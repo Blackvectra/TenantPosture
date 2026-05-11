@@ -120,7 +120,99 @@ function Publish-NRGAssessmentSummary {
         [void]$sb.AppendLine("")
     }
 
-    # Footer
+    # ── Configuration Inventory ──────────────────────────────────────────────
+    [void]$sb.AppendLine("---")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("## 3. Configuration Inventory")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("Data collected during this assessment. Use as your reference baseline.")
+    [void]$sb.AppendLine("")
+
+    # DNS Email Security
+    $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
+    if ($dnsData -and $dnsData.Success -and $dnsData.Data.Domains) {
+        [void]$sb.AppendLine("### DNS Email Security")
+        [void]$sb.AppendLine("")
+        [void]$sb.AppendLine("| Domain | SPF | DKIM | DMARC Policy | DMARC Record | MTA-STS |")
+        [void]$sb.AppendLine("|---|---|---|---|---|---|")
+        foreach ($domain in $dnsData.Data.Domains.Keys | Sort-Object) {
+            $d = $dnsData.Data.Domains[$domain]
+
+            # SPF
+            $spfStatus = if (-not $d.SPF) { '✗ None' }
+                         elseif ($d.SPF -match '\-all') { '✓ -all' }
+                         elseif ($d.SPF -match '~all') { '~ ~all' }
+                         else { '⚠ Present' }
+
+            # DKIM
+            $dkimStatus = if ($d.DKIM.Selector1 -and $d.DKIM.Selector2) { '✓ Both selectors' }
+                          elseif ($d.DKIM.Selector1 -or $d.DKIM.Selector2) { '⚠ Partial' }
+                          else { '✗ None' }
+
+            # DMARC
+            $dmarcPolicy = if (-not $d.DMARC) { '✗ None' }
+                           elseif ($d.DMARC -match 'p=reject') { '✓ reject' }
+                           elseif ($d.DMARC -match 'p=quarantine') { '~ quarantine' }
+                           else { '⚠ none' }
+            $dmarcRecord = if ($d.DMARC) { $d.DMARC -replace '\|','\|' } else { '—' }
+            if ($dmarcRecord.Length -gt 60) { $dmarcRecord = $dmarcRecord.Substring(0,57) + '...' }
+
+            # MTA-STS
+            $mtaStatus = if ($d.MTASTS.Mode) { $d.MTASTS.Mode }
+                         elseif ($d.MTASTS.TxtRecord) { 'present' }
+                         else { '—' }
+
+            [void]$sb.AppendLine("| $domain | $spfStatus | $dkimStatus | $dmarcPolicy | $dmarcRecord | $mtaStatus |")
+        }
+        [void]$sb.AppendLine("")
+    }
+
+    # EXO Configuration
+    $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if ($exoData -and $exoData.Success) {
+        [void]$sb.AppendLine("### Exchange Online Configuration")
+        [void]$sb.AppendLine("")
+        [void]$sb.AppendLine("| Setting | Value |")
+        [void]$sb.AppendLine("|---|---|")
+
+        $orgCfg = $exoData.Data.OrganizationConfig
+        if ($orgCfg) {
+            $audit = if ($orgCfg.AuditDisabled -eq $false) { '✓ Enabled' } else { '✗ Disabled' }
+            [void]$sb.AppendLine("| Mailbox Audit | $audit |")
+
+            $custLock = if ($orgCfg.CustomerLockBoxEnabled -eq $true) { '✓ Enabled' } else { '✗ Disabled' }
+            [void]$sb.AppendLine("| Customer Lockbox | $custLock |")
+        }
+
+        $transport = $exoData.Data.TransportConfig
+        if ($transport) {
+            $smtpAuth = if ($transport.SmtpClientAuthenticationDisabled -eq $true) { '✓ Disabled' } else { '✗ Enabled (risk)' }
+            [void]$sb.AppendLine("| SMTP Client Auth | $smtpAuth |")
+        }
+
+        $protocols = $exoData.Data.MailboxProtocols
+        if ($protocols) {
+            [void]$sb.AppendLine("| Total Mailboxes | $($protocols.TotalMailboxes) |")
+            [void]$sb.AppendLine("| POP3 Enabled | $($protocols.PopEnabled) mailboxes |")
+            [void]$sb.AppendLine("| IMAP Enabled | $($protocols.ImapEnabled) mailboxes |")
+            [void]$sb.AppendLine("| ActiveSync Enabled | $($protocols.ActiveSyncEnabled) mailboxes |")
+        }
+
+        $bypass = $exoData.Data.AuditBypass
+        if ($bypass) {
+            $bypassVal = if ($bypass.BypassedCount -eq 0) { '✓ None' } else { "✗ $($bypass.BypassedCount) mailboxes" }
+            [void]$sb.AppendLine("| Audit Bypass | $bypassVal |")
+        }
+
+        $shared = $exoData.Data.SharedMailboxes
+        if ($shared) {
+            [void]$sb.AppendLine("| Shared Mailboxes | $($shared.Count) |")
+        }
+
+        [void]$sb.AppendLine("")
+    }
+
+    # ── Footer ────────────────────────────────────────────────────────────────
     [void]$sb.AppendLine("---")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("*Prepared by $($brand.CompanyName) | $($brand.Phone) | $($brand.Website)*")
