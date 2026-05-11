@@ -109,6 +109,9 @@ if ($conn.EXO) {
     Write-Host "  [*] EXO: Mailbox configuration..."
     [void](Invoke-NRGCollectEXOMailboxConfig)
 
+    Write-Host "  [*] Defender: Safe Attachments, Safe Links, Anti-phishing..."
+    [void](Invoke-NRGCollectDefender)
+
     if (-not $SkipDNS) {
         Write-Host "  [*] DNS: SPF/DKIM/DMARC/MTA-STS for accepted domains..."
         if ($DnsDomains) {
@@ -142,16 +145,36 @@ if (-not $SkipSharePoint -and $conn['TenantDomain']) {
 Write-Host ""
 Write-Host "[-] Running evaluators..." -ForegroundColor Cyan
 
+# Session 1 — AAD baseline
 Test-NRGControlAADLegacyAuth
 Test-NRGControlAADPhishResistantMFA
+
+# Session 2 — Identity layer
 Test-NRGControlAADMFA
 Test-NRGControlAADCA
 Test-NRGControlAADPrivAccess
+
+# Session 1 — EXO + DNS baseline
 Test-NRGControlEXOMailboxAudit
 Test-NRGControlEXOSmtpAuth
 Test-NRGControlDNSSPF
 Test-NRGControlDNSDKIM
 Test-NRGControlDNSDMARC
+
+# Session 3 — EXO additions
+Test-NRGControlEXOPop3
+Test-NRGControlEXOImap
+Test-NRGControlEXOCustomerLockbox
+Test-NRGControlEXOSharedMailbox
+Test-NRGControlEXOModernAuth
+
+# Session 3 — DNS additions
+Test-NRGControlDNSMTASTS
+Test-NRGControlDNSTLSRPT
+Test-NRGControlDNSDNSSEC
+
+# Session 3 — Defender
+Test-NRGControlDefender
 
 $findings = Get-NRGFindings
 

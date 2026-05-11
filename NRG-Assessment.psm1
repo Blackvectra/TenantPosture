@@ -53,7 +53,7 @@ foreach ($folder in $loadOrder) {
         Write-Warning "Module folder not found: $folder"
         continue
     }
-    # Recursive so Collectors/AAD/*.ps1 is found
+    # Recursive so Collectors/AAD/*.ps1, Collectors/EXO/*.ps1 etc. are found
     $files = Get-ChildItem -Path $folderPath -Filter '*.ps1' -Recurse -File -ErrorAction SilentlyContinue
     foreach ($file in $files) {
         try {
@@ -79,12 +79,21 @@ $script:ExportedFunctions = @(
     'Invoke-NRGCollectEXOMailboxConfig','Invoke-NRGCollectDNSEmailRecords',
     # Collectors - Session 2 (Identity Layer)
     'Invoke-NRGCollectAADUsers','Invoke-NRGCollectAADRoles','Invoke-NRGCollectAADPIM',
+    # Collectors - Session 3 (Email + Defender)
+    'Invoke-NRGCollectDefender',
     # Evaluators - Session 1
     'Test-NRGControlAADLegacyAuth','Test-NRGControlAADPhishResistantMFA',
     'Test-NRGControlEXOMailboxAudit','Test-NRGControlEXOSmtpAuth',
     'Test-NRGControlDNSSPF','Test-NRGControlDNSDKIM','Test-NRGControlDNSDMARC',
     # Evaluators - Session 2 (Identity Layer)
     'Test-NRGControlAADMFA','Test-NRGControlAADCA','Test-NRGControlAADPrivAccess',
+    # Evaluators - Session 3 DNS additions
+    'Test-NRGControlDNSMTASTS','Test-NRGControlDNSTLSRPT','Test-NRGControlDNSDNSSEC',
+    # Evaluators - Session 3 EXO additions
+    'Test-NRGControlEXOPop3','Test-NRGControlEXOImap',
+    'Test-NRGControlEXOCustomerLockbox','Test-NRGControlEXOSharedMailbox','Test-NRGControlEXOModernAuth',
+    # Evaluators - Session 3 Defender
+    'Test-NRGControlDefender',
     # Publishers
     'Publish-NRGAssessmentSummary'
 )
