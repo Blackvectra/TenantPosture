@@ -1,7 +1,7 @@
 @{
     CompanyName    = 'NRG Technology Services'
-    Phone          = '(701) 751-4NRG'
-    Website        = 'nrgtechservices.com'
+    Phone          = '(701) 250-9400'
+    Website        = 'https://www.nrgtechservices.com'
     Email          = 'security@nrgtechservices.com'
     Address        = ''
     CityStateZip   = ''
