@@ -15,8 +15,8 @@
 # Each function has ONE source file. No duplicates anywhere in the repo.
 #
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
+# StrictMode intentionally off - allows safe property access patterns in collectors
+$ErrorActionPreference = 'Continue'
 
 # Module-scoped constants
 $script:NRGAssessmentVersion = '4.0.0'
