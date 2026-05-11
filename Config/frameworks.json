@@ -1,0 +1,15 @@
+{
+  "Frameworks": [
+    { "Id": "NIST-800-53",  "Name": "NIST SP 800-53 Rev 5",      "Version": "Rev 5",      "Authority": "NIST",      "Mandatory": false },
+    { "Id": "CIS-v8",       "Name": "CIS Controls v8.1",          "Version": "8.1",        "Authority": "CIS",       "Mandatory": false },
+    { "Id": "CIS-M365-v6",  "Name": "CIS M365 Foundations",       "Version": "6.0.1",      "Authority": "CIS",       "Mandatory": false },
+    { "Id": "HIPAA",        "Name": "HIPAA Security Rule",        "Version": "Current",    "Authority": "HHS",       "Mandatory": false },
+    { "Id": "HIPAA-NPRM",   "Name": "HIPAA NPRM 2024",            "Version": "NPRM 2024",  "Authority": "HHS",       "Mandatory": false },
+    { "Id": "ISO-27001",    "Name": "ISO/IEC 27001",              "Version": "2022",       "Authority": "ISO",       "Mandatory": false },
+    { "Id": "NIST-CSF-2",   "Name": "NIST CSF",                   "Version": "2.0",        "Authority": "NIST",      "Mandatory": false },
+    { "Id": "SOC-2",        "Name": "SOC 2 Trust Service Criteria","Version": "2017 TSC", "Authority": "AICPA",     "Mandatory": false },
+    { "Id": "CISA-SCuBA",   "Name": "CISA SCuBA M365 Baseline",   "Version": "Current",    "Authority": "CISA",      "Mandatory": true  },
+    { "Id": "CISA-BOD",     "Name": "CISA Binding Operational Directives","Version": "18-01, 25-01", "Authority": "CISA", "Mandatory": true },
+    { "Id": "CMMC-L2",      "Name": "CMMC 2.0 Level 2",           "Version": "2.0",        "Authority": "DoD",       "Mandatory": false }
+  ]
+}

@@ -1,0 +1,219 @@
+[
+  {
+    "ControlId": "AAD-1.1",
+    "Category": "Identity",
+    "Title": "Block legacy authentication protocols",
+    "Severity": "Critical",
+    "Description": "Legacy authentication protocols (POP, IMAP, basic auth) bypass modern conditional access and MFA. They must be blocked tenant-wide.",
+    "BusinessRisk": "Legacy auth is the #1 vector for password spray and credential stuffing attacks. Microsoft data shows 99%+ of compromised accounts used legacy authentication.",
+    "Remediation": "Create a Conditional Access policy: All users, All cloud apps, Client apps = Other clients, Grant = Block. Roll out in report-only first.",
+    "RemediationLink": "https://entra.microsoft.com/#view/Microsoft_AAD_ConditionalAccess/PoliciesView",
+    "EffortLevel": "Quick Win (< 30 min)",
+    "Frameworks": {
+      "NIST-800-53":  ["IA-2", "IA-2(1)", "IA-2(2)"],
+      "CIS-v8":       ["6.3", "6.5"],
+      "CIS-M365-v6":  ["5.2.2.4"],
+      "HIPAA":        ["164.312(d)"],
+      "HIPAA-NPRM":   ["164.312(d)"],
+      "ISO-27001":    ["A.5.17", "A.8.5"],
+      "NIST-CSF-2":   ["PR.AA-01", "PR.AA-03"],
+      "SOC-2":        ["CC6.1"],
+      "CISA-SCuBA":   ["MS.AAD.1.1"]
+    }
+  },
+  {
+    "ControlId": "AAD-1.2",
+    "Category": "Identity",
+    "Title": "Phishing-resistant MFA enforced for privileged roles",
+    "Severity": "Critical",
+    "Description": "Privileged accounts (Global Admin, Privileged Role Admin, etc.) must use phishing-resistant MFA methods (FIDO2 keys, Windows Hello for Business, certificate-based auth). SMS and voice are insufficient.",
+    "BusinessRisk": "Privileged account compromise is the highest-impact incident type. Phishing-resistant MFA defeats AiTM (Adversary-in-the-Middle) attacks like Evilginx.",
+    "Remediation": "Create a Conditional Access policy targeting all privileged role members requiring FIDO2 or certificate-based authentication via Authentication Strengths.",
+    "EffortLevel": "Standard (1-4 hrs)",
+    "Frameworks": {
+      "NIST-800-53":  ["IA-2(1)", "IA-2(2)", "IA-2(6)", "IA-2(8)"],
+      "CIS-v8":       ["6.5"],
+      "CIS-M365-v6":  ["5.2.3.4"],
+      "HIPAA":        ["164.312(d)"],
+      "HIPAA-NPRM":   ["164.312(d)"],
+      "ISO-27001":    ["A.5.15", "A.8.5"],
+      "NIST-CSF-2":   ["PR.AA-03"],
+      "SOC-2":        ["CC6.1", "CC6.6"],
+      "CISA-SCuBA":   ["MS.AAD.3.7"]
+    }
+  },
+  {
+    "ControlId": "AAD-1.3",
+    "Category": "Identity",
+    "Title": "Privileged Identity Management used for admin roles",
+    "Severity": "High",
+    "Description": "Administrator roles should be assigned as Eligible (not Active) via PIM, requiring just-in-time activation with approval and time-bounded duration.",
+    "BusinessRisk": "Permanent admin access means a compromised admin account immediately has maximum privileges. PIM limits the exposure window to only when privileges are actively needed.",
+    "Remediation": "Migrate Active admin role assignments to Eligible via Entra PIM. Configure activation requirements (MFA, justification, approval). Requires Entra ID P2 license.",
+    "RemediationLink": "https://entra.microsoft.com/#view/Microsoft_Azure_PIMCommon/CommonMenuBlade/~/quickStart",
+    "EffortLevel": "Strategic (planning required)",
+    "Frameworks": {
+      "NIST-800-53":  ["AC-2(7)", "AC-6(2)", "AC-6(5)"],
+      "CIS-v8":       ["5.4", "6.8"],
+      "CIS-M365-v6":  ["5.3.1"],
+      "HIPAA":        ["164.308(a)(3)(ii)(A)"],
+      "HIPAA-NPRM":   ["164.308(a)(3)(ii)(A)"],
+      "ISO-27001":    ["A.8.2"],
+      "NIST-CSF-2":   ["PR.AA-05"],
+      "SOC-2":        ["CC6.3"],
+      "CISA-SCuBA":   ["MS.AAD.7.6", "MS.AAD.7.7"]
+    }
+  },
+  {
+    "ControlId": "EXO-1.1",
+    "Category": "Email Security",
+    "Title": "Mailbox audit enabled tenant-wide",
+    "Severity": "High",
+    "Description": "Mailbox audit logging must be enabled and no mailbox should have AuditBypassEnabled=True. Bypass disables forensics for that user.",
+    "BusinessRisk": "Without mailbox auditing, BEC investigations are impossible. AuditBypassEnabled accounts leave zero forensic trail of mailbox actions.",
+    "Remediation": "Set-OrganizationConfig -AuditDisabled $false. For each bypassed mailbox: Set-MailboxAuditBypassAssociation -Identity <mbx> -AuditBypassEnabled $false",
+    "EffortLevel": "Quick Win (< 30 min)",
+    "Frameworks": {
+      "NIST-800-53":  ["AU-2", "AU-9", "AU-12"],
+      "CIS-v8":       ["8.2", "8.5"],
+      "CIS-M365-v6":  ["6.1.3"],
+      "HIPAA":        ["164.312(b)"],
+      "HIPAA-NPRM":   ["164.312(b)"],
+      "ISO-27001":    ["A.8.15"],
+      "NIST-CSF-2":   ["DE.CM-09"],
+      "SOC-2":        ["CC7.2"]
+    }
+  },
+  {
+    "ControlId": "EXO-1.2",
+    "Category": "Email Security",
+    "Title": "SMTP client authentication disabled tenant-wide",
+    "Severity": "Critical",
+    "Description": "SMTP AUTH (basic authentication for sending mail) must be disabled at the tenant level and on individual mailboxes. It bypasses MFA and Conditional Access.",
+    "BusinessRisk": "SMTP AUTH is exploited for outbound spam and impersonation after credential compromise. Most environments don't need it.",
+    "Remediation": "Set-TransportConfig -SmtpClientAuthenticationDisabled $true. Verify per-mailbox: Get-CASMailbox | Where SmtpClientAuthenticationDisabled -ne $true",
+    "EffortLevel": "Quick Win (< 30 min)",
+    "Frameworks": {
+      "NIST-800-53":  ["IA-2", "AC-17"],
+      "CIS-v8":       ["6.3"],
+      "CIS-M365-v6":  ["6.4.1"],
+      "HIPAA":        ["164.312(e)"],
+      "ISO-27001":    ["A.5.17", "A.8.5"],
+      "NIST-CSF-2":   ["PR.AA-03"],
+      "CISA-SCuBA":   ["MS.EXO.4.1"]
+    }
+  },
+  {
+    "ControlId": "EXO-2.1",
+    "Category": "Email Security",
+    "Title": "DMARC enforcement policy",
+    "Severity": "High",
+    "Description": "All sending domains should have a DMARC record published at p=reject (or at minimum p=quarantine with monitoring). p=none provides no protection.",
+    "BusinessRisk": "Without DMARC enforcement, attackers can spoof your domain in phishing emails to your customers and partners. BEC and brand-impersonation attacks rely on weak DMARC.",
+    "Remediation": "Publish DMARC TXT record: v=DMARC1; p=reject; rua=mailto:rua@dmarcian.com; pct=100; adkim=s; aspf=s. Stage via p=none -> p=quarantine -> p=reject.",
+    "EffortLevel": "Standard (1-4 hrs)",
+    "Frameworks": {
+      "NIST-800-53":  ["SI-8", "SC-8"],
+      "CIS-v8":       ["9.5"],
+      "CIS-M365-v6":  ["2.1.8"],
+      "ISO-27001":    ["A.8.20"],
+      "NIST-CSF-2":   ["PR.DS-02"],
+      "CISA-SCuBA":   ["MS.EXO.2.2"],
+      "CISA-BOD":     ["BOD 18-01"]
+    }
+  },
+  {
+    "ControlId": "DEF-1.1",
+    "Category": "Defender",
+    "Title": "Anti-phishing policy with impersonation protection",
+    "Severity": "High",
+    "Description": "Default and custom anti-phishing policies should be configured with impersonation protection for users, domains, and trusted senders.",
+    "BusinessRisk": "Phishing is the #1 method attackers use to compromise organizations. Without impersonation protection, look-alike domain and user attacks succeed.",
+    "Remediation": "Set up Defender for Office 365 anti-phishing policy with: Mailbox intelligence on, impersonation protection for VIPs, domain impersonation for owned domains.",
+    "RemediationLink": "https://security.microsoft.com/antiphishing",
+    "EffortLevel": "Standard (1-4 hrs)",
+    "Frameworks": {
+      "NIST-800-53":  ["SI-3", "SI-4"],
+      "CIS-v8":       ["9.6"],
+      "CIS-M365-v6":  ["2.1.7"],
+      "HIPAA":        ["164.308(a)(5)(ii)(B)"],
+      "HIPAA-NPRM":   ["164.308(a)(5)(ii)(B)"],
+      "ISO-27001":    ["A.8.7"],
+      "NIST-CSF-2":   ["PR.PS-05", "DE.CM-01"],
+      "CISA-SCuBA":   ["MS.DEFENDER.1.1"]
+    }
+  },
+  {
+    "ControlId": "DEF-1.2",
+    "Category": "Defender",
+    "Title": "Safe Attachments policy with Block action",
+    "Severity": "High",
+    "Description": "Defender for Office 365 Safe Attachments must be enabled with action set to Block. Detonates attachments in a sandbox before delivery.",
+    "BusinessRisk": "Ransomware is most commonly delivered via email attachments. Without Safe Attachments, one malicious file opened by one employee can encrypt the entire organization's data.",
+    "Remediation": "Create Safe Attachments policy: Action = Block, applied to all users. Requires Defender for Office 365 Plan 1 or 2.",
+    "EffortLevel": "Standard (1-4 hrs)",
+    "Frameworks": {
+      "NIST-800-53":  ["SI-3", "SI-8"],
+      "CIS-v8":       ["9.6", "10.5"],
+      "CIS-M365-v6":  ["2.1.4", "2.1.5"],
+      "HIPAA":        ["164.308(a)(5)(ii)(B)"],
+      "ISO-27001":    ["A.8.7"],
+      "NIST-CSF-2":   ["PR.PS-05", "DE.CM-01"],
+      "SOC-2":        ["CC6.8"],
+      "CISA-SCuBA":   ["MS.DEFENDER.4.1"]
+    }
+  },
+  {
+    "ControlId": "DEF-1.3",
+    "Category": "Defender",
+    "Title": "Safe Links policy enabled tenant-wide",
+    "Severity": "High",
+    "Description": "Defender for Office 365 Safe Links must be enabled for Email, Teams, and Office 365 apps. Re-evaluates URLs at click time to catch time-of-click attacks.",
+    "BusinessRisk": "Attackers use URLs that appear safe when sent but redirect to malicious sites after delivery. Safe Links re-checks every link at click time.",
+    "Remediation": "Create Safe Links policy: Enable for Email + Teams + Office 365 apps, Track user clicks, Do not allow click through.",
+    "EffortLevel": "Standard (1-4 hrs)",
+    "Frameworks": {
+      "NIST-800-53":  ["SI-3"],
+      "CIS-v8":       ["9.7"],
+      "CIS-M365-v6":  ["2.1.1"],
+      "HIPAA":        ["164.308(a)(5)(ii)(B)"],
+      "ISO-27001":    ["A.8.7"],
+      "NIST-CSF-2":   ["PR.PS-05"],
+      "CISA-SCuBA":   ["MS.DEFENDER.5.1"]
+    }
+  },
+  {
+    "ControlId": "DNS-1.1",
+    "Category": "Email Security",
+    "Title": "SPF record published",
+    "Severity": "Medium",
+    "Description": "Sender Policy Framework (SPF) TXT record must be published for each sending domain, ending in -all (hard fail) or ~all (soft fail).",
+    "BusinessRisk": "Without SPF, recipient mail servers cannot validate which IPs are authorized to send for your domain. Required for DMARC alignment.",
+    "Remediation": "Publish SPF TXT record. Example: 'v=spf1 include:spf.protection.outlook.com -all'",
+    "EffortLevel": "Quick Win (< 30 min)",
+    "Frameworks": {
+      "NIST-800-53":  ["SI-8"],
+      "CIS-v8":       ["9.5"],
+      "CIS-M365-v6":  ["2.1.9"],
+      "NIST-CSF-2":   ["PR.DS-02"],
+      "CISA-BOD":     ["BOD 18-01"]
+    }
+  },
+  {
+    "ControlId": "DNS-1.2",
+    "Category": "Email Security",
+    "Title": "DKIM signing enabled",
+    "Severity": "Medium",
+    "Description": "DKIM (DomainKeys Identified Mail) must be enabled in Exchange Online and CNAME records published for each sending domain.",
+    "BusinessRisk": "Without DKIM, emails fail DMARC alignment unless SPF passes. DKIM provides domain-anchored cryptographic identity verification.",
+    "Remediation": "In Defender Portal > Policies > DKIM, enable signing for each domain. Publish selector1._domainkey and selector2._domainkey CNAMEs at registrar.",
+    "EffortLevel": "Standard (1-4 hrs)",
+    "Frameworks": {
+      "NIST-800-53":  ["SI-8"],
+      "CIS-v8":       ["9.5"],
+      "CIS-M365-v6":  ["2.1.10"],
+      "NIST-CSF-2":   ["PR.DS-02"],
+      "CISA-BOD":     ["BOD 18-01"]
+    }
+  }
+]
