@@ -3,7 +3,7 @@
 # Evaluates DNS email security controls (SPF, DKIM, DMARC).
 #
 
-function Test-NRGControl-DNS-SPF {
+function Test-NRGControlDNSSPF {
     [CmdletBinding()] param()
 
     $controlId = 'DNS-1.1'
@@ -47,7 +47,7 @@ function Test-NRGControl-DNS-SPF {
     }
 }
 
-function Test-NRGControl-DNS-DKIM {
+function Test-NRGControlDNSDKIM {
     [CmdletBinding()] param()
 
     $controlId = 'DNS-1.2'
@@ -74,7 +74,7 @@ function Test-NRGControl-DNS-DKIM {
             Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Medium' -Instance $domain `
                 -Detail "Only one DKIM selector found for $domain. Both selector1 and selector2 should be published." `
-                -CurrentValue "Partial DKIM" -RequiredValue 'Both selectors' -FrameworkIds $citations
+                -CurrentValue 'Partial DKIM' -RequiredValue 'Both selectors' -FrameworkIds $citations
         } else {
             Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
@@ -85,7 +85,7 @@ function Test-NRGControl-DNS-DKIM {
     }
 }
 
-function Test-NRGControl-DNS-DMARC {
+function Test-NRGControlDNSDMARC {
     [CmdletBinding()] param()
 
     $controlId = 'EXO-2.1'
