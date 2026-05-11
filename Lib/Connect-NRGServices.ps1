@@ -9,6 +9,14 @@
 #   4. IPPS   — after EXO (same module)
 #   5. PnP    — last, reuses Graph token
 #
+# GRAPH SUB-MODULE PRE-IMPORT (assembly conflict prevention):
+#   Microsoft.Graph.Authentication is locked into the AppDomain by Connect-MgGraph.
+#   Sub-modules (Microsoft.Graph.Reports, Microsoft.Graph.Identity.Governance) must
+#   be imported BEFORE Connect-MgGraph or their auto-import triggers an assembly
+#   conflict at collection time. Pre-importing here forces them to share the same
+#   assembly load rather than competing for it.
+#   Reference: github.com/microsoftgraph/msgraph-sdk-powershell/issues/3394
+#
 # Reference: github.com/microsoftgraph/msgraph-sdk-powershell/issues/3394
 #
 
@@ -56,8 +64,27 @@ function Connect-NRGServices {
             'IdentityRiskyUser.Read.All','Reports.Read.All',
             'Organization.Read.All','Sites.Read.All',
             'DeviceManagementConfiguration.Read.All',
-            'DeviceManagementApps.Read.All'
+            'DeviceManagementApps.Read.All',
+            'UserAuthenticationMethod.Read.All'
         )
+
+        # Pre-import Graph sub-modules BEFORE Connect-MgGraph
+        # These sub-modules share Microsoft.Graph.Authentication — loading them now
+        # forces assembly resolution before Connect-MgGraph locks the version in.
+        # Without this, collector auto-imports after connection cause:
+        #   "Could not load file or assembly Microsoft.Graph.Authentication, already loaded"
+        $graphSubModules = @(
+            'Microsoft.Graph.Reports',               # Get-MgReportAuthenticationMethodUserRegistrationDetail
+            'Microsoft.Graph.Identity.Governance',   # Get-MgRoleManagementDirectory*
+            'Microsoft.Graph.Identity.SignIns',      # Get-MgPolicyIdentitySecurityDefaultEnforcementPolicy
+            'Microsoft.Graph.Users'                  # Get-MgUser
+        )
+        foreach ($gm in $graphSubModules) {
+            if (Get-Module -ListAvailable -Name $gm -ErrorAction SilentlyContinue) {
+                Import-Module $gm -ErrorAction SilentlyContinue -WarningAction SilentlyContinue 3>$null
+            }
+        }
+
         # -InformationAction Continue required: device code prints via Write-Information (stream 6)
         # Device code text goes to pipeline output - pipe to Out-Host so it displays
         # Reference: github.com/microsoftgraph/msgraph-sdk-powershell/issues/2798
