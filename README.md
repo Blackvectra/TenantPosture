@@ -196,4 +196,3 @@ v4.0.0 (this release) is the foundation. Future sessions expand depth:
 ## Author
 
 Matthew Levorson — Security Engineer, NRG Technology Services
-mlevorson@nextlayersec.io
