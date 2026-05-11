@@ -47,6 +47,7 @@ function Connect-NRGServices {
                 'DeviceManagementApps.Read.All'
             )
 
+            # Increase timeout to 300s - user has 5 min to enter device code
             Connect-MgGraph -Scopes $scopes -UseDeviceCode -NoWelcome -ErrorAction Stop
             $ctx = Get-MgContext
             if ($ctx) {
@@ -94,7 +95,15 @@ function Connect-NRGServices {
             }
             if ($UserPrincipalName) { $ippsParams['UserPrincipalName'] = $UserPrincipalName }
 
-            Connect-IPPSSession @ippsParams
+            # Try -Device first (newer module), fall back to devicecode approach
+            try {
+                Connect-IPPSSession @ippsParams
+            } catch {
+                # Older ExchangeOnlineManagement module uses different param
+                $ippsParamsFallback = @{ ShowBanner = $false; ErrorAction = 'Stop' }
+                if ($UserPrincipalName) { $ippsParamsFallback['UserPrincipalName'] = $UserPrincipalName }
+                Connect-IPPSSession @ippsParamsFallback
+            }
             $result.IPPSSession = $true
             Write-Host "  [+] Security & Compliance connected" -ForegroundColor Green
         } catch {
