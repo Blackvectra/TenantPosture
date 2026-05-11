@@ -16,26 +16,20 @@
 # and does not trigger the "restricted characters" module warning
 $script:ShowDeviceCodeBox = {
     param([string]$Service, [string]$Url)
-    $inner = "  $Service  "
-    $width = [Math]::Max(64, $inner.Length + 4)
-    $line  = [string]('─' * $width)
-    $pad   = ' ' * ($width - $inner.Length)
     Write-Host ""
-    Write-Host "  ┌$line┐" -ForegroundColor Yellow
-    Write-Host "  │$inner$pad│" -ForegroundColor Yellow
-    Write-Host "  │  $(' ' * ($width - 2))│" -ForegroundColor Yellow
+    Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Yellow
+    Write-Host "  │  $Service" -ForegroundColor Yellow
+    Write-Host "  │" -ForegroundColor Yellow
 
-    # OSC 8 clickable hyperlink (works in Windows Terminal, VS Code, iTerm2)
-    $link = "`e]8;;$Url`e\$Url`e]8;;`e\"
-    $linkPad = ' ' * ($width - $Url.Length - 12)
-    Write-Host "  │  Step 1: " -ForegroundColor Yellow -NoNewline
-    Write-Host $link -ForegroundColor Cyan -NoNewline
-    Write-Host "$linkPad│" -ForegroundColor Yellow
+    # OSC 8 clickable hyperlink - Ctrl+Click in Windows Terminal / VS Code
+    # Falls back to plain URL in terminals that don't support OSC 8
+    $clickable = "`e]8;;$Url`e\ Click here to open devicelogin `e]8;;`e\"
+    Write-Host "  │  " -ForegroundColor Yellow -NoNewline
+    Write-Host $clickable -ForegroundColor Cyan
 
-    $step2 = "Step 2: Enter the code shown BELOW this box"
-    $step2pad = ' ' * ($width - $step2.Length - 4)
-    Write-Host "  │  $step2$step2pad│" -ForegroundColor Yellow
-    Write-Host "  └$line┘" -ForegroundColor Yellow
+    Write-Host "  │  Or go to: $Url" -ForegroundColor DarkGray
+    Write-Host "  │  Then enter the code shown BELOW this box" -ForegroundColor Yellow
+    Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor Yellow
     Write-Host ""
 }
 
