@@ -17,12 +17,12 @@
 $script:ShowDeviceCodeBox = {
     param([string]$Service, [string]$Url)
     Write-Host ""
-    Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Yellow
-    Write-Host "  │  $Service" -ForegroundColor Yellow
-    Write-Host "  │" -ForegroundColor Yellow
-    Write-Host "  │  Ctrl+Click:  $Url" -ForegroundColor Cyan
-    Write-Host "  │  Then enter the code shown BELOW this box" -ForegroundColor Yellow
-    Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor Yellow
+    Write-Host "  +--------------------------------------------------------------+" -ForegroundColor Yellow
+    Write-Host "  |  $Service" -ForegroundColor Yellow
+    Write-Host "  |  Opening devicelogin in Edge..." -ForegroundColor Cyan
+    Write-Host "  |  Enter the code shown BELOW this box" -ForegroundColor Yellow
+    Write-Host "  +--------------------------------------------------------------+" -ForegroundColor Yellow
+    try { Start-Process "msedge.exe" -ArgumentList $Url -ErrorAction Stop } catch { try { Start-Process $Url } catch { } }
     Write-Host ""
 }
 
@@ -146,7 +146,7 @@ function Connect-NRGServices {
             $prefix = ($result['TenantDomain'] -split '\.')[0]
             $spoUrl = "https://$prefix-admin.sharepoint.com"
             & $script:ShowDeviceCodeBox "SharePoint Online" 'https://microsoft.com/devicelogin'
-            Connect-PnPOnline -Url $spoUrl -Interactive -ErrorAction Stop | Out-Null
+            Connect-PnPOnline -Url $spoUrl -PnPManagementShell -LaunchBrowser -ErrorAction Stop | Out-Null
             $result['SharePoint'] = $true
             Write-Host "  [+] SharePoint connected ($spoUrl)" -ForegroundColor Green
         } catch {
