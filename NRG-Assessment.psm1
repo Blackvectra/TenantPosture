@@ -66,11 +66,32 @@ foreach ($folder in $loadOrder) {
 
     foreach ($file in $files) {
         try {
-            . $file.FullName
+            . $file.FullName 3>$null
         } catch {
             Write-Warning "Failed to load $($file.Name): $($_.Exception.Message)"
         }
     }
 }
 
-Export-ModuleMember -Function * -Variable NRGAssessmentVersion, NRGBrand
+# Explicitly list exports - avoids PS warning about * exporting private helpers
+$script:ExportedFunctions = @(
+    # Lib - core state management
+    'Add-NRGFinding','Get-NRGFindings','Clear-NRGFindings',
+    'Register-NRGException','Get-NRGExceptions',
+    'Register-NRGCoverage','Get-NRGCoverage',
+    'Set-NRGRawData','Get-NRGRawData',
+    # Lib - connections
+    'Connect-NRGServices','Disconnect-NRGServices',
+    # Lib - control definitions
+    'Get-NRGControlDefinitions','Get-NRGControlById','Get-NRGFrameworkCitations',
+    # Collectors
+    'Invoke-NRGCollectAADAuthPolicies','Invoke-NRGCollectAADCAPolicies',
+    'Invoke-NRGCollectEXOMailboxConfig','Invoke-NRGCollectDNSEmailRecords',
+    # Evaluators
+    'Test-NRGControlAADLegacyAuth','Test-NRGControlAADPhishResistantMFA',
+    'Test-NRGControlEXOMailboxAudit','Test-NRGControlEXOSmtpAuth',
+    'Test-NRGControlDNSSPF','Test-NRGControlDNSDKIM','Test-NRGControlDNSDMARC',
+    # Publishers
+    'Publish-NRGAssessmentSummary'
+)
+Export-ModuleMember -Function $script:ExportedFunctions -Variable NRGAssessmentVersion, NRGBrand
