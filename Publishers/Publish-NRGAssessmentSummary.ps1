@@ -82,7 +82,12 @@ function Publish-NRGAssessmentSummary {
     [void]$sb.AppendLine("| Service | Connected |")
     [void]$sb.AppendLine("|---|---|")
     foreach ($svc in @('Graph','EXO','IPPSSession','Teams','SharePoint')) {
-        $status = if ($Connections.$svc) { '✓' } else { '✗' }
+        $connected = if ($Connections -is [hashtable]) {
+            $Connections.ContainsKey($svc) -and $Connections[$svc] -eq $true
+        } else {
+            $Connections.$svc -eq $true
+        }
+        $status = if ($connected) { '✓' } else { '✗' }
         [void]$sb.AppendLine("| $svc | $status |")
     }
     [void]$sb.AppendLine("")
