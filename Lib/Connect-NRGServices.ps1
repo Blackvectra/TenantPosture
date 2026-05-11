@@ -72,7 +72,10 @@ function Connect-NRGServices {
             'DeviceManagementApps.Read.All'
         )
         # -InformationAction Continue required: device code prints via Write-Information (stream 6)
-        Connect-MgGraph -Scopes $scopes -UseDeviceCode -NoWelcome -ErrorAction Stop -InformationAction Continue
+        # Device code text goes to pipeline output - pipe to Out-Host so it displays
+        # Reference: github.com/microsoftgraph/msgraph-sdk-powershell/issues/2798
+        $env:MSAL_ALLOW_BROKER = '0'  # Disable WAM to ensure device code displays
+        Connect-MgGraph -Scopes $scopes -UseDeviceCode -NoWelcome -ErrorAction Stop | Out-Host
         $ctx = Get-MgContext -ErrorAction Stop
         if ($ctx) {
             $result['Graph']        = $true
