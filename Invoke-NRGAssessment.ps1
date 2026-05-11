@@ -94,6 +94,15 @@ if ($conn.Graph) {
 
     Write-Host "  [*] AAD: Conditional Access policies..."
     [void](Invoke-NRGCollectAADCAPolicies)
+
+    Write-Host "  [*] AAD: Users and MFA registration state..."
+    [void](Invoke-NRGCollectAADUsers)
+
+    Write-Host "  [*] AAD: Directory role assignments..."
+    [void](Invoke-NRGCollectAADRoles)
+
+    Write-Host "  [*] AAD: PIM eligible and active schedules (P2)..."
+    [void](Invoke-NRGCollectAADPIM)
 }
 
 if ($conn.EXO) {
@@ -135,6 +144,9 @@ Write-Host "[-] Running evaluators..." -ForegroundColor Cyan
 
 Test-NRGControlAADLegacyAuth
 Test-NRGControlAADPhishResistantMFA
+Test-NRGControlAADMFA
+Test-NRGControlAADCA
+Test-NRGControlAADPrivAccess
 Test-NRGControlEXOMailboxAudit
 Test-NRGControlEXOSmtpAuth
 Test-NRGControlDNSSPF
