@@ -20,14 +20,7 @@ $script:ShowDeviceCodeBox = {
     Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Yellow
     Write-Host "  │  $Service" -ForegroundColor Yellow
     Write-Host "  │" -ForegroundColor Yellow
-
-    # OSC 8 clickable hyperlink - Ctrl+Click in Windows Terminal / VS Code
-    # Falls back to plain URL in terminals that don't support OSC 8
-    $clickable = "`e]8;;$Url`e\ Click here to open devicelogin `e]8;;`e\"
-    Write-Host "  │  " -ForegroundColor Yellow -NoNewline
-    Write-Host $clickable -ForegroundColor Cyan
-
-    Write-Host "  │  Or go to: $Url" -ForegroundColor DarkGray
+    Write-Host "  │  Ctrl+Click:  $Url" -ForegroundColor Cyan
     Write-Host "  │  Then enter the code shown BELOW this box" -ForegroundColor Yellow
     Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor Yellow
     Write-Host ""
@@ -153,7 +146,7 @@ function Connect-NRGServices {
             $prefix = ($result['TenantDomain'] -split '\.')[0]
             $spoUrl = "https://$prefix-admin.sharepoint.com"
             & $script:ShowDeviceCodeBox "SharePoint Online" 'https://microsoft.com/devicelogin'
-            Connect-PnPOnline -Url $spoUrl -DeviceLogin -ErrorAction Stop | Out-Null
+            Connect-PnPOnline -Url $spoUrl -Interactive -ErrorAction Stop | Out-Null
             $result['SharePoint'] = $true
             Write-Host "  [+] SharePoint connected ($spoUrl)" -ForegroundColor Green
         } catch {
