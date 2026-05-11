@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>M365 Security Assessment — nextlayersec.io</title>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 15px; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #f0f2f5;
+    color: #1e2532;
+    line-height: 1.6;
+  }
+
+  /* ── Layout ── */
+  .page { max-width: 1100px; margin: 0 auto; padding: 0 0 60px; }
+
+  /* ── Top bar ── */
+  .topbar {
+    background: #1a3a6b;
+    color: #fff;
+    padding: 20px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+  }
+  .topbar-brand { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em; }
+  .topbar-meta { text-align: right; font-size: 0.82rem; opacity: 0.85; line-height: 1.5; }
+  .topbar-meta strong { opacity: 1; font-size: 1rem; display: block; }
+
+  /* ── Accent strip ── */
+  .accent-strip { height: 4px; background: linear-gradient(90deg, #e87722, #4a7ba6); }
+
+  /* ── Summary card row ── */
+  .summary-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0;
+    background: #fff;
+    border-bottom: 1px solid #e2e6ed;
+    padding: 32px 40px;
+    align-items: center;
+  }
+
+  /* Score ring */
+  .score-ring { position: relative; width: 110px; height: 110px; flex-shrink: 0; }
+  .score-ring svg { transform: rotate(-90deg); }
+  .score-ring circle { fill: none; }
+  .score-ring .track { stroke: #e8ecf2; stroke-width: 10; }
+  .score-ring .progress { stroke: #e87722; stroke-width: 10; stroke-linecap: round;
+    stroke-dasharray: 251; stroke-dashoffset: 45;
+    transition: stroke-dashoffset 1s ease; }
+  .score-center {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center; line-height: 1.1;
+  }
+  .score-num { font-size: 1.7rem; font-weight: 800; color: #1a3a6b; }
+  .score-denom { font-size: 0.7rem; color: #8892a0; }
+
+  /* Posture + counts */
+  .summary-middle { padding: 0 36px; }
+  .posture-label {
+    font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em;
+    color: #d97706; margin-bottom: 10px;
+  }
+  .count-row { display: flex; gap: 20px; flex-wrap: wrap; }
+  .count-item { text-align: center; }
+  .count-num { font-size: 1.5rem; font-weight: 800; line-height: 1; }
+  .count-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #8892a0; margin-top: 2px; }
+  .count-gap     .count-num { color: #dc2626; }
+  .count-partial .count-num { color: #d97706; }
+  .count-pass    .count-num { color: #1a9e4a; }
+  .count-na      .count-num { color: #9ca3af; }
+
+  /* Connections */
+  .summary-right { border-left: 1px solid #e8ecf2; padding-left: 28px; }
+  .summary-right h3 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: #8892a0; margin-bottom: 10px; }
+  .conn-badge {
+    display: inline-block; padding: 3px 9px; border-radius: 4px;
+    font-size: 0.78rem; font-weight: 600; margin: 2px 3px 2px 0;
+  }
+  .conn-ok   { background: #dcfce7; color: #166534; }
+  .conn-fail { background: #fee2e2; color: #991b1b; }
+
+  /* ── Content area ── */
+  .content { padding: 0 40px; }
+
+  /* ── Section ── */
+  .section { margin-top: 32px; }
+  .section h2 {
+    font-size: 0.72rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    color: #4a7ba6;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #4a7ba6;
+    margin-bottom: 16px;
+  }
+
+  /* ── Priority actions ── */
+  .actions-list { display: flex; flex-direction: column; gap: 8px; }
+  .action-item {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 12px 16px; border-radius: 6px; border-left: 4px solid;
+  }
+  .action-critical { background: #fff1f1; border-color: #dc2626; }
+  .action-high     { background: #fffbeb; border-color: #d97706; }
+  .action-sev {
+    font-size: 0.68rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.06em; min-width: 58px; padding-top: 2px;
+  }
+  .action-critical .action-sev { color: #dc2626; }
+  .action-high     .action-sev { color: #d97706; }
+  .action-title { font-weight: 600; font-size: 0.9rem; color: #1e2532; }
+  .action-detail { font-size: 0.82rem; color: #6b7280; margin-top: 2px; }
+
+  /* ── Findings table ── */
+  .findings-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 0.875rem; background: #fff;
+    border-radius: 8px; overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .findings-table thead tr { background: #1a3a6b; color: #fff; }
+  .findings-table th { padding: 10px 14px; text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .findings-table tbody tr { border-bottom: 1px solid #f0f2f5; transition: background 0.15s; }
+  .findings-table tbody tr:last-child { border-bottom: none; }
+  .findings-table td { padding: 10px 14px; vertical-align: top; }
+
+  .row-gap     { border-left: 3px solid #dc2626 !important; }
+  .row-partial { border-left: 3px solid #d97706 !important; }
+  .row-pass    { border-left: 3px solid #1a9e4a !important; }
+  .row-na      { border-left: 3px solid #d1d5db !important; }
+
+  .expandable { cursor: pointer; }
+  .expandable:hover { background: #f8f9fb !important; }
+
+  .finding-title { font-weight: 500; color: #1e2532; }
+  .finding-detail-short { color: #6b7280; font-size: 0.82rem; }
+
+  /* Expanded row */
+  .expand-row td { background: #f8fafc; padding: 0; }
+  .finding-expand {
+    padding: 14px 18px 14px 18px;
+    border-top: 1px solid #e8ecf2;
+    font-size: 0.85rem;
+  }
+  .f-detail { color: #374151; margin-bottom: 8px; line-height: 1.5; }
+  .f-kv { margin-bottom: 5px; color: #4b5563; }
+  .f-label { font-weight: 700; color: #374151; margin-right: 6px; }
+  .f-remediation { color: #1d4ed8; }
+  .rem-link { color: #4a7ba6; text-decoration: none; font-weight: 600; margin-left: 8px; }
+  .rem-link:hover { text-decoration: underline; }
+  .f-frameworks { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .fw-tag {
+    font-size: 0.7rem; padding: 2px 6px; border-radius: 3px;
+    background: #eef2ff; color: #3730a3; font-weight: 600;
+  }
+
+  /* ── State badges ── */
+  .badge {
+    display: inline-block; padding: 3px 8px; border-radius: 4px;
+    font-size: 0.75rem; font-weight: 700; white-space: nowrap;
+  }
+  .badge-pass    { background: #dcfce7; color: #166534; }
+  .badge-partial { background: #fef9c3; color: #854d0e; }
+  .badge-gap     { background: #fee2e2; color: #991b1b; }
+  .badge-na      { background: #f3f4f6; color: #6b7280; }
+
+  /* ── Severity badges ── */
+  .sev { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
+  .sev-critical { background: #dc2626; color: #fff; }
+  .sev-high     { background: #ea580c; color: #fff; }
+  .sev-medium   { background: #d97706; color: #fff; }
+  .sev-low      { background: #65a30d; color: #fff; }
+  .sev-info     { background: #e5e7eb; color: #374151; }
+
+  /* ── Inventory tables ── */
+  .inv-table {
+    width: 100%; border-collapse: collapse; font-size: 0.85rem;
+    background: #fff; border-radius: 8px; overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .inv-table thead tr { background: #f8f9fb; }
+  .inv-table th { padding: 9px 14px; text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; font-weight: 700; border-bottom: 2px solid #e8ecf2; }
+  .inv-table td { padding: 9px 14px; border-bottom: 1px solid #f0f2f5; }
+  .inv-table tbody tr:last-child td { border-bottom: none; }
+  .inv-table-2col { max-width: 520px; }
+  .inv-good { color: #166534; font-weight: 600; }
+  .inv-warn { color: #854d0e; font-weight: 600; }
+  .inv-bad  { color: #991b1b; font-weight: 600; }
+  .inv-mono { font-family: 'Consolas', 'Courier New', monospace; font-size: 0.78rem; color: #374151; }
+
+  /* ── Footer ── */
+  .report-footer {
+    margin-top: 48px; padding: 20px 40px;
+    background: #1a3a6b; color: rgba(255,255,255,0.75);
+    font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center;
+  }
+  .report-footer strong { color: #fff; }
+
+  /* ── Print ── */
+  @media print {
+    body { background: #fff; font-size: 13px; }
+    .page { max-width: none; padding-bottom: 0; }
+    .topbar { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .accent-strip { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .expandable { cursor: default; }
+    .expand-row { display: table-row !important; }
+    .section { page-break-inside: avoid; }
+    .findings-table { box-shadow: none; border: 1px solid #e2e6ed; }
+    .report-footer { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-brand">NRG Technology Services</div>
+    <div class="topbar-meta">
+      <strong>M365 Security Assessment</strong>
+      nextlayersec.io &bull; May 11, 2026 &bull; v4.0.0
+    </div>
+  </div>
+  <div class="accent-strip"></div>
+
+  <!-- Summary row -->
+  <div class="summary-row">
+    <!-- Score ring -->
+    <div class="score-ring">
+      <svg width="110" height="110" viewBox="0 0 110 110">
+        <circle class="track"    cx="55" cy="55" r="40"/>
+        <circle class="progress" cx="55" cy="55" r="40"/>
+      </svg>
+      <div class="score-center">
+        <div class="score-num">82</div>
+        <div class="score-denom">/ 100</div>
+      </div>
+    </div>
+
+    <!-- Posture + counts -->
+    <div class="summary-middle">
+      <div class="posture-label">Moderate</div>
+      <div class="count-row">
+        <div class="count-item count-gap">
+          <div class="count-num">6</div>
+          <div class="count-label">Gaps</div>
+        </div>
+        <div class="count-item count-partial">
+          <div class="count-num">4</div>
+          <div class="count-label">Partial</div>
+        </div>
+        <div class="count-item count-pass">
+          <div class="count-num">34</div>
+          <div class="count-label">Satisfied</div>
+        </div>
+        <div class="count-item count-na">
+          <div class="count-num">1</div>
+          <div class="count-label">N/A</div>
+        </div>
+        <div class="count-item">
+          <div class="count-num" style="color:#1e2532">45</div>
+          <div class="count-label">Total</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connections -->
+    <div class="summary-right">
+      <h3>Service Connections</h3>
+      <span class="conn-badge conn-ok">&#10003; Graph</span><span class="conn-badge conn-ok">&#10003; EXO</span><span class="conn-badge conn-ok">&#10003; IPPSSession</span><span class="conn-badge conn-ok">&#10003; Teams</span><span class="conn-badge conn-fail">&#10005; SharePoint</span>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+
+            <div class="section">
+            <h2>Priority Actions</h2>
+            <div class="actions-list">            <div class="action-item action-critical">
+                <div class="action-sev">Critical</div>
+                <div class="action-body">
+                    <div class="action-title">Phishing-resistant MFA enforced for privileged roles</div>
+                    <div class="action-detail">No Conditional Access policy enforces a phishing-resistant Authentication Strength on privileged roles.</div>
+                </div>
+            </div>            <div class="action-item action-critical">
+                <div class="action-sev">Critical</div>
+                <div class="action-body">
+                    <div class="action-title">Conditional Access: MFA required for all users on all cloud apps</div>
+                    <div class="action-detail">No enabled CA policy requires MFA for All users on All cloud apps. Compromised credentials provide immediate account access.</div>
+                </div>
+            </div>            <div class="action-item action-high">
+                <div class="action-sev">High</div>
+                <div class="action-body">
+                    <div class="action-title">MFA registered for all enabled user accounts</div>
+                    <div class="action-detail">MFA registration critically low at 80%. Enforcing AAD-3.1 CA MFA policy at this registration level will lock out 1 users.</div>
+                </div>
+            </div>            <div class="action-item action-high">
+                <div class="action-sev">High</div>
+                <div class="action-body">
+                    <div class="action-title">Conditional Access: MFA required for Azure management</div>
+                    <div class="action-detail">No enabled CA policy enforces MFA for Azure management (Azure portal, CLI, PowerShell). App ID: 797f4846-ba00-4fd7-ba43-dac1f8f63013.</div>
+                </div>
+            </div>            <div class="action-item action-high">
+                <div class="action-sev">High</div>
+                <div class="action-body">
+                    <div class="action-title">Global Administrator accounts are dedicated (no assigned licenses)</div>
+                    <div class="action-detail">Licensed GA accounts are daily-use accounts — exposed to phishing, malware, and browser-based attacks during normal work. A compromised daily-use account with GA is an immediate full-tenant compromise.</div>
+                </div>
+            </div>
+            </div>
+        </div>
+
+    <!-- Findings -->
+    <div class="section">
+      <h2>Findings</h2>
+    </div>
+            <div class="section">
+            <h2>Defender</h2>
+            <table class="findings-table">
+                <thead>
+                    <tr>
+                        <th style="width:90px">State</th>
+                        <th style="width:80px">Severity</th>
+                        <th>Control</th>
+                        <th>Detail</th>
+                    </tr>
+                </thead>
+                <tbody>
+            <tr class="finding-row row-partial expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-partial">&#9679; Partial</span></td>
+                <td><span class="sev sev-high">High</span></td>
+                <td class="finding-title">Anti-phishing policy with impersonation protection</td>
+                <td class="finding-detail-short">Anti-phishing policy with impersonation protection exists but has no active rule applying it to recipients.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">Anti-phishing policy with impersonation protection exists but has no active rule applying it to recipients.</p><div class="f-kv"><span class="f-label">Current:</span> Policy 'Strict Preset Security Policy1757690553683' configured but no enabled rule targets recipients</div><div class="f-kv"><span class="f-label">Required:</span> Policy + active rule covering all accepted domains or all recipients</div><div class="f-kv f-remediation"><span class="f-label">Remediation:</span> Create an anti-phishing rule: New-AntiPhishRule -AntiPhishPolicy [name] -RecipientDomainIs [domain] -Priority 0. Or use the Security portal.</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SI-3, SI-4</span><span class="fw-tag">CIS-v8: 9.6</span><span class="fw-tag">CIS-M365-v6: 2.1.7</span><span class="fw-tag">HIPAA: 164.308(a)(5)(ii)(B)</span><span class="fw-tag">HIPAA-NPRM: 164.308(a)(5)(ii)(B)</span><span class="fw-tag">ISO-27001: A.8.7</span><span class="fw-tag">NIST-CSF-2: PR.PS-05, DE.CM-01</span><span class="fw-tag">CISA-SCuBA: MS.DEFENDER.1.1</span></div></div></td></tr>            <tr class="finding-row row-partial expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-partial">&#9679; Partial</span></td>
+                <td><span class="sev sev-high">High</span></td>
+                <td class="finding-title">Safe Links policy enabled tenant-wide</td>
+                <td class="finding-detail-short">Safe Links enabled but AllowClickThrough=True — users can bypass Safe Links warnings and reach malicious URLs.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">Safe Links enabled but AllowClickThrough=True — users can bypass Safe Links warnings and reach malicious URLs.</p><div class="f-kv"><span class="f-label">Current:</span> Policy: 'Protect Safe Links' | ScanUrls: True | ClickThrough: ALLOWED (gap) | InternalSenders: enabled | Teams: enabled</div><div class="f-kv"><span class="f-label">Required:</span> ScanUrls=True, AllowClickThrough=False, EnableForInternalSenders=True, applied to all recipients</div><div class="f-kv f-remediation"><span class="f-label">Remediation:</span> Set AllowClickThrough=$false on the Safe Links policy to prevent users bypassing URL block warnings.</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SI-3</span><span class="fw-tag">CIS-v8: 9.7</span><span class="fw-tag">CIS-M365-v6: 2.1.1</span><span class="fw-tag">HIPAA: 164.308(a)(5)(ii)(B)</span><span class="fw-tag">ISO-27001: A.8.7</span><span class="fw-tag">NIST-CSF-2: PR.PS-05</span><span class="fw-tag">CISA-SCuBA: MS.DEFENDER.5.1</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">Safe Attachments policy with Block action</td>
+                <td class="finding-detail-short">Safe Attachments Block policy active and applied to recipients.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">Safe Attachments Block policy active and applied to recipients.</p><div class="f-kv"><span class="f-label">Current:</span> Policy: 'Safe Attachments' | Action: Block | Enabled: True</div><div class="f-kv"><span class="f-label">Required:</span> Enabled Safe Attachments policy with Action=Block and active rule</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SI-3, SI-8</span><span class="fw-tag">CIS-v8: 9.6, 10.5</span><span class="fw-tag">CIS-M365-v6: 2.1.4, 2.1.5</span><span class="fw-tag">HIPAA: 164.308(a)(5)(ii)(B)</span><span class="fw-tag">ISO-27001: A.8.7</span><span class="fw-tag">NIST-CSF-2: PR.PS-05, DE.CM-01</span><span class="fw-tag">SOC-2: CC6.8</span><span class="fw-tag">CISA-SCuBA: MS.DEFENDER.4.1</span></div></div></td></tr>
+                </tbody>
+            </table>
+        </div>        <div class="section">
+            <h2>Email Security</h2>
+            <table class="findings-table">
+                <thead>
+                    <tr>
+                        <th style="width:90px">State</th>
+                        <th style="width:80px">Severity</th>
+                        <th>Control</th>
+                        <th>Detail</th>
+                    </tr>
+                </thead>
+                <tbody>
+            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">Customer Lockbox enabled</td>
+                <td class="finding-detail-short">Customer Lockbox enabled. Microsoft support access requires explicit approval.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">Customer Lockbox enabled. Microsoft support access requires explicit approval.</p><div class="f-kv"><span class="f-label">Current:</span> CustomerLockBoxEnabled: True</div><div class="f-kv"><span class="f-label">Required:</span> CustomerLockBoxEnabled: True</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: AC-2, AC-3</span><span class="fw-tag">CIS-M365-v6: 1.1.3</span><span class="fw-tag">HIPAA: 164.312(a)(1)</span><span class="fw-tag">ISO-27001: A.8.3</span><span class="fw-tag">NIST-CSF-2: PR.AA-05</span><span class="fw-tag">SOC-2: CC6.3</span><span class="fw-tag">CISA-SCuBA: MS.EXO.15.1</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">DKIM signing enabled: mattlevorson.com</td>
+                <td class="finding-detail-short">Both DKIM selectors published for mattlevorson.com.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">Both DKIM selectors published for mattlevorson.com.</p><div class="f-kv"><span class="f-label">Current:</span> selector1: selector1-mattlevorson-com._domainkey.nextlayersec665.a-v1.dkim.mail.microsoft; selector2: selector2-mattlevorson-com._domainkey.nextlayersec665.a-v1.dkim.mail.microsoft</div><div class="f-kv"><span class="f-label">Required:</span> selector1 + selector2 CNAMEs</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SI-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.10</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">DKIM signing enabled: nextlayersec.dev</td>
+                <td class="finding-detail-short">Both DKIM selectors published for nextlayersec.dev.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">Both DKIM selectors published for nextlayersec.dev.</p><div class="f-kv"><span class="f-label">Current:</span> selector1: selector1-nextlayersec-dev._domainkey.nextlayersec665.n-v1.dkim.mail.microsoft; selector2: selector2-nextlayersec-dev._domainkey.nextlayersec665.n-v1.dkim.mail.microsoft</div><div class="f-kv"><span class="f-label">Required:</span> selector1 + selector2 CNAMEs</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SI-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.10</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">DKIM signing enabled: nextlayersec.io</td>
+                <td class="finding-detail-short">Both DKIM selectors published for nextlayersec.io.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">Both DKIM selectors published for nextlayersec.io.</p><div class="f-kv"><span class="f-label">Current:</span> selector1: selector1-nextlayersec-io._domainkey.nextlayersec665.d-v1.dkim.mail.microsoft; selector2: selector2-nextlayersec-io._domainkey.nextlayersec665.d-v1.dkim.mail.microsoft</div><div class="f-kv"><span class="f-label">Required:</span> selector1 + selector2 CNAMEs</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SI-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.10</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">DMARC enforcement policy: mattlevorson.com</td>
+                <td class="finding-detail-short">mattlevorson.com DMARC at p=reject - exact-domain spoofing prevented.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">mattlevorson.com DMARC at p=reject - exact-domain spoofing prevented.</p><div class="f-kv"><span class="f-label">Current:</span> v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; rua=mailto:support@nextlayersec.dev; ruf=mailto:support@nextlayersec.dev; fo=1; pct=100</div><div class="f-kv"><span class="f-label">Required:</span> p=reject</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SI-8, SC-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.8</span><span class="fw-tag">ISO-27001: A.8.20</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-SCuBA: MS.EXO.2.2</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">DMARC enforcement policy: nextlayersec.dev</td>
+                <td class="finding-detail-short">nextlayersec.dev DMARC at p=reject - exact-domain spoofing prevented.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">nextlayersec.dev DMARC at p=reject - exact-domain spoofing prevented.</p><div class="f-kv"><span class="f-label">Current:</span> v=DMARC1; p=reject; rua=mailto:support@nextlayersec.dev; ruf=mailto:support@nextlayersec.dev; fo=1; aspf=s; adkim=s</div><div class="f-kv"><span class="f-label">Required:</span> p=reject</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SI-8, SC-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.8</span><span class="fw-tag">ISO-27001: A.8.20</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-SCuBA: MS.EXO.2.2</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">DMARC enforcement policy: nextlayersec.io</td>
+                <td class="finding-detail-short">nextlayersec.io DMARC at p=reject - exact-domain spoofing prevented.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">nextlayersec.io DMARC at p=reject - exact-domain spoofing prevented.</p><div class="f-kv"><span class="f-label">Current:</span> v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; ruamailto:mlevorson@nextlayersec.io; ruf=mailto:mlevorson@nextlayersec.io; fo=1;</div><div class="f-kv"><span class="f-label">Required:</span> p=reject</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SI-8, SC-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.8</span><span class="fw-tag">ISO-27001: A.8.20</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-SCuBA: MS.EXO.2.2</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">DNSSEC enabled for sending domains: mattlevorson.com</td>
+                <td class="finding-detail-short">mattlevorson.com has DNSSEC enabled (DS records present). DNS records are cryptographically signed.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">mattlevorson.com has DNSSEC enabled (DS records present). DNS records are cryptographically signed.</p><div class="f-kv"><span class="f-label">Current:</span> DNSSEC: enabled</div><div class="f-kv"><span class="f-label">Required:</span> DS records published</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SC-20, SC-21</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">DNSSEC enabled for sending domains: nextlayersec.dev</td>
+                <td class="finding-detail-short">nextlayersec.dev has DNSSEC enabled (DS records present). DNS records are cryptographically signed.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">nextlayersec.dev has DNSSEC enabled (DS records present). DNS records are cryptographically signed.</p><div class="f-kv"><span class="f-label">Current:</span> DNSSEC: enabled</div><div class="f-kv"><span class="f-label">Required:</span> DS records published</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SC-20, SC-21</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">DNSSEC enabled for sending domains: nextlayersec.io</td>
+                <td class="finding-detail-short">nextlayersec.io has DNSSEC enabled (DS records present). DNS records are cryptographically signed.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">nextlayersec.io has DNSSEC enabled (DS records present). DNS records are cryptographically signed.</p><div class="f-kv"><span class="f-label">Current:</span> DNSSEC: enabled</div><div class="f-kv"><span class="f-label">Required:</span> DS records published</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SC-20, SC-21</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">IMAP disabled for all mailboxes</td>
+                <td class="finding-detail-short">IMAP disabled on all mailboxes.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">IMAP disabled on all mailboxes.</p><div class="f-kv"><span class="f-label">Current:</span> IMAP enabled: 0 of 3 mailboxes</div><div class="f-kv"><span class="f-label">Required:</span> 0 mailboxes with IMAP enabled</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: IA-2, CM-7</span><span class="fw-tag">CIS-v8: 4.8</span><span class="fw-tag">CIS-M365-v6: 6.5.2</span><span class="fw-tag">ISO-27001: A.8.5</span><span class="fw-tag">NIST-CSF-2: PR.AA-03</span><span class="fw-tag">CISA-SCuBA: MS.EXO.10.2</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">Mailbox audit enabled tenant-wide</td>
+                <td class="finding-detail-short">Tenant audit enabled. No mailboxes have AuditBypassEnabled.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">Tenant audit enabled. No mailboxes have AuditBypassEnabled.</p><div class="f-kv"><span class="f-label">Current:</span> Enabled, no bypass</div><div class="f-kv"><span class="f-label">Required:</span> Enabled, no bypass</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: AU-2, AU-9, AU-12</span><span class="fw-tag">CIS-v8: 8.2, 8.5</span><span class="fw-tag">CIS-M365-v6: 6.1.3</span><span class="fw-tag">HIPAA: 164.312(b)</span><span class="fw-tag">HIPAA-NPRM: 164.312(b)</span><span class="fw-tag">ISO-27001: A.8.15</span><span class="fw-tag">NIST-CSF-2: DE.CM-09</span><span class="fw-tag">SOC-2: CC7.2</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">Modern authentication enabled for Exchange Online</td>
+                <td class="finding-detail-short">Modern authentication (OAuth2) enabled for Exchange Online. Outlook and mail clients can use MFA.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">Modern authentication (OAuth2) enabled for Exchange Online. Outlook and mail clients can use MFA.</p><div class="f-kv"><span class="f-label">Current:</span> OAuth2ClientProfileEnabled: True</div><div class="f-kv"><span class="f-label">Required:</span> OAuth2ClientProfileEnabled: True</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: IA-2, IA-2(1)</span><span class="fw-tag">CIS-M365-v6: 6.5.3</span><span class="fw-tag">ISO-27001: A.8.5</span><span class="fw-tag">NIST-CSF-2: PR.AA-03</span><span class="fw-tag">CISA-SCuBA: MS.EXO.3.1</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">MTA-STS policy enforced: mattlevorson.com</td>
+                <td class="finding-detail-short">mattlevorson.com MTA-STS in enforce mode. Sending servers must use TLS.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">mattlevorson.com MTA-STS in enforce mode. Sending servers must use TLS.</p><div class="f-kv"><span class="f-label">Current:</span> Mode: enforce | TXT: v=STSv1; id=20260419 | Policy URL: https://mta-sts.mattlevorson.com/.well-known/mta-sts.txt</div><div class="f-kv"><span class="f-label">Required:</span> Mode: enforce</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SC-8, SC-8(1)</span><span class="fw-tag">CIS-v8: 3.10</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">MTA-STS policy enforced: nextlayersec.dev</td>
+                <td class="finding-detail-short">nextlayersec.dev MTA-STS in enforce mode. Sending servers must use TLS.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">nextlayersec.dev MTA-STS in enforce mode. Sending servers must use TLS.</p><div class="f-kv"><span class="f-label">Current:</span> Mode: enforce | TXT: v=STSv1; id=20260419 | Policy URL: https://mta-sts.nextlayersec.dev/.well-known/mta-sts.txt</div><div class="f-kv"><span class="f-label">Required:</span> Mode: enforce</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SC-8, SC-8(1)</span><span class="fw-tag">CIS-v8: 3.10</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">MTA-STS policy enforced: nextlayersec.io</td>
+                <td class="finding-detail-short">nextlayersec.io MTA-STS in enforce mode. Sending servers must use TLS.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">nextlayersec.io MTA-STS in enforce mode. Sending servers must use TLS.</p><div class="f-kv"><span class="f-label">Current:</span> Mode: enforce | TXT: v=STSv1; id=20260417 | Policy URL: https://mta-sts.nextlayersec.io/.well-known/mta-sts.txt</div><div class="f-kv"><span class="f-label">Required:</span> Mode: enforce</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SC-8, SC-8(1)</span><span class="fw-tag">CIS-v8: 3.10</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">POP3 disabled for all mailboxes</td>
+                <td class="finding-detail-short">POP3 disabled on all mailboxes.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">POP3 disabled on all mailboxes.</p><div class="f-kv"><span class="f-label">Current:</span> POP3 enabled: 0 of 3 mailboxes</div><div class="f-kv"><span class="f-label">Required:</span> 0 mailboxes with POP3 enabled</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: IA-2, CM-7</span><span class="fw-tag">CIS-v8: 4.8</span><span class="fw-tag">CIS-M365-v6: 6.5.1</span><span class="fw-tag">ISO-27001: A.8.5</span><span class="fw-tag">NIST-CSF-2: PR.AA-03</span><span class="fw-tag">CISA-SCuBA: MS.EXO.10.1</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">SMTP client authentication disabled tenant-wide</td>
+                <td class="finding-detail-short">SMTP client authentication disabled tenant-wide.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">SMTP client authentication disabled tenant-wide.</p><div class="f-kv"><span class="f-label">Current:</span> Tenant: Disabled</div><div class="f-kv"><span class="f-label">Required:</span> Disabled</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: IA-2, AC-17</span><span class="fw-tag">CIS-v8: 6.3</span><span class="fw-tag">CIS-M365-v6: 6.4.1</span><span class="fw-tag">HIPAA: 164.312(e)</span><span class="fw-tag">ISO-27001: A.5.17, A.8.5</span><span class="fw-tag">NIST-CSF-2: PR.AA-03</span><span class="fw-tag">CISA-SCuBA: MS.EXO.4.1</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">SPF record published: mattlevorson.com</td>
+                <td class="finding-detail-short">mattlevorson.com has SPF with hard fail (-all).</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">mattlevorson.com has SPF with hard fail (-all).</p><div class="f-kv"><span class="f-label">Current:</span> v=spf1 include:spf.protection.outlook.com -all</div><div class="f-kv"><span class="f-label">Required:</span> SPF -all</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SI-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.9</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">SPF record published: nextlayersec.dev</td>
+                <td class="finding-detail-short">nextlayersec.dev has SPF with hard fail (-all).</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">nextlayersec.dev has SPF with hard fail (-all).</p><div class="f-kv"><span class="f-label">Current:</span> v=spf1 include:spf.protection.outlook.com -all</div><div class="f-kv"><span class="f-label">Required:</span> SPF -all</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SI-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.9</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">SPF record published: nextlayersec.io</td>
+                <td class="finding-detail-short">nextlayersec.io has SPF with hard fail (-all).</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">nextlayersec.io has SPF with hard fail (-all).</p><div class="f-kv"><span class="f-label">Current:</span> v=spf1 include:spf.protection.outlook.com -all</div><div class="f-kv"><span class="f-label">Required:</span> SPF -all</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SI-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.9</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">TLS-RPT configured for sending domains: mattlevorson.com</td>
+                <td class="finding-detail-short">mattlevorson.com TLS-RPT configured. TLS delivery failure reports will be received.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">mattlevorson.com TLS-RPT configured. TLS delivery failure reports will be received.</p><div class="f-kv"><span class="f-label">Current:</span> v=TLSRPTv1; rua=mailto:support@nextlayersec.dev</div><div class="f-kv"><span class="f-label">Required:</span> v=TLSRPTv1 record present</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SC-8, AU-6</span><span class="fw-tag">NIST-CSF-2: PR.DS-02, DE.CM-09</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">TLS-RPT configured for sending domains: nextlayersec.dev</td>
+                <td class="finding-detail-short">nextlayersec.dev TLS-RPT configured. TLS delivery failure reports will be received.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">nextlayersec.dev TLS-RPT configured. TLS delivery failure reports will be received.</p><div class="f-kv"><span class="f-label">Current:</span> v=TLSRPTv1; rua=mailto:support@nextlayersec.dev</div><div class="f-kv"><span class="f-label">Required:</span> v=TLSRPTv1 record present</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SC-8, AU-6</span><span class="fw-tag">NIST-CSF-2: PR.DS-02, DE.CM-09</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">TLS-RPT configured for sending domains: nextlayersec.io</td>
+                <td class="finding-detail-short">nextlayersec.io TLS-RPT configured. TLS delivery failure reports will be received.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">nextlayersec.io TLS-RPT configured. TLS delivery failure reports will be received.</p><div class="f-kv"><span class="f-label">Current:</span> v=TLSRPTv1; rua=mailto:mlevorson@nextlayersec.io</div><div class="f-kv"><span class="f-label">Required:</span> v=TLSRPTv1 record present</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: SC-8, AU-6</span><span class="fw-tag">NIST-CSF-2: PR.DS-02, DE.CM-09</span></div></div></td></tr>            <tr class="finding-row row-na expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-na">&#8212; N/A</span></td>
+                <td><span class="sev sev-medium">Medium</span></td>
+                <td class="finding-title">Shared mailbox sign-in disabled</td>
+                <td class="finding-detail-short">Shared mailbox data not collected.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">Shared mailbox data not collected.</p></div></td></tr>
+                </tbody>
+            </table>
+        </div>        <div class="section">
+            <h2>Identity</h2>
+            <table class="findings-table">
+                <thead>
+                    <tr>
+                        <th style="width:90px">State</th>
+                        <th style="width:80px">Severity</th>
+                        <th>Control</th>
+                        <th>Detail</th>
+                    </tr>
+                </thead>
+                <tbody>
+            <tr class="finding-row row-gap expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-gap">&#10005; Gap</span></td>
+                <td><span class="sev sev-critical">Critical</span></td>
+                <td class="finding-title">Conditional Access: MFA required for all users on all cloud apps</td>
+                <td class="finding-detail-short">No enabled CA policy requires MFA for All users on All cloud apps. Compromised credentials provide immediate account access.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">No enabled CA policy requires MFA for All users on All cloud apps. Compromised credentials provide immediate account access.</p><div class="f-kv"><span class="f-label">Current:</span> No MFA CA policy for all users</div><div class="f-kv"><span class="f-label">Required:</span> Enabled CA policy: All users (exclude break-glass), All cloud apps, Grant = Require MFA</div><div class="f-kv f-remediation"><span class="f-label">Remediation:</span> Create CA policy: All users (exclude break-glass named location), All cloud apps, Grant = Require MFA. Deploy report-only first. Do not enforce until AAD-2.1 registration exceeds 95%.</div><div class="f-frameworks"><span class="fw-tag">IA-2(1)</span><span class="fw-tag">IA-2(2)</span></div></div></td></tr>            <tr class="finding-row row-gap expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-gap">&#10005; Gap</span></td>
+                <td><span class="sev sev-high">High</span></td>
+                <td class="finding-title">Conditional Access: MFA required for Azure management</td>
+                <td class="finding-detail-short">No enabled CA policy enforces MFA for Azure management (Azure portal, CLI, PowerShell). App ID: 797f4846-ba00-4fd7-ba43-dac1f8f63013.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">No enabled CA policy enforces MFA for Azure management (Azure portal, CLI, PowerShell). App ID: 797f4846-ba00-4fd7-ba43-dac1f8f63013.</p><div class="f-kv"><span class="f-label">Current:</span> No MFA CA policy for Azure management</div><div class="f-kv"><span class="f-label">Required:</span> Enabled CA policy targeting Microsoft Azure Management app with MFA grant</div><div class="f-kv f-remediation"><span class="f-label">Remediation:</span> Add Microsoft Azure Management to existing all-users MFA CA policy, or create a dedicated policy. Covers Azure portal, Azure CLI, and Azure PowerShell.</div><div class="f-frameworks"><span class="fw-tag">IA-2(1)</span><span class="fw-tag">AC-6(5)</span></div></div></td></tr>            <tr class="finding-row row-gap expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-gap">&#10005; Gap</span></td>
+                <td><span class="sev sev-high">High</span></td>
+                <td class="finding-title">Global Administrator accounts are dedicated (no assigned licenses)</td>
+                <td class="finding-detail-short">Licensed GA accounts are daily-use accounts — exposed to phishing, malware, and browser-based attacks during normal work. A compromised daily-use account with GA is an immediate full-tenant compromise.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">Licensed GA accounts are daily-use accounts — exposed to phishing, malware, and browser-based attacks during normal work. A compromised daily-use account with GA is an immediate full-tenant compromise.</p><div class="f-kv"><span class="f-label">Current:</span> GA accounts with assigned licenses (likely daily-use): mlevorson@nextlayersec.io</div><div class="f-kv"><span class="f-label">Required:</span> All GA accounts unlicensed — admin tasks use dedicated cloud-only account, daily work uses separate licensed account</div><div class="f-kv f-remediation"><span class="f-label">Remediation:</span> Create dedicated cloud-only admin accounts: unlicensed, no mailbox, used only for admin tasks. Remove GA role from daily-use licensed accounts. Assign daily-use accounts appropriate scoped roles only.</div><div class="f-frameworks"><span class="fw-tag">AC-6(2)</span><span class="fw-tag">AC-6(5)</span></div></div></td></tr>            <tr class="finding-row row-gap expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-gap">&#10005; Gap</span></td>
+                <td><span class="sev sev-high">High</span></td>
+                <td class="finding-title">MFA registered for all enabled user accounts</td>
+                <td class="finding-detail-short">MFA registration critically low at 80%. Enforcing AAD-3.1 CA MFA policy at this registration level will lock out 1 users.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">MFA registration critically low at 80%. Enforcing AAD-3.1 CA MFA policy at this registration level will lock out 1 users.</p><div class="f-kv"><span class="f-label">Current:</span> 80% registered (1 of 5 unregistered). Sample (first 10): breakglass@nextlayersec.io</div><div class="f-kv"><span class="f-label">Required:</span> 95%+ registration before CA enforcement; 100% target</div><div class="f-kv f-remediation"><span class="f-label">Remediation:</span> Enable Registration Campaign (Entra ID &gt; Authentication methods &gt; Registration campaign). Use Temporary Access Pass (TAP) for bulk onboarding without helpdesk calls. Do not enforce AAD-3.1 until registration exceeds 95%.</div><div class="f-frameworks"><span class="fw-tag">IA-2(1)</span><span class="fw-tag">IA-2(2)</span></div></div></td></tr>            <tr class="finding-row row-gap expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-gap">&#10005; Gap</span></td>
+                <td><span class="sev sev-critical">Critical</span></td>
+                <td class="finding-title">Phishing-resistant MFA enforced for privileged roles</td>
+                <td class="finding-detail-short">No Conditional Access policy enforces a phishing-resistant Authentication Strength on privileged roles.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">No Conditional Access policy enforces a phishing-resistant Authentication Strength on privileged roles.</p><div class="f-kv"><span class="f-label">Current:</span> Not enforced</div><div class="f-kv"><span class="f-label">Required:</span> FIDO2 / WHfB / Cert-based for all admin roles</div><div class="f-kv f-remediation"><span class="f-label">Remediation:</span> Create a Conditional Access policy targeting all privileged role members requiring FIDO2 or certificate-based authentication via Authentication Strengths.</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: IA-2(1), IA-2(2), IA-2(6), IA-2(8)</span><span class="fw-tag">CIS-v8: 6.5</span><span class="fw-tag">CIS-M365-v6: 5.2.3.4</span><span class="fw-tag">HIPAA: 164.312(d)</span><span class="fw-tag">HIPAA-NPRM: 164.312(d)</span><span class="fw-tag">ISO-27001: A.5.15, A.8.5</span><span class="fw-tag">NIST-CSF-2: PR.AA-03</span><span class="fw-tag">SOC-2: CC6.1, CC6.6</span><span class="fw-tag">CISA-SCuBA: MS.AAD.3.7</span></div></div></td></tr>            <tr class="finding-row row-gap expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-gap">&#10005; Gap</span></td>
+                <td><span class="sev sev-high">High</span></td>
+                <td class="finding-title">PIM used for Global Administrator role (JIT access model)</td>
+                <td class="finding-detail-short">PIM is available but not consistently applied to the Global Administrator role. Permanent standing access means a compromised admin account immediately has full tenant privileges.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">PIM is available but not consistently applied to the Global Administrator role. Permanent standing access means a compromised admin account immediately has full tenant privileges.</p><div class="f-kv"><span class="f-label">Current:</span> 4 permanent GA(s), 0 PIM eligible</div><div class="f-kv"><span class="f-label">Required:</span> All operational GA assignments via PIM eligible; zero or break-glass-only permanent assignments</div><div class="f-kv f-remediation"><span class="f-label">Remediation:</span> Migrate all operational GA assignments to PIM eligible. Activation settings: require MFA, justification required, max 8-hour duration. Consider approval workflow for production tenants.</div><div class="f-frameworks"><span class="fw-tag">AC-2(7)</span><span class="fw-tag">AC-6(2)</span><span class="fw-tag">AC-6(5)</span></div></div></td></tr>            <tr class="finding-row row-partial expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-partial">&#9679; Partial</span></td>
+                <td><span class="sev sev-high">High</span></td>
+                <td class="finding-title">Break-glass Global Administrator account exists</td>
+                <td class="finding-detail-short">Break-glass candidate(s) detected based on heuristic (unlicensed, cloud-only GA, sign-in &gt; 30 days or never). Manual verification required — credential storage, CA exclusion, and sign-in alert cannot be confirmed automatically.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">Break-glass candidate(s) detected based on heuristic (unlicensed, cloud-only GA, sign-in &gt; 30 days or never). Manual verification required — credential storage, CA exclusion, and sign-in alert cannot be confirmed automatically.</p><div class="f-kv"><span class="f-label">Current:</span> Candidate(s): breakglass@nextlayersec.io (last sign-in: Never); Blackvectra@Nextlayersec665.onmicrosoft.com (last sign-in: 02/27/2026 19:18:15)</div><div class="f-kv"><span class="f-label">Required:</span> Verified break-glass GA: cloud-only, unlicensed, credentials sealed offline, sign-in alert configured, tested quarterly</div><div class="f-kv f-remediation"><span class="f-label">Remediation:</span> Verify manually: (1) credentials printed and stored in sealed envelope in physical safe, (2) account excluded from MFA CA via named location, (3) sign-in alert configured in Entra ID or Azure Monitor, (4) tested quarterly from known IP.</div></div></td></tr>            <tr class="finding-row row-partial expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-partial">&#9679; Partial</span></td>
+                <td><span class="sev sev-medium">Medium</span></td>
+                <td class="finding-title">No Conditional Access policies remaining in report-only mode</td>
+                <td class="finding-detail-short">Report-only policies provide zero enforcement. They generate logs but do not block or require anything.</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">Report-only policies provide zero enforcement. They generate logs but do not block or require anything.</p><div class="f-kv"><span class="f-label">Current:</span> 9 report-only policy/policies: [SharePoint admin center]Block access from apps on unmanaged devices - 2026/01/15; Require multifactor authentication for all users; Require MDM-enrolled and compliant device to access cloud apps for all users (Preview); Require phishing-resistant multifactor authentication for admins; Geo-Blocking; Require Device authentication joining devices; Insider Risk Policy - Block; Insider Risk - MFA; Insider Risk - Allow</div><div class="f-kv"><span class="f-label">Required:</span> All security CA policies in enabled (enforced) state</div><div class="f-kv f-remediation"><span class="f-label">Remediation:</span> Review each. Enforce or document acceptance with rationale and target date. Report-only provides zero protection.</div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">Authenticator app number matching enabled</td>
+                <td class="finding-detail-short">&nbsp;</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><div class="f-kv"><span class="f-label">Current:</span> Number matching: enabled (Microsoft default or explicit). Additional context: default</div><div class="f-kv"><span class="f-label">Required:</span> Number matching: enabled</div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">Block legacy authentication protocols</td>
+                <td class="finding-detail-short">Legacy authentication blocked by 1 Conditional Access policy(ies).</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><p class="f-detail">Legacy authentication blocked by 1 Conditional Access policy(ies).</p><div class="f-kv"><span class="f-label">Current:</span> Blocked via CA</div><div class="f-kv"><span class="f-label">Required:</span> Blocked</div><div class="f-kv f-remediation"><span class="f-label">Remediation:</span> Create a Conditional Access policy: All users, All cloud apps, Client apps = Other clients, Grant = Block. Roll out in report-only first.</div><div class="f-frameworks"><span class="fw-tag">NIST-800-53: IA-2, IA-2(1), IA-2(2)</span><span class="fw-tag">CIS-v8: 6.3, 6.5</span><span class="fw-tag">CIS-M365-v6: 5.2.2.4</span><span class="fw-tag">HIPAA: 164.312(d)</span><span class="fw-tag">HIPAA-NPRM: 164.312(d)</span><span class="fw-tag">ISO-27001: A.5.17, A.8.5</span><span class="fw-tag">NIST-CSF-2: PR.AA-01, PR.AA-03</span><span class="fw-tag">SOC-2: CC6.1</span><span class="fw-tag">CISA-SCuBA: MS.AAD.1.1</span></div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">Conditional Access: Legacy authentication blocked</td>
+                <td class="finding-detail-short">&nbsp;</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><div class="f-kv"><span class="f-label">Current:</span> Enforced CA policy: 'Disable Legacy Auth'</div><div class="f-kv"><span class="f-label">Required:</span> Enabled CA policy blocking client app types: other, exchangeActiveSync</div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">Conditional Access: Sign-in risk policy configured (Entra ID P2)</td>
+                <td class="finding-detail-short">&nbsp;</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><div class="f-kv"><span class="f-label">Current:</span> Policy: 'Sign in risk - Block' [Risk levels: high]</div><div class="f-kv"><span class="f-label">Required:</span> Enabled CA policy targeting sign-in risk Medium/High with MFA or block response</div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">Conditional Access: User risk policy configured (Entra ID P2)</td>
+                <td class="finding-detail-short">&nbsp;</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><div class="f-kv"><span class="f-label">Current:</span> Policy: 'User Risk - Blocked ' [Risk levels: high]</div><div class="f-kv"><span class="f-label">Required:</span> Enabled CA policy targeting user risk High with block or password change response</div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">Global Administrator count between 2 and 5</td>
+                <td class="finding-detail-short">&nbsp;</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><div class="f-kv"><span class="f-label">Current:</span> Permanent Global Administrator count: 4</div><div class="f-kv"><span class="f-label">Required:</span> Between 2 and 5 permanent Global Administrator assignments</div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">MFA enforced via Conditional Access (not per-user MFA or Security Defaults)</td>
+                <td class="finding-detail-short">&nbsp;</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><div class="f-kv"><span class="f-label">Current:</span> Security Defaults: disabled — tenant managed via Conditional Access</div><div class="f-kv"><span class="f-label">Required:</span> Security Defaults: disabled; MFA enforcement via Conditional Access</div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">No on-premises synced accounts hold Entra ID admin roles</td>
+                <td class="finding-detail-short">&nbsp;</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><div class="f-kv"><span class="f-label">Current:</span> No on-premises synced accounts found with Entra ID role assignments</div><div class="f-kv"><span class="f-label">Required:</span> Zero on-premises synced accounts in any Entra ID directory role</div></div></td></tr>            <tr class="finding-row row-pass expandable" onclick="toggleRow(this)">
+                <td><span class="badge badge-pass">&#10003; Pass</span></td>
+                <td><span class="sev sev-info">Info</span></td>
+                <td class="finding-title">Security Defaults disabled in favor of Conditional Access</td>
+                <td class="finding-detail-short">&nbsp;</td>
+            </tr>
+                        <tr class="expand-row" style="display:none"><td colspan="4"><div class="finding-expand"><div class="f-kv"><span class="f-label">Current:</span> Security Defaults: disabled</div><div class="f-kv"><span class="f-label">Required:</span> Security Defaults: disabled</div></div></td></tr>
+                </tbody>
+            </table>
+        </div>
+
+    <!-- Inventory -->
+    <div class="section">
+      <h2>Configuration Inventory</h2>
+    </div>
+            <div class="section">
+            <h2>DNS Email Security</h2>
+            <table class="inv-table">
+                <thead>
+                    <tr>
+                        <th>Domain</th>
+                        <th>SPF</th>
+                        <th>DKIM</th>
+                        <th>DMARC Policy</th>
+                        <th>DMARC Record</th>
+                        <th>MTA-STS</th>
+                        <th>TLS-RPT</th>
+                        <th>DNSSEC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td><strong>mattlevorson.com</strong></td>
+                    <td><span class="inv-good">&#10003; -all</span></td>
+                    <td><span class="inv-good">&#10003; Both selectors</span></td>
+                    <td><span class="inv-good">&#10003; reject</span></td>
+                    <td><span class="inv-mono">v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; rua=...</span></td>
+                    <td><span class="inv-good">&#10003; enforce</span></td>
+                    <td><span class="inv-good">&#10003;</span></td>
+                    <td><span class="inv-good">&#10003;</span></td>
+                </tr>                <tr>
+                    <td><strong>nextlayersec.dev</strong></td>
+                    <td><span class="inv-good">&#10003; -all</span></td>
+                    <td><span class="inv-good">&#10003; Both selectors</span></td>
+                    <td><span class="inv-good">&#10003; reject</span></td>
+                    <td><span class="inv-mono">v=DMARC1; p=reject; rua=mailto:support@nextlayersec....</span></td>
+                    <td><span class="inv-good">&#10003; enforce</span></td>
+                    <td><span class="inv-good">&#10003;</span></td>
+                    <td><span class="inv-good">&#10003;</span></td>
+                </tr>                <tr>
+                    <td><strong>nextlayersec.io</strong></td>
+                    <td><span class="inv-good">&#10003; -all</span></td>
+                    <td><span class="inv-good">&#10003; Both selectors</span></td>
+                    <td><span class="inv-good">&#10003; reject</span></td>
+                    <td><span class="inv-mono">v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; ruam...</span></td>
+                    <td><span class="inv-good">&#10003; enforce</span></td>
+                    <td><span class="inv-good">&#10003;</span></td>
+                    <td><span class="inv-good">&#10003;</span></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+            <div class="section">
+            <h2>Exchange Online Configuration</h2>
+            <table class="inv-table inv-table-2col">
+                <thead><tr><th>Setting</th><th>Value</th></tr></thead>
+                <tbody><tr><td>Mailbox Audit</td><td><span class="inv-good">&#10003; Enabled</span></td></tr><tr><td>Customer Lockbox</td><td><span class="inv-good">&#10003; Enabled</span></td></tr><tr><td>Modern Auth (OAuth2)</td><td><span class="inv-good">&#10003; Enabled</span></td></tr><tr><td>SMTP Client Auth</td><td><span class="inv-good">&#10003; Disabled</span></td></tr><tr><td>Total Mailboxes</td><td>3</td></tr><tr><td>POP3 Enabled</td><td><span class="inv-good">&#10003; 0 mailboxes</span></td></tr><tr><td>IMAP Enabled</td><td><span class="inv-good">&#10003; 0 mailboxes</span></td></tr><tr><td>ActiveSync Enabled</td><td>3 mailboxes</td></tr><tr><td>Audit Bypass</td><td><span class="inv-good">&#10003; None</span></td></tr></tbody>
+            </table>
+        </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div class="report-footer">
+    <span>Prepared by <strong>NRG Technology Services</strong> &bull; (701) 751-4NRG &bull; nrgtechservices.com</span>
+    <span>Read-only assessment &mdash; no configuration changes were made</span>
+  </div>
+
+</div>
+
+<script>
+function toggleRow(tr) {
+  var next = tr.nextElementSibling;
+  if (next && next.classList.contains('expand-row')) {
+    next.style.display = next.style.display === 'none' ? 'table-row' : 'none';
+  }
+}
+</script>
+</body>
+</html>

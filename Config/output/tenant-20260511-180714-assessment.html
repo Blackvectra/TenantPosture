@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M365 Security Assessment &mdash; </title>
+<style>
+:root{--P:#1a3a6b;--S:#e87722;--A:#4a7ba6;--bg:#edf0f6;--card:#fff;--txt:#18202e;--mut:#5a6478;--bdr:#dde3ec;--pass:#059669;--warn:#d97706;--gap:#dc2626;--na:#9ca3af;--r:10px;--sh:0 2px 14px rgba(26,58,107,.1),0 1px 3px rgba(0,0,0,.05)}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:15px;scroll-behavior:smooth}
+body{font-family:'Segoe UI Variable Display','Segoe UI','Helvetica Neue',system-ui,sans-serif;background:var(--bg);color:var(--txt);line-height:1.65;-webkit-font-smoothing:antialiased}
+a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{max-width:1160px;margin:0 auto}
+/* Header */
+.hdr{background:linear-gradient(135deg,var(--P) 0%,#0d2147 100%);color:#fff;padding:36px 48px 30px;position:relative;overflow:hidden}
+.hdr::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle at 75% 20%,rgba(232,119,34,.14) 0%,transparent 50%),radial-gradient(circle at 25% 80%,rgba(74,123,166,.1) 0%,transparent 50%);pointer-events:none}
+.hdr-inner{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;position:relative;z-index:1}
+.logo{height:34px;filter:brightness(0) invert(1)}
+.logo-t{font-size:1.15rem;font-weight:800;letter-spacing:-.02em;color:rgba(255,255,255,.95)}
+.hdr-eye{font-size:.62rem;text-transform:uppercase;letter-spacing:.15em;color:var(--S);font-weight:700;margin-bottom:7px}
+.hdr-client{font-size:2rem;font-weight:900;letter-spacing:-.03em;color:#fff;line-height:1.05}
+.hdr-meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:.77rem;color:rgba(255,255,255,.5)}
+.hdr-meta strong{color:rgba(255,255,255,.82);font-weight:600}
+.hdr-right{text-align:right;flex-shrink:0}
+.ver{font-size:.62rem;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);padding:3px 9px;border-radius:20px;color:rgba(255,255,255,.6);letter-spacing:.05em;display:inline-block;margin-bottom:10px}
+.abar{height:3px;background:linear-gradient(90deg,var(--S) 0%,var(--A) 55%,transparent 100%)}
+/* Layout */
+.cnt{padding:26px 48px 48px}
+.card{background:var(--card);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden;border:1px solid var(--bdr)}
+.mt{margin-top:20px}
+.card-hd{padding:14px 22px 12px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,#fafbfd,#f4f6fa)}
+.card-title{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.11em;color:var(--P)}
+.cat-pill{font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:20px;border:1px solid}
+/* Dashboard */
+.dash{display:grid;grid-template-columns:200px 1fr 220px}
+.dash>*{padding:24px 20px}
+.dv{border-right:1px solid var(--bdr)}
+/* Score ring */
+.score-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring-trk{fill:none;stroke:#e4e9f2;stroke-width:10}
+.ring-fill{fill:none;stroke:var(--S);stroke-width:10;stroke-linecap:round;stroke-dasharray:452.4;stroke-dashoffset:452.4;animation:rfill 1.4s cubic-bezier(.4,0,.2,1) .15s forwards}
+@keyframes rfill{to{stroke-dashoffset:18.1}}
+.score-c{text-align:center;margin-top:10px}
+.score-n{font-size:2.6rem;font-weight:900;color:var(--P);letter-spacing:-.04em;line-height:1}
+.score-s{font-size:.62rem;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.posture{display:inline-block;margin-top:8px;padding:4px 13px;border-radius:20px;font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;background:#05966918;color:#059669;border:1.5px solid #0596693a}
+/* Stats */
+.stats{display:flex;flex-direction:column;justify-content:center;gap:10px;padding-left:22px}
+.sr{display:flex;align-items:center;gap:8px}
+.sr-lbl{font-size:.64rem;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);min-width:52px;font-weight:700}
+.sr-track{flex:1;height:5px;background:#e8edf5;border-radius:3px;overflow:hidden}
+.sr-fill{height:100%;border-radius:3px}
+.sr-num{font-size:.9rem;font-weight:800;min-width:22px;text-align:right}
+.sg .sr-num,.sg .sr-fill{color:var(--gap);background:var(--gap)}
+.sw .sr-num,.sw .sr-fill{color:var(--warn);background:var(--warn)}
+.sp .sr-num,.sp .sr-fill{color:var(--pass);background:var(--pass)}
+.sn .sr-num,.sn .sr-fill{color:var(--na);background:var(--na)}
+.st .sr-num{color:var(--txt)}
+/* Cat bars */
+.cats{display:flex;flex-direction:column;gap:8px;justify-content:center}
+.cats-t,.conn-t{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);font-weight:700;margin-bottom:2px}
+.cbar-hd{display:flex;justify-content:space-between;margin-bottom:2px}
+.cbar-lbl{font-size:.73rem;font-weight:600;color:var(--txt)}
+.cbar-num{font-size:.73rem;font-weight:800}
+.cbar-track{height:6px;background:#e4e9f2;border-radius:3px;overflow:hidden}
+.cbar-fill{height:100%;border-radius:3px}
+/* Connections */
+.conn-grid{display:flex;flex-direction:column;gap:4px;margin-top:2px}
+.conn{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:5px;font-size:.73rem;font-weight:600}
+.cok{background:#f0fdf4;color:#166534}
+.coff{background:#fef2f2;color:#991b1b}
+/* Scope */
+.scope-body{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:0;padding:0}
+.scope-col{padding:20px 22px;border-right:1px solid var(--bdr)}
+.scope-col:last-child{border-right:none}
+.scope-head{font-size:.64rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);font-weight:800;margin-bottom:12px}
+.scope-item{display:flex;align-items:flex-start;gap:9px;margin-bottom:9px}
+.scope-ico{font-size:.85rem;padding-top:1px;flex-shrink:0}
+.scope-covered .scope-ico{color:var(--pass)}
+.scope-pending .scope-ico{color:var(--mut)}
+.scope-name{font-size:.8rem;font-weight:600;color:var(--txt)}
+.scope-cnt{font-size:.7rem;color:var(--mut)}
+.scope-method{}
+.method-formula{background:#f8fafd;border:1px solid var(--bdr);border-radius:6px;padding:10px 14px;margin-bottom:12px;text-align:center}
+.method-eq{font-size:.8rem;font-weight:700;color:var(--P);font-family:'Consolas','Courier New',monospace}
+.method-rows{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.method-row{display:flex;align-items:center;gap:9px;font-size:.75rem;color:var(--mut)}
+.method-scale{display:flex;gap:10px;flex-wrap:wrap}
+.scale-item{font-size:.73rem}
+/* Priority actions */
+.acts{padding:14px 20px;display:flex;flex-direction:column;gap:6px}
+.act{display:flex;align-items:flex-start;gap:11px;padding:10px 13px;border-radius:7px;border-left:4px solid}
+.ac{background:#fff5f5;border-color:var(--gap)}
+.ah{background:#fffbf0;border-color:var(--warn)}
+.act-n{font-size:.62rem;font-weight:900;color:var(--mut);min-width:14px;padding-top:2px}
+.act-sv{font-size:.6rem;font-weight:900;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap;flex-shrink:0;margin-top:2px}
+.ac .act-sv{background:var(--gap);color:#fff}
+.ah .act-sv{background:var(--warn);color:#fff}
+.act-t{font-weight:700;font-size:.82rem;color:var(--txt);line-height:1.3}
+.act-d{font-size:.74rem;color:var(--mut);margin-top:2px;line-height:1.4}
+/* Identity inventory */
+.inv-body{padding:18px 22px;display:flex;flex-direction:column;gap:18px}
+.subsec-title{font-size:.64rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);font-weight:800;margin-bottom:8px}
+.user-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.ustat{background:#f8fafd;border:1px solid var(--bdr);border-radius:8px;padding:12px 14px;text-align:center}
+.ustat-n{font-size:1.6rem;font-weight:900;color:var(--P);letter-spacing:-.02em;line-height:1}
+.ustat-l{font-size:.65rem;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);font-weight:700;margin-top:3px}
+/* MFA bar */
+.mfa-section{}
+.mfa-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.mfa-title{font-size:.64rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);font-weight:800}
+.mfa-pct{font-size:1.1rem;font-weight:900;letter-spacing:-.02em}
+.mfa-track{height:10px;background:#e8edf5;border-radius:5px;overflow:hidden;margin-bottom:6px}
+.mfa-fill{height:100%;border-radius:5px;transition:width 1s ease .3s}
+.mfa-detail{font-size:.77rem;color:var(--mut);line-height:1.45}
+/* Admin table */
+.adm-tbl{}
+.adm-ga{background:#fff9f0}
+.adm-name{font-weight:600}
+.adm-upn{font-size:.78rem;color:var(--mut);font-family:'Consolas','Courier New',monospace}
+.adm-last{font-size:.78rem;color:var(--mut)}
+.role-tag{font-size:.65rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:4px;background:#eef2ff;color:#3730a3;white-space:nowrap}
+/* PIM grid */
+.pim-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.pim-card{background:#f8fafd;border:1px solid var(--bdr);border-radius:8px;padding:12px 14px;text-align:center}
+.pim-n{font-size:1.6rem;font-weight:900;letter-spacing:-.02em;line-height:1}
+.pim-l{font-size:.65rem;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);font-weight:700;margin-top:3px}
+/* Findings table */
+.ft{width:100%;border-collapse:collapse;font-size:.83rem}
+.fth th{padding:8px 12px;background:#f4f6fa;font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:700;border-bottom:2px solid var(--bdr);text-align:left}
+.fr{border-bottom:1px solid #f3f5f9}
+.fr:last-of-type{border-bottom:none}
+.fr td{padding:9px 12px;vertical-align:top}
+.exp{cursor:pointer}
+.exp:hover{background:#f9fafc}
+.rg{border-left:3px solid var(--gap) !important}
+.rw{border-left:3px solid var(--warn) !important}
+.rp{border-left:3px solid var(--pass) !important}
+.rn{border-left:3px solid #d1d5db !important}
+.td1{width:90px}
+.td2{width:80px}
+.td3{font-weight:600;color:var(--txt)}
+.td4{color:var(--mut);font-size:.77rem}
+.f-title{font-weight:600;color:var(--txt);line-height:1.3;margin-bottom:2px}
+.f-cv{font-size:.72rem;color:var(--mut);font-style:italic;line-height:1.3}
+.extr td{background:#f8fafd;padding:0}
+.exbody{padding:12px 16px;border-top:1px solid #eaecf3}
+.ex-d{color:#374151;margin-bottom:8px;font-size:.82rem;line-height:1.55}
+.ex-r{display:flex;gap:8px;margin-bottom:5px;font-size:.79rem;align-items:flex-start}
+.ex-l{font-weight:800;color:#374151;min-width:84px;flex-shrink:0;font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;padding-top:3px}
+.ex-v{color:#4b5563;flex:1;line-height:1.45}
+.ex-rem .ex-v{color:#1d4ed8}
+.ex-lnk{color:var(--A);font-weight:700;margin-left:7px;font-size:.73rem}
+/* ATT&CK tags */
+.ttp-tag{font-size:.65rem;padding:2px 6px;border-radius:3px;background:#fef2f2;color:#991b1b;font-weight:700;border:1px solid #fecaca;display:inline-block;margin:1px;text-decoration:none}
+.ttp-tag:hover{background:#fee2e2;text-decoration:none}
+.ttp-mini{font-size:.62rem;padding:1px 5px;border-radius:3px;background:#fff1f0;color:#b91c1c;font-weight:700;border:1px solid #fecaca;display:inline-block;margin-left:4px;vertical-align:middle}
+.ttptags{display:flex;flex-wrap:wrap;gap:3px}
+/* Framework tags */
+.fwtags{display:flex;flex-wrap:wrap;gap:3px}
+.fw-tag{font-size:.64rem;padding:2px 6px;border-radius:3px;background:#eef2ff;color:#3730a3;font-weight:700;display:inline-block}
+/* State/severity badges */
+.b{display:inline-block;padding:3px 9px;border-radius:5px;font-size:.7rem;font-weight:800;white-space:nowrap;letter-spacing:.02em}
+.bp{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+.bw{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+.bg{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+.bn{background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb}
+.sv{display:inline-block;padding:2px 7px;border-radius:4px;font-size:.67rem;font-weight:800;white-space:nowrap;letter-spacing:.03em}
+.svc{background:var(--gap);color:#fff}
+.svh{background:#ea580c;color:#fff}
+.svm{background:var(--warn);color:#fff}
+.svl{background:#65a30d;color:#fff}
+.svi{background:#e5e7eb;color:#374151}
+/* Roadmap */
+.rm-wrap{padding:6px 20px 20px;display:flex;flex-direction:column;gap:18px}
+.rmg{}
+.rmgl{font-size:.68rem;font-weight:900;text-transform:uppercase;letter-spacing:.1em;padding:5px 0 8px;border-bottom:2px solid var(--bdr);margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.efq{color:#059669}.efs{color:#d97706}.efx{color:#7c3aed}
+.rmi{padding:8px 12px;border-radius:6px;border-left:3px solid;margin-bottom:6px;background:#fafbfc}
+.rmg-gap{border-color:var(--gap)}.rmg-warn{border-color:var(--warn)}
+.rmi-hd{display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap}
+.rmi-t{font-weight:700;font-size:.82rem;color:var(--txt)}
+.rmi-r{font-size:.77rem;color:#374151;line-height:1.45;padding-left:2px}
+/* Inventory */
+.tscroll{overflow-x:auto}
+.itbl{width:100%;border-collapse:collapse;font-size:.8rem}
+.itbl thead tr{background:#f4f6fa}
+.itbl th{padding:8px 12px;text-align:left;font-size:.63rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:700;border-bottom:2px solid var(--bdr)}
+.itbl td{padding:8px 12px;border-bottom:1px solid #f3f5f9;vertical-align:middle}
+.itbl tbody tr:last-child td{border-bottom:none}
+.itbl tbody tr:hover{background:#fafbfc}
+.i2{max-width:480px}
+.igood{color:#166534;font-weight:700}.iwarn{color:#92400e;font-weight:700}.ibad{color:#991b1b;font-weight:700}.ioff{color:var(--mut);font-weight:600}
+.isub{font-size:.68rem;color:var(--mut);margin-left:6px}
+.icode{font-family:'Cascadia Code','Consolas','Courier New',monospace;font-size:.72rem;color:#374151;background:#f3f4f6;padding:1px 5px;border-radius:3px}
+.ca-n{font-weight:600;max-width:220px}
+.ca-c{font-size:.75rem;color:var(--mut)}
+.ca-ro{background:#fffdf0}
+.ca-dis{background:#fafafa;opacity:.7}
+/* Footer */
+.ftr{background:var(--P);color:rgba(255,255,255,.55);padding:16px 48px;display:flex;justify-content:space-between;font-size:.74rem;flex-wrap:wrap;gap:8px;margin-top:32px}
+.ftr strong{color:#fff}
+/* Print */
+@media print{
+  *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
+  body{background:#fff;font-size:12px}
+  .wrap{max-width:none}
+  .cnt{padding:16px 28px 28px}
+  .hdr{padding:20px 28px 16px}
+  .ftr{padding:12px 28px;margin-top:18px}
+  .card{box-shadow:none;break-inside:avoid;border:1px solid #dde3ec}
+  .extr{display:table-row !important}
+  .exp{cursor:default}
+  .dash{grid-template-columns:160px 1fr 200px}
+  .scope-body{grid-template-columns:1fr 1fr 1fr}
+  .user-stats{grid-template-columns:repeat(5,1fr)}
+  .pim-grid{grid-template-columns:repeat(4,1fr)}
+  .ring-fill{animation:none !important;stroke-dashoffset:18.1}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hdr">
+  <div class="hdr-inner">
+    <div>
+      <div class="hdr-eye">Microsoft 365 Security Assessment</div>
+      <div class="hdr-client"></div>
+      <div class="hdr-meta">
+        <span><strong>Date</strong> May 11, 2026</span>
+        <span><strong>Tenant</strong> </span>
+        <span><strong>Operator</strong> mlevorson@nextlayersec.io</span>
+      </div>
+    </div>
+    <div class="hdr-right">
+      <div class="ver">NRG-Assessment v4.5.0</div>
+      <span class="logo-t">NRG Technology Services</span>
+    </div>
+  </div>
+</div>
+<div class="abar"></div>
+
+<div class="cnt">
+
+<!-- Dashboard -->
+<div class="card">
+  <div class="dash">
+    <div class="score-wrap dv">
+      <svg width="132" height="132" viewBox="0 0 160 160">
+        <circle class="ring-trk" cx="80" cy="80" r="72" transform="rotate(-90 80 80)"/>
+        <circle class="ring-fill" cx="80" cy="80" r="72" transform="rotate(-90 80 80)"/>
+      </svg>
+      <div class="score-c">
+        <div class="score-n">96</div>
+        <div class="score-s">/ 100</div>
+        <div class="posture">Strong</div>
+      </div>
+    </div>
+    <div class="stats dv">
+      <div class="sr sg"><span class="sr-lbl">Gaps</span><div class="sr-track"><div class="sr-fill" style="width:0%"></div></div><span class="sr-num">0</span></div>
+      <div class="sr sw"><span class="sr-lbl">Partial</span><div class="sr-track"><div class="sr-fill" style="width:7%"></div></div><span class="sr-num">2</span></div>
+      <div class="sr sp"><span class="sr-lbl">Satisfied</span><div class="sr-track"><div class="sr-fill" style="width:93%"></div></div><span class="sr-num">25</span></div>
+      <div class="sr sn"><span class="sr-lbl">N/A</span><div class="sr-track"><div class="sr-fill" style="width:67%"></div></div><span class="sr-num">55</span></div>
+      <div class="sr st"><span class="sr-lbl">Total</span><div class="sr-track"><div class="sr-fill" style="width:100%;background:#cbd5e1"></div></div><span class="sr-num">82</span></div>
+    </div>
+    <div class="cats">
+      <div class="cats-t">Score by Category</div>
+<div class="cbar"><div class="cbar-hd"><span class="cbar-lbl">Identity</span><span class="cbar-num" style="color:#dc2626">0</span></div><div class="cbar-track"><div class="cbar-fill" style="width:0%;background:#dc2626"></div></div></div>
+<div class="cbar"><div class="cbar-hd"><span class="cbar-lbl">Email Security</span><span class="cbar-num" style="color:#059669">100</span></div><div class="cbar-track"><div class="cbar-fill" style="width:100%;background:#059669"></div></div></div>
+<div class="cbar"><div class="cbar-hd"><span class="cbar-lbl">Defender</span><span class="cbar-num" style="color:#d97706">67</span></div><div class="cbar-track"><div class="cbar-fill" style="width:67%;background:#d97706"></div></div></div>
+      <div class="conn-t" style="margin-top:12px">Service Connections</div>
+      <div class="conn-grid"><div class="conn coff"><span>&#10005;</span><span>Graph</span></div><div class="conn cok"><span>&#10003;</span><span>EXO</span></div><div class="conn cok"><span>&#10003;</span><span>IPPSSession</span></div><div class="conn cok"><span>&#10003;</span><span>Teams</span></div><div class="conn coff"><span>&#10005;</span><span>SharePoint</span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Scope + Methodology -->
+      <div class="card mt">
+        <div class="card-hd"><span class="card-title">Assessment Scope &amp; Methodology</span></div>
+        <div class="scope-body">
+          <div class="scope-col">
+            <div class="scope-head">Assessed in this report</div>
+            <div class="scope-item scope-covered"><span class="scope-ico">&#10003;</span><div><div class="scope-name">Defender</div><div class="scope-cnt">3 controls assessed</div></div></div><div class="scope-item scope-covered"><span class="scope-ico">&#10003;</span><div><div class="scope-name">Email Security</div><div class="scope-cnt">25 controls assessed</div></div></div><div class="scope-item scope-covered"><span class="scope-ico">&#10003;</span><div><div class="scope-name">Identity</div><div class="scope-cnt">18 controls assessed</div></div></div><div class="scope-item scope-covered"><span class="scope-ico">&#10003;</span><div><div class="scope-name">Intune</div><div class="scope-cnt">8 controls assessed</div></div></div><div class="scope-item scope-covered"><span class="scope-ico">&#10003;</span><div><div class="scope-name">Power Platform</div><div class="scope-cnt">5 controls assessed</div></div></div><div class="scope-item scope-covered"><span class="scope-ico">&#10003;</span><div><div class="scope-name">Purview</div><div class="scope-cnt">8 controls assessed</div></div></div><div class="scope-item scope-covered"><span class="scope-ico">&#10003;</span><div><div class="scope-name">SharePoint</div><div class="scope-cnt">7 controls assessed</div></div></div><div class="scope-item scope-covered"><span class="scope-ico">&#10003;</span><div><div class="scope-name">Teams</div><div class="scope-cnt">8 controls assessed</div></div></div>
+          </div>
+          <div class="scope-col">
+            <div class="scope-head">Not yet assessed</div>
+            <div class="scope-item scope-pending"><span class="scope-ico">&#9711;</span><div><div class="scope-name">SharePoint Online</div><div class="scope-cnt">Session 5+</div></div></div><div class="scope-item scope-pending"><span class="scope-ico">&#9711;</span><div><div class="scope-name">Microsoft Teams governance</div><div class="scope-cnt">Session 5+</div></div></div><div class="scope-item scope-pending"><span class="scope-ico">&#9711;</span><div><div class="scope-name">Purview / Compliance Center</div><div class="scope-cnt">Session 5+</div></div></div><div class="scope-item scope-pending"><span class="scope-ico">&#9711;</span><div><div class="scope-name">Microsoft Intune / Endpoint</div><div class="scope-cnt">Session 5+</div></div></div><div class="scope-item scope-pending"><span class="scope-ico">&#9711;</span><div><div class="scope-name">Power Platform</div><div class="scope-cnt">Session 5+</div></div></div><div class="scope-item scope-pending"><span class="scope-ico">&#9711;</span><div><div class="scope-name">Microsoft Sentinel</div><div class="scope-cnt">Session 5+</div></div></div>
+          </div>
+          <div class="scope-col scope-method">
+            <div class="scope-head">Scoring Methodology</div>
+            <div class="method-formula">
+              <div class="method-eq">Score = (Satisfied + 0.5 &times; Partial) &divide; (Total &minus; N/A) &times; 100</div>
+            </div>
+            <div class="method-rows">
+              <div class="method-row"><span class="b bp" style="min-width:72px;text-align:center">Pass</span><span>Control fully meets the requirement</span></div>
+              <div class="method-row"><span class="b bw" style="min-width:72px;text-align:center">Partial</span><span>Control partially met or config present but not enforced</span></div>
+              <div class="method-row"><span class="b bg" style="min-width:72px;text-align:center">Gap</span><span>Control not in place — active security risk</span></div>
+              <div class="method-row"><span class="b bn" style="min-width:72px;text-align:center">N/A</span><span>Cannot be evaluated in this environment</span></div>
+            </div>
+            <div class="method-scale">
+              <div class="scale-item" style="color:#059669"><strong>85&ndash;100</strong> Strong</div>
+              <div class="scale-item" style="color:#d97706"><strong>65&ndash;84</strong> Moderate</div>
+              <div class="scale-item" style="color:#ea580c"><strong>40&ndash;64</strong> Weak</div>
+              <div class="scale-item" style="color:#dc2626"><strong>0&ndash;39</strong> Critical</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+<!-- Priority Actions -->
+
+
+<!-- Identity Inventory -->
+
+
+<!-- Findings -->
+      <div class="card mt">
+        <div class="card-hd">
+          <span class="card-title">Defender</span>
+          <span class="cat-pill" style="background:#d9770618;color:#d97706;border-color:#d977063a">67 / 100</span>
+        </div>
+        <table class="ft">
+          <thead><tr class="fth"><th style="width:92px">State</th><th style="width:82px">Severity</th><th>Control / Current Value</th><th>Detail</th></tr></thead>
+          <tbody>          <tr class="fr rw exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bw">&#9679; Partial</span></td>
+            <td class="td2"><span class="sv svh">High</span></td>
+            <td class="td3"><div class="f-title">Anti-phishing policy with impersonation protection <span class="ttp-mini">T1566.001</span></div><div class="f-cv">Policy 'Strict Preset Security Policy1757690553683' configured but ...</div></td>
+            <td class="td4">Anti-phishing policy with impersonation protection exists but has no active rule applying it to recipients.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Anti-phishing policy with impersonation protection exists but has no active rule applying it to recipients.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">Policy 'Strict Preset Security Policy1757690553683' configured but no enabled rule targets recipients</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">Policy + active rule covering all accepted domains or all recipients</span></div><div class="ex-r ex-rem"><span class="ex-l">Remediation</span><span class="ex-v">Create an anti-phishing rule: New-AntiPhishRule -AntiPhishPolicy [name] -RecipientDomainIs [domain] -Priority 0. Or use the Security portal.</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1566/001" target="_blank" class="ttp-tag">T1566.001</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SI-3, SI-4</span><span class="fw-tag">CIS-v8: 9.6</span><span class="fw-tag">CIS-M365-v6: 2.1.7</span><span class="fw-tag">HIPAA: 164.308(a)(5)(ii)(B)</span><span class="fw-tag">HIPAA-NPRM: 164.308(a)(5)(ii)(B)</span><span class="fw-tag">ISO-27001: A.8.7</span><span class="fw-tag">NIST-CSF-2: PR.PS-05, DE.CM-01</span><span class="fw-tag">CISA-SCuBA: MS.DEFENDER.1.1</span></span></div></div></td></tr>          <tr class="fr rw exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bw">&#9679; Partial</span></td>
+            <td class="td2"><span class="sv svh">High</span></td>
+            <td class="td3"><div class="f-title">Safe Links policy enabled tenant-wide <span class="ttp-mini">T1566.002</span><span class="ttp-mini">T1189</span></div><div class="f-cv">Policy: 'Protect Safe Links' | ScanUrls: True | ClickThrough: ALLOW...</div></td>
+            <td class="td4">Safe Links enabled but AllowClickThrough=True — users can bypass Safe Links warnings and reach malicious URLs.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Safe Links enabled but AllowClickThrough=True — users can bypass Safe Links warnings and reach malicious URLs.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">Policy: 'Protect Safe Links' | ScanUrls: True | ClickThrough: ALLOWED (gap) | InternalSenders: enabled | Teams: enabled</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">ScanUrls=True, AllowClickThrough=False, EnableForInternalSenders=True, applied to all recipients</span></div><div class="ex-r ex-rem"><span class="ex-l">Remediation</span><span class="ex-v">Set AllowClickThrough=$false on the Safe Links policy to prevent users bypassing URL block warnings.</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1566/002" target="_blank" class="ttp-tag">T1566.002</a><a href="https://attack.mitre.org/techniques/T1189" target="_blank" class="ttp-tag">T1189</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SI-3</span><span class="fw-tag">CIS-v8: 9.7</span><span class="fw-tag">CIS-M365-v6: 2.1.1</span><span class="fw-tag">HIPAA: 164.308(a)(5)(ii)(B)</span><span class="fw-tag">ISO-27001: A.8.7</span><span class="fw-tag">NIST-CSF-2: PR.PS-05</span><span class="fw-tag">CISA-SCuBA: MS.DEFENDER.5.1</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">Safe Attachments policy with Block action</div><div class="f-cv">Policy: 'Safe Attachments' | Action: Block | Enabled: True</div></td>
+            <td class="td4">Safe Attachments Block policy active and applied to recipients.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Safe Attachments Block policy active and applied to recipients.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">Policy: 'Safe Attachments' | Action: Block | Enabled: True</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">Enabled Safe Attachments policy with Action=Block and active rule</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1566/001" target="_blank" class="ttp-tag">T1566.001</a><a href="https://attack.mitre.org/techniques/T1204/002" target="_blank" class="ttp-tag">T1204.002</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SI-3, SI-8</span><span class="fw-tag">CIS-v8: 9.6, 10.5</span><span class="fw-tag">CIS-M365-v6: 2.1.4, 2.1.5</span><span class="fw-tag">HIPAA: 164.308(a)(5)(ii)(B)</span><span class="fw-tag">ISO-27001: A.8.7</span><span class="fw-tag">NIST-CSF-2: PR.PS-05, DE.CM-01</span><span class="fw-tag">SOC-2: CC6.8</span><span class="fw-tag">CISA-SCuBA: MS.DEFENDER.4.1</span></span></div></div></td></tr></tbody>
+        </table>
+      </div>      <div class="card mt">
+        <div class="card-hd">
+          <span class="card-title">Email Security</span>
+          <span class="cat-pill" style="background:#05966918;color:#059669;border-color:#0596693a">100 / 100</span>
+        </div>
+        <table class="ft">
+          <thead><tr class="fth"><th style="width:92px">State</th><th style="width:82px">Severity</th><th>Control / Current Value</th><th>Detail</th></tr></thead>
+          <tbody>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">Customer Lockbox enabled</div><div class="f-cv">CustomerLockBoxEnabled: True</div></td>
+            <td class="td4">Customer Lockbox enabled. Microsoft support access requires explicit approval.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Customer Lockbox enabled. Microsoft support access requires explicit approval.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">CustomerLockBoxEnabled: True</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">CustomerLockBoxEnabled: True</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1213" target="_blank" class="ttp-tag">T1213</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: AC-2, AC-3</span><span class="fw-tag">CIS-M365-v6: 1.1.3</span><span class="fw-tag">HIPAA: 164.312(a)(1)</span><span class="fw-tag">ISO-27001: A.8.3</span><span class="fw-tag">NIST-CSF-2: PR.AA-05</span><span class="fw-tag">SOC-2: CC6.3</span><span class="fw-tag">CISA-SCuBA: MS.EXO.15.1</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">DKIM signing enabled: mattlevorson.com</div><div class="f-cv">selector1: selector1-mattlevorson-com._domainkey.nextlayersec665.a-...</div></td>
+            <td class="td4">Both DKIM selectors published for mattlevorson.com.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Both DKIM selectors published for mattlevorson.com.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">selector1: selector1-mattlevorson-com._domainkey.nextlayersec665.a-v1.dkim.mail.microsoft; selector2: selector2-mattlevorson-com._domainkey.nextlayersec665.a-v1.dkim.mail.microsoft</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">selector1 + selector2 CNAMEs</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1566/001" target="_blank" class="ttp-tag">T1566.001</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SI-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.10</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">DKIM signing enabled: nextlayersec.dev</div><div class="f-cv">selector1: selector1-nextlayersec-dev._domainkey.nextlayersec665.n-...</div></td>
+            <td class="td4">Both DKIM selectors published for nextlayersec.dev.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Both DKIM selectors published for nextlayersec.dev.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">selector1: selector1-nextlayersec-dev._domainkey.nextlayersec665.n-v1.dkim.mail.microsoft; selector2: selector2-nextlayersec-dev._domainkey.nextlayersec665.n-v1.dkim.mail.microsoft</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">selector1 + selector2 CNAMEs</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1566/001" target="_blank" class="ttp-tag">T1566.001</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SI-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.10</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">DKIM signing enabled: nextlayersec.io</div><div class="f-cv">selector1: selector1-nextlayersec-io._domainkey.nextlayersec665.d-v...</div></td>
+            <td class="td4">Both DKIM selectors published for nextlayersec.io.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Both DKIM selectors published for nextlayersec.io.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">selector1: selector1-nextlayersec-io._domainkey.nextlayersec665.d-v1.dkim.mail.microsoft; selector2: selector2-nextlayersec-io._domainkey.nextlayersec665.d-v1.dkim.mail.microsoft</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">selector1 + selector2 CNAMEs</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1566/001" target="_blank" class="ttp-tag">T1566.001</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SI-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.10</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">DMARC enforcement policy: mattlevorson.com</div><div class="f-cv">v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; rua=mailto:support@...</div></td>
+            <td class="td4">mattlevorson.com DMARC at p=reject - exact-domain spoofing prevented.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">mattlevorson.com DMARC at p=reject - exact-domain spoofing prevented.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; rua=mailto:support@nextlayersec.dev; ruf=mailto:support@nextlayersec.dev; fo=1; pct=100</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">p=reject</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1566/001" target="_blank" class="ttp-tag">T1566.001</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SI-8, SC-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.8</span><span class="fw-tag">ISO-27001: A.8.20</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-SCuBA: MS.EXO.2.2</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">DMARC enforcement policy: nextlayersec.dev</div><div class="f-cv">v=DMARC1; p=reject; rua=mailto:support@nextlayersec.dev; ruf=mailto...</div></td>
+            <td class="td4">nextlayersec.dev DMARC at p=reject - exact-domain spoofing prevented.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">nextlayersec.dev DMARC at p=reject - exact-domain spoofing prevented.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">v=DMARC1; p=reject; rua=mailto:support@nextlayersec.dev; ruf=mailto:support@nextlayersec.dev; fo=1; aspf=s; adkim=s</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">p=reject</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1566/001" target="_blank" class="ttp-tag">T1566.001</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SI-8, SC-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.8</span><span class="fw-tag">ISO-27001: A.8.20</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-SCuBA: MS.EXO.2.2</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">DMARC enforcement policy: nextlayersec.io</div><div class="f-cv">v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; ruamailto:mlevorson...</div></td>
+            <td class="td4">nextlayersec.io DMARC at p=reject - exact-domain spoofing prevented.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">nextlayersec.io DMARC at p=reject - exact-domain spoofing prevented.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; ruamailto:mlevorson@nextlayersec.io; ruf=mailto:mlevorson@nextlayersec.io; fo=1;</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">p=reject</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1566/001" target="_blank" class="ttp-tag">T1566.001</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SI-8, SC-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.8</span><span class="fw-tag">ISO-27001: A.8.20</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-SCuBA: MS.EXO.2.2</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">DNSSEC enabled for sending domains: mattlevorson.com</div><div class="f-cv">DNSSEC: enabled</div></td>
+            <td class="td4">mattlevorson.com has DNSSEC enabled (DS records present). DNS records are cryptographically signed.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">mattlevorson.com has DNSSEC enabled (DS records present). DNS records are cryptographically signed.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">DNSSEC: enabled</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">DS records published</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1557" target="_blank" class="ttp-tag">T1557</a><a href="https://attack.mitre.org/techniques/T1584/002" target="_blank" class="ttp-tag">T1584.002</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SC-20, SC-21</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">DNSSEC enabled for sending domains: nextlayersec.dev</div><div class="f-cv">DNSSEC: enabled</div></td>
+            <td class="td4">nextlayersec.dev has DNSSEC enabled (DS records present). DNS records are cryptographically signed.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">nextlayersec.dev has DNSSEC enabled (DS records present). DNS records are cryptographically signed.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">DNSSEC: enabled</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">DS records published</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1557" target="_blank" class="ttp-tag">T1557</a><a href="https://attack.mitre.org/techniques/T1584/002" target="_blank" class="ttp-tag">T1584.002</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SC-20, SC-21</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">DNSSEC enabled for sending domains: nextlayersec.io</div><div class="f-cv">DNSSEC: enabled</div></td>
+            <td class="td4">nextlayersec.io has DNSSEC enabled (DS records present). DNS records are cryptographically signed.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">nextlayersec.io has DNSSEC enabled (DS records present). DNS records are cryptographically signed.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">DNSSEC: enabled</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">DS records published</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1557" target="_blank" class="ttp-tag">T1557</a><a href="https://attack.mitre.org/techniques/T1584/002" target="_blank" class="ttp-tag">T1584.002</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SC-20, SC-21</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">IMAP disabled for all mailboxes</div><div class="f-cv">IMAP enabled: 0 of 3 mailboxes</div></td>
+            <td class="td4">IMAP disabled on all mailboxes.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">IMAP disabled on all mailboxes.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">IMAP enabled: 0 of 3 mailboxes</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">0 mailboxes with IMAP enabled</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1114" target="_blank" class="ttp-tag">T1114</a><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: IA-2, CM-7</span><span class="fw-tag">CIS-v8: 4.8</span><span class="fw-tag">CIS-M365-v6: 6.5.2</span><span class="fw-tag">ISO-27001: A.8.5</span><span class="fw-tag">NIST-CSF-2: PR.AA-03</span><span class="fw-tag">CISA-SCuBA: MS.EXO.10.2</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">Mailbox audit enabled tenant-wide</div><div class="f-cv">Enabled, no bypass</div></td>
+            <td class="td4">Tenant audit enabled. No mailboxes have AuditBypassEnabled.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Tenant audit enabled. No mailboxes have AuditBypassEnabled.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">Enabled, no bypass</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">Enabled, no bypass</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1114" target="_blank" class="ttp-tag">T1114</a><a href="https://attack.mitre.org/techniques/T1114/002" target="_blank" class="ttp-tag">T1114.002</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: AU-2, AU-9, AU-12</span><span class="fw-tag">CIS-v8: 8.2, 8.5</span><span class="fw-tag">CIS-M365-v6: 6.1.3</span><span class="fw-tag">HIPAA: 164.312(b)</span><span class="fw-tag">HIPAA-NPRM: 164.312(b)</span><span class="fw-tag">ISO-27001: A.8.15</span><span class="fw-tag">NIST-CSF-2: DE.CM-09</span><span class="fw-tag">SOC-2: CC7.2</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">Modern authentication enabled for Exchange Online</div><div class="f-cv">OAuth2ClientProfileEnabled: True</div></td>
+            <td class="td4">Modern authentication (OAuth2) enabled for Exchange Online. Outlook and mail clients can use MFA.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Modern authentication (OAuth2) enabled for Exchange Online. Outlook and mail clients can use MFA.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">OAuth2ClientProfileEnabled: True</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">OAuth2ClientProfileEnabled: True</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: IA-2, IA-2(1)</span><span class="fw-tag">CIS-M365-v6: 6.5.3</span><span class="fw-tag">ISO-27001: A.8.5</span><span class="fw-tag">NIST-CSF-2: PR.AA-03</span><span class="fw-tag">CISA-SCuBA: MS.EXO.3.1</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">MTA-STS policy enforced: mattlevorson.com</div><div class="f-cv">Mode: enforce | TXT: v=STSv1; id=20260419 | Policy URL: https://mta...</div></td>
+            <td class="td4">mattlevorson.com MTA-STS in enforce mode. Sending servers must use TLS.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">mattlevorson.com MTA-STS in enforce mode. Sending servers must use TLS.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">Mode: enforce | TXT: v=STSv1; id=20260419 | Policy URL: https://mta-sts.mattlevorson.com/.well-known/mta-sts.txt</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">Mode: enforce</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1557" target="_blank" class="ttp-tag">T1557</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SC-8, SC-8(1)</span><span class="fw-tag">CIS-v8: 3.10</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">MTA-STS policy enforced: nextlayersec.dev</div><div class="f-cv">Mode: enforce | TXT: v=STSv1; id=20260419 | Policy URL: https://mta...</div></td>
+            <td class="td4">nextlayersec.dev MTA-STS in enforce mode. Sending servers must use TLS.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">nextlayersec.dev MTA-STS in enforce mode. Sending servers must use TLS.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">Mode: enforce | TXT: v=STSv1; id=20260419 | Policy URL: https://mta-sts.nextlayersec.dev/.well-known/mta-sts.txt</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">Mode: enforce</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1557" target="_blank" class="ttp-tag">T1557</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SC-8, SC-8(1)</span><span class="fw-tag">CIS-v8: 3.10</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">MTA-STS policy enforced: nextlayersec.io</div><div class="f-cv">Mode: enforce | TXT: v=STSv1; id=20260417 | Policy URL: https://mta...</div></td>
+            <td class="td4">nextlayersec.io MTA-STS in enforce mode. Sending servers must use TLS.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">nextlayersec.io MTA-STS in enforce mode. Sending servers must use TLS.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">Mode: enforce | TXT: v=STSv1; id=20260417 | Policy URL: https://mta-sts.nextlayersec.io/.well-known/mta-sts.txt</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">Mode: enforce</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1557" target="_blank" class="ttp-tag">T1557</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SC-8, SC-8(1)</span><span class="fw-tag">CIS-v8: 3.10</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">POP3 disabled for all mailboxes</div><div class="f-cv">POP3 enabled: 0 of 3 mailboxes</div></td>
+            <td class="td4">POP3 disabled on all mailboxes.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">POP3 disabled on all mailboxes.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">POP3 enabled: 0 of 3 mailboxes</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">0 mailboxes with POP3 enabled</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1114" target="_blank" class="ttp-tag">T1114</a><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: IA-2, CM-7</span><span class="fw-tag">CIS-v8: 4.8</span><span class="fw-tag">CIS-M365-v6: 6.5.1</span><span class="fw-tag">ISO-27001: A.8.5</span><span class="fw-tag">NIST-CSF-2: PR.AA-03</span><span class="fw-tag">CISA-SCuBA: MS.EXO.10.1</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">SMTP client authentication disabled tenant-wide</div><div class="f-cv">Tenant: Disabled</div></td>
+            <td class="td4">SMTP client authentication disabled tenant-wide.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">SMTP client authentication disabled tenant-wide.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">Tenant: Disabled</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">Disabled</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a><a href="https://attack.mitre.org/techniques/T1114" target="_blank" class="ttp-tag">T1114</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: IA-2, AC-17</span><span class="fw-tag">CIS-v8: 6.3</span><span class="fw-tag">CIS-M365-v6: 6.4.1</span><span class="fw-tag">HIPAA: 164.312(e)</span><span class="fw-tag">ISO-27001: A.5.17, A.8.5</span><span class="fw-tag">NIST-CSF-2: PR.AA-03</span><span class="fw-tag">CISA-SCuBA: MS.EXO.4.1</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">SPF record published: mattlevorson.com</div><div class="f-cv">v=spf1 include:spf.protection.outlook.com -all</div></td>
+            <td class="td4">mattlevorson.com has SPF with hard fail (-all).</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">mattlevorson.com has SPF with hard fail (-all).</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">v=spf1 include:spf.protection.outlook.com -all</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">SPF -all</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1566/001" target="_blank" class="ttp-tag">T1566.001</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SI-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.9</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">SPF record published: nextlayersec.dev</div><div class="f-cv">v=spf1 include:spf.protection.outlook.com -all</div></td>
+            <td class="td4">nextlayersec.dev has SPF with hard fail (-all).</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">nextlayersec.dev has SPF with hard fail (-all).</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">v=spf1 include:spf.protection.outlook.com -all</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">SPF -all</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1566/001" target="_blank" class="ttp-tag">T1566.001</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SI-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.9</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">SPF record published: nextlayersec.io</div><div class="f-cv">v=spf1 include:spf.protection.outlook.com -all</div></td>
+            <td class="td4">nextlayersec.io has SPF with hard fail (-all).</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">nextlayersec.io has SPF with hard fail (-all).</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">v=spf1 include:spf.protection.outlook.com -all</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">SPF -all</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1566/001" target="_blank" class="ttp-tag">T1566.001</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SI-8</span><span class="fw-tag">CIS-v8: 9.5</span><span class="fw-tag">CIS-M365-v6: 2.1.9</span><span class="fw-tag">NIST-CSF-2: PR.DS-02</span><span class="fw-tag">CISA-BOD: BOD 18-01</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">TLS-RPT configured for sending domains: mattlevorson.com</div><div class="f-cv">v=TLSRPTv1; rua=mailto:support@nextlayersec.dev</div></td>
+            <td class="td4">mattlevorson.com TLS-RPT configured. TLS delivery failure reports will be received.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">mattlevorson.com TLS-RPT configured. TLS delivery failure reports will be received.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">v=TLSRPTv1; rua=mailto:support@nextlayersec.dev</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">v=TLSRPTv1 record present</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1557" target="_blank" class="ttp-tag">T1557</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SC-8, AU-6</span><span class="fw-tag">NIST-CSF-2: PR.DS-02, DE.CM-09</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">TLS-RPT configured for sending domains: nextlayersec.dev</div><div class="f-cv">v=TLSRPTv1; rua=mailto:support@nextlayersec.dev</div></td>
+            <td class="td4">nextlayersec.dev TLS-RPT configured. TLS delivery failure reports will be received.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">nextlayersec.dev TLS-RPT configured. TLS delivery failure reports will be received.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">v=TLSRPTv1; rua=mailto:support@nextlayersec.dev</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">v=TLSRPTv1 record present</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1557" target="_blank" class="ttp-tag">T1557</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SC-8, AU-6</span><span class="fw-tag">NIST-CSF-2: PR.DS-02, DE.CM-09</span></span></div></div></td></tr>          <tr class="fr rp exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bp">&#10003; Pass</span></td>
+            <td class="td2"><span class="sv svi">Info</span></td>
+            <td class="td3"><div class="f-title">TLS-RPT configured for sending domains: nextlayersec.io</div><div class="f-cv">v=TLSRPTv1; rua=mailto:mlevorson@nextlayersec.io</div></td>
+            <td class="td4">nextlayersec.io TLS-RPT configured. TLS delivery failure reports will be received.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">nextlayersec.io TLS-RPT configured. TLS delivery failure reports will be received.</p><div class="ex-r"><span class="ex-l">Current</span><span class="ex-v">v=TLSRPTv1; rua=mailto:mlevorson@nextlayersec.io</span></div><div class="ex-r"><span class="ex-l">Required</span><span class="ex-v">v=TLSRPTv1 record present</span></div><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1557" target="_blank" class="ttp-tag">T1557</a></span></div><div class="ex-r"><span class="ex-l">Frameworks</span><span class="ex-v fwtags"><span class="fw-tag">NIST-800-53: SC-8, AU-6</span><span class="fw-tag">NIST-CSF-2: PR.DS-02, DE.CM-09</span></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Shared mailbox sign-in disabled</div></td>
+            <td class="td4">Shared mailbox data not collected.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Shared mailbox data not collected.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a></span></div></div></td></tr></tbody>
+        </table>
+      </div>      <div class="card mt">
+        <div class="card-hd">
+          <span class="card-title">Identity</span>
+          <span class="cat-pill" style="background:#dc262618;color:#dc2626;border-color:#dc26263a">0 / 100</span>
+        </div>
+        <table class="ft">
+          <thead><tr class="fth"><th style="width:92px">State</th><th style="width:82px">Severity</th><th>Control / Current Value</th><th>Detail</th></tr></thead>
+          <tbody>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Authenticator app number matching enabled</div></td>
+            <td class="td4">AAD-Users collector data unavailable — cannot assess auth method policy.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-Users collector data unavailable — cannot assess auth method policy.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1621" target="_blank" class="ttp-tag">T1621</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Block legacy authentication protocols</div></td>
+            <td class="td4">Conditional Access data not collected</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Conditional Access data not collected</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a><a href="https://attack.mitre.org/techniques/T1110/003" target="_blank" class="ttp-tag">T1110.003</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">CA Policy Assessment — AAD-1.1</div></td>
+            <td class="td4">AAD-CAPolicies collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-CAPolicies collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a><a href="https://attack.mitre.org/techniques/T1110/003" target="_blank" class="ttp-tag">T1110.003</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">CA Policy Assessment — AAD-3.1</div></td>
+            <td class="td4">AAD-CAPolicies collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-CAPolicies collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a><a href="https://attack.mitre.org/techniques/T1110" target="_blank" class="ttp-tag">T1110</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">CA Policy Assessment — AAD-3.2</div></td>
+            <td class="td4">AAD-CAPolicies collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-CAPolicies collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a><a href="https://attack.mitre.org/techniques/T1110/001" target="_blank" class="ttp-tag">T1110.001</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">CA Policy Assessment — AAD-3.3</div></td>
+            <td class="td4">AAD-CAPolicies collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-CAPolicies collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078/004" target="_blank" class="ttp-tag">T1078.004</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">CA Policy Assessment — AAD-3.4</div></td>
+            <td class="td4">AAD-CAPolicies collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-CAPolicies collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">CA Policy Assessment — AAD-3.5</div></td>
+            <td class="td4">AAD-CAPolicies collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-CAPolicies collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a><a href="https://attack.mitre.org/techniques/T1566" target="_blank" class="ttp-tag">T1566</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">CA Policy Assessment — AAD-3.6</div></td>
+            <td class="td4">AAD-CAPolicies collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-CAPolicies collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">MFA Assessment — AAD-2.1</div></td>
+            <td class="td4">AAD-Users collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-Users collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a><a href="https://attack.mitre.org/techniques/T1110" target="_blank" class="ttp-tag">T1110</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">MFA Assessment — AAD-2.2</div></td>
+            <td class="td4">AAD-Users collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-Users collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a><a href="https://attack.mitre.org/techniques/T1110" target="_blank" class="ttp-tag">T1110</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">MFA Assessment — AAD-2.4</div></td>
+            <td class="td4">AAD-Users collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-Users collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078" target="_blank" class="ttp-tag">T1078</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Phishing-resistant MFA enforced for privileged roles</div></td>
+            <td class="td4">CA data not collected</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">CA data not collected</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1111" target="_blank" class="ttp-tag">T1111</a><a href="https://attack.mitre.org/techniques/T1621" target="_blank" class="ttp-tag">T1621</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Privileged Access Assessment — AAD-4.1</div></td>
+            <td class="td4">AAD-Roles collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-Roles collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078/004" target="_blank" class="ttp-tag">T1078.004</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Privileged Access Assessment — AAD-4.2</div></td>
+            <td class="td4">AAD-Roles collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-Roles collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078/002" target="_blank" class="ttp-tag">T1078.002</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Privileged Access Assessment — AAD-4.3</div></td>
+            <td class="td4">AAD-Roles collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-Roles collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078/004" target="_blank" class="ttp-tag">T1078.004</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Privileged Access Assessment — AAD-4.4</div></td>
+            <td class="td4">AAD-Roles collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-Roles collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078/004" target="_blank" class="ttp-tag">T1078.004</a></span></div></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Privileged Access Assessment — AAD-4.5</div></td>
+            <td class="td4">AAD-Roles collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">AAD-Roles collector did not run.</p><div class="ex-r"><span class="ex-l">ATT&amp;CK TTPs</span><span class="ex-v ttptags"><a href="https://attack.mitre.org/techniques/T1078/004" target="_blank" class="ttp-tag">T1078.004</a></span></div></div></td></tr></tbody>
+        </table>
+      </div>      <div class="card mt">
+        <div class="card-hd">
+          <span class="card-title">Intune</span>
+          <span class="cat-pill" style="background:#dc262618;color:#dc2626;border-color:#dc26263a">0 / 100</span>
+        </div>
+        <table class="ft">
+          <thead><tr class="fth"><th style="width:92px">State</th><th style="width:82px">Severity</th><th>Control / Current Value</th><th>Detail</th></tr></thead>
+          <tbody>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Android App Protection (MAM) policy configured</div></td>
+            <td class="td4">Intune collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Intune collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Enrollment restrictions configured beyond default allow-all policy</div></td>
+            <td class="td4">Intune collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Intune collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Intune MDM authority configured and devices enrolled</div></td>
+            <td class="td4">Intune collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Intune collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">iOS App Protection (MAM) policy configured</div></td>
+            <td class="td4">Intune collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Intune collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Microsoft Defender for Endpoint connector enabled in Intune</div></td>
+            <td class="td4">Intune collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Intune collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Windows device compliance policy requires antivirus and firewall</div></td>
+            <td class="td4">Intune collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Intune collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Windows device compliance policy requires BitLocker encryption</div></td>
+            <td class="td4">Intune collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Intune collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Windows Hello for Business policy configured in Intune</div></td>
+            <td class="td4">Intune collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Intune collector did not run.</p></div></td></tr></tbody>
+        </table>
+      </div>      <div class="card mt">
+        <div class="card-hd">
+          <span class="card-title">Power Platform</span>
+          <span class="cat-pill" style="background:#dc262618;color:#dc2626;border-color:#dc26263a">0 / 100</span>
+        </div>
+        <table class="ft">
+          <thead><tr class="fth"><th style="width:92px">State</th><th style="width:82px">Severity</th><th>Control / Current Value</th><th>Detail</th></tr></thead>
+          <tbody>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Default environment DLP policy configured</div></td>
+            <td class="td4">Power Platform collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Power Platform collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">High-risk connectors blocked in Power Platform DLP policies</div></td>
+            <td class="td4">Power Platform collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Power Platform collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Non-default Power Platform environments covered by DLP policy</div></td>
+            <td class="td4">Power Platform collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Power Platform collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Power Platform admin role assignments minimal</div></td>
+            <td class="td4">Power Platform collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Power Platform collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Power Platform tenant isolation enabled</div></td>
+            <td class="td4">Power Platform collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Power Platform collector did not run.</p></div></td></tr></tbody>
+        </table>
+      </div>      <div class="card mt">
+        <div class="card-hd">
+          <span class="card-title">Purview</span>
+          <span class="cat-pill" style="background:#dc262618;color:#dc2626;border-color:#dc26263a">0 / 100</span>
+        </div>
+        <table class="ft">
+          <thead><tr class="fth"><th style="width:92px">State</th><th style="width:82px">Severity</th><th>Control / Current Value</th><th>Detail</th></tr></thead>
+          <tbody>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Audit log retention configured (90 days minimum)</div></td>
+            <td class="td4">Purview collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Purview collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">DLP policy covers Exchange email</div></td>
+            <td class="td4">Purview collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Purview collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">DLP policy covers Microsoft Teams</div></td>
+            <td class="td4">Purview collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Purview collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">DLP policy covers SharePoint and OneDrive</div></td>
+            <td class="td4">Purview collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Purview collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Retention policy for Exchange email configured</div></td>
+            <td class="td4">Purview collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Purview collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Retention policy for SharePoint and OneDrive configured</div></td>
+            <td class="td4">Purview collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Purview collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Sensitivity labels published to users</div></td>
+            <td class="td4">Purview collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Purview collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Unified audit log enabled</div></td>
+            <td class="td4">Purview collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Purview collector did not run.</p></div></td></tr></tbody>
+        </table>
+      </div>      <div class="card mt">
+        <div class="card-hd">
+          <span class="card-title">SharePoint</span>
+          <span class="cat-pill" style="background:#dc262618;color:#dc2626;border-color:#dc26263a">0 / 100</span>
+        </div>
+        <table class="ft">
+          <thead><tr class="fth"><th style="width:92px">State</th><th style="width:82px">Severity</th><th>Control / Current Value</th><th>Detail</th></tr></thead>
+          <tbody>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Anyone link expiration enforced (30 days or less)</div></td>
+            <td class="td4">SharePoint collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">SharePoint collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Default sharing link type set to internal or specific people</div></td>
+            <td class="td4">SharePoint collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">SharePoint collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">External user resharing of content disabled</div></td>
+            <td class="td4">SharePoint collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">SharePoint collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Guest user resharing of items they do not own disabled</div></td>
+            <td class="td4">SharePoint collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">SharePoint collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">OneDrive default sharing link scoped to organisation</div></td>
+            <td class="td4">SharePoint collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">SharePoint collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">SharePoint tenant external sharing restricted</div></td>
+            <td class="td4">SharePoint collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">SharePoint collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Unmanaged device access policy limits or blocks SharePoint access</div></td>
+            <td class="td4">SharePoint collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">SharePoint collector did not run.</p></div></td></tr></tbody>
+        </table>
+      </div>      <div class="card mt">
+        <div class="card-hd">
+          <span class="card-title">Teams</span>
+          <span class="cat-pill" style="background:#dc262618;color:#dc2626;border-color:#dc26263a">0 / 100</span>
+        </div>
+        <table class="ft">
+          <thead><tr class="fth"><th style="width:92px">State</th><th style="width:82px">Severity</th><th>Control / Current Value</th><th>Detail</th></tr></thead>
+          <tbody>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Anonymous meeting join disabled</div></td>
+            <td class="td4">Teams collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Teams collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Email integration into Teams channels disabled</div></td>
+            <td class="td4">Teams collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Teams collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Meeting lobby enabled for external and anonymous users</div></td>
+            <td class="td4">Teams collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Teams collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Meeting presenter role restricted to organiser or co-organisers</div></td>
+            <td class="td4">Teams collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Teams collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">PSTN (dial-in) users bypass lobby disabled</div></td>
+            <td class="td4">Teams collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Teams collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Teams consumer (personal account) federation disabled</div></td>
+            <td class="td4">Teams collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Teams collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Teams external access (federation) restricted</div></td>
+            <td class="td4">Teams collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Teams collector did not run.</p></div></td></tr>          <tr class="fr rn exp" onclick="toggle(this)">
+            <td class="td1"><span class="b bn">&#8212; N/A</span></td>
+            <td class="td2"><span class="sv svm">Medium</span></td>
+            <td class="td3"><div class="f-title">Third-party cloud storage apps disabled in Teams</div></td>
+            <td class="td4">Teams collector did not run.</td>
+          </tr>
+          <tr class="extr"><td colspan="4"><div class="exbody"><p class="ex-d">Teams collector did not run.</p></div></td></tr></tbody>
+        </table>
+      </div>
+
+<!-- Remediation Roadmap -->
+<div class="card mt"><div class="card-hd"><span class="card-title">Remediation Roadmap</span></div><div class="rm-wrap"><div class="rmg"><div class="rmgl efs">&#9200; Standard (1-4 hrs)</div><div class="rmi rmg-warn"><div class="rmi-hd"><span class="sv svh">High</span> <span class="rmi-t">Anti-phishing policy with impersonation protection</span> <span class="ttp-mini">T1566.001</span></div><div class="rmi-r">Create an anti-phishing rule: New-AntiPhishRule -AntiPhishPolicy [name] -RecipientDomainIs [domain] -Priority 0. Or use the Security portal.</div></div><div class="rmi rmg-warn"><div class="rmi-hd"><span class="sv svh">High</span> <span class="rmi-t">Safe Links policy enabled tenant-wide</span> <span class="ttp-mini">T1566.002</span><span class="ttp-mini">T1189</span></div><div class="rmi-r">Set AllowClickThrough=$false on the Safe Links policy to prevent users bypassing URL block warnings.</div></div></div></div></div>
+
+<!-- DNS Inventory -->
+<div class="card mt"><div class="card-hd"><span class="card-title">DNS Email Security</span></div><div class="tscroll"><table class="itbl"><thead><tr><th>Domain</th><th>SPF</th><th>DKIM</th><th>DMARC</th><th>DMARC Record</th><th>MTA-STS</th><th>TLS-RPT</th><th>DNSSEC</th></tr></thead><tbody><tr><td><strong>mattlevorson.com</strong></td><td><span class="igood">&#10003; -all</span></td><td><span class="igood">&#10003; Both</span></td><td><span class="igood">&#10003; reject</span></td><td><code class="icode">v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; r...</code></td><td><span class="igood">&#10003; enforce</span></td><td><span class="igood">&#10003;</span></td><td><span class="igood">&#10003;</span></td></tr><tr><td><strong>nextlayersec.dev</strong></td><td><span class="igood">&#10003; -all</span></td><td><span class="igood">&#10003; Both</span></td><td><span class="igood">&#10003; reject</span></td><td><code class="icode">v=DMARC1; p=reject; rua=mailto:support@nextlayers...</code></td><td><span class="igood">&#10003; enforce</span></td><td><span class="igood">&#10003;</span></td><td><span class="igood">&#10003;</span></td></tr><tr><td><strong>nextlayersec.io</strong></td><td><span class="igood">&#10003; -all</span></td><td><span class="igood">&#10003; Both</span></td><td><span class="igood">&#10003; reject</span></td><td><code class="icode">v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s; r...</code></td><td><span class="igood">&#10003; enforce</span></td><td><span class="igood">&#10003;</span></td><td><span class="igood">&#10003;</span></td></tr></tbody></table></div></div>
+
+<!-- EXO Inventory -->
+<div class="card mt" style="max-width:560px"><div class="card-hd"><span class="card-title">Exchange Online</span></div><table class="itbl i2"><thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody><tr><td>Mailbox Audit</td><td><span class="igood">&#10003; Enabled</span></td></tr><tr><td>Customer Lockbox</td><td><span class="igood">&#10003; Enabled</span></td></tr><tr><td>Modern Authentication (OAuth2)</td><td><span class="igood">&#10003; Enabled</span></td></tr><tr><td>SMTP Client Authentication</td><td><span class="igood">&#10003; Disabled</span></td></tr><tr><td>Total Mailboxes</td><td>3</td></tr><tr><td>POP3</td><td><span class="igood">&#10003; 0 mailboxes</span></td></tr><tr><td>IMAP</td><td><span class="igood">&#10003; 0 mailboxes</span></td></tr><tr><td>ActiveSync</td><td>3 mailboxes</td></tr><tr><td>Audit Bypass</td><td><span class="igood">&#10003; None</span></td></tr></tbody></table></div>
+
+<!-- CA Policies -->
+
+
+<!-- Defender -->
+<div class="card mt"><div class="card-hd"><span class="card-title">Defender for Office 365 Policies</span></div><table class="itbl"><thead><tr><th>Policy</th><th style="width:110px">Status</th><th>Configuration</th></tr></thead><tbody><tr><td><strong>Strict Preset Security Policy1757690555659</strong> <span class="isub">Safe Attachments</span></td><td><span class="igood">&#10003; Enabled</span></td><td>Action: Block</td></tr><tr><td><strong>Built-In Protection Policy</strong> <span class="isub">Safe Attachments</span></td><td><span class="igood">&#10003; Enabled</span></td><td>Action: Block</td></tr><tr><td><strong>Evaluation Policy</strong> <span class="isub">Safe Attachments</span></td><td><span class="igood">&#10003; Enabled</span></td><td>Action: Allow</td></tr><tr><td><strong>Safe attachements</strong> <span class="isub">Safe Attachments</span></td><td><span class="igood">&#10003; Enabled</span></td><td>Action: Block</td></tr><tr><td><strong>Safe Attachments</strong> <span class="isub">Safe Attachments</span></td><td><span class="igood">&#10003; Enabled</span></td><td>Action: Block</td></tr><tr><td><strong>Standard Preset Security Policy1757690511894</strong> <span class="isub">Safe Attachments</span></td><td><span class="igood">&#10003; Enabled</span></td><td>Action: Block</td></tr><tr><td><strong>Strict Preset Security Policy1757690556289</strong> <span class="isub">Safe Links</span></td><td><span class="igood">&#10003; Enabled</span></td><td>Click-through: <span class="igood">Blocked</span> &nbsp; Internal senders: <span class="igood">&#10003;</span> &nbsp; Teams: <span class="igood">&#10003;</span></td></tr><tr><td><strong>Built-In Protection Policy</strong> <span class="isub">Safe Links</span></td><td><span class="igood">&#10003; Enabled</span></td><td>Click-through: <span class="iwarn">Allowed</span> &nbsp; Internal senders: <span class="iwarn">&#10005;</span> &nbsp; Teams: <span class="igood">&#10003;</span></td></tr><tr><td><strong>Evaluation Policy</strong> <span class="isub">Safe Links</span></td><td><span class="igood">&#10003; Enabled</span></td><td>Click-through: <span class="iwarn">Allowed</span> &nbsp; Internal senders: <span class="iwarn">&#10005;</span> &nbsp; Teams: <span class="igood">&#10003;</span></td></tr><tr><td><strong>Protect Safe Links</strong> <span class="isub">Safe Links</span></td><td><span class="igood">&#10003; Enabled</span></td><td>Click-through: <span class="iwarn">Allowed</span> &nbsp; Internal senders: <span class="igood">&#10003;</span> &nbsp; Teams: <span class="igood">&#10003;</span></td></tr><tr><td><strong>Standard Preset Security Policy1757690513394</strong> <span class="isub">Safe Links</span></td><td><span class="igood">&#10003; Enabled</span></td><td>Click-through: <span class="igood">Blocked</span> &nbsp; Internal senders: <span class="igood">&#10003;</span> &nbsp; Teams: <span class="igood">&#10003;</span></td></tr><tr><td><strong>Strict Preset Security Policy1757690553683</strong> <span class="isub">Anti-Phishing</span></td><td><span class="igood">&#10003; Enabled</span></td><td>Mailbox intel: <span class="igood">&#10003;</span> &nbsp; Org domain: <span class="igood">&#10003;</span> &nbsp; Intel protection: <span class="igood">&#10003;</span> &nbsp; Threshold: 4</td></tr><tr><td><strong>Evaluation Policy</strong> <span class="isub">Anti-Phishing</span></td><td><span class="igood">&#10003; Enabled</span></td><td>Mailbox intel: <span class="igood">&#10003;</span> &nbsp; Org domain: <span class="igood">&#10003;</span> &nbsp; Intel protection: <span class="igood">&#10003;</span> &nbsp; Threshold: 3</td></tr><tr><td><strong>Standard Preset Security Policy1757690507293</strong> <span class="isub">Anti-Phishing</span></td><td><span class="igood">&#10003; Enabled</span></td><td>Mailbox intel: <span class="igood">&#10003;</span> &nbsp; Org domain: <span class="igood">&#10003;</span> &nbsp; Intel protection: <span class="igood">&#10003;</span> &nbsp; Threshold: 3</td></tr></tbody></table></div>
+
+</div>
+
+<div class="ftr">
+  <span>Prepared by <strong>NRG Technology Services</strong> &bull; (701) 751-4NRG &bull; nrgtechservices.com</span>
+  <span>Read-only assessment &mdash; no configuration changes were made</span>
+</div>
+
+</div>
+<script>
+function toggle(tr){var n=tr.nextElementSibling;if(n&&n.classList.contains('extr')){n.style.display=n.style.display===''||n.style.display==='table-row'?'none':'table-row'}}
+document.querySelectorAll('.extr').forEach(function(r){r.style.display='none'});
+</script>
+</body>
+</html>
