@@ -6,7 +6,7 @@
 # Each function reads from Get-NRGRawData and calls Add-NRGFinding.
 #
 
-function Test-NRGControl-AAD-LegacyAuth {
+function Test-NRGControlAADLegacyAuth {
     [CmdletBinding()] param()
 
     $controlId = 'AAD-1.1'
@@ -20,7 +20,6 @@ function Test-NRGControl-AAD-LegacyAuth {
         return
     }
 
-    # Block-legacy-auth = a CA policy with ClientAppTypes containing 'other' or 'exchangeActiveSync' AND grant=Block
     $blockingPolicies = @($caData.Data.Policies | Where-Object {
         $_.State -eq 'enabled' -and
         ($_.Conditions.ClientAppTypes -contains 'other' -or $_.Conditions.ClientAppTypes -contains 'exchangeActiveSync') -and
@@ -45,7 +44,7 @@ function Test-NRGControl-AAD-LegacyAuth {
     }
 }
 
-function Test-NRGControl-AAD-PhishResistantMFA {
+function Test-NRGControlAADPhishResistantMFA {
     [CmdletBinding()] param()
 
     $controlId = 'AAD-1.2'
@@ -59,9 +58,6 @@ function Test-NRGControl-AAD-PhishResistantMFA {
         return
     }
 
-    # Look for policies that:
-    # - Target privileged roles
-    # - Require an Authentication Strength (phish-resistant)
     $privPolicies = @($caData.Data.Policies | Where-Object {
         $_.State -eq 'enabled' -and
         $_.Conditions.Users.IncludeRoles.Count -gt 0 -and
