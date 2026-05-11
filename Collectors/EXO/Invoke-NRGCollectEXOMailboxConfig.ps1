@@ -1,10 +1,10 @@
 #
-# Get-NRGCollector-EXO-MailboxConfig.ps1
+# Invoke-NRGCollectEXOMailboxConfig.ps1
 # Collects Exchange Online tenant-wide and mailbox-level configurations.
 # COLLECTION ONLY - no scoring.
 #
 
-function Get-NRGCollector-EXO-MailboxConfig {
+function Invoke-NRGCollectEXOMailboxConfig {
     [CmdletBinding()] param()
 
     $result = @{
@@ -19,15 +19,15 @@ function Get-NRGCollector-EXO-MailboxConfig {
         # Tenant-level config
         $orgConfig = Get-OrganizationConfig -ErrorAction Stop
         $result.Data['OrganizationConfig'] = @{
-            AuditDisabled                  = $orgConfig.AuditDisabled
-            CustomerLockBoxEnabled         = $orgConfig.CustomerLockBoxEnabled
-            ConnectorsEnabled              = $orgConfig.ConnectorsEnabled
-            ConnectorsEnabledForOutlook    = $orgConfig.ConnectorsEnabledForOutlook
-            EwsEnabled                     = $orgConfig.EwsEnabled
-            OAuth2ClientProfileEnabled     = $orgConfig.OAuth2ClientProfileEnabled
-            UnifiedAuditLogIngestionEnabled = $orgConfig.UnifiedAuditLogIngestionEnabled
-            PublicFoldersEnabled           = $orgConfig.PublicFoldersEnabled
-            FocusedInboxOn                 = $orgConfig.FocusedInboxOn
+            AuditDisabled                   = if ($null -ne $orgConfig.AuditDisabled) { $orgConfig.AuditDisabled } else { $false }
+            CustomerLockBoxEnabled          = if ($null -ne $orgConfig.CustomerLockBoxEnabled) { $orgConfig.CustomerLockBoxEnabled } else { $null }
+            ConnectorsEnabled               = if ($null -ne $orgConfig.ConnectorsEnabled) { $orgConfig.ConnectorsEnabled } else { $null }
+            ConnectorsEnabledForOutlook     = if ($null -ne $orgConfig.ConnectorsEnabledForOutlook) { $orgConfig.ConnectorsEnabledForOutlook } else { $null }
+            EwsEnabled                      = if ($null -ne $orgConfig.EwsEnabled) { $orgConfig.EwsEnabled } else { $null }
+            OAuth2ClientProfileEnabled      = if ($null -ne $orgConfig.OAuth2ClientProfileEnabled) { $orgConfig.OAuth2ClientProfileEnabled } else { $null }
+            UnifiedAuditLogIngestionEnabled = if ($orgConfig.PSObject.Properties['UnifiedAuditLogIngestionEnabled']) { $orgConfig.UnifiedAuditLogIngestionEnabled } else { $null }
+            PublicFoldersEnabled            = if ($null -ne $orgConfig.PublicFoldersEnabled) { $orgConfig.PublicFoldersEnabled } else { $null }
+            FocusedInboxOn                  = if ($null -ne $orgConfig.FocusedInboxOn) { $orgConfig.FocusedInboxOn } else { $null }
         }
 
         # Transport config (SMTP AUTH)
