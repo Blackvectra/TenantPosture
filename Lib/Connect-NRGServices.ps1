@@ -71,7 +71,8 @@ function Connect-NRGServices {
             'DeviceManagementConfiguration.Read.All',
             'DeviceManagementApps.Read.All'
         )
-        Connect-MgGraph -Scopes $scopes -UseDeviceCode -NoWelcome -ErrorAction Stop | Out-Null
+        # -InformationAction Continue required: device code prints via Write-Information (stream 6)
+        Connect-MgGraph -Scopes $scopes -UseDeviceCode -NoWelcome -ErrorAction Stop -InformationAction Continue
         $ctx = Get-MgContext -ErrorAction Stop
         if ($ctx) {
             $result['Graph']        = $true
