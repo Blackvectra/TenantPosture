@@ -3,7 +3,7 @@
 # Evaluates Exchange Online controls against collected raw data.
 #
 
-function Test-NRGControl-EXO-MailboxAudit {
+function Test-NRGControlEXOMailboxAudit {
     [CmdletBinding()] param()
 
     $controlId = 'EXO-1.1'
@@ -17,8 +17,8 @@ function Test-NRGControl-EXO-MailboxAudit {
         return
     }
 
-    $auditDisabled  = $exoData.Data.OrganizationConfig.AuditDisabled
-    $bypassedCount  = if ($exoData.Data.ContainsKey('AuditBypass')) { $exoData.Data.AuditBypass.BypassedCount } else { 0 }
+    $auditDisabled = $exoData.Data.OrganizationConfig.AuditDisabled
+    $bypassedCount = if ($exoData.Data.ContainsKey('AuditBypass')) { $exoData.Data.AuditBypass.BypassedCount } else { 0 }
 
     if ($auditDisabled -eq $false -and $bypassedCount -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
@@ -43,7 +43,7 @@ function Test-NRGControl-EXO-MailboxAudit {
     }
 }
 
-function Test-NRGControl-EXO-SmtpAuth {
+function Test-NRGControlEXOSmtpAuth {
     [CmdletBinding()] param()
 
     $controlId = 'EXO-1.2'
