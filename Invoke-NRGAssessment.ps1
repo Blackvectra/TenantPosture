@@ -69,6 +69,11 @@ if ($SkipSharePoint)    { $connectParams['SkipSharePoint']    = $true }
 
 $conn = Connect-NRGServices @connectParams
 
+# Ensure all keys exist even if connection was skipped
+foreach ($svc in @('Graph','EXO','IPPSSession','Teams','SharePoint','TenantDomain','TenantId')) {
+    if (-not $conn.ContainsKey($svc)) { $conn[$svc] = $null }
+}
+
 if ($WhatIfConnections) {
     Write-Host ""
     Write-Host "Connections (WhatIf mode, no collection):" -ForegroundColor Yellow
