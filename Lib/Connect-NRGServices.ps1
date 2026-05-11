@@ -1,165 +1,178 @@
 #
 # Connect-NRGServices.ps1
-# Device code authentication for all M365 services.
+# Device code auth for all M365 services.
 #
-# Returns hashtable indicating which services connected successfully.
-# Failures are non-fatal - collectors will register coverage as Failed for their domain.
+# CONNECTION ORDER MATTERS (MSAL assembly conflict prevention):
+#   1. Graph  — loads MSAL at the version Graph SDK requires
+#   2. Teams  — shares Graph MSAL cleanly when loaded second
+#   3. EXO    — after Graph+Teams to avoid MSAL conflicts
+#   4. IPPS   — after EXO (same module)
+#   5. PnP    — last, reuses Graph token
 #
+# Reference: github.com/microsoftgraph/msgraph-sdk-powershell/issues/3394
+#
+
+# Script-scoped scriptblock (NOT a function) so it does not get exported
+# and does not trigger the "restricted characters" module warning
+$script:ShowDeviceCodeBox = {
+    param([string]$Service, [string]$Url)
+    $inner = "  $Service  "
+    $width = [Math]::Max(64, $inner.Length + 4)
+    $line  = [string]('─' * $width)
+    $pad   = ' ' * ($width - $inner.Length)
+    Write-Host ""
+    Write-Host "  ┌$line┐" -ForegroundColor Yellow
+    Write-Host "  │$inner$pad│" -ForegroundColor Yellow
+    Write-Host "  │  $(' ' * ($width - 2))│" -ForegroundColor Yellow
+
+    # OSC 8 clickable hyperlink (works in Windows Terminal, VS Code, iTerm2)
+    $link = "`e]8;;$Url`e\$Url`e]8;;`e\"
+    $linkPad = ' ' * ($width - $Url.Length - 12)
+    Write-Host "  │  Step 1: " -ForegroundColor Yellow -NoNewline
+    Write-Host $link -ForegroundColor Cyan -NoNewline
+    Write-Host "$linkPad│" -ForegroundColor Yellow
+
+    $step2 = "Step 2: Enter the code shown BELOW this box"
+    $step2pad = ' ' * ($width - $step2.Length - 4)
+    Write-Host "  │  $step2$step2pad│" -ForegroundColor Yellow
+    Write-Host "  └$line┘" -ForegroundColor Yellow
+    Write-Host ""
+}
 
 function Connect-NRGServices {
     [CmdletBinding()]
     param(
-        [string[]] $Services = @('Graph','EXO','IPPSSession','Teams','SharePoint'),
-        [string]   $UserPrincipalName,
-        [switch]   $SkipPurview,
-        [switch]   $SkipTeams,
-        [switch]   $SkipSharePoint
+        [string] $UserPrincipalName,
+        [switch] $SkipPurview,
+        [switch] $SkipTeams,
+        [switch] $SkipSharePoint
     )
 
-    $result = @{
-        Graph       = $false
-        EXO         = $false
-        IPPSSession = $false
-        Teams       = $false
-        SharePoint  = $false
+    $result = [hashtable]@{
+        Graph        = $false
+        EXO          = $false
+        IPPSSession  = $false
+        Teams        = $false
+        SharePoint   = $false
         TenantDomain = $null
         TenantId     = $null
     }
 
-    # ── Microsoft Graph (device code) ───────────────────────────────────────
-    if ('Graph' -in $Services) {
-        Write-Host "[*] Connecting Microsoft Graph (device code)..." -ForegroundColor Cyan
-        try {
-            $scopes = @(
-                'User.Read.All'
-                'Group.Read.All'
-                'Directory.Read.All'
-                'Policy.Read.All'
-                'AuditLog.Read.All'
-                'Application.Read.All'
-                'RoleManagement.Read.All'
-                'SecurityEvents.Read.All'
-                'IdentityRiskyUser.Read.All'
-                'Reports.Read.All'
-                'Organization.Read.All'
-                'Sites.Read.All'
-                'DeviceManagementConfiguration.Read.All'
-                'DeviceManagementApps.Read.All'
-            )
-
-            # Increase timeout to 300s - user has 5 min to enter device code
-            Connect-MgGraph -Scopes $scopes -UseDeviceCode -NoWelcome -ErrorAction Stop
-            $ctx = Get-MgContext
-            if ($ctx) {
-                $result.Graph = $true
-                $result.TenantId = $ctx.TenantId
-                if ($ctx.Account) {
-                    $result.TenantDomain = ($ctx.Account -split '@')[-1]
-                }
-                Write-Host "  [+] Microsoft Graph connected ($($ctx.Account))" -ForegroundColor Green
-            }
-        } catch {
-            Write-Host "  [!] Graph connection failed: $($_.Exception.Message)" -ForegroundColor Yellow
-            Register-NRGException -Source 'Connect-NRGServices' -Message "Graph: $($_.Exception.Message)"
+    # ── 1. Microsoft Graph (MUST BE FIRST) ────────────────────────────────────
+    Write-Host "  [*] Microsoft Graph..." -ForegroundColor Cyan
+    & $script:ShowDeviceCodeBox 'Microsoft Graph' 'https://microsoft.com/devicelogin'
+    try {
+        $scopes = @(
+            'User.Read.All','Group.Read.All','Directory.Read.All',
+            'Policy.Read.All','AuditLog.Read.All','Application.Read.All',
+            'RoleManagement.Read.All','SecurityEvents.Read.All',
+            'IdentityRiskyUser.Read.All','Reports.Read.All',
+            'Organization.Read.All','Sites.Read.All',
+            'DeviceManagementConfiguration.Read.All',
+            'DeviceManagementApps.Read.All'
+        )
+        Connect-MgGraph -Scopes $scopes -UseDeviceCode -NoWelcome -ErrorAction Stop | Out-Null
+        $ctx = Get-MgContext -ErrorAction Stop
+        if ($ctx) {
+            $result['Graph']        = $true
+            $result['TenantId']     = "$($ctx.TenantId)"
+            $result['TenantDomain'] = ($ctx.Account -split '@')[-1]
+            Write-Host "  [+] Graph — $($ctx.Account)" -ForegroundColor Green
         }
+    } catch {
+        Write-Host "  [!] Graph: $($_.Exception.Message)" -ForegroundColor Yellow
+        Register-NRGException -Source 'Connect-Graph' -Message $_.Exception.Message
     }
 
-    # ── Exchange Online (device code) ───────────────────────────────────────
-    if ('EXO' -in $Services) {
-        Write-Host "[*] Connecting Exchange Online (device code)..." -ForegroundColor Cyan
+    # ── 2. Microsoft Teams (BEFORE EXO) ──────────────────────────────────────
+    if (-not $SkipTeams) {
+        Write-Host "  [*] Microsoft Teams..." -ForegroundColor Cyan
         try {
-            $exoParams = @{
-                Device      = $true
-                ShowBanner  = $false
-                ErrorAction = 'Stop'
+            if (-not (Get-Module -ListAvailable -Name MicrosoftTeams -ErrorAction SilentlyContinue)) {
+                throw 'Run: Install-Module MicrosoftTeams -Scope CurrentUser -Force'
             }
-            if ($UserPrincipalName) { $exoParams['UserPrincipalName'] = $UserPrincipalName }
-
-            Connect-ExchangeOnline @exoParams
-            $result.EXO = $true
-            Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
-        } catch {
-            Write-Host "  [!] Exchange Online failed: $($_.Exception.Message)" -ForegroundColor Yellow
-            Register-NRGException -Source 'Connect-NRGServices' -Message "EXO: $($_.Exception.Message)"
-        }
-    }
-
-    # ── Security & Compliance Center (Purview) ──────────────────────────────
-    if ('IPPSSession' -in $Services -and -not $SkipPurview) {
-        Write-Host "[*] Connecting Security & Compliance Center (device code)..." -ForegroundColor Cyan
-        try {
-            $ippsParams = @{
-                Device      = $true
-                ShowBanner  = $false
-                ErrorAction = 'Stop'
-            }
-            if ($UserPrincipalName) { $ippsParams['UserPrincipalName'] = $UserPrincipalName }
-
-            # Try -Device first (newer module), fall back to devicecode approach
-            try {
-                Connect-IPPSSession @ippsParams
-            } catch {
-                # Older ExchangeOnlineManagement module uses different param
-                $ippsParamsFallback = @{ ShowBanner = $false; ErrorAction = 'Stop' }
-                if ($UserPrincipalName) { $ippsParamsFallback['UserPrincipalName'] = $UserPrincipalName }
-                Connect-IPPSSession @ippsParamsFallback
-            }
-            $result.IPPSSession = $true
-            Write-Host "  [+] Security & Compliance connected" -ForegroundColor Green
-        } catch {
-            Write-Host "  [!] IPPSSession failed: $($_.Exception.Message)" -ForegroundColor Yellow
-            Register-NRGException -Source 'Connect-NRGServices' -Message "IPPSSession: $($_.Exception.Message)"
-        }
-    }
-
-    # ── Microsoft Teams ─────────────────────────────────────────────────────
-    if ('Teams' -in $Services -and -not $SkipTeams) {
-        Write-Host "[*] Connecting Microsoft Teams (device code)..." -ForegroundColor Cyan
-        try {
-            if (-not (Get-Module -ListAvailable -Name MicrosoftTeams)) {
-                throw 'MicrosoftTeams module not installed. Run: Install-Module MicrosoftTeams -Scope CurrentUser'
-            }
-            Import-Module MicrosoftTeams -ErrorAction Stop
+            Import-Module MicrosoftTeams -ErrorAction Stop -WarningAction SilentlyContinue
+            & $script:ShowDeviceCodeBox 'Microsoft Teams' 'https://microsoft.com/devicelogin'
             Connect-MicrosoftTeams -UseDeviceAuthentication -ErrorAction Stop | Out-Null
-            $result.Teams = $true
-            Write-Host "  [+] Microsoft Teams connected" -ForegroundColor Green
+            $result['Teams'] = $true
+            Write-Host "  [+] Teams connected" -ForegroundColor Green
         } catch {
-            Write-Host "  [!] Teams failed: $($_.Exception.Message)" -ForegroundColor Yellow
-            Register-NRGException -Source 'Connect-NRGServices' -Message "Teams: $($_.Exception.Message)"
+            Write-Host "  [!] Teams: $($_.Exception.Message)" -ForegroundColor Yellow
+            Register-NRGException -Source 'Connect-Teams' -Message $_.Exception.Message
         }
     }
 
-    # ── SharePoint Online (PnP.PowerShell, device code) ─────────────────────
-    if ('SharePoint' -in $Services -and -not $SkipSharePoint -and $result.TenantDomain) {
-        Write-Host "[*] Connecting SharePoint Online (device code)..." -ForegroundColor Cyan
+    # ── 3. Exchange Online ────────────────────────────────────────────────────
+    Write-Host "  [*] Exchange Online..." -ForegroundColor Cyan
+    & $script:ShowDeviceCodeBox 'Exchange Online' 'https://microsoft.com/devicelogin'
+    try {
+        $p = @{ ShowBanner = $false; ErrorAction = 'Stop' }
+        if ($UserPrincipalName) { $p['UserPrincipalName'] = $UserPrincipalName }
         try {
-            if (-not (Get-Module -ListAvailable -Name PnP.PowerShell)) {
-                throw 'PnP.PowerShell module not installed. Run: Install-Module PnP.PowerShell -Scope CurrentUser'
+            $p['Device'] = $true
+            Connect-ExchangeOnline @p | Out-Null
+        } catch [System.Management.Automation.ParameterBindingException] {
+            $p.Remove('Device')
+            Connect-ExchangeOnline @p | Out-Null
+        }
+        $result['EXO'] = $true
+        Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
+    } catch {
+        Write-Host "  [!] EXO: $($_.Exception.Message)" -ForegroundColor Yellow
+        Register-NRGException -Source 'Connect-EXO' -Message $_.Exception.Message
+    }
+
+    # ── 4. Purview / Security & Compliance ───────────────────────────────────
+    if (-not $SkipPurview) {
+        Write-Host "  [*] Purview / Security and Compliance..." -ForegroundColor Cyan
+        & $script:ShowDeviceCodeBox 'Security and Compliance' 'https://microsoft.com/devicelogin'
+        try {
+            $p = @{ ShowBanner = $false; ErrorAction = 'Stop' }
+            if ($UserPrincipalName) { $p['UserPrincipalName'] = $UserPrincipalName }
+            try {
+                $p['Device'] = $true
+                Connect-IPPSSession @p | Out-Null
+            } catch [System.Management.Automation.ParameterBindingException] {
+                $p.Remove('Device')
+                Connect-IPPSSession @p | Out-Null
             }
-            Import-Module PnP.PowerShell -ErrorAction Stop
-
-            $tenantPrefix = ($result.TenantDomain -split '\.')[0]
-            $spoAdminUrl  = "https://$tenantPrefix-admin.sharepoint.com"
-
-            Connect-PnPOnline -Url $spoAdminUrl -DeviceLogin -ErrorAction Stop
-            $result.SharePoint = $true
-            Write-Host "  [+] SharePoint Online connected ($spoAdminUrl)" -ForegroundColor Green
+            $result['IPPSSession'] = $true
+            Write-Host "  [+] Purview connected" -ForegroundColor Green
         } catch {
-            Write-Host "  [!] SharePoint failed: $($_.Exception.Message)" -ForegroundColor Yellow
-            Register-NRGException -Source 'Connect-NRGServices' -Message "SharePoint: $($_.Exception.Message)"
+            Write-Host "  [!] Purview: $($_.Exception.Message)" -ForegroundColor Yellow
+            Register-NRGException -Source 'Connect-IPPS' -Message $_.Exception.Message
         }
     }
 
-    return $result
+    # ── 5. SharePoint Online via PnP ─────────────────────────────────────────
+    if (-not $SkipSharePoint -and $result['TenantDomain']) {
+        Write-Host "  [*] SharePoint Online..." -ForegroundColor Cyan
+        try {
+            if (-not (Get-Module -ListAvailable -Name PnP.PowerShell -ErrorAction SilentlyContinue)) {
+                throw 'Run: Install-Module PnP.PowerShell -Scope CurrentUser -Force'
+            }
+            Import-Module PnP.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
+            $prefix = ($result['TenantDomain'] -split '\.')[0]
+            $spoUrl = "https://$prefix-admin.sharepoint.com"
+            & $script:ShowDeviceCodeBox "SharePoint Online" 'https://microsoft.com/devicelogin'
+            Connect-PnPOnline -Url $spoUrl -DeviceLogin -ErrorAction Stop | Out-Null
+            $result['SharePoint'] = $true
+            Write-Host "  [+] SharePoint connected ($spoUrl)" -ForegroundColor Green
+        } catch {
+            Write-Host "  [!] SharePoint: $($_.Exception.Message)" -ForegroundColor Yellow
+            Register-NRGException -Source 'Connect-SharePoint' -Message $_.Exception.Message
+        }
+    }
+
+    Write-Host ""
+    Write-Output $result
 }
 
 function Disconnect-NRGServices {
     [CmdletBinding()] param()
-
     try { Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null } catch {}
     try { Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue | Out-Null } catch {}
     try { Disconnect-MicrosoftTeams -ErrorAction SilentlyContinue | Out-Null } catch {}
     try { Disconnect-PnPOnline -ErrorAction SilentlyContinue | Out-Null } catch {}
-
-    Write-Host "[-] All M365 sessions disconnected" -ForegroundColor DarkGray
+    Write-Host "[-] Sessions disconnected." -ForegroundColor DarkGray
 }
