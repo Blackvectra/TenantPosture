@@ -67,12 +67,15 @@ if ($SkipPurview)       { $connectParams['SkipPurview']       = $true }
 if ($SkipTeams)         { $connectParams['SkipTeams']         = $true }
 if ($SkipSharePoint)    { $connectParams['SkipSharePoint']    = $true }
 
-$conn = Connect-NRGServices @connectParams
+# Always defer SharePoint - PnP loads old Graph.Core that breaks Graph cmdlets if connected first
+$connectParams['SkipSharePoint'] = $true
 
-# Ensure all keys exist even if connection was skipped
-foreach ($svc in @('Graph','EXO','IPPSSession','Teams','SharePoint','TenantDomain','TenantId')) {
-    if (-not $conn.ContainsKey($svc)) { $conn[$svc] = $null }
+$rawConn = @(Connect-NRGServices @connectParams)
+$conn = $rawConn | Where-Object { $_ -is [hashtable] } | Select-Object -Last 1
+if (-not $conn) {
+    $conn = [hashtable]@{ Graph=$false; EXO=$false; IPPSSession=$false; Teams=$false; SharePoint=$false; TenantDomain=$null; TenantId=$null }
 }
+if (-not $conn.ContainsKey('SharePoint')) { $conn['SharePoint'] = $false }
 
 if ($WhatIfConnections) {
     Write-Host ""
@@ -87,23 +90,42 @@ Write-Host "[-] Running collectors..." -ForegroundColor Cyan
 
 if ($conn.Graph) {
     Write-Host "  [*] AAD: Authorization + auth method policies..."
-    [void](Get-NRGCollector-AAD-AuthPolicies)
+    [void](Invoke-NRGCollectAADAuthPolicies)
 
     Write-Host "  [*] AAD: Conditional Access policies..."
-    [void](Get-NRGCollector-AAD-CAPolicies)
+    [void](Invoke-NRGCollectAADCAPolicies)
 }
 
 if ($conn.EXO) {
     Write-Host "  [*] EXO: Mailbox configuration..."
-    [void](Get-NRGCollector-EXO-MailboxConfig)
+    [void](Invoke-NRGCollectEXOMailboxConfig)
 
     if (-not $SkipDNS) {
         Write-Host "  [*] DNS: SPF/DKIM/DMARC/MTA-STS for accepted domains..."
         if ($DnsDomains) {
-            [void](Get-NRGCollector-DNS-EmailRecords -Domains $DnsDomains)
+            [void](Invoke-NRGCollectDNSEmailRecords -Domains $DnsDomains)
         } else {
-            [void](Get-NRGCollector-DNS-EmailRecords)
+            [void](Invoke-NRGCollectDNSEmailRecords)
         }
+    }
+}
+
+# ── SharePoint connection (after Graph collectors to avoid assembly conflict) ─
+if (-not $SkipSharePoint -and $conn['TenantDomain']) {
+    Write-Host "  [*] SharePoint Online (post-collection to avoid Graph assembly conflict)..." -ForegroundColor Cyan
+    try {
+        if (Get-Module -ListAvailable -Name PnP.PowerShell -ErrorAction SilentlyContinue) {
+            Import-Module PnP.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
+            $prefix = ($conn['TenantDomain'] -split '\.')[0]
+            $spoUrl = "https://$prefix-admin.sharepoint.com"
+            Write-Host "  [*] SharePoint: $spoUrl" -ForegroundColor Cyan
+            Write-Host "  Open: https://microsoft.com/devicelogin and enter the code below" -ForegroundColor Yellow
+            Connect-PnPOnline -Url $spoUrl -DeviceLogin -ErrorAction Stop | Out-Null
+            $conn['SharePoint'] = $true
+            Write-Host "  [+] SharePoint connected" -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "  [!] SharePoint: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 }
 
@@ -111,13 +133,13 @@ if ($conn.EXO) {
 Write-Host ""
 Write-Host "[-] Running evaluators..." -ForegroundColor Cyan
 
-Test-NRGControl-AAD-LegacyAuth
-Test-NRGControl-AAD-PhishResistantMFA
-Test-NRGControl-EXO-MailboxAudit
-Test-NRGControl-EXO-SmtpAuth
-Test-NRGControl-DNS-SPF
-Test-NRGControl-DNS-DKIM
-Test-NRGControl-DNS-DMARC
+Test-NRGControlAADLegacyAuth
+Test-NRGControlAADPhishResistantMFA
+Test-NRGControlEXOMailboxAudit
+Test-NRGControlEXOSmtpAuth
+Test-NRGControlDNSSPF
+Test-NRGControlDNSDKIM
+Test-NRGControlDNSDMARC
 
 $findings = Get-NRGFindings
 
