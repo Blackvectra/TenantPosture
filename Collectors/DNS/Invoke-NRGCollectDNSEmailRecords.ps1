@@ -9,7 +9,12 @@
 
 function Invoke-NRGCollectDNSEmailRecords {
     [CmdletBinding()]
-    param([string[]] $Domains)
+    param(
+        [string[]] $Domains,
+        # Public DNS servers - bypasses corporate DNS that may block external TXT lookups
+        # Falls back to machine default if all public servers fail
+        [string[]] $DnsServers = @('8.8.8.8', '1.1.1.1', '9.9.9.9')
+    )
 
     $result = @{
         Source     = 'DNS-EmailRecords'
@@ -17,6 +22,19 @@ function Invoke-NRGCollectDNSEmailRecords {
         Success    = $false
         Data       = @{}
         Exceptions = @()
+    }
+
+    # DNS resolver with public server fallback
+    function Resolve-DnsWithFallback {
+        param([string]$Name, [string]$Type = 'TXT')
+        foreach ($server in $DnsServers) {
+            try {
+                $r = @(Resolve-DnsName -Name $Name -Type $Type -Server $server -ErrorAction Stop)
+                if ($r.Count -gt 0) { return $r }
+            } catch { }
+        }
+        # Fallback to machine default DNS
+        try { return @(Resolve-DnsName -Name $Name -Type $Type -ErrorAction Stop) } catch { return @() }
     }
 
     # Safe TXT value extractor - handles .Strings (PS5/older) and .Text (PS7/newer)
@@ -59,7 +77,7 @@ function Invoke-NRGCollectDNSEmailRecords {
 
         # ── SPF ───────────────────────────────────────────────────────────────
         try {
-            $spfRecs = @(Resolve-DnsName -Name $domain -Type TXT -ErrorAction Stop)
+            $spfRecs = @(Resolve-DnsWithFallback -Name $domain -Type 'TXT')
             $spfMatch = $spfRecs | Where-Object {
                 $val = Get-TxtValue $_
                 $null -ne $val -and $val -like 'v=spf1*'
@@ -73,7 +91,7 @@ function Invoke-NRGCollectDNSEmailRecords {
         # ── DKIM (selector1 + selector2) ──────────────────────────────────────
         foreach ($selector in @('selector1','selector2')) {
             try {
-                $cnRecs = @(Resolve-DnsName -Name "$selector._domainkey.$domain" -Type CNAME -ErrorAction Stop)
+                $cnRecs = @(Resolve-DnsWithFallback -Name "$selector._domainkey.$domain" -Type 'CNAME')
                 $cname  = $cnRecs | Where-Object {
                     $props = $_.PSObject.Properties.Name
                     'Type' -in $props -and $_.Type -eq 'CNAME'
@@ -92,7 +110,7 @@ function Invoke-NRGCollectDNSEmailRecords {
 
         # ── DMARC ─────────────────────────────────────────────────────────────
         try {
-            $dmarcRecs = @(Resolve-DnsName -Name "_dmarc.$domain" -Type TXT -ErrorAction Stop)
+            $dmarcRecs = @(Resolve-DnsWithFallback -Name "_dmarc.$domain" -Type 'TXT')
             $dmarcMatch = $dmarcRecs | Where-Object {
                 $val = Get-TxtValue $_
                 $null -ne $val -and $val -like 'v=DMARC1*'
@@ -102,7 +120,7 @@ function Invoke-NRGCollectDNSEmailRecords {
 
         # ── MTA-STS TXT record ────────────────────────────────────────────────
         try {
-            $stsRecs = @(Resolve-DnsName -Name "_mta-sts.$domain" -Type TXT -ErrorAction Stop)
+            $stsRecs = @(Resolve-DnsWithFallback -Name "_mta-sts.$domain" -Type 'TXT')
             $stsMatch = $stsRecs | Where-Object {
                 $val = Get-TxtValue $_
                 $null -ne $val -and $val -like 'v=STSv1*'
@@ -121,7 +139,7 @@ function Invoke-NRGCollectDNSEmailRecords {
 
         # ── TLS-RPT ───────────────────────────────────────────────────────────
         try {
-            $tlsRecs = @(Resolve-DnsName -Name "_smtp._tls.$domain" -Type TXT -ErrorAction Stop)
+            $tlsRecs = @(Resolve-DnsWithFallback -Name "_smtp._tls.$domain" -Type 'TXT')
             $tlsMatch = $tlsRecs | Where-Object {
                 $val = Get-TxtValue $_
                 $null -ne $val -and $val -like 'v=TLSRPTv1*'
@@ -131,7 +149,7 @@ function Invoke-NRGCollectDNSEmailRecords {
 
         # ── DNSSEC ────────────────────────────────────────────────────────────
         try {
-            $dsRecs = @(Resolve-DnsName -Name $domain -Type DS -ErrorAction SilentlyContinue)
+            $dsRecs = @(Resolve-DnsWithFallback -Name $domain -Type 'DS')
             if ($dsRecs.Count -gt 0) { $d.DNSSEC = $true }
         } catch { }
 
