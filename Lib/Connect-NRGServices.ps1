@@ -15,10 +15,8 @@
 #
 # GRAPH SUB-MODULE PRE-IMPORT (assembly conflict prevention):
 #   Microsoft.Graph.Authentication is locked into the AppDomain by Connect-MgGraph.
-#   Sub-modules (Microsoft.Graph.Reports, Microsoft.Graph.Identity.Governance) must
-#   be imported BEFORE Connect-MgGraph or their auto-import triggers an assembly
-#   conflict at collection time. Pre-importing here forces them to share the same
-#   assembly load rather than competing for it.
+#   Sub-modules must be imported BEFORE Connect-MgGraph or their auto-import
+#   triggers an assembly conflict at collection time.
 #   Reference: github.com/microsoftgraph/msgraph-sdk-powershell/issues/3394
 #
 
@@ -56,9 +54,6 @@ function Connect-NRGServices {
         )
 
         # Pre-import Graph sub-modules BEFORE Connect-MgGraph
-        # Forces assembly resolution before Connect-MgGraph locks the version in.
-        # Without this, collector auto-imports cause assembly conflicts post-connection.
-        # Reference: github.com/microsoftgraph/msgraph-sdk-powershell/issues/3394
         $graphSubModules = @(
             'Microsoft.Graph.Reports',
             'Microsoft.Graph.Identity.Governance',
@@ -71,18 +66,7 @@ function Connect-NRGServices {
             }
         }
 
-        # Interactive browser auth — no device code, no open window vulnerability
-        # Browser opens automatically, user logs in with MFA, window closes on success
-        $connectParams = @{
-            Scopes      = $scopes
-            NoWelcome   = $true
-            ErrorAction = 'Stop'
-        }
-        if ($UserPrincipalName) {
-            $connectParams['LoginHint'] = $UserPrincipalName
-        }
-
-        Connect-MgGraph @connectParams
+        Connect-MgGraph -Scopes $scopes -NoWelcome -ErrorAction Stop
 
         $ctx = Get-MgContext -ErrorAction Stop
         if ($ctx) {
@@ -104,10 +88,8 @@ function Connect-NRGServices {
                 throw 'Run: Install-Module MicrosoftTeams -Scope CurrentUser -Force'
             }
             Import-Module MicrosoftTeams -ErrorAction Stop -WarningAction SilentlyContinue
-
             $teamsParams = @{ ErrorAction = 'Stop' }
             if ($UserPrincipalName) { $teamsParams['AccountId'] = $UserPrincipalName }
-
             Connect-MicrosoftTeams @teamsParams | Out-Null
             $result['Teams'] = $true
             Write-Host "  [+] Teams connected" -ForegroundColor Green
@@ -120,12 +102,8 @@ function Connect-NRGServices {
     # ── 3. Exchange Online ────────────────────────────────────────────────────
     Write-Host "  [*] Exchange Online — browser will open for login..." -ForegroundColor Cyan
     try {
-        $exoParams = @{
-            ShowBanner  = $false
-            ErrorAction = 'Stop'
-        }
+        $exoParams = @{ ShowBanner = $false; ErrorAction = 'Stop' }
         if ($UserPrincipalName) { $exoParams['UserPrincipalName'] = $UserPrincipalName }
-
         Connect-ExchangeOnline @exoParams | Out-Null
         $result['EXO'] = $true
         Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
@@ -138,12 +116,8 @@ function Connect-NRGServices {
     if (-not $SkipPurview) {
         Write-Host "  [*] Purview / Security and Compliance — browser will open for login..." -ForegroundColor Cyan
         try {
-            $ippsParams = @{
-                ShowBanner  = $false
-                ErrorAction = 'Stop'
-            }
+            $ippsParams = @{ ShowBanner = $false; ErrorAction = 'Stop' }
             if ($UserPrincipalName) { $ippsParams['UserPrincipalName'] = $UserPrincipalName }
-
             Connect-IPPSSession @ippsParams | Out-Null
             $result['IPPSSession'] = $true
             Write-Host "  [+] Purview connected" -ForegroundColor Green
@@ -161,10 +135,8 @@ function Connect-NRGServices {
                 throw 'Run: Install-Module PnP.PowerShell -Scope CurrentUser -Force'
             }
             Import-Module PnP.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
-
             $prefix = ($result['TenantDomain'] -split '\.')[0]
             $spoUrl = "https://$prefix-admin.sharepoint.com"
-
             Connect-PnPOnline -Url $spoUrl -Interactive -ErrorAction Stop | Out-Null
             $result['SharePoint'] = $true
             Write-Host "  [+] SharePoint connected ($spoUrl)" -ForegroundColor Green
