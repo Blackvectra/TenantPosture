@@ -1,7 +1,7 @@
 # NRG Assessment Tool
 
 **Microsoft 365 Security Assessment Framework**
-*NRG Technology Services — NextLayerSec LLC*
+*NRG Technology Services *
 
 [![Version](https://img.shields.io/badge/Version-4.0.0-blue?style=flat-square)]()
 [![PowerShell](https://img.shields.io/badge/PowerShell-7.x-blue?style=flat-square&logo=powershell)]()
