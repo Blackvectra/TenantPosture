@@ -214,7 +214,6 @@ See [docs/prerequisites/permissions.md](docs/prerequisites/permissions.md) for r
 
 **Matthew Levorson**
 Security Engineer — NRG Technology Services
-Principal — NextLayerSec LLC
 
 ---
 
