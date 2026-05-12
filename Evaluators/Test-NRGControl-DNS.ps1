@@ -150,7 +150,13 @@ function Test-NRGControlDNSMTASTS {
     foreach ($domain in $dnsData.Data.Domains.Keys) {
         $d         = $dnsData.Data.Domains[$domain]
         $citations = Get-NRGFrameworkCitations -ControlId $controlId
-        $mtasts    = $d.MTASTS
+        # MTASTS may be stored as hashtable @{Mode=...; TxtRecord=...} or plain string
+        $mtastsRaw = $d.MTASTS
+        $mtasts = if ($mtastsRaw -is [System.Collections.Hashtable]) {
+            $mtastsRaw.Mode
+        } elseif ($mtastsRaw) {
+            "$mtastsRaw"
+        } else { $null }
 
         if (-not $mtasts) {
             Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
