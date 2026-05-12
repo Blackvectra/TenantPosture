@@ -3,27 +3,17 @@
 # Authenticates to all M365 services required for NRG-Assessment.
 #
 # Auth model:
-#   Graph       — interactive browser (SCuBA pattern, no device code)
+#   Graph       — interactive browser (SCuBA pattern)
 #   Teams       — device code
-#   EXO         — device code
-#   IPPS        — device code
+#   EXO         — device code (-Device with ParameterBindingException fallback)
+#   IPPS        — device code via direct MSAL.NET token acquisition
+#                 Bypasses EXO module's internal MSAL which initialises WAM broker
+#                 even on device code flows in PS7 on some machines.
+#                 MSAL.NET is already loaded by the Graph SDK — no new dependency.
 #
-# WAM broker disabled globally at function entry ($env:MSAL_ALLOW_BROKER = '0').
-# This prevents RuntimeBroker NullReferenceException on machines where the
-# Windows Authentication Manager broker is unavailable or misconfigured.
-# Must be set before ANY MSAL token acquisition, not just Graph.
-#
-# CONNECTION ORDER MATTERS (MSAL assembly conflict prevention):
-#   1. Graph  — loads MSAL at the version Graph SDK requires
-#   2. Teams  — must follow Graph to share MSAL cleanly
-#   3. EXO    — after Graph + Teams
-#   4. IPPS   — after EXO (same underlying module)
-#
-# GRAPH SUB-MODULE PRE-IMPORT:
-#   Sub-modules must be imported BEFORE Connect-MgGraph.
-#   Auto-import after Connect-MgGraph locks the AppDomain assembly version
-#   and causes conflicts at collection time.
-#   Ref: github.com/microsoftgraph/msgraph-sdk-powershell/issues/3394
+# Disconnect-ExchangeOnline intentionally NOT called in Disconnect-NRGServices.
+# EXO 3.3+ crashes PowerShell on ClearAllTokensAsync (background thread,
+# uncatchable) when WAM is unavailable. Sessions expire on process exit.
 #
 
 $script:ShowDeviceCodeBox = {
@@ -47,10 +37,6 @@ function Connect-NRGServices {
         [switch] $SkipSharePoint
     )
 
-    # Disable WAM broker globally — must be set before any MSAL token acquisition.
-    # Prevents RuntimeBroker NullReferenceException on all services, not just Graph.
-    $env:MSAL_ALLOW_BROKER = '0'
-
     $result = [hashtable]@{
         Graph        = $false
         EXO          = $false
@@ -59,6 +45,20 @@ function Connect-NRGServices {
         SharePoint   = $false
         TenantDomain = $null
         TenantId     = $null
+    }
+
+    # ── Try EXO 3.2.0 in PS5.1 only (assembly issue prevents load in PS7) ────
+    $isPS7 = $PSVersionTable.PSVersion.Major -ge 6
+    if (-not $isPS7) {
+        $exa320 = Get-Module -ListAvailable -Name ExchangeOnlineManagement |
+                   Where-Object { $_.Version -eq '3.2.0' } | Select-Object -First 1
+        if ($exa320) {
+            try {
+                Import-Module ExchangeOnlineManagement -RequiredVersion 3.2.0 `
+                    -Force -ErrorAction Stop -WarningAction SilentlyContinue | Out-Null
+                Write-Host "  [i] ExchangeOnlineManagement 3.2.0 loaded" -ForegroundColor DarkGray
+            } catch {}
+        }
     }
 
     # ── 1. Microsoft Graph — interactive browser (MUST BE FIRST) ─────────────
@@ -81,8 +81,6 @@ function Connect-NRGServices {
             'DeviceManagementConfiguration.Read.All'
             'DeviceManagementApps.Read.All'
         )
-
-        # Pre-import Graph sub-modules BEFORE Connect-MgGraph
         $graphSubModules = @(
             'Microsoft.Graph.Reports'
             'Microsoft.Graph.Identity.Governance'
@@ -97,11 +95,7 @@ function Connect-NRGServices {
             }
         }
 
-        # Interactive browser auth — no device code, no WAM broker
-        $mgParams = @{ Scopes = $scopes; NoWelcome = $true; ErrorAction = 'Stop' }
-        if ($UserPrincipalName) { $mgParams['LoginHint'] = $UserPrincipalName }
-        Connect-MgGraph @mgParams | Out-Null
-
+        Connect-MgGraph -Scopes $scopes -NoWelcome -ErrorAction Stop | Out-Null
         $ctx = Get-MgContext -ErrorAction Stop
         if ($ctx) {
             $result['Graph']        = $true
@@ -119,7 +113,7 @@ function Connect-NRGServices {
         Write-Host "  [*] Microsoft Teams..." -ForegroundColor Cyan
         try {
             if (-not (Get-Module -ListAvailable -Name MicrosoftTeams -ErrorAction SilentlyContinue)) {
-                throw 'MicrosoftTeams module not installed. Run: Install-Module MicrosoftTeams -Scope CurrentUser -Force'
+                throw 'MicrosoftTeams not installed. Run: Install-Module MicrosoftTeams -Scope CurrentUser -Force'
             }
             Import-Module MicrosoftTeams -ErrorAction Stop -WarningAction SilentlyContinue
             & $script:ShowDeviceCodeBox 'Microsoft Teams' 'https://microsoft.com/devicelogin'
@@ -152,13 +146,27 @@ function Connect-NRGServices {
         Register-NRGException -Source 'Connect-EXO' -Message $_.Exception.Message
     }
 
-    # ── 4. Purview / Security & Compliance — device code ─────────────────────
+    # ── 4. Purview — MSAL device code bypass (avoids EXO module WAM init) ─────
+    #
+    # Root cause: Connect-IPPSSession internally calls InteractiveRequest which
+    # initialises RuntimeBroker (WAM) before device code. On PS7 in console
+    # context the RuntimeBroker constructor throws NullReferenceException because
+    # CoreUIParent has no window handle.
+    #
+    # Fix: acquire the IPPS token ourselves using MSAL.NET (already loaded by
+    # the Graph SDK) with an explicit DeviceCode flow. DeviceCode does not
+    # initialise the WAM broker. Pass the token to Connect-IPPSSession -AccessToken.
+    #
     if (-not $SkipPurview) {
         Write-Host "  [*] Purview / Security and Compliance..." -ForegroundColor Cyan
-        & $script:ShowDeviceCodeBox 'Security and Compliance' 'https://microsoft.com/devicelogin'
+
+        $ippsConnected = $false
+
+        # First try: standard -Device flag (works on machines without WAM restriction)
         try {
             $p = @{ ShowBanner = $false; ErrorAction = 'Stop' }
             if ($UserPrincipalName) { $p['UserPrincipalName'] = $UserPrincipalName }
+            & $script:ShowDeviceCodeBox 'Security and Compliance' 'https://microsoft.com/devicelogin'
             try {
                 $p['Device'] = $true
                 Connect-IPPSSession @p | Out-Null
@@ -167,21 +175,74 @@ function Connect-NRGServices {
                 Connect-IPPSSession @p | Out-Null
             }
             $result['IPPSSession'] = $true
+            $ippsConnected         = $true
             Write-Host "  [+] Purview connected" -ForegroundColor Green
         } catch {
-            Write-Host "  [!] Purview: $($_.Exception.Message)" -ForegroundColor Yellow
-            Register-NRGException -Source 'Connect-IPPS' -Message $_.Exception.Message
+            $e = $_.Exception.Message
+            # WAM crash or other failure — fall through to MSAL bypass
+            if ($e -notmatch 'NullReference|RuntimeBroker|Object reference|canceled') {
+                Write-Host "  [!] Purview (standard): $e" -ForegroundColor DarkYellow
+            }
+        }
+
+        # Second try: direct MSAL.NET device code — no WAM broker involved
+        # The PowerShell scriptblock callback fails on threadpool threads (no Runspace).
+        # Fix: compile a pure C# lambda via Add-Type — no scriptblock, no Runspace needed.
+        if (-not $ippsConnected -and $result['TenantId'] -and $result['TenantDomain']) {
+            Write-Host "  [i] WAM blocked — acquiring IPPS token via MSAL device code..." -ForegroundColor DarkGray
+            & $script:ShowDeviceCodeBox 'Security and Compliance' 'https://microsoft.com/devicelogin'
+            try {
+                $tenantId  = $result['TenantId']
+                $tenantDom = $result['TenantDomain']
+                $exoAppId  = 'fb78d390-0c51-40cd-8e17-fdbfab77341b'
+                $ippsScope = [string[]]@('https://ps.compliance.protection.outlook.com/.default')
+
+                # Compile C# callback — pure .NET lambda, no PS Runspace required on callback thread.
+                # Must reference both MSAL and System.Console assemblies explicitly —
+                # .NET 6 splits BCL into separate assemblies; Add-Type doesn't include them by default.
+                if (-not ([System.Management.Automation.PSTypeName]'NRGIPPSHelper').Type) {
+                    $msalAsmPath    = [Microsoft.Identity.Client.PublicClientApplicationBuilder].Assembly.Location
+                    $consoleAsmPath = [System.Console].Assembly.Location
+                    Add-Type -TypeDefinition @"
+public static class NRGIPPSHelper {
+    public static System.Func<Microsoft.Identity.Client.DeviceCodeResult,
+                               System.Threading.Tasks.Task> GetCallback() {
+        return dcr => {
+            System.Console.WriteLine(dcr.Message);
+            return System.Threading.Tasks.Task.CompletedTask;
+        };
+    }
+}
+"@ -ReferencedAssemblies $msalAsmPath, $consoleAsmPath -ErrorAction Stop
+                }
+                $dcCallback = [NRGIPPSHelper]::GetCallback()
+
+                $msalBuilder = [Microsoft.Identity.Client.PublicClientApplicationBuilder]::Create($exoAppId)
+                $msalBuilder = $msalBuilder.WithAuthority("https://login.microsoftonline.com/$tenantId/")
+                $msalApp     = $msalBuilder.Build()
+
+                $tokenBuilder = $msalApp.AcquireTokenWithDeviceCode($ippsScope, $dcCallback)
+                $tokenTask    = $tokenBuilder.ExecuteAsync()
+                $tokenResult  = $tokenTask.GetAwaiter().GetResult()
+
+                Connect-IPPSSession -AccessToken $tokenResult.AccessToken -DelegatedOrganization $tenantDom -ShowBanner:$false -ErrorAction Stop | Out-Null
+
+                $result['IPPSSession'] = $true
+                $ippsConnected         = $true
+                Write-Host "  [+] Purview connected (MSAL bypass)" -ForegroundColor Green
+            } catch {
+                Write-Host "  [!] Purview: $($_.Exception.Message)" -ForegroundColor Yellow
+                Register-NRGException -Source 'Connect-IPPS' -Message $_.Exception.Message
+            }
         }
     }
 
-    # ── 5. SharePoint Online via PnP (deferred — called post-collection) ──────
-    # PnP loads Graph.Core which conflicts with Graph SDK sub-modules already
-    # loaded. Only connect here if explicitly called outside the orchestrator.
+    # ── 5. SharePoint Online via PnP ─────────────────────────────────────────
     if (-not $SkipSharePoint -and $result['TenantDomain']) {
         Write-Host "  [*] SharePoint Online..." -ForegroundColor Cyan
         try {
             if (-not (Get-Module -ListAvailable -Name PnP.PowerShell -ErrorAction SilentlyContinue)) {
-                throw 'PnP.PowerShell module not installed. Run: Install-Module PnP.PowerShell -Scope CurrentUser -Force'
+                throw 'PnP.PowerShell not installed. Run: Install-Module PnP.PowerShell -Scope CurrentUser -Force'
             }
             Import-Module PnP.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
             $prefix = ($result['TenantDomain'] -split '\.')[0]
@@ -203,7 +264,9 @@ function Connect-NRGServices {
 function Disconnect-NRGServices {
     [CmdletBinding()] param()
     try { Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null } catch {}
-    try { Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue | Out-Null } catch {}
+    # Disconnect-ExchangeOnline intentionally omitted.
+    # EXO 3.3+ crashes on ClearAllTokensAsync (background thread, uncatchable)
+    # when WAM broker is unavailable. Sessions expire on process exit.
     try { Disconnect-MicrosoftTeams -ErrorAction SilentlyContinue | Out-Null } catch {}
     try { Disconnect-PnPOnline -ErrorAction SilentlyContinue | Out-Null } catch {}
     Write-Host "[-] Sessions disconnected." -ForegroundColor DarkGray

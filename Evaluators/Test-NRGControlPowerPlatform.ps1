@@ -10,7 +10,7 @@
 #   PPL-2.2  Non-default environments isolated with DLP policy
 #
 # Reads: Get-NRGRawData -Key 'PowerPlatform'
-#        Get-NRGRawData -Key 'AAD-Roles' (for admin count)
+#        Get-NRGRawData -Key 'AAD-Roles' (PPL-2.1 only — uses PermanentAssignments)
 #
 # NOTE: Full DLP policy assessment requires the PowerApps.Administration.PowerShell
 # module. Controls will show NotApplicable if that module is not available.
@@ -49,8 +49,8 @@ function Test-NRGControlPowerPlatform {
             -Category 'Power Platform' -Title $ctrl.Title `
             -Detail 'Power Platform DLP data not available. Install Microsoft.PowerApps.Administration.PowerShell for full DLP assessment: Install-Module Microsoft.PowerApps.Administration.PowerShell'
     } else {
-        $defaultEnvId   = ($envs | Where-Object { $_.properties.environmentSku -eq 'Default' -or $_.name -match 'Default' } | Select-Object -First 1).name
-        $defaultEnvDlp  = @($dlp | Where-Object {
+        $defaultEnvId  = ($envs | Where-Object { $_.properties.environmentSku -eq 'Default' -or $_.name -match 'Default' } | Select-Object -First 1).name
+        $defaultEnvDlp = @($dlp | Where-Object {
             $_.environments -contains $defaultEnvId -or
             ($_.filterType -eq 'include' -and $_.environments -contains $defaultEnvId) -or
             ($_.filterType -eq 'exclude' -and -not ($_.environments -contains $defaultEnvId)) -or
@@ -109,8 +109,6 @@ function Test-NRGControlPowerPlatform {
             -Category 'Power Platform' -Title $ctrl.Title `
             -Detail 'Power Platform DLP data not available. Install Microsoft.PowerApps.Administration.PowerShell for DLP connector assessment.'
     } elseif ($dlp.Count -gt 0) {
-        # High-risk connectors that should be in Blocked group
-        $highRiskConnectors = @('HTTP','HTTPWithAzureAD','HttpRequest','CustomConnector')
         $policiesWithBlocked = @($dlp | Where-Object {
             $_.connectorGroups -and ($_.connectorGroups | Where-Object { $_.classification -eq 'Blocked' -and $_.connectors.Count -gt 0 })
         })
@@ -139,23 +137,36 @@ function Test-NRGControlPowerPlatform {
     }
 
     #--------------------------------------------------------------------------
-    # PPL-2.1  Power Platform admin role count minimal (checked via AAD roles)
+    # PPL-2.1  Power Platform admin role count minimal
     # AC-6(5) | T1078
+    #
+    # AAD-Roles collector stores PermanentAssignments (not RoleAssignments).
+    # Each assignment has RoleDefinitionId. Filter by known Entra role GUIDs.
+    #   Power Platform Administrator : 11648597-926c-4cf3-9c36-bcebb0ba8dcc
+    #   Dynamics 365 Administrator   : 44367163-eba1-44c3-98af-f5787879f96a
     #--------------------------------------------------------------------------
     $ctrl = Get-NRGControlById -ControlId 'PPL-2.1'
     $rolesRaw = Get-NRGRawData -Key 'AAD-Roles'
     if ($rolesRaw -and $rolesRaw.Success) {
-        $assignments = @($rolesRaw.Data['RoleAssignments'])
-        $defs        = @($rolesRaw.Data['RoleDefinitions'])
-        $roleNameMap = @{}
-        foreach ($def in $defs) { if ($def.Id) { $roleNameMap[$def.Id] = $def.DisplayName } }
+        $allAssignments = @($rolesRaw.Data['PermanentAssignments'])
 
-        $pplAdminRoles = @('Power Platform Administrator','Dynamics 365 Administrator')
-        $pplAdmins = @($assignments | Where-Object {
-            $_.RoleDefinitionId -and
-            $roleNameMap.ContainsKey($_.RoleDefinitionId) -and
-            $roleNameMap[$_.RoleDefinitionId] -in $pplAdminRoles
+        # Known Entra role template GUIDs for Power Platform admin roles
+        $pplRoleGuids = @(
+            '11648597-926c-4cf3-9c36-bcebb0ba8dcc'   # Power Platform Administrator
+            '44367163-eba1-44c3-98af-f5787879f96a'   # Dynamics 365 Administrator
+        )
+
+        $pplAdmins = @($allAssignments | Where-Object {
+            $_.RoleDefinitionId -and $pplRoleGuids -contains $_.RoleDefinitionId
         })
+
+        # Fallback: match by display name if the assignment object carries it
+        if ($pplAdmins.Count -eq 0) {
+            $pplAdminNames = @('Power Platform Administrator','Dynamics 365 Administrator')
+            $pplAdmins = @($allAssignments | Where-Object {
+                $_.RoleDisplayName -and $pplAdminNames -contains $_.RoleDisplayName
+            })
+        }
 
         if ($pplAdmins.Count -eq 0) {
             Add-NRGFinding -ControlId 'PPL-2.1' -State 'Satisfied' `

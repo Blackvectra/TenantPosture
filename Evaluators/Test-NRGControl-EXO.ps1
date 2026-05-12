@@ -2,14 +2,28 @@
 # Test-NRGControl-EXO.ps1
 # Evaluates Exchange Online controls against collected raw data.
 #
-# Controls:
-#   EXO-1.1  Mailbox audit enabled tenant-wide
-#   EXO-1.2  SMTP client authentication disabled
-#   EXO-2.2  POP3 disabled for all mailboxes
-#   EXO-2.3  IMAP disabled for all mailboxes
-#   EXO-2.4  Customer Lockbox enabled
-#   EXO-2.5  Shared mailbox sign-in disabled
-#   EXO-3.1  Modern authentication enabled
+# Functions:
+#   Test-NRGControlEXOMailboxAudit     EXO-1.1
+#   Test-NRGControlEXOSmtpAuth         EXO-1.2
+#   Test-NRGControlEXOPop3             EXO-2.2
+#   Test-NRGControlEXOImap             EXO-2.3
+#   Test-NRGControlEXOCustomerLockbox  EXO-2.4
+#   Test-NRGControlEXOSharedMailbox    EXO-2.5
+#   Test-NRGControlEXOModernAuth       EXO-3.1
+#
+# Data key: 'EXO-MailboxConfig'
+# Collector property map (verified against Invoke-NRGCollectEXOMailboxConfig.ps1):
+#   MailboxProtocols.PopEnabled           — POP3 enabled count    (NOT Pop3Enabled)
+#   MailboxProtocols.ImapEnabled          — IMAP enabled count
+#   MailboxProtocols.TotalMailboxes       — total mailbox count
+#   MailboxProtocols.SmtpClientAuthDisabled
+#   OrganizationConfig.AuditDisabled
+#   OrganizationConfig.CustomerLockBoxEnabled  (NOT IsCustomerLockBoxEnabled)
+#   OrganizationConfig.OAuth2ClientProfileEnabled
+#   SharedMailboxes.Count                 — total shared mailbox count
+#   SharedMailboxes.SignInEnabled         — count with sign-in enabled (NOT array of objects)
+#   AuditBypass.BypassedCount
+#   TransportConfig.SmtpClientAuthenticationDisabled
 #
 
 function Test-NRGControlEXOMailboxAudit {
@@ -102,23 +116,23 @@ function Test-NRGControlEXOPop3 {
         return
     }
 
+    # Collector stores PopEnabled (not Pop3Enabled)
     $popEnabled = $exoData.Data.MailboxProtocols.PopEnabled
     $totalMbx   = $exoData.Data.MailboxProtocols.TotalMailboxes
 
-    if ($popEnabled -eq 0) {
+    if ($popEnabled -eq 0 -or -not $popEnabled) {
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
             -Title $control.Title -Severity 'Informational' `
             -Detail 'POP3 disabled on all mailboxes.' `
-            -CurrentValue "POP3 enabled: 0 of $totalMbx mailboxes" -RequiredValue '0 mailboxes with POP3 enabled' `
+            -CurrentValue '0 mailboxes with POP3 enabled' -RequiredValue '0 mailboxes' `
             -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
     } else {
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity `
-            -Detail "POP3 enabled on $popEnabled of $totalMbx mailboxes. POP3 uses basic auth, bypassing MFA and Conditional Access." `
-            -CurrentValue "POP3 enabled: $popEnabled of $totalMbx mailboxes" `
-            -RequiredValue '0 mailboxes with POP3 enabled' `
-            -Remediation $control.Remediation `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
+            -Detail "POP3 enabled on $popEnabled of $totalMbx mailboxes. POP3 uses basic authentication and cannot enforce MFA." `
+            -CurrentValue "$popEnabled mailboxes with POP3 enabled" -RequiredValue '0 mailboxes' `
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId) `
+            -Remediation $control.Remediation
     }
 }
 
@@ -139,20 +153,19 @@ function Test-NRGControlEXOImap {
     $imapEnabled = $exoData.Data.MailboxProtocols.ImapEnabled
     $totalMbx    = $exoData.Data.MailboxProtocols.TotalMailboxes
 
-    if ($imapEnabled -eq 0) {
+    if ($imapEnabled -eq 0 -or -not $imapEnabled) {
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
             -Title $control.Title -Severity 'Informational' `
             -Detail 'IMAP disabled on all mailboxes.' `
-            -CurrentValue "IMAP enabled: 0 of $totalMbx mailboxes" -RequiredValue '0 mailboxes with IMAP enabled' `
+            -CurrentValue '0 mailboxes with IMAP enabled' -RequiredValue '0 mailboxes' `
             -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
     } else {
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity `
-            -Detail "IMAP enabled on $imapEnabled of $totalMbx mailboxes. IMAP uses basic auth, bypassing MFA and Conditional Access." `
-            -CurrentValue "IMAP enabled: $imapEnabled of $totalMbx mailboxes" `
-            -RequiredValue '0 mailboxes with IMAP enabled' `
-            -Remediation $control.Remediation `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
+            -Detail "IMAP enabled on $imapEnabled of $totalMbx mailboxes. IMAP uses basic authentication and cannot enforce MFA." `
+            -CurrentValue "$imapEnabled mailboxes with IMAP enabled" -RequiredValue '0 mailboxes' `
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId) `
+            -Remediation $control.Remediation
     }
 }
 
@@ -170,26 +183,26 @@ function Test-NRGControlEXOCustomerLockbox {
         return
     }
 
+    # Collector stores CustomerLockBoxEnabled (not IsCustomerLockBoxEnabled)
     $lockboxEnabled = $exoData.Data.OrganizationConfig.CustomerLockBoxEnabled
 
     if ($lockboxEnabled -eq $true) {
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
             -Title $control.Title -Severity 'Informational' `
             -Detail 'Customer Lockbox enabled. Microsoft support access requires explicit approval.' `
-            -CurrentValue 'CustomerLockBoxEnabled: True' -RequiredValue 'CustomerLockBoxEnabled: True' `
+            -CurrentValue 'Enabled' -RequiredValue 'Enabled' `
             -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
-    } elseif ($null -eq $lockboxEnabled) {
-        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Severity $control.Severity `
-            -Detail 'Customer Lockbox state could not be determined. May not be supported on this license tier (requires M365 E3/E5 or equivalent).' `
-            -CurrentValue 'Unknown' -RequiredValue 'CustomerLockBoxEnabled: True'
-    } else {
+    } elseif ($lockboxEnabled -eq $false) {
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity `
-            -Detail 'Customer Lockbox is disabled. Microsoft support can access tenant data during support incidents without explicit approval.' `
-            -CurrentValue 'CustomerLockBoxEnabled: False' -RequiredValue 'CustomerLockBoxEnabled: True' `
-            -Remediation $control.Remediation `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
+            -Detail 'Customer Lockbox disabled. Microsoft support engineers can access tenant data without explicit approval.' `
+            -CurrentValue 'Disabled' -RequiredValue 'Enabled' `
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId) `
+            -Remediation $control.Remediation
+    } else {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title `
+            -Detail 'Customer Lockbox data not available. Requires Microsoft 365 E5 or Customer Lockbox add-on license.'
     }
 }
 
@@ -213,32 +226,31 @@ function Test-NRGControlEXOSharedMailbox {
         return
     }
 
-    $sharedData     = $exoData.Data.SharedMailboxes
-    $totalShared    = $sharedData.Count
-    $signInEnabled  = $sharedData.SignInEnabled
+    # Collector stores SharedMailboxes as a hashtable of counts, not an array of objects
+    $shared       = $exoData.Data.SharedMailboxes
+    $total        = $shared.Count
+    $signInEnabled = $shared.SignInEnabled
 
-    if ($totalShared -eq 0) {
-        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'No shared mailboxes found in tenant.' `
-            -CurrentValue '0 shared mailboxes' -RequiredValue 'N/A'
-        return
-    }
-
-    if ($signInEnabled -eq 0) {
+    if ($total -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
             -Title $control.Title -Severity 'Informational' `
-            -Detail "All $totalShared shared mailboxes have direct sign-in disabled." `
-            -CurrentValue "Sign-in enabled: 0 of $totalShared shared mailboxes" `
-            -RequiredValue 'All shared mailboxes: AccountEnabled = False' `
+            -Detail 'No shared mailboxes found in this tenant.' `
+            -CurrentValue '0 shared mailboxes' -RequiredValue 'All shared mailboxes sign-in disabled'
+    } elseif ($signInEnabled -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+            -Title $control.Title -Severity 'Informational' `
+            -Detail "All $total shared mailbox(es) have sign-in disabled." `
+            -CurrentValue "$total shared mailboxes, 0 with sign-in enabled" `
+            -RequiredValue 'All shared mailboxes sign-in disabled' `
             -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
     } else {
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity `
-            -Detail "$signInEnabled of $totalShared shared mailboxes have direct sign-in enabled. Shared mailboxes with sign-in are service accounts vulnerable to credential attacks." `
-            -CurrentValue "Sign-in enabled: $signInEnabled of $totalShared shared mailboxes" `
-            -RequiredValue 'All shared mailboxes: AccountEnabled = False' `
-            -Remediation $control.Remediation `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
+            -Detail "$signInEnabled of $total shared mailbox(es) have sign-in enabled. Shared mailboxes with sign-in enabled can be used as persistent backdoor accounts." `
+            -CurrentValue "$signInEnabled of $total shared mailboxes with sign-in enabled" `
+            -RequiredValue 'All shared mailboxes: sign-in disabled (AccountDisabled = true)' `
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId) `
+            -Remediation $control.Remediation
     }
 }
 
@@ -262,18 +274,17 @@ function Test-NRGControlEXOModernAuth {
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
             -Title $control.Title -Severity 'Informational' `
             -Detail 'Modern authentication (OAuth2) enabled for Exchange Online. Outlook and mail clients can use MFA.' `
-            -CurrentValue 'OAuth2ClientProfileEnabled: True' -RequiredValue 'OAuth2ClientProfileEnabled: True' `
+            -CurrentValue 'OAuth2ClientProfileEnabled = True' -RequiredValue 'Enabled' `
             -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
-    } elseif ($null -eq $modernAuthEnabled) {
-        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'Modern auth state could not be determined from collected data.' `
-            -CurrentValue 'Unknown' -RequiredValue 'OAuth2ClientProfileEnabled: True'
-    } else {
+    } elseif ($modernAuthEnabled -eq $false) {
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity `
-            -Detail 'Modern authentication is disabled. Outlook and mail clients use basic authentication — MFA cannot be enforced on mail client connections.' `
-            -CurrentValue 'OAuth2ClientProfileEnabled: False' -RequiredValue 'OAuth2ClientProfileEnabled: True' `
-            -Remediation $control.Remediation `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
+            -Detail 'Modern authentication disabled for Exchange Online. Mail clients fall back to basic auth, bypassing MFA entirely.' `
+            -CurrentValue 'OAuth2ClientProfileEnabled = False' -RequiredValue 'Enabled' `
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId) `
+            -Remediation $control.Remediation
+    } else {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'Modern auth state could not be determined from collected data.'
     }
 }
