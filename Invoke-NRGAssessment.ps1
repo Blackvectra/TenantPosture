@@ -3,14 +3,16 @@
 # Entry point for NRG-Assessment v4.
 #
 # Flow:
-#   1. Import module (which loads Lib, Collectors, Evaluators, Publishers)
-#   2. Connect to M365 services (interactive browser)
+#   1. Import module (loads Lib, Collectors, Evaluators, Publishers)
+#   2. Connect to M365 services
 #   3. Run collectors -> raw data stored in module state
 #   4. Run evaluators -> findings registered via Add-NRGFinding
 #   5. Run publishers -> reports written to output/
 #
 # Example:
 #   pwsh -ExecutionPolicy RemoteSigned -File .\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com
+#   pwsh -ExecutionPolicy RemoteSigned -File .\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -SkipTeams -SkipSharePoint
+#   pwsh -ExecutionPolicy RemoteSigned -File .\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -JsonOnly
 #
 
 [CmdletBinding()]
@@ -60,14 +62,13 @@ Clear-NRGFindings
 
 # ── Connect to services ─────────────────────────────────────────────────────
 Write-Host ""
-Write-Host "[-] Establishing service connections (interactive browser)..." -ForegroundColor Cyan
+Write-Host "[-] Establishing service connections..." -ForegroundColor Cyan
 $connectParams = @{}
 if ($UserPrincipalName) { $connectParams['UserPrincipalName'] = $UserPrincipalName }
 if ($SkipPurview)       { $connectParams['SkipPurview']       = $true }
 if ($SkipTeams)         { $connectParams['SkipTeams']         = $true }
-if ($SkipSharePoint)    { $connectParams['SkipSharePoint']    = $true }
 
-# Always defer SharePoint - PnP loads old Graph.Core that breaks Graph cmdlets if connected first
+# Always defer SharePoint — PnP loads old Graph.Core that breaks Graph cmdlets if connected first
 $connectParams['SkipSharePoint'] = $true
 
 $rawConn = @(Connect-NRGServices @connectParams)
@@ -122,16 +123,16 @@ if ($conn.EXO) {
     }
 }
 
-# ── SharePoint connection (after Graph collectors to avoid assembly conflict) ─
+# ── SharePoint (deferred — after Graph collectors to avoid assembly conflict) ─
 if (-not $SkipSharePoint -and $conn['TenantDomain']) {
-    Write-Host "  [*] SharePoint Online (post-collection to avoid Graph assembly conflict)..." -ForegroundColor Cyan
+    Write-Host "  [*] SharePoint Online (post-collection)..." -ForegroundColor Cyan
     try {
         if (Get-Module -ListAvailable -Name PnP.PowerShell -ErrorAction SilentlyContinue) {
             Import-Module PnP.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
             $prefix = ($conn['TenantDomain'] -split '\.')[0]
             $spoUrl = "https://$prefix-admin.sharepoint.com"
             Write-Host "  [*] SharePoint: $spoUrl" -ForegroundColor Cyan
-            Connect-PnPOnline -Url $spoUrl -Interactive -ErrorAction Stop | Out-Null
+            Connect-PnPOnline -Url $spoUrl -DeviceLogin -ErrorAction Stop | Out-Null
             $conn['SharePoint'] = $true
             Write-Host "  [+] SharePoint connected" -ForegroundColor Green
         }
@@ -176,25 +177,24 @@ Test-NRGControlDNSDNSSEC
 Test-NRGControlDefender
 
 $findings = Get-NRGFindings
-
 Write-Host "  [+] $($findings.Count) findings evaluated" -ForegroundColor Green
 
 # ── Publish reports ─────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "[-] Generating reports..." -ForegroundColor Cyan
 
-$timestamp = (Get-Date -Format 'yyyyMMdd-HHmmss')
-$tenantTag = if ($conn.TenantDomain) { ($conn.TenantDomain -split '\.')[0] } else { 'tenant' }
-$baseName  = "$tenantTag-$timestamp"
+$timestamp    = (Get-Date -Format 'yyyyMMdd-HHmmss')
+$tenantTag    = if ($conn.TenantDomain) { ($conn.TenantDomain -split '\.')[0] } else { 'tenant' }
+$baseName     = "$tenantTag-$timestamp"
 
 $reportMetadata = @{
-    TenantDomain     = $conn.TenantDomain
-    TenantId         = $conn.TenantId
-    Operator         = $UserPrincipalName
-    AssessmentDate   = (Get-Date).ToString('MMMM dd, yyyy')
-    AssessmentTime   = (Get-Date).ToString('o')
-    ToolVersion      = $script:NRGAssessmentVersion
-    Brand            = $script:NRGBrand
+    TenantDomain   = $conn.TenantDomain
+    TenantId       = $conn.TenantId
+    Operator       = $UserPrincipalName
+    AssessmentDate = (Get-Date).ToString('MMMM dd, yyyy')
+    AssessmentTime = (Get-Date).ToString('o')
+    ToolVersion    = $script:NRGAssessmentVersion
+    Brand          = $script:NRGBrand
 }
 
 if ($JsonOnly) {
@@ -206,9 +206,9 @@ if ($JsonOnly) {
         Coverage    = (Get-NRGCoverage)
         Connections = $conn
     } | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding utf8
-    Write-Host "  [+] JSON results: $jsonPath" -ForegroundColor Green
+    Write-Host "  [+] JSON: $jsonPath" -ForegroundColor Green
 } else {
-    # Markdown summary report
+    # Markdown summary
     $mdPath = Join-Path $OutputPath "$baseName-assessment.md"
     Publish-NRGAssessmentSummary -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $mdPath
     Write-Host "  [+] Markdown: $mdPath" -ForegroundColor Green
@@ -228,6 +228,9 @@ if ($JsonOnly) {
         Connections = $conn
     } | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding utf8
     Write-Host "  [+] JSON:     $jsonPath" -ForegroundColor Green
+
+    # Auto-open HTML report in browser
+    Start-Process $htmlPath
 }
 
 # ── Summary ─────────────────────────────────────────────────────────────────
