@@ -1,0 +1,25 @@
+@"
+# Generated reports
+Reports/
+*.html
+*.csv
+
+# Logs
+*.log
+
+# PowerShell module cache
+PSGetModuleInfo.xml
+
+# Secrets / credentials
+*.cred
+*.pfx
+secrets.ps1
+
+# OS
+Thumbs.db
+.DS_Store
+"@ | Out-File .gitignore -Encoding utf8
+
+git add .gitignore
+git commit -m "chore: add .gitignore"
+git push
