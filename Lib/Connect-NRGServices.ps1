@@ -2,22 +2,28 @@
 # Connect-NRGServices.ps1
 # Interactive browser authentication for all M365 services.
 #
-# REPLACES device code flow — interactive browser opens automatically per service,
-# user logs in with MFA normally, browser closes, connection confirmed.
-# No codes to copy, no 15-minute open windows, no AiTM exposure.
+# Graph uses interactive browser auth (no device code).
+# Teams, EXO, IPPS, SharePoint use device code — required when running
+# elevated (as Administrator) because WAM broker fails in that context.
 #
 # CONNECTION ORDER MATTERS (MSAL assembly conflict prevention):
 #   1. Graph  — loads MSAL at the version Graph SDK requires
 #   2. Teams  — shares Graph MSAL cleanly when loaded second
 #   3. EXO    — after Graph+Teams to avoid MSAL conflicts
 #   4. IPPS   — after EXO (same module)
-#   5. PnP    — last, reuses Graph token
+#   5. PnP    — last, deferred to post-collection in orchestrator
 #
 # GRAPH SUB-MODULE PRE-IMPORT (assembly conflict prevention):
 #   Microsoft.Graph.Authentication is locked into the AppDomain by Connect-MgGraph.
-#   Sub-modules must be imported BEFORE Connect-MgGraph or their auto-import
-#   triggers an assembly conflict at collection time.
+#   Sub-modules must be imported BEFORE Connect-MgGraph or their auto-import triggers
+#   an assembly conflict at collection time.
 #   Reference: github.com/microsoftgraph/msgraph-sdk-powershell/issues/3394
+#
+# WAM BROKER NOTE:
+#   $env:MSAL_ALLOW_BROKER = '0' is set before Teams/EXO/IPPS connections.
+#   WAM (Windows Authentication Manager) requires a non-elevated user context.
+#   Running pwsh as Administrator causes RuntimeBroker NullReferenceException.
+#   Disabling WAM forces MSAL to use browser/device code flow instead.
 #
 
 function Connect-NRGServices {
@@ -39,7 +45,7 @@ function Connect-NRGServices {
         TenantId     = $null
     }
 
-    # ── 1. Microsoft Graph (MUST BE FIRST) ────────────────────────────────────
+    # ── 1. Microsoft Graph (MUST BE FIRST — interactive browser) ─────────────
     Write-Host "  [*] Microsoft Graph — browser will open for login..." -ForegroundColor Cyan
     try {
         $scopes = @(
@@ -54,6 +60,8 @@ function Connect-NRGServices {
         )
 
         # Pre-import Graph sub-modules BEFORE Connect-MgGraph
+        # Forces assembly resolution before Connect-MgGraph locks the version in.
+        # Reference: github.com/microsoftgraph/msgraph-sdk-powershell/issues/3394
         $graphSubModules = @(
             'Microsoft.Graph.Reports',
             'Microsoft.Graph.Identity.Governance',
@@ -66,6 +74,7 @@ function Connect-NRGServices {
             }
         }
 
+        # Interactive browser — no device code for Graph
         Connect-MgGraph -Scopes $scopes -NoWelcome -ErrorAction Stop
 
         $ctx = Get-MgContext -ErrorAction Stop
@@ -80,17 +89,20 @@ function Connect-NRGServices {
         Register-NRGException -Source 'Connect-Graph' -Message $_.Exception.Message
     }
 
+    # Disable WAM broker for all remaining connections.
+    # WAM fails when pwsh is running elevated (as Administrator).
+    # This forces MSAL to use device code / browser popup instead of WAM.
+    $env:MSAL_ALLOW_BROKER = '0'
+
     # ── 2. Microsoft Teams (BEFORE EXO) ──────────────────────────────────────
     if (-not $SkipTeams) {
-        Write-Host "  [*] Microsoft Teams — browser will open for login..." -ForegroundColor Cyan
+        Write-Host "  [*] Microsoft Teams — sign in when browser opens..." -ForegroundColor Cyan
         try {
             if (-not (Get-Module -ListAvailable -Name MicrosoftTeams -ErrorAction SilentlyContinue)) {
                 throw 'Run: Install-Module MicrosoftTeams -Scope CurrentUser -Force'
             }
             Import-Module MicrosoftTeams -ErrorAction Stop -WarningAction SilentlyContinue
-            $teamsParams = @{ ErrorAction = 'Stop' }
-            if ($UserPrincipalName) { $teamsParams['AccountId'] = $UserPrincipalName }
-            Connect-MicrosoftTeams @teamsParams | Out-Null
+            Connect-MicrosoftTeams -UseDeviceAuthentication -ErrorAction Stop | Out-Null
             $result['Teams'] = $true
             Write-Host "  [+] Teams connected" -ForegroundColor Green
         } catch {
@@ -100,11 +112,19 @@ function Connect-NRGServices {
     }
 
     # ── 3. Exchange Online ────────────────────────────────────────────────────
-    Write-Host "  [*] Exchange Online — browser will open for login..." -ForegroundColor Cyan
+    Write-Host "  [*] Exchange Online — sign in when browser opens..." -ForegroundColor Cyan
     try {
         $exoParams = @{ ShowBanner = $false; ErrorAction = 'Stop' }
         if ($UserPrincipalName) { $exoParams['UserPrincipalName'] = $UserPrincipalName }
-        Connect-ExchangeOnline @exoParams | Out-Null
+        # Use Device flag to avoid WAM broker crash when running elevated
+        try {
+            $exoParams['Device'] = $true
+            Connect-ExchangeOnline @exoParams | Out-Null
+        } catch [System.Management.Automation.ParameterBindingException] {
+            # Older EXO module version — no -Device param
+            $exoParams.Remove('Device')
+            Connect-ExchangeOnline @exoParams | Out-Null
+        }
         $result['EXO'] = $true
         Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
     } catch {
@@ -114,11 +134,17 @@ function Connect-NRGServices {
 
     # ── 4. Purview / Security & Compliance ───────────────────────────────────
     if (-not $SkipPurview) {
-        Write-Host "  [*] Purview / Security and Compliance — browser will open for login..." -ForegroundColor Cyan
+        Write-Host "  [*] Purview / Security and Compliance — sign in when browser opens..." -ForegroundColor Cyan
         try {
             $ippsParams = @{ ShowBanner = $false; ErrorAction = 'Stop' }
             if ($UserPrincipalName) { $ippsParams['UserPrincipalName'] = $UserPrincipalName }
-            Connect-IPPSSession @ippsParams | Out-Null
+            try {
+                $ippsParams['Device'] = $true
+                Connect-IPPSSession @ippsParams | Out-Null
+            } catch [System.Management.Automation.ParameterBindingException] {
+                $ippsParams.Remove('Device')
+                Connect-IPPSSession @ippsParams | Out-Null
+            }
             $result['IPPSSession'] = $true
             Write-Host "  [+] Purview connected" -ForegroundColor Green
         } catch {
@@ -127,24 +153,8 @@ function Connect-NRGServices {
         }
     }
 
-    # ── 5. SharePoint Online via PnP ─────────────────────────────────────────
-    if (-not $SkipSharePoint -and $result['TenantDomain']) {
-        Write-Host "  [*] SharePoint Online — browser will open for login..." -ForegroundColor Cyan
-        try {
-            if (-not (Get-Module -ListAvailable -Name PnP.PowerShell -ErrorAction SilentlyContinue)) {
-                throw 'Run: Install-Module PnP.PowerShell -Scope CurrentUser -Force'
-            }
-            Import-Module PnP.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
-            $prefix = ($result['TenantDomain'] -split '\.')[0]
-            $spoUrl = "https://$prefix-admin.sharepoint.com"
-            Connect-PnPOnline -Url $spoUrl -Interactive -ErrorAction Stop | Out-Null
-            $result['SharePoint'] = $true
-            Write-Host "  [+] SharePoint connected ($spoUrl)" -ForegroundColor Green
-        } catch {
-            Write-Host "  [!] SharePoint: $($_.Exception.Message)" -ForegroundColor Yellow
-            Register-NRGException -Source 'Connect-SharePoint' -Message $_.Exception.Message
-        }
-    }
+    # SharePoint is deferred to post-collection in Invoke-NRGAssessment.ps1
+    # to avoid PnP loading an old Graph.Core assembly that breaks Graph cmdlets.
 
     Write-Host ""
     Write-Output $result
