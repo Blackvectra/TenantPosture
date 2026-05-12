@@ -3,36 +3,25 @@
 # Module loader - dot-sources all functions from Lib, Collectors, Evaluators, Publishers
 #
 # Author: Matthew Levorson, NRG Technology Services
-# Version: 4.0.0
+# Version: 4.5.0
 #
-# Architecture:
-#   - Lib/         Shared helpers (Add-NRGFinding, Connect-NRGServices, etc.)
-#   - Collectors/  Raw data collection only (Invoke-NRGCollect*)
-#   - Evaluators/  Scoring logic only (Test-NRGControl*)
-#   - Publishers/  Report generation (Publish-NRG*)
-#   - Config/      JSON control + framework definitions
-#
-# Each function has ONE source file. No duplicates anywhere in the repo.
+# Sessions:
+#   1-4  AAD, EXO, DNS, Defender (34 controls)
+#   5-6  SharePoint, Teams, Purview, Intune, Power Platform (+36 = 70 controls)
 #
 # StrictMode intentionally off - allows safe property access patterns in collectors
 $ErrorActionPreference = 'Continue'
-# Module-scoped constants
-$script:NRGAssessmentVersion = '4.0.0'
+$script:NRGAssessmentVersion = '4.5.0'
 $script:NRGModuleRoot        = $PSScriptRoot
-# Module-scoped findings collection (populated by evaluators, consumed by publishers)
 $script:NRGFindings    = [System.Collections.Generic.List[object]]::new()
 $script:NRGExceptions  = [System.Collections.Generic.List[object]]::new()
 $script:NRGCoverage    = [System.Collections.Generic.Dictionary[string,string]]::new()
 $script:NRGRawData     = @{}
-# Load branding (optional - falls back to defaults if missing)
+
 $brandPath = Join-Path $PSScriptRoot 'Config\branding.psd1'
 $script:NRGBrand = if (Test-Path $brandPath) {
-    try {
-        Import-PowerShellDataFile -Path $brandPath -ErrorAction Stop
-    } catch {
-        Write-Warning "Branding file invalid, using defaults: $_"
-        $null
-    }
+    try { Import-PowerShellDataFile -Path $brandPath -ErrorAction Stop }
+    catch { Write-Warning "Branding file invalid, using defaults: $_"; $null }
 } else { $null }
 if (-not $script:NRGBrand) {
     $script:NRGBrand = @{
@@ -42,59 +31,62 @@ if (-not $script:NRGBrand) {
         Email          = 'security@nrgtechservices.com'
         PrimaryColor   = '#1a3a6b'
         SecondaryColor = '#e87722'
+        AccentColor    = '#4a7ba6'
         LogoUrl        = ''
     }
 }
-# Function loader - dot-source by folder in dependency order
+
 $loadOrder = @('Lib', 'Collectors', 'Evaluators', 'Publishers')
 foreach ($folder in $loadOrder) {
     $folderPath = Join-Path $PSScriptRoot $folder
-    if (-not (Test-Path $folderPath)) {
-        Write-Warning "Module folder not found: $folder"
-        continue
-    }
-    # Recursive so Collectors/AAD/*.ps1, Collectors/EXO/*.ps1 etc. are found
+    if (-not (Test-Path $folderPath)) { Write-Warning "Module folder not found: $folder"; continue }
     $files = Get-ChildItem -Path $folderPath -Filter '*.ps1' -Recurse -File -ErrorAction SilentlyContinue
     foreach ($file in $files) {
-        try {
-            . $file.FullName 3>$null
-        } catch {
-            Write-Warning "Failed to load $($file.Name): $($_.Exception.Message)"
-        }
+        try { . $file.FullName 3>$null }
+        catch { Write-Warning "Failed to load $($file.Name): $($_.Exception.Message)" }
     }
 }
-# Explicitly list exports - avoids PS warning about * exporting private helpers
+
 $script:ExportedFunctions = @(
-    # Lib - core state management
+    # ── Lib ───────────────────────────────────────────────────────────────────
     'Add-NRGFinding','Get-NRGFindings','Clear-NRGFindings',
     'Register-NRGException','Get-NRGExceptions',
     'Register-NRGCoverage','Get-NRGCoverage',
     'Set-NRGRawData','Get-NRGRawData',
-    # Lib - connections
     'Connect-NRGServices','Disconnect-NRGServices',
-    # Lib - control definitions
     'Get-NRGControlDefinitions','Get-NRGControlById','Get-NRGFrameworkCitations',
-    # Collectors - Session 1
+
+    # ── Collectors — Sessions 1-4 ─────────────────────────────────────────────
     'Invoke-NRGCollectAADAuthPolicies','Invoke-NRGCollectAADCAPolicies',
-    'Invoke-NRGCollectEXOMailboxConfig','Invoke-NRGCollectDNSEmailRecords',
-    # Collectors - Session 2 (Identity Layer)
     'Invoke-NRGCollectAADUsers','Invoke-NRGCollectAADRoles','Invoke-NRGCollectAADPIM',
-    # Collectors - Session 3 (Email + Defender)
-    'Invoke-NRGCollectDefender',
-    # Evaluators - Session 1
+    'Invoke-NRGCollectEXOMailboxConfig','Invoke-NRGCollectDefender',
+    'Invoke-NRGCollectDNSEmailRecords',
+
+    # ── Collectors — Sessions 5-6 ─────────────────────────────────────────────
+    'Invoke-NRGCollectSharePoint',
+    'Invoke-NRGCollectTeams',
+    'Invoke-NRGCollectPurview',
+    'Invoke-NRGCollectIntune',
+    'Invoke-NRGCollectPowerPlatform',
+
+    # ── Evaluators — Sessions 1-4 ─────────────────────────────────────────────
     'Test-NRGControlAADLegacyAuth','Test-NRGControlAADPhishResistantMFA',
-    'Test-NRGControlEXOMailboxAudit','Test-NRGControlEXOSmtpAuth',
-    'Test-NRGControlDNSSPF','Test-NRGControlDNSDKIM','Test-NRGControlDNSDMARC',
-    # Evaluators - Session 2 (Identity Layer)
     'Test-NRGControlAADMFA','Test-NRGControlAADCA','Test-NRGControlAADPrivAccess',
-    # Evaluators - Session 3 DNS additions
-    'Test-NRGControlDNSMTASTS','Test-NRGControlDNSTLSRPT','Test-NRGControlDNSDNSSEC',
-    # Evaluators - Session 3 EXO additions
+    'Test-NRGControlEXOMailboxAudit','Test-NRGControlEXOSmtpAuth',
     'Test-NRGControlEXOPop3','Test-NRGControlEXOImap',
     'Test-NRGControlEXOCustomerLockbox','Test-NRGControlEXOSharedMailbox','Test-NRGControlEXOModernAuth',
-    # Evaluators - Session 3 Defender
+    'Test-NRGControlDNSSPF','Test-NRGControlDNSDKIM','Test-NRGControlDNSDMARC',
+    'Test-NRGControlDNSMTASTS','Test-NRGControlDNSTLSRPT','Test-NRGControlDNSDNSSEC',
     'Test-NRGControlDefender',
-    # Publishers
-    'Publish-NRGAssessmentSummary'
+
+    # ── Evaluators — Sessions 5-6 ─────────────────────────────────────────────
+    'Test-NRGControlSharePoint',
+    'Test-NRGControlTeams',
+    'Test-NRGControlPurview',
+    'Test-NRGControlIntune',
+    'Test-NRGControlPowerPlatform',
+
+    # ── Publishers ────────────────────────────────────────────────────────────
+    'Publish-NRGAssessmentSummary','Publish-NRGAssessmentHTML'
 )
 Export-ModuleMember -Function $script:ExportedFunctions -Variable NRGAssessmentVersion, NRGBrand
