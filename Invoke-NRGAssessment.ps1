@@ -4,7 +4,7 @@
 #
 # Flow:
 #   1. Import module (which loads Lib, Collectors, Evaluators, Publishers)
-#   2. Connect to M365 services (device code)
+#   2. Connect to M365 services (interactive browser)
 #   3. Run collectors -> raw data stored in module state
 #   4. Run evaluators -> findings registered via Add-NRGFinding
 #   5. Run publishers -> reports written to output/
@@ -60,7 +60,7 @@ Clear-NRGFindings
 
 # ── Connect to services ─────────────────────────────────────────────────────
 Write-Host ""
-Write-Host "[-] Establishing service connections (device code)..." -ForegroundColor Cyan
+Write-Host "[-] Establishing service connections (interactive browser)..." -ForegroundColor Cyan
 $connectParams = @{}
 if ($UserPrincipalName) { $connectParams['UserPrincipalName'] = $UserPrincipalName }
 if ($SkipPurview)       { $connectParams['SkipPurview']       = $true }
@@ -131,8 +131,7 @@ if (-not $SkipSharePoint -and $conn['TenantDomain']) {
             $prefix = ($conn['TenantDomain'] -split '\.')[0]
             $spoUrl = "https://$prefix-admin.sharepoint.com"
             Write-Host "  [*] SharePoint: $spoUrl" -ForegroundColor Cyan
-            Write-Host "  Open: https://microsoft.com/devicelogin and enter the code below" -ForegroundColor Yellow
-            Connect-PnPOnline -Url $spoUrl -DeviceLogin -ErrorAction Stop | Out-Null
+            Connect-PnPOnline -Url $spoUrl -Interactive -ErrorAction Stop | Out-Null
             $conn['SharePoint'] = $true
             Write-Host "  [+] SharePoint connected" -ForegroundColor Green
         }
@@ -212,6 +211,12 @@ if ($JsonOnly) {
     # Markdown summary report
     $mdPath = Join-Path $OutputPath "$baseName-assessment.md"
     Publish-NRGAssessmentSummary -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $mdPath
+    Write-Host "  [+] Markdown: $mdPath" -ForegroundColor Green
+
+    # HTML report
+    $htmlPath = Join-Path $OutputPath "$baseName-assessment.html"
+    Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath
+    Write-Host "  [+] HTML:     $htmlPath" -ForegroundColor Green
 
     # JSON for downstream tooling
     $jsonPath = Join-Path $OutputPath "$baseName-results.json"
@@ -222,7 +227,6 @@ if ($JsonOnly) {
         Coverage    = (Get-NRGCoverage)
         Connections = $conn
     } | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding utf8
-    Write-Host "  [+] Markdown: $mdPath" -ForegroundColor Green
     Write-Host "  [+] JSON:     $jsonPath" -ForegroundColor Green
 }
 
