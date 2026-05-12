@@ -1,6 +1,10 @@
 #
 # Connect-NRGServices.ps1
-# Device code auth for all M365 services.
+# Interactive browser authentication for all M365 services.
+#
+# REPLACES device code flow — interactive browser opens automatically per service,
+# user logs in with MFA normally, browser closes, connection confirmed.
+# No codes to copy, no 15-minute open windows, no AiTM exposure.
 #
 # CONNECTION ORDER MATTERS (MSAL assembly conflict prevention):
 #   1. Graph  — loads MSAL at the version Graph SDK requires
@@ -17,22 +21,6 @@
 #   assembly load rather than competing for it.
 #   Reference: github.com/microsoftgraph/msgraph-sdk-powershell/issues/3394
 #
-# Reference: github.com/microsoftgraph/msgraph-sdk-powershell/issues/3394
-#
-
-# Script-scoped scriptblock (NOT a function) so it does not get exported
-# and does not trigger the "restricted characters" module warning
-$script:ShowDeviceCodeBox = {
-    param([string]$Service, [string]$Url)
-    Write-Host ""
-    Write-Host "  +--------------------------------------------------------------+" -ForegroundColor Yellow
-    Write-Host "  |  $Service" -ForegroundColor Yellow
-    Write-Host "  |  Opening devicelogin in Edge..." -ForegroundColor Cyan
-    Write-Host "  |  Enter the code shown BELOW this box" -ForegroundColor Yellow
-    Write-Host "  +--------------------------------------------------------------+" -ForegroundColor Yellow
-    try { Start-Process "msedge.exe" -ArgumentList $Url -ErrorAction Stop } catch { try { Start-Process $Url } catch { } }
-    Write-Host ""
-}
 
 function Connect-NRGServices {
     [CmdletBinding()]
@@ -54,8 +42,7 @@ function Connect-NRGServices {
     }
 
     # ── 1. Microsoft Graph (MUST BE FIRST) ────────────────────────────────────
-    Write-Host "  [*] Microsoft Graph..." -ForegroundColor Cyan
-    & $script:ShowDeviceCodeBox 'Microsoft Graph' 'https://microsoft.com/devicelogin'
+    Write-Host "  [*] Microsoft Graph — browser will open for login..." -ForegroundColor Cyan
     try {
         $scopes = @(
             'User.Read.All','Group.Read.All','Directory.Read.All',
@@ -69,15 +56,14 @@ function Connect-NRGServices {
         )
 
         # Pre-import Graph sub-modules BEFORE Connect-MgGraph
-        # These sub-modules share Microsoft.Graph.Authentication — loading them now
-        # forces assembly resolution before Connect-MgGraph locks the version in.
-        # Without this, collector auto-imports after connection cause:
-        #   "Could not load file or assembly Microsoft.Graph.Authentication, already loaded"
+        # Forces assembly resolution before Connect-MgGraph locks the version in.
+        # Without this, collector auto-imports cause assembly conflicts post-connection.
+        # Reference: github.com/microsoftgraph/msgraph-sdk-powershell/issues/3394
         $graphSubModules = @(
-            'Microsoft.Graph.Reports',               # Get-MgReportAuthenticationMethodUserRegistrationDetail
-            'Microsoft.Graph.Identity.Governance',   # Get-MgRoleManagementDirectory*
-            'Microsoft.Graph.Identity.SignIns',      # Get-MgPolicyIdentitySecurityDefaultEnforcementPolicy
-            'Microsoft.Graph.Users'                  # Get-MgUser
+            'Microsoft.Graph.Reports',
+            'Microsoft.Graph.Identity.Governance',
+            'Microsoft.Graph.Identity.SignIns',
+            'Microsoft.Graph.Users'
         )
         foreach ($gm in $graphSubModules) {
             if (Get-Module -ListAvailable -Name $gm -ErrorAction SilentlyContinue) {
@@ -85,11 +71,19 @@ function Connect-NRGServices {
             }
         }
 
-        # -InformationAction Continue required: device code prints via Write-Information (stream 6)
-        # Device code text goes to pipeline output - pipe to Out-Host so it displays
-        # Reference: github.com/microsoftgraph/msgraph-sdk-powershell/issues/2798
-        $env:MSAL_ALLOW_BROKER = '0'  # Disable WAM to ensure device code displays
-        Connect-MgGraph -Scopes $scopes -UseDeviceCode -NoWelcome -ErrorAction Stop | Out-Host
+        # Interactive browser auth — no device code, no open window vulnerability
+        # Browser opens automatically, user logs in with MFA, window closes on success
+        $connectParams = @{
+            Scopes      = $scopes
+            NoWelcome   = $true
+            ErrorAction = 'Stop'
+        }
+        if ($UserPrincipalName) {
+            $connectParams['LoginHint'] = $UserPrincipalName
+        }
+
+        Connect-MgGraph @connectParams
+
         $ctx = Get-MgContext -ErrorAction Stop
         if ($ctx) {
             $result['Graph']        = $true
@@ -104,14 +98,17 @@ function Connect-NRGServices {
 
     # ── 2. Microsoft Teams (BEFORE EXO) ──────────────────────────────────────
     if (-not $SkipTeams) {
-        Write-Host "  [*] Microsoft Teams..." -ForegroundColor Cyan
+        Write-Host "  [*] Microsoft Teams — browser will open for login..." -ForegroundColor Cyan
         try {
             if (-not (Get-Module -ListAvailable -Name MicrosoftTeams -ErrorAction SilentlyContinue)) {
                 throw 'Run: Install-Module MicrosoftTeams -Scope CurrentUser -Force'
             }
             Import-Module MicrosoftTeams -ErrorAction Stop -WarningAction SilentlyContinue
-            & $script:ShowDeviceCodeBox 'Microsoft Teams' 'https://microsoft.com/devicelogin'
-            Connect-MicrosoftTeams -UseDeviceAuthentication -ErrorAction Stop | Out-Null
+
+            $teamsParams = @{ ErrorAction = 'Stop' }
+            if ($UserPrincipalName) { $teamsParams['AccountId'] = $UserPrincipalName }
+
+            Connect-MicrosoftTeams @teamsParams | Out-Null
             $result['Teams'] = $true
             Write-Host "  [+] Teams connected" -ForegroundColor Green
         } catch {
@@ -121,18 +118,15 @@ function Connect-NRGServices {
     }
 
     # ── 3. Exchange Online ────────────────────────────────────────────────────
-    Write-Host "  [*] Exchange Online..." -ForegroundColor Cyan
-    & $script:ShowDeviceCodeBox 'Exchange Online' 'https://microsoft.com/devicelogin'
+    Write-Host "  [*] Exchange Online — browser will open for login..." -ForegroundColor Cyan
     try {
-        $p = @{ ShowBanner = $false; ErrorAction = 'Stop' }
-        if ($UserPrincipalName) { $p['UserPrincipalName'] = $UserPrincipalName }
-        try {
-            $p['Device'] = $true
-            Connect-ExchangeOnline @p | Out-Null
-        } catch [System.Management.Automation.ParameterBindingException] {
-            $p.Remove('Device')
-            Connect-ExchangeOnline @p | Out-Null
+        $exoParams = @{
+            ShowBanner  = $false
+            ErrorAction = 'Stop'
         }
+        if ($UserPrincipalName) { $exoParams['UserPrincipalName'] = $UserPrincipalName }
+
+        Connect-ExchangeOnline @exoParams | Out-Null
         $result['EXO'] = $true
         Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
     } catch {
@@ -142,18 +136,15 @@ function Connect-NRGServices {
 
     # ── 4. Purview / Security & Compliance ───────────────────────────────────
     if (-not $SkipPurview) {
-        Write-Host "  [*] Purview / Security and Compliance..." -ForegroundColor Cyan
-        & $script:ShowDeviceCodeBox 'Security and Compliance' 'https://microsoft.com/devicelogin'
+        Write-Host "  [*] Purview / Security and Compliance — browser will open for login..." -ForegroundColor Cyan
         try {
-            $p = @{ ShowBanner = $false; ErrorAction = 'Stop' }
-            if ($UserPrincipalName) { $p['UserPrincipalName'] = $UserPrincipalName }
-            try {
-                $p['Device'] = $true
-                Connect-IPPSSession @p | Out-Null
-            } catch [System.Management.Automation.ParameterBindingException] {
-                $p.Remove('Device')
-                Connect-IPPSSession @p | Out-Null
+            $ippsParams = @{
+                ShowBanner  = $false
+                ErrorAction = 'Stop'
             }
+            if ($UserPrincipalName) { $ippsParams['UserPrincipalName'] = $UserPrincipalName }
+
+            Connect-IPPSSession @ippsParams | Out-Null
             $result['IPPSSession'] = $true
             Write-Host "  [+] Purview connected" -ForegroundColor Green
         } catch {
@@ -164,16 +155,17 @@ function Connect-NRGServices {
 
     # ── 5. SharePoint Online via PnP ─────────────────────────────────────────
     if (-not $SkipSharePoint -and $result['TenantDomain']) {
-        Write-Host "  [*] SharePoint Online..." -ForegroundColor Cyan
+        Write-Host "  [*] SharePoint Online — browser will open for login..." -ForegroundColor Cyan
         try {
             if (-not (Get-Module -ListAvailable -Name PnP.PowerShell -ErrorAction SilentlyContinue)) {
                 throw 'Run: Install-Module PnP.PowerShell -Scope CurrentUser -Force'
             }
             Import-Module PnP.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
+
             $prefix = ($result['TenantDomain'] -split '\.')[0]
             $spoUrl = "https://$prefix-admin.sharepoint.com"
-            & $script:ShowDeviceCodeBox "SharePoint Online" 'https://microsoft.com/devicelogin'
-            Connect-PnPOnline -Url $spoUrl -PnPManagementShell -LaunchBrowser -ErrorAction Stop | Out-Null
+
+            Connect-PnPOnline -Url $spoUrl -Interactive -ErrorAction Stop | Out-Null
             $result['SharePoint'] = $true
             Write-Host "  [+] SharePoint connected ($spoUrl)" -ForegroundColor Green
         } catch {
