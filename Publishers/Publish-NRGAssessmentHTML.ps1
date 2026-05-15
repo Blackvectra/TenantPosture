@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 #
 # Publish-NRGAssessmentHTML.ps1
 # Client-deliverable HTML report — print-to-PDF ready, self-contained.
@@ -16,6 +17,12 @@
 #   5. Identity Inventory (users, MFA, admin roles, PIM)
 #   6. Configuration Inventory (DNS, EXO, CA Policies, Defender)
 #
+# SECURITY HARDENING (v4.5.1):
+#   - Every dynamic value passes through ConvertTo-NRGHtmlSafe (full HtmlEncode)
+#   - Every URL passes through ConvertTo-NRGSafeUrl (scheme allowlist)
+#   - Content-Security-Policy meta tag (defense in depth)
+#   - Color values from branding.psd1 validated against CSS color pattern
+#
 # Author: Matthew Levorson, NRG Technology Services
 #
 
@@ -29,17 +36,50 @@ function Publish-NRGAssessmentHTML {
         [string] $ClientName = ''
     )
 
+    # ── Security helpers ──────────────────────────────────────────────────────
+    # Ensure ConvertTo-NRGHtmlSafe and ConvertTo-NRGSafeUrl are loaded.
+    # In the normal module load path these are imported by NRG-Assessment.psm1.
+    # If for any reason they're missing, fail closed — do not silently render
+    # unsanitized output.
+    if (-not (Get-Command ConvertTo-NRGHtmlSafe -ErrorAction SilentlyContinue)) {
+        throw "Required security helper ConvertTo-NRGHtmlSafe is not loaded. Refusing to generate report."
+    }
+    if (-not (Get-Command ConvertTo-NRGSafeUrl -ErrorAction SilentlyContinue)) {
+        throw "Required security helper ConvertTo-NRGSafeUrl is not loaded. Refusing to generate report."
+    }
+
+    # Validate a value is a safe CSS color literal.
+    # Accepts: #rgb, #rrggbb, #rrggbbaa, named colors (alpha), rgb(...), rgba(...), hsl(...), hsla(...).
+    # Rejects: anything containing ; } { / * < > " ' or a newline.
+    function Test-NRGSafeCssColor {
+        param([string]$Value)
+        if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+        if ($Value -match '[;{}<>"''/\*\n\r]') { return $false }
+        if ($Value -match '^#[0-9a-fA-F]{3,8}$') { return $true }
+        if ($Value -match '^[a-zA-Z]{3,20}$')   { return $true }
+        if ($Value -match '^(rgb|rgba|hsl|hsla)\([0-9,.\s%]+\)$') { return $true }
+        return $false
+    }
+
+    function Get-NRGSafeColor {
+        param([string]$Value, [string]$Default)
+        if (Test-NRGSafeCssColor $Value) { return $Value }
+        return $Default
+    }
+
+    # ── Brand values — all validated or HTML-encoded ──────────────────────────
     $brand     = $Metadata.Brand
-    $primary   = if ($brand.PrimaryColor)   { $brand.PrimaryColor }   else { '#1a3a6b' }
-    $secondary = if ($brand.SecondaryColor) { $brand.SecondaryColor } else { '#e87722' }
-    $accent    = if ($brand.AccentColor)    { $brand.AccentColor }    else { '#4a7ba6' }
-    $company   = if ($brand.CompanyName)    { $brand.CompanyName }    else { 'NRG Technology Services' }
-    $phone     = if ($brand.Phone)          { $brand.Phone }          else { '' }
-    $website   = if ($brand.Website)        { $brand.Website }        else { '' }
-    $logoUrl   = if ($brand.LogoUrl)        { $brand.LogoUrl }        else { '' }
+    $primary   = Get-NRGSafeColor $brand.PrimaryColor   '#1a3a6b'
+    $secondary = Get-NRGSafeColor $brand.SecondaryColor '#e87722'
+    $accent    = Get-NRGSafeColor $brand.AccentColor    '#4a7ba6'
+    $company   = if ($brand.CompanyName) { $brand.CompanyName } else { 'NRG Technology Services' }
+    $phone     = if ($brand.Phone)       { $brand.Phone }       else { '' }
+    $website   = if ($brand.Website)     { $brand.Website }     else { '' }
+    $logoUrl   = if ($brand.LogoUrl)     { $brand.LogoUrl }     else { '' }
     $clientDisplay = if ($ClientName) { $ClientName } else { $Metadata.TenantDomain }
 
-    function hx { param([string]$s) if (-not $s) { return '' }; $s -replace '&','&amp;' -replace '<','&lt;' -replace '>','&gt;' -replace '"','&quot;' }
+    # Alias for brevity in template — same semantics as ConvertTo-NRGHtmlSafe
+    function hx { param([AllowNull()][AllowEmptyString()][object]$s) ConvertTo-NRGHtmlSafe $s }
 
     function sBadge { param([string]$s)
         switch ($s) {
@@ -70,6 +110,12 @@ function Publish-NRGAssessmentHTML {
         'DEF-1.1'='T1566.001';'DEF-1.2'='T1566.001,T1204.002';'DEF-1.3'='T1566.002,T1189'
         'DNS-1.1'='T1566.001';'DNS-1.2'='T1566.001';'DNS-2.1'='T1557'
         'DNS-2.2'='T1557';'DNS-2.3'='T1557,T1584.002'
+    }
+
+    # Validates MITRE TTP IDs as Txxxx or Txxxx.xxx — refuse anything else.
+    function Test-NRGSafeMitreId {
+        param([string]$Id)
+        return ($Id -match '^T\d{4}(\.\d{3})?$')
     }
 
     # Scoring
@@ -107,7 +153,8 @@ function Publish-NRGAssessmentHTML {
     function catBar { param([string]$label,[string]$key)
         $s = if ($cScores.ContainsKey($key)) { $cScores[$key] } else { return '' }
         $c = if ($s -ge 85) { '#059669' } elseif ($s -ge 65) { '#d97706' } elseif ($s -ge 40) { '#ea580c' } else { '#dc2626' }
-        "<div class=`"cbar`"><div class=`"cbar-hd`"><span class=`"cbar-lbl`">$label</span><span class=`"cbar-num`" style=`"color:$c`">$s</span></div><div class=`"cbar-track`"><div class=`"cbar-fill`" style=`"width:${s}%;background:$c`"></div></div></div>"
+        $labelEnc = hx $label
+        "<div class=`"cbar`"><div class=`"cbar-hd`"><span class=`"cbar-lbl`">$labelEnc</span><span class=`"cbar-num`" style=`"color:$c`">$s</span></div><div class=`"cbar-track`"><div class=`"cbar-fill`" style=`"width:${s}%;background:$c`"></div></div></div>"
     }
     $wGap  = if ($scrd -gt 0) { [Math]::Round(100 * $gap  / $scrd) } else { 0 }
     $wPart = if ($scrd -gt 0) { [Math]::Round(100 * $part / $scrd) } else { 0 }
@@ -124,7 +171,7 @@ function Publish-NRGAssessmentHTML {
         $ok  = if ($Connections -is [hashtable]) { $Connections.ContainsKey($svc) -and $Connections[$svc] -eq $true } else { $Connections.$svc -eq $true }
         $cls = if ($ok) { 'cok' } else { 'coff' }
         $ico = if ($ok) { '&#10003;' } else { '&#10005;' }
-        $lbl = if ($svcLabels.ContainsKey($svc)) { $svcLabels[$svc] } else { $svc }
+        $lbl = hx (if ($svcLabels.ContainsKey($svc)) { $svcLabels[$svc] } else { $svc })
         $connHtml += "<div class=`"conn $cls`"><span>$ico</span><span>$lbl</span></div>"
     }
 
@@ -137,13 +184,15 @@ function Publish-NRGAssessmentHTML {
         $ctrl   = Get-NRGControlById -ControlId $g.ControlId
         $bRisk  = if ($ctrl -and $ctrl.BusinessRisk) { hx $ctrl.BusinessRisk } else { hx $g.Detail }
         $rem    = hx $g.Remediation
+        $title  = hx $g.Title
         $cls    = if ($g.Severity -eq 'Critical') { 'ac' } else { 'ah' }
         $svCls  = if ($g.Severity -eq 'Critical') { 'svc' } else { 'svh' }
         $effort = if ($ctrl -and $ctrl.EffortLevel) { hx $ctrl.EffortLevel } else { '' }
+        $sev    = hx $g.Severity
         $riskDiv = if ($bRisk) { "<div class=`"act-risk`"><span class=`"act-risk-lbl`">Why it matters</span>$bRisk</div>" } else { '' }
         $remDiv  = if ($rem)   { "<div class=`"act-rem`"><span class=`"act-rem-lbl`">How to fix it</span>$rem</div>" } else { '' }
         $efSpan  = if ($effort) { "<span class=`"act-effort`">$effort</span>" } else { '' }
-        $actsHtml += "<div class=`"act $cls`"><div class=`"act-num`"><span class=`"act-n`">$n</span><span class=`"sv $svCls`" style=`"margin-top:4px`">$($g.Severity)</span>$efSpan</div><div class=`"act-body`"><div class=`"act-t`">$(hx $g.Title)</div>$riskDiv$remDiv</div></div>"
+        $actsHtml += "<div class=`"act $cls`"><div class=`"act-num`"><span class=`"act-n`">$n</span><span class=`"sv $svCls`" style=`"margin-top:4px`">$sev</span>$efSpan</div><div class=`"act-body`"><div class=`"act-t`">$title</div>$riskDiv$remDiv</div></div>"
         $n++
     }
 
@@ -156,7 +205,7 @@ function Publish-NRGAssessmentHTML {
             $t     = hx $f.Title
             $d     = hx $f.Detail
             $rem   = hx $f.Remediation
-            $rl    = hx $f.RemediationLink
+            $rlSafe = ConvertTo-NRGSafeUrl $f.RemediationLink
             $cv    = hx $f.CurrentValue
             $rv    = hx $f.RequiredValue
             $ctrl  = Get-NRGControlById -ControlId $f.ControlId
@@ -177,12 +226,20 @@ function Publish-NRGAssessmentHTML {
                 if ($bRisk) { $whyBlock = "<div class=`"ex-block`"><div class=`"ex-block-lbl why-lbl`">Why it matters</div><div class=`"ex-block-body`">$bRisk</div></div>" }
                 $howBlock = ''
                 if ($rem) {
-                    $lnk = if ($rl) { " <a href=`"$rl`" target=`"_blank`" class=`"ex-lnk`">&#8599; Open portal</a>" } else { '' }
+                    $lnk = if ($rlSafe) { " <a href=`"$rlSafe`" target=`"_blank`" rel=`"noopener noreferrer`" class=`"ex-lnk`">&#8599; Open portal</a>" } else { '' }
                     $efSpan2 = if ($effort) { "<span class=`"effort-tag`">$effort</span>" } else { '' }
                     $ttpHtml = ''
                     if ($ttpList.Count -gt 0) {
-                        $ttpTags = ($ttpList | ForEach-Object { $t2=$_.Trim(); "<a href=`"https://attack.mitre.org/techniques/$($t2 -replace '\.','/') `" target=`"_blank`" class=`"ttp-tag`">$t2</a>" }) -join ''
-                        $ttpHtml = "<div class=`"ex-ttp`">$ttpTags</div>"
+                        $ttpTags = ($ttpList | ForEach-Object {
+                            $t2 = $_.Trim()
+                            # Validate TTP ID format before constructing URL — reject anything not Txxxx[.xxx]
+                            if (Test-NRGSafeMitreId $t2) {
+                                $t2Url  = $t2 -replace '\.','/'
+                                $t2Enc  = hx $t2
+                                "<a href=`"https://attack.mitre.org/techniques/$t2Url`" target=`"_blank`" rel=`"noopener noreferrer`" class=`"ttp-tag`">$t2Enc</a>"
+                            }
+                        }) -join ''
+                        if ($ttpTags) { $ttpHtml = "<div class=`"ex-ttp`">$ttpTags</div>" }
                     }
                     $fwHtml = ''
                     if ($f.FrameworkIds -and $f.FrameworkIds.Count -gt 0) {
@@ -196,15 +253,25 @@ function Publish-NRGAssessmentHTML {
 
             $hasEx     = $exHtml -ne ''
             $clickAttr = if ($hasEx) { "class=`"fr $rc exp`" onclick=`"toggle(this)`"" } else { "class=`"fr $rc`"" }
-            $cvHint    = if ($cv -and $f.State -in @('Gap','Partial')) { $short = if ($cv.Length -gt 65) { $cv.Substring(0,62)+'...' } else { $cv }; "<div class=`"f-cv`">$short</div>" } else { '' }
-            $dPreview  = if ($d -and $f.State -in @('Gap','Partial')) { if ($d.Length -gt 100) { $d.Substring(0,97)+'...' } else { $d } } elseif ($f.State -eq 'Satisfied' -and $cv) { $cv } else { '' }
+            $cvHint    = if ($cv -and $f.State -in @('Gap','Partial')) {
+                # Truncate the ENCODED value, not the raw — but truncation on encoded
+                # could split an entity. Truncate raw first, then encode.
+                $rawCv = [string]$f.CurrentValue
+                $short = if ($rawCv.Length -gt 65) { $rawCv.Substring(0,62)+'...' } else { $rawCv }
+                "<div class=`"f-cv`">$(hx $short)</div>"
+            } else { '' }
+            $dPreview  = if ($d -and $f.State -in @('Gap','Partial')) {
+                $rawD = [string]$f.Detail
+                $short = if ($rawD.Length -gt 100) { $rawD.Substring(0,97)+'...' } else { $rawD }
+                hx $short
+            } elseif ($f.State -eq 'Satisfied' -and $cv) { $cv } else { '' }
             $moreIco   = if ($hasEx) { '<span class="more-ico">&#9654;</span>' } else { '' }
 
             $rows += "<tr $clickAttr><td class=`"td1`">$(sBadge $f.State)$(svBadge $f.Severity)</td><td class=`"td3`"><div class=`"f-title`">$t $moreIco</div>$cvHint</td><td class=`"td4`">$dPreview</td></tr>$exHtml"
         }
 
-        $cKey    = $cat.Name
-        $cScore  = if ($cScores.ContainsKey($cKey)) { $cScores[$cKey] } else { 0 }
+        $cKey    = hx $cat.Name
+        $cScore  = if ($cScores.ContainsKey($cat.Name)) { $cScores[$cat.Name] } else { 0 }
         $cColor  = if ($cScore -ge 85) { '#059669' } elseif ($cScore -ge 65) { '#d97706' } elseif ($cScore -ge 40) { '#ea580c' } else { '#dc2626' }
         $cg      = @($cat.Group | Where-Object State -eq 'Gap').Count
         $cp2     = @($cat.Group | Where-Object State -eq 'Partial').Count
@@ -214,7 +281,7 @@ function Publish-NRGAssessmentHTML {
         if ($cp2 -gt 0) { $parts2 += "<span style=`"color:var(--warn);font-weight:700`">$cp2 partial$(if($cp2 -gt 1){'s'})</span>" }
         if ($parts2.Count -gt 0) { $cSummary = " &nbsp;&mdash;&nbsp; " + ($parts2 -join ', ') }
 
-        $findHtml += "<div class=`"card mt`"><div class=`"card-hd`"><span><span class=`"card-title`">$(hx $cKey)</span>$cSummary</span><span class=`"cat-pill`" style=`"background:${cColor}18;color:$cColor;border-color:${cColor}3a`">$cScore / 100</span></div><table class=`"ft`"><thead><tr class=`"fth`"><th style=`"width:142px`">Status</th><th>Control</th><th>Summary</th></tr></thead><tbody>$rows</tbody></table></div>"
+        $findHtml += "<div class=`"card mt`"><div class=`"card-hd`"><span><span class=`"card-title`">$cKey</span>$cSummary</span><span class=`"cat-pill`" style=`"background:${cColor}18;color:$cColor;border-color:${cColor}3a`">$cScore / 100</span></div><table class=`"ft`"><thead><tr class=`"fth`"><th style=`"width:142px`">Status</th><th>Control</th><th>Summary</th></tr></thead><tbody>$rows</tbody></table></div>"
     }
 
     # Roadmap
@@ -238,7 +305,8 @@ function Publish-NRGAssessmentHTML {
                 $ctrl3  = Get-NRGControlById -ControlId $f.ControlId
                 $bRisk3 = if ($ctrl3 -and $ctrl3.BusinessRisk) { hx $ctrl3.BusinessRisk } else { hx $f.Detail }
                 $rc3    = if ($f.State -eq 'Gap') { 'rmg-gap' } else { 'rmg-warn' }
-                $lnk3   = if ($f.RemediationLink) { " <a href=`"$(hx $f.RemediationLink)`" target=`"_blank`" class=`"ex-lnk`">&#8599; Portal</a>" } else { '' }
+                $rl3Safe = ConvertTo-NRGSafeUrl $f.RemediationLink
+                $lnk3   = if ($rl3Safe) { " <a href=`"$rl3Safe`" target=`"_blank`" rel=`"noopener noreferrer`" class=`"ex-lnk`">&#8599; Portal</a>" } else { '' }
                 $whyDiv3 = if ($bRisk3) { "<div class=`"rmi-why`">$bRisk3</div>" } else { '' }
                 $rmRows  += "<div class=`"rmi $rc3`"><div class=`"rmi-hd`">$(svBadge $f.Severity) <span class=`"rmi-t`">$(hx $f.Title)</span></div>$whyDiv3<div class=`"rmi-r`">$(hx $f.Remediation)$lnk3</div></div>"
             }
@@ -321,15 +389,20 @@ function Publish-NRGAssessmentHTML {
         $dRows = ''
         foreach ($domain in ($dnsData.Data.Domains.Keys | Sort-Object)) {
             $d4   = $dnsData.Data.Domains[$domain]
+            $domEnc = hx $domain
             $spf  = if (-not $d4.SPF) { '<span class="ibad">&#10005; None</span>' } elseif ($d4.SPF -match '\-all') { '<span class="igood">&#10003; -all</span>' } elseif ($d4.SPF -match '~all') { '<span class="iwarn">&#9888; ~all</span>' } else { '<span class="iwarn">&#9888;</span>' }
             $dkim = if ($d4.DKIM.Selector1 -and $d4.DKIM.Selector2) { '<span class="igood">&#10003; Both</span>' } elseif ($d4.DKIM.Selector1 -or $d4.DKIM.Selector2) { '<span class="iwarn">&#9888; Partial</span>' } else { '<span class="ibad">&#10005;</span>' }
             $dmarc = if (-not $d4.DMARC) { '<span class="ibad">&#10005; None</span>' } elseif ($d4.DMARC -match 'p=reject') { '<span class="igood">&#10003; reject</span>' } elseif ($d4.DMARC -match 'p=quarantine') { '<span class="iwarn">&#9888; quarantine</span>' } else { '<span class="ibad">&#9888; none</span>' }
             $mtaM  = if ($d4.MTASTS -and $d4.MTASTS.Mode) { $d4.MTASTS.Mode } elseif ($d4.MTASTS -and $d4.MTASTS.TxtRecord) { 'present' } else { $null }
-            $mta   = if ($mtaM -eq 'enforce') { '<span class="igood">&#10003; enforce</span>' } elseif ($mtaM -eq 'testing') { '<span class="iwarn">&#9888; testing</span>' } elseif ($mtaM) { "<span class=`"iwarn`">$mtaM</span>" } else { '<span class="ibad">&#10005;</span>' }
+            $mta   = if ($mtaM -eq 'enforce') { '<span class="igood">&#10003; enforce</span>' } elseif ($mtaM -eq 'testing') { '<span class="iwarn">&#9888; testing</span>' } elseif ($mtaM) { "<span class=`"iwarn`">$(hx $mtaM)</span>" } else { '<span class="ibad">&#10005;</span>' }
             $tls   = if ($d4.TLSRPT) { '<span class="igood">&#10003;</span>' } else { '<span class="ibad">&#10005;</span>' }
             $dsec  = if ($d4.DNSSEC) { '<span class="igood">&#10003;</span>' } else { '<span class="ibad">&#10005;</span>' }
-            $dmarcTxt = if ($d4.DMARC) { $tt = if ($d4.DMARC.Length -gt 52) { $d4.DMARC.Substring(0,49)+'...' } else { $d4.DMARC }; "<code class=`"icode`">$(hx $tt)</code>" } else { '&mdash;' }
-            $dRows += "<tr><td><strong>$(hx $domain)</strong></td><td>$spf</td><td>$dkim</td><td>$dmarc</td><td>$dmarcTxt</td><td>$mta</td><td>$tls</td><td>$dsec</td></tr>"
+            $dmarcTxt = if ($d4.DMARC) {
+                $rawDmarc = [string]$d4.DMARC
+                $tt = if ($rawDmarc.Length -gt 52) { $rawDmarc.Substring(0,49)+'...' } else { $rawDmarc }
+                "<code class=`"icode`">$(hx $tt)</code>"
+            } else { '&mdash;' }
+            $dRows += "<tr><td><strong>$domEnc</strong></td><td>$spf</td><td>$dkim</td><td>$dmarc</td><td>$dmarcTxt</td><td>$mta</td><td>$tls</td><td>$dsec</td></tr>"
         }
         $dnsInvHtml = "<div class=`"card mt`"><div class=`"card-hd`"><span class=`"card-title`">DNS Email Security</span></div><div class=`"tscroll`"><table class=`"itbl`"><thead><tr><th>Domain</th><th>SPF</th><th>DKIM</th><th>DMARC</th><th>DMARC Record</th><th>MTA-STS</th><th>TLS-RPT</th><th>DNSSEC</th></tr></thead><tbody>$dRows</tbody></table></div></div>"
     }
@@ -348,12 +421,14 @@ function Publish-NRGAssessmentHTML {
         }
         if ($tr5) { $smtpV = if ($tr5.SmtpClientAuthenticationDisabled -eq $true) { '<span class="igood">&#10003; Disabled</span>' } else { '<span class="ibad">&#10005; Enabled (risk)</span>' }; $eRows += "<tr><td>SMTP Client Authentication</td><td>$smtpV</td></tr>" }
         if ($pr5) {
-            $p3V = if ($pr5.PopEnabled -eq 0) { '<span class="igood">&#10003; Disabled on all</span>' } else { "<span class=`"ibad`">&#10005; $($pr5.PopEnabled) enabled</span>" }
-            $i4V = if ($pr5.ImapEnabled -eq 0) { '<span class="igood">&#10003; Disabled on all</span>' } else { "<span class=`"ibad`">&#10005; $($pr5.ImapEnabled) enabled</span>" }
-            $eRows += "<tr><td>Total Mailboxes</td><td>$($pr5.TotalMailboxes)</td></tr><tr><td>POP3</td><td>$p3V</td></tr><tr><td>IMAP</td><td>$i4V</td></tr><tr><td>ActiveSync</td><td>$($pr5.ActiveSyncEnabled) mailboxes</td></tr>"
+            # Force integer coercion to defang any non-numeric content
+            $popN = [int]($pr5.PopEnabled); $imapN = [int]($pr5.ImapEnabled); $asN = [int]($pr5.ActiveSyncEnabled); $totN = [int]($pr5.TotalMailboxes)
+            $p3V = if ($popN -eq 0) { '<span class="igood">&#10003; Disabled on all</span>' } else { "<span class=`"ibad`">&#10005; $popN enabled</span>" }
+            $i4V = if ($imapN -eq 0) { '<span class="igood">&#10003; Disabled on all</span>' } else { "<span class=`"ibad`">&#10005; $imapN enabled</span>" }
+            $eRows += "<tr><td>Total Mailboxes</td><td>$totN</td></tr><tr><td>POP3</td><td>$p3V</td></tr><tr><td>IMAP</td><td>$i4V</td></tr><tr><td>ActiveSync</td><td>$asN mailboxes</td></tr>"
         }
-        if ($bp5) { $byV = if ($bp5.BypassedCount -eq 0) { '<span class="igood">&#10003; None</span>' } else { "<span class=`"ibad`">&#10005; $($bp5.BypassedCount) bypassed</span>" }; $eRows += "<tr><td>Audit Bypass</td><td>$byV</td></tr>" }
-        if ($sm5) { $siV = if ($sm5.SignInEnabled -eq 0) { '<span class="igood">&#10003; All disabled</span>' } else { "<span class=`"ibad`">&#10005; $($sm5.SignInEnabled) with sign-in</span>" }; $eRows += "<tr><td>Shared Mailboxes</td><td>$($sm5.Count) total</td></tr><tr><td>Shared Mailbox Sign-in</td><td>$siV</td></tr>" }
+        if ($bp5) { $bpN = [int]($bp5.BypassedCount); $byV = if ($bpN -eq 0) { '<span class="igood">&#10003; None</span>' } else { "<span class=`"ibad`">&#10005; $bpN bypassed</span>" }; $eRows += "<tr><td>Audit Bypass</td><td>$byV</td></tr>" }
+        if ($sm5) { $smCount = [int]($sm5.Count); $smSi = [int]($sm5.SignInEnabled); $siV = if ($smSi -eq 0) { '<span class="igood">&#10003; All disabled</span>' } else { "<span class=`"ibad`">&#10005; $smSi with sign-in</span>" }; $eRows += "<tr><td>Shared Mailboxes</td><td>$smCount total</td></tr><tr><td>Shared Mailbox Sign-in</td><td>$siV</td></tr>" }
         $exoInvHtml = "<div class=`"card mt`" style=`"max-width:560px`"><div class=`"card-hd`"><span class=`"card-title`">Exchange Online Configuration</span></div><table class=`"itbl i2`"><thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody>$eRows</tbody></table></div>"
     }
 
@@ -365,17 +440,24 @@ function Publish-NRGAssessmentHTML {
         foreach ($p6 in (@($caData.Data.Policies) | Sort-Object @{Expression={ switch ($_.State) { 'enabled' { 0 }; 'enabledForReportingButNotEnforced' { 1 }; 'disabled' { 2 } } }}, DisplayName)) {
             $stH = switch ($p6.State) { 'enabled' { '<span class="igood">&#10003; Enforced</span>' }; 'enabledForReportingButNotEnforced' { '<span class="iwarn">&#9680; Report-only</span>' }; 'disabled' { '<span class="ioff">&#8212; Disabled</span>' }; default { "<span class=`"iwarn`">$(hx $p6.State)</span>" } }
             $cp6 = @()
-            if ($p6.Conditions.Users.IncludeUsers -contains 'All') { $cp6 += 'All users' } elseif ($p6.Conditions.Users.IncludeRoles.Count -gt 0) { $cp6 += "$($p6.Conditions.Users.IncludeRoles.Count) role(s)" }
+            if ($p6.Conditions.Users.IncludeUsers -contains 'All') { $cp6 += 'All users' } elseif ($p6.Conditions.Users.IncludeRoles.Count -gt 0) { $cp6 += "$([int]$p6.Conditions.Users.IncludeRoles.Count) role(s)" }
             if ($p6.Conditions.Applications.IncludeApplications -contains 'All') { $cp6 += 'All cloud apps' }
             if ($p6.Conditions.ClientAppTypes -contains 'other') { $cp6 += 'Legacy auth' }
-            if ($p6.Conditions.SignInRiskLevels.Count -gt 0) { $cp6 += "Sign-in risk: $($p6.Conditions.SignInRiskLevels -join '/')" }
+            if ($p6.Conditions.SignInRiskLevels.Count -gt 0) {
+                # Build risk levels from a known enum allowlist — refuse anything else.
+                $allowedRisk = @('none','low','medium','high','hidden','unknownFutureValue')
+                $cleanRisk = @($p6.Conditions.SignInRiskLevels | Where-Object { $allowedRisk -contains $_ })
+                if ($cleanRisk.Count -gt 0) {
+                    $cp6 += "Sign-in risk: $(hx ($cleanRisk -join '/'))"
+                }
+            }
             $condStr = if ($cp6.Count -gt 0) { $cp6 -join ' &bull; ' } else { '&mdash;' }
             $gp6 = @()
             if ($p6.GrantControls.BuiltInControls -contains 'mfa') { $gp6 += 'Require MFA' }
             if ($p6.GrantControls.BuiltInControls -contains 'block') { $gp6 += 'Block' }
             if ($p6.GrantControls.BuiltInControls -contains 'compliantDevice') { $gp6 += 'Compliant device' }
-            if ($p6.GrantControls.AuthenticationStrength) { $gp6 += "Auth strength: $($p6.GrantControls.AuthenticationStrength.DisplayName)" }
-            $grantStr = if ($gp6.Count -gt 0) { hx ($gp6 -join ' + ') } else { '&mdash;' }
+            if ($p6.GrantControls.AuthenticationStrength) { $gp6 += "Auth strength: $(hx $p6.GrantControls.AuthenticationStrength.DisplayName)" }
+            $grantStr = if ($gp6.Count -gt 0) { $gp6 -join ' + ' } else { '&mdash;' }
             $rowCls = if ($p6.State -eq 'enabledForReportingButNotEnforced') { 'ca-ro' } elseif ($p6.State -eq 'disabled') { 'ca-dis' } else { '' }
             $caRows += "<tr class=`"$rowCls`"><td class=`"ca-n`">$(hx $p6.DisplayName)</td><td>$stH</td><td class=`"ca-c`">$condStr</td><td>$grantStr</td></tr>"
         }
@@ -387,9 +469,27 @@ function Publish-NRGAssessmentHTML {
     $defData = Get-NRGRawData -Key 'Defender'
     if ($defData -and $defData.Success) {
         $dRows7 = ''
-        if ($defData.Data['SafeAttachments'].Available) { foreach ($p7 in @($defData.Data['SafeAttachments'].Policies | Where-Object { -not $_.IsDefault })) { $en7 = if ($p7.Enable -eq $true) { '<span class="igood">&#10003; Enabled</span>' } else { '<span class="ioff">Disabled</span>' }; $dRows7 += "<tr><td><strong>$(hx $p7.Name)</strong> <span class=`"isub`">Safe Attachments</span></td><td>$en7</td><td>Action: $(hx $p7.Action)</td></tr>" } }
-        if ($defData.Data['SafeLinks'].Available) { foreach ($p7 in @($defData.Data['SafeLinks'].Policies | Where-Object { -not $_.IsDefault })) { $en7 = if ($p7.EnableSafeLinksForEmail -eq $true) { '<span class="igood">&#10003; Enabled</span>' } else { '<span class="ioff">Disabled</span>' }; $ct7 = if ($p7.AllowClickThrough -eq $false) { '<span class="igood">Click-through blocked</span>' } else { '<span class="iwarn">Click-through allowed</span>' }; $dRows7 += "<tr><td><strong>$(hx $p7.Name)</strong> <span class=`"isub`">Safe Links</span></td><td>$en7</td><td>$ct7</td></tr>" } }
-        if ($defData.Data['AntiPhishing'].Available) { foreach ($p7 in @($defData.Data['AntiPhishing'].Policies | Where-Object { -not $_.IsDefault })) { $en7 = if ($p7.Enabled) { '<span class="igood">&#10003; Enabled</span>' } else { '<span class="ioff">Disabled</span>' }; $mi7 = if ($p7.EnableMailboxIntelligence) { '<span class="igood">&#10003;</span>' } else { '<span class="ibad">&#10005;</span>' }; $dRows7 += "<tr><td><strong>$(hx $p7.Name)</strong> <span class=`"isub`">Anti-Phishing</span></td><td>$en7</td><td>Mailbox intel: $mi7 &nbsp; Threshold: $($p7.PhishThresholdLevel)</td></tr>" } }
+        if ($defData.Data['SafeAttachments'].Available) {
+            foreach ($p7 in @($defData.Data['SafeAttachments'].Policies | Where-Object { -not $_.IsDefault })) {
+                $en7 = if ($p7.Enable -eq $true) { '<span class="igood">&#10003; Enabled</span>' } else { '<span class="ioff">Disabled</span>' }
+                $dRows7 += "<tr><td><strong>$(hx $p7.Name)</strong> <span class=`"isub`">Safe Attachments</span></td><td>$en7</td><td>Action: $(hx $p7.Action)</td></tr>"
+            }
+        }
+        if ($defData.Data['SafeLinks'].Available) {
+            foreach ($p7 in @($defData.Data['SafeLinks'].Policies | Where-Object { -not $_.IsDefault })) {
+                $en7 = if ($p7.EnableSafeLinksForEmail -eq $true) { '<span class="igood">&#10003; Enabled</span>' } else { '<span class="ioff">Disabled</span>' }
+                $ct7 = if ($p7.AllowClickThrough -eq $false) { '<span class="igood">Click-through blocked</span>' } else { '<span class="iwarn">Click-through allowed</span>' }
+                $dRows7 += "<tr><td><strong>$(hx $p7.Name)</strong> <span class=`"isub`">Safe Links</span></td><td>$en7</td><td>$ct7</td></tr>"
+            }
+        }
+        if ($defData.Data['AntiPhishing'].Available) {
+            foreach ($p7 in @($defData.Data['AntiPhishing'].Policies | Where-Object { -not $_.IsDefault })) {
+                $en7 = if ($p7.Enabled) { '<span class="igood">&#10003; Enabled</span>' } else { '<span class="ioff">Disabled</span>' }
+                $mi7 = if ($p7.EnableMailboxIntelligence) { '<span class="igood">&#10003;</span>' } else { '<span class="ibad">&#10005;</span>' }
+                $threshEnc = hx $p7.PhishThresholdLevel
+                $dRows7 += "<tr><td><strong>$(hx $p7.Name)</strong> <span class=`"isub`">Anti-Phishing</span></td><td>$en7</td><td>Mailbox intel: $mi7 &nbsp; Threshold: $threshEnc</td></tr>"
+            }
+        }
         if ($dRows7) { $defInvHtml = "<div class=`"card mt`"><div class=`"card-hd`"><span class=`"card-title`">Defender for Office 365</span></div><table class=`"itbl`"><thead><tr><th>Policy</th><th style=`"width:110px`">Status</th><th>Configuration</th></tr></thead><tbody>$dRows7</tbody></table></div>" }
     }
 
@@ -401,7 +501,17 @@ function Publish-NRGAssessmentHTML {
     $phStr  = hx $phone
     $wsStr  = hx $website
     $ver    = hx $Metadata.ToolVersion
-    $logoH  = if ($logoUrl) { "<img src=`"$(hx $logoUrl)`" alt=`"$cmpStr`" class=`"logo`">" } else { "<span class=`"logo-t`">$cmpStr</span>" }
+
+    # Logo URL — strict validation. Reject anything not https or data: image
+    $logoSafe = ''
+    if ($logoUrl) {
+        if ($logoUrl -match '^data:image/(png|jpe?g|svg\+xml|gif|webp);base64,[A-Za-z0-9+/=]+$') {
+            $logoSafe = $logoUrl   # data URI image — safe to embed
+        } else {
+            $logoSafe = ConvertTo-NRGSafeUrl $logoUrl   # https only
+        }
+    }
+    $logoH  = if ($logoSafe) { "<img src=`"$logoSafe`" alt=`"$cmpStr`" class=`"logo`">" } else { "<span class=`"logo-t`">$cmpStr</span>" }
 
     $html = @"
 <!DOCTYPE html>
@@ -409,6 +519,8 @@ function Publish-NRGAssessmentHTML {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; script-src 'unsafe-inline'; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+<meta name="referrer" content="no-referrer">
 <title>M365 Security Assessment &mdash; $cDisp</title>
 <style>
 :root{--P:$primary;--S:$secondary;--A:$accent;--bg:#edf0f6;--card:#fff;--txt:#18202e;--mut:#5a6478;--bdr:#dde3ec;--pass:#059669;--warn:#d97706;--gap:#dc2626;--na:#9ca3af;--r:10px;--sh:0 2px 14px rgba(26,58,107,.1),0 1px 3px rgba(0,0,0,.05)}
