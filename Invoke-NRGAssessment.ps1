@@ -1,58 +1,87 @@
+#Requires -Version 7.0
 #
 # Invoke-NRGAssessment.ps1
-# Entry point for NRG-Assessment v4.5.0
+# Entry point for NRG-Assessment v4.5.5
+#
+# NRG Technology Services | NextLayerSec LLC
+# Author: Matthew Levorson
 #
 # Flow:
 #   1. Import module (loads Lib, Collectors, Evaluators, Publishers)
 #   2. Connect to M365 services
 #   3. Run collectors -> raw data stored in module state
 #   4. Run evaluators -> findings registered via Add-NRGFinding
-#   5. Run publishers -> Markdown + HTML + JSON written to output/
+#   5. Run publishers -> HTML, Markdown, JSON, XLSX, Playbook, Remediation script
 #
 # Usage:
-#   pwsh -ExecutionPolicy RemoteSigned -File .\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com
+#   .\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com
+#   .\Invoke-NRGAssessment.ps1 -AppId <guid> -TenantId <guid> -CertificateThumbprint <40hex> -OrganizationDomain contoso.onmicrosoft.com
 #
 
 [CmdletBinding()]
 param(
-    [string]   $UserPrincipalName,
-    [string]   $OutputPath,
-    [switch]   $SkipPurview,
-    [switch]   $SkipTeams,
-    [switch]   $SkipSharePoint,
-    [switch]   $SkipIntune,
-    [switch]   $SkipPowerPlatform,
-    [switch]   $SkipDNS,
+    [string] $UserPrincipalName,
+    [string] $OutputPath,
+
+    # App-only / certificate authentication for unattended runs
+    [string] $AppId,
+    [string] $TenantId,
+    [string] $CertificateThumbprint,
+    [string] $OrganizationDomain,
+
+    # Cloud environment
+    [ValidateSet('commercial','gcc','gcchigh','dod')]
+    [string] $Environment = 'commercial',
+
+    # Skip switches
+    [switch] $SkipPurview,
+    [switch] $IncludePurview,   # Include Purview/IPPSSession (skipped by default — EOM v3.4 WAM crash)
+    [switch] $SkipTeams,
+    [switch] $SkipSharePoint,
+    [switch] $SkipIntune,
+    [switch] $SkipPowerPlatform,
+    [switch] $SkipDNS,
+
+    # Run modes
+    [switch] $NonInteractive,
+    [string] $FromResults,
+    [string] $BaselineResults,
     [string[]] $DnsDomains,
-    [switch]   $JsonOnly,
-    [switch]   $WhatIfConnections
+    [switch] $JsonOnly,
+    [switch] $WhatIfConnections
 )
 
-# Disable WAM broker before any module loads.
-# Must be after param() but before Import-Module.
-# Prevents RuntimeBroker NullReferenceException on EXO, IPPS, Teams, Graph.
-$env:MSAL_ALLOW_BROKER = '0'
-$ErrorActionPreference = 'Stop'
+# Disable WAM broker before any module loads — prevents RuntimeBroker NullReferenceException
+$env:MSAL_ALLOW_BROKER        = '0'
+$env:MSAL_DISABLE_TOKENBROKER = '1'
+$env:MSAL_DISABLE_WAM         = '1'
+
+# Purview skipped by default — EOM v3.4 WAM broker crashes on background thread
+# Pass -IncludePurview to attempt it (works when running standalone PS7 window)
+if (-not $IncludePurview -and -not $SkipPurview) { $SkipPurview = $true }
+
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
-# ── Banner ───────────────────────────────────────────────────────────────────
+# ── Banner ────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host " NRG-Assessment v4.5.0 - Read-Only M365 Security Assessment" -ForegroundColor Cyan
-Write-Host " NRG Technology Services  |  75 Controls" -ForegroundColor Cyan
+Write-Host " NRG-Assessment v4.5.5 — Read-Only M365 Security Assessment"     -ForegroundColor Cyan
+Write-Host " NRG Technology Services | NextLayerSec LLC"                     -ForegroundColor Cyan
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# ── Output path ──────────────────────────────────────────────────────────────
+# ── Output path ───────────────────────────────────────────────────────────────
 if (-not $OutputPath) { $OutputPath = Join-Path $scriptDir 'output' }
-if (-not (Test-Path $OutputPath)) { New-Item -Path $OutputPath -ItemType Directory -Force | Out-Null }
+if (-not (Test-Path $OutputPath)) {
+    New-Item -Path $OutputPath -ItemType Directory -Force | Out-Null
+}
 
-# ── Import module ────────────────────────────────────────────────────────────
+# ── Import module ─────────────────────────────────────────────────────────────
 Write-Host "[-] Loading NRG-Assessment module..." -ForegroundColor Cyan
 $manifestPath = Join-Path $scriptDir 'NRG-Assessment.psd1'
 try {
     Import-Module $manifestPath -Force -ErrorAction Stop
-    Write-Host "  [+] Module loaded (v$($script:NRGAssessmentVersion))" -ForegroundColor Green
+    Write-Host "  [+] Module loaded (v$($NRGAssessmentVersion))" -ForegroundColor Green
 } catch {
     Write-Host "  [!] Module load failed: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
@@ -60,184 +89,298 @@ try {
 
 Clear-NRGFindings
 
-# ── Connect to services ──────────────────────────────────────────────────────
-Write-Host ""
-Write-Host "[-] Establishing service connections (Graph: browser | Teams/EXO/IPPS: device code)..." -ForegroundColor Cyan
-$connectParams = @{}
-if ($UserPrincipalName) { $connectParams['UserPrincipalName'] = $UserPrincipalName }
-if ($SkipPurview)       { $connectParams['SkipPurview']       = $true }
-if ($SkipTeams)         { $connectParams['SkipTeams']         = $true }
-
-# Always defer SharePoint — PnP loads Graph.Core which conflicts with Graph SDK
-$connectParams['SkipSharePoint'] = $true
-
-$rawConn = @(Connect-NRGServices @connectParams)
-$conn = $rawConn | Where-Object { $_ -is [hashtable] } | Select-Object -Last 1
-if (-not $conn) {
-    $conn = [hashtable]@{
-        Graph=$false; EXO=$false; IPPSSession=$false
-        Teams=$false; SharePoint=$false; TenantDomain=$null; TenantId=$null
+# ── Module prerequisite check ─────────────────────────────────────────────────
+# EOM is pinned to 3.2.0 — 3.4.0+ has a WAM broker crash that kills the process
+# from a background .NET thread (uncatchable from PowerShell).
+$moduleSpecs = @(
+    @{ Name='Microsoft.Graph.Authentication'; MinVersion='2.0.0'; PinVersion=$null   }
+    @{ Name='ExchangeOnlineManagement';       MinVersion='3.0.0'; PinVersion='3.2.0' }
+    @{ Name='MicrosoftTeams';                 MinVersion='5.0.0'; PinVersion=$null   }
+)
+$needsAction = @()
+foreach ($spec in $moduleSpecs) {
+    $installed = Get-Module -ListAvailable -Name $spec.Name -ErrorAction SilentlyContinue |
+        Sort-Object Version -Descending | Select-Object -First 1
+    if (-not $installed) {
+        $needsAction += @{ Spec=$spec; Action='install'; Current=$null }
+    } elseif ($spec.PinVersion -and $installed.Version -ne [version]$spec.PinVersion) {
+        $needsAction += @{ Spec=$spec; Action='repin'; Current=$installed.Version }
+    } elseif ($installed.Version -lt [version]$spec.MinVersion) {
+        $needsAction += @{ Spec=$spec; Action='upgrade'; Current=$installed.Version }
     }
 }
-if (-not $conn.ContainsKey('SharePoint')) { $conn['SharePoint'] = $false }
 
-if ($WhatIfConnections) {
+if ($needsAction.Count -gt 0) {
     Write-Host ""
-    Write-Host "Connections (WhatIf mode, no collection):" -ForegroundColor Yellow
-    $conn | Format-Table -AutoSize
-    return
-}
-
-# ── Run collectors ───────────────────────────────────────────────────────────
-Write-Host ""
-Write-Host "[-] Running collectors..." -ForegroundColor Cyan
-
-if ($conn.Graph) {
-    Write-Host "  [*] AAD: Auth + authorization policies..."
-    [void](Invoke-NRGCollectAADAuthPolicies)
-
-    Write-Host "  [*] AAD: Conditional Access policies..."
-    [void](Invoke-NRGCollectAADCAPolicies)
-
-    Write-Host "  [*] AAD: Users and MFA registration state..."
-    [void](Invoke-NRGCollectAADUsers)
-
-    Write-Host "  [*] AAD: Directory role assignments..."
-    [void](Invoke-NRGCollectAADRoles)
-
-    Write-Host "  [*] AAD: PIM eligible and active schedules..."
-    [void](Invoke-NRGCollectAADPIM)
-
-    if (-not $SkipSharePoint) {
-        Write-Host "  [*] SharePoint: Tenant settings via Graph..."
-        [void](Invoke-NRGCollectSharePoint)
-    }
-
-    if (-not $SkipIntune) {
-        Write-Host "  [*] Intune: Device compliance, MAM, MTD, enrollment..."
-        [void](Invoke-NRGCollectIntune)
-    }
-
-    if (-not $SkipPowerPlatform) {
-        Write-Host "  [*] Power Platform: Environments, tenant isolation, DLP..."
-        [void](Invoke-NRGCollectPowerPlatform)
-    }
-}
-
-if ($conn.EXO) {
-    Write-Host "  [*] EXO: Mailbox configuration..."
-    [void](Invoke-NRGCollectEXOMailboxConfig)
-
-    Write-Host "  [*] Defender: Safe Attachments, Safe Links, Anti-phishing..."
-    [void](Invoke-NRGCollectDefender)
-
-    if (-not $SkipDNS) {
-        Write-Host "  [*] DNS: SPF/DKIM/DMARC/MTA-STS for accepted domains..."
-        if ($DnsDomains) {
-            [void](Invoke-NRGCollectDNSEmailRecords -Domains $DnsDomains)
-        } else {
-            [void](Invoke-NRGCollectDNSEmailRecords)
+    foreach ($n in $needsAction) {
+        $name = $n.Spec.Name
+        if ($n.Action -eq 'install') {
+            Write-Host "  [!] Missing: $name" -ForegroundColor Yellow
+        } elseif ($n.Action -eq 'repin') {
+            Write-Host "  [!] $name $($n.Current) installed — recommended: $($n.Spec.PinVersion)" -ForegroundColor Yellow
+            if ([version]$n.Current -gt [version]$n.Spec.PinVersion) {
+                Write-Host "      Version $($n.Current) has known crash bugs in this tool's auth flow." -ForegroundColor DarkYellow
+            }
         }
     }
+    if ($NonInteractive) {
+        Write-Host "  [!] NonInteractive — run .\Install-NRGPrerequisites.ps1 manually then retry." -ForegroundColor Red
+        exit 1
+    }
+    $install = Read-Host "  Install/fix modules now? [Y/N]"
+    if ($install -match '^[Yy]') {
+        foreach ($n in $needsAction) {
+            $name = $n.Spec.Name
+            $targetVer = $n.Spec.PinVersion
+            try {
+                if ($n.Action -eq 'repin' -and [version]$n.Current -gt [version]$n.Spec.PinVersion) {
+                    Write-Host "  [*] Downgrading $name $($n.Current) -> $targetVer..." -ForegroundColor Cyan
+                    Uninstall-PSResource -Name $name -ErrorAction SilentlyContinue
+                }
+                if ($targetVer) {
+                    Write-Host "  [*] Installing $name $targetVer..." -ForegroundColor Cyan
+                    Install-PSResource -Name $name -Version $targetVer -TrustRepository -Scope CurrentUser -Reinstall -ErrorAction Stop
+                } else {
+                    Write-Host "  [*] Installing $name (latest)..." -ForegroundColor Cyan
+                    Install-PSResource -Name $name -TrustRepository -Scope CurrentUser -ErrorAction Stop
+                }
+                Write-Host "  [+] $name ready" -ForegroundColor Green
+            } catch {
+                Write-Host "  [!] $name failed: $($_.Exception.Message)" -ForegroundColor Red
+            }
+        }
+    } else {
+        Write-Host "  [!] Skipping. Run .\Install-NRGPrerequisites.ps1 to set up manually." -ForegroundColor Yellow
+    }
 }
 
-if ($conn.Teams -and -not $SkipTeams) {
-    Write-Host "  [*] Teams: Meeting, external access, client policies..."
-    [void](Invoke-NRGCollectTeams)
+# ── FromResults mode — skip collection, just republish ───────────────────────
+if ($FromResults -and (Test-Path $FromResults)) {
+    Write-Host "[-] FromResults mode — regenerating reports from $FromResults" -ForegroundColor Cyan
+    $priorData = Get-Content -Path $FromResults -Raw | ConvertFrom-Json
+    $findings = [object[]]@($priorData.Findings)
+    $conn = if ($priorData.Connections) { @{} + $priorData.Connections } else { @{} }
+    $reportMetadata = if ($priorData.Metadata) { @{} + $priorData.Metadata } else {
+        @{ TenantDomain='Unknown'; AssessmentDate=(Get-Date -Format 'MMMM dd, yyyy'); ToolVersion='4.5.5' }
+    }
+    $tenantTag = if ($reportMetadata.TenantDomain) { ($reportMetadata.TenantDomain -split '\.')[0] } else { 'tenant' }
+    $baseName = "$tenantTag-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    Write-Host "  [+] Loaded $($findings.Count) findings" -ForegroundColor Green
+    $skipCollection = $true
+} else {
+    $skipCollection = $false
 }
 
-if ($conn.IPPSSession -and -not $SkipPurview) {
-    Write-Host "  [*] Purview: Audit, DLP, retention, sensitivity labels..."
-    [void](Invoke-NRGCollectPurview)
+if (-not $skipCollection) {
+    # ── Connect to services ──────────────────────────────────────────────────
+    Write-Host ""
+    Write-Host "[-] Connecting to M365 services..." -ForegroundColor Cyan
+
+    $connectParams = @{}
+    if ($AppId -and $TenantId -and $CertificateThumbprint) {
+        $connectParams['AppId']                  = $AppId
+        $connectParams['TenantId']               = $TenantId
+        $connectParams['CertificateThumbprint']  = $CertificateThumbprint
+        if ($OrganizationDomain) { $connectParams['OrganizationDomain'] = $OrganizationDomain }
+    } elseif ($UserPrincipalName) {
+        $connectParams['UserPrincipalName'] = $UserPrincipalName
+    }
+    if ($SkipPurview) { $connectParams['SkipPurview'] = $true }
+    if ($SkipTeams)   { $connectParams['SkipTeams']   = $true }
+    $connectParams['SkipSharePoint'] = $true  # SharePoint via Graph
+
+    $rawConn = @(Connect-NRGServices @connectParams)
+    $conn = $rawConn | Where-Object { $_ -is [hashtable] } | Select-Object -Last 1
+    if (-not $conn) {
+        $conn = @{ Graph=$false; EXO=$false; IPPSSession=$false; Teams=$false; SharePoint=$false }
+    }
+    if (-not $conn.ContainsKey('SharePoint')) { $conn['SharePoint'] = $false }
+
+    if ($WhatIfConnections) {
+        Write-Host ""
+        Write-Host "Connections (WhatIf mode):" -ForegroundColor Yellow
+        $conn | Format-Table -AutoSize
+        return
+    }
+
+    # ── Run collectors ───────────────────────────────────────────────────────
+    Write-Host ""
+    Write-Host "[-] Running collectors..." -ForegroundColor Cyan
+
+    function Invoke-NRGCollector { param([string]$fn)
+        if (Get-Command $fn -ErrorAction SilentlyContinue) {
+            try { & $fn | Out-Null }
+            catch { Write-Warning "Collector $fn failed: $($_.Exception.Message.Split([char]10)[0])" }
+        }
+    }
+
+    if ($conn.Graph) {
+        Write-Host "  [*] AAD: Auth + authorization policies..."
+        Invoke-NRGCollector 'Invoke-NRGCollectAADAuthPolicies'
+        Write-Host "  [*] AAD: Conditional Access policies..."
+        Invoke-NRGCollector 'Invoke-NRGCollectAADCAPolicies'
+        Write-Host "  [*] AAD: Users and MFA registration state..."
+        Invoke-NRGCollector 'Invoke-NRGCollectAADUsers'
+        Write-Host "  [*] AAD: Directory role assignments..."
+        Invoke-NRGCollector 'Invoke-NRGCollectAADRoles'
+        Write-Host "  [*] AAD: PIM eligible and active schedules..."
+        Invoke-NRGCollector 'Invoke-NRGCollectAADPIM'
+        Invoke-NRGCollector 'Invoke-NRGCollectAADIdentityGovernance'
+        Write-Host "  [*] AAD: Inventory (guests, stale, OAuth, Secure Score)..."
+        Invoke-NRGCollector 'Invoke-NRGCollectAADInventory'
+
+        if (-not $SkipSharePoint) {
+            Write-Host "  [*] SharePoint: Tenant settings via Graph..."
+            Invoke-NRGCollector 'Invoke-NRGCollectSharePoint'
+        }
+        if (-not $SkipIntune) {
+            Write-Host "  [*] Intune: Device compliance, MAM, MTD, enrollment..."
+            Invoke-NRGCollector 'Invoke-NRGCollectIntune'
+        }
+        if (-not $SkipPowerPlatform) {
+            Write-Host "  [*] Power Platform: Environments, tenant isolation, DLP..."
+            Invoke-NRGCollector 'Invoke-NRGCollectPowerPlatform'
+        }
+    }
+
+    if ($conn.EXO) {
+        Write-Host "  [*] EXO: Mailbox configuration..."
+        Invoke-NRGCollector 'Invoke-NRGCollectEXOMailboxConfig'
+        Write-Host "  [*] EXO: Inventory (forwarding, shared, audit, SMTP AUTH)..."
+        Invoke-NRGCollector 'Invoke-NRGCollectEXOInventory'
+        Write-Host "  [*] Defender: Safe Attachments, Safe Links, Anti-phishing..."
+        Invoke-NRGCollector 'Invoke-NRGCollectDefender'
+        if (-not $SkipDNS) {
+            Write-Host "  [*] DNS: SPF/DKIM/DMARC/MTA-STS for accepted domains..."
+            if ($DnsDomains) {
+                if (Get-Command Invoke-NRGCollectDNSEmailRecords -ErrorAction SilentlyContinue) {
+                    Invoke-NRGCollectDNSEmailRecords -Domains $DnsDomains | Out-Null
+                }
+            } else {
+                Invoke-NRGCollector 'Invoke-NRGCollectDNSEmailRecords'
+            }
+        }
+    }
+
+    if ($conn.Teams -and -not $SkipTeams) {
+        Write-Host "  [*] Teams: Meeting, external access, client policies..."
+        Invoke-NRGCollector 'Invoke-NRGCollectTeams'
+    }
+
+    if ($conn.IPPSSession -and -not $SkipPurview) {
+        Write-Host "  [*] Purview: Audit, DLP, retention, sensitivity labels..."
+        Invoke-NRGCollector 'Invoke-NRGCollectPurview'
+    }
+
+    # ── Run evaluators ───────────────────────────────────────────────────────
+    Write-Host ""
+    Write-Host "[-] Running evaluators..." -ForegroundColor Cyan
+
+    function Invoke-NRGEvaluator { param([string]$fn)
+        if (Get-Command $fn -ErrorAction SilentlyContinue) {
+            try { & $fn }
+            catch { Write-Warning "Evaluator $($fn) — $($_.Exception.Message.Split([char]10)[0])" }
+        }
+    }
+
+    # All evaluators discovered by name from the loaded module
+    $evaluators = @(Get-Command -Module NRG-Assessment -Name 'Test-NRGControl*' -ErrorAction SilentlyContinue |
+                    Select-Object -ExpandProperty Name)
+    foreach ($ev in $evaluators) {
+        Invoke-NRGEvaluator $ev
+    }
+
+    $findings = Get-NRGFindings
+    Write-Host "  [+] $($findings.Count) findings evaluated" -ForegroundColor Green
+
+    # ── Build report metadata ────────────────────────────────────────────────
+    $tenantTag = if ($conn.TenantDomain) { ($conn.TenantDomain -split '\.')[0] } else { 'tenant' }
+    $baseName = "$tenantTag-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+
+    $reportMetadata = @{
+        TenantDomain   = $conn.TenantDomain
+        TenantId       = $conn.TenantId
+        Operator       = $UserPrincipalName
+        AssessmentDate = (Get-Date).ToString('MMMM dd, yyyy')
+        AssessmentTime = (Get-Date).ToString('o')
+        ToolVersion    = $NRGAssessmentVersion
+        Brand          = $NRGBrand
+    }
 }
-
-# ── Run evaluators ───────────────────────────────────────────────────────────
-Write-Host ""
-Write-Host "[-] Running evaluators..." -ForegroundColor Cyan
-
-# AAD
-Test-NRGControlAADLegacyAuth
-Test-NRGControlAADPhishResistantMFA
-Test-NRGControlAADMFA
-Test-NRGControlAADCA
-Test-NRGControlAADPrivAccess
-
-# EXO
-Test-NRGControlEXOMailboxAudit
-Test-NRGControlEXOSmtpAuth
-Test-NRGControlEXOPop3
-Test-NRGControlEXOImap
-Test-NRGControlEXOCustomerLockbox
-Test-NRGControlEXOSharedMailbox
-Test-NRGControlEXOModernAuth
-
-# DNS
-Test-NRGControlDNSSPF
-Test-NRGControlDNSDKIM
-Test-NRGControlDNSDMARC
-Test-NRGControlDNSMTASTS
-Test-NRGControlDNSTLSRPT
-Test-NRGControlDNSDNSSEC
-
-# Defender
-Test-NRGControlDefender
-
-# Sessions 5+6
-if (-not $SkipSharePoint)    { Test-NRGControlSharePoint }
-if (-not $SkipTeams)         { Test-NRGControlTeams }
-if (-not $SkipPurview)       { Test-NRGControlPurview }
-if (-not $SkipIntune)        { Test-NRGControlIntune }
-if (-not $SkipPowerPlatform) { Test-NRGControlPowerPlatform }
-
-$findings = Get-NRGFindings
-Write-Host "  [+] $($findings.Count) findings evaluated" -ForegroundColor Green
 
 # ── Publish reports ──────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "[-] Generating reports..." -ForegroundColor Cyan
 
-$timestamp = (Get-Date -Format 'yyyyMMdd-HHmmss')
-$tenantTag = if ($conn.TenantDomain) { ($conn.TenantDomain -split '\.')[0] } else { 'tenant' }
-$baseName  = "$tenantTag-$timestamp"
+$jsonPath = Join-Path $OutputPath "$baseName-results.json"
+@{
+    Metadata    = $reportMetadata
+    Findings    = $findings
+    Exceptions  = (Get-NRGExceptions)
+    Coverage    = (Get-NRGCoverage)
+    Connections = $conn
+} | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding utf8
+Write-Host "  [+] JSON: $jsonPath" -ForegroundColor Green
 
-$reportMetadata = @{
-    TenantDomain   = $conn.TenantDomain
-    TenantId       = $conn.TenantId
-    Operator       = $UserPrincipalName
-    AssessmentDate = (Get-Date).ToString('MMMM dd, yyyy')
-    AssessmentTime = (Get-Date).ToString('o')
-    ToolVersion    = $script:NRGAssessmentVersion
-    Brand          = $script:NRGBrand
-}
+if (-not $JsonOnly) {
+    # Markdown summary
+    if (Get-Command Publish-NRGAssessmentSummary -ErrorAction SilentlyContinue) {
+        $mdPath = Join-Path $OutputPath "$baseName-assessment.md"
+        try {
+            Publish-NRGAssessmentSummary -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $mdPath
+            Write-Host "  [+] Markdown: $mdPath" -ForegroundColor Green
+        } catch { Write-Warning "Markdown publish failed: $($_.Exception.Message)" }
+    }
 
-if ($JsonOnly) {
-    $jsonPath = Join-Path $OutputPath "$baseName-results.json"
-    @{
-        Metadata    = $reportMetadata
-        Findings    = $findings
-        Exceptions  = (Get-NRGExceptions)
-        Coverage    = (Get-NRGCoverage)
-        Connections = $conn
-    } | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding utf8
-    Write-Host "  [+] JSON results: $jsonPath" -ForegroundColor Green
-} else {
-    $mdPath = Join-Path $OutputPath "$baseName-assessment.md"
-    Publish-NRGAssessmentSummary -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $mdPath
-    Write-Host "  [+] Markdown:     $mdPath" -ForegroundColor Green
+    # HTML report
+    if (Get-Command Publish-NRGAssessmentHTML -ErrorAction SilentlyContinue) {
+        $htmlPath = Join-Path $OutputPath "$baseName-assessment.html"
+        try {
+            Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath
+            Write-Host "  [+] HTML: $htmlPath" -ForegroundColor Green
+        } catch {
+        $stack = $_.ScriptStackTrace
+        Write-Warning "HTML failed: $($_.Exception.Message)"
+        Write-Warning "Stack: $stack"
+    }
+    }
 
-    $htmlPath = Join-Path $OutputPath "$baseName-assessment.html"
-    Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath
-    Write-Host "  [+] HTML:         $htmlPath" -ForegroundColor Green
+    # Remediation playbook
+    if (Get-Command Publish-NRGRemediationPlaybook -ErrorAction SilentlyContinue) {
+        $pbPath = Join-Path $OutputPath "$baseName-playbook.md"
+        try {
+            Publish-NRGRemediationPlaybook -Metadata $reportMetadata -Findings $findings -OutputPath $pbPath
+            Write-Host "  [+] Playbook: $pbPath" -ForegroundColor Green
+        } catch { Write-Warning "Playbook publish failed: $($_.Exception.Message)" }
+    }
 
-    $jsonPath = Join-Path $OutputPath "$baseName-results.json"
-    @{
-        Metadata    = $reportMetadata
-        Findings    = $findings
-        Exceptions  = (Get-NRGExceptions)
-        Coverage    = (Get-NRGCoverage)
-        Connections = $conn
-    } | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding utf8
-    Write-Host "  [+] JSON:         $jsonPath" -ForegroundColor Green
+    # Remediation script
+    if (Get-Command Publish-NRGRemediationScript -ErrorAction SilentlyContinue) {
+        $rsPath = Join-Path $OutputPath "$baseName-remediation.ps1"
+        try {
+            Publish-NRGRemediationScript -Metadata $reportMetadata -Findings $findings -OutputPath $rsPath
+            Write-Host "  [+] Remediation: $rsPath" -ForegroundColor Green
+        } catch { Write-Warning "Remediation publish failed: $($_.Exception.Message)" }
+    }
+
+    # XLSX compliance matrix
+    if (Get-Command Publish-NRGComplianceMatrix -ErrorAction SilentlyContinue) {
+        $xlsxPath = Join-Path $OutputPath "$baseName-compliance-matrix.xlsx"
+        try {
+            Publish-NRGComplianceMatrix -Metadata $reportMetadata -Findings $findings -OutputPath $xlsxPath
+            Write-Host "  [+] XLSX matrix: $xlsxPath" -ForegroundColor Green
+        } catch { Write-Warning "XLSX publish failed: $($_.Exception.Message)" }
+    }
+
+    # Delta report (if baseline provided)
+    if ($BaselineResults -and (Test-Path $BaselineResults) -and (Get-Command Publish-NRGDeltaReport -ErrorAction SilentlyContinue)) {
+        $deltaPath = Join-Path $OutputPath "$baseName-delta.md"
+        try {
+            Publish-NRGDeltaReport -CurrentFindings $findings -BaselineResultsPath $BaselineResults `
+                -Metadata $reportMetadata -OutputPath $deltaPath
+            Write-Host "  [+] Delta: $deltaPath" -ForegroundColor Green
+        } catch { Write-Warning "Delta publish failed: $($_.Exception.Message)" }
+    }
 }
 
 # ── Summary ──────────────────────────────────────────────────────────────────
@@ -250,15 +393,17 @@ $s = @{
 
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host "  Assessment Complete  (v4.5.0 / 70 controls)" -ForegroundColor Cyan
+Write-Host " Assessment Complete (v4.5.5 / 188 controls)"                     -ForegroundColor Cyan
 Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host "  Satisfied        $($s.Satisfied)" -ForegroundColor Green
-Write-Host "  Partial          $($s.Partial)" -ForegroundColor Yellow
-Write-Host "  Gap              $($s.Gap)" -ForegroundColor Red
-Write-Host "  Not Applicable   $($s.NA)" -ForegroundColor DarkGray
-Write-Host "  Total            $($findings.Count)" -ForegroundColor White
-Write-Host "  Output           $OutputPath" -ForegroundColor White
+Write-Host "  Satisfied      $($s.Satisfied)"                                  -ForegroundColor Green
+Write-Host "  Partial        $($s.Partial)"                                    -ForegroundColor Yellow
+Write-Host "  Gap            $($s.Gap)"                                        -ForegroundColor Red
+Write-Host "  Not Applicable $($s.NA)"                                         -ForegroundColor DarkGray
+Write-Host "  Total          $($findings.Count)"                               -ForegroundColor White
+Write-Host "  Output         $OutputPath"                                      -ForegroundColor White
 Write-Host ""
 
-# ── Disconnect ───────────────────────────────────────────────────────────────
-Disconnect-NRGServices
+# ── Disconnect at end ────────────────────────────────────────────────────────
+if (-not $skipCollection) {
+    Disconnect-NRGServices
+}
