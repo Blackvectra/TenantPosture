@@ -1,53 +1,39 @@
 # Changelog
 
-## v4.0.0 — 2026-05-11
+## v4.5.5 (2025-05-18)
 
-**Complete architectural rebuild.** v3 is retired due to unresolvable architecture issues (duplicate function definitions, mixed concerns, brittle property dependencies).
+Major architectural change: rebuilt on the v4.5.0 baseline pattern to eliminate runtime crashes caused by aggressive `Set-StrictMode -Version Latest` propagation into evaluator scope.
 
-### Architecture
-- **Strict separation of concerns:** Collectors only collect, Evaluators only score, Publishers only report. Each function has one source file. No duplicates.
-- **JSON-driven control definitions** (`Config/controls.json`) — adding a control is a JSON edit, not a code change.
-- **JSON-driven framework crosswalk** (`Config/frameworks.json`) — adding a compliance framework is a JSON edit.
-- **Module-scoped state** — findings, exceptions, coverage, raw data live in module scope. No globals, no script-wide variables across files.
-- **Standard collector schema** — every collector returns `@{ Source; Timestamp; Success; Data; Exceptions }`. Evaluators check `Success` before reading `Data`.
+### Fixed
+- **StrictMode property access crashes** — removed `Set-StrictMode -Version Latest` and `$ErrorActionPreference = 'Stop'` from script scope in all evaluators and collectors. Was causing runtime failures on `$obj.MissingProperty` access patterns common in `ConvertFrom-Json` data from Microsoft Graph.
+- **Injection scanner false positives** — removed overly aggressive regex (`on\w+\s*=`) from the controls.json validator. Was flagging legitimate strings like `Condition =`, `applications =`, `ActionWhenThresholdReached =`.
+- **`?.` null-conditional operator crashes** — all null-conditional access replaced with explicit `if ($obj) { $obj.Prop } else { $null }` patterns. Was hitting tokenizer issues under StrictMode in PS 7.6.1.
+- **EOM v3.4 WAM broker crash** — `$env:MSAL_ALLOW_BROKER = '0'`, `$env:MSAL_DISABLE_TOKENBROKER = '1'`, `$env:MSAL_DISABLE_WAM = '1'` set before module import. Recommend EOM 3.2.0 for best results.
+- **AI- and INV- ControlId prefixes** — renamed to PPL-3.x (AI), AAD-12.x/AAD-13.1 (INV identity), EXO-6.x (INV email) to match standard workload prefixes.
+- **`New-Item -LiteralPath -ItemType Directory`** — replaced with `-Path` (more universally supported).
+- **`"```"` parse errors** — backtick before closing quote in double-quoted strings was breaking PS string termination. Switched to single-quoted strings for Markdown code fences.
 
-### Authentication
-- **Device code for all services.** Works in any terminal, no browser pop-ups, no PnP module quirks.
-- **PnP.PowerShell as primary SharePoint module.** Microsoft.Online.SharePoint.PowerShell is fallback only.
-- **Explicit `Import-Module MicrosoftTeams`** before connect — fixes PS7 command-not-recognized issues.
-- **Connection failures are non-fatal.** A failed connection registers an exception and skips that domain's collectors; other domains continue.
+### Added
+- **188 controls** across 9 workloads (AAD=46, DEF=23, DNS=6, EXO=28, INT=17, PPL=11, PVW=18, SPO=17, TMS=22).
+- **Premium HTML report** — animated score ring, workload scorecard grid, framework matrix, license gap analysis, priority actions, Named Findings section, 90-Day Roadmap, Best Practices section, Secure Score widget.
+- **Named findings** — per-user/per-mailbox lists for MFA gaps, stale guests, stale accounts, OAuth grants, external forwarding, shared mailbox sign-in, mailbox audit, SMTP AUTH overrides.
+- **XLSX compliance matrix** — 11 sheets, 7 framework-specific exports (CIS, SCuBA, NIST 800-53, CMMC, ISO 27001, SOC 2, HIPAA), license gaps.
+- **Delta report** — comparison vs prior assessment run with new/resolved/regressed/unchanged categorization.
+- **10 frameworks** — CIS M365 v6.0.1, CISA SCuBA, NIST 800-53r5, CMMC 2.0 L2, ISO 27001:2022, SOC 2 TSC, HIPAA §164, PCI DSS v4.0.1, DISA STIG, MITRE ATT&CK.
+- **5 AI/Copilot controls** (PPL-3.1 through PPL-3.5).
+- **App-only certificate authentication** for unattended runs.
+- **GCC environment support** (`-Environment commercial|gcc|gcchigh|dod`).
+- **NonInteractive mode** for CI/CD.
+- **FromResults regeneration** — rebuild reports from prior JSON without re-collecting.
+- **BaselineResults delta comparison**.
+- **Module prerequisite check with auto-install prompt**.
+- **GDAP batch runner** (Invoke-NRGBatchAssessment.ps1) for MSP multi-tenant runs.
 
-### Initial control set (Phase 1)
-11 controls across 3 domains:
-- AAD: Block legacy auth, phishing-resistant MFA for privileged roles, PIM usage
-- EXO: Mailbox audit enablement, SMTP AUTH disabled, DMARC enforcement
-- Defender: Anti-phish impersonation protection, Safe Attachments, Safe Links
-- DNS: SPF, DKIM, DMARC at p=reject
+### Changed
+- **`-SkipPurview` defaults to `$true`** — EOM v3.4 IPPSSession WAM crash. Use `-IncludePurview` to opt in.
+- **Evaluator discovery dynamic** — orchestrator enumerates `Test-NRGControl*` from loaded module rather than hardcoded list.
+- **Disconnect at end of run** — no try/finally chain that fires on every error.
 
-Each control includes:
-- Business risk statement
-- Remediation steps
-- Effort level estimate
-- Framework citations across 11 frameworks (NIST 800-53, CIS v8, CIS M365 v6, HIPAA, HIPAA NPRM, ISO 27001, NIST CSF 2.0, SOC 2, CISA SCuBA, CISA BOD, CMMC L2)
+## v4.5.0 (Baseline)
 
-### Removed from v3 (intentionally)
-- 18 duplicate function definitions across Public/*.ps1 and Modules/Nrg_*.psm1
-- Mixed collector + scoring + citation logic per file
-- Hardcoded control definitions in PowerShell
-- Brittle property dependencies (HighConfidencePhishAction direct access, IsBuiltInSystemPolicy compares, HashSet null .ctor exceptions)
-- Inconsistent Get-Mg* result handling (unwrapped arrays, .Count on potential null)
-- Mixed PowerShell 5.1 / 7.x compatibility assumptions
-
-### Coming in next sessions
-- Phase 2: Full identity layer (~80 controls)
-- Phase 3: Email + Defender depth (~150 controls)
-- HTML report publisher (replaces v3 HTML)
-- Technical report publisher (replaces v3 technical)
-- Implementation playbook publisher (replaces v3 playbook)
-- Phase 4-6: SharePoint, Teams, Purview, Power Platform, Intune, Defender XDR, STIG/CMMC mapping
-
----
-
-## v3.x — Retired
-
-The v3 codebase is retained in the old repository for historical reference but is no longer maintained. All future development is in v4.
+Initial clean architectural rebuild. 75 controls across Collectors → Evaluators → Publishers pipeline.
