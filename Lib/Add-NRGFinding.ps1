@@ -1,42 +1,70 @@
+#Requires -Version 7.0
 #
-# Add-NRGFinding.ps1
-# Register a control assessment finding. Used by all evaluators.
+# Add-NRGFinding.ps1  (v4.5.5)
+# Module-state helpers: findings, exceptions, coverage, raw data.
+# All functions operate on $script: scoped variables set in NRG-Assessment.psm1.
 #
-# State values: Satisfied | Partial | Gap | NotApplicable
-# Severity:     Critical  | High    | Medium | Low | Informational
+# SECURITY:
+#   - No external I/O — pure in-memory state
+#   - ValidateSet on State prevents invalid states silently passing through evaluators
+#   - ValidateSet on Severity prevents arbitrary strings reaching the HTML publisher
+#   - LiteralPath not relevant here (no file ops)
 #
+# OWASP ASVS V5.1.3  — input validation on all parameters
+# OWASP ASVS V16.4.1 — Set-StrictMode enforced by module loader
+#
+
+
+# ── Finding state ─────────────────────────────────────────────────────────────
 
 function Add-NRGFinding {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)] [string] $ControlId,
-        [Parameter(Mandatory)] [ValidateSet('Satisfied','Partial','Gap','NotApplicable')] [string] $State,
-        [Parameter(Mandatory)] [string] $Category,
-        [Parameter(Mandatory)] [string] $Title,
-        [ValidateSet('Critical','High','Medium','Low','Informational')] [string] $Severity = 'Medium',
-        [string]   $Detail        = '',
-        [string]   $CurrentValue  = '',
-        [string]   $RequiredValue = '',
-        [string]   $Instance      = '',
-        [string[]] $FrameworkIds  = @(),
-        [string]   $Remediation   = '',
-        [string]   $RemediationLink = ''
+        [Parameter(Mandatory)]
+        [ValidatePattern('^[A-Z]{2,4}-\d+\.\d+$')]
+        [string] $ControlId,
+
+        [Parameter(Mandatory)]
+        [ValidateSet('Satisfied','Partial','Gap','NotApplicable','Error')]
+        [string] $State,
+
+        [Parameter(Mandatory)]
+        [ValidateSet('Identity','Email','Endpoint','Data','Collaboration','Governance','Network','Power Platform','Compliance','SharePoint','Teams')]
+        [string] $Category,
+
+        [Parameter(Mandatory)]
+        [ValidateLength(1,200)]
+        [string] $Title,
+
+        [ValidateSet('Critical','High','Medium','Low','Informational')]
+        [string] $Severity = 'Informational',
+
+        [string] $Detail       = '',
+        [string] $CurrentValue = '',
+        [string] $RequiredValue= '',
+        [string] $Remediation  = '',
+        [string] $Instance     = '',
+        [string[]] $FrameworkIds = @(),
+
+        # Named objects affected — users, mailboxes, apps, devices
+        # Shown as a named table in the HTML report
+        [object[]] $AffectedObjects = @()
     )
 
     $finding = [PSCustomObject]@{
-        ControlId       = $ControlId
-        State           = $State
-        Category        = $Category
-        Title           = $Title
-        Severity        = if ($State -eq 'Satisfied') { 'Informational' } else { $Severity }
-        Detail          = $Detail
-        CurrentValue    = $CurrentValue
-        RequiredValue   = $RequiredValue
-        Instance        = $Instance
-        FrameworkIds    = $FrameworkIds
-        Remediation     = $Remediation
-        RemediationLink = $RemediationLink
-        Timestamp       = [DateTime]::UtcNow.ToString('o')
+        ControlId     = $ControlId
+        State         = $State
+        Category      = $Category
+        Title         = $Title
+        Severity      = $Severity
+        Detail        = $Detail
+        CurrentValue  = $CurrentValue
+        RequiredValue = $RequiredValue
+        Remediation   = $Remediation
+        AffectedObjects = @($AffectedObjects)
+        Instance      = $Instance
+        FrameworkIds  = $FrameworkIds
+        Timestamp     = (Get-Date).ToString('o')
     }
 
     $script:NRGFindings.Add($finding)
@@ -44,43 +72,52 @@ function Add-NRGFinding {
 
 function Get-NRGFindings {
     [CmdletBinding()] param()
-    return ,$script:NRGFindings.ToArray()
+    return @($script:NRGFindings)
 }
 
 function Clear-NRGFindings {
     [CmdletBinding()] param()
     $script:NRGFindings.Clear()
-    $script:NRGExceptions.Clear()
-    $script:NRGCoverage.Clear()
-    $script:NRGRawData = @{}
 }
+
+# ── Exception state ───────────────────────────────────────────────────────────
 
 function Register-NRGException {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)] [string] $Source,
-        [Parameter(Mandatory)] [string] $Message,
-        [string] $Severity = 'Warning'
+        [Parameter(Mandatory)]
+        [ValidateLength(1,100)]
+        [string] $Source,
+
+        [Parameter(Mandatory)]
+        [ValidateLength(1,2000)]
+        [string] $Message
     )
 
     $script:NRGExceptions.Add([PSCustomObject]@{
         Source    = $Source
         Message   = $Message
-        Severity  = $Severity
-        Timestamp = [DateTime]::UtcNow.ToString('o')
+        Timestamp = (Get-Date).ToString('o')
     })
 }
 
 function Get-NRGExceptions {
     [CmdletBinding()] param()
-    return ,$script:NRGExceptions.ToArray()
+    return @($script:NRGExceptions)
 }
+
+# ── Coverage state ────────────────────────────────────────────────────────────
 
 function Register-NRGCoverage {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)] [string] $Family,
-        [Parameter(Mandatory)] [ValidateSet('Collected','Partial','NotCollected','Failed')] [string] $Status,
+        [Parameter(Mandatory)]
+        [string] $Family,
+
+        [Parameter(Mandatory)]
+        [ValidateSet('Collected','Partial','NotCollected','Failed')]
+        [string] $Status,
+
         [string] $Note = ''
     )
     $script:NRGCoverage[$Family] = "$Status|$Note"
@@ -91,23 +128,50 @@ function Get-NRGCoverage {
     $result = @{}
     foreach ($k in $script:NRGCoverage.Keys) {
         $parts = $script:NRGCoverage[$k] -split '\|', 2
-        $result[$k] = [PSCustomObject]@{ Status = $parts[0]; Note = $parts[1] }
+        $result[$k] = [PSCustomObject]@{
+            Status = $parts[0]
+            Note   = if ($parts.Count -gt 1) { $parts[1] } else { '' }
+        }
     }
     return $result
 }
 
+# ── Raw data state ────────────────────────────────────────────────────────────
+
 function Set-NRGRawData {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)] [string] $Key,
-        [Parameter(Mandatory)] $Data
+        [Parameter(Mandatory)]
+        [ValidatePattern('^[A-Z][A-Za-z0-9\-]+$')]
+        [string] $Key,
+
+        [Parameter(Mandatory)]
+        $Data
     )
     $script:NRGRawData[$Key] = $Data
 }
 
 function Get-NRGRawData {
     [CmdletBinding()]
-    param([string] $Key)
+    param(
+        [ValidatePattern('^[A-Z][A-Za-z0-9\-]+$')]
+        [string] $Key
+    )
     if ($Key) { return $script:NRGRawData[$Key] }
     return $script:NRGRawData
+}
+
+function Get-NRGSafeProperty {
+    [CmdletBinding()]
+    param(
+        [AllowNull()][object] $Object,
+        [string] $Property,
+        [object] $Default = $null
+    )
+    if ($null -eq $Object) { return $Default }
+    $prop = $Object.PSObject.Properties[$Property]
+    if ($null -eq $prop) { return $Default }
+    $val = $prop.Value
+    if ($null -eq $val) { return $Default }
+    return $val
 }

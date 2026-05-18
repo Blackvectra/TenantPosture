@@ -1,0 +1,49 @@
+{
+  "clients": [
+    {
+      "ClientName":        "NRG Technology Services",
+      "TenantDomain":      "nrgtechservices.com",
+      "TenantId":          "00000000-0000-0000-0000-000000000000",
+      "DelegatedOrg":      "nrgtechservices.onmicrosoft.com",
+      "DnsDomains":        ["nrgtechservices.com"],
+      "SkipPurview":       false,
+      "SkipTeams":         false,
+      "SkipSharePoint":    false,
+      "SkipIntune":        false,
+      "SkipPowerPlatform": false,
+      "SkipDNS":           false,
+      "Notes":             "NRG internal tenant",
+      "Active":            true
+    },
+    {
+      "ClientName":        "NDACo",
+      "TenantDomain":      "ndaco.org",
+      "TenantId":          "00000000-0000-0000-0000-000000000000",
+      "DelegatedOrg":      "ndaco.onmicrosoft.com",
+      "DnsDomains":        ["ndaco.org"],
+      "SkipPurview":       true,
+      "SkipTeams":         false,
+      "SkipSharePoint":    false,
+      "SkipIntune":        false,
+      "SkipPowerPlatform": true,
+      "SkipDNS":           false,
+      "Notes":             "County government. NDIT controls DNS.",
+      "Active":            true
+    },
+    {
+      "ClientName":        "Dunn County",
+      "TenantDomain":      "dunncountynd.gov",
+      "TenantId":          "00000000-0000-0000-0000-000000000000",
+      "DelegatedOrg":      "dunncountynd.onmicrosoft.com",
+      "DnsDomains":        ["dunncountynd.gov"],
+      "SkipPurview":       true,
+      "SkipTeams":         false,
+      "SkipSharePoint":    false,
+      "SkipIntune":        false,
+      "SkipPowerPlatform": true,
+      "SkipDNS":           false,
+      "Notes":             "County government. NDCourts relay dependency.",
+      "Active":            true
+    }
+  ]
+}

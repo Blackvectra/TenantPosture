@@ -1,239 +1,523 @@
+#Requires -Version 7.0
 #
-# Test-NRGControlDefender.ps1
-# Evaluates Microsoft Defender for Office 365 policy controls.
-#
-# Controls:
-#   DEF-1.1  Anti-phishing policy with impersonation protection
-#   DEF-1.2  Safe Attachments policy with Block action
-#   DEF-1.3  Safe Links policy enabled tenant-wide
-#
-# Reads from module state:
-#   Get-NRGRawData -Key 'Defender'
+# Test-NRGControlDefender.ps1  (v4.5.5)
+# Evaluates Defender for Office 365 controls.
+# SCORING ONLY — no API calls.
 #
 # NIST SP 800-53: SI-3, SI-4, SI-8
-# MITRE ATT&CK:   T1566 (Phishing), T1204.002 (Malicious File), T1189 (Drive-by Compromise)
+# MITRE ATT&CK:   T1566, T1204.002
 #
 
 function Test-NRGControlDefender {
     [CmdletBinding()] param()
 
-    $raw = Get-NRGRawData -Key 'Defender'
-
-    if (-not $raw -or -not $raw.Success) {
-        $detail = if ($raw) { "Collector failed: $($raw.Exceptions -join '; ')" } else { 'Defender collector did not run.' }
-        foreach ($id in @('DEF-1.1','DEF-1.2','DEF-1.3')) {
-            $ctrl = Get-NRGControlById -ControlId $id
-            Add-NRGFinding -ControlId $id -State 'NotApplicable' `
-                -Category ($ctrl.Category) -Title ($ctrl.Title) -Detail $detail
+    $defData = Get-NRGRawData -Key 'Defender-Policies'
+    if (-not $defData -or -not $defData.Success) {
+        # Register NotApplicable for all Defender controls
+        foreach ($cid in @('DEF-1.1','DEF-1.2','DEF-1.3','DEF-1.4','DEF-1.5','DEF-1.6')) {
+            $ctrl = Get-NRGControlById -ControlId $cid
+            if ($ctrl) {
+                Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+                    -Title $ctrl.Title -Detail 'Defender policy data not collected'
+            }
         }
         return
     }
 
-    #--------------------------------------------------------------------------
-    # DEF-1.1  Anti-phishing policy with impersonation protection
-    # SI-4 | T1566.001 (Spearphishing Attachment)
-    #--------------------------------------------------------------------------
+    # ── DEF-1.1 Safe Attachments Enabled ─────────────────────────────────
     $ctrl = Get-NRGControlById -ControlId 'DEF-1.1'
+    if ($ctrl) {
+        $citations = Get-NRGFrameworkCitations -ControlId 'DEF-1.1'
+        $sa = $defData.Data['SafeAttachments']
 
-    if (-not $raw.Data['AntiPhishing'].Available) {
-        Add-NRGFinding -ControlId 'DEF-1.1' -State 'NotApplicable' `
-            -Category $ctrl.Category -Title $ctrl.Title `
-            -Detail "Anti-phishing cmdlets unavailable. Requires Defender for Office 365 Plan 1+. Error: $($raw.Exceptions | Where-Object { $_ -like 'AntiPhishing*' })"
-    }
-    else {
-        $apPolicies = @($raw.Data['AntiPhishing'].Policies)
-        $apRules    = @($raw.Data['AntiPhishing'].Rules)
-
-        $strongPolicies = @($apPolicies | Where-Object {
-            (-not $_.IsDefault -or $apPolicies.Count -eq 1) -and
-            $_.EnableMailboxIntelligence -eq $true -and
-            ($_.EnableOrganizationDomainsProtection -eq $true -or
-             $_.EnableMailboxIntelligenceProtection -eq $true)
-        })
-
-        $activePolicyNames = @($apRules | Where-Object { $_.State -eq 'Enabled' } |
-            Select-Object -ExpandProperty AntiPhishPolicy)
-
-        $enforcedStrongPolicies = @($strongPolicies | Where-Object {
-            $_.Name -in $activePolicyNames -or $_.IsDefault
-        })
-
-        if ($enforcedStrongPolicies.Count -gt 0) {
-            $policyName = $enforcedStrongPolicies[0].Name
-            $threshold  = $enforcedStrongPolicies[0].PhishThresholdLevel
-            Add-NRGFinding -ControlId 'DEF-1.1' -State 'Satisfied' `
-                -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' `
-                -Detail 'Anti-phishing policy with impersonation protection active.' `
-                -CurrentValue "Policy: '$policyName' | Mailbox intelligence: enabled | PhishThreshold: $threshold" `
-                -RequiredValue 'Non-default policy with mailbox intelligence and domain impersonation enabled' `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'DEF-1.1')
-        }
-        elseif ($strongPolicies.Count -gt 0) {
-            $policyName = $strongPolicies[0].Name
-            Add-NRGFinding -ControlId 'DEF-1.1' -State 'Partial' `
-                -Category $ctrl.Category -Title $ctrl.Title -Severity 'High' `
-                -Detail 'Anti-phishing policy with impersonation protection exists but has no active rule applying it to recipients.' `
-                -CurrentValue "Policy '$policyName' configured but no enabled rule targets recipients" `
-                -RequiredValue 'Policy + active rule covering all accepted domains or all recipients' `
-                -Remediation 'Create an anti-phishing rule: New-AntiPhishRule -AntiPhishPolicy [name] -RecipientDomainIs [domain] -Priority 0. Or use the Security portal.' `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'DEF-1.1')
-        }
-        else {
-            $defaultPolicy  = $apPolicies | Where-Object { $_.IsDefault }
-            $miEnabled      = if ($defaultPolicy) { "$($defaultPolicy.EnableMailboxIntelligence)" } else { 'N/A' }
-            $orgDomEnabled  = if ($defaultPolicy) { "$($defaultPolicy.EnableOrganizationDomainsProtection)" } else { 'N/A' }
-            Add-NRGFinding -ControlId 'DEF-1.1' -State 'Gap' `
-                -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity `
-                -Detail 'No anti-phishing policy with impersonation protection found. Default policy lacks user/domain impersonation controls.' `
-                -CurrentValue "Default policy only. Mailbox intelligence: $miEnabled. Org domain protection: $orgDomEnabled" `
-                -RequiredValue 'Custom anti-phishing policy: EnableMailboxIntelligence, EnableOrganizationDomainsProtection, EnableMailboxIntelligenceProtection all True' `
-                -Remediation $ctrl.Remediation `
-                -RemediationLink $ctrl.RemediationLink `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'DEF-1.1')
+        if (-not $sa -or -not $sa.Available) {
+            Add-NRGFinding -ControlId 'DEF-1.1' -State 'Gap' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $citations `
+                -Detail 'Safe Attachments is not available or could not be collected. Defender for Office 365 Plan 1 license required.' `
+                -CurrentValue 'Safe Attachments unavailable' -Remediation $ctrl.Remediation
+        } elseif ($sa.AnyBlockEnabled) {
+            Add-NRGFinding -ControlId 'DEF-1.1' -State 'Satisfied' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $citations `
+                -Detail "Safe Attachments configured with Block action on $($sa.BlockActionCount) policy(ies)."
+        } elseif ($sa.EnabledNonDefaultCount -gt 0) {
+            Add-NRGFinding -ControlId 'DEF-1.1' -State 'Partial' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $citations `
+                -Detail "Safe Attachments enabled but action is not 'Block' on any policy (Dynamic Delivery or Monitor only)." `
+                -CurrentValue 'No Block action policies' -RequiredValue "Safe Attachments with Action = 'Block'"
+        } else {
+            Add-NRGFinding -ControlId 'DEF-1.1' -State 'Gap' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $citations `
+                -Detail 'No Safe Attachments policies are enabled. Malicious attachments are not sandboxed.' `
+                -Remediation $ctrl.Remediation
         }
     }
 
-    #--------------------------------------------------------------------------
-    # DEF-1.2  Safe Attachments policy with Block action
-    # SI-3 | T1204.002 (Malicious File)
-    #--------------------------------------------------------------------------
+    # ── DEF-1.2 Safe Links Enabled for Email ─────────────────────────────
     $ctrl = Get-NRGControlById -ControlId 'DEF-1.2'
+    if ($ctrl) {
+        $citations = Get-NRGFrameworkCitations -ControlId 'DEF-1.2'
+        $sl = $defData.Data['SafeLinks']
 
-    if (-not $raw.Data['SafeAttachments'].Available) {
-        Add-NRGFinding -ControlId 'DEF-1.2' -State 'NotApplicable' `
-            -Category $ctrl.Category -Title $ctrl.Title `
-            -Detail "Safe Attachments cmdlets unavailable. Requires Defender for Office 365 Plan 1+. Error: $($raw.Exceptions | Where-Object { $_ -like 'SafeAttachments*' })"
-    }
-    else {
-        $saPolicies = @($raw.Data['SafeAttachments'].Policies)
-        $saRules    = @($raw.Data['SafeAttachments'].Rules)
-
-        $blockPolicies = @($saPolicies | Where-Object {
-            $_.Enable -eq $true -and
-            ($_.Action -eq 'Block' -or $_.Action -eq 'Replace') -and
-            -not $_.IsDefault
-        })
-
-        $activeRuleNames = @($saRules | Where-Object { $_.State -eq 'Enabled' } |
-            Select-Object -ExpandProperty SafeAttachmentPolicy)
-
-        $enforcedBlock = @($blockPolicies | Where-Object { $_.Name -in $activeRuleNames })
-
-        if ($enforcedBlock.Count -gt 0) {
-            $p = $enforcedBlock[0]
-            Add-NRGFinding -ControlId 'DEF-1.2' -State 'Satisfied' `
-                -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' `
-                -Detail 'Safe Attachments Block policy active and applied to recipients.' `
-                -CurrentValue "Policy: '$($p.Name)' | Action: $($p.Action) | Enabled: $($p.Enable)" `
-                -RequiredValue 'Enabled Safe Attachments policy with Action=Block and active rule' `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'DEF-1.2')
-        }
-        elseif ($blockPolicies.Count -gt 0) {
-            Add-NRGFinding -ControlId 'DEF-1.2' -State 'Partial' `
-                -Category $ctrl.Category -Title $ctrl.Title -Severity 'High' `
-                -Detail 'Safe Attachments Block policy exists but has no active rule applying it to recipients.' `
-                -CurrentValue "Policy '$($blockPolicies[0].Name)' Action=$($blockPolicies[0].Action) configured but no enabled rule" `
-                -RequiredValue 'Safe Attachments Block policy + active rule covering all recipients' `
-                -Remediation 'Create rule: New-SafeAttachmentRule -SafeAttachmentPolicy [name] -RecipientDomainIs [domain] -Priority 0' `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'DEF-1.2')
-        }
-        else {
-            $dynamicPolicies = @($saPolicies | Where-Object {
-                $_.Enable -eq $true -and $_.Action -eq 'DynamicDelivery' -and -not $_.IsDefault
-            })
-            if ($dynamicPolicies.Count -gt 0) {
-                Add-NRGFinding -ControlId 'DEF-1.2' -State 'Partial' `
-                    -Category $ctrl.Category -Title $ctrl.Title -Severity 'High' `
-                    -Detail 'Safe Attachments using DynamicDelivery (not Block). DynamicDelivery delivers message body while scanning — malicious attachments may reach users before scan completes.' `
-                    -CurrentValue "Action: DynamicDelivery on $($dynamicPolicies.Count) policy(ies)" `
-                    -RequiredValue 'Action: Block — holds entire message until scan completes' `
-                    -Remediation 'Change policy Action to Block. DynamicDelivery is acceptable for high-volume environments but Block provides stronger protection.' `
-                    -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'DEF-1.2')
+        if (-not $sl -or -not $sl.Available) {
+            Add-NRGFinding -ControlId 'DEF-1.2' -State 'Gap' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $citations `
+                -Detail 'Safe Links is not available. Defender for Office 365 Plan 1 required.' `
+                -Remediation $ctrl.Remediation
+        } elseif ($sl.EnabledNonDefaultCount -gt 0) {
+            $defaultPol = @($sl.Policies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+            $gaps = @()
+            if ($defaultPol) {
+                if ($defaultPol.AllowClickThrough)        { $gaps += 'AllowClickThrough=True' }
+                if (-not $defaultPol.TrackClicks)         { $gaps += 'TrackClicks=False' }
+                if (-not $defaultPol.EnableForInternalSenders) { $gaps += 'InternalSenders=False' }
+                if ($defaultPol.DisableUrlRewrite)        { $gaps += 'UrlRewrite=Disabled' }
             }
-            else {
-                Add-NRGFinding -ControlId 'DEF-1.2' -State 'Gap' `
-                    -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity `
-                    -Detail 'No enabled Safe Attachments policy with Block action found. Malicious attachments are delivered without sandbox detonation.' `
-                    -CurrentValue 'No active Safe Attachments Block policy' `
-                    -RequiredValue 'Custom Safe Attachments policy: Enable=True, Action=Block, applied to all recipients' `
-                    -Remediation $ctrl.Remediation `
-                    -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'DEF-1.2')
-            }
-        }
-    }
 
-    #--------------------------------------------------------------------------
-    # DEF-1.3  Safe Links policy enabled tenant-wide
-    # SI-3 | T1189 (Drive-by Compromise)
-    # FIX: pre-compute conditional values — inline 'if' is not valid PS5.1
-    #      parameter syntax and causes "term 'if' is not recognized" error
-    #--------------------------------------------------------------------------
-    $ctrl = Get-NRGControlById -ControlId 'DEF-1.3'
-
-    if (-not $raw.Data['SafeLinks'].Available) {
-        Add-NRGFinding -ControlId 'DEF-1.3' -State 'NotApplicable' `
-            -Category $ctrl.Category -Title $ctrl.Title `
-            -Detail "Safe Links cmdlets unavailable. Requires Defender for Office 365 Plan 1+. Error: $($raw.Exceptions | Where-Object { $_ -like 'SafeLinks*' })"
-    }
-    else {
-        $slPolicies = @($raw.Data['SafeLinks'].Policies)
-        $slRules    = @($raw.Data['SafeLinks'].Rules)
-
-        $strongPolicies = @($slPolicies | Where-Object {
-            $_.EnableSafeLinksForEmail -eq $true -and
-            $_.ScanUrls -eq $true -and
-            -not $_.IsDefault
-        })
-
-        $activeRuleNames = @($slRules | Where-Object { $_.State -eq 'Enabled' } |
-            Select-Object -ExpandProperty SafeLinksPolicy)
-
-        $enforcedStrong = @($strongPolicies | Where-Object { $_.Name -in $activeRuleNames })
-
-        if ($enforcedStrong.Count -gt 0) {
-            $p = $enforcedStrong[0]
-
-            # Pre-compute all conditional values — inline if() is not valid PS5.1 parameter syntax
-            $clickThrough     = if ($p.AllowClickThrough -eq $false) { 'blocked' } else { 'ALLOWED (gap)' }
-            $internalScan     = if ($p.EnableForInternalSenders -eq $true) { 'enabled' } else { 'disabled' }
-            $teamsScan        = if ($p.EnableSafeLinksForTeams -eq $true) { 'enabled' } else { 'disabled' }
-            $slState          = if ($p.AllowClickThrough -eq $false) { 'Satisfied' } else { 'Partial' }
-            $slSeverity       = if ($slState -eq 'Satisfied') { 'Informational' } else { 'High' }
-            $slDetail         = if ($slState -eq 'Satisfied') {
-                'Safe Links enabled with URL scanning, click-through blocked.'
+            if ($gaps.Count -eq 0) {
+                Add-NRGFinding -ControlId 'DEF-1.2' -State 'Satisfied' -Category $ctrl.Category `
+                    -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $citations `
+                    -Detail 'Safe Links enabled for email with hardened settings (click-through blocked, tracking enabled, internal senders covered).'
             } else {
-                "Safe Links enabled but AllowClickThrough=True — users can bypass Safe Links warnings and reach malicious URLs."
+                Add-NRGFinding -ControlId 'DEF-1.2' -State 'Partial' -Category $ctrl.Category `
+                    -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $citations `
+                    -Detail "Safe Links enabled but hardening gaps: $($gaps -join ', ')" `
+                    -CurrentValue "Issues: $($gaps -join ', ')" `
+                    -RequiredValue 'AllowClickThrough=False, TrackClicks=True, InternalSenders=True'
             }
-            $slRemediation    = if ($slState -eq 'Partial') {
-                'Set AllowClickThrough=$false on the Safe Links policy to prevent users bypassing URL block warnings.'
-            } else { $null }
+        } else {
+            Add-NRGFinding -ControlId 'DEF-1.2' -State 'Gap' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $citations `
+                -Detail 'No Safe Links policies are enabled for email. URLs are not scanned or rewritten.' `
+                -Remediation $ctrl.Remediation
+        }
+    }
 
-            Add-NRGFinding -ControlId 'DEF-1.3' -State $slState `
-                -Category $ctrl.Category -Title $ctrl.Title `
-                -Severity $slSeverity `
-                -Detail $slDetail `
-                -CurrentValue "Policy: '$($p.Name)' | ScanUrls: $($p.ScanUrls) | ClickThrough: $clickThrough | InternalSenders: $internalScan | Teams: $teamsScan" `
-                -RequiredValue 'ScanUrls=True, AllowClickThrough=False, EnableForInternalSenders=True, applied to all recipients' `
-                -Remediation $slRemediation `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'DEF-1.3')
+    # ── DEF-1.3 Spoof Intelligence Enabled ───────────────────────────────
+    $ctrl = Get-NRGControlById -ControlId 'DEF-1.3'
+    if ($ctrl) {
+        $citations = Get-NRGFrameworkCitations -ControlId 'DEF-1.3'
+        $ap = $defData.Data['AntiPhishing']
+        $defaultPol = if ($ap -and $ap.Available) {
+            @($ap.Policies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+        } else { $null }
+
+        if (-not $defaultPol) {
+            Add-NRGFinding -ControlId 'DEF-1.3' -State 'NotApplicable' -Category $ctrl.Category `
+                -Title $ctrl.Title -Detail 'Anti-phishing data not available'
+        } elseif ($defaultPol.EnableSpoofIntelligence) {
+            Add-NRGFinding -ControlId 'DEF-1.3' -State 'Satisfied' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $citations `
+                -Detail 'Spoof intelligence enabled — spoofed senders are evaluated and flagged.'
+        } else {
+            Add-NRGFinding -ControlId 'DEF-1.3' -State 'Gap' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $citations `
+                -Detail 'Spoof intelligence is DISABLED. Spoofed senders pass without evaluation — increases phishing delivery risk.' `
+                -CurrentValue 'EnableSpoofIntelligence = $false' `
+                -RequiredValue 'Set-AntiPhishPolicy -EnableSpoofIntelligence $true' `
+                -Remediation $ctrl.Remediation
         }
-        elseif ($strongPolicies.Count -gt 0) {
-            Add-NRGFinding -ControlId 'DEF-1.3' -State 'Partial' `
-                -Category $ctrl.Category -Title $ctrl.Title -Severity 'High' `
-                -Detail 'Safe Links policy configured but no active rule applies it to recipients.' `
-                -CurrentValue "Policy '$($strongPolicies[0].Name)' configured, no enabled rule found" `
-                -RequiredValue 'Safe Links policy + active rule covering all recipients' `
-                -Remediation 'Create rule: New-SafeLinksRule -SafeLinksPolicy [name] -RecipientDomainIs [domain] -Priority 0' `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'DEF-1.3')
+    }
+
+    # ── DEF-1.4 Honor DMARC Policy ───────────────────────────────────────
+    $ctrl = Get-NRGControlById -ControlId 'DEF-1.4'
+    if ($ctrl) {
+        $citations = Get-NRGFrameworkCitations -ControlId 'DEF-1.4'
+        $ap = $defData.Data['AntiPhishing']
+        $defaultPol = if ($ap -and $ap.Available) {
+            @($ap.Policies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+        } else { $null }
+
+        if (-not $defaultPol) {
+            Add-NRGFinding -ControlId 'DEF-1.4' -State 'NotApplicable' -Category $ctrl.Category `
+                -Title $ctrl.Title -Detail 'Anti-phishing data not available'
+        } elseif ($defaultPol.HonorDmarcPolicy) {
+            Add-NRGFinding -ControlId 'DEF-1.4' -State 'Satisfied' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $citations `
+                -Detail 'EOP honors sending domain DMARC policy. p=reject/quarantine actions are applied on inbound mail.'
+        } else {
+            Add-NRGFinding -ControlId 'DEF-1.4' -State 'Gap' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity 'High' -FrameworkIds $citations `
+                -Detail 'EOP does NOT honor DMARC policy. Messages from p=reject domains may still be delivered — undermines the entire DMARC ecosystem.' `
+                -CurrentValue 'HonorDmarcPolicy = $false' `
+                -RequiredValue 'Set-AntiPhishPolicy -Identity Default -HonorDmarcPolicy $true' `
+                -Remediation $ctrl.Remediation
         }
-        else {
-            Add-NRGFinding -ControlId 'DEF-1.3' -State 'Gap' `
-                -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity `
-                -Detail 'No enabled Safe Links policy with URL scanning found. Time-of-click URL protection is not active.' `
-                -CurrentValue 'No active Safe Links policy with ScanUrls=True' `
-                -RequiredValue 'Custom Safe Links policy: EnableSafeLinksForEmail=True, ScanUrls=True, AllowClickThrough=False, active rule applied' `
-                -Remediation $ctrl.Remediation `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'DEF-1.3')
+    }
+
+    # ── DEF-1.5 Phish Threshold Level ────────────────────────────────────
+    $ctrl = Get-NRGControlById -ControlId 'DEF-1.5'
+    if ($ctrl) {
+        $citations = Get-NRGFrameworkCitations -ControlId 'DEF-1.5'
+        $ap = $defData.Data['AntiPhishing']
+        $defaultPol = if ($ap -and $ap.Available) {
+            @($ap.Policies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+        } else { $null }
+
+        if (-not $defaultPol) {
+            Add-NRGFinding -ControlId 'DEF-1.5' -State 'NotApplicable' -Category $ctrl.Category `
+                -Title $ctrl.Title -Detail 'Anti-phishing data not available'
+        } else {
+            $threshold = $defaultPol.PhishThresholdLevel ?? 1
+            if ($threshold -ge 2) {
+                Add-NRGFinding -ControlId 'DEF-1.5' -State 'Satisfied' -Category $ctrl.Category `
+                    -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $citations `
+                    -Detail "Phish threshold level set to $threshold (Aggressive or higher). Catches more sophisticated phishing attempts."
+            } else {
+                Add-NRGFinding -ControlId 'DEF-1.5' -State 'Partial' -Category $ctrl.Category `
+                    -Title $ctrl.Title -Severity 'Low' -FrameworkIds $citations `
+                    -Detail "Phish threshold level is $threshold (Standard). CIS M365 and CISA SCuBA recommend level 2 (Aggressive) or higher." `
+                    -CurrentValue "PhishThresholdLevel = $threshold" -RequiredValue 'PhishThresholdLevel ≥ 2'
+            }
         }
+    }
+
+    # ── DEF-1.6 First Contact Safety Tip ────────────────────────────────
+    $ctrl = Get-NRGControlById -ControlId 'DEF-1.6'
+    if ($ctrl) {
+        $citations = Get-NRGFrameworkCitations -ControlId 'DEF-1.6'
+        $ap = $defData.Data['AntiPhishing']
+        $defaultPol = if ($ap -and $ap.Available) {
+            @($ap.Policies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+        } else { $null }
+
+        if (-not $defaultPol) {
+            Add-NRGFinding -ControlId 'DEF-1.6' -State 'NotApplicable' -Category $ctrl.Category `
+                -Title $ctrl.Title -Detail 'Anti-phishing data not available'
+        } elseif ($defaultPol.EnableFirstContactSafetyTips) {
+            Add-NRGFinding -ControlId 'DEF-1.6' -State 'Satisfied' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $citations `
+                -Detail 'First contact safety tip enabled — users see a warning banner when receiving email from a new sender.'
+        } else {
+            Add-NRGFinding -ControlId 'DEF-1.6' -State 'Gap' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity 'Low' -FrameworkIds $citations `
+                -Detail 'First contact safety tip disabled. Users receive no visual warning for first-time senders — increases social engineering risk.' `
+                -CurrentValue 'EnableFirstContactSafetyTips = $false' `
+                -RequiredValue 'Set-AntiPhishPolicy -EnableFirstContactSafetyTips $true' `
+                -Remediation $ctrl.Remediation
+        }
+    }
+}
+
+# ── DEF-2.1 Preset Security Policies Applied ─────────────────────────────────
+function Test-NRGControlDefenderPresetPolicies {
+    [CmdletBinding()] param()
+    $cid = 'DEF-2.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $def = Get-NRGRawData -Key 'Defender-Policies'
+    if (-not $def -or -not $def.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
+    }
+    # Preset policies appear as built-in named policies: Standard Preset / Strict Preset
+    $ap = $def.Data['AntiPhishing']
+    $sl = $def.Data['SafeLinks']
+    $sa = $def.Data['SafeAttachments']
+    $presetActive = $false
+    if ($ap -and $ap.Available) {
+        $presetActive = @($ap.Policies | Where-Object { $_.Name -match 'Standard|Strict|Preset' }).Count -gt 0
+    }
+    if ($presetActive) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Standard or Strict preset security policy is active in this tenant.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'No preset security policies detected. Custom policies are in use — verify all Defender settings are explicitly configured.' -CurrentValue 'Custom policies only' -RequiredValue 'Standard or Strict preset applied'
+    }
+}
+
+# ── DEF-2.2 Anti-Malware ZAP Enabled ─────────────────────────────────────────
+function Test-NRGControlDefenderZAP {
+    [CmdletBinding()] param()
+    $cid = 'DEF-2.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exo -or -not $exo.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
+    }
+    $defaultPolicy = @($exo.Data.AntiSpamPolicies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    if (-not $defaultPolicy) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default anti-spam policy found'; return
+    }
+    if ($defaultPolicy.ZapEnabled -eq $true) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Zero-hour auto purge (ZAP) is enabled. Malicious mail delivered before detection is retroactively removed.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'ZAP is disabled. Malware or phishing delivered before detection is NOT retroactively removed from user mailboxes.' -CurrentValue 'ZapEnabled = $false' -RequiredValue 'Set-HostedContentFilterPolicy -ZapEnabled $true' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── DEF-2.3 Anti-Malware Common Attachments Blocked ─────────────────────────
+function Test-NRGControlDefenderCommonAttachments {
+    [CmdletBinding()] param()
+    $cid = 'DEF-2.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $def = Get-NRGRawData -Key 'Defender-Policies'
+    if (-not $def -or -not $def.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
+    }
+    $mf = $def.Data['MalwareFilter']
+    if (-not $mf -or -not $mf.Available) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Malware filter data not available'; return
+    }
+    if ($mf.FileFilterEnabledCount -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Common attachment filter enabled on $($mf.FileFilterEnabledCount) malware policy(ies). High-risk file types blocked regardless of content scan."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Common attachments filter is disabled. High-risk file types (.exe, .js, .vbs, etc.) are not blocked at the mail gateway.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── DEF-2.4 Quarantine Policy Admin Managed ──────────────────────────────────
+function Test-NRGControlDefenderQuarantine {
+    [CmdletBinding()] param()
+    $cid = 'DEF-2.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exo -or -not $exo.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
+    }
+    # High confidence phish should go to quarantine, not junk
+    $defaultPolicy = @($exo.Data.AntiSpamPolicies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    if (-not $defaultPolicy) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default spam policy found'; return
+    }
+    $hcPhishAction = [string]($defaultPolicy.PhishSpamAction ?? 'MoveToJmf')
+    if ($hcPhishAction -eq 'Quarantine') {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Phishing is directed to quarantine — users cannot self-release phishing attempts.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "Phishing action is '$hcPhishAction' — phishing delivered to junk folder where users can click links." -CurrentValue "PhishSpamAction = $hcPhishAction" -RequiredValue 'PhishSpamAction = Quarantine' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── DEF-2.5 High Confidence Spam to Quarantine ──────────────────────────────
+function Test-NRGControlDefenderHCSpam {
+    [CmdletBinding()] param()
+    $cid = 'DEF-2.5'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exo -or -not $exo.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
+    }
+    $defaultPolicy = @($exo.Data.AntiSpamPolicies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    if (-not $defaultPolicy) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default policy found'; return }
+    $hcAction = [string]($defaultPolicy.HighConfidenceSpamAction ?? 'MoveToJmf')
+    if ($hcAction -eq 'Quarantine') {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'High confidence spam directed to quarantine.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "High confidence spam action is '$hcAction'. Should be Quarantine to prevent user interaction with confirmed spam." -CurrentValue "HighConfidenceSpamAction = $hcAction" -RequiredValue 'Quarantine' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── DEF-2.6 Bulk Mail Threshold Configured ──────────────────────────────────
+function Test-NRGControlDefenderBulkThreshold {
+    [CmdletBinding()] param()
+    $cid = 'DEF-2.6'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exo -or -not $exo.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
+    }
+    $defaultPolicy = @($exo.Data.AntiSpamPolicies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    if (-not $defaultPolicy) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default policy found'; return }
+    $threshold = $defaultPolicy.BulkThreshold ?? 7
+    if ($threshold -le 6) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Bulk complaint threshold set to $threshold (aggressive)."
+    } elseif ($threshold -le 7) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail "Bulk threshold is $threshold (default). CIS recommends ≤6 for better bulk mail filtering." -CurrentValue "BulkThreshold = $threshold" -RequiredValue '≤6'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "Bulk threshold is $threshold — too permissive, significant bulk mail reaches inboxes." -Remediation $ctrl.Remediation
+    }
+}
+
+# ── DEF-3.1 Unauthenticated Sender Indicator ─────────────────────────────────
+function Test-NRGControlDefenderUnauthSender {
+    [CmdletBinding()] param()
+    $cid = 'DEF-3.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $def = Get-NRGRawData -Key 'Defender-Policies'
+    if (-not $def -or -not $def.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'Defender data not collected'; return
+    }
+    $ap  = $def.Data['AntiPhishing']
+    $pol = if ($ap -and $ap.Available) { @($ap.Policies | Where-Object { $_.IsDefault }) | Select-Object -First 1 } else { $null }
+    if (-not $pol) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default anti-phishing policy'; return }
+    if ($pol.EnableUnauthenticatedSender -eq $true) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail 'Unauthenticated sender indicator enabled — Outlook shows ? on unverified sender photos.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'Unauthenticated sender indicator disabled. Users receive no visual warning that a sender cannot be authenticated.' `
+            -CurrentValue 'EnableUnauthenticatedSender = $false' `
+            -RequiredValue 'Set-AntiPhishPolicy -EnableUnauthenticatedSender $true' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── DEF-3.2 Via Tag Enabled ──────────────────────────────────────────────────
+function Test-NRGControlDefenderViaTag {
+    [CmdletBinding()] param()
+    $cid = 'DEF-3.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $def = Get-NRGRawData -Key 'Defender-Policies'
+    if (-not $def -or -not $def.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'Defender data not collected'; return
+    }
+    $ap  = $def.Data['AntiPhishing']
+    $pol = if ($ap -and $ap.Available) { @($ap.Policies | Where-Object { $_.IsDefault }) | Select-Object -First 1 } else { $null }
+    if (-not $pol) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default anti-phishing policy'; return }
+    if ($pol.EnableViaTag -eq $true) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail 'Via tag enabled — Outlook shows the sending service in From address when sender uses a relay.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'Via tag disabled. Users cannot see when email is sent through a relay service on behalf of a domain.' `
+            -CurrentValue 'EnableViaTag = $false' `
+            -RequiredValue 'Set-AntiPhishPolicy -EnableViaTag $true' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── DEF-3.3 Defender for Cloud Apps Connected ────────────────────────────────
+function Test-NRGControlDefenderMDCA {
+    [CmdletBinding()] param()
+    $cid = 'DEF-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    # MDCA connection status requires separate collector — proxy via CA policy data
+    $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
+    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+        -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+        -Detail 'Microsoft Defender for Cloud Apps connection status requires manual verification: Defender XDR > Settings > Cloud Apps > Connected apps. Verify M365 connector is active.' `
+        -Remediation $ctrl.Remediation
+}
+
+# ── DEF-3.4 Defender Alerts Email Notification ──────────────────────────────
+function Test-NRGControlDefenderAlertNotification {
+    [CmdletBinding()] param()
+    $cid = 'DEF-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+        -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+        -Detail 'Defender alert notification configuration requires manual verification: Defender portal > Settings > Email notifications. Verify security team is subscribed to high/critical alert emails.' `
+        -Remediation $ctrl.Remediation
+}
+
+# ── DEF-4.1 DLP Policy Covers All Key Workloads ───────────────────────────────
+function Test-NRGControlDefenderDLPWorkloads {
+    [CmdletBinding()] param()
+    $cid = 'DEF-4.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $pvw = Get-NRGRawData -Key 'Purview-Labels'
+    if (-not $pvw -or -not $pvw.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview DLP data not collected'; return
+    }
+    $dlpPolicies = @($pvw.Data.DLPPolicies ?? @())
+    if ($dlpPolicies.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No DLP policies configured. Sensitive data can be emailed, shared via Teams, or uploaded to SharePoint with no controls.' -Remediation $ctrl.Remediation; return
+    }
+    $required = @('Exchange','SharePoint','OneDriveForBusiness','Teams')
+    $covered  = @($dlpPolicies | ForEach-Object { $_.Workloads ?? @() } | Sort-Object -Unique)
+    $missing  = @($required | Where-Object { $_ -notin $covered })
+    if ($missing.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "DLP policies cover all required workloads: Exchange, SharePoint, OneDrive, Teams."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "DLP policies missing coverage for: $($missing -join ', '). Data can leave those channels without policy enforcement." -CurrentValue "Missing: $($missing -join ', ')" -RequiredValue 'Exchange + SharePoint + OneDrive + Teams all covered' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── DEF-4.2 DLP Policy Uses Sensitive Information Types ──────────────────────
+function Test-NRGControlDefenderDLPSITs {
+    [CmdletBinding()] param()
+    $cid = 'DEF-4.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $pvw = Get-NRGRawData -Key 'Purview-Labels'
+    if (-not $pvw -or -not $pvw.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview DLP data not collected'; return
+    }
+    $dlpPolicies = @($pvw.Data.DLPPolicies ?? @())
+    $withSITs = @($dlpPolicies | Where-Object { @($_.SensitiveInfoTypes ?? @()).Count -gt 0 })
+    if ($withSITs.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($withSITs.Count) DLP policy(ies) use sensitive information types for automatic classification and detection."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'DLP policies exist but none use sensitive information types. Without SITs, DLP cannot automatically detect credit cards, SSNs, health data, or other regulated content.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── DEF-4.3 Risky Application Alerts Configured ──────────────────────────────
+function Test-NRGControlDefenderRiskyAppAlerts {
+    [CmdletBinding()] param()
+    $cid = 'DEF-4.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    # Check for Defender for Cloud Apps or MDCA alert policies on risky apps
+    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Risky application alert configuration requires Microsoft Defender for Cloud Apps. Verify in Defender XDR > Cloud Apps > Policies > OAuth app policies that alerts are configured for high-privilege app consent and risky OAuth grants.' -Remediation $ctrl.Remediation
+}
+
+# ── DEF-4.4 Priority Account Protection Enabled ──────────────────────────────
+function Test-NRGControlDefenderPriorityAccounts {
+    [CmdletBinding()] param()
+    $cid = 'DEF-4.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $def = Get-NRGRawData -Key 'Defender-Policies'
+    if (-not $def -or -not $def.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
+    }
+    $priorityAccounts = @($def.Data.PriorityAccounts ?? @())
+    if ($priorityAccounts.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($priorityAccounts.Count) priority account(s) tagged in Defender. These accounts receive enhanced email protection and differentiated alert prioritization."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'No priority accounts tagged in Defender for Office 365. Executives and IT admins should be tagged to receive enhanced email filtering, threat tracking, and differentiated incidents.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── DEF-4.5 Endpoint DLP Policy Active ───────────────────────────────────────
+function Test-NRGControlDefenderEndpointDLP {
+    [CmdletBinding()] param()
+    $cid = 'DEF-4.5'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $pvw = Get-NRGRawData -Key 'Purview-Labels'
+    if (-not $pvw -or -not $pvw.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return
+    }
+    $endpointDLP = @($pvw.Data.DLPPolicies ?? @() | Where-Object { $_.Workloads -contains 'Devices' -or $_.Workloads -contains 'EndpointDevices' })
+    if ($endpointDLP.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($endpointDLP.Count) Endpoint DLP policy(ies) active. Sensitive data actions on endpoints (copy to USB, print, upload) are monitored or blocked."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No Endpoint DLP policies detected. Users can copy sensitive files to USB drives, personal cloud storage, or print them without policy controls. Requires Defender for Endpoint + E5 Compliance or Microsoft 365 E5.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── DEF-4.6 Attack Simulation Training Active ─────────────────────────────────
+function Test-NRGControlDefenderAttackSim {
+    [CmdletBinding()] param()
+    $cid = 'DEF-4.6'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $def = Get-NRGRawData -Key 'Defender-Policies'
+    if (-not $def -or -not $def.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
+    }
+    $simCampaigns = @($def.Data.SimulationCampaigns ?? @())
+    if ($simCampaigns.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($simCampaigns.Count) attack simulation campaign(s) configured. Users receive phishing simulation training."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'No attack simulation campaigns detected. Regular phishing simulations measurably reduce user susceptibility and identify training gaps. Requires Defender for Office 365 Plan 2.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── DEF-4.7 Safe Links Policy Protects Office Applications ───────────────────
+function Test-NRGControlDefenderSafeLinksOffice {
+    [CmdletBinding()] param()
+    $cid = 'DEF-4.7'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $def = Get-NRGRawData -Key 'Defender-Policies'
+    if (-not $def -or -not $def.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
+    }
+    $sl = $def.Data['SafeLinks']
+    if (-not $sl -or -not $sl.Available) {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Safe Links not available — requires Defender for Office 365 Plan 1.' -Remediation $ctrl.Remediation; return
+    }
+    $officeProtected = @($sl.Policies | Where-Object { $_.EnableSafeLinksForO365 -eq $true -or $_.EnableSafeLinksForOffice -eq $true }).Count -gt 0
+    if ($officeProtected) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Safe Links protection is enabled for Office applications (Word, Excel, PowerPoint, Teams).'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Safe Links not protecting Office applications. Malicious links embedded in Word/Excel/PowerPoint documents are not scanned at click time.' -Remediation $ctrl.Remediation
     }
 }

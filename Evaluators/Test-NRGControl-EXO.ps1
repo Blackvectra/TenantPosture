@@ -1,31 +1,14 @@
+#Requires -Version 7.0
 #
-# Test-NRGControl-EXO.ps1
-# Evaluates Exchange Online controls against collected raw data.
+# Test-NRGControl-EXO.ps1  (v4.5.5)
+# Evaluates Exchange Online security controls.
+# SCORING ONLY — no API calls.
 #
-# Functions:
-#   Test-NRGControlEXOMailboxAudit     EXO-1.1
-#   Test-NRGControlEXOSmtpAuth         EXO-1.2
-#   Test-NRGControlEXOPop3             EXO-2.2
-#   Test-NRGControlEXOImap             EXO-2.3
-#   Test-NRGControlEXOCustomerLockbox  EXO-2.4
-#   Test-NRGControlEXOSharedMailbox    EXO-2.5
-#   Test-NRGControlEXOModernAuth       EXO-3.1
-#
-# Data key: 'EXO-MailboxConfig'
-# Collector property map (verified against Invoke-NRGCollectEXOMailboxConfig.ps1):
-#   MailboxProtocols.PopEnabled           — POP3 enabled count    (NOT Pop3Enabled)
-#   MailboxProtocols.ImapEnabled          — IMAP enabled count
-#   MailboxProtocols.TotalMailboxes       — total mailbox count
-#   MailboxProtocols.SmtpClientAuthDisabled
-#   OrganizationConfig.AuditDisabled
-#   OrganizationConfig.CustomerLockBoxEnabled  (NOT IsCustomerLockBoxEnabled)
-#   OrganizationConfig.OAuth2ClientProfileEnabled
-#   SharedMailboxes.Count                 — total shared mailbox count
-#   SharedMailboxes.SignInEnabled         — count with sign-in enabled (NOT array of objects)
-#   AuditBypass.BypassedCount
-#   TransportConfig.SmtpClientAuthenticationDisabled
+# NIST SP 800-53: AU-2, SI-8, SC-7, SC-8
+# MITRE ATT&CK:   T1114, T1114.003, T1078, T1566
 #
 
+# ── EXO-1.1 Mailbox Audit Logging ────────────────────────────────────────────
 function Test-NRGControlEXOMailboxAudit {
     [CmdletBinding()] param()
 
@@ -40,32 +23,31 @@ function Test-NRGControlEXOMailboxAudit {
         return
     }
 
-    $auditDisabled = $exoData.Data.OrganizationConfig.AuditDisabled
-    $bypassedCount = if ($exoData.Data.ContainsKey('AuditBypass')) { $exoData.Data.AuditBypass.BypassedCount } else { 0 }
+    $orgDisabled = if ($exoData.Data.OrganizationConfig) { $exoData.Data.OrganizationConfig.AuditDisabled } else { $null }
+    $sample      = $exoData.Data.MailboxAuditSummary.SampleMailboxAudit
 
-    if ($auditDisabled -eq $false -and $bypassedCount -eq 0) {
+    if ($orgDisabled -eq $true) {
+        Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+            -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
+            -Detail 'Mailbox audit logging is DISABLED at the organization level. No mailbox activity will be logged.' `
+            -CurrentValue 'AuditDisabled = $true' -RequiredValue 'AuditDisabled = $false' `
+            -Remediation $control.Remediation
+    } elseif ($sample -and -not $sample.AllEnabled) {
+        Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+            -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
+            -Detail "Organization-level audit is enabled but some mailboxes have audit disabled (sample of $($sample.SampleCount) mailboxes)." `
+            -CurrentValue 'Some mailboxes audit-disabled' -RequiredValue 'All mailboxes audit-enabled'
+    } elseif ($orgDisabled -eq $false -or ($sample -and $sample.AllEnabled)) {
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' `
-            -Detail 'Tenant audit enabled. No mailboxes have AuditBypassEnabled.' `
-            -CurrentValue 'Enabled, no bypass' -RequiredValue 'Enabled, no bypass' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
-    } elseif ($auditDisabled -eq $true) {
-        Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
-            -Title $control.Title -Severity $control.Severity `
-            -Detail 'Tenant-wide mailbox audit is disabled. No forensic trail of mailbox actions.' `
-            -CurrentValue 'AuditDisabled = True' -RequiredValue 'AuditDisabled = False' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId) `
-            -Remediation $control.Remediation
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail 'Mailbox audit logging enabled at organization level.'
     } else {
-        Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
-            -Title $control.Title -Severity $control.Severity `
-            -Detail "$bypassedCount mailbox(es) have AuditBypassEnabled=True. These users leave no audit trail." `
-            -CurrentValue "$bypassedCount mailboxes bypassed" -RequiredValue 'No bypass' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId) `
-            -Remediation $control.Remediation
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'Audit status could not be determined'
     }
 }
 
+# ── EXO-1.2 SMTP Client Authentication Disabled ──────────────────────────────
 function Test-NRGControlEXOSmtpAuth {
     [CmdletBinding()] param()
 
@@ -80,32 +62,41 @@ function Test-NRGControlEXOSmtpAuth {
         return
     }
 
-    $tenantSmtpDisabled = $exoData.Data.TransportConfig.SmtpClientAuthenticationDisabled
-    $totalMbx           = $exoData.Data.MailboxProtocols.TotalMailboxes
-    $smtpDisabledMbx    = $exoData.Data.MailboxProtocols.SmtpClientAuthDisabled
+    $smtpAuth = $exoData.Data.SmtpAuthConfig
+    if (-not $smtpAuth) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'SMTP auth configuration not collected'
+        return
+    }
 
-    if ($tenantSmtpDisabled -eq $true) {
+    $tenantDisabled  = $smtpAuth.TenantDisabled
+    $perMailboxCount = $smtpAuth.PerMailboxEnabledCount ?? 0
+
+    if ($tenantDisabled -eq $true -and $perMailboxCount -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' `
-            -Detail 'SMTP client authentication disabled tenant-wide.' `
-            -CurrentValue 'Tenant: Disabled' -RequiredValue 'Disabled' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail 'SMTP AUTH disabled at tenant level with no per-mailbox exceptions.'
+    } elseif ($tenantDisabled -eq $true -and $perMailboxCount -gt 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+            -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
+            -Detail "SMTP AUTH disabled tenant-wide but $perMailboxCount mailbox(es) have it re-enabled: $($smtpAuth.SampleEnabled -join ', ')." `
+            -CurrentValue "$perMailboxCount mailboxes with SMTP AUTH enabled" `
+            -RequiredValue 'Zero per-mailbox SMTP AUTH exceptions'
     } else {
-        $enabledMbx = $totalMbx - $smtpDisabledMbx
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
-            -Title $control.Title -Severity $control.Severity `
-            -Detail "SMTP AUTH enabled tenant-wide. Approximately $enabledMbx of $totalMbx mailboxes accept SMTP basic auth, bypassing MFA." `
-            -CurrentValue "Tenant SMTP AUTH enabled; $enabledMbx mailboxes affected" `
-            -RequiredValue 'Tenant SmtpClientAuthenticationDisabled = True' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId) `
+            -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
+            -Detail 'SMTP AUTH is enabled at the tenant level. This allows basic authentication bypassing MFA and CA policies.' `
+            -CurrentValue 'SmtpClientAuthenticationDisabled = $false' `
+            -RequiredValue 'Set-TransportConfig -SmtpClientAuthenticationDisabled $true' `
             -Remediation $control.Remediation
     }
 }
 
-function Test-NRGControlEXOPop3 {
+# ── EXO-1.3 External Auto-Forwarding Blocked ─────────────────────────────────
+function Test-NRGControlEXOAutoForward {
     [CmdletBinding()] param()
 
-    $controlId = 'EXO-2.2'
+    $controlId = 'EXO-1.3'
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
 
@@ -116,27 +107,208 @@ function Test-NRGControlEXOPop3 {
         return
     }
 
-    # Collector stores PopEnabled (not Pop3Enabled)
-    $popEnabled = $exoData.Data.MailboxProtocols.PopEnabled
-    $totalMbx   = $exoData.Data.MailboxProtocols.TotalMailboxes
+    $defaultPolicy = @($exoData.Data.OutboundSpamPolicies ?? @()) |
+        Where-Object { $_.IsDefault } | Select-Object -First 1
 
-    if ($popEnabled -eq 0 -or -not $popEnabled) {
+    $wildcardRemote = @($exoData.Data.RemoteDomains ?? @()) |
+        Where-Object { $_.IsDefault } | Select-Object -First 1
+
+    $policyBlocked  = $defaultPolicy -and $defaultPolicy.AutoForwardingMode -eq 'Off'
+    $remoteBlocked  = $wildcardRemote -and (-not $wildcardRemote.AutoForwardEnabled)
+
+    if ($policyBlocked -and $remoteBlocked) {
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' `
-            -Detail 'POP3 disabled on all mailboxes.' `
-            -CurrentValue '0 mailboxes with POP3 enabled' -RequiredValue '0 mailboxes' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail 'External auto-forwarding blocked in both outbound spam policy and remote domain settings.'
+    } elseif ($policyBlocked) {
+        Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+            -Title $control.Title -Severity 'Low' -FrameworkIds $citations `
+            -Detail 'Outbound spam policy blocks auto-forward, but remote domain wildcard (*) still allows it. Set-RemoteDomain * -AutoForwardEnabled $false.' `
+            -CurrentValue 'Remote domain AutoForwardEnabled = $true' `
+            -RequiredValue 'Remote domain AutoForwardEnabled = $false'
+    } elseif ($remoteBlocked) {
+        Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+            -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
+            -Detail 'Remote domain wildcard blocks auto-forward, but outbound spam policy is not set to Off.' `
+            -CurrentValue "AutoForwardingMode = $($defaultPolicy.AutoForwardingMode ?? 'unknown')" `
+            -RequiredValue 'AutoForwardingMode = Off'
     } else {
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
-            -Title $control.Title -Severity $control.Severity `
-            -Detail "POP3 enabled on $popEnabled of $totalMbx mailboxes. POP3 uses basic authentication and cannot enforce MFA." `
-            -CurrentValue "$popEnabled mailboxes with POP3 enabled" -RequiredValue '0 mailboxes' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId) `
+            -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
+            -Detail 'External auto-forwarding is NOT blocked. Users or compromised accounts can silently exfiltrate all email to external addresses.' `
+            -CurrentValue "AutoForwardingMode = $($defaultPolicy.AutoForwardingMode ?? 'Automatic')" `
+            -RequiredValue 'AutoForwardingMode = Off in outbound spam policy AND Remote domain AutoForwardEnabled = $false' `
             -Remediation $control.Remediation
     }
 }
 
-function Test-NRGControlEXOImap {
+# ── EXO-1.4 DKIM Signing Enabled ─────────────────────────────────────────────
+function Test-NRGControlEXODKIM {
+    [CmdletBinding()] param()
+
+    $controlId = 'EXO-1.4'
+    $control   = Get-NRGControlById -ControlId $controlId
+    if (-not $control) { return }
+
+    $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exoData -or -not $exoData.Success) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'EXO data not collected'
+        return
+    }
+
+    $dkimConfigs = @($exoData.Data.DkimSigningConfigs ?? @())
+    if ($dkimConfigs.Count -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'No DKIM signing configuration found'
+        return
+    }
+
+    $disabled = @($dkimConfigs | Where-Object { -not $_.Enabled })
+    $enabled  = @($dkimConfigs | Where-Object { $_.Enabled })
+    $weakKey  = @($dkimConfigs | Where-Object { $_.Enabled -and $_.KeySize -and $_.KeySize -lt 2048 })
+
+    if ($disabled.Count -eq 0 -and $weakKey.Count -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail "DKIM enabled for all $($dkimConfigs.Count) domain(s): $($enabled.Domain -join ', ')"
+    } elseif ($disabled.Count -gt 0 -and $enabled.Count -gt 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+            -Title $control.Title -Severity 'High' -FrameworkIds $citations `
+            -Detail "DKIM enabled for $($enabled.Count) domain(s) but disabled for $($disabled.Count): $($disabled.Domain -join ', ')" `
+            -CurrentValue "DKIM disabled: $($disabled.Domain -join ', ')" -RequiredValue 'DKIM enabled for all domains'
+    } elseif ($weakKey.Count -gt 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+            -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
+            -Detail "DKIM enabled but $($weakKey.Count) domain(s) use <2048-bit keys: $($weakKey.Domain -join ', ')" `
+            -CurrentValue "Key size < 2048 bits" -RequiredValue '≥2048-bit DKIM keys'
+    } else {
+        Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+            -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
+            -Detail "DKIM is disabled for all $($disabled.Count) domain(s): $($disabled.Domain -join ', ')" `
+            -CurrentValue 'DKIM disabled for all domains' -RequiredValue 'DKIM enabled for all domains' `
+            -Remediation $control.Remediation
+    }
+}
+
+# ── EXO-1.5 Anti-Phishing Impersonation Protection ───────────────────────────
+function Test-NRGControlEXOAntiPhish {
+    [CmdletBinding()] param()
+
+    $controlId = 'EXO-1.5'
+    $control   = Get-NRGControlById -ControlId $controlId
+    if (-not $control) { return }
+
+    $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exoData -or -not $exoData.Success) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'EXO data not collected'
+        return
+    }
+
+    $defaultPolicy = @($exoData.Data.AntiPhishPolicies ?? @()) |
+        Where-Object { $_.IsDefault } | Select-Object -First 1
+
+    if (-not $defaultPolicy) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'No default anti-phishing policy found'
+        return
+    }
+
+    $gaps = @()
+    if (-not $defaultPolicy.EnableTargetedUserProtection) { $gaps += 'User impersonation protection disabled' }
+    if (-not $defaultPolicy.EnableOrganizationDomainsProtection) { $gaps += 'Organization domain impersonation disabled' }
+    if (-not $defaultPolicy.EnableMailboxIntelligence) { $gaps += 'Mailbox intelligence disabled' }
+    if (-not $defaultPolicy.EnableExternalSenderTag) { $gaps += 'External sender tag disabled' }
+
+    if ($gaps.Count -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail 'Anti-phishing policy has user impersonation, org domain protection, mailbox intelligence, and external sender tag all enabled.'
+    } elseif ($gaps.Count -le 2) {
+        Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+            -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
+            -Detail "Anti-phishing partially configured. Gaps: $($gaps -join '; ')" `
+            -CurrentValue "Missing: $($gaps -join ', ')" -RequiredValue 'All impersonation protections enabled'
+    } else {
+        Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+            -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
+            -Detail "Anti-phishing impersonation protection has multiple gaps: $($gaps -join '; ')" `
+            -CurrentValue "Missing: $($gaps -join ', ')" -RequiredValue 'All impersonation protections enabled' `
+            -Remediation $control.Remediation
+    }
+}
+
+# ── EXO-1.6 Modern Auth (OAuth2) Enabled ─────────────────────────────────────
+function Test-NRGControlEXOModernAuth {
+    [CmdletBinding()] param()
+
+    $controlId = 'EXO-1.6'
+    $control   = Get-NRGControlById -ControlId $controlId
+    if (-not $control) { return }
+
+    $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exoData -or -not $exoData.Success) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'EXO data not collected'
+        return
+    }
+
+    $modernAuth = if ($exoData.Data.OrganizationConfig) { $exoData.Data.OrganizationConfig.OAuth2ClientProfileEnabled } else { $null }
+
+    if ($modernAuth -eq $true) {
+        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail 'Modern authentication (OAuth2) is enabled for Exchange Online.'
+    } elseif ($modernAuth -eq $false) {
+        Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+            -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
+            -Detail 'Modern authentication is DISABLED. This forces clients to use basic authentication, bypassing MFA.' `
+            -CurrentValue 'OAuth2ClientProfileEnabled = $false' `
+            -RequiredValue 'Set-OrganizationConfig -OAuth2ClientProfileEnabled $true' `
+            -Remediation $control.Remediation
+    } else {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'Modern auth state could not be determined'
+    }
+}
+
+# ── EXO-1.7 Honor DMARC Policy (Anti-phish) ──────────────────────────────────
+function Test-NRGControlEXOHonorDMARC {
+    [CmdletBinding()] param()
+
+    $controlId = 'EXO-1.7'
+    $control   = Get-NRGControlById -ControlId $controlId
+    if (-not $control) { return }
+
+    $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exoData -or -not $exoData.Success) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'EXO data not collected'
+        return
+    }
+
+    $defaultPolicy = @($exoData.Data.AntiPhishPolicies ?? @()) |
+        Where-Object { $_.IsDefault } | Select-Object -First 1
+
+    if ($defaultPolicy -and $defaultPolicy.HonorDmarcPolicy -eq $true) {
+        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail 'Anti-phishing policy honors incoming DMARC policy (p=reject/quarantine applied by EXO).'
+    } elseif ($defaultPolicy) {
+        Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+            -Title $control.Title -Severity 'High' -FrameworkIds $citations `
+            -Detail 'Anti-phishing policy does NOT honor DMARC. Inbound p=reject messages from senders may still be delivered.' `
+            -CurrentValue 'HonorDmarcPolicy = $false' -RequiredValue 'HonorDmarcPolicy = $true' `
+            -Remediation $control.Remediation
+    } else {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'No default anti-phishing policy found'
+    }
+}
+
+# ── EXO-2.3 POP3 Access Disabled ─────────────────────────────────────────────
+function Test-NRGControlEXOPop3 {
     [CmdletBinding()] param()
 
     $controlId = 'EXO-2.3'
@@ -149,64 +321,26 @@ function Test-NRGControlEXOImap {
             -Title $control.Title -Detail 'EXO data not collected'
         return
     }
-
-    $imapEnabled = $exoData.Data.MailboxProtocols.ImapEnabled
-    $totalMbx    = $exoData.Data.MailboxProtocols.TotalMailboxes
-
-    if ($imapEnabled -eq 0 -or -not $imapEnabled) {
-        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' `
-            -Detail 'IMAP disabled on all mailboxes.' `
-            -CurrentValue '0 mailboxes with IMAP enabled' -RequiredValue '0 mailboxes' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
-    } else {
-        Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
-            -Title $control.Title -Severity $control.Severity `
-            -Detail "IMAP enabled on $imapEnabled of $totalMbx mailboxes. IMAP uses basic authentication and cannot enforce MFA." `
-            -CurrentValue "$imapEnabled mailboxes with IMAP enabled" -RequiredValue '0 mailboxes' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId) `
-            -Remediation $control.Remediation
-    }
+    # POP3 state not directly in our org config collector — check transport config
+    # If no specific data, register as not collected rather than false gap
+    Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+        -Title $control.Title -Detail 'POP3 state requires Get-CASMailboxPlan — not collected in current run. Verify manually: Get-CASMailboxPlan | Select PopEnabled'
 }
 
-function Test-NRGControlEXOCustomerLockbox {
+# ── EXO-2.4 IMAP Access Disabled ─────────────────────────────────────────────
+function Test-NRGControlEXOImap {
     [CmdletBinding()] param()
 
     $controlId = 'EXO-2.4'
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
 
-    $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
-    if (-not $exoData -or -not $exoData.Success) {
-        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'EXO data not collected'
-        return
-    }
-
-    # Collector stores CustomerLockBoxEnabled (not IsCustomerLockBoxEnabled)
-    $lockboxEnabled = $exoData.Data.OrganizationConfig.CustomerLockBoxEnabled
-
-    if ($lockboxEnabled -eq $true) {
-        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' `
-            -Detail 'Customer Lockbox enabled. Microsoft support access requires explicit approval.' `
-            -CurrentValue 'Enabled' -RequiredValue 'Enabled' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
-    } elseif ($lockboxEnabled -eq $false) {
-        Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
-            -Title $control.Title -Severity $control.Severity `
-            -Detail 'Customer Lockbox disabled. Microsoft support engineers can access tenant data without explicit approval.' `
-            -CurrentValue 'Disabled' -RequiredValue 'Enabled' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId) `
-            -Remediation $control.Remediation
-    } else {
-        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title `
-            -Detail 'Customer Lockbox data not available. Requires Microsoft 365 E5 or Customer Lockbox add-on license.'
-    }
+    Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+        -Title $control.Title -Detail 'IMAP state requires Get-CASMailboxPlan — not collected in current run. Verify manually: Get-CASMailboxPlan | Select ImapEnabled'
 }
 
-function Test-NRGControlEXOSharedMailbox {
+# ── EXO-2.5 Customer Lockbox Enabled ─────────────────────────────────────────
+function Test-NRGControlEXOCustomerLockbox {
     [CmdletBinding()] param()
 
     $controlId = 'EXO-2.5'
@@ -220,71 +354,322 @@ function Test-NRGControlEXOSharedMailbox {
         return
     }
 
-    if (-not $exoData.Data.ContainsKey('SharedMailboxes')) {
+    # Customer Lockbox state is in org config
+    if (-not $orgConfig) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'Shared mailbox data not collected.'
+            -Title $control.Title -Detail 'Organization config not collected'
         return
     }
 
-    # Collector stores SharedMailboxes as a hashtable of counts, not an array of objects
-    $shared       = $exoData.Data.SharedMailboxes
-    $total        = $shared.Count
-    $signInEnabled = $shared.SignInEnabled
-
-    if ($total -eq 0) {
+    # CustomerLockBoxEnabled may not be present if E5 not licensed
+    $lockboxEnabled = if ($orgConfig.PSObject.Properties['CustomerLockBoxEnabled']) { $orgConfig.PSObject.Properties['CustomerLockBoxEnabled'].Value } else { $null }
+    if ($lockboxEnabled -eq $true) {
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' `
-            -Detail 'No shared mailboxes found in this tenant.' `
-            -CurrentValue '0 shared mailboxes' -RequiredValue 'All shared mailboxes sign-in disabled'
-    } elseif ($signInEnabled -eq 0) {
-        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' `
-            -Detail "All $total shared mailbox(es) have sign-in disabled." `
-            -CurrentValue "$total shared mailboxes, 0 with sign-in enabled" `
-            -RequiredValue 'All shared mailboxes sign-in disabled' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
-    } else {
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail 'Customer Lockbox is enabled. Microsoft support requires explicit admin approval to access tenant data.'
+    } elseif ($lockboxEnabled -eq $false) {
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
-            -Title $control.Title -Severity $control.Severity `
-            -Detail "$signInEnabled of $total shared mailbox(es) have sign-in enabled. Shared mailboxes with sign-in enabled can be used as persistent backdoor accounts." `
-            -CurrentValue "$signInEnabled of $total shared mailboxes with sign-in enabled" `
-            -RequiredValue 'All shared mailboxes: sign-in disabled (AccountDisabled = true)' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId) `
+            -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
+            -Detail 'Customer Lockbox is disabled. Microsoft support can access tenant data during support cases without approval.' `
+            -CurrentValue 'CustomerLockBoxEnabled = $false' -RequiredValue 'CustomerLockBoxEnabled = $true' `
             -Remediation $control.Remediation
+    } else {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'Customer Lockbox state not available — requires E5 or E5 Compliance license'
     }
 }
 
-function Test-NRGControlEXOModernAuth {
+# ── EXO-2.6 Shared Mailboxes Block Direct Sign-In ────────────────────────────
+function Test-NRGControlEXOSharedMailbox {
     [CmdletBinding()] param()
 
-    $controlId = 'EXO-3.1'
+    $controlId = 'EXO-2.6'
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
 
+    # Shared mailbox sign-in state requires Graph User.Read.All to check AccountEnabled
+    # This data is in AAD-Users if collected
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
+
     if (-not $exoData -or -not $exoData.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'EXO data not collected'
         return
     }
 
-    $modernAuthEnabled = $exoData.Data.OrganizationConfig.OAuth2ClientProfileEnabled
+    # Shared mailbox sign-in state requires cross-referencing AAD Users with EXO shared mailboxes
+    # Without that cross-reference, mark as informational gap requiring manual review
+    Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+        -Title $control.Title -Severity 'High' -FrameworkIds $citations `
+        -Detail 'Shared mailbox direct sign-in status requires manual verification. Run: Get-Mailbox -RecipientTypeDetails SharedMailbox | ForEach-Object { Get-MgUser -UserId $_.ExternalDirectoryObjectId | Select DisplayName,AccountEnabled }' `
+        -CurrentValue 'Manual review required' -RequiredValue 'All shared mailbox accounts have AccountEnabled = $false' `
+        -Remediation $control.Remediation
+}
 
-    if ($modernAuthEnabled -eq $true) {
-        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' `
-            -Detail 'Modern authentication (OAuth2) enabled for Exchange Online. Outlook and mail clients can use MFA.' `
-            -CurrentValue 'OAuth2ClientProfileEnabled = True' -RequiredValue 'Enabled' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId)
-    } elseif ($modernAuthEnabled -eq $false) {
-        Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
-            -Title $control.Title -Severity $control.Severity `
-            -Detail 'Modern authentication disabled for Exchange Online. Mail clients fall back to basic auth, bypassing MFA entirely.' `
-            -CurrentValue 'OAuth2ClientProfileEnabled = False' -RequiredValue 'Enabled' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId $controlId) `
-            -Remediation $control.Remediation
+# ── EXO-3.1 Connection Filter No Safe List Bypass ────────────────────────────
+function Test-NRGControlEXOConnectionFilter {
+    [CmdletBinding()] param()
+    $cid = 'EXO-3.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $cf = Get-NRGRawData -Key 'EXO-ConnectionFilter'
+    if (-not $cf -or -not $cf.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Connection filter data not collected'; return
+    }
+    $defaultCF = @($cf.Data.ConnectionFilter | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    if (-not $defaultCF) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default connection filter found'; return }
+    $safeListEnabled = [bool]($defaultCF.EnableSafeList ?? $false)
+    if (-not $safeListEnabled) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Microsoft safe list bypass is disabled on connection filter.'
     } else {
-        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'Modern auth state could not be determined from collected data.'
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Safe list bypass is enabled — Microsoft-maintained IP list bypasses spam filtering entirely. Third-party senders on that list skip all EOP filtering.' -CurrentValue 'EnableSafeList = $true' -RequiredValue 'Set-HostedConnectionFilterPolicy -EnableSafeList $false' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── EXO-3.2 Outbound Spam User Sending Limits ────────────────────────────────
+function Test-NRGControlEXOOutboundLimits {
+    [CmdletBinding()] param()
+    $cid = 'EXO-3.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exo -or -not $exo.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
+    }
+    $defaultOutbound = @($exo.Data.OutboundSpamPolicies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    if (-not $defaultOutbound) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default outbound policy found'; return }
+    # AutoForwardingMode already checked in EXO-1.3 — here check action on limit breach
+    # ActionWhenThresholdReached should alert or restrict — not the default Restrict
+    Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Outbound spam policy exists. EXO enforces sending limits by default — verify ActionWhenThresholdReached is set to alert an admin.'
+}
+
+# ── EXO-3.3 Alert Policy — Forwarding Rules ──────────────────────────────────
+function Test-NRGControlEXOAlertForwarding {
+    [CmdletBinding()] param()
+    $cid = 'EXO-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $cf = Get-NRGRawData -Key 'EXO-ConnectionFilter'
+    if (-not $cf -or -not $cf.Success -or -not $cf.Data.AlertPolicies) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Alert policy data not collected'; return
+    }
+    $fwdAlerts = @($cf.Data.AlertPolicies.ActiveAlerts | Where-Object { $_.Title -match 'forward|redirect' })
+    if ($fwdAlerts.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Forwarding rule alert policy is active.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No active alert for new forwarding/redirect rules detected. Verify alert policies are configured in Defender portal: Email forwarding activities.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── EXO-3.4 Alert Policy — Unusual Mail Volume ───────────────────────────────
+function Test-NRGControlEXOAlertVolume {
+    [CmdletBinding()] param()
+    $cid = 'EXO-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'Unusual mail volume alert requires manual verification in Defender portal: Alerts > Alert policies > Unusual increase in email reported as phish.' -Remediation $ctrl.Remediation
+}
+
+# ── EXO-3.5 Transport Rules Audit Enabled ────────────────────────────────────
+function Test-NRGControlEXOTransportAudit {
+    [CmdletBinding()] param()
+    $cid = 'EXO-3.5'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exo -or -not $exo.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
+    }
+    $auditDisabled = if ($exo.Data.OrganizationConfig) { $exo.Data.OrganizationConfig.AuditDisabled } else { $null }
+    if ($auditDisabled -ne $true) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Organization-level audit logging is enabled, covering transport rule changes.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Audit logging disabled — transport rule creation and modification is not audited.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── EXO-4.1 Mailbox Audit Log Age Limit ──────────────────────────────────────
+function Test-NRGControlEXOAuditAgeLimit {
+    [CmdletBinding()] param()
+    $cid = 'EXO-4.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exo -or -not $exo.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'EXO data not collected'; return
+    }
+    $sample = $exo.Data.MailboxAuditSummary.SampleMailboxAudit
+    if (-not $sample) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'Sample mailbox audit data not collected'; return
+    }
+    $ageLimit = [string]($sample.AuditLogAgeLimit ?? '90.00:00:00')
+    $days = 90
+    if ($ageLimit -match '^(\d+)\.') { $days = [int]$matches[1] }
+    if ($days -ge 180) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "Mailbox audit log age limit: $days days (meets recommended 180+ days)."
+    } elseif ($days -ge 90) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit `
+            -Detail "Audit log age limit is $days days. 90 days is the minimum — 180 days recommended for adequate IR investigation window." `
+            -CurrentValue "$days days" -RequiredValue '180 days'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "Mailbox audit log age limit is only $days days — insufficient for most IR investigations." `
+            -CurrentValue "$days days" -RequiredValue '≥90 days (180 recommended)' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── EXO-4.2 Admin Audit Log Enabled ─────────────────────────────────────────
+function Test-NRGControlEXOAdminAudit {
+    [CmdletBinding()] param()
+    $cid = 'EXO-4.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exo -or -not $exo.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'EXO data not collected'; return
+    }
+    $orgAudit = if ($exo.Data.OrganizationConfig) { $exo.Data.OrganizationConfig.AuditDisabled } else { $null }
+    if ($orgAudit -ne $true) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail 'Admin audit logging is enabled — cmdlet execution by admins is tracked.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'Organization audit logging is disabled. All admin cmdlet execution goes unlogged.' `
+            -Remediation $ctrl.Remediation
+    }
+}
+
+# ── EXO-4.3 Safe Attachments for SharePoint OneDrive Teams ───────────────────
+function Test-NRGControlEXOSafeAttachmentsSPO {
+    [CmdletBinding()] param()
+    $cid = 'EXO-4.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $def = Get-NRGRawData -Key 'Defender-Policies'
+    if (-not $def -or -not $def.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'Defender data not collected'; return
+    }
+    $sa = $def.Data['SafeAttachments']
+    if (-not $sa -or -not $sa.Available) {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'Safe Attachments not available — Defender for Office 365 Plan 1 required for SPO/OD/Teams file scanning.' `
+            -Remediation $ctrl.Remediation; return
+    }
+    # Safe Attachments for SPO/OD/Teams is a separate tenant-level setting
+    # Proxied by checking if any policy covers it — CIS 2.3.4 requires global ATP for files
+    $spoEnabled = @($sa.Policies | Where-Object { $_.Enable -and $_.Action -ne 'Allow' }).Count -gt 0
+    if ($spoEnabled) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail 'Safe Attachments active policies cover file scanning. Verify SharePoint/OneDrive/Teams file ATP is enabled in Defender portal > Global settings.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail 'Safe Attachments for SharePoint/OneDrive/Teams requires manual verification: Defender portal > Policies > Safe Attachments > Global settings > enable for SPO/OD/Teams.' `
+            -Remediation $ctrl.Remediation
+    }
+}
+
+# ── EXO-4.4 Anti-Spam Inbound Policy Configured ─────────────────────────────
+function Test-NRGControlEXOAntiSpamInbound {
+    [CmdletBinding()] param()
+    $cid = 'EXO-4.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exo -or -not $exo.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'EXO data not collected'; return
+    }
+    $policies = @($exo.Data.AntiSpamPolicies ?? @())
+    $default  = $policies | Where-Object { $_.IsDefault } | Select-Object -First 1
+    if (-not $default) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'No default anti-spam policy found'; return
+    }
+    $gaps = @()
+    if ($default.SpamAction     -ne 'MoveToJmf' -and $default.SpamAction -ne 'Quarantine') { $gaps += "SpamAction=$($default.SpamAction)" }
+    if ($default.BulkThreshold  -gt 7)  { $gaps += "BulkThreshold=$($default.BulkThreshold)" }
+    if ($default.ZapEnabled -ne $true)  { $gaps += 'ZapEnabled=False' }
+    if ($gaps.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail 'Default inbound anti-spam policy is properly configured.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail "Anti-spam policy has sub-optimal settings: $($gaps -join ', ')" `
+            -CurrentValue ($gaps -join ', ') -RequiredValue 'SpamAction=MoveToJmf/Quarantine, BulkThreshold≤7, ZapEnabled=True' `
+            -Remediation $ctrl.Remediation
+    }
+}
+
+# ── EXO-5.1 Per-User Mailbox Audit Logging Enabled ────────────────────────────
+function Test-NRGControlEXOPerUserAudit {
+    [CmdletBinding()] param()
+    $cid = 'EXO-5.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exo -or -not $exo.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
+    }
+    $auditSummary = $exo.Data.MailboxAuditSummary
+    $auditDisabledCount = [int]($auditSummary.AuditDisabledCount ?? 0)
+    $totalMailboxes     = [int]($auditSummary.TotalMailboxes ?? 0)
+    if ($auditDisabledCount -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Mailbox audit logging enabled on all $totalMailboxes mailbox(es)."
+    } elseif ($auditDisabledCount -gt 0 -and $totalMailboxes -gt 0) {
+        $pct = [int]($auditDisabledCount * 100 / $totalMailboxes)
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$auditDisabledCount of $totalMailboxes mailboxes ($pct%) have audit logging disabled. Actions in those mailboxes are not logged — inbox rules, delegation, and access cannot be investigated." -CurrentValue "$auditDisabledCount mailboxes unaudited" -RequiredValue 'Zero mailboxes with audit disabled' -Remediation $ctrl.Remediation
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Mailbox audit summary data incomplete. Verify all mailboxes have auditing enabled: Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false }' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── EXO-5.2 Priority Account Email Protection Configured ─────────────────────
+function Test-NRGControlEXOPriorityAccountProtection {
+    [CmdletBinding()] param()
+    $cid = 'EXO-5.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $def = Get-NRGRawData -Key 'Defender-Policies'
+    if (-not $def -or -not $def.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
+    }
+    $priorityAccounts = @($def.Data.PriorityAccounts ?? @())
+    $ap = $def.Data['AntiPhishing']
+    $hasPriorityPolicy = $false
+    if ($ap -and $ap.Available -and $priorityAccounts.Count -gt 0) {
+        $hasPriorityPolicy = @($ap.Policies | Where-Object {
+            $_.TargetedUsersToProtect -and @($_.TargetedUsersToProtect).Count -gt 0
+        }).Count -gt 0
+    }
+    if ($hasPriorityPolicy -and $priorityAccounts.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Priority accounts are tagged and protected by targeted user impersonation protection in anti-phishing policy."
+    } elseif ($priorityAccounts.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No priority accounts tagged. Executives and admins are not enrolled in enhanced threat protection or differentiated incident prioritization.' -Remediation $ctrl.Remediation
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Priority accounts tagged but targeted impersonation protection not confirmed in anti-phishing policy. Ensure anti-phishing policy explicitly protects tagged accounts.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── EXO-5.3 Exchange Online Protection Safe Senders Not Overriding ────────────
+function Test-NRGControlEXOSafeSenderOverride {
+    [CmdletBinding()] param()
+    $cid = 'EXO-5.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exo -or -not $exo.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
+    }
+    $defaultPolicy = @($exo.Data.AntiSpamPolicies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    if (-not $defaultPolicy) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default policy'; return }
+    $allowListBypass = $defaultPolicy.AllowedSenderDomains -and @($defaultPolicy.AllowedSenderDomains).Count -gt 0
+    if (-not $allowListBypass) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No allowed sender domains in anti-spam policy — all inbound mail is filtered equally.'
+    } else {
+        $count = @($defaultPolicy.AllowedSenderDomains).Count
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$count allowed sender domain(s) in anti-spam policy bypass all EOP filtering. Allowed domains are a common attacker target — if a domain is compromised, all mail from it reaches inboxes unfiltered." -CurrentValue "$count bypass domains configured" -RequiredValue 'Zero allowed sender domains in anti-spam policy' -Remediation $ctrl.Remediation
     }
 }

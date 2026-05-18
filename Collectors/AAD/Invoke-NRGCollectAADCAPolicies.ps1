@@ -1,86 +1,147 @@
+#Requires -Version 7.0
 #
-# Invoke-NRGCollectAADCAPolicies.ps1
-# Collects all Conditional Access policies + their configurations.
-# COLLECTION ONLY - no scoring.
+# Invoke-NRGCollectAADCAPolicies.ps1  (v4.5.5)
+# Collects Conditional Access policies and named locations.
+# READ-ONLY.
+#
+# Required Graph scopes: Policy.Read.All
+#
+# NIST SP 800-53: AC-17 (remote access), IA-2 (MFA)
+# MITRE ATT&CK:   T1078.004 (Cloud Accounts), T1110 (Brute Force)
 #
 
 function Invoke-NRGCollectAADCAPolicies {
     [CmdletBinding()] param()
 
     $result = @{
-        Source     = 'AAD-CAPolicies'
-        Timestamp  = [DateTime]::UtcNow.ToString('o')
-        Success    = $false
-        Data       = @{}
-        Exceptions = @()
+        Success = $false
+        Data    = @{
+            Policies       = @()
+            NamedLocations = @()
+            AuthStrengths  = @()
+        }
     }
 
     try {
-        $policies = @(Get-MgIdentityConditionalAccessPolicy -All -ErrorAction Stop)
-
-        $policyDetails = foreach ($p in $policies) {
-            [PSCustomObject]@{
-                Id                = $p.Id
-                DisplayName       = $p.DisplayName
-                State             = $p.State
-                CreatedDateTime   = $p.CreatedDateTime
-                ModifiedDateTime  = $p.ModifiedDateTime
-                Conditions = @{
-                    Users = @{
-                        IncludeUsers  = @($p.Conditions.Users.IncludeUsers)
-                        ExcludeUsers  = @($p.Conditions.Users.ExcludeUsers)
-                        IncludeGroups = @($p.Conditions.Users.IncludeGroups)
-                        ExcludeGroups = @($p.Conditions.Users.ExcludeGroups)
-                        IncludeRoles  = @($p.Conditions.Users.IncludeRoles)
-                        ExcludeRoles  = @($p.Conditions.Users.ExcludeRoles)
+        # Conditional Access Policies
+        try {
+            $response = Invoke-MgGraphRequest -Method GET `
+                -Uri 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies?$top=250' `
+                -ErrorAction Stop
+            $result.Data.Policies = @($response.value ?? @() | ForEach-Object {
+                @{
+                    Id               = [string]$_.id
+                    DisplayName      = [string]$_.displayName
+                    State            = [string]$_.state
+                    CreatedDateTime  = [string]($_.createdDateTime ?? '')
+                    ModifiedDateTime = [string]($_.modifiedDateTime ?? '')
+                    Conditions       = @{
+                        ClientAppTypes    = @($_.conditions.clientAppTypes ?? @())
+                        SignInRiskLevels  = @($_.conditions.signInRiskLevels ?? @())
+                        UserRiskLevels    = @($_.conditions.userRiskLevels ?? @())
+                        AuthFlows         = @($_.conditions.authenticationFlows ?? @())
+                        Platforms         = @($_.conditions.platforms.includePlatforms ?? @())
+                        Locations         = @{
+                            Include = @($_.conditions.locations.includeLocations ?? @())
+                            Exclude = @($_.conditions.locations.excludeLocations ?? @())
+                        }
+                        Users             = @{
+                            IncludeUsers  = @($_.conditions.users.includeUsers ?? @())
+                            ExcludeUsers  = @($_.conditions.users.excludeUsers ?? @())
+                            IncludeGroups = @($_.conditions.users.includeGroups ?? @())
+                            ExcludeGroups = @($_.conditions.users.excludeGroups ?? @())
+                            IncludeRoles  = @($_.conditions.users.includeRoles ?? @())
+                            ExcludeRoles  = @($_.conditions.users.excludeRoles ?? @())
+                        }
+                        Applications      = @{
+                            Include = @($_.conditions.applications.includeApplications ?? @())
+                            Exclude = @($_.conditions.applications.excludeApplications ?? @())
+                        }
                     }
-                    Applications = @{
-                        IncludeApplications = @($p.Conditions.Applications.IncludeApplications)
-                        ExcludeApplications = @($p.Conditions.Applications.ExcludeApplications)
-                        IncludeUserActions  = @($p.Conditions.Applications.IncludeUserActions)
+                    GrantControls    = @{
+                        Operator             = [string]($_.grantControls.operator ?? '')
+                        BuiltInControls      = @($_.grantControls.builtInControls ?? @())
+                        CustomControls       = @($_.grantControls.customAuthenticationFactors ?? @())
+                        AuthStrengthId       = [string]($_.grantControls.authenticationStrength.id ?? '')
+                        AuthStrengthName     = [string]($_.grantControls.authenticationStrength.displayName ?? '')
                     }
-                    ClientAppTypes    = @($p.Conditions.ClientAppTypes)
-                    Locations = @{
-                        IncludeLocations = @($p.Conditions.Locations.IncludeLocations)
-                        ExcludeLocations = @($p.Conditions.Locations.ExcludeLocations)
+                    SessionControls  = @{
+                        SignInFrequency  = if ($_.sessionControls.signInFrequency) {
+                            @{
+                                IsEnabled       = [bool]$_.sessionControls.signInFrequency.isEnabled
+                                Value           = $_.sessionControls.signInFrequency.value
+                                Type            = [string]($_.sessionControls.signInFrequency.type ?? '')
+                                FrequencyInterval = [string]($_.sessionControls.signInFrequency.frequencyInterval ?? '')
+                            }
+                        } else { $null }
+                        PersistentBrowser = if ($_.sessionControls.persistentBrowser) {
+                            @{ IsEnabled = [bool]$_.sessionControls.persistentBrowser.isEnabled; Mode = [string]$_.sessionControls.persistentBrowser.mode }
+                        } else { $null }
                     }
-                    Platforms = @{
-                        IncludePlatforms = @($p.Conditions.Platforms.IncludePlatforms)
-                        ExcludePlatforms = @($p.Conditions.Platforms.ExcludePlatforms)
-                    }
-                    UserRiskLevels   = @($p.Conditions.UserRiskLevels)
-                    SignInRiskLevels = @($p.Conditions.SignInRiskLevels)
                 }
-                GrantControls = @{
-                    Operator        = $p.GrantControls.Operator
-                    BuiltInControls = @($p.GrantControls.BuiltInControls)
-                    AuthenticationStrength = if ($p.GrantControls.AuthenticationStrength) {
-                        @{ DisplayName = $p.GrantControls.AuthenticationStrength.DisplayName; Id = $p.GrantControls.AuthenticationStrength.Id }
-                    } else { $null }
-                }
-                SessionControls = @{
-                    ApplicationEnforcedRestrictions = if ($p.SessionControls.ApplicationEnforcedRestrictions) { $p.SessionControls.ApplicationEnforcedRestrictions.IsEnabled } else { $false }
-                    PersistentBrowser = if ($p.SessionControls.PersistentBrowser) { @{ IsEnabled = $p.SessionControls.PersistentBrowser.IsEnabled; Mode = $p.SessionControls.PersistentBrowser.Mode } } else { $null }
-                    SignInFrequency   = if ($p.SessionControls.SignInFrequency)   { @{ IsEnabled = $p.SessionControls.SignInFrequency.IsEnabled; Type = $p.SessionControls.SignInFrequency.Type; Value = $p.SessionControls.SignInFrequency.Value } } else { $null }
-                }
+            })
+        } catch {
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'AAD-CAPolicies' -Message $_.Exception.Message
             }
         }
 
-        $result.Data['Policies']      = $policyDetails
-        $result.Data['TotalCount']    = $policies.Count
-        $result.Data['EnabledCount']  = @($policies | Where-Object State -eq 'enabled').Count
-        $result.Data['ReportOnlyCount'] = @($policies | Where-Object State -eq 'enabledForReportingButNotEnforced').Count
-        $result.Data['DisabledCount'] = @($policies | Where-Object State -eq 'disabled').Count
+        # Named Locations
+        try {
+            $locResp = Invoke-MgGraphRequest -Method GET `
+                -Uri 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/namedLocations?$top=100' `
+                -ErrorAction Stop
+            $result.Data.NamedLocations = @($locResp.value ?? @() | ForEach-Object {
+                @{
+                    Id          = [string]$_.id
+                    DisplayName = [string]$_.displayName
+                    OdataType   = [string]($_.'@odata.type' ?? '')
+                    IsTrusted   = [bool]($_.isTrusted ?? $false)
+                    IpRanges    = @($_.ipRanges ?? @() | ForEach-Object { [string]($_.cidrAddress ?? '') })
+                    CountriesAndRegions = @($_.countriesAndRegions ?? @())
+                }
+            })
+        } catch {
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'AAD-NamedLocations' -Message $_.Exception.Message
+            }
+        }
+
+        # Authentication Strength Policies
+        try {
+            $strengthResp = Invoke-MgGraphRequest -Method GET `
+                -Uri 'https://graph.microsoft.com/v1.0/policies/authenticationStrengthPolicies?$top=50' `
+                -ErrorAction Stop
+            $result.Data.AuthStrengths = @($strengthResp.value ?? @() | ForEach-Object {
+                @{
+                    Id                  = [string]$_.id
+                    DisplayName         = [string]$_.displayName
+                    PolicyType          = [string]($_.policyType ?? '')
+                    AllowedCombinations = @($_.allowedCombinations ?? @())
+                }
+            })
+        } catch {
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'AAD-AuthStrengths' -Message $_.Exception.Message
+            }
+        }
 
         $result.Success = $true
-        Register-NRGCoverage -Family 'AAD-CAPolicies' -Status 'Collected'
-    }
-    catch {
-        $result.Exceptions += $_.Exception.Message
-        Register-NRGException -Source 'AAD-CAPolicies' -Message $_.Exception.Message
-        Register-NRGCoverage -Family 'AAD-CAPolicies' -Status 'Failed' -Note $_.Exception.Message
+        if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
+            Register-NRGCoverage -Family 'AAD-CAPolicies' -Status 'Collected'
+        }
+
+    } catch {
+        if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+            Register-NRGException -Source 'AAD-CAPolicies' -Message $_.Exception.Message
+        }
+        if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
+            Register-NRGCoverage -Family 'AAD-CAPolicies' -Status 'Failed' -Note $_.Exception.Message
+        }
     }
 
-    Set-NRGRawData -Key 'AAD-CAPolicies' -Data $result
+    if (Get-Command Set-NRGRawData -ErrorAction SilentlyContinue) {
+        Set-NRGRawData -Key 'AAD-CAPolicies' -Data $result
+    }
     return $result
 }

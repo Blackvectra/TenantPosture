@@ -1,84 +1,52 @@
 #Requires -Version 7.0
 #
-# Publish-NRGAssessmentHTML.ps1
-# Client-deliverable HTML report — print-to-PDF ready, self-contained.
+# Publish-NRGAssessmentHTML.ps1  (v4.5.5)
+# Premium client-deliverable HTML report. Self-contained, print-to-PDF ready.
 #
-# Philosophy: A report is only useful if the client can act on it.
-# Every gap shows three things:
-#   WHAT  — the issue in plain language
-#   WHY   — the business risk if not fixed (from controls.json BusinessRisk)
-#   HOW   — specific steps to remediate with effort estimate and portal link
+# Sections: Header · Executive overview · Workload scorecards ·
+#           Framework compliance matrix · License gap analysis ·
+#           Priority actions · All findings by workload · Footer + CTA
 #
-# Sections:
-#   1. Executive Dashboard (score ring, category scores, narrative summary)
-#   2. Priority Actions (top critical/high gaps with business impact + fix)
-#   3. Findings by Category (What/Why/How expanded per finding)
-#   4. Remediation Roadmap (grouped by effort — project plan)
-#   5. Identity Inventory (users, MFA, admin roles, PIM)
-#   6. Configuration Inventory (DNS, EXO, CA Policies, Defender)
+# SECURITY: All tenant data passes through ConvertTo-NRGHtmlSafe.
+#           All URLs pass through ConvertTo-NRGSafeUrl.
+#           CSS color values validated against allowlist pattern.
+#           MITRE IDs validated against ^T\d{4}(\.\d{3})?$
+#           Fail-closed if security helpers not loaded.
 #
-# SECURITY HARDENING (v4.5.1):
-#   - Every dynamic value passes through ConvertTo-NRGHtmlSafe (full HtmlEncode)
-#   - Every URL passes through ConvertTo-NRGSafeUrl (scheme allowlist)
-#   - Content-Security-Policy meta tag (defense in depth)
-#   - Color values from branding.psd1 validated against CSS color pattern
-#
-# Author: Matthew Levorson, NRG Technology Services
+# Author: Matthew Levorson — NRG Technology Services
 #
 
 function Publish-NRGAssessmentHTML {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)] [hashtable]  $Metadata,
-        [Parameter(Mandatory)] [object[]]   $Findings,
+        [Parameter(Mandatory)] [hashtable] $Metadata,
+        [Parameter(Mandatory)] [object[]]  $Findings,
         [Parameter(Mandatory)] $Connections,
-        [Parameter(Mandatory)] [string]     $OutputPath,
+        [Parameter(Mandatory)]
+        [ValidateScript({
+            if ($_ -match '\.\.[\\\/]') { throw 'Path traversal not allowed in OutputPath.' }
+            if ($_ -match '[<>"|?*]')   { throw 'Invalid characters in OutputPath.' }
+            return $true
+        })]
+        [string] $OutputPath,
         [string] $ClientName = ''
     )
 
-    # ── Security helpers ──────────────────────────────────────────────────────
-    # Ensure ConvertTo-NRGHtmlSafe and ConvertTo-NRGSafeUrl are loaded.
-    # In the normal module load path these are imported by NRG-Assessment.psm1.
-    # If for any reason they're missing, fail closed — do not silently render
-    # unsanitized output.
     if (-not (Get-Command ConvertTo-NRGHtmlSafe -ErrorAction SilentlyContinue)) {
-        throw "Required security helper ConvertTo-NRGHtmlSafe is not loaded. Refusing to generate report."
+        throw 'ConvertTo-NRGHtmlSafe not loaded — refusing to generate report.'
     }
     if (-not (Get-Command ConvertTo-NRGSafeUrl -ErrorAction SilentlyContinue)) {
-        throw "Required security helper ConvertTo-NRGSafeUrl is not loaded. Refusing to generate report."
+        throw 'ConvertTo-NRGSafeUrl not loaded — refusing to generate report.'
     }
 
-    # Validate a value is a safe CSS color literal.
-    # Accepts: #rgb, #rrggbb, #rrggbbaa, named colors (alpha), rgb(...), rgba(...), hsl(...), hsla(...).
-    # Rejects: anything containing ; } { / * < > " ' or a newline.
-    function Test-NRGSafeCssColor {
-        param([string]$Value)
-        if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
-        if ($Value -match '[;{}<>"''/\*\n\r]') { return $false }
-        if ($Value -match '^#[0-9a-fA-F]{3,8}$') { return $true }
-        if ($Value -match '^[a-zA-Z]{3,20}$')   { return $true }
-        if ($Value -match '^(rgb|rgba|hsl|hsla)\([0-9,.\s%]+\)$') { return $true }
-        return $false
+    # ── Helpers ───────────────────────────────────────────────────────────────
+    function Test-SafeColor { param([string]$v)
+        if ([string]::IsNullOrWhiteSpace($v)) { return $false }
+        if ($v -match '[;{}<>"' + "'" + '/\*\n\r]') { return $false }
+        return ($v -match '^#[0-9a-fA-F]{3,8}$' -or $v -match '^[a-zA-Z]{3,20}$' -or
+                $v -match '^(rgb|rgba|hsl|hsla)\([0-9,.\s%]+\)$')
     }
-
-    function Get-NRGSafeColor {
-        param([string]$Value, [string]$Default)
-        if (Test-NRGSafeCssColor $Value) { return $Value }
-        return $Default
-    }
-
-    # ── Brand values — all validated or HTML-encoded ──────────────────────────
-    $brand     = $Metadata.Brand
-    $primary   = Get-NRGSafeColor $brand.PrimaryColor   '#1a3a6b'
-    $secondary = Get-NRGSafeColor $brand.SecondaryColor '#e87722'
-    $accent    = Get-NRGSafeColor $brand.AccentColor    '#4a7ba6'
-    $company   = if ($brand.CompanyName) { $brand.CompanyName } else { 'NRG Technology Services' }
-    $phone     = if ($brand.Phone)       { $brand.Phone }       else { '' }
-    $website   = if ($brand.Website)     { $brand.Website }     else { '' }
-    $logoUrl   = if ($brand.LogoUrl)     { $brand.LogoUrl }     else { '' }
-    $clientDisplay = if ($ClientName) { $ClientName } else { $Metadata.TenantDomain }
-
-    # Alias for brevity in template — same semantics as ConvertTo-NRGHtmlSafe
+    function sc { param([string]$v,[string]$d) if (Test-SafeColor $v) { return $v }; return $d }
     function hx { param([AllowNull()][AllowEmptyString()][object]$s) ConvertTo-NRGHtmlSafe $s }
 
     function sBadge { param([string]$s)
@@ -86,7 +54,7 @@ function Publish-NRGAssessmentHTML {
             'Satisfied'     { '<span class="b bp">&#10003; Pass</span>' }
             'Partial'       { '<span class="b bw">&#9679; Partial</span>' }
             'Gap'           { '<span class="b bg">&#10005; Gap</span>' }
-            'NotApplicable' { '<span class="b bn">&#8212; N/A</span>' }
+            'NotApplicable' { '<span class="b bn">&mdash; N/A</span>' }
             default         { "<span class=`"b`">$(hx $s)</span>" }
         }
     }
@@ -99,651 +67,709 @@ function Publish-NRGAssessmentHTML {
             default    { '<span class="sv svi">Info</span>' }
         }
     }
-
-    $ttpMap = @{
-        'AAD-1.1'='T1078,T1110.003';'AAD-1.2'='T1111,T1621';'AAD-2.1'='T1078,T1110'
-        'AAD-2.2'='T1078,T1110';'AAD-2.3'='T1621';'AAD-3.1'='T1078,T1110'
-        'AAD-3.2'='T1078,T1110.001';'AAD-4.1'='T1078.004';'AAD-4.2'='T1078.002'
-        'AAD-4.3'='T1078.004';'EXO-1.1'='T1114,T1114.002';'EXO-1.2'='T1078,T1114'
-        'EXO-2.1'='T1566.001';'EXO-2.2'='T1114,T1078';'EXO-2.3'='T1114,T1078'
-        'EXO-2.4'='T1213';'EXO-2.5'='T1078';'EXO-3.1'='T1078'
-        'DEF-1.1'='T1566.001';'DEF-1.2'='T1566.001,T1204.002';'DEF-1.3'='T1566.002,T1189'
-        'DNS-1.1'='T1566.001';'DNS-1.2'='T1566.001';'DNS-2.1'='T1557'
-        'DNS-2.2'='T1557';'DNS-2.3'='T1557,T1584.002'
+    function pct { param([int]$n,[int]$d) if ($d -gt 0) { [int]($n * 100 / $d) } else { 0 } }
+    function scoreColor { param([int]$s)
+        if ($s -ge 85) { '#059669' } elseif ($s -ge 65) { '#ca8a04' } elseif ($s -ge 40) { '#ea580c' } else { '#dc2626' }
     }
 
-    # Validates MITRE TTP IDs as Txxxx or Txxxx.xxx — refuse anything else.
-    function Test-NRGSafeMitreId {
-        param([string]$Id)
-        return ($Id -match '^T\d{4}(\.\d{3})?$')
+    # ── Brand (null-safe — brand object may not be present) ─────────────────
+    $brand = if ($Metadata -and $null -ne $Metadata['Brand'] -and $null -ne $Metadata['Brand']) { $Metadata['Brand'] } else { @{} }
+    $P  = sc ($brand['PrimaryColor'])   '#0f2544'
+    $S  = sc ($brand['SecondaryColor']) '#e8621a'
+    $A  = sc ($brand['AccentColor'])    '#3b7dd8'
+    $co = if ($brand['CompanyName']) { $brand['CompanyName'] } else { 'NRG Technology Services' }
+    $ph = if ($brand['Phone']) { $brand['Phone'] } else { '' }
+    $ws = if ($brand['Website']) { $brand['Website'] } else { 'nrgtechservices.com' }
+    $lu = if ($brand['LogoUrl']) { $brand['LogoUrl'] } else { '' }
+    $clientDisplay = if ($ClientName) { $ClientName } else { $Metadata.TenantDomain }
+
+    # ── Counts ────────────────────────────────────────────────────────────────
+    $sat  = @($Findings | Where-Object State -eq 'Satisfied').Count
+    $part = @($Findings | Where-Object State -eq 'Partial').Count
+    $gap  = @($Findings | Where-Object State -eq 'Gap').Count
+    $na   = @($Findings | Where-Object State -eq 'NotApplicable').Count
+    $scrd = $Findings.Count - $na
+    $sc2  = if ($scrd -gt 0) { [Math]::Round(100 * ($sat + 0.5 * $part) / $scrd) } else { 0 }
+    $pLbl = if ($sc2 -ge 85) {'Strong'} elseif ($sc2 -ge 65) {'Moderate'} elseif ($sc2 -ge 40) {'At Risk'} else {'Critical Risk'}
+    $pCol = scoreColor $sc2
+    $circ = 452.4
+    $off  = [Math]::Round($circ * (1 - $sc2 / 100), 2)
+    $crit = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'Critical' }).Count
+    $high = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'High' }).Count
+    $med  = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'Medium' }).Count
+    $low  = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'Low' }).Count
+
+    # ── Control definitions ───────────────────────────────────────────────────
+    $cdefs = @{}
+    try { foreach ($c in (Get-NRGControlDefinitions)) { $cdefs[$c.ControlId] = $c } } catch { }
+
+    # ── Inventory findings (named objects) ───────────────────────────────────
+    $invFindings = @($Findings | Where-Object {
+        $_.State -eq 'Gap' -and
+        $_.AffectedObjects -and @($_.AffectedObjects).Count -gt 0
+    })
+
+    # ── Workload scores ───────────────────────────────────────────────────────
+    $wlNames  = @{AAD='Identity';EXO='Email';DNS='DNS Auth';DEF='Defender';SPO='SharePoint';TMS='Teams';INT='Intune';PVW='Purview';PPL='Power Platform'}
+    $wlFull   = @{AAD='Identity & Access';EXO='Exchange Online';DNS='DNS Email Auth';DEF='Microsoft Defender';SPO='SharePoint / OneDrive';TMS='Microsoft Teams';INT='Intune & Endpoint';PVW='Purview / Compliance';PPL='Power Platform'}
+    $wlOrder  = @('AAD','EXO','DEF','DNS','SPO','TMS','INT','PVW','PPL')
+    $wlScores = @{}
+    $Findings | Group-Object { ($_.ControlId -replace '-.*$','') } | ForEach-Object {
+        $wl = $_.Name; $g = $_.Group
+        $ws2 = @($g | Where-Object State -eq 'Satisfied').Count
+        $wp  = @($g | Where-Object State -eq 'Partial').Count
+        $wn  = @($g | Where-Object State -eq 'NotApplicable').Count
+        $wd  = $g.Count - $wn
+        $wlScores[$wl] = @{
+            Score = if ($wd -gt 0) { [Math]::Round(100*($ws2+0.5*$wp)/$wd) } else { 0 }
+            Gaps  = @($g | Where-Object State -eq 'Gap').Count
+        }
     }
 
-    # Scoring
-    $sat   = @($Findings | Where-Object State -eq 'Satisfied').Count
-    $part  = @($Findings | Where-Object State -eq 'Partial').Count
-    $gap   = @($Findings | Where-Object State -eq 'Gap').Count
-    $na    = @($Findings | Where-Object State -eq 'NotApplicable').Count
-    $total = $Findings.Count
-    $scrd  = $total - $na
-    $score = if ($scrd -gt 0) { [Math]::Round(100 * ($sat + 0.5 * $part) / $scrd) } else { 0 }
-    $pLabel = if ($score -ge 85) { 'Strong' } elseif ($score -ge 65) { 'Moderate' } elseif ($score -ge 40) { 'Weak' } else { 'Critical Risk' }
-    $pColor = if ($score -ge 85) { '#059669' } elseif ($score -ge 65) { '#d97706' } elseif ($score -ge 40) { '#ea580c' } else { '#dc2626' }
-    $circ   = 452.4
-    $offset = [Math]::Round($circ * (1 - $score / 100), 2)
+    # ── Framework scores ──────────────────────────────────────────────────────
+    $fwScores = @{}
+    foreach ($fw in @('CIS','SCuBA','NIST','CMMC')) {
+        $ff = @($Findings | Where-Object {
+            $_.FrameworkIds -and ($_.FrameworkIds | Where-Object { $_ -match "^$fw" })
+        })
+        $fd = @($ff | Where-Object State -ne 'NotApplicable').Count
+        $fs = @($ff | Where-Object State -eq 'Satisfied').Count
+        $fp = @($ff | Where-Object State -eq 'Partial').Count
+        $fwScores[$fw] = if ($fd -gt 0) { [Math]::Round(100*($fs+0.5*$fp)/$fd) } else { 0 }
+    }
 
-    $critCount = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'Critical' }).Count
-    $highCount = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'High' }).Count
-    $narrativeSentence = if ($critCount -gt 0) {
-        "This assessment identified <strong>$critCount critical</strong> and <strong>$highCount high-severity</strong> gaps requiring immediate attention."
-    } elseif ($highCount -gt 0) {
-        "No critical gaps identified. This assessment found <strong>$highCount high-severity</strong> gaps to address in the near term."
+    # ── License groups ────────────────────────────────────────────────────────
+    $licGroups = @{}
+    foreach ($f in ($Findings | Where-Object State -eq 'Gap')) {
+        $ctrl = $cdefs[$f.ControlId]
+        if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') {
+            $lic = $ctrl.LicenseRequirement
+            if (-not $licGroups.ContainsKey($lic)) { $licGroups[$lic] = 0 }
+            $licGroups[$lic]++
+        }
+    }
+    $totalBlocked = ($licGroups.Values | Measure-Object -Sum).Sum
+
+    # ── Logo ──────────────────────────────────────────────────────────────────
+    $ls = ''
+    if ($lu) {
+        if ($lu -match '^data:image/(png|jpe?g|svg\+xml|webp);base64,[A-Za-z0-9+/=]+$') { $ls = $lu } else { $ls = ConvertTo-NRGSafeUrl $lu }
+    }
+    $logoH = if ($ls) { "<img src='$ls' alt='$(hx $co)' class='logo'>" } else { "<span class='logo-t'>$(hx $co)</span>" }
+
+    # ── Narrative ─────────────────────────────────────────────────────────────
+    $narr = if ($crit -gt 0) {
+        "Assessment identified <strong style='color:#dc2626'>$crit critical</strong> and <strong style='color:#ea580c'>$high high-severity</strong> gaps requiring immediate action."
+    } elseif ($high -gt 0) {
+        "No critical gaps. Assessment identified <strong style='color:#ea580c'>$high high-severity</strong> gaps to address in the near term."
     } elseif ($gap -gt 0) {
-        "No critical or high-severity gaps identified. There are <strong>$gap medium or low-severity</strong> gaps to work through."
-    } else { "No gaps identified. The environment meets all assessed controls." }
+        "No critical or high-severity gaps. <strong>$gap medium/low severity</strong> items to resolve."
+    } else { 'All assessed controls are satisfied. No gaps identified.' }
 
-    # Category scores
-    $cScores = @{}
-    $Findings | Group-Object Category | ForEach-Object {
-        $cS = @($_.Group | Where-Object State -eq 'Satisfied').Count
-        $cP = @($_.Group | Where-Object State -eq 'Partial').Count
-        $cN = @($_.Group | Where-Object State -eq 'NotApplicable').Count
-        $cD = $_.Group.Count - $cN
-        $cScores[$_.Name] = if ($cD -gt 0) { [Math]::Round(100 * ($cS + 0.5 * $cP) / $cD) } else { 0 }
-    }
-    function catBar { param([string]$label,[string]$key)
-        $s = if ($cScores.ContainsKey($key)) { $cScores[$key] } else { return '' }
-        $c = if ($s -ge 85) { '#059669' } elseif ($s -ge 65) { '#d97706' } elseif ($s -ge 40) { '#ea580c' } else { '#dc2626' }
-        $labelEnc = hx $label
-        "<div class=`"cbar`"><div class=`"cbar-hd`"><span class=`"cbar-lbl`">$labelEnc</span><span class=`"cbar-num`" style=`"color:$c`">$s</span></div><div class=`"cbar-track`"><div class=`"cbar-fill`" style=`"width:${s}%;background:$c`"></div></div></div>"
-    }
-    $wGap  = if ($scrd -gt 0) { [Math]::Round(100 * $gap  / $scrd) } else { 0 }
-    $wPart = if ($scrd -gt 0) { [Math]::Round(100 * $part / $scrd) } else { 0 }
-    $wSat  = if ($scrd -gt 0) { [Math]::Round(100 * $sat  / $scrd) } else { 0 }
-    $wNA   = if ($total -gt 0) { [Math]::Round(100 * $na  / $total) } else { 0 }
+    # ── Secure Score (TODO: wire ss-ring widget into HTML body) ────────────
 
-    $allCatBars = ''
-    foreach ($cn in ($cScores.Keys | Sort-Object)) { $allCatBars += catBar $cn $cn }
-
-    # Connections
+    # ── Connections ───────────────────────────────────────────────────────────
+    $svcMap = @{Graph='Microsoft Graph';EXO='Exchange Online';IPPSSession='Purview/Compliance';Teams='Microsoft Teams';SharePoint='SharePoint Online'}
     $connHtml = ''
-    $svcLabels = @{ Graph='Microsoft Graph'; EXO='Exchange Online'; IPPSSession='Purview / Compliance'; Teams='Microsoft Teams'; SharePoint='SharePoint Online' }
     foreach ($svc in @('Graph','EXO','IPPSSession','Teams','SharePoint')) {
         $ok  = if ($Connections -is [hashtable]) { $Connections.ContainsKey($svc) -and $Connections[$svc] -eq $true } else { $Connections.$svc -eq $true }
         $cls = if ($ok) { 'cok' } else { 'coff' }
         $ico = if ($ok) { '&#10003;' } else { '&#10005;' }
-        $lbl = hx (if ($svcLabels.ContainsKey($svc)) { $svcLabels[$svc] } else { $svc })
-        $connHtml += "<div class=`"conn $cls`"><span>$ico</span><span>$lbl</span></div>"
+        $connHtml += "<div class='conn $cls'><span>$ico</span><span>$(hx $svcMap[$svc])</span></div>"
     }
 
-    # Priority actions
-    $topGaps  = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -in @('Critical','High') } |
-                  Sort-Object @{Expression={ switch ($_.Severity) { 'Critical' { 0 }; 'High' { 1 }; default { 2 } } }} | Select-Object -First 5)
+    # ── Workload scorecard HTML ───────────────────────────────────────────────
+    $wlGrid = ''
+    foreach ($wl in $wlOrder) {
+        if (-not $wlScores.ContainsKey($wl)) { continue }
+        $ws3  = $wlScores[$wl].Score
+        $gps  = $wlScores[$wl].Gaps
+        $lbl  = hx $(if ($wlNames[$wl]) { $wlNames[$wl] } else { $wl })
+        $col  = scoreColor $ws3
+        $ring = [Math]::Round(100.5 * (1 - $ws3/100), 2)
+        $gapTxt = if ($gps -gt 0) { "<div class='wl-gap'>$gps gap$(if($gps -ne 1){'s'})</div>" } else { "<div class='wl-ok'>&#10003; Clean</div>" }
+        $wlGrid += @"
+<div class='wl-card'>
+  <svg width='54' height='54' viewBox='0 0 36 36'>
+    <circle cx='18' cy='18' r='16' fill='none' stroke='#e8edf5' stroke-width='3.5'/>
+    <circle cx='18' cy='18' r='16' fill='none' stroke='$col' stroke-width='3.5' stroke-linecap='round'
+      stroke-dasharray='100.5' stroke-dashoffset='$ring' transform='rotate(-90 18 18)'
+      style='transition:stroke-dashoffset 1.2s ease .3s'/>
+  </svg>
+  <div class='wl-info'><div class='wl-name'>$lbl</div><div class='wl-score' style='color:$col'>$ws3<span class='wl-den'>/100</span></div>$gapTxt</div>
+</div>
+"@
+    }
+
+    # ── Framework matrix HTML ────────────────────────────────────────────────
+    $fwMeta = @{
+        CIS   = @{Full='CIS M365 Foundations v6.0.1'; Bg='#1e40af'}
+        SCuBA = @{Full='CISA SCuBA v1.7.1';            Bg='#0c4a6e'}
+        NIST  = @{Full='NIST SP 800-53 Rev 5';         Bg='#4c1d95'}
+        CMMC  = @{Full='CMMC 2.0 Level 2';             Bg='#134e4a'}
+    }
+    $fwHtml = ''
+    foreach ($fw in @('CIS','SCuBA','NIST','CMMC')) {
+        $fsc = $fwScores[$fw]; $col = scoreColor $fsc
+        $fwHtml += "<div class='fw-card'><div class='fw-hd' style='background:$($fwMeta[$fw].Bg)'>$(hx $fw)</div><div class='fw-body'><div class='fw-sc' style='color:$col'>$fsc<span class='fw-den'>%</span></div><div class='fw-name'>$(hx $fwMeta[$fw].Full)</div></div></div>"
+    }
+
+    # ── License card HTML ────────────────────────────────────────────────────
+    $licCard = ''
+    if ($licGroups.Count -gt 0) {
+        $licRows = ($licGroups.GetEnumerator() | Sort-Object Name | ForEach-Object {
+            "<div class='lic-row'><div class='lic-tier'>$(hx $_.Key)</div><div class='lic-cnt'>$($_.Value) control$(if($_.Value -ne 1){'s'}) blocked</div></div>"
+        }) -join ''
+        $licCard = @"
+<div class='card mt' id='licensing'>
+  <div class='card-hd'>
+    <div><div class='card-label'>License Gap Analysis</div><div class='card-sub'>Gaps that require a license upgrade to remediate</div></div>
+    <div class='lic-badge'>$totalBlocked blocked</div>
+  </div>
+  <div class='lic-body'>
+    <div class='lic-alert'><span class='lic-ico'>&#9888;</span><div>Upgrading to <strong>Microsoft 365 Business Premium</strong> resolves the majority of these gaps — including Safe Attachments, Safe Links, Conditional Access with device compliance, and Intune endpoint management. These are the controls most directly blocking ransomware and BEC attacks. Contact NRG for a licensing proposal.</div></div>
+    <div class='lic-rows'>$licRows</div>
+  </div>
+</div>
+"@
+    }
+
+    # ── Priority actions HTML ────────────────────────────────────────────────
+    $topGaps = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -in @('Critical','High') } |
+        Sort-Object @{Expression={ if($_.Severity -eq 'Critical'){0}else{1} }},ControlId | Select-Object -First 8)
     $actsHtml = ''
     $n = 1
     foreach ($g in $topGaps) {
-        $ctrl   = Get-NRGControlById -ControlId $g.ControlId
-        $bRisk  = if ($ctrl -and $ctrl.BusinessRisk) { hx $ctrl.BusinessRisk } else { hx $g.Detail }
-        $rem    = hx $g.Remediation
-        $title  = hx $g.Title
-        $cls    = if ($g.Severity -eq 'Critical') { 'ac' } else { 'ah' }
-        $svCls  = if ($g.Severity -eq 'Critical') { 'svc' } else { 'svh' }
-        $effort = if ($ctrl -and $ctrl.EffortLevel) { hx $ctrl.EffortLevel } else { '' }
-        $sev    = hx $g.Severity
-        $riskDiv = if ($bRisk) { "<div class=`"act-risk`"><span class=`"act-risk-lbl`">Why it matters</span>$bRisk</div>" } else { '' }
-        $remDiv  = if ($rem)   { "<div class=`"act-rem`"><span class=`"act-rem-lbl`">How to fix it</span>$rem</div>" } else { '' }
-        $efSpan  = if ($effort) { "<span class=`"act-effort`">$effort</span>" } else { '' }
-        $actsHtml += "<div class=`"act $cls`"><div class=`"act-num`"><span class=`"act-n`">$n</span><span class=`"sv $svCls`" style=`"margin-top:4px`">$sev</span>$efSpan</div><div class=`"act-body`"><div class=`"act-t`">$title</div>$riskDiv$remDiv</div></div>"
+        $ctrl  = $cdefs[$g.ControlId]
+        $bRisk = if ($ctrl -and $ctrl.BusinessRisk) { hx $ctrl.BusinessRisk } else { hx $g.Detail }
+        $rem   = if ($ctrl -and $ctrl.Remediation)  { hx $ctrl.Remediation  } else { hx $g.Remediation }
+        $lic   = if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') {
+            "<div class='act-lic'>&#128273; Requires: $(hx $ctrl.LicenseRequirement)</div>"
+        } else { '' }
+        $cls   = if ($g.Severity -eq 'Critical') { 'ac' } else { 'ah' }
+        $scls  = if ($g.Severity -eq 'Critical') { 'svc' } else { 'svh' }
+        $actsHtml += @"
+<div class='act $cls'>
+  <div class='act-num'><div class='act-n'>$n</div><div class='act-cid'>$(hx $g.ControlId)</div><span class='sv $scls'>$(hx $g.Severity)</span></div>
+  <div class='act-body'>
+    <div class='act-t'>$(hx $g.Title)</div>
+    $(if ($bRisk) { "<div class='act-risk'><span class='act-lbl rl'>&#9888; Why it matters</span>$bRisk</div>" })
+    $(if ($rem)   { "<div class='act-rem'><span class='act-lbl bl'>&#9654; How to fix it</span>$rem</div>" })
+    $lic
+  </div>
+</div>
+"@
         $n++
     }
 
-    # Findings
+    # ── Findings by workload HTML ─────────────────────────────────────────────
     $findHtml = ''
-    foreach ($cat in ($Findings | Group-Object Category | Sort-Object Name)) {
+    $Findings | Group-Object { ($_.ControlId -replace '-.*$','') } | Sort-Object {
+        $idx = [array]::IndexOf($wlOrder, $_.Name); if ($idx -lt 0) { 99 } else { $idx }
+    } | ForEach-Object {
+        $wl  = $_.Name; $grp = $_.Group
+        $wlL = hx $(if ($wlFull[$wl]) { $wlFull[$wl] } else { $wl })
+        $wsc = if ($wlScores[$wl]) { $wlScores[$wl].Score } else { 0 }
+        $wgp = if ($wlScores[$wl]) { $wlScores[$wl].Gaps  } else { 0 }
+        $wc  = scoreColor $wsc
+        $gBadge = if ($wgp -gt 0) { "<span class='wl-gbadge'>$wgp gap$(if($wgp -ne 1){'s'})</span>" } else { '' }
+
         $rows = ''
-        foreach ($f in ($cat.Group | Sort-Object @{Expression={ switch ($_.State) { 'Gap' { 0 }; 'Partial' { 1 }; 'Satisfied' { 2 }; 'NotApplicable' { 3 } } }}, @{Expression='Title'})) {
-            $rc    = switch ($f.State) { 'Gap' { 'rg' }; 'Partial' { 'rw' }; 'Satisfied' { 'rp' }; 'NotApplicable' { 'rn' } }
+        foreach ($f in ($grp | Sort-Object @{Expression={
+            switch ($_.State) {'Gap'{0};'Partial'{1};'Satisfied'{2};'NotApplicable'{3}}
+        }}, ControlId)) {
+            $rc    = switch ($f.State) {'Gap'{'rg'};'Partial'{'rw'};'Satisfied'{'rp'};'NotApplicable'{'rn'}}
             $t     = hx $f.Title
             $d     = hx $f.Detail
-            $rem   = hx $f.Remediation
-            $rlSafe = ConvertTo-NRGSafeUrl $f.RemediationLink
-            $cv    = hx $f.CurrentValue
-            $rv    = hx $f.RequiredValue
-            $ctrl  = Get-NRGControlById -ControlId $f.ControlId
-            $bRisk = if ($ctrl -and $ctrl.BusinessRisk) { hx $ctrl.BusinessRisk } else { '' }
-            $effort = if ($ctrl -and $ctrl.EffortLevel) { hx $ctrl.EffortLevel } else { '' }
-            $ttpList = if ($ttpMap.ContainsKey($f.ControlId)) { ($ttpMap[$f.ControlId] -split ',') } else { @() }
+            $ctrl2 = $cdefs[$f.ControlId]
+            $rem2  = if ($ctrl2 -and $ctrl2.Remediation) { hx $ctrl2.Remediation } else { hx $f.Remediation }
+            $bRisk2= if ($ctrl2 -and $ctrl2.BusinessRisk) { hx $ctrl2.BusinessRisk } else { '' }
+            $cv2   = hx $f.CurrentValue
+            $rv2   = hx $f.RequiredValue
+            $lic2  = if ($ctrl2 -and $ctrl2.LicenseRequirement -and $ctrl2.LicenseRequirement -notmatch '^Included') {
+                "<div class='ex-lic'>&#128273; $(hx $ctrl2.LicenseRequirement)</div>"
+            } else { '' }
+            $fwTags2 = ''
+            if ($f.FrameworkIds -and @($f.FrameworkIds).Count -gt 0) {
+                $fwTags2 = "<div class='ex-fw'>" + (($f.FrameworkIds | ForEach-Object { "<span class='fw-tag'>$(hx $_)</span>" }) -join '') + "</div>"
+            }
 
             $exHtml = ''
-            if ($f.State -in @('Gap','Partial') -and ($d -or $bRisk -or $rem)) {
-                $whatBlock = ''
-                if ($d) {
-                    $cvLine = ''
-                    if ($cv -and $rv) { $cvLine = "<div class=`"ex-cv`"><span class=`"ex-cvl`">Current:</span> $cv &rarr; <span class=`"ex-cvl`">Required:</span> $rv</div>" }
-                    elseif ($cv)      { $cvLine = "<div class=`"ex-cv`"><span class=`"ex-cvl`">Current:</span> $cv</div>" }
-                    $whatBlock = "<div class=`"ex-block`"><div class=`"ex-block-lbl what-lbl`">What the issue is</div><div class=`"ex-block-body`">$d$cvLine</div></div>"
-                }
-                $whyBlock = ''
-                if ($bRisk) { $whyBlock = "<div class=`"ex-block`"><div class=`"ex-block-lbl why-lbl`">Why it matters</div><div class=`"ex-block-body`">$bRisk</div></div>" }
-                $howBlock = ''
-                if ($rem) {
-                    $lnk = if ($rlSafe) { " <a href=`"$rlSafe`" target=`"_blank`" rel=`"noopener noreferrer`" class=`"ex-lnk`">&#8599; Open portal</a>" } else { '' }
-                    $efSpan2 = if ($effort) { "<span class=`"effort-tag`">$effort</span>" } else { '' }
-                    $ttpHtml = ''
-                    if ($ttpList.Count -gt 0) {
-                        $ttpTags = ($ttpList | ForEach-Object {
-                            $t2 = $_.Trim()
-                            # Validate TTP ID format before constructing URL — reject anything not Txxxx[.xxx]
-                            if (Test-NRGSafeMitreId $t2) {
-                                $t2Url  = $t2 -replace '\.','/'
-                                $t2Enc  = hx $t2
-                                "<a href=`"https://attack.mitre.org/techniques/$t2Url`" target=`"_blank`" rel=`"noopener noreferrer`" class=`"ttp-tag`">$t2Enc</a>"
-                            }
-                        }) -join ''
-                        if ($ttpTags) { $ttpHtml = "<div class=`"ex-ttp`">$ttpTags</div>" }
-                    }
-                    $fwHtml = ''
-                    if ($f.FrameworkIds -and $f.FrameworkIds.Count -gt 0) {
-                        $fwTags = ($f.FrameworkIds | ForEach-Object { "<span class=`"fw-tag`">$(hx $_)</span>" }) -join ''
-                        $fwHtml = "<div class=`"ex-fw`">$fwTags</div>"
-                    }
-                    $howBlock = "<div class=`"ex-block`"><div class=`"ex-block-lbl how-lbl`">How to fix it</div><div class=`"ex-block-body`">$rem$lnk $efSpan2$ttpHtml$fwHtml</div></div>"
-                }
-                $exHtml = "<tr class=`"extr`"><td colspan=`"3`"><div class=`"exbody`">$whatBlock$whyBlock$howBlock</div></td></tr>"
+            if ($f.State -in @('Gap','Partial') -and ($d -or $bRisk2 -or $rem2)) {
+                $cvLine2 = if ($cv2 -and $rv2) { "<div class='ex-cv'><span class='ex-cvl'>Current:</span> $cv2 &rarr; <span class='ex-cvl'>Required:</span> $rv2</div>" } elseif ($cv2) { "<div class='ex-cv'><span class='ex-cvl'>Current:</span> $cv2</div>" } else { '' }
+                $wb = if ($d)     { "<div class='ex-block'><div class='ex-lbl wlbl'>What the issue is</div><div class='ex-bd'>$d$cvLine2</div></div>" } else { '' }
+                $yb = if ($bRisk2){ "<div class='ex-block'><div class='ex-lbl ylbl'>Why it matters</div><div class='ex-bd'>$bRisk2</div></div>" }   else { '' }
+                $hb = if ($rem2)  { "<div class='ex-block'><div class='ex-lbl hlbl'>How to fix it</div><div class='ex-bd'>$rem2$lic2$fwTags2</div></div>" } else { '' }
+                $exHtml = "<tr class='extr'><td colspan='3'><div class='exbody'>$wb$yb$hb</div></td></tr>"
             }
 
-            $hasEx     = $exHtml -ne ''
-            $clickAttr = if ($hasEx) { "class=`"fr $rc exp`" onclick=`"toggle(this)`"" } else { "class=`"fr $rc`"" }
-            $cvHint    = if ($cv -and $f.State -in @('Gap','Partial')) {
-                # Truncate the ENCODED value, not the raw — but truncation on encoded
-                # could split an entity. Truncate raw first, then encode.
-                $rawCv = [string]$f.CurrentValue
-                $short = if ($rawCv.Length -gt 65) { $rawCv.Substring(0,62)+'...' } else { $rawCv }
-                "<div class=`"f-cv`">$(hx $short)</div>"
-            } else { '' }
-            $dPreview  = if ($d -and $f.State -in @('Gap','Partial')) {
-                $rawD = [string]$f.Detail
-                $short = if ($rawD.Length -gt 100) { $rawD.Substring(0,97)+'...' } else { $rawD }
-                hx $short
-            } elseif ($f.State -eq 'Satisfied' -and $cv) { $cv } else { '' }
-            $moreIco   = if ($hasEx) { '<span class="more-ico">&#9654;</span>' } else { '' }
+            $hasEx = $exHtml -ne ''
+            $mico  = if ($hasEx) { '<span class="mico">&#9654;</span>' } else { '' }
+            $ca    = if ($hasEx) { "class='fr $rc exp' onclick='toggle(this)'" } else { "class='fr $rc'" }
+            $prev  = if ($d -and $f.State -in @('Gap','Partial')) {
+                $s2 = [string]$f.Detail; if ($s2.Length -gt 110) { hx($s2.Substring(0,107)) + '&hellip;' } else { $d }
+            } elseif ($f.State -eq 'Satisfied' -and $f.CurrentValue) { $cv2 } else { '' }
 
-            $rows += "<tr $clickAttr><td class=`"td1`">$(sBadge $f.State)$(svBadge $f.Severity)</td><td class=`"td3`"><div class=`"f-title`">$t $moreIco</div>$cvHint</td><td class=`"td4`">$dPreview</td></tr>$exHtml"
+            $rows += "<tr $ca><td class='td1'>$(sBadge $f.State)$(svBadge $f.Severity)</td><td class='td3'><div class='ftitle'>$t $mico</div>$(if($cv2 -and $f.State -in @('Gap','Partial')){"<div class='fcv'>$cv2</div>"})</td><td class='td4'>$prev</td></tr>$exHtml"
         }
 
-        $cKey    = hx $cat.Name
-        $cScore  = if ($cScores.ContainsKey($cat.Name)) { $cScores[$cat.Name] } else { 0 }
-        $cColor  = if ($cScore -ge 85) { '#059669' } elseif ($cScore -ge 65) { '#d97706' } elseif ($cScore -ge 40) { '#ea580c' } else { '#dc2626' }
-        $cg      = @($cat.Group | Where-Object State -eq 'Gap').Count
-        $cp2     = @($cat.Group | Where-Object State -eq 'Partial').Count
-        $cSummary = ''
-        $parts2 = @()
-        if ($cg  -gt 0) { $parts2 += "<span style=`"color:var(--gap);font-weight:700`">$cg gap$(if($cg -gt 1){'s'})</span>" }
-        if ($cp2 -gt 0) { $parts2 += "<span style=`"color:var(--warn);font-weight:700`">$cp2 partial$(if($cp2 -gt 1){'s'})</span>" }
-        if ($parts2.Count -gt 0) { $cSummary = " &nbsp;&mdash;&nbsp; " + ($parts2 -join ', ') }
-
-        $findHtml += "<div class=`"card mt`"><div class=`"card-hd`"><span><span class=`"card-title`">$cKey</span>$cSummary</span><span class=`"cat-pill`" style=`"background:${cColor}18;color:$cColor;border-color:${cColor}3a`">$cScore / 100</span></div><table class=`"ft`"><thead><tr class=`"fth`"><th style=`"width:142px`">Status</th><th>Control</th><th>Summary</th></tr></thead><tbody>$rows</tbody></table></div>"
+        $findHtml += @"
+<div class='card mt' id='wl-$wl'>
+  <div class='card-hd'>
+    <div class='card-hdl'><span class='card-label'>$wlL</span>$gBadge</div>
+    <div class='wsc-pill' style='color:$wc;border-color:${wc}40;background:${wc}0e'>$wsc / 100</div>
+  </div>
+  <table class='ft'><thead><tr class='fth'><th style='width:148px'>Status</th><th>Control</th><th>Summary</th></tr></thead><tbody>$rows</tbody></table>
+</div>
+"@
     }
 
-    # Roadmap
-    $roadmapHtml = ''
-    $actionable  = @($Findings | Where-Object { $_.State -in @('Gap','Partial') -and $_.Remediation })
-    if ($actionable.Count -gt 0) {
-        $groups = [ordered]@{ 'Quick Win (< 30 min)'=@(); 'Standard (1-4 hrs)'=@(); 'Strategic (planning required)'=@() }
-        foreach ($f in ($actionable | Sort-Object @{Expression={ switch ($_.Severity) { 'Critical' { 0 }; 'High' { 1 }; 'Medium' { 2 }; default { 3 } } }})) {
-            $ctrl2  = Get-NRGControlById -ControlId $f.ControlId
-            $effort = if ($ctrl2 -and $ctrl2.EffortLevel) { $ctrl2.EffortLevel } else { 'Standard (1-4 hrs)' }
-            if ($groups.Contains($effort)) { $groups[$effort] += $f } else { $groups['Standard (1-4 hrs)'] += $f }
+    # ── Named inventory findings section ─────────────────────────────────────
+    $namedHtml = ''
+    if ($invFindings.Count -gt 0) {
+        $cards = ''
+        foreach ($nf in $invFindings) {
+            $ctrl3 = $cdefs[$nf.ControlId]
+            $aoItems = @($nf.AffectedObjects)
+            $aoRows  = ($aoItems | Select-Object -First 15 | ForEach-Object {
+                "<tr><td>$(hx $_)</td></tr>"
+            }) -join ''
+            $moreNote = if ($aoItems.Count -gt 15) { "<tr><td style='color:var(--mut);font-style:italic;padding:6px 10px'>...and $($aoItems.Count - 15) more. Full list in remediation script.</td></tr>" } else { '' }
+            $bRisk3 = if ($ctrl3 -and $ctrl3.BusinessRisk) { hx $ctrl3.BusinessRisk } else { hx $nf.Detail }
+            $svcls3 = switch ($nf.Severity) { 'Critical' {'svc'} 'High' {'svh'} 'Medium' {'svm'} default {'svl'} }
+            $cards += @"
+<div class='named-card'>
+  <div class='named-hd'>
+    <div>
+      <div class='named-t'>$(hx $nf.Title) <span class='sv $svcls3'>$(hx $nf.Severity)</span> <span class='ao-count'>$($aoItems.Count) affected</span></div>
+      <div class='named-sub'>$bRisk3</div>
+    </div>
+    <div style='font-size:.7rem;color:var(--mut);text-align:right'>$(hx $nf.ControlId)</div>
+  </div>
+  <div class='named-body'>
+    <table class='ao-table'><thead><tr><th>Name / Identifier</th></tr></thead>
+    <tbody>$aoRows$moreNote</tbody></table>
+  </div>
+</div>
+"@
         }
-        $rmRows = ''
-        foreach ($grpKey in $groups.Keys) {
-            $items  = $groups[$grpKey]
-            if ($items.Count -eq 0) { continue }
-            $efCls  = switch -Wildcard ($grpKey) { '*30 min*' { 'efq' }; '*1-4*' { 'efs' }; default { 'efx' } }
-            $efIco  = switch -Wildcard ($grpKey) { '*30 min*' { '&#9889;' }; '*1-4*' { '&#9200;' }; default { '&#9881;' } }
-            $rmRows += "<div class=`"rmg`"><div class=`"rmgl $efCls`">$efIco $(hx $grpKey) <span class=`"rm-cnt`">($($items.Count) item$(if($items.Count -gt 1){'s'}))</span></div>"
-            foreach ($f in $items) {
-                $ctrl3  = Get-NRGControlById -ControlId $f.ControlId
-                $bRisk3 = if ($ctrl3 -and $ctrl3.BusinessRisk) { hx $ctrl3.BusinessRisk } else { hx $f.Detail }
-                $rc3    = if ($f.State -eq 'Gap') { 'rmg-gap' } else { 'rmg-warn' }
-                $rl3Safe = ConvertTo-NRGSafeUrl $f.RemediationLink
-                $lnk3   = if ($rl3Safe) { " <a href=`"$rl3Safe`" target=`"_blank`" rel=`"noopener noreferrer`" class=`"ex-lnk`">&#8599; Portal</a>" } else { '' }
-                $whyDiv3 = if ($bRisk3) { "<div class=`"rmi-why`">$bRisk3</div>" } else { '' }
-                $rmRows  += "<div class=`"rmi $rc3`"><div class=`"rmi-hd`">$(svBadge $f.Severity) <span class=`"rmi-t`">$(hx $f.Title)</span></div>$whyDiv3<div class=`"rmi-r`">$(hx $f.Remediation)$lnk3</div></div>"
-            }
-            $rmRows += "</div>"
-        }
-        $roadmapHtml = "<div class=`"card mt`"><div class=`"card-hd`"><span class=`"card-title`">Remediation Roadmap</span><span style=`"font-size:.72rem;color:var(--mut)`">Sorted by effort, then severity</span></div><div class=`"rm-wrap`">$rmRows</div></div>"
+        $namedHtml = "<div class='card mt named-section' id='named'><div class='card-hd'><div><div class='card-label'>Named Findings</div><div class='card-sub'>Specific users, mailboxes, and applications requiring action</div></div><div style='font-size:.73rem;font-weight:700;color:var(--gap)'>$($invFindings.Count) items with named objects</div></div><div style='padding:14px 20px;display:flex;flex-direction:column;gap:0'>$cards</div></div>"
     }
 
-    # Identity
-    $identityHtml = ''
-    $userRaw  = Get-NRGRawData -Key 'AAD-Users'
-    $rolesRaw = Get-NRGRawData -Key 'AAD-Roles'
-    $pimRaw   = Get-NRGRawData -Key 'AAD-PIM'
-    if ($userRaw -and $userRaw.Success) {
-        $allUsers       = @($userRaw.Data['Users'])
-        $mfaReg         = @($userRaw.Data['MFARegistration'])
-        $memberUsers    = @($allUsers | Where-Object { $_.UserType -ne 'Guest' })
-        $enabledMembers = @($memberUsers | Where-Object { $_.AccountEnabled -eq $true })
-        $guestUsers     = @($allUsers | Where-Object { $_.UserType -eq 'Guest' })
-        $licensedUsers  = @($allUsers | Where-Object { $_.AssignedLicenses -and $_.AssignedLicenses.Count -gt 0 })
-        $syncedUsers    = @($allUsers | Where-Object { $_.OnPremisesSyncEnabled -eq $true })
-        $enabledUPNs    = @($enabledMembers | Select-Object -ExpandProperty UserPrincipalName)
-        $mfaFiltered    = @($mfaReg | Where-Object { $_.UserPrincipalName -in $enabledUPNs -or $_.Id -in $enabledUPNs })
-        if ($mfaFiltered.Count -eq 0) { $mfaFiltered = @($mfaReg) }
-        $mfaRegistered  = @($mfaFiltered | Where-Object { $_.IsMfaRegistered -eq $true }).Count
-        $mfaTotal       = $mfaFiltered.Count; if ($mfaTotal -eq 0) { $mfaTotal = $enabledMembers.Count }
-        $mfaPct         = if ($mfaTotal -gt 0) { [Math]::Round(100 * $mfaRegistered / $mfaTotal) } else { 0 }
-        $mfaColor       = if ($mfaPct -ge 95) { '#059669' } elseif ($mfaPct -ge 80) { '#d97706' } else { '#dc2626' }
-        $mfaNotReg      = $mfaTotal - $mfaRegistered
-        $mfaNote        = if ($mfaPct -lt 95) { "<br><span style=`"color:#dc2626;font-weight:700`">$mfaNotReg user$(if($mfaNotReg -gt 1){'s'}) without MFA registered.</span> Do not enforce an MFA Conditional Access policy until registration reaches 95%+ &mdash; it will lock out unregistered users." } else { '' }
+    # ── Best practices & roadmap ──────────────────────────────────────────────
+    $phase1Items = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -in @('Critical','High') } |
+        Sort-Object @{Expression={ if($_.Severity -eq 'Critical'){0}else{1} }},ControlId | Select-Object -First 6)
+    $phase2Items = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'Medium' } |
+        Select-Object -First 5)
+    $phase3Items = @($Findings | Where-Object { $_.State -in @('Gap','Partial') -and $_.Severity -eq 'Low' } |
+        Select-Object -First 5)
 
-        $statCardsHtml = "<div class=`"user-stats`"><div class=`"ustat`"><div class=`"ustat-n`">$($allUsers.Count)</div><div class=`"ustat-l`">Total Accounts</div></div><div class=`"ustat`"><div class=`"ustat-n`">$($enabledMembers.Count)</div><div class=`"ustat-l`">Enabled Members</div></div><div class=`"ustat`"><div class=`"ustat-n`">$($guestUsers.Count)</div><div class=`"ustat-l`">Guest Users</div></div><div class=`"ustat`"><div class=`"ustat-n`">$($licensedUsers.Count)</div><div class=`"ustat-l`">Licensed Users</div></div><div class=`"ustat`"><div class=`"ustat-n`">$($syncedUsers.Count)</div><div class=`"ustat-l`">On-prem Synced</div></div></div>"
-        $mfaBarHtml     = "<div class=`"mfa-section`"><div class=`"mfa-header`"><span class=`"mfa-title`">MFA Registration</span><span class=`"mfa-pct`" style=`"color:$mfaColor`">$mfaPct%</span></div><div class=`"mfa-track`"><div class=`"mfa-fill`" style=`"width:${mfaPct}%;background:$mfaColor`"></div></div><div class=`"mfa-detail`">$mfaRegistered of $mfaTotal enabled member accounts have MFA registered.$mfaNote</div></div>"
-
-        $adminRowsHtml = ''
-        if ($rolesRaw -and $rolesRaw.Success) {
-            $assignments = @($rolesRaw.Data['PermanentAssignments'])
-            $defs        = @($rolesRaw.Data['RoleDefinitions'])
-            $roleNameMap = @{}
-            foreach ($def in $defs) { if ($def.Id) { $roleNameMap[$def.Id] = $def.DisplayName } }
-            $privRoles = @('Global Administrator','Privileged Role Administrator','Exchange Administrator','Security Administrator','Compliance Administrator','User Administrator','SharePoint Administrator','Teams Service Administrator','Billing Administrator','Application Administrator','Hybrid Identity Administrator')
-            $adminAssignments = @($assignments | Where-Object { $_.RoleDefinitionId -and $roleNameMap.ContainsKey($_.RoleDefinitionId) -and $roleNameMap[$_.RoleDefinitionId] -in $privRoles })
-            foreach ($a in $adminAssignments) {
-                $roleName    = if ($roleNameMap.ContainsKey($a.RoleDefinitionId)) { $roleNameMap[$a.RoleDefinitionId] } else { 'Unknown' }
-                $user        = $allUsers | Where-Object { $_.Id -eq $a.PrincipalId } | Select-Object -First 1
-                $displayName = if ($user -and $user.DisplayName) { hx $user.DisplayName } else { hx $a.PrincipalId }
-                $upn         = if ($user -and $user.UserPrincipalName) { hx $user.UserPrincipalName } else { '&mdash;' }
-                $licVal      = if ($user -and $user.AssignedLicenses -and $user.AssignedLicenses.Count -gt 0) { '<span class="iwarn">&#9888; Licensed</span>' } else { '<span class="igood">&#10003; Unlicensed</span>' }
-                $syncVal     = if ($user -and $user.OnPremisesSyncEnabled -eq $true) { '<span class="ibad">&#9650; Synced</span>' } else { '<span class="igood">&#9729; Cloud-only</span>' }
-                $enVal       = if ($user -and $user.AccountEnabled -eq $true) { '<span class="igood">Enabled</span>' } else { '<span class="ioff">Disabled</span>' }
-                $lastSignIn  = '&mdash;'
-                if ($user -and $user.SignInActivity -and $user.SignInActivity.LastSignInDateTime) {
-                    try { $lastSignIn = ([datetime]$user.SignInActivity.LastSignInDateTime).ToString('yyyy-MM-dd') } catch {}
-                }
-                $rowClass = if ($roleName -eq 'Global Administrator') { 'adm-ga' } else { '' }
-                $adminRowsHtml += "<tr class=`"$rowClass`"><td><span class=`"role-tag`">$(hx $roleName)</span></td><td class=`"adm-name`">$displayName</td><td class=`"adm-upn`">$upn</td><td>$licVal</td><td>$syncVal</td><td>$enVal</td><td class=`"adm-last`">$lastSignIn</td></tr>"
-            }
-        }
-        $adminTableHtml = ''
-        if ($adminRowsHtml) { $adminTableHtml = "<div class=`"subsec-title`">Privileged Role Assignments</div><div class=`"tscroll`"><table class=`"itbl adm-tbl`"><thead><tr><th>Role</th><th>Name</th><th>Username</th><th>Licensed</th><th>Account Type</th><th>Status</th><th>Last Sign-in</th></tr></thead><tbody>$adminRowsHtml</tbody></table></div>" }
-
-        $pimHtml = ''
-        if ($pimRaw -and $pimRaw.Success) {
-            $eligible   = @($pimRaw.Data['EligibleSchedules'])
-            $active     = @($pimRaw.Data['ActiveSchedules'])
-            $pimColor   = if ($eligible.Count -gt 0) { '#059669' } else { '#dc2626' }
-            $gaRoleId   = $null
-            if ($rolesRaw -and $rolesRaw.Success) { $gaDef = @($rolesRaw.Data['RoleDefinitions']) | Where-Object { $_.DisplayName -eq 'Global Administrator' } | Select-Object -First 1; if ($gaDef) { $gaRoleId = $gaDef.Id } }
-            $gaEligible = if ($gaRoleId) { @($eligible | Where-Object { $_.RoleDefinitionId -eq $gaRoleId }).Count } else { 0 }
-            $gaActive   = if ($gaRoleId) { @($active   | Where-Object { $_.RoleDefinitionId -eq $gaRoleId }).Count } else { 0 }
-            $pimHtml    = "<div class=`"subsec-title`">Privileged Identity Management (PIM)</div><div class=`"pim-grid`"><div class=`"pim-card`"><div class=`"pim-n`" style=`"color:$pimColor`">$($eligible.Count)</div><div class=`"pim-l`">Eligible (just-in-time)</div></div><div class=`"pim-card`"><div class=`"pim-n`" style=`"color:$(if($active.Count -gt 0){'#d97706'}else{'#059669'})`">$($active.Count)</div><div class=`"pim-l`">Permanent assignments</div></div><div class=`"pim-card`"><div class=`"pim-n`" style=`"color:$(if($gaEligible -gt 0){'#059669'}else{'#dc2626'})`">$gaEligible</div><div class=`"pim-l`">Global Admin via JIT</div></div><div class=`"pim-card`"><div class=`"pim-n`" style=`"color:$(if($gaActive -gt 2){'#dc2626'}elseif($gaActive -gt 0){'#d97706'}else{'#059669'})`">$gaActive</div><div class=`"pim-l`">Global Admin permanent</div></div></div>"
-        }
-        $identityHtml = "<div class=`"card mt`"><div class=`"card-hd`"><span class=`"card-title`">Identity Inventory</span></div><div class=`"inv-body`">$statCardsHtml$mfaBarHtml$adminTableHtml$pimHtml</div></div>"
+    function rmItem { param($f,$cls)
+        $t4    = hx $f.Title
+        $cid4  = hx $f.ControlId
+        "<div class='rm-item'><div class='rm-bullet $cls'>!</div><div><strong>$t4</strong> <span style='font-size:.7rem;color:var(--mut)'>($cid4)</span></div></div>"
     }
 
-    # DNS
-    $dnsInvHtml = ''
-    $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
-    if ($dnsData -and $dnsData.Success -and $dnsData.Data.Domains) {
-        $dRows = ''
-        foreach ($domain in ($dnsData.Data.Domains.Keys | Sort-Object)) {
-            $d4   = $dnsData.Data.Domains[$domain]
-            $domEnc = hx $domain
-            $spf  = if (-not $d4.SPF) { '<span class="ibad">&#10005; None</span>' } elseif ($d4.SPF -match '\-all') { '<span class="igood">&#10003; -all</span>' } elseif ($d4.SPF -match '~all') { '<span class="iwarn">&#9888; ~all</span>' } else { '<span class="iwarn">&#9888;</span>' }
-            $dkim = if ($d4.DKIM.Selector1 -and $d4.DKIM.Selector2) { '<span class="igood">&#10003; Both</span>' } elseif ($d4.DKIM.Selector1 -or $d4.DKIM.Selector2) { '<span class="iwarn">&#9888; Partial</span>' } else { '<span class="ibad">&#10005;</span>' }
-            $dmarc = if (-not $d4.DMARC) { '<span class="ibad">&#10005; None</span>' } elseif ($d4.DMARC -match 'p=reject') { '<span class="igood">&#10003; reject</span>' } elseif ($d4.DMARC -match 'p=quarantine') { '<span class="iwarn">&#9888; quarantine</span>' } else { '<span class="ibad">&#9888; none</span>' }
-            $mtaM  = if ($d4.MTASTS -and $d4.MTASTS.Mode) { $d4.MTASTS.Mode } elseif ($d4.MTASTS -and $d4.MTASTS.TxtRecord) { 'present' } else { $null }
-            $mta   = if ($mtaM -eq 'enforce') { '<span class="igood">&#10003; enforce</span>' } elseif ($mtaM -eq 'testing') { '<span class="iwarn">&#9888; testing</span>' } elseif ($mtaM) { "<span class=`"iwarn`">$(hx $mtaM)</span>" } else { '<span class="ibad">&#10005;</span>' }
-            $tls   = if ($d4.TLSRPT) { '<span class="igood">&#10003;</span>' } else { '<span class="ibad">&#10005;</span>' }
-            $dsec  = if ($d4.DNSSEC) { '<span class="igood">&#10003;</span>' } else { '<span class="ibad">&#10005;</span>' }
-            $dmarcTxt = if ($d4.DMARC) {
-                $rawDmarc = [string]$d4.DMARC
-                $tt = if ($rawDmarc.Length -gt 52) { $rawDmarc.Substring(0,49)+'...' } else { $rawDmarc }
-                "<code class=`"icode`">$(hx $tt)</code>"
-            } else { '&mdash;' }
-            $dRows += "<tr><td><strong>$domEnc</strong></td><td>$spf</td><td>$dkim</td><td>$dmarc</td><td>$dmarcTxt</td><td>$mta</td><td>$tls</td><td>$dsec</td></tr>"
-        }
-        $dnsInvHtml = "<div class=`"card mt`"><div class=`"card-hd`"><span class=`"card-title`">DNS Email Security</span></div><div class=`"tscroll`"><table class=`"itbl`"><thead><tr><th>Domain</th><th>SPF</th><th>DKIM</th><th>DMARC</th><th>DMARC Record</th><th>MTA-STS</th><th>TLS-RPT</th><th>DNSSEC</th></tr></thead><tbody>$dRows</tbody></table></div></div>"
-    }
+    $p1Html = ($phase1Items | ForEach-Object { rmItem $_ 'p1-bullet' }) -join ''
+    $p2Html = ($phase2Items | ForEach-Object { rmItem $_ 'p2-bullet' }) -join ''
+    $p3Html = ($phase3Items | ForEach-Object { rmItem $_ 'p3-bullet' }) -join ''
 
-    # EXO
-    $exoInvHtml = ''
-    $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
-    if ($exoData -and $exoData.Success) {
-        $eRows = ''
-        $o5=$exoData.Data.OrganizationConfig; $tr5=$exoData.Data.TransportConfig; $pr5=$exoData.Data.MailboxProtocols; $bp5=$exoData.Data.AuditBypass; $sm5=$exoData.Data.SharedMailboxes
-        if ($o5) {
-            $audV = if ($o5.AuditDisabled -eq $false) { '<span class="igood">&#10003; Enabled</span>' } else { '<span class="ibad">&#10005; Disabled</span>' }
-            $lbV  = if ($o5.CustomerLockBoxEnabled -eq $true) { '<span class="igood">&#10003; Enabled</span>' } else { '<span class="ibad">&#10005; Disabled</span>' }
-            $maV  = if ($o5.OAuth2ClientProfileEnabled -eq $true) { '<span class="igood">&#10003; Enabled</span>' } elseif ($o5.OAuth2ClientProfileEnabled -eq $false) { '<span class="ibad">&#10005; Disabled</span>' } else { '<span class="iwarn">Unknown</span>' }
-            $eRows += "<tr><td>Mailbox Audit</td><td>$audV</td></tr><tr><td>Customer Lockbox</td><td>$lbV</td></tr><tr><td>Modern Authentication</td><td>$maV</td></tr>"
-        }
-        if ($tr5) { $smtpV = if ($tr5.SmtpClientAuthenticationDisabled -eq $true) { '<span class="igood">&#10003; Disabled</span>' } else { '<span class="ibad">&#10005; Enabled (risk)</span>' }; $eRows += "<tr><td>SMTP Client Authentication</td><td>$smtpV</td></tr>" }
-        if ($pr5) {
-            # Force integer coercion to defang any non-numeric content
-            $popN = [int]($pr5.PopEnabled); $imapN = [int]($pr5.ImapEnabled); $asN = [int]($pr5.ActiveSyncEnabled); $totN = [int]($pr5.TotalMailboxes)
-            $p3V = if ($popN -eq 0) { '<span class="igood">&#10003; Disabled on all</span>' } else { "<span class=`"ibad`">&#10005; $popN enabled</span>" }
-            $i4V = if ($imapN -eq 0) { '<span class="igood">&#10003; Disabled on all</span>' } else { "<span class=`"ibad`">&#10005; $imapN enabled</span>" }
-            $eRows += "<tr><td>Total Mailboxes</td><td>$totN</td></tr><tr><td>POP3</td><td>$p3V</td></tr><tr><td>IMAP</td><td>$i4V</td></tr><tr><td>ActiveSync</td><td>$asN mailboxes</td></tr>"
-        }
-        if ($bp5) { $bpN = [int]($bp5.BypassedCount); $byV = if ($bpN -eq 0) { '<span class="igood">&#10003; None</span>' } else { "<span class=`"ibad`">&#10005; $bpN bypassed</span>" }; $eRows += "<tr><td>Audit Bypass</td><td>$byV</td></tr>" }
-        if ($sm5) { $smCount = [int]($sm5.Count); $smSi = [int]($sm5.SignInEnabled); $siV = if ($smSi -eq 0) { '<span class="igood">&#10003; All disabled</span>' } else { "<span class=`"ibad`">&#10005; $smSi with sign-in</span>" }; $eRows += "<tr><td>Shared Mailboxes</td><td>$smCount total</td></tr><tr><td>Shared Mailbox Sign-in</td><td>$siV</td></tr>" }
-        $exoInvHtml = "<div class=`"card mt`" style=`"max-width:560px`"><div class=`"card-hd`"><span class=`"card-title`">Exchange Online Configuration</span></div><table class=`"itbl i2`"><thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody>$eRows</tbody></table></div>"
-    }
+    $bpItems = @(
+        @{ Title='Enable Multi-Factor Authentication for all users'; Detail='MFA is the single most impactful control — blocks 99.9% of automated attacks. Start with Authenticator app, enforce via CA policy.'; Effort='quick' },
+        @{ Title='Block legacy authentication protocols'; Detail='Legacy auth cannot be protected by MFA. A single legacy auth login from any user bypasses all CA policies. Block via CA or disable org-wide.'; Effort='quick' },
+        @{ Title='Configure Conditional Access baseline policies'; Detail='CA is the policy engine for Zero Trust. Minimum: require MFA for all users, block legacy auth, require compliant device for sensitive data.'; Effort='medium' },
+        @{ Title='Review and offboard stale accounts'; Detail='Implement an offboarding checklist: disable account, revoke sessions, remove licenses, review forwarding rules, archive mailbox. Run quarterly audits.'; Effort='quick' },
+        @{ Title='Deploy Microsoft Defender for Endpoint'; Detail='Endpoint visibility is the foundation of incident response. Without EDR, endpoint threats are invisible until data is gone.'; Effort='medium' },
+        @{ Title='Implement DMARC at enforcement (p=reject)'; Detail='SPF and DKIM alone do not prevent spoofing. Only p=reject tells receiving servers to block messages that fail authentication. Non-trivial but critical for any client-facing domain.'; Effort='medium' },
+        @{ Title='Establish PAM with PIM for privileged access'; Detail='Permanent admin accounts are always-on targets. PIM elevates admins on demand with MFA, justification, and time limits — significantly reducing the blast radius of a compromise.'; Effort='strategic' },
+        @{ Title='Deploy sensitivity labels and DLP policies'; Detail='Data protection requires knowing what data you have. Labels + DLP provides classification, protection, and enforcement across email, SharePoint, Teams, and endpoints.'; Effort='strategic' },
+        @{ Title='Create and test an incident response plan'; Detail='When a BEC or ransomware incident occurs, decisions made in the first 30 minutes determine the outcome. Having a playbook, a contact list, and a tested process cuts response time dramatically.'; Effort='strategic' }
+    )
 
-    # CA
-    $caPolicyHtml = ''
-    $caData = Get-NRGRawData -Key 'AAD-CAPolicies'
-    if ($caData -and $caData.Success -and $caData.Data.Policies) {
-        $caRows = ''
-        foreach ($p6 in (@($caData.Data.Policies) | Sort-Object @{Expression={ switch ($_.State) { 'enabled' { 0 }; 'enabledForReportingButNotEnforced' { 1 }; 'disabled' { 2 } } }}, DisplayName)) {
-            $stH = switch ($p6.State) { 'enabled' { '<span class="igood">&#10003; Enforced</span>' }; 'enabledForReportingButNotEnforced' { '<span class="iwarn">&#9680; Report-only</span>' }; 'disabled' { '<span class="ioff">&#8212; Disabled</span>' }; default { "<span class=`"iwarn`">$(hx $p6.State)</span>" } }
-            $cp6 = @()
-            if ($p6.Conditions.Users.IncludeUsers -contains 'All') { $cp6 += 'All users' } elseif ($p6.Conditions.Users.IncludeRoles.Count -gt 0) { $cp6 += "$([int]$p6.Conditions.Users.IncludeRoles.Count) role(s)" }
-            if ($p6.Conditions.Applications.IncludeApplications -contains 'All') { $cp6 += 'All cloud apps' }
-            if ($p6.Conditions.ClientAppTypes -contains 'other') { $cp6 += 'Legacy auth' }
-            if ($p6.Conditions.SignInRiskLevels.Count -gt 0) {
-                # Build risk levels from a known enum allowlist — refuse anything else.
-                $allowedRisk = @('none','low','medium','high','hidden','unknownFutureValue')
-                $cleanRisk = @($p6.Conditions.SignInRiskLevels | Where-Object { $allowedRisk -contains $_ })
-                if ($cleanRisk.Count -gt 0) {
-                    $cp6 += "Sign-in risk: $(hx ($cleanRisk -join '/'))"
-                }
-            }
-            $condStr = if ($cp6.Count -gt 0) { $cp6 -join ' &bull; ' } else { '&mdash;' }
-            $gp6 = @()
-            if ($p6.GrantControls.BuiltInControls -contains 'mfa') { $gp6 += 'Require MFA' }
-            if ($p6.GrantControls.BuiltInControls -contains 'block') { $gp6 += 'Block' }
-            if ($p6.GrantControls.BuiltInControls -contains 'compliantDevice') { $gp6 += 'Compliant device' }
-            if ($p6.GrantControls.AuthenticationStrength) { $gp6 += "Auth strength: $(hx $p6.GrantControls.AuthenticationStrength.DisplayName)" }
-            $grantStr = if ($gp6.Count -gt 0) { $gp6 -join ' + ' } else { '&mdash;' }
-            $rowCls = if ($p6.State -eq 'enabledForReportingButNotEnforced') { 'ca-ro' } elseif ($p6.State -eq 'disabled') { 'ca-dis' } else { '' }
-            $caRows += "<tr class=`"$rowCls`"><td class=`"ca-n`">$(hx $p6.DisplayName)</td><td>$stH</td><td class=`"ca-c`">$condStr</td><td>$grantStr</td></tr>"
-        }
-        $caPolicyHtml = "<div class=`"card mt`"><div class=`"card-hd`"><span class=`"card-title`">Conditional Access Policies</span></div><div class=`"tscroll`"><table class=`"itbl`"><thead><tr><th>Policy Name</th><th style=`"width:130px`">State</th><th>Applies To</th><th>Enforcement</th></tr></thead><tbody>$caRows</tbody></table></div></div>"
-    }
+    $bpHtml = ($bpItems | ForEach-Object {
+        $effortLabel = switch ($_.Effort) { 'quick' {'Quick Win (days)'} 'medium' {'Medium (weeks)'} 'strategic' {'Strategic (months)'} default {''} }
+        $effortCls   = switch ($_.Effort) { 'quick' {'bp-quick'} 'medium' {'bp-medium'} 'strategic' {'bp-strategic'} default {''} }
+        "<div class='bp-card'><div class='bp-t'>$(hx $_.Title)</div><div class='bp-d'>$(hx $_.Detail)</div><span class='bp-tag $effortCls'>$effortLabel</span></div>"
+    }) -join ''
 
-    # Defender
-    $defInvHtml = ''
-    $defData = Get-NRGRawData -Key 'Defender'
-    if ($defData -and $defData.Success) {
-        $dRows7 = ''
-        if ($defData.Data['SafeAttachments'].Available) {
-            foreach ($p7 in @($defData.Data['SafeAttachments'].Policies | Where-Object { -not $_.IsDefault })) {
-                $en7 = if ($p7.Enable -eq $true) { '<span class="igood">&#10003; Enabled</span>' } else { '<span class="ioff">Disabled</span>' }
-                $dRows7 += "<tr><td><strong>$(hx $p7.Name)</strong> <span class=`"isub`">Safe Attachments</span></td><td>$en7</td><td>Action: $(hx $p7.Action)</td></tr>"
-            }
-        }
-        if ($defData.Data['SafeLinks'].Available) {
-            foreach ($p7 in @($defData.Data['SafeLinks'].Policies | Where-Object { -not $_.IsDefault })) {
-                $en7 = if ($p7.EnableSafeLinksForEmail -eq $true) { '<span class="igood">&#10003; Enabled</span>' } else { '<span class="ioff">Disabled</span>' }
-                $ct7 = if ($p7.AllowClickThrough -eq $false) { '<span class="igood">Click-through blocked</span>' } else { '<span class="iwarn">Click-through allowed</span>' }
-                $dRows7 += "<tr><td><strong>$(hx $p7.Name)</strong> <span class=`"isub`">Safe Links</span></td><td>$en7</td><td>$ct7</td></tr>"
-            }
-        }
-        if ($defData.Data['AntiPhishing'].Available) {
-            foreach ($p7 in @($defData.Data['AntiPhishing'].Policies | Where-Object { -not $_.IsDefault })) {
-                $en7 = if ($p7.Enabled) { '<span class="igood">&#10003; Enabled</span>' } else { '<span class="ioff">Disabled</span>' }
-                $mi7 = if ($p7.EnableMailboxIntelligence) { '<span class="igood">&#10003;</span>' } else { '<span class="ibad">&#10005;</span>' }
-                $threshEnc = hx $p7.PhishThresholdLevel
-                $dRows7 += "<tr><td><strong>$(hx $p7.Name)</strong> <span class=`"isub`">Anti-Phishing</span></td><td>$en7</td><td>Mailbox intel: $mi7 &nbsp; Threshold: $threshEnc</td></tr>"
-            }
-        }
-        if ($dRows7) { $defInvHtml = "<div class=`"card mt`"><div class=`"card-hd`"><span class=`"card-title`">Defender for Office 365</span></div><table class=`"itbl`"><thead><tr><th>Policy</th><th style=`"width:110px`">Status</th><th>Configuration</th></tr></thead><tbody>$dRows7</tbody></table></div>" }
-    }
+    $roadmapHtml = @"
+<div class='card mt' id='roadmap'>
+  <div class='card-hd'>
+    <div class='card-label'>90-Day Security Roadmap</div>
+    <div class='card-sub'>Prioritized remediation path based on this assessment's findings</div>
+  </div>
+  <div class='rm-phases'>
+    <div class='rm-phase'>
+      <div class='rm-ph-hd' style='color:#dc2626'>Phase 1 — Week 1-2</div>
+      <div class='rm-ph-t'>Stop the Bleeding</div>
+      $(if ($phase1Items.Count -gt 0) { $p1Html } else { "<div class='rm-item'><div class='rm-bullet p1-bullet'>&#10003;</div><div>No critical gaps found</div></div>" })
+    </div>
+    <div class='rm-phase' style='border-left:1px solid var(--bdr)'>
+      <div class='rm-ph-hd' style='color:#ea580c'>Phase 2 — Week 2-4</div>
+      <div class='rm-ph-t'>Close the Gaps</div>
+      $(if ($phase2Items.Count -gt 0) { $p2Html } else { "<div class='rm-item'><div class='rm-bullet p2-bullet'>&#10003;</div><div>No medium gaps found</div></div>" })
+    </div>
+    <div class='rm-phase' style='border-left:1px solid var(--bdr)'>
+      <div class='rm-ph-hd' style='color:#3b7dd8'>Phase 3 — Month 2-3</div>
+      <div class='rm-ph-t'>Harden & Monitor</div>
+      $(if ($phase3Items.Count -gt 0) { $p3Html } else { "<div class='rm-item'><div class='rm-bullet p3-bullet'>&#10003;</div><div>No low gaps remaining</div></div>" })
+    </div>
+  </div>
+</div>
 
-    $tDom   = hx $Metadata.TenantDomain
-    $cDisp  = hx $clientDisplay
-    $dStr   = hx $Metadata.AssessmentDate
-    $opStr  = hx $Metadata.Operator
-    $cmpStr = hx $company
-    $phStr  = hx $phone
-    $wsStr  = hx $website
-    $ver    = hx $Metadata.ToolVersion
+<div class='card mt' id='bestpractices'>
+  <div class='card-hd'>
+    <div class='card-label'>Security Best Practices</div>
+    <div class='card-sub'>Recommendations beyond this assessment — the security journey for any M365 tenant</div>
+  </div>
+  <div class='bp-grid'>$bpHtml</div>
+</div>
+"@
 
-    # Logo URL — strict validation. Reject anything not https or data: image
-    $logoSafe = ''
-    if ($logoUrl) {
-        if ($logoUrl -match '^data:image/(png|jpe?g|svg\+xml|gif|webp);base64,[A-Za-z0-9+/=]+$') {
-            $logoSafe = $logoUrl   # data URI image — safe to embed
-        } else {
-            $logoSafe = ConvertTo-NRGSafeUrl $logoUrl   # https only
-        }
-    }
-    $logoH  = if ($logoSafe) { "<img src=`"$logoSafe`" alt=`"$cmpStr`" class=`"logo`">" } else { "<span class=`"logo-t`">$cmpStr</span>" }
+    # ── Escaped strings ───────────────────────────────────────────────────────
+    $cD = hx $clientDisplay; $tD = hx $Metadata.TenantDomain
+    $dS = hx $Metadata.AssessmentDate; $op = hx $Metadata.Operator
+    $co2 = hx $co; $ph2 = hx $ph; $ws2b = hx $ws; $vr = hx $Metadata.ToolVersion
 
+    # ── Assemble HTML ─────────────────────────────────────────────────────────
     $html = @"
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; script-src 'unsafe-inline'; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none';style-src 'unsafe-inline';img-src https: data:;script-src 'unsafe-inline';connect-src 'none';base-uri 'none';form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<title>M365 Security Assessment &mdash; $cDisp</title>
+<title>M365 Security Assessment &mdash; $cD</title>
 <style>
-:root{--P:$primary;--S:$secondary;--A:$accent;--bg:#edf0f6;--card:#fff;--txt:#18202e;--mut:#5a6478;--bdr:#dde3ec;--pass:#059669;--warn:#d97706;--gap:#dc2626;--na:#9ca3af;--r:10px;--sh:0 2px 14px rgba(26,58,107,.1),0 1px 3px rgba(0,0,0,.05)}
+:root{--P:$P;--S:$S;--A:$A;--bg:#eef2f8;--card:#fff;--txt:#111827;--mut:#6b7280;--bdr:#e2e8f0;--pass:#059669;--warn:#ca8a04;--gap:#dc2626;--na:#9ca3af;--r:12px;--sh:0 1px 3px rgba(0,0,0,.05),0 4px 18px rgba(15,37,68,.08)}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{font-size:15px;scroll-behavior:smooth}
-body{font-family:'Segoe UI Variable Display','Segoe UI','Helvetica Neue',system-ui,sans-serif;background:var(--bg);color:var(--txt);line-height:1.65;-webkit-font-smoothing:antialiased}
+body{font-family:'Segoe UI Variable Display','Segoe UI','Helvetica Neue',system-ui,sans-serif;background:var(--bg);color:var(--txt);line-height:1.6;-webkit-font-smoothing:antialiased}
 a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
-.wrap{max-width:1160px;margin:0 auto}
-.hdr{background:linear-gradient(135deg,var(--P) 0%,#0d2147 100%);color:#fff;padding:36px 48px 30px;position:relative;overflow:hidden}
-.hdr::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle at 75% 20%,rgba(232,119,34,.14) 0%,transparent 50%),radial-gradient(circle at 25% 80%,rgba(74,123,166,.1) 0%,transparent 50%);pointer-events:none}
-.hdr-inner{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;position:relative;z-index:1}
-.logo{height:34px;filter:brightness(0) invert(1)}.logo-t{font-size:1.15rem;font-weight:800;letter-spacing:-.02em;color:rgba(255,255,255,.95)}
-.hdr-eye{font-size:.62rem;text-transform:uppercase;letter-spacing:.15em;color:var(--S);font-weight:700;margin-bottom:7px}
-.hdr-client{font-size:2rem;font-weight:900;letter-spacing:-.03em;color:#fff;line-height:1.05}
-.hdr-meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:.77rem;color:rgba(255,255,255,.5)}
-.hdr-meta strong{color:rgba(255,255,255,.82);font-weight:600}
-.hdr-right{text-align:right;flex-shrink:0}
-.ver{font-size:.62rem;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);padding:3px 9px;border-radius:20px;color:rgba(255,255,255,.6);letter-spacing:.05em;display:inline-block;margin-bottom:10px}
-.abar{height:3px;background:linear-gradient(90deg,var(--S) 0%,var(--A) 55%,transparent 100%)}
-.cnt{padding:26px 48px 48px}
+.wrap{max-width:1180px;margin:0 auto}
+
+.hdr{background:linear-gradient(138deg,$P 0%,#061325 100%);position:relative;overflow:hidden}
+.hdr::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle at 80% 50%,rgba(232,98,26,.12) 0%,transparent 60%),radial-gradient(circle at 20% 80%,rgba(59,125,216,.08) 0%,transparent 50%);pointer-events:none}
+.hdr-top{display:flex;align-items:flex-start;justify-content:space-between;padding:40px 52px 26px;gap:32px;position:relative}
+.eye{font-size:.61rem;font-weight:700;text-transform:uppercase;letter-spacing:.18em;color:$S;margin-bottom:8px}
+.hdr-client{font-size:2.2rem;font-weight:900;letter-spacing:-.04em;color:#fff;line-height:1;margin-bottom:10px}
+.hdr-meta{display:flex;gap:22px;flex-wrap:wrap;font-size:.77rem;color:rgba(255,255,255,.42)}
+.hdr-meta strong{color:rgba(255,255,255,.78);font-weight:600}
+.hdr-right{flex-shrink:0;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.ver-badge{font-size:.61rem;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);padding:3px 10px;border-radius:20px;color:rgba(255,255,255,.5);letter-spacing:.06em}
+.logo{height:36px;filter:brightness(0) invert(1);opacity:.88}
+.logo-t{font-size:1.05rem;font-weight:900;color:rgba(255,255,255,.88);letter-spacing:-.02em}
+.hdr-nav{display:flex;padding:0 52px;border-top:1px solid rgba(255,255,255,.07);position:relative}
+.nav-a{padding:11px 16px;font-size:.68rem;font-weight:700;color:rgba(255,255,255,.38);letter-spacing:.06em;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;text-transform:uppercase;user-select:none}
+.nav-a:hover{color:rgba(255,255,255,.75);border-bottom-color:$S}
+.abar{height:3px;background:linear-gradient(90deg,$S 0%,$A 55%,transparent 100%)}
+
+.cnt{padding:28px 52px 56px}
 .card{background:var(--card);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden;border:1px solid var(--bdr)}
-.mt{margin-top:20px}
-.card-hd{padding:14px 22px 12px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,#fafbfd,#f4f6fa)}
-.card-title{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.11em;color:var(--P)}
-.cat-pill{font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:20px;border:1px solid}
-.dash{display:grid;grid-template-columns:200px 1fr 220px}
-.dash>*{padding:24px 20px}
-.dv{border-right:1px solid var(--bdr)}
-.score-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center}
-.ring-trk{fill:none;stroke:#e4e9f2;stroke-width:10}
-.ring-fill{fill:none;stroke:var(--S);stroke-width:10;stroke-linecap:round;stroke-dasharray:$circ;stroke-dashoffset:$circ;animation:rfill 1.4s cubic-bezier(.4,0,.2,1) .15s forwards}
-@keyframes rfill{to{stroke-dashoffset:$offset}}
-.score-c{text-align:center;margin-top:10px}
-.score-n{font-size:2.6rem;font-weight:900;color:var(--P);letter-spacing:-.04em;line-height:1}
-.score-s{font-size:.62rem;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
-.posture{display:inline-block;margin-top:8px;padding:4px 13px;border-radius:20px;font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;background:${pColor}18;color:$pColor;border:1.5px solid ${pColor}3a}
-.stats{display:flex;flex-direction:column;justify-content:center;gap:10px;padding-left:22px}
-.narrative{font-size:.84rem;color:var(--txt);line-height:1.6;padding:10px 0 0;border-top:1px solid var(--bdr);margin-top:8px}
-.sr{display:flex;align-items:center;gap:8px}
-.sr-lbl{font-size:.64rem;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);min-width:52px;font-weight:700}
-.sr-track{flex:1;height:5px;background:#e8edf5;border-radius:3px;overflow:hidden}
-.sr-fill{height:100%;border-radius:3px}
-.sr-num{font-size:.9rem;font-weight:800;min-width:22px;text-align:right}
-.sg .sr-num,.sg .sr-fill{color:var(--gap);background:var(--gap)}
-.sw .sr-num,.sw .sr-fill{color:var(--warn);background:var(--warn)}
-.sp .sr-num,.sp .sr-fill{color:var(--pass);background:var(--pass)}
-.sn .sr-num,.sn .sr-fill{color:var(--na);background:var(--na)}
-.cats{display:flex;flex-direction:column;gap:8px;justify-content:center}
-.cats-t,.conn-t{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);font-weight:700;margin-bottom:2px}
-.cbar-hd{display:flex;justify-content:space-between;margin-bottom:2px}
-.cbar-lbl{font-size:.73rem;font-weight:600;color:var(--txt)}.cbar-num{font-size:.73rem;font-weight:800}
-.cbar-track{height:6px;background:#e4e9f2;border-radius:3px;overflow:hidden}.cbar-fill{height:100%;border-radius:3px}
-.conn-grid{display:flex;flex-direction:column;gap:4px;margin-top:2px}
-.conn{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:5px;font-size:.73rem;font-weight:600}
-.cok{background:#f0fdf4;color:#166534}.coff{background:#fef2f2;color:#991b1b}
-.acts{padding:14px 20px;display:flex;flex-direction:column;gap:10px}
-.act{display:flex;align-items:flex-start;gap:14px;padding:14px 16px;border-radius:8px;border-left:4px solid}
-.ac{background:#fff8f8;border-color:var(--gap)}.ah{background:#fffbf0;border-color:var(--warn)}
-.act-num{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:52px}
-.act-n{font-size:1.4rem;font-weight:900;color:var(--mut);line-height:1}
-.act-effort{font-size:.58rem;font-weight:700;color:var(--mut);text-align:center;line-height:1.2;margin-top:4px}
-.act-body{flex:1}
-.act-t{font-weight:800;font-size:.9rem;color:var(--txt);line-height:1.3;margin-bottom:7px}
-.act-risk{font-size:.78rem;color:#374151;line-height:1.5;margin-bottom:6px;padding:7px 11px;background:rgba(220,38,38,.04);border-radius:5px;border-left:2px solid #fca5a5}
-.act-risk-lbl{font-weight:800;font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;color:#b91c1c;display:block;margin-bottom:3px}
-.act-rem{font-size:.78rem;color:#1d4ed8;line-height:1.5;padding:7px 11px;background:rgba(29,78,216,.04);border-radius:5px;border-left:2px solid #93c5fd}
-.act-rem-lbl{font-weight:800;font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;color:#1d4ed8;display:block;margin-bottom:3px}
-.ft{width:100%;border-collapse:collapse;font-size:.83rem}
-.fth th{padding:8px 12px;background:#f4f6fa;font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:700;border-bottom:2px solid var(--bdr);text-align:left}
-.fr{border-bottom:1px solid #f3f5f9}.fr:last-of-type{border-bottom:none}
-.fr td{padding:9px 12px;vertical-align:top}
-.exp{cursor:pointer}.exp:hover{background:#f9fafc}
-.rg{border-left:3px solid var(--gap)}.rw{border-left:3px solid var(--warn)}
-.rp{border-left:3px solid var(--pass)}.rn{border-left:3px solid #d1d5db}
-.td1{width:142px;vertical-align:top}.td1 .b,.td1 .sv{display:block;margin-bottom:3px}
-.td3{font-weight:600;color:var(--txt);width:30%}.td4{color:var(--mut);font-size:.78rem}
-.f-title{font-weight:700;color:var(--txt);line-height:1.3;margin-bottom:2px}
-.f-cv{font-size:.72rem;color:var(--mut);font-style:italic}
-.more-ico{font-size:.6rem;color:var(--mut);margin-left:4px;vertical-align:middle;display:inline-block;transition:transform .2s}
-.exp.open .more-ico{transform:rotate(90deg)}
+.mt{margin-top:22px}
+.card-hd{padding:15px 24px 13px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,#fafbfd,#f4f7fb)}
+.card-hdl{display:flex;align-items:center;gap:10px}
+.card-label{font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.12em;color:var(--P)}
+.card-sub{font-size:.72rem;color:var(--mut)}
+
+/* Exec dashboard */
+.ex-dash{display:grid;grid-template-columns:192px 1fr 224px;min-height:196px}
+.ex-dash>*{padding:24px 22px}
+.br{border-right:1px solid var(--bdr)}
+.score-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+.score-c{text-align:center}
+.score-n{font-size:2.9rem;font-weight:900;color:var(--P);letter-spacing:-.05em;line-height:1}
+.score-s{font-size:.58rem;color:var(--mut);text-transform:uppercase;letter-spacing:.07em;margin-top:2px}
+.posture-pill{display:inline-block;margin-top:8px;padding:4px 14px;border-radius:20px;font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;background:${pCol}18;color:$pCol;border:1.5px solid ${pCol}40}
+.stat-col{display:flex;flex-direction:column;gap:10px;justify-content:center}
+.sr{display:flex;align-items:center;gap:10px}
+.sr-l{font-size:.63rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);min-width:58px;font-weight:700}
+.sr-t{flex:1;height:5px;background:#e5eaf4;border-radius:3px;overflow:hidden}
+.sr-f{height:100%;border-radius:3px}
+.sr-n{font-size:.9rem;font-weight:800;min-width:24px;text-align:right}
+.sg .sr-n,.sg .sr-f{color:var(--gap);background:var(--gap)}
+.sw .sr-n,.sw .sr-f{color:var(--warn);background:var(--warn)}
+.sp .sr-n,.sp .sr-f{color:var(--pass);background:var(--pass)}
+.sna .sr-n,.sna .sr-f{color:var(--na);background:var(--na)}
+.narr{font-size:.83rem;color:var(--txt);line-height:1.6;padding:11px 0 0;border-top:1px solid var(--bdr);margin-top:10px}
+.sev-pills{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.sp2{display:flex;align-items:center;gap:5px;font-size:.7rem;font-weight:700;padding:4px 10px;border-radius:20px}
+.spc{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+.sph{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
+.spm{background:#fefce8;color:#854d0e;border:1px solid #fde68a}
+.spl{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+.conn-col{display:flex;flex-direction:column;justify-content:center;gap:6px}
+.conn-t{font-size:.61rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);font-weight:700;margin-bottom:4px}
+.conn{display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:6px;font-size:.72rem;font-weight:600}
+.cok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+.coff{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+
+/* Workload grid */
+.wl-section{border-top:1px solid var(--bdr);padding:16px 24px 20px}
+.wl-sec-t{font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);font-weight:700;margin-bottom:12px}
+.wl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.wl-card{display:flex;align-items:center;gap:11px;padding:13px 14px;background:#f7f9fd;border-radius:9px;border:1px solid var(--bdr)}
+.wl-info{flex:1;min-width:0}
+.wl-name{font-size:.68rem;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.wl-score{font-size:1.4rem;font-weight:900;line-height:1}
+.wl-den{font-size:.62rem;font-weight:600;color:var(--mut);margin-left:1px}
+.wl-gap{font-size:.66rem;font-weight:700;color:var(--gap);margin-top:2px}
+.wl-ok{font-size:.66rem;font-weight:700;color:var(--pass);margin-top:2px}
+
+/* Framework matrix */
+.fw-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:var(--bdr)}
+.fw-card{background:var(--card)}
+.fw-hd{padding:9px 18px;font-size:.78rem;font-weight:900;color:#fff;letter-spacing:.05em}
+.fw-body{padding:16px 18px;display:flex;flex-direction:column;gap:4px}
+.fw-sc{font-size:2rem;font-weight:900;line-height:1}
+.fw-den{font-size:.62rem;font-weight:600;color:var(--mut)}
+.fw-name{font-size:.7rem;color:var(--mut);font-weight:600;line-height:1.4;margin-top:4px}
+
+/* License card */
+.lic-body{padding:18px 24px;display:flex;flex-direction:column;gap:14px}
+.lic-alert{display:flex;align-items:flex-start;gap:14px;padding:14px 18px;background:#fffbeb;border:1px solid #fde68a;border-radius:9px;font-size:.82rem;line-height:1.65;color:#374151}
+.lic-ico{font-size:1.3rem;margin-top:1px;flex-shrink:0}
+.lic-rows{display:flex;flex-direction:column;gap:7px}
+.lic-row{display:flex;align-items:center;justify-content:space-between;padding:9px 16px;background:#f8fafd;border-radius:7px;border:1px solid var(--bdr)}
+.lic-tier{font-size:.8rem;font-weight:600;color:var(--txt)}
+.lic-cnt{font-size:.72rem;font-weight:700;color:var(--warn)}
+.lic-badge{font-size:.77rem;font-weight:800;padding:4px 13px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:20px}
+
+/* Priority actions */
+.acts{padding:16px 20px;display:flex;flex-direction:column;gap:12px}
+.act{display:flex;align-items:flex-start;gap:16px;padding:16px 18px;border-radius:10px;border-left:4px solid}
+.ac{background:#fff7f7;border-color:var(--gap)}
+.ah{background:#fffcf0;border-color:var(--warn)}
+.act-num{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:58px}
+.act-n{font-size:1.5rem;font-weight:900;color:var(--mut);line-height:1}
+.act-cid{font-size:.57rem;font-weight:700;color:var(--mut);letter-spacing:.04em;text-align:center}
+.act-body{flex:1;min-width:0}
+.act-t{font-weight:800;font-size:.91rem;color:var(--txt);line-height:1.3;margin-bottom:9px}
+.act-lbl{display:block;font-size:.6rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.rl{color:#b91c1c}.bl{color:#1d4ed8}
+.act-risk{font-size:.79rem;color:#374151;line-height:1.55;padding:9px 13px;background:rgba(220,38,38,.04);border-radius:6px;border-left:2px solid #fca5a5;margin-bottom:8px}
+.act-rem{font-size:.79rem;color:#1e3a8a;line-height:1.55;padding:9px 13px;background:rgba(29,78,216,.04);border-radius:6px;border-left:2px solid #93c5fd}
+.act-lic{font-size:.71rem;font-weight:700;color:#b45309;margin-top:7px;padding:5px 10px;background:#fffbeb;border-radius:5px;border:1px solid #fde68a}
+
+/* Findings */
+.ft{width:100%;border-collapse:collapse;font-size:.82rem}
+.fth th{padding:9px 14px;background:#f4f7fb;font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:700;border-bottom:2px solid var(--bdr);text-align:left}
+.fr{border-bottom:1px solid #eff2f8}.fr:last-of-type{border-bottom:none}
+.fr td{padding:10px 14px;vertical-align:top}
+.exp{cursor:pointer;transition:background .1s}.exp:hover{background:#f7f9fc}
+.rg{border-left:3px solid var(--gap)}.rw{border-left:3px solid var(--warn)}.rp{border-left:3px solid var(--pass)}.rn{border-left:3px solid #d1d5db}
+.td1{width:150px;vertical-align:top}.td1 .b,.td1 .sv{display:block;margin-bottom:4px}
+.td3{font-weight:600;color:var(--txt);width:32%}.td4{color:var(--mut);font-size:.77rem}
+.ftitle{font-weight:700;color:var(--txt);line-height:1.3;margin-bottom:2px}
+.fcv{font-size:.7rem;color:var(--mut);font-style:italic;margin-top:2px}
+.mico{font-size:.58rem;color:var(--mut);margin-left:5px;vertical-align:middle;display:inline-block;transition:transform .18s}
+.exp.open .mico{transform:rotate(90deg)}
 .extr td{background:#f8fafd;padding:0}
-.exbody{border-top:1px solid #eaecf3;display:grid;grid-template-columns:repeat(3,1fr)}
-.ex-block{padding:14px 16px;border-right:1px solid #eaecf3}.ex-block:last-child{border-right:none}
-.ex-block-lbl{font-size:.6rem;font-weight:900;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid}
-.what-lbl{color:#374151;border-color:#d1d5db}.why-lbl{color:#b91c1c;border-color:#fca5a5}.how-lbl{color:#1d4ed8;border-color:#93c5fd}
-.ex-block-body{font-size:.8rem;color:#374151;line-height:1.55}
-.ex-cv{font-size:.73rem;color:var(--mut);margin-top:5px;font-style:italic}.ex-cvl{font-weight:700;color:#374151}
-.ex-lnk{color:var(--A);font-weight:700;margin-left:6px;font-size:.73rem}
-.effort-tag{display:inline-block;margin-top:5px;font-size:.62rem;font-weight:700;padding:2px 7px;border-radius:12px;background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe}
-.ex-ttp{margin-top:7px;display:flex;flex-wrap:wrap;gap:3px}
-.ttp-tag{font-size:.63rem;padding:2px 6px;border-radius:3px;background:#fef2f2;color:#991b1b;font-weight:700;border:1px solid #fecaca;display:inline-block;text-decoration:none}
-.ttp-tag:hover{background:#fee2e2}
-.ex-fw{margin-top:5px;display:flex;flex-wrap:wrap;gap:3px}
-.fw-tag{font-size:.63rem;padding:2px 6px;border-radius:3px;background:#eef2ff;color:#3730a3;font-weight:700;display:inline-block}
-.b{display:inline-block;padding:3px 9px;border-radius:5px;font-size:.7rem;font-weight:800;white-space:nowrap;letter-spacing:.02em}
-.bp{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}.bw{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
-.bg{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}.bn{background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb}
-.sv{display:inline-block;padding:2px 7px;border-radius:4px;font-size:.67rem;font-weight:800;white-space:nowrap;letter-spacing:.03em}
+.exbody{border-top:1px solid #e6ecf5;display:grid;grid-template-columns:repeat(3,1fr)}
+.ex-block{padding:15px 18px;border-right:1px solid #eaecf3}.ex-block:last-child{border-right:none}
+.ex-lbl{font-size:.58rem;font-weight:900;text-transform:uppercase;letter-spacing:.1em;margin-bottom:7px;padding-bottom:5px;border-bottom:1px solid;display:block}
+.wlbl{color:#374151;border-color:#d1d5db}.ylbl{color:#b91c1c;border-color:#fca5a5}.hlbl{color:#1d4ed8;border-color:#93c5fd}
+.ex-bd{font-size:.79rem;color:#374151;line-height:1.6}
+.ex-cv{font-size:.71rem;color:var(--mut);margin-top:6px;font-style:italic}.ex-cvl{font-weight:700;color:#374151}
+.ex-lic{margin-top:7px;font-size:.7rem;font-weight:700;color:#b45309;padding:4px 9px;background:#fffbeb;border-radius:4px;border:1px solid #fde68a;display:inline-block}
+.ex-fw{margin-top:7px;display:flex;flex-wrap:wrap;gap:4px}
+.fw-tag{font-size:.61rem;padding:2px 7px;border-radius:4px;background:#eef2ff;color:#3730a3;font-weight:700;display:inline-block}
+.ao-table{width:100%;border-collapse:collapse;margin-top:10px}
+.ao-table th{font-size:.58rem;text-transform:uppercase;letter-spacing:.09em;color:var(--mut);font-weight:700;padding:5px 10px;background:#f4f7fb;border-bottom:1px solid var(--bdr);text-align:left}
+.ao-table td{font-size:.79rem;padding:6px 10px;border-bottom:1px solid #eff2f8;color:#374151;font-family:'Segoe UI Mono','Consolas',monospace}
+.ao-table tr:last-child td{border-bottom:none}
+.ao-table tr:hover td{background:#f8fafd}
+.ao-count{display:inline-block;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;padding:2px 9px;border-radius:12px;font-size:.67rem;font-weight:700;margin-left:8px}
+.ss-ring{display:flex;align-items:center;gap:14px;padding:16px 22px;background:#f8fafd;border-top:1px solid var(--bdr)}
+.ss-label{font-size:.6rem;text-transform:uppercase;letter-spacing:.09em;color:var(--mut);font-weight:700;margin-bottom:3px}
+.ss-val{font-size:1.4rem;font-weight:900;line-height:1}
+.ss-sub{font-size:.7rem;color:var(--mut);margin-top:2px}
+.named-section{margin-top:22px}
+.named-card{background:var(--card);border-radius:var(--r);box-shadow:var(--sh);border:1px solid var(--bdr);overflow:hidden;margin-top:14px}
+.named-hd{padding:12px 20px;background:linear-gradient(to right,#fff7f7,#fff);border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between}
+.named-t{font-size:.82rem;font-weight:800;color:#991b1b}
+.named-sub{font-size:.73rem;color:var(--mut);margin-top:2px}
+.named-body{padding:0}
+.bp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;padding:20px 24px}
+.bp-card{padding:16px 18px;background:#f8fafd;border-radius:9px;border:1px solid var(--bdr);border-left:3px solid var(--A)}
+.bp-t{font-size:.82rem;font-weight:800;color:var(--txt);margin-bottom:5px}
+.bp-d{font-size:.77rem;color:var(--mut);line-height:1.55}
+.bp-tag{display:inline-block;margin-top:7px;padding:2px 9px;border-radius:12px;font-size:.64rem;font-weight:700}
+.bp-quick{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+.bp-medium{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+.bp-strategic{background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe}
+.rm-phases{display:grid;grid-template-columns:repeat(3,1fr);gap:0;background:var(--bdr)}
+.rm-phase{background:var(--card);padding:22px 20px}
+.rm-ph-hd{font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px}
+.rm-ph-t{font-size:1rem;font-weight:900;color:var(--txt);margin-bottom:10px}
+.rm-item{display:flex;gap:8px;margin-bottom:7px;font-size:.79rem;color:#374151;align-items:flex-start}
+.rm-bullet{flex-shrink:0;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:900;margin-top:1px}
+.p1-bullet{background:#fef2f2;color:#991b1b}
+.p2-bullet{background:#fff7ed;color:#c2410c}
+.p3-bullet{background:#eef2ff;color:#3730a3}
+.wl-gbadge{display:inline-block;padding:2px 9px;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;font-size:.66rem;font-weight:700}
+.wsc-pill{font-size:.72rem;font-weight:800;padding:3px 11px;border-radius:14px;border:1px solid;flex-shrink:0}
+
+/* Badges */
+.b{display:inline-block;padding:3px 10px;border-radius:5px;font-size:.67rem;font-weight:800;white-space:nowrap}
+.bp{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+.bw{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+.bg{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+.bn{background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb}
+.sv{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.64rem;font-weight:800;white-space:nowrap}
 .svc{background:var(--gap);color:#fff}.svh{background:#ea580c;color:#fff}.svm{background:var(--warn);color:#fff}.svl{background:#65a30d;color:#fff}.svi{background:#e5e7eb;color:#374151}
-.rm-wrap{padding:6px 20px 20px;display:flex;flex-direction:column;gap:20px}
-.rmgl{font-size:.68rem;font-weight:900;text-transform:uppercase;letter-spacing:.1em;padding:5px 0 8px;border-bottom:2px solid var(--bdr);margin-bottom:8px;display:flex;align-items:center;gap:7px}
-.rm-cnt{font-weight:600;color:var(--mut)}.efq{color:#059669}.efs{color:#d97706}.efx{color:#7c3aed}
-.rmi{padding:10px 13px;border-radius:6px;border-left:3px solid;margin-bottom:6px;background:#fafbfc}
-.rmg-gap{border-color:var(--gap)}.rmg-warn{border-color:var(--warn)}
-.rmi-hd{display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap}
-.rmi-t{font-weight:700;font-size:.83rem;color:var(--txt)}
-.rmi-why{font-size:.76rem;color:#6b7280;line-height:1.45;margin-bottom:4px;font-style:italic}
-.rmi-r{font-size:.78rem;color:#1d4ed8;line-height:1.45}
-.inv-body{padding:18px 22px;display:flex;flex-direction:column;gap:18px}
-.subsec-title{font-size:.64rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);font-weight:800;margin-bottom:8px}
-.user-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
-.ustat{background:#f8fafd;border:1px solid var(--bdr);border-radius:8px;padding:12px 14px;text-align:center}
-.ustat-n{font-size:1.6rem;font-weight:900;color:var(--P);letter-spacing:-.02em;line-height:1}
-.ustat-l{font-size:.65rem;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);font-weight:700;margin-top:3px}
-.mfa-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
-.mfa-title{font-size:.64rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);font-weight:800}
-.mfa-pct{font-size:1.1rem;font-weight:900;letter-spacing:-.02em}
-.mfa-track{height:10px;background:#e8edf5;border-radius:5px;overflow:hidden;margin-bottom:6px}
-.mfa-fill{height:100%;border-radius:5px}.mfa-detail{font-size:.77rem;color:var(--mut);line-height:1.45}
-.adm-tbl{}.adm-ga{background:#fff9f0}.adm-name{font-weight:600}
-.adm-upn{font-size:.78rem;color:var(--mut);font-family:'Consolas','Courier New',monospace}.adm-last{font-size:.78rem;color:var(--mut)}
-.role-tag{font-size:.65rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:4px;background:#eef2ff;color:#3730a3;white-space:nowrap}
-.pim-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-.pim-card{background:#f8fafd;border:1px solid var(--bdr);border-radius:8px;padding:12px 14px;text-align:center}
-.pim-n{font-size:1.6rem;font-weight:900;letter-spacing:-.02em;line-height:1}
-.pim-l{font-size:.65rem;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);font-weight:700;margin-top:3px}
-.tscroll{overflow-x:auto}
-.itbl{width:100%;border-collapse:collapse;font-size:.8rem}
-.itbl thead tr{background:#f4f6fa}
-.itbl th{padding:8px 12px;text-align:left;font-size:.63rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:700;border-bottom:2px solid var(--bdr)}
-.itbl td{padding:8px 12px;border-bottom:1px solid #f3f5f9;vertical-align:middle}
-.itbl tbody tr:last-child td{border-bottom:none}.itbl tbody tr:hover{background:#fafbfc}
-.i2{max-width:480px}
-.igood{color:#166534;font-weight:700}.iwarn{color:#92400e;font-weight:700}.ibad{color:#991b1b;font-weight:700}.ioff{color:var(--mut);font-weight:600}
-.isub{font-size:.68rem;color:var(--mut);margin-left:6px}
-.icode{font-family:'Cascadia Code','Consolas','Courier New',monospace;font-size:.72rem;color:#374151;background:#f3f4f6;padding:1px 5px;border-radius:3px}
-.ca-n{font-weight:600;max-width:220px}.ca-c{font-size:.75rem;color:var(--mut)}.ca-ro{background:#fffdf0}.ca-dis{background:#fafafa;opacity:.7}
-.ftr{background:var(--P);color:rgba(255,255,255,.55);padding:16px 48px;display:flex;justify-content:space-between;font-size:.74rem;flex-wrap:wrap;gap:8px;margin-top:32px}
-.ftr strong{color:#fff}
+
+/* Footer */
+.ftr{background:$P;color:rgba(255,255,255,.48);padding:24px 52px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:32px;margin-top:36px}
+.ftr-l{display:flex;flex-direction:column;gap:4px}
+.ftr-co{font-size:.86rem;font-weight:700;color:#fff}
+.ftr-contact{font-size:.73rem}
+.ftr-contact a{color:rgba(255,255,255,.55);text-decoration:none}
+.ftr-r{text-align:right}
+.ftr-note{font-size:.7rem;color:rgba(255,255,255,.35);margin-top:4px}
+.ftr-cta{display:inline-block;padding:9px 22px;background:$S;color:#fff;border-radius:7px;font-size:.75rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-decoration:none;margin-top:10px}
+.ftr-cta:hover{opacity:.9;text-decoration:none}
+
+@keyframes rfill{to{stroke-dashoffset:$off}}
+
 @media print{
-  *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
-  body{background:#fff;font-size:12px}.wrap{max-width:none}.cnt{padding:16px 28px 28px}.hdr{padding:20px 28px 16px}.ftr{padding:12px 28px;margin-top:18px}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  body{background:#fff;font-size:12px}.wrap{max-width:none}
+  .cnt{padding:12px 28px 24px}.hdr-top{padding:20px 28px 14px}.ftr{padding:14px 28px;margin-top:16px}
   .card{box-shadow:none;break-inside:avoid;border:1px solid #dde3ec}
-  .extr{display:table-row !important}.exp{cursor:default}
-  .ring-fill{animation:none !important;stroke-dashoffset:$offset}
-  .exbody{grid-template-columns:1fr 1fr 1fr}
+  .extr{display:table-row!important}.exp{cursor:default}
+  .fw-grid{grid-template-columns:repeat(4,1fr)!important}
+  .wl-grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))!important}
+  .exbody{grid-template-columns:1fr 1fr 1fr!important}
+  .hdr-nav{display:none}
 }
 </style>
 </head>
 <body>
 <div class="wrap">
+
 <div class="hdr">
-  <div class="hdr-inner">
+  <div class="hdr-top">
     <div>
-      <div class="hdr-eye">Microsoft 365 Security Assessment</div>
-      <div class="hdr-client">$cDisp</div>
+      <div class="eye">Microsoft 365 Security Assessment</div>
+      <div class="hdr-client">$cD</div>
       <div class="hdr-meta">
-        <span><strong>Date</strong> $dStr</span>
-        <span><strong>Tenant</strong> $tDom</span>
-        $(if ($opStr) { "<span><strong>Prepared by</strong> $opStr</span>" })
+        <span><strong>Date</strong> $dS</span>
+        <span><strong>Tenant</strong> $tD</span>
+        $(if($op){"<span><strong>Prepared by</strong> $op</span>"})
+        <span><strong>Frameworks</strong> CIS M365 v6 &middot; CISA SCuBA &middot; NIST SP 800-53r5 &middot; CMMC 2.0</span>
       </div>
     </div>
-    <div class="hdr-right"><div class="ver">NRG-Assessment v$ver</div>$logoH</div>
+    <div class="hdr-right">
+      <div class="ver-badge">NRG-Assessment v$vr</div>
+      $logoH
+    </div>
+  </div>
+  <div class="hdr-nav">
+    <span class="nav-a" onclick="goto('exec')">Overview</span>
+    <span class="nav-a" onclick="goto('fw-section')">Frameworks</span>
+    $(if($licGroups.Count -gt 0){'<span class="nav-a" onclick="goto(''licensing'')">License Gaps</span>'})
+    <span class="nav-a" onclick="goto('named')">Named Findings</span>
+    <span class="nav-a" onclick="goto('actions')">Priority Actions</span>
+    <span class="nav-a" onclick="goto('roadmap')">Roadmap</span>
+    <span class="nav-a" onclick="goto('findings')">All Findings</span>
   </div>
 </div>
 <div class="abar"></div>
+
 <div class="cnt">
 
-<div class="card">
-  <div class="dash">
-    <div class="score-wrap dv">
-      <svg width="132" height="132" viewBox="0 0 160 160">
-        <circle class="ring-trk" cx="80" cy="80" r="72" transform="rotate(-90 80 80)"/>
-        <circle class="ring-fill" cx="80" cy="80" r="72" transform="rotate(-90 80 80)"/>
+<!-- OVERVIEW -->
+<div class="card" id="exec">
+  <div class="card-hd"><div class="card-label">Executive Overview</div><div class="card-sub">$($Findings.Count) controls assessed &middot; $scrd scored &middot; $na not applicable</div></div>
+  <div class="ex-dash">
+    <div class="score-wrap br">
+      <svg width="136" height="136" viewBox="0 0 160 160">
+        <circle fill="none" stroke="#e4e9f2" stroke-width="10" cx="80" cy="80" r="72" transform="rotate(-90 80 80)"/>
+        <circle fill="none" stroke="$S" stroke-width="10" cx="80" cy="80" r="72"
+          stroke-linecap="round" stroke-dasharray="$circ" stroke-dashoffset="$circ"
+          transform="rotate(-90 80 80)" style="animation:rfill 1.4s cubic-bezier(.4,0,.2,1) .25s forwards"/>
       </svg>
       <div class="score-c">
-        <div class="score-n">$score</div>
-        <div class="score-s">/ 100</div>
-        <div class="posture">$pLabel</div>
+        <div class="score-n">$sc2</div>
+        <div class="score-s">Security Score / 100</div>
+        <div class="posture-pill">$pLbl</div>
       </div>
     </div>
-    <div class="stats dv">
-      <div class="sr sg"><span class="sr-lbl">Gaps</span><div class="sr-track"><div class="sr-fill" style="width:${wGap}%"></div></div><span class="sr-num">$gap</span></div>
-      <div class="sr sw"><span class="sr-lbl">Partial</span><div class="sr-track"><div class="sr-fill" style="width:${wPart}%"></div></div><span class="sr-num">$part</span></div>
-      <div class="sr sp"><span class="sr-lbl">Satisfied</span><div class="sr-track"><div class="sr-fill" style="width:${wSat}%"></div></div><span class="sr-num">$sat</span></div>
-      <div class="sr sn"><span class="sr-lbl">N/A</span><div class="sr-track"><div class="sr-fill" style="width:${wNA}%"></div></div><span class="sr-num">$na</span></div>
-      <div class="narrative">$narrativeSentence</div>
+    <div class="stat-col br">
+      <div class="sr sg"><span class="sr-l">Gaps</span><div class="sr-t"><div class="sr-f" style="width:$(pct $gap $scrd)%"></div></div><span class="sr-n">$gap</span></div>
+      <div class="sr sw"><span class="sr-l">Partial</span><div class="sr-t"><div class="sr-f" style="width:$(pct $part $scrd)%"></div></div><span class="sr-n">$part</span></div>
+      <div class="sr sp"><span class="sr-l">Satisfied</span><div class="sr-t"><div class="sr-f" style="width:$(pct $sat $scrd)%"></div></div><span class="sr-n">$sat</span></div>
+      <div class="sr sna"><span class="sr-l">N/A</span><div class="sr-t"><div class="sr-f" style="width:$(pct $na $Findings.Count)%"></div></div><span class="sr-n">$na</span></div>
+      <div class="narr">$narr
+        <div class="sev-pills">
+          $(if($crit -gt 0){"<span class='sp2 spc'>&#9679; $crit Critical</span>"})
+          $(if($high -gt 0){"<span class='sp2 sph'>&#9679; $high High</span>"})
+          $(if($med  -gt 0){"<span class='sp2 spm'>&#9679; $med Medium</span>"})
+          $(if($low  -gt 0){"<span class='sp2 spl'>&#9679; $low Low</span>"})
+        </div>
+      </div>
     </div>
-    <div class="cats">
-      <div class="cats-t">Score by Category</div>
-      $allCatBars
-      <div class="conn-t" style="margin-top:12px">Service Connections</div>
-      <div class="conn-grid">$connHtml</div>
+    <div class="conn-col">
+      <div class="conn-t">Service Coverage</div>
+      $connHtml
     </div>
+  </div>
+  <div class="wl-section">
+    <div class="wl-sec-t">Score by Workload</div>
+    <div class="wl-grid">$wlGrid</div>
   </div>
 </div>
 
-$(if ($actsHtml) { "<div class=`"card mt`"><div class=`"card-hd`"><span class=`"card-title`">Priority Actions</span><span style=`"font-size:.73rem;color:var(--mut)`">Top critical and high-severity items requiring immediate attention</span></div><div class=`"acts`">$actsHtml</div></div>" })
-
-$findHtml
-
-$roadmapHtml
-
-$identityHtml
-
-$dnsInvHtml
-$exoInvHtml
-$caPolicyHtml
-$defInvHtml
-
+<!-- FRAMEWORK COMPLIANCE -->
+<div class="card mt" id="fw-section">
+  <div class="card-hd"><div class="card-label">Framework Compliance Matrix</div><div class="card-sub">Controls mapped to CIS, CISA SCuBA, NIST SP 800-53, and CMMC 2.0</div></div>
+  <div class="fw-grid">$fwHtml</div>
 </div>
+
+<!-- LICENSE GAPS -->
+$licCard
+
+<!-- PRIORITY ACTIONS -->
+$(if($actsHtml){
+"<div class='card mt' id='actions'>
+  <div class='card-hd'><div><div class='card-label'>Priority Actions</div><div class='card-sub'>Critical and high-severity gaps requiring immediate attention</div></div><div style='font-size:.73rem;font-weight:700;color:var(--gap)'>$($topGaps.Count) items</div></div>
+  <div class='acts'>$actsHtml</div>
+</div>"
+})
+
+<!-- NAMED INVENTORY FINDINGS -->
+$(if ($namedHtml) { "<div class='cnt' style='padding-top:0;padding-bottom:0'>$namedHtml</div>" })
+
+<!-- ROADMAP + BEST PRACTICES -->
+<div class='cnt' style='padding-top:0'>$roadmapHtml</div>
+
+<!-- ALL FINDINGS -->
+<div id="findings">$findHtml</div>
+
+</div><!-- /cnt -->
+
 <div class="ftr">
-  <span>Prepared by <strong>$cmpStr</strong>$(if ($phStr) { " &bull; $phStr" })$(if ($wsStr) { " &bull; $wsStr" })</span>
-  <span>Read-only assessment &mdash; no configuration changes were made</span>
+  <div class="ftr-l">
+    <div class="ftr-co">$co2</div>
+    <div class="ftr-contact">$(if($ph2){"$ph2 &nbsp;&middot;&nbsp;"})$(if($ws2b){"<a href='https://$ws2b' target='_blank' rel='noopener noreferrer'>$ws2b</a>"})</div>
+    <div class="ftr-note">Read-only assessment &mdash; no configuration changes were made to this tenant &middot; NRG-Assessment v$vr</div>
+  </div>
+  <div class="ftr-r">
+    <div style="font-size:.73rem;color:rgba(255,255,255,.5)">Ready to remediate these findings?</div>
+    <a class="ftr-cta" href="$(if($ws2b){"https://$ws2b"}else{'#'})" target="_blank" rel="noopener noreferrer">Contact NRG &rarr;</a>
+    <div class="ftr-note">$dS</div>
+  </div>
 </div>
-</div>
+
+</div><!-- /wrap -->
 <script>
-function toggle(tr){var n=tr.nextElementSibling;if(n&&n.classList.contains('extr')){var show=n.style.display==='none'||n.style.display==='';n.style.display=show?'table-row':'none';tr.classList.toggle('open',show)}}
+function goto(id){var el=document.getElementById(id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'})}
+function toggle(tr){var n=tr.nextElementSibling;if(n&&n.classList.contains('extr')){var s=n.style.display===''||n.style.display==='none';n.style.display=s?'table-row':'none';tr.classList.toggle('open',s)}}
 document.querySelectorAll('.extr').forEach(function(r){r.style.display='none'});
 </script>
-</body>
-</html>
+</body></html>
 "@
 
-    $html | Out-File -FilePath $OutputPath -Encoding utf8
+    $html | Out-File -LiteralPath $OutputPath -Encoding utf8
 }

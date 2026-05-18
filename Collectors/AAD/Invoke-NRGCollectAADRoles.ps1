@@ -1,70 +1,139 @@
+#Requires -Version 7.0
 #
-# Invoke-NRGCollectAADRoles.ps1
-# Collects permanent (non-PIM) Entra ID directory role assignments.
-# COLLECTION ONLY - no scoring.
+# Invoke-NRGCollectAADRoles.ps1  (v4.5.5)
+# Collects directory role assignments (active, permanent, and service principals).
+# READ-ONLY.
 #
-# Graph API limitation: Get-MgRoleManagementDirectoryRoleAssignment only supports
-# expanding ONE property per query. Principal and RoleDefinition must be fetched
-# separately and joined by RoleDefinitionId.
+# Required Graph scopes: RoleManagement.Read.All, Directory.Read.All
 #
-# NIST SP 800-53: AC-2(7), AC-6(5)
-# MITRE ATT&CK:   T1078.004 (Cloud Accounts)
-#
-# Required Graph scopes: RoleManagement.Read.All
+# NIST SP 800-53: AC-6 (least privilege), AC-6(5) (privileged accounts)
+# MITRE ATT&CK:   T1078.004 (Cloud Accounts), T1098 (Account Manipulation)
 #
 
 function Invoke-NRGCollectAADRoles {
     [CmdletBinding()] param()
 
     $result = @{
-        Source     = 'AAD-Roles'
-        Timestamp  = [DateTime]::UtcNow.ToString('o')
-        Success    = $false
-        Data       = @{}
-        Exceptions = @()
+        Success = $false
+        Data    = @{
+            RoleDefinitions  = @()
+            RoleAssignments  = @()
+            PrivRoles        = @()
+        }
     }
 
     try {
-        # AC-6(5) — Pull role definitions first for join lookup
-        # Separate call required — cannot expand both Principal and RoleDefinition together
-        $roleDefs = @(Get-MgRoleManagementDirectoryRoleDefinition -All -ErrorAction Stop)
-        $roleDefMap = @{}
-        foreach ($rd in $roleDefs) { $roleDefMap[$rd.Id] = $rd }
-
-        # AC-2(7) — Permanent role assignments with Principal expanded
-        # ExpandProperty limited to one property per query on this endpoint
-        $assignments = @(
-            Get-MgRoleManagementDirectoryRoleAssignment `
-                -All -ExpandProperty 'Principal' -ErrorAction Stop
+        # High-privilege roles to focus evaluation on
+        $privRoleNames = @(
+            'Global Administrator', 'Privileged Role Administrator',
+            'Security Administrator', 'Exchange Administrator',
+            'SharePoint Administrator', 'User Administrator',
+            'Application Administrator', 'Cloud Application Administrator',
+            'Authentication Administrator', 'Privileged Authentication Administrator',
+            'Helpdesk Administrator', 'Compliance Administrator',
+            'Billing Administrator', 'Teams Administrator',
+            'Azure AD Joined Device Local Administrator', 'Intune Administrator',
+            'Conditional Access Administrator'
         )
 
-        $result.Data['PermanentAssignments'] = $assignments | Select-Object -Property @(
-            'Id', 'PrincipalId', 'RoleDefinitionId', 'DirectoryScopeId',
-            @{ N = 'PrincipalUPN';  E = { $_.Principal.AdditionalProperties['userPrincipalName'] } },
-            @{ N = 'PrincipalType'; E = { $_.Principal.AdditionalProperties['@odata.type'] } },
-            @{ N = 'OnPremSynced';  E = { $_.Principal.AdditionalProperties['onPremisesSyncEnabled'] } },
-            @{ N = 'RoleName';      E = { $roleDefMap[$_.RoleDefinitionId].DisplayName } },
-            @{ N = 'IsBuiltIn';     E = { $roleDefMap[$_.RoleDefinitionId].IsBuiltIn } }
-        )
+        # Get all role definitions (we need names to match)
+        try {
+            $roleDefResp = Invoke-MgGraphRequest -Method GET `
+                -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions?$select=id,displayName,isBuiltIn,isEnabled&$top=200' `
+                -ErrorAction Stop
+            $result.Data.RoleDefinitions = @($roleDefResp.value ?? @() | ForEach-Object {
+                @{
+                    Id          = [string]$_.id
+                    DisplayName = [string]$_.displayName
+                    IsBuiltIn   = [bool]$_.isBuiltIn
+                    IsEnabled   = [bool]$_.isEnabled
+                    IsPriv      = ($privRoleNames -contains $_.displayName)
+                }
+            })
+        } catch {
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'AAD-RoleDefinitions' -Message $_.Exception.Message
+            }
+        }
 
-        $result.Data['RoleDefinitions'] = $roleDefs |
-            Select-Object Id, DisplayName, IsBuiltIn, IsEnabled
+        # Build role ID → name lookup
+        $roleMap = @{}
+        foreach ($rd in @($result.Data.RoleDefinitions)) {
+            $roleMap[$rd.Id] = $rd.DisplayName
+        }
 
-        # Pre-aggregate counts for common evaluator queries
-        $GA_ROLE_ID = '62e90394-69f5-4237-9190-012177145e10'
-        $result.Data['TotalAssignmentCount'] = $assignments.Count
-        $result.Data['GlobalAdminCount']     = @($result.Data['PermanentAssignments'] | Where-Object { $_.RoleDefinitionId -eq $GA_ROLE_ID }).Count
-        $result.Data['SyncedAdminCount']     = @($result.Data['PermanentAssignments'] | Where-Object { $_.OnPremSynced -eq $true }).Count
+        # Get active (permanent) role assignments — expanded to get principal details
+        try {
+            $assignResp = Invoke-MgGraphRequest -Method GET `
+                -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments?$expand=principal&$top=500' `
+                -ErrorAction Stop
+
+            $assignments = [System.Collections.Generic.List[object]]::new()
+            $nextLink = $assignResp.'@odata.nextLink'
+
+            foreach ($a in @($assignResp.value ?? @())) {
+                $roleName = $roleMap[$a.roleDefinitionId] ?? $a.roleDefinitionId
+                $assignments.Add(@{
+                    Id                   = [string]$a.id
+                    RoleDefinitionId     = [string]$a.roleDefinitionId
+                    RoleDefinitionName   = $roleName
+                    PrincipalId          = [string]$a.principalId
+                    PrincipalType        = [string]($a.principal.'@odata.type' ?? 'unknown')
+                    PrincipalDisplayName = [string]($a.principal.displayName ?? 'unknown')
+                    PrincipalUPN         = [string]($a.principal.userPrincipalName ?? '')
+                    DirectoryScopeId     = [string]($a.directoryScopeId ?? '/')
+                    IsPriv               = ($privRoleNames -contains $roleName)
+                    OnPremisesSyncEnabled = $a.principal.onPremisesSyncEnabled
+                })
+            }
+
+            # Page through remaining assignments
+            while ($nextLink) {
+                $pageResp = Invoke-MgGraphRequest -Method GET -Uri $nextLink -ErrorAction Stop
+                foreach ($a in @($pageResp.value ?? @())) {
+                    $roleName = $roleMap[$a.roleDefinitionId] ?? $a.roleDefinitionId
+                    $assignments.Add(@{
+                        Id                   = [string]$a.id
+                        RoleDefinitionId     = [string]$a.roleDefinitionId
+                        RoleDefinitionName   = $roleName
+                        PrincipalId          = [string]$a.principalId
+                        PrincipalType        = [string]($a.principal.'@odata.type' ?? 'unknown')
+                        PrincipalDisplayName = [string]($a.principal.displayName ?? 'unknown')
+                        PrincipalUPN         = [string]($a.principal.userPrincipalName ?? '')
+                        DirectoryScopeId     = [string]($a.directoryScopeId ?? '/')
+                        IsPriv               = ($privRoleNames -contains $roleName)
+                        OnPremisesSyncEnabled = $a.principal.onPremisesSyncEnabled
+                    })
+                }
+                $nextLink = $pageResp.'@odata.nextLink'
+            }
+
+            $result.Data.RoleAssignments = $assignments.ToArray()
+            $result.Data.PrivRoles       = @($assignments | Where-Object { $_.IsPriv })
+
+        } catch {
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'AAD-RoleAssignments' -Message $_.Exception.Message
+            }
+        }
 
         $result.Success = $true
-        Register-NRGCoverage -Family 'AAD-Roles' -Status 'Collected'
-    }
-    catch {
-        $result.Exceptions += $_.Exception.Message
-        Register-NRGException -Source 'AAD-Roles' -Message $_.Exception.Message
-        Register-NRGCoverage -Family 'AAD-Roles' -Status 'Failed' -Note $_.Exception.Message
+        if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
+            Register-NRGCoverage -Family 'AAD-Roles' -Status 'Collected' `
+                -Note "$($result.Data.RoleAssignments.Count) assignments"
+        }
+
+    } catch {
+        if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+            Register-NRGException -Source 'AAD-Roles' -Message $_.Exception.Message
+        }
+        if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
+            Register-NRGCoverage -Family 'AAD-Roles' -Status 'Failed' -Note $_.Exception.Message
+        }
     }
 
-    Set-NRGRawData -Key 'AAD-Roles' -Data $result
+    if (Get-Command Set-NRGRawData -ErrorAction SilentlyContinue) {
+        Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data $result
+    }
     return $result
 }
