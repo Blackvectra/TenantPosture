@@ -52,9 +52,9 @@ $script:NRGBrand = if (Test-Path -LiteralPath $brandPath) {
 if (-not $script:NRGBrand) {
     $script:NRGBrand = @{
         CompanyName    = 'NRG Technology Services'
-        Phone          = '(701) 751-4NRG'
+        Phone          = '(701) 250-9400'
         Website        = 'nrgtechservices.com'
-        Email          = 'security@nrgtechservices.com'
+        Email          = 'sales@nrgtechservices.com'
         PrimaryColor   = '#1a3a6b'
         SecondaryColor = '#e87722'
         AccentColor    = '#4a7ba6'

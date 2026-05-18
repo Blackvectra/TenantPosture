@@ -1,6 +1,6 @@
 # Changelog
 
-## v4.5.5 (2026-05-18)
+## v4.5.5 (2025-05-18)
 
 Major architectural change: rebuilt on the v4.5.0 baseline pattern to eliminate runtime crashes caused by aggressive `Set-StrictMode -Version Latest` propagation into evaluator scope.
 
@@ -30,23 +30,9 @@ Major architectural change: rebuilt on the v4.5.0 baseline pattern to eliminate 
 - **GDAP batch runner** (Invoke-NRGBatchAssessment.ps1) for MSP multi-tenant runs.
 
 ### Changed
-- **`-SkipPurview` defaults to `$true`** — EOM v3.4 IPPSSession WAM crash. Use `-IncludePurview` to opt in. (Implemented via script body logic — `[switch]` params do not default to `$true` per PSScriptAnalyzer.)
+- **`-SkipPurview` defaults to `$true`** — EOM v3.4 IPPSSession WAM crash. Use `-IncludePurview` to opt in.
 - **Evaluator discovery dynamic** — orchestrator enumerates `Test-NRGControl*` from loaded module rather than hardcoded list.
 - **Disconnect at end of run** — no try/finally chain that fires on every error.
-
-### Fixed (this session)
-- **`else`/`elseif` on new line after `}`** — PS parses `}` as end of statement; `else` on next line becomes `CommandNotFoundException`. Affected `Publish-NRGAssessmentHTML.ps1`, `Invoke-NRGCollectDNSEmailRecords.ps1`, `Test-NRGControl-DNS.ps1`, `Publish-NRGDeltaReport.ps1`.
-- **`hx (if ...)` in command mode** — function call followed by `(if` causes PS to treat `if` as a command name. Fixed to `hx $(if ...)` subexpression syntax.
-- **INT-1.3/INT-1.4/INT-1.5 evaluator logic swapped** — INT-1.3 (BitLocker) was evaluating MAM policies; INT-1.4 (MAM) was evaluating device compliance %; INT-1.5 (Antivirus) was evaluating enrollment restrictions. Each now evaluates its correct control.
-- **TMS-1.2/TMS-1.3 evaluator logic swapped** — anonymous meeting join logic was in TMS-1.2; consumer Teams access logic was in TMS-1.3. ControlIds corrected to match controls.json.
-- **`EXO-SmtpAuth` filter error** — `Get-CASMailbox -Filter {SmtpClientAuthenticationDisabled -eq $false}` fails (property not filterable). Replaced with `| Where-Object { $_.SmtpClientAuthenticationDisabled -eq $false }` in both EXO collectors.
-- **`[switch] $SkipPurview = $true`** — PSScriptAnalyzer `PSAvoidDefaultValueSwitchParameter`. Default moved to script body.
-- **`PSScriptRoot` assignment in test** — `$PSScriptRoot` is an automatic variable and cannot be overridden from a calling scope. Test replaced with direct severity validator check.
-- **`controls.json` Context block outside `Describe`** — missing `}` for `Module Loader Hardening` Context caused Describe to close prematurely; `controls.json` Context was orphaned at top level. Fixed brace structure.
-- **Unused variables across 8 files** — removed `$cloudStorage`, `$privRoles`, `$citations`, `$orgConfig`, `$userRaw`, `$sl`/`$sa`/`$ca`, `$flowEnabled`, `$totalSIT`, `$customScript`, `$thirdParty`/`$thirdPartyStorage`, `$vhEnabled`, `$showAO`, `$ctrl4`, `$ssData`/`$ssFindingDetail`.
-- **`$null` comparison direction** — `$_.MaxDurationHours -eq $null` → `$null -eq $_.MaxDurationHours` (PSScriptAnalyzer `PSPossibleIncorrectComparisonWithNull`).
-- **`CmdletBinding` before `Set-StrictMode`** — fixed in `Generate-SBOM.ps1`, `Verify-Integrity.ps1`, `Sign-Release.ps1`.
-- **`AAD-1.4` false positive framing** — Sign-in Risk CA Policy detail now explicitly states this requires Entra P2, not included in Business Premium.
 
 ## v4.5.0 (Baseline)
 
