@@ -1,6 +1,22 @@
 #Requires -Version 7.0
 
 # Safe property accessor — prevents throw on null nested object access
+
+# ── Collection Guard ────────────────────────────────────────────────────────
+# Returns $true if AAD data was successfully collected
+function Test-NRGAADDataAvailable {
+    $ca   = Get-NRGRawData -Key 'AAD-CAPolicies'
+    $auth = Get-NRGRawData -Key 'AAD-AuthPolicies'
+    $usr  = Get-NRGRawData -Key 'AAD-Users'
+    $rol  = Get-NRGRawData -Key 'AAD-Roles'
+    # At least one AAD collector must have succeeded
+    return ($ca   -and $ca.Success)   -or
+           ($auth -and $auth.Success) -or
+           ($usr  -and $usr.Success)  -or
+           ($rol  -and $rol.Success)
+}
+
+
 function Get-SafeProp {
     param($obj, [string]$prop, $default = $null)
     if ($null -eq $obj) { return $default }
@@ -94,6 +110,16 @@ function Test-NRGControlAADMFA {
         $total    = $withMFA + $noMFA
         $regPct   = if ($total -gt 0) { [int][Math]::Round($withMFA * 100 / $total) } else { 0 }
         $regSummary = " Registration: $withMFA of $total users ($regPct%) have MFA registered."
+    }
+
+    # Guard: if neither CA policies nor auth policies were collected, data is unavailable
+    $caCollected   = ($caData   -and $caData.Success)
+    $authCollected = ($authData -and $authData.Success)
+    if (-not $caCollected -and -not $authCollected) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Severity 'Informational' `
+            -Detail 'AAD data not collected — Graph connection failed or insufficient permissions.'
+        return
     }
 
     if ($secDefEnabled) {

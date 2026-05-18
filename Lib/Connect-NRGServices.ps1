@@ -131,6 +131,14 @@ function Connect-NRGServices {
             'UserAuthenticationMethod.Read.All'
         )
 
+        # Force-load the LATEST Microsoft.Graph.Authentication to prevent assembly conflicts
+        # when multiple versions exist or EOM has loaded an older bundled version
+        $mgAuthVersions = @(Get-Module -ListAvailable -Name Microsoft.Graph.Authentication |
+            Sort-Object Version -Descending)
+        if ($mgAuthVersions) {
+            Import-Module $mgAuthVersions[0].Path -Force -ErrorAction SilentlyContinue -WarningAction SilentlyContinue 3>$null
+        }
+
         # Pre-import Graph sub-modules before Connect-MgGraph locks the version
         $graphSubModules = @(
             'Microsoft.Graph.Reports',
@@ -166,6 +174,11 @@ function Connect-NRGServices {
             }
 
             $result['Graph']        = $true
+            # Verify Organization.Read.All consent (needed for subscribedSkus)
+            $ctx = Get-MgContext
+            if ($ctx -and $ctx.Scopes -notcontains 'Organization.Read.All') {
+                Write-Host "  [!] Organization.Read.All not in token — SKU detection disabled. Run Disconnect-MgGraph then re-run to force re-consent." -ForegroundColor Yellow
+            }
             $result['TenantId']     = "$($ctx.TenantId)"
             $result['TenantDomain'] = $accountDomain
             $who = if ($isAppOnly) { "App $($AppId.Substring(0,8))... in tenant $($TenantId.Substring(0,8))..." } else { $ctx.Account }

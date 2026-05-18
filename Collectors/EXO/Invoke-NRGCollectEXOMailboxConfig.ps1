@@ -37,8 +37,12 @@ function Invoke-NRGCollectEXOMailboxConfig {
         try {
             $tc = Get-TransportConfig -ErrorAction Stop
             $result.Data.TransportConfig = @{
-                SmtpClientAuthenticationDisabled = $tc.SmtpClientAuthenticationDisabled
-                MaxRecipientEnvelopeLimit        = $tc.MaxRecipientEnvelopeLimit
+                SmtpClientAuthenticationDisabled = if ($null -ne $tc.SmtpClientAuthenticationDisabled) { [bool]$tc.SmtpClientAuthenticationDisabled } else { $null }
+                AutoForwardEnabled               = if ($null -ne $tc.AutoForwardEnabled) { [bool]$tc.AutoForwardEnabled } else { $true }
+                MaxRecipientEnvelopeLimit        = try {
+                    $raw = [string]$tc.MaxRecipientEnvelopeLimit
+                    if ($raw -match '^\d+$') { [int]$raw } else { $null }  # 'Unlimited' → $null
+                } catch { $null }
             }
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
