@@ -1,0 +1,19 @@
+# Netlify / Cloudflare Pages _headers file
+# Apply these headers when serving NRG-Assessment HTML reports from a web portal.
+# This provides the full Content-Security-Policy enforcement (including frame-ancestors,
+# which is NOT enforced by the bundled meta-tag CSP per MDN/W3C CSP3).
+
+/*
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; script-src 'unsafe-inline'; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
+
+/*.html
+  Content-Type: text/html; charset=utf-8
+  Cache-Control: private, no-store

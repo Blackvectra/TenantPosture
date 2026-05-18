@@ -1,15 +1,84 @@
 {
-  "Frameworks": [
-    { "Id": "NIST-800-53",  "Name": "NIST SP 800-53 Rev 5",      "Version": "Rev 5",      "Authority": "NIST",      "Mandatory": false },
-    { "Id": "CIS-v8",       "Name": "CIS Controls v8.1",          "Version": "8.1",        "Authority": "CIS",       "Mandatory": false },
-    { "Id": "CIS-M365-v6",  "Name": "CIS M365 Foundations",       "Version": "6.0.1",      "Authority": "CIS",       "Mandatory": false },
-    { "Id": "HIPAA",        "Name": "HIPAA Security Rule",        "Version": "Current",    "Authority": "HHS",       "Mandatory": false },
-    { "Id": "HIPAA-NPRM",   "Name": "HIPAA NPRM 2024",            "Version": "NPRM 2024",  "Authority": "HHS",       "Mandatory": false },
-    { "Id": "ISO-27001",    "Name": "ISO/IEC 27001",              "Version": "2022",       "Authority": "ISO",       "Mandatory": false },
-    { "Id": "NIST-CSF-2",   "Name": "NIST CSF",                   "Version": "2.0",        "Authority": "NIST",      "Mandatory": false },
-    { "Id": "SOC-2",        "Name": "SOC 2 Trust Service Criteria","Version": "2017 TSC", "Authority": "AICPA",     "Mandatory": false },
-    { "Id": "CISA-SCuBA",   "Name": "CISA SCuBA M365 Baseline",   "Version": "Current",    "Authority": "CISA",      "Mandatory": true  },
-    { "Id": "CISA-BOD",     "Name": "CISA Binding Operational Directives","Version": "18-01, 25-01", "Authority": "CISA", "Mandatory": true },
-    { "Id": "CMMC-L2",      "Name": "CMMC 2.0 Level 2",           "Version": "2.0",        "Authority": "DoD",       "Mandatory": false }
+  "frameworks": [
+    {
+      "Id": "CIS",
+      "FullName": "CIS Microsoft 365 Foundations Benchmark v6.0.1",
+      "Version": "6.0.1",
+      "Publisher": "Center for Internet Security",
+      "URL": "https://www.cisecurity.org/benchmark/microsoft_365",
+      "Applicable": "All commercial M365 tenants"
+    },
+    {
+      "Id": "SCuBA",
+      "FullName": "CISA Secure Cloud Business Applications (SCuBA) v1.7.1",
+      "Version": "1.7.1",
+      "Publisher": "Cybersecurity and Infrastructure Security Agency",
+      "URL": "https://www.cisa.gov/resources-tools/services/secure-cloud-business-applications-scuba-project",
+      "Applicable": "Federal civilian executive branch; recommended for state/local government"
+    },
+    {
+      "Id": "NIST",
+      "FullName": "NIST SP 800-53 Revision 5",
+      "Version": "Rev 5",
+      "Publisher": "National Institute of Standards and Technology",
+      "URL": "https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final",
+      "Applicable": "Federal agencies; FedRAMP baselines; widely adopted in private sector"
+    },
+    {
+      "Id": "CMMC",
+      "FullName": "Cybersecurity Maturity Model Certification 2.0 Level 2",
+      "Version": "2.0 Level 2",
+      "Publisher": "Department of Defense",
+      "URL": "https://dodcio.defense.gov/CMMC/",
+      "Applicable": "DoD contractors handling Controlled Unclassified Information (CUI)"
+    },
+    {
+      "Id": "ISO27001",
+      "FullName": "ISO/IEC 27001:2022",
+      "Version": "2022",
+      "Publisher": "International Organization for Standardization",
+      "URL": "https://www.iso.org/standard/27001",
+      "Applicable": "Organizations pursuing ISO 27001 certification; internationally recognized"
+    },
+    {
+      "Id": "SOC2",
+      "FullName": "SOC 2 Trust Services Criteria (2022)",
+      "Version": "2022",
+      "Publisher": "American Institute of Certified Public Accountants (AICPA)",
+      "URL": "https://www.aicpa.org/resources/landing/system-and-organization-controls-soc-suite-of-services",
+      "Applicable": "SaaS providers; any organization undergoing SOC 2 Type I or II audit"
+    },
+    {
+      "Id": "HIPAA",
+      "FullName": "HIPAA Security Rule (45 CFR Part 164)",
+      "Version": "2024",
+      "Publisher": "U.S. Department of Health and Human Services",
+      "URL": "https://www.hhs.gov/hipaa/for-professionals/security/index.html",
+      "Applicable": "Covered entities and business associates handling Protected Health Information (PHI)"
+    },
+    {
+      "Id": "PCIDSS",
+      "FullName": "PCI DSS v4.0.1",
+      "Version": "4.0.1",
+      "Publisher": "PCI Security Standards Council",
+      "URL": "https://www.pcisecuritystandards.org/document_library/",
+      "Applicable": "Organizations processing, storing, or transmitting payment card data"
+    },
+    {
+      "Id": "DISASTIG",
+      "FullName": "DISA STIG for Microsoft 365",
+      "Version": "2024",
+      "Publisher": "Defense Information Systems Agency",
+      "URL": "https://public.cyber.mil/stigs/",
+      "Applicable": "DoD systems; used by defense contractors and federal agencies"
+    },
+    {
+      "Id": "MITRE",
+      "FullName": "MITRE ATT&CK Enterprise v16.1",
+      "Version": "v16.1",
+      "Publisher": "MITRE Corporation",
+      "URL": "https://attack.mitre.org",
+      "Applicable": "Threat modeling; adversary technique mapping; red/blue team alignment"
+    }
   ]
 }

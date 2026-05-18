@@ -1,126 +1,135 @@
+#Requires -Version 7.0
 #
 # Invoke-NRGCollectIntune.ps1
-# Collects Microsoft Intune (Endpoint Manager) configuration via Microsoft Graph.
+# Collects Intune device compliance, MAM, MTD, and enrollment configuration via Graph.
 #
-# Requires: Microsoft Graph connection
-# Scopes:   DeviceManagementConfiguration.Read.All, DeviceManagementApps.Read.All
+# READ-ONLY: This collector executes only Get-Mg* and Invoke-MgGraphRequest GET calls.
+# It does not create, modify, or remove any configuration.
 #
-# Data keys stored:
-#   Intune.CompliancePolicies       — /v1.0/deviceManagement/deviceCompliancePolicies
-#   Intune.EnrollmentConfigs        — /v1.0/deviceManagement/deviceEnrollmentConfigurations
-#   Intune.ManagedDeviceOverview    — /v1.0/deviceManagement/managedDeviceOverview
-#   Intune.MtdConnectors            — /v1.0/deviceManagement/mobileThreatDefenseConnectors
-#   Intune.AppProtectionPolicies    — /v1.0/deviceAppManagement/managedAppPolicies
-#   Intune.DeviceConfigurations     — /v1.0/deviceManagement/deviceConfigurations
+# Returns: structured hashtable stored under key 'Intune' via Set-NRGRawData.
+# Reads:   Graph DeviceManagement.* endpoints.
 #
-# NIST SP 800-53: CM-2, CM-6, CM-7, SC-8, SC-28, SI-3
-# MITRE ATT&CK:   T1082, T1005, T1078
+# NIST SP 800-53: CM-2 (baseline configuration), CM-8 (component inventory)
+# MITRE ATT&CK:   T1078 (Valid Accounts), T1005 (Data from Local System)
 #
 
 function Invoke-NRGCollectIntune {
     [CmdletBinding()] param()
-
     $result = @{
-        Source     = 'Intune'
-        Timestamp  = (Get-Date -Format 'o')
-        Success    = $false
-        Data       = @{}
-        Exceptions = @()
-    }
-
-    function GraphGet {
-        param([string]$Uri)
-        $all = @()
-        $next = $Uri
-        do {
-            try {
-                $r = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
-                if ($r.value) { $all += $r.value }
-                elseif ($r -and -not $r.ContainsKey('value')) { $all += $r }
-                $next = if ($r.'@odata.nextLink') { $r.'@odata.nextLink' } else { $null }
-            } catch {
-                throw $_
-            }
-        } while ($next)
-        return $all
+        Success = $false
+        Data    = @{
+            CompliancePolicies   = @()
+            ConfigurationProfiles = @()
+            AppProtectionPolicies = @()
+            EnrolledDevices       = @{ Total = 0; Compliant = 0; NonCompliant = 0; ByPlatform = @{} }
+            EnrollmentConfig      = $null
+        }
     }
 
     try {
-        # ── Managed device overview ────────────────────────────────────────────
+        # Device compliance policies
         try {
-            $overview = Invoke-MgGraphRequest -Method GET `
-                -Uri 'https://graph.microsoft.com/v1.0/deviceManagement/managedDeviceOverview' `
-                -ErrorAction Stop
-            $result.Data['ManagedDeviceOverview'] = $overview
-        } catch {
-            $result.Exceptions += "DeviceOverview: $($_.Exception.Message)"
-            $result.Data['ManagedDeviceOverview'] = $null
-        }
-
-        # ── Device compliance policies ─────────────────────────────────────────
-        try {
-            $policies = @(GraphGet 'https://graph.microsoft.com/v1.0/deviceManagement/deviceCompliancePolicies')
-            # Expand settings for each policy
-            $expanded = @()
-            foreach ($p in $policies) {
-                try {
-                    $detail = Invoke-MgGraphRequest -Method GET `
-                        -Uri "https://graph.microsoft.com/v1.0/deviceManagement/deviceCompliancePolicies/$($p.id)" `
-                        -ErrorAction Stop
-                    $expanded += $detail
-                } catch {
-                    $expanded += $p
-                }
+            $compliance = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/deviceManagement/deviceCompliancePolicies' -ErrorAction Stop
+            if ($compliance.value) {
+                $result.Data.CompliancePolicies = @($compliance.value | ForEach-Object {
+                    @{
+                        Id          = $_.id
+                        DisplayName = $_.displayName
+                        Platform    = $_.'@odata.type'
+                        Description = $_.description
+                        Version     = $_.version
+                    }
+                })
             }
-            $result.Data['CompliancePolicies'] = $expanded
         } catch {
-            $result.Exceptions += "CompliancePolicies: $($_.Exception.Message)"
-            $result.Data['CompliancePolicies'] = @()
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'Intune-Compliance' -Message $_.Exception.Message
+            }
         }
 
-        # ── Enrollment configurations ──────────────────────────────────────────
+        # Configuration profiles
         try {
-            $enroll = @(GraphGet 'https://graph.microsoft.com/v1.0/deviceManagement/deviceEnrollmentConfigurations')
-            $result.Data['EnrollmentConfigs'] = $enroll
+            $config = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/deviceManagement/deviceConfigurations' -ErrorAction Stop
+            if ($config.value) {
+                $result.Data.ConfigurationProfiles = @($config.value | ForEach-Object {
+                    @{
+                        Id          = $_.id
+                        DisplayName = $_.displayName
+                        Platform    = $_.'@odata.type'
+                    }
+                })
+            }
         } catch {
-            $result.Exceptions += "EnrollmentConfigs: $($_.Exception.Message)"
-            $result.Data['EnrollmentConfigs'] = @()
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'Intune-Config' -Message $_.Exception.Message
+            }
         }
 
-        # ── Mobile Threat Defense connectors ──────────────────────────────────
+        # App protection (MAM) policies
         try {
-            $mtd = @(GraphGet 'https://graph.microsoft.com/v1.0/deviceManagement/mobileThreatDefenseConnectors')
-            $result.Data['MtdConnectors'] = $mtd
+            $mam = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/deviceAppManagement/managedAppPolicies' -ErrorAction Stop
+            if ($mam.value) {
+                $result.Data.AppProtectionPolicies = @($mam.value | ForEach-Object {
+                    @{
+                        Id          = $_.id
+                        DisplayName = $_.displayName
+                        Type        = $_.'@odata.type'
+                    }
+                })
+            }
         } catch {
-            $result.Exceptions += "MtdConnectors: $($_.Exception.Message)"
-            $result.Data['MtdConnectors'] = @()
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'Intune-MAM' -Message $_.Exception.Message
+            }
         }
 
-        # ── App protection (MAM) policies ──────────────────────────────────────
+        # Managed devices (compliance state)
         try {
-            $mam = @(GraphGet 'https://graph.microsoft.com/v1.0/deviceAppManagement/managedAppPolicies')
-            $result.Data['AppProtectionPolicies'] = $mam
+            $devices = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$select=id,operatingSystem,complianceState' -ErrorAction Stop
+            if ($devices.value) {
+                $devList = @($devices.value)
+                $result.Data.EnrolledDevices.Total        = $devList.Count
+                $result.Data.EnrolledDevices.Compliant    = @($devList | Where-Object { $_.complianceState -eq 'compliant' }).Count
+                $result.Data.EnrolledDevices.NonCompliant = @($devList | Where-Object { $_.complianceState -ne 'compliant' }).Count
+                $byPlatform = @{}
+                foreach ($d in $devList) {
+                    $p = if ($d.operatingSystem) { [string]$d.operatingSystem } else { 'Unknown' }
+                    if (-not $byPlatform.ContainsKey($p)) { $byPlatform[$p] = 0 }
+                    $byPlatform[$p]++
+                }
+                $result.Data.EnrolledDevices.ByPlatform = $byPlatform
+            }
         } catch {
-            $result.Exceptions += "AppProtectionPolicies: $($_.Exception.Message)"
-            $result.Data['AppProtectionPolicies'] = @()
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'Intune-Devices' -Message $_.Exception.Message
+            }
         }
 
-        # ── Device configurations ──────────────────────────────────────────────
+        # Enrollment configuration
         try {
-            $devCfg = @(GraphGet 'https://graph.microsoft.com/v1.0/deviceManagement/deviceConfigurations')
-            $result.Data['DeviceConfigurations'] = $devCfg
+            $enroll = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/deviceManagement/deviceEnrollmentConfigurations' -ErrorAction Stop
+            if ($enroll.value) {
+                $result.Data.EnrollmentConfig = @($enroll.value | ForEach-Object {
+                    @{
+                        Id          = $_.id
+                        DisplayName = $_.displayName
+                        Type        = $_.'@odata.type'
+                        Priority    = $_.priority
+                    }
+                })
+            }
         } catch {
-            $result.Exceptions += "DeviceConfigurations: $($_.Exception.Message)"
-            $result.Data['DeviceConfigurations'] = @()
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'Intune-Enrollment' -Message $_.Exception.Message
+            }
         }
 
         $result.Success = $true
-
     } catch {
-        $result.Exceptions += $_.Exception.Message
-        Register-NRGException -Source 'Invoke-NRGCollectIntune' -Message $_.Exception.Message
+        if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+            Register-NRGException -Source 'Intune-Collector' -Message $_.Exception.Message
+        }
     }
 
     Set-NRGRawData -Key 'Intune' -Data $result
-    return $result
 }

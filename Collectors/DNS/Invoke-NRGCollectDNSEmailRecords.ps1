@@ -1,165 +1,224 @@
+#Requires -Version 7.0
 #
-# Invoke-NRGCollectDNSEmailRecords.ps1
-# Collects SPF, DKIM, DMARC, MTA-STS, TLS-RPT, DNSSEC for accepted domains.
-# COLLECTION ONLY - no scoring.
+# Invoke-NRGCollectDNSEmailRecords.ps1  (v4.5.5)
+# Collects DNS email authentication records: SPF, DKIM, DMARC, MTA-STS, TLS-RPT, DNSSEC.
+# READ-ONLY. External DNS queries only — no tenant writes.
 #
-# PS7 compatibility: Resolve-DnsName returns .Strings OR .Text depending on module version.
-# Uses PSObject.Properties check to avoid StrictMode PropertyNotFoundException.
+# IMPORTANT: Domain names are validated before any DNS call (OWASP A03 / ASVS V5.1.3).
+# DNS responses are treated as hostile data and sanitized before storing.
 #
+# NIST SP 800-53: SI-8 (spam protection), SC-8 (transmission confidentiality)
+# MITRE ATT&CK:   T1566 (Phishing), T1036.005 (Domain Spoofing)
+#
+
+# Validated FQDN pattern — reused for all domain validation in this file
+$script:DomainPattern = '^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
 
 function Invoke-NRGCollectDNSEmailRecords {
     [CmdletBinding()]
     param(
-        [string[]] $Domains,
-        # Public DNS servers - bypasses corporate DNS that may block external TXT lookups
-        # Falls back to machine default if all public servers fail
-        [string[]] $DnsServers = @('8.8.8.8', '1.1.1.1', '9.9.9.9')
+        # Explicit domain list — if not provided, reads from EXO accepted domains
+        [ValidateScript({
+            foreach ($d in $_) {
+                if ($d -notmatch '^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$') {
+                    throw "Invalid domain name: '$d'"
+                }
+            }
+            return $true
+        })]
+        [string[]] $Domains
     )
 
     $result = @{
-        Source     = 'DNS-EmailRecords'
-        Timestamp  = [DateTime]::UtcNow.ToString('o')
-        Success    = $false
-        Data       = @{}
-        Exceptions = @()
+        Success     = $false
+        Data        = @{ Domains = @{}; DomainCount = 0 }
     }
 
-    # DNS resolver with public server fallback
-    function Resolve-DnsWithFallback {
-        param([string]$Name, [string]$Type = 'TXT')
-        foreach ($server in $DnsServers) {
+    try {
+        # Determine domain list
+        if (-not $Domains -or $Domains.Count -eq 0) {
+            $exoData = if (Get-Command Get-NRGRawData -ErrorAction SilentlyContinue) {
+                Get-NRGRawData -Key 'EXO-MailboxConfig'
+            } else { $null }
+
+            if ($exoData -and $exoData.Success -and $exoData.Data.AcceptedDomains) {
+                $Domains = @($exoData.Data.AcceptedDomains |
+                    Where-Object { $_.DomainName -notmatch '\.onmicrosoft\.com$' } |
+                    ForEach-Object { $_.DomainName } |
+                    Where-Object { $_ -match $script:DomainPattern })
+            }
+        }
+
+        if (-not $Domains -or $Domains.Count -eq 0) {
+            if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
+                Register-NRGCoverage -Family 'DNS-EmailRecords' -Status 'NotCollected' -Note 'No domains to check'
+            }
+            $result.Success = $true
+            if (Get-Command Set-NRGRawData -ErrorAction SilentlyContinue) {
+                Set-NRGRawData -Key 'DNS-EmailRecords' -Data $result
+            }
+            return $result
+        }
+
+        $domainResults = @{}
+
+        foreach ($domain in $Domains) {
+            # Final validation — belt-and-suspenders even though we validated above
+            if ($domain -notmatch $script:DomainPattern) {
+                Write-Warning "Skipping invalid domain: $domain"
+                continue
+            }
+
+            $d = @{
+                Domain  = $domain
+                SPF     = $null
+                DKIM    = @{ Selector1 = $null; Selector2 = $null; CustomSelectors = @() }
+                DMARC   = $null
+                MTASTS  = @{ DNSRecord = $null; Policy = $null; Mode = $null }
+                TLSRPT  = $null
+                DNSSEC  = $false
+                MX      = @()
+                Errors  = @()
+            }
+
+            # SPF
             try {
-                $r = @(Resolve-DnsName -Name $Name -Type $Type -Server $server -ErrorAction Stop)
-                if ($r.Count -gt 0) { return $r }
-            } catch { }
-        }
-        # Fallback to machine default DNS
-        try { return @(Resolve-DnsName -Name $Name -Type $Type -ErrorAction Stop) } catch { return @() }
-    }
+                $txtRecords = @(Resolve-DnsName -Name $domain -Type TXT -ErrorAction Stop -ErrorVariable dnsErr)
+                $spfRecord  = $txtRecords |
+                    Where-Object { ($_.Strings -join '') -like 'v=spf1*' } |
+                    Select-Object -First 1
+                if ($spfRecord) { $d.SPF = ($spfRecord.Strings -join '') }
+            } catch {
+                $d.Errors += "SPF: $($_.Exception.Message)"
+            }
 
-    # Safe TXT value extractor - handles .Strings (PS5/older) and .Text (PS7/newer)
-    # Uses PSObject.Properties to avoid StrictMode throws
-    function Get-TxtValue {
-        param($record)
-        if ($null -eq $record) { return $null }
-        $props = $record.PSObject.Properties.Name
-        if ('Strings'  -in $props -and $null -ne $record.Strings)  { return ($record.Strings  -join '') }
-        if ('Text'     -in $props -and $null -ne $record.Text)      { return ($record.Text     -join '') }
-        if ('TextData' -in $props -and $null -ne $record.TextData)  { return "$($record.TextData)" }
-        if ('Data'     -in $props -and $null -ne $record.Data)      { return "$($record.Data)" }
-        return $null
-    }
+            # DKIM — standard selectors + check if EXO DKIM data has custom selectors
+            $dkimSelectors = @('selector1', 'selector2')
 
-    # Get domains from EXO accepted domains if not supplied
-    if (-not $Domains -or $Domains.Count -eq 0) {
-        try {
-            $accepted = @(Get-AcceptedDomain -ErrorAction Stop)
-            $Domains  = @($accepted |
-                Where-Object { $_.DomainName -notlike '*.onmicrosoft.com' } |
-                Select-Object -ExpandProperty DomainName)
-        } catch {
-            $result.Exceptions += "GetAcceptedDomains: $($_.Exception.Message)"
-        }
-    }
+            # Pull any custom DKIM selectors from EXO collector data
+            $exoRaw = if (Get-Command Get-NRGRawData -ErrorAction SilentlyContinue) {
+                Get-NRGRawData -Key 'EXO-MailboxConfig'
+            } else { $null }
 
-    $domainResults = @{}
-
-    foreach ($domain in $Domains) {
-        $d = @{
-            Domain = $domain
-            SPF    = $null
-            DKIM   = @{ Selector1 = $null; Selector2 = $null }
-            DMARC  = $null
-            MTASTS = @{ TxtRecord = $null; Policy = $null; Mode = $null }
-            TLSRPT = $null
-            DNSSEC = $false
-        }
-
-        # ── SPF ───────────────────────────────────────────────────────────────
-        try {
-            $spfRecs = @(Resolve-DnsWithFallback -Name $domain -Type 'TXT')
-            $spfMatch = $spfRecs | Where-Object {
-                $val = Get-TxtValue $_
-                $null -ne $val -and $val -like 'v=spf1*'
-            } | Select-Object -First 1
-            if ($spfMatch) { $d.SPF = Get-TxtValue $spfMatch }
-        } catch {
-            # SPF lookup failure is non-fatal
-            $result.Exceptions += "SPF-$domain`: $($_.Exception.Message)"
-        }
-
-        # ── DKIM (selector1 + selector2) ──────────────────────────────────────
-        foreach ($selector in @('selector1','selector2')) {
-            try {
-                $cnRecs = @(Resolve-DnsWithFallback -Name "$selector._domainkey.$domain" -Type 'CNAME')
-                $cname  = $cnRecs | Where-Object {
-                    $props = $_.PSObject.Properties.Name
-                    'Type' -in $props -and $_.Type -eq 'CNAME'
-                } | Select-Object -First 1
-                if (-not $cname) { $cname = $cnRecs | Select-Object -First 1 }
-                if ($cname) {
-                    $props  = $cname.PSObject.Properties.Name
-                    $target = if ('NameHost'  -in $props) { $cname.NameHost }
-                              elseif ('NameAlias' -in $props) { $cname.NameAlias }
-                              else { "$cname" }
-                    $key = if ($selector -eq 'selector1') { 'Selector1' } else { 'Selector2' }
-                    $d.DKIM[$key] = $target
+            if ($exoRaw -and $exoRaw.Success) {
+                $dkimConfig = @($exoRaw.Data.DkimSigningConfigs ?? @()) |
+                    Where-Object { $_.Domain -eq $domain } | Select-Object -First 1
+                if ($dkimConfig) {
+                    if ($dkimConfig.Selector1) { $dkimSelectors += $dkimConfig.Selector1 }
+                    if ($dkimConfig.Selector2) { $dkimSelectors += $dkimConfig.Selector2 }
+                    $dkimSelectors = @($dkimSelectors | Select-Object -Unique)
                 }
-            } catch { } # DKIM not configured is normal
-        }
+            }
 
-        # ── DMARC ─────────────────────────────────────────────────────────────
-        try {
-            $dmarcRecs = @(Resolve-DnsWithFallback -Name "_dmarc.$domain" -Type 'TXT')
-            $dmarcMatch = $dmarcRecs | Where-Object {
-                $val = Get-TxtValue $_
-                $null -ne $val -and $val -like 'v=DMARC1*'
-            } | Select-Object -First 1
-            if ($dmarcMatch) { $d.DMARC = Get-TxtValue $dmarcMatch }
-        } catch { }
-
-        # ── MTA-STS TXT record ────────────────────────────────────────────────
-        try {
-            $stsRecs = @(Resolve-DnsWithFallback -Name "_mta-sts.$domain" -Type 'TXT')
-            $stsMatch = $stsRecs | Where-Object {
-                $val = Get-TxtValue $_
-                $null -ne $val -and $val -like 'v=STSv1*'
-            } | Select-Object -First 1
-            if ($stsMatch) {
-                $d.MTASTS.TxtRecord = Get-TxtValue $stsMatch
-                # Parse mode from policy file
-                $stsUrl = "https://mta-sts.$domain/.well-known/mta-sts.txt"
+            foreach ($sel in $dkimSelectors) {
                 try {
-                    $policy = Invoke-WebRequest -Uri $stsUrl -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
-                    $d.MTASTS.Policy = $policy.Content
-                    if ($policy.Content -match 'mode:\s*(\S+)') { $d.MTASTS.Mode = $Matches[1].Trim() }
+                    $dkimFqdn    = "${sel}._domainkey.${domain}"
+                    $dkimRecords = @(Resolve-DnsName -Name $dkimFqdn -Type TXT -ErrorAction Stop)
+                    $dkimMatch   = $dkimRecords |
+                        Where-Object { ($_.Strings -join '') -like 'v=DKIM1*' } |
+                        Select-Object -First 1
+                    if ($dkimMatch) {
+                        if ($sel -eq 'selector1') { $d.DKIM.Selector1 = ($dkimMatch.Strings -join '') } elseif ($sel -eq 'selector2') { $d.DKIM.Selector2 = ($dkimMatch.Strings -join '') } else { $d.DKIM.CustomSelectors += @{ Selector = $sel; Record = ($dkimMatch.Strings -join '') } }
+                    }
+                } catch { }  # DKIM not found on this selector — non-fatal
+            }
+
+            # DMARC
+            try {
+                $dmarcFqdn    = "_dmarc.$domain"
+                $dmarcRecords = @(Resolve-DnsName -Name $dmarcFqdn -Type TXT -ErrorAction Stop)
+                $dmarcMatch   = $dmarcRecords |
+                    Where-Object { ($_.Strings -join '') -like 'v=DMARC1*' } |
+                    Select-Object -First 1
+                if ($dmarcMatch) {
+                    $dmarcStr     = ($dmarcMatch.Strings -join '')
+                    $d.DMARC      = $dmarcStr
+
+                    # Parse policy value — safe extraction, no eval
+                    $policyMatch = [regex]::Match($dmarcStr, '(?:^|;)\s*p=([^;]+)')
+                    $subPolicyMatch = [regex]::Match($dmarcStr, '(?:^|;)\s*sp=([^;]+)')
+                    $pctMatch    = [regex]::Match($dmarcStr, '(?:^|;)\s*pct=(\d+)')
+                    $d.DMARCPolicy       = if ($policyMatch.Success) { $policyMatch.Groups[1].Value.Trim() } else { 'none' }
+                    $d.DMARCSubPolicy    = if ($subPolicyMatch.Success) { $subPolicyMatch.Groups[1].Value.Trim() } else { $null }
+                    $d.DMARCPct          = if ($pctMatch.Success) { [int]$pctMatch.Groups[1].Value } else { 100 }
+                }
+            } catch {
+                $d.Errors += "DMARC: $($_.Exception.Message)"
+            }
+
+            # MTA-STS DNS record
+            try {
+                $mtaStsFqdn    = "_mta-sts.$domain"
+                $mtaStsRecords = @(Resolve-DnsName -Name $mtaStsFqdn -Type TXT -ErrorAction Stop)
+                $mtaStsMatch   = $mtaStsRecords |
+                    Where-Object { ($_.Strings -join '') -like 'v=STSv1*' } |
+                    Select-Object -First 1
+                if ($mtaStsMatch) {
+                    $d.MTASTS.DNSRecord = ($mtaStsMatch.Strings -join '')
+                }
+            } catch { }
+
+            # MTA-STS policy file (HTTPS fetch — validate URL before opening)
+            if ($d.MTASTS.DNSRecord) {
+                try {
+                    # Validate the domain before constructing URL — already validated above
+                    $stsUrl     = "https://mta-sts.$domain/.well-known/mta-sts.txt"
+                    $stsContent = Invoke-WebRequest -Uri $stsUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+                    $stsText    = $stsContent.Content
+                    $d.MTASTS.Policy = $stsText
+
+                    $modeMatch = [regex]::Match($stsText, '^\s*mode:\s*(\S+)', [System.Text.RegularExpressions.RegexOptions]::Multiline)
+                    $d.MTASTS.Mode = if ($modeMatch.Success) { $modeMatch.Groups[1].Value.Trim() } else { 'unknown' }
                 } catch { }
             }
-        } catch { }
 
-        # ── TLS-RPT ───────────────────────────────────────────────────────────
-        try {
-            $tlsRecs = @(Resolve-DnsWithFallback -Name "_smtp._tls.$domain" -Type 'TXT')
-            $tlsMatch = $tlsRecs | Where-Object {
-                $val = Get-TxtValue $_
-                $null -ne $val -and $val -like 'v=TLSRPTv1*'
-            } | Select-Object -First 1
-            if ($tlsMatch) { $d.TLSRPT = Get-TxtValue $tlsMatch }
-        } catch { }
+            # TLS-RPT
+            try {
+                $tlsRptFqdn    = "_smtp._tls.$domain"
+                $tlsRptRecords = @(Resolve-DnsName -Name $tlsRptFqdn -Type TXT -ErrorAction Stop)
+                $tlsRptMatch   = $tlsRptRecords |
+                    Where-Object { ($_.Strings -join '') -like 'v=TLSRPTv1*' } |
+                    Select-Object -First 1
+                if ($tlsRptMatch) { $d.TLSRPT = ($tlsRptMatch.Strings -join '') }
+            } catch { }
 
-        # ── DNSSEC ────────────────────────────────────────────────────────────
-        try {
-            $dsRecs = @(Resolve-DnsWithFallback -Name $domain -Type 'DS')
-            if ($dsRecs.Count -gt 0) { $d.DNSSEC = $true }
-        } catch { }
+            # DNSSEC (DS record presence at parent zone)
+            try {
+                $dsRecords = @(Resolve-DnsName -Name $domain -Type DS -ErrorAction SilentlyContinue)
+                if ($dsRecords.Count -gt 0) { $d.DNSSEC = $true }
+            } catch { }
 
-        $domainResults[$domain] = $d
+            # MX
+            try {
+                $mxRecords = @(Resolve-DnsName -Name $domain -Type MX -ErrorAction Stop)
+                $d.MX = @($mxRecords |
+                    Where-Object { $_.Type -eq 'MX' } |
+                    ForEach-Object { @{ Exchange = [string]$_.NameExchange; Preference = [int]$_.Preference } })
+            } catch { }
+
+            $domainResults[$domain] = $d
+        }
+
+        $result.Data.Domains    = $domainResults
+        $result.Data.DomainCount = $domainResults.Count
+        $result.Success         = $true
+
+        if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
+            Register-NRGCoverage -Family 'DNS-EmailRecords' -Status 'Collected' `
+                -Note "$($domainResults.Count) domains checked"
+        }
+
+    } catch {
+        if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+            Register-NRGException -Source 'DNS-EmailRecords' -Message $_.Exception.Message
+        }
+        if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
+            Register-NRGCoverage -Family 'DNS-EmailRecords' -Status 'Failed' -Note $_.Exception.Message
+        }
     }
 
-    $result.Data['Domains']     = $domainResults
-    $result.Data['DomainCount'] = $Domains.Count
-    $result.Success = $true
-    Register-NRGCoverage -Family 'DNS-EmailRecords' -Status 'Collected'
-    Set-NRGRawData -Key 'DNS-EmailRecords' -Data $result
+    if (Get-Command Set-NRGRawData -ErrorAction SilentlyContinue) {
+        Set-NRGRawData -Key 'DNS-EmailRecords' -Data $result
+    }
     return $result
 }

@@ -1,0 +1,252 @@
+#Requires -Version 7.0
+#
+# Test-NRGControl-Inventory.ps1  (v4.5.5)
+# Named/per-object inventory evaluators — these produce findings with
+# AffectedObjects arrays so the HTML report can show specific named users,
+# mailboxes, and apps rather than just counts.
+#
+# These are the "blood test" findings — they name EXACTLY who and what is at risk.
+#
+
+# ── INV-1.1 Users Without MFA — Named List ────────────────────────────────────
+function Test-NRGControlInventoryMFAUsers {
+    [CmdletBinding()] param()
+    $cid = 'AAD-12.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $users = Get-NRGRawData -Key 'AAD-Users'
+    if (-not $users -or -not $users.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'User data not collected'; return
+    }
+    $regDetails = @($users.Data.MFARegistration.RegistrationDetails ?? @())
+    if ($regDetails.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'MFA registration details not available (requires Reports.Read.All)'; return
+    }
+
+    $enabled   = @($regDetails | Where-Object { $_.IsEnabled -eq $true })
+    $withMFA   = @($enabled    | Where-Object { $_.IsMfaRegistered -eq $true })
+    $noMFA     = @($enabled    | Where-Object { $_.IsMfaRegistered -eq $false })
+    $total     = $enabled.Count
+    $pct       = if ($total -gt 0) { [int][Math]::Round($withMFA.Count * 100 / $total) } else { 0 }
+
+    if ($noMFA.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title `
+            -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "$($withMFA.Count) of $total enabled users ($pct%) have MFA registered. No gaps found."
+    } else {
+        $objects = @($noMFA | Select-Object -First 100 | ForEach-Object {
+            "$($_.UserDisplayName) ($($_.UserPrincipalName))"
+        })
+        $remaining = if ($noMFA.Count -gt 100) { " ($($noMFA.Count - 100) additional users in full results)" } else { '' }
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
+            -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "$($withMFA.Count) of $total enabled users ($pct%) have MFA registered. The $($noMFA.Count) user(s) listed below have no MFA method — each is one stolen password away from a full mailbox compromise.$remaining" `
+            -CurrentValue "$($withMFA.Count)/$total users with MFA ($pct%)" `
+            -RequiredValue '100% of enabled users registered for MFA' `
+            -Remediation $ctrl.Remediation -AffectedObjects $objects
+    }
+}
+
+# ── INV-1.2 Stale Guest Accounts ─────────────────────────────────────────────
+function Test-NRGControlInventoryStaleGuests {
+    [CmdletBinding()] param()
+    $cid = 'AAD-12.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $inv = Get-NRGRawData -Key 'AAD-Inventory'
+    if (-not $inv -or -not $inv.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Inventory data not collected'; return
+    }
+    $staleGuests = @($inv.Data.GuestUsers | Where-Object { $_.IsStale -eq $true })
+    $allGuests   = @($inv.Data.GuestUsers).Count
+    if ($staleGuests.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$allGuests guest account(s) found — all have signed in within the past 90 days. No stale guest access detected."
+    } else {
+        $objects = @($staleGuests | Sort-Object DaysSinceSignIn -Descending | Select-Object -First 50 | ForEach-Object {
+            $days = if ($_.DaysSinceSignIn -eq 9999) { "Never signed in" } else { "$($_.DaysSinceSignIn) days ago" }
+            "$($_.DisplayName) ($($_.UPN)) — Last sign-in: $days"
+        })
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "$($staleGuests.Count) guest account(s) with no sign-in activity in 90+ days. These are likely ex-vendors, ex-contractors, or test accounts that retain access to SharePoint, Teams, and shared resources." `
+            -CurrentValue "$($staleGuests.Count) stale guests of $allGuests total" -RequiredValue 'All guests active within 90 days or removed' `
+            -Remediation $ctrl.Remediation -AffectedObjects $objects
+    }
+}
+
+# ── INV-1.3 Stale Licensed Member Accounts ───────────────────────────────────
+function Test-NRGControlInventoryStaleMembers {
+    [CmdletBinding()] param()
+    $cid = 'AAD-12.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $inv = Get-NRGRawData -Key 'AAD-Inventory'
+    if (-not $inv -or -not $inv.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Inventory data not collected'; return
+    }
+    $stale = @($inv.Data.StaleMembers ?? @() | Where-Object { $_.HasLicense -eq $true })
+    if ($stale.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All licensed member accounts have been active within the past 90 days. No dormant employee accounts detected.'
+    } else {
+        $objects = @($stale | Sort-Object DaysSinceSignIn -Descending | Select-Object -First 50 | ForEach-Object {
+            $days = if ($_.DaysSinceSignIn -eq 9999) { "Never signed in" } else { "$($_.DaysSinceSignIn) days ago" }
+            "$($_.DisplayName) ($($_.UPN)) — $days"
+        })
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "$($stale.Count) licensed member account(s) have not signed in for 90+ days. These accounts are likely departed employees whose accounts were not offboarded — each is a dormant attack surface with an active license." `
+            -CurrentValue "$($stale.Count) stale licensed accounts" -RequiredValue 'All accounts active or offboarded' `
+            -Remediation $ctrl.Remediation -AffectedObjects $objects
+    }
+}
+
+# ── INV-1.4 OAuth Apps with AllPrincipals Consent ────────────────────────────
+function Test-NRGControlInventoryOAuthApps {
+    [CmdletBinding()] param()
+    $cid = 'AAD-12.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $inv = Get-NRGRawData -Key 'AAD-Inventory'
+    if (-not $inv -or -not $inv.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Inventory data not collected'; return
+    }
+    $apps = @($inv.Data.OAuthGrantedApps ?? @())
+    if ($apps.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No tenant-wide (AllPrincipals) OAuth consent grants found. Third-party app access is properly scoped to consenting individuals only.'
+    } else {
+        # Flag apps with sensitive scopes
+        $sensitive = @('Mail.Read','Mail.ReadWrite','Mail.Send','Files.Read.All','Files.ReadWrite.All',
+                       'User.Read.All','Directory.Read.All','Calendars.Read','offline_access')
+        $highRisk = @($apps | Where-Object {
+            $scope = [string]($_.Scope ?? '')
+            $sensitive | Where-Object { $scope -match $_ }
+        })
+        $objects = @($apps | Select-Object -First 30 | ForEach-Object {
+            $riskLabel = if ($highRisk | Where-Object { $_.AppName -eq $_.AppName }) { ' [HIGH RISK SCOPE]' } else { '' }
+            "$($_.AppName)$riskLabel — Scopes: $($_.Scope -replace ' ',' | ')"
+        })
+        $sev = if ($highRisk.Count -gt 0) { 'High' } else { 'Medium' }
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $sev -FrameworkIds $cit `
+            -Detail "$($apps.Count) application(s) have been granted OAuth permissions across ALL users in this tenant. $($highRisk.Count) have sensitive scopes (Mail, Files, Directory access). Each of these apps can access data for every user — if any app is compromised or malicious, the impact is tenant-wide." `
+            -CurrentValue "$($apps.Count) apps with AllPrincipals consent" -RequiredValue 'All tenant-wide grants reviewed and justified' `
+            -Remediation $ctrl.Remediation -AffectedObjects $objects
+    }
+}
+
+# ── INV-2.1 Mailboxes with External Forwarding Rules ─────────────────────────
+function Test-NRGControlInventoryExternalForwarding {
+    [CmdletBinding()] param()
+    $cid = 'EXO-6.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $inv = Get-NRGRawData -Key 'EXO-Inventory'
+    if (-not $inv -or -not $inv.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
+    }
+    $fwd = @($inv.Data.ForwardingMailboxes ?? @())
+    if ($fwd.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No mailboxes are configured with an external forwarding address. Email is not being silently copied to external destinations.'
+    } else {
+        $objects = @($fwd | ForEach-Object {
+            $deliver = if ($_.DeliverToMailboxAndForward) { ' [copy kept]' } else { ' [forward only — emails not in mailbox]' }
+            "$($_.DisplayName) ($($_.UPN)) → $($_.ForwardingAddress)$deliver"
+        })
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "$($fwd.Count) mailbox(es) are configured to forward email to external addresses. This is the primary BEC data exfiltration technique — compromised accounts set forwarding rules to silently copy all incoming mail to attacker-controlled addresses. Each of these should be verified as intentional." `
+            -CurrentValue "$($fwd.Count) mailboxes forwarding externally" -RequiredValue 'All external forwarding rules reviewed and approved' `
+            -Remediation $ctrl.Remediation -AffectedObjects $objects
+    }
+}
+
+# ── INV-2.2 Shared Mailboxes with Direct Sign-In Enabled ─────────────────────
+function Test-NRGControlInventorySharedMailboxSignIn {
+    [CmdletBinding()] param()
+    $cid = 'EXO-6.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $inv = Get-NRGRawData -Key 'EXO-Inventory'
+    if (-not $inv -or -not $inv.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
+    }
+    $shared = @($inv.Data.AllSharedMailboxes ?? @())
+    if ($shared.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No shared mailboxes found.'; return
+    }
+    # Cross-reference with AAD users to find which shared mailboxes have enabled accounts
+    $users = Get-NRGRawData -Key 'AAD-Users'
+    $enabledShared = @()
+    if ($users -and $users.Success) {
+        $userIndex = @{}
+        foreach ($u in @($users.Data.Users)) { $userIndex[$u.UserPrincipalName.ToLower()] = $u }
+        foreach ($mb in $shared) {
+            $smtp = [string]($mb.PrimarySmtp ?? '').ToLower()
+            if ($userIndex.ContainsKey($smtp) -and $userIndex[$smtp].AccountEnabled -eq $true) {
+                $enabledShared += $mb
+            }
+        }
+    }
+    if ($enabledShared.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($shared.Count) shared mailbox(es) found — all have interactive sign-in blocked. Access is via Outlook delegation only, as intended."
+    } else {
+        $objects = @($enabledShared | ForEach-Object { "$($_.DisplayName) ($($_.PrimarySmtp))" })
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "$($enabledShared.Count) of $($shared.Count) shared mailbox(es) have sign-in enabled. Shared mailboxes should have BlockCredential = true — they are accessed via delegation, not direct login. An enabled shared mailbox account can be compromised and is not subject to MFA." `
+            -CurrentValue "$($enabledShared.Count) shared mailboxes with sign-in enabled" -RequiredValue 'All shared mailboxes: BlockCredential = $true' `
+            -Remediation $ctrl.Remediation -AffectedObjects $objects
+    }
+}
+
+# ── INV-2.3 Mailboxes with Audit Logging Disabled ────────────────────────────
+function Test-NRGControlInventoryMailboxAuditDisabled {
+    [CmdletBinding()] param()
+    $cid = 'EXO-6.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $inv = Get-NRGRawData -Key 'EXO-Inventory'
+    if (-not $inv -or -not $inv.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
+    }
+    $noAudit = @($inv.Data.AuditDisabledMailboxes ?? @())
+    if ($noAudit.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All mailboxes have audit logging enabled. Mailbox access, inbox rules, and delegation changes are being recorded.'
+    } else {
+        $objects = @($noAudit | ForEach-Object { "$($_.DisplayName) ($($_.UPN)) [$($_.MailboxType)]" })
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "$($noAudit.Count) mailbox(es) have audit logging explicitly disabled. A BEC incident affecting these accounts cannot be investigated — there is no record of what email was read, what rules were created, or who accessed the mailbox." `
+            -CurrentValue "$($noAudit.Count) mailboxes unaudited" -RequiredValue 'Zero mailboxes with AuditEnabled = $false' `
+            -Remediation $ctrl.Remediation -AffectedObjects $objects
+    }
+}
+
+# ── INV-2.4 Per-User SMTP AUTH Override Enabled ───────────────────────────────
+function Test-NRGControlInventorySMTPAuthUsers {
+    [CmdletBinding()] param()
+    $cid = 'EXO-6.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $inv = Get-NRGRawData -Key 'EXO-Inventory'
+    if (-not $inv -or -not $inv.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
+    }
+    $smtp = @($inv.Data.SmtpAuthEnabledPerUser ?? @())
+    if ($smtp.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No per-user SMTP AUTH overrides. The org-level SMTP AUTH disable is enforced across all users — legacy client authentication is blocked.'
+    } else {
+        $objects = @($smtp | ForEach-Object { "$($_.DisplayName) ($($_.UPN))" })
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "$($smtp.Count) user(s) have SMTP AUTH individually re-enabled, bypassing the org-level disable. These users can authenticate via legacy SMTP, which does not support MFA and is a known credential stuffing target." `
+            -CurrentValue "$($smtp.Count) users with SMTP AUTH enabled" -RequiredValue 'Zero per-user SMTP AUTH overrides' `
+            -Remediation $ctrl.Remediation -AffectedObjects $objects
+    }
+}
+
+# ── INV-3.1 Microsoft Secure Score ────────────────────────────────────────────
+function Test-NRGControlInventorySecureScore {
+    [CmdletBinding()] param()
+    $cid = 'AAD-13.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $inv = Get-NRGRawData -Key 'AAD-Inventory'
+    if (-not $inv -or -not $inv.Success -or -not $inv.Data.SecureScore) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Secure Score data not collected (requires SecurityEvents.Read.All)'; return
+    }
+    $ss  = $inv.Data.SecureScore
+    $pct = [int]($ss.Percentage ?? 0)
+    $cur = [int]($ss.CurrentScore ?? 0)
+    $max = [int]($ss.MaxScore ?? 0)
+    $posture = if ($pct -ge 70) { 'Strong' } elseif ($pct -ge 50) { 'Moderate' } elseif ($pct -ge 30) { 'At Risk' } else { 'Critical' }
+    Add-NRGFinding -ControlId $cid -State $(if ($pct -ge 70) {'Satisfied'} elseif ($pct -ge 50) {'Partial'} else {'Gap'}) `
+        -Category $ctrl.Category -Title $ctrl.Title -Severity $(if ($pct -lt 30) {'High'} elseif ($pct -lt 50) {'Medium'} else {'Low'}) `
+        -FrameworkIds $cit `
+        -Detail "Microsoft Secure Score: $cur / $max ($pct%) — $posture. This is Microsoft's own assessment of your tenant configuration across identity, data, apps, and devices. Score as of $($ss.CreatedDate)." `
+        -CurrentValue "Score: $cur/$max ($pct%)" -RequiredValue 'Target: 70%+ (Strong posture)'
+}

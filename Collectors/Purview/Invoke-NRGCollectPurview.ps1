@@ -1,96 +1,117 @@
+#Requires -Version 7.0
 #
 # Invoke-NRGCollectPurview.ps1
-# Collects Microsoft Purview (Compliance) settings via IPPSSession.
+# Collects Purview audit retention, DLP policy state, and retention configuration.
 #
-# Requires: IPPSSession connection (Connect-IPPSSession)
+# READ-ONLY. Uses IPPS session (already established by Connect-NRGServices) for
+# DLP and retention. Audit retention queried via Get-AdminAuditLogConfig.
 #
-# Data keys stored:
-#   Purview.AuditConfig       — Get-AdminAuditLogConfig
-#   Purview.DLPPolicies       — Get-DlpCompliancePolicy
-#   Purview.RetentionPolicies — Get-RetentionCompliancePolicy
-#   Purview.Labels            — Get-Label (sensitivity labels)
-#   Purview.InsiderRisk       — Get-InsiderRiskPolicy (graceful skip if not licensed)
+# Required session: IPPSSession (Connect-IPPSSession).
 #
-# NIST SP 800-53: AU-2, AU-9, AU-12, SI-12, MP-6
-# MITRE ATT&CK:   T1114, T1530, T1048
+# NIST SP 800-53: AU-11 (audit retention), MP-7 (media use), AC-4 (info flow)
+# MITRE ATT&CK:   T1562.008 (Impair Defenses: Disable Cloud Logs), T1530 (Cloud Storage)
 #
 
 function Invoke-NRGCollectPurview {
     [CmdletBinding()] param()
-
     $result = @{
-        Source     = 'Purview'
-        Timestamp  = (Get-Date -Format 'o')
-        Success    = $false
-        Data       = @{}
-        Exceptions = @()
+        Success = $false
+        Data    = @{
+            AuditConfig         = $null
+            UnifiedAuditEnabled = $false
+            DLPPolicies         = @()
+            RetentionPolicies   = @()
+            SensitivityLabels   = @()
+        }
     }
 
     try {
-        # ── Audit log configuration ────────────────────────────────────────────
-        try {
-            $audit = Get-AdminAuditLogConfig -ErrorAction Stop
-            $result.Data['AuditConfig'] = $audit
-        } catch {
-            $result.Exceptions += "AuditConfig: $($_.Exception.Message)"
-            $result.Data['AuditConfig'] = $null
+        # Audit configuration
+        if (Get-Command Get-AdminAuditLogConfig -ErrorAction SilentlyContinue) {
+            try {
+                $audit = Get-AdminAuditLogConfig -ErrorAction Stop
+                if ($audit) {
+                    $result.Data.AuditConfig = @{
+                        UnifiedAuditLogIngestionEnabled = [bool]$audit.UnifiedAuditLogIngestionEnabled
+                        AdminAuditLogEnabled            = [bool]$audit.AdminAuditLogEnabled
+                        AdminAuditLogAgeLimit           = [string]$audit.AdminAuditLogAgeLimit
+                    }
+                    $result.Data.UnifiedAuditEnabled = [bool]$audit.UnifiedAuditLogIngestionEnabled
+                }
+            } catch {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Purview-Audit' -Message $_.Exception.Message
+                }
+            }
         }
 
-        # ── DLP compliance policies ────────────────────────────────────────────
-        try {
-            $dlp = @(Get-DlpCompliancePolicy -ErrorAction Stop)
-            $result.Data['DLPPolicies'] = $dlp
-        } catch {
-            $result.Exceptions += "DLPPolicies: $($_.Exception.Message)"
-            $result.Data['DLPPolicies'] = @()
+        # DLP policies
+        if (Get-Command Get-DlpCompliancePolicy -ErrorAction SilentlyContinue) {
+            try {
+                $dlp = Get-DlpCompliancePolicy -ErrorAction Stop
+                if ($dlp) {
+                    $result.Data.DLPPolicies = @($dlp | ForEach-Object {
+                        @{
+                            Name       = $_.Name
+                            Enabled    = ($_.Mode -eq 'Enable')
+                            Mode       = [string]$_.Mode
+                            Workloads  = if ($_.Workload) { ($_.Workload -split ',') } else { @() }
+                        }
+                    })
+                }
+            } catch {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Purview-DLP' -Message $_.Exception.Message
+                }
+            }
         }
 
-        # ── Retention policies ─────────────────────────────────────────────────
-        try {
-            $ret = @(Get-RetentionCompliancePolicy -ErrorAction Stop)
-            $result.Data['RetentionPolicies'] = $ret
-        } catch {
-            $result.Exceptions += "RetentionPolicies: $($_.Exception.Message)"
-            $result.Data['RetentionPolicies'] = @()
+        # Retention policies
+        if (Get-Command Get-RetentionCompliancePolicy -ErrorAction SilentlyContinue) {
+            try {
+                $ret = Get-RetentionCompliancePolicy -ErrorAction Stop
+                if ($ret) {
+                    $result.Data.RetentionPolicies = @($ret | ForEach-Object {
+                        @{
+                            Name      = $_.Name
+                            Enabled   = [bool]$_.Enabled
+                            Workloads = if ($_.Workload) { ($_.Workload -split ',') } else { @() }
+                        }
+                    })
+                }
+            } catch {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Purview-Retention' -Message $_.Exception.Message
+                }
+            }
         }
 
-        # ── Sensitivity labels ─────────────────────────────────────────────────
-        try {
-            $labels = @(Get-Label -ErrorAction Stop)
-            $result.Data['Labels'] = $labels
-        } catch {
-            $result.Exceptions += "Labels: $($_.Exception.Message)"
-            $result.Data['Labels'] = @()
-        }
-
-        # ── Insider risk policies (P2 / E5 — graceful skip) ───────────────────
-        try {
-            $irp = @(Get-InsiderRiskPolicy -ErrorAction Stop)
-            $result.Data['InsiderRisk'] = $irp
-            $result.Data['InsiderRiskAvailable'] = $true
-        } catch {
-            # InsiderRiskManagement.Read scope or E5 license may be absent — not an error
-            $result.Data['InsiderRisk'] = @()
-            $result.Data['InsiderRiskAvailable'] = $false
-        }
-
-        # ── Communication compliance ───────────────────────────────────────────
-        try {
-            $cc = @(Get-SupervisoryReviewPolicyV2 -ErrorAction Stop)
-            $result.Data['CommCompliance'] = $cc
-            $result.Data['CommComplianceAvailable'] = $true
-        } catch {
-            $result.Data['CommCompliance'] = @()
-            $result.Data['CommComplianceAvailable'] = $false
+        # Sensitivity labels
+        if (Get-Command Get-Label -ErrorAction SilentlyContinue) {
+            try {
+                $labels = Get-Label -ErrorAction Stop
+                if ($labels) {
+                    $result.Data.SensitivityLabels = @($labels | ForEach-Object {
+                        @{
+                            Name        = $_.Name
+                            DisplayName = $_.DisplayName
+                            IsValid     = [bool]$_.IsValid
+                        }
+                    })
+                }
+            } catch {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Purview-Labels' -Message $_.Exception.Message
+                }
+            }
         }
 
         $result.Success = $true
-
     } catch {
-        $result.Exceptions += $_.Exception.Message
-        Register-NRGException -Source 'Invoke-NRGCollectPurview' -Message $_.Exception.Message
+        if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+            Register-NRGException -Source 'Purview-Collector' -Message $_.Exception.Message
+        }
     }
 
     Set-NRGRawData -Key 'Purview' -Data $result
-    return $result
 }

@@ -1,298 +1,368 @@
+#Requires -Version 7.0
 #
 # Test-NRGControlIntune.ps1
-# Evaluates Microsoft Intune endpoint management controls.
+# Evaluates Intune controls. Reads: Get-NRGRawData -Key 'Intune'
 #
 # Controls:
-#   ITN-1.1  Intune MDM authority configured
-#   ITN-1.2  Windows device compliance policy requires encryption
-#   ITN-1.3  Windows device compliance policy requires AV and firewall
-#   ITN-1.4  iOS App Protection (MAM) policy configured
-#   ITN-1.5  Android App Protection (MAM) policy configured
-#   ITN-1.6  Windows Hello for Business policy configured
-#   ITN-1.7  Microsoft Defender for Endpoint connector enabled
-#   ITN-2.1  Enrollment restrictions configured
-#
-# Reads: Get-NRGRawData -Key 'Intune'
-#
-# NIST SP 800-53: CM-2, CM-6, CM-7, SC-28, SI-3
-# MITRE ATT&CK:   T1082, T1005, T1078, T1486
+#   ITN-1.1  Device compliance policy active
+#   ITN-1.2  Configuration profiles deployed
+#   ITN-1.3  App protection (MAM) policies configured
+#   ITN-1.4  Enrolled device compliance ratio
+#   ITN-1.5  Enrollment restriction policy configured
 #
 
 function Test-NRGControlIntune {
     [CmdletBinding()] param()
-
     $raw = Get-NRGRawData -Key 'Intune'
-
     if (-not $raw -or -not $raw.Success) {
-        $detail = if ($raw) { "Collector failed: $($raw.Exceptions -join '; ')" } else { 'Intune collector did not run.' }
-        foreach ($id in @('ITN-1.1','ITN-1.2','ITN-1.3','ITN-1.4','ITN-1.5','ITN-1.6','ITN-1.7','ITN-2.1')) {
-            $ctrl = Get-NRGControlById -ControlId $id
-            Add-NRGFinding -ControlId $id -State 'NotApplicable' `
-                -Category 'Intune' -Title ($ctrl.Title) -Detail $detail
+        foreach ($cid in @('INT-1.1','INT-1.2','INT-1.3','INT-1.4','INT-1.5')) {
+            $c = Get-NRGControlById -ControlId $cid
+            if ($c) {
+                Add-NRGFinding -ControlId $cid -State 'NotApplicable' `
+                    -Category 'Endpoint' -Title $c.Title `
+                    -Detail 'Intune collector did not run.'
+            }
         }
         return
     }
 
-    $overview      = $raw.Data['ManagedDeviceOverview']
-    $compPolicies  = @($raw.Data['CompliancePolicies'])
-    $enrollConfigs = @($raw.Data['EnrollmentConfigs'])
-    $mtdConnectors = @($raw.Data['MtdConnectors'])
-    $mamPolicies   = @($raw.Data['AppProtectionPolicies'])
-    $devConfigs    = @($raw.Data['DeviceConfigurations'])
+    $d = $raw.Data
 
-    #--------------------------------------------------------------------------
-    # ITN-1.1  Intune MDM authority configured
-    # CM-2 | T1078
-    #--------------------------------------------------------------------------
-    $ctrl = Get-NRGControlById -ControlId 'ITN-1.1'
-    if ($overview) {
-        $total = $overview.totalCount
-        if ($total -gt 0) {
-            Add-NRGFinding -ControlId 'ITN-1.1' -State 'Satisfied' `
-                -Category 'Intune' -Title $ctrl.Title -Severity 'Informational' `
-                -CurrentValue "Intune managing $total device(s). MDM authority: Intune" `
-                -RequiredValue 'Intune MDM authority configured with enrolled devices'
+    # ITN-1.1 — Device compliance policy active
+    $c = Get-NRGControlById -ControlId 'INT-1.1'
+    if ($c) {
+        $count = @($d.CompliancePolicies).Count
+        if ($count -gt 0) {
+            Add-NRGFinding -ControlId 'INT-1.1' -State 'Satisfied' `
+                -Category 'Endpoint' -Title $c.Title -Severity 'Informational' `
+                -CurrentValue "$count compliance policies active" `
+                -RequiredValue 'At least one compliance policy active'
         } else {
-            Add-NRGFinding -ControlId 'ITN-1.1' -State 'Partial' `
-                -Category 'Intune' -Title $ctrl.Title -Severity 'High' `
-                -Detail 'Intune is licensed and the API is accessible, but no managed devices found. Endpoint compliance and management policies cannot be enforced until devices are enrolled.' `
-                -CurrentValue 'Intune available, 0 managed devices' `
-                -RequiredValue 'Devices enrolled and MDM authority active' `
-                -Remediation 'Enroll Windows devices via Group Policy, Autopilot, or manual enrollment. Enroll mobile devices via Company Portal app.' `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'ITN-1.1')
+            Add-NRGFinding -ControlId 'INT-1.1' -State 'Gap' `
+                -Category 'Endpoint' -Title $c.Title -Severity $c.Severity `
+                -Detail 'No device compliance policies configured. Devices without compliance policies are treated as compliant by default.' `
+                -CurrentValue 'No compliance policies' `
+                -RequiredValue 'At least one compliance policy active' `
+                -Remediation $c.Remediation `
+                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'INT-1.1')
+        }
+    }
+
+    # ITN-1.2 — Configuration profiles deployed
+    $c = Get-NRGControlById -ControlId 'INT-1.2'
+    if ($c) {
+        $count = @($d.ConfigurationProfiles).Count
+        if ($count -gt 0) {
+            Add-NRGFinding -ControlId 'INT-1.2' -State 'Satisfied' `
+                -Category 'Endpoint' -Title $c.Title -Severity 'Informational' `
+                -CurrentValue "$count configuration profiles deployed"
+        } else {
+            Add-NRGFinding -ControlId 'INT-1.2' -State 'Partial' `
+                -Category 'Endpoint' -Title $c.Title -Severity 'Medium' `
+                -Detail 'No device configuration profiles deployed. Devices are not receiving baseline security configuration.' `
+                -Remediation $c.Remediation `
+                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'INT-1.2')
+        }
+    }
+
+    # INT-1.3 — BitLocker encryption required on Windows compliance policy
+    $c = Get-NRGControlById -ControlId 'INT-1.3'
+    if ($c) {
+        # Check if any Windows compliance policy requires BitLocker
+        $winPolicies = @($d.CompliancePolicies | Where-Object { $_.Platform -match 'Windows|Win10' })
+        $bitlockerRequired = $winPolicies | Where-Object { $_.BitLockerEnabled -eq $true }
+        if ($winPolicies.Count -eq 0) {
+            Add-NRGFinding -ControlId 'INT-1.3' -State 'NotApplicable' `
+                -Category 'Endpoint' -Title $c.Title -Severity 'Informational' `
+                -Detail 'No Windows compliance policies configured.'
+        } elseif ($bitlockerRequired.Count -gt 0) {
+            Add-NRGFinding -ControlId 'INT-1.3' -State 'Satisfied' `
+                -Category 'Endpoint' -Title $c.Title -Severity 'Informational' `
+                -Detail "BitLocker required by $($bitlockerRequired.Count) Windows compliance policy(ies)."
+        } else {
+            Add-NRGFinding -ControlId 'INT-1.3' -State 'Gap' `
+                -Category 'Endpoint' -Title $c.Title -Severity $c.Severity `
+                -Detail "Windows compliance policy exists but BitLocker encryption is not required. Unencrypted devices can access corporate data." `
+                -CurrentValue "BitLocker not required in $($winPolicies.Count) Windows policy(ies)" `
+                -RequiredValue 'BitLocker = Require in Windows compliance policy' `
+                -Remediation $c.Remediation `
+                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'INT-1.3')
+        }
+    }
+
+    # INT-1.4 — Mobile Application Management (MAM) app protection policies
+    $c = Get-NRGControlById -ControlId 'INT-1.4'
+    if ($c) {
+        $mamPolicies = @($d.AppProtectionPolicies)
+        $count = $mamPolicies.Count
+        if ($count -gt 0) {
+            Add-NRGFinding -ControlId 'INT-1.4' -State 'Satisfied' `
+                -Category 'Endpoint' -Title $c.Title -Severity 'Informational' `
+                -Detail "$count app protection (MAM) policy(ies) configured." `
+                -CurrentValue "$count MAM policies active"
+        } else {
+            Add-NRGFinding -ControlId 'INT-1.4' -State 'Gap' `
+                -Category 'Endpoint' -Title $c.Title -Severity $c.Severity `
+                -Detail 'No app protection (MAM) policies configured. Corporate data in Office apps on personal devices is unprotected — users can copy/paste or save to personal storage.' `
+                -CurrentValue 'No MAM policies' `
+                -RequiredValue 'App protection policies for iOS and Android targeting Office apps' `
+                -Remediation $c.Remediation `
+                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'INT-1.4')
+        }
+    }
+    # INT-1.5 — Antivirus policy deployed via Intune
+    $c = Get-NRGControlById -ControlId 'INT-1.5'
+    if ($c) {
+        # Check endpoint security AV policies; fall back to enrollment config as proxy
+        $avPolicies = @($d.EndpointSecurityPolicies | Where-Object { $_.TemplateType -match 'Antivirus|MicrosoftDefender' })
+        $enrollConfig = @($d.EnrollmentConfig)
+        if ($avPolicies.Count -gt 0) {
+            Add-NRGFinding -ControlId 'INT-1.5' -State 'Satisfied' `
+                -Category 'Endpoint' -Title $c.Title -Severity 'Informational' `
+                -Detail "$($avPolicies.Count) Intune antivirus policy(ies) deployed." `
+                -CurrentValue "$($avPolicies.Count) AV policies active"
+        } elseif ($enrollConfig.Count -gt 0) {
+            # Endpoint security policies not collected — enrollment config present, partial evidence
+            Add-NRGFinding -ControlId 'INT-1.5' -State 'Partial' `
+                -Category 'Endpoint' -Title $c.Title -Severity 'Medium' `
+                -Detail 'Intune endpoint security AV policy data not collected. Verify antivirus policy deployment in Intune > Endpoint security > Antivirus.' `
+                -Remediation $c.Remediation `
+                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'INT-1.5')
+        } else {
+            Add-NRGFinding -ControlId 'INT-1.5' -State 'Gap' `
+                -Category 'Endpoint' -Title $c.Title -Severity $c.Severity `
+                -Detail 'No Intune antivirus policies found. Devices may not have a managed AV configuration baseline.' `
+                -Remediation $c.Remediation `
+                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'INT-1.5')
+        }
+    }
+}
+
+# ── INT-2.1 Endpoint Detection and Response Deployed ─────────────────────────
+function Test-NRGControlIntuneEDR {
+    [CmdletBinding()] param()
+    $cid = 'INT-2.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $int = Get-NRGRawData -Key 'Intune-EndpointSecurity'
+    if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune endpoint security data not collected'; return }
+    $edrPolicies = @($int.Data.EndpointDetectionPolicies ?? @())
+    if ($edrPolicies.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($edrPolicies.Count) EDR/MDE onboarding policy(ies) deployed via Intune."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No EDR onboarding policy found in Intune. Endpoints may not be reporting to Defender for Endpoint.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── INT-2.2 Attack Surface Reduction Rules Enabled ───────────────────────────
+function Test-NRGControlIntuneASR {
+    [CmdletBinding()] param()
+    $cid = 'INT-2.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $int = Get-NRGRawData -Key 'Intune-EndpointSecurity'
+    if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune endpoint security data not collected'; return }
+    $asrPolicies = @($int.Data.ASRPolicies ?? @())
+    if ($asrPolicies.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($asrPolicies.Count) ASR rule policy(ies) deployed."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No Attack Surface Reduction rule policies found in Intune. ASR rules block commodity malware delivery vectors including Office macro abuse and credential theft.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── INT-2.3 Firewall Policy Deployed via Intune ───────────────────────────────
+function Test-NRGControlIntuneFirewall {
+    [CmdletBinding()] param()
+    $cid = 'INT-2.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $int = Get-NRGRawData -Key 'Intune-EndpointSecurity'
+    if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune endpoint security data not collected'; return }
+    $fwPolicies = @($int.Data.FirewallPolicies ?? @())
+    if ($fwPolicies.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($fwPolicies.Count) firewall policy(ies) deployed via Intune."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No Windows Firewall policy deployed via Intune. Endpoint firewall configuration is unmanaged.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── INT-2.4 Disk Encryption Compliance for macOS ─────────────────────────────
+function Test-NRGControlIntuneMacEncryption {
+    [CmdletBinding()] param()
+    $cid = 'INT-2.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $int = Get-NRGRawData -Key 'Intune-DeviceCompliance'
+    if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune compliance data not collected'; return }
+    $macPolicies = @($int.Data.CompliancePolicies | Where-Object { $_.Platform -match 'macOS|Mac' })
+    if ($macPolicies.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No macOS compliance policies found — may not have managed macOS devices'
+        return
+    }
+    $encRequired = @($macPolicies | Where-Object { $_.SystemIntegrityProtectionEnabled -or $_.StorageRequireEncryption }).Count -gt 0
+    if ($encRequired) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'macOS compliance policy requires FileVault encryption.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'macOS compliance policy does not require FileVault encryption. Stolen Macs expose all organizational data.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── INT-2.5 Windows Update Compliance Policy ─────────────────────────────────
+function Test-NRGControlIntuneWindowsUpdate {
+    [CmdletBinding()] param()
+    $cid = 'INT-2.5'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $int = Get-NRGRawData -Key 'Intune-DeviceCompliance'
+    if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune compliance data not collected'; return }
+    $winUpdatePolicies = @($int.Data.UpdatePolicies ?? @())
+    if ($winUpdatePolicies.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($winUpdatePolicies.Count) Windows Update compliance policy(ies) deployed."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No Windows Update for Business policy found in Intune. Endpoints may not receive security updates on a managed schedule. Verify via Windows Update rings.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── INT-3.1 Device Enrollment Restrictions Configured ────────────────────────
+function Test-NRGControlIntuneEnrollmentRestrictions {
+    [CmdletBinding()] param()
+    $cid = 'INT-3.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $int = Get-NRGRawData -Key 'Intune-DeviceCompliance'
+    if (-not $int -or -not $int.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'Intune data not collected'; return
+    }
+    $restrictions = @($int.Data.EnrollmentRestrictions ?? @())
+    if ($restrictions.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "$($restrictions.Count) device enrollment restriction policy(ies) configured."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail 'No custom enrollment restriction policies found. Default allows all platforms and personal devices to enroll without restrictions.' `
+            -Remediation $ctrl.Remediation
+    }
+}
+
+# ── INT-3.2 Mobile App Configuration Policies Deployed ───────────────────────
+function Test-NRGControlIntuneAppConfig {
+    [CmdletBinding()] param()
+    $cid = 'INT-3.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $int = Get-NRGRawData -Key 'Intune-AppProtection'
+    if (-not $int -or -not $int.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'Intune app protection data not collected'; return
+    }
+    $appConfig = @($int.Data.AppConfigPolicies ?? @())
+    if ($appConfig.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "$($appConfig.Count) app configuration policy(ies) deployed."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit `
+            -Detail 'No app configuration policies found. Managed apps may use default settings without security baseline configuration.' `
+            -Remediation $ctrl.Remediation
+    }
+}
+
+# ── INT-3.3 Conditional Launch Policies Configured ───────────────────────────
+function Test-NRGControlIntuneConditionalLaunch {
+    [CmdletBinding()] param()
+    $cid = 'INT-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $int = Get-NRGRawData -Key 'Intune-AppProtection'
+    if (-not $int -or -not $int.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'Intune app protection data not collected'; return
+    }
+    $appPolicies = @($int.Data.AppProtectionPolicies ?? @())
+    $withLaunch  = @($appPolicies | Where-Object { @($_.ConditionalLaunchSettings ?? @()).Count -gt 0 })
+    if ($withLaunch.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "$($withLaunch.Count) app protection policy(ies) include conditional launch rules."
+    } elseif ($appPolicies.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail 'App protection policies exist but no conditional launch settings configured. Add: Min OS version, Jailbreak/root detection, Max PIN attempts.' `
+            -Remediation $ctrl.Remediation
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'No app protection policies with conditional launch configured. Jailbroken devices and outdated OS versions access corporate apps unchecked.' `
+            -Remediation $ctrl.Remediation
+    }
+}
+
+# ── INT-4.1 Windows LAPS Configured ──────────────────────────────────────────
+function Test-NRGControlIntuneWindowsLAPS {
+    [CmdletBinding()] param()
+    $cid = 'INT-4.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $int = Get-NRGRawData -Key 'Intune-EndpointSecurity'
+    if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune data not collected'; return }
+    $lapsPolicies = @($int.Data.LAPSPolicies ?? @())
+    if ($lapsPolicies.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($lapsPolicies.Count) Windows LAPS policy(ies) deployed. Local administrator passwords are unique, rotated, and escrowed in Entra ID."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No Windows LAPS (Local Administrator Password Solution) policy deployed. If any endpoint shares the same local admin password, lateral movement after one compromise exposes all endpoints.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── INT-4.2 Windows Hello for Business Deployed ───────────────────────────────
+function Test-NRGControlIntuneWindowsHello {
+    [CmdletBinding()] param()
+    $cid = 'INT-4.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $int = Get-NRGRawData -Key 'Intune-DeviceCompliance'
+    if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune data not collected'; return }
+    $helloPolicies = @($int.Data.WindowsHelloPolicies ?? @())
+    if ($helloPolicies.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($helloPolicies.Count) Windows Hello for Business policy(ies) deployed. Phishing-resistant passwordless authentication on enrolled endpoints."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'No Windows Hello for Business policy deployed via Intune. WHfB provides phishing-resistant passwordless authentication for all Windows endpoints at no additional license cost.' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── INT-4.3 Update Compliance / Windows Update for Business Reports ───────────
+function Test-NRGControlIntuneUpdateCompliance {
+    [CmdletBinding()] param()
+    $cid = 'INT-4.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $int = Get-NRGRawData -Key 'Intune-DeviceCompliance'
+    if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune data not collected'; return }
+    $osCompliant = if ($int.Data.OSComplianceSummary) {
+        [int]($int.Data.OSComplianceSummary.CompliantCount ?? 0)
+    } else { -1 }
+    $totalDevices = if ($int.Data.OSComplianceSummary) {
+        [int]($int.Data.OSComplianceSummary.TotalCount ?? 0)
+    } else { -1 }
+    if ($osCompliant -ge 0 -and $totalDevices -gt 0) {
+        $pct = [int]($osCompliant * 100 / $totalDevices)
+        if ($pct -ge 90) {
+            Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$pct% of enrolled devices are OS-version compliant ($osCompliant/$totalDevices)."
+        } else {
+            Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$pct% OS compliance — $($totalDevices - $osCompliant) device(s) running non-compliant OS versions. Unpatched devices remain vulnerable to known exploits." -CurrentValue "$pct% compliant" -RequiredValue '≥90% compliant' -Remediation $ctrl.Remediation
         }
     } else {
-        Add-NRGFinding -ControlId 'ITN-1.1' -State 'Gap' `
-            -Category 'Intune' -Title $ctrl.Title -Severity $ctrl.Severity `
-            -Detail 'Intune device management data not accessible. MDM may not be configured or the tenant does not have an Intune license.' `
-            -CurrentValue 'Intune device data not available' `
-            -RequiredValue 'Intune MDM authority configured' `
-            -Remediation 'Microsoft 365 Business Premium, E3, or standalone Intune license required. Configure MDM authority in Endpoint Manager admin center.' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'ITN-1.1')
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Device OS compliance summary not available. Verify device compliance reporting is configured in Intune.' -Remediation $ctrl.Remediation
     }
+}
 
-    #--------------------------------------------------------------------------
-    # ITN-1.2  Windows compliance policy requires encryption (BitLocker)
-    # SC-28 | T1486, T1005
-    #--------------------------------------------------------------------------
-    $ctrl = Get-NRGControlById -ControlId 'ITN-1.2'
-    $winPolicies = @($compPolicies | Where-Object {
-        $_.'@odata.type' -match 'Windows' -or $_.platformType -eq 'windows10AndLater'
-    })
-    if ($winPolicies.Count -gt 0) {
-        $encRequired = @($winPolicies | Where-Object {
-            $_.bitLockerEnabled -eq $true -or
-            $_.storageRequireDeviceEncryption -eq $true -or
-            $_.secureBootEnabled -eq $true
-        })
-        if ($encRequired.Count -gt 0) {
-            Add-NRGFinding -ControlId 'ITN-1.2' -State 'Satisfied' `
-                -Category 'Intune' -Title $ctrl.Title -Severity 'Informational' `
-                -CurrentValue "$($encRequired.Count) Windows compliance policy(ies) require BitLocker/encryption" `
-                -RequiredValue 'Windows compliance policy with bitLockerEnabled = true'
-        } else {
-            Add-NRGFinding -ControlId 'ITN-1.2' -State 'Gap' `
-                -Category 'Intune' -Title $ctrl.Title -Severity $ctrl.Severity `
-                -Detail "Windows compliance policies exist ($($winPolicies.Count)) but none require BitLocker encryption. Devices can be compliant without disk encryption, exposing data if a device is lost or stolen." `
-                -CurrentValue 'Windows policy without encryption requirement' `
-                -RequiredValue 'Windows compliance policy with BitLocker enabled required' `
-                -Remediation 'Endpoint Manager > Devices > Compliance policies > [Windows policy] > Device health > Require BitLocker = Require.' `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'ITN-1.2')
-        }
-    } else {
-        Add-NRGFinding -ControlId 'ITN-1.2' -State 'Gap' `
-            -Category 'Intune' -Title $ctrl.Title -Severity $ctrl.Severity `
-            -Detail 'No Windows device compliance policies found. Windows endpoints have no enforced security baseline — any device with an M365 account has full access regardless of security posture.' `
-            -CurrentValue 'No Windows compliance policies' `
-            -RequiredValue 'Windows 10/11 compliance policy requiring BitLocker, AV, and firewall' `
-            -Remediation 'Endpoint Manager > Devices > Compliance policies > Create policy (Windows 10 and later). Set BitLocker = Required, AV = Required, Firewall = Required.' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'ITN-1.2')
+# ── INT-4.4 Mobile Device Compliance Policy Requires PIN/Biometric ────────────
+function Test-NRGControlIntuneMobilePIN {
+    [CmdletBinding()] param()
+    $cid = 'INT-4.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+    $int = Get-NRGRawData -Key 'Intune-DeviceCompliance'
+    if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune data not collected'; return }
+    $mobilePolicies = @($int.Data.CompliancePolicies | Where-Object { $_.Platform -match 'iOS|Android' })
+    if ($mobilePolicies.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No iOS or Android compliance policies — may not have managed mobile devices'; return
     }
-
-    #--------------------------------------------------------------------------
-    # ITN-1.3  Windows compliance policy requires AV and firewall
-    # SI-3, SC-7 | T1059
-    #--------------------------------------------------------------------------
-    $ctrl = Get-NRGControlById -ControlId 'ITN-1.3'
-    if ($winPolicies.Count -gt 0) {
-        $avRequired = @($winPolicies | Where-Object {
-            $_.antivirusRequired -eq $true -or
-            $_.defenderEnabled -eq $true -or
-            $_.realTimeProtectionEnabled -eq $true
-        })
-        $fwRequired = @($winPolicies | Where-Object {
-            $_.firewallEnabled -eq $true -or $_.firewallBlockAllIncomingTraffic -eq $true
-        })
-
-        if ($avRequired.Count -gt 0 -and $fwRequired.Count -gt 0) {
-            Add-NRGFinding -ControlId 'ITN-1.3' -State 'Satisfied' `
-                -Category 'Intune' -Title $ctrl.Title -Severity 'Informational' `
-                -CurrentValue "AV required: $($avRequired.Count) policy(ies). Firewall required: $($fwRequired.Count) policy(ies)." `
-                -RequiredValue 'Windows compliance policy requiring antivirus and firewall'
-        } elseif ($avRequired.Count -gt 0) {
-            Add-NRGFinding -ControlId 'ITN-1.3' -State 'Partial' `
-                -Category 'Intune' -Title $ctrl.Title -Severity 'High' `
-                -Detail 'Antivirus is required by compliance policy but firewall is not. Windows devices can be compliant without an active firewall.' `
-                -CurrentValue 'AV required. Firewall not required.' `
-                -RequiredValue 'Both antivirus and firewall required' `
-                -Remediation 'Endpoint Manager > Compliance policies > [Windows policy] > System security > Firewall = Required.'
-        } elseif ($fwRequired.Count -gt 0) {
-            Add-NRGFinding -ControlId 'ITN-1.3' -State 'Partial' `
-                -Category 'Intune' -Title $ctrl.Title -Severity 'High' `
-                -Detail 'Firewall required but antivirus not required by compliance policy. Windows devices can be compliant without active AV protection.' `
-                -CurrentValue 'Firewall required. AV not required.' `
-                -RequiredValue 'Both antivirus and firewall required' `
-                -Remediation 'Endpoint Manager > Compliance policies > [Windows policy] > System security > Antivirus = Required.'
-        } else {
-            Add-NRGFinding -ControlId 'ITN-1.3' -State 'Gap' `
-                -Category 'Intune' -Title $ctrl.Title -Severity $ctrl.Severity `
-                -Detail 'No Windows compliance policy requires antivirus or firewall. Endpoints can be enrolled as "compliant" with no AV or firewall active.' `
-                -CurrentValue 'AV and firewall not required' `
-                -RequiredValue 'Antivirus = Required, Firewall = Required in Windows compliance policy' `
-                -Remediation 'Endpoint Manager > Devices > Compliance policies > [Windows policy] > System security: Set Firewall = Required, Antivirus = Required, Real-time protection = Required.' `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'ITN-1.3')
-        }
+    $pinRequired = @($mobilePolicies | Where-Object { $_.PasswordRequired -eq $true -or $_.RequirePassword -eq $true }).Count -gt 0
+    if ($pinRequired) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Mobile device compliance policy requires PIN or biometric authentication.'
     } else {
-        Add-NRGFinding -ControlId 'ITN-1.3' -State 'NotApplicable' `
-            -Category 'Intune' -Title $ctrl.Title `
-            -Detail 'No Windows compliance policies — see ITN-1.2.'
-    }
-
-    #--------------------------------------------------------------------------
-    # ITN-1.4  iOS App Protection (MAM) policy configured
-    # CM-7, SC-4 | T1005
-    #--------------------------------------------------------------------------
-    $ctrl = Get-NRGControlById -ControlId 'ITN-1.4'
-    $iosPolicies = @($mamPolicies | Where-Object {
-        $_.'@odata.type' -match '[Ii]os' -or $_.platform -eq 'iOS'
-    })
-    if ($iosPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId 'ITN-1.4' -State 'Satisfied' `
-            -Category 'Intune' -Title $ctrl.Title -Severity 'Informational' `
-            -CurrentValue "$($iosPolicies.Count) iOS App Protection policy(ies) configured" `
-            -RequiredValue 'iOS MAM policy protecting corporate apps (Outlook, Teams, etc.)'
-    } else {
-        Add-NRGFinding -ControlId 'ITN-1.4' -State 'Gap' `
-            -Category 'Intune' -Title $ctrl.Title -Severity $ctrl.Severity `
-            -Detail 'No iOS App Protection policy configured. Corporate data accessed via Outlook, Teams, or OneDrive on personal iOS devices has no copy/paste, screenshot, or backup restrictions. If a device is lost or an employee leaves, data cannot be remotely wiped.' `
-            -CurrentValue 'No iOS MAM policy' `
-            -RequiredValue 'iOS App Protection policy covering Outlook, Teams, OneDrive at minimum' `
-            -Remediation 'Endpoint Manager > Apps > App protection policies > Create policy (iOS/iPadOS). Target Outlook, Teams, OneDrive. Set PIN, copy/paste restrictions, and remote wipe capability.' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'ITN-1.4')
-    }
-
-    #--------------------------------------------------------------------------
-    # ITN-1.5  Android App Protection (MAM) policy configured
-    # CM-7, SC-4 | T1005
-    #--------------------------------------------------------------------------
-    $ctrl = Get-NRGControlById -ControlId 'ITN-1.5'
-    $androidPolicies = @($mamPolicies | Where-Object {
-        $_.'@odata.type' -match '[Aa]ndroid' -or $_.platform -eq 'Android'
-    })
-    if ($androidPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId 'ITN-1.5' -State 'Satisfied' `
-            -Category 'Intune' -Title $ctrl.Title -Severity 'Informational' `
-            -CurrentValue "$($androidPolicies.Count) Android App Protection policy(ies) configured" `
-            -RequiredValue 'Android MAM policy protecting corporate apps'
-    } else {
-        Add-NRGFinding -ControlId 'ITN-1.5' -State 'Gap' `
-            -Category 'Intune' -Title $ctrl.Title -Severity $ctrl.Severity `
-            -Detail 'No Android App Protection policy configured. Corporate data on Android personal devices has no controls. Data can be copied to personal apps, screenshots can be taken, and data cannot be remotely wiped.' `
-            -CurrentValue 'No Android MAM policy' `
-            -RequiredValue 'Android App Protection policy covering Outlook, Teams, OneDrive at minimum' `
-            -Remediation 'Endpoint Manager > Apps > App protection policies > Create policy (Android). Target Outlook, Teams, OneDrive. Set PIN, copy/paste, screenshot restrictions.' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'ITN-1.5')
-    }
-
-    #--------------------------------------------------------------------------
-    # ITN-1.6  Windows Hello for Business policy configured
-    # IA-2(8) | T1078, T1621
-    #--------------------------------------------------------------------------
-    $ctrl = Get-NRGControlById -ControlId 'ITN-1.6'
-    # Look in enrollment configurations for Windows Hello for Business
-    $whfbEnroll = @($enrollConfigs | Where-Object {
-        $_.'@odata.type' -match 'WindowsHello' -or $_.displayName -match 'Hello'
-    })
-    $whfbDevCfg = @($devConfigs | Where-Object {
-        $_.'@odata.type' -match 'WindowsIdentityProtection' -or
-        $_.'@odata.type' -match 'WindowsHello' -or
-        $_.displayName -match 'Hello'
-    })
-    if ($whfbEnroll.Count -gt 0 -or $whfbDevCfg.Count -gt 0) {
-        $total = $whfbEnroll.Count + $whfbDevCfg.Count
-        Add-NRGFinding -ControlId 'ITN-1.6' -State 'Satisfied' `
-            -Category 'Intune' -Title $ctrl.Title -Severity 'Informational' `
-            -CurrentValue "$total Windows Hello for Business policy(ies) configured" `
-            -RequiredValue 'Windows Hello for Business enrollment/configuration policy'
-    } else {
-        Add-NRGFinding -ControlId 'ITN-1.6' -State 'Gap' `
-            -Category 'Intune' -Title $ctrl.Title -Severity $ctrl.Severity `
-            -Detail 'No Windows Hello for Business policy found. Windows sign-in defaults to password only on enrolled devices. WHfB provides phishing-resistant biometric/PIN authentication at the device level.' `
-            -CurrentValue 'No WHfB policy' `
-            -RequiredValue 'Windows Hello for Business enrollment policy enabled in Intune' `
-            -Remediation 'Endpoint Manager > Devices > Enrollment > Windows Hello for Business. Enable and require PIN with biometric option. Or create Identity Protection profile under Device configuration.' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'ITN-1.6')
-    }
-
-    #--------------------------------------------------------------------------
-    # ITN-1.7  Microsoft Defender for Endpoint connector enabled
-    # SI-3, SI-4 | T1082, T1059
-    #--------------------------------------------------------------------------
-    $ctrl = Get-NRGControlById -ControlId 'ITN-1.7'
-    $mdeConnector = @($mtdConnectors | Where-Object {
-        $_.partnerUniqueName -match 'Microsoft' -or
-        $_.partnerUniqueName -match 'Defender' -or
-        $_.partnerUniqueName -match 'AtpConnector'
-    })
-    if ($mdeConnector.Count -gt 0) {
-        $enabled = @($mdeConnector | Where-Object { $_.androidEnabled -eq $true -or $_.iosEnabled -eq $true -or $_.windowsEnabled -eq $true })
-        if ($enabled.Count -gt 0) {
-            Add-NRGFinding -ControlId 'ITN-1.7' -State 'Satisfied' `
-                -Category 'Intune' -Title $ctrl.Title -Severity 'Informational' `
-                -CurrentValue 'MDE connector enabled and active' `
-                -RequiredValue 'MDE-Intune connector enabled with platform coverage'
-        } else {
-            Add-NRGFinding -ControlId 'ITN-1.7' -State 'Partial' `
-                -Category 'Intune' -Title $ctrl.Title -Severity 'High' `
-                -Detail 'MDE connector exists in Intune but is not enabled for any platform. Defender risk signals are not feeding into Intune compliance evaluation.' `
-                -CurrentValue 'MDE connector present but platform coverage disabled' `
-                -RequiredValue 'MDE connector enabled for Windows, iOS, and Android' `
-                -Remediation 'Endpoint Manager > Endpoint security > Microsoft Defender for Endpoint > Enable connector. Enable for Windows, iOS, Android as appropriate.'
-        }
-    } else {
-        Add-NRGFinding -ControlId 'ITN-1.7' -State 'Gap' `
-            -Category 'Intune' -Title $ctrl.Title -Severity $ctrl.Severity `
-            -Detail 'No Microsoft Defender for Endpoint connector found in Intune. MDE threat risk scores are not integrated with device compliance, meaning compromised devices remain "compliant" in Intune.' `
-            -CurrentValue 'No MDE-Intune connector' `
-            -RequiredValue 'MDE connector configured and enabled in Intune' `
-            -Remediation 'Requires Microsoft Defender for Endpoint (P1 or P2) and Intune. Endpoint Manager > Endpoint security > Microsoft Defender for Endpoint > Open MDE portal and enable Intune connection.' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'ITN-1.7')
-    }
-
-    #--------------------------------------------------------------------------
-    # ITN-2.1  Enrollment restrictions configured
-    # CM-7, AC-3 | T1078
-    #--------------------------------------------------------------------------
-    $ctrl = Get-NRGControlById -ControlId 'ITN-2.1'
-    # Default enrollment restriction allows all platforms — check if custom restrictions exist
-    $customRestrictions = @($enrollConfigs | Where-Object {
-        $_.'@odata.type' -match 'DeviceEnrollmentPlatformRestriction' -and
-        $_.displayName -ne 'All users and all devices'  -and
-        $_.priority -ne 0
-    })
-
-    if ($customRestrictions.Count -gt 0) {
-        Add-NRGFinding -ControlId 'ITN-2.1' -State 'Satisfied' `
-            -Category 'Intune' -Title $ctrl.Title -Severity 'Informational' `
-            -CurrentValue "$($customRestrictions.Count) custom enrollment restriction(s) configured" `
-            -RequiredValue 'Custom enrollment restrictions beyond the default allow-all policy'
-    } else {
-        Add-NRGFinding -ControlId 'ITN-2.1' -State 'Partial' `
-            -Category 'Intune' -Title $ctrl.Title -Severity 'Medium' `
-            -Detail 'No custom enrollment restrictions found. The default policy allows all device types (Android, iOS, Windows, macOS) to enroll without restriction. Personal/unmanaged devices can enroll without controls.' `
-            -CurrentValue 'Default enrollment restrictions only (allow all platforms)' `
-            -RequiredValue 'Enrollment restrictions limiting allowed platforms and requiring corporate ownership' `
-            -Remediation 'Endpoint Manager > Devices > Enrollment restrictions > Create restriction. Block platforms not used in your org. Consider requiring corporate-owned device type.' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'ITN-2.1')
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Mobile compliance policies do not require PIN or biometric. Lost or stolen unprotected devices expose all corporate data in managed apps.' -Remediation $ctrl.Remediation
     }
 }

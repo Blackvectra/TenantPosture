@@ -1,0 +1,49 @@
+{
+  "clients": [
+    {
+      "ClientName":        "NRG Technology Services",
+      "TenantDomain":      "nrgtechservices.com",
+      "TenantId":          "00000000-0000-0000-0000-000000000000",
+      "DelegatedOrg":      "nrgtechservices.onmicrosoft.com",
+      "DnsDomains":        ["nrgtechservices.com"],
+      "SkipPurview":       false,
+      "SkipTeams":         false,
+      "SkipSharePoint":    false,
+      "SkipIntune":        false,
+      "SkipPowerPlatform": false,
+      "SkipDNS":           false,
+      "Notes":             "NRG internal tenant",
+      "Active":            true
+    },
+    {
+      "ClientName":        "ClientA",
+      "TenantDomain":      "clienta.org",
+      "TenantId":          "00000000-0000-0000-0000-000000000000",
+      "DelegatedOrg":      "clienta.onmicrosoft.com",
+      "DnsDomains":        ["clienta.org"],
+      "SkipPurview":       true,
+      "SkipTeams":         false,
+      "SkipSharePoint":    false,
+      "SkipIntune":        false,
+      "SkipPowerPlatform": true,
+      "SkipDNS":           false,
+      "Notes":             "County government. the state IT agency controls DNS.",
+      "Active":            true
+    },
+    {
+      "ClientName":        "Client B",
+      "TenantDomain":      "clientbnd.gov",
+      "TenantId":          "00000000-0000-0000-0000-000000000000",
+      "DelegatedOrg":      "clientbnd.onmicrosoft.com",
+      "DnsDomains":        ["clientbnd.gov"],
+      "SkipPurview":       true,
+      "SkipTeams":         false,
+      "SkipSharePoint":    false,
+      "SkipIntune":        false,
+      "SkipPowerPlatform": true,
+      "SkipDNS":           false,
+      "Notes":             "County government. state courts relay dependency.",
+      "Active":            true
+    }
+  ]
+}

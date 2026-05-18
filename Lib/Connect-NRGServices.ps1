@@ -1,41 +1,107 @@
+#Requires -Version 7.0
 #
-# Connect-NRGServices.ps1
-# Authenticates to all M365 services required for NRG-Assessment.
+# Connect-NRGServices.ps1  (v4.5.5)
+# Authentication to Microsoft 365 services for read-only assessment.
 #
-# Auth model:
-#   Graph       — interactive browser (SCuBA pattern)
-#   Teams       — device code
-#   EXO         — device code (-Device with ParameterBindingException fallback)
-#   IPPS        — device code via direct MSAL.NET token acquisition
-#                 Bypasses EXO module's internal MSAL which initialises WAM broker
-#                 even on device code flows in PS7 on some machines.
-#                 MSAL.NET is already loaded by the Graph SDK — no new dependency.
+# AUTH MODES:
+#   1. App-only / certificate-based — UNATTENDED, recommended for scheduled runs.
+#      Pass -TenantId, -AppId, -CertificateThumbprint. Required Graph app permissions
+#      (read-only): Directory.Read.All, Policy.Read.All, Reports.Read.All,
+#      SecurityEvents.Read.All, AuditLog.Read.All, RoleManagement.Read.All,
+#      Organization.Read.All, Sites.Read.All, DeviceManagementConfiguration.Read.All,
+#      DeviceManagementApps.Read.All, UserAuthenticationMethod.Read.All.
+#      EXO: Exchange.ManageAsApp + Global Reader role. See docs/AUTH-APP-ONLY.md.
+#      Use CA-issued cert. Self-signed is discouraged per Microsoft Learn.
 #
-# Disconnect-ExchangeOnline intentionally NOT called in Disconnect-NRGServices.
-# EXO 3.3+ crashes PowerShell on ClearAllTokensAsync (background thread,
-# uncatchable) when WAM is unavailable. Sessions expire on process exit.
+#   2. Interactive browser — ATTENDED, default.
+#      Graph: interactive browser (no device code, no broker bypass risk).
+#      Teams/EXO/IPPS: device code (WAM broker crashes when running elevated).
+#
+# TOKEN CACHE HYGIENE:
+#   Connect-MgGraph uses -ContextScope Process so the MSAL token cache is bound to
+#   this PowerShell process and NOT persisted to
+#   $env:LOCALAPPDATA\.IdentityService\msal_token_cache.bin (default CurrentUser scope).
+#   Orchestrator wraps the run in try/finally with Disconnect-NRGServices.
+#
+# CONNECTION ORDER (MSAL assembly conflict prevention):
+#   Graph -> Teams -> EXO -> IPPS. SharePoint deferred to orchestrator (PnP loads
+#   older Graph.Core that breaks Graph cmdlets).
+#
+# PnP MULTI-TENANT APP DELETED 2024-09-09:
+#   The shared PnP Management Shell Entra app (ClientID 31359c7f-bd7e-475c-86db-fdb8c937548e)
+#   was deleted by the PnP team as a deliberate security improvement. Customers MUST
+#   register their own Entra app for SharePoint. Do NOT use -PersistLogin (writes tokens
+#   to $HOME\.m365pnppowershell) or -UseWebLogin (removed in PnP v3, cookie hijacking).
+#
+# WAM BROKER DISABLED ($env:MSAL_ALLOW_BROKER = '0'):
+#   Set at function entry, before any connection. WAM crashes with NullReferenceException
+#   when pwsh is elevated. Disabling forces MSAL to use device-code/browser.
+#
+# CVE-2025-54100 (Dec 2025, CVSS 7.8): MSHTML-based Invoke-WebRequest parser injection
+# affects Windows PowerShell 5.1 only. This module requires PowerShell 7.0+ which is
+# not vulnerable.
 #
 
+# Script-scoped scriptblock (not exported)
 $script:ShowDeviceCodeBox = {
     param([string]$Service, [string]$Url)
+
+    try {
+        $parsed = [System.Uri]$Url
+        if ($parsed.Scheme -ne 'https' -or $parsed.Host -notmatch '\.microsoft\.com$') {
+            Write-Warning "Refusing to open non-HTTPS or non-Microsoft URL: $Url"
+            return
+        }
+    } catch {
+        Write-Warning "Invalid URL — refusing to open: $Url"
+        return
+    }
+
     Write-Host ""
     Write-Host "  +--------------------------------------------------------------+" -ForegroundColor Yellow
     Write-Host "  |  $Service" -ForegroundColor Yellow
-    Write-Host "  |  Opening devicelogin in Edge..." -ForegroundColor Cyan
+    Write-Host "  |  Opening devicelogin in browser..." -ForegroundColor Cyan
     Write-Host "  |  Enter the code shown BELOW this box" -ForegroundColor Yellow
     Write-Host "  +--------------------------------------------------------------+" -ForegroundColor Yellow
-    try { Start-Process "msedge.exe" -ArgumentList $Url -ErrorAction Stop } catch { try { Start-Process $Url } catch {} }
+    try { Start-Process "msedge.exe" -ArgumentList $Url -ErrorAction Stop }
+    catch { try { Start-Process $Url } catch { } }
     Write-Host ""
 }
 
 function Connect-NRGServices {
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Interactive')]
     param(
+        [Parameter(ParameterSetName = 'Interactive')]
+        [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9._%+-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$')]
         [string] $UserPrincipalName,
+
+        [Parameter(Mandatory, ParameterSetName = 'AppOnly')]
+        [ValidatePattern('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')]
+        [string] $TenantId,
+
+        [Parameter(Mandatory, ParameterSetName = 'AppOnly')]
+        [ValidatePattern('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')]
+        [string] $AppId,
+
+        [Parameter(Mandatory, ParameterSetName = 'AppOnly')]
+        [ValidatePattern('^[0-9a-fA-F]{40}$')]
+        [string] $CertificateThumbprint,
+
+        [Parameter(ParameterSetName = 'AppOnly')]
+        [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9-]*\.onmicrosoft\.com$')]
+        [string] $OrganizationDomain,
+
         [switch] $SkipPurview,
         [switch] $SkipTeams,
         [switch] $SkipSharePoint
     )
+
+    # Defense in depth — Microsoft endpoints already require TLS 1.2+
+    [System.Net.ServicePointManager]::SecurityProtocol =
+        [System.Net.SecurityProtocolType]::Tls12 -bor
+        [System.Net.SecurityProtocolType]::Tls13
+
+    $isAppOnly = ($PSCmdlet.ParameterSetName -eq 'AppOnly')
 
     $result = [hashtable]@{
         Graph        = $false
@@ -45,49 +111,32 @@ function Connect-NRGServices {
         SharePoint   = $false
         TenantDomain = $null
         TenantId     = $null
+        AuthMode     = $PSCmdlet.ParameterSetName
     }
 
-    # ── Try EXO 3.2.0 in PS5.1 only (assembly issue prevents load in PS7) ────
-    $isPS7 = $PSVersionTable.PSVersion.Major -ge 6
-    if (-not $isPS7) {
-        $exa320 = Get-Module -ListAvailable -Name ExchangeOnlineManagement |
-                   Where-Object { $_.Version -eq '3.2.0' } | Select-Object -First 1
-        if ($exa320) {
-            try {
-                Import-Module ExchangeOnlineManagement -RequiredVersion 3.2.0 `
-                    -Force -ErrorAction Stop -WarningAction SilentlyContinue | Out-Null
-                Write-Host "  [i] ExchangeOnlineManagement 3.2.0 loaded" -ForegroundColor DarkGray
-            } catch {}
-        }
-    }
+    # Disable WAM broker BEFORE any connection
+    $env:MSAL_ALLOW_BROKER = '0'
 
-    # ── 1. Microsoft Graph — interactive browser (MUST BE FIRST) ─────────────
-    Write-Host "  [*] Microsoft Graph — browser will open for login..." -ForegroundColor Cyan
+    # ── 1. Microsoft Graph ────────────────────────────────────────────────────
+    Write-Host "  [*] Microsoft Graph..." -ForegroundColor Cyan
     try {
         $scopes = @(
-            'User.Read.All'
-            'Group.Read.All'
-            'Directory.Read.All'
-            'Policy.Read.All'
-            'AuditLog.Read.All'
-            'Application.Read.All'
-            'RoleManagement.Read.All'
-            'SecurityEvents.Read.All'
-            'IdentityRiskyUser.Read.All'
-            'Reports.Read.All'
-            'Organization.Read.All'
+            'User.Read.All','Group.Read.All','Directory.Read.All',
+            'Policy.Read.All','AuditLog.Read.All','Application.Read.All',
+            'RoleManagement.Read.All','SecurityEvents.Read.All',
+            'IdentityRiskyUser.Read.All','Reports.Read.All',
+            'Organization.Read.All','Sites.Read.All',
+            'DeviceManagementConfiguration.Read.All',
+            'DeviceManagementApps.Read.All',
             'UserAuthenticationMethod.Read.All'
-            'Sites.Read.All'
-            'DeviceManagementConfiguration.Read.All'
-            'DeviceManagementApps.Read.All'
         )
+
+        # Pre-import Graph sub-modules before Connect-MgGraph locks the version
         $graphSubModules = @(
-            'Microsoft.Graph.Reports'
-            'Microsoft.Graph.Identity.Governance'
-            'Microsoft.Graph.Identity.SignIns'
+            'Microsoft.Graph.Reports',
+            'Microsoft.Graph.Identity.Governance',
+            'Microsoft.Graph.Identity.SignIns',
             'Microsoft.Graph.Users'
-            'Microsoft.Graph.Sites'
-            'Microsoft.Graph.DeviceManagement'
         )
         foreach ($gm in $graphSubModules) {
             if (Get-Module -ListAvailable -Name $gm -ErrorAction SilentlyContinue) {
@@ -95,165 +144,181 @@ function Connect-NRGServices {
             }
         }
 
-        Connect-MgGraph -Scopes $scopes -NoWelcome -ErrorAction Stop | Out-Null
+        if ($isAppOnly) {
+            Connect-MgGraph -TenantId $TenantId -ClientId $AppId `
+                            -CertificateThumbprint $CertificateThumbprint `
+                            -ContextScope Process -NoWelcome -ErrorAction Stop
+        } else {
+            # -ContextScope Process scopes MSAL token cache to this PS process —
+            # token does NOT persist to msal_token_cache.bin on disk.
+            Connect-MgGraph -Scopes $scopes -ContextScope Process -NoWelcome -ErrorAction Stop
+        }
+
         $ctx = Get-MgContext -ErrorAction Stop
         if ($ctx) {
+            if ($isAppOnly) {
+                $accountDomain = if ($OrganizationDomain) { $OrganizationDomain } else { $TenantId }
+            } else {
+                $accountDomain = ($ctx.Account -split '@')[-1]
+                if ($accountDomain -notmatch '^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}(\.[a-zA-Z0-9][a-zA-Z0-9-]{0,61})+$') {
+                    throw "Invalid tenant domain format from Graph context: $accountDomain"
+                }
+            }
+
             $result['Graph']        = $true
             $result['TenantId']     = "$($ctx.TenantId)"
-            $result['TenantDomain'] = ($ctx.Account -split '@')[-1]
-            Write-Host "  [+] Graph — $($ctx.Account)" -ForegroundColor Green
+            $result['TenantDomain'] = $accountDomain
+            $who = if ($isAppOnly) { "App $($AppId.Substring(0,8))... in tenant $($TenantId.Substring(0,8))..." } else { $ctx.Account }
+            Write-Host "  [+] Graph - $who" -ForegroundColor Green
         }
     } catch {
         Write-Host "  [!] Graph: $($_.Exception.Message)" -ForegroundColor Yellow
-        Register-NRGException -Source 'Connect-Graph' -Message $_.Exception.Message
+        if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+            Register-NRGException -Source 'Connect-Graph' -Message $_.Exception.Message
+        }
     }
 
-    # ── 2. Microsoft Teams — device code (BEFORE EXO) ────────────────────────
+    # ── 2. Microsoft Teams ────────────────────────────────────────────────────
     if (-not $SkipTeams) {
         Write-Host "  [*] Microsoft Teams..." -ForegroundColor Cyan
         try {
-            if (-not (Get-Module -ListAvailable -Name MicrosoftTeams -ErrorAction SilentlyContinue)) {
-                throw 'MicrosoftTeams not installed. Run: Install-Module MicrosoftTeams -Scope CurrentUser -Force'
+            # Check both installed and in-session (handles just-installed modules)
+            $teamsAvail = (Get-Module -ListAvailable -Name MicrosoftTeams -ErrorAction SilentlyContinue) -or
+                          (Get-Module -Name MicrosoftTeams -ErrorAction SilentlyContinue)
+            if (-not $teamsAvail) {
+                # Try importing directly — may have been installed this session
+                try { Import-Module MicrosoftTeams -Force -ErrorAction Stop -WarningAction SilentlyContinue }
+                catch { throw 'MicrosoftTeams module not installed. Run: Install-Module MicrosoftTeams -Scope CurrentUser -Force' }
             }
             Import-Module MicrosoftTeams -ErrorAction Stop -WarningAction SilentlyContinue
-            & $script:ShowDeviceCodeBox 'Microsoft Teams' 'https://microsoft.com/devicelogin'
-            Connect-MicrosoftTeams -UseDeviceAuthentication -ErrorAction Stop | Out-Null
+
+            if ($isAppOnly) {
+                Connect-MicrosoftTeams -TenantId $TenantId -ApplicationId $AppId `
+                                       -CertificateThumbprint $CertificateThumbprint `
+                                       -ErrorAction Stop | Out-Null
+            } else {
+                # Import module explicitly in case it was just installed this session
+                if (-not (Get-Command Connect-MicrosoftTeams -ErrorAction SilentlyContinue)) {
+                    Import-Module MicrosoftTeams -Force -ErrorAction SilentlyContinue
+                }
+                & $script:ShowDeviceCodeBox 'Microsoft Teams' 'https://microsoft.com/devicelogin'
+                Connect-MicrosoftTeams -UseDeviceAuthentication -ErrorAction Stop | Out-Null
+            }
             $result['Teams'] = $true
             Write-Host "  [+] Teams connected" -ForegroundColor Green
         } catch {
             Write-Host "  [!] Teams: $($_.Exception.Message)" -ForegroundColor Yellow
-            Register-NRGException -Source 'Connect-Teams' -Message $_.Exception.Message
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'Connect-Teams' -Message $_.Exception.Message
+            }
         }
     }
 
-    # ── 3. Exchange Online — device code ─────────────────────────────────────
+    # ── 3. Exchange Online ────────────────────────────────────────────────────
+    # ACCEPTED RESIDUAL RISK: the EXO V3 module dynamically downloads cmdlet code
+    # from https://outlook.office365.com/AdminApi/.../EXOModuleFile?Version=... at
+    # connection time and loads it into the session. Download is HTTPS and signed
+    # (v3.2.0+). See docs/security/THREAT-MODEL.md.
     Write-Host "  [*] Exchange Online..." -ForegroundColor Cyan
-    & $script:ShowDeviceCodeBox 'Exchange Online' 'https://microsoft.com/devicelogin'
     try {
-        $p = @{ ShowBanner = $false; ErrorAction = 'Stop' }
-        if ($UserPrincipalName) { $p['UserPrincipalName'] = $UserPrincipalName }
-        try {
-            $p['Device'] = $true
-            Connect-ExchangeOnline @p | Out-Null
-        } catch [System.Management.Automation.ParameterBindingException] {
-            $p.Remove('Device')
-            Connect-ExchangeOnline @p | Out-Null
+        if ($isAppOnly) {
+            $orgDomain = if ($OrganizationDomain) {
+                $OrganizationDomain
+            } elseif ($result.TenantDomain -match '\.onmicrosoft\.com$') {
+                $result.TenantDomain
+            } else {
+                throw "App-only EXO requires the .onmicrosoft.com routing domain via -OrganizationDomain."
+            }
+            Connect-ExchangeOnline -AppId $AppId -CertificateThumbprint $CertificateThumbprint `
+                                   -Organization $orgDomain -ShowBanner:$false -ErrorAction Stop | Out-Null
+        } else {
+            # UseRPSSession bypasses MSAL/WAM entirely — avoids the RuntimeBroker
+            # NullReferenceException that fires on a background thread in EOM v3.x
+            $exoParams = @{ ShowBanner = $false; ErrorAction = 'Stop' }
+            if ($UserPrincipalName) { $exoParams['UserPrincipalName'] = $UserPrincipalName }
+            try {
+                # Try legacy RPS session first — no MSAL, no WAM, no crash
+                $exoParams['UseRPSSession'] = $true
+                Connect-ExchangeOnline @exoParams | Out-Null
+            } catch [System.Management.Automation.ParameterBindingException] {
+                # UseRPSSession removed in EOM 3.4.0 — fall back to device code
+                $exoParams.Remove('UseRPSSession')
+                & $script:ShowDeviceCodeBox 'Exchange Online' 'https://microsoft.com/devicelogin'
+                try {
+                    $exoParams['Device'] = $true
+                    Connect-ExchangeOnline @exoParams | Out-Null
+                } catch [System.Management.Automation.ParameterBindingException] {
+                    $exoParams.Remove('Device')
+                    Connect-ExchangeOnline @exoParams | Out-Null
+                }
+            } catch {
+                # UseRPSSession might throw a different error if deprecated but present
+                # Try the version check approach
+                $exoParams.Remove('UseRPSSession')
+                & $script:ShowDeviceCodeBox 'Exchange Online' 'https://microsoft.com/devicelogin'
+                try {
+                    $exoParams['Device'] = $true
+                    Connect-ExchangeOnline @exoParams | Out-Null
+                } catch [System.Management.Automation.ParameterBindingException] {
+                    $exoParams.Remove('Device')
+                    Connect-ExchangeOnline @exoParams | Out-Null
+                }
+            }
         }
         $result['EXO'] = $true
         Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
     } catch {
         Write-Host "  [!] EXO: $($_.Exception.Message)" -ForegroundColor Yellow
-        Register-NRGException -Source 'Connect-EXO' -Message $_.Exception.Message
+        if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+            Register-NRGException -Source 'Connect-EXO' -Message $_.Exception.Message
+        }
     }
 
-    # ── 4. Purview — MSAL device code bypass (avoids EXO module WAM init) ─────
-    #
-    # Root cause: Connect-IPPSSession internally calls InteractiveRequest which
-    # initialises RuntimeBroker (WAM) before device code. On PS7 in console
-    # context the RuntimeBroker constructor throws NullReferenceException because
-    # CoreUIParent has no window handle.
-    #
-    # Fix: acquire the IPPS token ourselves using MSAL.NET (already loaded by
-    # the Graph SDK) with an explicit DeviceCode flow. DeviceCode does not
-    # initialise the WAM broker. Pass the token to Connect-IPPSSession -AccessToken.
-    #
+    # ── 4. Purview / Security & Compliance ───────────────────────────────────
     if (-not $SkipPurview) {
         Write-Host "  [*] Purview / Security and Compliance..." -ForegroundColor Cyan
-
-        $ippsConnected = $false
-
-        # First try: standard -Device flag (works on machines without WAM restriction)
         try {
-            $p = @{ ShowBanner = $false; ErrorAction = 'Stop' }
-            if ($UserPrincipalName) { $p['UserPrincipalName'] = $UserPrincipalName }
-            & $script:ShowDeviceCodeBox 'Security and Compliance' 'https://microsoft.com/devicelogin'
-            try {
-                $p['Device'] = $true
-                Connect-IPPSSession @p | Out-Null
-            } catch [System.Management.Automation.ParameterBindingException] {
-                $p.Remove('Device')
-                Connect-IPPSSession @p | Out-Null
-            }
-            $result['IPPSSession'] = $true
-            $ippsConnected         = $true
-            Write-Host "  [+] Purview connected" -ForegroundColor Green
-        } catch {
-            $e = $_.Exception.Message
-            # WAM crash or other failure — fall through to MSAL bypass
-            if ($e -notmatch 'NullReference|RuntimeBroker|Object reference|canceled') {
-                Write-Host "  [!] Purview (standard): $e" -ForegroundColor DarkYellow
-            }
-        }
+            if ($isAppOnly) {
+                # IPPSSession does not yet support app-only cert auth as of EXO V3.5.
+                Write-Host "      Note: IPPSSession does not currently support app-only auth. Skipping." -ForegroundColor DarkYellow
+            } else {
+                # Force device code auth — WAM broker causes NullReferenceException
+                # on background thread when no interactive UI parent exists
+                $env:MSAL_ALLOW_BROKER = '0'
+                $env:MSAL_DISABLE_TOKENBROKER = '1'
 
-        # Second try: direct MSAL.NET device code — no WAM broker involved
-        # The PowerShell scriptblock callback fails on threadpool threads (no Runspace).
-        # Fix: compile a pure C# lambda via Add-Type — no scriptblock, no Runspace needed.
-        if (-not $ippsConnected -and $result['TenantId'] -and $result['TenantDomain']) {
-            Write-Host "  [i] WAM blocked — acquiring IPPS token via MSAL device code..." -ForegroundColor DarkGray
-            & $script:ShowDeviceCodeBox 'Security and Compliance' 'https://microsoft.com/devicelogin'
-            try {
-                $tenantId  = $result['TenantId']
-                $tenantDom = $result['TenantDomain']
-                $exoAppId  = 'fb78d390-0c51-40cd-8e17-fdbfab77341b'
-                $ippsScope = [string[]]@('https://ps.compliance.protection.outlook.com/.default')
-
-                # Compile C# callback — pure .NET lambda, no PS Runspace required on callback thread.
-                # Must reference both MSAL and System.Console assemblies explicitly —
-                # .NET 6 splits BCL into separate assemblies; Add-Type doesn't include them by default.
-                if (-not ([System.Management.Automation.PSTypeName]'NRGIPPSHelper').Type) {
-                    $msalAsmPath    = [Microsoft.Identity.Client.PublicClientApplicationBuilder].Assembly.Location
-                    $consoleAsmPath = [System.Console].Assembly.Location
-                    Add-Type -TypeDefinition @"
-public static class NRGIPPSHelper {
-    public static System.Func<Microsoft.Identity.Client.DeviceCodeResult,
-                               System.Threading.Tasks.Task> GetCallback() {
-        return dcr => {
-            System.Console.WriteLine(dcr.Message);
-            return System.Threading.Tasks.Task.CompletedTask;
-        };
-    }
-}
-"@ -ReferencedAssemblies $msalAsmPath, $consoleAsmPath -ErrorAction Stop
+                $ippsParams = @{
+                    ShowBanner          = $false
+                    ErrorAction         = 'Stop'
+                    UseDeviceAuthentication = $true
                 }
-                $dcCallback = [NRGIPPSHelper]::GetCallback()
+                if ($UserPrincipalName) { $ippsParams['UserPrincipalName'] = $UserPrincipalName }
 
-                $msalBuilder = [Microsoft.Identity.Client.PublicClientApplicationBuilder]::Create($exoAppId)
-                $msalBuilder = $msalBuilder.WithAuthority("https://login.microsoftonline.com/$tenantId/")
-                $msalApp     = $msalBuilder.Build()
+                Write-Host "  [*] Purview requires device code auth — open browser:" -ForegroundColor Cyan
+                Write-Host "      https://microsoft.com/devicelogin" -ForegroundColor Yellow
+                Write-Host "      Sign in as $UserPrincipalName" -ForegroundColor Yellow
 
-                $tokenBuilder = $msalApp.AcquireTokenWithDeviceCode($ippsScope, $dcCallback)
-                $tokenTask    = $tokenBuilder.ExecuteAsync()
-                $tokenResult  = $tokenTask.GetAwaiter().GetResult()
-
-                Connect-IPPSSession -AccessToken $tokenResult.AccessToken -DelegatedOrganization $tenantDom -ShowBanner:$false -ErrorAction Stop | Out-Null
-
+                # Fallback if UseDeviceAuthentication param not available in older module
+                try {
+                    Connect-IPPSSession @ippsParams | Out-Null
+                } catch [System.Management.Automation.ParameterBindingException] {
+                    $ippsParams.Remove('UseDeviceAuthentication')
+                    $ippsParams['Device'] = $true
+                    try {
+                        Connect-IPPSSession @ippsParams | Out-Null
+                    } catch [System.Management.Automation.ParameterBindingException] {
+                        $ippsParams.Remove('Device')
+                        Connect-IPPSSession @ippsParams | Out-Null
+                    }
+                }
                 $result['IPPSSession'] = $true
-                $ippsConnected         = $true
-                Write-Host "  [+] Purview connected (MSAL bypass)" -ForegroundColor Green
-            } catch {
-                Write-Host "  [!] Purview: $($_.Exception.Message)" -ForegroundColor Yellow
+                Write-Host "  [+] Purview / Compliance connected" -ForegroundColor Green
+            }
+        } catch {
+            Write-Host "  [!] Purview: $($_.Exception.Message)" -ForegroundColor Yellow
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Connect-IPPS' -Message $_.Exception.Message
             }
-        }
-    }
-
-    # ── 5. SharePoint Online via PnP ─────────────────────────────────────────
-    if (-not $SkipSharePoint -and $result['TenantDomain']) {
-        Write-Host "  [*] SharePoint Online..." -ForegroundColor Cyan
-        try {
-            if (-not (Get-Module -ListAvailable -Name PnP.PowerShell -ErrorAction SilentlyContinue)) {
-                throw 'PnP.PowerShell not installed. Run: Install-Module PnP.PowerShell -Scope CurrentUser -Force'
-            }
-            Import-Module PnP.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
-            $prefix = ($result['TenantDomain'] -split '\.')[0]
-            $spoUrl = "https://$prefix-admin.sharepoint.com"
-            & $script:ShowDeviceCodeBox 'SharePoint Online' 'https://microsoft.com/devicelogin'
-            Connect-PnPOnline -Url $spoUrl -PnPManagementShell -LaunchBrowser -ErrorAction Stop | Out-Null
-            $result['SharePoint'] = $true
-            Write-Host "  [+] SharePoint connected ($spoUrl)" -ForegroundColor Green
-        } catch {
-            Write-Host "  [!] SharePoint: $($_.Exception.Message)" -ForegroundColor Yellow
-            Register-NRGException -Source 'Connect-SharePoint' -Message $_.Exception.Message
         }
     }
 
@@ -264,9 +329,7 @@ public static class NRGIPPSHelper {
 function Disconnect-NRGServices {
     [CmdletBinding()] param()
     try { Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null } catch {}
-    # Disconnect-ExchangeOnline intentionally omitted.
-    # EXO 3.3+ crashes on ClearAllTokensAsync (background thread, uncatchable)
-    # when WAM broker is unavailable. Sessions expire on process exit.
+    try { Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue | Out-Null } catch {}
     try { Disconnect-MicrosoftTeams -ErrorAction SilentlyContinue | Out-Null } catch {}
     try { Disconnect-PnPOnline -ErrorAction SilentlyContinue | Out-Null } catch {}
     Write-Host "[-] Sessions disconnected." -ForegroundColor DarkGray
