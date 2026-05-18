@@ -121,8 +121,9 @@ function Publish-NRGAssessmentHTML {
         $wn  = @($g | Where-Object State -eq 'NotApplicable').Count
         $wd  = $g.Count - $wn
         $wlScores[$wl] = @{
-            Score = if ($wd -gt 0) { [Math]::Round(100*($ws2+0.5*$wp)/$wd) } else { 0 }
-            Gaps  = @($g | Where-Object State -eq 'Gap').Count
+            Score  = if ($wd -gt 0) { [Math]::Round(100*($ws2+0.5*$wp)/$wd) } else { 0 }
+            Gaps   = @($g | Where-Object State -eq 'Gap').Count
+            Scored = $wd
         }
     }
 
@@ -138,11 +139,62 @@ function Publish-NRGAssessmentHTML {
         $fwScores[$fw] = if ($fd -gt 0) { [Math]::Round(100*($fs+0.5*$fp)/$fd) } else { 0 }
     }
 
-    # ── License groups ────────────────────────────────────────────────────────
+    # ── License detection — suppress gaps the tenant already has licenses for ────
+    $subscribedSkus = @()
+    try {
+        $invData = Get-NRGRawData -Key 'AAD-Inventory'
+        if ($invData -and $invData.SubscribedSkus) { $subscribedSkus = $invData.SubscribedSkus }
+    } catch {}
+
+    # Determine what license tiers are present
+    $allSkuParts = @($subscribedSkus | ForEach-Object { $_.SkuPartNumber })
+
+    $hasBusinessPremium = $allSkuParts -match 'SPB|O365_BUSINESS_PREMIUM|M365_BUSINESS_PREMIUM' |
+                          Select-Object -First 1
+    $hasEntraP2         = $allSkuParts -match 'AAD_PREMIUM_P2|ENTRA_ID_GOVERNANCE|IDENTITY_GOVERNANCE' |
+                          Select-Object -First 1
+    $hasIntune          = $hasBusinessPremium -or ($allSkuParts -match '^INTUNE')
+    $hasMDE             = $allSkuParts -match 'WIN_DEF_ATP|MDE_SMB|DEFENDER_ENDPOINT' |
+                          Select-Object -First 1
+    $hasMDCA            = $allSkuParts -match 'ADALLOM_S_STANDALONE|MFA_PREMIUM|CLOUD_APP_SECURITY' |
+                          Select-Object -First 1
+
+    # Build suppression list — requirements already met by detected licenses
+    $suppressedLicReqs = [System.Collections.Generic.HashSet[string]]::new()
+    if ($hasBusinessPremium) {
+        @(
+            'Defender for Office 365 Plan 1 (M365 Business Premium)',
+            'M365 Business Premium or E3+',
+            'M365 Business Premium or E3+ (Copilot requires M365 Copilot add-on)',
+            'M365 Business Premium or Entra ID P1',
+            'M365 Business Premium or Entra ID P1 + Intune',
+            'M365 Business Premium or Intune Plan 1',
+            'Microsoft Defender for Endpoint Plan 1+'
+        ) | ForEach-Object { $null = $suppressedLicReqs.Add($_) }
+    }
+    if ($hasEntraP2) {
+        @(
+            'Entra ID P2',
+            'Entra ID P2 + Workload Identities add-on',
+            'Included (all plans) — Access Reviews require Entra P2'
+        ) | ForEach-Object { $null = $suppressedLicReqs.Add($_) }
+    }
+    if ($hasIntune) {
+        @(
+            'M365 Business Premium or Intune Plan 1',
+            'M365 Business Premium or Entra ID P1 + Intune'
+        ) | ForEach-Object { $null = $suppressedLicReqs.Add($_) }
+    }
+    if ($hasMDE)  { $null = $suppressedLicReqs.Add('Microsoft Defender for Endpoint Plan 2') }
+    if ($hasMDCA) { $null = $suppressedLicReqs.Add('Microsoft Defender for Cloud Apps (M365 E5 or add-on)') }
+
+    # ── License groups (only show what the tenant actually needs) ─────────────
     $licGroups = @{}
     foreach ($f in ($Findings | Where-Object State -eq 'Gap')) {
         $ctrl = $cdefs[$f.ControlId]
-        if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') {
+        if ($ctrl -and $ctrl.LicenseRequirement -and
+            $ctrl.LicenseRequirement -notmatch '^Included' -and
+            -not $suppressedLicReqs.Contains($ctrl.LicenseRequirement)) {
             $lic = $ctrl.LicenseRequirement
             if (-not $licGroups.ContainsKey($lic)) { $licGroups[$lic] = 0 }
             $licGroups[$lic]++
@@ -171,8 +223,14 @@ function Publish-NRGAssessmentHTML {
     # ── Connections ───────────────────────────────────────────────────────────
     $svcMap = @{Graph='Microsoft Graph';EXO='Exchange Online';IPPSSession='Purview/Compliance';Teams='Microsoft Teams';SharePoint='SharePoint Online'}
     $connHtml = ''
+    # Check coverage data to supplement connection flags — Graph can have data even if flag is false
+    $aadHasData = try { $gd = Get-NRGRawData -Key 'AAD-CAPolicies'; $gd -and $gd.Success } catch { $false }
     foreach ($svc in @('Graph','EXO','IPPSSession','Teams','SharePoint')) {
-        $ok  = if ($Connections -is [hashtable]) { $Connections.ContainsKey($svc) -and $Connections[$svc] -eq $true } else { $Connections.$svc -eq $true }
+        $ok = if ($Connections -is [hashtable]) {
+            $Connections.ContainsKey($svc) -and $Connections[$svc] -eq $true
+        } else { $Connections.$svc -eq $true }
+        # Override: if Graph flag is false but AAD data was collected, mark as connected
+        if (-not $ok -and $svc -eq 'Graph' -and $aadHasData) { $ok = $true }
         $cls = if ($ok) { 'cok' } else { 'coff' }
         $ico = if ($ok) { '&#10003;' } else { '&#10005;' }
         $connHtml += "<div class='conn $cls'><span>$ico</span><span>$(hx $svcMap[$svc])</span></div>"
@@ -187,7 +245,10 @@ function Publish-NRGAssessmentHTML {
         $lbl  = hx $(if ($wlNames[$wl]) { $wlNames[$wl] } else { $wl })
         $col  = scoreColor $ws3
         $ring = [Math]::Round(100.5 * (1 - $ws3/100), 2)
-        $gapTxt = if ($gps -gt 0) { "<div class='wl-gap'>$gps gap$(if($gps -ne 1){'s'})</div>" } else { "<div class='wl-ok'>&#10003; Clean</div>" }
+        # Show N/A when no controls scored (all NotApplicable) instead of 0/100
+        $wlScored = $wlScores[$wl].Scored
+        $wlNaOnly = ($wlScored -eq 0)
+        $gapTxt = if ($gps -gt 0) { "<div class='wl-gap'>$gps gap$(if($gps -ne 1){'s'})</div>" } elseif ($wlNaOnly) { "<div class='wl-na'>— Not assessed</div>" } else { "<div class='wl-ok'>&#10003; Clean</div>" }
         $wlGrid += @"
 <div class='wl-card'>
   <svg width='54' height='54' viewBox='0 0 36 36'>
@@ -196,7 +257,7 @@ function Publish-NRGAssessmentHTML {
       stroke-dasharray='100.5' stroke-dashoffset='$ring' transform='rotate(-90 18 18)'
       style='transition:stroke-dashoffset 1.2s ease .3s'/>
   </svg>
-  <div class='wl-info'><div class='wl-name'>$lbl</div><div class='wl-score' style='color:$col'>$ws3<span class='wl-den'>/100</span></div>$gapTxt</div>
+  <div class='wl-info'><div class='wl-name'>$lbl</div><div class='wl-score' style='color:$col'>$(if ($wlNaOnly) { '<span style="color:#94a3b8">—</span>' } else { "$ws3<span class=`'wl-den`'>/100</span>" })</div>$gapTxt</div>
 </div>
 "@
     }
@@ -227,7 +288,7 @@ function Publish-NRGAssessmentHTML {
     <div class='lic-badge'>$totalBlocked blocked</div>
   </div>
   <div class='lic-body'>
-    <div class='lic-alert'><span class='lic-ico'>&#9888;</span><div>Upgrading to <strong>Microsoft 365 Business Premium</strong> resolves the majority of these gaps — including Safe Attachments, Safe Links, Conditional Access with device compliance, and Intune endpoint management. These are the controls most directly blocking ransomware and BEC attacks. Contact NRG for a licensing proposal.</div></div>
+    $(if (-not $hasBusinessPremium) { "<div class='lic-alert'><span class='lic-ico'>&#9888;</span><div>Upgrading to <strong>Microsoft 365 Business Premium</strong> resolves the majority of these gaps — including Safe Attachments, Safe Links, Conditional Access with device compliance, and Intune endpoint management. These are the controls most directly blocking ransomware and BEC attacks. Contact NRG for a licensing proposal.</div></div>" } elseif (-not $hasEntraP2) { "<div class='lic-alert'><span class='lic-ico'>&#9432;</span><div>The remaining license-gated controls require <strong>Microsoft Entra ID P2</strong> or <strong>Entra Suite</strong> — including Identity Protection risk-based CA policies and PIM governance features. Contact NRG for a licensing proposal.</div></div>" } else { "<div class='lic-alert'><span class='lic-ico'>&#9432;</span><div>The following controls require additional licensing beyond your current subscriptions. Contact NRG for a licensing assessment.</div></div>" })
     <div class='lic-rows'>$licRows</div>
   </div>
 </div>
@@ -514,7 +575,7 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
 .wl-score{font-size:1.4rem;font-weight:900;line-height:1}
 .wl-den{font-size:.62rem;font-weight:600;color:var(--mut);margin-left:1px}
 .wl-gap{font-size:.66rem;font-weight:700;color:var(--gap);margin-top:2px}
-.wl-ok{font-size:.66rem;font-weight:700;color:var(--pass);margin-top:2px}
+.wl-ok{font-size:.66rem;font-weight:700;color:var(--pass);margin-top:2px}.wl-na{color:#94a3b8;font-size:.65rem;font-weight:500;margin-top:2px}
 
 /* Framework matrix */
 .fw-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:var(--bdr)}

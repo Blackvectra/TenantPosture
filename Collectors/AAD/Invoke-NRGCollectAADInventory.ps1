@@ -24,13 +24,31 @@ function Invoke-NRGCollectAADInventory {
             RecentRiskEvents    = @()
             SecureScore         = $null
             LastSignInSummary   = @{}
+            SubscribedSkus      = @()
         }
     }
 
-    $cutoff90  = (Get-Date).AddDays(-90).ToString('o')
-    $cutoff30  = (Get-Date).AddDays(-30).ToString('o')
-
     try {
+        # Subscribed SKUs — license detection for report suppression
+        try {
+            $skuResp = Invoke-MgGraphRequest -Method GET `
+                -Uri 'https://graph.microsoft.com/v1.0/subscribedSkus?$select=skuPartNumber,skuId,servicePlans,capabilityStatus' `
+                -ErrorAction Stop
+            $result.Data.SubscribedSkus = @($skuResp.value | Where-Object { $_.capabilityStatus -in @('Enabled','Warning') } | ForEach-Object {
+                @{
+                    SkuPartNumber = [string]$_.skuPartNumber
+                    SkuId         = [string]$_.skuId
+                    ServicePlans  = @($_.servicePlans | Where-Object { $_.provisioningStatus -eq 'Success' } | Select-Object -ExpandProperty servicePlanName)
+                }
+            })
+        } catch {
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'AAD-SubscribedSkus' -Message $_.Exception.Message
+            }
+            # Log permission hint
+            Write-Verbose "AAD-SubscribedSkus failed — needs Organization.Read.All or Directory.Read.All"
+        }
+
         # Guest users + last sign-in
         try {
             $guests = Invoke-MgGraphRequest -Method GET `
@@ -144,9 +162,7 @@ function Invoke-NRGCollectAADInventory {
         }
 
         $result.Success = $true
-        if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
-            Register-NRGCoverage -Family 'AAD-Inventory' -Status 'Collected'
-        }
+
     } catch {
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
             Register-NRGException -Source 'AAD-Inventory' -Message $_.Exception.Message
@@ -155,6 +171,11 @@ function Invoke-NRGCollectAADInventory {
 
     if (Get-Command Set-NRGRawData -ErrorAction SilentlyContinue) {
         Set-NRGRawData -Key 'AAD-Inventory' -Data $result
+    }
+    if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
+        $skuCount = @($result.Data.SubscribedSkus).Count
+        Register-NRGCoverage -Family 'AAD-Inventory' -Status 'Collected' `
+            -Note "Guests=$(@($result.Data.GuestUsers).Count) SKUs=$skuCount"
     }
     return $result
 }
