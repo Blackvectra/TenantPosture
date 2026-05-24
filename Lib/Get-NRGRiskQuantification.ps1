@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 #
-# Get-NRGRiskQuantification.ps1  (v4.5.6)
+# Get-NRGRiskQuantification.ps1  (v4.5.5)
 # Translates each Gap / Partial finding into an annualized dollar exposure
 # band using industry-cited loss data. Surfaced in the HTML report and the
 # Markdown summary so clients see a defensible $-cost next to every gap.
@@ -113,10 +113,20 @@ function Get-NRGFindingRiskCost {
         [Parameter(Mandatory)] [object] $Finding
     )
 
-    $state    = [string]$Finding.State
-    $severity = [string]$Finding.Severity
-    $category = [string]$Finding.Category
-    $cid      = [string]$Finding.ControlId
+    # Defensive: under StrictMode Latest, bare $Finding.Prop on a missing
+    # property throws PropertyNotFoundException. Use null-conditional access
+    # plus a try/catch so a single malformed finding can't crash the caller —
+    # we return $null and let the caller decide (skip vs. surface).
+    $invariant = [cultureinfo]::InvariantCulture
+    try {
+        $state    = [string](${Finding}?.State    ?? '')
+        $severity = [string](${Finding}?.Severity ?? '')
+        $category = [string](${Finding}?.Category ?? '')
+        $cid      = [string](${Finding}?.ControlId ?? '')
+    } catch {
+        Write-Warning "Get-NRGFindingRiskCost: malformed finding ($($_.Exception.Message))"
+        return $null
+    }
 
     # Satisfied / NotApplicable / Error = no risk (or untestable, treat as zero
     # rather than guessing). Only Gap and Partial generate exposure.
@@ -150,17 +160,19 @@ function Get-NRGFindingRiskCost {
         $high *= 0.6
     }
 
-    $midpoint = [int][Math]::Round(($low + $high) / 2)
+    # Use [long] (int64) for dollar amounts — annualized aggregate exposure
+    # can plausibly exceed int32's ~$2.1B ceiling for large client estates.
+    $midpoint  = [long][Math]::Round(($low + $high) / 2)
     $scenarios = @($script:NRGRiskScenarios[$category] ?? @())
     $citations = @($script:NRGRiskCitations[$severity] ?? @())
 
     return @{
-        MinAnnualExposure  = [int][Math]::Round($low)
-        MaxAnnualExposure  = [int][Math]::Round($high)
+        MinAnnualExposure  = [long][Math]::Round($low)
+        MaxAnnualExposure  = [long][Math]::Round($high)
         Confidence         = [string]$band.Confidence
         Scenarios          = $scenarios
         Citations          = $citations
-        MidpointFormatted  = '$' + ('{0:N0}' -f $midpoint)
+        MidpointFormatted  = '$' + ([string]::Format($invariant, '{0:N0}', $midpoint))
     }
 }
 
@@ -185,50 +197,69 @@ function Get-NRGAggregateRisk {
         [Parameter(Mandatory)] [object[]] $Findings
     )
 
-    $totalLow  = 0
-    $totalHigh = 0
+    # Aggregate dollar amounts use [long] (int64). Annualized exposure across
+    # a large client estate can plausibly exceed int32's ~$2.1B ceiling.
+    [long]$totalLow  = 0
+    [long]$totalHigh = 0
     $bySev     = @{}
     $byWorkload= @{}
     $byScenario= @{}
     $count     = 0
+    $invariant = [cultureinfo]::InvariantCulture
 
     foreach ($f in $Findings) {
-        if ($f.State -notin @('Gap','Partial')) { continue }
-        $risk = Get-NRGFindingRiskCost -Finding $f
-        $totalLow  += $risk.MinAnnualExposure
-        $totalHigh += $risk.MaxAnnualExposure
-        $count++
+        # Under StrictMode Latest, any unguarded $f.Prop access on a malformed
+        # finding throws PropertyNotFoundException and zeroes out the entire
+        # executive-summary figure. Wrap per-finding work in try/catch so one
+        # bad finding only loses itself.
+        try {
+            $fState = [string](${f}?.State ?? '')
+            if ($fState -notin @('Gap','Partial')) { continue }
 
-        $sev = [string]$f.Severity
-        if (-not $bySev.ContainsKey($sev)) { $bySev[$sev] = @{ Low=0; High=0; Count=0 } }
-        $bySev[$sev].Low   += $risk.MinAnnualExposure
-        $bySev[$sev].High  += $risk.MaxAnnualExposure
-        $bySev[$sev].Count++
+            $risk = Get-NRGFindingRiskCost -Finding $f
+            if ($null -eq $risk) {
+                Write-Warning "Skipping malformed finding in risk aggregate: Get-NRGFindingRiskCost returned null"
+                continue
+            }
+            $totalLow  += [long]$risk.MinAnnualExposure
+            $totalHigh += [long]$risk.MaxAnnualExposure
+            $count++
 
-        if ([string]$f.ControlId -match '^([A-Z]{2,4})-') {
-            $wl = $matches[1]
-            if (-not $byWorkload.ContainsKey($wl)) { $byWorkload[$wl] = @{ Low=0; High=0; Count=0 } }
-            $byWorkload[$wl].Low   += $risk.MinAnnualExposure
-            $byWorkload[$wl].High  += $risk.MaxAnnualExposure
-            $byWorkload[$wl].Count++
-        }
+            $sev = [string](${f}?.Severity ?? '(unknown)')
+            if (-not $bySev.ContainsKey($sev)) { $bySev[$sev] = @{ Low=[long]0; High=[long]0; Count=0 } }
+            $bySev[$sev].Low   += [long]$risk.MinAnnualExposure
+            $bySev[$sev].High  += [long]$risk.MaxAnnualExposure
+            $bySev[$sev].Count++
 
-        foreach ($s in $risk.Scenarios) {
-            if (-not $byScenario.ContainsKey($s)) { $byScenario[$s] = @{ Low=0; High=0; Count=0 } }
-            $byScenario[$s].Low   += $risk.MinAnnualExposure
-            $byScenario[$s].High  += $risk.MaxAnnualExposure
-            $byScenario[$s].Count++
+            $cid = [string](${f}?.ControlId ?? '(unknown)')
+            if ($cid -match '^([A-Z]{2,4})-') {
+                $wl = $matches[1]
+                if (-not $byWorkload.ContainsKey($wl)) { $byWorkload[$wl] = @{ Low=[long]0; High=[long]0; Count=0 } }
+                $byWorkload[$wl].Low   += [long]$risk.MinAnnualExposure
+                $byWorkload[$wl].High  += [long]$risk.MaxAnnualExposure
+                $byWorkload[$wl].Count++
+            }
+
+            foreach ($s in $risk.Scenarios) {
+                if (-not $byScenario.ContainsKey($s)) { $byScenario[$s] = @{ Low=[long]0; High=[long]0; Count=0 } }
+                $byScenario[$s].Low   += [long]$risk.MinAnnualExposure
+                $byScenario[$s].High  += [long]$risk.MaxAnnualExposure
+                $byScenario[$s].Count++
+            }
+        } catch {
+            Write-Warning "Skipping malformed finding in risk aggregate: $($_.Exception.Message)"
+            continue
         }
     }
 
-    $mid = [int][Math]::Round(($totalLow + $totalHigh) / 2)
+    $mid = [long][Math]::Round(($totalLow + $totalHigh) / 2)
     return @{
         OpenGapAndPartialCount = $count
         TotalMin               = $totalLow
         TotalMax               = $totalHigh
         TotalMidpoint          = $mid
-        TotalRangeFormatted    = ('$' + ('{0:N0}' -f $totalLow) + ' – $' + ('{0:N0}' -f $totalHigh))
-        TotalMidpointFormatted = '$' + ('{0:N0}' -f $mid)
+        TotalRangeFormatted    = ('$' + ([string]::Format($invariant, '{0:N0}', $totalLow)) + ' – $' + ([string]::Format($invariant, '{0:N0}', $totalHigh)))
+        TotalMidpointFormatted = '$' + ([string]::Format($invariant, '{0:N0}', $mid))
         BySeverity             = $bySev
         ByWorkload             = $byWorkload
         ByScenario             = $byScenario
