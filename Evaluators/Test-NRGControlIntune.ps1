@@ -1,7 +1,8 @@
 #Requires -Version 7.0
 #
 # Test-NRGControlIntune.ps1
-# Evaluates Intune controls. Reads: Get-NRGRawData -Key 'Intune'
+# Evaluates Intune controls. Reads from the three split raw-data keys produced by
+# Invoke-NRGCollectIntuneEndpointSecurity / DeviceCompliance / AppProtection.
 #
 # Controls:
 #   ITN-1.1  Device compliance policy active
@@ -13,20 +14,31 @@
 
 function Test-NRGControlIntune {
     [CmdletBinding()] param()
-    $raw = Get-NRGRawData -Key 'Intune'
-    if (-not $raw -or -not $raw.Success) {
+    $es  = Get-NRGRawData -Key 'Intune-EndpointSecurity'
+    $dc  = Get-NRGRawData -Key 'Intune-DeviceCompliance'
+    $app = Get-NRGRawData -Key 'Intune-AppProtection'
+
+    $anySuccess = ($es -and $es.Success) -or ($dc -and $dc.Success) -or ($app -and $app.Success)
+    if (-not $anySuccess) {
         foreach ($cid in @('INT-1.1','INT-1.2','INT-1.3','INT-1.4','INT-1.5')) {
             $c = Get-NRGControlById -ControlId $cid
             if ($c) {
                 Add-NRGFinding -ControlId $cid -State 'NotApplicable' `
                     -Category 'Endpoint' -Title $c.Title `
-                    -Detail 'Intune collector did not run.'
+                    -Detail 'Intune collectors did not run.'
             }
         }
         return
     }
 
-    $d = $raw.Data
+    # Merge fields the legacy ITN-1.x checks expect into a single $d view
+    $d = @{
+        CompliancePolicies       = if ($dc  -and $dc.Success)  { $dc.Data.CompliancePolicies }       else { @() }
+        ConfigurationProfiles    = if ($dc  -and $dc.Success)  { $dc.Data.ConfigurationProfiles }    else { @() }
+        AppProtectionPolicies    = if ($app -and $app.Success) { $app.Data.AppProtectionPolicies }   else { @() }
+        EnrollmentConfig         = if ($dc  -and $dc.Success)  { $dc.Data.EnrollmentConfig }         else { @() }
+        EndpointSecurityPolicies = if ($es  -and $es.Success)  { $es.Data.EndpointSecurityPolicies } else { @() }
+    }
 
     # ITN-1.1 — Device compliance policy active
     $c = Get-NRGControlById -ControlId 'INT-1.1'

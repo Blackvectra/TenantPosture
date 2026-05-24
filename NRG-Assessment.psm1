@@ -100,8 +100,8 @@ foreach ($folder in $loadOrder) {
 
 # ── Exported function list ────────────────────────────────────────────────────
 $script:ExportedFunctions = @(
-    # ── Lib ───────────────────────────────────────────────────────────────────
-    'Add-NRGFinding', 'Get-NRGSafeProperty', 'Get-NRGFindings', 'Clear-NRGFindings',
+    # ── Lib helpers ───────────────────────────────────────────────────────────
+    'Add-NRGFinding', 'Get-NRGFindings', 'Clear-NRGFindings',
     'Register-NRGException', 'Get-NRGExceptions',
     'Register-NRGCoverage', 'Get-NRGCoverage',
     'Set-NRGRawData', 'Get-NRGRawData',
@@ -110,21 +110,26 @@ $script:ExportedFunctions = @(
     'Get-NRGControlDefinitions', 'Get-NRGControlById',
     'Get-NRGFrameworkCitations', 'Get-NRGFrameworkDefinitions',
 
-    # ── Collectors — AAD ─────────────────────────────────────────────────────
+    # ── Collectors — AAD ──────────────────────────────────────────────────────
     'Invoke-NRGCollectAADAuthPolicies', 'Invoke-NRGCollectAADCAPolicies',
     'Invoke-NRGCollectAADUsers', 'Invoke-NRGCollectAADRoles',
     'Invoke-NRGCollectAADPIM', 'Invoke-NRGCollectAADIdentityGovernance',
+    'Invoke-NRGCollectAADInventory',
 
-    # ── Collectors — EXO / Defender / DNS ────────────────────────────────────
+    # ── Collectors — EXO / Defender / DNS ─────────────────────────────────────
     'Invoke-NRGCollectEXOMailboxConfig', 'Invoke-NRGCollectEXOConnectionFilter',
+    'Invoke-NRGCollectEXOInventory',
     'Invoke-NRGCollectDefender', 'Invoke-NRGCollectDNSEmailRecords',
 
-    # ── Collectors — Phase 2+ ────────────────────────────────────────────────
+    # ── Collectors — Phase 2+ ─────────────────────────────────────────────────
     'Invoke-NRGCollectSharePoint', 'Invoke-NRGCollectTeams',
-    'Invoke-NRGCollectPurview', 'Invoke-NRGCollectIntune',
+    'Invoke-NRGCollectPurview',
+    'Invoke-NRGCollectIntuneEndpointSecurity',
+    'Invoke-NRGCollectIntuneDeviceCompliance',
+    'Invoke-NRGCollectIntuneAppProtection',
     'Invoke-NRGCollectPowerPlatform',
 
-    # ── Evaluators — AAD ─────────────────────────────────────────────────────
+    # ── Evaluators — AAD ──────────────────────────────────────────────────────
     'Test-NRGControlAADLegacyAuth', 'Test-NRGControlAADMFA',
     'Test-NRGControlAADPhishResistantMFA', 'Test-NRGControlAADCA',
     'Test-NRGControlAADPrivAccess', 'Test-NRGControlAADSignInRisk',
@@ -141,12 +146,17 @@ $script:ExportedFunctions = @(
     'Test-NRGControlAADAuthenticatorNumberMatch', 'Test-NRGControlAADPasswordless',
     'Test-NRGControlAADIdentityProtection', 'Test-NRGControlAADPrivCloudOnly',
     'Test-NRGControlAADBreakGlassMonitoring', 'Test-NRGControlAADSignInFrequency',
+    'Test-NRGControlAADDeviceCode', 'Test-NRGControlAADNoGuestInPrivRoles',
+    'Test-NRGControlAADRiskyServicePrincipals', 'Test-NRGControlAADTokenProtection',
+    'Test-NRGControlAADContinuousAccess', 'Test-NRGControlAADCrossTenantAccess',
+    'Test-NRGControlAADPrivilegedWorkstation', 'Test-NRGControlAADTermsOfUse',
+    'Test-NRGControlAADWorkloadIdentityCA',
 
-    # ── Evaluators — DNS ─────────────────────────────────────────────────────
+    # ── Evaluators — DNS ──────────────────────────────────────────────────────
     'Test-NRGControlDNSSPF', 'Test-NRGControlDNSDKIM', 'Test-NRGControlDNSDMARC',
     'Test-NRGControlDNSMTASTS', 'Test-NRGControlDNSTLSRPT', 'Test-NRGControlDNSDNSSEC',
 
-    # ── Evaluators — EXO ─────────────────────────────────────────────────────
+    # ── Evaluators — EXO ──────────────────────────────────────────────────────
     'Test-NRGControlEXOMailboxAudit', 'Test-NRGControlEXOSmtpAuth',
     'Test-NRGControlEXOAutoForward', 'Test-NRGControlEXODKIM',
     'Test-NRGControlEXOAntiPhish', 'Test-NRGControlEXOModernAuth',
@@ -157,6 +167,8 @@ $script:ExportedFunctions = @(
     'Test-NRGControlEXOAlertVolume', 'Test-NRGControlEXOTransportAudit',
     'Test-NRGControlEXOAuditAgeLimit', 'Test-NRGControlEXOAdminAudit',
     'Test-NRGControlEXOSafeAttachmentsSPO', 'Test-NRGControlEXOAntiSpamInbound',
+    'Test-NRGControlEXOPerUserAudit', 'Test-NRGControlEXOPriorityAccountProtection',
+    'Test-NRGControlEXOSafeSenderOverride',
 
     # ── Evaluators — Defender ─────────────────────────────────────────────────
     'Test-NRGControlDefender',
@@ -165,6 +177,10 @@ $script:ExportedFunctions = @(
     'Test-NRGControlDefenderHCSpam', 'Test-NRGControlDefenderBulkThreshold',
     'Test-NRGControlDefenderUnauthSender', 'Test-NRGControlDefenderViaTag',
     'Test-NRGControlDefenderMDCA', 'Test-NRGControlDefenderAlertNotification',
+    'Test-NRGControlDefenderDLPWorkloads', 'Test-NRGControlDefenderDLPSITs',
+    'Test-NRGControlDefenderRiskyAppAlerts', 'Test-NRGControlDefenderPriorityAccounts',
+    'Test-NRGControlDefenderEndpointDLP', 'Test-NRGControlDefenderAttackSim',
+    'Test-NRGControlDefenderSafeLinksOffice',
 
     # ── Evaluators — SharePoint ───────────────────────────────────────────────
     'Test-NRGControlSharePoint',
@@ -183,6 +199,8 @@ $script:ExportedFunctions = @(
     'Test-NRGControlTeamsExternalChat', 'Test-NRGControlTeamsPSTN',
     'Test-NRGControlTeamsWatermarks', 'Test-NRGControlTeamsAutoAdmit',
     'Test-NRGControlTeamsMeetingChat', 'Test-NRGControlTeamsChatCopy',
+    'Test-NRGControlTeamsMeetingRecordingScope', 'Test-NRGControlTeamsAnonymousStart',
+    'Test-NRGControlTeamsFederationAllowlist', 'Test-NRGControlTeamsLiveEvents',
 
     # ── Evaluators — Purview ──────────────────────────────────────────────────
     'Test-NRGControlPurview',
@@ -191,6 +209,8 @@ $script:ExportedFunctions = @(
     'Test-NRGControlPurviewRetention', 'Test-NRGControlPurviewAutoLabel',
     'Test-NRGControlPurviewSIEMExport', 'Test-NRGControlPurviewEDiscovery',
     'Test-NRGControlPurviewComplianceScore', 'Test-NRGControlPurviewSensitiveInfoTypes',
+    'Test-NRGControlPurviewAuditPremium', 'Test-NRGControlPurviewAuditRetention',
+    'Test-NRGControlPurviewLabelsPublished', 'Test-NRGControlPurviewRecordsManagement',
 
     # ── Evaluators — Intune ───────────────────────────────────────────────────
     'Test-NRGControlIntune',
@@ -198,18 +218,31 @@ $script:ExportedFunctions = @(
     'Test-NRGControlIntuneFirewall', 'Test-NRGControlIntuneMacEncryption',
     'Test-NRGControlIntuneWindowsUpdate', 'Test-NRGControlIntuneEnrollmentRestrictions',
     'Test-NRGControlIntuneAppConfig', 'Test-NRGControlIntuneConditionalLaunch',
+    'Test-NRGControlIntuneWindowsLAPS', 'Test-NRGControlIntuneWindowsHello',
+    'Test-NRGControlIntuneUpdateCompliance', 'Test-NRGControlIntuneMobilePIN',
 
     # ── Evaluators — Power Platform ───────────────────────────────────────────
     'Test-NRGControlPowerPlatform',
     'Test-NRGControlPPLConnectorClassification',
     'Test-NRGControlPPLAutomate', 'Test-NRGControlPPLPowerApps',
 
+    # ── Evaluators — Inventory / Object-level ─────────────────────────────────
+    'Test-NRGControlInventoryMFAUsers', 'Test-NRGControlInventoryStaleGuests',
+    'Test-NRGControlInventoryStaleMembers', 'Test-NRGControlInventoryOAuthApps',
+    'Test-NRGControlInventoryExternalForwarding',
+    'Test-NRGControlInventorySharedMailboxSignIn',
+    'Test-NRGControlInventoryMailboxAuditDisabled',
+    'Test-NRGControlInventorySMTPAuthUsers', 'Test-NRGControlInventorySecureScore',
+
+    # ── Evaluators — AI / Copilot ─────────────────────────────────────────────
+    'Test-NRGControlAICopilotSensitivityLabels', 'Test-NRGControlAICopilotDLP',
+    'Test-NRGControlAICopilotLicensedOnly', 'Test-NRGControlAICopilotStudio',
+    'Test-NRGControlAICopilotInteractionData',
+
     # ── Publishers ────────────────────────────────────────────────────────────
     'Publish-NRGAssessmentHTML', 'Publish-NRGAssessmentSummary',
     'Publish-NRGRemediationPlaybook', 'Publish-NRGRemediationScript',
-    'Invoke-NRGCollectAADInventory', 'Invoke-NRGCollectEXOInventory', 'Test-NRGControlInventoryMFAUsers', 'Test-NRGControlInventoryStaleGuests', 'Test-NRGControlInventoryStaleMembers', 'Test-NRGControlInventoryOAuthApps', 'Test-NRGControlInventoryExternalForwarding', 'Test-NRGControlInventorySharedMailboxSignIn', 'Test-NRGControlInventoryMailboxAuditDisabled', 'Test-NRGControlInventorySMTPAuthUsers', 'Test-NRGControlInventorySecureScore',
-    'Publish-NRGComplianceMatrix', 'Publish-NRGDeltaReport', 'Test-NRGControlAICopilotSensitivityLabels', 'Test-NRGControlAICopilotDLP', 'Test-NRGControlAICopilotLicensedOnly', 'Test-NRGControlAICopilotStudio', 'Test-NRGControlAICopilotInteractionData',
-    'Test-NRGControlAADDeviceCode', 'Test-NRGControlAADNoGuestInPrivRoles', 'Test-NRGControlAADRiskyServicePrincipals', 'Test-NRGControlAADTokenProtection', 'Test-NRGControlAADContinuousAccess', 'Test-NRGControlAADCrossTenantAccess', 'Test-NRGControlAADPrivilegedWorkstation', 'Test-NRGControlAADTermsOfUse', 'Test-NRGControlAADWorkloadIdentityCA', 'Test-NRGControlDefenderDLPWorkloads', 'Test-NRGControlDefenderDLPSITs', 'Test-NRGControlDefenderRiskyAppAlerts', 'Test-NRGControlDefenderPriorityAccounts', 'Test-NRGControlDefenderEndpointDLP', 'Test-NRGControlDefenderAttackSim', 'Test-NRGControlDefenderSafeLinksOffice', 'Test-NRGControlEXOPerUserAudit', 'Test-NRGControlEXOPriorityAccountProtection', 'Test-NRGControlEXOSafeSenderOverride', 'Test-NRGControlTeamsMeetingRecordingScope', 'Test-NRGControlTeamsAnonymousStart', 'Test-NRGControlTeamsFederationAllowlist', 'Test-NRGControlTeamsLiveEvents', 'Test-NRGControlIntuneWindowsLAPS', 'Test-NRGControlIntuneWindowsHello', 'Test-NRGControlIntuneUpdateCompliance', 'Test-NRGControlIntuneMobilePIN', 'Test-NRGControlPurviewAuditPremium', 'Test-NRGControlPurviewAuditRetention', 'Test-NRGControlPurviewLabelsPublished', 'Test-NRGControlPurviewRecordsManagement'
+    'Publish-NRGComplianceMatrix', 'Publish-NRGDeltaReport'
 )
 
 Export-ModuleMember -Function $script:ExportedFunctions -Variable NRGAssessmentVersion, NRGBrand
