@@ -207,7 +207,7 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
         It 'Orchestrator validates DnsDomains as FQDNs' {
             $orchPath = Join-Path $script:RepoRoot 'Invoke-NRGAssessment.ps1'
             $content  = Get-Content -LiteralPath $orchPath -Raw
-            $content | Should -Match 'ValidateScript.*DnsDomains|DnsDomains.*ValidateScript' -Because 'DnsDomains must be FQDN-validated before reaching DNS resolver'
+            $content | Should -Match '(?s)(ValidateScript.*DnsDomains|DnsDomains.*ValidateScript)' -Because 'DnsDomains must be FQDN-validated before reaching DNS resolver'
         }
 
         It 'DNS collector validates domain names before Resolve-DnsName' {
@@ -220,7 +220,7 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
         It 'Add-NRGFinding validates ControlId format' {
             $libPath = Join-Path $script:RepoRoot 'Lib\Add-NRGFinding.ps1'
             $content = Get-Content -LiteralPath $libPath -Raw
-            $content | Should -Match 'ValidatePattern.*ControlId|ControlId.*ValidatePattern' -Because 'ControlId must match known format (ASVS V5.1.3)'
+            $content | Should -Match '(?s)(ValidatePattern.*ControlId|ControlId.*ValidatePattern)' -Because 'ControlId must match known format (ASVS V5.1.3)'
         }
 
         It 'Add-NRGFinding validates State via ValidateSet' {
@@ -238,13 +238,13 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
         It 'Set-NRGRawData validates Key format via ValidatePattern' {
             $libPath = Join-Path $script:RepoRoot 'Lib\Add-NRGFinding.ps1'
             $content = Get-Content -LiteralPath $libPath -Raw
-            $content | Should -Match 'ValidatePattern.*Key|Key.*ValidatePattern' -Because 'Raw data keys must not allow path chars (ASVS V5.1.3)'
+            $content | Should -Match '(?s)(ValidatePattern.*Key|Key.*ValidatePattern)' -Because 'Raw data keys must not allow path chars (ASVS V5.1.3)'
         }
 
         It 'Register-NRGException has length cap on Message' {
             $libPath = Join-Path $script:RepoRoot 'Lib\Add-NRGFinding.ps1'
             $content = Get-Content -LiteralPath $libPath -Raw
-            $content | Should -Match 'ValidateLength.*Message|Message.*ValidateLength' -Because 'Unbounded message strings can cause memory exhaustion (ASVS V5.1.3)'
+            $content | Should -Match '(?s)(ValidateLength.*Message|Message.*ValidateLength)' -Because 'Unbounded message strings can cause memory exhaustion (ASVS V5.1.3)'
         }
 
         It 'Get-NRGControlById validates ControlId format' {
