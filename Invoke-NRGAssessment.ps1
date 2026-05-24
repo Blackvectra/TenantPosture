@@ -354,14 +354,50 @@ Write-Host ""
 Write-Host "[-] Generating reports..." -ForegroundColor Cyan
 
 $jsonPath = Join-Path $OutputPath "$baseName-results.json"
+# Capture the raw-data snapshot for drift detection on the NEXT run. The
+# delta publisher compares this snapshot against a future run's snapshot to
+# surface raw configuration changes (new CA policies, new admin assignments,
+# new OAuth apps, DMARC policy regression) — not just finding state changes.
+$rawDataSnapshot = if (Get-Command Get-NRGRawData -ErrorAction SilentlyContinue) {
+    Get-NRGRawData
+} else { @{} }
 @{
     Metadata    = $reportMetadata
     Findings    = $findings
+    RawData     = $rawDataSnapshot
     Exceptions  = (Get-NRGExceptions)
     Coverage    = (Get-NRGCoverage)
     Connections = $conn
 } | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding utf8
 Write-Host "  [+] JSON: $jsonPath" -ForegroundColor Green
+Write-Host "      Baseline contains sensitive tenant inventory (CA policies, admin assignments, OAuth apps) — file ACL restricted to current user + admins. Path: $jsonPath" -ForegroundColor Yellow
+
+# Tighten ACL on the baseline JSON. It contains a full tenant inventory
+# (every CA policy, every admin assignment with UPNs, every OAuth app,
+# every DMARC record) — on a shared MSP workstation or a synced OneDrive
+# folder, default inherited permissions would make this world-readable.
+# Strip inheritance and grant only current user + SYSTEM + Administrators.
+try {
+    $acl = Get-Acl -LiteralPath $jsonPath
+    # Disable inheritance, drop any inherited rules
+    $acl.SetAccessRuleProtection($true, $false)
+    # Remove any non-inherited rules that survived (defense in depth)
+    foreach ($existing in @($acl.Access)) {
+        if (-not $existing.IsInherited) {
+            [void]$acl.RemoveAccessRule($existing)
+        }
+    }
+    $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $rules = @(
+        [System.Security.AccessControl.FileSystemAccessRule]::new($currentUser, 'FullControl', 'Allow')
+        [System.Security.AccessControl.FileSystemAccessRule]::new('NT AUTHORITY\SYSTEM', 'FullControl', 'Allow')
+        [System.Security.AccessControl.FileSystemAccessRule]::new('BUILTIN\Administrators', 'FullControl', 'Allow')
+    )
+    foreach ($r in $rules) { $acl.AddAccessRule($r) }
+    Set-Acl -LiteralPath $jsonPath -AclObject $acl
+} catch {
+    Write-Warning "Failed to restrict ACL on baseline JSON ($jsonPath): $($_.Exception.Message). File may be readable by other users on this host — review permissions manually."
+}
 
 if (-not $JsonOnly) {
     # Markdown summary
@@ -417,7 +453,7 @@ if (-not $JsonOnly) {
     if ($BaselineResults -and (Test-Path $BaselineResults) -and (Get-Command Publish-NRGDeltaReport -ErrorAction SilentlyContinue)) {
         $deltaPath = Join-Path $OutputPath "$baseName-delta.md"
         try {
-            Publish-NRGDeltaReport -CurrentFindings $findings -BaselineResultsPath $BaselineResults `
+            Publish-NRGDeltaReport -CurrentFindings $findings -CurrentRawData $rawDataSnapshot -BaselineResultsPath $BaselineResults `
                 -Metadata $reportMetadata -OutputPath $deltaPath
             Write-Host "  [+] Delta: $deltaPath" -ForegroundColor Green
         } catch { Write-Warning "Delta publish failed: $($_.Exception.Message)" }
