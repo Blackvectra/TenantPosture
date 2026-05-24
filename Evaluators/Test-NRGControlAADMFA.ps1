@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 #
 # Test-NRGControlAADMFA.ps1
 # Evaluates MFA registration completeness and Security Defaults state.
