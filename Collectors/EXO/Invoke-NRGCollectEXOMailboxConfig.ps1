@@ -157,13 +157,19 @@ function Invoke-NRGCollectEXOMailboxConfig {
             $dkimConfigs = @(Get-DkimSigningConfig -ErrorAction Stop)
             $result.Data.DkimSigningConfigs = @($dkimConfigs | ForEach-Object {
                 @{
-                    Domain       = [string]$_.Domain
-                    Enabled      = [bool]$_.Enabled
-                    Status       = [string]$_.Status
-                    KeySize      = $_.KeySize
-                    LastChecked  = [string]($_.LastChecked ?? '')
-                    Selector1    = [string]($_.Selector1 ?? '')
-                    Selector2    = [string]($_.Selector2 ?? '')
+                    Domain          = [string]$_.Domain
+                    Enabled         = [bool]$_.Enabled
+                    Status          = [string]$_.Status
+                    KeySize         = $_.KeySize
+                    LastChecked     = [string]($_.LastChecked ?? '')
+                    Selector1       = [string]($_.Selector1 ?? '')
+                    Selector2       = [string]($_.Selector2 ?? '')
+                    # KeyCreationTime and RotateOnDate let the DNS evaluator
+                    # compute key rotation age. NIST 800-53 SC-12 / SC-17 expects
+                    # cryptographic keys to be rotated on a documented cadence;
+                    # Microsoft auto-rotates DKIM but only if explicitly enabled.
+                    KeyCreationTime = [string]($_.KeyCreationTime ?? '')
+                    RotateOnDate    = [string]($_.RotateOnDate ?? '')
                 }
             })
         } catch {

@@ -1,18 +1,97 @@
 #Requires -Version 7.0
 #
-# Invoke-NRGCollectDNSEmailRecords.ps1  (v4.5.5)
-# Collects DNS email authentication records: SPF, DKIM, DMARC, MTA-STS, TLS-RPT, DNSSEC.
-# READ-ONLY. External DNS queries only — no tenant writes.
+# Invoke-NRGCollectDNSEmailRecords.ps1  (v4.5.6)
+# Collects DNS email authentication and PKI hygiene data for each accepted domain:
+#   - SPF, DKIM, DMARC, MTA-STS, TLS-RPT, DNSSEC, MX  (Phase 1)
+#   - DKIM key rotation age via EXO Get-DkimSigningConfig.KeyCreationTime
+#   - CAA records (RFC 8659) — controls which CAs may issue certs for the domain
+#   - TLS certificate expiry on autodiscover + MX hostnames (port 443 HTTPS)
+#   - crt.sh certificate transparency log lookup (RFC 6962)
+#
+# READ-ONLY. External DNS / HTTPS queries only — no tenant writes.
 #
 # IMPORTANT: Domain names are validated before any DNS call (OWASP A03 / ASVS V5.1.3).
 # DNS responses are treated as hostile data and sanitized before storing.
 #
-# NIST SP 800-53: SI-8 (spam protection), SC-8 (transmission confidentiality)
-# MITRE ATT&CK:   T1566 (Phishing), T1036.005 (Domain Spoofing)
+# NIST SP 800-53: SI-8 (spam), SC-8 (transmission), SC-12 (key management),
+#                 SC-17 (PKI certificates)
+# MITRE ATT&CK:   T1566 (Phishing), T1036.005 (Domain Spoofing),
+#                 T1583.001 (Acquire Infrastructure — Domains)
 #
 
 # Validated FQDN pattern — reused for all domain validation in this file
 $script:DomainPattern = '^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+
+# SSRF guard for hostnames returned by DNS (MX records, etc.).
+# Returns $null if the host is safe to probe, or a string describing why it was refused.
+# A malicious DNS response could direct a TCP/TLS probe at internal RFC1918 names,
+# `localhost`, cloud-metadata-adjacent names, or link-local addresses. We re-validate
+# the FQDN shape, block explicit internal-only suffixes, then resolve to IPs and
+# refuse to connect to RFC1918 / loopback / link-local / IPv6 ULA / IPv6 link-local.
+function Test-NRGSafeProbeTarget {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $HostName)
+
+    if ([string]::IsNullOrWhiteSpace($HostName)) {
+        return 'empty hostname'
+    }
+
+    # 1. Must match the same FQDN pattern we use for tenant domains.
+    #    This excludes IPv4 literals (TLD is letters only) and any bare hostname.
+    if ($HostName -notmatch $script:DomainPattern) {
+        return "hostname '$HostName' failed FQDN validation"
+    }
+
+    # 2. Explicit deny-list of internal-only hostnames and suffixes.
+    $lower = $HostName.ToLowerInvariant()
+    if ($lower -eq 'localhost' -or $lower -eq 'localhost.localdomain') {
+        return "hostname '$HostName' is a loopback alias"
+    }
+    if ($lower -like '*.local' -or $lower -like '*.internal') {
+        return "hostname '$HostName' uses an internal-only suffix"
+    }
+    if ($lower -eq 'metadata.google.internal') {
+        return "hostname '$HostName' is a cloud metadata endpoint"
+    }
+    # Belt-and-suspenders — the FQDN regex above should already exclude IPv4 literals,
+    # but if somehow a 169.254.x.x dotted-quad slipped through we want to catch it.
+    if ($HostName -match '^169\.254\.') {
+        return "hostname '$HostName' is link-local"
+    }
+
+    # 3. Resolve and inspect every returned address.
+    try {
+        $addresses = [System.Net.Dns]::GetHostAddresses($HostName)
+    } catch {
+        return "DNS resolution failed: $($_.Exception.Message)"
+    }
+    if (-not $addresses -or $addresses.Count -eq 0) {
+        return "no addresses returned for '$HostName'"
+    }
+
+    foreach ($addr in $addresses) {
+        $ipStr = $addr.ToString()
+        if ($addr.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork) {
+            # IPv4: block RFC1918, loopback, link-local
+            $bytes = $addr.GetAddressBytes()
+            $b0 = $bytes[0]; $b1 = $bytes[1]
+            if ($b0 -eq 10)                                  { return "address $ipStr is RFC1918 10/8" }
+            if ($b0 -eq 172 -and $b1 -ge 16 -and $b1 -le 31) { return "address $ipStr is RFC1918 172.16/12" }
+            if ($b0 -eq 192 -and $b1 -eq 168)                { return "address $ipStr is RFC1918 192.168/16" }
+            if ($b0 -eq 127)                                 { return "address $ipStr is loopback 127/8" }
+            if ($b0 -eq 169 -and $b1 -eq 254)                { return "address $ipStr is link-local 169.254/16" }
+        } elseif ($addr.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
+            # IPv6: block loopback (::1), link-local (fe80::/10), ULA (fc00::/7)
+            if ([System.Net.IPAddress]::IsLoopback($addr)) { return "address $ipStr is IPv6 loopback" }
+            if ($addr.IsIPv6LinkLocal)                     { return "address $ipStr is IPv6 link-local (fe80::/10)" }
+            $b0 = $addr.GetAddressBytes()[0]
+            # fc00::/7 — high 7 bits are 1111110 (0xFC or 0xFD)
+            if (($b0 -band 0xFE) -eq 0xFC)                 { return "address $ipStr is IPv6 ULA (fc00::/7)" }
+        }
+    }
+
+    return $null
+}
 
 function Invoke-NRGCollectDNSEmailRecords {
     [CmdletBinding()]
@@ -26,7 +105,12 @@ function Invoke-NRGCollectDNSEmailRecords {
             }
             return $true
         })]
-        [string[]] $Domains
+        [string[]] $Domains,
+
+        # Per-domain time budget (seconds) for DNS + TLS + crt.sh probes.
+        # Prevents one slow tenant from stretching collection into the minute range.
+        [ValidateRange(10, 600)]
+        [int] $TimeoutSec = 60
     )
 
     $result = @{
@@ -69,15 +153,48 @@ function Invoke-NRGCollectDNSEmailRecords {
                 continue
             }
 
+            # Per-domain time budget — a hung TLS probe (5s), 30s crt.sh fetch,
+            # plus multiple DNS lookups can compound into the minute range. With
+            # many tenants this adds up, so we cap the total at $TimeoutSec and
+            # skip the long-tail sub-steps (TLS probe, crt.sh) once exceeded.
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+
             $d = @{
                 Domain  = $domain
                 SPF     = $null
-                DKIM    = @{ Selector1 = $null; Selector2 = $null; CustomSelectors = @() }
+                DKIM    = @{
+                    Selector1       = $null
+                    Selector2       = $null
+                    CustomSelectors = @()
+                    KeySize         = $null
+                    KeyCreationTime = $null
+                    RotateOnDate    = $null
+                    KeyAgeDays      = $null
+                    RotationStatus  = $null  # 'OK' | 'Due' | 'Overdue' | 'Unknown'
+                }
                 DMARC   = $null
                 MTASTS  = @{ DNSRecord = $null; Policy = $null; Mode = $null }
                 TLSRPT  = $null
                 DNSSEC  = $false
                 MX      = @()
+                CAA     = @{
+                    Present         = $false
+                    Records         = @()
+                    IssuanceAllowed = @()  # 'issue' tag values
+                    WildcardAllowed = @()  # 'issuewild' tag values
+                    IodefContact    = @()  # 'iodef' tag values
+                }
+                TLSCerts = @{
+                    Autodiscover = $null
+                    MailHost     = $null
+                }
+                CTLog   = @{
+                    TotalCerts      = 0
+                    Last30Days      = 0
+                    Issuers         = @()
+                    UnexpectedSANs  = @()
+                    QueryError      = $null
+                }
                 Errors  = @()
             }
 
@@ -107,6 +224,30 @@ function Invoke-NRGCollectDNSEmailRecords {
                     if ($dkimConfig.Selector1) { $dkimSelectors += $dkimConfig.Selector1 }
                     if ($dkimConfig.Selector2) { $dkimSelectors += $dkimConfig.Selector2 }
                     $dkimSelectors = @($dkimSelectors | Select-Object -Unique)
+
+                    # DKIM rotation age — NIST 800-53 SC-12 expects cryptographic
+                    # material to be rotated on a documented cadence. Microsoft
+                    # rotates DKIM only when the customer opts in; many tenants
+                    # have keys older than two years which weakens DKIM's value.
+                    $d.DKIM.KeySize         = $dkimConfig.KeySize
+                    $d.DKIM.KeyCreationTime = [string]$dkimConfig.KeyCreationTime
+                    $d.DKIM.RotateOnDate    = [string]$dkimConfig.RotateOnDate
+                    if ($dkimConfig.KeyCreationTime) {
+                        try {
+                            $kct = [datetime]::Parse($dkimConfig.KeyCreationTime)
+                            $age = [int]([datetime]::UtcNow - $kct.ToUniversalTime()).TotalDays
+                            $d.DKIM.KeyAgeDays = $age
+                            # Industry guidance: rotate at most every 365 days,
+                            # alert at 270 ("Due"), fail at 365+ ("Overdue").
+                            $d.DKIM.RotationStatus = if ($age -lt 270) { 'OK' }
+                                                     elseif ($age -lt 365) { 'Due' }
+                                                     else { 'Overdue' }
+                        } catch {
+                            $d.DKIM.RotationStatus = 'Unknown'
+                        }
+                    } else {
+                        $d.DKIM.RotationStatus = 'Unknown'
+                    }
                 }
             }
 
@@ -195,6 +336,175 @@ function Invoke-NRGCollectDNSEmailRecords {
                     Where-Object { $_.Type -eq 'MX' } |
                     ForEach-Object { @{ Exchange = [string]$_.NameExchange; Preference = [int]$_.Preference } })
             } catch { }
+
+            # ── CAA records (RFC 8659) ────────────────────────────────────────
+            # Controls which CAs may issue certs for the domain. Absence means
+            # any CA may issue, which is fine but means there's no defense
+            # against an attacker who phishes a domain admin into approving
+            # a cert from a CA the org doesn't use.
+            try {
+                $caaRecords = @(Resolve-DnsName -Name $domain -Type CAA -ErrorAction Stop |
+                                Where-Object { $_.Type -eq 'CAA' })
+                if ($caaRecords.Count -gt 0) {
+                    $d.CAA.Present = $true
+                    $d.CAA.Records = @($caaRecords | ForEach-Object {
+                        @{
+                            Flags = [int]($_.Flags ?? 0)
+                            Tag   = [string]$_.Tag
+                            Value = [string]$_.Value
+                        }
+                    })
+                    $d.CAA.IssuanceAllowed = @($caaRecords | Where-Object { $_.Tag -eq 'issue' }     | ForEach-Object { [string]$_.Value })
+                    $d.CAA.WildcardAllowed = @($caaRecords | Where-Object { $_.Tag -eq 'issuewild' } | ForEach-Object { [string]$_.Value })
+                    $d.CAA.IodefContact    = @($caaRecords | Where-Object { $_.Tag -eq 'iodef' }     | ForEach-Object { [string]$_.Value })
+                }
+            } catch {
+                $d.Errors += "CAA: $($_.Exception.Message)"
+            }
+
+            # Budget check after the DNS section — if we've already burned the
+            # budget on slow lookups, skip the long-tail probes (TLS + crt.sh).
+            if ($sw.Elapsed.TotalSeconds -gt $TimeoutSec) {
+                $d.Errors += "TimeBudget: exceeded ${TimeoutSec}s before TLS probe; skipping TLS probe and crt.sh"
+                $domainResults[$domain] = $d
+                continue
+            }
+
+            # ── TLS certificate inspection (autodiscover + MX hostname) ──────
+            # NIST 800-53 SC-17 — verify certs haven't expired and are issued by
+            # a trusted CA. We probe port 443 on autodiscover.<domain> and on
+            # the first MX hostname. STARTTLS on port 25 is a future enhancement;
+            # current scope is the HTTPS endpoints the help desk routinely uses.
+            $tlsTargets = [ordered]@{}
+            $tlsTargets['Autodiscover'] = "autodiscover.$domain"
+            if ($d.MX.Count -gt 0) {
+                $firstMx = [string]$d.MX[0].Exchange
+                # MX hostnames sometimes end with a trailing dot — strip it
+                $firstMx = $firstMx.TrimEnd('.')
+                # SSRF guard — MX values are attacker-influenced DNS data. Re-validate
+                # the FQDN, deny internal-only suffixes, and refuse to connect to
+                # RFC1918 / loopback / link-local / IPv6 ULA addresses.
+                if ($firstMx) {
+                    $refusalReason = Test-NRGSafeProbeTarget -HostName $firstMx
+                    if ($refusalReason) {
+                        $d.Errors += "TLSCerts.MailHost: refused MX target '$firstMx' — $refusalReason"
+                        $d.TLSCerts['MailHost'] = @{ Hostname = $firstMx; Error = "Refused: $refusalReason" }
+                    } else {
+                        $tlsTargets['MailHost'] = $firstMx
+                    }
+                }
+            }
+
+            foreach ($role in $tlsTargets.Keys) {
+                $hostname = $tlsTargets[$role]
+                if (-not $hostname) { continue }
+
+                # Resource-leak fix: wrap the entire TLS-inspection block in
+                # try/finally and dispose tcpClient + sslStream in the finally
+                # block. Previously, an exception in AuthenticateAsClient left
+                # the sockets dangling until GC.
+                $tcpClient = $null
+                $sslStream = $null
+                try {
+                    $tcpClient = [System.Net.Sockets.TcpClient]::new()
+                    # 5-second connect timeout — many MX hosts block 443
+                    $iar = $tcpClient.BeginConnect($hostname, 443, $null, $null)
+                    if (-not $iar.AsyncWaitHandle.WaitOne(5000, $false)) {
+                        $d.TLSCerts[$role] = @{ Hostname = $hostname; Error = 'Connect timeout' }
+                        continue
+                    }
+                    $tcpClient.EndConnect($iar)
+                    # Don't validate the chain — we're inspecting, not consuming
+                    $sslStream = [System.Net.Security.SslStream]::new(
+                        $tcpClient.GetStream(), $false, { param($s,$c,$ch,$e) $true })
+                    $sslStream.AuthenticateAsClient($hostname)
+                    $cert  = $sslStream.RemoteCertificate
+                    $x509  = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($cert)
+                    $now   = [datetime]::UtcNow
+                    $days  = [int]($x509.NotAfter.ToUniversalTime() - $now).TotalDays
+                    $d.TLSCerts[$role] = @{
+                        Hostname        = $hostname
+                        Subject         = [string]$x509.Subject
+                        Issuer          = [string]$x509.Issuer
+                        NotBefore       = $x509.NotBefore.ToString('o')
+                        NotAfter        = $x509.NotAfter.ToString('o')
+                        DaysUntilExpiry = $days
+                        Thumbprint      = [string]$x509.Thumbprint
+                        Status          = if ($days -lt 0) { 'Expired' }
+                                          elseif ($days -lt 14) { 'ExpiringSoon' }
+                                          elseif ($days -lt 30) { 'ExpiringWithin30' }
+                                          else { 'OK' }
+                    }
+                } catch {
+                    $d.TLSCerts[$role] = @{ Hostname = $hostname; Error = $_.Exception.Message }
+                } finally {
+                    if ($sslStream) { try { $sslStream.Dispose() } catch {} }
+                    if ($tcpClient) { try { $tcpClient.Dispose() } catch {} }
+                }
+            }
+
+            # Budget check after TLS — skip crt.sh if we've exceeded the budget.
+            if ($sw.Elapsed.TotalSeconds -gt $TimeoutSec) {
+                $d.Errors += "TimeBudget: exceeded ${TimeoutSec}s after TLS probe; skipping crt.sh"
+                $domainResults[$domain] = $d
+                continue
+            }
+
+            # ── Certificate Transparency log lookup via crt.sh (RFC 6962) ────
+            # Surfaces ALL certs ever issued for the domain — useful to catch
+            # certs issued by CAs the org doesn't authorize, or recent issuance
+            # spikes that may indicate an attacker who acquired the domain.
+            try {
+                # URL-encode the domain literal; crt.sh expects %25 (URL-encoded %)
+                # around the domain for wildcard match.
+                $ctUrl = ('https://crt.sh/?q=%25.{0}&output=json' -f [uri]::EscapeDataString($domain))
+                $ctResp = Invoke-WebRequest -Uri $ctUrl -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
+                $ctList = $ctResp.Content | ConvertFrom-Json -ErrorAction Stop
+                if ($ctList) {
+                    $arr = @($ctList)
+                    $d.CTLog.TotalCerts = $arr.Count
+                    $thirtyDaysAgo = (Get-Date).AddDays(-30)
+                    $recent = @($arr | Where-Object {
+                        try { [datetime]::Parse($_.entry_timestamp) -gt $thirtyDaysAgo }
+                        catch { $false }
+                    })
+                    $d.CTLog.Last30Days = $recent.Count
+                    $d.CTLog.Issuers = @($arr | ForEach-Object { [string]$_.issuer_name } |
+                                         Sort-Object -Unique | Select-Object -First 20)
+
+                    # Cross-check: are recent issuers consistent with the CAA
+                    # allowlist? If CAA names letsencrypt.org but recent issuers
+                    # include 'CN=Sectigo RSA Domain Validation', that's a finding.
+                    if ($d.CAA.IssuanceAllowed.Count -gt 0) {
+                        $allowed = @($d.CAA.IssuanceAllowed | ForEach-Object { $_.ToLowerInvariant() })
+                        $d.CTLog.UnexpectedSANs = @($recent | Where-Object {
+                            $issuer = [string]$_.issuer_name
+                            $allowedHit = $false
+                            foreach ($a in $allowed) {
+                                if ($issuer.ToLowerInvariant() -match [regex]::Escape($a)) {
+                                    $allowedHit = $true; break
+                                }
+                            }
+                            -not $allowedHit
+                        } | Select-Object -First 10 | ForEach-Object {
+                            @{
+                                CommonName   = [string]$_.common_name
+                                Issuer       = [string]$_.issuer_name
+                                NotBefore    = [string]$_.not_before
+                                EntryDate    = [string]$_.entry_timestamp
+                            }
+                        })
+                    }
+                }
+            } catch {
+                $d.CTLog.QueryError = $_.Exception.Message
+            }
+
+            # Final budget check — log overrun so operators can see which domains
+            # are pushing past the per-domain budget even after all sub-steps ran.
+            if ($sw.Elapsed.TotalSeconds -gt $TimeoutSec) {
+                $d.Errors += "TimeBudget: total time $([int]$sw.Elapsed.TotalSeconds)s exceeded ${TimeoutSec}s budget"
+            }
 
             $domainResults[$domain] = $d
         }
