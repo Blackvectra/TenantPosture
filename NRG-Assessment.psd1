@@ -1,6 +1,6 @@
 @{
     # Module identity
-    ModuleVersion     = '4.5.5'
+    ModuleVersion     = '4.6.0'
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
     Author            = 'Matthew Levorson'
     CompanyName       = 'NRG Technology Services / NextLayerSec LLC'
@@ -273,7 +273,8 @@
         PSData = @{
             Tags         = @('M365', 'Security', 'Assessment', 'MSP', 'CIS', 'SCuBA', 'NIST', 'CMMC')
             ProjectUri   = 'https://github.com/Blackvectra/NRG-Assessment-Tool'
-            ReleaseNotes = 'v4.5.5: 143 controls across 9 workloads, 153 exported functions, full OWASP/ASVS hardening, 77-test Pester suite'
+            Prerelease   = 'rc1'
+            ReleaseNotes = 'v4.6.0-rc1: security hardening (3 publisher injection fixes + manifest sync, 52 previously-dropped exports restored), Intune collector split, SCuBA ID coverage, EXO inbox-rule forwarding detection, CI workflow with Pester + PSScriptAnalyzer.'
         }
     }
 }

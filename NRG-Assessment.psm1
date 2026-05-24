@@ -25,7 +25,7 @@ $env:MSAL_DISABLE_TOKENBROKER = '1'
 
 $ErrorActionPreference = 'Stop'
 
-$script:NRGAssessmentVersion = '4.5.5'
+$script:NRGAssessmentVersion = '4.6.0-rc1'
 $script:NRGModuleRoot        = $PSScriptRoot
 
 # Thread-safe collections for module state
