@@ -31,13 +31,36 @@ jobs:
           }
           (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1).Version
 
+      - name: Diagnostics — pwsh + Pester + parse test file
+        shell: pwsh
+        run: |
+          Write-Host ('pwsh version: {0}' -f $PSVersionTable.PSVersion)
+          Write-Host ('OS: {0}' -f $PSVersionTable.OS)
+          $p = (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1)
+          Write-Host ('Pester version: {0} at {1}' -f $p.Version, $p.ModuleBase)
+
+          # AST parse check — distinguishes syntax errors in the test file
+          # from Pester runtime issues.
+          $tokens = $null
+          $errors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+            './Testing/NRG.Security.Tests.ps1', [ref]$tokens, [ref]$errors)
+          if ($errors -and $errors.Count -gt 0) {
+            Write-Host ''
+            Write-Host 'PARSE ERRORS IN TEST FILE:' -ForegroundColor Red
+            $errors | ForEach-Object { Write-Host ('  Line {0}: {1}' -f $_.Extent.StartLineNumber, $_.Message) }
+            throw 'Test file does not parse — fix syntax before Pester can run.'
+          }
+          Write-Host 'Test file AST parses cleanly.'
+
       - name: Run Pester
         shell: pwsh
         run: |
           $config = New-PesterConfiguration
           $config.Run.Path = './Testing/NRG.Security.Tests.ps1'
           $config.Run.Exit = $true
-          $config.Output.Verbosity = 'Detailed'
+          $config.Run.Throw = $false
+          $config.Output.Verbosity = 'Diagnostic'
           $config.TestResult.Enabled = $true
           $config.TestResult.OutputPath = 'pester-results.xml'
           $config.TestResult.OutputFormat = 'NUnitXml'
