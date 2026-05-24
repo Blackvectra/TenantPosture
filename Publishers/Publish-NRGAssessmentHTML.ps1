@@ -236,6 +236,65 @@ function Publish-NRGAssessmentHTML {
         $connHtml += "<div class='conn $cls'><span>$ico</span><span>$(hx $svcMap[$svc])</span></div>"
     }
 
+    # ── Risk exposure HTML (PR #8 — Get-NRGAggregateRisk) ────────────────────
+    # Translates open Gap/Partial findings into annualized loss expectancy.
+    # Degrades to an empty $riskHtml if the risk-quantification module from
+    # PR #8 is not loaded; the Executive Overview card still renders cleanly.
+    $riskHtml = ''
+    if (Get-Command Get-NRGAggregateRisk -ErrorAction SilentlyContinue) {
+        try {
+            $risk = Get-NRGAggregateRisk -Findings $Findings
+            if ($risk.OpenGapAndPartialCount -gt 0) {
+                $sevRows = ''
+                foreach ($sev in @('Critical','High','Medium','Low')) {
+                    if ($risk.BySeverity.ContainsKey($sev)) {
+                        $b = $risk.BySeverity[$sev]
+                        $range = '$' + ('{0:N0}' -f $b.Low) + ' &ndash; $' + ('{0:N0}' -f $b.High)
+                        $sevRows += "<tr><td>$(hx $sev)</td><td style='text-align:right'>$($b.Count)</td><td style='text-align:right'>$range</td></tr>"
+                    }
+                }
+                $totalRange  = $risk.TotalRangeFormatted -replace ' – ', ' &ndash; '
+                $midpoint    = $risk.TotalMidpointFormatted
+                $riskHtml = @"
+<div class="card mt" id="risk-exposure">
+  <div class="card-hd">
+    <div class="card-label">Estimated Annual Risk Exposure</div>
+    <div class="card-sub">$($risk.OpenGapAndPartialCount) open Gap and Partial findings, annualized loss expectancy bands</div>
+  </div>
+  <div class="ex-dash">
+    <div class="score-wrap br">
+      <div class="score-c" style="padding:8px 16px">
+        <div class="score-n" style="font-size:1.9rem;line-height:1.1">$(hx $midpoint)</div>
+        <div class="score-s">Midpoint estimate / year</div>
+        <div class="posture-pill" style="margin-top:8px">$(hx $totalRange)</div>
+      </div>
+    </div>
+    <div class="stat-col br" style="padding-left:20px">
+      <table style="width:100%;border-collapse:collapse;font-size:.95rem">
+        <thead>
+          <tr style="border-bottom:1px solid #e4e9f2">
+            <th style="text-align:left;padding:6px 4px">Severity</th>
+            <th style="text-align:right;padding:6px 4px">Open</th>
+            <th style="text-align:right;padding:6px 4px">Annual range</th>
+          </tr>
+        </thead>
+        <tbody>$sevRows</tbody>
+      </table>
+    </div>
+    <div class="conn-col" style="font-size:.85rem;color:#4a5568;line-height:1.5">
+      <div class="conn-t">Methodology</div>
+      <p style="margin:6px 0 0 0">SLE &times; ARO &mdash; SLE anchored to Verizon DBIR 2025 incident-cost medians and IBM Cost of a Data Breach 2024. ARO from Microsoft Digital Defense Report 2024. Bands, not point estimates.</p>
+    </div>
+  </div>
+</div>
+"@
+            }
+        } catch {
+            # Risk calc failure must never break the rest of the report
+            $riskHtml = ''
+        }
+    }
+
     # ── Workload scorecard HTML ───────────────────────────────────────────────
     $wlGrid = ''
     foreach ($wl in $wlOrder) {
@@ -781,6 +840,8 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
     <div class="wl-grid">$wlGrid</div>
   </div>
 </div>
+
+$riskHtml
 
 <!-- FRAMEWORK COMPLIANCE -->
 <div class="card mt" id="fw-section">
