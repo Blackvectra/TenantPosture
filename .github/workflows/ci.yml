@@ -20,8 +20,15 @@ jobs:
       - name: Install Pester (>= 5.5.0)
         shell: pwsh
         run: |
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module -Name Pester -MinimumVersion 5.5.0 -Force -SkipPublisherCheck
+          $ErrorActionPreference = 'Stop'
+          if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
+            Install-PSResource -Name Pester -Version '[5.5.0,)' -TrustRepository -Scope CurrentUser -Reinstall
+          } else {
+            if (Get-PSRepository PSGallery -ErrorAction SilentlyContinue) {
+              Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+            }
+            Install-Module -Name Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck -AllowClobber
+          }
           (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1).Version
 
       - name: Run Pester
@@ -54,8 +61,15 @@ jobs:
       - name: Install PSScriptAnalyzer
         shell: pwsh
         run: |
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module -Name PSScriptAnalyzer -Force
+          $ErrorActionPreference = 'Stop'
+          if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
+            Install-PSResource -Name PSScriptAnalyzer -TrustRepository -Scope CurrentUser -Reinstall
+          } else {
+            if (Get-PSRepository PSGallery -ErrorAction SilentlyContinue) {
+              Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+            }
+            Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -AllowClobber
+          }
 
       - name: Run analyzer
         shell: pwsh
@@ -99,14 +113,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Test-ModuleManifest
+      - name: Validate manifest parses + has required fields
         shell: pwsh
         run: |
-          $m = Test-ModuleManifest -Path ./NRG-Assessment.psd1 -ErrorAction Stop
-          Write-Host ('Manifest valid: {0} v{1}' -f $m.Name, $m.Version)
-          Write-Host ('FunctionsToExport count: {0}' -f $m.ExportedFunctions.Count)
+          # Test-ModuleManifest loads RequiredModules to validate them — those
+          # aren't installed in CI (Microsoft.Graph / EXO / Teams = 500MB and
+          # ~3 min to install). Use Import-PowerShellDataFile instead: catches
+          # syntax errors and lets us assert the structural fields directly.
+          $m = Import-PowerShellDataFile -LiteralPath ./NRG-Assessment.psd1 -ErrorAction Stop
+
+          $required = @('ModuleVersion','GUID','Author','RootModule','FunctionsToExport','PowerShellVersion','CompatiblePSEditions')
+          $missing = $required | Where-Object { -not $m.ContainsKey($_) }
+          if ($missing) { throw ('Manifest missing required keys: {0}' -f ($missing -join ', ')) }
+
+          if ($m.ModuleVersion -notmatch '^\d+\.\d+\.\d+') {
+            throw ('ModuleVersion "{0}" is not a valid semver prefix' -f $m.ModuleVersion)
+          }
+          if (-not (Test-Path -LiteralPath (Join-Path '.' $m.RootModule))) {
+            throw ('RootModule "{0}" not found on disk' -f $m.RootModule)
+          }
+
+          Write-Host ('Manifest valid: v{0}' -f $m.ModuleVersion)
+          Write-Host ('FunctionsToExport count: {0}' -f @($m.FunctionsToExport).Count)
           Write-Host ('PSEdition: {0}' -f ($m.CompatiblePSEditions -join ', '))
-          Write-Host ('Required modules: {0}' -f $m.RequiredModules.Count)
+          Write-Host ('PowerShellVersion: {0}' -f $m.PowerShellVersion)
+          if ($m.RequiredModules) {
+            Write-Host ('Required modules: {0}' -f @($m.RequiredModules).Count)
+          }
 
       - name: Validate controls.json parses
         shell: pwsh

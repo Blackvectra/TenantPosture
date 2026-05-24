@@ -38,10 +38,12 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             Split-Path -Parent $PSScriptRoot
         } else { (Get-Location).Path }
 
-        # All production PS files (excluding this test file and zip artifacts)
+        # All production PS files (excluding this test file and zip artifacts).
+        # Path-separator class [/\\] makes the filter portable between Windows
+        # and Linux runners — needed for CI on ubuntu-latest.
         $script:PsFiles = Get-ChildItem -LiteralPath $script:RepoRoot -Recurse -File -Include '*.ps1','*.psm1' |
-            Where-Object { $_.FullName -notmatch '\\Testing\\' -and
-                           $_.FullName -notmatch '\\output\\' -and
+            Where-Object { $_.FullName -notmatch '[/\\]Testing[/\\]' -and
+                           $_.FullName -notmatch '[/\\]output[/\\]' -and
                            $_.FullName -notmatch '\.git' }
 
         # Try to load module for runtime tests
