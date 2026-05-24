@@ -1,25 +1,27 @@
-@"
-# Generated reports
+# Generated reports / scratch
 Reports/
-*.html
-*.csv
-
-# Logs
-*.log
+*.html.tmp
+*.bak
 
 # PowerShell module cache
 PSGetModuleInfo.xml
 
-# Secrets / credentials
+# Secrets / credentials — never commit
 *.cred
 *.pfx
+*.pem
 secrets.ps1
+.env
+.env.local
 
 # OS
 Thumbs.db
 .DS_Store
-"@ | Out-File .gitignore -Encoding utf8
 
-git add .gitignore
-git commit -m "chore: add .gitignore"
-git push
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Claude Code session metadata (worktrees, settings.local.json, etc.)
+.claude/
