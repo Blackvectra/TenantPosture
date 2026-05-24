@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 #
-# Test-NRGControl-EXO.ps1  (v4.5.5)
+# Test-NRGControlEXO.ps1  (v4.5.6)
 # Evaluates Exchange Online security controls.
 # SCORING ONLY — no API calls.
 #
