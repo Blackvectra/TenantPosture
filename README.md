@@ -100,8 +100,8 @@ Collectors/                       READ-ONLY — raw data collection, no scoring
 
 Evaluators/                       SCORING ONLY — reads raw data, writes findings
   Test-NRGControl-AAD.ps1         32 controls
-  Test-NRGControl-EXO.ps1         21 controls
-  Test-NRGControl-DNS.ps1         6 controls
+  Test-NRGControlEXO.ps1          21 controls
+  Test-NRGControlDNS.ps1          6 controls
   Test-NRGControlDefender.ps1     16 controls
   Test-NRGControlSharePoint.ps1   17 controls
   Test-NRGControlTeams.ps1        18 controls
