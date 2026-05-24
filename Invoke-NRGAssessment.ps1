@@ -234,8 +234,12 @@ if (-not $skipCollection) {
             Invoke-NRGCollector 'Invoke-NRGCollectSharePoint'
         }
         if (-not $SkipIntune) {
-            Write-Host "  [*] Intune: Device compliance, MAM, MTD, enrollment..."
-            Invoke-NRGCollector 'Invoke-NRGCollectIntune'
+            Write-Host "  [*] Intune: Endpoint Security (LAPS / ASR / Firewall / EDR / AV)..."
+            Invoke-NRGCollector 'Invoke-NRGCollectIntuneEndpointSecurity'
+            Write-Host "  [*] Intune: Device Compliance, WHfB, Update Rings, Enrollment..."
+            Invoke-NRGCollector 'Invoke-NRGCollectIntuneDeviceCompliance'
+            Write-Host "  [*] Intune: App Protection (MAM) and App Configuration..."
+            Invoke-NRGCollector 'Invoke-NRGCollectIntuneAppProtection'
         }
         if (-not $SkipPowerPlatform) {
             Write-Host "  [*] Power Platform: Environments, tenant isolation, DLP..."
