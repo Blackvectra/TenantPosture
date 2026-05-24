@@ -29,6 +29,22 @@ function Publish-NRGDeltaReport {
         [Parameter(Mandatory)] [string]    $OutputPath
     )
 
+    # Fail closed — require security helpers
+    if (-not (Get-Command ConvertTo-NRGHtmlSafe -ErrorAction SilentlyContinue)) {
+        throw "ConvertTo-NRGHtmlSafe not loaded — refusing to generate delta report without injection protection."
+    }
+
+    # Helper: escape for Markdown (prevents table/header injection).
+    # The baseline JSON is UNTRUSTED — it could be edited between runs or copied
+    # from another tenant — so every field from it must be escaped before
+    # rendering. Likewise for current-run tenant data. OWASP A03 / ASVS V5.1.3.
+    function EscMd([object]$v) {
+        if ($null -eq $v -or [string]::IsNullOrEmpty([string]$v)) { return '' }
+        $safe = ConvertTo-NRGHtmlSafe -Value ([string]$v)
+        $safe = $safe -replace '\|', '\|' -replace '`', '\`'
+        return $safe
+    }
+
     # Load baseline
     $baselineRaw = Get-Content -LiteralPath $BaselineResultsPath -Encoding utf8 -Raw | ConvertFrom-Json
     $baseFindings = @($baselineRaw.Findings ?? $baselineRaw)
@@ -73,9 +89,10 @@ function Publish-NRGDeltaReport {
     $scoreDelta = $currScore - $baseScore
     $scoreArrow = if ($scoreDelta -gt 0) { "&#9650; +$scoreDelta" } elseif ($scoreDelta -lt 0) { "&#9660; $scoreDelta" } else { "&#9654; 0" }
 
-    $baseDate = [string]($baselineRaw.Metadata.AssessmentDate ?? 'prior run')
-    $currDate = [string]($Metadata.AssessmentDate ?? (Get-Date -Format 'MMMM dd, yyyy'))
-    $client   = [string]($Metadata.TenantDomain ?? 'Client')
+    $baseDate = EscMd ([string]($baselineRaw.Metadata.AssessmentDate ?? 'prior run'))
+    $currDate = EscMd ([string]($Metadata.AssessmentDate ?? (Get-Date -Format 'MMMM dd, yyyy')))
+    $client   = EscMd ([string]($Metadata.TenantDomain ?? 'Client'))
+    $toolVer  = EscMd ([string]($Metadata.ToolVersion ?? '4.5.5'))
 
     $sb = [System.Text.StringBuilder]::new()
     $null = $sb.AppendLine("# Assessment Delta Report")
@@ -104,7 +121,7 @@ function Publish-NRGDeltaReport {
         $null = $sb.AppendLine("| Control | Title | Severity |")
         $null = $sb.AppendLine("|---|---|---|")
         foreach ($f in ($items | Sort-Object @{Expression={ switch($_.Severity){'Critical'{0};'High'{1};'Medium'{2};'Low'{3};default{4}} }},ControlId)) {
-            $null = $sb.AppendLine("| $($f.ControlId) | $($f.Title) | $($f.Severity) |")
+            $null = $sb.AppendLine("| $(EscMd $f.ControlId) | $(EscMd $f.Title) | $(EscMd $f.Severity) |")
         }
         $null = $sb.AppendLine()
     }
@@ -132,7 +149,8 @@ function Publish-NRGDeltaReport {
     $null = $sb.AppendLine("**Recommended next action:**")
     if ($newGaps.Count -gt 0) {
         $topNew = $newGaps | Sort-Object @{Expression={switch($_.Severity){'Critical'{0};'High'{1};default{2}}}} | Select-Object -First 3
-        $null = $sb.AppendLine("Address the $($newGaps.Count) new gap(s) first, prioritizing: $($topNew.Title -join ', ').")
+        $topTitles = ($topNew | ForEach-Object { EscMd $_.Title }) -join ', '
+        $null = $sb.AppendLine("Address the $($newGaps.Count) new gap(s) first, prioritizing: $topTitles.")
     } elseif ($unchangedGaps.Count -gt 0) {
         $null = $sb.AppendLine("$($unchangedGaps.Count) gap(s) remain unresolved from prior assessment. Focus on completing Phase 1 remediation.")
     } else {
@@ -140,7 +158,7 @@ function Publish-NRGDeltaReport {
     }
     $null = $sb.AppendLine()
     $null = $sb.AppendLine("---")
-    $null = $sb.AppendLine("*NRG-Assessment v$($Metadata.ToolVersion ?? '4.5.5') · NRG Technology Services · $currDate*")
+    $null = $sb.AppendLine("*NRG-Assessment v$toolVer · NRG Technology Services · $currDate*")
 
     $sb.ToString() | Out-File -LiteralPath $OutputPath -Encoding utf8
 }

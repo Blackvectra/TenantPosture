@@ -14,9 +14,14 @@
     # Root module
     RootModule        = 'NRG-Assessment.psm1'
 
-    # All functions exported by this module
+    # All functions exported by this module.
+    # IMPORTANT: this list must stay in sync with $script:ExportedFunctions in
+    # NRG-Assessment.psm1. PowerShell intersects the two lists, so a function
+    # missing here is silently dropped from the exported surface.
     FunctionsToExport = @(
+        # ── Lib ───────────────────────────────────────────────────────────────
         'Add-NRGFinding',
+        'Get-NRGSafeProperty',
         'Get-NRGFindings',
         'Clear-NRGFindings',
         'Register-NRGException',
@@ -33,21 +38,31 @@
         'Get-NRGControlById',
         'Get-NRGFrameworkCitations',
         'Get-NRGFrameworkDefinitions',
+
+        # ── Collectors — AAD ──────────────────────────────────────────────────
         'Invoke-NRGCollectAADAuthPolicies',
         'Invoke-NRGCollectAADCAPolicies',
         'Invoke-NRGCollectAADUsers',
         'Invoke-NRGCollectAADRoles',
         'Invoke-NRGCollectAADPIM',
         'Invoke-NRGCollectAADIdentityGovernance',
+        'Invoke-NRGCollectAADInventory',
+
+        # ── Collectors — EXO / Defender / DNS ─────────────────────────────────
         'Invoke-NRGCollectEXOMailboxConfig',
         'Invoke-NRGCollectEXOConnectionFilter',
+        'Invoke-NRGCollectEXOInventory',
         'Invoke-NRGCollectDefender',
         'Invoke-NRGCollectDNSEmailRecords',
+
+        # ── Collectors — Phase 2+ ─────────────────────────────────────────────
         'Invoke-NRGCollectSharePoint',
         'Invoke-NRGCollectTeams',
         'Invoke-NRGCollectPurview',
         'Invoke-NRGCollectIntune',
         'Invoke-NRGCollectPowerPlatform',
+
+        # ── Evaluators — AAD ──────────────────────────────────────────────────
         'Test-NRGControlAADLegacyAuth',
         'Test-NRGControlAADMFA',
         'Test-NRGControlAADPhishResistantMFA',
@@ -80,12 +95,25 @@
         'Test-NRGControlAADPrivCloudOnly',
         'Test-NRGControlAADBreakGlassMonitoring',
         'Test-NRGControlAADSignInFrequency',
+        'Test-NRGControlAADDeviceCode',
+        'Test-NRGControlAADNoGuestInPrivRoles',
+        'Test-NRGControlAADRiskyServicePrincipals',
+        'Test-NRGControlAADTokenProtection',
+        'Test-NRGControlAADContinuousAccess',
+        'Test-NRGControlAADCrossTenantAccess',
+        'Test-NRGControlAADPrivilegedWorkstation',
+        'Test-NRGControlAADTermsOfUse',
+        'Test-NRGControlAADWorkloadIdentityCA',
+
+        # ── Evaluators — DNS ──────────────────────────────────────────────────
         'Test-NRGControlDNSSPF',
         'Test-NRGControlDNSDKIM',
         'Test-NRGControlDNSDMARC',
         'Test-NRGControlDNSMTASTS',
         'Test-NRGControlDNSTLSRPT',
         'Test-NRGControlDNSDNSSEC',
+
+        # ── Evaluators — EXO ──────────────────────────────────────────────────
         'Test-NRGControlEXOMailboxAudit',
         'Test-NRGControlEXOSmtpAuth',
         'Test-NRGControlEXOAutoForward',
@@ -106,6 +134,11 @@
         'Test-NRGControlEXOAdminAudit',
         'Test-NRGControlEXOSafeAttachmentsSPO',
         'Test-NRGControlEXOAntiSpamInbound',
+        'Test-NRGControlEXOPerUserAudit',
+        'Test-NRGControlEXOPriorityAccountProtection',
+        'Test-NRGControlEXOSafeSenderOverride',
+
+        # ── Evaluators — Defender ─────────────────────────────────────────────
         'Test-NRGControlDefender',
         'Test-NRGControlDefenderPresetPolicies',
         'Test-NRGControlDefenderZAP',
@@ -117,6 +150,15 @@
         'Test-NRGControlDefenderViaTag',
         'Test-NRGControlDefenderMDCA',
         'Test-NRGControlDefenderAlertNotification',
+        'Test-NRGControlDefenderDLPWorkloads',
+        'Test-NRGControlDefenderDLPSITs',
+        'Test-NRGControlDefenderRiskyAppAlerts',
+        'Test-NRGControlDefenderPriorityAccounts',
+        'Test-NRGControlDefenderEndpointDLP',
+        'Test-NRGControlDefenderAttackSim',
+        'Test-NRGControlDefenderSafeLinksOffice',
+
+        # ── Evaluators — SharePoint ───────────────────────────────────────────
         'Test-NRGControlSharePoint',
         'Test-NRGControlSPOOneDriveSync',
         'Test-NRGControlSPOLinkExpiration',
@@ -130,6 +172,8 @@
         'Test-NRGControlSPOSharingNotifications',
         'Test-NRGControlSPOVersionHistory',
         'Test-NRGControlSPOGuestExpiry',
+
+        # ── Evaluators — Teams ────────────────────────────────────────────────
         'Test-NRGControlTeams',
         'Test-NRGControlTeamsSkype',
         'Test-NRGControlTeamsUnverifiedApps',
@@ -143,6 +187,12 @@
         'Test-NRGControlTeamsAutoAdmit',
         'Test-NRGControlTeamsMeetingChat',
         'Test-NRGControlTeamsChatCopy',
+        'Test-NRGControlTeamsMeetingRecordingScope',
+        'Test-NRGControlTeamsAnonymousStart',
+        'Test-NRGControlTeamsFederationAllowlist',
+        'Test-NRGControlTeamsLiveEvents',
+
+        # ── Evaluators — Purview ──────────────────────────────────────────────
         'Test-NRGControlPurview',
         'Test-NRGControlPurviewAuditSearch',
         'Test-NRGControlPurviewCommCompliance',
@@ -154,6 +204,12 @@
         'Test-NRGControlPurviewEDiscovery',
         'Test-NRGControlPurviewComplianceScore',
         'Test-NRGControlPurviewSensitiveInfoTypes',
+        'Test-NRGControlPurviewAuditPremium',
+        'Test-NRGControlPurviewAuditRetention',
+        'Test-NRGControlPurviewLabelsPublished',
+        'Test-NRGControlPurviewRecordsManagement',
+
+        # ── Evaluators — Intune ───────────────────────────────────────────────
         'Test-NRGControlIntune',
         'Test-NRGControlIntuneEDR',
         'Test-NRGControlIntuneASR',
@@ -163,12 +219,42 @@
         'Test-NRGControlIntuneEnrollmentRestrictions',
         'Test-NRGControlIntuneAppConfig',
         'Test-NRGControlIntuneConditionalLaunch',
+        'Test-NRGControlIntuneWindowsLAPS',
+        'Test-NRGControlIntuneWindowsHello',
+        'Test-NRGControlIntuneUpdateCompliance',
+        'Test-NRGControlIntuneMobilePIN',
+
+        # ── Evaluators — Power Platform ───────────────────────────────────────
         'Test-NRGControlPowerPlatform',
         'Test-NRGControlPPLConnectorClassification',
         'Test-NRGControlPPLAutomate',
         'Test-NRGControlPPLPowerApps',
+
+        # ── Evaluators — Inventory ────────────────────────────────────────────
+        'Test-NRGControlInventoryMFAUsers',
+        'Test-NRGControlInventoryStaleGuests',
+        'Test-NRGControlInventoryStaleMembers',
+        'Test-NRGControlInventoryOAuthApps',
+        'Test-NRGControlInventoryExternalForwarding',
+        'Test-NRGControlInventorySharedMailboxSignIn',
+        'Test-NRGControlInventoryMailboxAuditDisabled',
+        'Test-NRGControlInventorySMTPAuthUsers',
+        'Test-NRGControlInventorySecureScore',
+
+        # ── Evaluators — AI / Copilot ─────────────────────────────────────────
+        'Test-NRGControlAICopilotSensitivityLabels',
+        'Test-NRGControlAICopilotDLP',
+        'Test-NRGControlAICopilotLicensedOnly',
+        'Test-NRGControlAICopilotStudio',
+        'Test-NRGControlAICopilotInteractionData',
+
+        # ── Publishers ────────────────────────────────────────────────────────
         'Publish-NRGAssessmentHTML',
-        'Publish-NRGAssessmentSummary'
+        'Publish-NRGAssessmentSummary',
+        'Publish-NRGRemediationPlaybook',
+        'Publish-NRGRemediationScript',
+        'Publish-NRGComplianceMatrix',
+        'Publish-NRGDeltaReport'
     )
 
     VariablesToExport = @('NRGAssessmentVersion', 'NRGBrand')
