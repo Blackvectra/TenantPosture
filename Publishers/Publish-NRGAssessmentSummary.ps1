@@ -91,6 +91,54 @@ function Publish-NRGAssessmentSummary {
     $null = $sb.AppendLine("| **Total Controls** | **$total** |")
     $null = $sb.AppendLine()
 
+    # ── Risk Exposure (PR #8 — Get-NRGAggregateRisk) ─────────────────────────
+    # Translates open Gap and Partial findings into annualized loss expectancy
+    # using Verizon DBIR / IBM CoaDB anchored bands. Degrades gracefully when
+    # the risk-quantification module is not loaded (older deployments without
+    # PR #8 merged): the section is omitted and the rest of the report is
+    # unaffected.
+    if (Get-Command Get-NRGAggregateRisk -ErrorAction SilentlyContinue) {
+        try {
+            $risk = Get-NRGAggregateRisk -Findings $Findings
+            if ($risk.OpenGapAndPartialCount -gt 0) {
+                $null = $sb.AppendLine("## 💰 Estimated Annual Risk Exposure")
+                $null = $sb.AppendLine()
+                $null = $sb.AppendLine("**Open gaps and partials map to roughly $(EscMd $risk.TotalRangeFormatted) in expected annual loss.**")
+                $null = $sb.AppendLine()
+                $null = $sb.AppendLine("| Metric | Value |")
+                $null = $sb.AppendLine("|---|---|")
+                $null = $sb.AppendLine("| Findings included | $($risk.OpenGapAndPartialCount) (Gap + Partial) |")
+                $null = $sb.AppendLine("| Exposure range | $(EscMd $risk.TotalRangeFormatted) |")
+                $null = $sb.AppendLine("| Midpoint estimate | $(EscMd $risk.TotalMidpointFormatted) |")
+                $null = $sb.AppendLine()
+
+                if ($risk.BySeverity.Count -gt 0) {
+                    $null = $sb.AppendLine("**By severity:**")
+                    $null = $sb.AppendLine()
+                    $null = $sb.AppendLine("| Severity | Open | Exposure range |")
+                    $null = $sb.AppendLine("|---|---|---|")
+                    foreach ($sev in @('Critical','High','Medium','Low')) {
+                        if ($risk.BySeverity.ContainsKey($sev)) {
+                            $b = $risk.BySeverity[$sev]
+                            $range = '$' + ('{0:N0}' -f $b.Low) + ' – $' + ('{0:N0}' -f $b.High)
+                            $null = $sb.AppendLine("| $sev | $($b.Count) | $(EscMd $range) |")
+                        }
+                    }
+                    $null = $sb.AppendLine()
+                }
+
+                $null = $sb.AppendLine("> *Methodology: annualized loss expectancy = SLE × ARO. SLE from Verizon DBIR 2025 incident-cost medians and IBM Cost of a Data Breach 2024. Bands, not point estimates — assessment-grade.*")
+                $null = $sb.AppendLine()
+            }
+        } catch {
+            # Risk calc failure must not break the rest of the report
+            $null = $sb.AppendLine("## 💰 Risk Exposure")
+            $null = $sb.AppendLine()
+            $null = $sb.AppendLine("*Risk exposure calculation failed: $(EscMd $_.Exception.Message). Report continues with the rest of the findings.*")
+            $null = $sb.AppendLine()
+        }
+    }
+
     # Service connection status
     $null = $sb.AppendLine("## Service Coverage")
     $null = $sb.AppendLine()
