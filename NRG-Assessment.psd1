@@ -35,6 +35,8 @@
         'ConvertTo-NRGSafeUrl',
         'Get-NRGControlDefinitions',
         'Get-NRGControlById',
+        'Get-NRGFindingRiskCost',
+        'Get-NRGAggregateRisk',
         'Get-NRGFrameworkCitations',
         'Get-NRGFrameworkDefinitions',
 
