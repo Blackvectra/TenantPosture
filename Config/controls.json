@@ -830,7 +830,8 @@
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
           "T1213"
-        ]
+        ],
+        "SCuBA": "MS.TEAMS.1.6v1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -901,7 +902,8 @@
         "CMMC": "AU.L2-3.3.2",
         "MITRE": [
           "T1562.008"
-        ]
+        ],
+        "SCuBA": "MS.DEFENDER.6.3v1"
       },
       "LicenseRequirement": "M365 Business Premium or E3+"
     },
@@ -1091,7 +1093,8 @@
         "MITRE": [
           "T1048",
           "T1567"
-        ]
+        ],
+        "SCuBA": "MS.POWERPLATFORM.3.1v1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1113,7 +1116,8 @@
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
           "T1048"
-        ]
+        ],
+        "SCuBA": "MS.POWERPLATFORM.2.1v1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1135,7 +1139,8 @@
         "CMMC": "CM.L2-3.4.5",
         "MITRE": [
           "T1578"
-        ]
+        ],
+        "SCuBA": "MS.POWERPLATFORM.1.1v1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1931,7 +1936,8 @@
         "NIST": "SI-4, AU-12",
         "MITRE": [
           "T1566"
-        ]
+        ],
+        "SCuBA": "MS.DEFENDER.5.1v1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1954,7 +1960,8 @@
         "MITRE": [
           "T1114",
           "T1070.008"
-        ]
+        ],
+        "SCuBA": "MS.DEFENDER.6.1v1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2112,7 +2119,8 @@
         "NIST": "AC-12",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "SCuBA": "MS.SHAREPOINT.3.3v2"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2226,7 +2234,8 @@
         "NIST": "SI-8",
         "MITRE": [
           "T1566"
-        ]
+        ],
+        "SCuBA": "MS.TEAMS.4.1v1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2312,7 +2321,8 @@
         "NIST": "AC-3, IA-3",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "SCuBA": "MS.TEAMS.1.5v1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2664,7 +2674,8 @@
         "MITRE": [
           "T1078",
           "T1110"
-        ]
+        ],
+        "SCuBA": "MS.AAD.3.1v1"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -2783,7 +2794,8 @@
         "MITRE": [
           "T1070.008"
         ],
-        "HIPAA": "\u00a7164.312(b)"
+        "HIPAA": "\u00a7164.312(b)",
+        "SCuBA": "MS.DEFENDER.6.3v1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2805,7 +2817,8 @@
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
           "T1070.008"
-        ]
+        ],
+        "SCuBA": "MS.DEFENDER.6.1v1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2851,7 +2864,8 @@
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
           "T1566"
-        ]
+        ],
+        "SCuBA": "MS.DEFENDER.1.2v1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2942,7 +2956,8 @@
         "CMMC": "IR.L2-3.6.1",
         "MITRE": [
           "T1562.008"
-        ]
+        ],
+        "SCuBA": "MS.DEFENDER.5.2v1"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -3139,7 +3154,8 @@
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
           "T1562.008"
-        ]
+        ],
+        "SCuBA": "MS.DEFENDER.5.2v1"
       },
       "LicenseRequirement": "Microsoft Sentinel (add-on) or Defender XDR"
     },
@@ -3294,7 +3310,8 @@
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
           "T1048"
-        ]
+        ],
+        "SCuBA": "MS.POWERPLATFORM.2.1v1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3317,7 +3334,8 @@
         "MITRE": [
           "T1048",
           "T1567"
-        ]
+        ],
+        "SCuBA": "MS.POWERPLATFORM.1.1v1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3340,7 +3358,8 @@
         "MITRE": [
           "T1578",
           "T1190"
-        ]
+        ],
+        "SCuBA": "MS.POWERPLATFORM.5.1v1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3654,7 +3673,8 @@
         "MITRE": [
           "T1566",
           "T1078"
-        ]
+        ],
+        "SCuBA": "MS.DEFENDER.2.1v1"
       }
     },
     {
@@ -3680,7 +3700,8 @@
         ],
         "ISO27001": "A.8.12",
         "SOC2": "CC6.7",
-        "PCIDSS": "Req 9.4"
+        "PCIDSS": "Req 9.4",
+        "SCuBA": "MS.DEFENDER.4.2v1"
       }
     },
     {
@@ -4019,7 +4040,8 @@
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
         "HIPAA": "\u00a7164.312(b)",
-        "PCIDSS": "Req 10.7"
+        "PCIDSS": "Req 10.7",
+        "SCuBA": "MS.DEFENDER.6.1v1"
       }
     },
     {
@@ -4046,7 +4068,8 @@
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
         "HIPAA": "\u00a7164.308(a)(1)",
-        "PCIDSS": "Req 10.7"
+        "PCIDSS": "Req 10.7",
+        "SCuBA": "MS.DEFENDER.6.3v1"
       }
     },
     {
@@ -4313,7 +4336,8 @@
         "MITRE": [
           "T1528",
           "T1550.001"
-        ]
+        ],
+        "SCuBA": "MS.AAD.5.2v1"
       }
     },
     {
@@ -4415,7 +4439,8 @@
         "MITRE": [
           "T1078",
           "T1110"
-        ]
+        ],
+        "SCuBA": "MS.EXO.5.1v1"
       }
     },
     {
