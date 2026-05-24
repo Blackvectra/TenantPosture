@@ -241,7 +241,7 @@ function Publish-NRGAssessmentHTML {
     # Degrades to an empty $riskHtml if the risk-quantification module from
     # PR #8 is not loaded; the Executive Overview card still renders cleanly.
     $riskHtml = ''
-    if (Get-Command Get-NRGAggregateRisk -ErrorAction SilentlyContinue) {
+    if (Get-Command Get-NRGAggregateRisk -CommandType Function -Module NRG-Assessment -ErrorAction SilentlyContinue) {
         try {
             $risk = Get-NRGAggregateRisk -Findings $Findings
             if ($risk.OpenGapAndPartialCount -gt 0) {
@@ -249,17 +249,17 @@ function Publish-NRGAssessmentHTML {
                 foreach ($sev in @('Critical','High','Medium','Low')) {
                     if ($risk.BySeverity.ContainsKey($sev)) {
                         $b = $risk.BySeverity[$sev]
-                        $range = '$' + ('{0:N0}' -f $b.Low) + ' &ndash; $' + ('{0:N0}' -f $b.High)
-                        $sevRows += "<tr><td>$(hx $sev)</td><td style='text-align:right'>$($b.Count)</td><td style='text-align:right'>$range</td></tr>"
+                        $range = '$' + ('{0:N0}' -f $b.Low) + ' – $' + ('{0:N0}' -f $b.High)
+                        $sevRows += "<tr><td>$(hx $sev)</td><td style='text-align:right'>$($b.Count)</td><td style='text-align:right'>$(hx $range)</td></tr>"
                     }
                 }
-                $totalRange  = $risk.TotalRangeFormatted -replace ' – ', ' &ndash; '
+                $totalRange  = $risk.TotalRangeFormatted
                 $midpoint    = $risk.TotalMidpointFormatted
                 $riskHtml = @"
 <div class="card mt" id="risk-exposure">
   <div class="card-hd">
     <div class="card-label">Estimated Annual Risk Exposure</div>
-    <div class="card-sub">$($risk.OpenGapAndPartialCount) open Gap and Partial findings, annualized loss expectancy bands</div>
+    <div class="card-sub">$(hx $risk.OpenGapAndPartialCount) open Gap and Partial findings, annualized loss expectancy bands</div>
   </div>
   <div class="ex-dash">
     <div class="score-wrap br">
@@ -291,6 +291,7 @@ function Publish-NRGAssessmentHTML {
             }
         } catch {
             # Risk calc failure must never break the rest of the report
+            Write-Warning "Risk exposure calculation failed: $($_.Exception.Message)"
             $riskHtml = ''
         }
     }

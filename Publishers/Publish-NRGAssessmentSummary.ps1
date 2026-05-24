@@ -97,7 +97,7 @@ function Publish-NRGAssessmentSummary {
     # the risk-quantification module is not loaded (older deployments without
     # PR #8 merged): the section is omitted and the rest of the report is
     # unaffected.
-    if (Get-Command Get-NRGAggregateRisk -ErrorAction SilentlyContinue) {
+    if (Get-Command Get-NRGAggregateRisk -CommandType Function -Module NRG-Assessment -ErrorAction SilentlyContinue) {
         try {
             $risk = Get-NRGAggregateRisk -Findings $Findings
             if ($risk.OpenGapAndPartialCount -gt 0) {
