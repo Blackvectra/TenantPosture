@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 #
 # Test-NRGControlAADCA.ps1 — AAD-2.3 number matching fix
 #
