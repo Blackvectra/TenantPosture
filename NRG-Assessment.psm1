@@ -11,9 +11,9 @@
 #   - LiteralPath everywhere: prevents wildcard expansion on folder/file paths
 #   - Path traversal check: each dot-sourced file must resolve inside $PSScriptRoot
 #   - Import-PowerShellDataFile uses -LiteralPath: prevents wildcard in branding path
-#   - No StrictMode disable: original comment "StrictMode intentionally off" was wrong;
-#     collectors that rely on $null?.Property access work fine with null-coalescing
-#     operators or explicit null checks — not by disabling strict mode globally.
+#   - StrictMode stays on (Set-StrictMode -Version Latest is not disabled);
+#     collectors that touch potentially-null properties use null-coalescing
+#     operators or explicit null checks — never a global strict-mode disable.
 #
 # OWASP ASVS V16.4.1 — strict mode for early error detection
 # OWASP A01          — path traversal prevention on dot-sourced files
@@ -84,6 +84,7 @@ foreach ($folder in $loadOrder) {
         $resolvedFile   = [System.IO.Path]::GetFullPath($file.FullName)
         $resolvedModule = [System.IO.Path]::GetFullPath($PSScriptRoot)
 
+        # OWASP A01: resolved file must StartsWith $PSScriptRoot (resolved as $resolvedModule)
         if (-not $resolvedFile.StartsWith($resolvedModule, [StringComparison]::OrdinalIgnoreCase)) {
             Write-Warning "Skipping file outside module root (path traversal?): $($file.FullName)"
             continue
