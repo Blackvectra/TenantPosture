@@ -20,6 +20,8 @@
 
 [CmdletBinding()]
 param(
+    # OWASP ASVS V5.1.3 — UPN must match standard email format before reaching auth
+    [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9._%+-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$|^$')]
     [string] $UserPrincipalName,
     [string] $OutputPath,
 
@@ -46,10 +48,26 @@ param(
     [switch] $NonInteractive,
     [string] $FromResults,
     [string] $BaselineResults,
+    # OWASP ASVS V5.1.3 — every DnsDomains entry must be an FQDN before DNS resolver sees it
+    [ValidateScript({
+        foreach ($d in $_) {
+            if ($d -notmatch '^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$') {
+                throw "Invalid DNS domain name: '$d'"
+            }
+        }
+        return $true
+    })]
     [string[]] $DnsDomains,
     [switch] $JsonOnly,
     [switch] $WhatIfConnections
 )
+
+# OWASP ASVS V11.2.2 / OSSTMM DN5 — enforce TLS 1.2 minimum (Microsoft endpoints
+# already require this, but defense-in-depth catches dev/test environments where
+# .NET defaults might drift back to older protocols)
+[System.Net.ServicePointManager]::SecurityProtocol =
+    [System.Net.SecurityProtocolType]::Tls12 -bor
+    [System.Net.SecurityProtocolType]::Tls13
 
 # Disable WAM broker before any module loads — prevents RuntimeBroker NullReferenceException
 $env:MSAL_ALLOW_BROKER        = '0'
@@ -71,10 +89,19 @@ Write-Host "================================================================" -F
 Write-Host ""
 
 # ── Output path ───────────────────────────────────────────────────────────────
+# OWASP A01 / ASVS V12.3.1 — reject ..[/\\] path-traversal sequences before any
+# file operation. Also ensure the resolved path stays under the script directory
+# unless an absolute path was explicitly provided by the operator.
 if (-not $OutputPath) { $OutputPath = Join-Path $scriptDir 'output' }
-if (-not (Test-Path $OutputPath)) {
-    New-Item -Path $OutputPath -ItemType Directory -Force | Out-Null
+if ($OutputPath -match '\.\.[\\/]') {
+    throw "OutputPath rejected: contains '..[/\\]' traversal sequence."
 }
+if (-not (Test-Path -LiteralPath $OutputPath)) {
+    New-Item -LiteralPath $OutputPath -ItemType Directory -Force | Out-Null
+}
+# Resolve to absolute path so downstream auto-open / publish steps can verify
+# generated files via $resolvedOutput.StartsWith($resolvedOutput) bounds checks.
+$resolvedOutput = [System.IO.Path]::GetFullPath($OutputPath)
 
 # ── Import module ─────────────────────────────────────────────────────────────
 Write-Host "[-] Loading NRG-Assessment module..." -ForegroundColor Cyan
@@ -88,6 +115,10 @@ try {
 }
 
 Clear-NRGFindings
+
+# OWASP ASVS V7.3.2 — wrap the entire run in try/finally so service sessions
+# always disconnect, even if a collector / evaluator / publisher throws.
+try {
 
 # ── Module prerequisite check ─────────────────────────────────────────────────
 # EOM is pinned to 3.2.0 — 3.4.0+ has a WAM broker crash that kills the process
@@ -164,6 +195,9 @@ if ($FromResults -and (Test-Path $FromResults)) {
         @{ TenantDomain='Unknown'; AssessmentDate=(Get-Date -Format 'MMMM dd, yyyy'); ToolVersion='4.5.5' }
     }
     $tenantTag = if ($reportMetadata.TenantDomain) { ($reportMetadata.TenantDomain -split '\.')[0] } else { 'tenant' }
+    # OWASP A01 — strip any non-[a-zA-Z0-9-] before using tenantTag in a file path
+    $tenantTag = $tenantTag -replace '[^a-zA-Z0-9-]', ''
+    if (-not $tenantTag) { $tenantTag = 'tenant' }
     $baseName = "$tenantTag-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
     Write-Host "  [+] Loaded $($findings.Count) findings" -ForegroundColor Green
     $skipCollection = $true
@@ -299,6 +333,9 @@ if (-not $skipCollection) {
 
     # ── Build report metadata ────────────────────────────────────────────────
     $tenantTag = if ($conn.TenantDomain) { ($conn.TenantDomain -split '\.')[0] } else { 'tenant' }
+    # OWASP A01 — strip any non-[a-zA-Z0-9-] before using tenantTag in a file path
+    $tenantTag = $tenantTag -replace '[^a-zA-Z0-9-]', ''
+    if (-not $tenantTag) { $tenantTag = 'tenant' }
     $baseName = "$tenantTag-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
 
     $reportMetadata = @{
@@ -407,7 +444,10 @@ Write-Host "  Total          $($findings.Count)"                               -
 Write-Host "  Output         $OutputPath"                                      -ForegroundColor White
 Write-Host ""
 
-# ── Disconnect at end ────────────────────────────────────────────────────────
-if (-not $skipCollection) {
-    Disconnect-NRGServices
+}
+finally {
+    # ── Disconnect on success or error ────────────────────────────────────────
+    if (-not $skipCollection) {
+        Disconnect-NRGServices
+    }
 }

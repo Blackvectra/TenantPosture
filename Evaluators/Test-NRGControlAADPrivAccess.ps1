@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 #
 # Test-NRGControlAADPrivAccess.ps1
 # Evaluates privileged access hygiene.

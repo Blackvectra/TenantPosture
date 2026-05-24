@@ -1,0 +1,172 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pester:
+    name: Pester Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Pester (>= 5.5.0)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
+            Install-PSResource -Name Pester -Version '[5.5.0,)' -TrustRepository -Scope CurrentUser -Reinstall
+          } else {
+            if (Get-PSRepository PSGallery -ErrorAction SilentlyContinue) {
+              Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+            }
+            Install-Module -Name Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck -AllowClobber
+          }
+          (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1).Version
+
+      - name: Diagnostics — pwsh + Pester + parse test file
+        shell: pwsh
+        run: |
+          Write-Host ('pwsh version: {0}' -f $PSVersionTable.PSVersion)
+          Write-Host ('OS: {0}' -f $PSVersionTable.OS)
+          $p = (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1)
+          Write-Host ('Pester version: {0} at {1}' -f $p.Version, $p.ModuleBase)
+
+          # AST parse check — distinguishes syntax errors in the test file
+          # from Pester runtime issues.
+          $tokens = $null
+          $errors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+            './Testing/NRG.Security.Tests.ps1', [ref]$tokens, [ref]$errors)
+          if ($errors -and $errors.Count -gt 0) {
+            Write-Host ''
+            Write-Host 'PARSE ERRORS IN TEST FILE:' -ForegroundColor Red
+            $errors | ForEach-Object { Write-Host ('  Line {0}: {1}' -f $_.Extent.StartLineNumber, $_.Message) }
+            throw 'Test file does not parse — fix syntax before Pester can run.'
+          }
+          Write-Host 'Test file AST parses cleanly.'
+
+      - name: Run Pester
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = './Testing/NRG.Security.Tests.ps1'
+          $config.Run.Exit = $true
+          $config.Run.Throw = $false
+          $config.Output.Verbosity = 'Diagnostic'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = 'pester-results.xml'
+          $config.TestResult.OutputFormat = 'NUnitXml'
+          Invoke-Pester -Configuration $config
+
+      - name: Upload Pester results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pester-results
+          path: pester-results.xml
+          if-no-files-found: warn
+
+  psscriptanalyzer:
+    name: PSScriptAnalyzer
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
+            Install-PSResource -Name PSScriptAnalyzer -TrustRepository -Scope CurrentUser -Reinstall
+          } else {
+            if (Get-PSRepository PSGallery -ErrorAction SilentlyContinue) {
+              Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+            }
+            Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -AllowClobber
+          }
+
+      - name: Run analyzer
+        shell: pwsh
+        run: |
+          $settings = Resolve-Path ./PSScriptAnalyzerSettings.psd1
+          $results = Invoke-ScriptAnalyzer -Path . -Recurse -Settings $settings
+
+          if (-not $results) {
+            Write-Host "PSScriptAnalyzer: clean." -ForegroundColor Green
+            exit 0
+          }
+
+          $errors   = @($results | Where-Object Severity -eq 'Error')
+          $warnings = @($results | Where-Object Severity -eq 'Warning')
+          $infos    = @($results | Where-Object Severity -eq 'Information')
+
+          Write-Host ''
+          Write-Host 'PSScriptAnalyzer summary:' -ForegroundColor Cyan
+          Write-Host ('  Errors:        {0}' -f $errors.Count)
+          Write-Host ('  Warnings:      {0}' -f $warnings.Count)
+          Write-Host ('  Informational: {0}' -f $infos.Count)
+          Write-Host ''
+
+          if ($errors.Count -gt 0) {
+            Write-Host 'Errors (CI fails on these):' -ForegroundColor Red
+            $errors | Format-Table RuleName,Severity,ScriptName,Line,Message -AutoSize -Wrap
+          }
+          if ($warnings.Count -gt 0) {
+            Write-Host 'Warnings (informational — does not fail CI):' -ForegroundColor Yellow
+            $warnings | Format-Table RuleName,Severity,ScriptName,Line,Message -AutoSize -Wrap
+          }
+
+          if ($errors.Count -gt 0) {
+            throw ("PSScriptAnalyzer found {0} Error-severity finding(s)." -f $errors.Count)
+          }
+
+  manifest:
+    name: Module Manifest + controls.json
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate manifest parses + has required fields
+        shell: pwsh
+        run: |
+          # Test-ModuleManifest loads RequiredModules to validate them — those
+          # aren't installed in CI (Microsoft.Graph / EXO / Teams = 500MB and
+          # ~3 min to install). Use Import-PowerShellDataFile instead: catches
+          # syntax errors and lets us assert the structural fields directly.
+          $m = Import-PowerShellDataFile -LiteralPath ./NRG-Assessment.psd1 -ErrorAction Stop
+
+          $required = @('ModuleVersion','GUID','Author','RootModule','FunctionsToExport','PowerShellVersion','CompatiblePSEditions')
+          $missing = $required | Where-Object { -not $m.ContainsKey($_) }
+          if ($missing) { throw ('Manifest missing required keys: {0}' -f ($missing -join ', ')) }
+
+          if ($m.ModuleVersion -notmatch '^\d+\.\d+\.\d+') {
+            throw ('ModuleVersion "{0}" is not a valid semver prefix' -f $m.ModuleVersion)
+          }
+          if (-not (Test-Path -LiteralPath (Join-Path '.' $m.RootModule))) {
+            throw ('RootModule "{0}" not found on disk' -f $m.RootModule)
+          }
+
+          Write-Host ('Manifest valid: v{0}' -f $m.ModuleVersion)
+          Write-Host ('FunctionsToExport count: {0}' -f @($m.FunctionsToExport).Count)
+          Write-Host ('PSEdition: {0}' -f ($m.CompatiblePSEditions -join ', '))
+          Write-Host ('PowerShellVersion: {0}' -f $m.PowerShellVersion)
+          if ($m.RequiredModules) {
+            Write-Host ('Required modules: {0}' -f @($m.RequiredModules).Count)
+          }
+
+      - name: Validate controls.json parses
+        shell: pwsh
+        run: |
+          $j = Get-Content -LiteralPath ./Config/controls.json -Raw | ConvertFrom-Json -ErrorAction Stop
+          if (-not $j.controls) { throw 'controls.json missing top-level "controls" array.' }
+          Write-Host ('controls.json: {0} controls' -f $j.controls.Count)
