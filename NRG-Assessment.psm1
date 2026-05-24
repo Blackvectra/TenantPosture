@@ -123,7 +123,10 @@ $script:ExportedFunctions = @(
 
     # ── Collectors — Phase 2+ ─────────────────────────────────────────────────
     'Invoke-NRGCollectSharePoint', 'Invoke-NRGCollectTeams',
-    'Invoke-NRGCollectPurview', 'Invoke-NRGCollectIntune',
+    'Invoke-NRGCollectPurview',
+    'Invoke-NRGCollectIntuneEndpointSecurity',
+    'Invoke-NRGCollectIntuneDeviceCompliance',
+    'Invoke-NRGCollectIntuneAppProtection',
     'Invoke-NRGCollectPowerPlatform',
 
     # ── Evaluators — AAD ──────────────────────────────────────────────────────
