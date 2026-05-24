@@ -595,7 +595,6 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             $content | Should -Match 'Synchronized'
         }
     }
-}
 
     # ── controls.json Content Hardening ───────────────────────────────────
 
