@@ -109,6 +109,7 @@ $script:ExportedFunctions = @(
     'ConvertTo-NRGHtmlSafe', 'ConvertTo-NRGSafeUrl',
     'Get-NRGControlDefinitions', 'Get-NRGControlById',
     'Get-NRGFrameworkCitations', 'Get-NRGFrameworkDefinitions',
+    'Get-NRGFindingRiskCost', 'Get-NRGAggregateRisk',
 
     # ── Collectors — AAD ─────────────────────────────────────────────────────
     'Invoke-NRGCollectAADAuthPolicies', 'Invoke-NRGCollectAADCAPolicies',
