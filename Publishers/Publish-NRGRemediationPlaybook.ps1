@@ -29,9 +29,21 @@ function Publish-NRGRemediationPlaybook {
         throw "Refusing to generate playbook without ConvertTo-NRGHtmlSafe loaded."
     }
 
-    $client    = $Metadata.TenantDomain ?? 'Client'
-    $date      = $Metadata.AssessmentDate ?? (Get-Date -Format 'MMMM dd, yyyy')
-    $version   = $Metadata.ToolVersion ?? '4.5.5'
+    # Helper: escape for Markdown (prevents table/header injection)
+    # All tenant-sourced strings (control titles, details, branding, etc.) pass
+    # through this before interpolation into Markdown. Without it, a value like
+    # "| evil | injected" would break out of a table row, and backticks could
+    # break out of inline code spans. OWASP A03 / ASVS V5.1.3.
+    function EscMd([object]$v) {
+        if ($null -eq $v -or [string]::IsNullOrEmpty([string]$v)) { return '' }
+        $safe = ConvertTo-NRGHtmlSafe -Value ([string]$v)
+        $safe = $safe -replace '\|', '\|' -replace '`', '\`'
+        return $safe
+    }
+
+    $client    = EscMd ($Metadata.TenantDomain ?? 'Client')
+    $date      = EscMd ($Metadata.AssessmentDate ?? (Get-Date -Format 'MMMM dd, yyyy'))
+    $version   = EscMd ($Metadata.ToolVersion ?? '4.5.5')
 
     # Load control definitions for remediation text and license requirements
     $controls = @{}
@@ -96,7 +108,7 @@ function Publish-NRGRemediationPlaybook {
         $null = $sb.AppendLine()
         foreach ($lic in $licenseGroups) {
             $count = @($upgradeNeeded | Where-Object { $controls[$_.ControlId].LicenseRequirement -eq $lic }).Count
-            $null = $sb.AppendLine("- **$lic** — $count control(s)")
+            $null = $sb.AppendLine("- **$(EscMd $lic)** — $count control(s)")
         }
         $null = $sb.AppendLine()
         $null = $sb.AppendLine("Controls marked with 🔑 below require a license upgrade. Contact NRG to discuss licensing options.")
@@ -109,15 +121,15 @@ function Publish-NRGRemediationPlaybook {
         $lines = [System.Collections.Generic.List[string]]::new()
         $ctrl  = $controlDefs[$f.ControlId]
         $licFlag = if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') { ' 🔑' } else { '' }
-        $licNote = if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') { "  > **Requires:** $($ctrl.LicenseRequirement)  " } else { '' }
+        $licNote = if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') { "  > **Requires:** $(EscMd $ctrl.LicenseRequirement)  " } else { '' }
 
-        $lines.Add("### $num. $($f.ControlId) — $($f.Title)$licFlag")
+        $lines.Add("### $num. $(EscMd $f.ControlId) — $(EscMd $f.Title)$licFlag")
         $lines.Add("")
         if ($licNote) { $lines.Add($licNote); $lines.Add("") }
-        $lines.Add("**Risk:** $($f.Detail)")
+        $lines.Add("**Risk:** $(EscMd $f.Detail)")
         $lines.Add("")
-        if ($f.CurrentValue) { $lines.Add("**Current state:** ``$($f.CurrentValue)``  ") }
-        if ($f.RequiredValue) { $lines.Add("**Required state:** ``$($f.RequiredValue)``  ") }
+        if ($f.CurrentValue) { $lines.Add("**Current state:** ``$(EscMd $f.CurrentValue)``  ") }
+        if ($f.RequiredValue) { $lines.Add("**Required state:** ``$(EscMd $f.RequiredValue)``  ") }
         $lines.Add("")
 
         # Remediation
@@ -125,20 +137,24 @@ function Publish-NRGRemediationPlaybook {
         if ($remedy) {
             $lines.Add("**Remediation:**  ")
             $lines.Add("")
-            # If it looks like PowerShell, wrap in code block
+            # If it looks like PowerShell, wrap in code block. We keep the
+            # remediation text literal inside the fence (it's meant to be
+            # copy-paste runnable), but neutralize any embedded triple-backtick
+            # sequence that would break out of the fence.
             if ($remedy -match 'Set-|New-|Enable-|Connect-|Get-|\$') {
+                $safeRemedy = ([string]$remedy) -replace '```', "``'``'``"
                 $lines.Add('```powershell')
-                $lines.Add($remedy)
+                $lines.Add($safeRemedy)
                 $lines.Add('```')
             } else {
-                $lines.Add($remedy)
+                $lines.Add((EscMd $remedy))
             }
             $lines.Add("")
         }
 
         # Framework citations
         if ($f.FrameworkIds -and @($f.FrameworkIds).Count -gt 0) {
-            $citations = ($f.FrameworkIds | ForEach-Object { $_ }) -join ' · '
+            $citations = ($f.FrameworkIds | ForEach-Object { EscMd $_ }) -join ' · '
             $lines.Add("**Frameworks:** $citations  ")
             $lines.Add("")
         }
@@ -210,7 +226,7 @@ function Publish-NRGRemediationPlaybook {
         $null = $sb.AppendLine("| Control | Current State | Required |")
         $null = $sb.AppendLine("|---------|--------------|---------|")
         foreach ($f in ($partials | Select-Object -First 20)) {
-            $null = $sb.AppendLine("| $($f.ControlId) — $($f.Title) | $($f.CurrentValue ?? 'See report') | $($f.RequiredValue ?? 'See report') |")
+            $null = $sb.AppendLine("| $(EscMd $f.ControlId) — $(EscMd $f.Title) | $(EscMd ($f.CurrentValue ?? 'See report')) | $(EscMd ($f.RequiredValue ?? 'See report')) |")
         }
         $null = $sb.AppendLine()
     }
@@ -268,8 +284,8 @@ function Publish-NRGRemediationPlaybook {
         foreach ($f in $topFindings) {
             $ctrl = $controls[$f.ControlId]
             $bizRisk = if ($ctrl -and $ctrl.BusinessRisk) { $ctrl.BusinessRisk } else { $f.Detail }
-            $null = $exec.AppendLine("**$n. $($f.Title)**  ")
-            $null = $exec.AppendLine("$bizRisk  ")
+            $null = $exec.AppendLine("**$n. $(EscMd $f.Title)**  ")
+            $null = $exec.AppendLine("$(EscMd $bizRisk)  ")
             $null = $exec.AppendLine("")
             $n++
         }
