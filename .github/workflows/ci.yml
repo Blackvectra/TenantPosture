@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pester:
+    name: Pester Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Pester (>= 5.5.0)
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name Pester -MinimumVersion 5.5.0 -Force -SkipPublisherCheck
+          (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1).Version
+
+      - name: Run Pester
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = './Testing/NRG.Security.Tests.ps1'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = 'pester-results.xml'
+          $config.TestResult.OutputFormat = 'NUnitXml'
+          Invoke-Pester -Configuration $config
+
+      - name: Upload Pester results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pester-results
+          path: pester-results.xml
+          if-no-files-found: warn
+
+  psscriptanalyzer:
+    name: PSScriptAnalyzer
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name PSScriptAnalyzer -Force
+
+      - name: Run analyzer
+        shell: pwsh
+        run: |
+          $settings = Resolve-Path ./PSScriptAnalyzerSettings.psd1
+          $results = Invoke-ScriptAnalyzer -Path . -Recurse -Settings $settings
+
+          if (-not $results) {
+            Write-Host "PSScriptAnalyzer: clean." -ForegroundColor Green
+            exit 0
+          }
+
+          $errors   = @($results | Where-Object Severity -eq 'Error')
+          $warnings = @($results | Where-Object Severity -eq 'Warning')
+          $infos    = @($results | Where-Object Severity -eq 'Information')
+
+          Write-Host ''
+          Write-Host 'PSScriptAnalyzer summary:' -ForegroundColor Cyan
+          Write-Host ('  Errors:        {0}' -f $errors.Count)
+          Write-Host ('  Warnings:      {0}' -f $warnings.Count)
+          Write-Host ('  Informational: {0}' -f $infos.Count)
+          Write-Host ''
+
+          if ($errors.Count -gt 0) {
+            Write-Host 'Errors (CI fails on these):' -ForegroundColor Red
+            $errors | Format-Table RuleName,Severity,ScriptName,Line,Message -AutoSize -Wrap
+          }
+          if ($warnings.Count -gt 0) {
+            Write-Host 'Warnings (informational — does not fail CI):' -ForegroundColor Yellow
+            $warnings | Format-Table RuleName,Severity,ScriptName,Line,Message -AutoSize -Wrap
+          }
+
+          if ($errors.Count -gt 0) {
+            throw ("PSScriptAnalyzer found {0} Error-severity finding(s)." -f $errors.Count)
+          }
+
+  manifest:
+    name: Module Manifest + controls.json
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test-ModuleManifest
+        shell: pwsh
+        run: |
+          $m = Test-ModuleManifest -Path ./NRG-Assessment.psd1 -ErrorAction Stop
+          Write-Host ('Manifest valid: {0} v{1}' -f $m.Name, $m.Version)
+          Write-Host ('FunctionsToExport count: {0}' -f $m.ExportedFunctions.Count)
+          Write-Host ('PSEdition: {0}' -f ($m.CompatiblePSEditions -join ', '))
+          Write-Host ('Required modules: {0}' -f $m.RequiredModules.Count)
+
+      - name: Validate controls.json parses
+        shell: pwsh
+        run: |
+          $j = Get-Content -LiteralPath ./Config/controls.json -Raw | ConvertFrom-Json -ErrorAction Stop
+          if (-not $j.controls) { throw 'controls.json missing top-level "controls" array.' }
+          Write-Host ('controls.json: {0} controls' -f $j.controls.Count)
