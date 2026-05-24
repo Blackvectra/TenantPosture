@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 #
-# Test-NRGControl-DNS.ps1  (v4.5.5)
+# Test-NRGControlDNS.ps1  (v4.5.6)
 # Evaluates DNS email authentication controls.
 # SCORING ONLY — no DNS queries, reads from module state.
 #
