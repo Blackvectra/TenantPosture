@@ -22,6 +22,77 @@
 # Validated FQDN pattern — reused for all domain validation in this file
 $script:DomainPattern = '^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
 
+# SSRF guard for hostnames returned by DNS (MX records, etc.).
+# Returns $null if the host is safe to probe, or a string describing why it was refused.
+# A malicious DNS response could direct a TCP/TLS probe at internal RFC1918 names,
+# `localhost`, cloud-metadata-adjacent names, or link-local addresses. We re-validate
+# the FQDN shape, block explicit internal-only suffixes, then resolve to IPs and
+# refuse to connect to RFC1918 / loopback / link-local / IPv6 ULA / IPv6 link-local.
+function Test-NRGSafeProbeTarget {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $HostName)
+
+    if ([string]::IsNullOrWhiteSpace($HostName)) {
+        return 'empty hostname'
+    }
+
+    # 1. Must match the same FQDN pattern we use for tenant domains.
+    #    This excludes IPv4 literals (TLD is letters only) and any bare hostname.
+    if ($HostName -notmatch $script:DomainPattern) {
+        return "hostname '$HostName' failed FQDN validation"
+    }
+
+    # 2. Explicit deny-list of internal-only hostnames and suffixes.
+    $lower = $HostName.ToLowerInvariant()
+    if ($lower -eq 'localhost' -or $lower -eq 'localhost.localdomain') {
+        return "hostname '$HostName' is a loopback alias"
+    }
+    if ($lower -like '*.local' -or $lower -like '*.internal') {
+        return "hostname '$HostName' uses an internal-only suffix"
+    }
+    if ($lower -eq 'metadata.google.internal') {
+        return "hostname '$HostName' is a cloud metadata endpoint"
+    }
+    # Belt-and-suspenders — the FQDN regex above should already exclude IPv4 literals,
+    # but if somehow a 169.254.x.x dotted-quad slipped through we want to catch it.
+    if ($HostName -match '^169\.254\.') {
+        return "hostname '$HostName' is link-local"
+    }
+
+    # 3. Resolve and inspect every returned address.
+    try {
+        $addresses = [System.Net.Dns]::GetHostAddresses($HostName)
+    } catch {
+        return "DNS resolution failed: $($_.Exception.Message)"
+    }
+    if (-not $addresses -or $addresses.Count -eq 0) {
+        return "no addresses returned for '$HostName'"
+    }
+
+    foreach ($addr in $addresses) {
+        $ipStr = $addr.ToString()
+        if ($addr.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork) {
+            # IPv4: block RFC1918, loopback, link-local
+            $bytes = $addr.GetAddressBytes()
+            $b0 = $bytes[0]; $b1 = $bytes[1]
+            if ($b0 -eq 10)                                  { return "address $ipStr is RFC1918 10/8" }
+            if ($b0 -eq 172 -and $b1 -ge 16 -and $b1 -le 31) { return "address $ipStr is RFC1918 172.16/12" }
+            if ($b0 -eq 192 -and $b1 -eq 168)                { return "address $ipStr is RFC1918 192.168/16" }
+            if ($b0 -eq 127)                                 { return "address $ipStr is loopback 127/8" }
+            if ($b0 -eq 169 -and $b1 -eq 254)                { return "address $ipStr is link-local 169.254/16" }
+        } elseif ($addr.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
+            # IPv6: block loopback (::1), link-local (fe80::/10), ULA (fc00::/7)
+            if ([System.Net.IPAddress]::IsLoopback($addr)) { return "address $ipStr is IPv6 loopback" }
+            if ($addr.IsIPv6LinkLocal)                     { return "address $ipStr is IPv6 link-local (fe80::/10)" }
+            $b0 = $addr.GetAddressBytes()[0]
+            # fc00::/7 — high 7 bits are 1111110 (0xFC or 0xFD)
+            if (($b0 -band 0xFE) -eq 0xFC)                 { return "address $ipStr is IPv6 ULA (fc00::/7)" }
+        }
+    }
+
+    return $null
+}
+
 function Invoke-NRGCollectDNSEmailRecords {
     [CmdletBinding()]
     param(
@@ -34,7 +105,12 @@ function Invoke-NRGCollectDNSEmailRecords {
             }
             return $true
         })]
-        [string[]] $Domains
+        [string[]] $Domains,
+
+        # Per-domain time budget (seconds) for DNS + TLS + crt.sh probes.
+        # Prevents one slow tenant from stretching collection into the minute range.
+        [ValidateRange(10, 600)]
+        [int] $TimeoutSec = 60
     )
 
     $result = @{
@@ -76,6 +152,12 @@ function Invoke-NRGCollectDNSEmailRecords {
                 Write-Warning "Skipping invalid domain: $domain"
                 continue
             }
+
+            # Per-domain time budget — a hung TLS probe (5s), 30s crt.sh fetch,
+            # plus multiple DNS lookups can compound into the minute range. With
+            # many tenants this adds up, so we cap the total at $TimeoutSec and
+            # skip the long-tail sub-steps (TLS probe, crt.sh) once exceeded.
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
             $d = @{
                 Domain  = $domain
@@ -280,6 +362,14 @@ function Invoke-NRGCollectDNSEmailRecords {
                 $d.Errors += "CAA: $($_.Exception.Message)"
             }
 
+            # Budget check after the DNS section — if we've already burned the
+            # budget on slow lookups, skip the long-tail probes (TLS + crt.sh).
+            if ($sw.Elapsed.TotalSeconds -gt $TimeoutSec) {
+                $d.Errors += "TimeBudget: exceeded ${TimeoutSec}s before TLS probe; skipping TLS probe and crt.sh"
+                $domainResults[$domain] = $d
+                continue
+            }
+
             # ── TLS certificate inspection (autodiscover + MX hostname) ──────
             # NIST 800-53 SC-17 — verify certs haven't expired and are issued by
             # a trusted CA. We probe port 443 on autodiscover.<domain> and on
@@ -291,18 +381,35 @@ function Invoke-NRGCollectDNSEmailRecords {
                 $firstMx = [string]$d.MX[0].Exchange
                 # MX hostnames sometimes end with a trailing dot — strip it
                 $firstMx = $firstMx.TrimEnd('.')
-                if ($firstMx) { $tlsTargets['MailHost'] = $firstMx }
+                # SSRF guard — MX values are attacker-influenced DNS data. Re-validate
+                # the FQDN, deny internal-only suffixes, and refuse to connect to
+                # RFC1918 / loopback / link-local / IPv6 ULA addresses.
+                if ($firstMx) {
+                    $refusalReason = Test-NRGSafeProbeTarget -HostName $firstMx
+                    if ($refusalReason) {
+                        $d.Errors += "TLSCerts.MailHost: refused MX target '$firstMx' — $refusalReason"
+                        $d.TLSCerts['MailHost'] = @{ Hostname = $firstMx; Error = "Refused: $refusalReason" }
+                    } else {
+                        $tlsTargets['MailHost'] = $firstMx
+                    }
+                }
             }
 
             foreach ($role in $tlsTargets.Keys) {
                 $hostname = $tlsTargets[$role]
                 if (-not $hostname) { continue }
+
+                # Resource-leak fix: wrap the entire TLS-inspection block in
+                # try/finally and dispose tcpClient + sslStream in the finally
+                # block. Previously, an exception in AuthenticateAsClient left
+                # the sockets dangling until GC.
+                $tcpClient = $null
+                $sslStream = $null
                 try {
                     $tcpClient = [System.Net.Sockets.TcpClient]::new()
                     # 5-second connect timeout — many MX hosts block 443
                     $iar = $tcpClient.BeginConnect($hostname, 443, $null, $null)
                     if (-not $iar.AsyncWaitHandle.WaitOne(5000, $false)) {
-                        $tcpClient.Close()
                         $d.TLSCerts[$role] = @{ Hostname = $hostname; Error = 'Connect timeout' }
                         continue
                     }
@@ -328,11 +435,19 @@ function Invoke-NRGCollectDNSEmailRecords {
                                           elseif ($days -lt 30) { 'ExpiringWithin30' }
                                           else { 'OK' }
                     }
-                    $sslStream.Dispose()
-                    $tcpClient.Close()
                 } catch {
                     $d.TLSCerts[$role] = @{ Hostname = $hostname; Error = $_.Exception.Message }
+                } finally {
+                    if ($sslStream) { try { $sslStream.Dispose() } catch {} }
+                    if ($tcpClient) { try { $tcpClient.Dispose() } catch {} }
                 }
+            }
+
+            # Budget check after TLS — skip crt.sh if we've exceeded the budget.
+            if ($sw.Elapsed.TotalSeconds -gt $TimeoutSec) {
+                $d.Errors += "TimeBudget: exceeded ${TimeoutSec}s after TLS probe; skipping crt.sh"
+                $domainResults[$domain] = $d
+                continue
             }
 
             # ── Certificate Transparency log lookup via crt.sh (RFC 6962) ────
@@ -383,6 +498,12 @@ function Invoke-NRGCollectDNSEmailRecords {
                 }
             } catch {
                 $d.CTLog.QueryError = $_.Exception.Message
+            }
+
+            # Final budget check — log overrun so operators can see which domains
+            # are pushing past the per-domain budget even after all sub-steps ran.
+            if ($sw.Elapsed.TotalSeconds -gt $TimeoutSec) {
+                $d.Errors += "TimeBudget: total time $([int]$sw.Elapsed.TotalSeconds)s exceeded ${TimeoutSec}s budget"
             }
 
             $domainResults[$domain] = $d
