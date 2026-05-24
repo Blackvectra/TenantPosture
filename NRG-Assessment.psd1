@@ -21,7 +21,6 @@
     FunctionsToExport = @(
         # ── Lib ───────────────────────────────────────────────────────────────
         'Add-NRGFinding',
-        'Get-NRGSafeProperty',
         'Get-NRGFindings',
         'Clear-NRGFindings',
         'Register-NRGException',
@@ -59,7 +58,9 @@
         'Invoke-NRGCollectSharePoint',
         'Invoke-NRGCollectTeams',
         'Invoke-NRGCollectPurview',
-        'Invoke-NRGCollectIntune',
+        'Invoke-NRGCollectIntuneEndpointSecurity',
+        'Invoke-NRGCollectIntuneDeviceCompliance',
+        'Invoke-NRGCollectIntuneAppProtection',
         'Invoke-NRGCollectPowerPlatform',
 
         # ── Evaluators — AAD ──────────────────────────────────────────────────
