@@ -462,7 +462,10 @@ function Publish-NRGDeltaReport {
     $null = $sb.AppendLine()
     $null = $sb.AppendLine("---")
     $null = $sb.AppendLine("*NRG-Assessment v$(EscMdStrict ($Metadata.ToolVersion ?? '4.5.5')) · NRG Technology Services · $currDate*")
-    $toolVer  = EscMdStrict ([string]($Metadata.ToolVersion ?? '4.5.5'))
+    # Audit fix (v4.6.x LOW): the prior `$toolVer = EscMdStrict ...` assignment
+    # on this line was dead — the value is already inlined into the footer
+    # AppendLine above and no other consumer reads $toolVer. Removed to keep
+    # the file lint-clean under PSReviewUnusedVariable.
 
     $sb.ToString() | Out-File -LiteralPath $OutputPath -Encoding utf8
 }

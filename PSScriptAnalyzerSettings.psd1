@@ -7,6 +7,10 @@
     #
     # CI logic lives in .github/workflows/ci.yml — this file only configures the
     # rule set the analyzer evaluates against.
+    #
+    # SUPPRESSION POLICY: every excluded rule below carries a rationale + a
+    # documented sunset path (v5.0 cleanup, Phase 4 ship, etc). Suppressions
+    # are not free — they hide signal — so we treat them as technical debt.
 
     Severity = @('Error', 'Warning')
 
@@ -35,6 +39,21 @@
         # (Get-NRGFindings returns a collection, Clear-NRGFindings clears all).
         # The plural form better reflects the collection semantics than the
         # analyzer's singular-noun convention.
-        'PSUseSingularNouns'
+        'PSUseSingularNouns',
+
+        # The 6 Apply-NRG* write-mode functions (Apply-NRGAADLegacyAuth,
+        # Apply-NRGAADMFA, Apply-NRGEXOMailboxAudit, Apply-NRGEXOSmtpAuth,
+        # Apply-NRGEXOAutoForward, Apply-NRGDefenderPreset) use the unapproved
+        # "Apply" verb. "Apply-" is the deliberate verb chosen for the write-
+        # mode remediation surface because it pairs naturally with the
+        # operator workflow ("apply the baseline to a tenant") and the
+        # existing Apply-NRGBaseline.ps1 orchestrator. Renaming to
+        # Set-NRGBaselineAAD* / Set-NRGBaselineEXO* would break operator
+        # documentation, training material, and muscle memory built up across
+        # multiple client engagements. Rename is deferred to v5.0 where it
+        # can ship alongside the other breaking changes already planned for
+        # that release. Until then, this exclusion is the explicit accept-
+        # the-debt marker. Re-evaluate when v5.0 ships.
+        'PSUseApprovedVerbs'
     )
 }

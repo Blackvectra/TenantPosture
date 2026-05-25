@@ -25,6 +25,13 @@ $env:MSAL_DISABLE_TOKENBROKER = '1'
 
 $ErrorActionPreference = 'Stop'
 
+# OWASP ASVS V16.4.1 — strict mode catches uninitialized variables, property
+# access on $null, and indexing past array end. Activated module-wide so every
+# dot-sourced collector/evaluator/publisher runs under the same semantics. The
+# Pester invariant in Testing/NRG.Security.Tests.ps1 enforces presence of this
+# directive in production code going forward.
+Set-StrictMode -Version Latest
+
 $script:NRGAssessmentVersion = '4.6.1'
 $script:NRGModuleRoot        = $PSScriptRoot
 
