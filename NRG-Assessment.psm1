@@ -32,7 +32,7 @@ $ErrorActionPreference = 'Stop'
 # directive in production code going forward.
 Set-StrictMode -Version Latest
 
-$script:NRGAssessmentVersion = '4.6.1'
+$script:NRGAssessmentVersion = '4.6.2'
 $script:NRGModuleRoot        = $PSScriptRoot
 
 # Thread-safe collections for module state
@@ -119,6 +119,7 @@ $script:ExportedFunctions = @(
     'Get-NRGFrameworkCitations', 'Get-NRGFrameworkDefinitions',
     'Get-NRGFindingRiskCost', 'Get-NRGAggregateRisk',
     'Set-NRGSensitiveFileAcl',
+    'Get-NRGTenantLicenseProfile', 'Test-NRGLicenseRequirementMet',
 
     # ── Collectors — AAD ──────────────────────────────────────────────────────
     'Invoke-NRGCollectAADAuthPolicies', 'Invoke-NRGCollectAADCAPolicies',
