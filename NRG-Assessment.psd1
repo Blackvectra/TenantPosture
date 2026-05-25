@@ -64,6 +64,7 @@
         'Invoke-NRGCollectIntuneDeviceCompliance',
         'Invoke-NRGCollectIntuneAppProtection',
         'Invoke-NRGCollectPowerPlatform',
+        'Invoke-NRGCollectM365Copilot',
 
         # ── Evaluators — AAD ──────────────────────────────────────────────────
         'Test-NRGControlAADLegacyAuth',

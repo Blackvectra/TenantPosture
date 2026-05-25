@@ -310,6 +310,12 @@ if (-not $skipCollection) {
         Invoke-NRGCollector 'Invoke-NRGCollectPurview'
     }
 
+    # Copilot collector runs after Purview so it can reuse label/DLP/audit raw data
+    if ($conn.Graph) {
+        Write-Host "  [*] M365 Copilot: Licensing, label alignment, DLP coverage, Studio bots..."
+        Invoke-NRGCollector 'Invoke-NRGCollectM365Copilot'
+    }
+
     # ── Run evaluators ───────────────────────────────────────────────────────
     Write-Host ""
     Write-Host "[-] Running evaluators..." -ForegroundColor Cyan
