@@ -458,6 +458,102 @@
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
     {
+      "ControlId": "DNS-2.1",
+      "Title": "DKIM Key Rotation Cadence",
+      "Description": "DKIM signing keys are rotated on a documented cadence (target: <= 365 days) for each sending domain.",
+      "BusinessRisk": "Long-lived DKIM keys broaden the impact of a key-compromise event and weaken DMARC reliance on DKIM signatures. Microsoft does not auto-rotate customer-managed DKIM keys, so many tenants run keys older than two years.",
+      "Severity": "Medium",
+      "Workload": "DNS",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "DNS-EmailRecords",
+      "EvaluatorFunction": "Test-NRGControlDNSDkimRotation",
+      "Remediation": "Rotate DKIM keys: Set-DkimSigningConfig -Identity domain.com -KeyCreationTime (Get-Date) -BodyCanonicalization Relaxed -HeaderCanonicalization Relaxed. Plan a 12-month cadence and document rotation in the change record.",
+      "References": {
+        "CIS": "2.2.1",
+        "SCuBA": "",
+        "NIST": "SC-12, SC-13, SC-17",
+        "CMMC": "SC.L2-3.13.10",
+        "MITRE": [
+          "T1566",
+          "T1606.001"
+        ]
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "DNS-2.2",
+      "Title": "CAA Record Restricts Certificate Issuance",
+      "Description": "DNS Certification Authority Authorization (CAA) records (RFC 8659) name the approved CAs for the domain.",
+      "BusinessRisk": "Without CAA, any publicly trusted CA may issue certificates for the domain. A phishing-driven approval at a non-approved CA has no DNS-level brake, enabling on-path TLS interception or impersonation.",
+      "Severity": "Medium",
+      "Workload": "DNS",
+      "Category": "Network",
+      "Automated": true,
+      "CollectorDependency": "DNS-EmailRecords",
+      "EvaluatorFunction": "Test-NRGControlDNSCAA",
+      "Remediation": "Publish CAA records at the registrar naming approved CAs. Example: 'domain.com. IN CAA 0 issue \"digicert.com\"' and 'domain.com. IN CAA 0 issuewild \";\"' to deny wildcard issuance. Include 'iodef' contact email for mis-issuance reports.",
+      "References": {
+        "CIS": "2.2.5",
+        "SCuBA": "",
+        "NIST": "SC-12, SC-17, CM-7",
+        "CMMC": "SC.L2-3.13.10",
+        "MITRE": [
+          "T1583.001",
+          "T1606.001"
+        ]
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "DNS-2.3",
+      "Title": "TLS Certificate Expiry on Mail Hostnames",
+      "Description": "TLS certificates on autodiscover and mail hostnames have at least 90 days of remaining validity.",
+      "BusinessRisk": "Expired TLS certs break autodiscover, Outlook on the web, and mail flow. Last-minute renewals invite errors and rush approvals at unauthorized CAs.",
+      "Severity": "High",
+      "Workload": "DNS",
+      "Category": "Network",
+      "Automated": true,
+      "CollectorDependency": "DNS-EmailRecords",
+      "EvaluatorFunction": "Test-NRGControlDNSTLSCertExpiry",
+      "Remediation": "Renew TLS certs at least 30 days before expiry. Automate renewal via ACME (Let's Encrypt) or your registrar's managed cert service. Alert when DaysUntilExpiry drops below 30.",
+      "References": {
+        "CIS": "2.2.5",
+        "SCuBA": "",
+        "NIST": "SC-12, SC-17",
+        "CMMC": "SC.L2-3.13.10",
+        "MITRE": [
+          "T1557",
+          "T1600.001"
+        ]
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "DNS-2.4",
+      "Title": "Certificate Transparency Log Hygiene",
+      "Description": "All certs issued for the domain (visible in CT logs per RFC 6962) originate from CAs on the org-approved allowlist.",
+      "BusinessRisk": "A cert issued by an unapproved CA in CT logs may indicate domain takeover, social-engineered cert approval, or use of an unsanctioned third-party service that proxies the domain.",
+      "Severity": "Medium",
+      "Workload": "DNS",
+      "Category": "Network",
+      "Automated": true,
+      "CollectorDependency": "DNS-EmailRecords",
+      "EvaluatorFunction": "Test-NRGControlDNSCertTransparency",
+      "Remediation": "Review crt.sh entries for the domain. Confirm each unrecognized issuer corresponds to an approved third-party (CDN, SaaS subdomain). Add the approved CA to CAA. Subscribe to CT log monitoring (e.g., Cert Spotter) for ongoing mis-issuance detection.",
+      "References": {
+        "CIS": "2.2.5",
+        "SCuBA": "",
+        "NIST": "SC-12, SC-17, AU-6",
+        "CMMC": "AU.L2-3.3.5",
+        "MITRE": [
+          "T1583.001",
+          "T1606.001"
+        ]
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
       "ControlId": "DEF-1.1",
       "Title": "Safe Attachments Enabled with Block Action",
       "Description": "Defender for Office 365 Safe Attachments policies are enabled with action = Block.",

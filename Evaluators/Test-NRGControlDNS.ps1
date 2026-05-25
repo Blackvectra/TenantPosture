@@ -1,11 +1,12 @@
 #Requires -Version 7.0
 #
-# Test-NRGControlDNS.ps1  (v4.5.6)
-# Evaluates DNS email authentication controls.
-# SCORING ONLY — no DNS queries, reads from module state.
+# Test-NRGControlDNS.ps1  (v4.6.1)
+# Evaluates DNS email authentication + PKI hygiene controls.
+# SCORING ONLY — no DNS / HTTPS queries, reads from module state set by
+# Invoke-NRGCollectDNSEmailRecords.
 #
-# NIST SP 800-53: SI-8, SC-8, SC-13
-# MITRE ATT&CK:   T1566, T1036.005, T1557, T1600.001
+# NIST SP 800-53: SI-8, SC-8, SC-12, SC-13, SC-17, AU-6, CM-7
+# MITRE ATT&CK:   T1566, T1036.005, T1557, T1600.001, T1583.001
 #
 
 # ── DNS-1.1 SPF Published and Valid ─────────────────────────────────────────
@@ -285,6 +286,373 @@ function Test-NRGControlDNSDNSSEC {
                 -Detail "$domain does not have DNSSEC enabled. DNS records can be spoofed (cache poisoning, on-path attacks)." `
                 -CurrentValue 'DNSSEC not configured' `
                 -RequiredValue 'DNSSEC enabled at registrar (DS record published)' `
+                -Remediation $control.Remediation
+        }
+    }
+}
+
+# ── DNS-2.1 DKIM Key Rotation Cadence ───────────────────────────────────────
+# Reads $d.DKIM.KeyAgeDays populated by the collector from
+# Get-DkimSigningConfig.KeyCreationTime. Microsoft does not auto-rotate DKIM
+# keys for customer-managed domains, so many tenants run 2+ year old keys.
+# NIST SP 800-57 Part 1 §5.3.6 recommends a documented cryptoperiod for
+# signing keys; 1y is industry standard, 2y is the outer bound.
+function Test-NRGControlDNSDkimRotation {
+    [CmdletBinding()] param()
+
+    $controlId = 'DNS-2.1'
+    $control   = Get-NRGControlById -ControlId $controlId
+    if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
+
+    $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
+    if (-not $dnsData -or -not $dnsData.Success -or $dnsData.Data.DomainCount -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'DNS data not collected'
+        return
+    }
+
+    foreach ($domain in $dnsData.Data.Domains.Keys) {
+        $d = $dnsData.Data.Domains[$domain]
+
+        # Defensive: DKIM block may be missing on older collector data
+        $age = $null
+        if ($d.PSObject.Properties['DKIM'] -or ($d -is [hashtable] -and $d.ContainsKey('DKIM'))) {
+            $dkim = $d.DKIM
+            if ($dkim) {
+                if ($dkim -is [hashtable] -and $dkim.ContainsKey('KeyAgeDays')) {
+                    $age = $dkim['KeyAgeDays']
+                } elseif ($dkim.PSObject.Properties['KeyAgeDays']) {
+                    $age = $dkim.KeyAgeDays
+                }
+            }
+        }
+
+        if ($null -eq $age) {
+            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain DKIM rotation age unknown — selector not found or M365 default key (no customer-managed KeyCreationTime)." `
+                -CurrentValue 'KeyAgeDays: unknown'
+            continue
+        }
+
+        $ageInt = [int]$age
+        if ($ageInt -le 365) {
+            Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain DKIM key age is $ageInt days — within the 365-day cryptoperiod recommended by NIST SP 800-57." `
+                -CurrentValue "KeyAgeDays: $ageInt"
+        } elseif ($ageInt -le 730) {
+            Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain DKIM key is $ageInt days old — over 1 year, rotation recommended (NIST SP 800-57 cryptoperiod guidance)." `
+                -CurrentValue "KeyAgeDays: $ageInt" -RequiredValue 'KeyAgeDays <= 365' `
+                -Remediation $control.Remediation
+        } else {
+            Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain DKIM key is $ageInt days old — over 2 years, significant rotation gap. Long-lived signing keys increase the impact of a key-compromise event." `
+                -CurrentValue "KeyAgeDays: $ageInt" -RequiredValue 'KeyAgeDays <= 365' `
+                -Remediation $control.Remediation
+        }
+    }
+}
+
+# ── DNS-2.2 CAA Record Restricts Cert Issuance ──────────────────────────────
+# Reads $d.CAA populated by the collector from Resolve-DnsName -Type CAA.
+# Absence of CAA means any publicly trusted CA may issue certs for the domain.
+# RFC 8659 — DNS Certification Authority Authorization.
+function Test-NRGControlDNSCAA {
+    [CmdletBinding()] param()
+
+    $controlId = 'DNS-2.2'
+    $control   = Get-NRGControlById -ControlId $controlId
+    if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
+
+    $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
+    if (-not $dnsData -or -not $dnsData.Success -or $dnsData.Data.DomainCount -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'DNS data not collected'
+        return
+    }
+
+    foreach ($domain in $dnsData.Data.Domains.Keys) {
+        $d = $dnsData.Data.Domains[$domain]
+
+        $caa = $null
+        if ($d -is [hashtable] -and $d.ContainsKey('CAA')) { $caa = $d['CAA'] }
+        elseif ($d.PSObject.Properties['CAA'])             { $caa = $d.CAA }
+
+        if (-not $caa -or -not $caa.Present) {
+            Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "No CAA record published for $domain — any publicly trusted CA may issue certs for this domain. Phishing-driven mis-issuance has no DNS-level brake." `
+                -CurrentValue 'No CAA record' `
+                -RequiredValue 'CAA issue/issuewild record naming approved CA(s) per RFC 8659' `
+                -Remediation $control.Remediation
+            continue
+        }
+
+        $issuance = @($caa.IssuanceAllowed ?? @())
+        $wildcard = @($caa.WildcardAllowed ?? @())
+
+        # Treat ";" as RFC 8659 deny-all. If issuance is empty, or all entries are
+        # the literal deny token, and no wildcard override is present, it is a
+        # deny-all configuration — usually a misconfig, occasionally intentional.
+        $issuanceTrim = @($issuance | ForEach-Object { ([string]$_).Trim() })
+        $allDenyIssue = ($issuanceTrim.Count -eq 0) -or
+                        (-not ($issuanceTrim | Where-Object { $_ -and $_ -ne ';' }))
+        $hasWildcardOverride = ($wildcard.Count -gt 0)
+
+        if ($allDenyIssue -and -not $hasWildcardOverride) {
+            Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain CAA is deny-all (no 'issue' or 'issuewild' values present) and no wildcard exception is set. Cert renewal from the org's actual CA will fail. Verify this is intentional." `
+                -CurrentValue ("issue: [" + ($issuanceTrim -join ',') + "], issuewild: [" + (($wildcard -join ',')) + "]") `
+                -RequiredValue 'At least one approved CA listed in issue= or issuewild='
+        } else {
+            $allowedList = @($issuance + $wildcard | Where-Object { $_ -and $_ -ne ';' } | Sort-Object -Unique)
+            Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain has a restrictive CAA allowlist ($($allowedList.Count) CA entry/entries) — RFC 8659 compliant." `
+                -CurrentValue ('Allowed CAs: ' + ($allowedList -join ', '))
+        }
+    }
+}
+
+# ── DNS-2.3 TLS Certificate Expiry on Mail Hostnames ────────────────────────
+# Reads $d.TLSCerts.Autodiscover and $d.TLSCerts.MailHost populated by the
+# collector from a port-443 SslStream probe. Surfaces the soonest expiry per
+# domain so help desk can plan renewals.
+function Test-NRGControlDNSTLSCertExpiry {
+    [CmdletBinding()] param()
+
+    $controlId = 'DNS-2.3'
+    $control   = Get-NRGControlById -ControlId $controlId
+    if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
+
+    $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
+    if (-not $dnsData -or -not $dnsData.Success -or $dnsData.Data.DomainCount -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'DNS data not collected'
+        return
+    }
+
+    foreach ($domain in $dnsData.Data.Domains.Keys) {
+        $d = $dnsData.Data.Domains[$domain]
+
+        $tls = $null
+        if ($d -is [hashtable] -and $d.ContainsKey('TLSCerts')) { $tls = $d['TLSCerts'] }
+        elseif ($d.PSObject.Properties['TLSCerts'])             { $tls = $d.TLSCerts }
+
+        if (-not $tls) {
+            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain has no TLS cert data collected." -CurrentValue 'No TLS probe results'
+            continue
+        }
+
+        # Walk every TLSCerts.* sub-key (Autodiscover, MailHost, plus any
+        # future additions). Track the soonest valid expiry.
+        $soonestDays  = $null
+        $soonestHost  = $null
+        $probedCount  = 0
+        $errorCount   = 0
+        $allErrors    = @()
+
+        $tlsKeys = if ($tls -is [hashtable]) { @($tls.Keys) }
+                   else { @($tls.PSObject.Properties.Name) }
+
+        foreach ($role in $tlsKeys) {
+            $cert = if ($tls -is [hashtable]) { $tls[$role] } else { $tls.$role }
+            if (-not $cert) { continue }
+            $probedCount++
+
+            $certHasError = $false
+            $certError    = $null
+            $certDays     = $null
+            $certHost     = $null
+
+            if ($cert -is [hashtable]) {
+                if ($cert.ContainsKey('Error')) { $certError = $cert['Error']; $certHasError = [bool]$certError }
+                if ($cert.ContainsKey('DaysUntilExpiry')) { $certDays = $cert['DaysUntilExpiry'] }
+                if ($cert.ContainsKey('Hostname'))        { $certHost = $cert['Hostname'] }
+            } else {
+                if ($cert.PSObject.Properties['Error'])           { $certError = $cert.Error; $certHasError = [bool]$certError }
+                if ($cert.PSObject.Properties['DaysUntilExpiry']) { $certDays = $cert.DaysUntilExpiry }
+                if ($cert.PSObject.Properties['Hostname'])        { $certHost = $cert.Hostname }
+            }
+
+            if ($certHasError) {
+                $errorCount++
+                $allErrors += "${role}: $certError"
+                continue
+            }
+            if ($null -eq $certDays) { continue }
+
+            $certDaysInt = [int]$certDays
+            if ($null -eq $soonestDays -or $certDaysInt -lt $soonestDays) {
+                $soonestDays = $certDaysInt
+                $soonestHost = "$role ($certHost)"
+            }
+        }
+
+        if ($null -eq $soonestDays) {
+            $errSummary = if ($errorCount -gt 0) { ' Errors: ' + ($allErrors -join '; ') } else { '' }
+            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain has no TLS cert collected for autodiscover or mail hostnames — endpoints may not run HTTPS on 443 or are blocked.$errSummary" `
+                -CurrentValue 'No TLS cert collected'
+            continue
+        }
+
+        $hostLabel = $soonestHost
+        if ($soonestDays -lt 7) {
+            Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "CRITICAL: $hostLabel TLS cert expires in $soonestDays day(s). HTTPS will fail for users and break autodiscover within the week." `
+                -CurrentValue "DaysUntilExpiry: $soonestDays on $hostLabel" `
+                -RequiredValue 'DaysUntilExpiry >= 90' `
+                -Remediation $control.Remediation
+        } elseif ($soonestDays -lt 30) {
+            Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$hostLabel TLS cert expires in $soonestDays days — renewal window is closing. NIST SC-17 requires PKI lifecycle management." `
+                -CurrentValue "DaysUntilExpiry: $soonestDays on $hostLabel" `
+                -RequiredValue 'DaysUntilExpiry >= 90' `
+                -Remediation $control.Remediation
+        } elseif ($soonestDays -lt 90) {
+            Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity 'Medium' -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$hostLabel TLS cert expires in $soonestDays days — schedule renewal." `
+                -CurrentValue "DaysUntilExpiry: $soonestDays on $hostLabel" `
+                -RequiredValue 'DaysUntilExpiry >= 90'
+        } else {
+            Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain TLS certs valid; soonest expiry is $hostLabel at $soonestDays days." `
+                -CurrentValue "DaysUntilExpiry: $soonestDays on $hostLabel"
+        }
+    }
+}
+
+# ── DNS-2.4 Certificate Transparency Log Hygiene ────────────────────────────
+# Reads $d.CTLog populated by the collector from a crt.sh JSON query.
+# Surfaces certs issued for the domain by unknown CAs — possible mis-issuance.
+# RFC 6962 — Certificate Transparency.
+function Test-NRGControlDNSCertTransparency {
+    [CmdletBinding()] param()
+
+    $controlId = 'DNS-2.4'
+    $control   = Get-NRGControlById -ControlId $controlId
+    if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
+
+    # Known-good CA fragments. Matched case-insensitively against the full
+    # crt.sh issuer_name string ("C=US, O=Let's Encrypt, CN=R3" etc.).
+    $knownGoodCAs = @(
+        'DigiCert', "Let's Encrypt", 'Lets Encrypt', 'Sectigo',
+        'GlobalSign', 'GoDaddy', 'Starfield', 'Microsoft',
+        'Comodo', 'Amazon', 'Entrust', 'Buypass', 'IdenTrust'
+    )
+
+    $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
+    if (-not $dnsData -or -not $dnsData.Success -or $dnsData.Data.DomainCount -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'DNS data not collected'
+        return
+    }
+
+    foreach ($domain in $dnsData.Data.Domains.Keys) {
+        $d = $dnsData.Data.Domains[$domain]
+
+        $ct = $null
+        if ($d -is [hashtable] -and $d.ContainsKey('CTLog')) { $ct = $d['CTLog'] }
+        elseif ($d.PSObject.Properties['CTLog'])             { $ct = $d.CTLog }
+
+        if (-not $ct) {
+            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain has no CT log data collected." -CurrentValue 'No CTLog block'
+            continue
+        }
+
+        $queryError = $null
+        $totalCerts = 0
+        $issuers    = @()
+        if ($ct -is [hashtable]) {
+            if ($ct.ContainsKey('QueryError')) { $queryError = $ct['QueryError'] }
+            if ($ct.ContainsKey('TotalCerts')) { $totalCerts = [int]($ct['TotalCerts'] ?? 0) }
+            if ($ct.ContainsKey('Issuers'))    { $issuers    = @($ct['Issuers'] ?? @()) }
+        } else {
+            if ($ct.PSObject.Properties['QueryError']) { $queryError = $ct.QueryError }
+            if ($ct.PSObject.Properties['TotalCerts']) { $totalCerts = [int]($ct.TotalCerts ?? 0) }
+            if ($ct.PSObject.Properties['Issuers'])    { $issuers    = @($ct.Issuers ?? @()) }
+        }
+
+        if ($queryError) {
+            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "crt.sh query failed for ${domain}: $queryError. CT log hygiene cannot be evaluated this run." `
+                -CurrentValue "QueryError: $queryError"
+            continue
+        }
+
+        if ($totalCerts -eq 0) {
+            Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain has zero certs in CT logs — either the domain is unused for HTTPS, or CT monitoring is a blind spot for detecting mis-issuance against this domain." `
+                -CurrentValue 'TotalCerts: 0' `
+                -RequiredValue 'At least one cert in CT logs from an approved CA' `
+                -Remediation $control.Remediation
+            continue
+        }
+
+        # Classify issuers — anything not matching the known-good fragment list
+        # is flagged as suspicious. We allow either an exact substring match or
+        # a regex-escaped match to keep this resilient to issuer string variants.
+        $suspicious = @()
+        foreach ($issuer in $issuers) {
+            $iLower  = ([string]$issuer).ToLowerInvariant()
+            $matched = $false
+            foreach ($ca in $knownGoodCAs) {
+                if ($iLower.Contains($ca.ToLowerInvariant())) { $matched = $true; break }
+            }
+            if (-not $matched) { $suspicious += [string]$issuer }
+        }
+
+        if ($suspicious.Count -eq 0) {
+            Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain has $totalCerts cert(s) in CT logs, all from recognized CAs ($($issuers.Count) issuer(s))." `
+                -CurrentValue ("TotalCerts: $totalCerts; Issuers: " + (($issuers | Select-Object -First 5) -join '; '))
+        } else {
+            $top = ($suspicious | Select-Object -First 3) -join '; '
+            Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain CT logs include $($suspicious.Count) cert(s) from issuer(s) not on the known-good CA list. Investigate possible mis-issuance: $top" `
+                -CurrentValue "Suspicious issuers: $top" `
+                -RequiredValue 'All CT-log issuers match the org-approved CA allowlist' `
                 -Remediation $control.Remediation
         }
     }
