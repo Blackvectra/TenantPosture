@@ -46,7 +46,23 @@ param(
 
     # Run modes
     [switch] $NonInteractive,
+    # Audit fix (v4.6.x MED #6): validate that FromResults / BaselineResults
+    # point at an existing file via -LiteralPath. This refuses wildcard input
+    # ('*'), path-traversal sequences, and silently-missing files before any
+    # downstream Get-Content / republish step touches the path.
+    [ValidateScript({
+        if ([string]::IsNullOrEmpty($_)) { return $true }
+        if ($_ -match '\.\.[\\/]') { throw "Path traversal not allowed in FromResults." }
+        if (-not (Test-Path -LiteralPath $_ -PathType Leaf)) { throw "FromResults file not found: $_" }
+        return $true
+    })]
     [string] $FromResults,
+    [ValidateScript({
+        if ([string]::IsNullOrEmpty($_)) { return $true }
+        if ($_ -match '\.\.[\\/]') { throw "Path traversal not allowed in BaselineResults." }
+        if (-not (Test-Path -LiteralPath $_ -PathType Leaf)) { throw "BaselineResults file not found: $_" }
+        return $true
+    })]
     [string] $BaselineResults,
     # OWASP ASVS V5.1.3 — every DnsDomains entry must be an FQDN before DNS resolver sees it
     [ValidateScript({
@@ -61,6 +77,11 @@ param(
     [switch] $JsonOnly,
     [switch] $WhatIfConnections
 )
+
+# OWASP ASVS V16.4.1 — strict mode at the entry point so the orchestrator
+# uses the same semantics as the module body (uninitialized variable access,
+# property access on $null, indexing past array end all throw).
+Set-StrictMode -Version Latest
 
 # OWASP ASVS V11.2.2 / OSSTMM DN5 — enforce TLS 1.2 minimum (Microsoft endpoints
 # already require this, but defense-in-depth catches dev/test environments where
@@ -197,9 +218,9 @@ if ($needsAction.Count -gt 0) {
 }
 
 # ── FromResults mode — skip collection, just republish ───────────────────────
-if ($FromResults -and (Test-Path $FromResults)) {
+if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
     Write-Host "[-] FromResults mode — regenerating reports from $FromResults" -ForegroundColor Cyan
-    $priorData = Get-Content -Path $FromResults -Raw | ConvertFrom-Json
+    $priorData = Get-Content -LiteralPath $FromResults -Raw -Encoding utf8 | ConvertFrom-Json
     $findings = [object[]]@($priorData.Findings)
     $conn = if ($priorData.Connections) { @{} + $priorData.Connections } else { @{} }
     $reportMetadata = if ($priorData.Metadata) { @{} + $priorData.Metadata } else {
@@ -334,7 +355,17 @@ if (-not $skipCollection) {
     function Invoke-NRGEvaluator { param([string]$fn)
         if (Get-Command $fn -ErrorAction SilentlyContinue) {
             try { & $fn }
-            catch { Write-Warning "Evaluator $($fn) — $($_.Exception.Message.Split([char]10)[0])" }
+            catch {
+                # Strict-mode tightening (v4.6.x audit fix): a property-access
+                # crash on partial collector data now surfaces both as a warning
+                # for the operator console AND as a Register-NRGException so the
+                # incident is captured in the JSON output for follow-up.
+                $errMsg = $_.Exception.Message.Split([char]10)[0]
+                Write-Warning "Evaluator $($fn) — $errMsg"
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    try { Register-NRGException -Source $fn -Message $errMsg } catch { }
+                }
+            }
         }
     }
 
@@ -385,7 +416,7 @@ $rawDataSnapshot = if (Get-Command Get-NRGRawData -ErrorAction SilentlyContinue)
     Exceptions  = (Get-NRGExceptions)
     Coverage    = (Get-NRGCoverage)
     Connections = $conn
-} | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonPath -Encoding utf8
+} | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $jsonPath -Encoding utf8
 Write-Host "  [+] JSON: $jsonPath" -ForegroundColor Green
 Write-Host "      Baseline contains sensitive tenant inventory (CA policies, admin assignments, OAuth apps) — file ACL restricted to current user + admins. Path: $jsonPath" -ForegroundColor Yellow
 
@@ -399,12 +430,19 @@ Write-Host "      Baseline contains sensitive tenant inventory (CA policies, adm
 Set-NRGSensitiveFileAcl -Path $jsonPath
 
 if (-not $JsonOnly) {
+    # ── Audit-finding fix (HIGH #2): every secondary report file gets the same
+    #    ACL hardening as the JSON baseline. They all contain the same tenant
+    #    inventory data (CA policies, admin UPNs, OAuth grants, DMARC records)
+    #    rendered into a different format. Inherited permissions on a shared
+    #    MSP workstation or synced OneDrive would otherwise make these world-
+    #    readable. Set-NRGSensitiveFileAcl is a no-op on non-Windows.
     # Markdown summary
     if (Get-Command Publish-NRGAssessmentSummary -ErrorAction SilentlyContinue) {
         $mdPath = Join-Path $OutputPath "$baseName-assessment.md"
         try {
             Publish-NRGAssessmentSummary -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $mdPath
             Write-Host "  [+] Markdown: $mdPath" -ForegroundColor Green
+            Set-NRGSensitiveFileAcl -Path $mdPath -ErrorAction SilentlyContinue
         } catch { Write-Warning "Markdown publish failed: $($_.Exception.Message)" }
     }
 
@@ -414,6 +452,7 @@ if (-not $JsonOnly) {
         try {
             Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath
             Write-Host "  [+] HTML: $htmlPath" -ForegroundColor Green
+            Set-NRGSensitiveFileAcl -Path $htmlPath -ErrorAction SilentlyContinue
         } catch {
         $stack = $_.ScriptStackTrace
         Write-Warning "HTML failed: $($_.Exception.Message)"
@@ -438,6 +477,8 @@ if (-not $JsonOnly) {
                 -ExecutivePath $execPath
             Write-Host "  [+] Playbook: $pbPath" -ForegroundColor Green
             Write-Host "  [+] Executive: $execPath" -ForegroundColor Green
+            Set-NRGSensitiveFileAcl -Path $pbPath   -ErrorAction SilentlyContinue
+            Set-NRGSensitiveFileAcl -Path $execPath -ErrorAction SilentlyContinue
         } catch { Write-Warning "Playbook publish failed: $($_.Exception.Message)" }
     }
 
@@ -447,6 +488,7 @@ if (-not $JsonOnly) {
         try {
             Publish-NRGRemediationScript -Metadata $reportMetadata -Findings $findings -OutputPath $rsPath
             Write-Host "  [+] Remediation: $rsPath" -ForegroundColor Green
+            Set-NRGSensitiveFileAcl -Path $rsPath -ErrorAction SilentlyContinue
         } catch { Write-Warning "Remediation publish failed: $($_.Exception.Message)" }
     }
 
@@ -456,16 +498,18 @@ if (-not $JsonOnly) {
         try {
             Publish-NRGComplianceMatrix -Metadata $reportMetadata -Findings $findings -OutputPath $xlsxPath
             Write-Host "  [+] XLSX matrix: $xlsxPath" -ForegroundColor Green
+            Set-NRGSensitiveFileAcl -Path $xlsxPath -ErrorAction SilentlyContinue
         } catch { Write-Warning "XLSX publish failed: $($_.Exception.Message)" }
     }
 
     # Delta report (if baseline provided)
-    if ($BaselineResults -and (Test-Path $BaselineResults) -and (Get-Command Publish-NRGDeltaReport -ErrorAction SilentlyContinue)) {
+    if ($BaselineResults -and (Test-Path -LiteralPath $BaselineResults) -and (Get-Command Publish-NRGDeltaReport -ErrorAction SilentlyContinue)) {
         $deltaPath = Join-Path $OutputPath "$baseName-delta.md"
         try {
             Publish-NRGDeltaReport -CurrentFindings $findings -CurrentRawData $rawDataSnapshot -BaselineResultsPath $BaselineResults `
                 -Metadata $reportMetadata -OutputPath $deltaPath
             Write-Host "  [+] Delta: $deltaPath" -ForegroundColor Green
+            Set-NRGSensitiveFileAcl -Path $deltaPath -ErrorAction SilentlyContinue
         } catch { Write-Warning "Delta publish failed: $($_.Exception.Message)" }
     }
 }

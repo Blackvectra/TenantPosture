@@ -13,8 +13,24 @@
 param(
     [string] $OutputPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'sbom\nrg-assessment.cdx.json'),
     [string] $RepoRoot   = (Split-Path -Parent $PSScriptRoot),
-    [string] $Version    = '4.5.5'
+    # Audit fix (v4.6.x LOW): default Version is read from the module manifest
+    # at runtime instead of being a hardcoded constant that drifts every
+    # release. Operators can still override via -Version on the command line.
+    [string] $Version
 )
+
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $manifestPath = Join-Path $RepoRoot 'NRG-Assessment.psd1'
+    if (Test-Path -LiteralPath $manifestPath) {
+        try {
+            $manifestData = Import-PowerShellDataFile -LiteralPath $manifestPath -ErrorAction Stop
+            if ($manifestData.ModuleVersion) { $Version = [string]$manifestData.ModuleVersion }
+        } catch {
+            Write-Warning "Could not read ModuleVersion from manifest, falling back to placeholder: $($_.Exception.Message)"
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($Version)) { $Version = '0.0.0-unknown' }
+}
 
 
 $outputDir = Split-Path -Parent $OutputPath

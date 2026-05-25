@@ -15,6 +15,29 @@
 #
 
 
+# Lazy-init helper. Under Set-StrictMode -Version Latest an unset module-scope
+# variable throws on access. The .psm1 initialises these four variables at
+# module load, but when this file is dot-sourced outside the module (test
+# harness, ad-hoc REPL, Pester runtime context), the initialisation has not
+# run yet. This helper guarantees the state containers exist before any
+# accessor touches them, with no observable behaviour change for the normal
+# module-import path. (v4.6.x audit HIGH #1)
+function Initialize-NRGState {
+    if (-not (Get-Variable -Name NRGFindings -Scope Script -ErrorAction SilentlyContinue)) {
+        $script:NRGFindings = [System.Collections.Generic.List[object]]::new()
+    }
+    if (-not (Get-Variable -Name NRGExceptions -Scope Script -ErrorAction SilentlyContinue)) {
+        $script:NRGExceptions = [System.Collections.Generic.List[object]]::new()
+    }
+    if (-not (Get-Variable -Name NRGCoverage -Scope Script -ErrorAction SilentlyContinue)) {
+        $script:NRGCoverage = [System.Collections.Generic.Dictionary[string,string]]::new()
+    }
+    if (-not (Get-Variable -Name NRGRawData -Scope Script -ErrorAction SilentlyContinue)) {
+        $script:NRGRawData = [System.Collections.Hashtable]::Synchronized(@{})
+    }
+}
+
+
 # ── Finding state ─────────────────────────────────────────────────────────────
 
 function Add-NRGFinding {
@@ -51,6 +74,7 @@ function Add-NRGFinding {
         [object[]] $AffectedObjects = @()
     )
 
+    Initialize-NRGState
     $finding = [PSCustomObject]@{
         ControlId     = $ControlId
         State         = $State
@@ -72,11 +96,13 @@ function Add-NRGFinding {
 
 function Get-NRGFindings {
     [CmdletBinding()] param()
+    Initialize-NRGState
     return @($script:NRGFindings)
 }
 
 function Clear-NRGFindings {
     [CmdletBinding()] param()
+    Initialize-NRGState
     $script:NRGFindings.Clear()
 }
 
@@ -94,6 +120,7 @@ function Register-NRGException {
         [string] $Message
     )
 
+    Initialize-NRGState
     $script:NRGExceptions.Add([PSCustomObject]@{
         Source    = $Source
         Message   = $Message
@@ -103,6 +130,7 @@ function Register-NRGException {
 
 function Get-NRGExceptions {
     [CmdletBinding()] param()
+    Initialize-NRGState
     return @($script:NRGExceptions)
 }
 
@@ -120,11 +148,13 @@ function Register-NRGCoverage {
 
         [string] $Note = ''
     )
+    Initialize-NRGState
     $script:NRGCoverage[$Family] = "$Status|$Note"
 }
 
 function Get-NRGCoverage {
     [CmdletBinding()] param()
+    Initialize-NRGState
     $result = @{}
     foreach ($k in $script:NRGCoverage.Keys) {
         $parts = $script:NRGCoverage[$k] -split '\|', 2
@@ -148,6 +178,7 @@ function Set-NRGRawData {
         [Parameter(Mandatory)]
         $Data
     )
+    Initialize-NRGState
     $script:NRGRawData[$Key] = $Data
 }
 
@@ -157,6 +188,7 @@ function Get-NRGRawData {
         [ValidatePattern('^[A-Z][A-Za-z0-9\-]+$')]
         [string] $Key
     )
+    Initialize-NRGState
     if ($Key) { return $script:NRGRawData[$Key] }
     return $script:NRGRawData
 }

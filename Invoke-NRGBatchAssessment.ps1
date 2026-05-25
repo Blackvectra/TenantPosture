@@ -78,6 +78,9 @@ param(
     [switch] $WhatIf
 )
 
+# OWASP ASVS V16.4.1 — strict mode at entry, same as single-tenant orchestrator.
+Set-StrictMode -Version Latest
+
 # ── Security baseline ─────────────────────────────────────────────────────────
 $env:MSAL_ALLOW_BROKER = '0'
 [System.Net.ServicePointManager]::SecurityProtocol =
@@ -250,10 +253,34 @@ try { Disconnect-MgGraph -ErrorAction SilentlyContinue } catch {}
 
 # ── Batch summary ─────────────────────────────────────────────────────────────
 if (-not (Test-Path -LiteralPath $resolvedOutput)) {
-    New-Item -Path $resolvedOutput -ItemType Directory -Force | Out-Null
+    New-Item -LiteralPath $resolvedOutput -ItemType Directory -Force | Out-Null
 }
 
 $summaryPath = Join-Path $resolvedOutput "batch-summary-$timestamp.md"
+
+# Audit fix (v4.6.x MED #7): every tenant-sourced value gets escaped before
+# Markdown interpolation. clients.json is operator-controlled today, but
+# discipline + parity with Publish-NRGAssessmentSummary keeps the threat
+# model consistent across publishers — and a future code path that loads
+# clients from a partner-portal API would inherit the same protection.
+function EscMd {
+    param([object]$Value)
+    if ($null -eq $Value -or [string]::IsNullOrEmpty([string]$Value)) { return '' }
+    $s = [string]$Value
+    # Strip the high-risk Markdown / HTML control characters. We deliberately
+    # do not call ConvertTo-NRGHtmlSafe here because the module may not have
+    # imported successfully — keep this helper standalone so the batch summary
+    # is still produced even on partial load.
+    $s = $s -replace '&', '&amp;'
+    $s = $s -replace '<', '&lt;'
+    $s = $s -replace '>', '&gt;'
+    $s = $s -replace '\|', '\|'
+    $s = $s -replace '`', '\`'
+    # Trim newlines so a multi-line exception message doesn't smash the table.
+    $s = $s -replace '[\r\n]+', ' '
+    return $s
+}
+
 $sb = [System.Text.StringBuilder]::new()
 $null = $sb.AppendLine("# NRG-Assessment Batch Summary")
 $null = $sb.AppendLine()
@@ -264,7 +291,7 @@ $null = $sb.AppendLine("| Client | Tenant | Status | Time | Report |")
 $null = $sb.AppendLine("|--------|--------|--------|------|--------|")
 foreach ($r in $batchResults) {
     $icon = if ($r.Status -eq 'Success') { '✅' } else { '❌' }
-    $null = $sb.AppendLine("| $($r.ClientName) | $($r.TenantDomain) | $icon $($r.Status) | $($r.ElapsedMin)m | $($r.OutputPath) |")
+    $null = $sb.AppendLine("| $(EscMd $r.ClientName) | $(EscMd $r.TenantDomain) | $icon $(EscMd $r.Status) | $($r.ElapsedMin)m | $(EscMd $r.OutputPath) |")
 }
 
 $failed = @($batchResults | Where-Object { $_.Status -ne 'Success' })
@@ -273,11 +300,19 @@ if ($failed.Count -gt 0) {
     $null = $sb.AppendLine("## Failed Assessments")
     foreach ($f in $failed) {
         $null = $sb.AppendLine()
-        $null = $sb.AppendLine("**$($f.ClientName):** $($f.Error)")
+        $null = $sb.AppendLine("**$(EscMd $f.ClientName):** $(EscMd $f.Error)")
     }
 }
 
 $sb.ToString() | Out-File -LiteralPath $summaryPath -Encoding utf8
+
+# Audit-finding fix (HIGH #2): batch summary includes per-tenant status,
+# tenant domains, and exception messages — same sensitivity tier as the
+# per-client baseline JSON. Apply ACL hardening if helper is loaded
+# (Set-NRGSensitiveFileAcl was exported by the module imported above).
+if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+    Set-NRGSensitiveFileAcl -Path $summaryPath -ErrorAction SilentlyContinue
+}
 
 # ── Final ─────────────────────────────────────────────────────────────────────
 $success = @($batchResults | Where-Object { $_.Status -eq 'Success' }).Count

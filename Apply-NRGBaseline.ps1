@@ -59,6 +59,12 @@ param(
     [switch] $DryRun
 )
 
+# OWASP ASVS V16.4.1 — strict mode at the entry point. Write-mode tool runs
+# the same hardening as the assessor — property access on $null, uninitialized
+# variables, and indexing past array end all throw rather than silently coerce
+# to $null and produce a wrong remediation.
+Set-StrictMode -Version Latest
+
 # OWASP ASVS V11.2.2 — TLS 1.2 minimum
 [System.Net.ServicePointManager]::SecurityProtocol =
     [System.Net.SecurityProtocolType]::Tls12 -bor
@@ -165,7 +171,7 @@ if ($PSCmdlet.ParameterSetName -eq 'FromFile') {
     }
     Write-Host "[-] Loading results from: $ResultsPath" -ForegroundColor Cyan
     try {
-        $raw = Get-Content -LiteralPath $ResultsPath -Raw | ConvertFrom-Json -ErrorAction Stop
+        $raw = Get-Content -LiteralPath $ResultsPath -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
     } catch {
         throw "Failed to parse results JSON: $($_.Exception.Message)"
     }
@@ -260,7 +266,7 @@ if (-not (Test-Path -LiteralPath $ReportsPath)) {
     # -WhatIf:$false — Reports/ is local audit storage, not a tenant change.
     # Without this, New-Item respects $WhatIfPreference and skips the mkdir,
     # then the subsequent WriteAllText fails with "path not found".
-    New-Item -Path $ReportsPath -ItemType Directory -Force -WhatIf:$false | Out-Null
+    New-Item -LiteralPath $ReportsPath -ItemType Directory -Force -WhatIf:$false | Out-Null
 }
 $ts = Get-Date -Format 'yyyyMMdd-HHmmss'
 $rollbackPath = Join-Path $ReportsPath "apply-$ts-rollback.json"
