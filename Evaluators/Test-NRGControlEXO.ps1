@@ -673,3 +673,188 @@ function Test-NRGControlEXOSafeSenderOverride {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$count allowed sender domain(s) in anti-spam policy bypass all EOP filtering. Allowed domains are a common attacker target — if a domain is compromised, all mail from it reaches inboxes unfiltered." -CurrentValue "$count bypass domains configured" -RequiredValue 'Zero allowed sender domains in anti-spam policy' -Remediation $ctrl.Remediation
     }
 }
+
+# ── EXO-7.1 Mailbox Forwarding to External Addresses ─────────────────────────
+# Consumes EXO-Inventory.ForwardingMailboxes. ForwardingSmtpAddress is a
+# server-side persistent exfil channel — common BEC TTP (MITRE T1114.003).
+function Test-NRGControlEXOMailboxForwarding {
+    [CmdletBinding()] param()
+    $cid = 'EXO-7.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+
+    $inv = Get-NRGRawData -Key 'EXO-Inventory'
+    if (-not $inv -or -not $inv.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'EXO inventory data not collected'
+        return
+    }
+
+    $fwd = @($inv.Data.ForwardingMailboxes ?? @())
+    $count = $fwd.Count
+
+    if ($count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail 'No mailboxes have a ForwardingSmtpAddress configured.'
+        return
+    }
+
+    $affected = @($fwd | ForEach-Object {
+        [ordered]@{
+            DisplayName  = [string]$_.UPN
+            ForwardingTo = [string]$_.ForwardingAddress
+        }
+    })
+
+    Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+        -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+        -Detail "$count mailbox(es) auto-forward to external addresses — common BEC persistence (MITRE T1114.003)." `
+        -CurrentValue "$count mailbox(es) forwarding externally" `
+        -RequiredValue 'Zero mailboxes with ForwardingSmtpAddress to external recipients' `
+        -Remediation 'EAC > Recipients > Mailboxes > select mailbox > Manage email forwarding > clear "Forward all email sent to this mailbox". Or: Set-Mailbox -Identity <UPN> -ForwardingSmtpAddress $null -ForwardingAddress $null -DeliverToMailboxAndForward $false. Also recommend an EXO transport rule blocking auto-forward to external recipients (Set-RemoteDomain Default -AutoForwardEnabled $false; mail flow rule: if sender is internal and recipient is external and message type is auto-forward, then reject).' `
+        -AffectedObjects $affected
+}
+
+# ── EXO-7.2 Inbox Rules Forwarding Externally ────────────────────────────────
+# Consumes EXO-Inventory.InboxRulesForwarding. Outlook rules that ForwardTo /
+# RedirectTo / ForwardAsAttachmentTo external recipients — classic
+# post-credential-compromise persistence (MITRE T1114.003) or insider exfil.
+function Test-NRGControlEXOInboxRulesForwarding {
+    [CmdletBinding()] param()
+    $cid = 'EXO-7.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+
+    $inv = Get-NRGRawData -Key 'EXO-Inventory'
+    if (-not $inv -or -not $inv.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'EXO inventory data not collected'
+        return
+    }
+
+    # Only count rules that actually forward externally — the collector also
+    # tracks disabled-rule fingerprints, but for this control we score on the
+    # active exfil surface.
+    $rules = @(@($inv.Data.InboxRulesForwarding ?? @()) | Where-Object { $_.IsExternal })
+    $count = $rules.Count
+
+    if ($count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail 'No inbox rules forward mail externally.'
+        return
+    }
+
+    $affected = @($rules | ForEach-Object {
+        [ordered]@{
+            DisplayName = [string]$_.Mailbox
+            RuleName    = [string]$_.RuleName
+            Recipients  = (@($_.ExternalRecipients) -join ', ')
+        }
+    })
+
+    Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+        -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+        -Detail "$count inbox rule(s) forward externally — attacker persistence (T1114.003) or insider data exfil." `
+        -CurrentValue "$count inbox rule(s) forwarding externally" `
+        -RequiredValue 'Zero inbox rules forwarding to external recipients' `
+        -Remediation 'Find: foreach ($m in Get-Mailbox -ResultSize Unlimited) { Get-InboxRule -Mailbox $m.UserPrincipalName | Where-Object { $_.ForwardTo -or $_.RedirectTo -or $_.ForwardAsAttachmentTo } | Select-Object @{n=''Mailbox'';e={$m.UserPrincipalName}}, Name, ForwardTo, RedirectTo, ForwardAsAttachmentTo }. Disable: Disable-InboxRule -Mailbox <UPN> -Identity <RuleName>. Block at transport layer: Set-RemoteDomain Default -AutoForwardEnabled $false plus a mail flow rule rejecting auto-forwarded mail to external recipients.' `
+        -AffectedObjects $affected
+}
+
+# ── EXO-7.3 Per-User Audit Explicitly Disabled ───────────────────────────────
+# Consumes EXO-Inventory.AuditDisabledMailboxes. Since Jan 2019, mailbox
+# auditing is ON by default org-wide; an explicit AuditEnabled = $false is a
+# deliberate override that creates an IR blind spot.
+function Test-NRGControlEXOAuditDisabledMailboxes {
+    [CmdletBinding()] param()
+    $cid = 'EXO-7.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+
+    $inv = Get-NRGRawData -Key 'EXO-Inventory'
+    if (-not $inv -or -not $inv.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'EXO inventory data not collected'
+        return
+    }
+
+    $disabled = @($inv.Data.AuditDisabledMailboxes ?? @())
+    $count = $disabled.Count
+
+    if ($count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail 'No mailboxes have per-user audit explicitly disabled.'
+        return
+    }
+
+    $affected = @($disabled | ForEach-Object {
+        [ordered]@{
+            DisplayName = [string]$_.UPN
+            MailboxType = [string]$_.MailboxType
+        }
+    })
+
+    Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+        -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+        -Detail "$count mailbox(es) with per-user audit explicitly disabled — incident-response blind spot." `
+        -CurrentValue "$count mailbox(es) AuditEnabled = `$false" `
+        -RequiredValue 'AuditEnabled = $true on every mailbox' `
+        -Remediation 'As of Jan 2019, mailbox audit is enabled by default org-wide. Any AuditEnabled = $false is a deliberate override and almost always wrong. Re-enable: Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false } | Set-Mailbox -AuditEnabled $true. For a single mailbox: Set-Mailbox -Identity <UPN> -AuditEnabled $true.' `
+        -AffectedObjects $affected
+}
+
+# ── EXO-7.4 Per-User SMTP AUTH Override (Legacy Auth) ────────────────────────
+# Consumes EXO-Inventory.SmtpAuthEnabledPerUser. A per-mailbox
+# SmtpClientAuthenticationDisabled = $false overrides the tenant-level disable
+# and re-enables basic-auth SMTP — bypasses MFA and CA. Common attack surface
+# for password spray against legacy mail clients and copiers/scanners.
+function Test-NRGControlEXOSmtpAuthExceptions {
+    [CmdletBinding()] param()
+    $cid = 'EXO-7.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-NRGFrameworkCitations -ControlId $cid
+
+    $inv = Get-NRGRawData -Key 'EXO-Inventory'
+    if (-not $inv -or -not $inv.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'EXO inventory data not collected'
+        return
+    }
+
+    $exceptions = @($inv.Data.SmtpAuthEnabledPerUser ?? @())
+    $count = $exceptions.Count
+
+    if ($count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail 'No mailboxes override the tenant-level SMTP AUTH disable.'
+        return
+    }
+
+    $affected = @($exceptions | ForEach-Object {
+        [ordered]@{
+            DisplayName = [string]$_.UPN
+        }
+    })
+
+    $upnList = (@($exceptions | ForEach-Object { [string]$_.UPN }) -join ', ')
+    $detail  = "$count mailbox(es) override the tenant-level SMTP AUTH disable — legacy auth blast radius. Affected: $upnList"
+    $remediation = 'For each affected mailbox: Set-CASMailbox -Identity <UPN> -SmtpClientAuthenticationDisabled $true. Recommend migrating senders to OAuth-based SMTP (Microsoft Graph sendMail API) or App Passwords with MFA. For multifunction devices/scanners, prefer SMTP relay via on-prem connector with IP allowlist or Direct Send (anonymous) — neither requires basic auth.'
+
+    if ($count -le 5) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail $detail `
+            -CurrentValue "$count per-user SMTP AUTH exception(s)" `
+            -RequiredValue 'Zero per-user SMTP AUTH exceptions' `
+            -Remediation $remediation `
+            -AffectedObjects $affected
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail $detail `
+            -CurrentValue "$count per-user SMTP AUTH exception(s)" `
+            -RequiredValue 'Zero per-user SMTP AUTH exceptions' `
+            -Remediation $remediation `
+            -AffectedObjects $affected
+    }
+}
