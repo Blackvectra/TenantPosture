@@ -494,8 +494,16 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
                 '^\s*Enable-OrganizationCustomization\b',
                 '^\s*Set-MalwareFilterPolicy\b'
             )
+            # Apply-NRGBaseline.ps1 + Apply/ folder are the write-mode tool — they
+            # exist specifically to execute these cmdlets. Exclude from the
+            # read-only posture scan. The rest of the module (collectors,
+            # evaluators, publishers) remains read-only.
             $offenders = @()
             foreach ($file in $script:PsFiles) {
+                if ($file.FullName -match '[/\\]Apply[/\\]' -or
+                    $file.Name -eq 'Apply-NRGBaseline.ps1') {
+                    continue
+                }
                 $lines = Get-Content -LiteralPath $file.FullName
                 for ($i = 0; $i -lt $lines.Count; $i++) {
                     foreach ($pat in $writePatterns) {
@@ -508,7 +516,7 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
                     }
                 }
             }
-            $offenders | Should -BeNullOrEmpty -Because 'This tool is read-only — no tenant writes permitted'
+            $offenders | Should -BeNullOrEmpty -Because 'This tool is read-only — no tenant writes permitted (except in Apply-NRGBaseline write-mode tool)'
         }
     }
 
