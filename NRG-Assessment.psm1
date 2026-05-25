@@ -111,6 +111,7 @@ $script:ExportedFunctions = @(
     'Get-NRGControlDefinitions', 'Get-NRGControlById',
     'Get-NRGFrameworkCitations', 'Get-NRGFrameworkDefinitions',
     'Get-NRGFindingRiskCost', 'Get-NRGAggregateRisk',
+    'Set-NRGSensitiveFileAcl',
 
     # ── Collectors — AAD ──────────────────────────────────────────────────────
     'Invoke-NRGCollectAADAuthPolicies', 'Invoke-NRGCollectAADCAPolicies',

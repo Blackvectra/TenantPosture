@@ -15,6 +15,7 @@ function Test-NRGControlEXOMailboxAudit {
     $controlId = 'EXO-1.1'
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
@@ -54,6 +55,7 @@ function Test-NRGControlEXOSmtpAuth {
     $controlId = 'EXO-1.2'
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
@@ -99,6 +101,7 @@ function Test-NRGControlEXOAutoForward {
     $controlId = 'EXO-1.3'
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
@@ -149,6 +152,7 @@ function Test-NRGControlEXODKIM {
     $controlId = 'EXO-1.4'
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
@@ -198,6 +202,7 @@ function Test-NRGControlEXOAntiPhish {
     $controlId = 'EXO-1.5'
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
@@ -246,6 +251,7 @@ function Test-NRGControlEXOModernAuth {
     $controlId = 'EXO-1.6'
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
@@ -280,6 +286,7 @@ function Test-NRGControlEXOHonorDMARC {
     $controlId = 'EXO-1.7'
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
@@ -346,6 +353,7 @@ function Test-NRGControlEXOCustomerLockbox {
     $controlId = 'EXO-2.5'
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
@@ -354,15 +362,26 @@ function Test-NRGControlEXOCustomerLockbox {
         return
     }
 
-    # Customer Lockbox state is in org config
+    # Customer Lockbox state is in org config — pull it from the collector
+    # output. Prior versions referenced $orgConfig without ever assigning it
+    # (lost in PR conflict resolution) — under StrictMode this silently
+    # killed the evaluator via the loader's try/catch.
+    $orgConfig = $exoData.Data.OrganizationConfig
     if (-not $orgConfig) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'Organization config not collected'
         return
     }
 
-    # CustomerLockBoxEnabled may not be present if E5 not licensed
-    $lockboxEnabled = if ($orgConfig.PSObject.Properties['CustomerLockBoxEnabled']) { $orgConfig.PSObject.Properties['CustomerLockBoxEnabled'].Value } else { $null }
+    # CustomerLockBoxEnabled may not be present if E5 not licensed.
+    # The collector stores OrganizationConfig as a hashtable, so use
+    # ContainsKey rather than PSObject.Properties (which works on both but
+    # is the wrong idiom for a hashtable).
+    $lockboxEnabled = if ($orgConfig -is [System.Collections.IDictionary]) {
+        if ($orgConfig.Contains('CustomerLockBoxEnabled')) { $orgConfig['CustomerLockBoxEnabled'] } else { $null }
+    } elseif ($orgConfig.PSObject.Properties['CustomerLockBoxEnabled']) {
+        $orgConfig.PSObject.Properties['CustomerLockBoxEnabled'].Value
+    } else { $null }
     if ($lockboxEnabled -eq $true) {
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
             -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
@@ -386,6 +405,7 @@ function Test-NRGControlEXOSharedMailbox {
     $controlId = 'EXO-2.6'
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     # Shared mailbox sign-in state requires Graph User.Read.All to check AccountEnabled
     # This data is in AAD-Users if collected

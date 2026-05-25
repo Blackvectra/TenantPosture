@@ -234,6 +234,88 @@ function Publish-NRGDeltaReport {
 
     $toolVer  = EscMdStrict ([string]($Metadata.ToolVersion ?? '4.5.5'))
 
+    # ── Load baseline JSON ──────────────────────────────────────────────────
+    $baselineRaw  = Get-Content -LiteralPath $BaselineResultsPath -Encoding utf8 -Raw | ConvertFrom-Json
+    $baseFindings = @($baselineRaw.Findings ?? $baselineRaw)
+
+    # ── Tenant-ID guard ─────────────────────────────────────────────────────
+    # Refuse to generate a delta report against the wrong client's baseline.
+    # Silently producing nonsense from a mis-targeted baseline is worse than
+    # erroring out — operators have no easy way to spot the mistake otherwise
+    # (the delta report would just show every control as "new" or "regressed"
+    # because the controls *exist in both* but the configuration is for a
+    # different tenant entirely).
+    $baseTenantId = $null
+    $hasMetadata  = $false
+    if ($baselineRaw.PSObject.Properties['Metadata'] -and $baselineRaw.Metadata) {
+        $hasMetadata = $true
+        if ($baselineRaw.Metadata.PSObject.Properties['TenantId']) {
+            $baseTenantId = [string]$baselineRaw.Metadata.TenantId
+        }
+    }
+    if (-not $hasMetadata) {
+        throw "Baseline JSON has no Metadata — cannot verify TenantId. Re-run assessment to generate a new baseline."
+    }
+    if ([string]::IsNullOrWhiteSpace($baseTenantId)) {
+        throw "Baseline JSON has no TenantId — cannot verify it matches the current tenant. Re-run assessment to generate a new baseline."
+    }
+    $currTenantId = [string]($Metadata.TenantId ?? '')
+    if ($baseTenantId -ne $currTenantId) {
+        throw "Baseline tenant ID '$baseTenantId' does not match current tenant ID '$currTenantId'. Refusing to generate delta report — wrong baseline?"
+    }
+
+    # ── Categorize findings by ControlId change ─────────────────────────────
+    $base = @{}
+    foreach ($f in $baseFindings)    { $base[[string]$f.ControlId] = $f }
+    $curr = @{}
+    foreach ($f in $CurrentFindings) { $curr[[string]$f.ControlId] = $f }
+
+    $newGaps       = @()   # Was not Gap (or missing), now Gap
+    $resolved      = @()   # Was Gap, now Satisfied
+    $regressed     = @()   # Was Satisfied/Partial, now worse (but not new Gap)
+    $improved      = @()   # Was Gap, now Partial (partial progress)
+    $unchangedGaps = @()   # Was Gap, still Gap
+
+    $sOrder = @{ 'Satisfied' = 0; 'Partial' = 1; 'Gap' = 2; 'NotApplicable' = 3 }
+
+    foreach ($cid in ($curr.Keys | Sort-Object)) {
+        $c = $curr[$cid]; $b = $base[$cid]
+        $cState = [string]$c.State
+        if (-not $b) {
+            if ($cState -eq 'Gap') { $newGaps += $c }
+            continue
+        }
+        $bState = [string]$b.State
+        $bOrd = if ($sOrder.ContainsKey($bState)) { $sOrder[$bState] } else { 3 }
+        $cOrd = if ($sOrder.ContainsKey($cState)) { $sOrder[$cState] } else { 3 }
+
+        if     ($bState -eq 'Gap' -and $cState -eq 'Satisfied') { $resolved      += $c }
+        elseif ($bState -eq 'Gap' -and $cState -eq 'Partial')   { $improved      += $c }
+        elseif ($bState -eq 'Gap' -and $cState -eq 'Gap')       { $unchangedGaps += $c }
+        elseif ($cState -eq 'Gap' -and $bState -ne 'Gap')       { $newGaps       += $c }
+        elseif ($cOrd -gt $bOrd)                                { $regressed     += $c }
+    }
+
+    # ── Score computation ───────────────────────────────────────────────────
+    function Get-Score {
+        param([object[]] $f)
+        $sc  = @($f | Where-Object State -ne 'NotApplicable').Count
+        $sat = @($f | Where-Object State -eq  'Satisfied').Count
+        $pt  = @($f | Where-Object State -eq  'Partial').Count
+        if ($sc -gt 0) { [int][Math]::Round(100 * ($sat + 0.5 * $pt) / $sc) } else { 0 }
+    }
+    $currScore  = Get-Score $CurrentFindings
+    $baseScore  = Get-Score $baseFindings
+    $scoreDelta = $currScore - $baseScore
+    $scoreArrow = if ($scoreDelta -gt 0) { "&#9650; +$scoreDelta" }
+                  elseif ($scoreDelta -lt 0) { "&#9660; $scoreDelta" }
+                  else { "&#9654; 0" }
+
+    # ── Header strings (operator + tenant controlled, strict-escape) ────────
+    $baseDate = EscMdStrict ($baselineRaw.Metadata.AssessmentDate ?? 'prior run')
+    $currDate = EscMdStrict ($Metadata.AssessmentDate ?? (Get-Date -Format 'MMMM dd, yyyy'))
+    $client   = EscMdStrict ($Metadata.TenantDomain   ?? 'Client')
+
     $sb = [System.Text.StringBuilder]::new()
     $null = $sb.AppendLine("# Assessment Delta Report")
     $null = $sb.AppendLine()
