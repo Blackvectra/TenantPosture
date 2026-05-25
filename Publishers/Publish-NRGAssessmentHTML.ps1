@@ -140,53 +140,24 @@ function Publish-NRGAssessmentHTML {
     }
 
     # ── License detection — suppress gaps the tenant already has licenses for ────
-    $subscribedSkus = @()
-    try {
-        $invData = Get-NRGRawData -Key 'AAD-Inventory'
-        if ($invData -and $invData.SubscribedSkus) { $subscribedSkus = $invData.SubscribedSkus }
-    } catch {}
+    # Detection is centralised in Lib/Get-NRGTenantLicenseProfile.ps1 so the
+    # HTML, Markdown, remediation script, and playbook publishers all see the
+    # same suppression set. v4.6.1 inlined the logic here and applied it only
+    # to the "License Gap Analysis" card — every other site (Priority Actions,
+    # per-finding rows, remediation script, playbook) still emitted
+    # "Requires: M365 Business Premium" against tenants that already had BP.
+    $licProfile = if (Get-Command Get-NRGTenantLicenseProfile -ErrorAction SilentlyContinue) {
+        try { Get-NRGTenantLicenseProfile } catch { $null }
+    } else { $null }
 
-    # Determine what license tiers are present
-    $allSkuParts = @($subscribedSkus | ForEach-Object { $_.SkuPartNumber })
-
-    $hasBusinessPremium = $allSkuParts -match 'SPB|O365_BUSINESS_PREMIUM|M365_BUSINESS_PREMIUM' |
-                          Select-Object -First 1
-    $hasEntraP2         = $allSkuParts -match 'AAD_PREMIUM_P2|ENTRA_ID_GOVERNANCE|IDENTITY_GOVERNANCE' |
-                          Select-Object -First 1
-    $hasIntune          = $hasBusinessPremium -or ($allSkuParts -match '^INTUNE')
-    $hasMDE             = $allSkuParts -match 'WIN_DEF_ATP|MDE_SMB|DEFENDER_ENDPOINT' |
-                          Select-Object -First 1
-    $hasMDCA            = $allSkuParts -match 'ADALLOM_S_STANDALONE|MFA_PREMIUM|CLOUD_APP_SECURITY' |
-                          Select-Object -First 1
-
-    # Build suppression list — requirements already met by detected licenses
-    $suppressedLicReqs = [System.Collections.Generic.HashSet[string]]::new()
-    if ($hasBusinessPremium) {
-        @(
-            'Defender for Office 365 Plan 1 (M365 Business Premium)',
-            'M365 Business Premium or E3+',
-            'M365 Business Premium or E3+ (Copilot requires M365 Copilot add-on)',
-            'M365 Business Premium or Entra ID P1',
-            'M365 Business Premium or Entra ID P1 + Intune',
-            'M365 Business Premium or Intune Plan 1',
-            'Microsoft Defender for Endpoint Plan 1+'
-        ) | ForEach-Object { $null = $suppressedLicReqs.Add($_) }
-    }
-    if ($hasEntraP2) {
-        @(
-            'Entra ID P2',
-            'Entra ID P2 + Workload Identities add-on',
-            'Included (all plans) — Access Reviews require Entra P2'
-        ) | ForEach-Object { $null = $suppressedLicReqs.Add($_) }
-    }
-    if ($hasIntune) {
-        @(
-            'M365 Business Premium or Intune Plan 1',
-            'M365 Business Premium or Entra ID P1 + Intune'
-        ) | ForEach-Object { $null = $suppressedLicReqs.Add($_) }
-    }
-    if ($hasMDE)  { $null = $suppressedLicReqs.Add('Microsoft Defender for Endpoint Plan 2') }
-    if ($hasMDCA) { $null = $suppressedLicReqs.Add('Microsoft Defender for Cloud Apps (M365 E5 or add-on)') }
+    # Compatibility aliases — preserve existing variable names referenced
+    # elsewhere in this file. Falls back to $false when the helper is not
+    # available (e.g. unit-test load of just the publisher).
+    $hasBusinessPremium = if ($licProfile) { $licProfile.HasBusinessPremium } else { $false }
+    $hasEntraP2         = if ($licProfile) { $licProfile.HasEntraP2 }         else { $false }
+    $suppressedLicReqs  = if ($licProfile) { $licProfile.SuppressedLicenseRequirements }
+                          else            { [System.Collections.Generic.HashSet[string]]::new() }
+    $tierLabel          = if ($licProfile) { $licProfile.TierLabel } else { 'Unknown' }
 
     # ── License groups (only show what the tenant actually needs) ─────────────
     $licGroups = @{}
@@ -364,7 +335,12 @@ function Publish-NRGAssessmentHTML {
         $ctrl  = $cdefs[$g.ControlId]
         $bRisk = if ($ctrl -and $ctrl.BusinessRisk) { hx $ctrl.BusinessRisk } else { hx $g.Detail }
         $rem   = if ($ctrl -and $ctrl.Remediation)  { hx $ctrl.Remediation  } else { hx $g.Remediation }
-        $lic   = if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') {
+        # Suppress the "Requires:" badge when the tenant already holds the
+        # license. v4.6.1 always emitted this badge — see comment by
+        # $licProfile above.
+        $lic = if ($ctrl -and $ctrl.LicenseRequirement -and
+                   $ctrl.LicenseRequirement -notmatch '^Included' -and
+                   -not $suppressedLicReqs.Contains($ctrl.LicenseRequirement)) {
             "<div class='act-lic'>&#128273; Requires: $(hx $ctrl.LicenseRequirement)</div>"
         } else { '' }
         $cls   = if ($g.Severity -eq 'Critical') { 'ac' } else { 'ah' }
@@ -407,7 +383,10 @@ function Publish-NRGAssessmentHTML {
             $bRisk2= if ($ctrl2 -and $ctrl2.BusinessRisk) { hx $ctrl2.BusinessRisk } else { '' }
             $cv2   = hx $f.CurrentValue
             $rv2   = hx $f.RequiredValue
-            $lic2  = if ($ctrl2 -and $ctrl2.LicenseRequirement -and $ctrl2.LicenseRequirement -notmatch '^Included') {
+            # Suppress per-finding "Requires:" tag when license already held.
+            $lic2 = if ($ctrl2 -and $ctrl2.LicenseRequirement -and
+                        $ctrl2.LicenseRequirement -notmatch '^Included' -and
+                        -not $suppressedLicReqs.Contains($ctrl2.LicenseRequirement)) {
                 "<div class='ex-lic'>&#128273; $(hx $ctrl2.LicenseRequirement)</div>"
             } else { '' }
             $fwTags2 = ''
@@ -794,6 +773,7 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
       <div class="hdr-meta">
         <span><strong>Date</strong> $dS</span>
         <span><strong>Tenant</strong> $tD</span>
+        <span><strong>License Tier</strong> $(hx $tierLabel)</span>
         $(if($op){"<span><strong>Prepared by</strong> $op</span>"})
         <span><strong>Frameworks</strong> CIS M365 v6 &middot; CISA SCuBA &middot; NIST SP 800-53r5 &middot; CMMC 2.0</span>
       </div>
