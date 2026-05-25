@@ -579,8 +579,8 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
         It 'All evaluators exist' {
             @(
                 'Evaluators\Test-NRGControl-AAD.ps1',
-                'Evaluators\Test-NRGControl-EXO.ps1',
-                'Evaluators\Test-NRGControl-DNS.ps1',
+                'Evaluators\Test-NRGControlEXO.ps1',
+                'Evaluators\Test-NRGControlDNS.ps1',
                 'Evaluators\Test-NRGControlDefender.ps1'
             ) | ForEach-Object {
                 Test-Path -LiteralPath (Join-Path $script:RepoRoot $_) | Should -BeTrue -Because "$_ must exist"
