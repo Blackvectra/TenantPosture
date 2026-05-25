@@ -266,25 +266,37 @@ function Test-NRGControlAADCA {
 
         if ($authenticatorConfig) {
             $features           = $authenticatorConfig.AdditionalProperties['featureSettings']
-            $numberMatchState   = if ($features -and $features['numberMatchingRequiredState'])        { $features['numberMatchingRequiredState']['state'] }        else { 'unknown' }
-            $additionalCtxState = if ($features -and $features['displayAppInformationRequiredState']) { $features['displayAppInformationRequiredState']['state'] }  else { 'unknown' }
+            # Microsoft enforced number matching as platform default in May 2023 — when
+            # 'numberMatchingRequiredState' is absent, MS is enforcing it at the platform
+            # level, not that it is disabled. Treating absence as "unknown" produced
+            # false Gap findings on every tenant.
+            $numberMatchState   = if ($features -and $features['numberMatchingRequiredState'])        { $features['numberMatchingRequiredState']['state'] }        else { $null }
+            $additionalCtxState = if ($features -and $features['displayAppInformationRequiredState']) { $features['displayAppInformationRequiredState']['state'] }  else { $null }
 
-            if ($numberMatchState -eq 'enabled') {
-                Add-NRGFinding -ControlId 'AAD-2.3' -State 'Satisfied' `
-                    -Category 'Identity' -Title 'Authenticator app number matching enabled' `
-                    -Severity 'High' `
-                    -CurrentValue "Number matching: $numberMatchState. Additional context: $additionalCtxState" `
-                    -RequiredValue 'Number matching: enabled'
+            $numberMatchEffective = if (-not $numberMatchState -or $numberMatchState -in @('enabled','default')) {
+                'enabled (Microsoft default or explicit)'
+            } else {
+                $numberMatchState
             }
-            else {
+            $additionalCtxDisplay = if (-not $additionalCtxState) { 'default' } else { $additionalCtxState }
+
+            if ($numberMatchState -eq 'disabled') {
+                # Explicit disable — should not be possible on modern tenants
                 Add-NRGFinding -ControlId 'AAD-2.3' -State 'Gap' `
                     -Category 'Identity' -Title 'Authenticator app number matching enabled' `
                     -Severity 'High' `
-                    -Detail 'Push notifications without number matching are vulnerable to MFA fatigue (T1621). Attacker spams approvals until user accepts.' `
-                    -CurrentValue "Number matching: $numberMatchState. Additional context: $additionalCtxState" `
-                    -RequiredValue 'Number matching: enabled; Additional context: enabled' `
-                    -Remediation 'Entra ID > Authentication methods > Microsoft Authenticator > Configure. Enable Number matching AND Additional context. Zero-downtime change — takes effect on next sign-in prompt.' `
+                    -Detail 'Number matching is explicitly disabled. Push notifications are vulnerable to MFA fatigue (T1621).' `
+                    -CurrentValue "Number matching: disabled. Additional context: $additionalCtxDisplay" `
+                    -RequiredValue 'Number matching: enabled' `
+                    -Remediation 'Entra ID > Authentication methods > Microsoft Authenticator > Configure. Enable Number matching. This should not be disabled on any current tenant.' `
                     -FrameworkIds @('IA-2(8)')
+            }
+            else {
+                Add-NRGFinding -ControlId 'AAD-2.3' -State 'Satisfied' `
+                    -Category 'Identity' -Title 'Authenticator app number matching enabled' `
+                    -Severity 'Informational' `
+                    -CurrentValue "Number matching: $numberMatchEffective. Additional context: $additionalCtxDisplay" `
+                    -RequiredValue 'Number matching: enabled'
             }
         }
         else {
