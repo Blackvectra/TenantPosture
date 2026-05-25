@@ -43,6 +43,15 @@ function Publish-NRGAssessmentSummary {
     $assmtDate  = EscMd ($Metadata.AssessmentDate ?? (Get-Date -Format 'MMMM dd, yyyy'))
     $version    = EscMd ($Metadata.ToolVersion ?? '4.5.5')
 
+    # License tier — added in v4.6.2. The Markdown report previously had no
+    # tier indicator at all, which led operators to assume the tool had not
+    # detected their license. The line is rendered just below the metadata
+    # block. Degrades gracefully when the helper is not loaded.
+    $tierLabel = if (Get-Command Get-NRGTenantLicenseProfile -ErrorAction SilentlyContinue) {
+        try { (Get-NRGTenantLicenseProfile).TierLabel } catch { 'Unknown' }
+    } else { 'Unknown' }
+    $tierLabelMd = EscMd $tierLabel
+
     # Scoring summary
     $satisfied = @($Findings | Where-Object { $_.State -eq 'Satisfied' }).Count
     $partial   = @($Findings | Where-Object { $_.State -eq 'Partial' }).Count
@@ -76,6 +85,7 @@ function Publish-NRGAssessmentSummary {
     $null = $sb.AppendLine()
     $null = $sb.AppendLine("**Prepared by:** $company")
     $null = $sb.AppendLine("**Tenant:** $tenant")
+    $null = $sb.AppendLine("**License Tier:** $tierLabelMd")
     $null = $sb.AppendLine("**Assessment Date:** $assmtDate")
     $null = $sb.AppendLine("**Tool Version:** $version")
     $null = $sb.AppendLine()
