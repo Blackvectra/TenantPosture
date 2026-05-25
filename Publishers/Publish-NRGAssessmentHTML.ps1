@@ -453,7 +453,24 @@ function Publish-NRGAssessmentHTML {
             $ctrl3 = $cdefs[$nf.ControlId]
             $aoItems = @($nf.AffectedObjects)
             $aoRows  = ($aoItems | Select-Object -First 15 | ForEach-Object {
-                "<tr><td>$(hx $_)</td></tr>"
+                # AffectedObjects can be a flat string (UPN, AppId) or an
+                # [ordered] hashtable when evaluators surface multiple
+                # fields per row (e.g. EXO-7.1 mailbox + forwarding target,
+                # EXO-7.2 mailbox + rule name + recipients). hx => ConvertTo-
+                # NRGHtmlSafe stringifies a hashtable to its type name and
+                # loses the data, so render the dictionary case explicitly
+                # as a key=value list joined with '; '.
+                $obj = $_
+                $rendered = if ($obj -is [System.Collections.IDictionary]) {
+                    $kvs = @()
+                    foreach ($entry in $obj.GetEnumerator()) {
+                        $kvs += "$(hx $entry.Key)=$(hx ([string]$entry.Value))"
+                    }
+                    $kvs -join '; '
+                } else {
+                    hx ([string]$obj)
+                }
+                "<tr><td>$rendered</td></tr>"
             }) -join ''
             $moreNote = if ($aoItems.Count -gt 15) { "<tr><td style='color:var(--mut);font-style:italic;padding:6px 10px'>...and $($aoItems.Count - 15) more. Full list in remediation script.</td></tr>" } else { '' }
             $bRisk3 = if ($ctrl3 -and $ctrl3.BusinessRisk) { hx $ctrl3.BusinessRisk } else { hx $nf.Detail }
