@@ -416,7 +416,7 @@
     {
       "ControlId": "DNS-1.5",
       "Title": "TLS-RPT Record Published",
-      "Description": "TLS-RPT DNS record is published to receive reports of TLS failures on inbound SMTP delivery.",
+      "Description": "TLS-RPT DNS record is published to receive reports of TLS failures on inbound SMTP delivery. (No direct SCuBA mapping \u2014 DNS/email-auth controls handled out-of-band.)",
       "BusinessRisk": "Without TLS-RPT, TLS failures and downgrade attempts go undetected. Required for MTA-STS monitoring.",
       "Severity": "Low",
       "Workload": "DNS",
@@ -427,7 +427,9 @@
       "Remediation": "Publish: _smtp._tls.domain.com TXT 'v=TLSRPTv1; rua=mailto:tlsrpt@domain.com'",
       "References": {
         "CIS": "2.2.4",
+        "SCuBA": "",
         "NIST": "AU-2, SC-8",
+        "CMMC": "AU.L2-3.3.1",
         "MITRE": [
           "T1557"
         ]
@@ -437,7 +439,7 @@
     {
       "ControlId": "DNS-1.6",
       "Title": "DNSSEC Enabled",
-      "Description": "DNSSEC is enabled with DS records published at the registrar.",
+      "Description": "DNSSEC is enabled with DS records published at the registrar. (No direct SCuBA mapping \u2014 DNS/email-auth controls handled out-of-band.)",
       "BusinessRisk": "Without DNSSEC, DNS responses can be forged by cache poisoning, redirecting email and undermining SPF/DKIM/DMARC.",
       "Severity": "Low",
       "Workload": "DNS",
@@ -448,6 +450,7 @@
       "Remediation": "Enable DNSSEC at your registrar. GoDaddy: Domains > DNS > DNSSEC > Enable. Free for up to 5 domains.",
       "References": {
         "CIS": "2.2.5",
+        "SCuBA": "",
         "NIST": "SC-20, SC-21",
         "CMMC": "SC.L2-3.13.8",
         "MITRE": [
@@ -571,6 +574,7 @@
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.4v1",
         "NIST": "SI-3, SI-4",
+        "CMMC": "SI.L2-3.14.2",
         "MITRE": [
           "T1566"
         ]
@@ -593,6 +597,7 @@
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.5v1",
         "NIST": "SI-3",
+        "CMMC": "SI.L2-3.14.2",
         "MITRE": [
           "T1566.001"
         ]
@@ -945,6 +950,7 @@
       "Remediation": "Create labels in Purview > Information protection. Publish via label policies. Minimum tiers: Internal, Confidential, Highly Confidential.",
       "References": {
         "CIS": "3.4.1",
+        "SCuBA": "MS.DEFENDER.4.1v2",
         "NIST": "AC-16, SC-28",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -1009,7 +1015,7 @@
     {
       "ControlId": "INT-1.3",
       "Title": "BitLocker Encryption Required on Windows",
-      "Description": "Windows compliance policy requires BitLocker disk encryption.",
+      "Description": "Windows compliance policy requires BitLocker disk encryption. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Unencrypted laptops allow physical theft to result in data breach.",
       "Severity": "High",
       "Workload": "INT",
@@ -1020,6 +1026,7 @@
       "Remediation": "Intune compliance policy for Windows: Device Health > Require BitLocker = Require.",
       "References": {
         "CIS": "4.1.2",
+        "SCuBA": "",
         "NIST": "SC-28",
         "CMMC": "MP.L2-3.8.9",
         "MITRE": [
@@ -1032,7 +1039,7 @@
     {
       "ControlId": "INT-1.4",
       "Title": "Mobile Application Management Configured",
-      "Description": "Intune app protection policies enforce data containment on iOS and Android.",
+      "Description": "Intune app protection policies enforce data containment on iOS and Android. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "BYOD without MAM can copy corporate data from managed apps to personal apps with no controls.",
       "Severity": "Medium",
       "Workload": "INT",
@@ -1043,6 +1050,7 @@
       "Remediation": "Create app protection policies in Intune > Apps > App protection policies for iOS and Android targeting Office apps.",
       "References": {
         "CIS": "4.3.1",
+        "SCuBA": "",
         "NIST": "AC-19, SC-28",
         "CMMC": "AC.L2-3.1.19",
         "MITRE": [
@@ -1055,7 +1063,7 @@
     {
       "ControlId": "INT-1.5",
       "Title": "Antivirus Policy Deployed via Intune",
-      "Description": "Intune endpoint security antivirus policies are deployed to Windows devices, enforcing Defender AV settings.",
+      "Description": "Intune endpoint security antivirus policies are deployed to Windows devices, enforcing Defender AV settings. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without enforced AV policy, users can disable Defender or create exclusions, leaving endpoints unprotected.",
       "Severity": "High",
       "Workload": "INT",
@@ -1066,6 +1074,7 @@
       "Remediation": "Create Endpoint Security > Antivirus policy in Intune. Set CloudBlockLevel = High, enable real-time protection and tamper protection.",
       "References": {
         "CIS": "4.4.1",
+        "SCuBA": "",
         "NIST": "SI-3",
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
@@ -1316,7 +1325,7 @@
     {
       "ControlId": "AAD-2.2",
       "Title": "Named Locations Defined",
-      "Description": "At least one trusted named location (IP range) is defined in Entra ID for use in CA policies.",
+      "Description": "At least one trusted named location (IP range) is defined in Entra ID for use in CA policies. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without named locations, CA cannot distinguish access from trusted office networks vs untrusted locations.",
       "Severity": "Low",
       "Workload": "AAD",
@@ -1327,7 +1336,9 @@
       "Remediation": "Entra ID > Security > Named locations > Add IP ranges location. Mark office and VPN IP ranges as trusted.",
       "References": {
         "CIS": "5.2.1",
+        "SCuBA": "",
         "NIST": "AC-17",
+        "CMMC": "AC.L2-3.1.12",
         "MITRE": [
           "T1078"
         ],
@@ -1424,6 +1435,7 @@
       "Remediation": "PIM > Roles > Select role > Settings > Require justification on activation.",
       "References": {
         "CIS": "5.1.3.2",
+        "SCuBA": "MS.AAD.7.5v1",
         "NIST": "AC-6(9), AU-12",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
@@ -1449,6 +1461,7 @@
         "CIS": "5.1.3.3",
         "SCuBA": "MS.AAD.7.5v1",
         "NIST": "AC-6(5)",
+        "CMMC": "AC.L2-3.1.5",
         "MITRE": [
           "T1078.004"
         ],
@@ -1470,7 +1483,9 @@
       "Remediation": "PIM > Roles > Select role > Settings > Maximum activation duration = 8 hours.",
       "References": {
         "CIS": "5.1.3.4",
+        "SCuBA": "MS.AAD.7.4v1",
         "NIST": "AC-6",
+        "CMMC": "AC.L2-3.1.5",
         "MITRE": [
           "T1078.004"
         ]
@@ -1518,7 +1533,9 @@
       "Remediation": "Entra ID > User settings > Restrict non-admin users from creating tenants. Block MSOL PowerShell via authorization policy.",
       "References": {
         "CIS": "5.3.2",
+        "SCuBA": "MS.AAD.5.4v1",
         "NIST": "CM-7, AC-6",
+        "CMMC": "CM.L2-3.4.6",
         "MITRE": [
           "T1078"
         ],
@@ -1554,7 +1571,7 @@
     {
       "ControlId": "AAD-5.1",
       "Title": "Self-Service Password Reset Enabled",
-      "Description": "SSPR is enabled allowing users to reset their own passwords without helpdesk involvement.",
+      "Description": "SSPR is enabled allowing users to reset their own passwords without helpdesk involvement. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without SSPR, helpdesk becomes a social engineering target \u2014 attackers call claiming to be users to get password resets.",
       "Severity": "Medium",
       "Workload": "AAD",
@@ -1565,7 +1582,9 @@
       "Remediation": "Entra ID > Password reset > Properties > Self service password reset enabled = All or Selected.",
       "References": {
         "CIS": "5.4.1",
+        "SCuBA": "",
         "NIST": "IA-5",
+        "CMMC": "IA.L2-3.5.7",
         "MITRE": [
           "T1078"
         ],
@@ -1576,7 +1595,7 @@
     {
       "ControlId": "AAD-5.2",
       "Title": "SSPR Requires Multiple Authentication Methods",
-      "Description": "SSPR is configured to require at least two authentication methods for password reset.",
+      "Description": "SSPR is configured to require at least two authentication methods for password reset. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Single-method SSPR allows account takeover via one compromised recovery method (phone SIM swap, email compromise).",
       "Severity": "Medium",
       "Workload": "AAD",
@@ -1587,7 +1606,9 @@
       "Remediation": "Entra ID > Password reset > Authentication methods > Number of methods required = 2.",
       "References": {
         "CIS": "5.4.2",
+        "SCuBA": "",
         "NIST": "IA-2(1), IA-5",
+        "CMMC": "IA.L2-3.5.3",
         "MITRE": [
           "T1078"
         ]
@@ -1663,6 +1684,7 @@
         "CIS": "5.5.3",
         "SCuBA": "MS.AAD.6.3v1",
         "NIST": "AC-3",
+        "CMMC": "AC.L2-3.1.1",
         "MITRE": [
           "T1528"
         ],
@@ -1673,7 +1695,7 @@
     {
       "ControlId": "AAD-7.1",
       "Title": "Password Protection Lockout Configured",
-      "Description": "Account lockout threshold is configured at 10 or fewer failed attempts.",
+      "Description": "Account lockout threshold is configured at 10 or fewer failed attempts. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "High lockout thresholds allow extensive brute force attempts before accounts are locked.",
       "Severity": "Medium",
       "Workload": "AAD",
@@ -1684,6 +1706,7 @@
       "Remediation": "Entra ID > Security > Authentication methods > Password protection > Lockout threshold \u226410.",
       "References": {
         "CIS": "5.6.1",
+        "SCuBA": "",
         "NIST": "AC-7",
         "CMMC": "AC.L2-3.1.8",
         "MITRE": [
@@ -1708,6 +1731,7 @@
         "CIS": "5.1.2.3",
         "SCuBA": "MS.AAD.7.1v1",
         "NIST": "CP-2, AC-2",
+        "CMMC": "IR.L2-3.6.1",
         "MITRE": [
           "T1078.004"
         ],
@@ -1733,6 +1757,7 @@
         "CIS": "2.3.3",
         "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-3",
+        "CMMC": "SI.L2-3.14.2",
         "MITRE": [
           "T1566"
         ]
@@ -1825,7 +1850,9 @@
       "Remediation": "Set-HostedContentFilterPolicy -HighConfidenceSpamAction Quarantine",
       "References": {
         "CIS": "2.1.11",
+        "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-8",
+        "CMMC": "SI.L2-3.14.7",
         "MITRE": [
           "T1566"
         ]
@@ -1846,7 +1873,9 @@
       "Remediation": "Set-HostedContentFilterPolicy -BulkThreshold 6",
       "References": {
         "CIS": "2.1.12",
+        "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-8",
+        "CMMC": "SI.L2-3.14.7",
         "MITRE": [
           "T1566"
         ]
@@ -1856,7 +1885,7 @@
     {
       "ControlId": "EXO-3.1",
       "Title": "Connection Filter Safe List Bypass Disabled",
-      "Description": "Microsoft safe list bypass is disabled on the default connection filter policy.",
+      "Description": "Microsoft safe list bypass is disabled on the default connection filter policy. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Safe list bypass allows senders on Microsoft-maintained lists to skip all EOP filtering \u2014 third-party senders can exploit this.",
       "Severity": "Medium",
       "Workload": "EXO",
@@ -1867,7 +1896,9 @@
       "Remediation": "Set-HostedConnectionFilterPolicy -Identity Default -EnableSafeList $false",
       "References": {
         "CIS": "2.1.13",
+        "SCuBA": "",
         "NIST": "SI-8",
+        "CMMC": "SI.L2-3.14.7",
         "MITRE": [
           "T1566"
         ]
@@ -1877,7 +1908,7 @@
     {
       "ControlId": "EXO-3.2",
       "Title": "Outbound Spam Sending Limits Configured",
-      "Description": "Outbound spam policy is configured with appropriate per-user sending limits and admin notification.",
+      "Description": "Outbound spam policy is configured with appropriate per-user sending limits and admin notification. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Compromised accounts can send mass phishing without rate limiting. Limits and alerts provide early BEC detection.",
       "Severity": "Medium",
       "Workload": "EXO",
@@ -1888,7 +1919,9 @@
       "Remediation": "Set-HostedOutboundSpamFilterPolicy: configure RecipientLimitInternalPerHour, RecipientLimitExternalPerHour, ActionWhenThresholdReached = Alert.",
       "References": {
         "CIS": "2.1.14",
+        "SCuBA": "",
         "NIST": "SI-8, AU-12",
+        "CMMC": "SI.L2-3.14.7",
         "MITRE": [
           "T1078",
           "T1114.003"
@@ -1934,6 +1967,7 @@
       "References": {
         "CIS": "2.1.16",
         "NIST": "SI-4, AU-12",
+        "CMMC": "SI.L2-3.14.6",
         "MITRE": [
           "T1566"
         ],
@@ -2017,7 +2051,7 @@
     {
       "ControlId": "SPO-2.3",
       "Title": "SharePoint Third-Party Apps From Store Restricted",
-      "Description": "Third-party app installation from the SharePoint store is disabled or restricted.",
+      "Description": "Third-party app installation from the SharePoint store is disabled or restricted. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Store apps can access SharePoint data with user-granted permissions. Malicious or compromised apps exfiltrate data.",
       "Severity": "Low",
       "Workload": "SPO",
@@ -2028,7 +2062,9 @@
       "Remediation": "SharePoint Admin Center > Settings > Apps > disable apps from the SharePoint store.",
       "References": {
         "CIS": "7.3.3",
+        "SCuBA": "",
         "NIST": "CM-7",
+        "CMMC": "CM.L2-3.4.6",
         "MITRE": [
           "T1195"
         ]
@@ -2061,7 +2097,7 @@
     {
       "ControlId": "SPO-2.5",
       "Title": "Third-Party Cloud Storage Disabled in SharePoint",
-      "Description": "Third-party storage services (Dropbox, Box, Google Drive) are disabled in SharePoint and OneDrive.",
+      "Description": "Third-party storage services (Dropbox, Box, Google Drive) are disabled in SharePoint and OneDrive. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Third-party storage integration allows organizational data to move to unmanaged cloud services outside DLP policy coverage.",
       "Severity": "Medium",
       "Workload": "SPO",
@@ -2072,6 +2108,7 @@
       "Remediation": "SharePoint Admin Center > Settings > Third-party storage services > Off",
       "References": {
         "CIS": "7.3.5",
+        "SCuBA": "",
         "NIST": "AC-4",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -2084,7 +2121,7 @@
     {
       "ControlId": "SPO-2.6",
       "Title": "Email Attestation Required for Sharing",
-      "Description": "External users must verify their email address before accessing shared SharePoint content.",
+      "Description": "External users must verify their email address before accessing shared SharePoint content. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without email attestation, anonymous link recipients have no identity verification \u2014 links shared to wrong address are accessed by unintended parties.",
       "Severity": "Medium",
       "Workload": "SPO",
@@ -2095,7 +2132,9 @@
       "Remediation": "Set-SPOTenant -EmailAttestationRequired $true -EmailAttestationReAuthDays 30",
       "References": {
         "CIS": "7.2.4",
+        "SCuBA": "",
         "NIST": "IA-3, AC-3",
+        "CMMC": "IA.L2-3.5.2",
         "MITRE": [
           "T1078"
         ]
@@ -2117,6 +2156,7 @@
       "References": {
         "CIS": "7.2.5",
         "NIST": "AC-12",
+        "CMMC": "AC.L2-3.1.11",
         "MITRE": [
           "T1078"
         ],
@@ -2127,7 +2167,7 @@
     {
       "ControlId": "SPO-2.8",
       "Title": "OneDrive Sync Restricted by Tenant Domain GUID",
-      "Description": "OneDrive sync is restricted to authorized tenant GUIDs preventing cross-tenant syncing.",
+      "Description": "OneDrive sync is restricted to authorized tenant GUIDs preventing cross-tenant syncing. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without GUID restriction, users can sync organizational data to personal O365 tenants or competitor tenants.",
       "Severity": "High",
       "Workload": "SPO",
@@ -2138,6 +2178,7 @@
       "Remediation": "Set-SPOTenant -AllowedDomainGuidsForSyncApp (Get-SPOTenant).TenantId",
       "References": {
         "CIS": "7.2.8",
+        "SCuBA": "",
         "NIST": "AC-4, SC-28",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -2163,6 +2204,7 @@
         "CIS": "8.2.4",
         "SCuBA": "MS.TEAMS.1.4v1",
         "NIST": "AC-17",
+        "CMMC": "AC.L2-3.1.12",
         "MITRE": [
           "T1566",
           "T1534"
@@ -2196,7 +2238,7 @@
     {
       "ControlId": "TMS-2.3",
       "Title": "Third-Party Cloud Storage Disabled in Teams",
-      "Description": "Dropbox, Box, Google Drive, and ShareFile integrations are disabled in Teams client configuration.",
+      "Description": "Dropbox, Box, Google Drive, and ShareFile integrations are disabled in Teams client configuration. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Third-party storage allows data to move from Teams to unmanaged cloud services outside DLP and retention policy coverage.",
       "Severity": "High",
       "Workload": "TMS",
@@ -2207,6 +2249,7 @@
       "Remediation": "Set-CsTeamsClientConfiguration -AllowDropbox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false",
       "References": {
         "CIS": "8.3.2",
+        "SCuBA": "",
         "NIST": "AC-4",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -2232,6 +2275,7 @@
       "References": {
         "CIS": "8.3.3",
         "NIST": "SI-8",
+        "CMMC": "SI.L2-3.14.7",
         "MITRE": [
           "T1566"
         ],
@@ -2242,7 +2286,7 @@
     {
       "ControlId": "TMS-2.5",
       "Title": "Cloud Recording Disabled for External Participants",
-      "Description": "External participants cannot initiate or control meeting cloud recordings.",
+      "Description": "External participants cannot initiate or control meeting cloud recordings. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "External participants recording meetings capture confidential discussions with no internal awareness or consent controls.",
       "Severity": "Low",
       "Workload": "TMS",
@@ -2253,7 +2297,9 @@
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowCloudRecordingForCalls $false for externally-scoped policies",
       "References": {
         "CIS": "8.5.4",
+        "SCuBA": "",
         "NIST": "AU-9",
+        "CMMC": "AU.L2-3.3.8",
         "MITRE": [
           "T1113"
         ]
@@ -2263,7 +2309,7 @@
     {
       "ControlId": "TMS-2.6",
       "Title": "Broad Channel Meeting Invite Restricted",
-      "Description": "Channel meeting scheduling that invites all channel members is restricted or requires deliberate selection.",
+      "Description": "Channel meeting scheduling that invites all channel members is restricted or requires deliberate selection. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Channel meetings can inadvertently include all members \u2014 including external guests \u2014 in sensitive meeting invites.",
       "Severity": "Low",
       "Workload": "TMS",
@@ -2274,7 +2320,9 @@
       "Remediation": "Review AllowChannelMeetingScheduling in meeting policy \u2014 restrict if channels have broad guest membership.",
       "References": {
         "CIS": "8.5.5",
+        "SCuBA": "",
         "NIST": "AC-3",
+        "CMMC": "AC.L2-3.1.1",
         "MITRE": [
           "T1078"
         ]
@@ -2297,6 +2345,7 @@
         "CIS": "8.2.5",
         "SCuBA": "MS.TEAMS.1.5v1",
         "NIST": "AC-17",
+        "CMMC": "AC.L2-3.1.12",
         "MITRE": [
           "T1566",
           "T1534"
@@ -2319,6 +2368,7 @@
       "References": {
         "CIS": "8.5.6",
         "NIST": "AC-3, IA-3",
+        "CMMC": "AC.L2-3.1.1",
         "MITRE": [
           "T1078"
         ],
@@ -2356,7 +2406,7 @@
     {
       "ControlId": "PVW-2.2",
       "Title": "Communication Compliance Policy Active",
-      "Description": "At least one communication compliance policy is active for regulatory monitoring.",
+      "Description": "At least one communication compliance policy is active for regulatory monitoring. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "In regulated industries (finance, healthcare, government), unmonitored communications create compliance liability.",
       "Severity": "Low",
       "Workload": "PVW",
@@ -2367,7 +2417,9 @@
       "Remediation": "Purview > Communication compliance > Create policy. Requires E5 Compliance.",
       "References": {
         "CIS": "3.2.1",
+        "SCuBA": "",
         "NIST": "AU-12",
+        "CMMC": "AU.L2-3.3.1",
         "MITRE": [
           "T1114"
         ]
@@ -2377,7 +2429,7 @@
     {
       "ControlId": "PVW-2.3",
       "Title": "Information Barriers Mode Configured",
-      "Description": "Information barriers are configured in Single or Multi-segment mode if barriers are deployed.",
+      "Description": "Information barriers are configured in Single or Multi-segment mode if barriers are deployed. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Legacy information barriers mode has known limitations. Modern mode provides more reliable segment enforcement.",
       "Severity": "Low",
       "Workload": "PVW",
@@ -2388,7 +2440,9 @@
       "Remediation": "Set-PolicyConfig -InformationBarrierMode MultiSegment. Requires E5 Compliance.",
       "References": {
         "CIS": "3.2.2",
+        "SCuBA": "",
         "NIST": "AC-4",
+        "CMMC": "AC.L2-3.1.3",
         "MITRE": [
           "T1048"
         ]
@@ -2398,7 +2452,7 @@
     {
       "ControlId": "PVW-2.4",
       "Title": "Insider Risk Management Policy Active",
-      "Description": "At least one insider risk management policy is configured to detect data theft or policy violations.",
+      "Description": "At least one insider risk management policy is configured to detect data theft or policy violations. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Departing employees and malicious insiders can exfiltrate significant data undetected without insider risk monitoring.",
       "Severity": "Medium",
       "Workload": "PVW",
@@ -2409,6 +2463,7 @@
       "Remediation": "Purview > Insider risk management > Create policy (Departing user data theft, Data leaks). Requires E5 Compliance.",
       "References": {
         "CIS": "3.2.3",
+        "SCuBA": "",
         "NIST": "SI-4",
         "CMMC": "SI.L2-3.14.7",
         "MITRE": [
@@ -2422,7 +2477,7 @@
     {
       "ControlId": "PVW-2.5",
       "Title": "Retention Policy Covers Key Workloads",
-      "Description": "Retention policies are configured for Exchange, SharePoint, OneDrive, and Teams.",
+      "Description": "Retention policies are configured for Exchange, SharePoint, OneDrive, and Teams. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without retention policies, data subject to legal hold cannot be preserved. Data may be deleted before regulatory retention requirements are met.",
       "Severity": "High",
       "Workload": "PVW",
@@ -2433,6 +2488,7 @@
       "Remediation": "Purview > Data lifecycle management > Retention policies. Create policies for Exchange, SharePoint, OneDrive, Teams.",
       "References": {
         "CIS": "3.3.2",
+        "SCuBA": "",
         "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.2",
         "MITRE": [
@@ -2456,6 +2512,7 @@
       "Remediation": "Purview > Information protection > Auto-labeling > Create policy for sensitive info types (SSN, credit card, etc.).",
       "References": {
         "CIS": "3.4.2",
+        "SCuBA": "MS.DEFENDER.4.1v2",
         "NIST": "AC-16, SC-28",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -2493,7 +2550,7 @@
     {
       "ControlId": "INT-2.2",
       "Title": "Attack Surface Reduction Rules Enabled",
-      "Description": "ASR rules are deployed via Intune endpoint security policy to block common malware delivery techniques.",
+      "Description": "ASR rules are deployed via Intune endpoint security policy to block common malware delivery techniques. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "ASR rules block Office macro abuse, credential theft from LSASS, and script-based attacks. Without them, commodity malware delivery succeeds.",
       "Severity": "High",
       "Workload": "INT",
@@ -2504,6 +2561,7 @@
       "Remediation": "Intune > Endpoint security > Attack surface reduction > Create ASR rules policy. Enable at minimum: Block Office macros, Block credential stealing, Block JS/VBS launching executables.",
       "References": {
         "CIS": "4.4.3",
+        "SCuBA": "",
         "NIST": "SI-3, CM-7",
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
@@ -2516,7 +2574,7 @@
     {
       "ControlId": "INT-2.3",
       "Title": "Windows Firewall Policy Deployed via Intune",
-      "Description": "Windows Defender Firewall is managed and enforced via Intune endpoint security policy.",
+      "Description": "Windows Defender Firewall is managed and enforced via Intune endpoint security policy. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without managed firewall policy, users can disable the firewall or create rules that expose services to lateral movement.",
       "Severity": "High",
       "Workload": "INT",
@@ -2527,6 +2585,7 @@
       "Remediation": "Intune > Endpoint security > Firewall > Create Windows Firewall policy. Enable domain, private, and public profiles.",
       "References": {
         "CIS": "4.4.4",
+        "SCuBA": "",
         "NIST": "SC-7",
         "CMMC": "SC.L1-3.13.1",
         "MITRE": [
@@ -2539,7 +2598,7 @@
     {
       "ControlId": "INT-2.4",
       "Title": "macOS FileVault Encryption Required",
-      "Description": "macOS compliance policy requires FileVault disk encryption.",
+      "Description": "macOS compliance policy requires FileVault disk encryption. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Stolen or lost Macs without FileVault expose all organizational data stored locally, including cached credentials and documents.",
       "Severity": "High",
       "Workload": "INT",
@@ -2550,6 +2609,7 @@
       "Remediation": "Intune > Devices > Compliance > macOS > Create policy > System Security > Require encryption = Require.",
       "References": {
         "CIS": "4.2.1",
+        "SCuBA": "",
         "NIST": "SC-28",
         "CMMC": "MP.L2-3.8.9",
         "MITRE": [
@@ -2597,6 +2657,7 @@
       "Remediation": "PIM > Alerts > Review and enable: Roles assigned outside PIM, Redundant assignments, Stale assignments, Too many GA admins.",
       "References": {
         "CIS": "5.1.3.5",
+        "SCuBA": "MS.AAD.7.7v1",
         "NIST": "AC-6(9), AU-12",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
@@ -2755,7 +2816,7 @@
     {
       "ControlId": "AAD-10.4",
       "Title": "Sign-in Frequency Session Control Configured",
-      "Description": "CA policy enforces sign-in frequency to limit the lifetime of stolen session tokens.",
+      "Description": "CA policy enforces sign-in frequency to limit the lifetime of stolen session tokens. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Stolen tokens (from AiTM, token theft via malware) remain valid for the full session lifetime. Sign-in frequency limits re-use to the configured window.",
       "Severity": "Medium",
       "Workload": "AAD",
@@ -2766,6 +2827,7 @@
       "Remediation": "CA policy: Session controls > Sign-in frequency > set to 1 hour for privileged users, 8 hours for standard users.",
       "References": {
         "CIS": "5.2.3.1",
+        "SCuBA": "",
         "NIST": "AC-12",
         "CMMC": "AC.L2-3.1.10",
         "MITRE": [
@@ -2885,6 +2947,7 @@
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.5v1",
         "NIST": "SI-3",
+        "CMMC": "SI.L2-3.14.2",
         "MITRE": [
           "T1566",
           "T1036.005"
@@ -2908,6 +2971,7 @@
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.5v1",
         "NIST": "SI-8",
+        "CMMC": "SI.L2-3.14.7",
         "MITRE": [
           "T1566",
           "T1036.005"
@@ -2918,7 +2982,7 @@
     {
       "ControlId": "DEF-3.3",
       "Title": "Defender for Cloud Apps Connected",
-      "Description": "Microsoft Defender for Cloud Apps M365 connector is active for shadow IT discovery and session controls.",
+      "Description": "Microsoft Defender for Cloud Apps M365 connector is active for shadow IT discovery and session controls. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without MDCA, OAuth app abuse, shadow IT cloud usage, and anomalous user behavior in cloud apps goes undetected.",
       "Severity": "Medium",
       "Workload": "DEF",
@@ -2929,6 +2993,7 @@
       "Remediation": "Defender XDR > Settings > Cloud Apps > Connected apps > Office 365 > Connect.",
       "References": {
         "CIS": "2.4.1",
+        "SCuBA": "",
         "NIST": "SI-4",
         "CMMC": "SI.L2-3.14.7",
         "MITRE": [
@@ -2964,7 +3029,7 @@
     {
       "ControlId": "SPO-3.1",
       "Title": "Site Collection Admin Access Reviewed",
-      "Description": "Site collection administrators are reviewed periodically to ensure no excessive accumulation.",
+      "Description": "Site collection administrators are reviewed periodically to ensure no excessive accumulation. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Site collection admins have full read/write access to all site content. Stale or excessive site admins are a data exfiltration risk.",
       "Severity": "Medium",
       "Workload": "SPO",
@@ -2975,6 +3040,7 @@
       "Remediation": "Review site admins: Get-SPOSite -Limit ALL | ForEach-Object { Get-SPOUser -Site $_.Url -Group 'Site Collection Administrators' }",
       "References": {
         "CIS": "7.1.1",
+        "SCuBA": "",
         "NIST": "AC-2(9)",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -2986,7 +3052,7 @@
     {
       "ControlId": "SPO-3.2",
       "Title": "SharePoint Sharing Notifications Enabled",
-      "Description": "Content owners receive notifications when their files or folders are re-shared.",
+      "Description": "Content owners receive notifications when their files or folders are re-shared. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Silent re-sharing allows data to spread beyond intended recipients without the owner's awareness.",
       "Severity": "Low",
       "Workload": "SPO",
@@ -2997,7 +3063,9 @@
       "Remediation": "Set-SPOTenant -NotifyOwnersWhenItemsReshared $true",
       "References": {
         "CIS": "7.2.9",
+        "SCuBA": "",
         "NIST": "AC-3, AU-12",
+        "CMMC": "AC.L2-3.1.1",
         "MITRE": [
           "T1213.002"
         ]
@@ -3007,7 +3075,7 @@
     {
       "ControlId": "SPO-3.3",
       "Title": "OneDrive Version History Enabled",
-      "Description": "Version history is enabled in OneDrive and SharePoint for ransomware recovery capability.",
+      "Description": "Version history is enabled in OneDrive and SharePoint for ransomware recovery capability. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without version history, ransomware-encrypted files cannot be recovered to a clean state. Version history is the primary ransomware recovery control for cloud storage.",
       "Severity": "High",
       "Workload": "SPO",
@@ -3018,6 +3086,7 @@
       "Remediation": "Verify via SharePoint Admin Center > Settings that versioning is enabled and version limits are adequate (\u2265100 versions).",
       "References": {
         "CIS": "7.3.6",
+        "SCuBA": "",
         "NIST": "CP-9, CP-10",
         "CMMC": "RE.L2-3.4.2",
         "MITRE": [
@@ -3052,7 +3121,7 @@
     {
       "ControlId": "TMS-3.1",
       "Title": "Teams Meeting Watermarks Enabled",
-      "Description": "Content watermarking is enabled for Teams meetings to deter and trace content leaks.",
+      "Description": "Content watermarking is enabled for Teams meetings to deter and trace content leaks. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Meeting content shared without watermarks cannot be traced if leaked. Watermarks deter deliberate leaks and enable forensic attribution.",
       "Severity": "Low",
       "Workload": "TMS",
@@ -3063,7 +3132,9 @@
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowWatermarkForScreenSharing $true",
       "References": {
         "CIS": "8.5.7",
+        "SCuBA": "",
         "NIST": "AC-4",
+        "CMMC": "AC.L2-3.1.3",
         "MITRE": [
           "T1113"
         ]
@@ -3096,7 +3167,7 @@
     {
       "ControlId": "TMS-3.3",
       "Title": "Meeting Chat Disabled for Anonymous Participants",
-      "Description": "Anonymous meeting participants cannot use meeting chat (EnabledExceptAnonymous or Disabled).",
+      "Description": "Anonymous meeting participants cannot use meeting chat (EnabledExceptAnonymous or Disabled). (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Anonymous participants with chat access can send phishing links and malicious content to all authenticated meeting participants.",
       "Severity": "Medium",
       "Workload": "TMS",
@@ -3107,6 +3178,7 @@
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowMeetingChat EnabledExceptAnonymous",
       "References": {
         "CIS": "8.5.8",
+        "SCuBA": "",
         "NIST": "AC-3",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -3118,7 +3190,7 @@
     {
       "ControlId": "TMS-3.4",
       "Title": "Meeting Chat Copy Prevention via DLP",
-      "Description": "DLP policies prevent copying sensitive meeting chat content to unauthorized locations.",
+      "Description": "DLP policies prevent copying sensitive meeting chat content to unauthorized locations. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Meeting chat containing sensitive discussions can be copied to personal notes, email, or external storage without DLP controls.",
       "Severity": "Low",
       "Workload": "TMS",
@@ -3129,7 +3201,9 @@
       "Remediation": "Purview > DLP > Create policy targeting Teams with sensitive info types to restrict copy/paste of protected content.",
       "References": {
         "CIS": "8.3.4",
+        "SCuBA": "",
         "NIST": "AC-4, SC-28",
+        "CMMC": "AC.L2-3.1.3",
         "MITRE": [
           "T1048"
         ]
@@ -3162,7 +3236,7 @@
     {
       "ControlId": "PVW-3.2",
       "Title": "eDiscovery Case Management Configured",
-      "Description": "eDiscovery roles are assigned and cases can be opened for legal hold and content search.",
+      "Description": "eDiscovery roles are assigned and cases can be opened for legal hold and content search. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without eDiscovery access, compliance and legal teams cannot place holds or export content for litigation, regulatory audits, or HR investigations.",
       "Severity": "Medium",
       "Workload": "PVW",
@@ -3173,6 +3247,7 @@
       "Remediation": "Purview > Roles & scopes > eDiscovery Manager. Assign eDiscovery Manager role to compliance team members.",
       "References": {
         "CIS": "3.5.1",
+        "SCuBA": "",
         "NIST": "AU-11, IR-4",
         "CMMC": "IR.L2-3.6.1",
         "MITRE": [
@@ -3184,7 +3259,7 @@
     {
       "ControlId": "PVW-3.3",
       "Title": "Compliance Score Improvement Actions Tracked",
-      "Description": "Microsoft Purview Compliance Manager improvement actions are reviewed and assigned to owners.",
+      "Description": "Microsoft Purview Compliance Manager improvement actions are reviewed and assigned to owners. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Compliance Manager surfaces specific misconfiguration risks with remediation steps. Unreviewed action items represent documented known gaps.",
       "Severity": "Low",
       "Workload": "PVW",
@@ -3195,7 +3270,9 @@
       "Remediation": "compliance.microsoft.com > Compliance Manager > Improvement actions > Assign to owners and set target dates.",
       "References": {
         "CIS": "3.5.2",
+        "SCuBA": "",
         "NIST": "CA-7",
+        "CMMC": "CA.L2-3.12.3",
         "MITRE": [
           "T1078"
         ]
@@ -3229,7 +3306,7 @@
     {
       "ControlId": "INT-3.1",
       "Title": "Device Enrollment Restrictions Configured",
-      "Description": "Intune enrollment restrictions limit which platforms, ownership types, and OS versions can enroll.",
+      "Description": "Intune enrollment restrictions limit which platforms, ownership types, and OS versions can enroll. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without enrollment restrictions, any device \u2014 including unmanaged personal or obsolete devices \u2014 can enroll and receive corporate app access.",
       "Severity": "Medium",
       "Workload": "INT",
@@ -3240,6 +3317,7 @@
       "Remediation": "Intune > Devices > Enrollment > Enrollment restrictions > Create policy restricting to managed platforms and minimum OS versions.",
       "References": {
         "CIS": "4.1.4",
+        "SCuBA": "",
         "NIST": "CM-7, AC-3",
         "CMMC": "CM.L2-3.4.1",
         "MITRE": [
@@ -3251,7 +3329,7 @@
     {
       "ControlId": "INT-3.2",
       "Title": "Mobile App Configuration Policies Deployed",
-      "Description": "App configuration policies push security settings to managed mobile apps.",
+      "Description": "App configuration policies push security settings to managed mobile apps. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without app config policies, managed apps use default settings which may not meet security baselines. Outlook, Teams, and Edge on mobile all have security-relevant configuration options.",
       "Severity": "Low",
       "Workload": "INT",
@@ -3262,7 +3340,9 @@
       "Remediation": "Intune > Apps > App configuration policies > Create policy for iOS/Android targeting Outlook, Teams, Edge.",
       "References": {
         "CIS": "4.3.2",
+        "SCuBA": "",
         "NIST": "CM-6, AC-19",
+        "CMMC": "CM.L2-3.4.2",
         "MITRE": [
           "T1078"
         ]
@@ -3441,7 +3521,7 @@
     {
       "ControlId": "AAD-11.4",
       "Title": "Token Protection (Session Binding) Enforced",
-      "Description": "CA policy enforces token protection to bind tokens to the originating device, blocking replay attacks.",
+      "Description": "CA policy enforces token protection to bind tokens to the originating device, blocking replay attacks. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "AiTM (adversary-in-the-middle) phishing steals authenticated session tokens. Without token binding, stolen tokens work from any device \u2014 effectively bypassing MFA entirely.",
       "Severity": "High",
       "Workload": "AAD",
@@ -3453,6 +3533,7 @@
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
         "CIS": "5.2.3.2",
+        "SCuBA": "",
         "NIST": "AC-12, IA-2",
         "CMMC": "AC.L2-3.1.10",
         "MITRE": [
@@ -3465,7 +3546,7 @@
     {
       "ControlId": "AAD-11.5",
       "Title": "Continuous Access Evaluation Strict Mode",
-      "Description": "CA policy enforces CAE strict mode ensuring near-real-time session revocation when risk or network conditions change.",
+      "Description": "CA policy enforces CAE strict mode ensuring near-real-time session revocation when risk or network conditions change. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Default CAE uses best-effort revocation with up to 60-minute delays. Strict mode provides near-real-time enforcement when IP changes or risk signals fire.",
       "Severity": "Low",
       "Workload": "AAD",
@@ -3477,7 +3558,9 @@
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
         "CIS": "5.2.3.3",
+        "SCuBA": "",
         "NIST": "AC-12",
+        "CMMC": "AC.L2-3.1.11",
         "MITRE": [
           "T1550.001"
         ]
@@ -3534,7 +3617,7 @@
     {
       "ControlId": "AAD-11.8",
       "Title": "Terms of Use Policy Enforced",
-      "Description": "A CA policy enforces Terms of Use acceptance for users accessing organizational resources.",
+      "Description": "A CA policy enforces Terms of Use acceptance for users accessing organizational resources. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without ToU enforcement, there is no documented acknowledgment of acceptable use policy \u2014 creating legal and HR gaps, especially for guest users and contractors.",
       "Severity": "Low",
       "Workload": "AAD",
@@ -3546,7 +3629,9 @@
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
         "CIS": "5.3.6",
+        "SCuBA": "",
         "NIST": "AC-8",
+        "CMMC": "AC.L2-3.1.9",
         "MITRE": [
           "T1078"
         ]
@@ -3567,6 +3652,7 @@
       "LicenseRequirement": "Entra Workload Identities Premium (add-on)",
       "References": {
         "CIS": "5.1.5.2",
+        "SCuBA": "MS.AAD.5.5v1",
         "NIST": "IA-3, AC-6",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -3670,6 +3756,7 @@
       "References": {
         "CIS": "2.3.5",
         "NIST": "SI-3, IR-4",
+        "CMMC": "SI.L2-3.14.2",
         "MITRE": [
           "T1566",
           "T1078"
@@ -3707,7 +3794,7 @@
     {
       "ControlId": "DEF-4.6",
       "Title": "Attack Simulation Training Campaigns Active",
-      "Description": "Regular phishing simulation campaigns are run via Attack Simulation Training in Defender.",
+      "Description": "Regular phishing simulation campaigns are run via Attack Simulation Training in Defender. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Human error causes >90% of breaches. Without regular simulation, users have no trained muscle memory for identifying phishing \u2014 click-through rates on real attacks remain high.",
       "Severity": "Low",
       "Workload": "DEF",
@@ -3719,7 +3806,9 @@
       "LicenseRequirement": "Defender for Office 365 Plan 2 (M365 E5 or add-on)",
       "References": {
         "CIS": "2.3.6",
+        "SCuBA": "",
         "NIST": "AT-2, AT-3",
+        "CMMC": "AT.L2-3.2.1",
         "MITRE": [
           "T1566"
         ]
@@ -3803,7 +3892,7 @@
     {
       "ControlId": "EXO-5.3",
       "Title": "No Allowed Sender Domains Bypassing Anti-Spam Filtering",
-      "Description": "The anti-spam policy contains no allowed sender domains that would cause all mail from those domains to bypass EOP filtering.",
+      "Description": "The anti-spam policy contains no allowed sender domains that would cause all mail from those domains to bypass EOP filtering. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Allowed sender domains are one of the most common misconfigurations in M365. If a permitted domain is compromised, all mail from it bypasses spam and malware filtering entirely.",
       "Severity": "High",
       "Workload": "EXO",
@@ -3815,6 +3904,7 @@
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CIS": "2.1.13",
+        "SCuBA": "",
         "NIST": "SI-8",
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
@@ -3839,6 +3929,7 @@
         "CIS": "8.5.9",
         "SCuBA": "MS.TEAMS.1.6v1",
         "NIST": "AU-11",
+        "CMMC": "AU.L2-3.3.1",
         "MITRE": [
           "T1113"
         ]
@@ -3908,6 +3999,7 @@
         "CIS": "8.5.10",
         "SCuBA": "MS.TEAMS.1.7v2",
         "NIST": "AC-3",
+        "CMMC": "AC.L2-3.1.1",
         "MITRE": [
           "T1078"
         ]
@@ -3943,7 +4035,7 @@
     {
       "ControlId": "INT-4.2",
       "Title": "Windows Hello for Business Deployed",
-      "Description": "Windows Hello for Business is deployed via Intune policy, enabling phishing-resistant passwordless authentication on enrolled Windows endpoints.",
+      "Description": "Windows Hello for Business is deployed via Intune policy, enabling phishing-resistant passwordless authentication on enrolled Windows endpoints. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "WHfB eliminates password-based credential theft on enrolled endpoints \u2014 LSASS dumping yields nothing, phishing yields nothing. It is the highest-value passwordless deployment available at no extra license cost.",
       "Severity": "Medium",
       "Workload": "INT",
@@ -3955,6 +4047,7 @@
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
         "CIS": "4.1.6",
+        "SCuBA": "",
         "NIST": "IA-2(1)",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -3995,7 +4088,7 @@
     {
       "ControlId": "INT-4.4",
       "Title": "Mobile Device Compliance Requires PIN or Biometric",
-      "Description": "iOS and Android compliance policies require a PIN or biometric lock before accessing managed apps.",
+      "Description": "iOS and Android compliance policies require a PIN or biometric lock before accessing managed apps. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Unlocked mobile devices give physical access to all managed apps, corporate email, Teams conversations, and OneDrive files \u2014 no attacker credential required.",
       "Severity": "High",
       "Workload": "INT",
@@ -4007,6 +4100,7 @@
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
         "CIS": "4.2.2",
+        "SCuBA": "",
         "NIST": "IA-5, AC-11",
         "CMMC": "IA.L2-3.5.1",
         "MITRE": [
@@ -4087,6 +4181,7 @@
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
         "CIS": "3.4.1",
+        "SCuBA": "MS.DEFENDER.4.1v2",
         "NIST": "AC-16, SC-28",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -4101,7 +4196,7 @@
     {
       "ControlId": "PVW-4.4",
       "Title": "Records Management Labels Configured for Regulated Data",
-      "Description": "Records management retention labels are configured for content subject to legal or regulatory hold requirements.",
+      "Description": "Records management retention labels are configured for content subject to legal or regulatory hold requirements. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without immutable records declarations, content subject to litigation hold can be modified or deleted \u2014 creating legal liability and spoliation risk.",
       "Severity": "Low",
       "Workload": "PVW",
@@ -4113,6 +4208,7 @@
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
         "CIS": "3.3.3",
+        "SCuBA": "",
         "NIST": "AU-11, IR-4",
         "CMMC": "IR.L2-3.6.1",
         "MITRE": [
@@ -4123,7 +4219,7 @@
     {
       "ControlId": "PPL-3.1",
       "Title": "M365 Copilot Sensitivity Label Enforcement",
-      "Description": "Sensitivity labels are configured with file scope, enabling Microsoft 365 Copilot to respect data classification boundaries when accessing and summarizing content.",
+      "Description": "Sensitivity labels are configured with file scope, enabling Microsoft 365 Copilot to respect data classification boundaries when accessing and summarizing content. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without sensitivity labels, Copilot can access and surface any data the user can reach \u2014 including HR files, financial records, and confidential strategies \u2014 with no awareness of sensitivity. Copilot dramatically amplifies over-sharing risk.",
       "Severity": "High",
       "Workload": "PPL",
@@ -4135,7 +4231,9 @@
       "LicenseRequirement": "M365 Business Premium or E3+ (Copilot requires M365 Copilot add-on)",
       "References": {
         "CIS": "3.4.1",
+        "SCuBA": "",
         "NIST": "AC-16, SC-28",
+        "CMMC": "MP.L2-3.8.4",
         "ISO27001": "A.8.12",
         "SOC2": "C1.2",
         "MITRE": [
@@ -4146,7 +4244,7 @@
     {
       "ControlId": "PPL-3.2",
       "Title": "DLP Policy Active for Copilot Interactions",
-      "Description": "Data Loss Prevention policies are configured to protect against sensitive data leakage through Microsoft 365 Copilot prompts and responses.",
+      "Description": "Data Loss Prevention policies are configured to protect against sensitive data leakage through Microsoft 365 Copilot prompts and responses. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without DLP covering Copilot, users can extract sensitive data by prompting Copilot to summarize, translate, or reformat confidential content \u2014 bypassing all other data controls.",
       "Severity": "High",
       "Workload": "PPL",
@@ -4158,7 +4256,9 @@
       "LicenseRequirement": "M365 E5 Compliance add-on",
       "References": {
         "CIS": "3.3.4",
+        "SCuBA": "",
         "NIST": "SC-28, AC-4",
+        "CMMC": "SC.L2-3.13.16",
         "ISO27001": "A.8.12",
         "SOC2": "C1.2",
         "HIPAA": "\u00a7164.312(e)(1)",
@@ -4171,7 +4271,7 @@
     {
       "ControlId": "PPL-3.3",
       "Title": "Copilot Access Restricted to Licensed Users",
-      "Description": "Microsoft 365 Copilot access is controlled and provisioned only to users with explicit Copilot licenses.",
+      "Description": "Microsoft 365 Copilot access is controlled and provisioned only to users with explicit Copilot licenses. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Uncontrolled Copilot access means unlicensed users may gain Copilot capabilities through shared accounts or feature rollouts, bypassing governance controls.",
       "Severity": "Medium",
       "Workload": "PPL",
@@ -4183,7 +4283,9 @@
       "LicenseRequirement": "M365 Copilot add-on license ($30/user/month)",
       "References": {
         "CIS": "5.5.1",
+        "SCuBA": "",
         "NIST": "AC-2",
+        "CMMC": "AC.L2-3.1.1",
         "ISO27001": "A.5.18",
         "MITRE": [
           "T1078"
@@ -4193,7 +4295,7 @@
     {
       "ControlId": "PPL-3.4",
       "Title": "Copilot Studio Agent Publishing Governed",
-      "Description": "Copilot Studio (Power Virtual Agents) agent creation and publishing requires admin approval and is subject to DLP policies.",
+      "Description": "Copilot Studio (Power Virtual Agents) agent creation and publishing requires admin approval and is subject to DLP policies. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Ungoverned Copilot Studio agents can be built to query sensitive SharePoint libraries, connect to external APIs, and respond to any user in the organization \u2014 creating unreviewed data exposure channels at scale.",
       "Severity": "High",
       "Workload": "PPL",
@@ -4205,7 +4307,9 @@
       "LicenseRequirement": "Power Platform + Copilot Studio license",
       "References": {
         "CIS": "9.3.4",
+        "SCuBA": "",
         "NIST": "CM-7, AC-6",
+        "CMMC": "CM.L2-3.4.6",
         "ISO27001": "A.8.18",
         "MITRE": [
           "T1078",
@@ -4216,7 +4320,7 @@
     {
       "ControlId": "PPL-3.5",
       "Title": "Copilot Interaction Audit Logging Active",
-      "Description": "Copilot prompt/response interactions are captured in the Unified Audit Log for compliance and investigation purposes.",
+      "Description": "Copilot prompt/response interactions are captured in the Unified Audit Log for compliance and investigation purposes. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Without Copilot interaction logging, an insider using Copilot to extract sensitive data leaves no audit trail \u2014 the interaction is functionally invisible to security and compliance teams.",
       "Severity": "High",
       "Workload": "PPL",
@@ -4228,7 +4332,9 @@
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
         "CIS": "3.1.1",
+        "SCuBA": "",
         "NIST": "AU-2, AU-12",
+        "CMMC": "AU.L2-3.3.1",
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
         "HIPAA": "\u00a7164.312(b)",
@@ -4293,7 +4399,7 @@
     {
       "ControlId": "AAD-12.3",
       "Title": "Stale Licensed Member Accounts \u2014 Named List",
-      "Description": "Identifies licensed member accounts with no sign-in activity in 90+ days \u2014 likely departed employees.",
+      "Description": "Identifies licensed member accounts with no sign-in activity in 90+ days \u2014 likely departed employees. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Active accounts for departed employees are a primary threat vector. Former employees know the organization's structure, workflows, and email conventions \u2014 making them highly effective social engineers if accounts are ever used maliciously.",
       "Severity": "High",
       "Workload": "AAD",
@@ -4305,6 +4411,7 @@
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CIS": "5.1.6.1",
+        "SCuBA": "",
         "NIST": "AC-2(9)",
         "CMMC": "AC.L2-3.1.2",
         "ISO27001": "A.5.18",
@@ -4446,7 +4553,7 @@
     {
       "ControlId": "AAD-13.1",
       "Title": "Microsoft Secure Score",
-      "Description": "Microsoft's own assessment of the tenant's security posture across identity, data, apps, and devices.",
+      "Description": "Microsoft's own assessment of the tenant's security posture across identity, data, apps, and devices. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Microsoft Secure Score measures the same controls through Microsoft's lens. A score below 50% indicates fundamental security gaps across the tenant. It is independently verifiable and useful for trend tracking.",
       "Severity": "Medium",
       "Workload": "AAD",
@@ -4458,7 +4565,9 @@
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CIS": "3.5.2",
+        "SCuBA": "",
         "NIST": "CA-7",
+        "CMMC": "CA.L2-3.12.3",
         "MITRE": [
           "T1078"
         ]
