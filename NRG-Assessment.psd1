@@ -1,6 +1,6 @@
 @{
     # Module identity
-    ModuleVersion     = '4.6.0'
+    ModuleVersion     = '4.6.1'
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
     Author            = 'Matthew Levorson'
     CompanyName       = 'NRG Technology Services / NextLayerSec LLC'
@@ -285,33 +285,34 @@
             Tags         = @('M365', 'Security', 'Assessment', 'MSP', 'CIS', 'SCuBA', 'NIST', 'CMMC')
             ProjectUri   = 'https://github.com/Blackvectra/NRG-Assessment-Tool'
             ReleaseNotes = @'
-v4.6.0: 208 exported functions. Full security review + cross-branch hardening.
+v4.6.1: 217 exported functions. Closes Phase 2 + Phase 4 roadmap gaps.
 
-Security hardening (PR #11): Markdown + PowerShell injection fixes in
-Publish-NRGRemediationPlaybook, Publish-NRGDeltaReport, and Publish-NRGRemediationScript
-(generated .ps1 deliverable). Manifest sync — 52 previously-dropped function exports
-restored. Closes XSS / code-injection sinks in client deliverables.
+PRs:
+  #12 DNS extended evaluators (4 new): DNS-2.1 DkimRotation, DNS-2.2 CAA,
+      DNS-2.3 TLSCertExpiry, DNS-2.4 CertTransparency. Consumes the extended
+      collector data that was previously unread.
+  #13 EXO Inventory evaluators (4 new): EXO-7.1 MailboxForwarding,
+      EXO-7.2 InboxRulesForwarding, EXO-7.3 AuditDisabledMailboxes,
+      EXO-7.4 SmtpAuthExceptions. Consumes the inventory collector data.
+  #14 Framework citations: SCuBA 126→136 (10 honest mappings; 52 marked
+      "" with description note where no SCuBA equivalent exists). CMMC
+      141→188 (100% via NIST→CMMC L2 standard mapping).
+  #15 Copilot governance: new M365Copilot collector (reuses Purview raw
+      data; Graph subscribedSkus + users + applications). 5 stub evaluators
+      replaced with real logic (sensitivity labels, DLP, licensing ratio,
+      Studio external publish, interaction-data retention).
+  #16 Apply-NRGBaseline.ps1: interactive write-mode tool with WhatIf,
+      idempotency check, rollback log, approval gates. V1 includes 6
+      representative apply functions (AAD-1.1 legacy auth, AAD-2.1 MFA,
+      EXO-1.1 mailbox audit, EXO-1.2 SMTP AUTH, EXO-1.3 auto-forward,
+      DEF-1.1 Defender preset). CA-policy creators deploy in
+      enabledForReportingButNotEnforced — operator promotes after sign-in
+      log validation.
 
-New capabilities:
-  * Risk quantification: $-cost framing per finding + aggregate annualized loss
-    expectancy with Verizon DBIR 2025 / IBM CoaDB 2024 anchors. Int64-safe,
-    invariant-culture formatting, StrictMode-resilient. (PRs #8 + #9)
-  * Configuration drift detection: baseline snapshot with ACL hardening,
-    tenant-ID mismatch guard, EscMdStrict escape helper for untrusted
-    baseline JSON. (PR #7, patched)
-  * DNS extended: DKIM rotation, CAA, TLS cert expiry, crt.sh CT log;
-    SSRF guard on MX targets, RFC1918/loopback/link-local block, per-domain
-    time budget. (PR #5, patched)
-  * EXO inventory: real shared-mailbox sign-in check + InboxRulesForwarding.
-  * Intune collector split into 3 (Endpoint Security / Device Compliance / App Protection).
-  * SCuBA rule ID coverage filled in for 25 controls.
-
-Quality / infrastructure:
-  * AAD-2.3 number-matching evaluator: corrected logic for Microsoft platform
-    enforcement (May 2023 default). Was producing false Gap findings on every
-    tenant. Orphan patch file removed.
-  * CI: Pester + PSScriptAnalyzer + manifest drift check via GitHub Actions.
-  * .gitignore for Reports/, secrets, .claude/ session metadata.
+Test infrastructure fixes:
+  * Pester "All evaluators exist" updated for PR #6 file renames.
+  * Pester "Read-Only Posture" excludes Apply-NRGBaseline (which IS the
+    write-mode tool by design).
 
 Migration: any caller of Invoke-NRGCollectIntune must switch to one of
 Invoke-NRGCollectIntuneEndpointSecurity / Invoke-NRGCollectIntuneDeviceCompliance /
