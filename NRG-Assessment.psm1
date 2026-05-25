@@ -157,6 +157,8 @@ $script:ExportedFunctions = @(
     # ── Evaluators — DNS ──────────────────────────────────────────────────────
     'Test-NRGControlDNSSPF', 'Test-NRGControlDNSDKIM', 'Test-NRGControlDNSDMARC',
     'Test-NRGControlDNSMTASTS', 'Test-NRGControlDNSTLSRPT', 'Test-NRGControlDNSDNSSEC',
+    'Test-NRGControlDNSDkimRotation', 'Test-NRGControlDNSCAA',
+    'Test-NRGControlDNSTLSCertExpiry', 'Test-NRGControlDNSCertTransparency',
 
     # ── Evaluators — EXO ──────────────────────────────────────────────────────
     'Test-NRGControlEXOMailboxAudit', 'Test-NRGControlEXOSmtpAuth',
