@@ -549,16 +549,28 @@ function Test-NRGControlAADAuthenticatorNumberMatch {
     }
     $ampConfigs = @($auth.Data.AuthMethodsPolicy.AuthenticationMethodConfigs ?? @())
     $mfaConfig  = $ampConfigs | Where-Object { $_.Id -eq 'MicrosoftAuthenticator' } | Select-Object -First 1
-    $nmState    = [string]($mfaConfig.FeatureSettings.NumberMatchingRequiredState ?? 'default')
-    if ($nmState -eq 'enabled') {
+    # Microsoft enforced number matching as the platform default in May 2023.
+    # When the property is null/empty the API is reporting "MS is enforcing it
+    # at the platform level" — NOT "we don't know". Treating absence as unknown
+    # produced "Number matching state is ''" Gap findings on every modern
+    # tenant (mirrors the AAD-2.3 fix in Test-NRGControlAADCA.ps1).
+    $nmStateRaw = $mfaConfig.FeatureSettings.NumberMatchingRequiredState
+    $nmState    = if ($null -eq $nmStateRaw -or [string]::IsNullOrWhiteSpace([string]$nmStateRaw)) {
+                      'default'
+                  } else {
+                      [string]$nmStateRaw
+                  }
+    if ($nmState -eq 'enabled' -or $nmState -eq 'default') {
+        $msg = if ($nmState -eq 'enabled') {
+            'Microsoft Authenticator number matching is explicitly enabled — MFA fatigue attacks blocked.'
+        } else {
+            'Number matching: enabled (Microsoft platform default since May 2023). Explicit configuration is optional but ensures it cannot be disabled.'
+        }
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail 'Microsoft Authenticator number matching is enabled — MFA fatigue attacks blocked.'
-    } elseif ($nmState -eq 'default') {
-        # Microsoft enabled number matching by default for all tenants in May 2023
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail 'Number matching is system-enforced by Microsoft (default). Explicitly enabling ensures it cannot be disabled.'
+            -Detail $msg `
+            -CurrentValue "NumberMatchingRequiredState = $nmState" `
+            -RequiredValue 'enabled (or default)'
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `

@@ -32,7 +32,13 @@
 
 [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High', DefaultParameterSetName = 'FromFile')]
 param(
-    [Parameter(Mandatory, ParameterSetName = 'FromFile')]
+    # Not Mandatory — the block below auto-detects the newest results JSON
+    # under .\output\ when -ResultsPath is omitted. The empty-prompt UX in
+    # v4.6.1 ("ResultsPath:" with no hint) led operators to type "Downloads"
+    # and crash. HelpMessage gives PowerShell's prompt useful context if the
+    # auto-detect path fails (no files in .\output\).
+    [Parameter(Mandatory = $false, ParameterSetName = 'FromFile',
+        HelpMessage = 'Path to results.json from a prior Invoke-NRGAssessment run. Defaults to the newest match in ./output/.')]
     [string] $ResultsPath,
 
     [Parameter(Mandatory, ParameterSetName = 'FromObjects')]
@@ -69,10 +75,19 @@ if ($DryRun -and -not $WhatIfPreference) {
     $WhatIfPreference = $true
 }
 
+# ── Pre-banner version probe ────────────────────────────────────────────────
+# Same pattern as Invoke-NRGAssessment.ps1 — read ModuleVersion from the
+# manifest so the banner can't drift from the .psd1 / .psm1 single source.
+$applyVersion = 'unknown'
+try {
+    $manifestData = Import-PowerShellDataFile -LiteralPath (Join-Path $scriptDir 'NRG-Assessment.psd1') -ErrorAction Stop
+    if ($manifestData.ModuleVersion) { $applyVersion = [string]$manifestData.ModuleVersion }
+} catch { }
+
 # ── Banner ──────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Red
-Write-Host " NRG-Assessment v4.6.1 — Apply-NRGBaseline (WRITE MODE)"        -ForegroundColor Red
+Write-Host " NRG-Assessment v$applyVersion — Apply-NRGBaseline (WRITE MODE)" -ForegroundColor Red
 Write-Host " NRG Technology Services | NextLayerSec LLC"                   -ForegroundColor Red
 Write-Host "================================================================" -ForegroundColor Red
 if ($WhatIfPreference) {
@@ -111,6 +126,23 @@ $script:NRGApplyDispatch = @{
 # ── Load findings ───────────────────────────────────────────────────────────
 $loadedFindings = @()
 if ($PSCmdlet.ParameterSetName -eq 'FromFile') {
+    # ── Auto-detect newest results JSON when -ResultsPath was not supplied ──
+    # The mandatory-prompt UX in v4.6.1 had zero hint text and operators typed
+    # plausible-looking nonsense ("Downloads") which crashed the script. Scan
+    # ./output/*-results.json (the same path Invoke-NRGAssessment writes to)
+    # and pick the newest. If the folder is empty, fall through to the clearer
+    # error message below.
+    if ([string]::IsNullOrWhiteSpace($ResultsPath)) {
+        $defaultOutput = Join-Path $scriptDir 'output'
+        $candidate = Get-ChildItem -Path $defaultOutput -Filter '*-results.json' -File -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($candidate) {
+            $ResultsPath = $candidate.FullName
+            Write-Host "[-] Using latest results: $ResultsPath  (override with -ResultsPath)" -ForegroundColor Cyan
+        } else {
+            throw "No -ResultsPath supplied and no ./output/*-results.json found. Run Invoke-NRGAssessment first or pass -ResultsPath explicitly."
+        }
+    }
     if (-not (Test-Path -LiteralPath $ResultsPath)) {
         throw "Results file not found: $ResultsPath"
     }

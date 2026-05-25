@@ -55,12 +55,15 @@ function Publish-NRGAssessmentSummary {
         [int](($satisfied + ($partial * 0.5)) / $scored * 100)
     } else { 0 }
 
-    $posture = switch ($true) {
-        { $scorePerc -ge 85 } { 'Strong' }
-        { $scorePerc -ge 65 } { 'Moderate' }
-        { $scorePerc -ge 40 } { 'At Risk' }
-        default                { 'Critical' }
-    }
+    # PowerShell `switch ($true)` evaluates EVERY matching scriptblock unless
+    # each arm contains a `break`. The previous form fell through and joined
+    # multiple buckets together ("Moderate At Risk" at 73%). Rewriting as
+    # if/elseif/else makes the mutually-exclusive intent obvious and removes
+    # the fallthrough hazard.
+    $posture = if     ($scorePerc -ge 85) { 'Strong'   }
+               elseif ($scorePerc -ge 65) { 'Moderate' }
+               elseif ($scorePerc -ge 40) { 'At Risk'  }
+               else                       { 'Critical' }
 
     # Build findings tables by severity
     $criticalGaps = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'Critical' })
