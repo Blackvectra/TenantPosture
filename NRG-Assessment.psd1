@@ -39,6 +39,7 @@
         'Get-NRGAggregateRisk',
         'Get-NRGFrameworkCitations',
         'Get-NRGFrameworkDefinitions',
+        'Set-NRGSensitiveFileAcl',
 
         # ── Collectors — AAD ──────────────────────────────────────────────────
         'Invoke-NRGCollectAADAuthPolicies',

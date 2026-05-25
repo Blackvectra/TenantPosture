@@ -394,27 +394,9 @@ Write-Host "      Baseline contains sensitive tenant inventory (CA policies, adm
 # every DMARC record) — on a shared MSP workstation or a synced OneDrive
 # folder, default inherited permissions would make this world-readable.
 # Strip inheritance and grant only current user + SYSTEM + Administrators.
-try {
-    $acl = Get-Acl -LiteralPath $jsonPath
-    # Disable inheritance, drop any inherited rules
-    $acl.SetAccessRuleProtection($true, $false)
-    # Remove any non-inherited rules that survived (defense in depth)
-    foreach ($existing in @($acl.Access)) {
-        if (-not $existing.IsInherited) {
-            [void]$acl.RemoveAccessRule($existing)
-        }
-    }
-    $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-    $rules = @(
-        [System.Security.AccessControl.FileSystemAccessRule]::new($currentUser, 'FullControl', 'Allow')
-        [System.Security.AccessControl.FileSystemAccessRule]::new('NT AUTHORITY\SYSTEM', 'FullControl', 'Allow')
-        [System.Security.AccessControl.FileSystemAccessRule]::new('BUILTIN\Administrators', 'FullControl', 'Allow')
-    )
-    foreach ($r in $rules) { $acl.AddAccessRule($r) }
-    Set-Acl -LiteralPath $jsonPath -AclObject $acl
-} catch {
-    Write-Warning "Failed to restrict ACL on baseline JSON ($jsonPath): $($_.Exception.Message). File may be readable by other users on this host — review permissions manually."
-}
+# Shared helper — same logic is reused by Apply-NRGBaseline.ps1 for its
+# rollback log + results JSON/MD (audit findings: parity gap with assessor).
+Set-NRGSensitiveFileAcl -Path $jsonPath
 
 if (-not $JsonOnly) {
     # Markdown summary

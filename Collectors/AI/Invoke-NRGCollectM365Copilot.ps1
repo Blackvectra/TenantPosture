@@ -346,11 +346,20 @@ function Invoke-NRGCollectM365Copilot {
     }
 
     # ── Finalize ─────────────────────────────────────────────────────────────
-    # We consider the collection successful if at least the licensing query
-    # completed. Per-endpoint failures are captured in $result.Errors.
-    $result.Success = ($result.Data.TotalUserCount -gt 0) -or
-                      ($result.Data.LicensedSkus.Count -gt 0) -or
-                      ($result.Errors.Count -lt 6)
+    # Success requires at least ONE primary data source to have completed.
+    # Primary sources:
+    #   - subscribedSkus (licensing): populates LicensedSkus
+    #   - users enumeration: populates TotalUserCount
+    # Supplemental sources (sensitivity labels, DLP, Copilot Studio apps,
+    # interaction retention) are best-effort — their failure must NOT mask
+    # a completely dead collector as live. The prior `Errors.Count -lt 6`
+    # heuristic would have reported Success=$true when every single endpoint
+    # failed (since failures-required-to-trip was strictly greater-than-equal
+    # to 6, and we only emit six error categories), turning zero-data into
+    # an apparent "everything's compliant" reading downstream.
+    $licensingOk = ($result.Data.LicensedSkus.Count -gt 0)
+    $usersOk     = ($result.Data.TotalUserCount -gt 0)
+    $result.Success = ($licensingOk -or $usersOk)
 
     if (Get-Command Set-NRGRawData -ErrorAction SilentlyContinue) {
         Set-NRGRawData -Key 'M365Copilot' -Data $result
