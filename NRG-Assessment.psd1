@@ -275,8 +275,39 @@
         PSData = @{
             Tags         = @('M365', 'Security', 'Assessment', 'MSP', 'CIS', 'SCuBA', 'NIST', 'CMMC')
             ProjectUri   = 'https://github.com/Blackvectra/NRG-Assessment-Tool'
-            Prerelease   = 'rc1'
-            ReleaseNotes = 'v4.6.0-rc1: security hardening (3 publisher injection fixes + manifest sync, 52 previously-dropped exports restored), Intune collector split, SCuBA ID coverage, EXO inbox-rule forwarding detection, CI workflow with Pester + PSScriptAnalyzer.'
+            ReleaseNotes = @'
+v4.6.0: 208 exported functions. Full security review + cross-branch hardening.
+
+Security hardening (PR #11): Markdown + PowerShell injection fixes in
+Publish-NRGRemediationPlaybook, Publish-NRGDeltaReport, and Publish-NRGRemediationScript
+(generated .ps1 deliverable). Manifest sync — 52 previously-dropped function exports
+restored. Closes XSS / code-injection sinks in client deliverables.
+
+New capabilities:
+  * Risk quantification: $-cost framing per finding + aggregate annualized loss
+    expectancy with Verizon DBIR 2025 / IBM CoaDB 2024 anchors. Int64-safe,
+    invariant-culture formatting, StrictMode-resilient. (PRs #8 + #9)
+  * Configuration drift detection: baseline snapshot with ACL hardening,
+    tenant-ID mismatch guard, EscMdStrict escape helper for untrusted
+    baseline JSON. (PR #7, patched)
+  * DNS extended: DKIM rotation, CAA, TLS cert expiry, crt.sh CT log;
+    SSRF guard on MX targets, RFC1918/loopback/link-local block, per-domain
+    time budget. (PR #5, patched)
+  * EXO inventory: real shared-mailbox sign-in check + InboxRulesForwarding.
+  * Intune collector split into 3 (Endpoint Security / Device Compliance / App Protection).
+  * SCuBA rule ID coverage filled in for 25 controls.
+
+Quality / infrastructure:
+  * AAD-2.3 number-matching evaluator: corrected logic for Microsoft platform
+    enforcement (May 2023 default). Was producing false Gap findings on every
+    tenant. Orphan patch file removed.
+  * CI: Pester + PSScriptAnalyzer + manifest drift check via GitHub Actions.
+  * .gitignore for Reports/, secrets, .claude/ session metadata.
+
+Migration: any caller of Invoke-NRGCollectIntune must switch to one of
+Invoke-NRGCollectIntuneEndpointSecurity / Invoke-NRGCollectIntuneDeviceCompliance /
+Invoke-NRGCollectIntuneAppProtection.
+'@
         }
     }
 }
