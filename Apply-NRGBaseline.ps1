@@ -99,6 +99,19 @@ if ($WhatIfPreference) {
 }
 Write-Host ""
 
+# ── Dot-source the shared Lib helpers we need (ACL hardening) ───────────────
+# Apply-NRGBaseline is a top-level orchestrator and does not Import-Module
+# NRG-Assessment, so any Lib helper it depends on must be dot-sourced here.
+# Set-NRGSensitiveFileAcl is required to harden the rollback log + results
+# files (tenant inventory + change history — same sensitivity tier as the
+# assessor baseline JSON).
+$aclHelperPath = Join-Path $scriptDir 'Lib' 'Set-NRGSensitiveFileAcl.ps1'
+if (Test-Path -LiteralPath $aclHelperPath) {
+    . $aclHelperPath
+} else {
+    Write-Warning "Set-NRGSensitiveFileAcl.ps1 not found at $aclHelperPath — output files will not be ACL-hardened."
+}
+
 # ── Dot-source the Apply functions ──────────────────────────────────────────
 $applyDir = Join-Path $scriptDir 'Apply'
 if (-not (Test-Path -LiteralPath $applyDir)) {
@@ -389,6 +402,12 @@ if ($rollbackEntries.Count -gt 0) {
     # Local report file — always write, not gated by WhatIfPreference (this is
     # the apply tool's own audit trail, not a tenant change).
     [System.IO.File]::WriteAllText($rollbackPath, $rollbackJson, [System.Text.UTF8Encoding]::new($false))
+    # Sensitive: rollback log contains tenant config Before/After per applied
+    # change. Restrict ACL to current user + SYSTEM + Administrators (same
+    # protection class as the assessor baseline). No-op on non-Windows.
+    if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileAcl -Path $rollbackPath
+    }
 }
 
 # ── Write results JSON + Markdown ───────────────────────────────────────────
@@ -412,6 +431,10 @@ $resultsJson = @{
     Results  = @($applyResults)
 } | ConvertTo-Json -Depth 12
 [System.IO.File]::WriteAllText($resultsJsonPath, $resultsJson, [System.Text.UTF8Encoding]::new($false))
+# Sensitive: results JSON contains tenant findings + Before/After values.
+if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+    Set-NRGSensitiveFileAcl -Path $resultsJsonPath
+}
 
 # Build markdown report
 $md = [System.Text.StringBuilder]::new()
@@ -451,6 +474,10 @@ foreach ($r in $applyResults) {
     [void]$md.AppendLine("")
 }
 [System.IO.File]::WriteAllText($resultsMdPath, $md.ToString(), [System.Text.UTF8Encoding]::new($false))
+# Sensitive: results MD includes tenant config Before/After per change.
+if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+    Set-NRGSensitiveFileAcl -Path $resultsMdPath
+}
 
 # ── Final summary to console ────────────────────────────────────────────────
 Write-Host ""
