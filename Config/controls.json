@@ -4572,6 +4572,108 @@
           "T1078"
         ]
       }
+    },
+    {
+      "ControlId": "EXO-7.1",
+      "Title": "No Mailbox Forwarding to External Addresses",
+      "Description": "No mailboxes have a ForwardingSmtpAddress configured to an external recipient. Server-side mailbox forwarding is a common BEC persistence channel that silently exfiltrates all inbound mail.",
+      "BusinessRisk": "ForwardingSmtpAddress is set at the mailbox level and survives password resets and license changes. Attackers who compromise a single mailbox use it to maintain visibility into the victim's mail after the initial intrusion is contained. It is also a common insider exfil vector for departing employees.",
+      "Severity": "High",
+      "Workload": "EXO",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-Inventory",
+      "EvaluatorFunction": "Test-NRGControlEXOMailboxForwarding",
+      "Remediation": "Get-Mailbox -ResultSize Unlimited -Filter \"ForwardingSmtpAddress -ne `$null\" | Set-Mailbox -ForwardingSmtpAddress $null -ForwardingAddress $null -DeliverToMailboxAndForward $false. Also block at transport layer: Set-RemoteDomain Default -AutoForwardEnabled $false.",
+      "LicenseRequirement": "Included (all plans)",
+      "References": {
+        "CIS": "6.2.1",
+        "SCuBA": "MS.EXO.1.1v1",
+        "NIST": "AU-6, IR-4, SI-4",
+        "CMMC": "AU.L2-3.3.5, IR.L2-3.6.1, SI.L2-3.14.6",
+        "MITRE": [
+          "T1114.003"
+        ],
+        "ISO27001": "A.8.16",
+        "SOC2": "CC7.2"
+      }
+    },
+    {
+      "ControlId": "EXO-7.2",
+      "Title": "No Inbox Rules Forwarding Externally",
+      "Description": "No mailbox inbox rules use ForwardTo, RedirectTo, or ForwardAsAttachmentTo to deliver mail to external recipients. Inbox rules are the classic post-credential-compromise persistence channel (MITRE T1114.003).",
+      "BusinessRisk": "Inbox rules created by an attacker after credential compromise will quietly forward mail of interest (finance, executives, password resets) to an attacker-controlled address. They bypass ForwardingSmtpAddress monitoring and survive sign-in revocation if the rule was created before the revoke.",
+      "Severity": "High",
+      "Workload": "EXO",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-Inventory",
+      "EvaluatorFunction": "Test-NRGControlEXOInboxRulesForwarding",
+      "Remediation": "Audit: foreach ($m in Get-Mailbox -ResultSize Unlimited) { Get-InboxRule -Mailbox $m.UserPrincipalName | Where-Object { $_.ForwardTo -or $_.RedirectTo -or $_.ForwardAsAttachmentTo } }. Disable: Disable-InboxRule -Mailbox <UPN> -Identity <RuleName>. Block at transport: Set-RemoteDomain Default -AutoForwardEnabled $false.",
+      "LicenseRequirement": "Included (all plans)",
+      "References": {
+        "CIS": "6.2.1",
+        "SCuBA": "MS.EXO.1.1v1",
+        "NIST": "AU-6, IR-4, SI-4",
+        "CMMC": "AU.L2-3.3.5, IR.L2-3.6.1, SI.L2-3.14.6",
+        "MITRE": [
+          "T1114.003"
+        ],
+        "ISO27001": "A.8.16",
+        "SOC2": "CC7.2"
+      }
+    },
+    {
+      "ControlId": "EXO-7.3",
+      "Title": "No Mailboxes with Per-User Audit Explicitly Disabled",
+      "Description": "No mailboxes have AuditEnabled = $false set explicitly. As of January 2019, mailbox audit is on by default org-wide; explicit per-user disable is a deliberate override and almost always wrong.",
+      "BusinessRisk": "Mailboxes with audit explicitly disabled cannot be investigated after a compromise. Inbox-rule creation, mail access by delegates, and sent-item modification are not captured for the disabled mailbox — a deliberate or accidental blind spot that thwarts incident response.",
+      "Severity": "Medium",
+      "Workload": "EXO",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-Inventory",
+      "EvaluatorFunction": "Test-NRGControlEXOAuditDisabledMailboxes",
+      "Remediation": "Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false } | Set-Mailbox -AuditEnabled $true. For a single mailbox: Set-Mailbox -Identity <UPN> -AuditEnabled $true.",
+      "LicenseRequirement": "Included (all plans)",
+      "References": {
+        "CIS": "3.1.2",
+        "SCuBA": "MS.EXO.4.1v1",
+        "NIST": "AU-2, AU-3, AU-12",
+        "CMMC": "AU.L2-3.3.1, AU.L2-3.3.2",
+        "MITRE": [
+          "T1070.008"
+        ],
+        "ISO27001": "A.8.15",
+        "SOC2": "CC7.2",
+        "HIPAA": "§164.308(a)(1)"
+      }
+    },
+    {
+      "ControlId": "EXO-7.4",
+      "Title": "No Per-User SMTP AUTH Overrides",
+      "Description": "No mailboxes have SmtpClientAuthenticationDisabled = $false set at the mailbox level. Per-user overrides bypass the tenant-level SMTP AUTH disable and re-enable basic authentication for that mailbox.",
+      "BusinessRisk": "Per-user SMTP AUTH exceptions re-enable basic auth for the affected mailboxes — bypassing MFA and Conditional Access. They are a classic password-spray and credential-stuffing target, and they are usually granted ad-hoc for legacy scanners or line-of-business apps and then forgotten.",
+      "Severity": "High",
+      "Workload": "EXO",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-Inventory",
+      "EvaluatorFunction": "Test-NRGControlEXOSmtpAuthExceptions",
+      "Remediation": "For each affected mailbox: Set-CASMailbox -Identity <UPN> -SmtpClientAuthenticationDisabled $true. Migrate senders to OAuth-based SMTP (Microsoft Graph sendMail API) or App Passwords with MFA. For multifunction devices/scanners, prefer SMTP relay via on-prem connector with IP allowlist, or Direct Send (anonymous) — neither requires basic auth.",
+      "LicenseRequirement": "Included (all plans)",
+      "References": {
+        "CIS": "6.2.2",
+        "SCuBA": "MS.EXO.4.2v1",
+        "NIST": "IA-2, SC-8, SI-4",
+        "CMMC": "IA.L2-3.5.3, SC.L2-3.13.8, SI.L2-3.14.6",
+        "MITRE": [
+          "T1110.003",
+          "T1078"
+        ],
+        "ISO27001": "A.8.5",
+        "SOC2": "CC6.1"
+      }
     }
   ]
 }

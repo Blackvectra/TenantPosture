@@ -171,6 +171,8 @@ $script:ExportedFunctions = @(
     'Test-NRGControlEXOSafeAttachmentsSPO', 'Test-NRGControlEXOAntiSpamInbound',
     'Test-NRGControlEXOPerUserAudit', 'Test-NRGControlEXOPriorityAccountProtection',
     'Test-NRGControlEXOSafeSenderOverride',
+    'Test-NRGControlEXOMailboxForwarding', 'Test-NRGControlEXOInboxRulesForwarding',
+    'Test-NRGControlEXOAuditDisabledMailboxes', 'Test-NRGControlEXOSmtpAuthExceptions',
 
     # ── Evaluators — Defender ─────────────────────────────────────────────────
     'Test-NRGControlDefender',

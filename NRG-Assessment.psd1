@@ -140,6 +140,10 @@
         'Test-NRGControlEXOPerUserAudit',
         'Test-NRGControlEXOPriorityAccountProtection',
         'Test-NRGControlEXOSafeSenderOverride',
+        'Test-NRGControlEXOMailboxForwarding',
+        'Test-NRGControlEXOInboxRulesForwarding',
+        'Test-NRGControlEXOAuditDisabledMailboxes',
+        'Test-NRGControlEXOSmtpAuthExceptions',
 
         # ── Evaluators — Defender ─────────────────────────────────────────────
         'Test-NRGControlDefender',
