@@ -301,16 +301,28 @@ function Invoke-NRGCollectDNSEmailRecords {
 
             # MTA-STS policy file (HTTPS fetch — validate URL before opening)
             if ($d.MTASTS.DNSRecord) {
-                try {
-                    # Validate the domain before constructing URL — already validated above
-                    $stsUrl     = "https://mta-sts.$domain/.well-known/mta-sts.txt"
-                    $stsContent = Invoke-WebRequest -Uri $stsUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
-                    $stsText    = $stsContent.Content
-                    $d.MTASTS.Policy = $stsText
+                # SSRF guard (v4.6.x audit MED #3): the mta-sts.<domain> hostname
+                # is constructed from tenant DNS data. Even though $domain is
+                # FQDN-validated above, the resolved hostname could point at
+                # an RFC1918 / loopback / link-local address (DNS rebinding).
+                # Refuse to fetch the policy file in those cases — same pattern
+                # used for the MX hostname TLS probe below.
+                $mtaStsHost = "mta-sts.$domain"
+                $mtaStsRefusal = Test-NRGSafeProbeTarget -HostName $mtaStsHost
+                if ($mtaStsRefusal) {
+                    $d.Errors += "MTASTS.Policy: refused '$mtaStsHost' — $mtaStsRefusal"
+                } else {
+                    try {
+                        # Validate the domain before constructing URL — already validated above
+                        $stsUrl     = "https://$mtaStsHost/.well-known/mta-sts.txt"
+                        $stsContent = Invoke-WebRequest -Uri $stsUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+                        $stsText    = $stsContent.Content
+                        $d.MTASTS.Policy = $stsText
 
-                    $modeMatch = [regex]::Match($stsText, '^\s*mode:\s*(\S+)', [System.Text.RegularExpressions.RegexOptions]::Multiline)
-                    $d.MTASTS.Mode = if ($modeMatch.Success) { $modeMatch.Groups[1].Value.Trim() } else { 'unknown' }
-                } catch { }
+                        $modeMatch = [regex]::Match($stsText, '^\s*mode:\s*(\S+)', [System.Text.RegularExpressions.RegexOptions]::Multiline)
+                        $d.MTASTS.Mode = if ($modeMatch.Success) { $modeMatch.Groups[1].Value.Trim() } else { 'unknown' }
+                    } catch { }
+                }
             }
 
             # TLS-RPT
@@ -376,7 +388,18 @@ function Invoke-NRGCollectDNSEmailRecords {
             # the first MX hostname. STARTTLS on port 25 is a future enhancement;
             # current scope is the HTTPS endpoints the help desk routinely uses.
             $tlsTargets = [ordered]@{}
-            $tlsTargets['Autodiscover'] = "autodiscover.$domain"
+            # SSRF guard (v4.6.x audit MED #3): autodiscover.<domain> resolved
+            # over DNS could point at RFC1918 / loopback / link-local IPs in
+            # a misconfigured or hostile tenant (DNS rebinding). Same Test-NRGSafeProbeTarget
+            # gate the MX target gets.
+            $autoDiscHost = "autodiscover.$domain"
+            $autoDiscRefusal = Test-NRGSafeProbeTarget -HostName $autoDiscHost
+            if ($autoDiscRefusal) {
+                $d.Errors += "TLSCerts.Autodiscover: refused '$autoDiscHost' — $autoDiscRefusal"
+                $d.TLSCerts['Autodiscover'] = @{ Hostname = $autoDiscHost; Error = "Refused: $autoDiscRefusal" }
+            } else {
+                $tlsTargets['Autodiscover'] = $autoDiscHost
+            }
             if ($d.MX.Count -gt 0) {
                 $firstMx = [string]$d.MX[0].Exchange
                 # MX hostnames sometimes end with a trailing dot — strip it

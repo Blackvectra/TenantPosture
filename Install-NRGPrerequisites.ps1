@@ -17,7 +17,11 @@ param(
     [switch] $Force
 )
 
-$ErrorActionPreference = 'Continue'
+# Audit fix (v4.6.x LOW): EAP=Stop module-wide. Individual install steps
+# below wrap their own try/catch so a single package failure (e.g.
+# MicrosoftTeams) doesn't abort the prerequisites checklist — but the
+# default fall-through behavior is now fail-fast instead of fail-silent.
+$ErrorActionPreference = 'Stop'
 
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan

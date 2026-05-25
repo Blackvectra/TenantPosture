@@ -90,10 +90,26 @@ function Publish-NRGComplianceMatrix {
         })
     }
 
-    # Serialize to temp JSON — no tenant data in Python code
-    $tmpJson = [System.IO.Path]::GetTempFileName() -replace '\.tmp$','.json'
+    # Serialize JSON for the Python helper.
+    # Audit fix (v4.6.x MED #4): the previous implementation wrote tenant
+    # findings to $env:TEMP via [System.IO.Path]::GetTempFileName(), which
+    # creates the file with default inherited permissions before any ACL
+    # tightening can run. Two-step (create + chmod) is race-prone in a
+    # shared TEMP. Instead, co-locate the helper JSON next to the XLSX
+    # output (which already lives in the ACL-hardened output directory)
+    # and harden it via Set-NRGSensitiveFileAcl as soon as we write it.
+    $outputDir = Split-Path -Parent $OutputPath
+    if (-not $outputDir -or -not (Test-Path -LiteralPath $outputDir)) {
+        $outputDir = [System.IO.Path]::GetTempPath()
+    }
+    $matrixBase = [System.IO.Path]::GetFileNameWithoutExtension($OutputPath)
+    if ([string]::IsNullOrWhiteSpace($matrixBase)) { $matrixBase = 'compliance-matrix' }
+    $tmpJson = Join-Path $outputDir "$matrixBase-matrix-input.json"
     try {
         $payload | ConvertTo-Json -Depth 6 -Compress | Out-File -LiteralPath $tmpJson -Encoding utf8
+        if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+            Set-NRGSensitiveFileAcl -Path $tmpJson -ErrorAction SilentlyContinue
+        }
 
         # Embedded Python — reads JSON, writes XLSX, no string interpolation of tenant data
         $pyScript = @'
@@ -365,7 +381,11 @@ wb.save(out_path)
 print(f"XLSX saved: {out_path}")
 '@
 
-        $pyTmp = [System.IO.Path]::GetTempFileName() -replace '\.tmp$','.py'
+        # Audit fix (v4.6.x MED #4): py helper also co-located with the XLSX
+        # output. The Python source itself isn't tenant-sensitive, but keeping
+        # all generation artifacts in one ACL-hardened directory simplifies
+        # cleanup and removes the TEMP-race surface entirely.
+        $pyTmp = Join-Path $outputDir "$matrixBase-matrix-helper.py"
         try {
             $pyScript | Out-File -LiteralPath $pyTmp -Encoding utf8
             $result = & $pythonCmd $pyTmp $tmpJson $OutputPath 2>&1

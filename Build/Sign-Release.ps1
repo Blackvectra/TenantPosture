@@ -36,7 +36,12 @@ param(
     [ValidatePattern('^[0-9a-fA-F]{40}$')]
     [string] $CertificateThumbprint,
 
-    [ValidatePattern('^https?://[a-zA-Z0-9.-]+(/.*)?$')]
+    # Audit fix (v4.6.x LOW): pattern previously accepted any FQDN-shaped
+    # host, which let a typo or attacker-controlled DNS entry slip past the
+    # validator. Tighten to the four publicly-trusted RFC 3161 timestamp
+    # services the release process actually uses. Add new entries here only
+    # after the operator vets the new authority.
+    [ValidatePattern('^https?://(timestamp\.digicert\.com|timestamp\.sectigo\.com|timestamp\.globalsign\.com|timestamp\.entrust\.com)(/.*)?$')]
     [string] $TimestampServer = 'http://timestamp.digicert.com',
 
     [string] $RepoRoot
