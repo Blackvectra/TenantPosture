@@ -48,7 +48,14 @@ $script:ShowDeviceCodeBox = {
 
     try {
         $parsed = [System.Uri]$Url
-        if ($parsed.Scheme -ne 'https' -or $parsed.Host -notmatch '\.microsoft\.com$') {
+        # OWASP A10 / ASVS V12.6.1 — HTTPS-only + Microsoft-domain allowlist.
+        # Match either the apex 'microsoft.com' or any '*.microsoft.com'
+        # subdomain. Microsoft uses the apex form for the device-code login
+        # endpoint (https://microsoft.com/devicelogin), which the previous
+        # regex '\.microsoft\.com$' silently rejected because the apex has no
+        # leading dot. HTTP remains rejected (Scheme must equal 'https').
+        $hostOk = $parsed.Host -eq 'microsoft.com' -or $parsed.Host -match '\.microsoft\.com$'
+        if ($parsed.Scheme -ne 'https' -or -not $hostOk) {
             Write-Warning "Refusing to open non-HTTPS or non-Microsoft URL: $Url"
             return
         }

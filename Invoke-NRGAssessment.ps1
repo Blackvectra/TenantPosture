@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 #
 # Invoke-NRGAssessment.ps1
-# Entry point for NRG-Assessment v4.5.5
+# Entry point for NRG-Assessment (version read from module manifest at runtime)
 #
 # NRG Technology Services | NextLayerSec LLC
 # Author: Matthew Levorson
@@ -80,10 +80,21 @@ if (-not $IncludePurview -and -not $SkipPurview) { $SkipPurview = $true }
 
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
+# ── Pre-banner version probe ─────────────────────────────────────────────────
+# Read ModuleVersion from the manifest BEFORE the module is imported so the
+# banner version stays in lockstep with the .psd1 / .psm1 single source of
+# truth. Falls back to 'unknown' if the manifest can't be parsed — the import
+# step below will then fail loudly and exit anyway.
+$script:NRGAssessmentVersion = 'unknown'
+try {
+    $manifestData = Import-PowerShellDataFile -LiteralPath (Join-Path $scriptDir 'NRG-Assessment.psd1') -ErrorAction Stop
+    if ($manifestData.ModuleVersion) { $script:NRGAssessmentVersion = [string]$manifestData.ModuleVersion }
+} catch { }
+
 # ── Banner ────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host " NRG-Assessment v4.5.5 — Read-Only M365 Security Assessment"     -ForegroundColor Cyan
+Write-Host " NRG-Assessment v$($script:NRGAssessmentVersion) — Read-Only M365 Security Assessment" -ForegroundColor Cyan
 Write-Host " NRG Technology Services | NextLayerSec LLC"                     -ForegroundColor Cyan
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host ""
@@ -192,7 +203,7 @@ if ($FromResults -and (Test-Path $FromResults)) {
     $findings = [object[]]@($priorData.Findings)
     $conn = if ($priorData.Connections) { @{} + $priorData.Connections } else { @{} }
     $reportMetadata = if ($priorData.Metadata) { @{} + $priorData.Metadata } else {
-        @{ TenantDomain='Unknown'; AssessmentDate=(Get-Date -Format 'MMMM dd, yyyy'); ToolVersion='4.5.5' }
+        @{ TenantDomain='Unknown'; AssessmentDate=(Get-Date -Format 'MMMM dd, yyyy'); ToolVersion=$script:NRGAssessmentVersion }
     }
     $tenantTag = if ($reportMetadata.TenantDomain) { ($reportMetadata.TenantDomain -split '\.')[0] } else { 'tenant' }
     # OWASP A01 — strip any non-[a-zA-Z0-9-] before using tenantTag in a file path
@@ -428,12 +439,23 @@ if (-not $JsonOnly) {
     }
     }
 
-    # Remediation playbook
+    # Remediation playbook + executive summary
+    # The publisher writes two deliverables: an engineer playbook (-OutputPath)
+    # and a client-facing executive summary (-ExecutivePath). Both -Connections
+    # and -ExecutivePath are mandatory on the function — omitting them in v4.6.1
+    # caused PowerShell to interactively prompt and then fail.
     if (Get-Command Publish-NRGRemediationPlaybook -ErrorAction SilentlyContinue) {
-        $pbPath = Join-Path $OutputPath "$baseName-playbook.md"
+        $pbPath   = Join-Path $OutputPath "$baseName-playbook.md"
+        $execPath = Join-Path $OutputPath "$baseName-executive.md"
         try {
-            Publish-NRGRemediationPlaybook -Metadata $reportMetadata -Findings $findings -OutputPath $pbPath
+            Publish-NRGRemediationPlaybook `
+                -Metadata $reportMetadata `
+                -Findings $findings `
+                -Connections $conn `
+                -OutputPath $pbPath `
+                -ExecutivePath $execPath
             Write-Host "  [+] Playbook: $pbPath" -ForegroundColor Green
+            Write-Host "  [+] Executive: $execPath" -ForegroundColor Green
         } catch { Write-Warning "Playbook publish failed: $($_.Exception.Message)" }
     }
 
@@ -474,9 +496,16 @@ $s = @{
     NA        = @($findings | Where-Object State -eq 'NotApplicable').Count
 }
 
+# Footer version + control count read at runtime so a stale hardcoded value
+# never ships in the operator output. Falls back to the count of findings the
+# evaluators actually emitted this run rather than guessing at "total controls
+# defined in controls.json" which can drift from baseline coverage.
+$footerVer    = if ($NRGAssessmentVersion)   { $NRGAssessmentVersion }   else { $script:NRGAssessmentVersion }
+$footerCount  = $findings.Count
+
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host " Assessment Complete (v4.5.5 / 188 controls)"                     -ForegroundColor Cyan
+Write-Host " Assessment Complete (v$footerVer / $footerCount controls)"      -ForegroundColor Cyan
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host "  Satisfied      $($s.Satisfied)"                                  -ForegroundColor Green
 Write-Host "  Partial        $($s.Partial)"                                    -ForegroundColor Yellow

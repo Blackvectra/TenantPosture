@@ -454,11 +454,25 @@ function Test-NRGControlDNSTLSCertExpiry {
         if ($d -is [hashtable] -and $d.ContainsKey('TLSCerts')) { $tls = $d['TLSCerts'] }
         elseif ($d.PSObject.Properties['TLSCerts'])             { $tls = $d.TLSCerts }
 
+        # Pull collector-side per-domain errors (TimeBudget, refused SSRF
+        # targets, etc.) so NotApplicable findings explain WHY no TLS data
+        # exists. Differentiates "domain has no HTTPS endpoint" from "we
+        # ran out of time budget before probing this domain".
+        $domainErrs = @()
+        if ($d -is [hashtable] -and $d.ContainsKey('Errors')) { $domainErrs = @($d['Errors']) }
+        elseif ($d.PSObject.Properties['Errors'])             { $domainErrs = @($d.Errors) }
+        $budgetSkipped = @($domainErrs | Where-Object { $_ -like 'TimeBudget:*TLS probe*' -or $_ -like '*before TLS probe*' })
+
         if (-not $tls) {
+            $reason = if ($budgetSkipped.Count -gt 0) {
+                'per-domain time budget exceeded before TLS probe ran — TLS expiry could not be assessed this run'
+            } else {
+                "$domain has no TLS cert data collected"
+            }
             Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$domain has no TLS cert data collected." -CurrentValue 'No TLS probe results'
+                -Detail $reason -CurrentValue 'No TLS probe results'
             continue
         }
 
@@ -508,11 +522,14 @@ function Test-NRGControlDNSTLSCertExpiry {
         }
 
         if ($null -eq $soonestDays) {
-            $errSummary = if ($errorCount -gt 0) { ' Errors: ' + ($allErrors -join '; ') } else { '' }
+            $errSummary = if ($errorCount -gt 0) { ' Probe errors: ' + ($allErrors -join '; ') } else { '' }
+            $budgetSummary = if ($budgetSkipped.Count -gt 0) {
+                ' Note: per-domain time budget exceeded before some probes ran.'
+            } else { '' }
             Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$domain has no TLS cert collected for autodiscover or mail hostnames — endpoints may not run HTTPS on 443 or are blocked.$errSummary" `
+                -Detail "$domain has no TLS cert collected for autodiscover or mail hostnames — endpoints may not run HTTPS on 443 or are blocked.${errSummary}${budgetSummary}" `
                 -CurrentValue 'No TLS cert collected'
             continue
         }
@@ -585,11 +602,24 @@ function Test-NRGControlDNSCertTransparency {
         if ($d -is [hashtable] -and $d.ContainsKey('CTLog')) { $ct = $d['CTLog'] }
         elseif ($d.PSObject.Properties['CTLog'])             { $ct = $d.CTLog }
 
+        # Pull collector-side per-domain errors so we can distinguish
+        # "crt.sh actually returned zero certs" (genuine finding) from
+        # "we skipped crt.sh because the time budget expired" (clarity).
+        $domainErrs = @()
+        if ($d -is [hashtable] -and $d.ContainsKey('Errors')) { $domainErrs = @($d['Errors']) }
+        elseif ($d.PSObject.Properties['Errors'])             { $domainErrs = @($d.Errors) }
+        $ctSkipped = @($domainErrs | Where-Object { $_ -like '*crt.sh*' -or $_ -like '*after TLS probe*' })
+
         if (-not $ct) {
+            $reason = if ($ctSkipped.Count -gt 0) {
+                'per-domain time budget exceeded before crt.sh query ran — CT log hygiene could not be evaluated this run'
+            } else {
+                "$domain has no CT log data collected"
+            }
             Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$domain has no CT log data collected." -CurrentValue 'No CTLog block'
+                -Detail $reason -CurrentValue 'No CTLog block'
             continue
         }
 
@@ -607,15 +637,36 @@ function Test-NRGControlDNSCertTransparency {
         }
 
         if ($queryError) {
+            # Detect rate-limit responses (HTTP 429 / "Too Many Requests" /
+            # explicit rate-limit text) so the operator sees the real reason
+            # the second/third domain returned no CT data on the same run.
+            $isRateLimited = $queryError -match '(?i)429|rate.?limit|too many'
+            $reasonHint    = if ($isRateLimited) {
+                "crt.sh rate-limited the query (HTTP 429 / rate-limit response). Re-run with a longer per-domain budget or stagger DNS collection."
+            } else {
+                "crt.sh query failed for ${domain}: $queryError"
+            }
             Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "crt.sh query failed for ${domain}: $queryError. CT log hygiene cannot be evaluated this run." `
+                -Detail "$reasonHint. CT log hygiene cannot be evaluated this run." `
                 -CurrentValue "QueryError: $queryError"
             continue
         }
 
         if ($totalCerts -eq 0) {
+            # If the time budget cut off crt.sh and TotalCerts stayed at the
+            # initialized zero, demote to NotApplicable so we don't blame the
+            # tenant for the collector's truncation. The collector signals
+            # this in $d.Errors with a 'TimeBudget:' message.
+            if ($ctSkipped.Count -gt 0) {
+                Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+                    -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
+                    -FrameworkIds $citations `
+                    -Detail "$domain CT log query was skipped: per-domain time budget exceeded before crt.sh ran." `
+                    -CurrentValue 'TotalCerts: 0 (collector truncated)'
+                continue
+            }
             Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
                 -FrameworkIds $citations `
