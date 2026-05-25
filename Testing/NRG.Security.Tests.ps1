@@ -159,25 +159,33 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             $hits | Should -BeNullOrEmpty -Because 'Module-level EAP=Continue masks all errors'
         }
 
-        It 'All production files have Set-StrictMode -Version Latest' -Skip {
-            # TODO Phase 4: bulk-add Set-StrictMode -Version Latest to every
-            # collector / evaluator / publisher .ps1 file. Currently deferred
-            # because StrictMode tightens semantics (uninitialized variable
-            # access, property access on $null, indexing past array end), and
-            # the existing code may rely on the relaxed defaults. Each file
-            # needs to be audited and tested before adding the directive to
-            # avoid runtime regressions on a tool that produces client-paid
-            # deliverables. Add as part of Phase 4 (Apply-NRGBaseline.ps1
-            # write mode) when the codebase gets a full security-hardening
-            # pass alongside the write-capable component.
+        It 'Entry-point + module files declare Set-StrictMode -Version Latest' {
+            # StrictMode is set ONCE at each entry point — the module's .psm1
+            # propagates it to every dot-sourced collector / evaluator /
+            # publisher via the inherited scope. Individual files do not need
+            # their own Set-StrictMode directive (it would be redundant), so
+            # we only assert it on the three orchestrator scripts and the
+            # module body. The Pester gate previously deferred all of this
+            # under -Skip; v4.6.x hardening fix removes the deferral.
+            $entryFiles = @(
+                'NRG-Assessment.psm1',
+                'Invoke-NRGAssessment.ps1',
+                'Apply-NRGBaseline.ps1',
+                'Invoke-NRGBatchAssessment.ps1'
+            )
             $offenders = @()
-            foreach ($file in $script:PsFiles) {
-                $content = Get-Content -LiteralPath $file.FullName -Raw
-                if ($content -notmatch 'Set-StrictMode') {
-                    $offenders += $file.Name
+            foreach ($name in $entryFiles) {
+                $path = Join-Path $script:RepoRoot $name
+                if (Test-Path -LiteralPath $path) {
+                    $content = Get-Content -LiteralPath $path -Raw
+                    if ($content -notmatch 'Set-StrictMode\s+-Version\s+Latest') {
+                        $offenders += $name
+                    }
+                } else {
+                    $offenders += "$name (missing)"
                 }
             }
-            $offenders | Should -BeNullOrEmpty -Because 'StrictMode catches uninitialized variables early (ASVS V16.4.1)'
+            $offenders | Should -BeNullOrEmpty -Because 'StrictMode at entry catches uninitialized variables module-wide (ASVS V16.4.1)'
         }
 
         It 'NRG-Assessment.psm1 does not disable StrictMode' {

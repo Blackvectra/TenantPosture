@@ -274,10 +274,16 @@
     CmdletsToExport   = @()
     AliasesToExport   = @()
 
-    # Required modules — must be present before this module loads
+    # Required modules — must be present before this module loads.
+    # Audit fix (v4.6.x LOW): MicrosoftTeams added because Connect-NRGServices
+    # imports it at runtime (Teams collector wraps Get-CsTenant / Get-CsTeams*),
+    # and ExchangeOnlineManagement is pinned to the same 3.2.0 floor that
+    # Install-NRGPrerequisites enforces (3.4.0+ has the WAM broker
+    # NullReferenceException that the prereq script downgrades around).
     RequiredModules = @(
         @{ ModuleName = 'Microsoft.Graph.Authentication'; ModuleVersion = '2.0.0' },
-        @{ ModuleName = 'ExchangeOnlineManagement';       ModuleVersion = '3.0.0' }
+        @{ ModuleName = 'ExchangeOnlineManagement';       ModuleVersion = '3.2.0' },
+        @{ ModuleName = 'MicrosoftTeams';                 ModuleVersion = '5.0.0' }
     )
 
     # Module metadata
