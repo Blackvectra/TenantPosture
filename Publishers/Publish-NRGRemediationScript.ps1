@@ -74,6 +74,14 @@ function Publish-NRGRemediationScript {
         foreach ($c in (Get-NRGControlDefinitions)) { $controls[$c.ControlId] = $c }
     } catch { }
 
+    # Tenant license profile — used to suppress "# REQUIRES: ..." comments on
+    # gaps whose license the tenant already holds. v4.6.1 emitted the comment
+    # unconditionally from controls.json LicenseRequirement, which mis-led
+    # operators on Business Premium tenants into thinking BP wasn't detected.
+    $licProfile = if (Get-Command Get-NRGTenantLicenseProfile -ErrorAction SilentlyContinue) {
+        try { Get-NRGTenantLicenseProfile } catch { $null }
+    } else { $null }
+
     $sevOrder = @{ 'Critical'=0; 'High'=1; 'Medium'=2; 'Low'=3; 'Informational'=4 }
     $gaps = @($Findings | Where-Object { $_.State -eq 'Gap' }) |
             Sort-Object { $sevOrder[$_.Severity] ?? 99 }, ControlId
@@ -161,7 +169,7 @@ function Publish-NRGRemediationScript {
     }
 
     function Write-GapBlock {
-        param([object]$f, [hashtable]$controlDefs, [string]$phaseNum, [string]$clientLiteral)
+        param([object]$f, [hashtable]$controlDefs, [string]$phaseNum, [string]$clientLiteral, [object]$licenseProfile)
         $lines = @()
         $ctrl  = $controlDefs[$f.ControlId]
         $remedy = if ($ctrl -and $ctrl.Remediation) { $ctrl.Remediation } else { '# No automated remediation available — see portal guidance.' }
@@ -186,7 +194,21 @@ function Publish-NRGRemediationScript {
         $workloadL  = ([string]$f.ControlId) -replace '-\d.*$',''
         $workloadL  = $workloadL -replace "[^A-Za-z0-9_]", ''
 
-        $licReq  = if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') {
+        # Emit "# REQUIRES: ..." ONLY when the tenant does NOT already hold
+        # the license. v4.6.1 emitted this unconditionally, which produced
+        # "# REQUIRES: M365 Business Premium" comments on Business Premium
+        # tenants — misleading the operator into thinking the tool had not
+        # detected their license. The license profile is computed once at the
+        # top of the publisher and threaded through here.
+        $licHeld = $false
+        if ($ctrl -and $ctrl.LicenseRequirement) {
+            $licHeld = if ($licenseProfile -and $licenseProfile.SuppressedLicenseRequirements) {
+                [bool]$licenseProfile.SuppressedLicenseRequirements.Contains($ctrl.LicenseRequirement)
+            } else { $false }
+        }
+        $licReq = if ($ctrl -and $ctrl.LicenseRequirement -and
+                      $ctrl.LicenseRequirement -notmatch '^Included' -and
+                      -not $licHeld) {
             "# REQUIRES: $licReqC"
         } else { $null }
 
@@ -230,7 +252,7 @@ function Publish-NRGRemediationScript {
         $null = $sb.AppendLine($line)
     }
     foreach ($f in $phase1Gaps) {
-        foreach ($line in (Write-GapBlock -f $f -controlDefs $controls -phaseNum '1' -clientLiteral $client)) {
+        foreach ($line in (Write-GapBlock -f $f -controlDefs $controls -phaseNum '1' -clientLiteral $client -licenseProfile $licProfile)) {
             $null = $sb.AppendLine($line)
         }
     }
@@ -240,7 +262,7 @@ function Publish-NRGRemediationScript {
         $null = $sb.AppendLine($line)
     }
     foreach ($f in $phase2Gaps) {
-        foreach ($line in (Write-GapBlock -f $f -controlDefs $controls -phaseNum '2' -clientLiteral $client)) {
+        foreach ($line in (Write-GapBlock -f $f -controlDefs $controls -phaseNum '2' -clientLiteral $client -licenseProfile $licProfile)) {
             $null = $sb.AppendLine($line)
         }
     }
@@ -250,7 +272,7 @@ function Publish-NRGRemediationScript {
         $null = $sb.AppendLine($line)
     }
     foreach ($f in $phase3Gaps) {
-        foreach ($line in (Write-GapBlock -f $f -controlDefs $controls -phaseNum '3' -clientLiteral $client)) {
+        foreach ($line in (Write-GapBlock -f $f -controlDefs $controls -phaseNum '3' -clientLiteral $client -licenseProfile $licProfile)) {
             $null = $sb.AppendLine($line)
         }
     }

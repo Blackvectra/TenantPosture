@@ -52,6 +52,23 @@ function Publish-NRGRemediationPlaybook {
         foreach ($c in $allCtrls) { $controls[$c.ControlId] = $c }
     } catch { }
 
+    # Tenant license profile — suppress 🔑 / "Requires:" annotations and the
+    # License Upgrades Required callout when the tenant already owns the
+    # license. v4.6.1 emitted these unconditionally from controls.json
+    # LicenseRequirement and counted held licenses as "upgrades required".
+    $licProfile = if (Get-Command Get-NRGTenantLicenseProfile -ErrorAction SilentlyContinue) {
+        try { Get-NRGTenantLicenseProfile } catch { $null }
+    } else { $null }
+    $licHeld = {
+        param($req)
+        if ([string]::IsNullOrEmpty($req)) { return $true }
+        if ($req -match '^Included') { return $true }
+        if ($null -ne $licProfile -and $licProfile.SuppressedLicenseRequirements) {
+            return [bool]$licProfile.SuppressedLicenseRequirements.Contains($req)
+        }
+        return $false
+    }
+
     # Gap findings only, sorted by severity priority
     $sevOrder = @{ 'Critical' = 0; 'High' = 1; 'Medium' = 2; 'Low' = 3; 'Informational' = 4 }
     $gaps     = @($Findings | Where-Object { $_.State -eq 'Gap' }) |
@@ -92,11 +109,14 @@ function Publish-NRGRemediationPlaybook {
     $null = $sb.AppendLine("| **Total gaps** | **$($gaps.Count)** | | **~$($p1Time+$p2Time+$p3Time) hours** |")
     $null = $sb.AppendLine()
 
-    # License upgrade callout
+    # License upgrade callout — only count gaps whose license is NOT already
+    # held. v4.6.1 ignored the tenant's actual licenses and listed every
+    # license-tagged gap as "needs upgrade".
     $upgradeNeeded = @($gaps | Where-Object {
         $c = $controls[$_.ControlId]
         $c -and $c.LicenseRequirement -and
-        $c.LicenseRequirement -notmatch '^Included'
+        $c.LicenseRequirement -notmatch '^Included' -and
+        -not (& $licHeld $c.LicenseRequirement)
     })
     if ($upgradeNeeded.Count -gt 0) {
         $licenseGroups = $upgradeNeeded | ForEach-Object {
@@ -117,11 +137,20 @@ function Publish-NRGRemediationPlaybook {
 
     # Helper to build a finding section
     function Write-FindingSection {
-        param([object]$f, [int]$num, [hashtable]$controlDefs)
+        param([object]$f, [int]$num, [hashtable]$controlDefs, [object]$licenseProfile)
         $lines = [System.Collections.Generic.List[string]]::new()
         $ctrl  = $controlDefs[$f.ControlId]
-        $licFlag = if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') { ' 🔑' } else { '' }
-        $licNote = if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') { "  > **Requires:** $(EscMd $ctrl.LicenseRequirement)  " } else { '' }
+        # Suppress license badge + note when the tenant already holds the
+        # license. The 🔑 marker should mean "this gap requires a license you
+        # do not have" — on a BP tenant it must not show for BP-gated controls.
+        $needsLicUpgrade = $false
+        if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') {
+            $needsLicUpgrade = -not ($licenseProfile -and
+                                     $licenseProfile.SuppressedLicenseRequirements -and
+                                     $licenseProfile.SuppressedLicenseRequirements.Contains($ctrl.LicenseRequirement))
+        }
+        $licFlag = if ($needsLicUpgrade) { ' 🔑' } else { '' }
+        $licNote = if ($needsLicUpgrade) { "  > **Requires:** $(EscMd $ctrl.LicenseRequirement)  " } else { '' }
 
         $lines.Add("### $num. $(EscMd $f.ControlId) — $(EscMd $f.Title)$licFlag")
         $lines.Add("")
@@ -182,7 +211,7 @@ function Publish-NRGRemediationPlaybook {
         $null = $sb.AppendLine()
         $n = 1
         foreach ($f in $phase1) {
-            foreach ($line in (Write-FindingSection -f $f -num $n -controlDefs $controls)) {
+            foreach ($line in (Write-FindingSection -f $f -num $n -controlDefs $controls -licenseProfile $licProfile)) {
                 $null = $sb.AppendLine($line)
             }
             $n++
@@ -197,7 +226,7 @@ function Publish-NRGRemediationPlaybook {
         $null = $sb.AppendLine()
         $n = 1
         foreach ($f in $phase2) {
-            foreach ($line in (Write-FindingSection -f $f -num $n -controlDefs $controls)) {
+            foreach ($line in (Write-FindingSection -f $f -num $n -controlDefs $controls -licenseProfile $licProfile)) {
                 $null = $sb.AppendLine($line)
             }
             $n++
@@ -212,7 +241,7 @@ function Publish-NRGRemediationPlaybook {
         $null = $sb.AppendLine()
         $n = 1
         foreach ($f in $phase3) {
-            foreach ($line in (Write-FindingSection -f $f -num $n -controlDefs $controls)) {
+            foreach ($line in (Write-FindingSection -f $f -num $n -controlDefs $controls -licenseProfile $licProfile)) {
                 $null = $sb.AppendLine($line)
             }
             $n++
@@ -306,8 +335,15 @@ function Publish-NRGRemediationPlaybook {
     $null = $exec.AppendLine()
     $null = $exec.AppendLine("1. **Phase 1 Remediation (Week 1–2)** — Address the $($phase1.Count) Critical and High severity gaps identified in the attached remediation playbook. NRG Technology Services can implement these changes as a managed service engagement.")
     $null = $exec.AppendLine("2. **Phase 2 Remediation (Week 2–4)** — Address the $($phase2.Count) Medium severity items.")
-    $null = $exec.AppendLine("3. **License Review** — Review M365 Business Premium licensing to address the $($upgradeNeeded.Count) controls currently blocked by the current license tier.")
-    $null = $exec.AppendLine("4. **Reassessment** — Schedule a follow-up assessment in 90 days to validate remediation and track improvement.")
+    # Step 3 — only emitted when a license upgrade actually unlocks gaps. On a
+    # tenant that already owns BP / E5, $upgradeNeeded is empty and step 3 is
+    # skipped (the previous behaviour stated "0 controls currently blocked").
+    if ($upgradeNeeded.Count -gt 0) {
+        $null = $exec.AppendLine("3. **License Review** — Review licensing to address the $($upgradeNeeded.Count) control(s) currently blocked by the current license tier.")
+        $null = $exec.AppendLine("4. **Reassessment** — Schedule a follow-up assessment in 90 days to validate remediation and track improvement.")
+    } else {
+        $null = $exec.AppendLine("3. **Reassessment** — Schedule a follow-up assessment in 90 days to validate remediation and track improvement.")
+    }
     $null = $exec.AppendLine()
     $null = $exec.AppendLine("---")
     $null = $exec.AppendLine("*This assessment was conducted using read-only access to the $client Microsoft 365 environment. No changes were made. Assessment framework: CIS M365 Foundations Benchmark v6.0.1, CISA SCuBA, NIST SP 800-53 Rev 5.*  ")
