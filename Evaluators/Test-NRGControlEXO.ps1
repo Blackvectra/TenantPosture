@@ -639,9 +639,9 @@ function Test-NRGControlEXOPerUserAudit {
     if (-not $exo -or -not $exo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
-    $auditSummary = $exo.Data.MailboxAuditSummary
-    $auditDisabledCount = [int]($auditSummary.AuditDisabledCount ?? 0)
-    $totalMailboxes     = [int]($auditSummary.TotalMailboxes ?? 0)
+    $auditSummary = Get-NRGNestedProperty -Object $exo -Path 'Data.MailboxAuditSummary'
+    $auditDisabledCount = [int](Get-NRGSafeProperty -Object $auditSummary -Property 'AuditDisabledCount' -Default 0)
+    $totalMailboxes     = [int](Get-NRGSafeProperty -Object $auditSummary -Property 'TotalMailboxes' -Default 0)
     if ($auditDisabledCount -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Mailbox audit logging enabled on all $totalMailboxes mailbox(es)."
     } elseif ($auditDisabledCount -gt 0 -and $totalMailboxes -gt 0) {
@@ -661,12 +661,13 @@ function Test-NRGControlEXOPriorityAccountProtection {
     if (-not $def -or -not $def.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
     }
-    $priorityAccounts = @($def.Data.PriorityAccounts ?? @())
-    $ap = $def.Data['AntiPhishing']
+    $priorityAccounts = @(Get-NRGNestedProperty -Object $def -Path 'Data.PriorityAccounts' -Default @())
+    $ap = Get-NRGNestedProperty -Object $def -Path 'Data.AntiPhishing'
     $hasPriorityPolicy = $false
-    if ($ap -and $ap.Available -and $priorityAccounts.Count -gt 0) {
-        $hasPriorityPolicy = @($ap.Policies | Where-Object {
-            $_.TargetedUsersToProtect -and @($_.TargetedUsersToProtect).Count -gt 0
+    if ($ap -and (Get-NRGSafeProperty -Object $ap -Property 'Available') -and $priorityAccounts.Count -gt 0) {
+        $hasPriorityPolicy = @((Get-NRGSafeProperty -Object $ap -Property 'Policies' -Default @()) | Where-Object {
+            $tu = Get-NRGSafeProperty -Object $_ -Property 'TargetedUsersToProtect'
+            $tu -and @($tu).Count -gt 0
         }).Count -gt 0
     }
     if ($hasPriorityPolicy -and $priorityAccounts.Count -gt 0) {
@@ -687,13 +688,15 @@ function Test-NRGControlEXOSafeSenderOverride {
     if (-not $exo -or -not $exo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
-    $defaultPolicy = @($exo.Data.AntiSpamPolicies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    $antiSpamPolicies = @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @())
+    $defaultPolicy    = @($antiSpamPolicies | Where-Object { (Get-NRGSafeProperty -Object $_ -Property 'IsDefault') }) | Select-Object -First 1
     if (-not $defaultPolicy) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default policy'; return }
-    $allowListBypass = $defaultPolicy.AllowedSenderDomains -and @($defaultPolicy.AllowedSenderDomains).Count -gt 0
+    $allowedDomains  = Get-NRGSafeProperty -Object $defaultPolicy -Property 'AllowedSenderDomains' -Default @()
+    $allowListBypass = $allowedDomains -and @($allowedDomains).Count -gt 0
     if (-not $allowListBypass) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No allowed sender domains in anti-spam policy — all inbound mail is filtered equally.'
     } else {
-        $count = @($defaultPolicy.AllowedSenderDomains).Count
+        $count = @($allowedDomains).Count
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$count allowed sender domain(s) in anti-spam policy bypass all EOP filtering. Allowed domains are a common attacker target — if a domain is compromised, all mail from it reaches inboxes unfiltered." -CurrentValue "$count bypass domains configured" -RequiredValue 'Zero allowed sender domains in anti-spam policy' -Remediation $ctrl.Remediation
     }
 }

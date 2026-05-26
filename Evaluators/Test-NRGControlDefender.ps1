@@ -465,7 +465,7 @@ function Test-NRGControlDefenderPriorityAccounts {
     if (-not $def -or -not $def.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
     }
-    $priorityAccounts = @($def.Data.PriorityAccounts ?? @())
+    $priorityAccounts = @(Get-NRGNestedProperty -Object $def -Path 'Data.PriorityAccounts' -Default @())
     if ($priorityAccounts.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($priorityAccounts.Count) priority account(s) tagged in Defender. These accounts receive enhanced email protection and differentiated alert prioritization."
     } else {
@@ -499,7 +499,7 @@ function Test-NRGControlDefenderAttackSim {
     if (-not $def -or -not $def.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
     }
-    $simCampaigns = @($def.Data.SimulationCampaigns ?? @())
+    $simCampaigns = @(Get-NRGNestedProperty -Object $def -Path 'Data.SimulationCampaigns' -Default @())
     if ($simCampaigns.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($simCampaigns.Count) attack simulation campaign(s) configured. Users receive phishing simulation training."
     } else {
