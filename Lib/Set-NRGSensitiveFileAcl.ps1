@@ -73,3 +73,72 @@ function Set-NRGSensitiveFileAcl {
         Write-Warning "Set-NRGSensitiveFileAcl: failed to restrict ACL on '$Path': $($_.Exception.Message). File may be readable by other users on this host — review permissions manually."
     }
 }
+
+# Writes content to a sensitive file with the ACL applied BEFORE any data is
+# written. Closes a TOCTOU window where a co-resident process on a shared MSP
+# workstation could read tenant data between Out-File completing and Set-Acl
+# running. On Windows: creates the file empty, hardens the ACL, then writes
+# the content via [System.IO.File]::WriteAllText. On non-Windows: behaves like
+# a normal write (ACL helper is a no-op there anyway).
+#
+# Usage:
+#   Set-NRGSensitiveFileContent -Path $jsonPath -Content $bigJson
+#
+# Notes:
+#   - $Content can be $null or empty — we still pre-create + ACL the file so
+#     a subsequent appender writes into a hardened file.
+#   - Uses UTF-8 without BOM (matches existing [System.IO.File]::WriteAllText
+#     usage in Apply-NRGBaseline).
+#   - Path validation: $Path must already be a valid OS path; caller is
+#     responsible for path-traversal checks at the entry point.
+#
+# v4.6.3 P2 — TOCTOU fix for the assessment JSON + apply rollback log.
+function Set-NRGSensitiveFileContent {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [string] $Path,
+
+        [Parameter(Mandatory, Position = 1)]
+        [AllowEmptyString()]
+        [AllowNull()]
+        [string] $Content,
+
+        [System.Text.Encoding] $Encoding = [System.Text.UTF8Encoding]::new($false)
+    )
+
+    # Pre-create empty file then harden ACL so the ACL is applied BEFORE any
+    # tenant data lands. Without this step, the file inherits the parent
+    # directory's ACL during the Out-File / WriteAllText call, giving a
+    # co-resident process a small window to read the data.
+    try {
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            # File already exists — truncate before hardening so leftover content
+            # doesn't bleed across runs.
+            [System.IO.File]::WriteAllText($Path, '', $Encoding)
+        } else {
+            # Create empty file. [System.IO.File]::Create returns a FileStream;
+            # we wrap in try/finally to ensure it's closed before Set-Acl.
+            $fs = $null
+            try {
+                $fs = [System.IO.File]::Create($Path)
+            } finally {
+                if ($fs) { $fs.Dispose() }
+            }
+        }
+    } catch {
+        Write-Warning "Set-NRGSensitiveFileContent: could not pre-create '$Path': $($_.Exception.Message)"
+        # Fall through — caller may still want the write to happen even if
+        # pre-creation failed (e.g. parent dir issues). The next step will
+        # re-throw if it fails too.
+    }
+
+    # Harden ACL BEFORE writing tenant data. No-op on non-Windows.
+    Set-NRGSensitiveFileAcl -Path $Path
+
+    # Now write the actual content. ACL is in place; tenant data is restricted
+    # the moment it lands on disk.
+    if ($null -ne $Content) {
+        [System.IO.File]::WriteAllText($Path, $Content, $Encoding)
+    }
+}

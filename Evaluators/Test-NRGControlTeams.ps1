@@ -169,7 +169,7 @@ function Test-NRGControlTeamsSkype {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams-Config'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $skype = $tms.Data.TenantConfig.AllowPublicUsers ?? $true
+    $skype = Get-NRGNestedProperty -Object $tms -Path 'Data.TenantConfig.AllowPublicUsers' -Default $true
     if (-not $skype) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Contact from Skype consumer users is disabled.'
     } else {
@@ -184,7 +184,7 @@ function Test-NRGControlTeamsUnverifiedApps {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams-Config'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $allowAll = $tms.Data.AppConfig.AllowAllApps ?? $true
+    $allowAll = Get-NRGNestedProperty -Object $tms -Path 'Data.AppConfig.AllowAllApps' -Default $true
     if (-not $allowAll) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Teams app installation restricted — not all apps are allowed.'
     } else {
@@ -199,7 +199,11 @@ function Test-NRGControlTeams3PStorage {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams-Config'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $anyStorage   = ($tms.Data.ClientConfig.AllowDropbox -or $tms.Data.ClientConfig.AllowBox -or $tms.Data.ClientConfig.AllowGoogleDrive -or $tms.Data.ClientConfig.AllowShareFile) ?? $false
+    $dropbox = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfig.AllowDropbox' -Default $false
+    $box     = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfig.AllowBox' -Default $false
+    $gdrive  = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfig.AllowGoogleDrive' -Default $false
+    $sfile   = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfig.AllowShareFile' -Default $false
+    $anyStorage = [bool]($dropbox -or $box -or $gdrive -or $sfile)
     if (-not $anyStorage) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Third-party cloud storage integrations disabled in Teams.'
     } else {
@@ -214,7 +218,7 @@ function Test-NRGControlTeamsEmailIntegration {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams-Config'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $emailInt = $tms.Data.TenantConfig.AllowEmailIntoChannels ?? $true
+    $emailInt = Get-NRGNestedProperty -Object $tms -Path 'Data.TenantConfig.AllowEmailIntoChannels' -Default $true
     if (-not $emailInt) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Email integration into Teams channels is disabled.'
     } else {
@@ -229,7 +233,7 @@ function Test-NRGControlTeamsRecordingExternal {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams-Config'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $allowExtRecord = $tms.Data.MeetingPolicy.AllowCloudRecordingForCalls ?? $true
+    $allowExtRecord = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowCloudRecordingForCalls' -Default $true
     if (-not $allowExtRecord) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'External participants cannot initiate cloud recordings.'
     } else {
@@ -244,7 +248,7 @@ function Test-NRGControlTeamsBroadChannel {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams-Config'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $broadInvite = $tms.Data.MeetingPolicy.AllowChannelMeetingScheduling ?? $true
+    $broadInvite = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowChannelMeetingScheduling' -Default $true
     if (-not $broadInvite) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Broad channel meeting scheduling restricted.'
     } else {
@@ -259,7 +263,7 @@ function Test-NRGControlTeamsExternalChat {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams-Config'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $extChat = $tms.Data.TenantConfig.AllowFederatedUsers ?? $true
+    $extChat = Get-NRGNestedProperty -Object $tms -Path 'Data.TenantConfig.AllowFederatedUsers' -Default $true
     if (-not $extChat) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'External user chat is disabled.'
     } else {
@@ -274,7 +278,7 @@ function Test-NRGControlTeamsPSTN {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams-Config'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $pstn = $tms.Data.MeetingPolicy.AllowPSTNUsersToBypassLobby ?? $false
+    $pstn = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowPSTNUsersToBypassLobby' -Default $false
     if (-not $pstn) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'PSTN dial-out users cannot bypass lobby.'
     } else {
@@ -292,7 +296,7 @@ function Test-NRGControlTeamsWatermarks {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Teams data not collected'; return
     }
-    $watermark = $tms.Data.MeetingPolicy.AllowWatermarkForScreenSharing ?? $false
+    $watermark = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowWatermarkForScreenSharing' -Default $false
     if ($watermark) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
@@ -315,7 +319,7 @@ function Test-NRGControlTeamsAutoAdmit {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Teams data not collected'; return
     }
-    $autoAdmit = [string]($tms.Data.MeetingPolicy.AutoAdmittedUsers ?? 'Everyone')
+    $autoAdmit = [string](Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AutoAdmittedUsers' -Default 'Everyone')
     $secure    = @('EveryoneInCompanyExcludingGuests','EveryoneInCompany','EveryoneInSameAndFederatedCompany','OrganizerOnly')
     if ($autoAdmit -in $secure) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
@@ -340,7 +344,7 @@ function Test-NRGControlTeamsMeetingChat {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Teams data not collected'; return
     }
-    $chatEnabled = [string]($tms.Data.MeetingPolicy.AllowMeetingChat ?? 'Enabled')
+    $chatEnabled = [string](Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowMeetingChat' -Default 'Enabled')
     if ($chatEnabled -eq 'Disabled') {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
@@ -380,7 +384,7 @@ function Test-NRGControlTeamsMeetingRecordingScope {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams-Config'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $expireDays = [int]($tms.Data.MeetingPolicy.MeetingRecordingExpirationDays ?? -1)
+    $expireDays = [int](Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.MeetingRecordingExpirationDays' -Default -1)
     if ($expireDays -gt 0 -and $expireDays -le 120) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Meeting recordings expire after $expireDays days. Limits long-term exposure of recorded meeting content."
     } elseif ($expireDays -gt 120) {
@@ -397,7 +401,7 @@ function Test-NRGControlTeamsAnonymousStart {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams-Config'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $anonStart = [bool]($tms.Data.MeetingPolicy.AllowAnonymousUsersToStartMeeting ?? $true)
+    $anonStart = [bool](Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowAnonymousUsersToStartMeeting' -Default $true)
     if (-not $anonStart) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Anonymous users cannot start Teams meetings independently.'
     } else {
@@ -412,8 +416,8 @@ function Test-NRGControlTeamsFederationAllowlist {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams-Config'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $allowAllDomains = [bool]($tms.Data.TenantConfig.AllowFederatedUsers ?? $false)
-    $specificDomains = @($tms.Data.FederationConfig.AllowedDomains ?? @())
+    $allowAllDomains = [bool](Get-NRGNestedProperty -Object $tms -Path 'Data.TenantConfig.AllowFederatedUsers' -Default $false)
+    $specificDomains = @(Get-NRGNestedProperty -Object $tms -Path 'Data.FederationConfig.AllowedDomains' -Default @())
     if ($allowAllDomains -and $specificDomains.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Teams federation is open to all external domains. Any Teams user at any organization can contact your users.' -CurrentValue 'Open federation — all domains allowed' -RequiredValue 'Allowlist specific trusted domains only' -Remediation $ctrl.Remediation
     } elseif ($allowAllDomains -and $specificDomains.Count -gt 0) {
@@ -430,8 +434,8 @@ function Test-NRGControlTeamsLiveEvents {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams-Config'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $liveEventsEnabled = [bool]($tms.Data.LiveEventPolicy.AllowBroadcastScheduling ?? $true)
-    $publicEvents      = [bool]($tms.Data.LiveEventPolicy.AllowBroadcastToAnonymousUsers ?? $false)
+    $liveEventsEnabled = [bool](Get-NRGNestedProperty -Object $tms -Path 'Data.LiveEventPolicy.AllowBroadcastScheduling' -Default $true)
+    $publicEvents      = [bool](Get-NRGNestedProperty -Object $tms -Path 'Data.LiveEventPolicy.AllowBroadcastToAnonymousUsers' -Default $false)
     if ($liveEventsEnabled -and $publicEvents) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Live events can be broadcast to anonymous (public internet) users. Unrestricted public broadcasting exposes organizational content without authentication.' -CurrentValue 'AllowBroadcastToAnonymousUsers = $true' -RequiredValue '$false' -Remediation $ctrl.Remediation
     } elseif ($liveEventsEnabled) {

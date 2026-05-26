@@ -32,7 +32,7 @@ $ErrorActionPreference = 'Stop'
 # directive in production code going forward.
 Set-StrictMode -Version Latest
 
-$script:NRGAssessmentVersion = '4.6.2'
+$script:NRGAssessmentVersion = '4.6.3'
 $script:NRGModuleRoot        = $PSScriptRoot
 
 # Thread-safe collections for module state
@@ -101,7 +101,17 @@ foreach ($folder in $loadOrder) {
             # Redirect information stream (3>) to suppress verbose module load noise
             . $file.FullName 3>$null
         } catch {
-            Write-Warning "Failed to load $($file.Name): $($_.Exception.Message)"
+            $loadMsg = "Failed to load $($file.Name): $($_.Exception.Message)"
+            Write-Warning $loadMsg
+            # v4.6.3 P2: surface load failures into the run's exception list so
+            # Get-NRGExceptions / the JSON output includes them. Without this,
+            # a dot-source failure was a Write-Warning only — operators only
+            # noticed if they were watching the console. Note Register-NRGException
+            # may not exist yet if Add-NRGFinding.ps1 was the file that failed —
+            # guard with Get-Command.
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                try { Register-NRGException -Source 'ModuleLoader' -Message $loadMsg } catch { }
+            }
         }
     }
 }
@@ -118,8 +128,9 @@ $script:ExportedFunctions = @(
     'Get-NRGControlDefinitions', 'Get-NRGControlById',
     'Get-NRGFrameworkCitations', 'Get-NRGFrameworkDefinitions',
     'Get-NRGFindingRiskCost', 'Get-NRGAggregateRisk',
-    'Set-NRGSensitiveFileAcl',
+    'Set-NRGSensitiveFileAcl', 'Set-NRGSensitiveFileContent',
     'Get-NRGTenantLicenseProfile', 'Test-NRGLicenseRequirementMet',
+    'Get-NRGSafeProperty', 'Get-NRGNestedProperty',
 
     # ── Collectors — AAD ──────────────────────────────────────────────────────
     'Invoke-NRGCollectAADAuthPolicies', 'Invoke-NRGCollectAADCAPolicies',
