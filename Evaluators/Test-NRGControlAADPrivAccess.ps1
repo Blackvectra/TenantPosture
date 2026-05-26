@@ -34,10 +34,10 @@ function Test-NRGControlAADPrivAccess {
     # Well-known Entra ID built-in role template GUID — stable across all tenants
     $GA_ROLE_ID = '62e90394-69f5-4237-9190-012177145e10'
 
-    $allAssignments = @($roleRaw.Data['PermanentAssignments'])
-    $globalAdmins   = @($allAssignments | Where-Object { $_.RoleDefinitionId -eq $GA_ROLE_ID })
+    $allAssignments = @(Get-NRGNestedProperty -Object $roleRaw -Path 'Data.PermanentAssignments' -Default @())
+    $globalAdmins   = @($allAssignments | Where-Object { (Get-NRGSafeProperty -Object $_ -Property 'RoleDefinitionId') -eq $GA_ROLE_ID })
     $gaCount        = $globalAdmins.Count
-    $syncedGAs      = @($globalAdmins | Where-Object { $_.OnPremSynced -eq $true })
+    $syncedGAs      = @($globalAdmins | Where-Object { (Get-NRGSafeProperty -Object $_ -Property 'OnPremSynced') -eq $true })
 
     # Satisfied  = count in [2..8] AND zero on-prem-synced GA
     # Partial    = count in [2..8] but at least one synced GA (correct count, wrong source)
