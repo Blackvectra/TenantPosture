@@ -335,10 +335,10 @@ function Test-NRGControlAADExternalCollab {
     if (-not $gov -or -not $gov.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Identity governance data not collected'; return
     }
-    $collab = $gov.Data.ExternalCollab
+    $collab = Get-NRGNestedProperty -Object $gov -Path 'Data.ExternalCollab'
     $gaps = @()
     if (Get-SafeProp $collab 'AllowedToCreateTenants') { $gaps += 'Users can create new tenants' }
-    if ($collab.BlockMsolPowerShell -ne $true) { $gaps += 'Legacy MSOL PowerShell not blocked' }
+    if ((Get-SafeProp $collab 'BlockMsolPowerShell') -ne $true) { $gaps += 'Legacy MSOL PowerShell not blocked' }
     if ($gaps.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'External collaboration settings properly restricted.'
     } else {
@@ -557,7 +557,7 @@ function Test-NRGControlAADAuthenticatorNumberMatch {
     # at the platform level" — NOT "we don't know". Treating absence as unknown
     # produced "Number matching state is ''" Gap findings on every modern
     # tenant (mirrors the AAD-2.3 fix in Test-NRGControlAADCA.ps1).
-    $nmStateRaw = $mfaConfig.FeatureSettings.NumberMatchingRequiredState
+    $nmStateRaw = Get-NRGNestedProperty -Object $mfaConfig -Path 'FeatureSettings.NumberMatchingRequiredState'
     $nmState    = if ($null -eq $nmStateRaw -or [string]::IsNullOrWhiteSpace([string]$nmStateRaw)) {
                       'default'
                   } else {
@@ -594,13 +594,15 @@ function Test-NRGControlAADPasswordless {
             -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
     }
     $ampConfigs = @(Get-NRGNestedProperty -Object $auth -Path 'Data.AuthMethodsPolicy.AuthenticationMethodConfigs' -Default @())
-    $fido2      = $ampConfigs | Where-Object { $_.Id -eq 'Fido2' } | Select-Object -First 1
-    $whi        = $ampConfigs | Where-Object { $_.Id -eq 'WindowsHello' } | Select-Object -First 1
-    $passwordlessEnabled = ($fido2.State -eq 'enabled') -or ($whi.State -eq 'enabled')
+    $fido2      = $ampConfigs | Where-Object { (Get-SafeProp $_ 'Id') -eq 'Fido2' } | Select-Object -First 1
+    $whi        = $ampConfigs | Where-Object { (Get-SafeProp $_ 'Id') -eq 'WindowsHello' } | Select-Object -First 1
+    $fido2State = [string](Get-SafeProp $fido2 'State' 'notConfigured')
+    $whiState   = [string](Get-SafeProp $whi   'State' 'notConfigured')
+    $passwordlessEnabled = ($fido2State -eq 'enabled') -or ($whiState -eq 'enabled')
     if ($passwordlessEnabled) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "Passwordless auth enabled: FIDO2=$($fido2.State ?? 'notConfigured'), WindowsHello=$($whi.State ?? 'notConfigured')"
+            -Detail "Passwordless auth enabled: FIDO2=$fido2State, WindowsHello=$whiState"
     } else {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit `
@@ -731,8 +733,11 @@ function Test-NRGControlAADDeviceCode {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
     }
     # Authentication flows policy — deviceCodeFlow
-    $flowPolicy = $auth.Data.AuthenticationFlowsPolicy ?? $null
-    $deviceCodeBlocked = $flowPolicy -and ($flowPolicy.DeviceCodeFlow -eq 'blocked' -or $flowPolicy.selfServiceSignUp.isEnabled -eq $false)
+    $flowPolicy = Get-NRGNestedProperty -Object $auth -Path 'Data.AuthenticationFlowsPolicy'
+    $deviceCodeBlocked = $flowPolicy -and (
+        (Get-NRGSafeProperty -Object $flowPolicy -Property 'DeviceCodeFlow') -eq 'blocked' -or
+        (Get-NRGNestedProperty -Object $flowPolicy -Path 'selfServiceSignUp.isEnabled') -eq $false
+    )
     # CA policy blocking device code is the more reliable check
     $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
     $caBlocks = $false
@@ -785,7 +790,7 @@ function Test-NRGControlAADRiskyServicePrincipals {
     if (-not $auth -or -not $auth.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
     }
-    $riskyApps = @($auth.Data.RiskyServicePrincipals ?? @())
+    $riskyApps = @(Get-NRGNestedProperty -Object $auth -Path 'Data.RiskyServicePrincipals' -Default @())
     if ($riskyApps.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No risky service principals detected by Identity Protection.'
     } else {
@@ -851,8 +856,8 @@ function Test-NRGControlAADCrossTenantAccess {
     if (-not $xtap) {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Cross-tenant access policy data not available. Verify in Entra ID > External Identities > Cross-tenant access settings that inbound defaults do not trust MFA or device compliance from unknown tenants.' -Remediation $ctrl.Remediation; return
     }
-    $trustsMFA    = [bool]($xtap.DefaultInbound.TrustSettings.IsMfaAccepted ?? $false)
-    $trustsDevice = [bool]($xtap.DefaultInbound.TrustSettings.IsCompliantDeviceAccepted ?? $false)
+    $trustsMFA    = [bool](Get-NRGNestedProperty -Object $xtap -Path 'DefaultInbound.TrustSettings.IsMfaAccepted' -Default $false)
+    $trustsDevice = [bool](Get-NRGNestedProperty -Object $xtap -Path 'DefaultInbound.TrustSettings.IsCompliantDeviceAccepted' -Default $false)
     if (-not $trustsMFA -and -not $trustsDevice) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Cross-tenant default inbound settings do not trust external MFA or device compliance claims.'
     } else {
