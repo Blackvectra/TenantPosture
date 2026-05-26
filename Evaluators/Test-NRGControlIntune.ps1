@@ -342,11 +342,12 @@ function Test-NRGControlIntuneUpdateCompliance {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-DeviceCompliance'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune data not collected'; return }
-    $osCompliant = if ($int.Data.OSComplianceSummary) {
-        [int]($int.Data.OSComplianceSummary.CompliantCount ?? 0)
+    $osSummary    = Get-NRGNestedProperty -Object $int -Path 'Data.OSComplianceSummary' -Default $null
+    $osCompliant  = if ($osSummary) {
+        [int](Get-NRGNestedProperty -Object $osSummary -Path 'CompliantCount' -Default 0)
     } else { -1 }
-    $totalDevices = if ($int.Data.OSComplianceSummary) {
-        [int]($int.Data.OSComplianceSummary.TotalCount ?? 0)
+    $totalDevices = if ($osSummary) {
+        [int](Get-NRGNestedProperty -Object $osSummary -Path 'TotalCount' -Default 0)
     } else { -1 }
     if ($osCompliant -ge 0 -and $totalDevices -gt 0) {
         $pct = [int]($osCompliant * 100 / $totalDevices)

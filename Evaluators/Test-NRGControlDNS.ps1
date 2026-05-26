@@ -19,14 +19,16 @@ function Test-NRGControlDNSSPF {
     $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
-    if (-not $dnsData -or -not $dnsData.Success -or $dnsData.Data.DomainCount -eq 0) {
+    $dnsDomainCount = [int](Get-NRGNestedProperty -Object $dnsData -Path 'Data.DomainCount' -Default 0)
+    if (-not $dnsData -or -not $dnsData.Success -or $dnsDomainCount -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'DNS data not collected'
         return
     }
 
-    foreach ($domain in $dnsData.Data.Domains.Keys) {
-        $d = $dnsData.Data.Domains[$domain]
+    $dnsDomainMap = Get-NRGNestedProperty -Object $dnsData -Path 'Data.Domains' -Default @{}
+    foreach ($domain in @($dnsDomainMap.Keys)) {
+        $d = $dnsDomainMap[$domain]
 
         if (-not $d.SPF) {
             Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
@@ -74,14 +76,16 @@ function Test-NRGControlDNSDKIM {
     $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
-    if (-not $dnsData -or -not $dnsData.Success -or $dnsData.Data.DomainCount -eq 0) {
+    $dnsDomainCount = [int](Get-NRGNestedProperty -Object $dnsData -Path 'Data.DomainCount' -Default 0)
+    if (-not $dnsData -or -not $dnsData.Success -or $dnsDomainCount -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'DNS data not collected'
         return
     }
 
-    foreach ($domain in $dnsData.Data.Domains.Keys) {
-        $d = $dnsData.Data.Domains[$domain]
+    $dnsDomainMap = Get-NRGNestedProperty -Object $dnsData -Path 'Data.Domains' -Default @{}
+    foreach ($domain in @($dnsDomainMap.Keys)) {
+        $d = $dnsDomainMap[$domain]
 
         $hasSelector1 = -not [string]::IsNullOrEmpty($d.DKIM.Selector1)
         $hasSelector2 = -not [string]::IsNullOrEmpty($d.DKIM.Selector2)
@@ -119,14 +123,16 @@ function Test-NRGControlDNSDMARC {
     $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
-    if (-not $dnsData -or -not $dnsData.Success -or $dnsData.Data.DomainCount -eq 0) {
+    $dnsDomainCount = [int](Get-NRGNestedProperty -Object $dnsData -Path 'Data.DomainCount' -Default 0)
+    if (-not $dnsData -or -not $dnsData.Success -or $dnsDomainCount -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'DNS data not collected'
         return
     }
 
-    foreach ($domain in $dnsData.Data.Domains.Keys) {
-        $d = $dnsData.Data.Domains[$domain]
+    $dnsDomainMap = Get-NRGNestedProperty -Object $dnsData -Path 'Data.Domains' -Default @{}
+    foreach ($domain in @($dnsDomainMap.Keys)) {
+        $d = $dnsDomainMap[$domain]
 
         if (-not $d.DMARC) {
             Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
@@ -185,14 +191,16 @@ function Test-NRGControlDNSMTASTS {
     $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
-    if (-not $dnsData -or -not $dnsData.Success -or $dnsData.Data.DomainCount -eq 0) {
+    $dnsDomainCount = [int](Get-NRGNestedProperty -Object $dnsData -Path 'Data.DomainCount' -Default 0)
+    if (-not $dnsData -or -not $dnsData.Success -or $dnsDomainCount -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'DNS data not collected'
         return
     }
 
-    foreach ($domain in $dnsData.Data.Domains.Keys) {
-        $d = $dnsData.Data.Domains[$domain]
+    $dnsDomainMap = Get-NRGNestedProperty -Object $dnsData -Path 'Data.Domains' -Default @{}
+    foreach ($domain in @($dnsDomainMap.Keys)) {
+        $d = $dnsDomainMap[$domain]
 
         if (-not $d.MTASTS.DNSRecord) {
             Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
@@ -231,14 +239,16 @@ function Test-NRGControlDNSTLSRPT {
     $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
-    if (-not $dnsData -or -not $dnsData.Success -or $dnsData.Data.DomainCount -eq 0) {
+    $dnsDomainCount = [int](Get-NRGNestedProperty -Object $dnsData -Path 'Data.DomainCount' -Default 0)
+    if (-not $dnsData -or -not $dnsData.Success -or $dnsDomainCount -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'DNS data not collected'
         return
     }
 
-    foreach ($domain in $dnsData.Data.Domains.Keys) {
-        $d = $dnsData.Data.Domains[$domain]
+    $dnsDomainMap = Get-NRGNestedProperty -Object $dnsData -Path 'Data.Domains' -Default @{}
+    foreach ($domain in @($dnsDomainMap.Keys)) {
+        $d = $dnsDomainMap[$domain]
 
         if ($d.TLSRPT) {
             Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
@@ -266,14 +276,16 @@ function Test-NRGControlDNSDNSSEC {
     $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
-    if (-not $dnsData -or -not $dnsData.Success -or $dnsData.Data.DomainCount -eq 0) {
+    $dnsDomainCount = [int](Get-NRGNestedProperty -Object $dnsData -Path 'Data.DomainCount' -Default 0)
+    if (-not $dnsData -or -not $dnsData.Success -or $dnsDomainCount -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'DNS data not collected'
         return
     }
 
-    foreach ($domain in $dnsData.Data.Domains.Keys) {
-        $d = $dnsData.Data.Domains[$domain]
+    $dnsDomainMap = Get-NRGNestedProperty -Object $dnsData -Path 'Data.Domains' -Default @{}
+    foreach ($domain in @($dnsDomainMap.Keys)) {
+        $d = $dnsDomainMap[$domain]
 
         if ($d.DNSSEC -eq $true) {
             Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
@@ -306,14 +318,16 @@ function Test-NRGControlDNSDkimRotation {
     $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
-    if (-not $dnsData -or -not $dnsData.Success -or $dnsData.Data.DomainCount -eq 0) {
+    $dnsDomainCount = [int](Get-NRGNestedProperty -Object $dnsData -Path 'Data.DomainCount' -Default 0)
+    if (-not $dnsData -or -not $dnsData.Success -or $dnsDomainCount -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'DNS data not collected'
         return
     }
 
-    foreach ($domain in $dnsData.Data.Domains.Keys) {
-        $d = $dnsData.Data.Domains[$domain]
+    $dnsDomainMap = Get-NRGNestedProperty -Object $dnsData -Path 'Data.Domains' -Default @{}
+    foreach ($domain in @($dnsDomainMap.Keys)) {
+        $d = $dnsDomainMap[$domain]
 
         # Defensive: DKIM block may be missing on older collector data
         $age = $null
@@ -375,14 +389,16 @@ function Test-NRGControlDNSCAA {
     $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
-    if (-not $dnsData -or -not $dnsData.Success -or $dnsData.Data.DomainCount -eq 0) {
+    $dnsDomainCount = [int](Get-NRGNestedProperty -Object $dnsData -Path 'Data.DomainCount' -Default 0)
+    if (-not $dnsData -or -not $dnsData.Success -or $dnsDomainCount -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'DNS data not collected'
         return
     }
 
-    foreach ($domain in $dnsData.Data.Domains.Keys) {
-        $d = $dnsData.Data.Domains[$domain]
+    $dnsDomainMap = Get-NRGNestedProperty -Object $dnsData -Path 'Data.Domains' -Default @{}
+    foreach ($domain in @($dnsDomainMap.Keys)) {
+        $d = $dnsDomainMap[$domain]
 
         $caa = $null
         if ($d -is [hashtable] -and $d.ContainsKey('CAA')) { $caa = $d['CAA'] }
@@ -441,14 +457,16 @@ function Test-NRGControlDNSTLSCertExpiry {
     $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
-    if (-not $dnsData -or -not $dnsData.Success -or $dnsData.Data.DomainCount -eq 0) {
+    $dnsDomainCount = [int](Get-NRGNestedProperty -Object $dnsData -Path 'Data.DomainCount' -Default 0)
+    if (-not $dnsData -or -not $dnsData.Success -or $dnsDomainCount -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'DNS data not collected'
         return
     }
 
-    foreach ($domain in $dnsData.Data.Domains.Keys) {
-        $d = $dnsData.Data.Domains[$domain]
+    $dnsDomainMap = Get-NRGNestedProperty -Object $dnsData -Path 'Data.Domains' -Default @{}
+    foreach ($domain in @($dnsDomainMap.Keys)) {
+        $d = $dnsDomainMap[$domain]
 
         $tls = $null
         if ($d -is [hashtable] -and $d.ContainsKey('TLSCerts')) { $tls = $d['TLSCerts'] }
@@ -589,14 +607,16 @@ function Test-NRGControlDNSCertTransparency {
     )
 
     $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
-    if (-not $dnsData -or -not $dnsData.Success -or $dnsData.Data.DomainCount -eq 0) {
+    $dnsDomainCount = [int](Get-NRGNestedProperty -Object $dnsData -Path 'Data.DomainCount' -Default 0)
+    if (-not $dnsData -or -not $dnsData.Success -or $dnsDomainCount -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'DNS data not collected'
         return
     }
 
-    foreach ($domain in $dnsData.Data.Domains.Keys) {
-        $d = $dnsData.Data.Domains[$domain]
+    $dnsDomainMap = Get-NRGNestedProperty -Object $dnsData -Path 'Data.Domains' -Default @{}
+    foreach ($domain in @($dnsDomainMap.Keys)) {
+        $d = $dnsDomainMap[$domain]
 
         $ct = $null
         if ($d -is [hashtable] -and $d.ContainsKey('CTLog')) { $ct = $d['CTLog'] }

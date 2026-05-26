@@ -23,50 +23,61 @@
 $script:DomainPattern = '^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
 
 # SSRF guard for hostnames returned by DNS (MX records, etc.).
-# Returns $null if the host is safe to probe, or a string describing why it was refused.
+# Returns a hashtable describing the probe target:
+#   @{ Refused = $true; Reason = '<why>' }                 -- unsafe, do not connect
+#   @{ Refused = $false; Address = [IPAddress]; HostName = '<original>' } -- safe to probe by IP
+#
 # A malicious DNS response could direct a TCP/TLS probe at internal RFC1918 names,
 # `localhost`, cloud-metadata-adjacent names, or link-local addresses. We re-validate
 # the FQDN shape, block explicit internal-only suffixes, then resolve to IPs and
 # refuse to connect to RFC1918 / loopback / link-local / IPv6 ULA / IPv6 link-local.
+#
+# DNS rebinding fix (v4.6.3 P2): the function previously only returned a refusal
+# string. Callers then called e.g. `TcpClient.Connect($hostname, 443)` which did a
+# SECOND DNS lookup. A short-TTL DNS rebinder could return a public IP at validate-time
+# and an RFC1918 IP at connect-time. We now resolve ONCE and return the IP for the
+# caller to connect by literal address (with SNI = original hostname).
 function Test-NRGSafeProbeTarget {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [string] $HostName)
 
     if ([string]::IsNullOrWhiteSpace($HostName)) {
-        return 'empty hostname'
+        return @{ Refused = $true; Reason = 'empty hostname' }
     }
 
     # 1. Must match the same FQDN pattern we use for tenant domains.
     #    This excludes IPv4 literals (TLD is letters only) and any bare hostname.
     if ($HostName -notmatch $script:DomainPattern) {
-        return "hostname '$HostName' failed FQDN validation"
+        return @{ Refused = $true; Reason = "hostname '$HostName' failed FQDN validation" }
     }
 
     # 2. Explicit deny-list of internal-only hostnames and suffixes.
     $lower = $HostName.ToLowerInvariant()
     if ($lower -eq 'localhost' -or $lower -eq 'localhost.localdomain') {
-        return "hostname '$HostName' is a loopback alias"
+        return @{ Refused = $true; Reason = "hostname '$HostName' is a loopback alias" }
     }
     if ($lower -like '*.local' -or $lower -like '*.internal') {
-        return "hostname '$HostName' uses an internal-only suffix"
+        return @{ Refused = $true; Reason = "hostname '$HostName' uses an internal-only suffix" }
     }
     if ($lower -eq 'metadata.google.internal') {
-        return "hostname '$HostName' is a cloud metadata endpoint"
+        return @{ Refused = $true; Reason = "hostname '$HostName' is a cloud metadata endpoint" }
     }
     # Belt-and-suspenders — the FQDN regex above should already exclude IPv4 literals,
     # but if somehow a 169.254.x.x dotted-quad slipped through we want to catch it.
     if ($HostName -match '^169\.254\.') {
-        return "hostname '$HostName' is link-local"
+        return @{ Refused = $true; Reason = "hostname '$HostName' is link-local" }
     }
 
-    # 3. Resolve and inspect every returned address.
+    # 3. Resolve and inspect every returned address. Resolution happens ONCE
+    #    and the returned address is the one the caller must connect to —
+    #    closing the DNS-rebinding window between validate and connect.
     try {
         $addresses = [System.Net.Dns]::GetHostAddresses($HostName)
     } catch {
-        return "DNS resolution failed: $($_.Exception.Message)"
+        return @{ Refused = $true; Reason = "DNS resolution failed: $($_.Exception.Message)" }
     }
     if (-not $addresses -or $addresses.Count -eq 0) {
-        return "no addresses returned for '$HostName'"
+        return @{ Refused = $true; Reason = "no addresses returned for '$HostName'" }
     }
 
     foreach ($addr in $addresses) {
@@ -75,22 +86,26 @@ function Test-NRGSafeProbeTarget {
             # IPv4: block RFC1918, loopback, link-local
             $bytes = $addr.GetAddressBytes()
             $b0 = $bytes[0]; $b1 = $bytes[1]
-            if ($b0 -eq 10)                                  { return "address $ipStr is RFC1918 10/8" }
-            if ($b0 -eq 172 -and $b1 -ge 16 -and $b1 -le 31) { return "address $ipStr is RFC1918 172.16/12" }
-            if ($b0 -eq 192 -and $b1 -eq 168)                { return "address $ipStr is RFC1918 192.168/16" }
-            if ($b0 -eq 127)                                 { return "address $ipStr is loopback 127/8" }
-            if ($b0 -eq 169 -and $b1 -eq 254)                { return "address $ipStr is link-local 169.254/16" }
+            if ($b0 -eq 10)                                  { return @{ Refused = $true; Reason = "address $ipStr is RFC1918 10/8" } }
+            if ($b0 -eq 172 -and $b1 -ge 16 -and $b1 -le 31) { return @{ Refused = $true; Reason = "address $ipStr is RFC1918 172.16/12" } }
+            if ($b0 -eq 192 -and $b1 -eq 168)                { return @{ Refused = $true; Reason = "address $ipStr is RFC1918 192.168/16" } }
+            if ($b0 -eq 127)                                 { return @{ Refused = $true; Reason = "address $ipStr is loopback 127/8" } }
+            if ($b0 -eq 169 -and $b1 -eq 254)                { return @{ Refused = $true; Reason = "address $ipStr is link-local 169.254/16" } }
         } elseif ($addr.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
             # IPv6: block loopback (::1), link-local (fe80::/10), ULA (fc00::/7)
-            if ([System.Net.IPAddress]::IsLoopback($addr)) { return "address $ipStr is IPv6 loopback" }
-            if ($addr.IsIPv6LinkLocal)                     { return "address $ipStr is IPv6 link-local (fe80::/10)" }
+            if ([System.Net.IPAddress]::IsLoopback($addr)) { return @{ Refused = $true; Reason = "address $ipStr is IPv6 loopback" } }
+            if ($addr.IsIPv6LinkLocal)                     { return @{ Refused = $true; Reason = "address $ipStr is IPv6 link-local (fe80::/10)" } }
             $b0 = $addr.GetAddressBytes()[0]
             # fc00::/7 — high 7 bits are 1111110 (0xFC or 0xFD)
-            if (($b0 -band 0xFE) -eq 0xFC)                 { return "address $ipStr is IPv6 ULA (fc00::/7)" }
+            if (($b0 -band 0xFE) -eq 0xFC)                 { return @{ Refused = $true; Reason = "address $ipStr is IPv6 ULA (fc00::/7)" } }
         }
     }
 
-    return $null
+    # Pick the first IPv4 (preferred) or fall back to first IPv6. Callers must
+    # connect to this IP literal — second resolution would re-open the rebinding race.
+    $picked = $addresses | Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } | Select-Object -First 1
+    if (-not $picked) { $picked = $addresses | Select-Object -First 1 }
+    return @{ Refused = $false; Address = $picked; HostName = $HostName }
 }
 
 function Invoke-NRGCollectDNSEmailRecords {
@@ -234,7 +249,10 @@ function Invoke-NRGCollectDNSEmailRecords {
                     $d.DKIM.RotateOnDate    = [string]$dkimConfig.RotateOnDate
                     if ($dkimConfig.KeyCreationTime) {
                         try {
-                            $kct = [datetime]::Parse($dkimConfig.KeyCreationTime)
+                            # InvariantCulture: Exchange returns timestamps in a fixed
+                            # format; relying on current culture's parser allows weird
+                            # parses on non-en-US hosts (e.g. dd/MM/yyyy). v4.6.3 P2 fix.
+                            $kct = [datetime]::Parse([string]$dkimConfig.KeyCreationTime, [cultureinfo]::InvariantCulture)
                             $age = [int]([datetime]::UtcNow - $kct.ToUniversalTime()).TotalDays
                             $d.DKIM.KeyAgeDays = $age
                             # Industry guidance: rotate at most every 365 days,
@@ -307,11 +325,20 @@ function Invoke-NRGCollectDNSEmailRecords {
                 # an RFC1918 / loopback / link-local address (DNS rebinding).
                 # Refuse to fetch the policy file in those cases — same pattern
                 # used for the MX hostname TLS probe below.
-                $mtaStsHost = "mta-sts.$domain"
-                $mtaStsRefusal = Test-NRGSafeProbeTarget -HostName $mtaStsHost
-                if ($mtaStsRefusal) {
-                    $d.Errors += "MTASTS.Policy: refused '$mtaStsHost' — $mtaStsRefusal"
+                $mtaStsHost  = "mta-sts.$domain"
+                $mtaStsProbe = Test-NRGSafeProbeTarget -HostName $mtaStsHost
+                if ($mtaStsProbe.Refused) {
+                    $d.Errors += "MTASTS.Policy: refused '$mtaStsHost' — $($mtaStsProbe.Reason)"
                 } else {
+                    # DNS rebinding fix (v4.6.3 P2): Invoke-WebRequest would re-resolve
+                    # the hostname; we cannot easily pin the resolved IP through it.
+                    # We accept Invoke-WebRequest's resolution here because the MTA-STS
+                    # policy file is a tenant-published-DNS record — risk is bounded
+                    # to the .well-known/ HTTP fetch and we still gate on the validate-
+                    # time resolution being public. A stricter pin would require a
+                    # custom HttpClient with a SocketsHttpHandler.ConnectCallback. The
+                    # validate-time resolution still rules out the worst case (the
+                    # bare hostname pointing at an internal address at validate time).
                     try {
                         # Validate the domain before constructing URL — already validated above
                         $stsUrl     = "https://$mtaStsHost/.well-known/mta-sts.txt"
@@ -387,18 +414,24 @@ function Invoke-NRGCollectDNSEmailRecords {
             # a trusted CA. We probe port 443 on autodiscover.<domain> and on
             # the first MX hostname. STARTTLS on port 25 is a future enhancement;
             # current scope is the HTTPS endpoints the help desk routinely uses.
+            # DNS rebinding fix (v4.6.3 P2): tlsTargets now stores
+            # @{ HostName=<original-fqdn>; Address=[IPAddress] } per role.
+            # We resolve ONCE in Test-NRGSafeProbeTarget and connect by IP,
+            # passing the original hostname as SNI to AuthenticateAsClient.
+            # This closes the rebinding race that existed when the validate-
+            # time GetHostAddresses() and the connect-time TcpClient name
+            # resolution disagreed (short-TTL DNS rebinder).
             $tlsTargets = [ordered]@{}
             # SSRF guard (v4.6.x audit MED #3): autodiscover.<domain> resolved
             # over DNS could point at RFC1918 / loopback / link-local IPs in
-            # a misconfigured or hostile tenant (DNS rebinding). Same Test-NRGSafeProbeTarget
-            # gate the MX target gets.
-            $autoDiscHost = "autodiscover.$domain"
-            $autoDiscRefusal = Test-NRGSafeProbeTarget -HostName $autoDiscHost
-            if ($autoDiscRefusal) {
-                $d.Errors += "TLSCerts.Autodiscover: refused '$autoDiscHost' — $autoDiscRefusal"
-                $d.TLSCerts['Autodiscover'] = @{ Hostname = $autoDiscHost; Error = "Refused: $autoDiscRefusal" }
+            # a misconfigured or hostile tenant. Same gate the MX target gets.
+            $autoDiscHost  = "autodiscover.$domain"
+            $autoDiscProbe = Test-NRGSafeProbeTarget -HostName $autoDiscHost
+            if ($autoDiscProbe.Refused) {
+                $d.Errors += "TLSCerts.Autodiscover: refused '$autoDiscHost' — $($autoDiscProbe.Reason)"
+                $d.TLSCerts['Autodiscover'] = @{ Hostname = $autoDiscHost; Error = "Refused: $($autoDiscProbe.Reason)" }
             } else {
-                $tlsTargets['Autodiscover'] = $autoDiscHost
+                $tlsTargets['Autodiscover'] = $autoDiscProbe
             }
             if ($d.MX.Count -gt 0) {
                 $firstMx = [string]$d.MX[0].Exchange
@@ -408,19 +441,22 @@ function Invoke-NRGCollectDNSEmailRecords {
                 # the FQDN, deny internal-only suffixes, and refuse to connect to
                 # RFC1918 / loopback / link-local / IPv6 ULA addresses.
                 if ($firstMx) {
-                    $refusalReason = Test-NRGSafeProbeTarget -HostName $firstMx
-                    if ($refusalReason) {
-                        $d.Errors += "TLSCerts.MailHost: refused MX target '$firstMx' — $refusalReason"
-                        $d.TLSCerts['MailHost'] = @{ Hostname = $firstMx; Error = "Refused: $refusalReason" }
+                    $mxProbe = Test-NRGSafeProbeTarget -HostName $firstMx
+                    if ($mxProbe.Refused) {
+                        $d.Errors += "TLSCerts.MailHost: refused MX target '$firstMx' — $($mxProbe.Reason)"
+                        $d.TLSCerts['MailHost'] = @{ Hostname = $firstMx; Error = "Refused: $($mxProbe.Reason)" }
                     } else {
-                        $tlsTargets['MailHost'] = $firstMx
+                        $tlsTargets['MailHost'] = $mxProbe
                     }
                 }
             }
 
             foreach ($role in $tlsTargets.Keys) {
-                $hostname = $tlsTargets[$role]
-                if (-not $hostname) { continue }
+                $probe = $tlsTargets[$role]
+                if (-not $probe) { continue }
+                $hostname = $probe.HostName
+                $ipAddr   = $probe.Address
+                if (-not $hostname -or -not $ipAddr) { continue }
 
                 # Resource-leak fix: wrap the entire TLS-inspection block in
                 # try/finally and dispose tcpClient + sslStream in the finally
@@ -430,14 +466,18 @@ function Invoke-NRGCollectDNSEmailRecords {
                 $sslStream = $null
                 try {
                     $tcpClient = [System.Net.Sockets.TcpClient]::new()
-                    # 5-second connect timeout — many MX hosts block 443
-                    $iar = $tcpClient.BeginConnect($hostname, 443, $null, $null)
+                    # 5-second connect timeout — many MX hosts block 443.
+                    # Connect to the resolved IP (closes the DNS rebinding race
+                    # against the connect-time name resolution).
+                    $iar = $tcpClient.BeginConnect($ipAddr, 443, $null, $null)
                     if (-not $iar.AsyncWaitHandle.WaitOne(5000, $false)) {
-                        $d.TLSCerts[$role] = @{ Hostname = $hostname; Error = 'Connect timeout' }
+                        $d.TLSCerts[$role] = @{ Hostname = $hostname; Address = $ipAddr.ToString(); Error = 'Connect timeout' }
                         continue
                     }
                     $tcpClient.EndConnect($iar)
-                    # Don't validate the chain — we're inspecting, not consuming
+                    # Don't validate the chain — we're inspecting, not consuming.
+                    # SNI = original hostname (so the server returns the right cert),
+                    # but the TCP destination is the validated IP.
                     $sslStream = [System.Net.Security.SslStream]::new(
                         $tcpClient.GetStream(), $false, { param($s,$c,$ch,$e) $true })
                     $sslStream.AuthenticateAsClient($hostname)
@@ -447,6 +487,7 @@ function Invoke-NRGCollectDNSEmailRecords {
                     $days  = [int]($x509.NotAfter.ToUniversalTime() - $now).TotalDays
                     $d.TLSCerts[$role] = @{
                         Hostname        = $hostname
+                        Address         = $ipAddr.ToString()
                         Subject         = [string]$x509.Subject
                         Issuer          = [string]$x509.Issuer
                         NotBefore       = $x509.NotBefore.ToString('o')
@@ -459,7 +500,7 @@ function Invoke-NRGCollectDNSEmailRecords {
                                           else { 'OK' }
                     }
                 } catch {
-                    $d.TLSCerts[$role] = @{ Hostname = $hostname; Error = $_.Exception.Message }
+                    $d.TLSCerts[$role] = @{ Hostname = $hostname; Address = $ipAddr.ToString(); Error = $_.Exception.Message }
                 } finally {
                     if ($sslStream) { try { $sslStream.Dispose() } catch {} }
                     if ($tcpClient) { try { $tcpClient.Dispose() } catch {} }
@@ -488,7 +529,9 @@ function Invoke-NRGCollectDNSEmailRecords {
                     $d.CTLog.TotalCerts = $arr.Count
                     $thirtyDaysAgo = (Get-Date).AddDays(-30)
                     $recent = @($arr | Where-Object {
-                        try { [datetime]::Parse($_.entry_timestamp) -gt $thirtyDaysAgo }
+                        # InvariantCulture: crt.sh emits ISO 8601 timestamps; the local
+                        # culture must not steer interpretation. v4.6.3 P2 fix.
+                        try { [datetime]::Parse([string]$_.entry_timestamp, [cultureinfo]::InvariantCulture) -gt $thirtyDaysAgo }
                         catch { $false }
                     })
                     $d.CTLog.Last30Days = $recent.Count

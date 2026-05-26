@@ -125,10 +125,22 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
         try {
             $next = 'https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$select=id,operatingSystem,complianceState'
             $devList = @()
-            while ($next) {
+            # Pagination cap (v4.6.3 P2): managed device count can run into
+            # tens of thousands on large tenants. Cap at 200 pages (~200k
+            # devices at default $top) and surface the cap as an exception.
+            $maxPages  = 200
+            $pageCount = 0
+            while ($next -and $pageCount -lt $maxPages) {
                 $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 if ($page.value) { $devList += $page.value }
                 $next = $page.'@odata.nextLink'
+                $pageCount++
+            }
+            if ($pageCount -ge $maxPages -and $next) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Intune-DeviceCompliance' `
+                        -Message "Pagination cap reached ($maxPages pages); managed device list may be truncated."
+                }
             }
             $result.Data.OSComplianceSummary.TotalCount        = $devList.Count
             $result.Data.OSComplianceSummary.CompliantCount    = @($devList | Where-Object { $_.complianceState -eq 'compliant' }).Count

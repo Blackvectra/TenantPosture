@@ -113,7 +113,7 @@ function Test-NRGControlPurviewAuditSearch {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview-AuditConfig'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
-    $enabled = $pvw.Data.AuditConfig.UnifiedAuditLogIngestionEnabled ?? $false
+    $enabled = Get-NRGNestedProperty -Object $pvw -Path 'Data.AuditConfig.UnifiedAuditLogIngestionEnabled' -Default $false
     if ($enabled) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Unified audit log search is enabled.'
     } else {
@@ -222,7 +222,7 @@ function Test-NRGControlPurviewEDiscovery {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Purview data not collected'; return
     }
-    $auditEnabled = $pvw.Data.AuditConfig.UnifiedAuditLogIngestionEnabled ?? $false
+    $auditEnabled = Get-NRGNestedProperty -Object $pvw -Path 'Data.AuditConfig.UnifiedAuditLogIngestionEnabled' -Default $false
     if ($auditEnabled) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
@@ -276,7 +276,7 @@ function Test-NRGControlPurviewAuditPremium {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview-AuditConfig'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
-    $premiumEnabled = [bool]($pvw.Data.AuditConfig.AdvancedAuditEnabled ?? $false)
+    $premiumEnabled = [bool](Get-NRGNestedProperty -Object $pvw -Path 'Data.AuditConfig.AdvancedAuditEnabled' -Default $false)
     if ($premiumEnabled) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Purview Audit (Premium) is enabled. High-value events including MailItemsAccessed and SearchQueryInitiated are captured.'
     } else {
