@@ -1,6 +1,6 @@
 @{
     # Module identity
-    ModuleVersion     = '4.6.3'
+    ModuleVersion     = '4.6.4'
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
     Author            = 'Matthew Levorson'
     CompanyName       = 'NRG Technology Services / NextLayerSec LLC'
@@ -298,6 +298,56 @@
             Tags         = @('M365', 'Security', 'Assessment', 'MSP', 'CIS', 'SCuBA', 'NIST', 'CMMC')
             ProjectUri   = 'https://github.com/Blackvectra/NRG-Assessment-Tool'
             ReleaseNotes = @'
+v4.6.4 EMERGENCY (Part A): orchestrator + Apply + evaluator + control-def fixes.
+
+Critical fixes:
+  * Pre-initialize $script:NRGFatalExitCode and $script:NRGSuccessExitCode in
+    Invoke-NRGAssessment.ps1 so StrictMode reads at exit never throw on the
+    success path (v4.6.3 crashed every successful run with exit code 1 AFTER
+    the report was written).
+  * Apply-NRGAADMFA + Apply-NRGAADLegacyAuth: replace unguarded
+    $_.Conditions.* / $_.GrantControls.* chained access with
+    Get-NRGNestedProperty under StrictMode. Prior code blew up the
+    idempotency Where-Object scan on the first CA policy with a null nested
+    object → DUPLICATE CA policies created on every apply.
+  * Test-NRGControl-Inventory.ps1 OAuth INV-1.4: fix
+    `$highRisk | Where-Object { $_.AppName -eq $_.AppName }` self-comparison
+    (always true) — every OAuth app was tagged [HIGH RISK SCOPE] whenever
+    any high-risk app existed. Now uses an actual lookup.
+
+PII fixes (HTML report client-deliverable):
+  * EXO-7.4 (SmtpAuthExceptions) and AAD-10.2 (PrivCloudOnly) — move full
+    UPN list out of the rendered Detail field into structured
+    AffectedObjects (escaped). Detail keeps count only.
+
+Dedupe + advisory marking:
+  * Purview triple-counting: PVW-1.1 remains canonical UAL check; PVW-2.1
+    repointed to AdminAuditLogEnabled; PVW-3.2 repointed to eDiscovery
+    cases (or NotApplicable). A tenant with audit disabled now gets ONE
+    Gap finding, not three.
+  * 15 placeholder evaluators marked "(Manual review required)" in Title
+    and ADVISORY ONLY in Detail until real checks land in v4.7.0. Includes
+    SPO-3.3 downgrade from hardcoded Satisfied to NotApplicable.
+
+Control definition fixes (controls.json):
+  * 11 fabricated SCuBA pillars cleared (MS.PURVIEW.* on PVW-1.1/1.3/2.1/3.4,
+    MS.INTUNE.* on INT-1.1/1.2/2.1/2.5/3.3/4.1/4.3) — those pillars do not
+    exist in SCuBA. Set SCuBA = "" with a description note.
+  * AAD-1.2 / AAD-1.3 SCuBA citations corrected to current ScubaGear IDs
+    (MS.AAD.3.2v2 for MFA-for-all, MS.AAD.3.6v1 for phishing-resistant MFA).
+  * EXO-2.7 silent no-op duplicate of EXO-1.6 removed.
+
+License-detection fixes:
+  * Get-NRGTenantLicenseProfile.SuppressedLicenseRequirements now handles
+    7 controls.json strings that previously drifted out of the map:
+    DfO Plan 2 with parenthetical, M365 E5 Compliance add-on, M365 E5 or
+    E5 Compliance add-on, Sentinel/Defender XDR, Entra Workload Identities
+    Premium, M365 Copilot ($30/user/month), Power Platform + Copilot Studio.
+  * Pester unit tests added in Testing/NRG.LicenseDetection.Tests.ps1
+    exercising each of the 7 strings.
+
+----- prior release notes -----
+
 v4.6.1: 217 exported functions. Closes Phase 2 + Phase 4 roadmap gaps.
 
 PRs:

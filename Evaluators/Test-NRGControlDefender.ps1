@@ -377,6 +377,8 @@ function Test-NRGControlDefenderViaTag {
 }
 
 # ── DEF-3.3 Defender for Cloud Apps Connected ────────────────────────────────
+# v4.6.4 ADVISORY MARK: hardcoded Partial — no programmatic check, marked
+# Manual review required pending v4.7.0 cleanup.
 function Test-NRGControlDefenderMDCA {
     [CmdletBinding()] param()
     $cid = 'DEF-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
@@ -384,19 +386,21 @@ function Test-NRGControlDefenderMDCA {
     # MDCA connection status requires separate collector — proxy via CA policy data
     $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
     Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-        -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
-        -Detail 'Microsoft Defender for Cloud Apps connection status requires manual verification: Defender XDR > Settings > Cloud Apps > Connected apps. Verify M365 connector is active.' `
+        -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
+        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Microsoft Defender for Cloud Apps connection status requires manual verification: Defender XDR > Settings > Cloud Apps > Connected apps. Verify M365 connector is active.' `
         -Remediation $ctrl.Remediation
 }
 
 # ── DEF-3.4 Defender Alerts Email Notification ──────────────────────────────
+# v4.6.4 ADVISORY MARK: hardcoded Partial — no programmatic check, marked
+# Manual review required pending v4.7.0 cleanup.
 function Test-NRGControlDefenderAlertNotification {
     [CmdletBinding()] param()
     $cid = 'DEF-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-        -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
-        -Detail 'Defender alert notification configuration requires manual verification: Defender portal > Settings > Email notifications. Verify security team is subscribed to high/critical alert emails.' `
+        -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
+        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Defender alert notification configuration requires manual verification: Defender portal > Settings > Email notifications. Verify security team is subscribed to high/critical alert emails.' `
         -Remediation $ctrl.Remediation
 }
 
@@ -442,12 +446,14 @@ function Test-NRGControlDefenderDLPSITs {
 }
 
 # ── DEF-4.3 Risky Application Alerts Configured ──────────────────────────────
+# v4.6.4 ADVISORY MARK: hardcoded Partial — no programmatic check, marked
+# Manual review required pending v4.7.0 cleanup.
 function Test-NRGControlDefenderRiskyAppAlerts {
     [CmdletBinding()] param()
     $cid = 'DEF-4.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     # Check for Defender for Cloud Apps or MDCA alert policies on risky apps
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Risky application alert configuration requires Microsoft Defender for Cloud Apps. Verify in Defender XDR > Cloud Apps > Policies > OAuth app policies that alerts are configured for high-privilege app consent and risky OAuth grants.' -Remediation $ctrl.Remediation
+    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Risky application alert configuration requires Microsoft Defender for Cloud Apps. Verify in Defender XDR > Cloud Apps > Policies > OAuth app policies that alerts are configured for high-privilege app consent and risky OAuth grants.' -Remediation $ctrl.Remediation
 }
 
 # ── DEF-4.4 Priority Account Protection Enabled ──────────────────────────────

@@ -185,8 +185,49 @@ function Get-NRGTenantLicenseProfile {
     if ($hasMDEP1) { $null = $suppressedLicReqs.Add('Microsoft Defender for Endpoint Plan 1+') }
     if ($hasMDEP2) { $null = $suppressedLicReqs.Add('Microsoft Defender for Endpoint Plan 2') }
     if ($hasDfOP1) { $null = $suppressedLicReqs.Add('Defender for Office 365 Plan 1 (M365 Business Premium)') }
-    if ($hasDfOP2) { $null = $suppressedLicReqs.Add('Defender for Office 365 Plan 2') }
+    if ($hasDfOP2) {
+        # v4.6.4 FIX: prior code only added the short string 'Defender for Office 365 Plan 2'
+        # but controls.json now uses the parenthetical variant. Add BOTH so we
+        # tolerate either form without silently failing to suppress.
+        $null = $suppressedLicReqs.Add('Defender for Office 365 Plan 2')
+        $null = $suppressedLicReqs.Add('Defender for Office 365 Plan 2 (M365 E5 or add-on)')
+    }
     if ($hasMDCA)  { $null = $suppressedLicReqs.Add('Microsoft Defender for Cloud Apps (M365 E5 or add-on)') }
+
+    # v4.6.4 FIX: 7 controls.json LicenseRequirement strings previously had no
+    # matching suppression entry — so even tenants holding the right SKU were
+    # incorrectly told they were missing a license. Map each to the right tier
+    # flag now.
+    # E5 / E5-Compliance umbrella: only fully suppressed when the tenant
+    # actually holds an E5 SKU (THREAT_INTELLIGENCE_DEPT, SPE_E5, or
+    # ENTERPRISEPREMIUM all imply E5 Compliance).
+    $hasE5Compliance = [bool]($partNumbers -match '^(SPE_E5|ENTERPRISEPREMIUM|INFORMATION_PROTECTION_COMPLIANCE)$') -or
+                       [bool]($servicePlans -match '^(EQUIVIO_ANALYTICS|RECORDS_MANAGEMENT|INFORMATION_BARRIERS|COMMUNICATIONS_COMPLIANCE|INSIDER_RISK_MANAGEMENT)$')
+    if ($hasE5Compliance) {
+        $null = $suppressedLicReqs.Add('M365 E5 Compliance add-on')
+        $null = $suppressedLicReqs.Add('M365 E5 or E5 Compliance add-on')
+    }
+    # Sentinel / Defender XDR: XDR ships with E5; Sentinel itself is a separate
+    # Azure SKU not in SubscribedSkus, so we suppress only on E5 / Defender XDR.
+    if ($hasDfOP2 -or $partNumbers -match '^(SPE_E5|ENTERPRISEPREMIUM)$') {
+        $null = $suppressedLicReqs.Add('Microsoft Sentinel (add-on) or Defender XDR')
+    }
+    # Entra Workload Identities Premium add-on — only suppress when the actual
+    # add-on SKU is present (separate purchase from Entra P1/P2).
+    if ([bool]($partNumbers -match '^Microsoft_Entra_Workload_Identities_Premium$')) {
+        $null = $suppressedLicReqs.Add('Entra Workload Identities Premium (add-on)')
+    }
+    # M365 Copilot add-on — exact string includes special chars and a $ amount;
+    # HashSet uses OrdinalIgnoreCase but we still must match the literal string.
+    if ([bool]($partNumbers -match '^Microsoft_365_Copilot$')) {
+        $null = $suppressedLicReqs.Add('M365 Copilot add-on license ($30/user/month)')
+    }
+    # Power Platform + Copilot Studio — Copilot Studio is sold as part-number
+    # Microsoft_Copilot_Studio_in_Microsoft_Teams or POWERAPPS_PER_USER.
+    if ([bool]($partNumbers -match '^(POWERAPPS_PER_USER|Microsoft_Copilot_Studio|POWER_AUTOMATE_PLAN)') -or
+        [bool]($servicePlans -match '^(POWERAPPS_PER_USER|POWER_AUTOMATE_USER_RPA)$')) {
+        $null = $suppressedLicReqs.Add('Power Platform + Copilot Studio license')
+    }
 
     return [pscustomobject]([ordered]@{
         TierLabel                     = $tierLabel
