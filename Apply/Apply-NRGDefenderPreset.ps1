@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 #
-# Apply-NRGDefenderPreset.ps1  (v4.6.1)
+# Apply-NRGDefenderPreset.ps1  (v4.6.3)
 # Remediates DEF-1.1: Enable Defender for Office 365 Standard preset policy.
 #
 # NRG Technology Services | NextLayerSec LLC
@@ -69,9 +69,39 @@ function Apply-NRGDefenderPreset {
             return [PSCustomObject]$result
         }
 
+        # M-DefenderPreset: capture recipient scope (SentTo / SentToMemberOf /
+        # RecipientDomainIs) in addition to Name+State so manual rollback is
+        # possible. Without these, an operator who wants to reverse an enable
+        # has no record of what scope to restore.
         $result.Before = [PSCustomObject]@{
-            EOPRule = if ($eopRule) { [PSCustomObject]@{ Name=$eopRule.Name; State=$eopRule.State } } else { [PSCustomObject]@{ Note = "Not present: $eopReadErr" } }
-            ATPRule = if ($atpRule) { [PSCustomObject]@{ Name=$atpRule.Name; State=$atpRule.State } } else { [PSCustomObject]@{ Note = "Not present: $atpReadErr (Defender for Office 365 P1+ required)" } }
+            EOPRule = if ($eopRule) {
+                [PSCustomObject]@{
+                    Name                  = $eopRule.Name
+                    State                 = $eopRule.State
+                    SentTo                = @($eopRule.SentTo)
+                    SentToMemberOf        = @($eopRule.SentToMemberOf)
+                    RecipientDomainIs     = @($eopRule.RecipientDomainIs)
+                    ExceptIfSentTo        = @($eopRule.ExceptIfSentTo)
+                    ExceptIfSentToMemberOf = @($eopRule.ExceptIfSentToMemberOf)
+                    ExceptIfRecipientDomainIs = @($eopRule.ExceptIfRecipientDomainIs)
+                }
+            } else {
+                [PSCustomObject]@{ Note = "Not present: $eopReadErr" }
+            }
+            ATPRule = if ($atpRule) {
+                [PSCustomObject]@{
+                    Name                  = $atpRule.Name
+                    State                 = $atpRule.State
+                    SentTo                = @($atpRule.SentTo)
+                    SentToMemberOf        = @($atpRule.SentToMemberOf)
+                    RecipientDomainIs     = @($atpRule.RecipientDomainIs)
+                    ExceptIfSentTo        = @($atpRule.ExceptIfSentTo)
+                    ExceptIfSentToMemberOf = @($atpRule.ExceptIfSentToMemberOf)
+                    ExceptIfRecipientDomainIs = @($atpRule.ExceptIfRecipientDomainIs)
+                }
+            } else {
+                [PSCustomObject]@{ Note = "Not present: $atpReadErr (Defender for Office 365 P1+ required)" }
+            }
         }
 
         $eopEnabled = $eopRule -and $eopRule.State -eq 'Enabled'

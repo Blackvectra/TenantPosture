@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 #
-# Apply-NRGAADMFA.ps1  (v4.6.1)
+# Apply-NRGAADMFA.ps1  (v4.6.3)
 # Remediates AAD-2.1: MFA required for all users via Conditional Access policy.
 #
 # NRG Technology Services | NextLayerSec LLC
@@ -59,6 +59,23 @@ function Apply-NRGAADMFA {
             return [PSCustomObject]$result
         }
 
+        # ── M-Idempotency: also match NRG-created policies by displayName, not
+        # just by shape. If our previous report-only policy was renamed AND its
+        # state is something other than enabled, the shape-only match below
+        # wouldn't recognize it and we'd create a duplicate. Treat any
+        # NRG-* policy that targets All users with MFA as compliant for
+        # apply purposes (regardless of state). The operator can still
+        # promote / tune it via portal.
+        $nrgOwned = @($existing | Where-Object {
+            $_.DisplayName -like 'NRG-*' -and
+            (@($_.Conditions.Users.IncludeUsers) -contains 'All') -and
+            (
+                ($_.GrantControls.BuiltInControls -contains 'mfa') -or
+                (-not [string]::IsNullOrEmpty($_.GrantControls.AuthenticationStrength.Id)) -or
+                (-not [string]::IsNullOrEmpty($_.GrantControls.AuthStrengthId))
+            )
+        })
+
         # Look for enabled policy: All users + MFA (built-in or auth strength)
         $compliant = @($existing | Where-Object {
             $_.State -eq 'enabled' -and
@@ -71,8 +88,10 @@ function Apply-NRGAADMFA {
         })
 
         $result.Before = [PSCustomObject]@{
-            MfaPolicyCount = $compliant.Count
-            MfaPolicies    = @($compliant | Select-Object Id, DisplayName, State)
+            MfaPolicyCount     = $compliant.Count
+            MfaPolicies        = @($compliant | Select-Object Id, DisplayName, State)
+            NRGOwnedPolicyCount = $nrgOwned.Count
+            NRGOwnedPolicies   = @($nrgOwned  | Select-Object Id, DisplayName, State)
         }
 
         if ($compliant.Count -gt 0) {
@@ -81,8 +100,35 @@ function Apply-NRGAADMFA {
             return [PSCustomObject]$result
         }
 
+        # An NRG-* MFA-shape policy already exists (likely report-only awaiting
+        # operator promotion). Do NOT create a duplicate.
+        if ($nrgOwned.Count -gt 0) {
+            $result.Status = 'AlreadyCompliant'
+            $result.Action = "Existing NRG-* MFA policy found ($($nrgOwned[0].DisplayName), state $($nrgOwned[0].State)) — no duplicate created."
+            $result.After  = $result.Before
+            return [PSCustomObject]$result
+        }
+
+        # ── H7: locate break-glass / emergency-access accounts and inject them
+        # as exclusions so the policy is safe even if a future operator promotes
+        # it from report-only to enabled via portal.
+        $bg = $null
+        if (Get-Command Get-NRGBreakGlassExclusions -ErrorAction SilentlyContinue) {
+            try { $bg = Get-NRGBreakGlassExclusions } catch {
+                Write-Verbose "Get-NRGBreakGlassExclusions threw: $($_.Exception.Message)"
+            }
+        }
+        $excludeUsers  = if ($bg -and $bg.ExcludeUsers)  { @($bg.ExcludeUsers)  } else { @() }
+        $excludeGroups = if ($bg -and $bg.ExcludeGroups) { @($bg.ExcludeGroups) } else { @() }
+
+        $bgWarning = $null
+        if (-not $bg -or -not $bg.Found) {
+            $bgWarning = "WARNING: No break-glass account exclusions detected on this tenant. The CA policy will be created in report-only mode (safe), but if a future operator promotes it to enabled, ALL USERS WILL BE BLOCKED. Create a 'Break Glass' group or named admin before promoting this policy to enabled."
+            Write-Warning $bgWarning
+        }
+
         $target = "Tenant Conditional Access policies"
-        $action = "Create CA policy 'NRG-Require-MFA-All-Users' (state: enabledForReportingButNotEnforced — operator must add break-glass exclusions and promote manually)"
+        $action = "Create CA policy 'NRG-Require-MFA-All-Users' (state: enabledForReportingButNotEnforced; excludeUsers=$($excludeUsers.Count), excludeGroups=$($excludeGroups.Count))"
         if (-not $PSCmdlet.ShouldProcess($target, $action)) {
             $result.Status = 'Skipped'
             return [PSCustomObject]$result
@@ -94,8 +140,9 @@ function Apply-NRGAADMFA {
             conditions  = @{
                 clientAppTypes = @('all')
                 users          = @{
-                    includeUsers = @('All')
-                    excludeUsers = @()
+                    includeUsers  = @('All')
+                    excludeUsers  = $excludeUsers
+                    excludeGroups = $excludeGroups
                 }
                 applications   = @{
                     includeApplications = @('All')
@@ -116,8 +163,17 @@ function Apply-NRGAADMFA {
             CreatedPolicyId  = $created.Id
             DisplayName      = $created.DisplayName
             State            = $created.State
-            Note             = 'Report-only mode. Add break-glass account exclusions before promoting to enabled.'
+            ExcludedUsers    = if ($bg -and $bg.UserUPNs)   { @($bg.UserUPNs)   } else { @() }
+            ExcludedGroups   = if ($bg -and $bg.GroupNames) { @($bg.GroupNames) } else { @() }
+            Note             = 'Report-only mode. Confirm break-glass exclusions cover ALL emergency accounts before promoting to enabled.'
             VerificationRead = @($after | Select-Object Id, DisplayName, State)
+        }
+        # Surface the break-glass warning on the Applied result so the
+        # rollback log captures it as a Notes field (Apply-NRGBaseline copies
+        # $r.Notes into the rollback entry). $result is an [ordered] hashtable
+        # cast to PSCustomObject on return — add Notes as a hashtable key.
+        if ($bgWarning) {
+            $result['Notes'] = $bgWarning
         }
         $result.Status = 'Applied'
     } catch {
