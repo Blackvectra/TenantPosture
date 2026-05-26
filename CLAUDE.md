@@ -2,13 +2,13 @@
 
 **Author:** Matthew Levorson, NRG Technology Services / NextLayerSec LLC
 **GitHub:** https://github.com/Blackvectra/NRG-Assessment-Tool
-**Version:** 4.5.5
+**Version:** 4.6.4
 **Language:** PowerShell 7.0+
 **Purpose:** Read-only Microsoft 365 security assessment framework for MSP multi-tenant environments.
 
 ## What This Tool Does
 
-NRG-Assessment runs agentlessly against any Microsoft 365 tenant, collects security configuration data via Microsoft Graph and Exchange Online PowerShell, evaluates 188 controls against a license-aware baseline, and produces an interactive HTML report with executive summary, compliance matrix, attack scenario analysis, and NRG services pitch. It is a read-only assessment — it never modifies tenant configuration.
+NRG-Assessment runs agentlessly against any Microsoft 365 tenant, collects security configuration data via Microsoft Graph and Exchange Online PowerShell, evaluates 195 controls against a license-aware baseline, and produces an interactive HTML report with executive summary, compliance matrix, attack scenario analysis, and NRG services pitch. It is a read-only assessment — it never modifies tenant configuration.
 
 There are two entry points. `Invoke-NRGAssessment.ps1` runs against a single tenant interactively. `Invoke-NRGBatchAssessment.ps1` runs against all clients defined in `Config/clients.json` sequentially using GDAP delegated access, producing per-client reports and a batch summary.
 
@@ -24,15 +24,15 @@ There are two entry points. `Invoke-NRGAssessment.ps1` runs against a single ten
 
 `Publishers/` contains `Publish-NRGAssessmentHTML.ps1` (1682-line interactive HTML report generator).
 
-`Config/` contains `clients.json` (batch client list with TenantId, DelegatedOrg, and skip flags), `controls.json` (control definitions with id, title, severity, and framework IDs), and `baselines/` containing `nrg-baseline-basic.json` (106 controls, 8 workload config sections), `nrg-baseline-standard.json` (15 controls, 4 workload config sections), `nrg-baseline-premium.json` (35 controls, 4 workload config sections), and `nrg-baseline-e5.json` (32 controls, 6 workload config sections).
+`Config/` contains `clients.json` (batch client list with TenantId, DelegatedOrg, and skip flags), `controls.json` (control definitions including `ControlId`, `Title`, `Severity`, `Workload`, `Category`, `CollectorDependency`, `EvaluatorFunction`, `Remediation`, `References`, and `LicenseRequirement` per control), `frameworks.json` (framework definitions for CIS / SCuBA / NIST / CMMC / ISO 27001 / SOC 2 / HIPAA / PCI DSS / DISA STIG / MITRE ATT&CK), `branding.psd1` (company name, contact, colors, hourly rate, fees), and `schema/controls.schema.json` (JSON Schema validating controls.json shape).
 
 ## Control Architecture
 
-188 total controls across 9 workloads: Azure AD / Entra ID (AAD, 46), Exchange Online (EXO, 28), Defender for Office 365 (DEF, 23), Microsoft Teams (TMS, 22), Purview / Compliance (PVW, 18), SharePoint Online (SPO, 17), Microsoft Intune (INT, 17), Power Platform (PPL, 11), Email Auth DNS (DNS, 6). Severity breakdown: 12 Critical, 88 High, 61 Medium, 27 Low.
+195 total controls across 9 workloads: Azure AD / Entra ID (AAD, 46), Exchange Online (EXO, 31), Defender for Office 365 (DEF, 23), Microsoft Teams (TMS, 22), Purview / Compliance (PVW, 18), SharePoint Online (SPO, 17), Microsoft Intune (INT, 17), Power Platform (PPL, 11), Email Auth DNS (DNS, 10). Severity breakdown: 11 Critical, 92 High, 65 Medium, 27 Low.
 
-Baseline tiers follow an `InheritsFrom` chain with zero overlap between tiers. `nrg-baseline-basic` covers 106 controls for any tenant. `nrg-baseline-standard` adds 15 controls (121 total) for Microsoft 365 Business Standard. `nrg-baseline-premium` adds 35 controls (156 total) for Business Premium and Entra P1/P2. `nrg-baseline-e5` adds 32 controls (188 total) for Microsoft 365 E5, Defender P2, and Purview Premium.
+License-aware scoring is encoded per control via the `LicenseRequirement` string field in `controls.json` (e.g. "M365 Business Premium or Entra ID P1", "Defender for Office 365 P1", "E5 Compliance"). There are no separate per-tier baseline JSON files — the requirement lives on each control row.
 
-License detection runs via `SubscribedSkus` in `Get-NRGBaselineTier.ps1`. Only controls applicable to the detected tier count toward the compliance score. Premium and E5 controls on lower-tier tenants route to the Upgrade Unlocks section of the HTML report.
+License detection runs via `SubscribedSkus` in `Lib/Get-NRGTenantLicenseProfile.ps1`, which returns a `HashSet` of LicenseRequirement strings the tenant satisfies. `Test-NRGLicenseRequirementMet` answers per-control whether the tenant has the licenses needed. Controls whose requirement isn't met are routed to the Upgrade Unlocks section of the HTML report and do not count against the compliance score.
 
 ## Data Flow
 
@@ -54,9 +54,9 @@ Every collector must initialize a result object with `CollectorId`, `CollectedAt
 
 Every evaluator must guard against missing data as its first action. If `Get-NRGRawData` returns null or `Success` is false, register `NotApplicable` and return immediately. Never allow a null reference to propagate into evaluation logic. `Add-NRGFinding` accepts `ControlId`, `State`, `Category`, `Title`, `Severity`, `Detail`, `FrameworkIds`, `CurrentValue`, `RequiredValue`, and `RemediationSteps`.
 
-## Baseline Configuration Schema
+## Control Schema
 
-Each baseline JSON has two sections: `RequiredControls` (list of control IDs applicable at this tier) and `Configuration` (prescriptive settings organized by workload). Each Configuration entry contains `ControlId`, `Setting`, `RequiredValue`, `Rationale`, `Authority`, and `RemediationCmdlet`. When adding new controls, add the ID to exactly one tier's `RequiredControls`, add the Configuration entry to the same file, and verify no duplicates exist across all four tier files.
+Each entry in `Config/controls.json` is validated by `Config/schema/controls.schema.json`. Required fields: `ControlId` (workload-prefixed, e.g. `AAD-1.1`), `Title`, `Description`, `BusinessRisk`, `Severity` (`Critical|High|Medium|Low|Informational`), `Workload` (one of AAD, EXO, DEF, TMS, PVW, SPO, INT, PPL, DNS), `Category`, `Automated` (boolean), `CollectorDependency` (raw-data key name the evaluator depends on), `EvaluatorFunction` (function name in `Evaluators/`), `Remediation`, `References` (array of framework citations), `LicenseRequirement` (string matched against `Get-NRGTenantLicenseProfile` output).
 
 ## Graph Scopes (21 total)
 
@@ -90,7 +90,7 @@ MSP context is NRG Technology Services, North Dakota. Government clients have CI
 
 ## Common Tasks
 
-**To add a new control:** add the definition to `controls.json`, add the ID to exactly one tier's `RequiredControls`, add the Configuration entry with `RequiredValue` and `RemediationCmdlet` to the same baseline file, add the evaluator function to the appropriate evaluator file, and verify the collector sets the data field the evaluator reads.
+**To add a new control:** add the entry to `Config/controls.json` with all required fields including `LicenseRequirement`, add the evaluator function to the appropriate file in `Evaluators/`, verify the function name matches `EvaluatorFunction`, verify the collector sets the data key referenced by `CollectorDependency`, and add the new function name to both `FunctionsToExport` in `NRG-Assessment.psd1` and `$script:ExportedFunctions` in `NRG-Assessment.psm1`.
 
 **To add a new client:** get the `TenantId` from the OpenID configuration endpoint, confirm the `.onmicrosoft.com` routing domain from M365 Admin Center, add the entry to `clients.json`, and set Skip flags based on the client's license tier — set `SkipPurview` and `SkipPowerPlatform` for Business Standard clients.
 
