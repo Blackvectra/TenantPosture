@@ -145,7 +145,7 @@ function Invoke-NRGCollectEXOMailboxConfig {
         # crash under Set-StrictMode -Version Latest. Read TransportConfig
         # via a local guard variable.
         try {
-            $smtpEnabled = @(Get-CASMailbox -ResultSize 500 -ErrorAction Stop | Where-Object { $_.SmtpClientAuthenticationDisabled -eq $false })
+            $smtpEnabled = @(Get-CASMailbox -ResultSize Unlimited -ErrorAction Stop | Where-Object { $_.SmtpClientAuthenticationDisabled -eq $false })
             $transportConfig = $result.Data.TransportConfig
             $tenantSmtpDisabled = if ($transportConfig) {
                 $transportConfig.SmtpClientAuthenticationDisabled
