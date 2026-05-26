@@ -672,6 +672,92 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             $dupes | Should -BeNullOrEmpty -Because 'Duplicate IDs cause non-deterministic evaluator behavior'
         }
 
+        It 'No ControlId is emitted by more than one evaluator function (v4.6.4 regression guard)' {
+            # Scans every Add-NRGFinding call across Evaluators/*.ps1 and groups
+            # the ControlId argument by the enclosing function. If two different
+            # functions both write findings for the same ControlId, runtime output
+            # contains duplicate findings with different titles (the v4.6.3 bug).
+            $evalDir = Join-Path $script:RepoRoot 'Evaluators'
+            $files   = @(Get-ChildItem -LiteralPath $evalDir -Filter '*.ps1' -File)
+
+            # Pattern: Add-NRGFinding -ControlId 'X-N.M'  OR  Add-NRGFinding -ControlId "X-N.M"
+            $litPattern = "Add-NRGFinding\s+-ControlId\s+['""]([A-Z]{2,4}-\d{1,3}\.\d{1,3})['""]"
+            # Pattern for foreach-style multi-emit:   foreach ($id in @('A','B',...)) { Add-NRGFinding -ControlId $id ...
+            # Loop variable name is captured ($id, $cid, $controlId, etc.) and required to match the Add-NRGFinding argument.
+            $forPattern = "foreach\s*\(\s*\`$([A-Za-z_][A-Za-z0-9_]*)\s+in\s+@\(([^)]+)\)\s*\)\s*\{[^}]*?Add-NRGFinding\s+-ControlId\s+\`$\1"
+
+            $emitterMap = @{}  # ControlId -> set of "fileBaseName::FunctionName"
+            foreach ($f in $files) {
+                $text = Get-Content -LiteralPath $f.FullName -Raw
+
+                # Build function-range index for this file
+                $fnMatches = [regex]::Matches($text, '(?m)^function\s+(Test-NRG[A-Za-z0-9_-]+)\s*\{')
+                $fnRanges = foreach ($fm in $fnMatches) {
+                    [PSCustomObject]@{ Name = $fm.Groups[1].Value; Start = $fm.Index }
+                }
+                $fnRanges = @($fnRanges | Sort-Object Start)
+
+                # Helper to resolve which function contains a given offset
+                $resolveFn = {
+                    param([int]$offset)
+                    $hit = $null
+                    foreach ($r in $fnRanges) { if ($r.Start -le $offset) { $hit = $r.Name } else { break } }
+                    if ($hit) { $hit } else { '<file-scope>' }
+                }
+
+                foreach ($m in [regex]::Matches($text, $litPattern)) {
+                    $cid = $m.Groups[1].Value
+                    $fn  = & $resolveFn $m.Index
+                    $key = "$($f.BaseName)::$fn"
+                    if (-not $emitterMap.ContainsKey($cid)) { $emitterMap[$cid] = [System.Collections.Generic.HashSet[string]]::new() }
+                    [void]$emitterMap[$cid].Add($key)
+                }
+
+                foreach ($m in [regex]::Matches($text, $forPattern)) {
+                    # Group 1 = loop variable name, Group 2 = comma-separated quoted id list
+                    $idList = $m.Groups[2].Value
+                    foreach ($idm in [regex]::Matches($idList, "'([A-Z]{2,4}-\d{1,3}\.\d{1,3})'")) {
+                        $cid = $idm.Groups[1].Value
+                        $fn  = & $resolveFn $m.Index
+                        $key = "$($f.BaseName)::$fn"
+                        if (-not $emitterMap.ContainsKey($cid)) { $emitterMap[$cid] = [System.Collections.Generic.HashSet[string]]::new() }
+                        [void]$emitterMap[$cid].Add($key)
+                    }
+                }
+            }
+
+            $conflicts = foreach ($cid in $emitterMap.Keys) {
+                if ($emitterMap[$cid].Count -gt 1) {
+                    "{0} emitted by: {1}" -f $cid, (($emitterMap[$cid]) -join '; ')
+                }
+            }
+            $conflicts | Should -BeNullOrEmpty -Because 'Two evaluator functions writing the same ControlId produces duplicate findings with conflicting titles (the v4.6.3 bug fixed in v4.6.4).'
+        }
+
+        It 'Every ControlId emitted by an evaluator is defined in controls.json (v4.6.4 regression guard)' {
+            # Catches phantom emissions (e.g. evaluator emits AAD-4.5 but JSON has no AAD-4.5).
+            $evalDir   = Join-Path $script:RepoRoot 'Evaluators'
+            $files     = @(Get-ChildItem -LiteralPath $evalDir -Filter '*.ps1' -File)
+            $knownIds  = [System.Collections.Generic.HashSet[string]]::new()
+            foreach ($c in $script:Controls) { [void]$knownIds.Add($c.ControlId) }
+
+            $emitted = [System.Collections.Generic.HashSet[string]]::new()
+            foreach ($f in $files) {
+                $text = Get-Content -LiteralPath $f.FullName -Raw
+                foreach ($m in [regex]::Matches($text, "Add-NRGFinding\s+-ControlId\s+['""]([A-Z]{2,4}-\d{1,3}\.\d{1,3})['""]")) {
+                    [void]$emitted.Add($m.Groups[1].Value)
+                }
+                foreach ($m in [regex]::Matches($text, "foreach\s*\(\s*\`$([A-Za-z_][A-Za-z0-9_]*)\s+in\s+@\(([^)]+)\)\s*\)\s*\{[^}]*?Add-NRGFinding\s+-ControlId\s+\`$\1")) {
+                    foreach ($idm in [regex]::Matches($m.Groups[2].Value, "'([A-Z]{2,4}-\d{1,3}\.\d{1,3})'")) {
+                        [void]$emitted.Add($idm.Groups[1].Value)
+                    }
+                }
+            }
+
+            $phantom = @($emitted | Where-Object { -not $knownIds.Contains($_) })
+            $phantom | Should -BeNullOrEmpty -Because 'Evaluator emits a ControlId that controls.json does not define — finding will appear with no metadata in the report.'
+        }
+
         It 'All Severity values are in the allowed set' {
             $valid = @('Critical','High','Medium','Low','Informational')
             $bad   = @($script:Controls | Where-Object { $_.Severity -notin $valid })
