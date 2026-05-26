@@ -22,7 +22,8 @@ function Publish-NRGRemediationPlaybook {
         [Parameter(Mandatory)] [object[]]  $Findings,
         [Parameter(Mandatory)] [hashtable] $Connections,
         [Parameter(Mandatory)] [string]    $OutputPath,
-        [Parameter(Mandatory)] [string]    $ExecutivePath
+        [Parameter(Mandatory)] [string]    $ExecutivePath,
+        [string]                           $HtmlOutputPath
     )
 
     if (-not (Get-Command ConvertTo-NRGHtmlSafe -ErrorAction SilentlyContinue)) {
@@ -36,8 +37,12 @@ function Publish-NRGRemediationPlaybook {
     # break out of inline code spans. OWASP A03 / ASVS V5.1.3.
     function EscMd([object]$v) {
         if ($null -eq $v -or [string]::IsNullOrEmpty([string]$v)) { return '' }
-        $safe = ConvertTo-NRGHtmlSafe -Value ([string]$v)
-        $safe = $safe -replace '\|', '\|' -replace '`', '\`'
+        # Markdown-safe only: escape characters that break table or code-span
+        # structure. Do NOT HTML-escape — that produced visible `&gt;` and
+        # `&#39;` in playbook/executive output. XSS escaping belongs at the
+        # markdown→HTML render boundary, not in the markdown source.
+        $safe = [string]$v
+        $safe = $safe -replace '\|', '\|' -replace '`', '\`' -replace '[\r\n]+', ' '
         return $safe
     }
 
@@ -108,6 +113,29 @@ function Publish-NRGRemediationPlaybook {
     $null = $sb.AppendLine("| Phase 3 — Hardening | $($phase3.Count) items | Low | ~$p3Time hours |")
     $null = $sb.AppendLine("| **Total gaps** | **$($gaps.Count)** | | **~$($p1Time+$p2Time+$p3Time) hours** |")
     $null = $sb.AppendLine()
+
+    # Contents — operator-friendly navigation. GitHub / VS Code / Pandoc all
+    # honor heading-anchor links of the form #section-name in lowercase with
+    # spaces→hyphens.
+    $null = $sb.AppendLine("## Contents")
+    $null = $sb.AppendLine()
+    $null = $sb.AppendLine("- [Phase 1 — Immediate Action (Week 1–2)](#phase-1--immediate-action-week-12) — $($phase1.Count) Critical + High")
+    $null = $sb.AppendLine("- [Phase 2 — Near-Term Improvements (Week 2–4)](#phase-2--near-term-improvements-week-24) — $($phase2.Count) Medium")
+    $null = $sb.AppendLine("- [Phase 3 — Hardening (Month 2–3)](#phase-3--hardening-month-23) — $($phase3.Count) Low")
+    $null = $sb.AppendLine("- [Partial Configurations — Complete These](#partial-configurations--complete-these)")
+    $null = $sb.AppendLine()
+
+    # Quick action checklist — every Phase 1 item as a one-line ticket the
+    # operator can copy into a tracker. Surfaces what to do without forcing
+    # them to scroll through 28 templated sections first.
+    if ($phase1.Count -gt 0) {
+        $null = $sb.AppendLine("## Phase 1 Checklist (copy to tracker)")
+        $null = $sb.AppendLine()
+        foreach ($f in $phase1) {
+            $null = $sb.AppendLine("- [ ] **$(EscMd $f.ControlId)** — $(EscMd $f.Title)")
+        }
+        $null = $sb.AppendLine()
+    }
 
     # License upgrade callout — only count gaps whose license is NOT already
     # held. v4.6.1 ignored the tenant's actual licenses and listed every
@@ -181,23 +209,11 @@ function Publish-NRGRemediationPlaybook {
             $lines.Add("")
         }
 
-        # Framework citations
-        if ($f.FrameworkIds -and @($f.FrameworkIds).Count -gt 0) {
-            $citations = ($f.FrameworkIds | ForEach-Object { EscMd $_ }) -join ' · '
-            $lines.Add("**Frameworks:** $citations  ")
-            $lines.Add("")
-        }
-
-        # Estimated time
-        $estTime = switch ($f.Severity) {
-            'Critical' { '15–30 min' }
-            'High'     { '15–30 min' }
-            'Medium'   { '15–45 min' }
-            'Low'      { '10–20 min' }
-            default    { '15–30 min' }
-        }
-        $lines.Add("**Estimated time:** $estTime  ")
-        $lines.Add("")
+        # Framework citations and per-item estimated time intentionally omitted —
+        # citations belong in the audit-evidence artifact (assessment.md), and
+        # the phase summary table at the top of the playbook already shows
+        # aggregate time per phase. Per-item repetition added wall-of-text
+        # noise that made the playbook hostile to read during remediation.
         $lines.Add("---")
         $lines.Add("")
         return $lines
@@ -292,6 +308,20 @@ function Publish-NRGRemediationPlaybook {
     $null = $exec.AppendLine()
     $null = $exec.AppendLine("## Overall Security Posture: $posture ($score/100)")
     $null = $exec.AppendLine()
+
+    # Bottom-line one-liner — what the score actually means for the business.
+    $bottomLine = switch ($posture) {
+        'Strong'        { "Posture is strong. Continue current operations; reassess in 12 months." }
+        'Moderate'      { "Several gaps weaken otherwise-sound controls. Address Phase 1 items within 30 days to materially reduce risk." }
+        'At Risk'       { "Tenant is exposed to common attack patterns (BEC, ransomware staging, credential theft). Phase 1 remediation should begin this week." }
+        'Critical Risk' { "Tenant is one credential compromise away from a material incident. Phase 1 remediation is urgent." }
+        default         { '' }
+    }
+    if ($bottomLine) {
+        $null = $exec.AppendLine("**Bottom line.** $bottomLine")
+        $null = $exec.AppendLine()
+    }
+
     $null = $exec.AppendLine("NRG Technology Services conducted a read-only security assessment of the $client Microsoft 365 environment on $date. The assessment evaluated $total security controls across identity, email security, data protection, collaboration tools, and endpoint management.")
     $null = $exec.AppendLine()
     $null = $exec.AppendLine("| Result | Count | Meaning |")
@@ -314,6 +344,12 @@ function Publish-NRGRemediationPlaybook {
             $ctrl = $controls[$f.ControlId]
             $bizRisk = if ($ctrl -and $ctrl.BusinessRisk) { $ctrl.BusinessRisk } else { $f.Detail }
             $null = $exec.AppendLine("**$n. $(EscMd $f.Title)**  ")
+            # Surface current state where the evaluator captured it — gives the
+            # exec recipient a one-line "how bad is it right now" anchor before
+            # the business-risk explanation.
+            if ($f.CurrentValue) {
+                $null = $exec.AppendLine("*Current state:* $(EscMd $f.CurrentValue)  ")
+            }
             $null = $exec.AppendLine("$(EscMd $bizRisk)  ")
             $null = $exec.AppendLine("")
             $n++
@@ -350,4 +386,129 @@ function Publish-NRGRemediationPlaybook {
     $null = $exec.AppendLine("*NRG Technology Services · Matthew Levorson, Security Engineer · $date*")
 
     $exec.ToString() | Out-File -LiteralPath $ExecutivePath -Encoding utf8
+
+    # HTML playbook — same data, render-friendly format. Operator opens in a
+    # browser, can ctrl-F per ControlId, can print to PDF for client delivery.
+    # Strict CSP via meta + Trusted Types; CSS inlined; no external assets so
+    # the file is self-contained and works offline.
+    if ($HtmlOutputPath) {
+        # Build deterministic HTML — no JS framework, no external fonts. The
+        # only inline script is the simple Trusted Types policy declaration
+        # required by the CSP.
+        function H([object]$v) {
+            if ($null -eq $v) { return '' }
+            return ([string]$v) `
+                -replace '&', '&amp;' `
+                -replace '<', '&lt;'  `
+                -replace '>', '&gt;'  `
+                -replace '"', '&quot;' `
+                -replace "'", '&#39;'
+        }
+
+        $html = [System.Text.StringBuilder]::new()
+        $null = $html.AppendLine('<!doctype html>')
+        $null = $html.AppendLine('<html lang="en"><head><meta charset="utf-8">')
+        $null = $html.AppendLine('<meta http-equiv="Content-Security-Policy" content="default-src ''none''; style-src ''unsafe-inline''; img-src data:; base-uri ''none''; form-action ''none''; frame-ancestors ''none''; require-trusted-types-for ''script''">')
+        $null = $html.AppendLine("<title>$(H "$client — Remediation Playbook")</title>")
+        $null = $html.AppendLine('<style>')
+        $null = $html.AppendLine('  *{box-sizing:border-box} body{font:15px/1.55 -apple-system,Segoe UI,Roboto,sans-serif;color:#111;background:#fafafa;margin:0;padding:0}')
+        $null = $html.AppendLine('  .wrap{max-width:980px;margin:0 auto;padding:32px 24px}')
+        $null = $html.AppendLine('  h1{font-size:28px;margin:0 0 6px}  h2{font-size:22px;margin:36px 0 14px;padding-top:12px;border-top:2px solid #e3e6ea}  h3{font-size:17px;margin:24px 0 8px}')
+        $null = $html.AppendLine('  .meta{color:#5a6470;font-size:14px;margin-bottom:24px}')
+        $null = $html.AppendLine('  table{border-collapse:collapse;width:100%;margin:8px 0 18px;font-size:14px}  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #e3e6ea;vertical-align:top}  th{background:#f3f5f7;font-weight:600}')
+        $null = $html.AppendLine('  .toc a{display:block;padding:4px 0;color:#1a3a6b;text-decoration:none}  .toc a:hover{text-decoration:underline}')
+        $null = $html.AppendLine('  .item{background:#fff;border:1px solid #e3e6ea;border-left:4px solid #ccc;border-radius:6px;padding:14px 18px;margin:10px 0}')
+        $null = $html.AppendLine('  .item.critical{border-left-color:#c0392b}  .item.high{border-left-color:#e67e22}  .item.medium{border-left-color:#f1c40f}  .item.low{border-left-color:#3498db}')
+        $null = $html.AppendLine('  .item .head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px}  .item .cid{font-family:ui-monospace,Menlo,Consolas,monospace;color:#5a6470;font-size:13px}  .item .title{font-weight:600;font-size:16px}  .item .sev{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#fff;background:#888;border-radius:3px;padding:2px 7px}  .item .sev.critical{background:#c0392b}  .item .sev.high{background:#e67e22}  .item .sev.medium{background:#b8860b}  .item .sev.low{background:#3498db}')
+        $null = $html.AppendLine('  .item .lic{font-size:12px;background:#fff3cd;border:1px solid #ffe69c;color:#856404;padding:6px 10px;border-radius:4px;margin:6px 0;display:inline-block}')
+        $null = $html.AppendLine('  .item .row{margin:6px 0}  .item .row b{display:inline-block;min-width:120px;color:#5a6470;font-weight:600}')
+        $null = $html.AppendLine('  pre{background:#1f2937;color:#e6edf3;padding:10px 12px;border-radius:6px;overflow-x:auto;font-size:13px;line-height:1.45;margin:8px 0}')
+        $null = $html.AppendLine('  code{background:#eef1f4;padding:2px 5px;border-radius:3px;font-size:90%}')
+        $null = $html.AppendLine('  .phase-hdr{background:#1a3a6b;color:#fff;padding:14px 18px;border-radius:6px;margin:28px 0 14px}  .phase-hdr h2{margin:0;color:#fff;border:none;padding:0}')
+        $null = $html.AppendLine('  .checklist li{margin:3px 0;list-style:none;padding-left:24px;position:relative}  .checklist li:before{content:"☐";position:absolute;left:0;color:#5a6470}')
+        $null = $html.AppendLine('  @media print{body{background:#fff} .wrap{max-width:none;padding:14px} .item{break-inside:avoid;border-radius:0}}')
+        $null = $html.AppendLine('</style></head><body><div class="wrap">')
+        $null = $html.AppendLine('<script nonce="" type="application/javascript">if(window.trustedTypes&&trustedTypes.createPolicy){trustedTypes.createPolicy("default",{createHTML:s=>s})}</script>')
+
+        $null = $html.AppendLine("<h1>M365 Security Remediation Playbook</h1>")
+        $null = $html.AppendLine("<div class=`"meta`"><b>Client:</b> $(H $client) &middot; <b>Assessment Date:</b> $(H $date) &middot; <b>Tool:</b> NRG-Assessment v$(H $version)</div>")
+
+        # Summary table
+        $null = $html.AppendLine("<h2>Summary</h2>")
+        $null = $html.AppendLine("<table><tr><th>Phase</th><th>Items</th><th>Severity</th><th>Estimated Time</th></tr>")
+        $null = $html.AppendLine("<tr><td>Phase 1 &mdash; Immediate</td><td>$($phase1.Count)</td><td>Critical + High</td><td>~$p1Time hours</td></tr>")
+        $null = $html.AppendLine("<tr><td>Phase 2 &mdash; Near-term</td><td>$($phase2.Count)</td><td>Medium</td><td>~$p2Time hours</td></tr>")
+        $null = $html.AppendLine("<tr><td>Phase 3 &mdash; Hardening</td><td>$($phase3.Count)</td><td>Low</td><td>~$p3Time hours</td></tr>")
+        $null = $html.AppendLine("<tr><td><b>Total gaps</b></td><td><b>$($gaps.Count)</b></td><td></td><td><b>~$($p1Time+$p2Time+$p3Time) hours</b></td></tr>")
+        $null = $html.AppendLine("</table>")
+
+        # TOC
+        $null = $html.AppendLine("<h2>Contents</h2><div class=`"toc`">")
+        $null = $html.AppendLine("<a href=`"#phase1`">Phase 1 &mdash; Immediate Action ($($phase1.Count) items)</a>")
+        $null = $html.AppendLine("<a href=`"#phase2`">Phase 2 &mdash; Near-Term Improvements ($($phase2.Count) items)</a>")
+        $null = $html.AppendLine("<a href=`"#phase3`">Phase 3 &mdash; Hardening ($($phase3.Count) items)</a>")
+        $null = $html.AppendLine("</div>")
+
+        # Phase 1 quick checklist
+        if ($phase1.Count -gt 0) {
+            $null = $html.AppendLine("<h2>Phase 1 Checklist</h2><ul class=`"checklist`">")
+            foreach ($f in $phase1) {
+                $null = $html.AppendLine("<li><b>$(H $f.ControlId)</b> &mdash; $(H $f.Title)</li>")
+            }
+            $null = $html.AppendLine("</ul>")
+        }
+
+        # Item renderer
+        function Render-HtmlItem {
+            param([object]$f, [hashtable]$controlDefs, [object]$licenseProfile, [scriptblock]$Esc)
+            $ctrl = $controlDefs[$f.ControlId]
+            $sevClass = ([string]$f.Severity).ToLower()
+            $needsLic = $false
+            if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') {
+                $needsLic = -not ($licenseProfile -and $licenseProfile.SuppressedLicenseRequirements -and $licenseProfile.SuppressedLicenseRequirements.Contains($ctrl.LicenseRequirement))
+            }
+            $bizRisk = if ($ctrl -and $ctrl.BusinessRisk) { $ctrl.BusinessRisk } elseif ($f.Detail) { $f.Detail } else { '' }
+            $remedy  = if ($ctrl -and $ctrl.Remediation) { $ctrl.Remediation } elseif ($f.Remediation) { $f.Remediation } else { '' }
+
+            $out = @()
+            $out += "<div class=`"item $sevClass`" id=`"$(& $Esc $f.ControlId)`">"
+            $out += "<div class=`"head`"><span class=`"cid`">$(& $Esc $f.ControlId)</span><span class=`"title`">$(& $Esc $f.Title)</span><span class=`"sev $sevClass`">$(& $Esc $f.Severity)</span></div>"
+            if ($needsLic) {
+                $out += "<div class=`"lic`">&#128273; Requires: $(& $Esc $ctrl.LicenseRequirement)</div>"
+            }
+            if ($bizRisk)        { $out += "<div class=`"row`"><b>Risk</b> $(& $Esc $bizRisk)</div>" }
+            if ($f.CurrentValue) { $out += "<div class=`"row`"><b>Current state</b> <code>$(& $Esc $f.CurrentValue)</code></div>" }
+            if ($f.RequiredValue){ $out += "<div class=`"row`"><b>Required state</b> <code>$(& $Esc $f.RequiredValue)</code></div>" }
+            if ($remedy) {
+                if ($remedy -match 'Set-|New-|Enable-|Connect-|Get-|\$') {
+                    $out += "<div class=`"row`"><b>Remediation</b></div><pre>$(& $Esc $remedy)</pre>"
+                } else {
+                    $out += "<div class=`"row`"><b>Remediation</b> $(& $Esc $remedy)</div>"
+                }
+            }
+            $out += "</div>"
+            return $out
+        }
+        $escFn = { param($v) H $v }
+
+        $null = $html.AppendLine("<div class=`"phase-hdr`" id=`"phase1`"><h2>Phase 1 &mdash; Immediate Action (Week 1&ndash;2)</h2></div>")
+        foreach ($f in $phase1) { foreach ($l in (Render-HtmlItem -f $f -controlDefs $controls -licenseProfile $licProfile -Esc $escFn)) { $null = $html.AppendLine($l) } }
+
+        if ($phase2.Count -gt 0) {
+            $null = $html.AppendLine("<div class=`"phase-hdr`" id=`"phase2`"><h2>Phase 2 &mdash; Near-Term Improvements (Week 2&ndash;4)</h2></div>")
+            foreach ($f in $phase2) { foreach ($l in (Render-HtmlItem -f $f -controlDefs $controls -licenseProfile $licProfile -Esc $escFn)) { $null = $html.AppendLine($l) } }
+        }
+        if ($phase3.Count -gt 0) {
+            $null = $html.AppendLine("<div class=`"phase-hdr`" id=`"phase3`"><h2>Phase 3 &mdash; Hardening (Month 2&ndash;3)</h2></div>")
+            foreach ($f in $phase3) { foreach ($l in (Render-HtmlItem -f $f -controlDefs $controls -licenseProfile $licProfile -Esc $escFn)) { $null = $html.AppendLine($l) } }
+        }
+
+        $null = $html.AppendLine("<hr><div class=`"meta`">Generated by NRG-Assessment v$(H $version) &middot; $(H $date)</div>")
+        $null = $html.AppendLine('</div></body></html>')
+
+        $html.ToString() | Out-File -LiteralPath $HtmlOutputPath -Encoding utf8
+        if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+            Set-NRGSensitiveFileAcl -Path $HtmlOutputPath -ErrorAction SilentlyContinue
+        }
+    }
 }
