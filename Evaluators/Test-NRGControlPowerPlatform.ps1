@@ -119,7 +119,7 @@ function Test-NRGControlPPLAutomate {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Power Platform settings not collected'; return
     }
-    $guestFlows     = $ppl.Data.TenantSettings.DisableFlowsForGuestUsers ?? $false
+    $guestFlows     = Get-NRGNestedProperty -Object $ppl -Path 'Data.TenantSettings.DisableFlowsForGuestUsers' -Default $false
     $gaps = @()
     if (-not $guestFlows) { $gaps += 'Guest users can create flows' }
     if ($gaps.Count -eq 0) {
@@ -143,7 +143,7 @@ function Test-NRGControlPPLPowerApps {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Power Platform settings not collected'; return
     }
-    $canvasAppsEnabled = -not ($ppl.Data.TenantSettings.DisablePortalsCreationByNonAdminUsers ?? $false)
+    $canvasAppsEnabled = -not (Get-NRGNestedProperty -Object $ppl -Path 'Data.TenantSettings.DisablePortalsCreationByNonAdminUsers' -Default $false)
     if (-not $canvasAppsEnabled) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `

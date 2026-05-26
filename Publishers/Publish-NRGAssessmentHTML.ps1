@@ -548,13 +548,35 @@ function Publish-NRGAssessmentHTML {
     $dS = hx $Metadata.AssessmentDate; $op = hx $Metadata.Operator
     $co2 = hx $co; $ph2 = hx $ph; $ws2b = hx $ws; $vr = hx $Metadata.ToolVersion
 
+    # ── Inline script content (v4.6.3 P2: hashed for CSP) ────────────────────
+    # The inline <script> block is static — no operator/tenant data interpolation
+    # — so its CSP hash is stable across runs. We compute it from the EXACT body
+    # bytes (between <script> and </script>), then emit script-src 'sha256-...'
+    # in the CSP and drop 'unsafe-inline'. Defense-in-depth against future
+    # accidental injection via report variable interpolation.
+    $inlineScript = @"
+
+function goto(id){var el=document.getElementById(id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'})}
+function toggle(tr){var n=tr.nextElementSibling;if(n&&n.classList.contains('extr')){var s=n.style.display===''||n.style.display==='none';n.style.display=s?'table-row':'none';tr.classList.toggle('open',s)}}
+document.querySelectorAll('.extr').forEach(function(r){r.style.display='none'});
+
+"@
+    $scriptHashBytes = [System.Text.Encoding]::UTF8.GetBytes($inlineScript)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $scriptHashB64 = [System.Convert]::ToBase64String($sha256.ComputeHash($scriptHashBytes))
+    } finally {
+        $sha256.Dispose()
+    }
+    $scriptCsp = "'sha256-$scriptHashB64'"
+
     # ── Assemble HTML ─────────────────────────────────────────────────────────
     $html = @"
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none';style-src 'unsafe-inline';img-src https: data:;script-src 'unsafe-inline';connect-src 'none';base-uri 'none';form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none';style-src 'unsafe-inline';img-src https: data:;script-src $scriptCsp;connect-src 'none';base-uri 'none';form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <title>M365 Security Assessment &mdash; $cD</title>
 <style>
@@ -883,11 +905,7 @@ $(if ($namedHtml) { "<div class='cnt' style='padding-top:0;padding-bottom:0'>$na
 </div>
 
 </div><!-- /wrap -->
-<script>
-function goto(id){var el=document.getElementById(id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'})}
-function toggle(tr){var n=tr.nextElementSibling;if(n&&n.classList.contains('extr')){var s=n.style.display===''||n.style.display==='none';n.style.display=s?'table-row':'none';tr.classList.toggle('open',s)}}
-document.querySelectorAll('.extr').forEach(function(r){r.style.display='none'});
-</script>
+<script>$inlineScript</script>
 </body></html>
 "@
 

@@ -17,7 +17,7 @@ function Test-NRGControlInventoryMFAUsers {
     if (-not $users -or -not $users.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'User data not collected'; return
     }
-    $regDetails = @($users.Data.MFARegistration.RegistrationDetails ?? @())
+    $regDetails = @(Get-NRGNestedProperty -Object $users -Path 'Data.MFARegistration.RegistrationDetails' -Default @())
     if ($regDetails.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'MFA registration details not available (requires Reports.Read.All)'; return
     }

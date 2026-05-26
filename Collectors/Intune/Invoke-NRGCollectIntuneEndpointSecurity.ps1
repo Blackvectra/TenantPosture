@@ -49,10 +49,20 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
             $uri  = 'https://graph.microsoft.com/beta/deviceManagement/configurationPolicies?$select=id,name,description,platforms,templateReference,createdDateTime,lastModifiedDateTime'
             $next = $uri
             $all  = @()
-            while ($next) {
+            # Pagination cap (v4.6.3 P2): see Intune-DeviceCompliance / AADRoles.
+            $maxPages  = 200
+            $pageCount = 0
+            while ($next -and $pageCount -lt $maxPages) {
                 $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 if ($page.value) { $all += $page.value }
                 $next = $page.'@odata.nextLink'
+                $pageCount++
+            }
+            if ($pageCount -ge $maxPages -and $next) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Intune-EndpointSecurity' `
+                        -Message "Pagination cap reached ($maxPages pages); configuration policy list may be truncated."
+                }
             }
 
             foreach ($p in $all) {
