@@ -81,8 +81,8 @@ function Test-NRGControlIntune {
     $c = Get-NRGControlById -ControlId 'INT-1.3'
     if ($c) {
         # Check if any Windows compliance policy requires BitLocker
-        $winPolicies = @($d.CompliancePolicies | Where-Object { $_.Platform -match 'Windows|Win10' })
-        $bitlockerRequired = $winPolicies | Where-Object { $_.BitLockerEnabled -eq $true }
+        $winPolicies = @($d.CompliancePolicies | Where-Object { (Get-NRGSafeProperty -Object $_ -Property 'Platform') -match 'Windows|Win10' })
+        $bitlockerRequired = @($winPolicies | Where-Object { (Get-NRGSafeProperty -Object $_ -Property 'BitLockerEnabled') -eq $true })
         if ($winPolicies.Count -eq 0) {
             Add-NRGFinding -ControlId 'INT-1.3' -State 'NotApplicable' `
                 -Category 'Endpoint' -Title $c.Title -Severity 'Informational' `
