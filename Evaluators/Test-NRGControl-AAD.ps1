@@ -852,7 +852,7 @@ function Test-NRGControlAADCrossTenantAccess {
     if (-not $auth -or -not $auth.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
     }
-    $xtap = $auth.Data.CrossTenantAccessPolicy ?? $null
+    $xtap = Get-NRGNestedProperty -Object $auth -Path 'Data.CrossTenantAccessPolicy'
     if (-not $xtap) {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Cross-tenant access policy data not available. Verify in Entra ID > External Identities > Cross-tenant access settings that inbound defaults do not trust MFA or device compliance from unknown tenants.' -Remediation $ctrl.Remediation; return
     }
