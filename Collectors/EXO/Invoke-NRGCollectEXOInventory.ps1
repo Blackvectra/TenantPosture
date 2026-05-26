@@ -80,7 +80,7 @@ function Invoke-NRGCollectEXOInventory {
 
         # ── Forwarding via ForwardingSmtpAddress (server-side, persistent) ───
         try {
-            $fwd = @(Get-Mailbox -ResultSize 1000 -Filter "ForwardingSmtpAddress -ne `$null" -ErrorAction Stop)
+            $fwd = @(Get-Mailbox -ResultSize Unlimited -Filter "ForwardingSmtpAddress -ne `$null" -ErrorAction Stop)
             $result.Data.ForwardingMailboxes = @($fwd | ForEach-Object {
                 $smtp = [string]$_.ForwardingSmtpAddress
                 @{
@@ -175,7 +175,7 @@ function Invoke-NRGCollectEXOInventory {
         # possible. Each licensed shared mailbox with accountEnabled is an
         # attack-surface entry that should be BlockCredential / disabled.
         try {
-            $shared = @(Get-Mailbox -RecipientTypeDetails SharedMailbox -ResultSize 1000 -ErrorAction Stop)
+            $shared = @(Get-Mailbox -RecipientTypeDetails SharedMailbox -ResultSize Unlimited -ErrorAction Stop)
             $result.Data.AllSharedMailboxes = @($shared | ForEach-Object {
                 @{
                     DisplayName          = [string]$_.DisplayName
@@ -238,7 +238,7 @@ function Invoke-NRGCollectEXOInventory {
 
         # ── Audit explicitly disabled per mailbox ────────────────────────────
         try {
-            $noAudit = @(Get-Mailbox -ResultSize 1000 -Filter "AuditEnabled -eq `$false" -ErrorAction Stop)
+            $noAudit = @(Get-Mailbox -ResultSize Unlimited -Filter "AuditEnabled -eq `$false" -ErrorAction Stop)
             $result.Data.AuditDisabledMailboxes = @($noAudit | ForEach-Object {
                 @{
                     DisplayName = [string]$_.DisplayName
@@ -254,7 +254,7 @@ function Invoke-NRGCollectEXOInventory {
 
         # ── Per-user SMTP AUTH overrides (bypass org-level disable) ──────────
         try {
-            $smtpEnabled = @(Get-CASMailbox -ResultSize 1000 -ErrorAction Stop |
+            $smtpEnabled = @(Get-CASMailbox -ResultSize Unlimited -ErrorAction Stop |
                 Where-Object { $_.SmtpClientAuthenticationDisabled -eq $false })
             $result.Data.SmtpAuthEnabledPerUser = @($smtpEnabled | Select-Object -First 100 | ForEach-Object {
                 @{
