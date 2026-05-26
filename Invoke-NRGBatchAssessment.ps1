@@ -152,16 +152,26 @@ if ($WhatIf) {
 # Partner Center GDAP relationships grant the delegated access — no per-client auth needed
 Write-Host '[-] Authenticating (one-time browser login)...' -ForegroundColor Cyan
 try {
+    # v4.6.4 EMERGENCY FIX (Medium #9): aligned with Connect-NRGServices /
+    # CLAUDE.md to request the same 21 scopes the single-tenant orchestrator
+    # asks for. Previously this batch script requested only 9, which silently
+    # disabled SharePoint, Teams, OAuth grant inspection, PIM, and full
+    # Intune reporting on every GDAP batch run.
     Connect-MgGraph -Scopes @(
-        'Policy.Read.All',
-        'Directory.Read.All',
-        'Reports.Read.All',
-        'RoleManagement.Read.All',
-        'User.Read.All',
-        'UserAuthenticationMethod.Read.All',
+        'User.Read.All','Group.Read.All','Directory.Read.All',
+        'Policy.Read.All','AuditLog.Read.All','Application.Read.All',
+        'RoleManagement.Read.All','SecurityEvents.Read.All',
+        'IdentityRiskyUser.Read.All','Reports.Read.All',
+        'Organization.Read.All','Sites.Read.All',
         'DeviceManagementConfiguration.Read.All',
         'DeviceManagementApps.Read.All',
-        'DeviceManagementManagedDevices.Read.All'
+        'UserAuthenticationMethod.Read.All',
+        'SharePointTenantSettings.Read.All',
+        'DeviceManagementManagedDevices.Read.All',
+        'DeviceManagementServiceConfig.Read.All',
+        'Policy.Read.PermissionGrant',
+        'PrivilegedAccess.Read.AzureAD',
+        'TeamSettings.Read.All'
     ) -ContextScope Process -NoWelcome -ErrorAction Stop
     Write-Host '  [+] Graph authenticated' -ForegroundColor Green
 } catch {
