@@ -9,7 +9,7 @@ GitHub: [Blackvectra/NRG-Assessment-Tool](https://github.com/Blackvectra/NRG-Ass
 
 ## What It Does
 
-Connects to a Microsoft 365 tenant via delegated auth (or GDAP for MSP batch runs), collects raw configuration data across all M365 services, evaluates 143 security controls, and produces client-ready HTML and Markdown reports with framework citations.
+Connects to a Microsoft 365 tenant via delegated auth (or GDAP for MSP batch runs), collects raw configuration data across all M365 services, evaluates 195 security controls, and produces client-ready HTML and Markdown reports with framework citations.
 
 **Zero writes to tenant. Read-only by design.**
 
@@ -21,7 +21,7 @@ On a fresh machine, run this once:
 
 ```powershell
 # After extracting the zip
-cd C:\path\to\NRG-Assessment-v4.5.5
+cd C:\path\to\NRG-Assessment-v4.6.4
 .\Install-NRGPrerequisites.ps1
 ```
 
@@ -83,7 +83,7 @@ cd NRG-Assessment-Tool
 Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (153 exports, dependency declarations)
+NRG-Assessment.psd1               ← Module manifest (220 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -114,12 +114,12 @@ Publishers/
   Publish-NRGAssessmentSummary.ps1 Markdown report for OneNote / GitHub
 
 Config/
-  controls.json                   143 control definitions + framework citations
+  controls.json                   195 control definitions + framework citations
   frameworks.json                 CIS, SCuBA, NIST, CMMC, MITRE metadata
   clients.json                    MSP client registry (TenantId + GDAP config)
 
 Testing/
-  NRG.Security.Tests.ps1          77 Pester tests (OWASP/ASVS static + runtime)
+  NRG.Security.Tests.ps1          100 Pester tests (OWASP/ASVS static + runtime)
 
 .github/workflows/security.yml    CI: PSScriptAnalyzer + Pester + Gitleaks + TruffleHog
 ```
@@ -128,7 +128,7 @@ Testing/
 
 ## Controls Coverage
 
-**143 controls across 9 workloads**
+**195 controls across 9 workloads**
 
 | Workload | Controls | Key Areas |
 |---|---|---|
@@ -218,4 +218,4 @@ Internal use — NRG Technology Services. Not licensed for redistribution.
 
 ---
 
-*NRG-Assessment v4.5.5 · 143 controls · 153 exported functions · 77 Pester tests*
+*NRG-Assessment v4.6.4 · 195 controls · 220 exported functions · 100 Pester tests*
