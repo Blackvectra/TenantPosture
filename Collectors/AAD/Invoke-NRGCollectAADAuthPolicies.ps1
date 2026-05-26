@@ -133,12 +133,24 @@ function Invoke-NRGCollectAADAuthPolicies {
         }
 
         # Password Protection Policy
+        # v4.6.4 EMERGENCY FIX (High #6): previously called
+        # https://graph.microsoft.com/beta/settings which is NOT the Entra
+        # Password Protection endpoint and always returned empty. The
+        # authoritative surface is /v1.0/groupSettings (or /beta/directorySettings)
+        # filtered by templateId. The 'Password Rule Settings' template GUID
+        # is well-known: 5cf42378-d67d-4f36-ba46-e8b86229381d.
+        # Reference: https://learn.microsoft.com/graph/api/group-list-settings
+        # and https://learn.microsoft.com/graph/group-directory-settings
+        # If the tenant has never customized password protection, the template
+        # may not yet be instantiated and the list will be empty — that itself
+        # is a valid finding (default lockout threshold of 10 in effect).
         try {
-            $pwdProt = Invoke-MgGraphRequest -Method GET `
-                -Uri 'https://graph.microsoft.com/beta/settings' `
+            $PWD_RULE_TEMPLATE_ID = '5cf42378-d67d-4f36-ba46-e8b86229381d'
+            $gsResp = Invoke-MgGraphRequest -Method GET `
+                -Uri 'https://graph.microsoft.com/v1.0/groupSettings' `
                 -ErrorAction Stop
-            $ppSetting = ($pwdProt.value ?? @()) |
-                Where-Object { $_.displayName -eq 'Password Rule Settings' } |
+            $ppSetting = @($gsResp.value ?? @()) |
+                Where-Object { [string]$_.templateId -eq $PWD_RULE_TEMPLATE_ID } |
                 Select-Object -First 1
             if ($ppSetting) {
                 $values = @{}
@@ -146,32 +158,72 @@ function Invoke-NRGCollectAADAuthPolicies {
                     $values[$v.name] = $v.value
                 }
                 $result.Data.PasswordProtection = @{
-                    LockoutThreshold       = [int]($values['LockoutThreshold'] ?? 10)
-                    LockoutDurationSeconds = [int]($values['LockoutDurationInSeconds'] ?? 60)
+                    Instantiated             = $true
+                    TemplateId               = $PWD_RULE_TEMPLATE_ID
+                    LockoutThreshold         = [int]($values['LockoutThreshold'] ?? 10)
+                    LockoutDurationSeconds   = [int]($values['LockoutDurationInSeconds'] ?? 60)
+                    EnableBannedPasswordCheckOnPremises = [bool]($values['EnableBannedPasswordCheckOnPremises'] ?? $false)
+                    BannedPasswordCheckOnPremisesMode   = [string]($values['BannedPasswordCheckOnPremisesMode'] ?? 'Audit')
                     EnableBannedPasswordCheck = [bool]($values['EnableBannedPasswordCheck'] ?? $false)
-                    BannedPasswordListPresent = (-not [string]::IsNullOrWhiteSpace($values['BannedPasswordList']))
+                    BannedPasswordList       = [string]($values['BannedPasswordList'] ?? '')
+                    BannedPasswordListPresent= (-not [string]::IsNullOrWhiteSpace($values['BannedPasswordList']))
+                }
+            } else {
+                # Template not instantiated — Entra defaults apply (lockout=10).
+                # Surface this as a structured "uninstantiated" state so the
+                # evaluator can flag it instead of returning null.
+                $result.Data.PasswordProtection = @{
+                    Instantiated              = $false
+                    TemplateId                = $PWD_RULE_TEMPLATE_ID
+                    LockoutThreshold          = 10
+                    LockoutDurationSeconds    = 60
+                    EnableBannedPasswordCheck = $false
+                    BannedPasswordListPresent = $false
                 }
             }
         } catch {
-            # Beta endpoint may not be accessible in all tenants — non-fatal
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-PasswordProtection' -Message $_.Exception.Message
             }
         }
 
         # Cross-Tenant Access Policy
+        # v4.6.4 EMERGENCY FIX (High #5): previously read
+        # $ctap.inboundTrust.applicationsFromExternalOrganizationsEnabled
+        # which does NOT exist on crossTenantAccessPolicyConfigurationDefault —
+        # returned 'unknown' on every tenant. Correct schema lives under
+        # b2bCollaborationInbound (and outbound) per
+        # https://learn.microsoft.com/graph/api/resources/crosstenantaccesspolicyconfigurationdefault
+        # Each B2B object has .applications and .usersAndGroups, both
+        # crossTenantAccessPolicyTargetConfiguration with .accessType
+        # ('allowed' | 'blocked') and a .targets array.
         try {
             $ctap = Invoke-MgGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/crossTenantAccessPolicy/default' `
                 -ErrorAction Stop
             if ($ctap) {
                 $result.Data.CrossTenantAccess = @{
+                    IsServiceDefault = [bool]($ctap.isServiceDefault ?? $true)
                     InboundB2B  = @{
-                        Applications = [string]($ctap.inboundTrust.applicationsFromExternalOrganizationsEnabled ?? 'unknown')
-                        UsersGroups  = [string]($ctap.b2bCollaborationInbound.usersAndGroups.accessType ?? 'unknown')
+                        ApplicationsAccessType  = [string]($ctap.b2bCollaborationInbound.applications.accessType ?? 'unknown')
+                        ApplicationsTargets     = @($ctap.b2bCollaborationInbound.applications.targets ?? @())
+                        UsersGroupsAccessType   = [string]($ctap.b2bCollaborationInbound.usersAndGroups.accessType ?? 'unknown')
+                        UsersGroupsTargets      = @($ctap.b2bCollaborationInbound.usersAndGroups.targets ?? @())
                     }
                     OutboundB2B = @{
-                        UsersGroups = [string]($ctap.b2bCollaborationOutbound.usersAndGroups.accessType ?? 'unknown')
+                        ApplicationsAccessType  = [string]($ctap.b2bCollaborationOutbound.applications.accessType ?? 'unknown')
+                        ApplicationsTargets     = @($ctap.b2bCollaborationOutbound.applications.targets ?? @())
+                        UsersGroupsAccessType   = [string]($ctap.b2bCollaborationOutbound.usersAndGroups.accessType ?? 'unknown')
+                        UsersGroupsTargets      = @($ctap.b2bCollaborationOutbound.usersAndGroups.targets ?? @())
+                    }
+                    B2BDirectConnectInbound = @{
+                        ApplicationsAccessType = [string]($ctap.b2bDirectConnectInbound.applications.accessType ?? 'unknown')
+                        UsersGroupsAccessType  = [string]($ctap.b2bDirectConnectInbound.usersAndGroups.accessType ?? 'unknown')
+                    }
+                    InboundTrust = @{
+                        IsMfaAccepted               = [bool]($ctap.inboundTrust.isMfaAccepted ?? $false)
+                        IsCompliantDeviceAccepted   = [bool]($ctap.inboundTrust.isCompliantDeviceAccepted ?? $false)
+                        IsHybridAzureADJoinedDeviceAccepted = [bool]($ctap.inboundTrust.isHybridAzureADJoinedDeviceAccepted ?? $false)
                     }
                 }
             }
