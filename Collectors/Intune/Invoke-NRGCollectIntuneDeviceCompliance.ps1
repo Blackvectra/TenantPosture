@@ -38,20 +38,35 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
 
     try {
         # ── Device compliance policies ───────────────────────────────────────
+        # v4.6.4 EMERGENCY FIX (Critical #3): added @odata.nextLink pagination.
+        # Previously truncated to first 100 policies on enterprise tenants.
         try {
-            $compliance = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/deviceManagement/deviceCompliancePolicies' -ErrorAction Stop
-            foreach ($p in @($compliance.value)) {
-                $result.Data.CompliancePolicies += @{
-                    Id          = $p.id
-                    DisplayName = [string]$p.displayName
-                    Platform    = [string]$p.'@odata.type'
-                    Description = [string]$p.description
-                    Version     = $p.version
-                    # Pull through fields the evaluator looks at; not all platforms expose them
-                    BitLockerEnabled        = $p.bitLockerEnabled
-                    SecureBootEnabled       = $p.secureBootEnabled
-                    PasswordRequired        = $p.passwordRequired
-                    StorageRequireEncryption= $p.storageRequireEncryption
+            $next = 'https://graph.microsoft.com/v1.0/deviceManagement/deviceCompliancePolicies'
+            $maxPages  = 200
+            $pageCount = 0
+            while ($next -and $pageCount -lt $maxPages) {
+                $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                foreach ($p in @($page.value)) {
+                    $result.Data.CompliancePolicies += @{
+                        Id          = $p.id
+                        DisplayName = [string]$p.displayName
+                        Platform    = [string]$p.'@odata.type'
+                        Description = [string]$p.description
+                        Version     = $p.version
+                        # Pull through fields the evaluator looks at; not all platforms expose them
+                        BitLockerEnabled        = $p.bitLockerEnabled
+                        SecureBootEnabled       = $p.secureBootEnabled
+                        PasswordRequired        = $p.passwordRequired
+                        StorageRequireEncryption= $p.storageRequireEncryption
+                    }
+                }
+                $next = $page.'@odata.nextLink'
+                $pageCount++
+            }
+            if ($pageCount -ge $maxPages -and $next) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Intune-DeviceCompliance-Policies' `
+                        -Message "Pagination cap reached ($maxPages pages); compliance policy list may be truncated."
                 }
             }
         } catch {
@@ -61,21 +76,35 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
         }
 
         # ── Device configuration profiles (legacy + Update for Business) ─────
+        # v4.6.4 EMERGENCY FIX (Critical #3): paginated.
         try {
-            $config = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/deviceManagement/deviceConfigurations' -ErrorAction Stop
-            foreach ($p in @($config.value)) {
-                $odata = [string]$p.'@odata.type'
-                $entry = @{
-                    Id          = $p.id
-                    DisplayName = [string]$p.displayName
-                    Platform    = $odata
-                    Description = [string]$p.description
-                }
-                $result.Data.ConfigurationProfiles += $entry
+            $next = 'https://graph.microsoft.com/v1.0/deviceManagement/deviceConfigurations'
+            $maxPages  = 200
+            $pageCount = 0
+            while ($next -and $pageCount -lt $maxPages) {
+                $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                foreach ($p in @($page.value)) {
+                    $odata = [string]$p.'@odata.type'
+                    $entry = @{
+                        Id          = $p.id
+                        DisplayName = [string]$p.displayName
+                        Platform    = $odata
+                        Description = [string]$p.description
+                    }
+                    $result.Data.ConfigurationProfiles += $entry
 
-                # Windows Update for Business rings live in deviceConfigurations
-                if ($odata -match 'windowsUpdateForBusinessConfiguration') {
-                    $result.Data.UpdatePolicies += $entry
+                    # Windows Update for Business rings live in deviceConfigurations
+                    if ($odata -match 'windowsUpdateForBusinessConfiguration') {
+                        $result.Data.UpdatePolicies += $entry
+                    }
+                }
+                $next = $page.'@odata.nextLink'
+                $pageCount++
+            }
+            if ($pageCount -ge $maxPages -and $next) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Intune-DeviceCompliance-Config' `
+                        -Message "Pagination cap reached ($maxPages pages); configuration profile list may be truncated."
                 }
             }
         } catch {
@@ -85,9 +114,25 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
         }
 
         # ── Enrollment configurations (WHfB, platform restrictions, limits) ──
+        # v4.6.4 EMERGENCY FIX (Critical #3): paginated.
         try {
-            $enroll = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/deviceManagement/deviceEnrollmentConfigurations' -ErrorAction Stop
-            foreach ($p in @($enroll.value)) {
+            $next = 'https://graph.microsoft.com/v1.0/deviceManagement/deviceEnrollmentConfigurations'
+            $maxPages  = 200
+            $pageCount = 0
+            $enrollAll = @()
+            while ($next -and $pageCount -lt $maxPages) {
+                $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                if ($page.value) { $enrollAll += $page.value }
+                $next = $page.'@odata.nextLink'
+                $pageCount++
+            }
+            if ($pageCount -ge $maxPages -and $next) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Intune-DeviceCompliance-Enrollment' `
+                        -Message "Pagination cap reached ($maxPages pages); enrollment configuration list may be truncated."
+                }
+            }
+            foreach ($p in $enrollAll) {
                 $odata = [string]$p.'@odata.type'
                 $entry = @{
                     Id          = $p.id
@@ -166,4 +211,11 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
     }
 
     Set-NRGRawData -Key 'Intune-DeviceCompliance' -Data $result
+    # v4.6.4 EMERGENCY FIX (Critical #3): added missing Register-NRGCoverage call
+    # per CLAUDE.md collector contract.
+    if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
+        $status = if ($result.Success) { 'Collected' } else { 'Failed' }
+        $note   = "CompPolicies=$($result.Data.CompliancePolicies.Count) Devices=$($result.Data.OSComplianceSummary.TotalCount)"
+        Register-NRGCoverage -Family 'Intune-DeviceCompliance' -Status $status -Note $note
+    }
 }

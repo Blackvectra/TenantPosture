@@ -139,10 +139,19 @@ function Invoke-NRGCollectEXOMailboxConfig {
         }
 
         # SMTP Auth per-mailbox (check for any explicitly enabled)
+        # v4.6.4 EMERGENCY FIX (Medium #10): if Get-TransportConfig threw
+        # earlier in this collector, $result.Data.TransportConfig is $null
+        # and the subsequent .SmtpClientAuthenticationDisabled access would
+        # crash under Set-StrictMode -Version Latest. Read TransportConfig
+        # via a local guard variable.
         try {
             $smtpEnabled = @(Get-CASMailbox -ResultSize 500 -ErrorAction Stop | Where-Object { $_.SmtpClientAuthenticationDisabled -eq $false })
+            $transportConfig = $result.Data.TransportConfig
+            $tenantSmtpDisabled = if ($transportConfig) {
+                $transportConfig.SmtpClientAuthenticationDisabled
+            } else { $null }
             $result.Data.SmtpAuthConfig = @{
-                TenantDisabled        = $result.Data.TransportConfig.SmtpClientAuthenticationDisabled
+                TenantDisabled        = $tenantSmtpDisabled
                 PerMailboxEnabledCount= $smtpEnabled.Count
                 SampleEnabled         = @($smtpEnabled | Select-Object -First 5 | ForEach-Object { [string]$_.UserPrincipalName })
             }

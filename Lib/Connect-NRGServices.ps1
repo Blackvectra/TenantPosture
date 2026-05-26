@@ -127,6 +127,18 @@ function Connect-NRGServices {
     # ── 1. Microsoft Graph ────────────────────────────────────────────────────
     Write-Host "  [*] Microsoft Graph..." -ForegroundColor Cyan
     try {
+        # v4.6.4 EMERGENCY FIX (Medium #9): align the requested Graph scopes
+        # with CLAUDE.md (21 scopes). Previously 15 — missing scopes caused
+        # silent permission failures in:
+        #   - SharePoint tenant settings (Sites.Read.All deprecated for
+        #     /admin/sharepoint/settings; SharePointTenantSettings.Read.All
+        #     is the supported scope)
+        #   - Intune managed devices and service config (separate scopes
+        #     from DeviceManagementConfiguration.Read.All)
+        #   - OAuth permission grant inspection (Policy.Read.PermissionGrant)
+        #   - PIM read on PIM-managed tenants (PrivilegedAccess.Read.AzureAD)
+        #   - Teams settings (TeamSettings.Read.All; previously relied on
+        #     module-side Connect-MicrosoftTeams permissions)
         $scopes = @(
             'User.Read.All','Group.Read.All','Directory.Read.All',
             'Policy.Read.All','AuditLog.Read.All','Application.Read.All',
@@ -135,7 +147,14 @@ function Connect-NRGServices {
             'Organization.Read.All','Sites.Read.All',
             'DeviceManagementConfiguration.Read.All',
             'DeviceManagementApps.Read.All',
-            'UserAuthenticationMethod.Read.All'
+            'UserAuthenticationMethod.Read.All',
+            # ── v4.6.4 added (6) ─────────────────────────────────────────
+            'SharePointTenantSettings.Read.All',
+            'DeviceManagementManagedDevices.Read.All',
+            'DeviceManagementServiceConfig.Read.All',
+            'Policy.Read.PermissionGrant',
+            'PrivilegedAccess.Read.AzureAD',
+            'TeamSettings.Read.All'
         )
 
         # Force-load the LATEST Microsoft.Graph.Authentication to prevent assembly conflicts
