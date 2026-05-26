@@ -109,7 +109,7 @@ foreach ($folder in $loadOrder) {
 # ── Exported function list ────────────────────────────────────────────────────
 $script:ExportedFunctions = @(
     # ── Lib helpers ───────────────────────────────────────────────────────────
-    'Add-NRGFinding', 'Get-NRGFindings', 'Clear-NRGFindings',
+    'Add-NRGFinding', 'Get-NRGFindings', 'Clear-NRGFindings', 'Clear-NRGState',
     'Register-NRGException', 'Get-NRGExceptions',
     'Register-NRGCoverage', 'Get-NRGCoverage',
     'Set-NRGRawData', 'Get-NRGRawData',

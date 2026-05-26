@@ -23,6 +23,7 @@
         'Add-NRGFinding',
         'Get-NRGFindings',
         'Clear-NRGFindings',
+        'Clear-NRGState',
         'Register-NRGException',
         'Get-NRGExceptions',
         'Register-NRGCoverage',
