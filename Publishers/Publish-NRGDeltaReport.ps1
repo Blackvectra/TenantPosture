@@ -197,21 +197,24 @@ function Publish-NRGDeltaReport {
         throw "ConvertTo-NRGHtmlSafe not loaded — refusing to generate delta report without injection protection."
     }
 
-    # Helper: standard Markdown escape (parity with Publish-NRGAssessmentSummary)
+    # Helper: standard Markdown escape (parity with Publish-NRGAssessmentSummary).
+    # Markdown-safe only — escape characters that break markdown table or
+    # code-span structure (pipe, backtick, raw newlines). Do NOT HTML-escape;
+    # XSS belongs at the markdown→HTML render boundary, not in source markdown.
     function EscMd([object]$v) {
         if ($null -eq $v -or [string]::IsNullOrEmpty([string]$v)) { return '' }
-        $safe = ConvertTo-NRGHtmlSafe -Value ([string]$v)
-        $safe = $safe -replace '\|', '\|' -replace '`', '\`'
+        $safe = [string]$v
+        $safe = $safe -replace '\|', '\|' -replace '`', '\`' -replace '[\r\n]+', ' '
         return $safe
     }
 
     # Helper: STRICT Markdown escape for untrusted baseline JSON. Strengthens
-    # EscMd to also strip newlines and escape the markdown link/image/emphasis
-    # syntax characters that an attacker controlling tenant DisplayNames /
-    # publisher strings could otherwise smuggle into the report.
+    # EscMd to also escape the markdown link/image/emphasis syntax characters
+    # that an attacker controlling tenant DisplayNames / publisher strings
+    # could otherwise smuggle into the report.
     function EscMdStrict([object]$v) {
         if ($null -eq $v -or [string]::IsNullOrEmpty([string]$v)) { return '' }
-        $safe = ConvertTo-NRGHtmlSafe -Value ([string]$v)
+        $safe = [string]$v
         # Collapse CR/LF (and tabs) to a single space so attackers can't break
         # out of a table row or inject a new Markdown block.
         $safe = $safe -replace "[\r\n\t]+", ' '

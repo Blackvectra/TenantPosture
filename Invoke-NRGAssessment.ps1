@@ -480,19 +480,23 @@ if (-not $JsonOnly) {
     # and -ExecutivePath are mandatory on the function — omitting them in v4.6.1
     # caused PowerShell to interactively prompt and then fail.
     if (Get-Command Publish-NRGRemediationPlaybook -ErrorAction SilentlyContinue) {
-        $pbPath   = Join-Path $OutputPath "$baseName-playbook.md"
-        $execPath = Join-Path $OutputPath "$baseName-executive.md"
+        $pbPath     = Join-Path $OutputPath "$baseName-playbook.md"
+        $execPath   = Join-Path $OutputPath "$baseName-executive.md"
+        $pbHtmlPath = Join-Path $OutputPath "$baseName-playbook.html"
         try {
             Publish-NRGRemediationPlaybook `
                 -Metadata $reportMetadata `
                 -Findings $findings `
                 -Connections $conn `
                 -OutputPath $pbPath `
-                -ExecutivePath $execPath
-            Write-Host "  [+] Playbook: $pbPath" -ForegroundColor Green
-            Write-Host "  [+] Executive: $execPath" -ForegroundColor Green
-            Set-NRGSensitiveFileAcl -Path $pbPath   -ErrorAction SilentlyContinue
-            Set-NRGSensitiveFileAcl -Path $execPath -ErrorAction SilentlyContinue
+                -ExecutivePath $execPath `
+                -HtmlOutputPath $pbHtmlPath
+            Write-Host "  [+] Playbook (md):   $pbPath" -ForegroundColor Green
+            Write-Host "  [+] Playbook (html): $pbHtmlPath" -ForegroundColor Green
+            Write-Host "  [+] Executive:       $execPath" -ForegroundColor Green
+            Set-NRGSensitiveFileAcl -Path $pbPath     -ErrorAction SilentlyContinue
+            Set-NRGSensitiveFileAcl -Path $execPath   -ErrorAction SilentlyContinue
+            Set-NRGSensitiveFileAcl -Path $pbHtmlPath -ErrorAction SilentlyContinue
         } catch { Write-Warning "Playbook publish failed: $($_.Exception.Message)" }
     }
 
