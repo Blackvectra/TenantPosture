@@ -106,6 +106,27 @@ function Clear-NRGFindings {
     $script:NRGFindings.Clear()
 }
 
+# Full state reset across all four module-scope collections.
+#
+# Required between batch clients (Invoke-NRGBatchAssessment.ps1). The batch
+# loop runs collectors then evaluators per client; without this helper the
+# raw data, coverage map, and exception log from the previous tenant would
+# persist into the next tenant's evaluation pass, producing findings labeled
+# with the wrong client. Clear-NRGFindings alone only resets the findings
+# list — it leaves $NRGRawData populated. CLAUDE.md mandates Clear-NRGState
+# specifically.
+#
+# Initialize-NRGState is called first so the helper is safe to invoke even
+# before the first collector has run (idempotent, StrictMode-safe).
+function Clear-NRGState {
+    [CmdletBinding()] param()
+    Initialize-NRGState
+    $script:NRGFindings.Clear()
+    $script:NRGRawData.Clear()
+    $script:NRGCoverage.Clear()
+    $script:NRGExceptions.Clear()
+}
+
 # ── Exception state ───────────────────────────────────────────────────────────
 
 function Register-NRGException {

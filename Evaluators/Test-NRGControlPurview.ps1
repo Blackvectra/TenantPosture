@@ -111,7 +111,7 @@ function Test-NRGControlPurviewAuditSearch {
     [CmdletBinding()] param()
     $cid = 'PVW-2.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-AuditConfig'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
     $enabled = $pvw.Data.AuditConfig.UnifiedAuditLogIngestionEnabled ?? $false
     if ($enabled) {
@@ -126,7 +126,7 @@ function Test-NRGControlPurviewCommCompliance {
     [CmdletBinding()] param()
     $cid = 'PVW-2.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-AuditConfig'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
     $policies = @($pvw.Data.CommCompliancePolicies ?? @())
     if ($policies.Count -gt 0) {
@@ -141,7 +141,7 @@ function Test-NRGControlPurviewInfoBarriers {
     [CmdletBinding()] param()
     $cid = 'PVW-2.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-AuditConfig'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
     $ibMode = [string]($pvw.Data.InformationBarriersMode ?? 'Legacy')
     if ($ibMode -match 'SingleSegment|MultiSegment|Mixed') {
@@ -156,7 +156,7 @@ function Test-NRGControlPurviewInsiderRisk {
     [CmdletBinding()] param()
     $cid = 'PVW-2.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-AuditConfig'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
     $irPolicies = @($pvw.Data.InsiderRiskPolicies ?? @())
     if ($irPolicies.Count -gt 0) {
@@ -171,7 +171,7 @@ function Test-NRGControlPurviewRetention {
     [CmdletBinding()] param()
     $cid = 'PVW-2.5'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-AuditConfig'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
     $retPolicies = @($pvw.Data.RetentionPolicies ?? @())
     $coveredWorkloads = @($retPolicies | ForEach-Object { $_.Workloads ?? @() } | Select-Object -Unique)
@@ -191,7 +191,7 @@ function Test-NRGControlPurviewAutoLabel {
     [CmdletBinding()] param()
     $cid = 'PVW-2.6'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-Labels'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview label data not collected'; return }
     $autoLabels = @($pvw.Data.AutoLabelPolicies ?? @())
     if ($autoLabels.Count -gt 0) {
@@ -217,7 +217,7 @@ function Test-NRGControlPurviewEDiscovery {
     [CmdletBinding()] param()
     $cid = 'PVW-3.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-AuditConfig'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Purview data not collected'; return
@@ -251,7 +251,7 @@ function Test-NRGControlPurviewSensitiveInfoTypes {
     [CmdletBinding()] param()
     $cid = 'PVW-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-Labels'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Purview label data not collected'; return
@@ -274,7 +274,7 @@ function Test-NRGControlPurviewAuditPremium {
     [CmdletBinding()] param()
     $cid = 'PVW-4.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-AuditConfig'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
     $premiumEnabled = [bool]($pvw.Data.AuditConfig.AdvancedAuditEnabled ?? $false)
     if ($premiumEnabled) {
@@ -289,7 +289,7 @@ function Test-NRGControlPurviewAuditRetention {
     [CmdletBinding()] param()
     $cid = 'PVW-4.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-AuditConfig'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
     $retentionPolicies = @($pvw.Data.AuditRetentionPolicies ?? @())
     $longTerm = @($retentionPolicies | Where-Object { [int]($_.RetentionDays ?? 0) -ge 365 })
@@ -305,7 +305,7 @@ function Test-NRGControlPurviewLabelsPublished {
     [CmdletBinding()] param()
     $cid = 'PVW-4.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-Labels'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview label data not collected'; return }
     $labels        = @($pvw.Data.SensitivityLabels ?? @())
     $labelPolicies = @($pvw.Data.LabelPolicies ?? @())
@@ -323,7 +323,7 @@ function Test-NRGControlPurviewRecordsManagement {
     [CmdletBinding()] param()
     $cid = 'PVW-4.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-AuditConfig'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
     $retentionLabels = @($pvw.Data.RetentionLabels ?? @())
     $recordLabels    = @($retentionLabels | Where-Object { $_.IsRecordLabel -eq $true })

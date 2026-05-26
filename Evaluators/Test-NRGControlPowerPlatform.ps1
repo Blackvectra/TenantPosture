@@ -89,7 +89,7 @@ function Test-NRGControlPPLConnectorClassification {
     [CmdletBinding()] param()
     $cid = 'PPL-2.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $ppl = Get-NRGRawData -Key 'PowerPlatform-DLP'
+    $ppl = Get-NRGRawData -Key 'PowerPlatform'
     if (-not $ppl -or -not $ppl.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Power Platform DLP data not collected'; return
@@ -114,7 +114,7 @@ function Test-NRGControlPPLAutomate {
     [CmdletBinding()] param()
     $cid = 'PPL-2.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $ppl = Get-NRGRawData -Key 'PowerPlatform-TenantSettings'
+    $ppl = Get-NRGRawData -Key 'PowerPlatform'
     if (-not $ppl -or -not $ppl.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Power Platform settings not collected'; return
@@ -138,7 +138,7 @@ function Test-NRGControlPPLPowerApps {
     [CmdletBinding()] param()
     $cid = 'PPL-2.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $ppl = Get-NRGRawData -Key 'PowerPlatform-TenantSettings'
+    $ppl = Get-NRGRawData -Key 'PowerPlatform'
     if (-not $ppl -or -not $ppl.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Power Platform settings not collected'; return

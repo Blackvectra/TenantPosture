@@ -167,7 +167,7 @@ function Test-NRGControlTeamsSkype {
     [CmdletBinding()] param()
     $cid = 'TMS-2.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
     $skype = $tms.Data.TenantConfig.AllowPublicUsers ?? $true
     if (-not $skype) {
@@ -182,7 +182,7 @@ function Test-NRGControlTeamsUnverifiedApps {
     [CmdletBinding()] param()
     $cid = 'TMS-2.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
     $allowAll = $tms.Data.AppConfig.AllowAllApps ?? $true
     if (-not $allowAll) {
@@ -197,7 +197,7 @@ function Test-NRGControlTeams3PStorage {
     [CmdletBinding()] param()
     $cid = 'TMS-2.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
     $anyStorage   = ($tms.Data.ClientConfig.AllowDropbox -or $tms.Data.ClientConfig.AllowBox -or $tms.Data.ClientConfig.AllowGoogleDrive -or $tms.Data.ClientConfig.AllowShareFile) ?? $false
     if (-not $anyStorage) {
@@ -212,7 +212,7 @@ function Test-NRGControlTeamsEmailIntegration {
     [CmdletBinding()] param()
     $cid = 'TMS-2.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
     $emailInt = $tms.Data.TenantConfig.AllowEmailIntoChannels ?? $true
     if (-not $emailInt) {
@@ -227,7 +227,7 @@ function Test-NRGControlTeamsRecordingExternal {
     [CmdletBinding()] param()
     $cid = 'TMS-2.5'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
     $allowExtRecord = $tms.Data.MeetingPolicy.AllowCloudRecordingForCalls ?? $true
     if (-not $allowExtRecord) {
@@ -242,7 +242,7 @@ function Test-NRGControlTeamsBroadChannel {
     [CmdletBinding()] param()
     $cid = 'TMS-2.6'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
     $broadInvite = $tms.Data.MeetingPolicy.AllowChannelMeetingScheduling ?? $true
     if (-not $broadInvite) {
@@ -257,7 +257,7 @@ function Test-NRGControlTeamsExternalChat {
     [CmdletBinding()] param()
     $cid = 'TMS-2.7'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
     $extChat = $tms.Data.TenantConfig.AllowFederatedUsers ?? $true
     if (-not $extChat) {
@@ -272,7 +272,7 @@ function Test-NRGControlTeamsPSTN {
     [CmdletBinding()] param()
     $cid = 'TMS-2.8'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
     $pstn = $tms.Data.MeetingPolicy.AllowPSTNUsersToBypassLobby ?? $false
     if (-not $pstn) {
@@ -287,7 +287,7 @@ function Test-NRGControlTeamsWatermarks {
     [CmdletBinding()] param()
     $cid = 'TMS-3.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Teams data not collected'; return
@@ -310,7 +310,7 @@ function Test-NRGControlTeamsAutoAdmit {
     [CmdletBinding()] param()
     $cid = 'TMS-3.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Teams data not collected'; return
@@ -335,7 +335,7 @@ function Test-NRGControlTeamsMeetingChat {
     [CmdletBinding()] param()
     $cid = 'TMS-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Teams data not collected'; return
@@ -362,7 +362,7 @@ function Test-NRGControlTeamsChatCopy {
     [CmdletBinding()] param()
     $cid = 'TMS-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Teams data not collected'; return
@@ -378,7 +378,7 @@ function Test-NRGControlTeamsMeetingRecordingScope {
     [CmdletBinding()] param()
     $cid = 'TMS-4.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
     $expireDays = [int]($tms.Data.MeetingPolicy.MeetingRecordingExpirationDays ?? -1)
     if ($expireDays -gt 0 -and $expireDays -le 120) {
@@ -395,7 +395,7 @@ function Test-NRGControlTeamsAnonymousStart {
     [CmdletBinding()] param()
     $cid = 'TMS-4.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
     $anonStart = [bool]($tms.Data.MeetingPolicy.AllowAnonymousUsersToStartMeeting ?? $true)
     if (-not $anonStart) {
@@ -410,7 +410,7 @@ function Test-NRGControlTeamsFederationAllowlist {
     [CmdletBinding()] param()
     $cid = 'TMS-4.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
     $allowAllDomains = [bool]($tms.Data.TenantConfig.AllowFederatedUsers ?? $false)
     $specificDomains = @($tms.Data.FederationConfig.AllowedDomains ?? @())
@@ -428,7 +428,7 @@ function Test-NRGControlTeamsLiveEvents {
     [CmdletBinding()] param()
     $cid = 'TMS-4.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams-Config'
+    $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
     $liveEventsEnabled = [bool]($tms.Data.LiveEventPolicy.AllowBroadcastScheduling ?? $true)
     $publicEvents      = [bool]($tms.Data.LiveEventPolicy.AllowBroadcastToAnonymousUsers ?? $false)
