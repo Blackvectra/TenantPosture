@@ -29,11 +29,16 @@ function Publish-NRGAssessmentSummary {
         throw "ConvertTo-NRGHtmlSafe not loaded — refusing to generate report without XSS protection."
     }
 
-    # Helper: escape for Markdown (prevents table/header injection)
+    # Helper: escape for Markdown (prevents table/header injection).
+    # Only escape characters that break markdown table/code-span structure
+    # (pipe, backtick, raw newlines). Do NOT HTML-escape (>, ', &, etc.) —
+    # those are valid markdown source and HTML escaping at this layer
+    # produces visible `&gt;` and `&#39;` in the rendered output. XSS
+    # protection belongs at the markdown→HTML render boundary, not here.
     function EscMd([object]$v) {
         if ($null -eq $v -or [string]::IsNullOrEmpty([string]$v)) { return '' }
-        $safe = ConvertTo-NRGHtmlSafe -Value ([string]$v)
-        $safe = $safe -replace '\|', '\|' -replace '`', '\`'
+        $safe = [string]$v
+        $safe = $safe -replace '\|', '\|' -replace '`', '\`' -replace '[\r\n]+', ' '
         return $safe
     }
 
@@ -201,11 +206,12 @@ function Publish-NRGAssessmentSummary {
         $null = $sb.AppendLine()
     }
 
-    # All findings detail
+    # All findings — sorted Gap → Partial → Satisfied first so the actionable
+    # rows are at the top. NotApplicable rows are collapsed into a count and
+    # listed in a folded appendix at the end (most readers don't need to scan
+    # 60+ rows of "not licensed for this control").
     $null = $sb.AppendLine("## All Findings")
     $null = $sb.AppendLine()
-    $null = $sb.AppendLine("| Control | Category | State | Severity | Title |")
-    $null = $sb.AppendLine("|---------|----------|-------|----------|-------|")
 
     $stateIcon = @{
         'Satisfied'     = '✅'
@@ -214,10 +220,39 @@ function Publish-NRGAssessmentSummary {
         'NotApplicable' = '—'
         'Error'         = '💥'
     }
+    $stateOrder = @{ 'Gap' = 0; 'Partial' = 1; 'Satisfied' = 2; 'Error' = 3; 'NotApplicable' = 4 }
+    $sevOrder   = @{ 'Critical' = 0; 'High' = 1; 'Medium' = 2; 'Low' = 3; 'Informational' = 4 }
 
-    foreach ($f in ($Findings | Sort-Object Category, ControlId)) {
+    $actionable = @($Findings | Where-Object { $_.State -ne 'NotApplicable' })
+    $naFindings = @($Findings | Where-Object { $_.State -eq 'NotApplicable' })
+
+    $null = $sb.AppendLine("| Control | Category | State | Severity | Title |")
+    $null = $sb.AppendLine("|---------|----------|-------|----------|-------|")
+    $sorted = $actionable | Sort-Object `
+        @{Expression={$stateOrder[[string]$_.State]}}, `
+        @{Expression={$sevOrder[[string]$_.Severity]}}, `
+        Category, ControlId
+    foreach ($f in $sorted) {
         $icon = $stateIcon[$f.State] ?? $f.State
         $null = $sb.AppendLine("| $(EscMd $f.ControlId) | $(EscMd $f.Category) | $icon $(EscMd $f.State) | $(EscMd $f.Severity) | $(EscMd $f.Title) |")
+    }
+    $null = $sb.AppendLine()
+
+    if ($naFindings.Count -gt 0) {
+        $null = $sb.AppendLine("### Not Applicable ($($naFindings.Count) controls)")
+        $null = $sb.AppendLine()
+        $null = $sb.AppendLine("These controls did not apply to this tenant — typically because the required license is not present, the feature is not enabled, or the workload was skipped at runtime. Expand for full list.")
+        $null = $sb.AppendLine()
+        $null = $sb.AppendLine("<details><summary>Show $($naFindings.Count) Not Applicable controls</summary>")
+        $null = $sb.AppendLine()
+        $null = $sb.AppendLine("| Control | Category | Title |")
+        $null = $sb.AppendLine("|---------|----------|-------|")
+        foreach ($f in ($naFindings | Sort-Object Category, ControlId)) {
+            $null = $sb.AppendLine("| $(EscMd $f.ControlId) | $(EscMd $f.Category) | $(EscMd $f.Title) |")
+        }
+        $null = $sb.AppendLine()
+        $null = $sb.AppendLine("</details>")
+        $null = $sb.AppendLine()
     }
 
     $null = $sb.AppendLine()
