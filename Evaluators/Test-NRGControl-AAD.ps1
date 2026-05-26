@@ -653,11 +653,21 @@ function Test-NRGControlAADPrivCloudOnly {
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
             -Detail 'No privileged role assignments are using on-premises synced accounts.'
     } else {
+        # v4.6.4 PII FIX: prior code interpolated the full PrincipalUPN list into
+        # Detail (renders in HTML client report → PII leak). Move UPNs to the
+        # structured AffectedObjects field; keep Detail count-only.
+        $affected = @($syncedPriv | ForEach-Object {
+            [ordered]@{
+                DisplayName    = [string]$_.PrincipalUPN
+                AssignmentType = 'OnPremSyncedPrivilegedRole'
+            }
+        })
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "$($syncedPriv.Count) privileged account(s) are synced from on-premises AD: $($syncedPriv.PrincipalUPN -join ', '). On-prem compromise directly escalates to cloud tenant." `
+            -Detail "$($syncedPriv.Count) privileged account(s) are synced from on-premises AD. On-prem compromise directly escalates to cloud tenant. See AffectedObjects for the per-account list." `
             -CurrentValue "Synced privileged accounts: $($syncedPriv.Count)" `
-            -RequiredValue 'Zero synced accounts in privileged roles' -Remediation $ctrl.Remediation
+            -RequiredValue 'Zero synced accounts in privileged roles' -Remediation $ctrl.Remediation `
+            -AffectedObjects $affected
     }
 }
 

@@ -106,18 +106,27 @@ function Test-NRGControlPurview {
     }
 }
 
-# ── PVW-2.1 Purview Audit Search Enabled ─────────────────────────────────────
+# ── PVW-2.1 Admin Audit Log Enabled (separate from UAL ingestion) ────────────
+# v4.6.4 DEDUPE FIX: PVW-2.1 previously checked the SAME
+# UnifiedAuditLogIngestionEnabled property as PVW-1.1 and PVW-3.2, so a tenant
+# with audit disabled would generate THREE Gap findings for the same root cause.
+# Repoint PVW-2.1 to the distinct AdminAuditLogEnabled property (admin role
+# changes / cmdlet audit history) which is a different audit pipeline.
 function Test-NRGControlPurviewAuditSearch {
     [CmdletBinding()] param()
     $cid = 'PVW-2.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
-    $enabled = Get-NRGNestedProperty -Object $pvw -Path 'Data.AuditConfig.UnifiedAuditLogIngestionEnabled' -Default $false
-    if ($enabled) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Unified audit log search is enabled.'
+    $adminEnabled = Get-NRGNestedProperty -Object $pvw -Path 'Data.AuditConfig.AdminAuditLogEnabled' -Default $null
+    if ($null -eq $adminEnabled) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AdminAuditLogEnabled property unavailable (Get-AdminAuditLogConfig not reachable — typically IPPSSession not connected).'
+        return
+    }
+    if ($adminEnabled) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Admin audit log is enabled — cmdlet invocations against EXO are recorded for incident response review.'
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Audit log search is disabled. Compliance and security investigations cannot query activity logs.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Admin audit logging is disabled — administrative cmdlet history is not retained. This is distinct from UAL ingestion (PVW-1.1) and covers EXO management plane activity specifically.' -Remediation $ctrl.Remediation
     }
 }
 
@@ -202,17 +211,23 @@ function Test-NRGControlPurviewAutoLabel {
 }
 
 # ── PVW-3.1 Audit Logs Exported to SIEM ──────────────────────────────────────
+# v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
 function Test-NRGControlPurviewSIEMExport {
     [CmdletBinding()] param()
     $cid = 'PVW-3.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-        -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
-        -Detail 'Audit log SIEM export status cannot be determined via Graph API alone. Verify via Purview > Audit > Export settings or Microsoft Sentinel connector status.' `
+        -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
+        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Audit log SIEM export status cannot be determined via Graph API alone. Verify via Purview > Audit > Export settings or Microsoft Sentinel connector status.' `
         -Remediation $ctrl.Remediation
 }
 
 # ── PVW-3.2 eDiscovery Case Management Configured ────────────────────────────
+# v4.6.4 DEDUPE FIX: PVW-3.2 previously aliased UnifiedAuditLogIngestionEnabled
+# → triple-counted with PVW-1.1 and PVW-2.1. Repoint to a separate eDiscovery
+# signal. We don't currently collect eDiscovery case data (no IPP cmdlet wired
+# up in the Purview collector), so when IPP is not connected we mark
+# NotApplicable rather than fabricating a Satisfied/Gap result.
 function Test-NRGControlPurviewEDiscovery {
     [CmdletBinding()] param()
     $cid = 'PVW-3.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
@@ -222,27 +237,35 @@ function Test-NRGControlPurviewEDiscovery {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Purview data not collected'; return
     }
-    $auditEnabled = Get-NRGNestedProperty -Object $pvw -Path 'Data.AuditConfig.UnifiedAuditLogIngestionEnabled' -Default $false
-    if ($auditEnabled) {
+    $cases = Get-NRGNestedProperty -Object $pvw -Path 'Data.EDiscoveryCases' -Default $null
+    if ($null -eq $cases) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'eDiscovery case inventory not collected (IPPSSession not connected or Get-ComplianceCase unavailable). Verify manually via compliance.microsoft.com > eDiscovery.'
+        return
+    }
+    $caseCount = @($cases).Count
+    if ($caseCount -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail 'Unified audit log is enabled — foundation for eDiscovery is in place. Verify eDiscovery roles are assigned to appropriate compliance personnel.'
+            -Detail "$caseCount eDiscovery case(s) configured — case management capability is in use. Verify eDiscovery roles are assigned to appropriate compliance personnel."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail 'Audit log disabled — eDiscovery searches will return no results. Legal hold and investigation capabilities are non-functional.' `
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit `
+            -Detail 'No eDiscovery cases configured. Legal hold and investigation workflows have never been exercised — confirm the workflow is documented and that compliance personnel hold the eDiscovery Manager / Administrator role.' `
             -Remediation $ctrl.Remediation
     }
 }
 
 # ── PVW-3.3 Microsoft Purview Compliance Score Reviewed ──────────────────────
+# v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
 function Test-NRGControlPurviewComplianceScore {
     [CmdletBinding()] param()
     $cid = 'PVW-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-        -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit `
-        -Detail 'Compliance Score requires manual review at compliance.microsoft.com > Compliance Manager. Verify improvement actions are assigned and tracked.' `
+        -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit `
+        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Compliance Score requires manual review at compliance.microsoft.com > Compliance Manager. Verify improvement actions are assigned and tracked.' `
         -Remediation $ctrl.Remediation
 }
 

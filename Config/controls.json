@@ -42,7 +42,7 @@
       "Remediation": "CA policy: Users = All, Apps = All cloud apps, Grant = Require MFA. Or enable Security Defaults.",
       "References": {
         "CIS": "5.2.2.1",
-        "SCuBA": "MS.AAD.3.1v1",
+        "SCuBA": "MS.AAD.3.2v2",
         "NIST": "IA-2(1), IA-2(2)",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -70,7 +70,7 @@
       "Remediation": "CA policy targeting privileged roles with Authentication Strength = Phishing-resistant MFA. Must cover Global Administrator at minimum.",
       "References": {
         "CIS": "5.2.2.2",
-        "SCuBA": "MS.AAD.3.2v1",
+        "SCuBA": "MS.AAD.3.6v1",
         "NIST": "IA-2(1), IA-2(2), IA-2(6)",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -962,7 +962,7 @@
     {
       "ControlId": "PVW-1.1",
       "Title": "Unified Audit Log Enabled",
-      "Description": "Microsoft Purview unified audit logging is enabled across M365 services.",
+      "Description": "Microsoft Purview unified audit logging is enabled across M365 services. (No SCuBA equivalent — Purview audit/DLP covered in MS.DEFENDER.* baselines.)",
       "BusinessRisk": "Without audit logging, there is no record of admin changes, data access, or security policy modifications. Incident investigation is impossible.",
       "Severity": "Critical",
       "Workload": "PVW",
@@ -973,7 +973,7 @@
       "Remediation": "Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true",
       "References": {
         "CIS": "3.1.1",
-        "SCuBA": "MS.PURVIEW.1.1v1",
+        "SCuBA": "",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
@@ -1011,7 +1011,7 @@
     {
       "ControlId": "PVW-1.3",
       "Title": "DLP Policy Active for Sensitive Data",
-      "Description": "At least one active DLP policy protects sensitive information types from unauthorized sharing.",
+      "Description": "At least one active DLP policy protects sensitive information types from unauthorized sharing. (No SCuBA equivalent — Purview audit/DLP covered in MS.DEFENDER.* baselines.)",
       "BusinessRisk": "Without DLP, PII, financial data, and PHI can be emailed externally or shared with unauthenticated recipients without detection.",
       "Severity": "High",
       "Workload": "PVW",
@@ -1022,7 +1022,7 @@
       "Remediation": "Create DLP policies in Purview > Data loss prevention using Microsoft-provided templates (Financial, PII, Health) across Exchange, SharePoint, Teams.",
       "References": {
         "CIS": "3.3.1",
-        "SCuBA": "MS.PURVIEW.2.1v1",
+        "SCuBA": "",
         "NIST": "SC-28, AC-4",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -1059,7 +1059,7 @@
     {
       "ControlId": "INT-1.1",
       "Title": "Device Compliance Policies Configured",
-      "Description": "Intune compliance policies are configured and evaluating enrolled devices against security baselines.",
+      "Description": "Intune compliance policies are configured and evaluating enrolled devices against security baselines. (No SCuBA equivalent — Intune device-compliance controls are out of SCuBA scope.)",
       "BusinessRisk": "Without compliance policies, enrolled devices have no enforced security requirements. Non-compliant devices access corporate resources unchecked.",
       "Severity": "High",
       "Workload": "INT",
@@ -1070,7 +1070,7 @@
       "Remediation": "Create compliance policies per platform in Intune > Devices > Compliance. Require encryption, password, and OS version minimums.",
       "References": {
         "CIS": "4.1.1",
-        "SCuBA": "MS.INTUNE.1.1v1",
+        "SCuBA": "",
         "NIST": "CM-2, CM-6",
         "CMMC": "CM.L2-3.4.1",
         "MITRE": [
@@ -1084,7 +1084,7 @@
     {
       "ControlId": "INT-1.2",
       "Title": "Non-Compliant Device Access Blocked via CA",
-      "Description": "CA policies block or limit M365 access from devices marked non-compliant by Intune.",
+      "Description": "CA policies block or limit M365 access from devices marked non-compliant by Intune. (No SCuBA equivalent — Intune device-compliance controls are out of SCuBA scope.)",
       "BusinessRisk": "Compliance policies without CA enforcement are informational only. Non-compliant devices continue accessing data.",
       "Severity": "High",
       "Workload": "INT",
@@ -1095,7 +1095,7 @@
       "Remediation": "Create CA policy: require compliant device or hybrid join for all cloud apps.",
       "References": {
         "CIS": "4.1.3",
-        "SCuBA": "MS.INTUNE.1.2v1",
+        "SCuBA": "",
         "NIST": "AC-3, CM-7",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -1340,30 +1340,6 @@
         "MITRE": [
           "T1078",
           "T1098"
-        ]
-      },
-      "LicenseRequirement": "Included (M365 Business Standard+)"
-    },
-    {
-      "ControlId": "EXO-2.7",
-      "Title": "Modern Authentication Enabled (EXO)",
-      "Description": "Modern authentication (OAuth2) is enabled for Exchange Online \u2014 duplicate reference for Session 3 evaluator compatibility.",
-      "BusinessRisk": "Same as EXO-1.6. This control ID retained for backward compatibility with Session 3 evaluator file.",
-      "Severity": "Critical",
-      "Workload": "EXO",
-      "Category": "Email",
-      "Automated": true,
-      "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOModernAuth",
-      "Remediation": "Set-OrganizationConfig -OAuth2ClientProfileEnabled $true",
-      "References": {
-        "CIS": "2.1.5",
-        "SCuBA": "MS.EXO.1.1v1",
-        "NIST": "IA-2, SC-8",
-        "CMMC": "IA.L2-3.5.3",
-        "MITRE": [
-          "T1078",
-          "T1110"
         ]
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
@@ -2475,7 +2451,7 @@
     {
       "ControlId": "PVW-2.1",
       "Title": "Purview Audit Log Search Enabled",
-      "Description": "Unified audit log search is enabled and accessible to compliance administrators.",
+      "Description": "Unified audit log search is enabled and accessible to compliance administrators. (No SCuBA equivalent — Purview audit/DLP covered in MS.DEFENDER.* baselines.)",
       "BusinessRisk": "Without audit log search, compliance teams cannot investigate incidents, fulfill legal holds, or demonstrate regulatory compliance.",
       "Severity": "High",
       "Workload": "PVW",
@@ -2486,7 +2462,7 @@
       "Remediation": "Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true",
       "References": {
         "CIS": "3.1.1",
-        "SCuBA": "MS.PURVIEW.1.1v1",
+        "SCuBA": "",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
@@ -2620,7 +2596,7 @@
     {
       "ControlId": "INT-2.1",
       "Title": "Endpoint Detection and Response Policy Deployed",
-      "Description": "MDE onboarding policy is deployed via Intune, enrolling endpoints into Defender for Endpoint.",
+      "Description": "MDE onboarding policy is deployed via Intune, enrolling endpoints into Defender for Endpoint. (No SCuBA equivalent — Intune device-compliance controls are out of SCuBA scope.)",
       "BusinessRisk": "Without EDR, endpoint threats are invisible. Lateral movement, persistence, and data theft go undetected.",
       "Severity": "Critical",
       "Workload": "INT",
@@ -2631,7 +2607,7 @@
       "Remediation": "Intune > Endpoint security > Endpoint detection and response > Create policy for Windows.",
       "References": {
         "CIS": "4.4.2",
-        "SCuBA": "MS.INTUNE.3.1v1",
+        "SCuBA": "",
         "NIST": "SI-3, SI-4",
         "CMMC": "SI.L2-3.14.7",
         "MITRE": [
@@ -2718,7 +2694,7 @@
     {
       "ControlId": "INT-2.5",
       "Title": "Windows Update Compliance Policy Deployed",
-      "Description": "Windows Update for Business rings or compliance policy ensures devices receive security updates on schedule.",
+      "Description": "Windows Update for Business rings or compliance policy ensures devices receive security updates on schedule. (No SCuBA equivalent — Intune device-compliance controls are out of SCuBA scope.)",
       "BusinessRisk": "Unpatched endpoints are the most exploited attack surface. Without managed update policy, critical patches may sit unapplied for months.",
       "Severity": "High",
       "Workload": "INT",
@@ -2729,7 +2705,7 @@
       "Remediation": "Intune > Devices > Windows update rings > Create update ring with feature and quality update schedules.",
       "References": {
         "CIS": "4.5.1",
-        "SCuBA": "MS.INTUNE.4.1v1",
+        "SCuBA": "",
         "NIST": "SI-2",
         "CMMC": "SI.L1-3.14.1",
         "MITRE": [
@@ -3378,7 +3354,7 @@
     {
       "ControlId": "PVW-3.4",
       "Title": "Sensitive Information Types Used in DLP Policies",
-      "Description": "DLP policies are configured with Microsoft or custom sensitive information types for automatic detection.",
+      "Description": "DLP policies are configured with Microsoft or custom sensitive information types for automatic detection. (No SCuBA equivalent — Purview audit/DLP covered in MS.DEFENDER.* baselines.)",
       "BusinessRisk": "Without SIT-based detection, DLP policies provide no classification and cannot automatically protect sensitive data in transit.",
       "Severity": "High",
       "Workload": "PVW",
@@ -3389,7 +3365,7 @@
       "Remediation": "Purview > DLP > Create or edit policies > Add conditions using sensitive information types (SSN, credit card, health info, etc.).",
       "References": {
         "CIS": "3.3.1",
-        "SCuBA": "MS.PURVIEW.2.1v1",
+        "SCuBA": "",
         "NIST": "SC-28, AC-4",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -3448,7 +3424,7 @@
     {
       "ControlId": "INT-3.3",
       "Title": "Conditional Launch Policies Configured",
-      "Description": "App protection policies include conditional launch settings to block jailbroken devices and enforce OS version requirements.",
+      "Description": "App protection policies include conditional launch settings to block jailbroken devices and enforce OS version requirements. (No SCuBA equivalent — Intune device-compliance controls are out of SCuBA scope.)",
       "BusinessRisk": "Jailbroken and rooted devices bypass OS security controls. Without conditional launch, compromised devices access corporate apps with full permissions.",
       "Severity": "High",
       "Workload": "INT",
@@ -3459,7 +3435,7 @@
       "Remediation": "Intune > Apps > App protection policies > Conditional launch > Add: Jailbroken/rooted devices = Block, Min OS version = current-1.",
       "References": {
         "CIS": "4.3.3",
-        "SCuBA": "MS.INTUNE.2.1v1",
+        "SCuBA": "",
         "NIST": "SC-28, CM-7",
         "CMMC": "CM.L2-3.4.1",
         "MITRE": [
@@ -4104,7 +4080,7 @@
     {
       "ControlId": "INT-4.1",
       "Title": "Windows LAPS Deployed via Intune",
-      "Description": "Windows Local Administrator Password Solution (LAPS) is deployed via Intune, generating unique randomized local admin passwords escrowed in Entra ID.",
+      "Description": "Windows Local Administrator Password Solution (LAPS) is deployed via Intune, generating unique randomized local admin passwords escrowed in Entra ID. (No SCuBA equivalent — Intune device-compliance controls are out of SCuBA scope.)",
       "BusinessRisk": "Shared or static local admin passwords enable pass-the-hash lateral movement \u2014 one compromised endpoint hands the attacker credentials that work on every other endpoint with the same password.",
       "Severity": "High",
       "Workload": "INT",
@@ -4116,7 +4092,7 @@
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
         "CIS": "4.1.5",
-        "SCuBA": "MS.INTUNE.5.1v1",
+        "SCuBA": "",
         "NIST": "AC-2, IA-5",
         "CMMC": "IA.L2-3.5.1",
         "MITRE": [
@@ -4156,7 +4132,7 @@
     {
       "ControlId": "INT-4.3",
       "Title": "Device OS Version Compliance Enforced",
-      "Description": "Device compliance policies enforce minimum OS versions and compliance rate is \u226590% across enrolled devices.",
+      "Description": "Device compliance policies enforce minimum OS versions and compliance rate is \u226590% across enrolled devices. (No SCuBA equivalent \u2014 Intune device-compliance controls are out of SCuBA scope.)",
       "BusinessRisk": "Endpoints running outdated OS versions contain unpatched known exploits. KEV-listed vulnerabilities are actively exploited by ransomware operators and nation-state actors.",
       "Severity": "High",
       "Workload": "INT",
@@ -4168,7 +4144,7 @@
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
         "CIS": "4.5.5",
-        "SCuBA": "MS.INTUNE.4.2v1",
+        "SCuBA": "",
         "NIST": "SI-2",
         "CMMC": "SI.L1-3.14.1",
         "MITRE": [
