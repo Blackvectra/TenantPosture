@@ -149,7 +149,12 @@ function Invoke-NRGCollectAADInventory {
                         @{
                             ControlName  = [string]$_.controlName
                             Score        = [double]($_.score ?? 0)
-                            MaxScore     = [double]($_.controlCategory ?? 0)
+                            # v4.6.4 EMERGENCY FIX (Critical #2): previously this
+                            # wrote $_.controlCategory (a STRING like 'Identity')
+                            # cast to [double] — which always coerces to 0. The
+                            # correct property on a controlScore is maxScore.
+                            MaxScore     = [double]($_.maxScore ?? 0)
+                            ControlCategory = [string]($_.controlCategory ?? '')
                             Description  = [string]($_.description ?? '')
                         }
                     })

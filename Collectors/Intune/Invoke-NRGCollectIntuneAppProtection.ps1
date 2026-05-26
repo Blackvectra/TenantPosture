@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 #
-# Invoke-NRGCollectIntuneAppProtection.ps1
+# Invoke-NRGCollectIntuneAppProtection.ps1  (v4.6.4)
 # Collects Intune app protection (MAM) and app configuration policies.
 #
 # READ-ONLY: GET-only Graph calls. Does not create, modify, or remove configuration.
@@ -12,6 +12,11 @@
 # NIST SP 800-53: AC-19 (access control for mobile devices), SC-28 (protection of
 #                 information at rest), CM-7 (least functionality)
 # MITRE ATT&CK:   T1530 (Data from Cloud Storage), T1567 (Exfiltration over Web Service)
+#
+# v4.6.4 EMERGENCY FIX (Critical #3): Added @odata.nextLink pagination to all
+# three Graph calls. Default Graph page size is 100 — tenants with >100 MAM
+# policies, app configs, or targeted configs silently truncated the rest.
+# Pagination cap 200 (same as AAD-Users / AAD-Roles).
 #
 
 function Invoke-NRGCollectIntuneAppProtection {
@@ -27,14 +32,27 @@ function Invoke-NRGCollectIntuneAppProtection {
     try {
         # ── App protection (MAM) policies ────────────────────────────────────
         try {
-            $mam = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/deviceAppManagement/managedAppPolicies' -ErrorAction Stop
-            foreach ($p in @($mam.value)) {
-                $result.Data.AppProtectionPolicies += @{
-                    Id          = $p.id
-                    DisplayName = [string]$p.displayName
-                    Description = [string]$p.description
-                    Type        = [string]$p.'@odata.type'
-                    Version     = $p.version
+            $next = 'https://graph.microsoft.com/v1.0/deviceAppManagement/managedAppPolicies'
+            $maxPages  = 200
+            $pageCount = 0
+            while ($next -and $pageCount -lt $maxPages) {
+                $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                foreach ($p in @($page.value)) {
+                    $result.Data.AppProtectionPolicies += @{
+                        Id          = $p.id
+                        DisplayName = [string]$p.displayName
+                        Description = [string]$p.description
+                        Type        = [string]$p.'@odata.type'
+                        Version     = $p.version
+                    }
+                }
+                $next = $page.'@odata.nextLink'
+                $pageCount++
+            }
+            if ($pageCount -ge $maxPages -and $next) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Intune-AppProtection-MAM' `
+                        -Message "Pagination cap reached ($maxPages pages); managed app policy list may be truncated."
                 }
             }
         } catch {
@@ -45,14 +63,27 @@ function Invoke-NRGCollectIntuneAppProtection {
 
         # ── App configuration policies — device-managed (MDM-channel) ────────
         try {
-            $appCfgMdm = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/deviceAppManagement/mobileAppConfigurations' -ErrorAction Stop
-            foreach ($p in @($appCfgMdm.value)) {
-                $result.Data.AppConfigPolicies += @{
-                    Id          = $p.id
-                    DisplayName = [string]$p.displayName
-                    Description = [string]$p.description
-                    Type        = [string]$p.'@odata.type'
-                    Channel     = 'MDM'
+            $next = 'https://graph.microsoft.com/v1.0/deviceAppManagement/mobileAppConfigurations'
+            $maxPages  = 200
+            $pageCount = 0
+            while ($next -and $pageCount -lt $maxPages) {
+                $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                foreach ($p in @($page.value)) {
+                    $result.Data.AppConfigPolicies += @{
+                        Id          = $p.id
+                        DisplayName = [string]$p.displayName
+                        Description = [string]$p.description
+                        Type        = [string]$p.'@odata.type'
+                        Channel     = 'MDM'
+                    }
+                }
+                $next = $page.'@odata.nextLink'
+                $pageCount++
+            }
+            if ($pageCount -ge $maxPages -and $next) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Intune-AppProtection-AppCfg-MDM' `
+                        -Message "Pagination cap reached ($maxPages pages); MDM app configuration list may be truncated."
                 }
             }
         } catch {
@@ -63,14 +94,27 @@ function Invoke-NRGCollectIntuneAppProtection {
 
         # ── App configuration policies — MAM-channel (targeted, no device enrollment) ──
         try {
-            $appCfgMam = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/deviceAppManagement/targetedManagedAppConfigurations' -ErrorAction Stop
-            foreach ($p in @($appCfgMam.value)) {
-                $result.Data.AppConfigPolicies += @{
-                    Id          = $p.id
-                    DisplayName = [string]$p.displayName
-                    Description = [string]$p.description
-                    Type        = [string]$p.'@odata.type'
-                    Channel     = 'MAM'
+            $next = 'https://graph.microsoft.com/v1.0/deviceAppManagement/targetedManagedAppConfigurations'
+            $maxPages  = 200
+            $pageCount = 0
+            while ($next -and $pageCount -lt $maxPages) {
+                $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                foreach ($p in @($page.value)) {
+                    $result.Data.AppConfigPolicies += @{
+                        Id          = $p.id
+                        DisplayName = [string]$p.displayName
+                        Description = [string]$p.description
+                        Type        = [string]$p.'@odata.type'
+                        Channel     = 'MAM'
+                    }
+                }
+                $next = $page.'@odata.nextLink'
+                $pageCount++
+            }
+            if ($pageCount -ge $maxPages -and $next) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Intune-AppProtection-AppCfg-MAM' `
+                        -Message "Pagination cap reached ($maxPages pages); targeted MAM app configuration list may be truncated."
                 }
             }
         } catch {
@@ -87,4 +131,11 @@ function Invoke-NRGCollectIntuneAppProtection {
     }
 
     Set-NRGRawData -Key 'Intune-AppProtection' -Data $result
+    # v4.6.4 EMERGENCY FIX (Critical #3): added missing Register-NRGCoverage call
+    # per CLAUDE.md collector contract.
+    if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
+        $status = if ($result.Success) { 'Collected' } else { 'Failed' }
+        $note   = "MAM=$($result.Data.AppProtectionPolicies.Count) AppCfg=$($result.Data.AppConfigPolicies.Count)"
+        Register-NRGCoverage -Family 'Intune-AppProtection' -Status $status -Note $note
+    }
 }

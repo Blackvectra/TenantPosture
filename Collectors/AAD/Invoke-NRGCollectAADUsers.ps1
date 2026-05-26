@@ -33,7 +33,13 @@ function Invoke-NRGCollectAADUsers {
         $nextLink  = 'https://graph.microsoft.com/v1.0/users?$select=id,displayName,userPrincipalName,accountEnabled,userType,onPremisesSyncEnabled,assignedLicenses,lastPasswordChangeDateTime,createdDateTime&$top=500&$filter=userType eq ''Member'''
 
         $pageCount = 0
-        $maxPages  = 20   # Cap at 10,000 users to prevent memory exhaustion (ASVS — resource limits)
+        # v4.6.4 EMERGENCY FIX (High #4): raised from 20 → 200 to match the
+        # other AAD collectors (AAD-Roles, AAD-IdentityGovernance). The old
+        # cap of 10,000 users silently truncated mid-size enterprise tenants
+        # and produced inconsistent counts vs. other AAD passes. At $top=500
+        # × 200 pages = 100k user ceiling, which still bounds memory but
+        # covers any realistic single tenant.
+        $maxPages  = 200
 
         while ($nextLink -and $pageCount -lt $maxPages) {
             $pageResp = Invoke-MgGraphRequest -Method GET -Uri $nextLink -ErrorAction Stop
@@ -52,6 +58,12 @@ function Invoke-NRGCollectAADUsers {
             }
             $nextLink = $pageResp.'@odata.nextLink'
             $pageCount++
+        }
+        if ($pageCount -ge $maxPages -and $nextLink) {
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'AAD-Users' `
+                    -Message "Pagination cap reached ($maxPages pages); user list may be truncated."
+            }
         }
 
         $result.Data.Users      = $allUsers.ToArray()
@@ -79,6 +91,12 @@ function Invoke-NRGCollectAADUsers {
                 }
                 $regLink = $regResp.'@odata.nextLink'
                 $regPage++
+            }
+            if ($regPage -ge $maxPages -and $regLink) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'AAD-MFARegistration' `
+                        -Message "Pagination cap reached ($maxPages pages); MFA registration list may be truncated."
+                }
             }
 
             $mfaRegistered   = @($regDetails | Where-Object { $_.IsMfaRegistered }).Count

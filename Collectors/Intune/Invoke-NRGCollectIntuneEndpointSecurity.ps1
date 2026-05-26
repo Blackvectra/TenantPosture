@@ -130,9 +130,25 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
         # ── Legacy intents endpoint (older endpoint-security templates) ──────
         # Tenants created before unified settings catalog may have policies only here.
         # Same bucketing logic by templateDisplayName.
+        # v4.6.4 EMERGENCY FIX (Critical #3): added @odata.nextLink pagination.
         try {
-            $intents = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/beta/deviceManagement/intents?$select=id,displayName,description,templateId,isAssigned' -ErrorAction Stop
-            foreach ($i in @($intents.value)) {
+            $next = 'https://graph.microsoft.com/beta/deviceManagement/intents?$select=id,displayName,description,templateId,isAssigned'
+            $intentAll = @()
+            $maxPages  = 200
+            $pageCount = 0
+            while ($next -and $pageCount -lt $maxPages) {
+                $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                if ($page.value) { $intentAll += $page.value }
+                $next = $page.'@odata.nextLink'
+                $pageCount++
+            }
+            if ($pageCount -ge $maxPages -and $next) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Intune-EndpointSecurity-Intents' `
+                        -Message "Pagination cap reached ($maxPages pages); intents list may be truncated."
+                }
+            }
+            foreach ($i in $intentAll) {
                 $tplName = [string]$i.displayName
                 $bucket = $null
                 if     ($tplName -match 'LAPS|Local admin password') { $bucket = 'LAPS' }
@@ -176,4 +192,11 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
     }
 
     Set-NRGRawData -Key 'Intune-EndpointSecurity' -Data $result
+    # v4.6.4 EMERGENCY FIX (Critical #3): added missing Register-NRGCoverage call
+    # per CLAUDE.md collector contract.
+    if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
+        $status = if ($result.Success) { 'Collected' } else { 'Failed' }
+        $note   = "LAPS=$($result.Data.LAPSPolicies.Count) ASR=$($result.Data.ASRPolicies.Count) FW=$($result.Data.FirewallPolicies.Count) EDR=$($result.Data.EndpointDetectionPolicies.Count) AV=$($result.Data.AntivirusPolicies.Count)"
+        Register-NRGCoverage -Family 'Intune-EndpointSecurity' -Status $status -Note $note
+    }
 }

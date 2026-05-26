@@ -119,8 +119,64 @@ function Invoke-NRGCollectAADIdentityGovernance {
             } else { $null }
 
             $breakGlass = @()
+            # v4.6.4 EMERGENCY FIX (High #8): the old logic compared
+            # $ga.PrincipalId against ExcludeGroups which holds GROUP IDs —
+            # group IDs do not match user IDs, so the check always returned
+            # false-negative on group-based exclusions. That produced a
+            # false-positive "GA missing CA exclusion" finding on every tenant
+            # with the documented break-glass pattern of "Global Admin in
+            # CA-Exclude group".
+            #
+            # Fix: when a policy excludes a group, resolve the group's
+            # transitive members from Graph and check if $ga.PrincipalId
+            # is in the resolved set. Memberships are cached at the
+            # per-collector run level — repeated checks across many CA
+            # policies and many GAs do not re-fetch the same group.
+            $groupMemberCache = @{}
+            $resolveGroupMembers = {
+                param([string]$groupId)
+                if ([string]::IsNullOrWhiteSpace($groupId)) { return @() }
+                if ($groupMemberCache.ContainsKey($groupId)) {
+                    return $groupMemberCache[$groupId]
+                }
+                $members = @()
+                try {
+                    # transitiveMembers expands nested groups; default Graph
+                    # uses paginated 100-per-page responses.
+                    $next = "https://graph.microsoft.com/v1.0/groups/$groupId/transitiveMembers?`$select=id&`$top=999"
+                    $pageCount = 0
+                    while ($next -and $pageCount -lt 50) {
+                        $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                        foreach ($m in @($page.value ?? @())) {
+                            if ($m.id) { $members += [string]$m.id }
+                        }
+                        $next = $page.'@odata.nextLink'
+                        $pageCount++
+                    }
+                } catch {
+                    # Group may be deleted, hidden, or inaccessible — return
+                    # an empty set so the CA check just treats it as a
+                    # non-match. Logging happens once per failed group below.
+                    if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                        Register-NRGException -Source 'AAD-BreakGlass-GroupResolve' `
+                            -Message "transitiveMembers for $groupId failed: $($_.Exception.Message)"
+                    }
+                }
+                $groupMemberCache[$groupId] = $members
+                return $members
+            }
+
             if ($rawRoles -and $rawRoles.Success) {
-                $gaAccounts = @($rawRoles.Data.RoleAssignments | Where-Object {
+                # Use AllPrivilegedAssignments where available (covers both
+                # permanent and PIM-eligible GAs from the Roles collector
+                # v4.6.4 fix), falling back to legacy RoleAssignments for
+                # backward compat with older raw-data shapes.
+                $candidatePool = if ($rawRoles.Data.AllPrivilegedAssignments) {
+                    @($rawRoles.Data.AllPrivilegedAssignments)
+                } else {
+                    @($rawRoles.Data.RoleAssignments)
+                }
+                $gaAccounts = @($candidatePool | Where-Object {
                     $_.RoleDefinitionName -eq 'Global Administrator' -and
                     $_.PrincipalType -notmatch 'servicePrincipal'
                 })
@@ -128,11 +184,29 @@ function Invoke-NRGCollectAADIdentityGovernance {
                 foreach ($ga in $gaAccounts) {
                     $isExcluded = $false
                     if ($caPolicies -and $caPolicies.Success) {
-                        # Check if this GA principal is explicitly excluded from any CA policy
-                        $isExcluded = @($caPolicies.Data.Policies | Where-Object {
-                            $_.Conditions.Users.ExcludeUsers -contains $ga.PrincipalId -or
-                            $_.Conditions.Users.ExcludeGroups -contains $ga.PrincipalId
-                        }).Count -gt 0
+                        foreach ($policy in @($caPolicies.Data.Policies)) {
+                            $excludeUsers  = @($policy.Conditions.Users.ExcludeUsers  ?? @())
+                            $excludeGroups = @($policy.Conditions.Users.ExcludeGroups ?? @())
+
+                            # Direct user-id exclusion: unchanged.
+                            if ($excludeUsers -contains $ga.PrincipalId) {
+                                $isExcluded = $true
+                                break
+                            }
+                            # Group exclusion: resolve membership and check.
+                            $matched = $false
+                            foreach ($gid in $excludeGroups) {
+                                $members = & $resolveGroupMembers $gid
+                                if ($members -contains $ga.PrincipalId) {
+                                    $matched = $true
+                                    break
+                                }
+                            }
+                            if ($matched) {
+                                $isExcluded = $true
+                                break
+                            }
+                        }
                     }
                     $breakGlass += @{
                         PrincipalId  = [string]$ga.PrincipalId
@@ -140,6 +214,7 @@ function Invoke-NRGCollectAADIdentityGovernance {
                         UPN          = [string]$ga.PrincipalUPN
                         CAExcluded   = $isExcluded
                         Synced       = $ga.OnPremisesSyncEnabled -eq $true
+                        Source       = [string]($ga.Source ?? 'permanent')
                     }
                 }
             }

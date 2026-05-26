@@ -172,10 +172,14 @@ function Invoke-NRGCollectM365Copilot {
             $result.Data.SensitivityLabelCount = $labels.Count
             $result.Data.SensitivityLabelsEnabled = ($labels.Count -gt 0)
         } else {
-            # Fallback to Graph beta endpoint
+            # Fallback to Graph endpoint (v4.6.4 EMERGENCY FIX Critical #1).
+            # PRIOR URL '/beta/security/labels/sensitivityLabels' was wrong (404).
+            # Correct surfaces:
+            #   /beta/informationProtection/policy/labels  — user-scoped labels
+            #   /v1.0/security/informationProtection/sensitivityLabels — newer
             try {
                 $sLabels = Invoke-MgGraphRequest -Method GET `
-                    -Uri 'https://graph.microsoft.com/beta/security/labels/sensitivityLabels' `
+                    -Uri 'https://graph.microsoft.com/beta/informationProtection/policy/labels' `
                     -ErrorAction Stop
                 $lValues = @($sLabels.value ?? @())
                 $result.Data.SensitivityLabelCount = $lValues.Count
@@ -237,28 +241,19 @@ function Invoke-NRGCollectM365Copilot {
             }
         }
 
-        # Fallback: Graph DLP endpoint (preview / beta — may be inaccessible)
-        if ($copilotDlpFromPurview.Count -eq 0) {
-            try {
-                $dlpGraph = Invoke-MgGraphRequest -Method GET `
-                    -Uri 'https://graph.microsoft.com/beta/security/dataLossPreventionPolicies' `
-                    -ErrorAction Stop
-                $dgValues = @($dlpGraph.value ?? @())
-                foreach ($p in $dgValues) {
-                    $name = [string]($p.displayName ?? $p.name ?? '')
-                    $locs = @($p.locations ?? @())
-                    if ($name -match 'Copilot|AI' -or ($locs -contains 'Copilot')) {
-                        $copilotDlpFromPurview += [ordered]@{
-                            Name      = $name
-                            Enabled   = [bool]($p.enabled ?? $false)
-                            Workloads = $locs
-                            Source    = 'Graph-beta'
-                        }
-                    }
-                }
-            } catch {
-                $result.Errors += "Graph DLP endpoint inaccessible: $($_.Exception.Message)"
-            }
+        # v4.6.4 EMERGENCY FIX (Critical #1): The Graph DLP fallback endpoint
+        # '/beta/security/dataLossPreventionPolicies' does not exist as a
+        # readable resource — DLP compliance policies are NOT exposed through
+        # Graph today. The authoritative source is Get-DlpCompliancePolicy
+        # over an IPP session, already collected by the Purview collector.
+        # If the Purview pass produced nothing, downstream evaluators must
+        # route to NotApplicable rather than relying on a fake fallback that
+        # would silently leave CopilotDLPPolicies empty without surfacing a
+        # collection failure. Therefore: no Graph fallback. If $purview was
+        # absent or unsuccessful, record an explicit Errors entry so the
+        # evaluator and HTML report can show the gap honestly.
+        if (-not ($purview -and $purview.Success)) {
+            $result.Errors += 'Copilot DLP requires Purview/IPPS session (Get-DlpCompliancePolicy); no Graph fallback exists.'
         }
 
         $result.Data.CopilotDLPPolicies = $copilotDlpFromPurview
