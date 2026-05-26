@@ -200,33 +200,74 @@ foreach ($client in $clients) {
     $errMsg = ''
 
     try {
+        # Clear-NRGState (not Clear-NRGFindings) to prevent raw-data bleed between tenants — CLAUDE.md mandates this.
+        # Run BEFORE any tenant context switch so prior tenant's raw data, coverage,
+        # and exception log cannot leak into the next client's evaluation pass.
+        Clear-NRGState
+
         # Switch Graph context to this client tenant via GDAP
         # TenantId already validated as GUID above
         Write-Host "  [-] Switching Graph context → $($client.TenantId)..." -ForegroundColor DarkGray
         Connect-MgGraph -TenantId $client.TenantId -ContextScope Process -NoWelcome -ErrorAction Stop
 
-        # Connect EXO via delegated org
-        Write-Host "  [-] Connecting EXO → $($client.DelegatedOrg)..." -ForegroundColor DarkGray
-        Connect-ExchangeOnline -DelegatedOrganization $client.DelegatedOrg `
-            -ShowBanner:$false -ErrorAction Stop
-
-        # Build params
-        $params = @{ OutputPath = $clientOut }
-        if ($client.UserPrincipalName) { $params['UserPrincipalName'] = $client.UserPrincipalName }
-        if ($client.SkipPurview)       { $params['SkipPurview']       = $true }
-        if ($client.SkipTeams)         { $params['SkipTeams']         = $true }
-        if ($client.SkipSharePoint)    { $params['SkipSharePoint']    = $true }
-        if ($client.SkipIntune)        { $params['SkipIntune']        = $true }
-        if ($client.SkipPowerPlatform) { $params['SkipPowerPlatform'] = $true }
-        if ($client.SkipDNS)           { $params['SkipDNS']           = $true }
-        if ($JsonOnly)                 { $params['JsonOnly']           = $true }
-        if ($client.DnsDomains -and @($client.DnsDomains).Count -gt 0) {
-            $params['DnsDomains'] = @($client.DnsDomains)
+        # Verify Graph context actually switched to the expected tenant.
+        # Connect-MgGraph can return success while leaving a cached context
+        # bound to a different tenant (token still valid for prior tenant,
+        # GDAP relationship pending, etc.). Trusting the return value alone
+        # risks running an assessment against the WRONG tenant and writing
+        # findings to the wrong client's output directory.
+        # NOTE: $tenantMismatch flag short-circuits to skip EXO connect and
+        # orchestrator run while still flowing through finally + batch summary,
+        # so the operator sees the skipped client in the run summary table.
+        $tenantMismatch = $false
+        $ctx = Get-MgContext
+        if (-not $ctx -or $ctx.TenantId -ne $client.TenantId) {
+            $actualTenant = if ($ctx) { $ctx.TenantId } else { '<no context>' }
+            Write-Warning "Tenant context mismatch for $($client.ClientName): expected $($client.TenantId), got $actualTenant. Skipping."
+            $status = 'TenantMismatch'
+            $errMsg = "Graph context tenant $actualTenant != expected $($client.TenantId)"
+            $tenantMismatch = $true
         }
 
-        # Run assessment — collectors + evaluators + publishers
-        Clear-NRGFindings
-        & $orchPath @params
+        if (-not $tenantMismatch) {
+            # Connect EXO via delegated org
+            Write-Host "  [-] Connecting EXO → $($client.DelegatedOrg)..." -ForegroundColor DarkGray
+            Connect-ExchangeOnline -DelegatedOrganization $client.DelegatedOrg `
+                -ShowBanner:$false -ErrorAction Stop
+
+            # Same defense-in-depth for EXO. Get-ConnectionInformation surfaces
+            # the actual tenant of the established session — compare against
+            # what we asked for. A mismatch means another tenant's mailbox
+            # cmdlets would run, which is a categorical assessment failure.
+            $exoCtx = Get-ConnectionInformation -ErrorAction SilentlyContinue |
+                Where-Object { $_.State -eq 'Connected' } |
+                Select-Object -First 1
+            if ($exoCtx -and $exoCtx.TenantId -and $exoCtx.TenantId -ne $client.TenantId) {
+                Write-Warning "EXO context mismatch for $($client.ClientName): expected $($client.TenantId), got $($exoCtx.TenantId). Skipping."
+                $status = 'TenantMismatch'
+                $errMsg = "EXO context tenant $($exoCtx.TenantId) != expected $($client.TenantId)"
+                $tenantMismatch = $true
+            }
+        }
+
+        if (-not $tenantMismatch) {
+            # Build params
+            $params = @{ OutputPath = $clientOut }
+            if ($client.UserPrincipalName) { $params['UserPrincipalName'] = $client.UserPrincipalName }
+            if ($client.SkipPurview)       { $params['SkipPurview']       = $true }
+            if ($client.SkipTeams)         { $params['SkipTeams']         = $true }
+            if ($client.SkipSharePoint)    { $params['SkipSharePoint']    = $true }
+            if ($client.SkipIntune)        { $params['SkipIntune']        = $true }
+            if ($client.SkipPowerPlatform) { $params['SkipPowerPlatform'] = $true }
+            if ($client.SkipDNS)           { $params['SkipDNS']           = $true }
+            if ($JsonOnly)                 { $params['JsonOnly']           = $true }
+            if ($client.DnsDomains -and @($client.DnsDomains).Count -gt 0) {
+                $params['DnsDomains'] = @($client.DnsDomains)
+            }
+
+            # Run assessment — collectors + evaluators + publishers
+            & $orchPath @params
+        }
 
     } catch {
         $status = 'Failed'

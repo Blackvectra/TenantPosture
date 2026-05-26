@@ -15,9 +15,9 @@
 #   Manual verification required — cannot automate credential storage or CA exclusion checks.
 #
 # Reads from module state:
-#   Get-NRGRawData -Key 'AAD-Roles'   (new Session 2 collector)
-#   Get-NRGRawData -Key 'AAD-PIM'     (new Session 2 collector)
-#   Get-NRGRawData -Key 'AAD-Users'   (new Session 2 collector)
+#   Get-NRGRawData -Key 'AAD-DirectoryRoles'  (Invoke-NRGCollectAADRoles)
+#   Get-NRGRawData -Key 'AAD-PIMSchedules'    (Invoke-NRGCollectAADRoles)
+#   Get-NRGRawData -Key 'AAD-Users'           (Invoke-NRGCollectAADUsers)
 #
 # NIST SP 800-53: AC-2(7), AC-6(2), AC-6(5), IA-2(6), CP-6, IR-4
 # MITRE ATT&CK:   T1078.002 (Domain Accounts), T1078.004 (Cloud Accounts),
@@ -27,8 +27,8 @@
 function Test-NRGControlAADPrivAccess {
     [CmdletBinding()] param()
 
-    $roleRaw = Get-NRGRawData -Key 'AAD-Roles'
-    $pimRaw  = Get-NRGRawData -Key 'AAD-PIM'
+    $roleRaw = Get-NRGRawData -Key 'AAD-DirectoryRoles'
+    $pimRaw  = Get-NRGRawData -Key 'AAD-PIMSchedules'
     $userRaw = Get-NRGRawData -Key 'AAD-Users'
 
     # Roles collector failed — skip all controls

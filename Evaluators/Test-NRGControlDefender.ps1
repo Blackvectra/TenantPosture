@@ -405,7 +405,7 @@ function Test-NRGControlDefenderDLPWorkloads {
     [CmdletBinding()] param()
     $cid = 'DEF-4.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-Labels'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview DLP data not collected'; return
     }
@@ -428,7 +428,7 @@ function Test-NRGControlDefenderDLPSITs {
     [CmdletBinding()] param()
     $cid = 'DEF-4.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-Labels'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview DLP data not collected'; return
     }
@@ -472,7 +472,7 @@ function Test-NRGControlDefenderEndpointDLP {
     [CmdletBinding()] param()
     $cid = 'DEF-4.5'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview-Labels'
+    $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return
     }

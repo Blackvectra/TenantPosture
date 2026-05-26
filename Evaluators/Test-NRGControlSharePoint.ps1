@@ -140,7 +140,7 @@ function Test-NRGControlSPOOneDriveSync {
     [CmdletBinding()] param()
     $cid = 'SPO-2.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $spo = Get-NRGRawData -Key 'SharePoint-TenantSettings'
+    $spo = Get-NRGRawData -Key 'SharePoint'
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
@@ -157,7 +157,7 @@ function Test-NRGControlSPOLinkExpiration {
     [CmdletBinding()] param()
     $cid = 'SPO-2.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $spo = Get-NRGRawData -Key 'SharePoint-TenantSettings'
+    $spo = Get-NRGRawData -Key 'SharePoint'
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
@@ -176,7 +176,7 @@ function Test-NRGControlSPOAppsFromStore {
     [CmdletBinding()] param()
     $cid = 'SPO-2.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $spo = Get-NRGRawData -Key 'SharePoint-TenantSettings'
+    $spo = Get-NRGRawData -Key 'SharePoint'
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
@@ -193,7 +193,7 @@ function Test-NRGControlSPOCustomScript {
     [CmdletBinding()] param()
     $cid = 'SPO-2.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $spo = Get-NRGRawData -Key 'SharePoint-TenantSettings'
+    $spo = Get-NRGRawData -Key 'SharePoint'
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
@@ -211,7 +211,7 @@ function Test-NRGControlSPO3PStorage {
     [CmdletBinding()] param()
     $cid = 'SPO-2.5'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $spo = Get-NRGRawData -Key 'SharePoint-TenantSettings'
+    $spo = Get-NRGRawData -Key 'SharePoint'
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
@@ -224,7 +224,7 @@ function Test-NRGControlSPOEmailAttestation {
     [CmdletBinding()] param()
     $cid = 'SPO-2.6'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $spo = Get-NRGRawData -Key 'SharePoint-TenantSettings'
+    $spo = Get-NRGRawData -Key 'SharePoint'
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
@@ -241,7 +241,7 @@ function Test-NRGControlSPOReauth {
     [CmdletBinding()] param()
     $cid = 'SPO-2.7'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $spo = Get-NRGRawData -Key 'SharePoint-TenantSettings'
+    $spo = Get-NRGRawData -Key 'SharePoint'
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
@@ -258,7 +258,7 @@ function Test-NRGControlSPODomainSync {
     [CmdletBinding()] param()
     $cid = 'SPO-2.8'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $spo = Get-NRGRawData -Key 'SharePoint-TenantSettings'
+    $spo = Get-NRGRawData -Key 'SharePoint'
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
@@ -275,7 +275,7 @@ function Test-NRGControlSPOSiteAdmins {
     [CmdletBinding()] param()
     $cid = 'SPO-3.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $spo = Get-NRGRawData -Key 'SharePoint-TenantSettings'
+    $spo = Get-NRGRawData -Key 'SharePoint'
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
@@ -291,7 +291,7 @@ function Test-NRGControlSPOSharingNotifications {
     [CmdletBinding()] param()
     $cid = 'SPO-3.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $spo = Get-NRGRawData -Key 'SharePoint-TenantSettings'
+    $spo = Get-NRGRawData -Key 'SharePoint'
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
@@ -314,7 +314,7 @@ function Test-NRGControlSPOVersionHistory {
     [CmdletBinding()] param()
     $cid = 'SPO-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $spo = Get-NRGRawData -Key 'SharePoint-TenantSettings'
+    $spo = Get-NRGRawData -Key 'SharePoint'
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
@@ -330,7 +330,7 @@ function Test-NRGControlSPOGuestExpiry {
     [CmdletBinding()] param()
     $cid = 'SPO-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $spo = Get-NRGRawData -Key 'SharePoint-TenantSettings'
+    $spo = Get-NRGRawData -Key 'SharePoint'
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
