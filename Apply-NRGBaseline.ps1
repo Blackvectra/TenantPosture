@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 #
-# Apply-NRGBaseline.ps1  (v4.6.1)
+# Apply-NRGBaseline.ps1  (v4.6.3)
 # Interactive WRITE-MODE deployment tool for NRG-Assessment remediations.
 #
 # NRG Technology Services | NextLayerSec LLC
@@ -16,13 +16,24 @@
 # Safety bars:
 #   * SupportsShouldProcess + ConfirmImpact='High' (free -WhatIf / -Confirm)
 #   * Per-control idempotency re-read (no write if already compliant)
-#   * Rollback log written for every applied change (before-state captured)
+#   * Rollback log flushed JSON-lines per applied change (interrupt-safe audit)
+#   * Tenant-ID pin: results.json Metadata.TenantId must match connected Graph
+#     session before any apply executes — prevents Tenant-B-apply-to-Tenant-A.
 #   * Auth gate — refuses to run if required service is not connected
 #   * Filters input findings to State = Gap / Partial only
+#   * Path-traversal guard on Apply/*.ps1 dot-source (mirrors psm1 loader)
 #
 # Apply functions are top-level script functions, NOT module exports — they are
 # dot-sourced from Apply/Apply-NRG*.ps1 at script start. This matches the
 # Invoke-NRGAssessment.ps1 convention (also a top-level orchestrator script).
+#
+# -Force semantics:
+#   -Force skips the per-finding -Confirm prompt and sets ConfirmPreference='None'
+#   for the duration of the loop. It DOES NOT:
+#     * promote any CA policy from report-only to enabled
+#     * bypass the tenant-ID pin / break-glass / path-traversal safety checks
+#     * override -WhatIf (WhatIfPreference remains independent)
+#   In short: -Force = "don't ask, just run the same safe path interactively".
 #
 # Usage:
 #   .\Apply-NRGBaseline.ps1 -ResultsPath .\output\contoso-20260524-results.json -WhatIf
@@ -118,18 +129,41 @@ if (Test-Path -LiteralPath $aclHelperPath) {
     Write-Warning "Set-NRGSensitiveFileAcl.ps1 not found at $aclHelperPath — output files will not be ACL-hardened."
 }
 
+# Break-glass exclusion helper (H7) — looked up by AAD CA-creating Apply
+# functions before writing a policy body, to prevent tenant-wide lockout if
+# a future operator promotes the report-only policy to enabled via portal.
+$bgHelperPath = Join-Path $scriptDir 'Lib' 'Get-NRGBreakGlassExclusions.ps1'
+if (Test-Path -LiteralPath $bgHelperPath) {
+    . $bgHelperPath
+} else {
+    Write-Warning "Get-NRGBreakGlassExclusions.ps1 not found at $bgHelperPath — CA policies will be created with empty exclusion lists."
+}
+
 # ── Dot-source the Apply functions ──────────────────────────────────────────
+# OWASP A01: a shared-MSP-workstation attacker could drop Apply-NRG-pwn.ps1
+# into Apply/ via a malicious symlink or junction, then dot-source-time
+# arbitrary code execution occurs the next time the operator runs the apply
+# tool. Mirror the psm1 loader's StartsWith() guard — resolve each candidate
+# path and refuse anything that escapes the Apply/ root.
 $applyDir = Join-Path $scriptDir 'Apply'
 if (-not (Test-Path -LiteralPath $applyDir)) {
     throw "Apply directory not found: $applyDir"
 }
+$resolvedApplyDir = [System.IO.Path]::GetFullPath($applyDir)
 $applyScripts = @(Get-ChildItem -LiteralPath $applyDir -Filter 'Apply-NRG*.ps1' -File -ErrorAction Stop)
 Write-Host "[-] Loading $($applyScripts.Count) apply function(s)..." -ForegroundColor Cyan
+$loadedCount = 0
 foreach ($s in $applyScripts) {
-    . $s.FullName
+    $resolvedFile = [System.IO.Path]::GetFullPath($s.FullName)
+    if (-not $resolvedFile.StartsWith($resolvedApplyDir, [StringComparison]::OrdinalIgnoreCase)) {
+        Write-Warning "Skipping file outside Apply/ root (path traversal?): $($s.FullName)"
+        continue
+    }
+    . $resolvedFile
+    $loadedCount++
     Write-Verbose "  Loaded: $($s.Name)"
 }
-Write-Host "  [+] Loaded" -ForegroundColor Green
+Write-Host "  [+] Loaded $loadedCount" -ForegroundColor Green
 
 # ── Dispatch table: ControlId -> Apply function ─────────────────────────────
 # Adding a new control = add a line here + drop a file into Apply/.
@@ -180,6 +214,79 @@ if ($PSCmdlet.ParameterSetName -eq 'FromFile') {
     }
     $loadedFindings = @($raw.Findings)
     Write-Host "  [+] Loaded $($loadedFindings.Count) findings" -ForegroundColor Green
+
+    # ── Tenant-ID pin ───────────────────────────────────────────────────────
+    # H6: results.json must be pinned to the connected Graph (and EXO) session.
+    # An operator with two tenant connections open could otherwise apply
+    # Tenant B's remediations to Tenant A. Skip in -WhatIf mode (no harm —
+    # nothing is being written — and -WhatIf is the documented preview path
+    # that doesn't require a real connection).
+    $resultsTenantId     = $null
+    $resultsTenantDomain = $null
+    if ($raw.PSObject.Properties.Match('Metadata').Count -gt 0 -and $raw.Metadata) {
+        if ($raw.Metadata.PSObject.Properties.Match('TenantId').Count -gt 0) {
+            $resultsTenantId = [string]$raw.Metadata.TenantId
+        }
+        if ($raw.Metadata.PSObject.Properties.Match('TenantDomain').Count -gt 0) {
+            $resultsTenantDomain = [string]$raw.Metadata.TenantDomain
+        }
+    }
+
+    if (-not $WhatIfPreference) {
+        if ([string]::IsNullOrWhiteSpace($resultsTenantId)) {
+            throw "Results JSON has no TenantId — refusing to apply against an unverified target."
+        }
+
+        # Graph context check
+        $mgCtx = $null
+        try { $mgCtx = Get-MgContext -ErrorAction SilentlyContinue } catch { }
+        if (-not $mgCtx -or [string]::IsNullOrWhiteSpace($mgCtx.TenantId)) {
+            throw "Graph session not connected — cannot verify tenant pin. Run Connect-NRGServices first."
+        }
+        if ($mgCtx.TenantId -ne $resultsTenantId) {
+            throw "Tenant mismatch: results.json was generated for $resultsTenantId, connected Graph session is $($mgCtx.TenantId). Refusing to apply to wrong tenant."
+        }
+        Write-Host "  [+] Tenant pin: Graph $($mgCtx.TenantId) matches results.json" -ForegroundColor Green
+
+        # EXO context check (best-effort — only fires if EOM is loaded and a
+        # session is open; the auth gate further below handles the "not
+        # connected at all" case for EXO-dependent controls).
+        if (Get-Command Get-ConnectionInformation -ErrorAction SilentlyContinue) {
+            $exoInfo = $null
+            try { $exoInfo = @(Get-ConnectionInformation -ErrorAction SilentlyContinue) } catch { }
+            $exoActive = @($exoInfo | Where-Object { $_.State -eq 'Connected' -or $_.TokenStatus -eq 'Active' })
+            if ($exoActive.Count -gt 0) {
+                $exoTenantId = $null
+                foreach ($p in 'TenantId','TenantID','TenantGuid') {
+                    if ($exoActive[0].PSObject.Properties.Match($p).Count -gt 0 -and $exoActive[0].$p) {
+                        $exoTenantId = [string]$exoActive[0].$p
+                        break
+                    }
+                }
+                if ($exoTenantId -and $exoTenantId -ne $resultsTenantId) {
+                    throw "Tenant mismatch (EXO): results.json TenantId $resultsTenantId, EXO session TenantId $exoTenantId. Refusing to apply."
+                }
+                # If EXO exposes Organization (the .onmicrosoft.com routing domain)
+                # and results carry TenantDomain, surface a warning on mismatch
+                # but do not block — TenantDomain in results may be primary, EXO
+                # always reports the routing domain.
+                if ($resultsTenantDomain -and $exoActive[0].PSObject.Properties.Match('Organization').Count -gt 0) {
+                    $exoOrg = [string]$exoActive[0].Organization
+                    if ($exoOrg -and -not (
+                        $exoOrg -eq $resultsTenantDomain -or
+                        $resultsTenantDomain.StartsWith(($exoOrg -split '\.')[0], [StringComparison]::OrdinalIgnoreCase)
+                    )) {
+                        Write-Warning "EXO Organization '$exoOrg' does not obviously match results.json TenantDomain '$resultsTenantDomain'. TenantId pin matched, so proceeding — verify this is intentional."
+                    }
+                }
+                Write-Host "  [+] Tenant pin: EXO session matches results.json" -ForegroundColor Green
+            }
+        }
+    } else {
+        if ([string]::IsNullOrWhiteSpace($resultsTenantId)) {
+            Write-Warning "Results JSON has no TenantId (skipped under -WhatIf, but real run will be refused)."
+        }
+    }
 } else {
     $loadedFindings = @($Findings)
     Write-Host "[-] Using $($loadedFindings.Count) findings from -Findings parameter" -ForegroundColor Cyan
@@ -192,6 +299,23 @@ Write-Host "  [+] $($actionable.Count) findings in Gap/Partial state" -Foregroun
 # ── Filter: ControlIds scope (if provided) ──────────────────────────────────
 if ($ControlIds -and $ControlIds.Count -gt 0) {
     $beforeCount = $actionable.Count
+    # M-ControlIds typo: warn on any -ControlIds value that doesn't appear in
+    # the actionable Gap/Partial set. Silently dropping a typo'd ID let the
+    # operator believe the apply ran when it actually no-op'd. We compare
+    # against the actionable set (post Gap/Partial filter) — an ID that exists
+    # in results.json but is Satisfied / NotApplicable is still worth surfacing
+    # because the operator clearly expected it to be a remediation target.
+    $loadedIds     = @($loadedFindings | ForEach-Object { $_.ControlId } | Sort-Object -Unique)
+    $actionableIds = @($actionable     | ForEach-Object { $_.ControlId } | Sort-Object -Unique)
+    foreach ($cid in $ControlIds) {
+        if ($actionableIds -notcontains $cid) {
+            if ($loadedIds -contains $cid) {
+                Write-Warning "ControlId '$cid' was found in results.json but is not in Gap/Partial state — nothing to apply."
+            } else {
+                Write-Warning "ControlId '$cid' requested but not found in results.json — typo?"
+            }
+        }
+    }
     $actionable = @($actionable | Where-Object { $ControlIds -contains $_.ControlId })
     Write-Host "  [+] -ControlIds filter: $beforeCount -> $($actionable.Count)" -ForegroundColor Green
 }
@@ -268,10 +392,39 @@ if (-not (Test-Path -LiteralPath $ReportsPath)) {
     # then the subsequent WriteAllText fails with "path not found".
     New-Item -LiteralPath $ReportsPath -ItemType Directory -Force -WhatIf:$false | Out-Null
 }
-$ts = Get-Date -Format 'yyyyMMdd-HHmmss'
-$rollbackPath = Join-Path $ReportsPath "apply-$ts-rollback.json"
-$resultsJsonPath = Join-Path $ReportsPath "apply-$ts-results.json"
-$resultsMdPath = Join-Path $ReportsPath "apply-$ts-results.md"
+# H5: filename uniqueness. yyyyMMdd-HHmmss alone collides under two
+# concurrent invocations within the same second (same operator, two MSP
+# tenants in parallel; or scheduled tasks). Append PID + short GUID so the
+# rollback log of one invocation can never overwrite another's.
+$ts        = Get-Date -Format 'yyyyMMdd-HHmmss'
+$uniqTag   = "$PID-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+# H4: rollback log is now JSON-lines (.jsonl) flushed per applied change so a
+# Ctrl-C mid-loop still leaves a complete audit trail of changes already
+# committed to the tenant. After the loop we ALSO emit the consolidated
+# .json document for human reading, but the .jsonl is the authoritative
+# interrupt-safe record.
+$rollbackJsonlPath = Join-Path $ReportsPath "apply-$ts-$uniqTag-rollback.jsonl"
+$rollbackPath      = Join-Path $ReportsPath "apply-$ts-$uniqTag-rollback.json"
+$resultsJsonPath   = Join-Path $ReportsPath "apply-$ts-$uniqTag-results.json"
+$resultsMdPath     = Join-Path $ReportsPath "apply-$ts-$uniqTag-results.md"
+
+# ── JSONL rollback helper (interrupt-safe append) ───────────────────────────
+function Add-NRGRollbackJsonl {
+    param(
+        [Parameter(Mandatory)] [object] $Entry,
+        [Parameter(Mandatory)] [string] $Path
+    )
+    $line = (ConvertTo-Json -InputObject $Entry -Depth 8 -Compress) + "`n"
+    # First write creates the file. ACL it ONCE on creation so subsequent
+    # appends inherit the same restricted ACL (Win) or are no-op (Linux).
+    $created = -not (Test-Path -LiteralPath $Path)
+    [System.IO.File]::AppendAllText($Path, $line, [System.Text.UTF8Encoding]::new($false))
+    if ($created -and (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue)) {
+        try { Set-NRGSensitiveFileAcl -Path $Path } catch {
+            Write-Warning "Failed to ACL rollback jsonl '$Path': $($_.Exception.Message)"
+        }
+    }
+}
 
 # ── DryRun preview (markdown to console) ────────────────────────────────────
 if ($DryRun -or $WhatIfPreference) {
@@ -365,15 +518,28 @@ try {
             }
 
             if ($r.Status -eq 'Applied') {
-                $rollbackEntries.Add([PSCustomObject]@{
-                    Timestamp = $r.Timestamp
-                    ControlId = $r.ControlId
-                    Action    = $r.Action
-                    Before    = $r.Before
-                    After     = $r.After
+                $rbEntry = [PSCustomObject]@{
+                    Timestamp     = $r.Timestamp
+                    ControlId     = $r.ControlId
+                    Action        = $r.Action
+                    Before        = $r.Before
+                    After         = $r.After
                     ApplyFunction = $fnName
-                    ReverseHint = "To reverse: see Before state above and run the inverse cmdlet manually."
-                })
+                    ReverseHint   = "To reverse: see Before state above and run the inverse cmdlet manually."
+                    # H7: surface any break-glass warning the apply function
+                    # attached to the result so it lands in the rollback log,
+                    # not just in the console transcript that may scroll off.
+                    Notes         = if ($r.PSObject.Properties.Match('Notes').Count -gt 0) { $r.Notes } else { $null }
+                }
+                $rollbackEntries.Add($rbEntry)
+                # H4: flush IMMEDIATELY — do not wait for end-of-loop. If the
+                # operator hits Ctrl-C between this apply and the next, the
+                # change to the tenant is real and the audit trail must exist.
+                try {
+                    Add-NRGRollbackJsonl -Entry $rbEntry -Path $rollbackJsonlPath
+                } catch {
+                    Write-Warning "Failed to persist rollback entry for $cid : $($_.Exception.Message)"
+                }
             }
         }
     }
@@ -396,12 +562,17 @@ foreach ($f in $noRemediation) {
 
 # ── Write rollback log ──────────────────────────────────────────────────────
 if ($rollbackEntries.Count -gt 0) {
+    # H4 ROLLBACK PERSISTENCE: at this point each entry has already been
+    # flushed individually to $rollbackJsonlPath via Add-NRGRollbackJsonl. The
+    # consolidated .json document below is purely for human reading — the
+    # .jsonl is the authoritative interrupt-safe record.
     $rollbackJson = @{
         Metadata = @{
-            ToolVersion  = '4.6.1'
+            ToolVersion  = $applyVersion
             GeneratedAt  = (Get-Date).ToString('o')
             ResultsPath  = if ($PSCmdlet.ParameterSetName -eq 'FromFile') { $ResultsPath } else { '(in-memory findings)' }
             EntryCount   = $rollbackEntries.Count
+            JsonlPath    = $rollbackJsonlPath
         }
         Entries = @($rollbackEntries)
     } | ConvertTo-Json -Depth 12
@@ -428,7 +599,7 @@ $summary = @{
 
 $resultsJson = @{
     Metadata = @{
-        ToolVersion = '4.6.1'
+        ToolVersion = $applyVersion
         GeneratedAt = (Get-Date).ToString('o')
         Mode        = if ($WhatIfPreference) { 'WhatIf' } elseif ($Force) { 'Force' } else { 'Interactive' }
         ResultsPath = if ($PSCmdlet.ParameterSetName -eq 'FromFile') { $ResultsPath } else { '(in-memory findings)' }
@@ -448,7 +619,7 @@ $md = [System.Text.StringBuilder]::new()
 [void]$md.AppendLine("")
 [void]$md.AppendLine("**Generated:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')  ")
 [void]$md.AppendLine("**Mode:** $(if ($WhatIfPreference) { 'WhatIf' } elseif ($Force) { 'Force' } else { 'Interactive' })  ")
-[void]$md.AppendLine("**Tool version:** 4.6.1")
+[void]$md.AppendLine("**Tool version:** $applyVersion")
 [void]$md.AppendLine("")
 [void]$md.AppendLine("## Summary")
 [void]$md.AppendLine("")
@@ -500,8 +671,9 @@ Write-Host ""
 Write-Host "  Results (JSON)  : $resultsJsonPath"                             -ForegroundColor White
 Write-Host "  Results (MD)    : $resultsMdPath"                               -ForegroundColor White
 if ($rollbackEntries.Count -gt 0) {
-    Write-Host "  Rollback log    : $rollbackPath"                            -ForegroundColor White
-    Write-Host "                    KEEP THIS FILE — required to reverse changes." -ForegroundColor Yellow
+    Write-Host "  Rollback (jsonl): $rollbackJsonlPath"                       -ForegroundColor White
+    Write-Host "  Rollback (json) : $rollbackPath"                            -ForegroundColor White
+    Write-Host "                    KEEP THESE FILES — required to reverse changes." -ForegroundColor Yellow
 } else {
     Write-Host "  Rollback log    : (no changes applied — log not written)"   -ForegroundColor DarkGray
 }
