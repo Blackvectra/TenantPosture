@@ -56,25 +56,35 @@ function Apply-NRGAADLegacyAuth {
             return [PSCustomObject]$result
         }
 
+        # v4.6.4 FIX: replace unguarded $_.Conditions.ClientAppTypes /
+        # $_.GrantControls.BuiltInControls chains with Get-NRGNestedProperty.
+        # Under Set-StrictMode -Version Latest the first CA policy with a null
+        # Conditions or GrantControls aborts the entire Where-Object scan →
+        # both arrays come back empty → DUPLICATE CA POLICY gets created on
+        # every apply.
         $blocking = @($existing | Where-Object {
+            $cat = Get-NRGNestedProperty -Object $_ -Path 'Conditions.ClientAppTypes' -Default @()
+            $bic = Get-NRGNestedProperty -Object $_ -Path 'GrantControls.BuiltInControls' -Default @()
             $_.State -eq 'enabled' -and
             (
-                ($_.Conditions.ClientAppTypes -contains 'other') -or
-                ($_.Conditions.ClientAppTypes -contains 'exchangeActiveSync')
+                (@($cat) -contains 'other') -or
+                (@($cat) -contains 'exchangeActiveSync')
             ) -and
-            ($_.GrantControls.BuiltInControls -contains 'block')
+            (@($bic) -contains 'block')
         })
 
         # M-Idempotency: also match NRG-* policies regardless of state, so a
         # renamed-or-report-only NRG policy doesn't cause us to create a
         # duplicate on the next apply.
         $nrgOwned = @($existing | Where-Object {
+            $cat = Get-NRGNestedProperty -Object $_ -Path 'Conditions.ClientAppTypes' -Default @()
+            $bic = Get-NRGNestedProperty -Object $_ -Path 'GrantControls.BuiltInControls' -Default @()
             $_.DisplayName -like 'NRG-*' -and
             (
-                ($_.Conditions.ClientAppTypes -contains 'other') -or
-                ($_.Conditions.ClientAppTypes -contains 'exchangeActiveSync')
+                (@($cat) -contains 'other') -or
+                (@($cat) -contains 'exchangeActiveSync')
             ) -and
-            ($_.GrantControls.BuiltInControls -contains 'block')
+            (@($bic) -contains 'block')
         })
 
         $result.Before = [PSCustomObject]@{

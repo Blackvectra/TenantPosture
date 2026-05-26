@@ -215,8 +215,9 @@ function Test-NRGControlSPO3PStorage {
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
+    # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
     # Check OneDriveForGuestsEnabled as proxy for third-party storage
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'Third-party storage service status requires manual verification: SharePoint Admin Center > Settings > Third-party storage services.' -Remediation $ctrl.Remediation
+    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Third-party storage service status requires manual verification: SharePoint Admin Center > Settings > Third-party storage services.' -Remediation $ctrl.Remediation
 }
 
 # ── SPO-2.6 Email Attestation for Sharing ────────────────────────────────────
@@ -280,9 +281,10 @@ function Test-NRGControlSPOSiteAdmins {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
+    # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
     Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-        -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
-        -Detail 'Site collection admin enumeration requires iterating all sites (impractical at scale). Verify via SharePoint Admin Center > Sites > Active sites > filter by admins, or run Get-SPOSite -Limit ALL | Get-SPOUser -Group "Site Collection Administrators".' `
+        -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
+        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Site collection admin enumeration requires iterating all sites (impractical at scale). Verify via SharePoint Admin Center > Sites > Active sites > filter by admins, or run Get-SPOSite -Limit ALL | Get-SPOUser -Group "Site Collection Administrators".' `
         -Remediation $ctrl.Remediation
 }
 
@@ -319,10 +321,13 @@ function Test-NRGControlSPOVersionHistory {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    # Version history is on by default — check if it's been explicitly disabled
-    Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-        -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-        -Detail 'OneDrive/SharePoint version history is enabled by default. Verify via SharePoint Admin Center > Settings that version limits have not been reduced to zero.'
+    # v4.6.4 CRITICAL FIX: prior code returned hardcoded Satisfied without
+    # actually inspecting any version-history config — that's a production
+    # false-negative. Downgrade to NotApplicable with explicit manual-review
+    # marker until a real per-site-collection check is implemented in v4.7.0.
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+        -Title "$($ctrl.Title) (Manual review required)" -FrameworkIds $cit `
+        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Version history retention varies per site collection and cannot be assumed from tenant-level data. Verify via SharePoint Admin Center > Settings that version limits have not been reduced to zero on any site collection.'
 }
 
 # ── SPO-3.4 SharePoint Guest Access Expiration Enabled ────────────────────────

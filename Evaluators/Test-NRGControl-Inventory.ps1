@@ -115,9 +115,18 @@ function Test-NRGControlInventoryOAuthApps {
             $scope = [string]($_.Scope ?? '')
             $sensitive | Where-Object { $scope -match $_ }
         })
+        # v4.6.4 FIX: the prior `$highRisk | Where-Object { $_.AppName -eq $_.AppName }`
+        # was a self-comparison (always-true) — every app got the [HIGH RISK SCOPE]
+        # label whenever any high-risk app existed. Build a lookup set keyed on
+        # AppName so we test "is THIS app (outer) in the high-risk list?" correctly.
+        $highRiskNames = @{}
+        foreach ($hr in $highRisk) {
+            if ($hr -and $hr.AppName) { $highRiskNames[[string]$hr.AppName] = $true }
+        }
         $objects = @($apps | Select-Object -First 30 | ForEach-Object {
-            $riskLabel = if ($highRisk | Where-Object { $_.AppName -eq $_.AppName }) { ' [HIGH RISK SCOPE]' } else { '' }
-            "$($_.AppName)$riskLabel — Scopes: $($_.Scope -replace ' ',' | ')"
+            $appName   = [string]$_.AppName
+            $riskLabel = if ($highRiskNames.ContainsKey($appName)) { ' [HIGH RISK SCOPE]' } else { '' }
+            "$appName$riskLabel — Scopes: $($_.Scope -replace ' ',' | ')"
         })
         $sev = if ($highRisk.Count -gt 0) { 'High' } else { 'Medium' }
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $sev -FrameworkIds $cit `

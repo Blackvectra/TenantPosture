@@ -371,9 +371,10 @@ function Test-NRGControlTeamsChatCopy {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Teams data not collected'; return
     }
+    # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
     Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-        -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit `
-        -Detail 'Chat copy prevention requires Information Protection policy with DLP. Verify via Purview > DLP > Teams policies if chat content exfiltration prevention is required.' `
+        -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit `
+        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Chat copy prevention requires Information Protection policy with DLP. Verify via Purview > DLP > Teams policies if chat content exfiltration prevention is required.' `
         -Remediation $ctrl.Remediation
 }
 

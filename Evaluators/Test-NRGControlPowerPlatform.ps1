@@ -73,12 +73,12 @@ function Test-NRGControlPowerPlatform {
     }
 
     # PPL-1.3 — Default environment tenant isolation
+    # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
     $c = Get-NRGControlById -ControlId 'PPL-1.3'
     if ($c) {
-        # Best-effort detection — full tenant isolation status requires admin module
         Add-NRGFinding -ControlId 'PPL-1.3' -State 'Partial' `
-            -Category 'Power Platform' -Title $c.Title -Severity 'Medium' `
-            -Detail 'Tenant isolation status requires Microsoft.PowerApps.Administration.PowerShell module to assess.' `
+            -Category 'Power Platform' -Title "$($c.Title) (Manual review required)" -Severity 'Medium' `
+            -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Tenant isolation status requires Microsoft.PowerApps.Administration.PowerShell module to assess.' `
             -Remediation $c.Remediation `
             -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PPL-1.3')
     }

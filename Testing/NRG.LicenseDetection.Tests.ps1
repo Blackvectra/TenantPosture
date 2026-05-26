@@ -213,4 +213,62 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
             $missing | Should -BeNullOrEmpty -Because 'Every Business Premium LicenseRequirement string in controls.json must be in the BP suppression set. If this fails, add the new string to Get-NRGTenantLicenseProfile.ps1.'
         }
     }
+
+    Context 'v4.6.4 — drifted LicenseRequirement strings must suppress on the holding tenant' {
+        # Each of these 7 strings is the EXACT controls.json value. Prior
+        # versions of Get-NRGTenantLicenseProfile did not map any of them to a
+        # tier flag → BP / E5 / Copilot tenants still saw "Requires: <X>"
+        # noise on the report.
+
+        It 'Defender for Office 365 Plan 2 (M365 E5 or add-on) — suppressed on E5' {
+            $skus = @(@{ SkuPartNumber = 'ENTERPRISEPREMIUM'; ServicePlans = @('THREAT_INTELLIGENCE','ATP_ENTERPRISE') })
+            $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'Defender for Office 365 Plan 2 (M365 E5 or add-on)' -Profile $p |
+                Should -BeTrue
+        }
+
+        It 'M365 E5 Compliance add-on — suppressed when E5 compliance service plan present' {
+            $skus = @(@{ SkuPartNumber = 'SPE_E5'; ServicePlans = @('EQUIVIO_ANALYTICS','RECORDS_MANAGEMENT') })
+            $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 E5 Compliance add-on' -Profile $p |
+                Should -BeTrue
+        }
+
+        It 'M365 E5 or E5 Compliance add-on — suppressed when E5 compliance present' {
+            $skus = @(@{ SkuPartNumber = 'ENTERPRISEPREMIUM'; ServicePlans = @('INSIDER_RISK_MANAGEMENT') })
+            $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 E5 or E5 Compliance add-on' -Profile $p |
+                Should -BeTrue
+        }
+
+        It 'Microsoft Sentinel (add-on) or Defender XDR — suppressed on E5 / DfO P2 tenant' {
+            $skus = @(@{ SkuPartNumber = 'SPE_E5'; ServicePlans = @('THREAT_INTELLIGENCE','MTP') })
+            $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'Microsoft Sentinel (add-on) or Defender XDR' -Profile $p |
+                Should -BeTrue
+        }
+
+        It 'Entra Workload Identities Premium (add-on) — suppressed when SKU present' {
+            $skus = @(@{ SkuPartNumber = 'Microsoft_Entra_Workload_Identities_Premium'; ServicePlans = @() })
+            $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'Entra Workload Identities Premium (add-on)' -Profile $p |
+                Should -BeTrue
+        }
+
+        It 'M365 Copilot add-on license ($30/user/month) — exact special-char string suppresses on Copilot tenant' {
+            $skus = @(@{ SkuPartNumber = 'Microsoft_365_Copilot'; ServicePlans = @('M365_COPILOT_BUSINESS_CHAT') })
+            $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
+            # Literal string with dollar sign and parentheses — make sure we
+            # match it as a raw string, not a regex pattern.
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Copilot add-on license ($30/user/month)' -Profile $p |
+                Should -BeTrue
+        }
+
+        It 'Power Platform + Copilot Studio license — suppressed when PowerApps Per User SKU present' {
+            $skus = @(@{ SkuPartNumber = 'POWERAPPS_PER_USER'; ServicePlans = @('POWERAPPS_PER_USER') })
+            $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'Power Platform + Copilot Studio license' -Profile $p |
+                Should -BeTrue
+        }
+    }
 }
