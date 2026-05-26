@@ -260,6 +260,15 @@ if (-not $skipCollection) {
     if (-not $conn) {
         $conn = @{ Graph=$false; EXO=$false; IPPSSession=$false; Teams=$false; SharePoint=$false }
     }
+    # Exit-code spec (v4.6.3 P2): exit 1 on auth failure means no Graph/EXO
+    # at all. The downstream collectors will skip silently but the result
+    # would be useless — fail loudly here so batch runners can flag the
+    # client as auth-broken in their summary.
+    if (-not $conn.Graph -and -not $conn.EXO) {
+        Write-Host "  [!] Connect-NRGServices returned no usable session (Graph and EXO both unavailable)." -ForegroundColor Red
+        $script:NRGFatalExitCode = 1
+        throw [System.InvalidOperationException]::new('Authentication failure: no Graph or EXO session available.')
+    }
     if (-not $conn.ContainsKey('SharePoint')) { $conn['SharePoint'] = $false }
 
     if ($WhatIfConnections) {
@@ -409,25 +418,23 @@ $jsonPath = Join-Path $OutputPath "$baseName-results.json"
 $rawDataSnapshot = if (Get-Command Get-NRGRawData -ErrorAction SilentlyContinue) {
     Get-NRGRawData
 } else { @{} }
-@{
+# TOCTOU fix (v4.6.3 P2): Set-NRGSensitiveFileContent pre-creates the file
+# and applies the ACL BEFORE any tenant data is written. Previously the
+# file inherited the parent directory's permissions during Out-File and was
+# only restricted afterwards via Set-Acl — on a shared MSP workstation a
+# co-resident process polling the output dir could read tenant data in
+# that small window.
+$jsonPayload = @{
     Metadata    = $reportMetadata
     Findings    = $findings
     RawData     = $rawDataSnapshot
     Exceptions  = (Get-NRGExceptions)
     Coverage    = (Get-NRGCoverage)
     Connections = $conn
-} | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $jsonPath -Encoding utf8
+} | ConvertTo-Json -Depth 10
+Set-NRGSensitiveFileContent -Path $jsonPath -Content $jsonPayload
 Write-Host "  [+] JSON: $jsonPath" -ForegroundColor Green
 Write-Host "      Baseline contains sensitive tenant inventory (CA policies, admin assignments, OAuth apps) — file ACL restricted to current user + admins. Path: $jsonPath" -ForegroundColor Yellow
-
-# Tighten ACL on the baseline JSON. It contains a full tenant inventory
-# (every CA policy, every admin assignment with UPNs, every OAuth app,
-# every DMARC record) — on a shared MSP workstation or a synced OneDrive
-# folder, default inherited permissions would make this world-readable.
-# Strip inheritance and grant only current user + SYSTEM + Administrators.
-# Shared helper — same logic is reused by Apply-NRGBaseline.ps1 for its
-# rollback log + results JSON/MD (audit findings: parity gap with assessor).
-Set-NRGSensitiveFileAcl -Path $jsonPath
 
 if (-not $JsonOnly) {
     # ── Audit-finding fix (HIGH #2): every secondary report file gets the same
@@ -541,10 +548,45 @@ Write-Host "  Total          $($findings.Count)"                               -
 Write-Host "  Output         $OutputPath"                                      -ForegroundColor White
 Write-Host ""
 
+# ── Exit-code spec (v4.6.3 P2) ────────────────────────────────────────────────
+# CLAUDE.md declares: 0 success, 1 auth failure, 2 no findings, 3 partial
+# collection, 4 fatal. Previously only exit 1 (module-load failure) was
+# wired. This block computes the right code based on counters set above.
+$collectorExceptions = @(Get-NRGExceptions)
+if ($findings.Count -eq 0) {
+    $script:NRGSuccessExitCode = 2
+} elseif ($collectorExceptions.Count -gt 0) {
+    # Partial collection: at least one collector raised, but some findings made it.
+    $script:NRGSuccessExitCode = 3
+} else {
+    $script:NRGSuccessExitCode = 0
+}
+
+}
+catch {
+    # Outer fatal-error catch (v4.6.3 P2).
+    # $script:NRGFatalExitCode may have been pre-set by an earlier explicit
+    # condition (auth failure = 1); otherwise fall through to 4 (fatal).
+    if (-not $script:NRGFatalExitCode) { $script:NRGFatalExitCode = 4 }
+    Write-Host ""
+    Write-Host "[!] Assessment failed: $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.ScriptStackTrace) {
+        Write-Host "    Stack: $($_.ScriptStackTrace)" -ForegroundColor DarkGray
+    }
 }
 finally {
     # ── Disconnect on success or error ────────────────────────────────────────
     if (-not $skipCollection) {
-        Disconnect-NRGServices
+        try { Disconnect-NRGServices } catch { }
     }
 }
+
+# Resolve and emit the exit code (must be done OUTSIDE the try/catch/finally
+# so the exit happens after the disconnect runs).
+if ($script:NRGFatalExitCode) {
+    exit $script:NRGFatalExitCode
+}
+if ($null -ne $script:NRGSuccessExitCode) {
+    exit $script:NRGSuccessExitCode
+}
+exit 0

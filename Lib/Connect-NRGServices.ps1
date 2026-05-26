@@ -174,7 +174,15 @@ function Connect-NRGServices {
             if ($isAppOnly) {
                 $accountDomain = if ($OrganizationDomain) { $OrganizationDomain } else { $TenantId }
             } else {
-                $accountDomain = ($ctx.Account -split '@')[-1]
+                # UPN parsing (v4.6.3 P2 fix): `($ctx.Account -split '@')[-1]` returns
+                # the WHOLE string when there's no `@`, which then fails downstream
+                # tenant-domain validation with a misleading message. Be explicit.
+                $accountParts = if ($ctx.Account) { ([string]$ctx.Account) -split '@' } else { @() }
+                if ($accountParts.Count -ne 2 -or [string]::IsNullOrWhiteSpace($accountParts[1])) {
+                    Write-Warning "Connect-NRGServices: Graph context account '$($ctx.Account)' is not a valid UPN (expected user@tenant.tld)."
+                    return $null
+                }
+                $accountDomain = $accountParts[1]
                 if ($accountDomain -notmatch '^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}(\.[a-zA-Z0-9][a-zA-Z0-9-]{0,61})+$') {
                     throw "Invalid tenant domain format from Graph context: $accountDomain"
                 }

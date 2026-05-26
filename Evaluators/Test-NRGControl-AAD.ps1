@@ -173,11 +173,12 @@ function Test-NRGControlAADNamedLocations {
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    $trustedLocations = @($ca.Data.NamedLocations | Where-Object { $_.IsTrusted })
+    $namedLocations   = @(Get-NRGNestedProperty -Object $ca -Path 'Data.NamedLocations' -Default @())
+    $trustedLocations = @($namedLocations | Where-Object { $_.IsTrusted })
     if ($trustedLocations.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($trustedLocations.Count) trusted named location(s) defined."
-    } elseif ($ca.Data.NamedLocations.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail "$($ca.Data.NamedLocations.Count) named location(s) defined but none marked as trusted." -CurrentValue 'Named locations defined, none trusted' -RequiredValue 'At least one trusted IP range defined'
+    } elseif ($namedLocations.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail "$($namedLocations.Count) named location(s) defined but none marked as trusted." -CurrentValue 'Named locations defined, none trusted' -RequiredValue 'At least one trusted IP range defined'
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No named locations defined. Cannot enforce location-based CA conditions or exclude trusted office IPs.' -Remediation $ctrl.Remediation
     }
@@ -314,7 +315,7 @@ function Test-NRGControlAADGuestInvite {
     if (-not $gov -or -not $gov.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Identity governance data not collected'; return
     }
-    $inviteFrom = [string]($(if ($gov.Data.ExternalCollab -and $gov.Data.ExternalCollab.PSObject.Properties['AllowInvitesFrom']) { $gov.Data.ExternalCollab.AllowInvitesFrom } else { 'everyone' }))
+    $inviteFrom = [string](Get-NRGNestedProperty -Object $gov -Path 'Data.ExternalCollab.AllowInvitesFrom' -Default 'everyone')
     $secure     = @('adminsAndGuestInviters','admins','none')
     if ($inviteFrom -in $secure) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Guest invitations restricted to: $inviteFrom"
@@ -394,10 +395,12 @@ function Test-NRGControlAADSSPRMethods {
     $cid = 'AAD-5.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $gov = Get-NRGRawData -Key 'AAD-IdentityGovernance'
-    if (-not $gov -or -not $gov.Success -or -not $gov.Data.SSPRPolicy) {
+    $ssprPolicy = Get-NRGNestedProperty -Object $gov -Path 'Data.SSPRPolicy' -Default $null
+    if (-not $gov -or -not $gov.Success -or -not $ssprPolicy) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SSPR policy data not collected'; return
     }
-    $enabledMethods = @($gov.Data.SSPRPolicy.MethodsConfigured | Where-Object { $_.State -eq 'enabled' })
+    $methodsConfigured = Get-NRGNestedProperty -Object $ssprPolicy -Path 'MethodsConfigured' -Default @()
+    $enabledMethods = @($methodsConfigured | Where-Object { $_.State -eq 'enabled' })
     if ($enabledMethods.Count -ge 2) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($enabledMethods.Count) authentication methods enabled for SSPR."
     } elseif ($enabledMethods.Count -eq 1) {
@@ -455,7 +458,7 @@ function Test-NRGControlAADAdminConsentWorkflow {
     if (-not $gov -or -not $gov.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Identity governance data not collected'; return
     }
-    $consentEnabled = [bool]($gov.Data.ConsentPolicy.IsEnabled ?? $false)
+    $consentEnabled = [bool](Get-NRGNestedProperty -Object $gov -Path 'Data.ConsentPolicy.IsEnabled' -Default $false)
     if ($consentEnabled) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Admin consent workflow enabled — users can request app access via approval process.'
     } else {
@@ -547,7 +550,7 @@ function Test-NRGControlAADAuthenticatorNumberMatch {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
     }
-    $ampConfigs = @($auth.Data.AuthMethodsPolicy.AuthenticationMethodConfigs ?? @())
+    $ampConfigs = @(Get-NRGNestedProperty -Object $auth -Path 'Data.AuthMethodsPolicy.AuthenticationMethodConfigs' -Default @())
     $mfaConfig  = $ampConfigs | Where-Object { $_.Id -eq 'MicrosoftAuthenticator' } | Select-Object -First 1
     # Microsoft enforced number matching as the platform default in May 2023.
     # When the property is null/empty the API is reporting "MS is enforcing it
@@ -590,7 +593,7 @@ function Test-NRGControlAADPasswordless {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
     }
-    $ampConfigs = @($auth.Data.AuthMethodsPolicy.AuthenticationMethodConfigs ?? @())
+    $ampConfigs = @(Get-NRGNestedProperty -Object $auth -Path 'Data.AuthMethodsPolicy.AuthenticationMethodConfigs' -Default @())
     $fido2      = $ampConfigs | Where-Object { $_.Id -eq 'Fido2' } | Select-Object -First 1
     $whi        = $ampConfigs | Where-Object { $_.Id -eq 'WindowsHello' } | Select-Object -First 1
     $passwordlessEnabled = ($fido2.State -eq 'enabled') -or ($whi.State -eq 'enabled')

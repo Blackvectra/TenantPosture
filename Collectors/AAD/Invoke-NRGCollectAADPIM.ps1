@@ -51,8 +51,11 @@ function Invoke-NRGCollectAADPIM {
         try {
             $eligLink = 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilitySchedules?$expand=principal,roleDefinition&$top=200'
             $eligList = [System.Collections.Generic.List[object]]::new()
+            # Pagination cap (v4.6.3 P2): see AADRoles for rationale.
+            $maxPages  = 200
+            $pageCount = 0
 
-            while ($eligLink) {
+            while ($eligLink -and $pageCount -lt $maxPages) {
                 $resp = Invoke-MgGraphRequest -Method GET -Uri $eligLink -ErrorAction Stop
                 foreach ($s in @($resp.value ?? @())) {
                     $eligList.Add(@{
@@ -70,6 +73,13 @@ function Invoke-NRGCollectAADPIM {
                     })
                 }
                 $eligLink = $resp.'@odata.nextLink'
+                $pageCount++
+            }
+            if ($pageCount -ge $maxPages -and $eligLink) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'AAD-PIM-Eligible' `
+                        -Message "Pagination cap reached ($maxPages pages); eligible schedule list may be truncated."
+                }
             }
             $result.Data.EligibleSchedules = $eligList.ToArray()
         } catch {
@@ -82,8 +92,11 @@ function Invoke-NRGCollectAADPIM {
         try {
             $activeLink = 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignmentSchedules?$expand=principal,roleDefinition&$top=200'
             $activeList = [System.Collections.Generic.List[object]]::new()
+            # Pagination cap (v4.6.3 P2)
+            $maxPages   = 200
+            $pageCount2 = 0
 
-            while ($activeLink) {
+            while ($activeLink -and $pageCount2 -lt $maxPages) {
                 $resp = Invoke-MgGraphRequest -Method GET -Uri $activeLink -ErrorAction Stop
                 foreach ($s in @($resp.value ?? @())) {
                     $activeList.Add(@{
@@ -101,6 +114,13 @@ function Invoke-NRGCollectAADPIM {
                     })
                 }
                 $activeLink = $resp.'@odata.nextLink'
+                $pageCount2++
+            }
+            if ($pageCount2 -ge $maxPages -and $activeLink) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'AAD-PIM-Active' `
+                        -Message "Pagination cap reached ($maxPages pages); active schedule list may be truncated."
+                }
             }
             $result.Data.ActiveSchedules = $activeList.ToArray()
         } catch {

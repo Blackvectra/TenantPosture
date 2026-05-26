@@ -144,7 +144,7 @@ function Test-NRGControlSPOOneDriveSync {
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    $syncDomain = $spo.Data.TenantSettings.AllowedDomainGuidsForSyncApp ?? @()
+    $syncDomain = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.AllowedDomainGuidsForSyncApp' -Default @()
     if (@($syncDomain).Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'OneDrive sync restricted to domain-joined devices or specific tenant GUIDs.'
     } else {
@@ -161,7 +161,7 @@ function Test-NRGControlSPOLinkExpiration {
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    $expiry = $spo.Data.TenantSettings.RequireAnonymousLinksExpireInDays ?? 0
+    $expiry = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.RequireAnonymousLinksExpireInDays' -Default 0
     if ($expiry -gt 0 -and $expiry -le 30) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Anonymous sharing links expire after $expiry days."
     } elseif ($expiry -gt 30) {
@@ -180,7 +180,7 @@ function Test-NRGControlSPOAppsFromStore {
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    $appsFromStore = $spo.Data.TenantSettings.AppsForSharePointEnabled ?? $true
+    $appsFromStore = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.AppsForSharePointEnabled' -Default $true
     if (-not $appsFromStore) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Third-party app installation from the SharePoint store is disabled.'
     } else {
@@ -198,7 +198,7 @@ function Test-NRGControlSPOCustomScript {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
     # DenyAndAddCustomizePages = custom script disabled
-    $denied = $spo.Data.TenantSettings.DenyAddAndCustomizePages ?? 'Disabled'
+    $denied = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.DenyAddAndCustomizePages' -Default 'Disabled'
     if ([string]$denied -match 'Enabled|Deny') {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Custom script execution is disabled on SharePoint sites.'
     } else {
@@ -228,7 +228,7 @@ function Test-NRGControlSPOEmailAttestation {
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    $emailAttest = $spo.Data.TenantSettings.EmailAttestationRequired ?? $false
+    $emailAttest = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.EmailAttestationRequired' -Default $false
     if ($emailAttest) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Email attestation required — external users must verify email before accessing shared content.'
     } else {
@@ -245,7 +245,7 @@ function Test-NRGControlSPOReauth {
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    $reauthDays = $spo.Data.TenantSettings.EmailAttestationReAuthDays ?? 0
+    $reauthDays = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.EmailAttestationReAuthDays' -Default 0
     if ($reauthDays -gt 0 -and $reauthDays -le 30) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Reauthentication required every $reauthDays day(s) for sharing links."
     } else {
@@ -262,7 +262,7 @@ function Test-NRGControlSPODomainSync {
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    $allowedGuids = @($spo.Data.TenantSettings.AllowedDomainGuidsForSyncApp ?? @())
+    $allowedGuids = @(Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.AllowedDomainGuidsForSyncApp' -Default @())
     if ($allowedGuids.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "OneDrive sync restricted to $($allowedGuids.Count) authorized tenant GUID(s)."
     } else {
@@ -296,7 +296,7 @@ function Test-NRGControlSPOSharingNotifications {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    $notify = $spo.Data.TenantSettings.NotifyOwnersWhenItemsReshared ?? $true
+    $notify = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.NotifyOwnersWhenItemsReshared' -Default $true
     if ($notify) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
@@ -335,8 +335,8 @@ function Test-NRGControlSPOGuestExpiry {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    $expireRequired = $spo.Data.TenantSettings.ExternalUserExpirationRequired ?? $false
-    $expireDays     = $spo.Data.TenantSettings.ExternalUserExpireInDays ?? 0
+    $expireRequired = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.ExternalUserExpirationRequired' -Default $false
+    $expireDays     = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.ExternalUserExpireInDays' -Default 0
     if ($expireRequired -and $expireDays -gt 0 -and $expireDays -le 60) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `

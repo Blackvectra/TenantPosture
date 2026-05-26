@@ -35,7 +35,9 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 
 $outputDir = Split-Path -Parent $OutputPath
 if (-not (Test-Path -LiteralPath $outputDir)) {
-    New-Item -Path $outputDir -ItemType Directory -Force | Out-Null
+    # LiteralPath: avoid wildcard expansion if the path contains [ ] *.
+    # v4.6.3 P2.
+    New-Item -LiteralPath $outputDir -ItemType Directory -Force | Out-Null
 }
 
 # Known dependencies (matches docs/security/SBOM.md)
@@ -101,6 +103,6 @@ $bom = [ordered]@{
     )
 }
 
-$bom | ConvertTo-Json -Depth 10 | Out-File -FilePath $OutputPath -Encoding utf8
+$bom | ConvertTo-Json -Depth 10 | Out-File -LiteralPath $OutputPath -Encoding utf8
 Write-Host "[+] CycloneDX SBOM written: $OutputPath" -ForegroundColor Green
 Write-Host "    Components: $($dependencies.Count)" -ForegroundColor DarkGray

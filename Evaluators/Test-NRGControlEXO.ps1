@@ -24,8 +24,8 @@ function Test-NRGControlEXOMailboxAudit {
         return
     }
 
-    $orgDisabled = if ($exoData.Data.OrganizationConfig) { $exoData.Data.OrganizationConfig.AuditDisabled } else { $null }
-    $sample      = $exoData.Data.MailboxAuditSummary.SampleMailboxAudit
+    $orgDisabled = Get-NRGNestedProperty -Object $exoData -Path 'Data.OrganizationConfig.AuditDisabled' -Default $null
+    $sample      = Get-NRGNestedProperty -Object $exoData -Path 'Data.MailboxAuditSummary.SampleMailboxAudit' -Default $null
 
     if ($orgDisabled -eq $true) {
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
@@ -260,7 +260,7 @@ function Test-NRGControlEXOModernAuth {
         return
     }
 
-    $modernAuth = if ($exoData.Data.OrganizationConfig) { $exoData.Data.OrganizationConfig.OAuth2ClientProfileEnabled } else { $null }
+    $modernAuth = Get-NRGNestedProperty -Object $exoData -Path 'Data.OrganizationConfig.OAuth2ClientProfileEnabled' -Default $null
 
     if ($modernAuth -eq $true) {
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
@@ -467,10 +467,12 @@ function Test-NRGControlEXOAlertForwarding {
     $cid = 'EXO-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $cf = Get-NRGRawData -Key 'EXO-ConnectionFilter'
-    if (-not $cf -or -not $cf.Success -or -not $cf.Data.AlertPolicies) {
+    $alertPolicies = Get-NRGNestedProperty -Object $cf -Path 'Data.AlertPolicies' -Default $null
+    if (-not $cf -or -not $cf.Success -or -not $alertPolicies) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Alert policy data not collected'; return
     }
-    $fwdAlerts = @($cf.Data.AlertPolicies.ActiveAlerts | Where-Object { $_.Title -match 'forward|redirect' })
+    $activeAlerts = Get-NRGNestedProperty -Object $alertPolicies -Path 'ActiveAlerts' -Default @()
+    $fwdAlerts = @($activeAlerts | Where-Object { $_.Title -match 'forward|redirect' })
     if ($fwdAlerts.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Forwarding rule alert policy is active.'
     } else {
@@ -495,7 +497,7 @@ function Test-NRGControlEXOTransportAudit {
     if (-not $exo -or -not $exo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
-    $auditDisabled = if ($exo.Data.OrganizationConfig) { $exo.Data.OrganizationConfig.AuditDisabled } else { $null }
+    $auditDisabled = Get-NRGNestedProperty -Object $exo -Path 'Data.OrganizationConfig.AuditDisabled' -Default $null
     if ($auditDisabled -ne $true) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Organization-level audit logging is enabled, covering transport rule changes.'
     } else {
@@ -513,7 +515,7 @@ function Test-NRGControlEXOAuditAgeLimit {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
-    $sample = $exo.Data.MailboxAuditSummary.SampleMailboxAudit
+    $sample = Get-NRGNestedProperty -Object $exo -Path 'Data.MailboxAuditSummary.SampleMailboxAudit' -Default $null
     if (-not $sample) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Sample mailbox audit data not collected'; return
@@ -548,7 +550,7 @@ function Test-NRGControlEXOAdminAudit {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
-    $orgAudit = if ($exo.Data.OrganizationConfig) { $exo.Data.OrganizationConfig.AuditDisabled } else { $null }
+    $orgAudit = Get-NRGNestedProperty -Object $exo -Path 'Data.OrganizationConfig.AuditDisabled' -Default $null
     if ($orgAudit -ne $true) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `

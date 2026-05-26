@@ -228,3 +228,42 @@ function Get-NRGSafeProperty {
     if ($null -eq $val) { return $Default }
     return $val
 }
+
+# Walks a dotted path safely under Set-StrictMode -Version Latest.
+# Returns $Default if any segment is null, missing, or unreachable.
+# Handles hashtables, pscustomobjects, and ordered dictionaries uniformly.
+#
+# Example:
+#   Get-NRGNestedProperty -Object $raw -Path 'Data.MeetingPolicy.AutoAdmittedUsers' -Default 'Everyone'
+#
+# Used by evaluators to replace `$raw.Data.X.Y ?? $default` chains, which
+# under StrictMode throw PropertyNotFoundException when any intermediate
+# segment is missing (the `??` operator only coalesces $null — it cannot
+# catch the exception).
+function Get-NRGNestedProperty {
+    [CmdletBinding()]
+    param(
+        [AllowNull()][object] $Object,
+        [Parameter(Mandatory)][string] $Path,
+        [object] $Default = $null
+    )
+    if ($null -eq $Object -or [string]::IsNullOrWhiteSpace($Path)) { return $Default }
+    $cur = $Object
+    foreach ($segment in ($Path -split '\.')) {
+        if ($null -eq $cur) { return $Default }
+        try {
+            if ($cur -is [System.Collections.IDictionary]) {
+                if (-not $cur.Contains($segment)) { return $Default }
+                $cur = $cur[$segment]
+            } else {
+                $prop = $cur.PSObject.Properties[$segment]
+                if ($null -eq $prop) { return $Default }
+                $cur = $prop.Value
+            }
+        } catch {
+            return $Default
+        }
+    }
+    if ($null -eq $cur) { return $Default }
+    return $cur
+}

@@ -1,6 +1,6 @@
 @{
     # Module identity
-    ModuleVersion     = '4.6.2'
+    ModuleVersion     = '4.6.3'
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
     Author            = 'Matthew Levorson'
     CompanyName       = 'NRG Technology Services / NextLayerSec LLC'
@@ -41,8 +41,11 @@
         'Get-NRGFrameworkCitations',
         'Get-NRGFrameworkDefinitions',
         'Set-NRGSensitiveFileAcl',
+        'Set-NRGSensitiveFileContent',
         'Get-NRGTenantLicenseProfile',
         'Test-NRGLicenseRequirementMet',
+        'Get-NRGSafeProperty',
+        'Get-NRGNestedProperty',
 
         # ── Collectors — AAD ──────────────────────────────────────────────────
         'Invoke-NRGCollectAADAuthPolicies',

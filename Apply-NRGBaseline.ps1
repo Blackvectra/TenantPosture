@@ -578,12 +578,18 @@ if ($rollbackEntries.Count -gt 0) {
     } | ConvertTo-Json -Depth 12
     # Local report file — always write, not gated by WhatIfPreference (this is
     # the apply tool's own audit trail, not a tenant change).
-    [System.IO.File]::WriteAllText($rollbackPath, $rollbackJson, [System.Text.UTF8Encoding]::new($false))
-    # Sensitive: rollback log contains tenant config Before/After per applied
-    # change. Restrict ACL to current user + SYSTEM + Administrators (same
-    # protection class as the assessor baseline). No-op on non-Windows.
-    if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
-        Set-NRGSensitiveFileAcl -Path $rollbackPath
+    #
+    # TOCTOU fix (v4.6.3 P2): Set-NRGSensitiveFileContent pre-creates the file
+    # and ACL-hardens it BEFORE writing the JSON. Previously a co-resident
+    # process on a shared MSP workstation could read tenant Before/After data
+    # in the small window between WriteAllText and Set-Acl.
+    if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileContent -Path $rollbackPath -Content $rollbackJson
+    } else {
+        [System.IO.File]::WriteAllText($rollbackPath, $rollbackJson, [System.Text.UTF8Encoding]::new($false))
+        if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+            Set-NRGSensitiveFileAcl -Path $rollbackPath
+        }
     }
 }
 
@@ -607,10 +613,14 @@ $resultsJson = @{
     Summary  = $summary
     Results  = @($applyResults)
 } | ConvertTo-Json -Depth 12
-[System.IO.File]::WriteAllText($resultsJsonPath, $resultsJson, [System.Text.UTF8Encoding]::new($false))
-# Sensitive: results JSON contains tenant findings + Before/After values.
-if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
-    Set-NRGSensitiveFileAcl -Path $resultsJsonPath
+# TOCTOU fix (v4.6.3 P2) — see rollback write above.
+if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+    Set-NRGSensitiveFileContent -Path $resultsJsonPath -Content $resultsJson
+} else {
+    [System.IO.File]::WriteAllText($resultsJsonPath, $resultsJson, [System.Text.UTF8Encoding]::new($false))
+    if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileAcl -Path $resultsJsonPath
+    }
 }
 
 # Build markdown report
@@ -650,10 +660,14 @@ foreach ($r in $applyResults) {
     }
     [void]$md.AppendLine("")
 }
-[System.IO.File]::WriteAllText($resultsMdPath, $md.ToString(), [System.Text.UTF8Encoding]::new($false))
-# Sensitive: results MD includes tenant config Before/After per change.
-if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
-    Set-NRGSensitiveFileAcl -Path $resultsMdPath
+# TOCTOU fix (v4.6.3 P2) — see rollback write above.
+if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+    Set-NRGSensitiveFileContent -Path $resultsMdPath -Content ($md.ToString())
+} else {
+    [System.IO.File]::WriteAllText($resultsMdPath, $md.ToString(), [System.Text.UTF8Encoding]::new($false))
+    if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileAcl -Path $resultsMdPath
+    }
 }
 
 # ── Final summary to console ────────────────────────────────────────────────
