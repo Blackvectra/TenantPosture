@@ -66,24 +66,39 @@ function Apply-NRGAADMFA {
         # NRG-* policy that targets All users with MFA as compliant for
         # apply purposes (regardless of state). The operator can still
         # promote / tune it via portal.
+        #
+        # v4.6.4 FIX: every nested chained-access ($_.Conditions.Users.IncludeUsers,
+        # $_.GrantControls.AuthenticationStrength.Id, ...) blows up under
+        # Set-StrictMode -Version Latest the first time any CA policy in the
+        # tenant has a $null intermediate object — the entire Where-Object
+        # short-circuits to empty → idempotency check returns 0 → DUPLICATE
+        # CA POLICY gets created on every apply. Replace with Get-NRGNestedProperty.
         $nrgOwned = @($existing | Where-Object {
+            $includeUsers = Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.IncludeUsers' -Default @()
+            $builtInCtrls = Get-NRGNestedProperty -Object $_ -Path 'GrantControls.BuiltInControls' -Default @()
+            $authStrengId = Get-NRGNestedProperty -Object $_ -Path 'GrantControls.AuthenticationStrength.Id' -Default ''
+            $authStrIdAlt = Get-NRGNestedProperty -Object $_ -Path 'GrantControls.AuthStrengthId' -Default ''
             $_.DisplayName -like 'NRG-*' -and
-            (@($_.Conditions.Users.IncludeUsers) -contains 'All') -and
+            (@($includeUsers) -contains 'All') -and
             (
-                ($_.GrantControls.BuiltInControls -contains 'mfa') -or
-                (-not [string]::IsNullOrEmpty($_.GrantControls.AuthenticationStrength.Id)) -or
-                (-not [string]::IsNullOrEmpty($_.GrantControls.AuthStrengthId))
+                (@($builtInCtrls) -contains 'mfa') -or
+                (-not [string]::IsNullOrEmpty($authStrengId)) -or
+                (-not [string]::IsNullOrEmpty($authStrIdAlt))
             )
         })
 
         # Look for enabled policy: All users + MFA (built-in or auth strength)
         $compliant = @($existing | Where-Object {
+            $includeUsers = Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.IncludeUsers' -Default @()
+            $builtInCtrls = Get-NRGNestedProperty -Object $_ -Path 'GrantControls.BuiltInControls' -Default @()
+            $authStrengId = Get-NRGNestedProperty -Object $_ -Path 'GrantControls.AuthenticationStrength.Id' -Default ''
+            $authStrIdAlt = Get-NRGNestedProperty -Object $_ -Path 'GrantControls.AuthStrengthId' -Default ''
             $_.State -eq 'enabled' -and
-            (@($_.Conditions.Users.IncludeUsers) -contains 'All') -and
+            (@($includeUsers) -contains 'All') -and
             (
-                ($_.GrantControls.BuiltInControls -contains 'mfa') -or
-                (-not [string]::IsNullOrEmpty($_.GrantControls.AuthenticationStrength.Id)) -or
-                (-not [string]::IsNullOrEmpty($_.GrantControls.AuthStrengthId))
+                (@($builtInCtrls) -contains 'mfa') -or
+                (-not [string]::IsNullOrEmpty($authStrengId)) -or
+                (-not [string]::IsNullOrEmpty($authStrIdAlt))
             )
         })
 

@@ -328,13 +328,13 @@ function Test-NRGControlEXOPop3 {
             -Title $control.Title -Detail 'EXO data not collected'
         return
     }
-    # POP3 state not directly in our org config collector — check transport config
-    # If no specific data, register as not collected rather than false gap
+    # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
     Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-        -Title $control.Title -Detail 'POP3 state requires Get-CASMailboxPlan — not collected in current run. Verify manually: Get-CASMailboxPlan | Select PopEnabled'
+        -Title "$($control.Title) (Manual review required)" -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). POP3 state requires Get-CASMailboxPlan — not collected in current run. Verify manually: Get-CASMailboxPlan | Select PopEnabled'
 }
 
 # ── EXO-2.4 IMAP Access Disabled ─────────────────────────────────────────────
+# v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
 function Test-NRGControlEXOImap {
     [CmdletBinding()] param()
 
@@ -343,7 +343,7 @@ function Test-NRGControlEXOImap {
     if (-not $control) { return }
 
     Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-        -Title $control.Title -Detail 'IMAP state requires Get-CASMailboxPlan — not collected in current run. Verify manually: Get-CASMailboxPlan | Select ImapEnabled'
+        -Title "$($control.Title) (Manual review required)" -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). IMAP state requires Get-CASMailboxPlan — not collected in current run. Verify manually: Get-CASMailboxPlan | Select ImapEnabled'
 }
 
 # ── EXO-2.5 Customer Lockbox Enabled ─────────────────────────────────────────
@@ -417,11 +417,11 @@ function Test-NRGControlEXOSharedMailbox {
         return
     }
 
+    # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
     # Shared mailbox sign-in state requires cross-referencing AAD Users with EXO shared mailboxes
-    # Without that cross-reference, mark as informational gap requiring manual review
     Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
-        -Title $control.Title -Severity 'High' -FrameworkIds $citations `
-        -Detail 'Shared mailbox direct sign-in status requires manual verification. Run: Get-Mailbox -RecipientTypeDetails SharedMailbox | ForEach-Object { Get-MgUser -UserId $_.ExternalDirectoryObjectId | Select DisplayName,AccountEnabled }' `
+        -Title "$($control.Title) (Manual review required)" -Severity 'High' -FrameworkIds $citations `
+        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Shared mailbox direct sign-in status requires manual verification. Run: Get-Mailbox -RecipientTypeDetails SharedMailbox | ForEach-Object { Get-MgUser -UserId $_.ExternalDirectoryObjectId | Select DisplayName,AccountEnabled }' `
         -CurrentValue 'Manual review required' -RequiredValue 'All shared mailbox accounts have AccountEnabled = $false' `
         -Remediation $control.Remediation
 }
@@ -456,9 +456,10 @@ function Test-NRGControlEXOOutboundLimits {
     }
     $defaultOutbound = @($exo.Data.OutboundSpamPolicies | Where-Object { $_.IsDefault }) | Select-Object -First 1
     if (-not $defaultOutbound) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default outbound policy found'; return }
-    # AutoForwardingMode already checked in EXO-1.3 — here check action on limit breach
-    # ActionWhenThresholdReached should alert or restrict — not the default Restrict
-    Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Outbound spam policy exists. EXO enforces sending limits by default — verify ActionWhenThresholdReached is set to alert an admin.'
+    # v4.6.4 ADVISORY MARK: hardcoded Satisfied without inspecting any threshold —
+    # tag as manual review required pending v4.7.0 cleanup. AutoForwardingMode
+    # already checked in EXO-1.3 — here check action on limit breach.
+    Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Informational' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Outbound spam policy exists. EXO enforces sending limits by default — verify ActionWhenThresholdReached is set to alert an admin.'
 }
 
 # ── EXO-3.3 Alert Policy — Forwarding Rules ──────────────────────────────────
@@ -481,11 +482,12 @@ function Test-NRGControlEXOAlertForwarding {
 }
 
 # ── EXO-3.4 Alert Policy — Unusual Mail Volume ───────────────────────────────
+# v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
 function Test-NRGControlEXOAlertVolume {
     [CmdletBinding()] param()
     $cid = 'EXO-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'Unusual mail volume alert requires manual verification in Defender portal: Alerts > Alert policies > Unusual increase in email reported as phish.' -Remediation $ctrl.Remediation
+    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Unusual mail volume alert requires manual verification in Defender portal: Alerts > Alert policies > Unusual increase in email reported as phish.' -Remediation $ctrl.Remediation
 }
 
 # ── EXO-3.5 Transport Rules Audit Enabled ────────────────────────────────────
@@ -852,14 +854,18 @@ function Test-NRGControlEXOSmtpAuthExceptions {
         return
     }
 
+    # v4.6.4 PII FIX: prior code interpolated the full UPN list into Detail,
+    # which renders verbatim in the HTML client report → PII leak. Move UPNs to
+    # the structured AffectedObjects (rendered into a named-findings card with
+    # proper escaping) and keep Detail as a count-only one-liner.
     $affected = @($exceptions | ForEach-Object {
         [ordered]@{
-            DisplayName = [string]$_.UPN
+            DisplayName  = [string]$_.UPN
+            OverrideType = 'SmtpAuth'
         }
     })
 
-    $upnList = (@($exceptions | ForEach-Object { [string]$_.UPN }) -join ', ')
-    $detail  = "$count mailbox(es) override the tenant-level SMTP AUTH disable — legacy auth blast radius. Affected: $upnList"
+    $detail  = "$count mailbox(es) override the tenant-level SMTP AUTH disable — legacy auth blast radius. See AffectedObjects for the per-user list."
     $remediation = 'For each affected mailbox: Set-CASMailbox -Identity <UPN> -SmtpClientAuthenticationDisabled $true. Recommend migrating senders to OAuth-based SMTP (Microsoft Graph sendMail API) or App Passwords with MFA. For multifunction devices/scanners, prefer SMTP relay via on-prem connector with IP allowlist or Direct Send (anonymous) — neither requires basic auth.'
 
     if ($count -le 5) {

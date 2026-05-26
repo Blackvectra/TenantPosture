@@ -83,6 +83,13 @@ param(
 # property access on $null, indexing past array end all throw).
 Set-StrictMode -Version Latest
 
+# v4.6.4 CRITICAL FIX: pre-initialize exit-code vars so StrictMode reads at end
+# (lines 570 + 586) never throw VariableIsUndefined on the success path. Without
+# this every successful run crashes with a stack trace AFTER the report is
+# written but BEFORE `exit 0` lands → callers see exit code 1.
+$script:NRGFatalExitCode  = $null
+$script:NRGSuccessExitCode = $null
+
 # OWASP ASVS V11.2.2 / OSSTMM DN5 — enforce TLS 1.2 minimum (Microsoft endpoints
 # already require this, but defense-in-depth catches dev/test environments where
 # .NET defaults might drift back to older protocols)
