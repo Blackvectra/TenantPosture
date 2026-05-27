@@ -1,5 +1,55 @@
 # Changelog
 
+## v4.6.7 (2026-05-27) — polished release
+
+Polish-and-correctness bundle covering everything surfaced by the v4.6.6 review of the clientc.example run.
+
+### Fixed — correctness
+
+- **Six StrictMode property-access NREs in `Test-NRGControlIntune.ps1`.** The user's clientc.example run printed `The property 'ConditionalLaunchSettings' cannot be found on this object.` for `INT-3.3`. Same unguarded pattern surfaced at five more sites:
+  - `INT-3.3`  ConditionalLaunchSettings (line 290)
+  - `INT-1.2`  TemplateType (line 129)
+  - `INT-3.1`  Platform (line 205) + SystemIntegrityProtectionEnabled / StorageRequireEncryption (line 210)
+  - `INT-4.4`  Platform (line 371) + PasswordRequired / RequirePassword (line 375)
+  
+  All six switched to `Get-NRGSafeProperty -Object $_ -Property '<name>' -Default <safe>` — the same canonical pattern already used at line 84 (INT-1.3 BitLocker). The `??` null-coalescing operator only handles `$null` values; under StrictMode a missing property throws before `??` can coalesce.
+
+- **EOM downgrade fails on OneDrive-synced PowerShell module paths.** The user's run showed `Cannot remove package path C:\Users\…\OneDrive - …\Documents\PowerShell\Modules\ExchangeOnlineManagement\3.2.0` because OneDrive holds file locks on every file in the synced tree. `Invoke-NRGAssessment.ps1` now detects a OneDrive-synced `ModuleBase` BEFORE calling `Uninstall-PSResource` and prints an actionable message ("pause OneDrive sync on Documents OR move PowerShell modules out of OneDrive") instead of letting the uninstall fail mid-sweep.
+
+- **EXO "more results available" warning recurrence.** `Collectors/EXO/Invoke-NRGCollectEXOMailboxConfig.ps1:122` deliberately samples 10 user mailboxes for audit-config inspection — but EXO emits a `WARNING: There are more results available...` line on every call. Operators reading the warning assumed the v4.6.5 ResultSize sweep had regressed. The sampling call now passes `-WarningAction SilentlyContinue` and the inline comment explains the intent.
+
+### Fixed — UI / browser
+
+- **Click handler on collapsible rows now ignores clicks on `<a>`, `<button>`, `<input>`, `<select>`, `<textarea>`** descendants. Previously, a click anywhere inside the expanded detail row bubbled up and collapsed the row before the click could resolve. The fix is a `e.target.closest('a,button,input,select,textarea')` early-return inside the click handler.
+
+### Fixed — security / hardening
+
+- **CSP now explicitly sets `frame-ancestors 'none'` and `object-src 'none'`.** Per CSP spec, neither directive inherits from `default-src 'none'` — without explicit declarations the assessment report was embeddable in cross-origin iframes (clickjacking surface) and could load `<object>`/`<embed>` plugin content. The sibling playbook publisher already set `frame-ancestors 'none'`; assessment.html was the only outlier.
+
+- **CSP integrity self-check at publish time.** `Publish-NRGAssessmentHTML.ps1` now re-derives the SHA-256 of the inline `<script>` body actually written into `$html` and throws if it disagrees with the `script-src 'sha256-...'` claim baked into the CSP. Catches the exact regression we fixed in v4.6.6.1 (interpolation drift between hashed source and emitted body) at publish time rather than in the operator's browser.
+
+- **Self-signed code-signing cert explicit non-CA constraint.** `Build/New-NRGCodeSigningCert.ps1` now passes `-TextExtension '2.5.29.19={text}cA=false'` so even though the cert is installed in `CurrentUser\Root` (required for self-signed chain validation), it cannot issue certs for arbitrary subjects. Loss of the private key enables impersonation of THIS publisher only, not arbitrary code signing. Banner now states this explicitly.
+
+### Fixed — cosmetic
+
+- **`Publish-NRGRemediationPlaybook.ps1` fallback `?? '4.5.5'`** now falls back to `$script:NRGAssessmentVersion` (current module version) and only to the string `'unknown'` if even that is unavailable. Previously, generated playbooks could print v4.5.5 in their footer if the entry script forgot to populate `$Metadata.ToolVersion`.
+
+- **Sanitized `sample-report/example-assessment.html` regenerated** with the current publisher. The old NLS sample contained stale `onclick=` and the OLD `function goto` / `function toggle` JS body, which would either silently fail under CSP or mislead reviewers into thinking inline-onclick was supported.
+
+### Added — invariants
+
+- **Pester regression guards** for the CSP era:
+  - `HTML publisher emits NO inline onclick= attributes` — catches re-introduction of the bug we just fixed.
+  - `HTML publisher CSP frame-ancestors and object-src locked down` — catches accidental CSP-policy weakening.
+
+### Build / CI
+
+- **Pester and PSScriptAnalyzer pinned to upper bounds** (`[5.5.0,5.99.99]` and `[1.21.0,1.99.99]`) on both `Install-PSResource` and `Install-Module` paths. Prevents a future breaking 6.x major from being auto-adopted on the next CI run — bumping the major now requires a deliberate workflow edit.
+
+- **Retry-loop sleep on the final iteration is skipped.** Previously, on a full-failure path CI hung an extra 8s before throwing. The retry now sleeps only between attempts, not after the last one.
+
+- **Removed unverified "ubuntu-latest ships [Pester/PSScriptAnalyzer] in the toolcache" comment** from the workflow — it isn't a load-bearing claim and the fast-path is still a correct no-op when the runner image doesn't preinstall the module.
+
 ## v4.6.6.1 (2026-05-27) — HTML report CSP hotfix
 
 ### Fixed

@@ -117,9 +117,11 @@ function Invoke-NRGCollectEXOMailboxConfig {
             }
         }
 
-        # Sample mailbox audit config (check first 10 user mailboxes)
+        # Sample mailbox audit config (check first 10 user mailboxes). -WarningAction
+        # SilentlyContinue suppresses EXO's expected "more results available" warning
+        # — the 10-mailbox cap is intentional sampling, not an undercount.
         try {
-            $mailboxes = @(Get-Mailbox -RecipientTypeDetails UserMailbox -ResultSize 10 -ErrorAction Stop)
+            $mailboxes = @(Get-Mailbox -RecipientTypeDetails UserMailbox -ResultSize 10 -WarningAction SilentlyContinue -ErrorAction Stop)
             if ($mailboxes.Count -gt 0) {
                 $sample = $mailboxes[0]
                 $result.Data.MailboxAuditSummary.SampleMailboxAudit = @{

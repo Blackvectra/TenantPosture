@@ -578,7 +578,8 @@ document.querySelectorAll('[data-goto]').forEach(function(el){
   });
 });
 document.querySelectorAll('tr.exp').forEach(function(tr){
-  tr.addEventListener('click',function(){
+  tr.addEventListener('click',function(e){
+    if(e.target&&e.target.closest&&e.target.closest('a,button,input,select,textarea'))return;
     var n=tr.nextElementSibling;
     if(n&&n.classList.contains('extr')){
       var s=n.style.display===''||n.style.display==='none';
@@ -604,7 +605,7 @@ document.querySelectorAll('tr.exp').forEach(function(tr){
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none';style-src 'unsafe-inline';img-src https: data:;script-src $scriptCsp;connect-src 'none';base-uri 'none';form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none';style-src 'unsafe-inline';img-src https: data:;script-src $scriptCsp;connect-src 'none';base-uri 'none';form-action 'none';frame-ancestors 'none';object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <title>M365 Security Assessment &mdash; $cD</title>
 <style>
@@ -936,6 +937,27 @@ $(if ($namedHtml) { "<div class='cnt' style='padding-top:0;padding-bottom:0'>$na
 <script>$inlineScript</script>
 </body></html>
 "@
+
+    # ── CSP integrity self-check ───────────────────────────────────────────────
+    # Re-derive the SHA-256 hash of the inline <script> body actually emitted into
+    # $html and compare it to the hash baked into the CSP. If they differ — e.g.
+    # because a future edit interpolated a $variable into $inlineScript — refuse
+    # to write the file rather than ship a report whose buttons silently fail.
+    $cspMatch = [regex]::Match($html, "script-src 'sha256-([A-Za-z0-9+/=]+)'")
+    $scrMatch = [regex]::Match($html, '(?s)<script>(.*?)</script>')
+    if (-not $cspMatch.Success -or -not $scrMatch.Success) {
+        throw 'CSP integrity check: could not locate hashed script-src or inline <script> in generated HTML — refusing to write report.'
+    }
+    $declaredHash = $cspMatch.Groups[1].Value
+    $sha256b = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $actualHash = [System.Convert]::ToBase64String($sha256b.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($scrMatch.Groups[1].Value)))
+    } finally {
+        $sha256b.Dispose()
+    }
+    if ($actualHash -ne $declaredHash) {
+        throw ("CSP integrity check FAILED: declared SHA-256 '$declaredHash' does not match inline-script body hash '$actualHash'. Browser will block the script. Likely cause: a `$variable` was interpolated into `$inlineScript`, drifting the hash. Refusing to write report.")
+    }
 
     $html | Out-File -LiteralPath $OutputPath -Encoding utf8
 }
