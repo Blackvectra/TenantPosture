@@ -90,12 +90,19 @@ if (-not $PSCmdlet.ShouldProcess($Subject, 'Generate self-signed code-signing ce
 # practice for production but blocks the operator from moving the cert to
 # another workstation. Default to Exportable for in-house multi-machine
 # operator scenarios; tighten manually if the threat model warrants.
+#
+# Explicit BasicConstraints `cA=false` and KeyUsage DigitalSignature only:
+# even though this cert ends up in the operator's CurrentUser\Root store
+# (required for self-signed chain validation), it is NOT a CA — anyone
+# with the private key can only impersonate THIS publisher, not issue
+# certs for arbitrary subjects.
 $cert = New-SelfSignedCertificate `
     -Type CodeSigningCert `
     -Subject $Subject `
     -CertStoreLocation 'Cert:\CurrentUser\My' `
     -KeyExportPolicy Exportable `
     -KeyUsage DigitalSignature `
+    -TextExtension @('2.5.29.19={text}cA=false') `
     -NotAfter $notAfter
 
 Write-Host "  [+] Cert generated. Thumbprint: $($cert.Thumbprint)" -ForegroundColor Green
@@ -151,4 +158,10 @@ Write-Host '       .\Apply-NRGBaseline.ps1 -ResultsPath .\output\<...>.json -Req
 Write-Host ''
 Write-Host 'When you upgrade to a paid cert (Microsoft Trusted Signing / Sectigo / DigiCert),' -ForegroundColor DarkGray
 Write-Host 'pass that cert thumbprint to Sign-Release.ps1 instead — no other change needed.'  -ForegroundColor DarkGray
+Write-Host ''
+Write-Host 'Security note:' -ForegroundColor DarkGray
+Write-Host '  This cert is installed in your CurrentUser scope only (not LocalMachine), and' -ForegroundColor DarkGray
+Write-Host '  it is a NON-CA cert (cA=false, DigitalSignature only). Loss of the private key' -ForegroundColor DarkGray
+Write-Host '  enables impersonation of this specific publisher, NOT arbitrary code signing.' -ForegroundColor DarkGray
+Write-Host '  Treat the private key the same as any other long-lived credential.' -ForegroundColor DarkGray
 Write-Host ''

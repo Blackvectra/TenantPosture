@@ -443,6 +443,23 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             Select-String -Path $pubPath -Pattern 'Content-Security-Policy' | Should -Not -BeNullOrEmpty
         }
 
+        It 'HTML publisher emits NO inline onclick= attributes (CSP requires addEventListener)' {
+            # Inline onclick= attributes are blocked by the strict CSP we emit
+            # (script-src 'sha256-...' with no 'unsafe-hashes'). Re-introducing
+            # one silently breaks every interactive element in the report.
+            $pubPath = Join-Path $script:RepoRoot 'Publishers\Publish-NRGAssessmentHTML.ps1'
+            $content = Get-Content -LiteralPath $pubPath -Raw
+            # Allow the explanatory comment that mentions onclick= as a counter-example.
+            $stripped = $content -replace '(?m)^\s*#.*$', ''
+            $stripped | Should -Not -Match "onclick\s*=" -Because 'CSP blocks inline event handlers; use addEventListener inside the hashed <script> instead'
+        }
+
+        It 'HTML publisher CSP frame-ancestors and object-src locked down' {
+            $pubPath = Join-Path $script:RepoRoot 'Publishers\Publish-NRGAssessmentHTML.ps1'
+            Select-String -Path $pubPath -Pattern "frame-ancestors 'none'" | Should -Not -BeNullOrEmpty -Because 'clickjacking protection (does not inherit from default-src)'
+            Select-String -Path $pubPath -Pattern "object-src 'none'"      | Should -Not -BeNullOrEmpty -Because 'plugin-embedding protection (does not inherit from default-src)'
+        }
+
         It 'External links use rel=noopener noreferrer' {
             $pubPath = Join-Path $script:RepoRoot 'Publishers\Publish-NRGAssessmentHTML.ps1'
             $count   = (Select-String -Path $pubPath -Pattern 'noopener noreferrer' -AllMatches).Count

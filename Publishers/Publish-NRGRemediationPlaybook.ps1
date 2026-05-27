@@ -48,7 +48,7 @@ function Publish-NRGRemediationPlaybook {
 
     $client    = EscMd ($Metadata.TenantDomain ?? 'Client')
     $date      = EscMd ($Metadata.AssessmentDate ?? (Get-Date -Format 'MMMM dd, yyyy'))
-    $version   = EscMd ($Metadata.ToolVersion ?? '4.5.5')
+    $version   = EscMd ($Metadata.ToolVersion ?? $script:NRGAssessmentVersion ?? 'unknown')
 
     # Load control definitions for remediation text and license requirements
     $controls = @{}
