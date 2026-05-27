@@ -189,7 +189,7 @@ function Publish-NRGRemediationScript {
     $null = $sb.AppendLine("    Write-Error (`"Failed to parse `" + `$resultsJson + `": `" + `$_.Exception.Message + `". The JSON may be truncated or corrupt; re-run Invoke-NRGAssessment to regenerate.`")")
     $null = $sb.AppendLine("    return")
     $null = $sb.AppendLine("}")
-    $null = $sb.AppendLine("if (-not `$assessment.PSObject.Properties['Findings'] -or `$null -eq `$assessment.Findings) {")
+    $null = $sb.AppendLine("if (`$null -eq `$assessment -or -not `$assessment.PSObject.Properties['Findings'] -or `$null -eq `$assessment.Findings) {")
     $null = $sb.AppendLine("    Write-Error (`"Findings array missing from `" + `$resultsJson + `". The results JSON is the wrong shape; re-run Invoke-NRGAssessment to regenerate.`")")
     $null = $sb.AppendLine("    return")
     $null = $sb.AppendLine("}")
