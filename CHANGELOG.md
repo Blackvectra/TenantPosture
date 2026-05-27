@@ -1,5 +1,15 @@
 # Changelog
 
+## v4.6.6.1 (2026-05-27) — HTML report CSP hotfix
+
+### Fixed
+
+- **Interactive buttons silently broken in HTML assessment report.** The CSP emitted by `Publishers/Publish-NRGAssessmentHTML.ps1` was `script-src 'sha256-...'` — correctly authorizing the inline `<script>` block, but with no `'unsafe-inline'` or `'unsafe-hashes'`. Every `onclick="goto(...)"` on the header nav and every `onclick='toggle(this)'` on the expandable finding rows was therefore blocked by the browser, with no visible error to the operator. Nav links and row expanders rendered as cursor-pointer but did nothing on click.
+
+  Fix: removed all inline `onclick=` attributes. Nav spans now use `data-goto="<id>"`; expandable rows are identified by their existing `class="exp"`. Handlers are attached via `addEventListener` inside the existing CSP-hashed `<script>` block, so the SHA-256 hash covers them automatically — no CSP relaxation needed.
+
+  Affected: every HTML assessment report produced by v4.6.3 (when the CSP hash was introduced) through v4.6.6. The playbook HTML was unaffected (no interactive elements).
+
 ## v4.6.6 (2026-05-27) — fresh-install hotfix
 
 Two latent bugs surfaced when an operator unboxed v4.6.5 from a fresh GitHub zip on a Windows workstation without MicrosoftTeams installed:
