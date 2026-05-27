@@ -37,7 +37,7 @@ $outputDir = Split-Path -Parent $OutputPath
 if (-not (Test-Path -LiteralPath $outputDir)) {
     # LiteralPath: avoid wildcard expansion if the path contains [ ] *.
     # v4.6.3 P2.
-    New-Item -LiteralPath $outputDir -ItemType Directory -Force | Out-Null
+    [void][System.IO.Directory]::CreateDirectory($outputDir)
 }
 
 # Known dependencies (matches docs/security/SBOM.md)

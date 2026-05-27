@@ -304,7 +304,7 @@ try { Disconnect-MgGraph -ErrorAction SilentlyContinue } catch {}
 
 # ── Batch summary ─────────────────────────────────────────────────────────────
 if (-not (Test-Path -LiteralPath $resolvedOutput)) {
-    New-Item -LiteralPath $resolvedOutput -ItemType Directory -Force | Out-Null
+    [void][System.IO.Directory]::CreateDirectory($resolvedOutput)
 }
 
 $summaryPath = Join-Path $resolvedOutput "batch-summary-$timestamp.md"
