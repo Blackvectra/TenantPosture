@@ -136,7 +136,7 @@ if ($OutputPath -match '\.\.[\\/]') {
     throw "OutputPath rejected: contains '..[/\\]' traversal sequence."
 }
 if (-not (Test-Path -LiteralPath $OutputPath)) {
-    New-Item -LiteralPath $OutputPath -ItemType Directory -Force | Out-Null
+    [void][System.IO.Directory]::CreateDirectory($OutputPath)
 }
 # Resolve to absolute path so downstream auto-open / publish steps can verify
 # generated files via $resolvedOutput.StartsWith($resolvedOutput) bounds checks.

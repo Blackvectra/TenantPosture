@@ -438,7 +438,7 @@ if (-not (Test-Path -LiteralPath $ReportsPath)) {
     # -WhatIf:$false — Reports/ is local audit storage, not a tenant change.
     # Without this, New-Item respects $WhatIfPreference and skips the mkdir,
     # then the subsequent WriteAllText fails with "path not found".
-    New-Item -LiteralPath $ReportsPath -ItemType Directory -Force -WhatIf:$false | Out-Null
+    [void][System.IO.Directory]::CreateDirectory($ReportsPath)
 }
 # H5: filename uniqueness. yyyyMMdd-HHmmss alone collides under two
 # concurrent invocations within the same second (same operator, two MSP
