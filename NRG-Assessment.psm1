@@ -131,6 +131,7 @@ $script:ExportedFunctions = @(
     'Set-NRGSensitiveFileAcl', 'Set-NRGSensitiveFileContent',
     'Get-NRGTenantLicenseProfile', 'Test-NRGLicenseRequirementMet',
     'Get-NRGSafeProperty', 'Get-NRGNestedProperty',
+    'Test-NRGSignatureStatus',
 
     # ── Collectors — AAD ──────────────────────────────────────────────────────
     'Invoke-NRGCollectAADAuthPolicies', 'Invoke-NRGCollectAADCAPolicies',

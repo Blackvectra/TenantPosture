@@ -4,10 +4,20 @@
     Authenticode-signs all .ps1/.psm1/.psd1 files in the repo and produces a signed .cat catalog.
 
 .DESCRIPTION
-    Requires a CA-issued code-signing certificate installed in Cert:\CurrentUser\My
-    (or accessible via thumbprint). Self-signed certs are NOT recommended per Microsoft Learn.
+    Signs every PowerShell file in the repo with the supplied code-signing certificate.
 
-    Uses a timestamp server so signatures remain valid after the certificate expires.
+    Cert source options (any of):
+      - Microsoft Trusted Signing / Sectigo / DigiCert (paid, public-CA-issued) — best for
+        external distribution because the cert chain validates without local trust.
+      - Self-signed cert from Build/New-NRGCodeSigningCert.ps1 — perfect for in-house use
+        where the operator workstations trust the cert locally. Signature still serves
+        integrity (Verify-Integrity.ps1) and policy (Apply-NRGBaseline.ps1 -RequireSignedCode)
+        purposes. Upgrade to a paid cert later by passing a different -CertificateThumbprint;
+        no other change required.
+
+    Uses an RFC 3161 timestamp server so signatures remain valid after the certificate
+    expires. The timestamp is useful for self-signed certs too — it pins WHEN the signature
+    was applied, even if WHO is only self-attested.
 
     Default timestamp servers (in priority order):
       http://timestamp.digicert.com
@@ -17,8 +27,9 @@
     unless -SkipCatalogCheck is passed.
 
 .PARAMETER CertificateThumbprint
-    SHA-1 thumbprint of the code-signing certificate to use. Must already be installed
-    in a certificate store accessible to the running user.
+    SHA-1 thumbprint of the code-signing certificate. If omitted, reads from
+    ~/.nrg-assessment/signing-thumbprint.txt (written by New-NRGCodeSigningCert.ps1
+    when invoked with -SaveThumbprintForBuild).
 
 .PARAMETER TimestampServer
     URL of an RFC 3161 timestamp server. Defaults to DigiCert.
@@ -27,20 +38,21 @@
     Repository root to sign. Defaults to one level up from this script.
 
 .EXAMPLE
+    # In-house, self-signed (one-time setup):
+    .\Build\New-NRGCodeSigningCert.ps1 -SaveThumbprintForBuild
+    .\Build\Sign-Release.ps1   # picks up the saved thumbprint
+
+.EXAMPLE
+    # Paid cert (Microsoft Trusted Signing / Sectigo / DigiCert):
     .\Build\Sign-Release.ps1 -CertificateThumbprint '0123456789ABCDEF0123456789ABCDEF01234567'
 #>
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)]
+    [Parameter()]
     [ValidatePattern('^[0-9a-fA-F]{40}$')]
     [string] $CertificateThumbprint,
 
-    # Audit fix (v4.6.x LOW): pattern previously accepted any FQDN-shaped
-    # host, which let a typo or attacker-controlled DNS entry slip past the
-    # validator. Tighten to the four publicly-trusted RFC 3161 timestamp
-    # services the release process actually uses. Add new entries here only
-    # after the operator vets the new authority.
     [ValidatePattern('^https?://(timestamp\.digicert\.com|timestamp\.sectigo\.com|timestamp\.globalsign\.com|timestamp\.entrust\.com)(/.*)?$')]
     [string] $TimestampServer = 'http://timestamp.digicert.com',
 
@@ -53,6 +65,22 @@ if (-not $RepoRoot) {
 }
 if (-not (Test-Path -LiteralPath $RepoRoot)) {
     throw "Repository root not found: $RepoRoot"
+}
+
+# Resolve thumbprint: explicit param wins; otherwise pick up the one
+# New-NRGCodeSigningCert.ps1 stashed in the operator's profile.
+if (-not $CertificateThumbprint) {
+    $thumbFile = Join-Path $env:USERPROFILE '.nrg-assessment/signing-thumbprint.txt'
+    if (Test-Path -LiteralPath $thumbFile) {
+        $CertificateThumbprint = (Get-Content -LiteralPath $thumbFile -Raw).Trim()
+        Write-Verbose "Loaded thumbprint from $thumbFile"
+    } else {
+        throw "No -CertificateThumbprint supplied and no saved thumbprint at $thumbFile. Run Build/New-NRGCodeSigningCert.ps1 -SaveThumbprintForBuild first, or pass -CertificateThumbprint explicitly."
+    }
+}
+
+if ($CertificateThumbprint -notmatch '^[0-9a-fA-F]{40}$') {
+    throw "Thumbprint '$CertificateThumbprint' is not a 40-hex SHA-1. Refusing to proceed."
 }
 
 Write-Host "================================================================" -ForegroundColor Cyan
@@ -69,9 +97,16 @@ if (-not $cert) {
     throw "Code-signing certificate with thumbprint $CertificateThumbprint not found in CurrentUser\My or LocalMachine\My."
 }
 
-if ($cert.Subject -match 'self.?signed' -or $cert.Issuer -eq $cert.Subject) {
-    Write-Warning "Certificate appears to be self-signed. Microsoft Learn discourages this for production code signing."
-    Write-Warning "Continue at your own discretion."
+# Detect self-signed (Issuer == Subject). Inform but don't warn — for in-house
+# use, self-signed is the supported default. Upgrading to a paid cert later
+# only changes which thumbprint gets passed; this script doesn't care.
+$isSelfSigned = ($cert.Issuer -eq $cert.Subject)
+if ($isSelfSigned) {
+    Write-Host "  Mode:           Self-signed (in-house)" -ForegroundColor Yellow
+    Write-Host "                  Operators must trust the cert in their workstation's TrustedPublisher / Root stores." -ForegroundColor DarkGray
+    Write-Host "                  Build/New-NRGCodeSigningCert.ps1 does this for the workstation that generated the cert." -ForegroundColor DarkGray
+} else {
+    Write-Host "  Mode:           CA-issued" -ForegroundColor Green
 }
 
 if ($cert.NotAfter -lt (Get-Date).AddDays(30)) {
