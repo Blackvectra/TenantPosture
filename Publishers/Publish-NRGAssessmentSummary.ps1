@@ -228,9 +228,12 @@ function Publish-NRGAssessmentSummary {
 
     $null = $sb.AppendLine("| Control | Category | State | Severity | Title |")
     $null = $sb.AppendLine("|---------|----------|-------|----------|-------|")
+    # `?? 99` coerces unknown State / Severity values to a sortable tail position
+    # so a malformed finding (null or unexpected enum value) sorts last instead
+    # of mixing $null into the comparison and producing unpredictable order.
     $sorted = $actionable | Sort-Object `
-        @{Expression={$stateOrder[[string]$_.State]}}, `
-        @{Expression={$sevOrder[[string]$_.Severity]}}, `
+        @{Expression={($stateOrder[[string]$_.State])    ?? 99}}, `
+        @{Expression={($sevOrder[[string]$_.Severity])   ?? 99}}, `
         Category, ControlId
     foreach ($f in $sorted) {
         $icon = $stateIcon[$f.State] ?? $f.State
