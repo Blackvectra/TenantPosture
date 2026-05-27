@@ -21,7 +21,7 @@ On a fresh machine, run this once:
 
 ```powershell
 # After extracting the zip
-cd C:\path\to\NRG-Assessment-v4.6.4
+cd C:\path\to\NRG-Assessment-v4.6.5
 .\Install-NRGPrerequisites.ps1
 ```
 
@@ -218,4 +218,4 @@ Internal use — NRG Technology Services. Not licensed for redistribution.
 
 ---
 
-*NRG-Assessment v4.6.4 · 195 controls · 220 exported functions · 100 Pester tests*
+*NRG-Assessment v4.6.5 · 195 controls · 220 exported functions · 100 Pester tests*
