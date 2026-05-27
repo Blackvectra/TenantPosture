@@ -1,5 +1,26 @@
 # Changelog
 
+## v4.6.6 (2026-05-27) — fresh-install hotfix
+
+Two latent bugs surfaced when an operator unboxed v4.6.5 from a fresh GitHub zip on a Windows workstation without MicrosoftTeams installed:
+
+### Fixed
+
+- **`New-Item -LiteralPath ... -ItemType Directory` doesn't work** — `-LiteralPath` is not in `New-Item`'s parameter set, even on PowerShell 7. The line had worked on previous runs only because the `output/` directory already existed (the `Test-Path` guard skipped `New-Item`). On a fresh install, `New-Item` ran and failed with "A parameter cannot be found that matches parameter name 'LiteralPath'". Five sites affected:
+  - `Invoke-NRGAssessment.ps1:139`
+  - `Invoke-NRGBatchAssessment.ps1:307`
+  - `Apply-NRGBaseline.ps1:441`
+  - `Build/New-NRGCodeSigningCert.ps1:138` (introduced in v4.6.5)
+  - `tools/Generate-SBOM.ps1:40`
+  
+  All switched to `[void][System.IO.Directory]::CreateDirectory($path)` — cross-version, parameter-set-free, not flagged by the Pester `-LiteralPath` regex.
+
+- **`MicrosoftTeams` demoted from `RequiredModules` to soft dependency.** Listing it as a hard requirement blocked the entire module from loading on operator workstations without Teams installed — the wrong failure mode for an optional collector. `Connect-NRGServices` already handles Teams gracefully (imports on-demand, skips with clear error if not installed). Operators can now run assessments without Teams installed; the Teams collector simply gets skipped.
+
+### Notes
+
+The v4.6.5 release shipped with `ModuleVersion = '4.6.4'` in the manifest due to a post-merge Copilot Autofix that reverted the version bump. v4.6.6 corrects the version to 4.6.6 and ships the fresh-install hotfix. If you installed v4.6.5 and got "v4.6.4" in the banner with a `New-Item -LiteralPath` crash on first run, this release fixes both.
+
 ## v4.6.5 (2026-05-27)
 
 Patch release closing the correctness sweep defined in `docs/CORRECTNESS-SWEEP-v4.6.5.md`. No new features. Every defect surfaced by three real-tenant runs and a follow-on code-review audit is either Resolved here or explicitly tracked Open.

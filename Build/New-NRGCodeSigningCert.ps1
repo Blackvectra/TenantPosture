@@ -135,7 +135,7 @@ if (-not $SkipTrust) {
 if ($SaveThumbprintForBuild) {
     $configDir = Join-Path $env:USERPROFILE '.nrg-assessment'
     if (-not (Test-Path -LiteralPath $configDir)) {
-        New-Item -ItemType Directory -LiteralPath $configDir -Force | Out-Null
+        [void][System.IO.Directory]::CreateDirectory($configDir)
     }
     $thumbFile = Join-Path $configDir 'signing-thumbprint.txt'
     Set-Content -LiteralPath $thumbFile -Value $cert.Thumbprint -Encoding utf8
