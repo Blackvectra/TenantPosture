@@ -74,7 +74,10 @@ function Test-NRGSignatureStatus {
     # macOS knows the cmdlets but the underlying CryptoAPI calls aren't there.
     # Detect early and return a typed "Unsupported" so the caller's logic
     # branches cleanly instead of crashing on platform-specific errors.
-    $isWindows = $IsWindows -or $env:OS -eq 'Windows_NT'
+    # Use the built-in $IsWindows automatic variable directly (PS 7+ guaranteed
+    # by #Requires) — don't shadow it with a local. PSScriptAnalyzer's
+    # PSAvoidAssignmentToAutomaticVariable rule flags any assignment to $isWindows
+    # because PowerShell variable lookup is case-insensitive.
 
     # Resolve targets — single file vs directory
     $resolved = Resolve-Path -LiteralPath $Path
@@ -88,7 +91,7 @@ function Test-NRGSignatureStatus {
     }
 
     foreach ($item in $items) {
-        if (-not $isWindows) {
+        if (-not $IsWindows) {
             [pscustomobject]@{
                 Path             = $item.FullName
                 Status           = 'Unsupported'
