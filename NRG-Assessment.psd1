@@ -46,6 +46,7 @@
         'Test-NRGLicenseRequirementMet',
         'Get-NRGSafeProperty',
         'Get-NRGNestedProperty',
+        'Test-NRGSignatureStatus',
 
         # ── Collectors — AAD ──────────────────────────────────────────────────
         'Invoke-NRGCollectAADAuthPolicies',
