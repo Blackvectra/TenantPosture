@@ -176,6 +176,21 @@ function Publish-NRGRemediationScript {
     $null = $sb.AppendLine("# operator account.")
     $null = $sb.AppendLine("Connect-NRGServices -UserPrincipalName '$opUPNC' -ErrorAction Stop | Out-Null")
     $null = $sb.AppendLine("")
+    $null = $sb.AppendLine("# Load the matching assessment JSON so Apply-* dispatches can pass the")
+    $null = $sb.AppendLine("# original Finding object (every Apply-NRG* function takes -Finding [object]).")
+    $null = $sb.AppendLine("# The JSON sits next to this script: <baseName>-results.json where this")
+    $null = $sb.AppendLine("# script's basename is <baseName>-remediation.")
+    $null = $sb.AppendLine("`$scriptBase  = [System.IO.Path]::GetFileNameWithoutExtension(`$MyInvocation.MyCommand.Path)")
+    $null = $sb.AppendLine("`$resultsBase = `$scriptBase -replace '-remediation`$',''")
+    $null = $sb.AppendLine("`$resultsJson = Join-Path `$scriptDir (`"`$resultsBase-results.json`")")
+    $null = $sb.AppendLine("if (-not (Test-Path -LiteralPath `$resultsJson)) {")
+    $null = $sb.AppendLine("    Write-Error (`"Assessment results not found at `" + `$resultsJson + `". This script needs the original -results.json from the same run to pass Finding objects into Apply-* functions.`")")
+    $null = $sb.AppendLine("    return")
+    $null = $sb.AppendLine("}")
+    $null = $sb.AppendLine("`$assessment = Get-Content -LiteralPath `$resultsJson -Raw | ConvertFrom-Json")
+    $null = $sb.AppendLine("`$findingsByCtrl = @{}")
+    $null = $sb.AppendLine("foreach (`$fnd in `$assessment.Findings) { `$findingsByCtrl[`$fnd.ControlId] = `$fnd }")
+    $null = $sb.AppendLine("")
 
     # Phase-based section header helper
     function PhaseHeader { param($n, $sev, $count)
@@ -260,11 +275,19 @@ function Publish-NRGRemediationScript {
             # SupportsShouldProcess on the outer script means -WhatIf and
             # -Confirm flow through to the Apply-* function automatically.
             $lines += "    Write-Host '  -> $ctrlIdL ($applyFn)' -ForegroundColor Cyan"
-            $lines += "    try {"
-            $lines += "        $applyFn -ErrorAction Stop"
-            $lines += "        Write-Host '     [+] applied' -ForegroundColor Green"
-            $lines += "    } catch {"
-            $lines += "        Write-Host (`"     [!] failed: `" + `$_.Exception.Message) -ForegroundColor Red"
+            # Look up the finding object from the loaded JSON — Apply-* requires
+            # -Finding [object] (mandatory). Falling back to a synthetic object
+            # would mask the real finding state from the Apply function's logic.
+            $lines += "    `$fnd = `$findingsByCtrl['$ctrlIdL']"
+            $lines += "    if (-not `$fnd) {"
+            $lines += "        Write-Host '     [!] finding not in results.json — skipping' -ForegroundColor Yellow"
+            $lines += "    } else {"
+            $lines += "        try {"
+            $lines += "            $applyFn -Finding `$fnd -ErrorAction Stop"
+            $lines += "            Write-Host '     [+] applied' -ForegroundColor Green"
+            $lines += "        } catch {"
+            $lines += "            Write-Host (`"     [!] failed: `" + `$_.Exception.Message) -ForegroundColor Red"
+            $lines += "        }"
             $lines += "    }"
         } else {
             # No Apply-* mapping — emit instruction as a comment block so the
