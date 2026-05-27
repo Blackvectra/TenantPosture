@@ -204,6 +204,20 @@ if ($needsAction.Count -gt 0) {
             $targetVer = $n.Spec.PinVersion
             try {
                 if ($n.Action -eq 'repin' -and [version]$n.Current -gt [version]$n.Spec.PinVersion) {
+                    # OneDrive-synced PowerShell module paths can't be removed (OneDrive holds
+                    # file locks on every file in the synced tree). Detect that case up front
+                    # and refuse with an actionable message rather than letting Uninstall-PSResource
+                    # fail mid-sweep with a confusing 'Cannot remove package path' error.
+                    $existing = Get-Module -Name $name -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
+                    if ($existing -and $existing.ModuleBase -match '(?i)\bOneDrive\b') {
+                        Write-Host "  [!] $name is installed in a OneDrive-synced path:" -ForegroundColor Red
+                        Write-Host "      $($existing.ModuleBase)" -ForegroundColor DarkYellow
+                        Write-Host "      OneDrive prevents PowerShell from removing this module." -ForegroundColor Yellow
+                        Write-Host "      Fix: pause OneDrive sync on your Documents folder, OR move your" -ForegroundColor Yellow
+                        Write-Host "      PowerShell modules out of OneDrive (Settings -> OneDrive -> Backup)." -ForegroundColor Yellow
+                        Write-Host "      Then re-run this script." -ForegroundColor Yellow
+                        continue
+                    }
                     Write-Host "  [*] Downgrading $name $($n.Current) -> $targetVer..." -ForegroundColor Cyan
                     Uninstall-PSResource -Name $name -ErrorAction SilentlyContinue
                 }
