@@ -46,6 +46,7 @@
         'Test-NRGLicenseRequirementMet',
         'Get-NRGSafeProperty',
         'Get-NRGNestedProperty',
+        'Test-NRGSignatureStatus',
 
         # ── Collectors — AAD ──────────────────────────────────────────────────
         'Invoke-NRGCollectAADAuthPolicies',
@@ -287,7 +288,7 @@
     # Install-NRGPrerequisites enforces (3.4.0+ has the WAM broker
     # NullReferenceException that the prereq script downgrades around).
     RequiredModules = @(
-        @{ ModuleName = 'Microsoft.Graph.Authentication'; ModuleVersion = '2.0.0' },
+        @{ ModuleName = 'Microsoft.Graph.Authentication'; ModuleVersion = '2.20.0' },
         @{ ModuleName = 'ExchangeOnlineManagement';       ModuleVersion = '3.2.0' },
         @{ ModuleName = 'MicrosoftTeams';                 ModuleVersion = '5.0.0' }
     )

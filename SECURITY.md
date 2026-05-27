@@ -90,4 +90,4 @@ Do not open public GitHub issues for security vulnerabilities.
 
 ---
 
-*NRG-Assessment v4.6.4 · Hardened against OWASP Top 10:2025, ASVS v5, CVE-2025-54100*
+*NRG-Assessment v4.6.5 · Hardened against OWASP Top 10:2025, ASVS v5, CVE-2025-54100*

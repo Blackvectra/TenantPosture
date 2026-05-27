@@ -105,6 +105,42 @@ These came out of the strategic-doc review and aren't blockers for v4.6.5 itself
 2. **Item 19 (Azure subscription assessment) repo** — green-light to scaffold a new `NRG-Azure-Assessment` repo when v4.6.5 closes, or hold for v5.x?
 3. **Tenants for validation runs.** The operator's own tenant covers most of the Resolved bugs. We need at minimum one non-BP tenant to validate entry #23 (license detection). Which tenant?
 
+## OWASP Top 10:2021 audit (v4.6.5)
+
+Walk-through of the OWASP Top 10 against this codebase as it stands in v4.6.5. The 14 NRE fixes + ResultSize fix + remediation-script dispatch fix already closed the most-likely runtime-exploitable defects. What remains:
+
+| Category | Applies | Posture | Open work |
+|---|---|---|---|
+| **A01 Broken Access Control** | YES | ACLs on output via `Set-NRGSensitiveFileAcl`. Path-traversal guard on module loader (psm1:95). Apply-* uses `ConfirmImpact='High'` + tenant-ID pin (results.json `Metadata.TenantId` must match connected session before any write). | None — closed. |
+| **A02 Cryptographic Failures** | YES | TLS 1.2/1.3 enforced in `Apply-NRGBaseline.ps1:79-82`. No plaintext secrets in code or output. Token cache process-scope only (not persisted). | **Fixed in v4.6.5**: bumped Graph SDK pin 2.0.0 → 2.20.0 to match README install instructions and pick up known token-handling fixes. |
+| **A03 Injection** | YES | HTML escape via `ConvertTo-NRGHtmlSafe` in HTML emitters. Markdown escape via `EscMd` (pipe/backtick/newline only — does not over-escape into HTML entities). PS literal escape via `EscPs1Literal` + `EscPs1Comment` in remediation script generator. DNS collector validates FQDN via `Test-NRGSafeProbeTarget` and the `$script:DomainPattern` regex. | **Open (Low)**: PS code fence in playbook remedy block only escapes ``` ``` ```. Tenant data containing `$()` or `@()` could expand if executed by a non-paranoid renderer. Mitigation in publisher; not exploitable as-emitted. Tracked for v4.7. |
+| **A04 Insecure Design** | YES | Assessor is read-only; write-mode segregated into `Apply/` with `SupportsShouldProcess + ConfirmImpact='High'`. Two-step workflow (assess → review → apply) is the design. | **Open (High)**: Generated `<tenant>-remediation.ps1` is not Authenticode-signed. Operator running it with high privilege has no out-of-band tamper detection beyond the integrity manifest. Needs code-signing cert from operator + signing step in `Build/Sign-Release.ps1`. Tracked as standalone v4.7 item. |
+| **A05 Security Misconfiguration** | YES | StrictMode `Latest` at module scope (psm1:33). `ErrorActionPreference = 'Stop'` at script entry. `LiteralPath` everywhere file paths are touched. `RemoteSigned` execution policy assumed at install. | **Open (Low)**: `Install-NRGPrerequisites.ps1` sets `RemoteSigned` which allows user-scope unsigned scripts. Operators should be guided to `AllSigned` after they trust the release. Add note to DEPLOYMENT.md. |
+| **A06 Vulnerable and Outdated Components** | YES | Module pinning: Graph 2.20.0+ (bumped this PR), EOM 3.2.0, Teams 6.4.0, Pester 5.6.1. | **Open (Info)**: EOM 3.2.0 lifecycle. Monitor Microsoft's EOM support lifecycle; plan upgrade before support end. **Fixed in v4.6.5**: added `.gitattributes` to force LF line endings so future integrity manifests are stable across Windows/macOS/Linux checkouts. |
+| **A07 Identification and Authentication Failures** | YES | App-only auth supported (certificate thumbprint, no password). Browser flow for Graph (no WAM broker risk). Device-code for Teams/EXO (documented in Connect-NRGServices comments). `MSAL_ALLOW_BROKER=0` set in psm1:23 to block broker compromise. UPN regex validation. | **Open (Medium)**: Device-code auth relies on the tenant's CA policy enforcing MFA for service principals. If the tenant CA policy permits device-code without MFA, the operator's session is one phishing step from compromise. **Action**: add a one-time warning at first device-code prompt — "Confirm tenant CA policy requires MFA for service principals before continuing." Tracked for v4.7. |
+| **A08 Software and Data Integrity Failures** | YES | `tools/Verify-Integrity.ps1` exists and validates SHA-256. Tenant-ID pin in Apply-* (`Apply-NRGBaseline.ps1:20` comment) prevents Tenant-B-apply-to-Tenant-A. JSON-lines rollback audit log per applied change (`Apply-NRGBaseline.ps1:406` — `apply-<ts>-<uniq>-rollback.jsonl`). | **Open (Critical)**: `tools/integrity-manifest.txt` does not exist. Operators have no way to verify downloaded source. **Action**: generate via `.\tools\Verify-Integrity.ps1 -Update` as part of `Build/Sign-Release.ps1` at release-tag time. Cannot be committed at branch time because hashes would diverge on Windows checkout — `.gitattributes` (added this PR) addresses the line-ending half of that problem, but the manifest must still be release-time generated. **Workaround until then**: operators verify the GitHub release tag SHA + use `git verify-tag` if releases are GPG-signed. |
+| **A09 Security Logging and Monitoring Failures** | PARTIAL | Exception capture via `Register-NRGException` (in-memory, written to JSON output). `Add-NRGFinding` records every state. Apply-* writes JSON-lines rollback audit (Apply-NRGBaseline.ps1:406) per change. | **Open (Low)**: `Register-NRGException` length-caps message at 2000 chars but does not strip URLs / GUIDs / token fragments that could land in the JSON output. Trade-off: stripping kills debugging info. Recommendation: add a `-Redact` switch that operators can use when sharing outputs externally; leave default unredacted. Tracked for v4.7. |
+| **A10 Server-Side Request Forgery** | YES | DNS collector blocks RFC1918/loopback/metadata endpoints via `Test-NRGSafeProbeTarget`. Resolves DNS once to prevent rebinding. Graph endpoints are hardcoded Microsoft hosts. Device-code URL validated as HTTPS + microsoft.com domain. | None — closed. |
+
+**Overall posture: Moderate-Strong.** No Critical defects open against the **assessor**; one Critical open against the **release-management process** (integrity manifest). Apply-* write-mode has one outstanding High item (Authenticode signing).
+
+### v4.6.5 actions
+
+- Bumped Graph SDK pin `Microsoft.Graph.Authentication` 2.0.0 → 2.20.0 (A02)
+- Added `.gitattributes` to force LF line endings on source files (A06/A08 prerequisite)
+
+### Deferred to v4.7
+
+- Authenticode signing of release artifacts + signature verification gate in `Apply-NRGBaseline.ps1` (A04 / A08)
+- Device-code MFA-policy advisory warning at first prompt (A07)
+- `-Redact` option on JSON output for external sharing (A09)
+- PS-fence escape hardening for tenant-data in markdown remediation (A03)
+- DEPLOYMENT.md guidance: `AllSigned` execution policy + integrity-manifest verification step (A05 / A08)
+
+### Process note (release management)
+
+`tools/integrity-manifest.txt` is intentionally absent from `HEAD`. It is generated at release-tag time by `Build/Sign-Release.ps1` (which calls `Verify-Integrity.ps1 -Update`) and included in the release artifact, NOT in the source tree. Committing a manifest at branch time would diverge from the actual release hashes and provide false confidence. The `.gitattributes` addition this PR ensures manifests computed on the release machine match what operators check out.
+
 ---
 
 *Document owner: NextLayerSec. Sequenced ahead of all v4.7+ feature work per strategic review.*
