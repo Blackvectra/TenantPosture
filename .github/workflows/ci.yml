@@ -21,14 +21,47 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
-            Install-PSResource -Name Pester -Version '[5.5.0,)' -TrustRepository -Scope CurrentUser -Reinstall
-          } else {
-            if (Get-PSRepository PSGallery -ErrorAction SilentlyContinue) {
-              Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-            }
-            Install-Module -Name Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck -AllowClobber
+
+          # Fast-path: if a satisfying Pester is already on the runner (the
+          # ubuntu-latest image ships one in the toolcache), skip the network
+          # call entirely. This also avoids the periodic PSGallery /
+          # PSResourceGet transient failures that previously failed CI here.
+          $have = Get-Module -ListAvailable Pester |
+                  Where-Object { $_.Version -ge [version]'5.5.0' } |
+                  Sort-Object Version -Descending |
+                  Select-Object -First 1
+          if ($have) {
+              Write-Host ('Pester {0} already installed at {1} — skipping install.' -f $have.Version, $have.ModuleBase)
+              return
           }
+
+          # Slow path: retry the install up to 3x with exponential backoff to
+          # ride out brief PSGallery / PSResourceGet hiccups. The previous
+          # workflow failed at this step in 11s with no retry; that's the
+          # signature of an upstream blip rather than a real packaging issue.
+          $delays = @(2, 4, 8)
+          $lastErr = $null
+          foreach ($delay in $delays) {
+              try {
+                  if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
+                      Install-PSResource -Name Pester -Version '[5.5.0,)' -TrustRepository -Scope CurrentUser -ErrorAction Stop
+                  } else {
+                      if (Get-PSRepository PSGallery -ErrorAction SilentlyContinue) {
+                          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+                      }
+                      Install-Module -Name Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck -AllowClobber -ErrorAction Stop
+                  }
+                  $lastErr = $null
+                  break
+              } catch {
+                  $lastErr = $_
+                  Write-Host ('Install attempt failed: {0}' -f $_.Exception.Message) -ForegroundColor Yellow
+                  Write-Host ('Retrying in {0}s...' -f $delay)
+                  Start-Sleep -Seconds $delay
+              }
+          }
+          if ($lastErr) { throw $lastErr }
+
           (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1).Version
 
       - name: Diagnostics — pwsh + Pester + parse test file
@@ -85,14 +118,41 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
-            Install-PSResource -Name PSScriptAnalyzer -TrustRepository -Scope CurrentUser -Reinstall
-          } else {
-            if (Get-PSRepository PSGallery -ErrorAction SilentlyContinue) {
-              Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-            }
-            Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -AllowClobber
+
+          # Fast-path: ubuntu-latest ships PSScriptAnalyzer in the toolcache;
+          # if it's already present, skip the gallery round-trip.
+          $have = Get-Module -ListAvailable PSScriptAnalyzer |
+                  Sort-Object Version -Descending |
+                  Select-Object -First 1
+          if ($have) {
+              Write-Host ('PSScriptAnalyzer {0} already installed at {1} — skipping install.' -f $have.Version, $have.ModuleBase)
+              return
           }
+
+          # Slow path: retry 3x with exponential backoff to ride out brief
+          # PSGallery / PSResourceGet transient failures.
+          $delays = @(2, 4, 8)
+          $lastErr = $null
+          foreach ($delay in $delays) {
+              try {
+                  if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
+                      Install-PSResource -Name PSScriptAnalyzer -TrustRepository -Scope CurrentUser -ErrorAction Stop
+                  } else {
+                      if (Get-PSRepository PSGallery -ErrorAction SilentlyContinue) {
+                          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+                      }
+                      Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -AllowClobber -ErrorAction Stop
+                  }
+                  $lastErr = $null
+                  break
+              } catch {
+                  $lastErr = $_
+                  Write-Host ('Install attempt failed: {0}' -f $_.Exception.Message) -ForegroundColor Yellow
+                  Write-Host ('Retrying in {0}s...' -f $delay)
+                  Start-Sleep -Seconds $delay
+              }
+          }
+          if ($lastErr) { throw $lastErr }
 
       - name: Run analyzer
         shell: pwsh
