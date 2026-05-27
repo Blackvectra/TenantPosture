@@ -80,6 +80,14 @@ function Publish-NRGAssessmentHTML {
     $co = if ($brand['CompanyName']) { $brand['CompanyName'] } else { 'NRG Technology Services' }
     $ph = if ($brand['Phone']) { $brand['Phone'] } else { '' }
     $ws = if ($brand['Website']) { $brand['Website'] } else { 'nrgtechservices.com' }
+    # Normalize the Website value to a bare host so the templates below can
+    # consistently prepend `https://`. The branding config legitimately stores
+    # the full URL (`https://www.nrgtechservices.com`) but the templates also
+    # assume bare-host (`nrgtechservices.com`). Without this strip, the footer
+    # rendered `<a href='https://https://www.nrgtechservices.com'>` which the
+    # browser parsed as host=`https:` + path=`//www...` — operator saw the
+    # malformed `https://https//www.nrgtechservices.com` in the rendered link.
+    $ws = $ws -replace '^https?://', ''
     $lu = if ($brand['LogoUrl']) { $brand['LogoUrl'] } else { '' }
     $clientDisplay = if ($ClientName) { $ClientName } else { $Metadata.TenantDomain }
 
