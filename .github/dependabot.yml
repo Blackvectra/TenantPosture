@@ -1,11 +1,33 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+# Dependabot configuration — keeps GitHub Actions versions current.
+#
+# Why only github-actions:
+#   This is a PowerShell repo. Dependabot does not support PSGallery /
+#   PowerShell modules as an ecosystem (the full supported list is at
+#   https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#   under `package-ecosystem`). The only thing Dependabot can meaningfully
+#   keep current in this repo is the action versions used in
+#   .github/workflows/*.yml (e.g. actions/checkout, github/codeql-action,
+#   actions/upload-artifact).
+#
+#   PowerShell module versions for runtime dependencies (Microsoft.Graph,
+#   ExchangeOnlineManagement) are pinned in NRG-Assessment.psd1 and
+#   bumped deliberately — Dependabot can't help there. CI module versions
+#   (Pester, PSScriptAnalyzer) are pinned in ci.yml on closed ranges
+#   ([5.5.0,5.99.99] etc.) and also bumped deliberately.
 
 version: 2
 updates:
-  - package-ecosystem: "" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  - package-ecosystem: "github-actions"
+    directory: "/"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      # Cluster all action bumps into a single weekly PR so we don't drown
+      # in N tiny dependabot PRs every Monday. Each PR still shows the
+      # individual version bumps in its description.
+      actions:
+        patterns:
+          - "*"
