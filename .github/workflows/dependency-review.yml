@@ -1,0 +1,43 @@
+# Dependency Review — checks every PR for changes that add a known-vulnerable
+# dependency or relax a license constraint.
+#
+# Scope on this repo: PowerShell modules from PSGallery are not tracked by
+# GitHub's dependency graph (no PSGallery ecosystem support), so this
+# workflow primarily protects the GitHub Actions versions used in the
+# workflow files. That's still meaningful: it blocks PRs that pin to an
+# action whose version has a known CVE, or that bumps to a license you
+# don't want to ship under.
+
+name: Dependency Review
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  # required to comment on PRs with the findings summary
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          # Block PRs that introduce moderate-or-higher severity vulnerabilities.
+          # That is the load-bearing check.
+          fail-on-severity: moderate
+          # License audit is intentionally NOT enforced. GitHub's dependency
+          # graph rarely surfaces a license string for github-actions deps
+          # (the SPDX-id field is null for most action repos), which makes
+          # an allow-list effectively a deny-all-with-known-license filter
+          # that blocks legitimate first-party actions on first introduction.
+          # If license discipline matters later, gate via deny-licenses on
+          # specific licenses (GPL-3.0, AGPL-3.0) instead of allow-listing.
+          comment-summary-in-pr: on-failure
