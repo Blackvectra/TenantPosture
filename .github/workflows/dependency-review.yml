@@ -31,7 +31,13 @@ jobs:
         uses: actions/dependency-review-action@v4
         with:
           # Block PRs that introduce moderate-or-higher severity vulnerabilities.
+          # That is the load-bearing check.
           fail-on-severity: moderate
-          # License allow-list — these are the licenses we accept new deps under.
-          allow-licenses: MIT, BSD-2-Clause, BSD-3-Clause, Apache-2.0, ISC, MPL-2.0, CC0-1.0, Unlicense
+          # License audit is intentionally NOT enforced. GitHub's dependency
+          # graph rarely surfaces a license string for github-actions deps
+          # (the SPDX-id field is null for most action repos), which makes
+          # an allow-list effectively a deny-all-with-known-license filter
+          # that blocks legitimate first-party actions on first introduction.
+          # If license discipline matters later, gate via deny-licenses on
+          # specific licenses (GPL-3.0, AGPL-3.0) instead of allow-listing.
           comment-summary-in-pr: on-failure

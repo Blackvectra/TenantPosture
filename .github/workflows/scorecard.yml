@@ -37,7 +37,13 @@ jobs:
           persist-credentials: false
 
       - name: Run analysis
-        uses: ossf/scorecard-action@v2
+        # SHA-pinned (not tag-pinned) per CodeQL's supply-chain rule:
+        # ossf/scorecard-action is 3rd-party, so a moving tag would let
+        # the maintainer (or an attacker who compromises the org) re-point
+        # `v2` at any future commit. Pin the exact tree we trust today.
+        # Dependabot (github-actions ecosystem) will open a PR when this
+        # action publishes a newer release, with the new SHA in the diff.
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
         with:
           results_file: results.sarif
           results_format: sarif
