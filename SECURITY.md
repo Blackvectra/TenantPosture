@@ -36,7 +36,7 @@ Enforced by: CI static analysis (`Read-Only Posture` test in `NRG.Security.Tests
 
 ### CVE-2025-54100
 
-`#Requires -Version 7.0` on all 35 production files blocks the PS 5.1 MSHTML injection vulnerability.
+`#Requires -Version 7.0` on every production file blocks the PS 5.1 MSHTML injection vulnerability.
 
 ---
 
@@ -57,14 +57,28 @@ The JSON control definition file is validated at load time before any evaluator 
 
 ## CI/CD Security Pipeline
 
-Every push to `main` runs:
+Each row below names the workflow file that implements it, so this list can be verified against `.github/workflows/` at any time.
 
-1. **PSScriptAnalyzer** — static analysis, Error + Warning severity
-2. **Pester (77 tests)** — OWASP/ASVS security invariants (static + runtime)
-3. **Gitleaks** — secret detection across full commit history
-4. **TruffleHog** — deep verified secret scan
-5. **CycloneDX SBOM** — software bill of materials on release
-6. **Authenticode catalog check** — on release tags (if catalog present)
+**On every push and pull request to `main`:**
+
+1. **PSScriptAnalyzer** (`ci.yml`) — static analysis; Error severity fails the build. Findings upload to Code Scanning as SARIF.
+2. **Pester** (`ci.yml`) — OWASP/ASVS security invariants (static + runtime).
+3. **CodeQL** (`codeql.yml`) — scans the GitHub Actions workflow YAML for supply-chain weaknesses; `security-extended` + `security-and-quality` query packs.
+4. **Gitleaks** (`secret-scan.yml`) — fast regex/entropy secret detection across full git history.
+5. **TruffleHog** (`secret-scan.yml`) — verified secret scan; confirms candidates against live services to suppress false positives.
+6. **Dependency Review** (`dependency-review.yml`) — blocks PRs that introduce moderate-or-higher severity vulnerable dependencies.
+
+**On a weekly schedule:**
+
+7. **OSSF Scorecard** (`scorecard.yml`) — repository security-health metric (branch protection, pinned deps, token permissions, etc.); results upload to Code Scanning.
+8. **Gitleaks / TruffleHog full-history sweep** (`secret-scan.yml`) — catches secrets introduced via force-push or a branch that bypassed PR review.
+
+**On version tags (`v*`):**
+
+9. **CycloneDX SBOM** (`release.yml`) — software bill of materials generated from `tools/Generate-SBOM.ps1` and attached to the workflow run.
+10. **Authenticode + integrity check** (`release.yml`, windows-latest) — verifies the integrity manifest and Authenticode signature status. Fails on tamper (HashMismatch / Expired / UntrustedRoot); tolerates unsigned in-house builds (operator signs locally via `Build/Sign-Release.ps1`).
+
+**Dependency hygiene:** Dependabot (`dependabot.yml`) opens weekly PRs for GitHub Actions version bumps; every third-party action is SHA-pinned.
 
 ---
 
@@ -96,4 +110,4 @@ If you suspect a credential leak, malicious dependency, signed-release tamper, o
 
 ---
 
-*NRG-Assessment v4.6.5 · Hardened against OWASP Top 10:2025, ASVS v5, CVE-2025-54100*
+*NRG-Assessment v4.6.7 · Hardened against OWASP Top 10:2025, ASVS v5, CVE-2025-54100*

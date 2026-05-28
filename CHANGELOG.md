@@ -50,6 +50,31 @@ Polish-and-correctness bundle covering everything surfaced by the v4.6.6 review 
 
 - **Removed unverified "ubuntu-latest ships [Pester/PSScriptAnalyzer] in the toolcache" comment** from the workflow — it isn't a load-bearing claim and the fast-path is still a correct no-op when the runner image doesn't preinstall the module.
 
+### Added — GitHub repository security surface
+
+The v4.6.7 line also brought the repo's GitHub-side security posture up to match the in-code hardening. None of this changes module code (ModuleVersion stays 4.6.7); it is repository / CI / documentation infrastructure.
+
+- **`.github/dependabot.yml`** — `github-actions` ecosystem, weekly, grouped into one PR. (PowerShell modules from PSGallery aren't a Dependabot-supported ecosystem; runtime module versions stay pinned in the manifest.)
+- **`.github/workflows/codeql.yml`** — CodeQL Advanced scanning the Actions workflow YAML for supply-chain weaknesses (`security-extended` + `security-and-quality`).
+- **`.github/workflows/ci.yml`** — PSScriptAnalyzer job now emits SARIF and uploads to Code Scanning (`category=psscriptanalyzer`). SARIF `startLine`/`startColumn` clamped to ≥1 (PSScriptAnalyzer emits 0 for whole-file rules, which SARIF 2.1.0 rejects); relative paths via `GetRelativePath`.
+- **`.github/workflows/dependency-review.yml`** — blocks PRs introducing moderate-or-higher CVEs. (License allow-list dropped — GitHub's dependency graph doesn't populate SPDX licenses for most action repos, so an allow-list false-fails first-party actions.)
+- **`.github/workflows/scorecard.yml`** — OSSF Scorecard weekly + on push; `ossf/scorecard-action` SHA-pinned per the supply-chain rule CodeQL enforces.
+- **`.github/workflows/secret-scan.yml`** — Gitleaks + TruffleHog on push/PR and a weekly full-history sweep. Both third-party actions SHA-pinned. Isolated from `ci.yml` so a scanner hiccup can't block the core gates.
+- **`.github/workflows/release.yml`** — on `v*` tags: CycloneDX SBOM from `tools/Generate-SBOM.ps1`, plus a windows-latest Authenticode + integrity-manifest verification (fails on tamper, tolerates unsigned in-house builds).
+
+### Added — documentation
+
+- **`docs/INCIDENT-RESPONSE.md`** — per-scenario runbook (GitHub credential leak, M365 enterprise-app secret leak, malicious dependency / compromised action, signing-cert compromise, active tenant compromise during an assessment). Referenced from `SECURITY.md`.
+- **`docs/ROADMAP-v4.9.0.md`** — consolidates the former v4.7 (analytics) and v4.8 (IG scoping / attestation / portfolio / Maester) roadmaps into one coordinated release; `ROADMAP-v4.7.md` and `ROADMAP-v4.8.md` marked SUPERSEDED.
+
+### Fixed — documentation accuracy
+
+A documentation-drift audit caught several stale claims, now corrected:
+
+- **`SECURITY.md` CI/CD section rewritten to match reality.** It previously listed Gitleaks, TruffleHog, CycloneDX SBOM, and an Authenticode catalog check as running CI steps when no workflow implemented them, and omitted the CodeQL / Scorecard / Dependency Review / Dependabot steps that *do* run. The four claimed-but-missing steps are now actually implemented (above), and the section names the workflow file behind each step so it can be verified against `.github/workflows/`.
+- **Version strings reconciled to 4.6.7** in the `NRG-Assessment.psm1` header banner, `CLAUDE.md`, and the `SECURITY.md` footer (all had lagged at 4.5.5 / 4.6.5 while the manifest and `$script:NRGAssessmentVersion` were already 4.6.7).
+- **`SECURITY.md` "35 production files"** claim replaced with a count-free phrasing to stop the number drifting out of sync.
+
 ## v4.6.6.1 (2026-05-27) — HTML report CSP hotfix
 
 ### Fixed

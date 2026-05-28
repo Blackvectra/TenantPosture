@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 #
-# NRG-Assessment.psm1  (v4.5.5)
+# NRG-Assessment.psm1  (v4.6.7)
 # Module loader — dot-sources all functions from Lib, Collectors, Evaluators, Publishers.
 #
 # Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC

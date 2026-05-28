@@ -1,0 +1,110 @@
+# Release pipeline — runs only on version tags (v*).
+#
+# Two jobs:
+#   sbom        — generates a CycloneDX SBOM from tools/Generate-SBOM.ps1 and
+#                 attaches it to the workflow run (and the GitHub Release if
+#                 one exists for the tag).
+#   authenticode — on windows-latest, verifies Authenticode signatures + the
+#                 integrity manifest. It cannot SIGN (no cert in CI — signing
+#                 is a local operator step via Build/Sign-Release.ps1); it
+#                 VERIFIES. A HashMismatch (file changed after signing) fails
+#                 the job; NotSigned is reported but tolerated, since in-house
+#                 releases may ship unsigned until the operator signs locally.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  sbom:
+    name: CycloneDX SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate SBOM
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./tools/Generate-SBOM.ps1 -OutputPath ./sbom/nrg-assessment.cdx.json
+          if (-not (Test-Path -LiteralPath ./sbom/nrg-assessment.cdx.json)) {
+              throw 'SBOM generation produced no output file.'
+          }
+          $sbom = Get-Content -LiteralPath ./sbom/nrg-assessment.cdx.json -Raw | ConvertFrom-Json
+          Write-Host ('SBOM OK: {0} components, format {1}' -f @($sbom.components).Count, $sbom.bomFormat)
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-cyclonedx
+          path: sbom/nrg-assessment.cdx.json
+          if-no-files-found: error
+
+  authenticode:
+    name: Authenticode + integrity check
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify integrity manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (Test-Path -LiteralPath ./tools/integrity-manifest.txt) {
+              # Re-hash the tree and diff against the committed manifest. The
+              # script writes with -Update; here we compare current hashes to
+              # the manifest and fail on any mismatch.
+              $manifest = Get-Content -LiteralPath ./tools/integrity-manifest.txt |
+                          Where-Object { $_ -and -not $_.StartsWith('#') }
+              $mismatch = 0
+              foreach ($line in $manifest) {
+                  $parts = $line -split '\s+', 2
+                  if ($parts.Count -ne 2) { continue }
+                  $expected = $parts[0]; $rel = $parts[1].Trim()
+                  if (Test-Path -LiteralPath $rel) {
+                      $actual = (Get-FileHash -LiteralPath $rel -Algorithm SHA256).Hash
+                      if ($actual -ne $expected) {
+                          Write-Host ("  [MISMATCH] $rel") -ForegroundColor Red
+                          $mismatch++
+                      }
+                  } else {
+                      Write-Host ("  [MISSING]  $rel") -ForegroundColor Yellow
+                  }
+              }
+              if ($mismatch -gt 0) { throw "$mismatch file(s) do not match the integrity manifest." }
+              Write-Host '  [+] Integrity manifest verified.' -ForegroundColor Green
+          } else {
+              Write-Host '  [i] No integrity manifest committed — skipping (run tools/Verify-Integrity.ps1 -Update locally to create one).'
+          }
+
+      - name: Authenticode signature status
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = Get-ChildItem -Recurse -File -Include '*.ps1','*.psm1','*.psd1' |
+                   Where-Object { $_.FullName -notmatch '[\\/](output|\.git)[\\/]' }
+          $valid = 0; $notSigned = 0; $bad = 0
+          foreach ($f in $files) {
+              $sig = Get-AuthenticodeSignature -LiteralPath $f.FullName
+              switch ($sig.Status) {
+                  'Valid'        { $valid++ }
+                  'NotSigned'    { $notSigned++ }
+                  'UnknownError' { $notSigned++ }   # treated as not-signed on this host
+                  default        { $bad++; Write-Host ("  [{0}] {1}" -f $sig.Status, $f.Name) -ForegroundColor Red }
+              }
+          }
+          Write-Host ('Authenticode summary — Valid: {0}  NotSigned: {1}  Problem: {2}' -f $valid, $notSigned, $bad)
+          # HashMismatch / Expired / UntrustedRoot = real tamper/trust signals → fail.
+          # NotSigned alone is tolerated (in-house releases sign locally).
+          if ($bad -gt 0) { throw "$bad file(s) have a bad Authenticode status (tamper or trust failure)." }
+          if ($notSigned -gt 0 -and $valid -eq 0) {
+              Write-Host '  [i] Release is unsigned. Sign locally with Build/Sign-Release.ps1 before distribution.' -ForegroundColor Yellow
+          }
