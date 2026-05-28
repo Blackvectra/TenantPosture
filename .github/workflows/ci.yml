@@ -202,8 +202,12 @@ jobs:
                       physicalLocation = @{
                           artifactLocation = @{ uri = $rel }
                           region = @{
-                              startLine   = [int]$r.Line
-                              startColumn = [int]$r.Column
+                              # SARIF 2.1.0 requires startLine/startColumn >= 1.
+                              # PSScriptAnalyzer occasionally emits 0 for whole-
+                              # file rules (e.g. manifest-level checks); clamp
+                              # those up to 1 so the SARIF validates.
+                              startLine   = [Math]::Max(1, [int]$r.Line)
+                              startColumn = [Math]::Max(1, [int]$r.Column)
                           }
                       }
                   })
