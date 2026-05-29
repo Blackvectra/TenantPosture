@@ -1,5 +1,7 @@
 # Roadmap v4.7 — Ten new feature areas
 
+> **⚠️ SUPERSEDED.** This document has been rolled into [`docs/ROADMAP-v4.9.0.md`](ROADMAP-v4.9.0.md), which combines the v4.7 (analytics) and v4.8 (IG scoping / attestation / portfolio / Maester) waves into a single coordinated release. Do not modify this file going forward — it remains in place for git-history continuity only. Implementation tracking moves to the v4.9.0 doc.
+
 **Status:** Design. No code yet. This document defines architecture, control IDs, data shapes, and publisher impact for the v4.7 feature wave. Implementation tracked in [#TBD] once this design is approved.
 
 **Scope:** Both `NRG-Assessment-Tool` (this repo) and the sibling repo land each feature in lockstep — same control IDs, same finding shapes, identical baseline JSON entries. Branding is the only diff.
