@@ -2,6 +2,8 @@
 
 **Status:** Design. No code yet. Supersedes `docs/ROADMAP-v4.7.md` (analytics) and `docs/ROADMAP-v4.8.md` (IG scoping, attestation, portfolio, Maester eval) — both consolidated here as a single coordinated release.
 
+**Companion track:** `docs/WEB-PORTAL-DESIGN.md` defines a parallel **product surface** — a multi-tenant web portal that complements (does not replace) the CLI. The two tracks ship independently; the portal consumes the CLI as a pinned git submodule.
+
 **Why combined.** The original v4.7 / v4.8 split was sequencing convenience, but the features tightly couple in practice: the Maturity Model (F1) wants IG coverage as an input, the Portfolio dashboard (F13) wants Maturity and Incident-Likelihood as columns, and Attestation (F12) and Responsibility Map (F5) are both schema migrations on the same `controls.json` rows. Shipping together = **one** baseline jump, **one** tenant scope-grant cycle, **one** CHANGELOG entry, **one** documentation update for clients.
 
 **Scope:** Both `NRG-Assessment-Tool` and the sibling `NLS-Assessment` repo land each feature in lockstep — same control IDs, same finding shapes, identical baseline JSON entries. Branding only.
