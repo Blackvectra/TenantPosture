@@ -2,7 +2,7 @@
 
 **Author:** Matthew Levorson, NRG Technology Services / NextLayerSec LLC
 **GitHub:** https://github.com/Blackvectra/NRG-Assessment-Tool
-**Version:** 4.6.5
+**Version:** 4.6.7
 **Language:** PowerShell 7.0+
 **Purpose:** Read-only Microsoft 365 security assessment framework for MSP multi-tenant environments.
 

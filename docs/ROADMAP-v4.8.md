@@ -1,5 +1,7 @@
 # Roadmap v4.8 — IG1/IG2 grouping, attestation, and portfolio surface
 
+> **⚠️ SUPERSEDED.** This document has been rolled into [`docs/ROADMAP-v4.9.0.md`](ROADMAP-v4.9.0.md), which combines the v4.7 (analytics) and v4.8 (IG scoping / attestation / portfolio / Maester) waves into a single coordinated release. Do not modify this file going forward — it remains in place for git-history continuity only. Implementation tracking moves to the v4.9.0 doc.
+
 **Status:** Design. No code yet. Sibling of `docs/ROADMAP-v4.7.md`. v4.7 covers analytics features; v4.8 covers scoping clarity, the IG1/IG2 view onto existing 188 controls, the governance-attestation hole, and the cross-client surface.
 
 **Scope:** Both `NRG-Assessment-Tool` and the sibling repo land each feature in lockstep — same control IDs, same finding shapes, identical baseline JSON entries. Branding is the only diff.
