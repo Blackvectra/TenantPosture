@@ -61,7 +61,7 @@ $bom = [ordered]@{
         timestamp = (Get-Date).ToString('o')
         tools = @(
             [ordered]@{
-                vendor  = 'NRG Technology Services'
+                vendor  = 'NRG Technology Services / NextLayerSec LLC'
                 name    = 'Generate-SBOM.ps1'
                 version = '1.0'
             }
@@ -76,8 +76,8 @@ $bom = [ordered]@{
                 @{ license = @{ id = 'MIT' } }
             )
             supplier = @{
-                name = 'NRG Technology Services'
-                url  = @('https://nrgtechservices.com')
+                name = 'NRG Technology Services / NextLayerSec LLC'
+                url  = @('https://www.nrgtechservices.com')
             }
         }
     }

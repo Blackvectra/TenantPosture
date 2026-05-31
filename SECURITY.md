@@ -6,6 +6,86 @@ This tool is **read-only by design.** No cmdlets that write, modify, or delete t
 
 Enforced by: CI static analysis (`Read-Only Posture` test in `NRG.Security.Tests.ps1`) verifies no tenant write cmdlets appear outside of `-Remediation` strings in any production file.
 
+The one sanctioned write path is the optional `Register-NRGTenantApp` onboarding helper, which creates a read-only enterprise app in a customer tenant. It is gated behind `-RegisterApp` + `SupportsShouldProcess` (`-WhatIf` / `-Confirm`) and is not invoked during an assessment scan.
+
+---
+
+## Reporting a Vulnerability
+
+We follow a **coordinated vulnerability disclosure** model aligned to NIST SP 800-218 (SSDF), CISA's Secure-by-Design pledge, and CISA Binding Operational Directive 20-01 ("Develop and Publish a Vulnerability Disclosure Policy"). Researchers who report in good faith are protected by the [Safe Harbor](#safe-harbor) clause below.
+
+### How to report
+
+**Preferred (private):** Open a private security advisory via the repository's [Security tab → "Report a vulnerability"](https://github.com/Blackvectra/NRG-Assessment-Tool/security/advisories/new). This routes the report directly to the maintainers, keeps it private until coordinated disclosure, and produces a CVE if applicable.
+
+**Alternative (email):** `security@nrgtechservices.com` — please encrypt with our public PGP key if the issue is sensitive (key fingerprint published at `https://www.nrgtechservices.com/.well-known/security.txt`). Subject line: `[NRG-Assessment SECURITY] <one-line summary>`.
+
+**Do NOT** open a public GitHub issue, post in a forum, or disclose on social media until the coordinated-disclosure window has closed.
+
+### What to include
+
+- Affected version(s) — output of `Get-Module NRG-Assessment | Select-Object Version`
+- Affected component — file path, function name, control ID, or evaluator
+- Reproducer — minimal PowerShell snippet, command sequence, or step-by-step instructions
+- Impact — what an attacker can achieve, what data is exposed, what assumptions must hold
+- Suggested mitigation if you have one
+- Whether you intend to publish your own write-up, and on what timeline
+
+### Our response commitments
+
+| Stage | Target SLA | Notes |
+|---|---|---|
+| Acknowledgement | **3 business days** | Confirms we received the report and have an owner |
+| Initial triage | **7 business days** | Severity assessment + scope confirmation + assigned tracking ID |
+| Status updates | **Every 14 days** | Progress, blockers, expected fix date |
+| Fix released | **Severity-dependent** (see below) | Coordinated with reporter before public disclosure |
+| Public advisory + CVE | **At fix release** | Or 90 days after triage, whichever is sooner |
+
+**Fix-release SLA by severity** (CVSS 3.1 base score):
+
+| Severity | CVSS | Target |
+|---|---|---|
+| Critical | 9.0–10.0 | 7 calendar days |
+| High | 7.0–8.9 | 30 calendar days |
+| Medium | 4.0–6.9 | 60 calendar days |
+| Low | 0.1–3.9 | Next scheduled release |
+
+If 90 days elapse from triage without a fix, we will publish the advisory with the agreed-upon mitigation guidance, even if a complete fix is not yet available. Researchers may request a shorter or longer window in extenuating circumstances.
+
+### What's in scope
+
+- The PowerShell module (`NRG-Assessment.psm1`, `Lib/`, `Collectors/`, `Evaluators/`, `Publishers/`) and entry scripts (`Invoke-NRGAssessment.ps1`, `Invoke-NRGBatchAssessment.ps1`)
+- The HTML/Markdown/XLSX/JSON report artifacts (XSS, injection, sensitive-data leakage in output)
+- The control definition pipeline (`Config/controls.json`, schema validation, framework citations)
+- The local web GUI (`Lib/Start-NRGWebServer.ps1`, `Web/`) — loopback-only by design
+- The tenant onboarding helper (`Lib/Register-NRGTenantApp.ps1`)
+- CI/CD workflows (`.github/workflows/`)
+- Sample reports, sample data, documentation that could mislead operators
+- Supply-chain integrity (Authenticode signing, SBOM, dependency pinning)
+
+### What's NOT in scope
+
+- Vulnerabilities in upstream Microsoft Graph SDK, ExchangeOnlineManagement, MicrosoftTeams, Pode, or other declared dependencies — report those to the respective project
+- Vulnerabilities in Microsoft 365 itself or in a tenant's configuration (this tool just reads and reports them)
+- DoS via maliciously crafted `controls.json` if you can already write to the repo (you've already won)
+- "Information disclosure" of data the operator already has access to (the tool prints tenant inventory by design)
+- Findings that require an attacker to already have administrative access to the operator's workstation
+
+---
+
+## Safe Harbor
+
+NRG Technology Services / NextLayerSec LLC considers good-faith security research that complies with this policy to be **authorized activity** and will not pursue legal action against researchers who:
+
+- Make a good-faith effort to avoid privacy violations, destruction of data, and interruption or degradation of services
+- Do not exploit a discovered vulnerability beyond what's necessary to confirm it
+- Do not exfiltrate any data and stop testing as soon as a vulnerability is confirmed
+- Do not publicly disclose the vulnerability before we have had a chance to fix it (per the SLA above)
+- Report only to the channels listed in this document
+- Do not engage in social engineering or physical attacks against NRG Technology Services / NextLayerSec LLC employees
+
+Researchers who comply with this policy will be acknowledged in the advisory (with consent) and in this repository's `SECURITY-CREDITS.md` if/when one is created.
+
 ---
 
 ## Security Controls Applied
@@ -92,15 +172,11 @@ See `docs/security/THREAT-MODEL.md` for the full threat model including:
 
 ---
 
-## Reporting a Vulnerability
+## Secure Development Framework Alignment
 
-This is an internal tool for NRG Technology Services. Report security issues to:
+NRG-Assessment self-attests to NIST SP 800-218 (SSDF) practices. See [`docs/SECURE-DEVELOPMENT.md`](docs/SECURE-DEVELOPMENT.md) for the per-task mapping (PO, PS, PW, RV practice families) and the evidence trail.
 
-**Matthew Levorson**
-Security Engineer — NRG Technology Services
-GitHub: @Blackvectra
-
-Do not open public GitHub issues for security vulnerabilities. For GitHub-native private disclosure, use the repository's "Report a vulnerability" tab (Settings → Code security → Private vulnerability reporting).
+OpenSSF Best Practices self-assessment is tracked in [`docs/OPENSSF-BEST-PRACTICES.md`](docs/OPENSSF-BEST-PRACTICES.md).
 
 ---
 
@@ -110,4 +186,4 @@ If you suspect a credential leak, malicious dependency, signed-release tamper, o
 
 ---
 
-*NRG-Assessment v4.6.7 · Hardened against OWASP Top 10:2025, ASVS v5, CVE-2025-54100*
+*NRG-Assessment v4.10.1 · Hardened against OWASP Top 10:2025, ASVS v5, CVE-2025-54100 · NIST SP 800-218 (SSDF) aligned · CISA BOD 20-01 VDP compliant*

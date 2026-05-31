@@ -2,11 +2,9 @@
 
 **Status:** Design. No code yet. Supersedes `docs/ROADMAP-v4.7.md` (analytics) and `docs/ROADMAP-v4.8.md` (IG scoping, attestation, portfolio, Maester eval) — both consolidated here as a single coordinated release.
 
-**Companion track:** `docs/WEB-PORTAL-DESIGN.md` defines a parallel **product surface** — a multi-tenant web portal that complements (does not replace) the CLI. The two tracks ship independently; the portal consumes the CLI as a pinned git submodule.
-
 **Why combined.** The original v4.7 / v4.8 split was sequencing convenience, but the features tightly couple in practice: the Maturity Model (F1) wants IG coverage as an input, the Portfolio dashboard (F13) wants Maturity and Incident-Likelihood as columns, and Attestation (F12) and Responsibility Map (F5) are both schema migrations on the same `controls.json` rows. Shipping together = **one** baseline jump, **one** tenant scope-grant cycle, **one** CHANGELOG entry, **one** documentation update for clients.
 
-**Scope:** Both `NRG-Assessment-Tool` and the sibling `NLS-Assessment` repo land each feature in lockstep — same control IDs, same finding shapes, identical baseline JSON entries. Branding only.
+**Scope:** Both `NRG-Assessment` and the sibling `NRG-Assessment` repo land each feature in lockstep — same control IDs, same finding shapes, identical baseline JSON entries. Branding only.
 
 **Principles** (inherited; unchanged):
 - Read-only invariant holds. Every new collector uses GET-only Graph and read-only EXO cmdlets.
@@ -19,7 +17,7 @@
 
 ## Scope boundary (the principle, not a feature)
 
-`NRG-Assessment-Tool` is a **Microsoft tenant cloud assessment tool**. It collects through Graph, EXO, Teams, SharePoint, Intune, Purview, Defender for O365, and Power Platform APIs plus authoritative DNS. It is **not**, and will not become:
+`NRG-Assessment` is a **Microsoft tenant cloud assessment tool**. It collects through Graph, EXO, Teams, SharePoint, Intune, Purview, Defender for O365, and Power Platform APIs plus authoritative DNS. It is **not**, and will not become:
 
 - An endpoint hardening scanner. No per-device WMI/registry reads. No `Get-HotFix`, `manage-bde -status`, `Get-LocalUser`, `Get-LocalGroupMember`, autorun-policy, PS-logging-policy, or exploit-protection registry checks.
 - A third-party EDR connector. No Cortex XDR API, no MDR-platform integrations we don't own.
@@ -138,7 +136,7 @@ Sequenced to minimize cross-feature merge conflicts. Schema migrations land toge
 | 10 | Portfolio Dashboard | F13 | Cross-client roll-up; benefits from F1, F11, F12 already live. |
 | 11 | Maester Eval | F14 | Independent; doc-only; can be picked up any time after Wave 1. |
 
-Each wave is one PR per repo, lockstep across NRG and NLS.
+Each wave is one PR per repo, lockstep across both repos.
 
 ---
 
@@ -180,7 +178,7 @@ Each wave is one PR per repo, lockstep across NRG and NLS.
 4. **Maturity tier history forgery** (F1). `output/<tenant>/maturity-history.json` is local. Easy to forge locally. Current mitigation: file is covered by the existing signed integrity manifest. Sufficient, or escalate?
 5. **GDAP enumeration opt-in** (F8). Partner Center API requires partner consent separate from tenant consent. `-IncludeGDAPReview` flag (opt-in) is the proposed default. Confirm before Wave 3.
 6. **Portfolio scale at 50+ clients** (F13). Workload heatmap gets dense beyond ~50 rows. Set a threshold (e.g. ≥ 50 clients) for switching to a paginated/grouped view?
-7. **Maester license boundary** (F14). MIT — compatible with both repo licenses (NRG-Assessment: MIT; NLS-Assessment: CC BY-ND on docs). Confirm derivative-work boundary before adopting any Maester code directly.
+7. **Maester license boundary** (F14). MIT — compatible with both repo licenses (NRG-Assessment: MIT; NRG-Assessment: CC BY-ND on docs). Confirm derivative-work boundary before adopting any Maester code directly.
 8. **Operator UPN at attestation time** (F12). When operator runs from a partner tenant under GDAP, `AttestedBy` should record the operator UPN, not the client tenant identity. Confirm UPN is available from the connection context at attestation time.
 
 ---
@@ -198,4 +196,4 @@ A v4.9.0 release is considered ready when:
 
 ---
 
-*Design owner: NRG Technology Services / NextLayerSec. This document supersedes `docs/ROADMAP-v4.7.md` and `docs/ROADMAP-v4.8.md`. Both source documents remain in place for git history but should not be modified going forward.*
+*Design owner: NRG Technology Services / NextLayerSec LLC. This document supersedes `docs/ROADMAP-v4.7.md` and `docs/ROADMAP-v4.8.md`. Both source documents remain in place for git history but should not be modified going forward.*

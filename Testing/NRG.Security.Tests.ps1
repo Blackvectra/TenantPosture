@@ -393,10 +393,19 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             $offenders | Should -BeNullOrEmpty -Because '-Encoding utf8 prevents BOM/locale corruption (ASVS V16.2.3)'
         }
 
-        It 'No plaintext HTTP URLs (except RFC 3161 timestamp in Sign-Release)' {
+        It 'No plaintext HTTP URLs (except for legitimate exemptions)' {
+            # Sign-Release.ps1 legitimately contains plaintext RFC 3161
+            # timestamp authority URLs — those are HTTP by protocol design;
+            # the cert chain inside the signed response validates trust.
+            #
+            # Start-NRGWebServer.ps1 binds the local GUI to http://127.0.0.1
+            # only. TLS on loopback adds no security (the data never leaves
+            # the kernel's loopback interface) and would require a self-
+            # signed cert with all the trust-store ceremony that implies.
+            $allowlist = @('Sign-Release.ps1', 'Start-NRGWebServer.ps1')
             $offenders = @()
             foreach ($file in $script:PsFiles) {
-                if ($file.Name -eq 'Sign-Release.ps1') { continue }
+                if ($file.Name -in $allowlist) { continue }
                 $hits = Select-String -Path $file.FullName -Pattern 'http://' -ErrorAction SilentlyContinue
                 $offenders += $hits
             }

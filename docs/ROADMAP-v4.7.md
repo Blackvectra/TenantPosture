@@ -4,12 +4,12 @@
 
 **Status:** Design. No code yet. This document defines architecture, control IDs, data shapes, and publisher impact for the v4.7 feature wave. Implementation tracked in [#TBD] once this design is approved.
 
-**Scope:** Both `NRG-Assessment-Tool` (this repo) and the sibling repo land each feature in lockstep — same control IDs, same finding shapes, identical baseline JSON entries. Branding is the only diff.
+**Scope:** Both `NRG-Assessment` (this repo) and the sibling repo land each feature in lockstep — same control IDs, same finding shapes, identical baseline JSON entries. Branding is the only diff.
 
 **Principles:**
 - Read-only invariant holds. Every new collector uses GET-only Graph and read-only EXO cmdlets.
 - Every new evaluator follows the `Add-NRGFinding` contract (ControlId, State, Category, Title, Severity, Detail, FrameworkIds, CurrentValue, RequiredValue, Remediation).
-- Every new control gets one row in `Config/controls.json` and one `Configuration` entry in exactly one `baselines/nrg-baseline-*.json` tier file.
+- Every new control gets one row in `Config/controls.json` and one `Configuration` entry in exactly one `baselines/nls-baseline-*.json` tier file.
 - Every new feature includes a Pester test in `Testing/`.
 - Module manifest exports stay in sync between `NRG-Assessment.psm1` and `NRG-Assessment.psd1`.
 
@@ -71,7 +71,7 @@ Each relevant control has a published `IncidentRiskMultiplier` per incident type
 
 ## Feature 3 — Privileged Account Behavioral Baseline
 
-**Problem.** Microsoft's risky-sign-in is anchored to global threat intel, not per-tenant norms. An admin who has never signed in from outside North Dakota at 2am is a meaningful tenant-specific signal.
+**Problem.** Microsoft's risky-sign-in is anchored to global threat intel, not per-tenant norms. An admin who has never signed in from outside the operator's local region at 2am is a meaningful tenant-specific signal.
 
 **Architecture.**
 - New collector: `Collectors/AAD/Invoke-NRGCollectAADAdminSignInTelemetry.ps1`.
@@ -290,4 +290,4 @@ Sequenced to minimize cross-feature merge conflicts. Each row is its own PR per 
 
 ---
 
-*Design owner: NRG Technology Services / NextLayerSec. Review before implementation begins.*
+*Design owner: NRG Technology Services / NextLayerSec LLC. Review before implementation begins.*

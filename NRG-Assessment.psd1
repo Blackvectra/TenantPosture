@@ -1,6 +1,6 @@
 @{
     # Module identity
-    ModuleVersion     = '4.6.7'
+    ModuleVersion     = '4.10.1'
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
     Author            = 'Matthew Levorson'
     CompanyName       = 'NRG Technology Services / NextLayerSec LLC'
@@ -34,6 +34,8 @@
         'Disconnect-NRGServices',
         'ConvertTo-NRGHtmlSafe',
         'ConvertTo-NRGSafeUrl',
+        'Start-NRGWebServer',
+        'Register-NRGTenantApp',
         'Get-NRGControlDefinitions',
         'Get-NRGControlById',
         'Get-NRGFindingRiskCost',
@@ -47,6 +49,9 @@
         'Get-NRGSafeProperty',
         'Get-NRGNestedProperty',
         'Test-NRGSignatureStatus',
+        'Get-NRGMaturityTier',
+        'Get-NRGCoverageScore',
+        'Get-NRGObjectField',
 
         # ── Collectors — AAD ──────────────────────────────────────────────────
         'Invoke-NRGCollectAADAuthPolicies',

@@ -219,16 +219,16 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
       <div class="eye">Microsoft 365 Security Assessment</div>
       <div class="hdr-client">Example Corp</div>
       <div class="hdr-meta">
-        <span><strong>Date</strong> 2026-05-27</span>
+        <span><strong>Date</strong> 2026-05-31</span>
         <span><strong>Tenant</strong> example.com</span>
         <span><strong>License Tier</strong> Unknown</span>
-        <span><strong>Prepared by</strong> NRG Technology Services</span>
+        <span><strong>Prepared by</strong> NRG Technology Services / NextLayerSec LLC</span>
         <span><strong>Frameworks</strong> CIS M365 v6 &middot; CISA SCuBA &middot; NIST SP 800-53r5 &middot; CMMC 2.0</span>
       </div>
     </div>
     <div class="hdr-right">
-      <div class="ver-badge">NRG-Assessment v4.6.7</div>
-      <span class='logo-t'>NRG Technology Services</span>
+      <div class="ver-badge">NRG-Assessment v4.9.0</div>
+      <span class='logo-t'>NRG Technology Services / NextLayerSec LLC</span>
     </div>
   </div>
   <div class="hdr-nav">
@@ -342,10 +342,10 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
     
   </div>
 </div><div class='act ah'>
-  <div class='act-num'><div class='act-n'>3</div><div class='act-cid'>EXO-3.2</div><span class='sv svh'>High</span></div>
+  <div class='act-num'><div class='act-n'>3</div><div class='act-cid'>EXO-1.1</div><span class='sv svh'>High</span></div>
   <div class='act-body'>
-    <div class='act-t'>External email forwarding disabled</div>
-    <div class='act-risk'><span class='act-lbl rl'>&#9888; Why it matters</span>Transport rule allows automatic forwarding to external recipients.</div>
+    <div class='act-t'>Mailbox Audit Logging Enabled</div>
+    <div class='act-risk'><span class='act-lbl rl'>&#9888; Why it matters</span>Mailbox audit logging is off for some user mailboxes.</div>
     
     
   </div>
@@ -365,7 +365,7 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
     <div class='rm-phase'>
       <div class='rm-ph-hd' style='color:#dc2626'>Phase 1 — Week 1-2</div>
       <div class='rm-ph-t'>Stop the Bleeding</div>
-      <div class='rm-item'><div class='rm-bullet p1-bullet'>!</div><div><strong>Block legacy authentication</strong> <span style='font-size:.7rem;color:var(--mut)'>(AAD-1.1)</span></div></div><div class='rm-item'><div class='rm-bullet p1-bullet'>!</div><div><strong>MFA enforced for all users</strong> <span style='font-size:.7rem;color:var(--mut)'>(AAD-2.1)</span></div></div><div class='rm-item'><div class='rm-bullet p1-bullet'>!</div><div><strong>External email forwarding disabled</strong> <span style='font-size:.7rem;color:var(--mut)'>(EXO-3.2)</span></div></div>
+      <div class='rm-item'><div class='rm-bullet p1-bullet'>!</div><div><strong>Block legacy authentication</strong> <span style='font-size:.7rem;color:var(--mut)'>(AAD-1.1)</span></div></div><div class='rm-item'><div class='rm-bullet p1-bullet'>!</div><div><strong>MFA enforced for all users</strong> <span style='font-size:.7rem;color:var(--mut)'>(AAD-2.1)</span></div></div><div class='rm-item'><div class='rm-bullet p1-bullet'>!</div><div><strong>Mailbox Audit Logging Enabled</strong> <span style='font-size:.7rem;color:var(--mut)'>(EXO-1.1)</span></div></div>
     </div>
     <div class='rm-phase' style='border-left:1px solid var(--bdr)'>
       <div class='rm-ph-hd' style='color:#ea580c'>Phase 2 — Week 2-4</div>
@@ -400,7 +400,7 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
     <div class='card-hdl'><span class='card-label'>Exchange Online</span><span class='wl-gbadge'>1 gap</span></div>
     <div class='wsc-pill' style='color:#dc2626;border-color:#dc262640;background:#dc26260e'>0 / 100</div>
   </div>
-  <table class='ft'><thead><tr class='fth'><th style='width:148px'>Status</th><th>Control</th><th>Summary</th></tr></thead><tbody><tr class='fr rg exp'><td class='td1'><span class="b bg">&#10005; Gap</span><span class="sv svh">High</span></td><td class='td3'><div class='ftitle'>External email forwarding disabled <span class="mico">&#9654;</span></div><div class='fcv'>Allowed</div></td><td class='td4'>Transport rule allows automatic forwarding to external recipients.</td></tr><tr class='extr'><td colspan='3'><div class='exbody'><div class='ex-block'><div class='ex-lbl wlbl'>What the issue is</div><div class='ex-bd'>Transport rule allows automatic forwarding to external recipients.<div class='ex-cv'><span class='ex-cvl'>Current:</span> Allowed &rarr; <span class='ex-cvl'>Required:</span> Blocked</div></div></div></div></td></tr></tbody></table>
+  <table class='ft'><thead><tr class='fth'><th style='width:148px'>Status</th><th>Control</th><th>Summary</th></tr></thead><tbody><tr class='fr rg exp'><td class='td1'><span class="b bg">&#10005; Gap</span><span class="sv svh">High</span></td><td class='td3'><div class='ftitle'>Mailbox Audit Logging Enabled <span class="mico">&#9654;</span></div><div class='fcv'>Disabled on 12 mailboxes</div></td><td class='td4'>Mailbox audit logging is off for some user mailboxes.</td></tr><tr class='extr'><td colspan='3'><div class='exbody'><div class='ex-block'><div class='ex-lbl wlbl'>What the issue is</div><div class='ex-bd'>Mailbox audit logging is off for some user mailboxes.<div class='ex-cv'><span class='ex-cvl'>Current:</span> Disabled on 12 mailboxes &rarr; <span class='ex-cvl'>Required:</span> Enabled on all mailboxes</div></div></div></div></td></tr></tbody></table>
 </div><div class='card mt' id='wl-DNS'>
   <div class='card-hd'>
     <div class='card-hdl'><span class='card-label'>DNS Email Auth</span></div>
@@ -413,14 +413,14 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
 
 <div class="ftr">
   <div class="ftr-l">
-    <div class="ftr-co">NRG Technology Services</div>
-    <div class="ftr-contact">(701) 555-0100 &nbsp;&middot;&nbsp;<a href='https://nrgtechservices.com' target='_blank' rel='noopener noreferrer'>nrgtechservices.com</a></div>
-    <div class="ftr-note">Read-only assessment &mdash; no configuration changes were made to this tenant &middot; NRG-Assessment v4.6.7</div>
+    <div class="ftr-co">NRG Technology Services / NextLayerSec LLC</div>
+    <div class="ftr-contact"><a href='https://www.nrgtechservices.com' target='_blank' rel='noopener noreferrer'>nrgtechservices.com</a></div>
+    <div class="ftr-note">Read-only assessment &mdash; no configuration changes were made to this tenant &middot; NRG-Assessment v4.9.0</div>
   </div>
   <div class="ftr-r">
     <div style="font-size:.73rem;color:rgba(255,255,255,.5)">Ready to remediate these findings?</div>
-    <a class="ftr-cta" href="https://nrgtechservices.com" target="_blank" rel="noopener noreferrer">Contact NRG &rarr;</a>
-    <div class="ftr-note">2026-05-27</div>
+    <a class="ftr-cta" href="https://www.nrgtechservices.com" target="_blank" rel="noopener noreferrer">Contact NRG &rarr;</a>
+    <div class="ftr-note">2026-05-31</div>
   </div>
 </div>
 

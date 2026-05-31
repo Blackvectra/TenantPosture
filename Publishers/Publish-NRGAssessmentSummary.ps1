@@ -43,7 +43,7 @@ function Publish-NRGAssessmentSummary {
     }
 
     $brand      = $script:NRGBrand
-    $company    = EscMd ($brand.CompanyName ?? 'NRG Technology Services')
+    $company    = EscMd ($brand.CompanyName ?? 'NRG Technology Services / NextLayerSec LLC')
     $tenant     = EscMd ($Metadata.TenantDomain ?? 'Unknown Tenant')
     $assmtDate  = EscMd ($Metadata.AssessmentDate ?? (Get-Date -Format 'MMMM dd, yyyy'))
     $version    = EscMd ($Metadata.ToolVersion ?? '4.5.5')
@@ -57,17 +57,17 @@ function Publish-NRGAssessmentSummary {
     } else { 'Unknown' }
     $tierLabelMd = EscMd $tierLabel
 
-    # Scoring summary
-    $satisfied = @($Findings | Where-Object { $_.State -eq 'Satisfied' }).Count
-    $partial   = @($Findings | Where-Object { $_.State -eq 'Partial' }).Count
-    $gap       = @($Findings | Where-Object { $_.State -eq 'Gap' }).Count
-    $na        = @($Findings | Where-Object { $_.State -eq 'NotApplicable' }).Count
-    $total     = $Findings.Count
-    $scored    = $satisfied + $partial + $gap
-
-    $scorePerc = if ($scored -gt 0) {
-        [int](($satisfied + ($partial * 0.5)) / $scored * 100)
-    } else { 0 }
+    # Scoring summary — v4.10.1: pulled from the canonical helper instead of
+    # re-rolling Where-Object passes. -ErrorHandling Gap preserves the
+    # historical Summary semantics (Error findings counted in the denominator).
+    $cov = Get-NRGCoverageScore -Findings $Findings -ErrorHandling 'Gap'
+    $satisfied = $cov.Satisfied
+    $partial   = $cov.Partial
+    $gap       = $cov.Gap
+    $na        = $cov.NA
+    $total     = $cov.Total
+    $scored    = $cov.Scored
+    $scorePerc = $cov.Score
 
     # PowerShell `switch ($true)` evaluates EVERY matching scriptblock unless
     # each arm contains a `break`. The previous form fell through and joined
