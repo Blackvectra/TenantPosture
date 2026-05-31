@@ -72,13 +72,13 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
 
         It 'Test-NRGLicenseRequirementMet returns true for BP-gated controls' {
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus @(@{ SkuPartNumber = 'SPB'; ServicePlans = @('AAD_PREMIUM','INTUNE_A') })
-            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Business Premium or Entra ID P1' -Profile $p |
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Business Premium or Entra ID P1' -LicenseProfile $p |
                 Should -BeTrue
-            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Business Premium or Intune Plan 1' -Profile $p |
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Business Premium or Intune Plan 1' -LicenseProfile $p |
                 Should -BeTrue
         }
 
-        It 'Replays the exact user-reported nextlayersec.io tenant SKU set' {
+        It 'Replays the exact user-reported nrgtechservices.com tenant SKU set' {
             # Captured from /root/.claude/uploads/.../nextlayersec20260525134902results.json
             # AAD-Inventory.Data.SubscribedSkus
             $skus = @(
@@ -122,7 +122,7 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
             $p.HasEntraP2 | Should -BeFalse
             $p.HasIntune  | Should -BeTrue
             # E3 holders should have "BP or P1" suppressed (P1 alone satisfies)
-            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Business Premium or Entra ID P1' -Profile $p |
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Business Premium or Entra ID P1' -LicenseProfile $p |
                 Should -BeTrue
         }
 
@@ -131,7 +131,7 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
             $p.HasBusinessPremium | Should -BeFalse
             $p.HasEntraP2         | Should -BeTrue
-            Test-NRGLicenseRequirementMet -LicenseRequirement 'Entra ID P2' -Profile $p | Should -BeTrue
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'Entra ID P2' -LicenseProfile $p | Should -BeTrue
         }
     }
 
@@ -143,7 +143,7 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
             $p.HasEntraP1         | Should -BeFalse
             $p.HasIntune          | Should -BeFalse
             $p.SuppressedLicenseRequirements.Count | Should -Be 0
-            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Business Premium or Entra ID P1' -Profile $p |
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Business Premium or Entra ID P1' -LicenseProfile $p |
                 Should -BeFalse
         }
 
@@ -154,15 +154,15 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
         }
 
         It 'Null profile means "unknown" — Test- returns false to err on the side of disclosure' {
-            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Business Premium or Entra ID P1' -Profile $null |
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Business Premium or Entra ID P1' -LicenseProfile $null |
                 Should -BeFalse
         }
 
         It 'Null / empty / Included* requirements are always considered met' {
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus @()
-            Test-NRGLicenseRequirementMet -LicenseRequirement $null    -Profile $p | Should -BeTrue
-            Test-NRGLicenseRequirementMet -LicenseRequirement ''       -Profile $p | Should -BeTrue
-            Test-NRGLicenseRequirementMet -LicenseRequirement 'Included (all plans)' -Profile $p | Should -BeTrue
+            Test-NRGLicenseRequirementMet -LicenseRequirement $null    -LicenseProfile $p | Should -BeTrue
+            Test-NRGLicenseRequirementMet -LicenseRequirement ''       -LicenseProfile $p | Should -BeTrue
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'Included (all plans)' -LicenseProfile $p | Should -BeTrue
         }
     }
 
@@ -223,35 +223,35 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
         It 'Defender for Office 365 Plan 2 (M365 E5 or add-on) — suppressed on E5' {
             $skus = @(@{ SkuPartNumber = 'ENTERPRISEPREMIUM'; ServicePlans = @('THREAT_INTELLIGENCE','ATP_ENTERPRISE') })
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
-            Test-NRGLicenseRequirementMet -LicenseRequirement 'Defender for Office 365 Plan 2 (M365 E5 or add-on)' -Profile $p |
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'Defender for Office 365 Plan 2 (M365 E5 or add-on)' -LicenseProfile $p |
                 Should -BeTrue
         }
 
         It 'M365 E5 Compliance add-on — suppressed when E5 compliance service plan present' {
             $skus = @(@{ SkuPartNumber = 'SPE_E5'; ServicePlans = @('EQUIVIO_ANALYTICS','RECORDS_MANAGEMENT') })
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
-            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 E5 Compliance add-on' -Profile $p |
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 E5 Compliance add-on' -LicenseProfile $p |
                 Should -BeTrue
         }
 
         It 'M365 E5 or E5 Compliance add-on — suppressed when E5 compliance present' {
             $skus = @(@{ SkuPartNumber = 'ENTERPRISEPREMIUM'; ServicePlans = @('INSIDER_RISK_MANAGEMENT') })
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
-            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 E5 or E5 Compliance add-on' -Profile $p |
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 E5 or E5 Compliance add-on' -LicenseProfile $p |
                 Should -BeTrue
         }
 
         It 'Microsoft Sentinel (add-on) or Defender XDR — suppressed on E5 / DfO P2 tenant' {
             $skus = @(@{ SkuPartNumber = 'SPE_E5'; ServicePlans = @('THREAT_INTELLIGENCE','MTP') })
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
-            Test-NRGLicenseRequirementMet -LicenseRequirement 'Microsoft Sentinel (add-on) or Defender XDR' -Profile $p |
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'Microsoft Sentinel (add-on) or Defender XDR' -LicenseProfile $p |
                 Should -BeTrue
         }
 
         It 'Entra Workload Identities Premium (add-on) — suppressed when SKU present' {
             $skus = @(@{ SkuPartNumber = 'Microsoft_Entra_Workload_Identities_Premium'; ServicePlans = @() })
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
-            Test-NRGLicenseRequirementMet -LicenseRequirement 'Entra Workload Identities Premium (add-on)' -Profile $p |
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'Entra Workload Identities Premium (add-on)' -LicenseProfile $p |
                 Should -BeTrue
         }
 
@@ -260,14 +260,14 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
             # Literal string with dollar sign and parentheses — make sure we
             # match it as a raw string, not a regex pattern.
-            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Copilot add-on license ($30/user/month)' -Profile $p |
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Copilot add-on license ($30/user/month)' -LicenseProfile $p |
                 Should -BeTrue
         }
 
         It 'Power Platform + Copilot Studio license — suppressed when PowerApps Per User SKU present' {
             $skus = @(@{ SkuPartNumber = 'POWERAPPS_PER_USER'; ServicePlans = @('POWERAPPS_PER_USER') })
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
-            Test-NRGLicenseRequirementMet -LicenseRequirement 'Power Platform + Copilot Studio license' -Profile $p |
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'Power Platform + Copilot Studio license' -LicenseProfile $p |
                 Should -BeTrue
         }
     }

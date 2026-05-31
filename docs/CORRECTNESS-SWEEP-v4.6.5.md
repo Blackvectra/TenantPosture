@@ -43,11 +43,12 @@ A defect that crashes the entire publish step (e.g. XLSX failing to generate at 
 | 16 | EXO-6.3 (Mailboxes Unaudited — Named List) | High — wrong count surfaced | "43 mailboxes unaudited" was an undercount on dmvwrr (>1000-mailbox tenant) | `Get-Mailbox -ResultSize 1000` cap silently truncated | `-ResultSize Unlimited` for population-counting calls | PR #29 |
 | 17 | EXO-6.1, EXO-6.2, EXO-6.4, EXO-7.1, EXO-7.2 (other named-list checks) | High — same undercount risk | Same | Same | Same | PR #29 |
 | 18 | HTML playbook artifact | **Critical** — entire artifact failed | `WARNING: Playbook publish failed: Cannot bind parameter 'Id'` | `function H` collided with built-in `h` alias (= `Get-History -Id [long]`); PowerShell routed the title string into the alias | Renamed to `EscHtml` | PR #29 |
-| 19 | Branding leak: NRG real phone `(701) 250-9400` in NLS public repo | Privacy | Was in `Config/branding.psd1` and psm1 fallback | Initial port left brand defaults intact | Cleared to empty | (security sweep) |
-| 20 | Branding leak: real client name `ClientA`, `Client B` in NLS docs / clients.json | Privacy | MSP-internal client names in public repo | Initial port left sample clients in place | Sanitized to `example.com` / `example2.com` | (security sweep) |
-| 21 | Branding leak: 38 client assessment HTML/JSON files tracked in NRG `output/` | Privacy | `clienta.org`, `nextlayersec.io` real tenant configs in main | `.gitignore` only excluded `Reports/`, not `output/` | Added `output/` to `.gitignore` + `git rm -r --cached output/` | PR #29 |
-| 22 | Per-tenant remediation script dispatch | **Critical** — every dispatched Apply-* call fails at runtime | Generated script called `Apply-NRGAADLegacyAuth -ErrorAction Stop` with no `-Finding` arg; Apply-* functions declare `[Parameter(Mandatory)] [object] $Finding` | Audit surfaced this before any operator ran the generated script in production | Generator now loads the matching `<baseName>-results.json` next to the script, builds a `$findingsByCtrl` hashtable, and dispatches `Apply-NRG* -Finding $fnd` with a `not in results.json — skipping` guard | This PR |
-| 23 | All findings table sort under unknown State / Severity | Low — unpredictable row order on malformed findings | `Sort-Object` over `$stateOrder[[string]$_.State]` produced $null mixed with ints when the enum value was unexpected | Defensive `?? 99` coerces unknown values to a sortable tail position | This PR |
+| 19 | Branding leak: NRG real phone `(701) 250-9400` in NRG public repo | Privacy | Was in `Config/branding.psd1` and psm1 fallback | Initial port left brand defaults intact | Cleared to empty | (security sweep) |
+| 20 | Branding leak: real client name `ClientA`, `Client B` in NRG docs / clients.json | Privacy | MSP-internal client names in public repo | Initial port left sample clients in place | Sanitized to `example.com` / `example2.com` | (security sweep) |
+| 21 | Branding leak: 38 client assessment HTML/JSON files tracked in NRG `output/` (NRG never had them, but `.gitignore` was missing `output/` so future runs would track) | Privacy | NRG side: clienta.org / nrgtechservices.com real tenant configs in main. NRG side: vulnerability only — no actual leak yet | NRG `.gitignore` only excluded `Reports/`; NRG `.gitignore` had same gap until this PR | NRG: PR #29. NRG: this PR added `output/` to `.gitignore` so future Invoke-NRGAssessment runs don't track real client data |
+| 22 | Sample `example-assessment.html` contained real personal domain `mattlevorson.com` (7 occurrences across DNS findings) and 2 admin display names `NRG Technology Services / NextLayerSec LLC` that came from over-aggressive `Matthew Levorson → NRG Technology Services / NextLayerSec LLC` sanitization (collided with the legitimate company brand string) | **Critical** — real personal data in public-facing sample | Sanitization pass during sample creation only handled the primary domain `nrgtechservices.com`; secondary domain on the source tenant was missed. Display-name replacement was too broad and produced `NRG Technology Services / NextLayerSec LLC, NRG Technology Services / NextLayerSec LLC` in admin role list. | Replaced `mattlevorson.com` → `example2.com`; replaced role-list `NRG Technology Services / NextLayerSec LLC` instances → `Admin 2`, `Admin 3` (kept first occurrence as company brand string) | This PR |
+| 23 | Per-tenant remediation script dispatch | **Critical** — every dispatched Apply-* call fails at runtime | Generated script called `Apply-NRGAADLegacyAuth -ErrorAction Stop` with no `-Finding` arg; Apply-* functions declare `[Parameter(Mandatory)] [object] $Finding` | Audit surfaced this before any operator ran the generated script in production | Generator now loads the matching `<baseName>-results.json` next to the script, builds a `$findingsByCtrl` hashtable, and dispatches `Apply-NRG* -Finding $fnd` with a `not in results.json — skipping` guard | This PR |
+| 24 | All findings table sort under unknown State / Severity | Low — unpredictable row order on malformed findings | `Sort-Object` over `$stateOrder[[string]$_.State]` produced $null mixed with ints when the enum value was unexpected | Defensive `?? 99` coerces unknown values to a sortable tail position | This PR |
 
 ### Open (to investigate before declaring v4.6.5 done)
 
@@ -105,6 +106,18 @@ These came out of the strategic-doc review and aren't blockers for v4.6.5 itself
 2. **Item 19 (Azure subscription assessment) repo** — green-light to scaffold a new `NRG-Azure-Assessment` repo when v4.6.5 closes, or hold for v5.x?
 3. **Tenants for validation runs.** The operator's own tenant covers most of the Resolved bugs. We need at minimum one non-BP tenant to validate entry #23 (license detection). Which tenant?
 
+
+## NRG-side PR mapping
+
+The strategic doc lists NRG-side PR numbers in the Resolved table for traceability. The same fixes landed in this repo under different PR numbers — lockstep is preserved.
+
+| NRG PR | NRG PR | Topic |
+|---|---|---|
+| #27 | #2 | 13 StrictMode NREs (entries 1–12, 14, 15) |
+| #29 | #4 | HTML playbook alias collision, CrossTenantAccess first-level NRE, EXO ResultSize cap (entries 2 first-level, 13, 16, 17, 18) |
+| #28 | #3 | Readability pass (predates correctness sweep) |
+| (security sweep, NRG) | (security sweep, NRG) | Branding / PII leaks (entries 19, 20, 21) |
+
 ## OWASP Top 10:2021 audit (v4.6.5)
 
 Walk-through of the OWASP Top 10 against this codebase as it stands in v4.6.5. The 14 NRE fixes + ResultSize fix + remediation-script dispatch fix already closed the most-likely runtime-exploitable defects. What remains:
@@ -143,4 +156,4 @@ Walk-through of the OWASP Top 10 against this codebase as it stands in v4.6.5. T
 
 ---
 
-*Document owner: NextLayerSec. Sequenced ahead of all v4.7+ feature work per strategic review.*
+*Document owner: NRG Technology Services / NextLayerSec LLC. Sequenced ahead of all v4.7+ feature work per strategic review.*

@@ -5,6 +5,13 @@
 Built by Matthew Levorson — NRG Technology Services / NextLayerSec LLC  
 GitHub: [Blackvectra/NRG-Assessment-Tool](https://github.com/Blackvectra/NRG-Assessment-Tool)
 
+[![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF_Best_Practices-Passing_(self--assessed)-blue)](docs/OPENSSF-BEST-PRACTICES.md)
+[![SSDF](https://img.shields.io/badge/NIST_SP_800--218-self--attested-green)](docs/SECURE-DEVELOPMENT.md)
+[![CISA BOD 20-01](https://img.shields.io/badge/Vulnerability_Disclosure-CISA_BOD_20--01-orange)](docs/VULNERABILITY-DISCLOSURE-POLICY.md)
+[![Security Policy](https://img.shields.io/badge/security-policy-red)](SECURITY.md)
+
+> **Security:** Report vulnerabilities privately via the [GitHub Security tab](https://github.com/Blackvectra/NRG-Assessment-Tool/security/advisories/new) or `security@nrgtechservices.com`. We follow a 7-day Critical / 30-day High fix SLA; see [`SECURITY.md`](SECURITY.md) for the full policy.
+
 ---
 
 ## What It Does
@@ -61,6 +68,27 @@ cd NRG-Assessment-Tool
 # Output lands in .\output\<timestamp>\
 ```
 
+### Quick Triage, Delta, and CI Exit Codes
+
+For automation pipelines and fast triage:
+
+```powershell
+# Quick scan — only Critical + High controls (faster, lower noise)
+.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -Quick
+
+# Compare against a prior baseline JSON — emits a delta report
+# (score delta, finding regressions, CA / role / OAuth / DMARC drift)
+.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com `
+    -BaselineResults .\output\client\20260415-results.json
+
+# CI / Task Scheduler thresholds — non-zero exit when posture drifts
+# Exit 10 = critical threshold, 11 = high threshold, 12 = score threshold
+.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com `
+    -FailOnCritical 1 -FailOnHigh 5 -FailOnScoreBelow 70
+```
+
+Every run now classifies the tenant into a **Tenant Security Maturity Tier** (Initial / Developing / Defined / Managed / Optimizing) — the label appears in the console summary and is embedded in the JSON metadata for downstream dashboards.
+
 ### MSP Batch Run (GDAP)
 
 ```powershell
@@ -69,11 +97,34 @@ cd NRG-Assessment-Tool
 .\Invoke-NRGBatchAssessment.ps1
 
 # Run a single client
-.\Invoke-NRGBatchAssessment.ps1 -OnlyClient clienta.org
+.\Invoke-NRGBatchAssessment.ps1 -OnlyClient example.com
 
 # Preview what would run
 .\Invoke-NRGBatchAssessment.ps1 -WhatIf
 ```
+
+### Local Web GUI
+
+For operators who prefer clicking over typing, `-Web` boots a local browser
+GUI instead of the terminal flow. The GUI is a Pode-backed loopback server
+on `127.0.0.1:8765`; it never exposes itself to the network and never sends
+tenant data anywhere. Pick a tenant, click "Run scan", watch progress live,
+and view the existing HTML report inline.
+
+```powershell
+# One-time install (free, MIT-licensed PSGallery module)
+Install-Module Pode -MinimumVersion 2.10.0 -Scope CurrentUser
+
+# Launch the GUI (auto-opens your default browser)
+.\Invoke-NRGAssessment.ps1 -Web
+
+# Use a different port if 8765 is taken
+.\Invoke-NRGAssessment.ps1 -Web -WebPort 9000
+```
+
+The GUI consumes the same `Config/clients.json` as the CLI, scans run via the
+same module functions, and reports land in the same `./output/` directory —
+so CLI and GUI workflows can be mixed freely.
 
 ---
 
@@ -214,8 +265,8 @@ GitHub Actions runs on every push to `main`:
 
 ## License
 
-Internal use — NRG Technology Services. Not licensed for redistribution.
+Internal use — NRG Technology Services / NextLayerSec LLC. Not licensed for redistribution.
 
 ---
 
-*NRG-Assessment v4.6.5 · 195 controls · 220 exported functions · 100 Pester tests*
+*NRG-Assessment v4.10.1 · 195 controls · 230 exported functions · 179 Pester tests*

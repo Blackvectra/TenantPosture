@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NRG-Assessment</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header>
+    <h1>NRG-Assessment <span class="ver">GUI</span></h1>
+    <div class="status" id="status">Ready</div>
+  </header>
+
+  <main id="layout-main">
+    <section id="panel-clients" class="panel">
+      <h2>Tenant</h2>
+      <div class="adhoc-row">
+        <input type="text" id="adhoc-domain" placeholder="example.com (or pick a client below)" autocomplete="off" />
+        <button id="btn-run-adhoc" type="button">Run scan</button>
+      </div>
+      <h3>Clients (from Config/clients.json)</h3>
+      <div id="client-list" class="cards"></div>
+      <div class="row-actions">
+        <button id="btn-refresh-clients" type="button" class="secondary">Refresh</button>
+      </div>
+    </section>
+
+    <section id="panel-history" class="panel">
+      <h2>Recent runs</h2>
+      <div id="run-list" class="runs"></div>
+      <div class="row-actions">
+        <button id="btn-refresh-runs" type="button" class="secondary">Refresh</button>
+      </div>
+    </section>
+
+    <section id="panel-progress" class="panel full" hidden>
+      <h2>Scanning <span id="progress-tenant"></span></h2>
+      <div class="progress-bar"><div id="progress-fill"></div></div>
+      <pre id="progress-log"></pre>
+    </section>
+
+    <section id="panel-report" class="panel full" hidden>
+      <div class="report-header">
+        <h2 id="report-title">Report</h2>
+        <button id="btn-close-report" type="button" class="secondary">Close</button>
+      </div>
+      <iframe id="report-frame" sandbox="allow-same-origin"></iframe>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

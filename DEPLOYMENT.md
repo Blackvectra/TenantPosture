@@ -77,7 +77,7 @@ cd NRG-Assessment-Tool
 
 # Custom output path
 .\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com `
-    -OutputPath 'C:\Reports\clienta'
+    -OutputPath 'C:\Reports\example'
 ```
 
 **Output files:**
@@ -101,11 +101,11 @@ output\<TenantDomain>\
 {
   "clients": [
     {
-      "ClientName":   "ClientA",
-      "TenantDomain": "clienta.org",
+      "ClientName":   "Example Client",
+      "TenantDomain": "example.com",
       "TenantId":     "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-      "DelegatedOrg": "clienta.onmicrosoft.com",
-      "DnsDomains":   ["clienta.org"],
+      "DelegatedOrg": "example.onmicrosoft.com",
+      "DnsDomains":   ["example.com"],
       "SkipPurview":       true,
       "SkipPowerPlatform": true,
       "Active":       true
@@ -126,7 +126,7 @@ output\<TenantDomain>\
 .\Invoke-NRGBatchAssessment.ps1
 
 # Single client
-.\Invoke-NRGBatchAssessment.ps1 -OnlyClient clienta.org
+.\Invoke-NRGBatchAssessment.ps1 -OnlyClient example.com
 
 # Preview only
 .\Invoke-NRGBatchAssessment.ps1 -WhatIf
@@ -135,8 +135,8 @@ output\<TenantDomain>\
 **Output:**
 ```
 output\
-  clienta.org\                   Per-client reports
-  clientbnd.gov\
+  example.com\                   Per-client reports
+  example2.com\
   batch-summary-<ts>.md        Cross-client status table
 ```
 
@@ -191,4 +191,4 @@ Expected for tenants without Entra ID P2 licensing. The PIM collector probes for
 
 ---
 
-*NRG-Assessment v4.5.5 · NRG Technology Services*
+*NRG-Assessment v4.5.5 · NRG Technology Services / NextLayerSec LLC*
