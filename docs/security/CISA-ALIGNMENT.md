@@ -41,7 +41,7 @@ BOD 18-01 mandates DMARC, DKIM, SPF, and HTTPS for federal executive branch doma
 
 ## Not a CISA Pledge Signatory
 
-NRG Technology Services and NextLayerSec LLC are not signatories to the CISA Secure by Design pledge. This tool aligns with Secure by Design principles as a matter of engineering practice, not formal commitment.
+NRG Technology Services / NextLayerSec LLC and NRG Technology Services / NextLayerSec LLC are not signatories to the CISA Secure by Design pledge. This tool aligns with Secure by Design principles as a matter of engineering practice, not formal commitment.
 
 ---
 
@@ -57,4 +57,4 @@ NRG Technology Services and NextLayerSec LLC are not signatories to the CISA Sec
 
 ---
 
-*NRG-Assessment v4.5.5 · NRG Technology Services · NextLayerSec LLC*
+*NRG-Assessment v4.5.5 · NRG Technology Services / NextLayerSec LLC · NRG Technology Services / NextLayerSec LLC*

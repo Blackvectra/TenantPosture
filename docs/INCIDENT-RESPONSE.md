@@ -67,7 +67,7 @@ This is the highest-blast-radius asset for this tool. The app reads Graph on eve
 **Triggers:** Dependabot alert, OSSF Scorecard score drop, CodeQL flag, unexpected CI behavior, action repo gets archived or transferred.
 
 **Contain (30 min):**
-1. https://github.com/Blackvectra/&lt;repo&gt;/actions → identify the workflow that uses the bad action → "…" → **Disable workflow**.
+1. https://github.com/Blackvectra/NRG-Assessment-Tool/actions → identify the workflow that uses the bad action → "…" → **Disable workflow**.
 2. If the malicious step already ran: every secret referenced in that workflow is leaked. Cross-trigger Scenario 1 or 2 as applicable.
 
 **Eradicate (GitHub Action case):**

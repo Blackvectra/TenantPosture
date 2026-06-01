@@ -75,4 +75,4 @@ The point isn't that every step is perfect every time — it's that skipped step
 
 ---
 
-*Owner: NextLayerSec. Updated whenever the polish roadmap progresses (v4.6.6, v4.6.7, v4.6.8, v4.6.9 will each tighten parts of this list).*
+*Owner: NRG Technology Services / NextLayerSec LLC. Updated whenever the polish roadmap progresses (v4.6.6, v4.6.7, v4.6.8, v4.6.9 will each tighten parts of this list).*

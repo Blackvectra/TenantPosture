@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 #
-# NRG-Assessment.psm1  (v4.6.7)
+# NRG-Assessment.psm1  (v4.10.1)
 # Module loader — dot-sources all functions from Lib, Collectors, Evaluators, Publishers.
 #
 # Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC
@@ -32,7 +32,7 @@ $ErrorActionPreference = 'Stop'
 # directive in production code going forward.
 Set-StrictMode -Version Latest
 
-$script:NRGAssessmentVersion = '4.6.7'
+$script:NRGAssessmentVersion = '4.10.1'
 $script:NRGModuleRoot        = $PSScriptRoot
 
 # Thread-safe collections for module state
@@ -125,6 +125,7 @@ $script:ExportedFunctions = @(
     'Set-NRGRawData', 'Get-NRGRawData',
     'Connect-NRGServices', 'Disconnect-NRGServices',
     'ConvertTo-NRGHtmlSafe', 'ConvertTo-NRGSafeUrl',
+    'Start-NRGWebServer', 'Register-NRGTenantApp',
     'Get-NRGControlDefinitions', 'Get-NRGControlById',
     'Get-NRGFrameworkCitations', 'Get-NRGFrameworkDefinitions',
     'Get-NRGFindingRiskCost', 'Get-NRGAggregateRisk',
@@ -132,6 +133,9 @@ $script:ExportedFunctions = @(
     'Get-NRGTenantLicenseProfile', 'Test-NRGLicenseRequirementMet',
     'Get-NRGSafeProperty', 'Get-NRGNestedProperty',
     'Test-NRGSignatureStatus',
+    'Get-NRGMaturityTier',
+    'Get-NRGCoverageScore',
+    'Get-NRGObjectField',
 
     # ── Collectors — AAD ──────────────────────────────────────────────────────
     'Invoke-NRGCollectAADAuthPolicies', 'Invoke-NRGCollectAADCAPolicies',

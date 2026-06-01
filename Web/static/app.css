@@ -1,0 +1,224 @@
+/* NRG-Assessment GUI — matches the report's visual identity (deep navy + accent).
+   No inline styles; CSP-friendly. */
+
+:root {
+  --bg:        #eef2f8;
+  --card:      #ffffff;
+  --txt:       #111827;
+  --mut:       #6b7280;
+  --bdr:       #e2e8f0;
+  --P:         #0e2a5b;
+  --S:         #e8621a;
+  --A:         #2b8be0;
+  --pass:      #059669;
+  --warn:      #ca8a04;
+  --gap:       #dc2626;
+  --shadow:    0 1px 3px rgba(0,0,0,.05), 0 4px 18px rgba(15,37,68,.08);
+  --r:         10px;
+}
+
+* { box-sizing: border-box; }
+*::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Segoe UI Variable Display','Segoe UI','Helvetica Neue', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--txt);
+  line-height: 1.5;
+}
+
+header {
+  background: linear-gradient(135deg, var(--P), #1e4ea0);
+  color: #fff;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: var(--shadow);
+}
+header h1 { margin: 0; font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; }
+header .ver { font-size: 0.7rem; font-weight: 400; opacity: 0.75; margin-left: 0.5rem; }
+.status {
+  font-size: 0.85rem;
+  background: rgba(255,255,255,0.12);
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+main {
+  max-width: 1280px;
+  margin: 1.5rem auto;
+  padding: 0 1.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r);
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.panel.full { grid-column: 1 / -1; }
+.panel h2 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--P);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.panel h3 {
+  margin: 1rem 0 0.5rem 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--mut);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.adhoc-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
+.adhoc-row input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--bdr);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+.adhoc-row input:focus {
+  outline: 2px solid var(--A);
+  outline-offset: -1px;
+  border-color: transparent;
+}
+
+button {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  background: var(--P);
+  color: #fff;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.05s, opacity 0.1s;
+}
+button:hover { opacity: 0.92; }
+button:active { transform: translateY(1px); }
+button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+button.secondary {
+  background: transparent;
+  color: var(--P);
+  border: 1px solid var(--bdr);
+}
+button.secondary:hover { background: var(--bg); }
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 360px;
+  overflow-y: auto;
+  margin-bottom: 0.75rem;
+}
+.card {
+  background: #f7f9fc;
+  border: 1px solid var(--bdr);
+  border-radius: 8px;
+  padding: 0.6rem 0.85rem;
+  cursor: pointer;
+  transition: background 0.1s, transform 0.05s, border-color 0.1s;
+}
+.card:hover { background: #e9eef7; border-color: var(--A); }
+.card:active { transform: translateY(1px); }
+.card-title { font-weight: 600; font-size: 0.95rem; }
+.card-meta { font-size: 0.8rem; color: var(--mut); margin-top: 0.15rem; }
+
+.runs {
+  max-height: 400px;
+  overflow-y: auto;
+}
+.run-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.55rem 0.5rem;
+  border-bottom: 1px solid var(--bdr);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.run-item:hover { background: #f7f9fc; }
+.run-item:last-child { border-bottom: 0; }
+.run-tenant { font-weight: 500; font-size: 0.9rem; }
+.run-time { font-size: 0.8rem; color: var(--mut); font-variant-numeric: tabular-nums; }
+.run-size { font-size: 0.75rem; color: var(--mut); }
+.runs:empty::before {
+  content: 'No prior runs in ./output/';
+  color: var(--mut);
+  font-size: 0.85rem;
+  font-style: italic;
+  display: block;
+  padding: 0.5rem;
+}
+.cards:empty::before {
+  content: 'No clients defined. Add tenants to Config/clients.json or use the box above.';
+  color: var(--mut);
+  font-size: 0.85rem;
+  font-style: italic;
+  display: block;
+  padding: 0.5rem;
+}
+
+.row-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.5rem; }
+
+.progress-bar {
+  background: var(--bg);
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--bdr);
+}
+#progress-fill {
+  background: linear-gradient(90deg, var(--A), var(--P));
+  height: 100%;
+  width: 0%;
+  transition: width 0.3s ease-out;
+}
+#progress-log {
+  background: #0b1d40;
+  color: #cbd5e1;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+  font-family: 'Cascadia Mono','SF Mono','Monaco','Consolas',monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+#report-frame {
+  width: 100%;
+  height: 78vh;
+  border: 1px solid var(--bdr);
+  border-radius: 6px;
+  background: #fff;
+}
+
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; }
+}

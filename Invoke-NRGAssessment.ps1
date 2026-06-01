@@ -31,6 +31,22 @@ param(
     [string] $CertificateThumbprint,
     [string] $OrganizationDomain,
 
+    # One-time tenant onboarding: register a read-only enterprise app + cert in
+    # the customer tenant so future scans run app-only (no device codes, no
+    # Conditional-Access flow blocks). Requires an operator who can create app
+    # registrations; you'll be connected interactively with write scopes first.
+    [switch] $RegisterApp,
+
+    # Auto-grant admin consent during -RegisterApp (operator must be Global
+    # Administrator). Omit to instead receive a consent URL for a Global Admin.
+    [switch] $GrantConsent,
+
+    # Convenience: look up a previously-onboarded tenant's ClientId + cert
+    # thumbprint from Config/clients.json by domain, so unattended scans don't
+    # need the GUIDs pasted every time. Also the target for -RegisterApp.
+    [ValidatePattern('^$|^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$')]
+    [string] $TenantDomain,
+
     # Cloud environment
     [ValidateSet('commercial','gcc','gcchigh','dod')]
     [string] $Environment = 'commercial',
@@ -75,7 +91,41 @@ param(
     })]
     [string[]] $DnsDomains,
     [switch] $JsonOnly,
-    [switch] $WhatIfConnections
+    [switch] $WhatIfConnections,
+
+    # Launch the local web GUI instead of running a scan in the terminal.
+    # The GUI is a local Pode-backed server (loopback only, never exposed
+    # to the network) that lets the operator pick a tenant, trigger scans,
+    # watch progress, and view reports in a browser. See Lib/Start-NRGWebServer.ps1
+    # and Web/. No tenant data leaves the workstation.
+    [switch] $Web,
+
+    # Port for the -Web GUI loopback server. Default avoids common collisions.
+    [ValidateRange(1024, 65535)]
+    [int] $WebPort = 8765,
+
+    # ── Quick scan mode ──────────────────────────────────────────────────────
+    # Only evaluate Critical + High controls. Skips Medium / Low / Informational
+    # evaluators entirely. Designed for live demos and sanity checks; finishes
+    # in under a minute on most tenants instead of ~10 min for the full sweep.
+    [switch] $Quick,
+
+    # ── Automation-friendly threshold exit codes ────────────────────────────
+    # Non-zero exit on failure threshold. Default 0 = disabled (preserves the
+    # existing exit-code spec). When any of these fires, the run still produces
+    # all artifacts; the non-zero exit is purely a signal for cron / Task
+    # Scheduler / CI integrations to take action (email IT, file a ticket).
+    #   10 = critical-gap threshold breached
+    #   11 = high-gap threshold breached
+    #   12 = score below threshold
+    [ValidateRange(0, 999)]
+    [int] $FailOnCritical = 0,
+
+    [ValidateRange(0, 999)]
+    [int] $FailOnHigh     = 0,
+
+    [ValidateRange(0, 100)]
+    [int] $FailOnScoreBelow = 0
 )
 
 # OWASP ASVS V16.4.1 — strict mode at the entry point so the orchestrator
@@ -87,8 +137,9 @@ Set-StrictMode -Version Latest
 # (lines 570 + 586) never throw VariableIsUndefined on the success path. Without
 # this every successful run crashes with a stack trace AFTER the report is
 # written but BEFORE `exit 0` lands → callers see exit code 1.
-$script:NRGFatalExitCode  = $null
-$script:NRGSuccessExitCode = $null
+$script:NRGFatalExitCode     = $null
+$script:NRGSuccessExitCode   = $null
+$script:NRGThresholdExitCode = $null
 
 # OWASP ASVS V11.2.2 / OSSTMM DN5 — enforce TLS 1.2 minimum (Microsoft endpoints
 # already require this, but defense-in-depth catches dev/test environments where
@@ -151,6 +202,69 @@ try {
 } catch {
     Write-Host "  [!] Module load failed: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
+}
+
+# -Web short-circuits the terminal flow: hand control to the local Pode-backed
+# web GUI, which handles tenant selection, scan triggering, progress display,
+# and report viewing in a browser. The server binds to 127.0.0.1 only —
+# never exposed to the network — and exits cleanly on Ctrl+C.
+if ($Web) {
+    Start-NRGWebServer -Port $WebPort -ScriptDir $scriptDir
+    exit 0
+}
+
+# -RegisterApp short-circuits into one-time tenant onboarding: connect
+# interactively with WRITE scopes, then create the read-only enterprise app +
+# cert in the customer tenant and record it in clients.json. After this, scans
+# of that tenant run app-only. This is a privileged, deliberate operation — it
+# never happens during a normal scan.
+if ($RegisterApp) {
+    if (-not $TenantDomain) {
+        Write-Host "  [!] -RegisterApp requires -TenantDomain (the customer's domain)." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host ""
+    Write-Host "[-] Connecting to Microsoft Graph with onboarding (write) scopes..." -ForegroundColor Cyan
+    Write-Host "    A browser sign-in will open. Authorize as an admin of $TenantDomain." -ForegroundColor DarkGray
+    try {
+        Connect-MgGraph -Scopes 'Application.ReadWrite.All','AppRoleAssignment.ReadWrite.All','Directory.Read.All' `
+                        -ContextScope Process -NoWelcome -ErrorAction Stop
+    } catch {
+        Write-Host "  [!] Graph connect failed: $($_.Exception.Message)" -ForegroundColor Red
+        exit 1
+    }
+    $regParams = @{ TenantDomain = $TenantDomain }
+    if ($GrantConsent) { $regParams['GrantConsent'] = $true }
+    Register-NRGTenantApp @regParams
+    try { Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null } catch { }
+    exit 0
+}
+
+# -TenantDomain convenience: if the operator gave a domain but no explicit
+# app-only credentials, look up a previously-onboarded record in clients.json
+# and populate AppId / TenantId / CertificateThumbprint so the scan runs
+# app-only with zero typed GUIDs.
+if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint)) {
+    $clientsPath = Join-Path $scriptDir 'Config\clients.json'
+    if (Test-Path -LiteralPath $clientsPath) {
+        try {
+            $rec = @(Get-Content -LiteralPath $clientsPath -Raw -Encoding utf8 | ConvertFrom-Json) |
+                   Where-Object { $_.TenantDomain -eq $TenantDomain -and $_.PSObject.Properties['ClientId'] -and $_.ClientId } |
+                   Select-Object -First 1
+        } catch { $rec = $null }
+        if ($rec) {
+            $AppId                 = [string]$rec.ClientId
+            $TenantId              = [string]$rec.TenantId
+            $CertificateThumbprint = [string]$rec.CertThumbprint
+            if (-not $OrganizationDomain -and $rec.PSObject.Properties['TenantDomain']) {
+                $OrganizationDomain = [string]$rec.TenantDomain
+            }
+            Write-Host "  [+] Using app-only auth for $TenantDomain (ClientId $AppId)" -ForegroundColor Green
+        } else {
+            Write-Host "  [i] $TenantDomain is not onboarded for app-only auth. Falling back to interactive." -ForegroundColor DarkGray
+            Write-Host "      Onboard it once with:  .\Invoke-NRGAssessment.ps1 -RegisterApp -TenantDomain $TenantDomain" -ForegroundColor DarkGray
+        }
+    }
 }
 
 Clear-NRGFindings
@@ -241,11 +355,18 @@ if ($needsAction.Count -gt 0) {
 # ── FromResults mode — skip collection, just republish ───────────────────────
 if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
     Write-Host "[-] FromResults mode — regenerating reports from $FromResults" -ForegroundColor Cyan
-    $priorData = Get-Content -LiteralPath $FromResults -Raw -Encoding utf8 | ConvertFrom-Json
+    # PS7 -AsHashtable gives us hashtables all the way down so downstream
+    # `.Contains(key)` (Maturity badge, threshold exit codes) works. The prior
+    # `@{} + $priorData.Metadata` form threw `A hash table can only be added
+    # to another hash table` because ConvertFrom-Json returns PSCustomObject.
+    $priorData = Get-Content -LiteralPath $FromResults -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
     $findings = [object[]]@($priorData.Findings)
-    $conn = if ($priorData.Connections) { @{} + $priorData.Connections } else { @{} }
-    $reportMetadata = if ($priorData.Metadata) { @{} + $priorData.Metadata } else {
+    $conn = if ($priorData.Connections) { [hashtable]$priorData.Connections } else { @{} }
+    $reportMetadata = if ($priorData.Metadata) { [hashtable]$priorData.Metadata } else {
         @{ TenantDomain='Unknown'; AssessmentDate=(Get-Date -Format 'MMMM dd, yyyy'); ToolVersion=$script:NRGAssessmentVersion }
+    }
+    if ($Quick) {
+        Write-Warning "-Quick has no effect with -FromResults: findings are loaded from the baseline JSON, not re-evaluated. To produce a Quick scan, re-run against the live tenant."
     }
     $tenantTag = if ($reportMetadata.TenantDomain) { ($reportMetadata.TenantDomain -split '\.')[0] } else { 'tenant' }
     # OWASP A01 — strip any non-[a-zA-Z0-9-] before using tenantTag in a file path
@@ -402,6 +523,29 @@ if (-not $skipCollection) {
     # All evaluators discovered by name from the loaded module
     $evaluators = @(Get-Command -Module NRG-Assessment -Name 'Test-NRGControl*' -ErrorAction SilentlyContinue |
                     Select-Object -ExpandProperty Name)
+
+    # ── -Quick: filter evaluators to those that handle Critical / High controls
+    # NOTE: filter is by evaluator FUNCTION name, so any workload-level function
+    # that handles BOTH Critical/High and Medium/Low controls (DEF-1.x, PVW-*,
+    # SPO-*, etc) will still emit its Low/Medium findings. The maturity badge
+    # and HTML score ring reflect the actual set, not the requested severity
+    # range. Treat -Quick as "skip the workloads that ONLY have low-severity
+    # checks" rather than "skip every Low/Medium finding."
+    if ($Quick) {
+        $highSevEvaluators = @{}
+        # Fail-closed: a corrupt controls.json must not silently produce a
+        # filter that excludes every evaluator and exits 2 ("no findings").
+        # The outer try/catch already turns this into fatal=4 with a message.
+        foreach ($ctrl in (Get-NRGControlDefinitions)) {
+            if ($ctrl.Severity -in @('Critical','High') -and $ctrl.EvaluatorFunction) {
+                $highSevEvaluators[$ctrl.EvaluatorFunction] = $true
+            }
+        }
+        $beforeCount = $evaluators.Count
+        $evaluators  = @($evaluators | Where-Object { $highSevEvaluators.ContainsKey($_) })
+        Write-Host "  [i] Quick mode: $($evaluators.Count) of $beforeCount evaluators (workloads with Critical+High only; lower-severity findings inside those workloads still surface)" -ForegroundColor Yellow
+    }
+
     foreach ($ev in $evaluators) {
         Invoke-NRGEvaluator $ev
     }
@@ -424,7 +568,22 @@ if (-not $skipCollection) {
         AssessmentTime = (Get-Date).ToString('o')
         ToolVersion    = $NRGAssessmentVersion
         Brand          = $NRGBrand
+        QuickScan      = [bool]$Quick
     }
+}
+
+# ── Maturity tier (roadmap F1) ──────────────────────────────────────────────
+# Derived from the final findings stream — recomputed every run including
+# -FromResults so the badge always reflects the current findings, not whatever
+# Maturity value (if any) the baseline JSON happened to carry. Result is
+# embedded in the metadata so publishers (HTML, JSON, Markdown, Playbook,
+# Delta) can render the same classification. Failure is logged + surfaced
+# via the summary banner so a missing badge doesn't slip past the operator.
+try {
+    $reportMetadata['Maturity'] = Get-NRGMaturityTier -Findings $findings
+} catch {
+    Write-Warning "Maturity-tier classification failed: $($_.Exception.Message)"
+    $reportMetadata['MaturityError'] = $_.Exception.Message
 }
 
 # ── Publish reports ──────────────────────────────────────────────────────────
@@ -547,11 +706,35 @@ if (-not $JsonOnly) {
 }
 
 # ── Summary ──────────────────────────────────────────────────────────────────
-$s = @{
-    Satisfied = @($findings | Where-Object State -eq 'Satisfied').Count
-    Partial   = @($findings | Where-Object State -eq 'Partial').Count
-    Gap       = @($findings | Where-Object State -eq 'Gap').Count
-    NA        = @($findings | Where-Object State -eq 'NotApplicable').Count
+# Error state is surfaced explicitly so an operator sees collector-failure
+# counts as a distinct bucket from Gap (a real posture issue).
+#
+# v4.10.1: counts now pulled from $reportMetadata['Maturity'] when available
+# (single source of truth with the maturity badge and CI thresholds). The
+# Maturity helper computed Sat/Partial/Gap/NA/Error in one pass at line 583;
+# re-deriving them here with 5x Where-Object was wasted work AND meant a
+# future change to the counter rule (e.g., excluding Error from Gap counts)
+# would silently split into two answers. Falls back to one canonical
+# Get-NRGCoverageScore call when Maturity is unavailable (helper threw, or
+# a -FromResults baseline pre-dating v4.10.1) — banner always renders.
+$s = if ($reportMetadata.Contains('Maturity') -and $reportMetadata['Maturity']) {
+    $m = $reportMetadata['Maturity']
+    @{
+        Satisfied = $m.Satisfied
+        Partial   = $m.Partial
+        Gap       = $m.Gap
+        NA        = $m.NotApplicable
+        Error     = $m.ErrorFindings
+    }
+} else {
+    $cov = Get-NRGCoverageScore -Findings $findings -ErrorHandling 'Gap'
+    @{
+        Satisfied = $cov.Satisfied
+        Partial   = $cov.Partial
+        Gap       = $cov.Gap
+        NA        = $cov.NA
+        Error     = $cov.Error
+    }
 }
 
 # Footer version + control count read at runtime so a stale hardcoded value
@@ -569,9 +752,89 @@ Write-Host "  Satisfied      $($s.Satisfied)"                                  -
 Write-Host "  Partial        $($s.Partial)"                                    -ForegroundColor Yellow
 Write-Host "  Gap            $($s.Gap)"                                        -ForegroundColor Red
 Write-Host "  Not Applicable $($s.NA)"                                         -ForegroundColor DarkGray
+if ($s.Error -gt 0) {
+    Write-Host "  Error          $($s.Error) (collector failures — excluded from score)" -ForegroundColor Magenta
+}
 Write-Host "  Total          $($findings.Count)"                               -ForegroundColor White
 Write-Host "  Output         $OutputPath"                                      -ForegroundColor White
+if ($reportMetadata.Contains('Maturity') -and $reportMetadata['Maturity']) {
+    $m = $reportMetadata['Maturity']
+    Write-Host "  Maturity       $($m.Label) (tier $($m.Tier)/5, score $($m.Score)/100)" -ForegroundColor Cyan
+} elseif ($reportMetadata.Contains('MaturityError')) {
+    Write-Host "  Maturity       unavailable ($($reportMetadata['MaturityError']))" -ForegroundColor Yellow
+}
 Write-Host ""
+
+# ── Threshold exit codes (CI / automation) ────────────────────────────────────
+# Opt-in policy gate (default 0 = disabled). Reads pre-computed counts from
+# $reportMetadata['Maturity'] so the badge in the report and the threshold the
+# CI fires on can never disagree — the older inline `Where-Object` re-derivation
+# meant a future change to the maturity counter rule (e.g., excluding Error
+# from Gap counts) would silently split into two answers.
+#
+# Threshold codes (10/11/12) land on $script:NRGThresholdExitCode — a separate
+# channel from $script:NRGFatalExitCode (1=auth, 4=fatal). This preserves the
+# disambiguation between "graceful policy breach, all reports on disk" and
+# "orchestrator crashed mid-publish": the final exit-resolution block at the
+# bottom of this script gives fatal precedence over threshold, threshold
+# precedence over success.
+#
+# Fail-closed when Maturity is unavailable: ALL three FailOn flags emit the
+# loud INOPERATIVE warning, not just FailOnScoreBelow. The earlier version
+# silently defaulted gap counts to 0 when $mat was null, which silently let
+# every FailOnCritical/FailOnHigh-gated tenant exit 0 if the Maturity helper
+# ever threw. CI operators must get a loud signal when their gate is
+# inoperative — silent fail-open is the worst possible failure mode for a
+# policy enforcement check.
+#
+# Zero-findings runs (collection failed, all evaluators returned nothing) also
+# skip the threshold check entirely — the run already exits 2 ("no findings"),
+# and a derived "score=0" should not be re-interpreted as a posture failure.
+# A baseline-tampered -FromResults with a "real" zero is still caught by the
+# -FromResults + -FailOn* combination warning below.
+if ($FailOnCritical -gt 0 -or $FailOnHigh -gt 0 -or $FailOnScoreBelow -gt 0) {
+
+    # Warn loudly when -FromResults is combined with any -FailOn* — the gate
+    # then evaluates against a baseline FILE, not the live tenant. A baseline
+    # JSON with every State='Satisfied' would silently pass any CI gate. We
+    # already reject -Quick + -FromResults the same way upstream.
+    if ($skipCollection) {
+        Write-Warning "-FailOnCritical / -FailOnHigh / -FailOnScoreBelow combined with -FromResults: CI gate is evaluated against the baseline JSON, not the live tenant. If the baseline file has been modified, the gate's verdict reflects the file — not current posture. Re-run against the live tenant for an authoritative gate."
+    }
+
+    $mat = if ($reportMetadata.Contains('Maturity')) { $reportMetadata['Maturity'] } else { $null }
+
+    if ($findings.Count -eq 0) {
+        Write-Warning "Threshold check skipped: 0 findings evaluated. The run will exit 2 ('no findings'); a zero-score derived from an empty findings stream would mislead a posture check."
+    }
+    elseif (-not $mat) {
+        Write-Warning "Threshold check INOPERATIVE: Maturity classification unavailable, so CriticalGaps/HighGaps/Score cannot be read. Investigate the maturity warning above. The -FailOn* gate did NOT run for this assessment — do not treat a clean exit as policy compliance."
+    }
+    else {
+        $critGaps = [int]$mat.CriticalGaps
+        $highGaps = [int]$mat.HighGaps
+
+        if ($FailOnCritical -gt 0 -and $critGaps -ge $FailOnCritical) {
+            Write-Host "[!] Threshold breached: $critGaps Critical gaps (limit $FailOnCritical) — exiting 10" -ForegroundColor Red
+            $script:NRGThresholdExitCode = 10
+        }
+        elseif ($FailOnHigh -gt 0 -and $highGaps -ge $FailOnHigh) {
+            Write-Host "[!] Threshold breached: $highGaps High gaps (limit $FailOnHigh) — exiting 11" -ForegroundColor Red
+            $script:NRGThresholdExitCode = 11
+        }
+        elseif ($FailOnScoreBelow -gt 0) {
+            if ($mat.Contains('Score') -and $null -ne $mat.Score) {
+                $maturityScore = [int]$mat.Score
+                if ($maturityScore -lt $FailOnScoreBelow) {
+                    Write-Host "[!] Threshold breached: score $maturityScore < $FailOnScoreBelow — exiting 12" -ForegroundColor Red
+                    $script:NRGThresholdExitCode = 12
+                }
+            } else {
+                Write-Warning "-FailOnScoreBelow $FailOnScoreBelow is set but Maturity.Score is missing/null — skipping. CI gate is INOPERATIVE for this run."
+            }
+        }
+    }
+}
 
 # ── Exit-code spec (v4.6.3 P2) ────────────────────────────────────────────────
 # CLAUDE.md declares: 0 success, 1 auth failure, 2 no findings, 3 partial
@@ -608,8 +871,14 @@ finally {
 
 # Resolve and emit the exit code (must be done OUTSIDE the try/catch/finally
 # so the exit happens after the disconnect runs).
+# Precedence: fatal (auth/crash) > threshold (policy gate) > success.
+# Threshold only applies when no fatal error occurred — a crash that happens
+# to leave a threshold value set must not masquerade as a graceful breach.
 if ($script:NRGFatalExitCode) {
     exit $script:NRGFatalExitCode
+}
+if ($script:NRGThresholdExitCode) {
+    exit $script:NRGThresholdExitCode
 }
 if ($null -ne $script:NRGSuccessExitCode) {
     exit $script:NRGSuccessExitCode

@@ -83,7 +83,7 @@ Each v4.6.x release ships with:
 2. Updated `CHANGELOG.md` entry with one bullet per item
 3. Updated `Testing/NRG.Polish.Tests.ps1` — at least one Pester test per item asserting the new behavior
 4. Updated `CLAUDE.md` if the item changes a public CLI surface or schema field
-5. Lockstep diff in the sibling repo (NRG ↔ NLS)
+5. Lockstep diff in the sibling repo (NRG ↔ NRG)
 
 ## Out of scope for this track
 
@@ -111,4 +111,4 @@ Scoped as a v5.x project track, not v4.6.x.
 
 ---
 
-*Track owner: NextLayerSec. Sequenced after v4.6.5 close.*
+*Track owner: NRG Technology Services / NextLayerSec LLC. Sequenced after v4.6.5 close.*

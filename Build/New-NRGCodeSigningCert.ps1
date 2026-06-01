@@ -5,7 +5,7 @@
 # certificate, stores it in the operator's CurrentUser cert store, and
 # emits the thumbprint so it can be plumbed into Build/Sign-Release.ps1.
 #
-# Author: NextLayerSec / NRG Technology Services
+# Author: Matthew Levorson / NRG Technology Services / NextLayerSec LLC
 #
 # WHY SELF-SIGNED (and when to upgrade)
 #   For in-house use the operator workstation trusts the certificate locally.

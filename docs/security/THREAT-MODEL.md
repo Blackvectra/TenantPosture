@@ -81,4 +81,4 @@ Gitleaks and TruffleHog run on every push to detect accidentally committed crede
 
 ---
 
-*Last reviewed: May 2026 · Matthew Levorson · NRG Technology Services*
+*Last reviewed: May 2026 · NRG Technology Services / NextLayerSec LLC · NRG Technology Services / NextLayerSec LLC*

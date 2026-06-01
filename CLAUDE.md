@@ -1,8 +1,8 @@
 # NRG-Assessment Tool — Claude Code Project Context
 
-**Author:** Matthew Levorson, NRG Technology Services / NextLayerSec LLC
+**Author:** NRG Technology Services — nrgtechservices.com
 **GitHub:** https://github.com/Blackvectra/NRG-Assessment-Tool
-**Version:** 4.6.7
+**Version:** 4.10.1
 **Language:** PowerShell 7.0+
 **Purpose:** Read-only Microsoft 365 security assessment framework for MSP multi-tenant environments.
 
@@ -70,7 +70,7 @@ Do not add scopes without updating `Connect-NRGServices.ps1`. The scope list mus
 
 `DelegatedOrg` must be the `.onmicrosoft.com` routing domain. Get it from Microsoft 365 Admin Center under Settings then Domains for each client. Get `TenantId` from `https://login.microsoftonline.com/domain/.well-known/openid-configuration` — the GUID in the issuer field is the TenantId.
 
-Test sequence before first full run: run with `-WhatIf` first, then `-OnlyClient nextlayersec.io -JsonOnly`, then full batch.
+Test sequence before first full run: run with `-WhatIf` first, then `-OnlyClient nrgtechservices.com -JsonOnly`, then full batch.
 
 ## HTML Report Structure
 
@@ -86,7 +86,7 @@ The report produces 13 sections: Executive Overview with score ring and license 
 
 ## Environment
 
-MSP context is NRG Technology Services, North Dakota. Government clients have CISA BOD 18-01 compliance obligations. Key clients are `nrgtechservices.com`, `clienta.org`, and `clientbnd.gov`. Tooling includes ConnectWise RMM, Cortex XDR, Microsoft Defender for Endpoint, SonicWall, DMARCian, and Microsoft 365/Entra ID. Frameworks referenced are NIST SP 800-53r5, NIST CSF 2.0, MITRE ATT&CK Enterprise, CIS M365 Foundations v3, CISA SCuBA, and CISA BOD 18-01. Logs go to `C:\ProgramData\NRG\Logs`. Assessment output goes to `.\output\tenantdomain\timestamp-results.json`. Batch summary goes to `.\output\batch-summary-timestamp.md`.
+MSP context is NRG Technology Services / NextLayerSec LLC. Government clients have CISA BOD 18-01 compliance obligations. Key clients are `nrgtechservices.com`, `example.com`, and `example2.com`. Tooling includes ConnectWise RMM, Cortex XDR, Microsoft Defender for Endpoint, SonicWall, DMARCian, and Microsoft 365/Entra ID. Frameworks referenced are NIST SP 800-53r5, NIST CSF 2.0, MITRE ATT&CK Enterprise, CIS M365 Foundations v3, CISA SCuBA, and CISA BOD 18-01. Logs go to `C:\ProgramData\NRG\Logs`. Assessment output goes to `.\output\tenantdomain\timestamp-results.json`. Batch summary goes to `.\output\batch-summary-timestamp.md`.
 
 ## Common Tasks
 
