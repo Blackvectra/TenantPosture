@@ -30,7 +30,7 @@
     Root directory for all client reports. Defaults to .\output\
 
 .PARAMETER OnlyClient
-    Run against a single client by TenantDomain. E.g. -OnlyClient ndaco.org
+    Run against a single client by TenantDomain. E.g. -OnlyClient example.com
 
 .PARAMETER JsonOnly
     Write JSON findings only — no HTML or Markdown.

@@ -257,21 +257,28 @@ function Test-NRGLicenseRequirementMet {
         null/empty/"Included*" requirements as already met.
     .PARAMETER LicenseRequirement
         The exact string from controls.json LicenseRequirement field.
-    .PARAMETER Profile
+    .PARAMETER LicenseProfile
         The output of Get-NRGTenantLicenseProfile. Required — passing null
         means "no SKU data" and we conservatively return $false so the
         publisher labels the gap as license-gated rather than silently
         suppressing a real upgrade need.
+
+        Renamed from -Profile in v4.9.x to avoid shadowing PowerShell's
+        built-in $Profile automatic variable, which PSScriptAnalyzer
+        flags via PSAvoidAssignmentToAutomaticVariable. No alias is
+        kept because the runner's older PSA still trips on the alias
+        name itself; the only callers are internal tests, which have
+        been migrated in lockstep.
     #>
     [CmdletBinding()]
     [OutputType([bool])]
     param(
         [Parameter()] [AllowNull()] [AllowEmptyString()] [string] $LicenseRequirement,
-        [Parameter()] [AllowNull()] [object] $Profile
+        [Parameter()] [AllowNull()] [object] $LicenseProfile
     )
 
     if ([string]::IsNullOrEmpty($LicenseRequirement)) { return $true }
     if ($LicenseRequirement -match '^Included') { return $true }
-    if ($null -eq $Profile -or -not $Profile.SuppressedLicenseRequirements) { return $false }
-    return [bool]$Profile.SuppressedLicenseRequirements.Contains($LicenseRequirement)
+    if ($null -eq $LicenseProfile -or -not $LicenseProfile.SuppressedLicenseRequirements) { return $false }
+    return [bool]$LicenseProfile.SuppressedLicenseRequirements.Contains($LicenseRequirement)
 }

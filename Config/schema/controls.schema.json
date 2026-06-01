@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://blackvectra.com/schemas/nrg-controls-v1.schema.json",
+  "$id": "https://blackvectra.com/schemas/nls-controls-v1.schema.json",
   "title": "NRG Assessment Tool — Control Definition Schema v1.0",
   "description": "Validates Config/controls.json. Every control must pass this schema before merge.",
   "type": "object",

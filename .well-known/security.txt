@@ -1,0 +1,10 @@
+# RFC 9116 security.txt — machine-readable security contact metadata.
+# Serve from any domain hosting NRG-Assessment at /.well-known/security.txt.
+
+Contact: https://github.com/Blackvectra/NRG-Assessment-Tool/security/advisories/new
+Contact: mailto:security@nrgtechservices.com
+Expires: 2027-05-31T00:00:00.000Z
+Policy: https://github.com/Blackvectra/NRG-Assessment-Tool/blob/main/docs/VULNERABILITY-DISCLOSURE-POLICY.md
+Preferred-Languages: en
+Canonical: https://github.com/Blackvectra/NRG-Assessment-Tool/blob/main/.well-known/security.txt
+Acknowledgments: https://github.com/Blackvectra/NRG-Assessment-Tool/security/advisories

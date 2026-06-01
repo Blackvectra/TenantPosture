@@ -4,7 +4,7 @@
 # Returns Authenticode signature status for a path. Wraps Get-AuthenticodeSignature
 # so callers don't need to know about cert-chain edge cases.
 #
-# Author: NextLayerSec / NRG Technology Services
+# Author: Matthew Levorson / NRG Technology Services / NextLayerSec LLC
 #
 # Used by:
 #   - Apply-NRGBaseline.ps1 -RequireSignedCode preflight gate
@@ -75,9 +75,8 @@ function Test-NRGSignatureStatus {
     # Detect early and return a typed "Unsupported" so the caller's logic
     # branches cleanly instead of crashing on platform-specific errors.
     # Use the built-in $IsWindows automatic variable directly (PS 7+ guaranteed
-    # by #Requires) — don't shadow it with a local. PSScriptAnalyzer's
-    # PSAvoidAssignmentToAutomaticVariable rule flags any assignment to $isWindows
-    # because PowerShell variable lookup is case-insensitive.
+    # by #Requires) — don't shadow it. PSScriptAnalyzer flags
+    # PSAvoidAssignmentToAutomaticVariable on $isWindows assignment.
 
     # Resolve targets — single file vs directory
     $resolved = Resolve-Path -LiteralPath $Path

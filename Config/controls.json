@@ -21,10 +21,10 @@
           "T1078",
           "T1110.003"
         ],
-        "ISO27001": "A.8.2",
+        "ISO27001": "A.5.17",
         "SOC2": "CC6.1",
         "HIPAA": "\u00a7164.312(d)",
-        "PCIDSS": "Req 8.2"
+        "PCIDSS": "Req 8.3"
       },
       "LicenseRequirement": "M365 Business Premium or Entra ID P1"
     },
@@ -49,7 +49,7 @@
           "T1078",
           "T1621"
         ],
-        "ISO27001": "A.8.2",
+        "ISO27001": "A.5.17, A.8.5",
         "SOC2": "CC6.1",
         "HIPAA": "\u00a7164.312(d)",
         "PCIDSS": "Req 8.4"
@@ -78,10 +78,10 @@
           "T1621",
           "T1557"
         ],
-        "ISO27001": "A.8.2",
+        "ISO27001": "A.8.2, A.8.5",
         "SOC2": "CC6.1",
-        "HIPAA": "\u00a7164.312(d)",
-        "PCIDSS": "Req 8.6"
+        "HIPAA": "\u00a7164.312(d), \u00a7164.308(a)(4)(ii)(B)",
+        "PCIDSS": "Req 8.4"
       },
       "LicenseRequirement": "M365 Business Premium or Entra ID P1"
     },
@@ -106,8 +106,8 @@
           "T1078",
           "T1110"
         ],
-        "ISO27001": "A.8.3",
-        "SOC2": "CC6.6",
+        "ISO27001": "A.5.15, A.8.3",
+        "SOC2": "CC6.1",
         "HIPAA": "\u00a7164.312(a)(1)",
         "PCIDSS": "Req 7.2"
       },
@@ -134,7 +134,10 @@
           "T1078.004",
           "T1098"
         ],
-        "ISO27001": "A.8.18"
+        "ISO27001": "A.8.2",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(C), \u00a7164.312(a)(2)(i)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 7.2.1"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -159,10 +162,10 @@
           "T1114",
           "T1070.008"
         ],
-        "ISO27001": "A.8.17",
+        "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
-        "HIPAA": "\u00a7164.312(e)(2)",
-        "PCIDSS": "Req 4.2"
+        "HIPAA": "\u00a7164.312(b)",
+        "PCIDSS": "Req 10.2"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -187,8 +190,10 @@
           "T1078",
           "T1114.002"
         ],
-        "ISO27001": "A.8.17",
-        "HIPAA": "\u00a7164.312(e)(2)"
+        "ISO27001": "A.8.24",
+        "HIPAA": "\u00a7164.312(e)(1)",
+        "SOC2": "CC6.7, CC6.1",
+        "PCIDSS": "Req 4.2.1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -212,7 +217,10 @@
         "MITRE": [
           "T1114.003"
         ],
-        "ISO27001": "A.8.17"
+        "ISO27001": "A.8.12",
+        "HIPAA": "\u00a7164.312(e)(1), \u00a7164.402",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 3.4, Req 4.2"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -236,7 +244,11 @@
         "MITRE": [
           "T1566",
           "T1036.005"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 4.2",
+        "ISO27001": "A.8.23, A.8.24"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -260,7 +272,11 @@
         "MITRE": [
           "T1566.001",
           "T1598.003"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4.1",
+        "ISO27001": "A.8.7, A.8.23"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -284,7 +300,11 @@
         "MITRE": [
           "T1078",
           "T1110"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(d)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.3",
+        "ISO27001": "A.5.17"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -308,7 +328,11 @@
         "MITRE": [
           "T1566",
           "T1036.005"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 5.4.1",
+        "ISO27001": "A.8.23"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -332,7 +356,11 @@
         "MITRE": [
           "T1566",
           "T1036.005"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(1)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 5.4.1",
+        "ISO27001": "A.8.23"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -357,9 +385,10 @@
           "T1566",
           "T1036.005"
         ],
-        "ISO27001": "A.8.24",
-        "HIPAA": "\u00a7164.312(e)(2)",
-        "PCIDSS": "Req 4.2"
+        "ISO27001": "A.8.23, A.8.24",
+        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "PCIDSS": "Req 4.2",
+        "SOC2": "CC6.7"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -384,8 +413,10 @@
           "T1566",
           "T1036.005"
         ],
-        "ISO27001": "A.8.24",
-        "PCIDSS": "Req 4.2"
+        "ISO27001": "A.8.23",
+        "PCIDSS": "Req 5.4.1",
+        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "SOC2": "CC6.7"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -409,7 +440,11 @@
         "MITRE": [
           "T1557",
           "T1600.001"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(2)(ii)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 4.2.1",
+        "ISO27001": "A.8.24"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -432,7 +467,11 @@
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
           "T1557"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(2)(ii)",
+        "SOC2": "CC6.7, CC7.2",
+        "PCIDSS": "Req 4.2.1",
+        "ISO27001": "A.8.24"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -456,7 +495,11 @@
         "MITRE": [
           "T1557",
           "T1584.002"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(c)(1)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 1.4",
+        "ISO27001": "A.8.20"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -480,7 +523,11 @@
         "MITRE": [
           "T1566",
           "T1606.001"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 3.7",
+        "ISO27001": "A.8.24"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -504,7 +551,11 @@
         "MITRE": [
           "T1583.001",
           "T1606.001"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(c)(1)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 4.2.1",
+        "ISO27001": "A.8.24"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -528,7 +579,11 @@
         "MITRE": [
           "T1557",
           "T1600.001"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(2)(ii)",
+        "SOC2": "CC6.7, CC7.2",
+        "PCIDSS": "Req 4.2.1",
+        "ISO27001": "A.8.24"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -552,7 +607,11 @@
         "MITRE": [
           "T1583.001",
           "T1606.001"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(c)(1)",
+        "SOC2": "CC7.2",
+        "PCIDSS": "Req 11.6.1",
+        "ISO27001": "A.8.16"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -577,7 +636,10 @@
           "T1566.001",
           "T1204.002"
         ],
-        "ISO27001": "A.8.7"
+        "ISO27001": "A.8.7",
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.2"
       },
       "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)"
     },
@@ -602,7 +664,10 @@
           "T1566.002",
           "T1204.001"
         ],
-        "ISO27001": "A.8.7"
+        "ISO27001": "A.8.7",
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.2"
       },
       "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)"
     },
@@ -626,7 +691,11 @@
         "MITRE": [
           "T1566",
           "T1036.005"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 5.4.1",
+        "ISO27001": "A.8.23"
       },
       "LicenseRequirement": "Included (EOP)"
     },
@@ -650,7 +719,11 @@
         "MITRE": [
           "T1566",
           "T1036.005"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 5.4.1",
+        "ISO27001": "A.8.23"
       },
       "LicenseRequirement": "Included (EOP)"
     },
@@ -673,7 +746,11 @@
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
           "T1566"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4.1",
+        "ISO27001": "A.8.7, A.8.23"
       },
       "LicenseRequirement": "Included (EOP)"
     },
@@ -696,7 +773,11 @@
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
           "T1566.001"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4.1",
+        "ISO27001": "A.8.7"
       },
       "LicenseRequirement": "Included (EOP)"
     },
@@ -720,7 +801,10 @@
         "MITRE": [
           "T1213.002"
         ],
-        "ISO27001": "A.5.15"
+        "ISO27001": "A.5.19, A.5.21",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.312(e)(1)",
+        "SOC2": "CC6.2, CC6.7",
+        "PCIDSS": "Req 7.2.4"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -743,7 +827,11 @@
         "CMMC": "AC.L2-3.1.3",
         "MITRE": [
           "T1213.002"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.312(a)(2)(i)",
+        "SOC2": "CC6.2",
+        "PCIDSS": "Req 8.2.1",
+        "ISO27001": "A.5.16, A.5.18"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -768,7 +856,10 @@
           "T1078",
           "T1110"
         ],
-        "ISO27001": "A.5.15"
+        "ISO27001": "A.5.17, A.8.5",
+        "HIPAA": "\u00a7164.312(d)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.3"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -791,7 +882,11 @@
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(C)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 8.2.4",
+        "ISO27001": "A.5.18"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -814,7 +909,11 @@
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
           "T1213.002"
-        ]
+        ],
+        "HIPAA": "\u00a7164.310(d)(1), \u00a7164.312(a)(1)",
+        "SOC2": "CC6.6",
+        "PCIDSS": "Req 1.3",
+        "ISO27001": "A.8.1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -839,7 +938,10 @@
           "T1566",
           "T1534"
         ],
-        "ISO27001": "A.5.15"
+        "ISO27001": "A.5.23, A.8.22",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(A), \u00a7164.312(e)(1)",
+        "SOC2": "CC6.6",
+        "PCIDSS": "Req 1.4"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -863,7 +965,11 @@
         "MITRE": [
           "T1566",
           "T1534"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.2, CC6.6",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.5.23"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -886,7 +992,11 @@
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(a)(2)(i)",
+        "SOC2": "CC6.1, CC6.2",
+        "PCIDSS": "Req 8.2.1",
+        "ISO27001": "A.5.16"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -909,7 +1019,11 @@
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(a)(1), \u00a7164.502",
+        "SOC2": "CC6.1, C1.1",
+        "PCIDSS": "Req 7.2.5",
+        "ISO27001": "A.5.18, A.8.3"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -932,7 +1046,11 @@
         "MITRE": [
           "T1213"
         ],
-        "SCuBA": "MS.TEAMS.1.6v1"
+        "SCuBA": "MS.TEAMS.1.6v1",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(A), \u00a7164.310(d)(2)(ii)",
+        "SOC2": "CC6.7, C1.1",
+        "PCIDSS": "Req 3.5.1",
+        "ISO27001": "A.5.23, A.8.10"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -955,14 +1073,18 @@
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)",
+        "SOC2": "CC6.2",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.5.18"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
     {
       "ControlId": "PVW-1.1",
       "Title": "Unified Audit Log Enabled",
-      "Description": "Microsoft Purview unified audit logging is enabled across M365 services. (No SCuBA equivalent — Purview audit/DLP covered in MS.DEFENDER.* baselines.)",
+      "Description": "Microsoft Purview unified audit logging is enabled across M365 services. (No SCuBA equivalent \u2014 Purview audit/DLP covered in MS.DEFENDER.* baselines.)",
       "BusinessRisk": "Without audit logging, there is no record of admin changes, data access, or security policy modifications. Incident investigation is impossible.",
       "Severity": "Critical",
       "Workload": "PVW",
@@ -981,7 +1103,8 @@
         ],
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
-        "HIPAA": "\u00a7164.308(a)(1)"
+        "HIPAA": "\u00a7164.312(b), \u00a7164.308(a)(1)(ii)(D)",
+        "PCIDSS": "Req 10.2"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1004,14 +1127,18 @@
         "MITRE": [
           "T1562.008"
         ],
-        "SCuBA": "MS.DEFENDER.6.3v1"
+        "SCuBA": "MS.DEFENDER.6.3v1",
+        "HIPAA": "\u00a7164.312(b), \u00a7164.316(b)(2)(i)",
+        "SOC2": "CC7.2, A1.2",
+        "PCIDSS": "Req 10.5",
+        "ISO27001": "A.8.15"
       },
       "LicenseRequirement": "M365 Business Premium or E3+"
     },
     {
       "ControlId": "PVW-1.3",
       "Title": "DLP Policy Active for Sensitive Data",
-      "Description": "At least one active DLP policy protects sensitive information types from unauthorized sharing. (No SCuBA equivalent — Purview audit/DLP covered in MS.DEFENDER.* baselines.)",
+      "Description": "At least one active DLP policy protects sensitive information types from unauthorized sharing. (No SCuBA equivalent \u2014 Purview audit/DLP covered in MS.DEFENDER.* baselines.)",
       "BusinessRisk": "Without DLP, PII, financial data, and PHI can be emailed externally or shared with unauthenticated recipients without detection.",
       "Severity": "High",
       "Workload": "PVW",
@@ -1028,7 +1155,11 @@
         "MITRE": [
           "T1048",
           "T1567"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(1), \u00a7164.502(b)",
+        "SOC2": "CC6.7, C1.1",
+        "PCIDSS": "Req 3.4",
+        "ISO27001": "A.8.12"
       },
       "LicenseRequirement": "M365 Business Premium or E3+"
     },
@@ -1052,14 +1183,18 @@
         "MITRE": [
           "T1048",
           "T1005"
-        ]
+        ],
+        "HIPAA": "\u00a7164.502(b), \u00a7164.312(c)(1)",
+        "SOC2": "C1.1",
+        "PCIDSS": "Req 3.4, Req 7.2",
+        "ISO27001": "A.8.11, A.8.12"
       },
       "LicenseRequirement": "M365 Business Premium or E3+"
     },
     {
       "ControlId": "INT-1.1",
       "Title": "Device Compliance Policies Configured",
-      "Description": "Intune compliance policies are configured and evaluating enrolled devices against security baselines. (No SCuBA equivalent — Intune device-compliance controls are out of SCuBA scope.)",
+      "Description": "Intune compliance policies are configured and evaluating enrolled devices against security baselines. (No SCuBA equivalent \u2014 Intune device-compliance controls are out of SCuBA scope.)",
       "BusinessRisk": "Without compliance policies, enrolled devices have no enforced security requirements. Non-compliant devices access corporate resources unchecked.",
       "Severity": "High",
       "Workload": "INT",
@@ -1077,14 +1212,17 @@
           "T1078",
           "T1082"
         ],
-        "ISO27001": "A.8.1"
+        "ISO27001": "A.8.1",
+        "HIPAA": "\u00a7164.310(d)(1), \u00a7164.312(a)(1)",
+        "SOC2": "CC6.1, CC6.6",
+        "PCIDSS": "Req 1.3"
       },
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1"
     },
     {
       "ControlId": "INT-1.2",
       "Title": "Non-Compliant Device Access Blocked via CA",
-      "Description": "CA policies block or limit M365 access from devices marked non-compliant by Intune. (No SCuBA equivalent — Intune device-compliance controls are out of SCuBA scope.)",
+      "Description": "CA policies block or limit M365 access from devices marked non-compliant by Intune. (No SCuBA equivalent \u2014 Intune device-compliance controls are out of SCuBA scope.)",
       "BusinessRisk": "Compliance policies without CA enforcement are informational only. Non-compliant devices continue accessing data.",
       "Severity": "High",
       "Workload": "INT",
@@ -1101,10 +1239,10 @@
         "MITRE": [
           "T1078"
         ],
-        "ISO27001": "A.8.3",
-        "SOC2": "CC6.7",
-        "HIPAA": "\u00a7164.312(a)(2)",
-        "PCIDSS": "Req 5.2"
+        "ISO27001": "A.8.1, A.8.3",
+        "SOC2": "CC6.1",
+        "HIPAA": "\u00a7164.312(a)(1), \u00a7164.310(d)(1)",
+        "PCIDSS": "Req 1.3"
       },
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1"
     },
@@ -1128,7 +1266,11 @@
         "MITRE": [
           "T1005",
           "T1025"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(a)(2)(iv), \u00a7164.310(d)(1)",
+        "SOC2": "CC6.7, CC6.1",
+        "PCIDSS": "Req 3.5.1",
+        "ISO27001": "A.8.1, A.8.24"
       },
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1"
     },
@@ -1152,7 +1294,11 @@
         "MITRE": [
           "T1005",
           "T1533"
-        ]
+        ],
+        "HIPAA": "\u00a7164.310(d)(1), \u00a7164.312(a)(1)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 1.3",
+        "ISO27001": "A.8.1"
       },
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1"
     },
@@ -1175,7 +1321,11 @@
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
           "T1562.001"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.2",
+        "ISO27001": "A.8.7"
       },
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1"
     },
@@ -1199,7 +1349,11 @@
           "T1048",
           "T1567"
         ],
-        "SCuBA": "MS.POWERPLATFORM.3.1v1"
+        "SCuBA": "MS.POWERPLATFORM.3.1v1",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(A), \u00a7164.312(a)(1)",
+        "SOC2": "CC6.6",
+        "PCIDSS": "Req 1.4",
+        "ISO27001": "A.5.23, A.8.22"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1222,7 +1376,11 @@
         "MITRE": [
           "T1048"
         ],
-        "SCuBA": "MS.POWERPLATFORM.2.1v1"
+        "SCuBA": "MS.POWERPLATFORM.2.1v1",
+        "HIPAA": "\u00a7164.312(e)(1)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 3.4",
+        "ISO27001": "A.8.12"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1245,7 +1403,11 @@
         "MITRE": [
           "T1578"
         ],
-        "SCuBA": "MS.POWERPLATFORM.1.1v1"
+        "SCuBA": "MS.POWERPLATFORM.1.1v1",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3, CC8.1",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.5.23, A.8.32"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1269,7 +1431,11 @@
         "MITRE": [
           "T1078",
           "T1110"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(2)(ii)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 4.2.1",
+        "ISO27001": "A.8.24"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1293,7 +1459,11 @@
         "MITRE": [
           "T1078",
           "T1110"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(2)(ii)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 4.2.1",
+        "ISO27001": "A.8.24"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1316,7 +1486,11 @@
         "CMMC": "PE.L1-3.10.1",
         "MITRE": [
           "T1078.004"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(A), \u00a7164.312(b)",
+        "SOC2": "CC6.1, CC6.6",
+        "PCIDSS": "Req 7.2.5",
+        "ISO27001": "A.5.23, A.8.16"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1340,7 +1514,11 @@
         "MITRE": [
           "T1078",
           "T1098"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(a)(2)(i)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.2.1",
+        "ISO27001": "A.5.16, A.8.5"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1365,7 +1543,10 @@
           "T1078",
           "T1621"
         ],
-        "ISO27001": "A.8.2"
+        "ISO27001": "A.8.16",
+        "HIPAA": "\u00a7164.312(a)(1)",
+        "SOC2": "CC6.1, CC7.2",
+        "PCIDSS": "Req 8.5"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1390,7 +1571,10 @@
           "T1078",
           "T1110"
         ],
-        "ISO27001": "A.8.2"
+        "ISO27001": "A.8.16",
+        "HIPAA": "\u00a7164.312(a)(1)",
+        "SOC2": "CC6.1, CC7.2",
+        "PCIDSS": "Req 8.5"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1414,7 +1598,10 @@
         "MITRE": [
           "T1078"
         ],
-        "ISO27001": "A.8.3"
+        "ISO27001": "A.8.3",
+        "HIPAA": "\u00a7164.312(a)(1)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.2.2"
       },
       "LicenseRequirement": "M365 Business Premium or Entra ID P1"
     },
@@ -1439,7 +1626,9 @@
           "T1078"
         ],
         "ISO27001": "A.8.1",
-        "SOC2": "CC6.1"
+        "SOC2": "CC6.1",
+        "HIPAA": "\u00a7164.310(d)(1), \u00a7164.312(a)(1)",
+        "PCIDSS": "Req 1.3"
       },
       "LicenseRequirement": "M365 Business Premium or Entra ID P1 + Intune"
     },
@@ -1464,7 +1653,10 @@
           "T1078.004",
           "T1548"
         ],
-        "ISO27001": "A.8.18"
+        "ISO27001": "A.8.2",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(C)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2.5"
       },
       "LicenseRequirement": "Entra ID P2"
     },
@@ -1489,7 +1681,10 @@
           "T1078.004",
           "T1548"
         ],
-        "ISO27001": "A.8.5"
+        "ISO27001": "A.8.2, A.8.5",
+        "HIPAA": "\u00a7164.312(d)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.4"
       },
       "LicenseRequirement": "Entra ID P2"
     },
@@ -1513,7 +1708,10 @@
         "MITRE": [
           "T1078.004"
         ],
-        "ISO27001": "A.8.5"
+        "ISO27001": "A.8.2, A.8.15",
+        "HIPAA": "\u00a7164.308(a)(1)(ii)(D)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 10.2"
       },
       "LicenseRequirement": "Entra ID P2"
     },
@@ -1537,7 +1735,10 @@
         "MITRE": [
           "T1078.004"
         ],
-        "ISO27001": "A.8.5"
+        "ISO27001": "A.8.2",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2.4"
       },
       "LicenseRequirement": "Entra ID P2"
     },
@@ -1560,7 +1761,11 @@
         "CMMC": "AC.L2-3.1.5",
         "MITRE": [
           "T1078.004"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(C)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2.5",
+        "ISO27001": "A.8.2"
       },
       "LicenseRequirement": "Entra ID P2"
     },
@@ -1584,10 +1789,10 @@
         "MITRE": [
           "T1078"
         ],
-        "ISO27001": "A.5.18",
+        "ISO27001": "A.5.18, A.5.19",
         "SOC2": "CC6.2",
         "HIPAA": "\u00a7164.308(a)(4)",
-        "PCIDSS": "Req 7.3"
+        "PCIDSS": "Req 7.2.3"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -1611,7 +1816,10 @@
         "MITRE": [
           "T1078"
         ],
-        "ISO27001": "A.5.18"
+        "ISO27001": "A.5.19, A.5.21",
+        "HIPAA": "\u00a7164.308(a)(4)",
+        "SOC2": "CC6.2, CC6.6",
+        "PCIDSS": "Req 1.3.1"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -1636,7 +1844,10 @@
           "T1087",
           "T1069"
         ],
-        "ISO27001": "A.5.18"
+        "ISO27001": "A.5.18",
+        "HIPAA": "\u00a7164.308(a)(4)",
+        "SOC2": "CC6.2",
+        "PCIDSS": "Req 7.2.4"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -1660,7 +1871,10 @@
         "MITRE": [
           "T1078"
         ],
-        "ISO27001": "A.5.17"
+        "ISO27001": "A.5.17",
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(D)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.3.5"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -1683,7 +1897,11 @@
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(D)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.3.5",
+        "ISO27001": "A.5.17"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -1708,7 +1926,10 @@
           "T1528",
           "T1550.001"
         ],
-        "ISO27001": "A.8.18"
+        "ISO27001": "A.8.19",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3, CC8.1",
+        "PCIDSS": "Req 6.5.4"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -1733,10 +1954,10 @@
           "T1528",
           "T1550.001"
         ],
-        "ISO27001": "A.8.18",
+        "ISO27001": "A.5.23, A.8.19",
         "SOC2": "CC6.3",
         "HIPAA": "\u00a7164.308(a)(4)",
-        "PCIDSS": "Req 6.3"
+        "PCIDSS": "Req 6.4.3"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -1760,7 +1981,10 @@
         "MITRE": [
           "T1528"
         ],
-        "ISO27001": "A.8.18"
+        "ISO27001": "A.8.19",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3, CC8.1",
+        "PCIDSS": "Req 6.5.4"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -1783,7 +2007,11 @@
         "CMMC": "AC.L2-3.1.8",
         "MITRE": [
           "T1110"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(C), \u00a7164.308(a)(5)(ii)(D)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.3.4",
+        "ISO27001": "A.5.17, A.8.5"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -1807,9 +2035,10 @@
         "MITRE": [
           "T1078.004"
         ],
-        "ISO27001": "A.5.16",
-        "SOC2": "CC9.1",
-        "HIPAA": "\u00a7164.308(a)(3)"
+        "ISO27001": "A.5.30, A.8.2",
+        "SOC2": "CC6.1",
+        "HIPAA": "\u00a7164.312(a)(2)(ii)",
+        "PCIDSS": "Req 7.2.1"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -1832,7 +2061,11 @@
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
           "T1566"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(8)",
+        "SOC2": "CC8.1",
+        "PCIDSS": "Req 2.2",
+        "ISO27001": "A.8.9"
       },
       "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)"
     },
@@ -1856,7 +2089,10 @@
         "MITRE": [
           "T1566"
         ],
-        "ISO27001": "A.8.7"
+        "ISO27001": "A.8.7",
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4.2"
       },
       "LicenseRequirement": "Included (EOP)"
     },
@@ -1881,7 +2117,10 @@
           "T1566.001",
           "T1204.002"
         ],
-        "ISO27001": "A.8.7"
+        "ISO27001": "A.8.7",
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.2"
       },
       "LicenseRequirement": "Included (EOP)"
     },
@@ -1904,7 +2143,11 @@
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
           "T1566"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4.2",
+        "ISO27001": "A.8.7"
       },
       "LicenseRequirement": "Included (EOP)"
     },
@@ -1927,7 +2170,11 @@
         "CMMC": "SI.L2-3.14.7",
         "MITRE": [
           "T1566"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4.2",
+        "ISO27001": "A.8.7"
       },
       "LicenseRequirement": "Included (EOP)"
     },
@@ -1950,7 +2197,11 @@
         "CMMC": "SI.L2-3.14.7",
         "MITRE": [
           "T1566"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4.1",
+        "ISO27001": "A.8.23"
       },
       "LicenseRequirement": "Included (EOP)"
     },
@@ -1973,7 +2224,11 @@
         "CMMC": "SI.L2-3.14.7",
         "MITRE": [
           "T1566"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4.1",
+        "ISO27001": "A.8.7"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -1997,7 +2252,11 @@
         "MITRE": [
           "T1078",
           "T1114.003"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B), \u00a7164.402",
+        "SOC2": "CC6.8, CC7.2",
+        "PCIDSS": "Req 5.4",
+        "ISO27001": "A.8.7, A.8.16"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2020,7 +2279,11 @@
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
           "T1114.003"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(1)(ii)(D), \u00a7164.308(a)(6)",
+        "SOC2": "CC7.2, CC7.3",
+        "PCIDSS": "Req 10.7",
+        "ISO27001": "A.8.16"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2043,7 +2306,11 @@
         "MITRE": [
           "T1566"
         ],
-        "SCuBA": "MS.DEFENDER.5.1v1"
+        "SCuBA": "MS.DEFENDER.5.1v1",
+        "HIPAA": "\u00a7164.308(a)(1)(ii)(D), \u00a7164.308(a)(6)",
+        "SOC2": "CC7.2, CC7.3",
+        "PCIDSS": "Req 10.7",
+        "ISO27001": "A.8.16"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2067,7 +2334,11 @@
           "T1114",
           "T1070.008"
         ],
-        "SCuBA": "MS.DEFENDER.6.1v1"
+        "SCuBA": "MS.DEFENDER.6.1v1",
+        "HIPAA": "\u00a7164.312(b), \u00a7164.308(a)(1)(ii)(D)",
+        "SOC2": "CC7.2, CC8.1",
+        "PCIDSS": "Req 10.2, Req 6.5.3",
+        "ISO27001": "A.8.15, A.8.32"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2092,8 +2363,10 @@
           "T1005",
           "T1533"
         ],
-        "SOC2": "CC6.7",
-        "HIPAA": "\u00a7164.312(c)(1)"
+        "SOC2": "CC6.6, CC6.7",
+        "HIPAA": "\u00a7164.310(d)(1)",
+        "PCIDSS": "Req 1.3",
+        "ISO27001": "A.8.1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2116,7 +2389,11 @@
         "CMMC": "AC.L2-3.1.3",
         "MITRE": [
           "T1213.002"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(C)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.5.18"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2139,7 +2416,11 @@
         "CMMC": "CM.L2-3.4.6",
         "MITRE": [
           "T1195"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3, CC8.1",
+        "PCIDSS": "Req 6.4.3",
+        "ISO27001": "A.5.23, A.8.19"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2162,7 +2443,11 @@
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
           "T1059"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(c)(1), \u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8, CC8.1",
+        "PCIDSS": "Req 6.4.1",
+        "ISO27001": "A.8.28"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2186,7 +2471,11 @@
         "MITRE": [
           "T1048",
           "T1567"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.312(e)(1)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.5.23"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2209,7 +2498,11 @@
         "CMMC": "IA.L2-3.5.2",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(C), \u00a7164.312(d)",
+        "SOC2": "CC6.2",
+        "PCIDSS": "Req 8.3",
+        "ISO27001": "A.5.17, A.5.18"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2232,7 +2525,11 @@
         "MITRE": [
           "T1078"
         ],
-        "SCuBA": "MS.SHAREPOINT.3.3v2"
+        "SCuBA": "MS.SHAREPOINT.3.3v2",
+        "HIPAA": "\u00a7164.312(d)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.3",
+        "ISO27001": "A.5.17"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2256,7 +2553,11 @@
         "MITRE": [
           "T1005",
           "T1533"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(A), \u00a7164.310(d)(1)",
+        "SOC2": "CC6.6, CC6.7",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.5.23, A.8.1"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2280,7 +2581,11 @@
         "MITRE": [
           "T1566",
           "T1534"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.312(e)(1)",
+        "SOC2": "CC6.6",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.5.23"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2303,7 +2608,11 @@
         "CMMC": "CM.L2-3.4.6",
         "MITRE": [
           "T1195"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8, CC8.1",
+        "PCIDSS": "Req 6.4.3",
+        "ISO27001": "A.5.23, A.8.19"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2328,7 +2637,10 @@
           "T1048",
           "T1567"
         ],
-        "SOC2": "CC6.7"
+        "SOC2": "CC6.7",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.312(e)(1)",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.5.23"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2351,7 +2663,11 @@
         "MITRE": [
           "T1566"
         ],
-        "SCuBA": "MS.TEAMS.4.1v1"
+        "SCuBA": "MS.TEAMS.4.1v1",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.312(e)(1)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 4.2",
+        "ISO27001": "A.5.23"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2374,7 +2690,11 @@
         "CMMC": "AU.L2-3.3.8",
         "MITRE": [
           "T1113"
-        ]
+        ],
+        "HIPAA": "\u00a7164.502, \u00a7164.312(e)(1)",
+        "SOC2": "C1.1",
+        "PCIDSS": "Req 3.4",
+        "ISO27001": "A.8.10, A.8.12"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2397,7 +2717,11 @@
         "CMMC": "AC.L2-3.1.1",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.2",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.5.18"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2421,7 +2745,11 @@
         "MITRE": [
           "T1566",
           "T1534"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.312(e)(1)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 4.2",
+        "ISO27001": "A.5.23"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2444,14 +2772,18 @@
         "MITRE": [
           "T1078"
         ],
-        "SCuBA": "MS.TEAMS.1.5v1"
+        "SCuBA": "MS.TEAMS.1.5v1",
+        "HIPAA": "\u00a7164.312(a)(1)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 7.2",
+        "ISO27001": "A.5.18"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
     {
       "ControlId": "PVW-2.1",
       "Title": "Purview Audit Log Search Enabled",
-      "Description": "Unified audit log search is enabled and accessible to compliance administrators. (No SCuBA equivalent — Purview audit/DLP covered in MS.DEFENDER.* baselines.)",
+      "Description": "Unified audit log search is enabled and accessible to compliance administrators. (No SCuBA equivalent \u2014 Purview audit/DLP covered in MS.DEFENDER.* baselines.)",
       "BusinessRisk": "Without audit log search, compliance teams cannot investigate incidents, fulfill legal holds, or demonstrate regulatory compliance.",
       "Severity": "High",
       "Workload": "PVW",
@@ -2471,7 +2803,7 @@
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
         "HIPAA": "\u00a7164.312(b)",
-        "PCIDSS": "Req 10.2"
+        "PCIDSS": "Req 10.7"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2494,7 +2826,11 @@
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
           "T1114"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(1)(ii)(D), \u00a7164.502(j)",
+        "SOC2": "CC7.2",
+        "PCIDSS": "Req 12.10.1",
+        "ISO27001": "A.5.34, A.8.16"
       },
       "LicenseRequirement": "M365 E5 Compliance add-on"
     },
@@ -2517,7 +2853,11 @@
         "CMMC": "AC.L2-3.1.3",
         "MITRE": [
           "T1048"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(A)",
+        "SOC2": "C1.1, CC6.1",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.5.18, A.8.3"
       },
       "LicenseRequirement": "M365 E5 Compliance add-on"
     },
@@ -2542,7 +2882,10 @@
           "T1005",
           "T1048"
         ],
-        "HIPAA": "\u00a7164.308(a)(1)"
+        "HIPAA": "\u00a7164.308(a)(6)",
+        "SOC2": "CC7.2, CC7.3",
+        "PCIDSS": "Req 12.10",
+        "ISO27001": "A.6.8, A.8.16"
       },
       "LicenseRequirement": "M365 E5 Compliance add-on"
     },
@@ -2566,7 +2909,10 @@
         "MITRE": [
           "T1070.008"
         ],
-        "SOC2": "A1.2"
+        "SOC2": "A1.2, CC2.1",
+        "HIPAA": "\u00a7164.316(b)(2)(i), \u00a7164.308(a)(7)(ii)(A)",
+        "PCIDSS": "Req 10.5",
+        "ISO27001": "A.8.10, A.8.13"
       },
       "LicenseRequirement": "M365 Business Premium or E3+"
     },
@@ -2589,14 +2935,18 @@
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
           "T1005"
-        ]
+        ],
+        "HIPAA": "\u00a7164.502(b), \u00a7164.312(c)(1)",
+        "SOC2": "C1.1",
+        "PCIDSS": "Req 3.4",
+        "ISO27001": "A.8.11"
       },
       "LicenseRequirement": "M365 E5 Compliance add-on"
     },
     {
       "ControlId": "INT-2.1",
       "Title": "Endpoint Detection and Response Policy Deployed",
-      "Description": "MDE onboarding policy is deployed via Intune, enrolling endpoints into Defender for Endpoint. (No SCuBA equivalent — Intune device-compliance controls are out of SCuBA scope.)",
+      "Description": "MDE onboarding policy is deployed via Intune, enrolling endpoints into Defender for Endpoint. (No SCuBA equivalent \u2014 Intune device-compliance controls are out of SCuBA scope.)",
       "BusinessRisk": "Without EDR, endpoint threats are invisible. Lateral movement, persistence, and data theft go undetected.",
       "Severity": "Critical",
       "Workload": "INT",
@@ -2614,8 +2964,10 @@
           "T1055",
           "T1562.001"
         ],
-        "ISO27001": "A.8.16",
-        "PCIDSS": "Req 5.3"
+        "ISO27001": "A.8.7, A.8.16",
+        "PCIDSS": "Req 11.5",
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B), \u00a7164.308(a)(6)",
+        "SOC2": "CC6.8, CC7.2, CC7.3"
       },
       "LicenseRequirement": "Microsoft Defender for Endpoint Plan 2"
     },
@@ -2639,7 +2991,11 @@
         "MITRE": [
           "T1059",
           "T1003"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4",
+        "ISO27001": "A.8.7"
       },
       "LicenseRequirement": "Microsoft Defender for Endpoint Plan 1+"
     },
@@ -2663,7 +3019,11 @@
         "MITRE": [
           "T1021",
           "T1590"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(a)(1), \u00a7164.312(e)(1)",
+        "SOC2": "CC6.6",
+        "PCIDSS": "Req 1.2",
+        "ISO27001": "A.8.20, A.8.21"
       },
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1"
     },
@@ -2687,14 +3047,18 @@
         "MITRE": [
           "T1005",
           "T1025"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(a)(2)(iv), \u00a7164.310(d)(1)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 3.5.1",
+        "ISO27001": "A.8.1, A.8.24"
       },
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1"
     },
     {
       "ControlId": "INT-2.5",
       "Title": "Windows Update Compliance Policy Deployed",
-      "Description": "Windows Update for Business rings or compliance policy ensures devices receive security updates on schedule. (No SCuBA equivalent — Intune device-compliance controls are out of SCuBA scope.)",
+      "Description": "Windows Update for Business rings or compliance policy ensures devices receive security updates on schedule. (No SCuBA equivalent \u2014 Intune device-compliance controls are out of SCuBA scope.)",
       "BusinessRisk": "Unpatched endpoints are the most exploited attack surface. Without managed update policy, critical patches may sit unapplied for months.",
       "Severity": "High",
       "Workload": "INT",
@@ -2711,7 +3075,11 @@
         "MITRE": [
           "T1190",
           "T1068"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(1)(ii)(B), \u00a7164.308(a)(8)",
+        "SOC2": "CC7.1, CC8.1",
+        "PCIDSS": "Req 6.3.3",
+        "ISO27001": "A.8.8"
       },
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1"
     },
@@ -2734,7 +3102,11 @@
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
           "T1078.004"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(1)(ii)(D), \u00a7164.312(b)",
+        "SOC2": "CC7.2",
+        "PCIDSS": "Req 10.2",
+        "ISO27001": "A.8.15, A.8.16"
       },
       "LicenseRequirement": "Entra ID P2"
     },
@@ -2758,9 +3130,10 @@
         "MITRE": [
           "T1078.004"
         ],
-        "ISO27001": "A.5.18",
-        "SOC2": "CC6.2",
-        "HIPAA": "\u00a7164.308(a)(3)"
+        "ISO27001": "A.5.18, A.8.2",
+        "SOC2": "CC6.3",
+        "HIPAA": "\u00a7164.308(a)(4)",
+        "PCIDSS": "Req 7.2.4"
       },
       "LicenseRequirement": "Entra ID P2"
     },
@@ -2784,7 +3157,10 @@
         "MITRE": [
           "T1621"
         ],
-        "ISO27001": "A.8.5"
+        "ISO27001": "A.5.17, A.8.5",
+        "HIPAA": "\u00a7164.312(d)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.4"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -2808,7 +3184,11 @@
           "T1078",
           "T1110"
         ],
-        "SCuBA": "MS.AAD.3.1v1"
+        "SCuBA": "MS.AAD.3.1v1",
+        "HIPAA": "\u00a7164.312(d)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.4",
+        "ISO27001": "A.5.17, A.8.5"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -2832,7 +3212,11 @@
         "MITRE": [
           "T1078",
           "T1110"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(1)(ii)(D), \u00a7164.308(a)(6)",
+        "SOC2": "CC7.2, CC7.3",
+        "PCIDSS": "Req 10.7",
+        "ISO27001": "A.5.27, A.8.16"
       },
       "LicenseRequirement": "Entra ID P2"
     },
@@ -2856,9 +3240,10 @@
         "MITRE": [
           "T1078.004"
         ],
-        "ISO27001": "A.5.16",
-        "SOC2": "CC6.3",
-        "HIPAA": "\u00a7164.312(a)(2)"
+        "ISO27001": "A.8.2",
+        "SOC2": "CC6.1",
+        "HIPAA": "\u00a7164.312(a)(2)(i)",
+        "PCIDSS": "Req 8.2.1"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -2881,7 +3266,11 @@
         "CMMC": "IR.L2-3.6.1",
         "MITRE": [
           "T1078.004"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(1)(ii)(D), \u00a7164.312(b)",
+        "SOC2": "CC7.2",
+        "PCIDSS": "Req 10.2.5",
+        "ISO27001": "A.8.15"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -2905,7 +3294,11 @@
         "MITRE": [
           "T1550.001",
           "T1539"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(a)(2)(iii)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.2.8",
+        "ISO27001": "A.5.17, A.8.3"
       },
       "LicenseRequirement": "M365 Business Premium or Entra ID P1"
     },
@@ -2928,8 +3321,11 @@
         "MITRE": [
           "T1070.008"
         ],
-        "HIPAA": "\u00a7164.312(b)",
-        "SCuBA": "MS.DEFENDER.6.3v1"
+        "HIPAA": "\u00a7164.312(b), \u00a7164.316(b)(2)(i)",
+        "SCuBA": "MS.DEFENDER.6.3v1",
+        "SOC2": "CC7.2, A1.2",
+        "PCIDSS": "Req 10.5",
+        "ISO27001": "A.8.15"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2952,7 +3348,11 @@
         "MITRE": [
           "T1070.008"
         ],
-        "SCuBA": "MS.DEFENDER.6.1v1"
+        "SCuBA": "MS.DEFENDER.6.1v1",
+        "HIPAA": "\u00a7164.312(b)",
+        "SOC2": "CC7.2, CC8.1",
+        "PCIDSS": "Req 10.2",
+        "ISO27001": "A.8.15, A.8.18"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2976,7 +3376,11 @@
         "MITRE": [
           "T1566.001",
           "T1204.002"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.2",
+        "ISO27001": "A.8.7"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -2999,7 +3403,11 @@
         "MITRE": [
           "T1566"
         ],
-        "SCuBA": "MS.DEFENDER.1.2v1"
+        "SCuBA": "MS.DEFENDER.1.2v1",
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4",
+        "ISO27001": "A.8.7"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3023,7 +3431,11 @@
         "MITRE": [
           "T1566",
           "T1036.005"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 5.4.1",
+        "ISO27001": "A.8.23"
       },
       "LicenseRequirement": "Included (EOP)"
     },
@@ -3047,7 +3459,11 @@
         "MITRE": [
           "T1566",
           "T1036.005"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 5.4.1",
+        "ISO27001": "A.8.23"
       },
       "LicenseRequirement": "Included (EOP)"
     },
@@ -3071,7 +3487,11 @@
         "MITRE": [
           "T1528",
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(1)(ii)(D), \u00a7164.312(b)",
+        "SOC2": "CC7.2, CC6.6",
+        "PCIDSS": "Req 10.4, Req 11.5",
+        "ISO27001": "A.5.23, A.8.16"
       },
       "LicenseRequirement": "Microsoft Defender for Cloud Apps (M365 E5 or add-on)"
     },
@@ -3094,7 +3514,11 @@
         "MITRE": [
           "T1562.008"
         ],
-        "SCuBA": "MS.DEFENDER.5.2v1"
+        "SCuBA": "MS.DEFENDER.5.2v1",
+        "HIPAA": "\u00a7164.308(a)(6)",
+        "SOC2": "CC7.3, CC7.4",
+        "PCIDSS": "Req 12.10.1",
+        "ISO27001": "A.5.24, A.6.8"
       },
       "LicenseRequirement": "Included (all plans)"
     },
@@ -3117,7 +3541,11 @@
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.5.18, A.8.2"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3140,7 +3568,11 @@
         "CMMC": "AC.L2-3.1.1",
         "MITRE": [
           "T1213.002"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(1)(ii)(D)",
+        "SOC2": "CC7.2",
+        "PCIDSS": "Req 10.7",
+        "ISO27001": "A.8.16"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3163,7 +3595,11 @@
         "CMMC": "RE.L2-3.4.2",
         "MITRE": [
           "T1486"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(c)(1), \u00a7164.308(a)(7)(ii)(A)",
+        "SOC2": "A1.2",
+        "PCIDSS": "Req 10.5",
+        "ISO27001": "A.8.13"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3186,7 +3622,11 @@
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(C)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 8.2.4",
+        "ISO27001": "A.5.18"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3209,7 +3649,11 @@
         "CMMC": "AC.L2-3.1.3",
         "MITRE": [
           "T1113"
-        ]
+        ],
+        "HIPAA": "\u00a7164.502(b), \u00a7164.312(c)(1)",
+        "SOC2": "C1.1",
+        "PCIDSS": "Req 3.4",
+        "ISO27001": "A.8.11"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3232,7 +3676,11 @@
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(d), \u00a7164.308(a)(4)",
+        "SOC2": "CC6.1, CC6.2",
+        "PCIDSS": "Req 8.3",
+        "ISO27001": "A.5.17, A.5.18"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3255,7 +3703,11 @@
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
           "T1566"
-        ]
+        ],
+        "HIPAA": "\u00a7164.502, \u00a7164.312(a)(1)",
+        "SOC2": "C1.1",
+        "PCIDSS": "Req 7.2",
+        "ISO27001": "A.5.18"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3278,7 +3730,11 @@
         "CMMC": "AC.L2-3.1.3",
         "MITRE": [
           "T1048"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(e)(1), \u00a7164.502(b)",
+        "SOC2": "CC6.7, C1.1",
+        "PCIDSS": "Req 3.4",
+        "ISO27001": "A.8.12"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3301,7 +3757,11 @@
         "MITRE": [
           "T1562.008"
         ],
-        "SCuBA": "MS.DEFENDER.5.2v1"
+        "SCuBA": "MS.DEFENDER.5.2v1",
+        "HIPAA": "\u00a7164.312(b), \u00a7164.308(a)(6)",
+        "SOC2": "CC7.2, CC7.3",
+        "PCIDSS": "Req 10.4, Req 11.5",
+        "ISO27001": "A.8.15, A.8.16"
       },
       "LicenseRequirement": "Microsoft Sentinel (add-on) or Defender XDR"
     },
@@ -3324,7 +3784,11 @@
         "CMMC": "IR.L2-3.6.1",
         "MITRE": [
           "T1114"
-        ]
+        ],
+        "HIPAA": "\u00a7164.316, \u00a7164.524",
+        "SOC2": "CC7.4",
+        "PCIDSS": "Req 12.10.5",
+        "ISO27001": "A.5.33"
       },
       "LicenseRequirement": "M365 Business Premium or E3+"
     },
@@ -3347,14 +3811,18 @@
         "CMMC": "CA.L2-3.12.3",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(8)",
+        "SOC2": "CC4.1, CC4.2",
+        "PCIDSS": "Req 12.11",
+        "ISO27001": "A.5.36"
       },
       "LicenseRequirement": "Included (all plans)"
     },
     {
       "ControlId": "PVW-3.4",
       "Title": "Sensitive Information Types Used in DLP Policies",
-      "Description": "DLP policies are configured with Microsoft or custom sensitive information types for automatic detection. (No SCuBA equivalent — Purview audit/DLP covered in MS.DEFENDER.* baselines.)",
+      "Description": "DLP policies are configured with Microsoft or custom sensitive information types for automatic detection. (No SCuBA equivalent \u2014 Purview audit/DLP covered in MS.DEFENDER.* baselines.)",
       "BusinessRisk": "Without SIT-based detection, DLP policies provide no classification and cannot automatically protect sensitive data in transit.",
       "Severity": "High",
       "Workload": "PVW",
@@ -3371,7 +3839,11 @@
         "MITRE": [
           "T1048",
           "T1005"
-        ]
+        ],
+        "HIPAA": "\u00a7164.502(b), \u00a7164.312(e)(1)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 3.4, Req 12.5.3",
+        "ISO27001": "A.8.12"
       },
       "LicenseRequirement": "M365 Business Premium or E3+"
     },
@@ -3394,7 +3866,11 @@
         "CMMC": "CM.L2-3.4.1",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(C), \u00a7164.310(d)(1)",
+        "SOC2": "CC6.2",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.8.1"
       },
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1"
     },
@@ -3417,14 +3893,18 @@
         "CMMC": "CM.L2-3.4.2",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.310(d)(1)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 1.3",
+        "ISO27001": "A.8.1"
       },
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1"
     },
     {
       "ControlId": "INT-3.3",
       "Title": "Conditional Launch Policies Configured",
-      "Description": "App protection policies include conditional launch settings to block jailbroken devices and enforce OS version requirements. (No SCuBA equivalent — Intune device-compliance controls are out of SCuBA scope.)",
+      "Description": "App protection policies include conditional launch settings to block jailbroken devices and enforce OS version requirements. (No SCuBA equivalent \u2014 Intune device-compliance controls are out of SCuBA scope.)",
       "BusinessRisk": "Jailbroken and rooted devices bypass OS security controls. Without conditional launch, compromised devices access corporate apps with full permissions.",
       "Severity": "High",
       "Workload": "INT",
@@ -3440,7 +3920,11 @@
         "CMMC": "CM.L2-3.4.1",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(a)(1), \u00a7164.310(d)(1)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 7.2, Req 1.3",
+        "ISO27001": "A.8.1"
       },
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1"
     },
@@ -3463,7 +3947,11 @@
         "MITRE": [
           "T1048"
         ],
-        "SCuBA": "MS.POWERPLATFORM.2.1v1"
+        "SCuBA": "MS.POWERPLATFORM.2.1v1",
+        "HIPAA": "\u00a7164.308(a)(1)(ii)(D)",
+        "SOC2": "CC6.6",
+        "PCIDSS": "Req 6.4.3",
+        "ISO27001": "A.5.23, A.8.30"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3487,7 +3975,11 @@
           "T1048",
           "T1567"
         ],
-        "SCuBA": "MS.POWERPLATFORM.1.1v1"
+        "SCuBA": "MS.POWERPLATFORM.1.1v1",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "SOC2": "CC8.1",
+        "PCIDSS": "Req 6.5.3",
+        "ISO27001": "A.5.23, A.8.32"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3511,7 +4003,11 @@
           "T1578",
           "T1190"
         ],
-        "SCuBA": "MS.POWERPLATFORM.5.1v1"
+        "SCuBA": "MS.POWERPLATFORM.5.1v1",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "SOC2": "CC8.1",
+        "PCIDSS": "Req 6.5.3",
+        "ISO27001": "A.5.23, A.8.32"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
     },
@@ -3537,7 +4033,10 @@
           "T1528",
           "T1111"
         ],
-        "ISO27001": "A.8.5"
+        "ISO27001": "A.5.17",
+        "HIPAA": "\u00a7164.312(d)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.4"
       }
     },
     {
@@ -3562,8 +4061,10 @@
           "T1078",
           "T1078.004"
         ],
-        "ISO27001": "A.5.18",
-        "SOC2": "CC6.1"
+        "ISO27001": "A.5.18, A.8.2",
+        "SOC2": "CC6.2, CC6.3",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "PCIDSS": "Req 7.2.3"
       }
     },
     {
@@ -3587,7 +4088,11 @@
         "MITRE": [
           "T1078.004",
           "T1550.001"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(1)(ii)(D)",
+        "SOC2": "CC7.2",
+        "PCIDSS": "Req 6.4.3",
+        "ISO27001": "A.5.23, A.8.30"
       }
     },
     {
@@ -3612,7 +4117,10 @@
           "T1550.001",
           "T1539"
         ],
-        "ISO27001": "A.8.5"
+        "ISO27001": "A.5.17",
+        "HIPAA": "\u00a7164.312(d), \u00a7164.312(c)(2)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.3"
       }
     },
     {
@@ -3635,7 +4143,11 @@
         "CMMC": "AC.L2-3.1.11",
         "MITRE": [
           "T1550.001"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(d)",
+        "SOC2": "CC6.1, CC7.2",
+        "PCIDSS": "Req 8.3",
+        "ISO27001": "A.5.17, A.8.16"
       }
     },
     {
@@ -3660,7 +4172,10 @@
           "T1078",
           "T1110"
         ],
-        "ISO27001": "A.5.19"
+        "ISO27001": "A.5.23, A.8.22",
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(A)",
+        "SOC2": "CC6.6",
+        "PCIDSS": "Req 1.4"
       }
     },
     {
@@ -3683,7 +4198,11 @@
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
           "T1078.004"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(3)(ii)(A)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.8.2"
       }
     },
     {
@@ -3706,7 +4225,11 @@
         "CMMC": "AC.L2-3.1.9",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "SOC2": "CC1.4, CC6.3",
+        "PCIDSS": "Req 12.3",
+        "ISO27001": "A.5.10"
       }
     },
     {
@@ -3730,7 +4253,11 @@
         "MITRE": [
           "T1078.004",
           "T1550.001"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(d)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.6",
+        "ISO27001": "A.5.16, A.8.2"
       }
     },
     {
@@ -3758,7 +4285,7 @@
         "ISO27001": "A.8.12",
         "SOC2": "CC6.7",
         "HIPAA": "\u00a7164.312(e)(1)",
-        "PCIDSS": "Req 9.4"
+        "PCIDSS": "Req 3.4"
       }
     },
     {
@@ -3785,7 +4312,8 @@
         ],
         "ISO27001": "A.8.12",
         "SOC2": "CC6.7",
-        "HIPAA": "\u00a7164.312(e)(1)"
+        "HIPAA": "\u00a7164.312(e)(1)",
+        "PCIDSS": "Req 3.4"
       }
     },
     {
@@ -3809,7 +4337,11 @@
         "MITRE": [
           "T1528",
           "T1550.001"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(6)",
+        "SOC2": "CC7.2, CC7.3",
+        "PCIDSS": "Req 6.4.3",
+        "ISO27001": "A.5.23, A.6.8"
       }
     },
     {
@@ -3833,7 +4365,11 @@
           "T1566",
           "T1078"
         ],
-        "SCuBA": "MS.DEFENDER.2.1v1"
+        "SCuBA": "MS.DEFENDER.2.1v1",
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(A)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.8.2"
       }
     },
     {
@@ -3857,10 +4393,11 @@
           "T1005",
           "T1025"
         ],
-        "ISO27001": "A.8.12",
+        "ISO27001": "A.8.1, A.8.12",
         "SOC2": "CC6.7",
-        "PCIDSS": "Req 9.4",
-        "SCuBA": "MS.DEFENDER.4.2v1"
+        "PCIDSS": "Req 3.4, Req 5.4",
+        "SCuBA": "MS.DEFENDER.4.2v1",
+        "HIPAA": "\u00a7164.312(e)(1), \u00a7164.310(d)(1)"
       }
     },
     {
@@ -3883,7 +4420,11 @@
         "CMMC": "AT.L2-3.2.1",
         "MITRE": [
           "T1566"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(i)",
+        "SOC2": "CC2.2, CC2.3",
+        "PCIDSS": "Req 12.6.3",
+        "ISO27001": "A.6.3"
       }
     },
     {
@@ -3907,7 +4448,11 @@
         "MITRE": [
           "T1566.001",
           "T1204.002"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.2",
+        "ISO27001": "A.8.7"
       }
     },
     {
@@ -3934,7 +4479,8 @@
         ],
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
-        "HIPAA": "\u00a7164.308(a)(1)"
+        "HIPAA": "\u00a7164.312(b)",
+        "PCIDSS": "Req 10.2"
       }
     },
     {
@@ -3958,7 +4504,11 @@
         "MITRE": [
           "T1566",
           "T1036.005"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(A)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.8.2"
       }
     },
     {
@@ -3981,7 +4531,11 @@
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
           "T1566"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4.1",
+        "ISO27001": "A.8.7"
       }
     },
     {
@@ -4004,7 +4558,11 @@
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
           "T1113"
-        ]
+        ],
+        "HIPAA": "\u00a7164.316(b)(2)(i), \u00a7164.502",
+        "SOC2": "A1.2, C1.1",
+        "PCIDSS": "Req 3.2.1",
+        "ISO27001": "A.5.33, A.8.10"
       }
     },
     {
@@ -4027,7 +4585,11 @@
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(a)(2)(i), \u00a7164.312(d)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.2.1",
+        "ISO27001": "A.5.16"
       }
     },
     {
@@ -4051,7 +4613,11 @@
         "MITRE": [
           "T1566",
           "T1534"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(A)",
+        "SOC2": "CC6.6",
+        "PCIDSS": "Req 1.4",
+        "ISO27001": "A.5.23, A.8.22"
       }
     },
     {
@@ -4074,13 +4640,17 @@
         "CMMC": "AC.L2-3.1.1",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.502, \u00a7164.308(a)(4)",
+        "SOC2": "C1.1",
+        "PCIDSS": "Req 7.2.4",
+        "ISO27001": "A.5.18"
       }
     },
     {
       "ControlId": "INT-4.1",
       "Title": "Windows LAPS Deployed via Intune",
-      "Description": "Windows Local Administrator Password Solution (LAPS) is deployed via Intune, generating unique randomized local admin passwords escrowed in Entra ID. (No SCuBA equivalent — Intune device-compliance controls are out of SCuBA scope.)",
+      "Description": "Windows Local Administrator Password Solution (LAPS) is deployed via Intune, generating unique randomized local admin passwords escrowed in Entra ID. (No SCuBA equivalent \u2014 Intune device-compliance controls are out of SCuBA scope.)",
       "BusinessRisk": "Shared or static local admin passwords enable pass-the-hash lateral movement \u2014 one compromised endpoint hands the attacker credentials that work on every other endpoint with the same password.",
       "Severity": "High",
       "Workload": "INT",
@@ -4099,9 +4669,10 @@
           "T1110",
           "T1021.002"
         ],
-        "ISO27001": "A.8.5",
+        "ISO27001": "A.5.17, A.8.2",
         "SOC2": "CC6.1",
-        "HIPAA": "\u00a7164.312(a)(2)"
+        "HIPAA": "\u00a7164.308(a)(5)(ii)(D)",
+        "PCIDSS": "Req 2.2.2"
       }
     },
     {
@@ -4126,7 +4697,10 @@
           "T1078",
           "T1110"
         ],
-        "ISO27001": "A.8.5"
+        "ISO27001": "A.5.17, A.8.5",
+        "HIPAA": "\u00a7164.312(d)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.4"
       }
     },
     {
@@ -4152,9 +4726,9 @@
           "T1068"
         ],
         "ISO27001": "A.8.8",
-        "SOC2": "CC7.1",
-        "HIPAA": "\u00a7164.308(a)(5)",
-        "PCIDSS": "Req 6.3"
+        "SOC2": "CC7.1, CC8.1",
+        "HIPAA": "\u00a7164.308(a)(1)(ii)(B)",
+        "PCIDSS": "Req 6.3.3"
       }
     },
     {
@@ -4179,7 +4753,10 @@
           "T1078",
           "T1005"
         ],
-        "HIPAA": "\u00a7164.312(a)(2)"
+        "HIPAA": "\u00a7164.312(a)(2)(iii), \u00a7164.312(d)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.4",
+        "ISO27001": "A.5.17, A.8.1"
       }
     },
     {
@@ -4206,7 +4783,7 @@
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
         "HIPAA": "\u00a7164.312(b)",
-        "PCIDSS": "Req 10.7",
+        "PCIDSS": "Req 10.2.1",
         "SCuBA": "MS.DEFENDER.6.1v1"
       }
     },
@@ -4232,9 +4809,9 @@
           "T1070.008"
         ],
         "ISO27001": "A.8.15",
-        "SOC2": "CC7.2",
-        "HIPAA": "\u00a7164.308(a)(1)",
-        "PCIDSS": "Req 10.7",
+        "SOC2": "CC7.2, A1.2",
+        "HIPAA": "\u00a7164.316(b)(2)(i), \u00a7164.312(b)",
+        "PCIDSS": "Req 10.5.1",
         "SCuBA": "MS.DEFENDER.6.3v1"
       }
     },
@@ -4260,9 +4837,10 @@
           "T1005",
           "T1048"
         ],
-        "ISO27001": "A.8.12",
-        "SOC2": "C1.2",
-        "HIPAA": "\u00a7164.514(b)"
+        "ISO27001": "A.8.11",
+        "SOC2": "C1.1",
+        "HIPAA": "\u00a7164.502(b)",
+        "PCIDSS": "Req 3.4"
       }
     },
     {
@@ -4285,7 +4863,11 @@
         "CMMC": "IR.L2-3.6.1",
         "MITRE": [
           "T1070.008"
-        ]
+        ],
+        "HIPAA": "\u00a7164.316(b)(2)(i), \u00a7164.530(j)",
+        "SOC2": "A1.2, C1.1",
+        "PCIDSS": "Req 10.5",
+        "ISO27001": "A.5.33, A.8.13"
       }
     },
     {
@@ -4306,11 +4888,13 @@
         "SCuBA": "",
         "NIST": "AC-16, SC-28",
         "CMMC": "MP.L2-3.8.4",
-        "ISO27001": "A.8.12",
-        "SOC2": "C1.2",
+        "ISO27001": "A.8.11, A.8.12",
+        "SOC2": "C1.1, CC6.1",
         "MITRE": [
           "T1005"
-        ]
+        ],
+        "HIPAA": "\u00a7164.502(b), \u00a7164.312(a)(1)",
+        "PCIDSS": "Req 3.4, Req 7.2"
       }
     },
     {
@@ -4332,18 +4916,19 @@
         "NIST": "SC-28, AC-4",
         "CMMC": "SC.L2-3.13.16",
         "ISO27001": "A.8.12",
-        "SOC2": "C1.2",
+        "SOC2": "CC6.7",
         "HIPAA": "\u00a7164.312(e)(1)",
         "MITRE": [
           "T1005",
           "T1048"
-        ]
+        ],
+        "PCIDSS": "Req 3.4"
       }
     },
     {
       "ControlId": "PPL-3.3",
       "Title": "Copilot Access Restricted to Licensed Users",
-      "Description": "Microsoft 365 Copilot license assignment is scoped to a defined subset of users with documented business need — not blanket-assigned tenant-wide. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
+      "Description": "Microsoft 365 Copilot license assignment is scoped to a defined subset of users with documented business need \u2014 not blanket-assigned tenant-wide. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
       "BusinessRisk": "Uncontrolled Copilot access means unlicensed users may gain Copilot capabilities through shared accounts or feature rollouts, bypassing governance controls.",
       "Severity": "Medium",
       "Workload": "PPL",
@@ -4358,10 +4943,13 @@
         "SCuBA": "",
         "NIST": "AC-2",
         "CMMC": "AC.L2-3.1.1",
-        "ISO27001": "A.5.18",
+        "ISO27001": "A.5.18, A.8.3",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2.1"
       }
     },
     {
@@ -4382,11 +4970,14 @@
         "SCuBA": "",
         "NIST": "CM-7, AC-6",
         "CMMC": "CM.L2-3.4.6",
-        "ISO27001": "A.8.18",
+        "ISO27001": "A.8.32",
         "MITRE": [
           "T1078",
           "T1190"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "SOC2": "CC8.1",
+        "PCIDSS": "Req 6.5.3"
       }
     },
     {
@@ -4413,7 +5004,8 @@
         "MITRE": [
           "T1114",
           "T1562.008"
-        ]
+        ],
+        "PCIDSS": "Req 10.2"
       }
     },
     {
@@ -4434,13 +5026,14 @@
         "SCuBA": "MS.AAD.3.1v1",
         "NIST": "IA-2(1)",
         "CMMC": "IA.L2-3.5.3",
-        "ISO27001": "A.8.5",
+        "ISO27001": "A.5.17, A.8.5",
         "SOC2": "CC6.1",
         "HIPAA": "\u00a7164.312(d)",
         "MITRE": [
           "T1078",
           "T1110"
-        ]
+        ],
+        "PCIDSS": "Req 8.4"
       }
     },
     {
@@ -4461,11 +5054,13 @@
         "SCuBA": "MS.AAD.5.3v1",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L2-3.1.2",
-        "ISO27001": "A.5.18",
-        "SOC2": "CC6.2",
+        "ISO27001": "A.5.18, A.6.5",
+        "SOC2": "CC6.3",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(C)",
+        "PCIDSS": "Req 8.2.4"
       }
     },
     {
@@ -4486,11 +5081,13 @@
         "SCuBA": "",
         "NIST": "AC-2(9)",
         "CMMC": "AC.L2-3.1.2",
-        "ISO27001": "A.5.18",
-        "SOC2": "CC6.2",
+        "ISO27001": "A.5.18, A.6.5",
+        "SOC2": "CC6.3",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(4)(ii)(C)",
+        "PCIDSS": "Req 8.2.4"
       }
     },
     {
@@ -4510,13 +5107,15 @@
         "CIS": "5.5.4",
         "NIST": "AC-3",
         "CMMC": "AC.L2-3.1.2",
-        "ISO27001": "A.8.18",
-        "SOC2": "CC6.3",
+        "ISO27001": "A.5.23, A.8.4",
+        "SOC2": "CC6.3, CC7.2",
         "MITRE": [
           "T1528",
           "T1550.001"
         ],
-        "SCuBA": "MS.AAD.5.2v1"
+        "SCuBA": "MS.AAD.5.2v1",
+        "HIPAA": "\u00a7164.308(a)(4), \u00a7164.308(a)(1)(ii)(D)",
+        "PCIDSS": "Req 6.4.3"
       }
     },
     {
@@ -4537,12 +5136,13 @@
         "SCuBA": "MS.EXO.1.1v1",
         "NIST": "AC-4",
         "CMMC": "AC.L2-3.1.2",
-        "ISO27001": "A.8.17",
+        "ISO27001": "A.8.12",
         "SOC2": "CC6.7",
-        "HIPAA": "\u00a7164.312(e)(1)",
+        "HIPAA": "\u00a7164.312(e)(1), \u00a7164.402",
         "MITRE": [
           "T1114.003"
-        ]
+        ],
+        "PCIDSS": "Req 3.4, Req 4.2"
       }
     },
     {
@@ -4567,7 +5167,9 @@
         "SOC2": "CC6.1",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.312(a)(2)(i)",
+        "PCIDSS": "Req 8.2.1"
       }
     },
     {
@@ -4594,7 +5196,8 @@
         "MITRE": [
           "T1114",
           "T1070.008"
-        ]
+        ],
+        "PCIDSS": "Req 10.2"
       }
     },
     {
@@ -4614,12 +5217,15 @@
         "CIS": "2.1.1",
         "NIST": "IA-2",
         "CMMC": "IA.L2-3.5.3",
-        "ISO27001": "A.8.5",
+        "ISO27001": "A.8.24",
         "MITRE": [
           "T1078",
           "T1110"
         ],
-        "SCuBA": "MS.EXO.5.1v1"
+        "SCuBA": "MS.EXO.5.1v1",
+        "HIPAA": "\u00a7164.312(e)(1)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 4.2.1"
       }
     },
     {
@@ -4642,7 +5248,11 @@
         "CMMC": "CA.L2-3.12.3",
         "MITRE": [
           "T1078"
-        ]
+        ],
+        "HIPAA": "\u00a7164.308(a)(8)",
+        "SOC2": "CC4.1",
+        "PCIDSS": "Req 11.6.1",
+        "ISO27001": "A.5.36"
       }
     },
     {
@@ -4666,8 +5276,10 @@
         "MITRE": [
           "T1114.003"
         ],
-        "ISO27001": "A.8.16",
-        "SOC2": "CC7.2"
+        "ISO27001": "A.8.12",
+        "SOC2": "CC6.7",
+        "HIPAA": "\u00a7164.312(e)(1), \u00a7164.402",
+        "PCIDSS": "Req 3.4"
       }
     },
     {
@@ -4691,15 +5303,17 @@
         "MITRE": [
           "T1114.003"
         ],
-        "ISO27001": "A.8.16",
-        "SOC2": "CC7.2"
+        "ISO27001": "A.8.12",
+        "SOC2": "CC6.7",
+        "HIPAA": "\u00a7164.312(e)(1), \u00a7164.402",
+        "PCIDSS": "Req 3.4"
       }
     },
     {
       "ControlId": "EXO-7.3",
       "Title": "No Mailboxes with Per-User Audit Explicitly Disabled",
       "Description": "No mailboxes have AuditEnabled = $false set explicitly. As of January 2019, mailbox audit is on by default org-wide; explicit per-user disable is a deliberate override and almost always wrong.",
-      "BusinessRisk": "Mailboxes with audit explicitly disabled cannot be investigated after a compromise. Inbox-rule creation, mail access by delegates, and sent-item modification are not captured for the disabled mailbox — a deliberate or accidental blind spot that thwarts incident response.",
+      "BusinessRisk": "Mailboxes with audit explicitly disabled cannot be investigated after a compromise. Inbox-rule creation, mail access by delegates, and sent-item modification are not captured for the disabled mailbox \u2014 a deliberate or accidental blind spot that thwarts incident response.",
       "Severity": "Medium",
       "Workload": "EXO",
       "Category": "Email",
@@ -4718,21 +5332,22 @@
         ],
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
-        "HIPAA": "§164.308(a)(1)"
+        "HIPAA": "\u00a7164.312(b)",
+        "PCIDSS": "Req 10.2"
       }
     },
     {
       "ControlId": "EXO-7.4",
       "Title": "No Per-User SMTP AUTH Overrides",
       "Description": "No mailboxes have SmtpClientAuthenticationDisabled = $false set at the mailbox level. Per-user overrides bypass the tenant-level SMTP AUTH disable and re-enable basic authentication for that mailbox.",
-      "BusinessRisk": "Per-user SMTP AUTH exceptions re-enable basic auth for the affected mailboxes — bypassing MFA and Conditional Access. They are a classic password-spray and credential-stuffing target, and they are usually granted ad-hoc for legacy scanners or line-of-business apps and then forgotten.",
+      "BusinessRisk": "Per-user SMTP AUTH exceptions re-enable basic auth for the affected mailboxes \u2014 bypassing MFA and Conditional Access. They are a classic password-spray and credential-stuffing target, and they are usually granted ad-hoc for legacy scanners or line-of-business apps and then forgotten.",
       "Severity": "High",
       "Workload": "EXO",
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
       "EvaluatorFunction": "Test-NRGControlEXOSmtpAuthExceptions",
-      "Remediation": "For each affected mailbox: Set-CASMailbox -Identity <UPN> -SmtpClientAuthenticationDisabled $true. Migrate senders to OAuth-based SMTP (Microsoft Graph sendMail API) or App Passwords with MFA. For multifunction devices/scanners, prefer SMTP relay via on-prem connector with IP allowlist, or Direct Send (anonymous) — neither requires basic auth.",
+      "Remediation": "For each affected mailbox: Set-CASMailbox -Identity <UPN> -SmtpClientAuthenticationDisabled $true. Migrate senders to OAuth-based SMTP (Microsoft Graph sendMail API) or App Passwords with MFA. For multifunction devices/scanners, prefer SMTP relay via on-prem connector with IP allowlist, or Direct Send (anonymous) \u2014 neither requires basic auth.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CIS": "6.2.2",
@@ -4743,8 +5358,10 @@
           "T1110.003",
           "T1078"
         ],
-        "ISO27001": "A.8.5",
-        "SOC2": "CC6.1"
+        "ISO27001": "A.8.24",
+        "SOC2": "CC6.7",
+        "HIPAA": "\u00a7164.312(e)(1)",
+        "PCIDSS": "Req 4.2.1"
       }
     }
   ]

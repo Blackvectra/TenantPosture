@@ -1,0 +1,32 @@
+# CODEOWNERS — auto-request review on PRs touching these paths.
+#
+# Order matters: the LAST matching pattern takes precedence.
+# Default owner first, then security-sensitive paths get a more specific match.
+#
+# This file is parsed by GitHub for branch-protection-required reviews. Keep
+# usernames current — orphaned owners block all PRs.
+
+# Default — every PR routes to the lead maintainer.
+*                                       @Blackvectra
+
+# Security-sensitive paths — explicit owner so the diff cannot land without
+# a security-engineer review. Same owner today, but the routing is in place
+# for when the team grows.
+SECURITY.md                             @Blackvectra
+CODEOWNERS                              @Blackvectra
+.github/                                @Blackvectra
+.github/workflows/                      @Blackvectra
+Lib/Connect-NRGServices.ps1             @Blackvectra
+Lib/Register-NRGTenantApp.ps1           @Blackvectra
+Lib/ConvertTo-NRGHtmlSafe.ps1           @Blackvectra
+Lib/Set-NRGSensitiveFileAcl.ps1         @Blackvectra
+Lib/Test-NRGSignatureStatus.ps1         @Blackvectra
+Lib/Start-NRGWebServer.ps1              @Blackvectra
+Build/                                  @Blackvectra
+Testing/NRG.Security.Tests.ps1          @Blackvectra
+docs/VULNERABILITY-DISCLOSURE-POLICY.md @Blackvectra
+docs/SECURE-DEVELOPMENT.md              @Blackvectra
+docs/OPENSSF-BEST-PRACTICES.md          @Blackvectra
+docs/INCIDENT-RESPONSE.md               @Blackvectra
+docs/security/                          @Blackvectra
+PSScriptAnalyzerSettings.psd1           @Blackvectra

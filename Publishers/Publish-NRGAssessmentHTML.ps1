@@ -13,7 +13,7 @@
 #           MITRE IDs validated against ^T\d{4}(\.\d{3})?$
 #           Fail-closed if security helpers not loaded.
 #
-# Author: Matthew Levorson — NRG Technology Services
+# Author: Matthew Levorson — NRG Technology Services / NextLayerSec LLC
 #
 
 function Publish-NRGAssessmentHTML {
@@ -77,27 +77,34 @@ function Publish-NRGAssessmentHTML {
     $P  = sc ($brand['PrimaryColor'])   '#0f2544'
     $S  = sc ($brand['SecondaryColor']) '#e8621a'
     $A  = sc ($brand['AccentColor'])    '#3b7dd8'
-    $co = if ($brand['CompanyName']) { $brand['CompanyName'] } else { 'NRG Technology Services' }
+    $co = if ($brand['CompanyName']) { $brand['CompanyName'] } else { 'NRG Technology Services / NextLayerSec LLC' }
     $ph = if ($brand['Phone']) { $brand['Phone'] } else { '' }
     $ws = if ($brand['Website']) { $brand['Website'] } else { 'nrgtechservices.com' }
     # Normalize the Website value to a bare host so the templates below can
-    # consistently prepend `https://`. The branding config legitimately stores
-    # the full URL (`https://www.nrgtechservices.com`) but the templates also
-    # assume bare-host (`nrgtechservices.com`). Without this strip, the footer
-    # rendered `<a href='https://https://www.nrgtechservices.com'>` which the
-    # browser parsed as host=`https:` + path=`//www...` — operator saw the
-    # malformed `https://https//www.nrgtechservices.com` in the rendered link.
+    # consistently prepend `https://`. The branding config may store the full
+    # URL (`https://www.nrgtechservices.com`) but the templates also assume bare-host.
+    # Without this strip, the footer rendered
+    # `<a href='https://https://www.nrgtechservices.com'>` which the browser parsed as
+    # host=`https:` + path=`//nrgtechservices.com` — visible as `https://https//`
+    # in the link text.
     $ws = $ws -replace '^https?://', ''
     $lu = if ($brand['LogoUrl']) { $brand['LogoUrl'] } else { '' }
     $clientDisplay = if ($ClientName) { $ClientName } else { $Metadata.TenantDomain }
 
     # ── Counts ────────────────────────────────────────────────────────────────
-    $sat  = @($Findings | Where-Object State -eq 'Satisfied').Count
-    $part = @($Findings | Where-Object State -eq 'Partial').Count
-    $gap  = @($Findings | Where-Object State -eq 'Gap').Count
-    $na   = @($Findings | Where-Object State -eq 'NotApplicable').Count
-    $scrd = $Findings.Count - $na
-    $sc2  = if ($scrd -gt 0) { [Math]::Round(100 * ($sat + 0.5 * $part) / $scrd) } else { 0 }
+    # v4.10.1: tenant-wide score now from Get-NRGCoverageScore. -ErrorHandling Gap
+    # preserves the historical HTML semantics (Error counted in denominator,
+    # which deflates the score for collector failures). The maturity badge on
+    # the same report still uses the canonical Error-Exclude rule (per
+    # Get-NRGMaturityTier's documented rationale) — so a tenant with Error
+    # findings will see the badge sit slightly above the ring, by design.
+    $cov  = Get-NRGCoverageScore -Findings $Findings -ErrorHandling 'Gap'
+    $sat  = $cov.Satisfied
+    $part = $cov.Partial
+    $gap  = $cov.Gap
+    $na   = $cov.NA
+    $scrd = $cov.Scored
+    $sc2  = $cov.Score
     $pLbl = if ($sc2 -ge 85) {'Strong'} elseif ($sc2 -ge 65) {'Moderate'} elseif ($sc2 -ge 40) {'At Risk'} else {'Critical Risk'}
     $pCol = scoreColor $sc2
     $circ = 452.4
@@ -121,30 +128,26 @@ function Publish-NRGAssessmentHTML {
     $wlNames  = @{AAD='Identity';EXO='Email';DNS='DNS Auth';DEF='Defender';SPO='SharePoint';TMS='Teams';INT='Intune';PVW='Purview';PPL='Power Platform'}
     $wlFull   = @{AAD='Identity & Access';EXO='Exchange Online';DNS='DNS Email Auth';DEF='Microsoft Defender';SPO='SharePoint / OneDrive';TMS='Microsoft Teams';INT='Intune & Endpoint';PVW='Purview / Compliance';PPL='Power Platform'}
     $wlOrder  = @('AAD','EXO','DEF','DNS','SPO','TMS','INT','PVW','PPL')
+    # v4.10.1: per-workload + per-framework scores now go through the same
+    # canonical helper as the tenant-wide score. -ErrorHandling Gap preserves
+    # historical behavior. The grouping (workload prefix split) stays here
+    # so we don't re-iterate findings per workload; we hand the filtered
+    # group directly to the helper.
     $wlScores = @{}
     $Findings | Group-Object { ($_.ControlId -replace '-.*$','') } | ForEach-Object {
         $wl = $_.Name; $g = $_.Group
-        $ws2 = @($g | Where-Object State -eq 'Satisfied').Count
-        $wp  = @($g | Where-Object State -eq 'Partial').Count
-        $wn  = @($g | Where-Object State -eq 'NotApplicable').Count
-        $wd  = $g.Count - $wn
+        $wcov = Get-NRGCoverageScore -Findings $g -ErrorHandling 'Gap'
         $wlScores[$wl] = @{
-            Score  = if ($wd -gt 0) { [Math]::Round(100*($ws2+0.5*$wp)/$wd) } else { 0 }
-            Gaps   = @($g | Where-Object State -eq 'Gap').Count
-            Scored = $wd
+            Score  = $wcov.Score
+            Gaps   = $wcov.Gap
+            Scored = $wcov.Scored
         }
     }
 
     # ── Framework scores ──────────────────────────────────────────────────────
     $fwScores = @{}
     foreach ($fw in @('CIS','SCuBA','NIST','CMMC')) {
-        $ff = @($Findings | Where-Object {
-            $_.FrameworkIds -and ($_.FrameworkIds | Where-Object { $_ -match "^$fw" })
-        })
-        $fd = @($ff | Where-Object State -ne 'NotApplicable').Count
-        $fs = @($ff | Where-Object State -eq 'Satisfied').Count
-        $fp = @($ff | Where-Object State -eq 'Partial').Count
-        $fwScores[$fw] = if ($fd -gt 0) { [Math]::Round(100*($fs+0.5*$fp)/$fd) } else { 0 }
+        $fwScores[$fw] = (Get-NRGCoverageScore -Findings $Findings -FrameworkId $fw -ErrorHandling 'Gap').Score
     }
 
     # ── License detection — suppress gaps the tenant already has licenses for ────
@@ -196,8 +199,6 @@ function Publish-NRGAssessmentHTML {
     } elseif ($gap -gt 0) {
         "No critical or high-severity gaps. <strong>$gap medium/low severity</strong> items to resolve."
     } else { 'All assessed controls are satisfied. No gaps identified.' }
-
-    # ── Secure Score (TODO: wire ss-ring widget into HTML body) ────────────
 
     # ── Connections ───────────────────────────────────────────────────────────
     $svcMap = @{Graph='Microsoft Graph';EXO='Exchange Online';IPPSSession='Purview/Compliance';Teams='Microsoft Teams';SharePoint='SharePoint Online'}
