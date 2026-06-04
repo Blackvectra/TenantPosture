@@ -213,13 +213,19 @@ if ($OutputPath -match '\.\.[\\/]') {
 if (-not (Test-Path -LiteralPath $OutputPath)) {
     [void][System.IO.Directory]::CreateDirectory($OutputPath)
 }
-# Resolve to absolute path. The original intent here (per the deleted
-# comment) was to use $resolvedOutput for path-bounds checks on downstream
-# publisher outputs; that check was never wired and the variable was unused.
-# Keeping the side-effecting GetFullPath call because it validates the path
-# format (throws on invalid syntax) — but discarding the result via $null
-# until a future PR actually implements the bounds check.
-$null = [System.IO.Path]::GetFullPath($OutputPath)
+# Resolve to absolute path. $resolvedOutput is intentionally retained as the
+# forward-declaration anchor for the security invariant in
+# Testing/NRG.Security.Tests.ps1:106-110, which enforces that any future
+# auto-open / publish path-bounds check MUST take the form
+# $path.StartsWith($resolvedOutput). v4.11.1 first tried to remove this as
+# dead code; the security test caught that the variable IS a documented test
+# anchor, not dead. Leaving the GetFullPath call (validates path format —
+# throws on invalid syntax) and the variable for the test to match.
+$resolvedOutput = [System.IO.Path]::GetFullPath($OutputPath)
+# Suppression: PSScriptAnalyzer flags this as unused. Documented above —
+# it's a security-test anchor, not dead code. Remove when an actual
+# StartsWith bounds check on $resolvedOutput exists at a use site.
+$null = $resolvedOutput
 
 # ── Import module ─────────────────────────────────────────────────────────────
 Write-Host "[-] Loading NRG-Assessment module..." -ForegroundColor Cyan
