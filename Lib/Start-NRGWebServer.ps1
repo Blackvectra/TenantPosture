@@ -68,11 +68,15 @@ function Start-NRGWebServer {
     # ── Auto-open browser after a small delay so the server is listening ─
     if (-not $NoBrowser) {
         $url = "http://127.0.0.1:$Port/"
+        # $using:url is idiomatic for passing a closed-over variable into
+        # Start-Job. Drops the PSUseUsingScopeModifierInNewRunspaces warning
+        # vs the older param()/-ArgumentList pattern.
         Start-Job -ScriptBlock {
-            param($u)
             Start-Sleep -Milliseconds 1500
-            try { Start-Process $u } catch { }
-        } -ArgumentList $url | Out-Null
+            try { Start-Process $using:url } catch {
+                Write-Verbose "Auto-launch of $using:url failed: $($_.Exception.Message)"
+            }
+        } | Out-Null
     }
 
     Write-Host ''

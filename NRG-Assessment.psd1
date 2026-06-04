@@ -1,6 +1,6 @@
 @{
     # Module identity
-    ModuleVersion     = '4.10.1'
+    ModuleVersion     = '4.11.1'
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
     Author            = 'Matthew Levorson'
     CompanyName       = 'NRG Technology Services / NextLayerSec LLC'
@@ -279,7 +279,8 @@
         'Publish-NRGRemediationPlaybook',
         'Publish-NRGRemediationScript',
         'Publish-NRGComplianceMatrix',
-        'Publish-NRGDeltaReport'
+        'Publish-NRGDeltaReport',
+        'Publish-NRGMonthlyReport'
     )
 
     VariablesToExport = @('NRGAssessmentVersion', 'NRGBrand')

@@ -25,9 +25,11 @@ function Invoke-NRGCollectAADPIM {
     }
 
     try {
-        # Probe whether PIM is available (P2 license check)
+        # Probe whether PIM is available (P2 license check). The response body
+        # is intentionally discarded — only the fact that the call didn't
+        # throw matters (P2 licensing gates this endpoint with a 403).
         try {
-            $testResp = Invoke-MgGraphRequest -Method GET `
+            $null = Invoke-MgGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilitySchedules?$top=1' `
                 -ErrorAction Stop
             $result.PIMAvailable = $true
