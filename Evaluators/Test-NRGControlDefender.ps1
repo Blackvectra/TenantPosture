@@ -207,10 +207,10 @@ function Test-NRGControlDefenderPresetPolicies {
     if (-not $def -or -not $def.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
     }
-    # Preset policies appear as built-in named policies: Standard Preset / Strict Preset
+    # Preset policies appear as built-in named policies: Standard Preset / Strict Preset.
+    # v4.11.1: dropped unused $sl/$sa reads (left over from a refactor that
+    # moved Safe Links / Safe Attachments to their own evaluators).
     $ap = $def.Data['AntiPhishing']
-    $sl = $def.Data['SafeLinks']
-    $sa = $def.Data['SafeAttachments']
     $presetActive = $false
     if ($ap -and $ap.Available) {
         $presetActive = @($ap.Policies | Where-Object { $_.Name -match 'Standard|Strict|Preset' }).Count -gt 0
@@ -383,8 +383,9 @@ function Test-NRGControlDefenderMDCA {
     [CmdletBinding()] param()
     $cid = 'DEF-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    # MDCA connection status requires separate collector — proxy via CA policy data
-    $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
+    # MDCA connection status requires a dedicated collector that doesn't exist
+    # yet. v4.11.1: removed the unused $ca proxy read — the finding is
+    # ADVISORY-ONLY (manual review) so no data dependency is needed.
     Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
         -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Microsoft Defender for Cloud Apps connection status requires manual verification: Defender XDR > Settings > Cloud Apps > Connected apps. Verify M365 connector is active.' `

@@ -291,7 +291,6 @@ function Publish-NRGRemediationPlaybook {
     $gap     = $cov.Gap
     $na      = $cov.NA
     $total   = $cov.Total
-    $scored  = $cov.Scored
     $score   = $cov.Score
     # v4.10.1: rewritten from `switch ($true)` to if/elseif. Switch had the
     # same fallthrough hazard the Summary publisher fixed earlier — all

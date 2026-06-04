@@ -50,10 +50,9 @@ function Publish-NRGRemediationScript {
     # For interpolation into single-quoted PowerShell literals in the generated
     # script. A tenant value like "John's Mailbox" must be doubled to 'John''s
     # Mailbox' so it does not break out of the literal.
-    $client  = EscPs1Literal $clientRaw
-    $date    = EscPs1Literal $dateRaw
-    $version = EscPs1Literal $versionRaw
-    $opUPN   = EscPs1Literal $opUPNRaw
+    # v4.11.1: dropped unused $date/$version/$opUPN escape assignments
+    # (left over from a header block that was removed in an earlier refactor).
+    $client = EscPs1Literal $clientRaw
 
     # For interpolation into PowerShell comment lines in the generated script.
     # Strip newlines so a value cannot terminate the comment and inject code.
@@ -242,7 +241,8 @@ function Publish-NRGRemediationScript {
         # Single-quoted-literal-safe forms (double any ' so values cannot break
         # out of a '...'  PowerShell literal in the generated script).
         $ctrlIdL    = EscPs1Literal $f.ControlId
-        $titleL     = EscPs1Literal $f.Title
+        # v4.11.1: dropped unused $titleL (the Title was rendered via the
+        # raw $f.Title interpolation downstream, not via this escaped form).
         # Workload prefix: strip everything after the first hyphen+digit (per the
         # original logic) and then strip to safe charset — defence in depth.
         $workloadL  = ([string]$f.ControlId) -replace '-\d.*$',''

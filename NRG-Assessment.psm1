@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 #
-# NRG-Assessment.psm1  (v4.10.1)
+# NRG-Assessment.psm1  (v4.11.1)
 # Module loader — dot-sources all functions from Lib, Collectors, Evaluators, Publishers.
 #
 # Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC
@@ -32,7 +32,7 @@ $ErrorActionPreference = 'Stop'
 # directive in production code going forward.
 Set-StrictMode -Version Latest
 
-$script:NRGAssessmentVersion = '4.10.1'
+$script:NRGAssessmentVersion = '4.11.1'
 $script:NRGModuleRoot        = $PSScriptRoot
 
 # Thread-safe collections for module state
@@ -274,7 +274,8 @@ $script:ExportedFunctions = @(
     # ── Publishers ────────────────────────────────────────────────────────────
     'Publish-NRGAssessmentHTML', 'Publish-NRGAssessmentSummary',
     'Publish-NRGRemediationPlaybook', 'Publish-NRGRemediationScript',
-    'Publish-NRGComplianceMatrix', 'Publish-NRGDeltaReport'
+    'Publish-NRGComplianceMatrix', 'Publish-NRGDeltaReport',
+    'Publish-NRGMonthlyReport'
 )
 
 Export-ModuleMember -Function $script:ExportedFunctions -Variable NRGAssessmentVersion, NRGBrand
