@@ -41,6 +41,30 @@
         # analyzer's singular-noun convention.
         'PSUseSingularNouns',
 
+        # All 40 empty catches in this codebase are intentional defensive
+        # swallows around best-effort operations:
+        #   - DNS record lookups that legitimately fail when a record isn't
+        #     published (DKIM selectors, MTA-STS, TLS-RPT, DNSSEC) — absence
+        #     IS the finding, not an error.
+        #   - Service disconnects in cleanup paths (Disconnect-MgGraph,
+        #     Disconnect-ExchangeOnline, etc.) where -ErrorAction SilentlyContinue
+        #     is already on the cmdlet AND the catch is double-defense.
+        #   - Best-effort module-version reads with hardcoded fallback values.
+        #   - Browser auto-launch second-line fallbacks.
+        # The rule's premise ("silent swallowing hides bugs") doesn't apply
+        # when the error is known, non-actionable, and the semantic intent
+        # is "try and fail gracefully." Re-evaluate if a future refactor
+        # adds NEW empty catches that aren't covered by these categories.
+        'PSAvoidUsingEmptyCatchBlock',
+
+        # UTF-8 without BOM is the canonical encoding for PowerShell 7 source
+        # files (#Requires -Version 7.0 at the top of every script in this repo
+        # guarantees PS7). The BOM-required rule targets PS 5.1 compatibility,
+        # which we don't support. Suppressing this drops ~70 false positives
+        # that would otherwise drown out signal in CI logs. Revisit if
+        # this codebase ever has to support PS 5.1 again (it won't).
+        'PSUseBOMForUnicodeEncodedFile',
+
         # The 6 Apply-NRG* write-mode functions (Apply-NRGAADLegacyAuth,
         # Apply-NRGAADMFA, Apply-NRGEXOMailboxAudit, Apply-NRGEXOSmtpAuth,
         # Apply-NRGEXOAutoForward, Apply-NRGDefenderPreset) use the unapproved

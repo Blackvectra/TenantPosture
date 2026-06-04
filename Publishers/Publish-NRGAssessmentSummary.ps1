@@ -66,7 +66,6 @@ function Publish-NRGAssessmentSummary {
     $gap       = $cov.Gap
     $na        = $cov.NA
     $total     = $cov.Total
-    $scored    = $cov.Scored
     $scorePerc = $cov.Score
 
     # PowerShell `switch ($true)` evaluates EVERY matching scriptblock unless
