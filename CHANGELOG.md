@@ -2,6 +2,68 @@
 
 ## Unreleased
 
+## v4.11.1 (2026-06-03)
+
+**Release scope:** combined v4.11.0 + v4.11.1 catch-up release ported from NLS-Assessment. v4.11.0 adds the Monthly Compliance Report publisher (new recurring MSP deliverable). v4.11.1 is a polish pass that drives PSScriptAnalyzer warning count from **127 → 0** with no behavior changes — one real bug fixed, 11 unused-variable removals, two new `PSScriptAnalyzerSettings.psd1` suppressions (each with rationale + sunset path), documentation drift corrected.
+
+### Added — Monthly Compliance Report publisher (v4.11.0)
+
+New recurring MSP deliverable, distinct from the one-shot assessment HTML. HIPAA-framed, designed for Business Associate documentation trail and client-facing monthly status reporting.
+
+- **`Publishers/Publish-NRGMonthlyReport.ps1`** — emits a self-contained HTML monthly report + sibling JSON state file. Sections: Posture Snapshot (score ring + state bars + baseline/trend note), Work Completed This Period, In Progress, Queued / Roadmap, Residual Risk Statement (Critical/High/Total open + license-blocked callout), HIPAA Defensibility Note (§164.308(a)(1) ongoing risk-management documentation).
+- **`Config/monthly-delta/`** — per-month per-tenant operator-maintained `.psd1` files driving the three status tables. Each row maps to a control via ControlId; HIPAA safeguard citation auto-pulled from `controls.json` `FrameworkIds` (HIPAA-prefixed entry).
+- **`Config/monthly-delta/EXAMPLE-cornerpostcounseling.com-2026-05.psd1`** — reference delta showing supported shape.
+- **CLI flags on `Invoke-NRGAssessment.ps1`**: `-MonthlyReport`, `-MonthlyDeltaPath`, `-MonthlyPriorPath` (optional, omit on baseline). Path-traversal + missing-file `ValidateScript` guards match `-FromResults` pattern.
+- **`Testing/NRG.MonthlyReport.Tests.ps1`** — 12-case Pester suite. Pins baseline-vs-trend rendering, JSON state shape (next month's input), score formula via `Get-NRGCoverageScore -ErrorHandling Gap`, defensive input handling (missing file, path traversal, malformed delta), empty-arrays graceful render, XSS escaping on operator-supplied delta strings.
+- **Module exports**: `Publish-NRGMonthlyReport` added (count 230 → 231).
+
+Design notes:
+
+- Self-contained — no external tracking system dependency. State lives in two artifacts the operator manages: the per-month delta `.psd1` + the previous month's output JSON (auto-produced).
+- Score uses `-ErrorHandling Gap` to match the HTML assessment report's score ring (so monthly score never silently disagrees with the main HTML deliverable).
+- XSS guard via `ConvertTo-NRGHtmlSafe` (or inline fallback when the helper isn't loaded). Every operator-supplied string flows through.
+- HIPAA citation lookup is best-effort; missing citations render as '—' rather than blocking the row.
+
+### Fixed — real bug (v4.11.1)
+
+- **`Publishers/Publish-NRGMonthlyReport.ps1` license callout had a dead `$controlsWord` variable** — the singular/plural switch was assigned (`if (1) {'control'} else {'controls'}`) but never interpolated into the rendered text. On tenants with exactly 1 license-blocked control, the callout would have read "1 of the open gaps cannot be remediated" (grammar-correct by accident only because the original wording said "of the open gaps" generically). Reworked the sentence to actually use the singular/plural word: "1 control cannot be remediated" vs "N controls cannot be remediated".
+
+### Fixed — runspace scope warning (v4.11.1)
+
+- **`Lib/Start-NRGWebServer.ps1` browser auto-launch ScriptBlock** flagged by `PSUseUsingScopeModifierInNewRunspaces`. The `param($u)/-ArgumentList $url` pattern works but is non-idiomatic and the warning was real (PSA couldn't see the param binding through the ScriptBlock boundary in some edge cases). Switched to `$using:url` — same behavior, drops the warning, more idiomatic PS7. Also added a `Write-Verbose` to the inner catch so a failed `Start-Process` surfaces under `-Verbose`.
+
+### Cleanup — dead-code removal (11 sites, v4.11.1)
+
+Removed 11 unused-variable assignments left over from prior refactors. None changed observable behavior; all were `$x = <expr>` followed by zero reads:
+
+- `Invoke-NRGAssessment.ps1:194` — `$resolvedOutput` (replaced with `$null = ...` to preserve the side-effecting path-format validation while making the discard explicit; restoring the intended bounds-check is a future-PR concern).
+- `Evaluators/Test-NRGControlDefender.ps1` — `$sl`, `$sa` (Safe Links / Safe Attachments raw reads, leftover from a refactor that moved those into separate evaluators), `$ca` (MDCA-via-CA-policy proxy that became advisory-only).
+- `Collectors/AAD/Invoke-NRGCollectAADPIM.ps1:30` — `$testResp` (probe response value never inspected; only the absence of a thrown exception matters; replaced with `$null = Invoke-MgGraphRequest ...` to make the intentional discard explicit).
+- `Publishers/Publish-NRGAssessmentSummary.ps1:69` + `Publish-NRGRemediationPlaybook.ps1:294` — `$scored` (extracted in v4.10.1 alongside the other coverage values but never referenced; only `$total` and `$score` make it into the rendered output).
+- `Publishers/Publish-NRGDeltaReport.ps1:247` — `$toolVer` (escaped via `EscMdStrict` but the resulting variable was never used).
+- `Publishers/Publish-NRGRemediationScript.ps1:54-56,245` — `$date`, `$version`, `$opUPN`, `$titleL` (header-block remnants from an earlier rendering pass).
+
+### PSScriptAnalyzer suppressions added (v4.11.1)
+
+Two rules suppressed in `PSScriptAnalyzerSettings.psd1`, each with rationale + a sunset condition per the existing suppression policy:
+
+- **`PSUseBOMForUnicodeEncodedFile`** — UTF-8 without BOM is the canonical encoding for PowerShell 7. Every script in this repo has `#Requires -Version 7.0`. The rule targets PS 5.1 compatibility, which we don't support. Drops 72 false positives.
+- **`PSAvoidUsingEmptyCatchBlock`** — all 40 existing empty catches are intentional defensive swallows around best-effort operations (DNS record absence, service disconnect cleanup, best-effort version reads, browser auto-launch fallbacks). Each already has `-ErrorAction SilentlyContinue` on the wrapped cmdlet AND the catch is double-defense.
+
+Both suppressions list a "re-evaluate when…" condition so they're explicit technical-debt markers, not silent erosion.
+
+### Documentation drift corrected (v4.11.1)
+
+- `CLAUDE.md`: version line bumped `4.10.1 → 4.11.1`.
+- `README.md`: footer bumped `v4.10.1 → v4.11.1`.
+
+### Verification
+
+- All changed files parse cleanly (0 syntax errors).
+- PSScriptAnalyzer: **0 Errors, 0 Warnings** (target state for the polish release).
+- Helper smoke test passes: `Publish-NRGMonthlyReport` runs against the example delta file and produces valid HTML + JSON outputs.
+- ModuleVersion: 4.10.1 → 4.11.1 (jumps past 4.11.0 since both v4.11.0 and v4.11.1 land in this combined release).
+
 ## v4.10.1 (2026-05-31)
 
 **Release scope:** further hardening pass that addresses the 3 deferred items from the v4.10.0 code-review punch list. Pure refactor + bug fix release — no new features, no parameter changes, no breaking changes to existing callers. Net: ~2,400 fewer lines of duplicated logic, two new shared Lib helpers, two new Pester suites pinning their behavior, one latent StrictMode bug fixed in the Delta publisher, one switch-fallthrough bug fixed in the Remediation Playbook publisher.

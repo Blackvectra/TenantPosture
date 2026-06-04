@@ -244,8 +244,6 @@ function Publish-NRGDeltaReport {
         return $safe
     }
 
-    $toolVer  = EscMdStrict ([string]($Metadata.ToolVersion ?? '4.5.5'))
-
     # ── Load baseline JSON ──────────────────────────────────────────────────
     $baselineRaw  = Get-Content -LiteralPath $BaselineResultsPath -Encoding utf8 -Raw | ConvertFrom-Json
     $baseFindings = @($baselineRaw.Findings ?? $baselineRaw)

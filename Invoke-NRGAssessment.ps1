@@ -80,6 +80,30 @@ param(
         return $true
     })]
     [string] $BaselineResults,
+
+    # ── Monthly compliance report (v4.11.0) ─────────────────────────────────
+    # When -MonthlyReport is set, Publish-NRGMonthlyReport emits a recurring
+    # MSP deliverable (HTML + JSON state file) modeled on the user-supplied
+    # template. Work-Completed / In-Progress / Queued state comes from
+    # -MonthlyDeltaPath (operator-maintained .psd1, one per tenant per month).
+    # -MonthlyPriorPath is the prior period's <name>.json output and drives
+    # the trend note in the snapshot. Omit on first (baseline) report.
+    # See Config/monthly-delta/EXAMPLE-cornerpostcounseling.com-2026-05.psd1
+    # for the delta-file shape.
+    [switch] $MonthlyReport,
+    [ValidateScript({
+        if ($_ -match '\.\.[\\/]') { throw "Path traversal not allowed in MonthlyDeltaPath." }
+        if (-not (Test-Path -LiteralPath $_ -PathType Leaf)) { throw "Monthly delta file not found: $_" }
+        return $true
+    })]
+    [string] $MonthlyDeltaPath,
+    [ValidateScript({
+        if ($null -eq $_ -or '' -eq $_) { return $true }
+        if ($_ -match '\.\.[\\/]') { throw "Path traversal not allowed in MonthlyPriorPath." }
+        if (-not (Test-Path -LiteralPath $_ -PathType Leaf)) { throw "Monthly prior-period file not found: $_" }
+        return $true
+    })]
+    [string] $MonthlyPriorPath,
     # OWASP ASVS V5.1.3 — every DnsDomains entry must be an FQDN before DNS resolver sees it
     [ValidateScript({
         foreach ($d in $_) {
@@ -189,9 +213,13 @@ if ($OutputPath -match '\.\.[\\/]') {
 if (-not (Test-Path -LiteralPath $OutputPath)) {
     [void][System.IO.Directory]::CreateDirectory($OutputPath)
 }
-# Resolve to absolute path so downstream auto-open / publish steps can verify
-# generated files via $resolvedOutput.StartsWith($resolvedOutput) bounds checks.
-$resolvedOutput = [System.IO.Path]::GetFullPath($OutputPath)
+# Resolve to absolute path. The original intent here (per the deleted
+# comment) was to use $resolvedOutput for path-bounds checks on downstream
+# publisher outputs; that check was never wired and the variable was unused.
+# Keeping the side-effecting GetFullPath call because it validates the path
+# format (throws on invalid syntax) — but discarding the result via $null
+# until a future PR actually implements the bounds check.
+$null = [System.IO.Path]::GetFullPath($OutputPath)
 
 # ── Import module ─────────────────────────────────────────────────────────────
 Write-Host "[-] Loading NRG-Assessment module..." -ForegroundColor Cyan
@@ -702,6 +730,30 @@ if (-not $JsonOnly) {
             Write-Host "  [+] Delta: $deltaPath" -ForegroundColor Green
             Set-NRGSensitiveFileAcl -Path $deltaPath -ErrorAction SilentlyContinue
         } catch { Write-Warning "Delta publish failed: $($_.Exception.Message)" }
+    }
+
+    # Monthly compliance report (v4.11.0) — recurring MSP deliverable, HIPAA-framed.
+    # Driven by an operator-maintained delta file (-MonthlyDeltaPath). The output
+    # JSON file is intended to become the next month's -MonthlyPriorPath input.
+    if ($MonthlyReport) {
+        if (-not $MonthlyDeltaPath) {
+            Write-Warning "-MonthlyReport requires -MonthlyDeltaPath <path-to-delta.psd1>; skipping monthly report."
+        }
+        elseif (Get-Command Publish-NRGMonthlyReport -ErrorAction SilentlyContinue) {
+            $monthlyDir  = Join-Path $OutputPath 'monthly'
+            $deltaBase   = [IO.Path]::GetFileNameWithoutExtension($MonthlyDeltaPath)
+            $monthlyPath = Join-Path $monthlyDir "$deltaBase.html"
+            try {
+                Publish-NRGMonthlyReport `
+                    -Findings $findings `
+                    -Metadata $reportMetadata `
+                    -DeltaPath $MonthlyDeltaPath `
+                    -PriorMonthPath $MonthlyPriorPath `
+                    -OutputPath $monthlyPath | Out-Null
+                Set-NRGSensitiveFileAcl -Path $monthlyPath -ErrorAction SilentlyContinue
+                Set-NRGSensitiveFileAcl -Path ($monthlyPath -replace '\.html$', '.json') -ErrorAction SilentlyContinue
+            } catch { Write-Warning "Monthly report publish failed: $($_.Exception.Message)" }
+        }
     }
 }
 
