@@ -153,10 +153,72 @@ function Publish-NRGMonthlyReport {
             throw "Delta file is missing required key '$req': $DeltaPath"
         }
     }
+    # v4.11.3 (audit review item #3): enforce the same Period format here
+    # that the prior-month validator below requires. Without this check
+    # the delta could carry `Period = 'Q2 2026'`, month 1 succeeds, month
+    # 2 reads the same string back as prior and the validator throws —
+    # the tool would generate input it later rejects. Same regex on both
+    # sides closes the round-trip.
+    $deltaPeriodTrim = ([string]$delta['Period']).Trim()
+    $deltaPeriodOk = $deltaPeriodTrim -and (
+        $deltaPeriodTrim -match '^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}$' -or
+        $deltaPeriodTrim -match '^\d{4}-(0[1-9]|1[0-2])$'
+    )
+    if (-not $deltaPeriodOk) {
+        throw "Delta file 'Period' must match 'Month YYYY' (e.g. 'May 2026') or 'YYYY-MM' (e.g. '2026-05'); got '$($delta['Period'])'. File: $DeltaPath"
+    }
 
     $prior = $null
     if ($PriorMonthPath) {
         $prior = Get-Content -LiteralPath $PriorMonthPath -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
+
+        # v4.11.2 audit fix (M-2), v4.11.3 review follow-up:
+        # Schema-validate the prior-month JSON before any of its fields render.
+        # The file is operator-supplied (or disk-replaced on a shared
+        # workstation) — without this check a tampered JSON could push
+        # misleading "Score: 100" / arbitrary "Period: <text>" through the
+        # trend note in next month's HIPAA-framed report. XSS is blocked by
+        # $hx; content falsification is the real concern (compliance fraud).
+        #
+        # The v4.11.2 fix was bypassable: it guarded each check with
+        # `if ($prior.Contains('Score'))` / `Contains('Period')`. An
+        # attacker simply deleted the keys, both guards became false,
+        # validation was skipped, and the downstream renderer's
+        # Get-NRGObjectField -Default fallback fabricated a "0 → $score"
+        # improvement arrow. v4.11.3 treats Score and Period as REQUIRED
+        # when a prior file is supplied. Also tightens the Score type
+        # check (`[int]` strict cast in try/catch, not lenient `-as [int]`
+        # which would accept $true→1 and "42.5"→42), and accepts trailing/
+        # leading whitespace in Period so a manually-edited prior JSON
+        # with a stray space or newline doesn't falsely-reject.
+        if ($prior -isnot [hashtable]) {
+            throw "Prior-month JSON must deserialize to a hashtable; got [$($prior.GetType().FullName)]. File: $PriorMonthPath"
+        }
+        foreach ($req in 'Score','Period') {
+            if (-not $prior.Contains($req)) {
+                throw "Prior-month JSON is missing required key '$req'. File: $PriorMonthPath"
+            }
+        }
+        # Strict integer-type check on Score — reject booleans, floats,
+        # arrays, hashtables, strings that lenient -as[int] would coerce.
+        $scoreVal = $prior['Score']
+        if ($scoreVal -isnot [int] -and $scoreVal -isnot [long]) {
+            throw "Prior-month JSON 'Score' must be a JSON integer (not boolean/float/string); got [$($scoreVal.GetType().Name)] '$scoreVal'. File: $PriorMonthPath"
+        }
+        if ($scoreVal -lt 0 -or $scoreVal -gt 100) {
+            throw "Prior-month JSON 'Score' must be in [0,100]; got $scoreVal. File: $PriorMonthPath"
+        }
+        # Period: trim before matching so a stray edit doesn't break a
+        # legitimate report. Accept "Month YYYY" or "YYYY-MM" (matches
+        # both forms the publisher emits and the operator delta accepts).
+        $periodStr = if ($prior['Period'] -is [string]) { $prior['Period'].Trim() } else { '' }
+        $periodOk = $periodStr -and (
+            $periodStr -match '^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}$' -or
+            $periodStr -match '^\d{4}-(0[1-9]|1[0-2])$'
+        )
+        if (-not $periodOk) {
+            throw "Prior-month JSON 'Period' must match 'Month YYYY' or 'YYYY-MM'; got '$($prior['Period'])'. File: $PriorMonthPath"
+        }
     }
 
     # Resolve the three table populations:
@@ -498,7 +560,12 @@ $licCallout
     if ($outDir -and -not (Test-Path -LiteralPath $outDir)) {
         New-Item -ItemType Directory -Force -LiteralPath $outDir | Out-Null
     }
-    $html | Out-File -LiteralPath $OutputPath -Encoding utf8 -NoNewline
+    # v4.11.3 (audit finding #1 deeper fix): self-harden via terminal helper.
+    if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileContent -Path $OutputPath -Content $html
+    } else {
+        $html | Out-File -LiteralPath $OutputPath -Encoding utf8 -NoNewline
+    }
 
     # Sibling JSON — becomes next month's -PriorMonthPath input.
     $jsonOut = [ordered]@{
@@ -523,7 +590,12 @@ $licCallout
     }
     $jsonPath = $OutputPath -replace '\.html?$', '.json'
     if ($jsonPath -eq $OutputPath) { $jsonPath = "$OutputPath.json" }
-    $jsonOut | ConvertTo-Json -Depth 8 | Out-File -LiteralPath $jsonPath -Encoding utf8
+    # v4.11.3 (audit finding #1 deeper fix): self-harden via terminal helper.
+    if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileContent -Path $jsonPath -Content ($jsonOut | ConvertTo-Json -Depth 8)
+    } else {
+        $jsonOut | ConvertTo-Json -Depth 8 | Out-File -LiteralPath $jsonPath -Encoding utf8
+    }
 
     Write-Host "  [+] Monthly report: $OutputPath" -ForegroundColor Green
     Write-Host "  [+] Monthly state:  $jsonPath" -ForegroundColor Green

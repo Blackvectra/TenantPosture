@@ -94,9 +94,15 @@ function Get-NRGCoverageScore {
         if ($FrameworkId) {
             $fwIds = Get-NRGObjectField -Item $f -Key 'FrameworkIds'
             if (-not $fwIds) { continue }
+            # v4.11.2 audit fix (L-3): regex-escape FrameworkId so a future
+            # caller passing operator-supplied or controls.json-derived text
+            # can't silently change matching semantics via regex metachars
+            # (`.`, `+`, `*`, `[`). Today's callers all pass literals
+            # (CIS / SCuBA / NIST / CMMC) — defense-in-depth.
+            $fwPattern = '^' + [regex]::Escape($FrameworkId)
             $match = $false
             foreach ($id in @($fwIds)) {
-                if ($id -match "^$FrameworkId") { $match = $true; break }
+                if ($id -match $fwPattern) { $match = $true; break }
             }
             if (-not $match) { continue }
         }

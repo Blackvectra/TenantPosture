@@ -355,14 +355,23 @@ if ($failed.Count -gt 0) {
     }
 }
 
-$sb.ToString() | Out-File -LiteralPath $summaryPath -Encoding utf8
-
-# Audit-finding fix (HIGH #2): batch summary includes per-tenant status,
+# v4.11.3 (audit finding #1 fix): batch summary includes per-tenant status,
 # tenant domains, and exception messages — same sensitivity tier as the
-# per-client baseline JSON. Apply ACL hardening if helper is loaded
-# (Set-NRGSensitiveFileAcl was exported by the module imported above).
-if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
-    Set-NRGSensitiveFileAcl -Path $summaryPath -ErrorAction SilentlyContinue
+# per-client baseline JSON. Pre-v4.11.3 used the old Out-File-then-Set-Acl
+# pattern with a TOCTOU window between file creation (inherited parent-dir
+# ACL) and post-hoc hardening. v4.11.2 H-1 corrected every single-tenant
+# publisher but missed this site because the hardening lived in each caller.
+# The post-merge review surfaced the omission and showed the orchestrator-
+# level fix was the wrong altitude. Now writes through Set-NRGSensitiveFileContent
+# (pre-creates an empty hardened file then writes content), closing the
+# window. Both helpers are no-op equivalents on non-Windows.
+if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+    Set-NRGSensitiveFileContent -Path $summaryPath -Content $sb.ToString()
+} else {
+    $sb.ToString() | Out-File -LiteralPath $summaryPath -Encoding utf8
+    if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileAcl -Path $summaryPath -ErrorAction SilentlyContinue
+    }
 }
 
 # ── Final ─────────────────────────────────────────────────────────────────────

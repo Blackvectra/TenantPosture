@@ -213,18 +213,17 @@ if ($OutputPath -match '\.\.[\\/]') {
 if (-not (Test-Path -LiteralPath $OutputPath)) {
     [void][System.IO.Directory]::CreateDirectory($OutputPath)
 }
-# Resolve to absolute path. $resolvedOutput is intentionally retained as the
-# forward-declaration anchor for the security invariant in
-# Testing/NRG.Security.Tests.ps1:106-110, which enforces that any future
-# auto-open / publish path-bounds check MUST take the form
-# $path.StartsWith($resolvedOutput). v4.11.1 first tried to remove this as
-# dead code; the security test caught that the variable IS a documented test
-# anchor, not dead. Leaving the GetFullPath call (validates path format —
-# throws on invalid syntax) and the variable for the test to match.
+# Resolve to absolute path. The GetFullPath call validates path format —
+# throws on invalid syntax — and the resolved value is the canonical bounds
+# root that any future auto-open / publish path check would compare against
+# via $path.StartsWith($resolvedOutput). The v4.11.1 polish pass tried to
+# remove this as dead code; the v4.11.2 audit (M-4) found the security test
+# that previously enforced its presence was comment-load-bearing and has
+# now been Skip-gated until a real Open-NRGReport helper exists. The
+# variable stays — the GetFullPath validation is genuinely useful — and
+# the $null = ... below tells PSA the value is intentionally unused for
+# now.
 $resolvedOutput = [System.IO.Path]::GetFullPath($OutputPath)
-# Suppression: PSScriptAnalyzer flags this as unused. Documented above —
-# it's a security-test anchor, not dead code. Remove when an actual
-# StartsWith bounds check on $resolvedOutput exists at a use site.
 $null = $resolvedOutput
 
 # ── Import module ─────────────────────────────────────────────────────────────
@@ -651,19 +650,28 @@ Write-Host "  [+] JSON: $jsonPath" -ForegroundColor Green
 Write-Host "      Baseline contains sensitive tenant inventory (CA policies, admin assignments, OAuth apps) — file ACL restricted to current user + admins. Path: $jsonPath" -ForegroundColor Yellow
 
 if (-not $JsonOnly) {
-    # ── Audit-finding fix (HIGH #2): every secondary report file gets the same
-    #    ACL hardening as the JSON baseline. They all contain the same tenant
-    #    inventory data (CA policies, admin UPNs, OAuth grants, DMARC records)
-    #    rendered into a different format. Inherited permissions on a shared
-    #    MSP workstation or synced OneDrive would otherwise make these world-
-    #    readable. Set-NRGSensitiveFileAcl is a no-op on non-Windows.
+    # ── Publisher hardening (HIGH #2 from v4.6.x audit, refactored in v4.11.3):
+    # Each publisher now self-hardens its terminal write via
+    # Set-NRGSensitiveFileContent internally — no orchestrator-side pre-create
+    # dance required. v4.11.2 applied pre-creates at every caller site; the
+    # post-merge review caught that this left Invoke-NRGBatchAssessment's own
+    # batch-summary write at the original pre-fix pattern (the caller-side
+    # discipline doesn't travel). v4.11.3 pushes hardening into the
+    # publishers themselves so any caller — single-tenant orchestrator,
+    # batch, web, future — is covered without remembering anything.
+    #
+    # The XLSX matrix publisher keeps a documented sub-window (openpyxl
+    # creates the .xlsx itself); its temp-file payload IS hardened in
+    # v4.11.3 (pre-existing gap surfaced by the review).
+    # Set-NRGSensitiveFileContent / Set-NRGSensitiveFileAcl are no-ops on
+    # non-Windows.
+
     # Markdown summary
     if (Get-Command Publish-NRGAssessmentSummary -ErrorAction SilentlyContinue) {
         $mdPath = Join-Path $OutputPath "$baseName-assessment.md"
         try {
             Publish-NRGAssessmentSummary -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $mdPath
             Write-Host "  [+] Markdown: $mdPath" -ForegroundColor Green
-            Set-NRGSensitiveFileAcl -Path $mdPath -ErrorAction SilentlyContinue
         } catch { Write-Warning "Markdown publish failed: $($_.Exception.Message)" }
     }
 
@@ -673,12 +681,11 @@ if (-not $JsonOnly) {
         try {
             Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath
             Write-Host "  [+] HTML: $htmlPath" -ForegroundColor Green
-            Set-NRGSensitiveFileAcl -Path $htmlPath -ErrorAction SilentlyContinue
         } catch {
-        $stack = $_.ScriptStackTrace
-        Write-Warning "HTML failed: $($_.Exception.Message)"
-        Write-Warning "Stack: $stack"
-    }
+            $stack = $_.ScriptStackTrace
+            Write-Warning "HTML failed: $($_.Exception.Message)"
+            Write-Warning "Stack: $stack"
+        }
     }
 
     # Remediation playbook + executive summary
@@ -701,9 +708,6 @@ if (-not $JsonOnly) {
             Write-Host "  [+] Playbook (md):   $pbPath" -ForegroundColor Green
             Write-Host "  [+] Playbook (html): $pbHtmlPath" -ForegroundColor Green
             Write-Host "  [+] Executive:       $execPath" -ForegroundColor Green
-            Set-NRGSensitiveFileAcl -Path $pbPath     -ErrorAction SilentlyContinue
-            Set-NRGSensitiveFileAcl -Path $execPath   -ErrorAction SilentlyContinue
-            Set-NRGSensitiveFileAcl -Path $pbHtmlPath -ErrorAction SilentlyContinue
         } catch { Write-Warning "Playbook publish failed: $($_.Exception.Message)" }
     }
 
@@ -713,11 +717,12 @@ if (-not $JsonOnly) {
         try {
             Publish-NRGRemediationScript -Metadata $reportMetadata -Findings $findings -OutputPath $rsPath
             Write-Host "  [+] Remediation: $rsPath" -ForegroundColor Green
-            Set-NRGSensitiveFileAcl -Path $rsPath -ErrorAction SilentlyContinue
         } catch { Write-Warning "Remediation publish failed: $($_.Exception.Message)" }
     }
 
-    # XLSX compliance matrix
+    # XLSX compliance matrix — openpyxl creates the .xlsx itself so the
+    # output file gets post-hoc ACL hardening. Intermediate temp files are
+    # hardened by the publisher in v4.11.3.
     if (Get-Command Publish-NRGComplianceMatrix -ErrorAction SilentlyContinue) {
         $xlsxPath = Join-Path $OutputPath "$baseName-compliance-matrix.xlsx"
         try {
@@ -734,7 +739,6 @@ if (-not $JsonOnly) {
             Publish-NRGDeltaReport -CurrentFindings $findings -CurrentRawData $rawDataSnapshot -BaselineResultsPath $BaselineResults `
                 -Metadata $reportMetadata -OutputPath $deltaPath
             Write-Host "  [+] Delta: $deltaPath" -ForegroundColor Green
-            Set-NRGSensitiveFileAcl -Path $deltaPath -ErrorAction SilentlyContinue
         } catch { Write-Warning "Delta publish failed: $($_.Exception.Message)" }
     }
 
@@ -750,14 +754,15 @@ if (-not $JsonOnly) {
             $deltaBase   = [IO.Path]::GetFileNameWithoutExtension($MonthlyDeltaPath)
             $monthlyPath = Join-Path $monthlyDir "$deltaBase.html"
             try {
+                if (-not (Test-Path -LiteralPath $monthlyDir)) {
+                    New-Item -ItemType Directory -Force -LiteralPath $monthlyDir | Out-Null
+                }
                 Publish-NRGMonthlyReport `
                     -Findings $findings `
                     -Metadata $reportMetadata `
                     -DeltaPath $MonthlyDeltaPath `
                     -PriorMonthPath $MonthlyPriorPath `
                     -OutputPath $monthlyPath | Out-Null
-                Set-NRGSensitiveFileAcl -Path $monthlyPath -ErrorAction SilentlyContinue
-                Set-NRGSensitiveFileAcl -Path ($monthlyPath -replace '\.html$', '.json') -ErrorAction SilentlyContinue
             } catch { Write-Warning "Monthly report publish failed: $($_.Exception.Message)" }
         }
     }

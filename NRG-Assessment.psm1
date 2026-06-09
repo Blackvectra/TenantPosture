@@ -32,8 +32,21 @@ $ErrorActionPreference = 'Stop'
 # directive in production code going forward.
 Set-StrictMode -Version Latest
 
-$script:NRGAssessmentVersion = '4.11.1'
-$script:NRGModuleRoot        = $PSScriptRoot
+# v4.11.2 audit fix (L-1): version was hardcoded as a stale literal that drifted
+# across 4 releases (4.9.0 → 4.11.1). Module-direct callers reading
+# `$NRGAssessmentVersion` (which is exported via VariablesToExport) saw the
+# stale value. Now resolved from the sibling manifest at load time so it
+# always matches `ModuleVersion` in the .psd1. Fallback to 'unknown' is
+# defensive — manifest parsing should never fail at module-load time, but
+# if it does the module should still load with a clearly-flagged version
+# rather than silently shipping the stale literal.
+$script:NRGModuleRoot = $PSScriptRoot
+$script:NRGAssessmentVersion = try {
+    $manifest = Import-PowerShellDataFile -LiteralPath (Join-Path $PSScriptRoot 'NRG-Assessment.psd1') -ErrorAction Stop
+    [string]$manifest.ModuleVersion
+} catch {
+    'unknown'
+}
 
 # Thread-safe collections for module state
 $script:NRGFindings   = [System.Collections.Generic.List[object]]::new()

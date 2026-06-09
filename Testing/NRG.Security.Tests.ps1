@@ -103,10 +103,30 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             $content | Should -Match 'StartsWith.*PSScriptRoot|PSScriptRoot.*StartsWith' -Because 'Dot-sourced files must be origin-checked (OWASP A01)'
         }
 
-        It 'HTML auto-open is bound-checked against output directory' {
-            $orchPath = Join-Path $script:RepoRoot 'Invoke-NRGAssessment.ps1'
-            $content  = Get-Content -LiteralPath $orchPath -Raw
-            $content | Should -Match 'StartsWith.*resolvedOutput|resolvedOutput.*StartsWith' -Because 'Auto-open must verify file is inside output dir'
+        It 'HTML auto-open is bound-checked against output directory' -Skip:(-not (Get-Command Open-NRGReport -ErrorAction SilentlyContinue)) {
+            # v4.11.2 audit fix (M-4), v4.11.3 review follow-up:
+            # The original test enforced the invariant via regex-on-source
+            # ('StartsWith.*resolvedOutput'), which silently passed because
+            # the orchestrator's DOCUMENTATION COMMENT contained those
+            # words — not any actual bounds-check code. v4.11.2 made the
+            # test Skip-gated until Open-NRGReport exists, but the body
+            # was a tautology ($true | Should -BeTrue) — meaning the test
+            # would still enforce nothing the moment the helper landed.
+            #
+            # v4.11.3 gives the body a real assertion: when Open-NRGReport
+            # is loaded, call it with a path explicitly OUTSIDE the
+            # operator's output directory and assert the helper throws.
+            # This makes path-traversal in any future auto-open implementation
+            # caught by CI rather than shipped silently.
+            $outRoot = Join-Path ([IO.Path]::GetTempPath()) ("nrg-bounds-" + [Guid]::NewGuid().ToString('N').Substring(0,8))
+            $null = New-Item -ItemType Directory -Force -LiteralPath $outRoot
+            try {
+                $traversalPath = Join-Path $outRoot '..\..\etc\passwd'
+                { Open-NRGReport -Path $traversalPath -OutputRoot $outRoot } |
+                    Should -Throw -Because 'auto-open must refuse paths outside $resolvedOutput'
+            } finally {
+                Remove-Item -LiteralPath $outRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
         }
 
         It 'controls.json loader verifies file resolves inside module root' {

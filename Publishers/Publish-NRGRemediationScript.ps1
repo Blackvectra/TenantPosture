@@ -363,5 +363,10 @@ function Publish-NRGRemediationScript {
     $null = $sb.AppendLine("Write-Host 'Remediation script complete.' -ForegroundColor Cyan")
     $null = $sb.AppendLine("Write-Host 'Re-run NRG-Assessment to validate changes.' -ForegroundColor Cyan")
 
-    $sb.ToString() | Out-File -LiteralPath $OutputPath -Encoding utf8
+    # v4.11.3 (audit finding #1 deeper fix): self-harden via terminal helper.
+    if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileContent -Path $OutputPath -Content $sb.ToString()
+    } else {
+        $sb.ToString() | Out-File -LiteralPath $OutputPath -Encoding utf8
+    }
 }

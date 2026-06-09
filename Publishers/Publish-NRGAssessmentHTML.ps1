@@ -960,5 +960,14 @@ $(if ($namedHtml) { "<div class='cnt' style='padding-top:0;padding-bottom:0'>$na
         throw ("CSP integrity check FAILED: declared SHA-256 '$declaredHash' does not match inline-script body hash '$actualHash'. Browser will block the script. Likely cause: a `$variable` was interpolated into `$inlineScript`, drifting the hash. Refusing to write report.")
     }
 
-    $html | Out-File -LiteralPath $OutputPath -Encoding utf8
+    # v4.11.3 (audit finding #1 deeper fix): publisher self-hardens via
+    # Set-NRGSensitiveFileContent — hardening travels with the terminal write
+    # so no caller (orchestrator, batch, web, future) can forget the
+    # pre-create dance. The fallback to raw Out-File preserves behavior in
+    # the unlikely case the helper isn't loaded (Lib hasn't dot-sourced).
+    if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileContent -Path $OutputPath -Content $html
+    } else {
+        $html | Out-File -LiteralPath $OutputPath -Encoding utf8
+    }
 }

@@ -2,6 +2,67 @@
 
 ## Unreleased
 
+## v4.11.3 (2026-06-09)
+
+**Release scope:** combined v4.11.2 + v4.11.3 catch-up release ported from NLS-Assessment. v4.11.2 addressed one **High** (TOCTOU on six client-deliverable publishers), three **Medium**, and two **Low** findings from a comprehensive v4.11.1 security review. v4.11.3 is the post-merge code-review follow-up that found two v4.11.2 fixes were incomplete in ways that re-opened the exact vector each was meant to close (orchestrator-altitude hardening missed the batch summary write; M-2 schema fix was bypassable via key omission), plus closed a self-inflicted Period emitter/validator round-trip bug, tightened Score type coercion, and turned the M-4 skip-gated test from a tautology into a real path-traversal assertion. NRG lands v4.11.3 directly, skipping the orchestrator-side pre-create approach v4.11.2 used (same outcome, less churn). No behavior changes for normal operation; defense-in-depth tightening on shared/synced workstations. CVE landscape: NRG-Assessment is **not vulnerable** to CVE-2026-26143 (PowerShell `Import-PowerShellDataFile -SkipLimitCheck` security-feature bypass) — verified that `-SkipLimitCheck` is never used at any of the 4 call sites in the codebase.
+
+### Fixed — TOCTOU altitude (v4.11.2 H-1 + v4.11.3 Review #1)
+
+Each publisher now self-hardens its terminal write via `Set-NRGSensitiveFileContent` internally — no caller (single-tenant orchestrator, batch entry point, web server, future GitHub Action runner) can forget the pre-create dance. The pre-v4.11.2 pattern was `Out-File`-then-`Set-NRGSensitiveFileAcl`, leaving a TOCTOU window where the publisher's tenant-data output (CA policies, admin UPNs, OAuth grants, DMARC records, HIPAA findings) inherited the parent directory's ACL before the post-hoc hardening ran. On a shared MSP workstation or synced OneDrive folder, a co-resident process could read the data in that window.
+
+- `Publishers/Publish-NRGAssessmentHTML.ps1`, `Publish-NRGAssessmentSummary.ps1`, `Publish-NRGRemediationPlaybook.ps1` (×3 outputs: md + executive + html), `Publish-NRGRemediationScript.ps1`, `Publish-NRGDeltaReport.ps1`, `Publish-NRGMonthlyReport.ps1` (×2 outputs: html + json): terminal `Out-File` replaced with `Set-NRGSensitiveFileContent` (with a `Get-Command` fallback for the rare case the helper isn't loaded).
+- `Invoke-NRGAssessment.ps1`: removed the now-redundant orchestrator-side `Set-NRGSensitiveFileAcl` post-hoc calls (9 sites). Publishers self-harden. The XLSX matrix's post-hoc Set-Acl call is kept (openpyxl creates the file itself; documented sub-window).
+- `Invoke-NRGBatchAssessment.ps1`: batch summary write switched to `Set-NRGSensitiveFileContent`. **This was the active TOCTOU window the orchestrator-altitude approach missed** — the discipline of "pre-create before each publisher call" doesn't travel to a different caller. Pushing hardening into the publishers themselves closes it.
+- `Publishers/Publish-NRGComplianceMatrix.ps1`: intermediate `$tmpJson` payload (carries full findings + control inventory, same sensitivity tier as the JSON baseline) now pre-create-hardened via `Set-NRGSensitiveFileContent`. Pre-existing gap surfaced by the review.
+
+### Fixed — M-2 prior-month JSON schema bypass via key omission (v4.11.2 M-2 + v4.11.3 Review #2)
+
+`Publish-NRGMonthlyReport.ps1` operator-supplied (or disk-replaced on a shared workstation) JSON deserializes via `ConvertFrom-Json -AsHashtable` and the `Period`/`Score` fields render directly into next month's HIPAA-framed trend note. XSS is blocked by `ConvertTo-NRGHtmlSafe`, but content falsification — pushing a "Score: 100" + "Period: <attacker text>" through compliance documentation — was possible. The v4.11.2 fix asserted `$prior -is [hashtable]` and validated `Score` + `Period`, but guarded both checks with `if ($prior.Contains('Score'))` / `Contains('Period')`. An attacker with write access simply *deleted* the keys → both guards false → validation skipped → `Get-NRGObjectField -Default 0` renders a fabricated "▲ +N" improvement arrow. v4.11.3 lands the fixed version directly: `Score` and `Period` are **required** when a `-PriorMonthPath` is supplied, throw on missing keys.
+
+### Fixed — Period emitter/validator alignment (v4.11.3 Review #3)
+
+The v4.11.2 validator accepted only `'Month YYYY'` or `'YYYY-MM'`, but the publisher emits `Period` straight from the operator's delta `.psd1` with no format check. An operator delta with `Period = 'Q2 2026'` (or any custom format) succeeded month 1, then **hard-failed month 2** when that JSON was fed back as `-MonthlyPriorPath`. The self-contained workflow (this month's JSON → next month's prior) broke for any period string the validator didn't anticipate. v4.11.3 applies the same regex to the delta-load path so the format invariant holds at both entry points; the tool can no longer produce input it later rejects.
+
+### Fixed — Period regex whitespace tolerance (v4.11.3 Review #4)
+
+The v4.11.2 regex anchored `^…$` with no `\s` tolerance. Hand-edited prior JSON with `'May 2026\n'` or `' May 2026'` (trailing newline added by editor; leading space from copy-paste) was rejected as malicious. v4.11.3 `.Trim()`s the value before matching at both the prior-month validator and the new delta-format check.
+
+### Fixed — strict Score type (v4.11.3 Review #6)
+
+The lenient `$prior['Score'] -as [int]` coercion accepted `$true → 1`, `"42.5" → 42`, `99.6 → 100` — weakening M-2 against type-confusion inputs. v4.11.3 asserts `$scoreVal -is [int] -or -is [long]` (rejecting JSON booleans, floats, strings) before the range check.
+
+### Fixed — M-4 skip-gated test now asserts something (v4.11.3 Review #5)
+
+`Testing/NRG.Security.Tests.ps1` previously enforced the "Auto-open is bound-checked against output directory" invariant via a regex match against the orchestrator source for the literal text "StartsWith" + "resolvedOutput". The test passed in v4.11.0/v4.11.1 only because the orchestrator's *documentation comment* contained both magic words — no actual code performed a bounds check, and there is no auto-open feature today. v4.11.2 was supposed to convert this to `-Skip:(-not (Get-Command Open-NRGReport))`, but with a tautology body (`$true | Should -BeTrue`) — the moment `Open-NRGReport` lands, the test would activate and assert nothing. v4.11.3 gives the body a real assertion: call `Open-NRGReport` with a path explicitly outside the operator's output directory and assert the helper throws. Future path-traversal in any auto-open implementation now caught by CI. The orchestrator's `$resolvedOutput` variable is retained because the `GetFullPath` validation is genuinely useful (throws on invalid path syntax).
+
+### Fixed — GitHub Actions SHA-pinning (v4.11.2 M-3)
+
+19 first-party action references across 6 workflows used moving `@v6` / `@v7` / `@v4` / `@v5` tags. Vulnerable to the same supply-chain pattern as the March 2025 `tj-actions/changed-files` incident — an attacker who compromises an action owner's repo can re-point the tag and inject malicious workflow code. All 19 now SHA-pinned with version comments (e.g., `actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6`). The existing `.github/dependabot.yml` keeps SHAs current as upstream releases ship. The 3rd-party `ossf/scorecard-action` and `trufflesecurity/trufflehog` actions were already correctly SHA-pinned.
+
+### Fixed — stale `$script:NRGAssessmentVersion` in `NRG-Assessment.psm1` (v4.11.2 L-1)
+
+Hardcoded as a stale literal that drifted across 4 releases without updating. Runtime banner was correct because the orchestrator re-reads the manifest, but module-direct callers reading the exported `$NRGAssessmentVersion` variable saw the stale value. Now resolved from the sibling manifest at module load time so it always tracks `ModuleVersion` in the .psd1. SECURITY.md footer also updated.
+
+### Fixed — `Get-NRGCoverageScore -FrameworkId` regex was unescaped (v4.11.2 L-3)
+
+Built `"^$FrameworkId"` directly without `[regex]::Escape`. Current callers all pass literal framework names (CIS / SCuBA / NIST / CMMC) — no current exploit. Defense-in-depth fix: future callers wiring this from operator input or `controls.json` field content can't silently change matching semantics via regex metachars (`.`, `+`, `*`, `[`).
+
+### Deferred (separate decisions, not pure security)
+
+- **M-1** EOM pin semantics: `RequiredModules.ModuleVersion = '3.2.0'` is a floor, not exact. Workstation with EOM 3.5+ pre-installed loads it and hits the WAM crash unless operator accepts the in-tool downgrade prompt. Real risk on `-NonInteractive` runs. Fix needs a product decision: switch to `RequiredModuleVersion` for exact-pin refusal, OR accept EOM 3.7.1+ as the new floor (Microsoft has shipped WAM fixes in 3.7.x).
+- **L-2** PowerShell 7 floor raise from 7.0 → 7.4. CVE-2026-26143 doesn't affect this code (`-SkipLimitCheck` never used). Optional defense-in-depth; PS 7.2 LTS EOL'd Nov 2024.
+
+### Verification
+
+- ✅ All changed files parse cleanly (0 syntax errors)
+- ✅ PSScriptAnalyzer: 0 Errors, 0 Warnings
+- ✅ ModuleVersion: `4.11.1 → 4.11.3`
+- ✅ All 19 GitHub Actions references SHA-pinned
+- ✅ Smoke test: monthly report rebuild against an example delta; `Set-NRGSensitiveFileContent` is the terminal write path for HTML + JSON
+- ✅ Smoke test: M-2 bypass via key omission now throws ("missing required key 'Score'")
+- ✅ Smoke test: boolean Score now rejected ("must be a JSON integer (not boolean/float/string)")
+- ✅ `$script:NRGAssessmentVersion` resolves to `4.11.3` from the manifest at psm1 load time
+
 ## v4.11.1 (2026-06-03)
 
 **Release scope:** combined v4.11.0 + v4.11.1 catch-up release ported from NLS-Assessment. v4.11.0 adds the Monthly Compliance Report publisher (new recurring MSP deliverable). v4.11.1 is a polish pass that drives PSScriptAnalyzer warning count from **127 → 0** with no behavior changes — one real bug fixed, 11 unused-variable removals, two new `PSScriptAnalyzerSettings.psd1` suppressions (each with rationale + sunset path), documentation drift corrected.

@@ -106,9 +106,20 @@ function Publish-NRGComplianceMatrix {
     if ([string]::IsNullOrWhiteSpace($matrixBase)) { $matrixBase = 'compliance-matrix' }
     $tmpJson = Join-Path $outputDir "$matrixBase-matrix-input.json"
     try {
-        $payload | ConvertTo-Json -Depth 6 -Compress | Out-File -LiteralPath $tmpJson -Encoding utf8
-        if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
-            Set-NRGSensitiveFileAcl -Path $tmpJson -ErrorAction SilentlyContinue
+        # v4.11.3 audit follow-up: pre-create + harden the intermediate JSON
+        # before tenant data lands. Previous code wrote with default ACL then
+        # hardened post-hoc, leaving the same TOCTOU window the v4.11.2 H-1
+        # fix closed for the main publishers. $tmpJson contains the full
+        # findings + control payload (same sensitivity tier as the JSON
+        # baseline). Fallback path covers the rare case the helper isn't
+        # loaded.
+        if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+            Set-NRGSensitiveFileContent -Path $tmpJson -Content ($payload | ConvertTo-Json -Depth 6 -Compress)
+        } else {
+            $payload | ConvertTo-Json -Depth 6 -Compress | Out-File -LiteralPath $tmpJson -Encoding utf8
+            if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+                Set-NRGSensitiveFileAcl -Path $tmpJson -ErrorAction SilentlyContinue
+            }
         }
 
         # Embedded Python — reads JSON, writes XLSX, no string interpolation of tenant data

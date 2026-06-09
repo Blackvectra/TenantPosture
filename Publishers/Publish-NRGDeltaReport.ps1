@@ -474,5 +474,10 @@ function Publish-NRGDeltaReport {
     # AppendLine above and no other consumer reads $toolVer. Removed to keep
     # the file lint-clean under PSReviewUnusedVariable.
 
-    $sb.ToString() | Out-File -LiteralPath $OutputPath -Encoding utf8
+    # v4.11.3 (audit finding #1 deeper fix): self-harden via terminal helper.
+    if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileContent -Path $OutputPath -Content $sb.ToString()
+    } else {
+        $sb.ToString() | Out-File -LiteralPath $OutputPath -Encoding utf8
+    }
 }
