@@ -1,6 +1,6 @@
 @{
     # Module identity
-    ModuleVersion     = '4.11.1'
+    ModuleVersion     = '4.12.0'
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
     Author            = 'Matthew Levorson'
     CompanyName       = 'NRG Technology Services / NextLayerSec LLC'
@@ -280,7 +280,34 @@
         'Publish-NRGRemediationScript',
         'Publish-NRGComplianceMatrix',
         'Publish-NRGDeltaReport',
-        'Publish-NRGMonthlyReport'
+        'Publish-NRGMonthlyReport',
+
+        # ── v4.12.0 Email Incident Response (Email-IR/ subtree) ───────────────
+        'Connect-NRGEmailServices',
+        'Disconnect-NRGEmailServices',
+        'Invoke-NRGEmailCollectMailbox',
+        'Get-NRGEmailDomainFromAddress',
+        'Test-NRGEmailIsLegitMSDomain',
+        'Test-NRGEmailMatchesMSImpersonation',
+        'Test-NRGEmailControl-InboxRules',
+        'Test-NRGEmailControl-Forwarding',
+        'Test-NRGEmailControl-OutboundActivity',
+        'Test-NRGEmailControl-PhishOrigin',
+        'Test-NRGEmailControl-ThreatIntel',
+        'Publish-NRGEmailIncidentReport',
+        'Connect-NRGEmailAdminServices',
+        'Disconnect-NRGEmailAdminServices',
+        'Invoke-NRGEmailCollectSignIns',
+        'Clear-NRGSignInTriageState',
+        'Test-NRGSignInControl-FailedToSuccess',
+        'Test-NRGSignInControl-AnonymousIp',
+        'Test-NRGSignInControl-ImpossibleTravel',
+        'Test-NRGSignInControl-RiskyUsers',
+        'Test-NRGSignInControl-GeoAnomaly',
+        'Test-NRGSignInControl-RankUsers',
+        'Test-NRGSignInControl-IPIntel',
+        'Publish-NRGSignInTriageReport',
+        'Get-NRGIPSignInIntel'
     )
 
     VariablesToExport = @('NRGAssessmentVersion', 'NRGBrand')
