@@ -73,7 +73,11 @@ if (-not $script:NRGBrand) {
 # Each dot-sourced file is verified to resolve inside $PSScriptRoot before loading.
 # This prevents a malformed filename from causing a path traversal load.
 # OWASP A01 / ASVS V12.3.1
-$loadOrder = @('Lib', 'Collectors', 'Evaluators', 'Publishers')
+               # v4.12.0: Email-IR (incident response mode for compromised
+               # single-user mailboxes) lives in its own top-level subtree
+               # for visible separation from the posture assessment.
+$loadOrder = @('Lib', 'Collectors', 'Evaluators', 'Publishers',
+               'Email-IR/Lib', 'Email-IR/Collectors', 'Email-IR/Evaluators', 'Email-IR/Publishers')
 
 foreach ($folder in $loadOrder) {
     $folderPath = Join-Path $PSScriptRoot $folder
@@ -275,7 +279,29 @@ $script:ExportedFunctions = @(
     'Publish-NRGAssessmentHTML', 'Publish-NRGAssessmentSummary',
     'Publish-NRGRemediationPlaybook', 'Publish-NRGRemediationScript',
     'Publish-NRGComplianceMatrix', 'Publish-NRGDeltaReport',
-    'Publish-NRGMonthlyReport'
+    'Publish-NRGMonthlyReport',
+
+    # ── v4.12.0 Email Incident Response mode ─────────────────────────────────
+    'Connect-NRGEmailServices', 'Disconnect-NRGEmailServices',
+    'Invoke-NRGEmailCollectMailbox',
+    'Get-NRGEmailDomainFromAddress', 'Test-NRGEmailIsLegitMSDomain', 'Test-NRGEmailMatchesMSImpersonation',
+    'Test-NRGEmailControl-InboxRules', 'Test-NRGEmailControl-Forwarding',
+    'Test-NRGEmailControl-OutboundActivity', 'Test-NRGEmailControl-PhishOrigin',
+    'Test-NRGEmailControl-ThreatIntel',
+    'Publish-NRGEmailIncidentReport',
+    'Connect-NRGEmailAdminServices',
+    'Disconnect-NRGEmailAdminServices',
+    'Invoke-NRGEmailCollectSignIns',
+    'Clear-NRGSignInTriageState',
+    'Test-NRGSignInControl-FailedToSuccess',
+    'Test-NRGSignInControl-AnonymousIp',
+    'Test-NRGSignInControl-ImpossibleTravel',
+    'Test-NRGSignInControl-RiskyUsers',
+    'Test-NRGSignInControl-GeoAnomaly',
+    'Test-NRGSignInControl-RankUsers',
+    'Test-NRGSignInControl-IPIntel',
+    'Publish-NRGSignInTriageReport',
+    'Get-NRGIPSignInIntel'
 )
 
 Export-ModuleMember -Function $script:ExportedFunctions -Variable NRGAssessmentVersion, NRGBrand
