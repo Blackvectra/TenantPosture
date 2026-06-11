@@ -397,3 +397,137 @@ Describe 'NRG Email IR — Containment Runbook render (publisher)' {
         ([regex]::Matches($html, 'class="rbnum"')).Count | Should -Be 6
     }
 }
+
+Describe 'NRG Email IR — EMAIL-4.1 OAuth consent grants' {
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
+        . (Join-Path $script:RepoRoot 'Lib' 'Add-NRGFinding.ps1')
+        . (Join-Path $script:RepoRoot 'Email-IR' 'Evaluators' 'Test-NRGEmailControls.ps1')
+        function script:NewBag($cid, $data) { [ordered]@{ CollectorId=$cid; CollectedAt=(Get-Date -Format 'o'); Success=$true; Data=$data } }
+    }
+    BeforeEach { Clear-NRGState }
+
+    It 'Flags a Mail.Send grant to an unverified app as Critical Gap' {
+        Set-NRGRawData -Key 'IR-UserConsents' -Data (NewBag 'c' @{
+            Count = 2
+            Grants = @(
+                [ordered]@{ GrantId='g1'; ClientSpId='sp-evil'; App=[ordered]@{ DisplayName='Mail Helper Pro'; AppId='a1'; PublisherName=$null }; ConsentType='Principal'; Scope='Mail.ReadWrite Mail.Send offline_access' }
+                [ordered]@{ GrantId='g2'; ClientSpId='sp-ok';   App=[ordered]@{ DisplayName='Teams';           AppId='a2'; PublisherName='Microsoft' }; ConsentType='Principal'; Scope='User.Read' }
+            )
+        })
+        Test-NRGEmailControl-OAuthConsents
+        $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.1')
+        $f.Count       | Should -Be 1
+        $f[0].State    | Should -Be 'Gap'
+        $f[0].Severity | Should -Be 'Critical'
+        $f[0].Detail   | Should -Match 'Mail Helper Pro'
+        $f[0].Detail   | Should -Match 'UNVERIFIED publisher'
+        $f[0].Detail   | Should -Match 'Mail\.Send'
+        $f[0].Detail   | Should -Not -Match 'Teams'
+    }
+
+    It 'Read-only mail scope lands as Partial (verify with user), not Gap' {
+        Set-NRGRawData -Key 'IR-UserConsents' -Data (NewBag 'c' @{
+            Count = 1
+            Grants = @([ordered]@{ GrantId='g1'; ClientSpId='sp1'; App=[ordered]@{ DisplayName='CRM Sync'; AppId='a1'; PublisherName='Vendor Inc' }; ConsentType='Principal'; Scope='Mail.Read offline_access' })
+        })
+        Test-NRGEmailControl-OAuthConsents
+        $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.1')
+        $f[0].State | Should -Be 'Partial'
+        $f[0].Detail | Should -Match 'CRM Sync'
+    }
+
+    It 'Benign grants are Satisfied; missing data is NotApplicable' {
+        Set-NRGRawData -Key 'IR-UserConsents' -Data (NewBag 'c' @{
+            Count = 1
+            Grants = @([ordered]@{ GrantId='g1'; ClientSpId='sp1'; App=[ordered]@{ DisplayName='Teams'; AppId='a1'; PublisherName='Microsoft' }; ConsentType='Principal'; Scope='User.Read openid profile' })
+        })
+        Test-NRGEmailControl-OAuthConsents
+        @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.1')[0].State | Should -Be 'Satisfied'
+
+        Clear-NRGState
+        Test-NRGEmailControl-OAuthConsents
+        @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.1')[0].State | Should -Be 'NotApplicable'
+    }
+}
+
+Describe 'NRG Email IR — EMAIL-4.2 auth methods' {
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
+        . (Join-Path $script:RepoRoot 'Lib' 'Add-NRGFinding.ps1')
+        . (Join-Path $script:RepoRoot 'Email-IR' 'Evaluators' 'Test-NRGEmailControls.ps1')
+        function script:NewBag($cid, $data) { [ordered]@{ CollectorId=$cid; CollectedAt=(Get-Date -Format 'o'); Success=$true; Data=$data } }
+    }
+    BeforeEach { Clear-NRGState }
+
+    It 'Flags a second phone method + recent registration as Gap' {
+        Set-NRGRawData -Key 'IR-UserAuthMethods' -Data (NewBag 'm' @{
+            Count = 3
+            Methods = @(
+                [ordered]@{ Id='m1'; MethodType='phoneAuthenticationMethod';                  Display='+1 701555**34'; CreatedDateTime=$null }
+                [ordered]@{ Id='m2'; MethodType='phoneAuthenticationMethod';                  Display='+44 20709**11'; CreatedDateTime=$null }
+                [ordered]@{ Id='m3'; MethodType='microsoftAuthenticatorAuthenticationMethod'; Display='Pixel 9';       CreatedDateTime=(Get-Date).AddDays(-2).ToString('o') }
+            )
+        })
+        Test-NRGEmailControl-AuthMethods
+        $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.2')
+        $f[0].State  | Should -Be 'Gap'
+        $f[0].Detail | Should -Match '2 phone methods'
+        $f[0].Detail | Should -Match 'last 14 days'
+        $f[0].Detail | Should -Match '\+44 20709'
+    }
+
+    It 'Single old method inventory is Satisfied but still lists methods' {
+        Set-NRGRawData -Key 'IR-UserAuthMethods' -Data (NewBag 'm' @{
+            Count = 1
+            Methods = @([ordered]@{ Id='m1'; MethodType='microsoftAuthenticatorAuthenticationMethod'; Display='iPhone 15'; CreatedDateTime=(Get-Date).AddDays(-300).ToString('o') })
+        })
+        Test-NRGEmailControl-AuthMethods
+        $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.2')
+        $f[0].State  | Should -Be 'Satisfied'
+        $f[0].Detail | Should -Match 'iPhone 15'
+    }
+
+    It 'Zero methods is Partial (no MFA at all warrants follow-up)' {
+        Set-NRGRawData -Key 'IR-UserAuthMethods' -Data (NewBag 'm' @{ Count=0; Methods=@() })
+        Test-NRGEmailControl-AuthMethods
+        @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.2')[0].State | Should -Be 'Partial'
+    }
+}
+
+Describe 'NRG Email IR — recipients.csv formula-injection guard' {
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
+        . (Join-Path $script:RepoRoot 'Email-IR' 'Publishers' 'Publish-NRGEmailIncidentReport.ps1')
+        $script:OutDir = Join-Path ([System.IO.Path]::GetTempPath()) ("nls-csv-" + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $script:OutDir -Force | Out-Null
+    }
+    AfterAll {
+        if ($script:OutDir -and (Test-Path $script:OutDir)) { Remove-Item $script:OutDir -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+
+    It 'Neutralizes formula-leading recipient cells with an apostrophe' {
+        $meta = @{ UserPrincipalName='alice@corp.com'; ToolVersion='4.12.1'; Brand=@{ CompanyName='NRG' } }
+        $findings = @(
+            @{
+                ControlId='EMAIL-2.1'; State='Gap'; Severity='Critical'; Category='Email'
+                Title='Outbound'; Detail='BEC'
+                AffectedObjects = @(
+                    [pscustomobject]@{ Recipient='=cmd|''/c calc''!A1'; Scope='External'; Reason='Received BEC-pattern message' }
+                    [pscustomobject]@{ Recipient='bob@corp.com';        Scope='Internal'; Reason='Received mail during compromise window' }
+                )
+            }
+        )
+        $htmlPath = Join-Path $script:OutDir 'r.html'
+        Publish-NRGEmailIncidentReport -Metadata $meta -Findings $findings -OutputPath $htmlPath
+        $csvPath = Join-Path $script:OutDir 'recipients.csv'
+        Test-Path $csvPath | Should -BeTrue
+        $csv = Get-Content $csvPath -Raw
+        # The dangerous cell must be prefixed; Excel then treats it as text.
+        $csv | Should -Match "'=cmd"
+        $csv | Should -Not -Match '(?m)^"=cmd'
+        # Clean cells pass through untouched.
+        $csv | Should -Match 'bob@corp.com'
+        $csv | Should -Not -Match "'bob@corp.com"
+    }
+}

@@ -301,7 +301,10 @@ $script:ExportedFunctions = @(
     'Test-NRGSignInControl-RankUsers',
     'Test-NRGSignInControl-IPIntel',
     'Publish-NRGSignInTriageReport',
-    'Get-NRGIPSignInIntel'
+    'Get-NRGIPSignInIntel',
+    'Invoke-NRGEmailCollectUserSecurity',
+    'Test-NRGEmailControl-OAuthConsents',
+    'Test-NRGEmailControl-AuthMethods'
 )
 
 Export-ModuleMember -Function $script:ExportedFunctions -Variable NRGAssessmentVersion, NRGBrand

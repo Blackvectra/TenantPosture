@@ -119,7 +119,7 @@ function Publish-NRGSignInTriageReport {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; object-src 'none'; base-uri 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; object-src 'none'; base-uri 'none';">
 <title>Sign-In Triage Report — $tenantId</title>
 <style>
 :root{--ink:#1f2733;--mut:#6b7484;--bdr:#e8edf5;--bg:#f4f7fb;--card:#fff;--red:#dc2626;--red-d:#991b1b;--red-bg:#fef2f2;--red-bd:#fecaca;--amber:#ca8a04;--amber-bg:#fffbeb;--amber-bd:#fde68a;--grn:#166534;--grn-bg:#f0fdf4;--grn-bd:#bbf7d0;--blue:#1e40af;--blue-bg:#eff6ff;--blue-bd:#bfdbfe;--org:#e87722;--org2:#ea580c;--ff:'Segoe UI Variable Display','Segoe UI','Helvetica Neue',system-ui,sans-serif;--fm:'Segoe UI Mono','Consolas',monospace;}

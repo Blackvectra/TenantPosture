@@ -17,11 +17,13 @@
 #          then auto-dive into each flagged user's mailbox without a
 #          per-user credential prompt.
 #
-# Scopes (6):
+# Scopes (7):
 #   AuditLog.Read.All           — /auditLogs/signIns (the IoC source)
 #   IdentityRiskyUser.Read.All  — /identityProtection/riskyUsers
-#   Directory.Read.All          — tenant + user attribute reads
+#   Directory.Read.All          — tenant + user attribute reads, OAuth grants
 #   User.Read.All               — display names, UPNs, account-enabled state
+#   UserAuthenticationMethod.Read.All — registered MFA methods (EMAIL-4.2:
+#                                 attacker-added phone/authenticator detection)
 #   Mail.Read.All               — any user's mailbox under admin auth
 #   MailboxSettings.Read.All    — any user's inbox rules + forwarding
 #
@@ -65,6 +67,10 @@ function Connect-NRGEmailAdminServices {
     if (-not $SkipMailDive) {
         $scopes += 'Mail.Read.All'
         $scopes += 'MailboxSettings.Read.All'
+        # v4.12.1: deep-dive also checks attacker-added MFA methods (EMAIL-4.2).
+        # Grouped with the mail scopes because it's only consumed by the
+        # per-user deep-dive — triage-only runs shouldn't prompt for it.
+        $scopes += 'UserAuthenticationMethod.Read.All'
     }
 
     Write-Host "  [*] Connecting to Microsoft Graph (admin scope, IR triage)..." -ForegroundColor Cyan

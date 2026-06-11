@@ -154,6 +154,17 @@ try {
     } catch {
         Write-Warning "Mailbox collection failed: $($_.Exception.Message)"
     }
+    # v4.12.1: OAuth consents + auth methods. Under the delegated 3-scope
+    # connection these Graph reads usually 403 — the collector fails soft
+    # and EMAIL-4.x registers NotApplicable with the admin-context
+    # equivalent, same pattern as EMAIL-1.2. Full coverage comes from the
+    # admin triage deep-dive.
+    try {
+        Invoke-NRGEmailCollectUserSecurity
+        Write-Host '  [+] User-security data collected (OAuth grants + auth methods)' -ForegroundColor Green
+    } catch {
+        Write-Warning "User-security collection failed: $($_.Exception.Message)"
+    }
 
     # ── Evaluate ─────────────────────────────────────────────────────────────
     Write-Host ''
@@ -164,6 +175,8 @@ try {
         'Test-NRGEmailControl-Forwarding'
         'Test-NRGEmailControl-OutboundActivity'
         'Test-NRGEmailControl-PhishOrigin'
+        'Test-NRGEmailControl-OAuthConsents'
+        'Test-NRGEmailControl-AuthMethods'
     )
     if ($EnableThreatIntel) { $evaluators += 'Test-NRGEmailControl-ThreatIntel' }
 
