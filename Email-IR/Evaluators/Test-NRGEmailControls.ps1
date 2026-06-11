@@ -573,3 +573,148 @@ function Test-NRGEmailControl-ThreatIntel {
         -Title $title -Severity 'High' -Detail $detail `
         -CurrentValue "$($young.Count) suspicious newly-registered domains"
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EMAIL-4.1 — OAuth consent grants (persistence that survives password reset)
+# ─────────────────────────────────────────────────────────────────────────────
+# Attackers who phish a user increasingly skip credential theft entirely and
+# instead trick the user into consenting to a mail-reading OAuth app
+# ("illicit consent grant"). That access token pipeline keeps working after
+# the password is reset and MFA is re-enrolled — only revoking the grant
+# kills it. Flag any grant carrying a mail/file-write or send scope.
+function Test-NRGEmailControl-OAuthConsents {
+    [CmdletBinding()] param()
+    $cid = 'EMAIL-4.1'
+    $title = 'OAuth consent grants on the account'
+    $cat = 'Email'
+
+    $consentRaw = Get-NRGRawData -Key 'IR-UserConsents'
+    if (-not $consentRaw -or -not $consentRaw.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+            -Title $title -Severity 'Critical' `
+            -Detail 'OAuth consent collection did not succeed (requires Directory.Read.All — available in admin triage mode, usually not under delegated user scope). To rule out manually: Entra > Users > the user > Applications, or Get-MgUserOauth2PermissionGrant -UserId <upn>.'
+        return
+    }
+
+    $grants = @($consentRaw.Data.Grants)
+    if ($grants.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
+            -Title $title -Severity 'Critical' `
+            -Detail 'No user-principal OAuth consent grants on this account.'
+        return
+    }
+
+    # Scopes that give an app standing access to the mailbox/files. Any ONE
+    # of these on a user-consented grant during an incident deserves review;
+    # write/send scopes are the classic BEC persistence shape.
+    $riskScopes = @(
+        'Mail.ReadWrite', 'Mail.Send', 'MailboxSettings.ReadWrite',
+        'Files.ReadWrite.All', 'EWS.AccessAsUser.All',
+        'full_access_as_user', 'IMAP.AccessAsUser.All',
+        'POP.AccessAsUser.All', 'SMTP.Send'
+    )
+    $watchScopes = @('Mail.Read', 'MailboxSettings.Read', 'offline_access', 'Files.ReadWrite')
+
+    $flagged = @()
+    $watched = @()
+    foreach ($g in $grants) {
+        $scopeList = @(([string]$g.Scope) -split '\s+' | Where-Object { $_ })
+        $hits  = @($scopeList | Where-Object { $riskScopes  -contains $_ })
+        $soft  = @($scopeList | Where-Object { $watchScopes -contains $_ })
+        $appLabel = if ($g.App -and $g.App.DisplayName) { $g.App.DisplayName } else { "spId $($g.ClientSpId)" }
+        $verified = if ($g.App -and $g.App.PublisherName) { "publisher '$($g.App.PublisherName)'" } else { 'UNVERIFIED publisher' }
+        if ($hits.Count -gt 0) {
+            $flagged += "  - '$appLabel' ($verified): $($hits -join ', ')  [full scope: $($g.Scope)]"
+        } elseif ($soft.Count -gt 0) {
+            $watched += "  - '$appLabel' ($verified): $($soft -join ', ')"
+        }
+    }
+
+    if ($flagged.Count -gt 0) {
+        $detail = "FOUND $($flagged.Count) grant(s) with mail/file write-or-send scopes — OAuth persistence survives password reset + MFA re-enrollment; only revoking the grant kills it.`n" +
+                  ($flagged -join "`n") +
+                  $(if ($watched.Count -gt 0) { "`nAlso review (read-level scopes):`n" + ($watched -join "`n") } else { '' })
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
+            -Title $title -Severity 'Critical' -Detail $detail `
+            -CurrentValue "$($flagged.Count) high-risk grant(s) of $($grants.Count) total" `
+            -RequiredValue 'No unrecognized grants with mail/file write scopes' `
+            -Remediation 'Revoke each unrecognized grant: Entra > Enterprise applications > the app > Permissions, or Remove-MgOauth2PermissionGrant -OAuth2PermissionGrantId <grantId>. Then check the app is not tenant-consented for other users.'
+        return
+    }
+
+    if ($watched.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $cat `
+            -Title $title -Severity 'High' `
+            -Detail ("No write/send-scope grants, but $($watched.Count) grant(s) carry mail/file READ scopes — verify the user recognizes each app:`n" + ($watched -join "`n")) `
+            -CurrentValue "$($watched.Count) read-scope grant(s)" `
+            -Remediation 'Confirm each app with the user; revoke anything unrecognized (Entra > Users > the user > Applications).'
+        return
+    }
+
+    Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
+        -Title $title -Severity 'Critical' `
+        -Detail "Reviewed $($grants.Count) consent grant(s) — none carry mail or file scopes."
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EMAIL-4.2 — Registered authentication methods (attacker-added MFA)
+# ─────────────────────────────────────────────────────────────────────────────
+# After stealing a session, attackers add their OWN phone/authenticator so
+# they can satisfy MFA on re-auth. Surface every registered method so the
+# operator can verify each one with the user on the containment call —
+# this feeds Containment Runbook step 2 (delete unrecognized methods).
+function Test-NRGEmailControl-AuthMethods {
+    [CmdletBinding()] param()
+    $cid = 'EMAIL-4.2'
+    $title = 'Registered MFA / authentication methods'
+    $cat = 'Email'
+
+    $methodRaw = Get-NRGRawData -Key 'IR-UserAuthMethods'
+    if (-not $methodRaw -or -not $methodRaw.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+            -Title $title -Severity 'High' `
+            -Detail 'Auth-method collection did not succeed (requires UserAuthenticationMethod.Read.All — available in admin triage mode, not under delegated user scope). To rule out manually: Entra > Users > the user > Authentication methods.'
+        return
+    }
+
+    $methods = @($methodRaw.Data.Methods)
+    if ($methods.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $cat `
+            -Title $title -Severity 'High' `
+            -Detail 'NO authentication methods registered. Either MFA was never set up (account protected by password alone) or all methods were deleted. Both warrant follow-up.' `
+            -Remediation 'Enroll a trusted MFA method (or issue a Temporary Access Pass to bootstrap one).'
+        return
+    }
+
+    # Inventory always goes in the Detail — the operator reads this list TO
+    # the user on the call ("do you have a phone ending in ..34?").
+    $inv = foreach ($m in $methods) {
+        $disp = if ($m.Display) { " — $($m.Display)" } else { '' }
+        $when = if ($m.CreatedDateTime) { " (registered $($m.CreatedDateTime))" } else { '' }
+        "  - $($m.MethodType)$disp$when"
+    }
+
+    $signals = @()
+    $phoneCount = @($methods | Where-Object { $_.MethodType -like 'phone*' }).Count
+    if ($phoneCount -gt 1) { $signals += "$phoneCount phone methods registered (attackers add a second phone)" }
+    $cutoff = (Get-Date).ToUniversalTime().AddDays(-14)
+    $recent = @($methods | Where-Object {
+        $_.CreatedDateTime -and ([datetime]::Parse([string]$_.CreatedDateTime).ToUniversalTime() -gt $cutoff)
+    })
+    if ($recent.Count -gt 0) {
+        $signals += "$($recent.Count) method(s) registered in the last 14 days: " + (@($recent | ForEach-Object { $_.MethodType }) -join ', ')
+    }
+
+    if ($signals.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
+            -Title $title -Severity 'High' `
+            -Detail ("SIGNALS: " + ($signals -join '; ') + "`nRegistered methods — verify EACH with the user:`n" + ($inv -join "`n")) `
+            -CurrentValue "$($methods.Count) method(s), $($signals.Count) signal(s)" `
+            -Remediation 'Read the method list to the user. Delete anything they do not recognize: Entra > Users > the user > Authentication methods (Containment Runbook step 2).'
+        return
+    }
+
+    Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
+        -Title $title -Severity 'High' `
+        -Detail ("No anomaly signals. Registered methods — still verify with the user during containment:`n" + ($inv -join "`n"))
+}

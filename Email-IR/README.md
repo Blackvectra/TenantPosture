@@ -13,6 +13,8 @@ The **Email Account Assessment** is a focused variant of the NRG-Assessment tool
 
 The two IR tools are the two halves of one workflow: triage finds the suspect users from the tenant's sign-in logs, then you deep-dive each one's mailbox.
 
+For MSP fleets, `Invoke-NRGBatchSignInTriage.ps1` (v4.12.1) loops the triage across every active client in `Config/clients.json` and writes a batch summary with compromised clients sorted to the top.
+
 ## Two workflows
 
 ### A — Single-shot admin (auto deep-dive)
@@ -51,7 +53,8 @@ issue the TAP yourself in the Admin Center.
 
 `Invoke-NRGSignInTriage.ps1` reads tenant-wide sign-in logs (admin scopes:
 `AuditLog.Read.All`, `IdentityRiskyUser.Read.All`, `Directory.Read.All`,
-`User.Read.All`, plus `Mail.Read.All` + `MailboxSettings.Read.All` unless
+`User.Read.All`, plus `Mail.Read.All` + `MailboxSettings.Read.All` +
+`UserAuthenticationMethod.Read.All` unless
 `-SkipMailDive`). It scores every user against these IoCs:
 
 | Control | Looks for | Score |
@@ -83,6 +86,10 @@ the user (delegated, `/me/...`). Either way it runs these heuristics:
 | `EMAIL-2.1` | Outbound activity scan — BEC subject patterns (wire transfer, gift card, urgent payment), volume bursts, external recipient counts |
 | `EMAIL-3.1` | Most-likely original phish ranker — scores inbound + recoverable-items messages on: external sender + Microsoft-impersonation + urgency keywords + suspicious URLs + display-name spoof + RECOVERED-from-Deletions |
 | `EMAIL-3.2` | (Optional, `-EnableThreatIntel`) WHOIS-via-RDAP lookup of top sender domains — flags domains registered in last 30 days |
+| `EMAIL-4.1` | OAuth consent grants — illicit-consent persistence that **survives password reset and MFA re-enrollment**. Flags grants with mail/file write-or-send scopes (Mail.ReadWrite, Mail.Send, EWS, IMAP/POP/SMTP); read-scope grants land as verify-with-user |
+| `EMAIL-4.2` | Registered MFA methods — full inventory to read to the user on the containment call, flags >1 phone method and any method registered in the last 14 days (attacker-added MFA). Feeds Containment Runbook step 2 |
+
+`EMAIL-4.x` need admin-tier scopes (`Directory.Read.All`, `UserAuthenticationMethod.Read.All`) — full coverage under the admin triage deep-dive; under delegated user scope they register NotApplicable with the admin-context equivalent.
 
 Delegated user-scope reads (no admin required, workflow B):
 
@@ -158,8 +165,8 @@ Things this tool **cannot** see at user-scope (would need admin):
 | Need | Admin scope required |
 |---|---|
 | Sign-in audit log (IPs, locations, MFA challenges) | `AuditLog.Read.All` |
-| MFA method changes (attacker added their phone) | `UserAuthenticationMethod.Read.All` |
-| OAuth app consents this user granted | `OAuth2PermissionGrant.Read.All` |
+| ~~MFA method changes (attacker added their phone)~~ | Covered since v4.12.1 — `EMAIL-4.2` under admin triage deep-dive |
+| ~~OAuth app consents this user granted~~ | Covered since v4.12.1 — `EMAIL-4.1` under admin triage deep-dive |
 | Search-and-purge phish across other users | E5 Defender + admin role |
 | Server-side `ForwardingSmtpAddress` | EXO Online — `Get-Mailbox` |
 | Microsoft Defender alerts on this user | `SecurityEvents.Read.All` |

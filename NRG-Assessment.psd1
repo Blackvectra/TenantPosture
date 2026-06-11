@@ -1,6 +1,6 @@
 @{
     # Module identity
-    ModuleVersion     = '4.12.0'
+    ModuleVersion     = '4.12.1'
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
     Author            = 'Matthew Levorson'
     CompanyName       = 'NRG Technology Services / NextLayerSec LLC'
@@ -307,7 +307,10 @@
         'Test-NRGSignInControl-RankUsers',
         'Test-NRGSignInControl-IPIntel',
         'Publish-NRGSignInTriageReport',
-        'Get-NRGIPSignInIntel'
+        'Get-NRGIPSignInIntel',
+        'Invoke-NRGEmailCollectUserSecurity',
+        'Test-NRGEmailControl-OAuthConsents',
+        'Test-NRGEmailControl-AuthMethods'
     )
 
     VariablesToExport = @('NRGAssessmentVersion', 'NRGBrand')

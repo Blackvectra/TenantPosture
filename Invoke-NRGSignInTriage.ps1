@@ -254,12 +254,17 @@ try {
             Write-Host "  >>> $upn (IoC score $($u.Score)): $($u.Reasons -join '; ')" -ForegroundColor Cyan
             # IMPORTANT: clear raw-data keys between users so each user's mailbox
             # data doesn't bleed into the next user's evaluation.
-            foreach ($key in 'IR-MailboxProfile','IR-MailboxSentItems','IR-MailboxInbox','IR-MailboxRecoverable','IR-MailboxRules','IR-MailboxForwarding') {
+            foreach ($key in 'IR-MailboxProfile','IR-MailboxSentItems','IR-MailboxInbox','IR-MailboxRecoverable','IR-MailboxRules','IR-MailboxForwarding','IR-UserConsents','IR-UserAuthMethods') {
                 Set-NRGRawData -Key $key -Data @{ CollectorId=$key; Success=$false; Data=$null }
             }
             try {
                 Invoke-NRGEmailCollectMailbox -WindowDays $WindowDays -TargetUpn $upn
-                foreach ($fn in @('Test-NRGEmailControl-InboxRules','Test-NRGEmailControl-Forwarding','Test-NRGEmailControl-OutboundActivity','Test-NRGEmailControl-PhishOrigin')) {
+                # v4.12.1: OAuth consents + auth methods — the two persistence
+                # surfaces a mailbox read can't see (illicit consent grants
+                # survive password resets; attacker-added MFA methods survive
+                # session revocation).
+                try { Invoke-NRGEmailCollectUserSecurity -TargetUpn $upn } catch { Write-Warning "User-security collection for $upn failed: $($_.Exception.Message)" }
+                foreach ($fn in @('Test-NRGEmailControl-InboxRules','Test-NRGEmailControl-Forwarding','Test-NRGEmailControl-OutboundActivity','Test-NRGEmailControl-PhishOrigin','Test-NRGEmailControl-OAuthConsents','Test-NRGEmailControl-AuthMethods')) {
                     try { & $fn } catch { Write-Warning "$fn for $upn failed: $($_.Exception.Message)" }
                 }
                 $divedUsers += $upn

@@ -244,7 +244,7 @@ function Publish-NRGEmailIncidentReport {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; object-src 'none'; base-uri 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; object-src 'none'; base-uri 'none';">
 <title>Email Incident Report — $upn</title>
 <style>
 :root{
@@ -417,14 +417,25 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);line-height:1.5
     # Collect every AffectedObject (the EMAIL-2.1 recipient warn-list) and
     # write a recipients.csv next to the report so the operator can hand off
     # the notify-list. Self-hardened like the other outputs.
+    #
+    # CSV formula-injection guard: recipient strings come from mail the
+    # ATTACKER sent (To/Cc/Bcc of outbound from the compromised account) and
+    # this CSV is expected to be opened in Excel by the responder. A cell
+    # beginning with = + - @ or a tab/CR is interpreted by Excel as a live
+    # formula (DDE / =cmd| payloads), so neutralize with a leading apostrophe.
+    $csvCell = {
+        param($v)
+        $s = [string]$v
+        if ($s -match '^[=+\-@\t\r]') { "'" + $s } else { $s }
+    }
     $allRecipients = foreach ($f in $Findings) {
         foreach ($o in @($f.AffectedObjects)) {
             if ($o -and $o.Recipient) {
                 [pscustomobject]@{
-                    Recipient   = $o.Recipient
-                    Scope       = $o.Scope
-                    Reason      = $o.Reason
-                    SourceUser  = $upnRaw
+                    Recipient   = & $csvCell $o.Recipient
+                    Scope       = & $csvCell $o.Scope
+                    Reason      = & $csvCell $o.Reason
+                    SourceUser  = & $csvCell $upnRaw
                 }
             }
         }

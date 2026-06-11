@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## v4.12.1 (2026-06-11)
+
+Port of NLS-Assessment v4.12.1 (security fixes + EMAIL-4.x persistence checks + batch triage sweep). NRG-named throughout.
+
+### Security
+- recipients.csv formula-injection neutralized (cells starting with = + - @ tab CR get an apostrophe prefix; Pester-pinned).
+- Email-IR report CSP tightened: script-src 'none' (no scripts exist in these reports; browser now enforces it).
+
+### Added
+- `Invoke-NRGEmailCollectUserSecurity` collector — per-user OAuth2 grants + registered auth methods (`IR-UserConsents` / `IR-UserAuthMethods`), GET-only, -TargetUpn admin/delegated pivot.
+- `EMAIL-4.1 Test-NRGEmailControl-OAuthConsents` — illicit-consent persistence (survives password reset + MFA re-enrollment); Critical for mail/file write-or-send scopes.
+- `EMAIL-4.2 Test-NRGEmailControl-AuthMethods` — attacker-added MFA detection; full method inventory for the containment call; flags >1 phone + methods registered in last 14 days.
+- `UserAuthenticationMethod.Read.All` added to `Connect-NRGEmailAdminServices` (grouped with mail scopes; -SkipMailDive doesn't prompt for it).
+- `Invoke-NRGBatchSignInTriage.ps1` — the "morning sweep": triage every active clients.json tenant, batch summary with CRITICAL-IOCS clients first, exit 10 on any critical IoCs.
+- 7 new Pester cases. ModuleVersion 4.12.0 -> 4.12.1; exports 252 -> 255 (psd1+psm1 in sync).
+
+## v4.12.0 (2026-06-11)
+
+Port of NLS-Assessment v4.12.0 — Email Account Assessment mode (Email-IR/ subtree, sign-in triage, per-user mailbox IR, Containment & Recovery Runbook). See Email-IR/README.md.
+
 ## v4.11.1 (2026-06-03)
 
 **Release scope:** combined v4.11.0 + v4.11.1 catch-up release ported from NLS-Assessment. v4.11.0 adds the Monthly Compliance Report publisher (new recurring MSP deliverable). v4.11.1 is a polish pass that drives PSScriptAnalyzer warning count from **127 → 0** with no behavior changes — one real bug fixed, 11 unused-variable removals, two new `PSScriptAnalyzerSettings.psd1` suppressions (each with rationale + sunset path), documentation drift corrected.
