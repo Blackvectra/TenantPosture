@@ -2,7 +2,7 @@
 
 **Author:** NRG Technology Services — nrgtechservices.com
 **GitHub:** https://github.com/Blackvectra/NRG-Assessment-Tool
-**Version:** 4.11.1
+**Version:** 4.12.1
 **Language:** PowerShell 7.0+
 **Purpose:** Read-only Microsoft 365 security assessment framework for MSP multi-tenant environments.
 
@@ -10,11 +10,13 @@
 
 NRG-Assessment runs agentlessly against any Microsoft 365 tenant, collects security configuration data via Microsoft Graph and Exchange Online PowerShell, evaluates 195 controls against a license-aware baseline, and produces an interactive HTML report with executive summary, compliance matrix, attack scenario analysis, and NRG services pitch. It is a read-only assessment — it never modifies tenant configuration.
 
-There are two entry points. `Invoke-NRGAssessment.ps1` runs against a single tenant interactively. `Invoke-NRGBatchAssessment.ps1` runs against all clients defined in `Config/clients.json` sequentially using GDAP delegated access, producing per-client reports and a batch summary.
+There are four entry points. `Invoke-NRGAssessment.ps1` runs against a single tenant interactively. `Invoke-NRGBatchAssessment.ps1` runs against all clients defined in `Config/clients.json` sequentially using GDAP delegated access, producing per-client reports and a batch summary. `Invoke-NRGSignInTriage.ps1` (v4.12.0) runs admin-scope sign-in IoC triage to rank likely-compromised users. `Invoke-NRGEmailAssessment.ps1` (v4.12.0) runs a per-user mailbox incident-response deep-dive.
+
+The v4.12.0 Email-IR mode lives in the top-level `Email-IR/` subtree (`Lib/`, `Collectors/`, `Evaluators/`, `Publishers/`, `Testing/`), auto-loaded by the psm1 `$loadOrder`. Its evaluators use `EMAIL-*` and `SIGNIN-*` control IDs and are not in `Config/controls.json` — they are heuristic IoC checks, not baseline controls.
 
 ## Project Structure
 
-`NRG-Assessment-Tool/` contains `Invoke-NRGAssessment.ps1` (single-tenant entry point), `Invoke-NRGBatchAssessment.ps1` (multi-tenant batch entry point), `NRG-Assessment.psm1` (module loader that dot-sources all subdirectories recursively), and `NRG-Assessment.psd1` (module manifest).
+`NRG-Assessment-Tool/` contains `Invoke-NRGAssessment.ps1` (single-tenant entry point), `Invoke-NRGBatchAssessment.ps1` (multi-tenant batch entry point), `Invoke-NRGBatchSignInTriage.ps1` (morning sweep across all GDAP clients), `NRG-Assessment.psm1` (module loader that dot-sources all subdirectories recursively), and `NRG-Assessment.psd1` (module manifest).
 
 `Lib/` contains `Add-NRGFinding.ps1` (state management: findings, raw data, coverage, Clear-NRGState), `Connect-NRGServices.ps1` (Graph + EXO + Teams + IPPSSession connection logic), and `Get-NRGBaselineTier.ps1` (license detection and baseline compliance functions).
 
@@ -52,7 +54,7 @@ All functions use `[CmdletBinding()]`. All data structures that get serialized u
 
 Every collector must initialize a result object with `CollectorId`, `CollectedAt`, `Success` set to `false`, and a `Data` block; execute API calls inside `try/catch`; set `Success` to `true` on completion; call `Set-NRGRawData`; and call `Register-NRGCoverage`.
 
-Every evaluator must guard against missing data as its first action. If `Get-NRGRawData` returns null or `Success` is false, register `NotApplicable` and return immediately. Never allow a null reference to propagate into evaluation logic. `Add-NRGFinding` accepts `ControlId`, `State`, `Category`, `Title`, `Severity`, `Detail`, `FrameworkIds`, `CurrentValue`, `RequiredValue`, and `RemediationSteps`.
+Every evaluator must guard against missing data as its first action. If `Get-NRGRawData` returns null or `Success` is false, register `NotApplicable` and return immediately. Never allow a null reference to propagate into evaluation logic. `Add-NRGFinding` accepts `ControlId`, `State`, `Category`, `Title`, `Severity`, `Detail`, `FrameworkIds`, `CurrentValue`, `RequiredValue`, `Remediation` (NOT `RemediationSteps` — that parameter does not exist), and `AffectedObjects` (structured per-finding objects, e.g. recipient warn-lists or flagged inbox rules).
 
 ## Control Schema
 
@@ -66,7 +68,7 @@ Do not add scopes without updating `Connect-NRGServices.ps1`. The scope list mus
 
 ## Batch Mode
 
-`Config/clients.json` requires the following fields for every client: `ClientName`, `TenantDomain`, `TenantId` (GUID), `DelegatedOrg` (the `.onmicrosoft.com` routing domain — not the primary domain), `UserPrincipalName`, `ClientType` (`Contract`, `NonContract`, or `Prospect`), `NRGHourlyRate`, `DnsDomains` (array), `SkipPurview`, `SkipTeams`, `SkipSharePoint`, `SkipIntune`, `SkipPowerPlatform`, `SkipDNS` (all boolean), `Notes`, and `Active`.
+`Config/clients.json` requires the following fields for every client: `ClientName`, `TenantDomain`, `TenantId` (GUID), `DelegatedOrg` (the `.onmicrosoft.com` routing domain — not the primary domain), `DnsDomains` (array), `SkipPurview`, `SkipTeams`, `SkipSharePoint`, `SkipIntune`, `SkipPowerPlatform`, `SkipDNS` (all boolean), `Notes`, and `Active`.
 
 `DelegatedOrg` must be the `.onmicrosoft.com` routing domain. Get it from Microsoft 365 Admin Center under Settings then Domains for each client. Get `TenantId` from `https://login.microsoftonline.com/domain/.well-known/openid-configuration` — the GUID in the issuer field is the TenantId.
 
@@ -74,7 +76,7 @@ Test sequence before first full run: run with `-WhatIf` first, then `-OnlyClient
 
 ## HTML Report Structure
 
-The report produces 13 sections: Executive Overview with score ring and license tier badge; Framework Compliance Matrix covering CIS M365 v6, CISA SCuBA, NIST 800-53r5, and CMMC 2.0; NRG Baseline Compliance with tier-detected score and deviation table; License Gap Analysis; Priority Actions with current state and business risk per finding; Additional Gaps for Medium findings; Attack Scenario Analysis for BEC, Ransomware, Domain Spoofing, and Privilege Escalation; What's Working; NRG Services and Quote; Security Roadmap; Named Findings; Upgrade Unlocks; and All Findings. Report modes are `-ClientType` (`Contract`, `NonContract`, or `Prospect`), and `-NRGHourlyRate` to override the default rate of 150.
+The report produces 13 sections: Executive Overview with score ring and license tier badge; Framework Compliance Matrix covering CIS M365 v6, CISA SCuBA, NIST 800-53r5, and CMMC 2.0; NRG Baseline Compliance with tier-detected score and deviation table; License Gap Analysis; Priority Actions with current state and business risk per finding; Additional Gaps for Medium findings; Attack Scenario Analysis for BEC, Ransomware, Domain Spoofing, and Privilege Escalation; What's Working; NRG Services and Quote; Security Roadmap; Named Findings; Upgrade Unlocks; and All Findings. (Note: `-ClientType` and `-NRGHourlyRate` are NOT parameters on any entry point, and they are not `clients.json` fields either — branding and rates live in `Config/branding.psd1`.)
 
 ## Known Gaps and Roadmap
 
@@ -86,7 +88,7 @@ The report produces 13 sections: Executive Overview with score ring and license 
 
 ## Environment
 
-MSP context is NRG Technology Services / NextLayerSec LLC. Government clients have CISA BOD 18-01 compliance obligations. Key clients are `nrgtechservices.com`, `example.com`, and `example2.com`. Tooling includes ConnectWise RMM, Cortex XDR, Microsoft Defender for Endpoint, SonicWall, DMARCian, and Microsoft 365/Entra ID. Frameworks referenced are NIST SP 800-53r5, NIST CSF 2.0, MITRE ATT&CK Enterprise, CIS M365 Foundations v3, CISA SCuBA, and CISA BOD 18-01. Logs go to `C:\ProgramData\NRG\Logs`. Assessment output goes to `.\output\tenantdomain\timestamp-results.json`. Batch summary goes to `.\output\batch-summary-timestamp.md`.
+MSP context is NRG Technology Services / NextLayerSec LLC. Government clients have CISA BOD 18-01 compliance obligations. Key clients are `nrgtechservices.com`, `example.com`, and `example2.com`. Tooling includes ConnectWise RMM, Cortex XDR, Microsoft Defender for Endpoint, SonicWall, DMARCian, and Microsoft 365/Entra ID. Frameworks referenced are NIST SP 800-53r5, NIST CSF 2.0, MITRE ATT&CK Enterprise, CIS M365 Foundations v3, CISA SCuBA, and CISA BOD 18-01. There is no separate log file — diagnostics are console output plus the `Exceptions` array inside the results JSON. Assessment output goes to `.\output\tenantdomain\timestamp-results.json`. Batch summary goes to `.\output\batch-summary-timestamp.md`. Email-IR output goes to `.\output\<user>\` and triage to `.\output\IR-Triage\`.
 
 ## Common Tasks
 
