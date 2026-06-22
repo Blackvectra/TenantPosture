@@ -248,16 +248,29 @@ td{padding:10px 12px;border-bottom:1px solid var(--bdr);vertical-align:top}
     }
 
     if ($MarkdownPath) {
-        $md = "# Sign-In Triage Report — $tenantId`n`n"
-        $md += "**Admin:** $admin  `n**Assessed:** $assessed  `n**Window:** $window day(s)  `n"
-        $md += "**Tool:** NRG-Assessment v$toolVer  `n**Verdict:** **$verdict**  `n`n"
+        # Markdown injection guard. UPN, ranked-user Reasons, and finding
+        # Title / Detail / Remediation all originate from Graph
+        # (attacker-influenceable via sign-in attributes, risk-event labels,
+        # display names). Without escaping, a pipe character breaks table
+        # layout and backticks open arbitrary code blocks that some Markdown
+        # renderers (Pandoc with --filter, MkDocs unsafe HTML) treat as raw
+        # HTML — XSS vector at render time. Mirrors EscMd in
+        # Publish-NRGAssessmentSummary.
+        $EscMd = {
+            param([object] $v)
+            if ($null -eq $v -or [string]::IsNullOrEmpty([string]$v)) { return '' }
+            ([string]$v) -replace '\|', '\|' -replace '`', '\`' -replace '[\r\n]+', ' '
+        }
+        $md = "# Sign-In Triage Report — $(& $EscMd $tidRaw)`n`n"
+        $md += "**Admin:** $(& $EscMd $adminRaw)  `n**Assessed:** $(& $EscMd $assRaw)  `n**Window:** $(& $EscMd ([string]$winRaw)) day(s)  `n"
+        $md += "**Tool:** NRG-Assessment v$(& $EscMd $verRaw)  `n**Verdict:** **$verdict**  `n`n"
         $md += "| Severity | Count |`n|---|---|`n| Critical | $($byState.Critical.Count) |`n| High | $($byState.High.Count) |`n| Clean | $($byState.Satisfied.Count) |`n`n"
         $md += "## Ranked Users`n`n"
         if ($RankedUsers.Count -eq 0) { $md += "_No users met the IoC threshold._`n`n" }
         else {
             $md += "| UPN | Score | Reasons |`n|---|---|---|`n"
             foreach ($u in $RankedUsers) {
-                $md += "| $($u.UserPrincipalName) | $($u.Score) | $($u.Reasons -join '; ') |`n"
+                $md += "| $(& $EscMd $u.UserPrincipalName) | $($u.Score) | $(& $EscMd ($u.Reasons -join '; ')) |`n"
             }
             $md += "`n"
         }
@@ -266,9 +279,9 @@ td{padding:10px 12px;border-bottom:1px solid var(--bdr);vertical-align:top}
             if ($items.Count -eq 0) { continue }
             $md += "## $section`n`n"
             foreach ($f in $items) {
-                $md += "### $($f.ControlId): $($f.Title)`n`n"
-                $md += "$($f.Detail)`n`n"
-                if ($f.Remediation) { $md += "**Action:** $($f.Remediation)`n`n" }
+                $md += "### $(& $EscMd $f.ControlId): $(& $EscMd $f.Title)`n`n"
+                $md += "$(& $EscMd $f.Detail)`n`n"
+                if ($f.Remediation) { $md += "**Action:** $(& $EscMd $f.Remediation)`n`n" }
             }
         }
         if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {

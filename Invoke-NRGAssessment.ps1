@@ -25,10 +25,20 @@ param(
     [string] $UserPrincipalName,
     [string] $OutputPath,
 
-    # App-only / certificate authentication for unattended runs
+    # App-only / certificate authentication for unattended runs. ValidatePattern
+    # at the entry point per OWASP ASVS V5.1.3 — defense-in-depth even though
+    # Connect-NRGServices re-validates. Catches malformed input (newlines, null
+    # bytes, command-injection metachars) before any logging or downstream use.
+    [ValidatePattern('^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')]
     [string] $AppId,
+
+    [ValidatePattern('^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')]
     [string] $TenantId,
+
+    [ValidatePattern('^$|^[0-9a-fA-F]{40}$')]
     [string] $CertificateThumbprint,
+
+    [ValidatePattern('^$|^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$')]
     [string] $OrganizationDomain,
 
     # One-time tenant onboarding: register a read-only enterprise app + cert in

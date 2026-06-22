@@ -90,14 +90,22 @@ foreach ($folder in $loadOrder) {
     $files = Get-ChildItem -LiteralPath $folderPath -Filter '*.ps1' -Recurse -File -ErrorAction SilentlyContinue
 
     foreach ($file in $files) {
-        # Verify the resolved path is inside PSScriptRoot — prevents path traversal
-        # if a file is somehow named with ../ sequences (e.g. via symlink)
-        $resolvedFile   = [System.IO.Path]::GetFullPath($file.FullName)
-        $resolvedModule = [System.IO.Path]::GetFullPath($PSScriptRoot)
+        # OWASP ASVS V12.3.1 / CWE-22 — verify the resolved path is inside
+        # PSScriptRoot before dot-sourcing. Use Resolve-Path which follows
+        # symlinks (vs. [Path]::GetFullPath, which canonicalizes but does
+        # NOT resolve symlinks). A symlink under a Collectors/ subdirectory
+        # pointing outside the module root would have passed the prior
+        # GetFullPath check; Resolve-Path catches it.
+        try {
+            $resolvedFile   = (Resolve-Path -LiteralPath $file.FullName).ProviderPath
+            $resolvedModule = (Resolve-Path -LiteralPath $PSScriptRoot).ProviderPath
+        } catch {
+            Write-Warning "Skipping file with unresolvable path: $($file.FullName)"
+            continue
+        }
 
-        # OWASP A01: resolved file must StartsWith $PSScriptRoot (resolved as $resolvedModule)
         if (-not $resolvedFile.StartsWith($resolvedModule, [StringComparison]::OrdinalIgnoreCase)) {
-            Write-Warning "Skipping file outside module root (path traversal?): $($file.FullName)"
+            Write-Warning "Skipping file outside module root (symlink/path traversal?): $($file.FullName) -> $resolvedFile"
             continue
         }
 

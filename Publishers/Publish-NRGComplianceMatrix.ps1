@@ -148,15 +148,32 @@ SEV_COLORS = {'Critical':'DC2626','High':'EA580C','Medium':'CA8A04','Low':'65A30
 STATE_COLORS = {'Gap':ROSE,'Partial':AMBER_L,'Satisfied':GREEN_L,'NotApplicable':NA_L}
 STATE_FONT   = {'Gap':'991B1B','Partial':'92400E','Satisfied':'166534','NotApplicable':'6B7280'}
 
+# CWE-345 / OWASP A03 — XLSX formula-injection guard. Finding fields
+# (Detail, CurrentValue, Remediation, Title) can carry attacker-influenced
+# strings — a value like "=cmd|'/c calc'!A1" written verbatim to a cell
+# becomes a live formula when the operator opens the workbook. Prefix
+# formula-leading cells with an apostrophe (Excel-standard neutralization)
+# and force string data_type so openpyxl never auto-detects a formula.
+_FORMULA_LEAD = ('=', '+', '-', '@', '\t', '\r')
+
+def _safe(val):
+    if val is None: return ''
+    s = str(val)
+    if s and s[0] in _FORMULA_LEAD:
+        return "'" + s
+    return s
+
 def hdr(ws, row, col, val, bg=NAVY, fg=WHITE, bold=True, wrap=False, size=10):
-    c = ws.cell(row=row, column=col, value=val)
+    c = ws.cell(row=row, column=col, value=_safe(val))
+    c.data_type = 's'
     c.font = Font(name='Arial', bold=bold, color=fg, size=size)
     c.fill = PatternFill('solid', fgColor=bg)
     c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=wrap)
     return c
 
 def cell(ws, row, col, val, bg=None, fg='111827', bold=False, wrap=True, align='left'):
-    c = ws.cell(row=row, column=col, value=val)
+    c = ws.cell(row=row, column=col, value=_safe(val))
+    c.data_type = 's'
     c.font = Font(name='Arial', color=fg, bold=bold, size=9)
     if bg: c.fill = PatternFill('solid', fgColor=bg)
     c.alignment = Alignment(horizontal=align, vertical='top', wrap_text=wrap)

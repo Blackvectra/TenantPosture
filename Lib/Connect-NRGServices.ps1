@@ -54,9 +54,16 @@ $script:ShowDeviceCodeBox = {
         # endpoint (https://microsoft.com/devicelogin), which the previous
         # regex '\.microsoft\.com$' silently rejected because the apex has no
         # leading dot. HTTP remains rejected (Scheme must equal 'https').
+        # OWASP ASVS V7.4.2 — split the scheme + hostname checks so the warning
+        # tells the operator which guard tripped. A combined message masked
+        # protocol-downgrade attempts when the operator only read "not Microsoft".
+        if ($parsed.Scheme -ne 'https') {
+            Write-Warning "Refusing to open device-code URL: scheme is '$($parsed.Scheme)', must be 'https': $Url"
+            return
+        }
         $hostOk = $parsed.Host -eq 'microsoft.com' -or $parsed.Host -match '\.microsoft\.com$'
-        if ($parsed.Scheme -ne 'https' -or -not $hostOk) {
-            Write-Warning "Refusing to open non-HTTPS or non-Microsoft URL: $Url"
+        if (-not $hostOk) {
+            Write-Warning "Refusing to open device-code URL: host '$($parsed.Host)' is not microsoft.com or a *.microsoft.com subdomain: $Url"
             return
         }
     } catch {

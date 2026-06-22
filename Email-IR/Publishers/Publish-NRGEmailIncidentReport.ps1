@@ -21,6 +21,22 @@
 #          rendered — only subject lines, sender addresses, recipients,
 #          URLs, and the operator's incident-response checklist.
 
+# Helper: StrictMode-safe key presence check for [pscustomobject] items in
+# AffectedObjects. Under Set-StrictMode -Version Latest, accessing $o.Recipient
+# on a PSCustomObject *without* a Recipient property throws — which crashed
+# the BEC scenario where EMAIL-1.1 InboxRule objects and EMAIL-2.1 Recipient
+# objects sit in the same Findings list. PSObject.Properties[key] returns
+# $null instead of throwing on a missing property.
+#
+# Current evaluators (EMAIL-1.1, EMAIL-2.1) only emit [pscustomobject] into
+# AffectedObjects. If a future evaluator emits [hashtable] / [ordered]
+# instances, this helper needs an IDictionary branch — see git history.
+function Test-NRGAffectedObjectHasKey {
+    [CmdletBinding()] param([object] $Object, [string] $Key)
+    if ($null -eq $Object) { return $false }
+    return ($null -ne $Object.PSObject.Properties[$Key])
+}
+
 function Publish-NRGEmailIncidentReport {
     [CmdletBinding()]
     param(
@@ -111,8 +127,10 @@ function Publish-NRGEmailIncidentReport {
         # Affected-objects table (the EMAIL-2.1 recipient warn-list only —
         # InboxRule objects from EMAIL-1.1 are rendered by the Containment
         # Runbook, not here, so filter to objects that carry a Recipient).
+        # StrictMode-safe key check — direct $_.Recipient throws on objects
+        # that don't carry it (e.g. EMAIL-1.1 InboxRule shape).
         $affHtml = ''
-        $aff = @($f.AffectedObjects | Where-Object { $_ -and $_.Recipient })
+        $aff = @($f.AffectedObjects | Where-Object { Test-NRGAffectedObjectHasKey $_ 'Recipient' })
         if ($aff.Count -gt 0) {
             $rows = foreach ($o in $aff) {
                 $recip = & $hxRef ([string]$o.Recipient)
@@ -186,9 +204,11 @@ function Publish-NRGEmailIncidentReport {
     $upnCmd = $upnRaw   # raw UPN for command substitution (escaped at render)
 
     # Pull flagged inbox rules out of the EMAIL-1.1 finding's AffectedObjects.
+    # StrictMode-safe: direct $o.RuleType throws on objects that don't carry it
+    # (e.g. EMAIL-2.1 Recipient shape that lives in the same Findings list).
     $flaggedRules = foreach ($f in $Findings) {
         foreach ($o in @($f.AffectedObjects)) {
-            if ($o -and $o.RuleType -eq 'InboxRule') { $o }
+            if ((Test-NRGAffectedObjectHasKey $o 'RuleType') -and $o.RuleType -eq 'InboxRule') { $o }
         }
     }
     $flaggedRules = @($flaggedRules)
@@ -430,7 +450,9 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);line-height:1.5
     }
     $allRecipients = foreach ($f in $Findings) {
         foreach ($o in @($f.AffectedObjects)) {
-            if ($o -and $o.Recipient) {
+            # StrictMode-safe: direct $o.Recipient throws on EMAIL-1.1 InboxRule
+            # shape (which has no Recipient property).
+            if (Test-NRGAffectedObjectHasKey $o 'Recipient') {
                 [pscustomobject]@{
                     Recipient   = & $csvCell $o.Recipient
                     Scope       = & $csvCell $o.Scope
@@ -456,10 +478,22 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);line-height:1.5
 
     # ── Markdown summary ─────────────────────────────────────────────────────
     if ($MarkdownPath) {
-        $md = "# Email Account Assessment — $upn`n`n"
-        $md += "**Assessed:** $assessed  `n"
-        $md += "**Tool:** NRG-Assessment v$toolVer  `n"
-        $md += "**Window:** $window days outbound / 30 days inbox  `n"
+        # Markdown injection guard. UPN, finding Title / Detail / Remediation,
+        # and Recipient strings all originate from Graph (attacker-influenceable
+        # via inbox-rule names, sender display names, etc.). Without escaping,
+        # a pipe character breaks table layout and backticks open arbitrary
+        # code blocks that some Markdown renderers (Pandoc with --filter,
+        # MkDocs unsafe HTML) treat as raw HTML — XSS vector at render time.
+        # Mirrors the EscMd helper already used by Publish-NRGAssessmentSummary.
+        $EscMd = {
+            param([object] $v)
+            if ($null -eq $v -or [string]::IsNullOrEmpty([string]$v)) { return '' }
+            ([string]$v) -replace '\|', '\|' -replace '`', '\`' -replace '[\r\n]+', ' '
+        }
+        $md = "# Email Account Assessment — $(& $EscMd $upnRaw)`n`n"
+        $md += "**Assessed:** $(& $EscMd $assRaw)  `n"
+        $md += "**Tool:** NRG-Assessment v$(& $EscMd $verRaw)  `n"
+        $md += "**Window:** $(& $EscMd $winRaw) days outbound / 30 days inbox  `n"
         $md += "**Verdict:** **$verdict**  `n`n"
         $md += "| Severity | Count |`n|---|---|`n"
         $md += "| Critical | $($byState.Critical.Count) |`n"
@@ -470,9 +504,9 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);line-height:1.5
             if ($items.Count -eq 0) { continue }
             $md += "## $section`n`n"
             foreach ($f in $items) {
-                $md += "### $($f.ControlId): $($f.Title)`n`n"
-                $md += "$($f.Detail)`n`n"
-                if ($f.Remediation) { $md += "**Action:** $($f.Remediation)`n`n" }
+                $md += "### $(& $EscMd $f.ControlId): $(& $EscMd $f.Title)`n`n"
+                $md += "$(& $EscMd $f.Detail)`n`n"
+                if ($f.Remediation) { $md += "**Action:** $(& $EscMd $f.Remediation)`n`n" }
             }
         }
         $md += "## Containment & Recovery Runbook`n`n"
