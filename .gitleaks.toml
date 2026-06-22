@@ -1,0 +1,41 @@
+# Gitleaks configuration — extends the upstream default ruleset and adds
+# project-specific allowlists for values that look like secrets to the
+# generic-entropy rules but are publicly documented constants.
+#
+# Keep this file short and document every entry. If a future entry isn't
+# obviously a non-secret to a code reviewer, it shouldn't be here.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Azure built-in role definition GUIDs (public constants, not secrets)"
+# Reserved for future realtime/ (Azure Function) Bicep deployments that
+# need to grant RBAC roles to the Function App's Managed Identity. These
+# GUIDs are documented at
+# https://learn.microsoft.com/azure/role-based-access-control/built-in-roles
+# and are identical across every Azure tenant.
+regexes = [
+  # Key Vault Secrets User
+  '''4633458b-17de-408a-b874-0445c86b69e6''',
+  # Key Vault Certificate User
+  '''db79e9a7-68ee-4b58-9aeb-b90e7c24fcba''',
+  # Storage Blob Data Owner
+  '''b7e6dc6d-f1e8-4753-8033-0f276bb0955b''',
+  # Storage Queue Data Contributor
+  '''974c5e8b-45b9-4653-ba55-5f855dd0fb88''',
+  # Storage Table Data Contributor
+  '''0a9a7e1f-b9d0-4cc4-a60d-0ce9bcad2296''',
+]
+
+[[allowlists]]
+description = "detect-secrets baseline file (hashed_secret fields are SHA1 digests, not secret values)"
+# Reserved for a future .secrets.baseline file. The detect-secrets schema
+# includes a `hashed_secret` field — that's a SHA1 of the original line,
+# NOT the original secret. It is irreversible by construction. But its
+# hex form fires gitleaks's generic-api-key entropy rule. Allowlist the
+# whole file path so the baseline can live in the repo without
+# re-introducing the very false positives it's meant to suppress.
+paths = [
+  '''^\.secrets\.baseline$''',
+]

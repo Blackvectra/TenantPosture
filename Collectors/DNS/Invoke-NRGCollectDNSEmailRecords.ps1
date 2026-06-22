@@ -523,7 +523,11 @@ function Invoke-NRGCollectDNSEmailRecords {
                 # around the domain for wildcard match.
                 $ctUrl = ('https://crt.sh/?q=%25.{0}&output=json' -f [uri]::EscapeDataString($domain))
                 $ctResp = Invoke-WebRequest -Uri $ctUrl -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
-                $ctList = $ctResp.Content | ConvertFrom-Json -ErrorAction Stop
+                # CWE-502 — crt.sh is a public service; a hostile response (MITM
+                # downgrade, BGP hijack, compromise) could include a recursive
+                # JSON bomb. -Depth caps deserialization at realistic CT-log
+                # entry nesting (10 is generous).
+                $ctList = $ctResp.Content | ConvertFrom-Json -Depth 10 -ErrorAction Stop
                 if ($ctList) {
                     $arr = @($ctList)
                     $d.CTLog.TotalCerts = $arr.Count

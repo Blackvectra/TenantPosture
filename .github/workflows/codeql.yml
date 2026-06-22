@@ -25,6 +25,13 @@ jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
+    # CodeQL Code Scanning requires GitHub Advanced Security on private
+    # repos. Skip on private so the workflow doesn't surface "Code
+    # scanning is not enabled" configuration errors that look like real
+    # code-quality failures. When the repo flips back to public, this
+    # job re-enables automatically. (PowerShell static analysis still
+    # runs via PSScriptAnalyzer in ci.yml regardless of repo visibility.)
+    if: github.event.repository.private == false
     permissions:
       # required to publish results to Code Scanning
       security-events: write
