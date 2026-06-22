@@ -269,4 +269,4 @@ Internal use — NRG Technology Services / NextLayerSec LLC. Not licensed for re
 
 ---
 
-*NRG-Assessment v4.11.1 · 195 controls · 231 exported functions · 191 Pester tests*
+*NRG-Assessment v4.12.1 · 195 posture controls + 7 EMAIL + 7 SIGNIN · 255 exported functions · Pester suite*
