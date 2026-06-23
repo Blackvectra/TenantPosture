@@ -1,12 +1,12 @@
 #Requires -Version 7.0
 #
-# Get-NRGIPThreatIntel.ps1  (v4.12.0)
+# Get-NRGIPThreatIntel.ps1  (v4.12.x)
 #
 # Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC
 # Purpose: IP-level threat intelligence helpers for the sign-in triage:
-#          geolocation + ASN owner lookup via RDAP, and Tor-exit-node
-#          cross-check against the Tor Project's published list. All
-#          free, unauthenticated sources. No VirusTotal / API keys.
+#          geolocation + ASN owner lookup via RDAP. Tor-exit-node detection
+#          is gated on an operator-supplied LOCAL file (no outbound to
+#          check.torproject.org) — see Test-NRGIPIsTorExit notes.
 #
 # Privacy: every IP queried via RDAP is submitted to the regional RIR
 #          (ARIN / RIPE / APNIC / LACNIC / AFRINIC). Operator's
@@ -14,16 +14,31 @@
 #          permits this. RDAP queries do NOT include identifying info
 #          about the operator's tenant — just the IP being looked up.
 #
-# Caching: per-process cache keyed by IP. Tor exit-list cached once per
-#          run with a 6-hour staleness window — refreshed if the on-disk
-#          file is older.
+# Outbound: rdap.org only. The previous version also fetched
+#           https://check.torproject.org/torbulkexitlist — that hostname
+#           is flagged by several EDRs (Palo Alto Cortex XDR, Microsoft
+#           Defender for Endpoint, CrowdStrike) as "Tor infrastructure
+#           contact" which generates noise in the MSP's own SIEM even
+#           though the fetch is a legitimate enrichment. The fetch has
+#           been REMOVED. Two paths still cover Tor:
+#             1) Microsoft Identity Protection labels Tor sign-ins
+#                server-side via 'anonymizedIPAddress' in
+#                riskEventTypes_v2 (Entra ID P2). The scorer already
+#                picks this up unchanged.
+#             2) Operators who need standalone Tor detection on
+#                P1 / no-P2 tenants can curate a local file (one IP per
+#                line, # comments allowed) and pass -TorExitListPath.
+#
+# Caching: per-process cache keyed by IP. Tor exit-list (when a local
+#          file is provided) is read once per session and treated as
+#          O(1) HashSet lookups.
 
 if (-not (Get-Variable -Name NRGIPCache -Scope Script -ErrorAction SilentlyContinue)) {
     $script:NRGIPCache = [System.Collections.Generic.Dictionary[string,object]]::new()
 }
 if (-not (Get-Variable -Name NRGTorExitSet -Scope Script -ErrorAction SilentlyContinue)) {
-    $script:NRGTorExitSet = $null
-    $script:NRGTorLoadedAt = $null
+    $script:NRGTorExitSet     = $null
+    $script:NRGTorLoadedFrom  = $null
 }
 
 function Get-NRGIPGeolocation {
@@ -111,10 +126,29 @@ function Get-NRGIPGeolocation {
     return $result
 }
 
-# Tor Project's published bulk exit list — text, one IP per line, public,
-# no auth. The script downloads once per session (6h cache) and treats
-# memberships as O(1) HashSet lookups so a few hundred sign-in IPs
-# don't burst into a few hundred HTTP calls.
+# Tor-exit lookup against an OPERATOR-SUPPLIED LOCAL FILE.
+#
+# The previous version of this helper fetched the bulk exit list from
+# https://check.torproject.org/torbulkexitlist on first use. That hostname
+# is on Palo Alto Cortex XDR, Microsoft Defender for Endpoint, and several
+# other EDRs' "suspicious infrastructure" lists, generating noise in the
+# MSP's own SIEM. The fetch has been removed; this helper now only loads
+# from a local file the operator points at.
+#
+# File format: newline-delimited IPv4/IPv6 addresses. Lines starting with
+# '#' are treated as comments. Blank lines ignored.
+#
+# Refresh strategy is left to the operator — most Tor exit IPs persist
+# for weeks/months, so a snapshot pulled from any trusted internal source
+# (your SIEM, MISP, your own mirror of the Tor list, etc.) and committed
+# to a SharePoint share is sufficient.
+#
+# If -TorExitListPath is not supplied (or the file is missing), this
+# function returns $false unconditionally. Tor signals are still picked
+# up via Microsoft Identity Protection's 'anonymizedIPAddress' risk-event
+# type for tenants with Entra ID P2 — that signal flows through
+# riskEventTypes_v2 in the sign-in event and is scored by the existing
+# anonymous-IP detector. No EDR noise either way.
 function Test-NRGIPIsTorExit {
     [CmdletBinding()]
     [OutputType([bool])]
@@ -122,43 +156,50 @@ function Test-NRGIPIsTorExit {
         [Parameter(Mandatory = $true)]
         [string] $IPAddress,
 
-        # Force a refresh of the local Tor exit list even if cached.
+        # Operator-controlled local file of Tor exit IPs. Newline-delimited,
+        # # comments allowed. When omitted, this helper returns $false.
+        [string] $TorExitListPath,
+
+        # Reload the local file even if cached (e.g., operator refreshed
+        # the file mid-run).
         [switch] $ForceRefresh
     )
 
     Set-StrictMode -Version Latest
     $ErrorActionPreference = 'Stop'
 
-    # (Re)load the Tor exit list if needed
+    # No local file → no standalone Tor detection. Microsoft IdP still
+    # catches Tor for P2 tenants via anonymizedIPAddress.
+    if (-not $TorExitListPath) { return $false }
+
+    if (-not (Test-Path -LiteralPath $TorExitListPath -PathType Leaf)) {
+        Write-Warning "Tor exit list file not found: $TorExitListPath — returning `$false (no Tor flag from local list this run)"
+        return $false
+    }
+
+    # (Re)load the local file if cached set is missing, came from a
+    # different path, or operator forced refresh.
     $stale = (-not $script:NRGTorExitSet) -or
              $ForceRefresh -or
-             ($script:NRGTorLoadedAt -and ((Get-Date) - $script:NRGTorLoadedAt).TotalHours -gt 6)
+             ($script:NRGTorLoadedFrom -ne $TorExitListPath)
     if ($stale) {
         try {
-            try {
-                [Net.ServicePointManager]::SecurityProtocol =
-                    [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
-            } catch {
-                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            }
-            $body = Invoke-RestMethod -Uri 'https://check.torproject.org/torbulkexitlist' `
-                -TimeoutSec 10 -UseBasicParsing -ErrorAction Stop
             $script:NRGTorExitSet = [System.Collections.Generic.HashSet[string]]::new(
                 [System.StringComparer]::OrdinalIgnoreCase)
-            foreach ($line in ($body -split "`n")) {
-                $ip = $line.Trim()
+            $lines = Get-Content -LiteralPath $TorExitListPath -ErrorAction Stop
+            foreach ($line in $lines) {
+                $ip = ([string]$line).Trim()
                 if ($ip -and -not $ip.StartsWith('#')) {
                     [void]$script:NRGTorExitSet.Add($ip)
                 }
             }
-            $script:NRGTorLoadedAt = Get-Date
+            $script:NRGTorLoadedFrom = $TorExitListPath
         } catch {
-            # Network or cert error — fall through with an empty set.
-            # Returning $false for unknown IPs is the safe default.
+            # Read error — safe default is $false rather than throw.
             if (-not $script:NRGTorExitSet) {
                 $script:NRGTorExitSet = [System.Collections.Generic.HashSet[string]]::new()
             }
-            Write-Warning "Tor exit list fetch failed; results may underestimate Tor IPs: $($_.Exception.Message.Split([char]10)[0])"
+            Write-Warning "Tor exit list read failed; returning `$false: $($_.Exception.Message.Split([char]10)[0])"
         }
     }
     return $script:NRGTorExitSet.Contains($IPAddress)
@@ -167,8 +208,8 @@ function Test-NRGIPIsTorExit {
 function Clear-NRGIPThreatIntelCache {
     [CmdletBinding()] param()
     $script:NRGIPCache.Clear()
-    $script:NRGTorExitSet  = $null
-    $script:NRGTorLoadedAt = $null
+    $script:NRGTorExitSet    = $null
+    $script:NRGTorLoadedFrom = $null
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -179,11 +220,16 @@ function Get-NRGIPSignInIntel {
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
     param(
         [Parameter(Mandatory = $true)]
-        [string] $IPAddress
+        [string] $IPAddress,
+
+        # Operator-supplied local Tor exit list (see Test-NRGIPIsTorExit).
+        # When omitted, Tor detection from this helper is disabled; rely on
+        # Microsoft Identity Protection's anonymizedIPAddress risk event.
+        [string] $TorExitListPath
     )
     Set-StrictMode -Version Latest
     $geo = Get-NRGIPGeolocation -IPAddress $IPAddress
-    $isTor = Test-NRGIPIsTorExit -IPAddress $IPAddress
+    $isTor = Test-NRGIPIsTorExit -IPAddress $IPAddress -TorExitListPath $TorExitListPath
     [ordered]@{
         IPAddress = $IPAddress
         Country   = $geo.Country
@@ -195,6 +241,6 @@ function Get-NRGIPSignInIntel {
             if ($geo.ASNOwner -and ($geo.ASNOwner -match '(?i)hosting|datacenter|server|cloud|colo|VPS')) { 'HOSTING_ASN' }
             if ($geo.ASNOwner -and ($geo.ASNOwner -match '(?i)NordVPN|Mullvad|Surfshark|ExpressVPN|ProtonVPN|PIA|Private Internet'))     { 'KNOWN_VPN_ASN' }
         ) | Where-Object { $_ }
-        Source    = "rdap.org+torproject"
+        Source    = 'rdap.org'
     }
 }

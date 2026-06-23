@@ -66,8 +66,7 @@ param(
     [string] $HomeCountry,
 
     # IP threat-intel enrichment of suspicious sign-in source IPs (RDAP
-    # geolocation + ASN owner + Tor exit-node cross-check). Submits the
-    # flagged IPs to public services (rdap.org, check.torproject.org) —
+    # geolocation + ASN owner). Submits the flagged IPs to rdap.org —
     # operator confirms client data-handling policy permits. On by default
     # for triage since identifying attacker infrastructure is the point;
     # pass -EnableThreatIntel:$false to skip the external calls.
