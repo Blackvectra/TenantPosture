@@ -67,9 +67,15 @@ issue the TAP yourself in the Admin Center.
 | `SIGNIN-2.1` | Rank aggregator — produces the prioritized user list, highest IoC score first | — |
 
 `SIGNIN-1.5` is gated by `-EnableThreatIntel` (default **on**). It submits the
-flagged sign-in IPs to public services (`rdap.org`, `check.torproject.org`) —
+flagged sign-in IPs to `rdap.org` for geolocation + ASN-owner enrichment —
 confirm the client's data-handling policy permits this, or pass
-`-EnableThreatIntel:$false` to skip the external calls. All users with a
+`-EnableThreatIntel:$false` to skip the external calls. Tor-exit detection
+no longer fetches from `check.torproject.org` (Cortex XDR + other EDRs flag
+that hostname as suspicious infrastructure contact); pass an
+operator-curated local list via `-TorExitListPath` if you need standalone
+Tor flagging, or rely on Microsoft Identity Protection's
+`anonymizedIPAddress` risk-event type (Entra ID P2) which already covers
+Tor for those tenants. All users with a
 non-zero IoC score appear in the triage report's ranked table (not just the
 deep-dived subset).
 
