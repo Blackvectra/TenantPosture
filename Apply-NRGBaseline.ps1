@@ -253,7 +253,11 @@ if ($PSCmdlet.ParameterSetName -eq 'FromFile') {
     }
     Write-Host "[-] Loading results from: $ResultsPath" -ForegroundColor Cyan
     try {
-        $raw = Get-Content -LiteralPath $ResultsPath -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
+        # CWE-502 hardening — explicit -Depth caps deserialization at a
+        # realistic-but-bounded depth so a hostile or corrupt baseline JSON
+        # (recursive bomb) cannot exhaust memory at parse time. The matching
+        # write side uses -Depth 10.
+        $raw = Get-Content -LiteralPath $ResultsPath -Raw -Encoding utf8 | ConvertFrom-Json -Depth 20 -ErrorAction Stop
     } catch {
         throw "Failed to parse results JSON: $($_.Exception.Message)"
     }

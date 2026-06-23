@@ -39,10 +39,25 @@ function Set-NRGSensitiveFileAcl {
 
     # Non-Windows host: Set-Acl is a no-op shim that returns $null; the
     # FileSystemAccessRule constructor will fail because Windows identity
-    # types are unavailable. Detect early and skip cleanly so the helper
-    # remains safe to call from cross-platform smoke tests.
+    # types are unavailable. **ASVS V12.3 / NIST AC-3 / CWE-732** —
+    # previously the helper silently returned here, leaving the file with
+    # whatever the parent directory's umask granted (typically 0644 =
+    # group/other readable). Tenant findings (UPN, CA policies, OAuth
+    # apps, DMARC posture) would then be readable by any user on shared
+    # Linux/macOS hosts. Set 0600 (owner read/write only) before returning.
     if (-not $IsWindows) {
-        Write-Verbose "Set-NRGSensitiveFileAcl: skipping ACL hardening on non-Windows host (Path: $Path)"
+        Write-Verbose "Set-NRGSensitiveFileAcl: applying POSIX 0600 mode on non-Windows host (Path: $Path)"
+        try {
+            if (Test-Path -LiteralPath $Path -PathType Leaf) {
+                # chmod is the most portable surface across Linux + macOS.
+                & chmod 600 $Path 2>$null
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Warning "Set-NRGSensitiveFileAcl: chmod 600 returned exit code $LASTEXITCODE on $Path"
+                }
+            }
+        } catch {
+            Write-Warning "Set-NRGSensitiveFileAcl: failed to set POSIX 0600 on $Path : $($_.Exception.Message)"
+        }
         return
     }
 

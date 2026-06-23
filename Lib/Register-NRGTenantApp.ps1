@@ -121,6 +121,34 @@ function Register-NRGTenantApp {
         Write-Warning "Current Graph context is missing '$needWrite'. App creation will likely fail with Authorization_RequestDenied. Reconnect with the write scopes listed in this function's header."
     }
 
+    # ── Tenant context binding (ATT&CK T1078.003 / T1098 hardening) ──────────
+    # Pen-test finding: previously this function trusted the currently-
+    # connected Get-MgContext.TenantId without verifying it matches the
+    # supplied -TenantDomain. An operator who left a prior tenant connected
+    # (or a malicious local hook intercepting -TenantDomain) could end up
+    # registering the customer's app registration in the WRONG tenant, with
+    # clients.json then mapping the wrong domain → wrong tenant for every
+    # future scan. Resolve the domain to its TenantId via the well-known
+    # OpenID Configuration endpoint (anonymous, read-only) and fail loudly
+    # on mismatch before any tenant write.
+    try {
+        $oidcUrl = "https://login.microsoftonline.com/$([uri]::EscapeDataString($TenantDomain))/.well-known/openid-configuration"
+        $oidcResp = Invoke-RestMethod -Uri $oidcUrl -Method GET -TimeoutSec 15 -ErrorAction Stop
+        $expectedTenantId = $null
+        if ($oidcResp.issuer -match '/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/') {
+            $expectedTenantId = $Matches[1]
+        }
+        if (-not $expectedTenantId) {
+            throw "Could not parse a TenantId from the issuer for '$TenantDomain' (issuer='$($oidcResp.issuer)')."
+        }
+        if ([string]$ctx.TenantId -ne [string]$expectedTenantId) {
+            throw "Tenant-context mismatch: -TenantDomain '$TenantDomain' resolves to TenantId $expectedTenantId, but the connected Graph context is $($ctx.TenantId). REFUSING to onboard the wrong tenant. Reconnect to the correct tenant: Disconnect-MgGraph; Connect-MgGraph -TenantId $expectedTenantId -Scopes Application.ReadWrite.All,AppRoleAssignment.ReadWrite.All,Directory.Read.All"
+        }
+        Write-Host "  [+] Tenant binding verified: $TenantDomain -> $expectedTenantId matches connected context" -ForegroundColor Green
+    } catch [System.Net.WebException], [System.Net.Http.HttpRequestException] {
+        throw "Cannot verify tenant binding (network failure reaching login.microsoftonline.com for '$TenantDomain'): $($_.Exception.Message). Refusing to onboard without a verified tenant match."
+    }
+
     Write-Host ''
     Write-Host '================================================================' -ForegroundColor Cyan
     Write-Host " Tenant onboarding — app-only assessment registration"          -ForegroundColor Cyan
