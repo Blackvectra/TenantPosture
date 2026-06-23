@@ -142,9 +142,21 @@ function Register-NRGException {
     )
 
     Initialize-NRGState
+
+    # CWE-117 log-injection guard. $Message often originates from a Graph
+    # or EXO error text the attacker can influence (custom display name,
+    # rejected request body, malformed response). Newlines + CR + NUL +
+    # ESC sequences in $Message let an attacker inject what looks like a
+    # second log line into downstream parsers (Sentinel, Splunk, the
+    # serialized JSON Exceptions array). Collapse all control characters
+    # to a single space here, at the single chokepoint, so the source
+    # value is preserved for diagnostics but no parser can be tricked.
+    $sanitizedSource  = ($Source  -replace '[\x00-\x1F\x7F]+', ' ').Trim()
+    $sanitizedMessage = ($Message -replace '[\x00-\x1F\x7F]+', ' ').Trim()
+
     $script:NRGExceptions.Add([PSCustomObject]@{
-        Source    = $Source
-        Message   = $Message
+        Source    = $sanitizedSource
+        Message   = $sanitizedMessage
         Timestamp = (Get-Date).ToString('o')
     })
 }

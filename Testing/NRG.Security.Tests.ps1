@@ -100,7 +100,17 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
         It 'Module loader verifies dot-sourced files resolve inside PSScriptRoot' {
             $modPath = Join-Path $script:RepoRoot 'NRG-Assessment.psm1'
             $content = Get-Content -LiteralPath $modPath -Raw
-            $content | Should -Match 'StartsWith.*PSScriptRoot|PSScriptRoot.*StartsWith' -Because 'Dot-sourced files must be origin-checked (OWASP A01)'
+            # OWASP A01 / CWE-22 — the loader must (a) canonicalize the module
+            # root via PSScriptRoot, (b) canonicalize each dot-sourced file's
+            # path, and (c) StartsWith-bound (b) against (a) before dot-sourcing.
+            # Original assertion was a same-line regex which became brittle
+            # after the symlink-resolution refactor (Resolve-Path) put the
+            # PSScriptRoot canonicalization on a different line from StartsWith.
+            # Re-encode as three substring checks: cosmetic refactors don't
+            # break the test, but real removal of any piece still fails it.
+            $content | Should -Match '\$PSScriptRoot' -Because 'loader must reference PSScriptRoot to know the module root'
+            $content | Should -Match 'StartsWith' -Because 'dot-sourced files must be StartsWith-bound against the resolved module root (OWASP A01)'
+            $content | Should -Match 'Resolve-Path|GetFullPath' -Because 'both file path AND module root must be canonicalized (resolves symlinks, normalizes ../) before StartsWith comparison'
         }
 
         It 'HTML auto-open is bound-checked against output directory' {

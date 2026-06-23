@@ -23,6 +23,12 @@ jobs:
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
+    # GitHub Dependency Graph + Dependency Review API requires GitHub
+    # Advanced Security on private repos. Skip on private repos so the
+    # workflow doesn't surface "configuration error" failures
+    # masquerading as code-quality issues. When the repo flips back to
+    # public, this job re-enables automatically.
+    if: github.event.repository.private == false
     steps:
       - name: Checkout
         uses: actions/checkout@v6

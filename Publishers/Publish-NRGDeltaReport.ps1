@@ -245,7 +245,10 @@ function Publish-NRGDeltaReport {
     }
 
     # ── Load baseline JSON ──────────────────────────────────────────────────
-    $baselineRaw  = Get-Content -LiteralPath $BaselineResultsPath -Encoding utf8 -Raw | ConvertFrom-Json
+    # CWE-502 hardening — bounded -Depth caps deserialization so a recursive
+    # JSON bomb cannot exhaust memory. Matches the write side's -Depth 10
+    # with margin for evaluator additions.
+    $baselineRaw  = Get-Content -LiteralPath $BaselineResultsPath -Encoding utf8 -Raw | ConvertFrom-Json -Depth 20
     $baseFindings = @($baselineRaw.Findings ?? $baselineRaw)
 
     # ── Tenant-ID guard ─────────────────────────────────────────────────────
