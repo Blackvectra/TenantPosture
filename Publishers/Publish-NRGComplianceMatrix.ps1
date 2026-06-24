@@ -157,23 +157,32 @@ STATE_FONT   = {'Gap':'991B1B','Partial':'92400E','Satisfied':'166534','NotAppli
 _FORMULA_LEAD = ('=', '+', '-', '@', '\t', '\r')
 
 def _safe(val):
+    # Numeric values (including bool, which subclasses int) pass through
+    # unchanged so Excel renders them as numbers — sorting, formatting,
+    # and aggregation in the operator's workbook depend on it.
     if val is None: return ''
+    if isinstance(val, (int, float)):
+        return val
     s = str(val)
     if s and s[0] in _FORMULA_LEAD:
         return "'" + s
     return s
 
 def hdr(ws, row, col, val, bg=NAVY, fg=WHITE, bold=True, wrap=False, size=10):
-    c = ws.cell(row=row, column=col, value=_safe(val))
-    c.data_type = 's'
+    safe_val = _safe(val)
+    c = ws.cell(row=row, column=col, value=safe_val)
+    if isinstance(safe_val, str):
+        c.data_type = 's'
     c.font = Font(name='Arial', bold=bold, color=fg, size=size)
     c.fill = PatternFill('solid', fgColor=bg)
     c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=wrap)
     return c
 
 def cell(ws, row, col, val, bg=None, fg='111827', bold=False, wrap=True, align='left'):
-    c = ws.cell(row=row, column=col, value=_safe(val))
-    c.data_type = 's'
+    safe_val = _safe(val)
+    c = ws.cell(row=row, column=col, value=safe_val)
+    if isinstance(safe_val, str):
+        c.data_type = 's'
     c.font = Font(name='Arial', color=fg, bold=bold, size=9)
     if bg: c.fill = PatternFill('solid', fgColor=bg)
     c.alignment = Alignment(horizontal=align, vertical='top', wrap_text=wrap)

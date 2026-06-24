@@ -101,16 +101,14 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             $modPath = Join-Path $script:RepoRoot 'NRG-Assessment.psm1'
             $content = Get-Content -LiteralPath $modPath -Raw
             # OWASP A01 / CWE-22 — the loader must (a) canonicalize the module
-            # root via PSScriptRoot, (b) canonicalize each dot-sourced file's
-            # path, and (c) StartsWith-bound (b) against (a) before dot-sourcing.
-            # Original assertion was a same-line regex which became brittle
-            # after the symlink-resolution refactor (Resolve-Path) put the
-            # PSScriptRoot canonicalization on a different line from StartsWith.
-            # Re-encode as three substring checks: cosmetic refactors don't
-            # break the test, but real removal of any piece still fails it.
-            $content | Should -Match '\$PSScriptRoot' -Because 'loader must reference PSScriptRoot to know the module root'
-            $content | Should -Match 'StartsWith' -Because 'dot-sourced files must be StartsWith-bound against the resolved module root (OWASP A01)'
-            $content | Should -Match 'Resolve-Path|GetFullPath' -Because 'both file path AND module root must be canonicalized (resolves symlinks, normalizes ../) before StartsWith comparison'
+            # root from $PSScriptRoot via Resolve-Path, (b) canonicalize each
+            # dot-sourced file's path the same way, and (c) StartsWith-bound
+            # (b) against (a) before dot-sourcing. Three pinned assertions —
+            # cosmetic refactors don't break the test, but removing any one of
+            # the three security primitives still fails it.
+            $content | Should -Match 'Resolve-Path\s+-LiteralPath\s+\$PSScriptRoot' -Because 'module root must be canonicalized via Resolve-Path on PSScriptRoot (resolves symlinks)'
+            $content | Should -Match 'Resolve-Path\s+-LiteralPath\s+\$file' -Because 'each dot-sourced file path must be canonicalized via Resolve-Path before comparison (resolves symlinks)'
+            $content | Should -Match '\$resolvedFile\.StartsWith\(\s*\$resolvedModule' -Because 'StartsWith-bound against the canonicalized module root (OWASP A01)'
         }
 
         It 'HTML auto-open is bound-checked against output directory' {
