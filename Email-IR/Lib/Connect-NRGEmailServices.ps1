@@ -87,6 +87,14 @@ function Connect-NRGEmailServices {
     if (-not $ctx) {
         throw "Connect-MgGraph returned no context. Authentication failed."
     }
+    # CWE-345 — tenant context binding (companion to UPN check below). MSAL
+    # SSO can return a context for a tenant the operator is a guest in even
+    # when a different -TenantId was requested. Without this check the per-
+    # user /me/ calls land in the wrong tenant.
+    if ($TenantId -and $ctx.TenantId -and ($ctx.TenantId -ne $TenantId)) {
+        Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+        throw "Tenant context mismatch: requested TenantId '$TenantId' but Graph returned context for '$($ctx.TenantId)'. MSAL may have used a cached account for a different tenant."
+    }
     if ($UserPrincipalName -and $ctx.Account -and ($ctx.Account -ne $UserPrincipalName)) {
         Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
         throw "Connected as '$($ctx.Account)' but expected '$UserPrincipalName'. The browser session may have reused a different account. Sign out of M365 in the browser, re-run, and verify the prompt."
