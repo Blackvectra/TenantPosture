@@ -732,28 +732,11 @@ function Test-NRGControlAADDeviceCode {
     if (-not $auth -or -not $auth.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
     }
-    # Authentication flows policy — deviceCodeFlow
-    $flowPolicy = Get-NRGNestedProperty -Object $auth -Path 'Data.AuthenticationFlowsPolicy'
-    $deviceCodeBlocked = $flowPolicy -and (
-        (Get-NRGObjectField -Item $flowPolicy -Key 'DeviceCodeFlow') -eq 'blocked' -or
-        (Get-NRGNestedProperty -Object $flowPolicy -Path 'selfServiceSignUp.isEnabled') -eq $false
-    )
-    # CA policy blocking device code is the more reliable check
-    $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
-    $caBlocks = $false
-    if ($ca -and $ca.Success) {
-        $caBlocks = @($ca.Data.Policies | Where-Object {
-            $_.State -eq 'enabled' -and
-            $_.Conditions.AuthenticationFlows -and
-            ($_.Conditions.AuthenticationFlows.TransferMethods -contains 'deviceCodeFlow' -or
-             $_.Conditions.AuthenticationFlows.TransferMethods -contains 'deviceCode')
-        }).Count -gt 0
-    }
-    if ($deviceCodeBlocked -or $caBlocks) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Device code authentication flow is blocked. Adversary-in-the-middle phishing via device code is prevented.'
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Device code authentication flow is not blocked. Attackers use this flow in phishing campaigns where victims visit a URL and enter a code — no password required to compromise the account.' -CurrentValue 'Device code flow: allowed' -RequiredValue 'CA policy blocking deviceCodeFlow for all users' -Remediation $ctrl.Remediation
-    }
+    # Neither signal this control relied on is collected: the auth collector does
+    # not store 'AuthenticationFlowsPolicy' and the CA collector does not store
+    # authentication-flow conditions. Reporting Gap/Satisfied from absent data was
+    # dishonest, so this control is not assessed.
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Device-code CA condition not collected; verify manually in Entra CA. Not assessed.'
 }
 
 # ── AAD-11.2 No Guest Users in Highly Privileged Roles ───────────────────────
@@ -794,13 +777,9 @@ function Test-NRGControlAADRiskyServicePrincipals {
     if (-not $auth -or -not $auth.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
     }
-    $riskyApps = @(Get-NRGNestedProperty -Object $auth -Path 'Data.RiskyServicePrincipals' -Default @())
-    if ($riskyApps.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No risky service principals detected by Identity Protection.'
-    } else {
-        $names = ($riskyApps | Select-Object -First 5 | ForEach-Object { $_.DisplayName }) -join ', '
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($riskyApps.Count) risky service principal(s) detected: $names. Compromised service principals have persistent, non-interactive access to all assigned resource scopes." -CurrentValue "$($riskyApps.Count) risky service principals" -RequiredValue 'Zero unreviewed risky service principals' -Remediation $ctrl.Remediation
-    }
+    # 'Data.RiskyServicePrincipals' is never populated by any collector, so this
+    # check always saw an empty list and reported a false Satisfied. Not assessed.
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Risky service principal data not collected; not assessed.'
 }
 
 # ── AAD-11.4 Token Protection (Binding) Conditional Access ───────────────────

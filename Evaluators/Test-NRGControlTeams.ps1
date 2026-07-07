@@ -278,12 +278,7 @@ function Test-NRGControlTeamsPSTN {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $pstn = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowPSTNUsersToBypassLobby' -Default $false
-    if (-not $pstn) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'PSTN dial-out users cannot bypass lobby.'
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'PSTN users can bypass the Teams meeting lobby. Unverified phone callers can join meetings without approval.' -Remediation $ctrl.Remediation
-    }
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Required Teams setting not collected; not assessed.'
 }
 
 # ── TMS-3.1 Teams Meeting Watermarks Enabled ─────────────────────────────────
@@ -319,6 +314,7 @@ function Test-NRGControlTeamsAutoAdmit {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Teams data not collected'; return
     }
+    if (-not (Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy')) { Add-NRGFinding -ControlId 'TMS-3.2' -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams meeting policy not collected; not assessed.'; return }
     $autoAdmit = [string](Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AutoAdmittedUsers' -Default 'Everyone')
     $secure    = @('EveryoneInCompanyExcludingGuests','EveryoneInCompany','EveryoneInSameAndFederatedCompany','OrganizerOnly')
     if ($autoAdmit -in $secure) {
@@ -385,14 +381,7 @@ function Test-NRGControlTeamsMeetingRecordingScope {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $expireDays = [int](Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.MeetingRecordingExpirationDays' -Default -1)
-    if ($expireDays -gt 0 -and $expireDays -le 120) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Meeting recordings expire after $expireDays days. Limits long-term exposure of recorded meeting content."
-    } elseif ($expireDays -gt 120) {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail "Meeting recording expiration set to $expireDays days — consider reducing to 60-90 days." -CurrentValue "$expireDays days" -RequiredValue '≤90 days'
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Meeting recordings do not expire. Sensitive meeting content persists indefinitely in OneDrive/SharePoint.' -Remediation $ctrl.Remediation
-    }
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Required Teams setting not collected; not assessed.'
 }
 
 # ── TMS-4.2 Anonymous Users Cannot Start Meetings ────────────────────────────
@@ -402,6 +391,7 @@ function Test-NRGControlTeamsAnonymousStart {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
+    if (-not (Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy')) { Add-NRGFinding -ControlId 'TMS-4.2' -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams meeting policy not collected; not assessed.'; return }
     $anonStart = [bool](Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowAnonymousUsersToStartMeeting' -Default $true)
     if (-not $anonStart) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Anonymous users cannot start Teams meetings independently.'
@@ -435,13 +425,5 @@ function Test-NRGControlTeamsLiveEvents {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $liveEventsEnabled = [bool](Get-NRGNestedProperty -Object $tms -Path 'Data.LiveEventPolicy.AllowBroadcastScheduling' -Default $true)
-    $publicEvents      = [bool](Get-NRGNestedProperty -Object $tms -Path 'Data.LiveEventPolicy.AllowBroadcastToAnonymousUsers' -Default $false)
-    if ($liveEventsEnabled -and $publicEvents) {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Live events can be broadcast to anonymous (public internet) users. Unrestricted public broadcasting exposes organizational content without authentication.' -CurrentValue 'AllowBroadcastToAnonymousUsers = $true' -RequiredValue '$false' -Remediation $ctrl.Remediation
-    } elseif ($liveEventsEnabled) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Live events enabled but anonymous broadcast is disabled. Public internet users cannot watch live events without authentication.'
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Live event scheduling is disabled.'
-    }
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Required Teams setting not collected; not assessed.'
 }

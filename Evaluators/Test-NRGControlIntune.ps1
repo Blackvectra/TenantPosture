@@ -286,23 +286,12 @@ function Test-NRGControlIntuneConditionalLaunch {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Intune app protection data not collected'; return
     }
-    $appPolicies = @($int.Data.AppProtectionPolicies ?? @())
-    $withLaunch  = @($appPolicies | Where-Object { @(Get-NRGObjectField -Item $_ -Key 'ConditionalLaunchSettings' -Default @()).Count -gt 0 })
-    if ($withLaunch.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "$($withLaunch.Count) app protection policy(ies) include conditional launch rules."
-    } elseif ($appPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
-            -Detail 'App protection policies exist but no conditional launch settings configured. Add: Min OS version, Jailbreak/root detection, Max PIN attempts.' `
-            -Remediation $ctrl.Remediation
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail 'No app protection policies with conditional launch configured. Jailbroken devices and outdated OS versions access corporate apps unchecked.' `
-            -Remediation $ctrl.Remediation
-    }
+    # 'ConditionalLaunchSettings' is never stored on the app-protection policy
+    # objects by the collector, so this check always reported a false Partial.
+    # Not assessed.
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+        -Title $ctrl.Title -FrameworkIds $cit `
+        -Detail 'Conditional-launch settings not collected; not assessed.'
 }
 
 # ── INT-4.1 Windows LAPS Configured ──────────────────────────────────────────
