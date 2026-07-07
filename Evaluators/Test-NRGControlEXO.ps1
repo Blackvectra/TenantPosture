@@ -640,8 +640,8 @@ function Test-NRGControlEXOPerUserAudit {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
     $auditSummary = Get-NRGNestedProperty -Object $exo -Path 'Data.MailboxAuditSummary'
-    $auditDisabledCount = [int](Get-NRGSafeProperty -Object $auditSummary -Property 'AuditDisabledCount' -Default 0)
-    $totalMailboxes     = [int](Get-NRGSafeProperty -Object $auditSummary -Property 'TotalMailboxes' -Default 0)
+    $auditDisabledCount = [int](Get-NRGObjectField -Item $auditSummary -Key 'AuditDisabledCount' -Default 0)
+    $totalMailboxes     = [int](Get-NRGObjectField -Item $auditSummary -Key 'TotalMailboxes' -Default 0)
     if ($auditDisabledCount -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Mailbox audit logging enabled on all $totalMailboxes mailbox(es)."
     } elseif ($auditDisabledCount -gt 0 -and $totalMailboxes -gt 0) {
@@ -664,9 +664,9 @@ function Test-NRGControlEXOPriorityAccountProtection {
     $priorityAccounts = @(Get-NRGNestedProperty -Object $def -Path 'Data.PriorityAccounts' -Default @())
     $ap = Get-NRGNestedProperty -Object $def -Path 'Data.AntiPhishing'
     $hasPriorityPolicy = $false
-    if ($ap -and (Get-NRGSafeProperty -Object $ap -Property 'Available') -and $priorityAccounts.Count -gt 0) {
-        $hasPriorityPolicy = @((Get-NRGSafeProperty -Object $ap -Property 'Policies' -Default @()) | Where-Object {
-            $tu = Get-NRGSafeProperty -Object $_ -Property 'TargetedUsersToProtect'
+    if ($ap -and (Get-NRGObjectField -Item $ap -Key 'Available') -and $priorityAccounts.Count -gt 0) {
+        $hasPriorityPolicy = @((Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) | Where-Object {
+            $tu = Get-NRGObjectField -Item $_ -Key 'TargetedUsersToProtect'
             $tu -and @($tu).Count -gt 0
         }).Count -gt 0
     }
@@ -689,9 +689,9 @@ function Test-NRGControlEXOSafeSenderOverride {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
     $antiSpamPolicies = @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @())
-    $defaultPolicy    = @($antiSpamPolicies | Where-Object { (Get-NRGSafeProperty -Object $_ -Property 'IsDefault') }) | Select-Object -First 1
+    $defaultPolicy    = @($antiSpamPolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'IsDefault') }) | Select-Object -First 1
     if (-not $defaultPolicy) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default policy'; return }
-    $allowedDomains  = Get-NRGSafeProperty -Object $defaultPolicy -Property 'AllowedSenderDomains' -Default @()
+    $allowedDomains  = Get-NRGObjectField -Item $defaultPolicy -Key 'AllowedSenderDomains' -Default @()
     $allowListBypass = $allowedDomains -and @($allowedDomains).Count -gt 0
     if (-not $allowListBypass) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No allowed sender domains in anti-spam policy — all inbound mail is filtered equally.'
