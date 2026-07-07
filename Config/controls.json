@@ -1975,7 +1975,7 @@
       "Remediation": "Entra ID > Enterprise apps > Consent and permissions > Admin consent requests > Yes + configure reviewers.",
       "References": {
         "CIS": "5.5.3",
-        "SCuBA": "MS.AAD.6.3v1",
+        "SCuBA": "MS.AAD.5.3v1",
         "NIST": "AC-3",
         "CMMC": "AC.L2-3.1.1",
         "MITRE": [
@@ -3234,7 +3234,7 @@
       "Remediation": "Create dedicated .admin or .onmicrosoft.com accounts for all privileged role holders. Remove privileged roles from on-premises synced accounts.",
       "References": {
         "CIS": "5.1.1.1",
-        "SCuBA": "MS.AAD.7.8v1",
+        "SCuBA": "MS.AAD.7.3v1",
         "NIST": "AC-6(5)",
         "CMMC": "AC.L2-3.1.6",
         "MITRE": [
@@ -4054,7 +4054,6 @@
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CIS": "5.1.1.2",
-        "SCuBA": "MS.AAD.7.7v1",
         "NIST": "AC-2, AC-6(5)",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -5051,7 +5050,6 @@
       "LicenseRequirement": "Included (all plans) \u2014 Access Reviews require Entra P2",
       "References": {
         "CIS": "5.3.4",
-        "SCuBA": "MS.AAD.5.3v1",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L2-3.1.2",
         "ISO27001": "A.5.18, A.6.5",
