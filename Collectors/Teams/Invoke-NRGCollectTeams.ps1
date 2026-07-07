@@ -36,16 +36,25 @@ function Invoke-NRGCollectTeams {
                     # agnostic helper so one absent property doesn't nuke the whole
                     # FederationConfig block. (Same StrictMode class as the Graph
                     # shape fix, but Cs cmdlets bypass Invoke-NRGGraphRequest.)
-                    $allowedDomains = Get-NRGObjectField -Item $fed -Key 'AllowedDomains'
-                    $blockedDomains = Get-NRGObjectField -Item $fed -Key 'BlockedDomains'
-                    $result.Data.FederationConfig = @{
+                    # AllowedDomains is either an AllowAllKnownDomains marker or a
+                    # list whose items expose .AllowedDomain (Blocked items expose
+                    # .Domain). Enumerate the container and null-filter so an empty
+                    # or marker container yields an empty array (Count 0), never a
+                    # phantom @($null) — @($null).Count is 1, which TMS-1.1 would
+                    # misread as "federation restricted to 1 domain" on an OPEN
+                    # (wide-open) federation tenant: a false Satisfied.
+                    $allowedRaw = Get-NRGObjectField -Item $fed -Key 'AllowedDomains'
+                    $blockedRaw = Get-NRGObjectField -Item $fed -Key 'BlockedDomains'
+                    $allowedList = @(foreach ($x in @($allowedRaw)) { Get-NRGObjectField -Item $x -Key 'AllowedDomain' }) | Where-Object { $_ }
+                    $blockedList = @(foreach ($x in @($blockedRaw)) { Get-NRGObjectField -Item $x -Key 'Domain' }) | Where-Object { $_ }
+                    $result.Data.FederationConfig = [ordered]@{
                         AllowFederatedUsers              = [bool](Get-NRGObjectField -Item $fed -Key 'AllowFederatedUsers' -Default $false)
                         AllowPublicUsers                 = [bool](Get-NRGObjectField -Item $fed -Key 'AllowPublicUsers' -Default $false)
                         AllowTeamsConsumer               = [bool](Get-NRGObjectField -Item $fed -Key 'AllowTeamsConsumer' -Default $false)
                         AllowTeamsConsumerInbound        = [bool](Get-NRGObjectField -Item $fed -Key 'AllowTeamsConsumerInbound' -Default $false)
                         TreatDiscoveredPartnersAsUnverified = [bool](Get-NRGObjectField -Item $fed -Key 'TreatDiscoveredPartnersAsUnverified' -Default $false)
-                        AllowedDomains                   = @((Get-NRGObjectField -Item $allowedDomains -Key 'AllowedDomain'))
-                        BlockedDomains                   = @((Get-NRGObjectField -Item $blockedDomains -Key 'Domain'))
+                        AllowedDomains                   = @($allowedList)
+                        BlockedDomains                   = @($blockedList)
                     }
                 }
             } catch {
