@@ -90,4 +90,25 @@ Describe 'Framework crosswalk accuracy' {
             $bad -join "`n" | Should -BeNullOrEmpty -Because 'every NIST token must be a well-formed 800-53r5 control ID'
         }
     }
+
+    Context 'MITRE ATT&CK references are well-formed Enterprise technique IDs' {
+        # Framework is declared "MITRE ATT&CK Enterprise". IDs must be T#### or
+        # T####.### (sub-technique). Guards typos and stray non-technique tokens.
+        # (The Mobile-vs-Enterprise scope error that removed T1533 is not
+        # format-detectable — re-run the authoritative attack.mitre.org check on
+        # ATT&CK version bumps.)
+        It 'Every References.MITRE token matches T#### or T####.###' {
+            $rx = [regex]'^T\d{4}(\.\d{3})?$'
+            $bad = [System.Collections.Generic.List[string]]::new()
+            foreach ($c in $script:Controls) {
+                if ($null -eq $c.References) { continue }
+                $mitre = $c.References.MITRE
+                if (-not $mitre) { continue }
+                foreach ($id in @($mitre)) {
+                    if (-not $rx.IsMatch([string]$id)) { $bad.Add("$($c.ControlId) -> '$id'") }
+                }
+            }
+            $bad -join "`n" | Should -BeNullOrEmpty -Because 'every MITRE token must be a well-formed ATT&CK technique ID'
+        }
+    }
 }
