@@ -337,7 +337,7 @@ function Test-NRGControlAADExternalCollab {
     }
     $collab = Get-NRGNestedProperty -Object $gov -Path 'Data.ExternalCollab'
     $gaps = @()
-    if (Get-SafeProp $collab 'AllowedToCreateTenants') { $gaps += 'Users can create new tenants' }
+    if (Get-NRGNestedProperty -Object $collab -Path 'DefaultUserRolePermissions.AllowedToCreateTenants') { $gaps += 'Users can create new tenants' }
     if ((Get-SafeProp $collab 'BlockMsolPowerShell') -ne $true) { $gaps += 'Legacy MSOL PowerShell not blocked' }
     if ($gaps.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'External collaboration settings properly restricted.'
@@ -735,7 +735,7 @@ function Test-NRGControlAADDeviceCode {
     # Authentication flows policy — deviceCodeFlow
     $flowPolicy = Get-NRGNestedProperty -Object $auth -Path 'Data.AuthenticationFlowsPolicy'
     $deviceCodeBlocked = $flowPolicy -and (
-        (Get-NRGSafeProperty -Object $flowPolicy -Property 'DeviceCodeFlow') -eq 'blocked' -or
+        (Get-NRGObjectField -Item $flowPolicy -Key 'DeviceCodeFlow') -eq 'blocked' -or
         (Get-NRGNestedProperty -Object $flowPolicy -Path 'selfServiceSignUp.isEnabled') -eq $false
     )
     # CA policy blocking device code is the more reliable check
@@ -771,8 +771,12 @@ function Test-NRGControlAADNoGuestInPrivRoles {
         'Application Administrator','Cloud Application Administrator','Conditional Access Administrator',
         'Intune Administrator','User Administrator','Authentication Policy Administrator'
     )
+    # Collector stores RoleDefinitionName (not RoleName) and no UserType — guests
+    # are identifiable by the #EXT# marker in PrincipalUPN. Reading the old
+    # RoleName/UserType keys made $guestPriv always empty -> a guest holding
+    # Global Administrator was silently reported Satisfied (Critical false-negative).
     $guestPriv = @($roles.Data.RoleAssignments | Where-Object {
-        $_.RoleName -in $privRoleNames -and $_.UserType -eq 'Guest'
+        $_.RoleDefinitionName -in $privRoleNames -and $_.PrincipalUPN -like '*#EXT#*'
     })
     if ($guestPriv.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No guest accounts hold highly privileged directory roles.'
@@ -852,12 +856,12 @@ function Test-NRGControlAADCrossTenantAccess {
     if (-not $auth -or -not $auth.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
     }
-    $xtap = Get-NRGNestedProperty -Object $auth -Path 'Data.CrossTenantAccessPolicy'
+    $xtap = Get-NRGNestedProperty -Object $auth -Path 'Data.CrossTenantAccess'
     if (-not $xtap) {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Cross-tenant access policy data not available. Verify in Entra ID > External Identities > Cross-tenant access settings that inbound defaults do not trust MFA or device compliance from unknown tenants.' -Remediation $ctrl.Remediation; return
     }
-    $trustsMFA    = [bool](Get-NRGNestedProperty -Object $xtap -Path 'DefaultInbound.TrustSettings.IsMfaAccepted' -Default $false)
-    $trustsDevice = [bool](Get-NRGNestedProperty -Object $xtap -Path 'DefaultInbound.TrustSettings.IsCompliantDeviceAccepted' -Default $false)
+    $trustsMFA    = [bool](Get-NRGNestedProperty -Object $xtap -Path 'InboundTrust.IsMfaAccepted' -Default $false)
+    $trustsDevice = [bool](Get-NRGNestedProperty -Object $xtap -Path 'InboundTrust.IsCompliantDeviceAccepted' -Default $false)
     if (-not $trustsMFA -and -not $trustsDevice) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Cross-tenant default inbound settings do not trust external MFA or device compliance claims.'
     } else {

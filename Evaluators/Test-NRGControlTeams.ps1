@@ -169,7 +169,7 @@ function Test-NRGControlTeamsSkype {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $skype = Get-NRGNestedProperty -Object $tms -Path 'Data.TenantConfig.AllowPublicUsers' -Default $true
+    $skype = Get-NRGNestedProperty -Object $tms -Path 'Data.FederationConfig.AllowPublicUsers' -Default $true
     if (-not $skype) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Contact from Skype consumer users is disabled.'
     } else {
@@ -199,10 +199,10 @@ function Test-NRGControlTeams3PStorage {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $dropbox = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfig.AllowDropbox' -Default $false
-    $box     = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfig.AllowBox' -Default $false
-    $gdrive  = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfig.AllowGoogleDrive' -Default $false
-    $sfile   = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfig.AllowShareFile' -Default $false
+    $dropbox = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfiguration.AllowDropBox' -Default $false
+    $box     = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfiguration.AllowBox' -Default $false
+    $gdrive  = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfiguration.AllowGoogleDrive' -Default $false
+    $sfile   = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfiguration.AllowShareFile' -Default $false
     $anyStorage = [bool]($dropbox -or $box -or $gdrive -or $sfile)
     if (-not $anyStorage) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Third-party cloud storage integrations disabled in Teams.'
@@ -218,7 +218,7 @@ function Test-NRGControlTeamsEmailIntegration {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $emailInt = Get-NRGNestedProperty -Object $tms -Path 'Data.TenantConfig.AllowEmailIntoChannels' -Default $true
+    $emailInt = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfiguration.AllowEmailIntoChannel' -Default $true
     if (-not $emailInt) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Email integration into Teams channels is disabled.'
     } else {
@@ -263,7 +263,7 @@ function Test-NRGControlTeamsExternalChat {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $extChat = Get-NRGNestedProperty -Object $tms -Path 'Data.TenantConfig.AllowFederatedUsers' -Default $true
+    $extChat = Get-NRGNestedProperty -Object $tms -Path 'Data.FederationConfig.AllowFederatedUsers' -Default $true
     if (-not $extChat) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'External user chat is disabled.'
     } else {
@@ -417,7 +417,7 @@ function Test-NRGControlTeamsFederationAllowlist {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    $allowAllDomains = [bool](Get-NRGNestedProperty -Object $tms -Path 'Data.TenantConfig.AllowFederatedUsers' -Default $false)
+    $allowAllDomains = [bool](Get-NRGNestedProperty -Object $tms -Path 'Data.FederationConfig.AllowFederatedUsers' -Default $false)
     $specificDomains = @(Get-NRGNestedProperty -Object $tms -Path 'Data.FederationConfig.AllowedDomains' -Default @())
     if ($allowAllDomains -and $specificDomains.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Teams federation is open to all external domains. Any Teams user at any organization can contact your users.' -CurrentValue 'Open federation — all domains allowed' -RequiredValue 'Allowlist specific trusted domains only' -Remediation $ctrl.Remediation
