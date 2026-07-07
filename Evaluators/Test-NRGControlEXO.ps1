@@ -639,17 +639,7 @@ function Test-NRGControlEXOPerUserAudit {
     if (-not $exo -or -not $exo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
-    $auditSummary = Get-NRGNestedProperty -Object $exo -Path 'Data.MailboxAuditSummary'
-    $auditDisabledCount = [int](Get-NRGObjectField -Item $auditSummary -Key 'AuditDisabledCount' -Default 0)
-    $totalMailboxes     = [int](Get-NRGObjectField -Item $auditSummary -Key 'TotalMailboxes' -Default 0)
-    if ($auditDisabledCount -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Mailbox audit logging enabled on all $totalMailboxes mailbox(es)."
-    } elseif ($auditDisabledCount -gt 0 -and $totalMailboxes -gt 0) {
-        $pct = [int]($auditDisabledCount * 100 / $totalMailboxes)
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$auditDisabledCount of $totalMailboxes mailboxes ($pct%) have audit logging disabled. Actions in those mailboxes are not logged — inbox rules, delegation, and access cannot be investigated." -CurrentValue "$auditDisabledCount mailboxes unaudited" -RequiredValue 'Zero mailboxes with audit disabled' -Remediation $ctrl.Remediation
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Mailbox audit summary data incomplete. Verify all mailboxes have auditing enabled: Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false }' -Remediation $ctrl.Remediation
-    }
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Per-mailbox audit counts not collected; not assessed.'
 }
 
 # ── EXO-5.2 Priority Account Email Protection Configured ─────────────────────
@@ -661,22 +651,7 @@ function Test-NRGControlEXOPriorityAccountProtection {
     if (-not $def -or -not $def.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
     }
-    $priorityAccounts = @(Get-NRGNestedProperty -Object $def -Path 'Data.PriorityAccounts' -Default @())
-    $ap = Get-NRGNestedProperty -Object $def -Path 'Data.AntiPhishing'
-    $hasPriorityPolicy = $false
-    if ($ap -and (Get-NRGObjectField -Item $ap -Key 'Available') -and $priorityAccounts.Count -gt 0) {
-        $hasPriorityPolicy = @((Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) | Where-Object {
-            $tu = Get-NRGObjectField -Item $_ -Key 'TargetedUsersToProtect'
-            $tu -and @($tu).Count -gt 0
-        }).Count -gt 0
-    }
-    if ($hasPriorityPolicy -and $priorityAccounts.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Priority accounts are tagged and protected by targeted user impersonation protection in anti-phishing policy."
-    } elseif ($priorityAccounts.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No priority accounts tagged. Executives and admins are not enrolled in enhanced threat protection or differentiated incident prioritization.' -Remediation $ctrl.Remediation
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Priority accounts tagged but targeted impersonation protection not confirmed in anti-phishing policy. Ensure anti-phishing policy explicitly protects tagged accounts.' -Remediation $ctrl.Remediation
-    }
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Priority account data not collected; not assessed.'
 }
 
 # ── EXO-5.3 Exchange Online Protection Safe Senders Not Overriding ────────────

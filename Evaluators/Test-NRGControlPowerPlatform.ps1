@@ -94,19 +94,12 @@ function Test-NRGControlPPLConnectorClassification {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Power Platform DLP data not collected'; return
     }
-    $policies     = @($ppl.Data.DLPPolicies ?? @())
-    $businessConns = @($policies | ForEach-Object { @($_.BusinessConnectors ?? @()).Count } | Measure-Object -Sum).Sum
-    $blockedConns  = @($policies | ForEach-Object { @($_.BlockedConnectors ?? @()).Count } | Measure-Object -Sum).Sum
-    if ($businessConns -gt 0 -or $blockedConns -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "$($policies.Count) DLP policy(ies) with connector classifications: Business=$businessConns, Blocked=$blockedConns."
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail 'No connector classifications found in Power Platform DLP policies. All connectors have equal access to business and non-business data.' `
-            -Remediation $ctrl.Remediation
-    }
+    # The collector never stores per-policy connector classification detail
+    # (BusinessConnectors/BlockedConnectors), so both sums were always zero and
+    # this check reported a false Gap. Not assessed.
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+        -Title $ctrl.Title -FrameworkIds $cit `
+        -Detail 'Connector classification detail not collected; not assessed.'
 }
 
 # ── PPL-2.2 Power Automate Governance Policy ──────────────────────────────────
