@@ -2,6 +2,8 @@
 #
 # Invoke-NRGGraphRequest.ps1  (v4.12.2)
 #
+# Dependencies: Microsoft.Graph.Authentication (Invoke-MgGraphRequest)
+#
 # NRG Technology Services / NextLayerSec LLC
 # Author: Matthew Levorson
 # Purpose: Thin, shape-pinning proxy over Invoke-MgGraphRequest. Forces
