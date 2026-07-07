@@ -42,7 +42,7 @@
       "Remediation": "CA policy: Users = All, Apps = All cloud apps, Grant = Require MFA. Or enable Security Defaults.",
       "References": {
         "CIS": "5.2.2.1",
-        "SCuBA": "MS.AAD.3.2v2",
+        "SCuBA": "MS.AAD.3.2v1",
         "NIST": "IA-2(1), IA-2(2)",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -155,7 +155,7 @@
       "Remediation": "Set-OrganizationConfig -AuditDisabled $false",
       "References": {
         "CIS": "2.1.1",
-        "SCuBA": "MS.EXO.2.1v1",
+        "SCuBA": "MS.EXO.13.1v1",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
@@ -238,7 +238,7 @@
       "Remediation": "Enable-DkimSigningConfig -Identity domain.com. Publish the CNAME records from M365 admin center.",
       "References": {
         "CIS": "2.2.1",
-        "SCuBA": "MS.EXO.9.1v1",
+        "SCuBA": "MS.EXO.9.1v2",
         "NIST": "SC-8, SC-13",
         "CMMC": "SC.L2-3.13.8",
         "MITRE": [
@@ -294,7 +294,7 @@
       "Remediation": "Set-OrganizationConfig -OAuth2ClientProfileEnabled $true",
       "References": {
         "CIS": "2.1.5",
-        "SCuBA": "MS.EXO.1.1v1",
+        "SCuBA": "MS.EXO.1.1v2",
         "NIST": "IA-2, SC-8",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -378,7 +378,7 @@
       "Remediation": "Enable DKIM in M365 admin center for each domain. Publish the two CNAME records provided.",
       "References": {
         "CIS": "2.2.1",
-        "SCuBA": "MS.EXO.9.1v1",
+        "SCuBA": "MS.EXO.9.1v2",
         "NIST": "SC-8, SC-13",
         "CMMC": "SC.L2-3.13.8",
         "MITRE": [
@@ -406,7 +406,7 @@
       "Remediation": "Start with p=none and rua= reporting. Advance to p=quarantine then p=reject as all legitimate senders pass alignment. Target: v=DMARC1; p=reject; pct=100; rua=mailto:dmarc@domain.com",
       "References": {
         "CIS": "2.2.3",
-        "SCuBA": "MS.EXO.9.3v1",
+        "SCuBA": "MS.EXO.9.3v2",
         "NIST": "SI-8, SC-8",
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
@@ -877,7 +877,7 @@
       "Remediation": "Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60",
       "References": {
         "CIS": "7.2.6",
-        "SCuBA": "MS.SHAREPOINT.1.4v1",
+        "SCuBA": "MS.SHAREPOINT.3.3v1",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -959,7 +959,7 @@
       "Remediation": "Set-CsTenantFederationConfiguration -AllowTeamsConsumer $false -AllowTeamsConsumerInbound $false",
       "References": {
         "CIS": "8.2.2",
-        "SCuBA": "MS.TEAMS.1.2v1",
+        "SCuBA": "MS.TEAMS.1.2v2",
         "NIST": "AC-17",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -987,7 +987,7 @@
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowAnonymousUsersToJoinMeeting $false",
       "References": {
         "CIS": "8.5.1",
-        "SCuBA": "MS.TEAMS.2.1v1",
+        "SCuBA": "MS.TEAMS.2.1v2",
         "NIST": "AC-3, AC-17",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -1014,7 +1014,7 @@
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowExternalParticipantGiveRequestControl $false",
       "References": {
         "CIS": "8.5.3",
-        "SCuBA": "MS.TEAMS.2.2v1",
+        "SCuBA": "MS.TEAMS.2.2v2",
         "NIST": "AC-3",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -1453,7 +1453,6 @@
       "Remediation": "Set-TransportConfig -ImapEnabled $false. Per-mailbox: Get-CASMailbox -ResultSize Unlimited | Set-CASMailbox -ImapEnabled $false",
       "References": {
         "CIS": "2.1.6",
-        "SCuBA": "MS.EXO.5.2v1",
         "NIST": "SC-8, IA-2",
         "CMMC": "SC.L2-3.13.8",
         "MITRE": [
@@ -1619,7 +1618,7 @@
       "Remediation": "CA policy: Grant = Require device to be marked as compliant, or Require hybrid Azure AD joined device.",
       "References": {
         "CIS": "5.2.2.8",
-        "SCuBA": "MS.AAD.3.3v1",
+        "SCuBA": "MS.AAD.3.3v2",
         "NIST": "CM-7, AC-17",
         "CMMC": "CM.L2-3.4.1",
         "MITRE": [
@@ -1810,7 +1809,6 @@
       "Remediation": "Entra ID > User settings > Restrict non-admin users from creating tenants. Block MSOL PowerShell via authorization policy.",
       "References": {
         "CIS": "5.3.2",
-        "SCuBA": "MS.AAD.5.4v1",
         "NIST": "CM-7, AC-6",
         "CMMC": "CM.L2-3.4.6",
         "MITRE": [
@@ -1947,7 +1945,7 @@
       "Remediation": "Entra ID > Enterprise apps > Consent and permissions > User consent settings = Do not allow user consent.",
       "References": {
         "CIS": "5.5.2",
-        "SCuBA": "MS.AAD.6.2v1",
+        "SCuBA": "MS.AAD.5.2v1",
         "NIST": "AC-3",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -2274,7 +2272,7 @@
       "Remediation": "Defender portal > Policies > Alert policies > Enable: Email forwarding activities.",
       "References": {
         "CIS": "2.1.15",
-        "SCuBA": "MS.EXO.8.1v1",
+        "SCuBA": "MS.EXO.8.1v2",
         "NIST": "AU-12, SI-4",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
@@ -2356,7 +2354,6 @@
       "Remediation": "Set-SPOTenant -AllowedDomainGuidsForSyncApp @('your-tenant-guid')",
       "References": {
         "CIS": "7.2.7",
-        "SCuBA": "MS.SHAREPOINT.1.5v1",
         "NIST": "SC-28, AC-19",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -2525,7 +2522,7 @@
         "MITRE": [
           "T1078"
         ],
-        "SCuBA": "MS.SHAREPOINT.3.3v2",
+        "SCuBA": "MS.SHAREPOINT.3.3v1",
         "HIPAA": "\u00a7164.312(d)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.3",
@@ -2603,7 +2600,7 @@
       "Remediation": "Teams Admin Center > Teams apps > Permission policies > Block all apps from unknown publishers.",
       "References": {
         "CIS": "8.3.1",
-        "SCuBA": "MS.TEAMS.3.1v1",
+        "SCuBA": "MS.TEAMS.5.2v2",
         "NIST": "CM-7",
         "CMMC": "CM.L2-3.4.6",
         "MITRE": [
@@ -3617,7 +3614,7 @@
       "Remediation": "Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60",
       "References": {
         "CIS": "7.2.6",
-        "SCuBA": "MS.SHAREPOINT.1.4v1",
+        "SCuBA": "MS.SHAREPOINT.3.3v1",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -3671,7 +3668,7 @@
       "Remediation": "Set-CsTeamsMeetingPolicy -AutoAdmittedUsers EveryoneInCompanyExcludingGuests",
       "References": {
         "CIS": "8.5.2",
-        "SCuBA": "MS.TEAMS.2.3v1",
+        "SCuBA": "MS.TEAMS.2.3v2",
         "NIST": "AC-3, IA-3",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -4050,7 +4047,7 @@
       "Automated": true,
       "CollectorDependency": "AAD-DirectoryRoles",
       "EvaluatorFunction": "Test-NRGControlAADNoGuestInPrivRoles",
-      "Remediation": "Remove guest accounts from all privileged roles. Use cloud-only member accounts for all administrative functions. Reference: MS.AAD.7.7v1 (SCuBA).",
+      "Remediation": "Remove guest accounts from all privileged roles. Use cloud-only member accounts for all administrative functions.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CIS": "5.1.1.2",
@@ -4164,7 +4161,6 @@
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CIS": "5.3.5",
-        "SCuBA": "MS.AAD.5.4v1",
         "NIST": "AC-17, IA-2",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -4246,7 +4242,6 @@
       "LicenseRequirement": "Entra Workload Identities Premium (add-on)",
       "References": {
         "CIS": "5.1.5.2",
-        "SCuBA": "MS.AAD.5.5v1",
         "NIST": "IA-3, AC-6",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -4493,11 +4488,11 @@
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
       "EvaluatorFunction": "Test-NRGControlEXOPriorityAccountProtection",
-      "Remediation": "Set-AntiPhishPolicy > TargetedUsersToProtect \u2014 add executive UPNs. Enable EnableTargetedUserProtection. Reference: MS.DEFENDER.1.6v1 (SCuBA).",
+      "Remediation": "Set-AntiPhishPolicy > TargetedUsersToProtect \u2014 add executive UPNs. Enable EnableTargetedUserProtection. Reference: MS.DEFENDER.2.1v1 (SCuBA).",
       "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)",
       "References": {
         "CIS": "2.1.6",
-        "SCuBA": "MS.DEFENDER.1.6v1",
+        "SCuBA": "MS.DEFENDER.2.1v1",
         "NIST": "SI-3",
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
@@ -4575,11 +4570,11 @@
       "Automated": true,
       "CollectorDependency": "Teams-Config",
       "EvaluatorFunction": "Test-NRGControlTeamsAnonymousStart",
-      "Remediation": "Set-CsTeamsMeetingPolicy -AllowAnonymousUsersToStartMeeting $false. Reference: MS.TEAMS.2.2v1 (SCuBA).",
+      "Remediation": "Set-CsTeamsMeetingPolicy -AllowAnonymousUsersToStartMeeting $false. Reference: MS.TEAMS.2.2v2 (SCuBA).",
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CIS": "8.5.3",
-        "SCuBA": "MS.TEAMS.2.2v1",
+        "SCuBA": "MS.TEAMS.2.2v2",
         "NIST": "AC-3, IA-3",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -5131,7 +5126,7 @@
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CIS": "2.1.2",
-        "SCuBA": "MS.EXO.1.1v1",
+        "SCuBA": "MS.EXO.1.1v2",
         "NIST": "AC-4",
         "CMMC": "AC.L2-3.1.2",
         "ISO27001": "A.8.12",
@@ -5268,7 +5263,7 @@
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CIS": "6.2.1",
-        "SCuBA": "MS.EXO.1.1v1",
+        "SCuBA": "MS.EXO.1.1v2",
         "NIST": "AU-6, IR-4, SI-4",
         "CMMC": "AU.L2-3.3.5, IR.L2-3.6.1, SI.L2-3.14.6",
         "MITRE": [
@@ -5295,7 +5290,7 @@
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CIS": "6.2.1",
-        "SCuBA": "MS.EXO.1.1v1",
+        "SCuBA": "MS.EXO.1.1v2",
         "NIST": "AU-6, IR-4, SI-4",
         "CMMC": "AU.L2-3.3.5, IR.L2-3.6.1, SI.L2-3.14.6",
         "MITRE": [
