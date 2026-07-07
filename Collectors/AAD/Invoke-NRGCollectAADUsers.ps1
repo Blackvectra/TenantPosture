@@ -42,7 +42,7 @@ function Invoke-NRGCollectAADUsers {
         $maxPages  = 200
 
         while ($nextLink -and $pageCount -lt $maxPages) {
-            $pageResp = Invoke-MgGraphRequest -Method GET -Uri $nextLink -ErrorAction Stop
+            $pageResp = Invoke-NRGGraphRequest -Method GET -Uri $nextLink -ErrorAction Stop
             foreach ($u in @($pageResp.value ?? @())) {
                 $allUsers.Add(@{
                     Id                       = [string]$u.id
@@ -76,7 +76,7 @@ function Invoke-NRGCollectAADUsers {
             $regPage = 0
 
             while ($regLink -and $regPage -lt $maxPages) {
-                $regResp = Invoke-MgGraphRequest -Method GET -Uri $regLink -ErrorAction Stop
+                $regResp = Invoke-NRGGraphRequest -Method GET -Uri $regLink -ErrorAction Stop
                 foreach ($r in @($regResp.value ?? @())) {
                     $regDetails.Add(@{
                         Id                    = [string]$r.id

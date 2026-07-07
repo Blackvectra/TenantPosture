@@ -19,7 +19,7 @@
 #          IR-MailboxForwarding    — server-side forwarding settings
 #          IR-MailboxProfile       — /me basics (UPN, display name, tenant)
 #
-# Graph cmdlets: Invoke-MgGraphRequest (REST), all GET-only.
+# Graph cmdlets: Invoke-NRGGraphRequest (REST), all GET-only.
 #
 # Privacy: Bodies are NOT collected — only headers + a stripped URL list.
 #          Subjects + recipients + URLs are retained because they're the
@@ -60,7 +60,7 @@ function Invoke-NRGEmailCollectMailbox {
         Data        = $null
     }
     try {
-        $me = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/${userPrefix}?`$select=id,displayName,mail,userPrincipalName" -ErrorAction Stop
+        $me = Invoke-NRGGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/${userPrefix}?`$select=id,displayName,mail,userPrincipalName" -ErrorAction Stop
         $profileBag.Data = [ordered]@{
             Id                = $me.id
             DisplayName       = $me.displayName
@@ -86,7 +86,7 @@ function Invoke-NRGEmailCollectMailbox {
         $pageCap = 5  # Hard cap to keep collection bounded
         $pages   = 0
         while ($uri -and $pages -lt $pageCap) {
-            $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+            $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
             if ($resp.value) { $sentItems += $resp.value }
             $uri = if ($resp.'@odata.nextLink') { $resp.'@odata.nextLink' } else { $null }
             $pages++
@@ -145,7 +145,7 @@ function Invoke-NRGEmailCollectMailbox {
         $uri = "https://graph.microsoft.com/v1.0/$userPrefix/mailFolders/Inbox/messages?`$top=200&`$filter=receivedDateTime ge $inboxCutoff&`$select=id,subject,receivedDateTime,from,sender,bodyPreview,internetMessageHeaders,webLink"
         $pages = 0
         while ($uri -and $pages -lt 5) {
-            $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+            $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
             if ($resp.value) { $inboxItems += $resp.value }
             $uri = if ($resp.'@odata.nextLink') { $resp.'@odata.nextLink' } else { $null }
             $pages++
@@ -195,7 +195,7 @@ function Invoke-NRGEmailCollectMailbox {
         $recItems = @()
         $recUri = "https://graph.microsoft.com/v1.0/$userPrefix/mailFolders/recoverableitemsdeletions/messages?`$top=200&`$select=id,subject,receivedDateTime,from,bodyPreview"
         try {
-            $resp = Invoke-MgGraphRequest -Method GET -Uri $recUri -ErrorAction Stop
+            $resp = Invoke-NRGGraphRequest -Method GET -Uri $recUri -ErrorAction Stop
             if ($resp.value) { $recItems = $resp.value }
         } catch {
             # Some tenant configurations + scopes return 404 for this path;
@@ -249,7 +249,7 @@ function Invoke-NRGEmailCollectMailbox {
         Data        = $null
     }
     try {
-        $rules = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/$userPrefix/mailFolders/Inbox/messageRules" -ErrorAction Stop
+        $rules = Invoke-NRGGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/$userPrefix/mailFolders/Inbox/messageRules" -ErrorAction Stop
         $rulesOut.Data = [ordered]@{
             Count = if ($rules.value) { $rules.value.Count } else { 0 }
             Rules = @($rules.value)
@@ -268,7 +268,7 @@ function Invoke-NRGEmailCollectMailbox {
         Data        = $null
     }
     try {
-        $settings = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/$userPrefix/mailboxSettings" -ErrorAction Stop
+        $settings = Invoke-NRGGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/$userPrefix/mailboxSettings" -ErrorAction Stop
         $settingsOut.Data = [ordered]@{
             DelegateMeetingMessageDeliveryOptions = $settings.delegateMeetingMessageDeliveryOptions
             AutomaticRepliesSetting               = $settings.automaticRepliesSetting

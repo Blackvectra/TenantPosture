@@ -32,7 +32,7 @@ function Invoke-NRGCollectAADAuthPolicies {
     try {
         # Authentication Methods Policy (MFA methods, FIDO2, Authenticator settings)
         try {
-            $amp = Invoke-MgGraphRequest -Method GET `
+            $amp = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy' `
                 -ErrorAction Stop
             if ($amp) {
@@ -73,7 +73,7 @@ function Invoke-NRGCollectAADAuthPolicies {
 
         # Authorization Policy (consent settings, guest permissions, Security Defaults)
         try {
-            $authPol = Invoke-MgGraphRequest -Method GET `
+            $authPol = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/authorizationPolicy' `
                 -ErrorAction Stop
             if ($authPol) {
@@ -101,7 +101,7 @@ function Invoke-NRGCollectAADAuthPolicies {
 
         # Security Defaults
         try {
-            $secDef = Invoke-MgGraphRequest -Method GET `
+            $secDef = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/identitySecurityDefaultsEnforcementPolicy' `
                 -ErrorAction Stop
             if ($secDef) {
@@ -117,7 +117,7 @@ function Invoke-NRGCollectAADAuthPolicies {
 
         # Admin Consent Request Policy
         try {
-            $consentPol = Invoke-MgGraphRequest -Method GET `
+            $consentPol = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/adminConsentRequestPolicy' `
                 -ErrorAction Stop
             if ($consentPol) {
@@ -146,7 +146,7 @@ function Invoke-NRGCollectAADAuthPolicies {
         # is a valid finding (default lockout threshold of 10 in effect).
         try {
             $PWD_RULE_TEMPLATE_ID = '5cf42378-d67d-4f36-ba46-e8b86229381d'
-            $gsResp = Invoke-MgGraphRequest -Method GET `
+            $gsResp = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/groupSettings' `
                 -ErrorAction Stop
             $ppSetting = @($gsResp.value ?? @()) |
@@ -198,7 +198,7 @@ function Invoke-NRGCollectAADAuthPolicies {
         # crossTenantAccessPolicyTargetConfiguration with .accessType
         # ('allowed' | 'blocked') and a .targets array.
         try {
-            $ctap = Invoke-MgGraphRequest -Method GET `
+            $ctap = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/crossTenantAccessPolicy/default' `
                 -ErrorAction Stop
             if ($ctap) {

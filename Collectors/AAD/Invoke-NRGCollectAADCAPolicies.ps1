@@ -25,7 +25,7 @@ function Invoke-NRGCollectAADCAPolicies {
     try {
         # Conditional Access Policies
         try {
-            $response = Invoke-MgGraphRequest -Method GET `
+            $response = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies?$top=250' `
                 -ErrorAction Stop
             $result.Data.Policies = @($response.value ?? @() | ForEach-Object {
@@ -88,7 +88,7 @@ function Invoke-NRGCollectAADCAPolicies {
 
         # Named Locations
         try {
-            $locResp = Invoke-MgGraphRequest -Method GET `
+            $locResp = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/namedLocations?$top=100' `
                 -ErrorAction Stop
             $result.Data.NamedLocations = @($locResp.value ?? @() | ForEach-Object {
@@ -109,7 +109,7 @@ function Invoke-NRGCollectAADCAPolicies {
 
         # Authentication Strength Policies
         try {
-            $strengthResp = Invoke-MgGraphRequest -Method GET `
+            $strengthResp = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/authenticationStrengthPolicies?$top=50' `
                 -ErrorAction Stop
             $result.Data.AuthStrengths = @($strengthResp.value ?? @() | ForEach-Object {
