@@ -36,7 +36,7 @@ function Invoke-NRGCollectIntuneAppProtection {
             $maxPages  = 200
             $pageCount = 0
             while ($next -and $pageCount -lt $maxPages) {
-                $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 foreach ($p in @($page.value)) {
                     $result.Data.AppProtectionPolicies += @{
                         Id          = $p.id
@@ -67,7 +67,7 @@ function Invoke-NRGCollectIntuneAppProtection {
             $maxPages  = 200
             $pageCount = 0
             while ($next -and $pageCount -lt $maxPages) {
-                $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 foreach ($p in @($page.value)) {
                     $result.Data.AppConfigPolicies += @{
                         Id          = $p.id
@@ -98,7 +98,7 @@ function Invoke-NRGCollectIntuneAppProtection {
             $maxPages  = 200
             $pageCount = 0
             while ($next -and $pageCount -lt $maxPages) {
-                $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 foreach ($p in @($page.value)) {
                     $result.Data.AppConfigPolicies += @{
                         Id          = $p.id

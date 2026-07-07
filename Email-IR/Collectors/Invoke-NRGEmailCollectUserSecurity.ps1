@@ -20,7 +20,7 @@
 #                                the principal, app display names resolved
 #          IR-UserAuthMethods  — registered auth methods (type, id, metadata)
 #
-# Graph cmdlets: Invoke-MgGraphRequest (REST), all GET-only.
+# Graph cmdlets: Invoke-NRGGraphRequest (REST), all GET-only.
 
 function Invoke-NRGEmailCollectUserSecurity {
     [CmdletBinding()]
@@ -47,7 +47,7 @@ function Invoke-NRGEmailCollectUserSecurity {
         Data        = $null
     }
     try {
-        $resp = Invoke-MgGraphRequest -Method GET `
+        $resp = Invoke-NRGGraphRequest -Method GET `
             -Uri "https://graph.microsoft.com/v1.0/${userPrefix}/oauth2PermissionGrants" -ErrorAction Stop
         $grants = @($resp.value)
 
@@ -63,7 +63,7 @@ function Invoke-NRGEmailCollectUserSecurity {
                     $appName = $spCache[$spId]
                 } else {
                     try {
-                        $sp = Invoke-MgGraphRequest -Method GET `
+                        $sp = Invoke-NRGGraphRequest -Method GET `
                             -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/${spId}?`$select=displayName,appId,publisherName" -ErrorAction Stop
                         $appName = [ordered]@{
                             DisplayName   = [string]$sp.displayName
@@ -102,7 +102,7 @@ function Invoke-NRGEmailCollectUserSecurity {
         Data        = $null
     }
     try {
-        $resp = Invoke-MgGraphRequest -Method GET `
+        $resp = Invoke-NRGGraphRequest -Method GET `
             -Uri "https://graph.microsoft.com/v1.0/${userPrefix}/authentication/methods" -ErrorAction Stop
         $methods = @($resp.value)
 

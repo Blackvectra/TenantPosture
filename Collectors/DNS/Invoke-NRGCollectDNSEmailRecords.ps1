@@ -148,6 +148,31 @@ function Invoke-NRGCollectDNSEmailRecords {
             }
         }
 
+        # Graph fallback: SPF/DMARC/DNSSEC/MTA-STS are public DNS lookups that do
+        # NOT require EXO. When EXO failed to connect (assembly conflict) the
+        # AcceptedDomains fallback above yields nothing — so derive the domain
+        # list from Graph verifiedDomains instead, so DNS still collects. Only
+        # the DKIM check genuinely needs EXO. (ndaco.org 2026-07-07: EXO was down
+        # and no -Domains was passed, so DNS silently collected nothing.)
+        if ((-not $Domains -or $Domains.Count -eq 0) -and
+            (Get-Command Invoke-NRGGraphRequest -ErrorAction SilentlyContinue)) {
+            try {
+                $org = Invoke-NRGGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/organization'
+                $verified = @($org.value ?? @()) |
+                    ForEach-Object { @($_.verifiedDomains ?? @()) } |
+                    Where-Object { $_ }
+                $Domains = @($verified |
+                    ForEach-Object { [string]($_.name ?? '') } |
+                    Where-Object { $_ -notmatch '\.onmicrosoft\.com$' -and $_ -match $script:DomainPattern } |
+                    Select-Object -Unique)
+            } catch {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'DNS-DomainDiscovery' `
+                        -Message "Graph verifiedDomains fallback failed: $($_.Exception.Message)"
+                }
+            }
+        }
+
         if (-not $Domains -or $Domains.Count -eq 0) {
             if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
                 Register-NRGCoverage -Family 'DNS-EmailRecords' -Status 'NotCollected' -Note 'No domains to check'
