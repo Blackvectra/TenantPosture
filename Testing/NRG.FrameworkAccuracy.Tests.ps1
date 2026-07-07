@@ -65,4 +65,29 @@ Describe 'Framework crosswalk accuracy' {
             $stale -join "`n" | Should -BeNullOrEmpty -Because 'prose citations must not drift from the formal SCuBA mapping'
         }
     }
+
+    Context 'NIST 800-53r5 references are well-formed control identifiers' {
+        # NIST control IDs are stable across the catalog, so the realistic error
+        # is a typo or a bad family prefix, not version drift. Validate the
+        # FAMILY-N or FAMILY-N(M) shape with a real 800-53r5 family prefix.
+        It 'Every References.NIST token matches FAMILY-N[(M)] with a valid r5 family' {
+            $validFamilies = 'AC','AT','AU','CA','CM','CP','IA','IR','MA','MP','PE','PL','PM','PS','PT','RA','SA','SC','SI','SR'
+            $rx = [regex]'^([A-Z]{2})-\d+(\(\d+\))?$'
+            $bad = [System.Collections.Generic.List[string]]::new()
+            foreach ($c in $script:Controls) {
+                if ($null -eq $c.References) { continue }
+                $nist = [string]$c.References.NIST
+                if (-not $nist) { continue }
+                foreach ($tok in ($nist -split '[;,]')) {
+                    $t = $tok.Trim()
+                    if (-not $t) { continue }
+                    $m = $rx.Match($t)
+                    if (-not $m.Success -or $m.Groups[1].Value -notin $validFamilies) {
+                        $bad.Add("$($c.ControlId) -> '$t'")
+                    }
+                }
+            }
+            $bad -join "`n" | Should -BeNullOrEmpty -Because 'every NIST token must be a well-formed 800-53r5 control ID'
+        }
+    }
 }
