@@ -728,15 +728,23 @@ function Test-NRGControlAADDeviceCode {
     [CmdletBinding()] param()
     $cid = 'AAD-11.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $auth = Get-NRGRawData -Key 'AAD-AuthPolicies'
-    if (-not $auth -or -not $auth.Success) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
+    # The signal IS collected: Invoke-NRGCollectAADCAPolicies stores each policy's
+    # authentication-flow condition as Conditions.AuthFlows (the raw Graph
+    # authenticationFlows object, which carries transferMethods). A CA policy that
+    # blocks device code has transferMethods containing 'deviceCode'.
+    $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
+    if (-not $ca -or -not $ca.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Conditional Access policy data not collected'; return
     }
-    # Neither signal this control relied on is collected: the auth collector does
-    # not store 'AuthenticationFlowsPolicy' and the CA collector does not store
-    # authentication-flow conditions. Reporting Gap/Satisfied from absent data was
-    # dishonest, so this control is not assessed.
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Device-code CA condition not collected; verify manually in Entra CA. Not assessed.'
+    $caBlocks = @($ca.Data.Policies | Where-Object {
+        $_.State -eq 'enabled' -and
+        ((@($_.Conditions.AuthFlows) | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'transferMethods') }) -join ',') -match 'deviceCode'
+    }).Count -gt 0
+    if ($caBlocks) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Device code authentication flow is blocked by a Conditional Access policy. Adversary-in-the-middle phishing via device code is prevented.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Device code authentication flow is not blocked. Attackers use this flow in phishing campaigns where victims visit a URL and enter a code — no password required to compromise the account.' -CurrentValue 'No CA policy blocks deviceCodeFlow' -RequiredValue 'CA policy blocking deviceCodeFlow for all users' -Remediation $ctrl.Remediation
+    }
 }
 
 # ── AAD-11.2 No Guest Users in Highly Privileged Roles ───────────────────────
