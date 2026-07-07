@@ -88,7 +88,7 @@ The report produces 13 sections: Executive Overview with score ring and license 
 
 ## Environment
 
-MSP context is NRG Technology Services / NextLayerSec LLC. Government clients have CISA BOD 18-01 compliance obligations. Key clients are `nrgtechservices.com`, `example.com`, and `example2.com`. Tooling includes ConnectWise RMM, Cortex XDR, Microsoft Defender for Endpoint, SonicWall, DMARCian, and Microsoft 365/Entra ID. Frameworks referenced are NIST SP 800-53r5, NIST CSF 2.0, MITRE ATT&CK Enterprise, CIS M365 Foundations v3, CISA SCuBA, and CISA BOD 18-01. There is no separate log file — diagnostics are console output plus the `Exceptions` array inside the results JSON. Assessment output goes to `.\output\tenantdomain\timestamp-results.json`. Batch summary goes to `.\output\batch-summary-timestamp.md`. Email-IR output goes to `.\output\<user>\` and triage to `.\output\IR-Triage\`.
+MSP context is NRG Technology Services / NextLayerSec LLC. Government clients have CISA BOD 18-01 compliance obligations. Key clients are `nrgtechservices.com`, `example.com`, and `example2.com`. Tooling includes ConnectWise RMM, Cortex XDR, Microsoft Defender for Endpoint, SonicWall, DMARCian, and Microsoft 365/Entra ID. Frameworks referenced are NIST SP 800-53r5, NIST CSF 2.0, MITRE ATT&CK Enterprise, CIS M365 Foundations Benchmark v6.0.1, CISA SCuBA, and CISA BOD 18-01. There is no separate log file — diagnostics are console output plus the `Exceptions` array inside the results JSON. Assessment output goes to `.\output\tenantdomain\timestamp-results.json`. Batch summary goes to `.\output\batch-summary-timestamp.md`. Email-IR output goes to `.\output\<user>\` and triage to `.\output\IR-Triage\`.
 
 ## Common Tasks
 

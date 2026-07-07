@@ -25,6 +25,11 @@ Describe 'Framework crosswalk accuracy' {
         $script:AuthScuba = @(Get-Content -LiteralPath $scubaPath |
             Where-Object { $_ -and -not $_.StartsWith('#') } |
             ForEach-Object { $_.Trim() })
+
+        $cisPath = Join-Path $script:RepoRoot 'Config' 'framework-baselines' 'cis-controls-v8.1-safeguards.txt'
+        $script:AuthCis = @(Get-Content -LiteralPath $cisPath |
+            Where-Object { $_ -match '^\d' } |
+            ForEach-Object { ($_ -split '\s+', 2)[0] })
     }
 
     Context 'SCuBA references vs authoritative ScubaGear v1.8.0 baseline' {
@@ -109,6 +114,34 @@ Describe 'Framework crosswalk accuracy' {
                 }
             }
             $bad -join "`n" | Should -BeNullOrEmpty -Because 'every MITRE token must be a well-formed ATT&CK technique ID'
+        }
+    }
+
+    Context 'CIS Controls v8.1 references vs authoritative safeguard list' {
+        It 'Bundled CIS v8.1 safeguard list has all 153 safeguards' {
+            $script:AuthCis.Count | Should -Be 153
+        }
+
+        It 'Every References.CISControls safeguard exists in the authoritative v8.1 list' {
+            $authSet = [System.Collections.Generic.HashSet[string]]::new(
+                [string[]]$script:AuthCis, [System.StringComparer]::Ordinal)
+            $bad = [System.Collections.Generic.List[string]]::new()
+            foreach ($c in $script:Controls) {
+                if ($null -eq $c.References) { continue }
+                $cis = $c.References.CISControls
+                if ($null -eq $cis) { continue }
+                foreach ($sg in @($cis)) {
+                    if (-not $authSet.Contains([string]$sg)) { $bad.Add("$($c.ControlId) -> $sg") }
+                }
+            }
+            $bad -join "`n" | Should -BeNullOrEmpty -Because 'every CIS Controls v8.1 safeguard must exist in the authoritative list'
+        }
+
+        It 'Every control carries a CISControls field (array, possibly empty)' {
+            $missing = @($script:Controls | Where-Object {
+                $null -eq $_.References -or $null -eq $_.References.PSObject.Properties['CISControls']
+            } | ForEach-Object { $_.ControlId })
+            $missing -join ', ' | Should -BeNullOrEmpty
         }
     }
 }

@@ -9,6 +9,14 @@
       "Applicable": "All commercial M365 tenants"
     },
     {
+      "Id": "CISControls",
+      "FullName": "CIS Critical Security Controls v8.1",
+      "Version": "8.1",
+      "Publisher": "Center for Internet Security",
+      "URL": "https://www.cisecurity.org/controls/v8-1",
+      "Applicable": "Cross-framework control mapping; validated against the authoritative 153-safeguard baseline in Config/framework-baselines/cis-controls-v8.1-safeguards.txt"
+    },
+    {
       "Id": "SCuBA",
       "FullName": "CISA Secure Cloud Business Applications (SCuBA) v1.7.1",
       "Version": "1.7.1",
