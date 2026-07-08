@@ -178,6 +178,47 @@ function Invoke-NRGCollectDefender {
             }
         }
 
+        # ── Attack Simulation Training campaigns — DEF-4.6 ────────────────
+        # Graph endpoint (not an EXO cmdlet): needs AttackSimulation.Read.All
+        # (v4.13 re-consent) and Defender for Office 365 P2. GLOBAL CLOUD ONLY —
+        # US Gov L4/L5/DoD and China 21Vianet return 404. Caught either way so
+        # AttackSimulations stays Available=$false and the evaluator routes to
+        # NotApplicable in those clouds, never a false Gap.
+        try {
+            if (Get-Command Invoke-NRGGraphRequest -ErrorAction SilentlyContinue) {
+                $simResp = Invoke-NRGGraphRequest -Method GET `
+                    -Uri 'https://graph.microsoft.com/v1.0/security/attackSimulation/simulations?$top=100' `
+                    -ErrorAction Stop
+                $sims = @()
+                if ($simResp -and $null -ne $simResp.value) {
+                    $sims = @(@($simResp.value) | ForEach-Object {
+                        @{
+                            DisplayName    = [string]($_.displayName ?? '')
+                            Status         = [string]($_.status ?? 'unknown')
+                            AttackType     = [string]($_.attackType ?? 'unknown')
+                            LaunchDateTime = [string]($_.launchDateTime ?? '')
+                            IsAutomated    = [bool]($_.isAutomated ?? $false)
+                        }
+                    })
+                }
+                $result.Data['AttackSimulations'] = @{
+                    Available = $true
+                    Count     = $sims.Count
+                    Simulations = $sims
+                    # A launched/completed campaign — anything past draft — proves a
+                    # real training program, not just a saved draft.
+                    LaunchedCount = @($sims | Where-Object { $_.Status -in @('running','scheduled','succeeded','completed') }).Count
+                }
+            } else {
+                $result.Data['AttackSimulations'] = @{ Available = $false; Error = 'Graph proxy unavailable' }
+            }
+        } catch {
+            $result.Data['AttackSimulations'] = @{ Available = $false; Error = $_.Exception.Message }
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'Defender-AttackSimulations' -Message $_.Exception.Message
+            }
+        }
+
         $result.Success = $true
         if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
             Register-NRGCoverage -Family 'Defender' -Status 'Collected'

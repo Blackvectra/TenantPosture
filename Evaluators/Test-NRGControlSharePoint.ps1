@@ -161,7 +161,16 @@ function Test-NRGControlSPOLinkExpiration {
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Setting not exposed by Graph /admin/sharepoint/settings (requires SharePoint Management Shell); not assessed.'
+    $sp = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettingsSPO' -Default $null
+    if ($null -eq $sp) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph.'; return
+    }
+    $days = [int](Get-NRGObjectField -Item $sp -Key 'RequireAnonymousLinksExpireInDays' -Default -1)
+    if ($days -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Anonymous ('Anyone') sharing links expire after $days day(s)."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "Anonymous ('Anyone') sharing links never expire (RequireAnonymousLinksExpireInDays = $days). Shared links remain live indefinitely and cannot be recalled once distributed." -CurrentValue "RequireAnonymousLinksExpireInDays = $days (no expiry)" -RequiredValue 'A finite expiry (e.g. 30 days)' -Remediation $ctrl.Remediation
+    }
 }
 
 # ── SPO-2.3 SharePoint Apps Only From Store ───────────────────────────────────
@@ -190,7 +199,14 @@ function Test-NRGControlSPOCustomScript {
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Setting not exposed by Graph /admin/sharepoint/settings (requires SharePoint Management Shell); not assessed.'
+    # Custom script is a PER-SITE flag (Set-SPOSite -DenyAddAndCustomizePages),
+    # not a tenant Get-SPOTenant property, so there is no single tenant-wide value
+    # to read. Modern tenants block custom script by default; verifying every site
+    # requires Get-SPOSite enumeration (out of scope for a tenant-settings read).
+    # Kept as an advisory (Partial) rather than a fabricated pass/fail.
+    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Per-site review required)" -Severity 'Low' -FrameworkIds $cit `
+        -Detail 'Custom-script permission is controlled per site collection (DenyAddAndCustomizePages), not by a tenant-wide switch. Custom script is blocked by default on modern tenants. Confirm no site collection has been re-enabled for custom script: Get-SPOSite -Limit All | Where-Object { $_.DenyAddAndCustomizePages -ne ''Enabled'' }.' `
+        -Remediation $ctrl.Remediation
 }
 
 # ── SPO-2.5 Third-Party Storage Services Disabled ────────────────────────────
@@ -216,7 +232,17 @@ function Test-NRGControlSPOEmailAttestation {
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Setting not exposed by Graph /admin/sharepoint/settings (requires SharePoint Management Shell); not assessed.'
+    $sp = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettingsSPO' -Default $null
+    if ($null -eq $sp) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph.'; return
+    }
+    $required = [bool](Get-NRGObjectField -Item $sp -Key 'EmailAttestationRequired' -Default $false)
+    $reauth   = [int](Get-NRGObjectField -Item $sp -Key 'EmailAttestationReAuthDays' -Default 0)
+    if ($required) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "External recipients must periodically re-verify their email to keep access (re-attestation every $reauth day(s))."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Email attestation is not required for external sharing. Recipients of verification-code links are never asked to re-prove control of their mailbox, so forwarded or intercepted links grant lasting access.' -CurrentValue 'EmailAttestationRequired = False' -RequiredValue 'EmailAttestationRequired = True' -Remediation $ctrl.Remediation
+    }
 }
 
 # ── SPO-2.7 Reauthentication Required for Sharing Links ──────────────────────
@@ -280,9 +306,18 @@ function Test-NRGControlSPOSharingNotifications {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-        -Title $ctrl.Title `
-        -Detail 'Setting not exposed by Graph /admin/sharepoint/settings (requires SharePoint Management Shell); not assessed.'
+    $sp = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettingsSPO' -Default $null
+    if ($null -eq $sp) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title `
+            -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph.'; return
+    }
+    $notify = [bool](Get-NRGObjectField -Item $sp -Key 'NotifyOwnersWhenItemsReshared' -Default $false)
+    if ($notify) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Site owners are notified when their content is reshared — unexpected resharing is visible for review.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'Owners are not notified when items are reshared. Content can spread to new external parties without the owner ever knowing.' -CurrentValue 'NotifyOwnersWhenItemsReshared = False' -RequiredValue 'NotifyOwnersWhenItemsReshared = True' -Remediation $ctrl.Remediation
+    }
 }
 
 # ── SPO-3.3 OneDrive Version History Enabled ──────────────────────────────────
@@ -314,7 +349,17 @@ function Test-NRGControlSPOGuestExpiry {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-        -Title $ctrl.Title `
-        -Detail 'Setting not exposed by Graph /admin/sharepoint/settings (requires SharePoint Management Shell); not assessed.'
+    $sp = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettingsSPO' -Default $null
+    if ($null -eq $sp) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title `
+            -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph.'; return
+    }
+    $required = [bool](Get-NRGObjectField -Item $sp -Key 'ExternalUserExpirationRequired' -Default $false)
+    $expDays  = [int](Get-NRGObjectField -Item $sp -Key 'ExternalUserExpireInDays' -Default 0)
+    if ($required -and $expDays -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Guest (external user) access automatically expires after $expDays day(s) of inactivity."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Guest access never automatically expires (ExternalUserExpirationRequired off). External users retain access to shared content indefinitely, accumulating stale standing access.' -CurrentValue "ExternalUserExpirationRequired = $required" -RequiredValue 'ExternalUserExpirationRequired = True with a finite ExternalUserExpireInDays' -Remediation $ctrl.Remediation
+    }
 }

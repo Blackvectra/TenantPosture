@@ -9,7 +9,8 @@
 #      (read-only): Directory.Read.All, Policy.Read.All, Reports.Read.All,
 #      SecurityEvents.Read.All, AuditLog.Read.All, RoleManagement.Read.All,
 #      Organization.Read.All, Sites.Read.All, DeviceManagementConfiguration.Read.All,
-#      DeviceManagementApps.Read.All, UserAuthenticationMethod.Read.All.
+#      DeviceManagementApps.Read.All, UserAuthenticationMethod.Read.All,
+#      IdentityRiskyServicePrincipal.Read.All, AttackSimulation.Read.All.
 #      EXO: Exchange.ManageAsApp + Global Reader role. See docs/AUTH-APP-ONLY.md.
 #      Use CA-issued cert. Self-signed is discouraged per Microsoft Learn.
 #
@@ -130,7 +131,14 @@ function Connect-NRGServices {
             'DeviceManagementServiceConfig.Read.All',
             'Policy.Read.PermissionGrant',
             'PrivilegedAccess.Read.AzureAD',
-            'TeamSettings.Read.All'
+            'TeamSettings.Read.All',
+            # ── v4.13 added (2) — require client re-consent ──────────────
+            #   IdentityRiskyServicePrincipal.Read.All → AAD-11.3 (risky
+            #     workload identities; needs Entra ID P2 + Workload IDs add-on)
+            #   AttackSimulation.Read.All → DEF-4.6 (attack-sim training;
+            #     Global cloud only, needs Defender for Office 365 P2)
+            'IdentityRiskyServicePrincipal.Read.All',
+            'AttackSimulation.Read.All'
         )
 
         # Force-load the LATEST Microsoft.Graph.Authentication to prevent assembly conflicts
@@ -302,6 +310,60 @@ function Connect-NRGServices {
         }
     }
 
+    # ── 5. SharePoint Online Management Shell ────────────────────────────────
+    # Optional. Powers the five SPO tenant controls (SPO-2.2/2.6/3.2/3.4 + the
+    # SPO-2.4 advisory) whose settings Graph /admin/sharepoint/settings does NOT
+    # expose. Uses Microsoft.Online.SharePoint.PowerShell (NOT PnP — PnP loads an
+    # old Graph.Core assembly that breaks Microsoft.Graph in the same session).
+    # Best-effort: any failure leaves SharePoint=$false and the SPO collector
+    # falls back to Graph-only, so the five controls stay NotApplicable — never a
+    # false pass. App-only cert auth isn't supported by this module (like IPPS).
+    if (-not $SkipSharePoint) {
+        Write-Host "  [*] SharePoint Online Management Shell..." -ForegroundColor Cyan
+        try {
+            if ($isAppOnly) {
+                Write-Host "      Note: SPO Management Shell does not support app-only cert auth. Skipping (Graph-only SPO)." -ForegroundColor DarkYellow
+            } elseif (-not ($result['Graph'])) {
+                Write-Host "      Note: Graph not connected — cannot derive SPO admin URL. Skipping." -ForegroundColor DarkYellow
+            } else {
+                $spoAvail = (Get-Module -ListAvailable -Name Microsoft.Online.SharePoint.PowerShell -ErrorAction SilentlyContinue) -or
+                            (Get-Module -Name Microsoft.Online.SharePoint.PowerShell -ErrorAction SilentlyContinue)
+                if (-not $spoAvail) {
+                    Write-Host "      Note: Microsoft.Online.SharePoint.PowerShell not installed. Skipping (Graph-only SPO). Install-Module Microsoft.Online.SharePoint.PowerShell -Scope CurrentUser -Force" -ForegroundColor DarkYellow
+                } else {
+                    Import-Module Microsoft.Online.SharePoint.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
+                    # Derive the admin URL from the Graph root site host:
+                    # https://contoso.sharepoint.com → https://contoso-admin.sharepoint.com
+                    # (also correct for gov: contoso.sharepoint.us → contoso-admin.sharepoint.us).
+                    $adminUrl = $null
+                    try {
+                        $root = Invoke-NRGGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/sites/root' -ErrorAction Stop
+                        $webUrl = [string]($root.webUrl ?? '')
+                        if ($webUrl -match '^https://([^./]+)\.(sharepoint\.[a-z]+)') {
+                            $adminUrl = "https://$($Matches[1])-admin.$($Matches[2])"
+                        }
+                    } catch {
+                        Register-NRGException -Source 'Connect-SPO-RootSite' -Message $_.Exception.Message -ErrorAction SilentlyContinue
+                    }
+                    if (-not $adminUrl) {
+                        Write-Host "      Note: could not derive SPO admin URL from Graph root site. Skipping." -ForegroundColor DarkYellow
+                    } else {
+                        # Interactive browser MFA (matches ScubaGear). No device-code flow.
+                        Connect-SPOService -Url $adminUrl -ErrorAction Stop
+                        $result['SharePoint']   = $true
+                        $result['SPOAdminUrl']  = $adminUrl
+                        Write-Host "  [+] SharePoint Online connected ($adminUrl)" -ForegroundColor Green
+                    }
+                }
+            }
+        } catch {
+            Write-Host "  [!] SharePoint: $($_.Exception.Message)" -ForegroundColor Yellow
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'Connect-SPO' -Message $_.Exception.Message
+            }
+        }
+    }
+
     Write-Host ""
     Write-Output $result
 }
@@ -311,6 +373,7 @@ function Disconnect-NRGServices {
     try { Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null } catch {}
     try { Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue | Out-Null } catch {}
     try { Disconnect-MicrosoftTeams -ErrorAction SilentlyContinue | Out-Null } catch {}
+    try { Disconnect-SPOService -ErrorAction SilentlyContinue | Out-Null } catch {}
     try { Disconnect-PnPOnline -ErrorAction SilentlyContinue | Out-Null } catch {}
     Write-Host "[-] Sessions disconnected." -ForegroundColor DarkGray
 }
