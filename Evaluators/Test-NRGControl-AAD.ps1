@@ -785,9 +785,27 @@ function Test-NRGControlAADRiskyServicePrincipals {
     if (-not $auth -or -not $auth.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
     }
-    # 'Data.RiskyServicePrincipals' is never populated by any collector, so this
-    # check always saw an empty list and reported a false Satisfied. Not assessed.
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Risky service principal data not collected; not assessed.'
+    # $null = endpoint not reachable (scope not consented, or no Workload Identities
+    # Premium so detections never run) — honest NotApplicable, not a false pass.
+    $risky = Get-NRGNestedProperty -Object $auth -Path 'Data.RiskyServicePrincipals' -Default $null
+    if ($null -eq $risky) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Risky workload-identity data unavailable (requires IdentityRiskyServicePrincipal.Read.All consent and Workload Identities Premium); not assessed.'; return
+    }
+    $risky = @($risky)
+    # atRisk / confirmedCompromised are the states that demand action; remediated,
+    # dismissed, confirmedSafe and none are resolved or benign.
+    $active = @($risky | Where-Object { (Get-NRGObjectField -Item $_ -Key 'RiskState') -in @('atRisk','confirmedCompromised') })
+    if ($active.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "No service principals are currently flagged at-risk by Identity Protection ($($risky.Count) workload identities evaluated)."
+    } else {
+        $names = @($active | ForEach-Object { $n = [string](Get-NRGObjectField -Item $_ -Key 'DisplayName'); if ($n) { $n } else { [string](Get-NRGObjectField -Item $_ -Key 'AppId') } }) | Select-Object -First 10
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "$($active.Count) service principal(s) are flagged at-risk or confirmed compromised by Identity Protection. Compromised workload identities can hold OAuth grants that persist through user password resets and MFA. Investigate and remediate." `
+            -CurrentValue "$($active.Count) risky SP(s): $($names -join ', ')" `
+            -RequiredValue 'Zero at-risk / confirmed-compromised service principals' `
+            -Remediation $ctrl.Remediation `
+            -AffectedObjects $active
+    }
 }
 
 # ── AAD-11.4 Token Protection (Binding) Conditional Access ───────────────────

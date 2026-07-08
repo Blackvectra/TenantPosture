@@ -27,6 +27,11 @@ function Invoke-NRGCollectSharePoint {
             TenantSettings = $null
             RootSite       = $null
             ExternalSharing = $null
+            # Populated only when a SharePoint Online Management Shell session
+            # exists (Connect-SPOService). Graph /admin/sharepoint/settings does
+            # NOT expose these fields; the five SPO-2.2/2.4/2.6/3.2/3.4 controls
+            # depend on them. $null → those evaluators report NotApplicable.
+            TenantSettingsSPO = $null
         }
     }
 
@@ -90,6 +95,30 @@ function Invoke-NRGCollectSharePoint {
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'SPO-RootSite' -Message $_.Exception.Message
+            }
+        }
+
+        # SharePoint Online Management Shell tenant settings — only if a
+        # Connect-SPOService session is live (see Connect-NRGServices section 5).
+        # Get-SPOTenant surfaces the sharing-governance fields Graph omits.
+        # Field names verified against Set-SPOTenant docs.
+        if (Get-Command Get-SPOTenant -ErrorAction SilentlyContinue) {
+            try {
+                $t = Get-SPOTenant -ErrorAction Stop
+                if ($t) {
+                    $result.Data.TenantSettingsSPO = @{
+                        RequireAnonymousLinksExpireInDays = [int]($t.RequireAnonymousLinksExpireInDays ?? -1)   # SPO-2.2
+                        EmailAttestationRequired          = [bool]($t.EmailAttestationRequired ?? $false)       # SPO-2.6
+                        EmailAttestationReAuthDays        = [int]($t.EmailAttestationReAuthDays ?? 0)           # SPO-2.6
+                        NotifyOwnersWhenItemsReshared     = [bool]($t.NotifyOwnersWhenItemsReshared ?? $false)  # SPO-3.2
+                        ExternalUserExpirationRequired    = [bool]($t.ExternalUserExpirationRequired ?? $false) # SPO-3.4
+                        ExternalUserExpireInDays          = [int]($t.ExternalUserExpireInDays ?? 0)             # SPO-3.4
+                    }
+                }
+            } catch {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'SPO-TenantSettingsShell' -Message $_.Exception.Message
+                }
             }
         }
 

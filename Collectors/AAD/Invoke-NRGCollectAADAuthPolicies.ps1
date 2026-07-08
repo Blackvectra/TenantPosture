@@ -26,6 +26,7 @@ function Invoke-NRGCollectAADAuthPolicies {
             AdminConsentPolicy      = $null
             ConsentPolicies         = $null
             CrossTenantAccess       = $null
+            RiskyServicePrincipals  = $null
         }
     }
 
@@ -230,6 +231,35 @@ function Invoke-NRGCollectAADAuthPolicies {
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-CrossTenantAccess' -Message $_.Exception.Message
+            }
+        }
+
+        # ── Risky service principals (workload identity risk) — AAD-11.3 ──────
+        # Needs IdentityRiskyServicePrincipal.Read.All (v4.13 re-consent) AND
+        # Entra ID P2 + Workload Identities Premium for detections to populate.
+        # Absent either, this 403s / returns empty; caught so RiskyServicePrincipals
+        # stays $null and the evaluator routes to NotApplicable, never a false pass.
+        try {
+            $rsp = Invoke-NRGGraphRequest -Method GET `
+                -Uri 'https://graph.microsoft.com/v1.0/identityProtection/riskyServicePrincipals?$top=200' `
+                -ErrorAction Stop
+            if ($rsp -and $null -ne $rsp.value) {
+                $result.Data.RiskyServicePrincipals = @(@($rsp.value) | ForEach-Object {
+                    @{
+                        Id                   = [string]($_.id ?? '')
+                        AppId                = [string]($_.appId ?? '')
+                        DisplayName          = [string]($_.displayName ?? '')
+                        IsEnabled            = [bool]($_.isEnabled ?? $false)
+                        RiskLevel            = [string]($_.riskLevel ?? 'none')
+                        RiskState            = [string]($_.riskState ?? 'none')
+                        RiskDetail           = [string]($_.riskDetail ?? 'none')
+                        ServicePrincipalType = [string]($_.servicePrincipalType ?? '')
+                    }
+                })
+            }
+        } catch {
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'AAD-RiskyServicePrincipals' -Message $_.Exception.Message
             }
         }
 

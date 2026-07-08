@@ -278,7 +278,13 @@ function Test-NRGControlTeamsPSTN {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Required Teams setting not collected; not assessed.'
+    if (-not (Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy')) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams meeting policy not collected; not assessed.'; return }
+    $pstnBypass = [bool](Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowPSTNUsersToBypassLobby' -Default $false)
+    if (-not $pstnBypass) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'PSTN dial-in users cannot bypass the lobby — they wait for admission like other external participants.'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'PSTN dial-in users bypass the meeting lobby. Anyone who dials the meeting number joins directly without admission.' -CurrentValue 'AllowPSTNUsersToBypassLobby = True' -RequiredValue 'AllowPSTNUsersToBypassLobby = False' -Remediation $ctrl.Remediation
+    }
 }
 
 # ── TMS-3.1 Teams Meeting Watermarks Enabled ─────────────────────────────────
@@ -381,7 +387,14 @@ function Test-NRGControlTeamsMeetingRecordingScope {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Required Teams setting not collected; not assessed.'
+    if (-not (Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy')) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams meeting policy not collected; not assessed.'; return }
+    # NewMeetingRecordingExpirationDays: 1-99999 = auto-expiry configured; -1 = never expire.
+    $expiry = [int](Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.NewMeetingRecordingExpirationDays' -Default -1)
+    if ($expiry -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Meeting recordings auto-expire after $expiry days — recordings are not retained indefinitely."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Meeting recordings never auto-expire (retention set to unlimited). Recorded meeting content accumulates in OneDrive/SharePoint indefinitely, expanding the data-at-rest exposure.' -CurrentValue 'NewMeetingRecordingExpirationDays = -1 (never expires)' -RequiredValue 'A finite expiration (e.g. 60-120 days)' -Remediation $ctrl.Remediation
+    }
 }
 
 # ── TMS-4.2 Anonymous Users Cannot Start Meetings ────────────────────────────
@@ -425,5 +438,15 @@ function Test-NRGControlTeamsLiveEvents {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Required Teams setting not collected; not assessed.'
+    if (-not (Get-NRGNestedProperty -Object $tms -Path 'Data.BroadcastPolicy')) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams live-events (broadcast) policy not collected; not assessed.'; return }
+    $scheduling = [bool](Get-NRGNestedProperty -Object $tms -Path 'Data.BroadcastPolicy.AllowBroadcastScheduling' -Default $false)
+    $visibility = [string](Get-NRGNestedProperty -Object $tms -Path 'Data.BroadcastPolicy.BroadcastAttendeeVisibilityMode' -Default '')
+    if (-not $scheduling) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Teams live events are disabled (AllowBroadcastScheduling = False) — no live events can be broadcast to anonymous internet users.'
+    } elseif ($visibility -eq 'Everyone') {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Live events can be broadcast to Everyone, including anonymous internet users. Organizers can publish company content to a fully public, unauthenticated audience.' -CurrentValue 'BroadcastAttendeeVisibilityMode = Everyone' -RequiredValue 'EveryoneInCompany or InvitedUsersInCompany (authenticated audiences only)' -Remediation $ctrl.Remediation
+    } else {
+        $shown = if ($visibility) { $visibility } else { 'restricted' }
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Live events are restricted to authenticated audiences (BroadcastAttendeeVisibilityMode = $shown) — anonymous internet users cannot watch."
+    }
 }
