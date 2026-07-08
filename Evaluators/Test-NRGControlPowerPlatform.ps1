@@ -94,12 +94,25 @@ function Test-NRGControlPPLConnectorClassification {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Power Platform DLP data not collected'; return
     }
-    # The collector never stores per-policy connector classification detail
-    # (BusinessConnectors/BlockedConnectors), so both sums were always zero and
-    # this check reported a false Gap. Not assessed.
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-        -Title $ctrl.Title -FrameworkIds $cit `
-        -Detail 'Connector classification detail not collected; not assessed.'
+    # Invoke-NRGCollectPowerPlatform now stores per-policy connector
+    # classification (Business/Blocked connectors) from Get-DlpPolicy.
+    $policies      = @($ppl.Data.DLPPolicies ?? @())
+    $businessConns = @($policies | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'BusinessConnectors' -Default @()).Count } | Measure-Object -Sum).Sum
+    $blockedConns  = @($policies | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'BlockedConnectors'  -Default @()).Count } | Measure-Object -Sum).Sum
+    if ($policies.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -FrameworkIds $cit -Detail 'No Power Platform DLP policies configured.'
+    } elseif ($businessConns -gt 0 -or $blockedConns -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "Power Platform DLP classifies connectors ($businessConns business, $blockedConns blocked across $($policies.Count) policy(ies))."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'Power Platform DLP policies exist but classify no connectors as business or blocked — all connectors have equal access.' `
+            -CurrentValue "$($policies.Count) DLP policy(ies), 0 classified connectors" `
+            -RequiredValue 'Connectors classified into business/blocked groups' -Remediation $ctrl.Remediation
+    }
 }
 
 # ── PPL-2.2 Power Automate Governance Policy ──────────────────────────────────
