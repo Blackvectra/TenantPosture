@@ -30,14 +30,31 @@ function Invoke-NRGCollectTeams {
             try {
                 $fed = Get-CsTenantFederationConfiguration -ErrorAction Stop
                 if ($fed) {
-                    $result.Data.FederationConfig = @{
-                        AllowFederatedUsers              = [bool]$fed.AllowFederatedUsers
-                        AllowPublicUsers                 = [bool]$fed.AllowPublicUsers
-                        AllowTeamsConsumer               = [bool]$fed.AllowTeamsConsumer
-                        AllowTeamsConsumerInbound        = [bool]$fed.AllowTeamsConsumerInbound
-                        TreatDiscoveredPartnersAsUnverified = [bool]$fed.TreatDiscoveredPartnersAsUnverified
-                        AllowedDomains                   = @($fed.AllowedDomains.AllowedDomain)
-                        BlockedDomains                   = @($fed.BlockedDomains.Domain)
+                    # Get-Cs* objects vary by MicrosoftTeams module version and can
+                    # arrive remoting-deserialized without every property — bare
+                    # $fed.Prop then THROWS under StrictMode. Read via the shape-
+                    # agnostic helper so one absent property doesn't nuke the whole
+                    # FederationConfig block. (Same StrictMode class as the Graph
+                    # shape fix, but Cs cmdlets bypass Invoke-NRGGraphRequest.)
+                    # AllowedDomains is either an AllowAllKnownDomains marker or a
+                    # list whose items expose .AllowedDomain (Blocked items expose
+                    # .Domain). Enumerate the container and null-filter so an empty
+                    # or marker container yields an empty array (Count 0), never a
+                    # phantom @($null) — @($null).Count is 1, which TMS-1.1 would
+                    # misread as "federation restricted to 1 domain" on an OPEN
+                    # (wide-open) federation tenant: a false Satisfied.
+                    $allowedRaw = Get-NRGObjectField -Item $fed -Key 'AllowedDomains'
+                    $blockedRaw = Get-NRGObjectField -Item $fed -Key 'BlockedDomains'
+                    $allowedList = @(foreach ($x in @($allowedRaw)) { Get-NRGObjectField -Item $x -Key 'AllowedDomain' }) | Where-Object { $_ }
+                    $blockedList = @(foreach ($x in @($blockedRaw)) { Get-NRGObjectField -Item $x -Key 'Domain' }) | Where-Object { $_ }
+                    $result.Data.FederationConfig = [ordered]@{
+                        AllowFederatedUsers              = [bool](Get-NRGObjectField -Item $fed -Key 'AllowFederatedUsers' -Default $false)
+                        AllowPublicUsers                 = [bool](Get-NRGObjectField -Item $fed -Key 'AllowPublicUsers' -Default $false)
+                        AllowTeamsConsumer               = [bool](Get-NRGObjectField -Item $fed -Key 'AllowTeamsConsumer' -Default $false)
+                        AllowTeamsConsumerInbound        = [bool](Get-NRGObjectField -Item $fed -Key 'AllowTeamsConsumerInbound' -Default $false)
+                        TreatDiscoveredPartnersAsUnverified = [bool](Get-NRGObjectField -Item $fed -Key 'TreatDiscoveredPartnersAsUnverified' -Default $false)
+                        AllowedDomains                   = @($allowedList)
+                        BlockedDomains                   = @($blockedList)
                     }
                 }
             } catch {
@@ -52,12 +69,13 @@ function Invoke-NRGCollectTeams {
             try {
                 $ext = Get-CsExternalAccessPolicy -Identity Global -ErrorAction Stop
                 if ($ext) {
+                    # Shape-agnostic reads — see FederationConfig note above.
                     $result.Data.ExternalAccessPolicy = @{
-                        Identity                  = [string]$ext.Identity
-                        EnableFederationAccess    = [bool]$ext.EnableFederationAccess
-                        EnablePublicCloudAccess   = [bool]$ext.EnablePublicCloudAccess
-                        EnableTeamsConsumerAccess = [bool]$ext.EnableTeamsConsumerAccess
-                        EnableTeamsConsumerInbound = [bool]$ext.EnableTeamsConsumerInbound
+                        Identity                  = [string](Get-NRGObjectField -Item $ext -Key 'Identity' -Default '')
+                        EnableFederationAccess    = [bool](Get-NRGObjectField -Item $ext -Key 'EnableFederationAccess' -Default $false)
+                        EnablePublicCloudAccess   = [bool](Get-NRGObjectField -Item $ext -Key 'EnablePublicCloudAccess' -Default $false)
+                        EnableTeamsConsumerAccess = [bool](Get-NRGObjectField -Item $ext -Key 'EnableTeamsConsumerAccess' -Default $false)
+                        EnableTeamsConsumerInbound = [bool](Get-NRGObjectField -Item $ext -Key 'EnableTeamsConsumerInbound' -Default $false)
                     }
                 }
             } catch {

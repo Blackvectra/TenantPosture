@@ -271,7 +271,7 @@ function Invoke-NRGCollectEXOConnectionFilter {
 
         # Alert policies for forwarding and unusual volume
         try {
-            $alerts = Invoke-MgGraphRequest -Method GET `
+            $alerts = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/security/alerts_v2?$filter=status ne ''resolved''&$top=50' `
                 -ErrorAction Stop
             $result.Data['AlertPolicies'] = @{

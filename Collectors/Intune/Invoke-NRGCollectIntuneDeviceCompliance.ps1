@@ -45,7 +45,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
             $maxPages  = 200
             $pageCount = 0
             while ($next -and $pageCount -lt $maxPages) {
-                $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 foreach ($p in @($page.value)) {
                     $result.Data.CompliancePolicies += @{
                         Id          = $p.id
@@ -82,7 +82,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
             $maxPages  = 200
             $pageCount = 0
             while ($next -and $pageCount -lt $maxPages) {
-                $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 foreach ($p in @($page.value)) {
                     $odata = [string]$p.'@odata.type'
                     $entry = @{
@@ -121,7 +121,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
             $pageCount = 0
             $enrollAll = @()
             while ($next -and $pageCount -lt $maxPages) {
-                $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 if ($page.value) { $enrollAll += $page.value }
                 $next = $page.'@odata.nextLink'
                 $pageCount++
@@ -176,7 +176,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
             $maxPages  = 200
             $pageCount = 0
             while ($next -and $pageCount -lt $maxPages) {
-                $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 if ($page.value) { $devList += $page.value }
                 $next = $page.'@odata.nextLink'
                 $pageCount++

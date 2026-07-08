@@ -74,7 +74,7 @@ function Invoke-NRGCollectM365Copilot {
 
     # ── 1) Licensing: SKUs that confer Copilot ───────────────────────────────
     try {
-        $skus = Invoke-MgGraphRequest -Method GET `
+        $skus = Invoke-NRGGraphRequest -Method GET `
             -Uri 'https://graph.microsoft.com/v1.0/subscribedSkus' `
             -ErrorAction Stop
 
@@ -126,7 +126,7 @@ function Invoke-NRGCollectM365Copilot {
 
     # ── 2) User count + per-user license confirmation ────────────────────────
     try {
-        $users = Invoke-MgGraphRequest -Method GET `
+        $users = Invoke-NRGGraphRequest -Method GET `
             -Uri 'https://graph.microsoft.com/v1.0/users?$select=id,assignedLicenses&$top=999' `
             -ErrorAction Stop
 
@@ -178,7 +178,7 @@ function Invoke-NRGCollectM365Copilot {
             #   /beta/informationProtection/policy/labels  — user-scoped labels
             #   /v1.0/security/informationProtection/sensitivityLabels — newer
             try {
-                $sLabels = Invoke-MgGraphRequest -Method GET `
+                $sLabels = Invoke-NRGGraphRequest -Method GET `
                     -Uri 'https://graph.microsoft.com/beta/informationProtection/policy/labels' `
                     -ErrorAction Stop
                 $lValues = @($sLabels.value ?? @())
@@ -266,7 +266,7 @@ function Invoke-NRGCollectM365Copilot {
     # /applications for known Copilot Studio bot publisher patterns. If nothing
     # is found, downstream evaluator routes to NotApplicable.
     try {
-        $apps = Invoke-MgGraphRequest -Method GET `
+        $apps = Invoke-NRGGraphRequest -Method GET `
             -Uri "https://graph.microsoft.com/v1.0/applications?`$select=id,displayName,publisherDomain,tags&`$top=200" `
             -ErrorAction Stop
         $aValues = @($apps.value ?? @())

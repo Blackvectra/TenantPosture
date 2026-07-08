@@ -32,7 +32,7 @@ function Invoke-NRGCollectAADIdentityGovernance {
     try {
         # SSPR / Combined registration policy
         try {
-            $sspr = Invoke-MgGraphRequest -Method GET `
+            $sspr = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy' `
                 -ErrorAction Stop
             $regEnforcement = $sspr.registrationEnforcement
@@ -51,7 +51,7 @@ function Invoke-NRGCollectAADIdentityGovernance {
 
         # External collaboration / guest invite settings
         try {
-            $extCollab = Invoke-MgGraphRequest -Method GET `
+            $extCollab = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/authorizationPolicy' `
                 -ErrorAction Stop
             $result.Data.ExternalCollab = @{
@@ -74,7 +74,7 @@ function Invoke-NRGCollectAADIdentityGovernance {
 
         # Admin consent request policy
         try {
-            $consentPol = Invoke-MgGraphRequest -Method GET `
+            $consentPol = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/adminConsentRequestPolicy' `
                 -ErrorAction Stop
             $result.Data.ConsentPolicy = @{
@@ -90,7 +90,7 @@ function Invoke-NRGCollectAADIdentityGovernance {
 
         # High-risk OAuth consent grants — app-only grants to all users
         try {
-            $grants = Invoke-MgGraphRequest -Method GET `
+            $grants = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/oauth2PermissionGrants?$top=200&$filter=consentType eq ''AllPrincipals''' `
                 -ErrorAction Stop
             $result.Data.OAuthHighRiskGrants = @($grants.value ?? @() | ForEach-Object {
@@ -146,7 +146,7 @@ function Invoke-NRGCollectAADIdentityGovernance {
                     $next = "https://graph.microsoft.com/v1.0/groups/$groupId/transitiveMembers?`$select=id&`$top=999"
                     $pageCount = 0
                     while ($next -and $pageCount -lt 50) {
-                        $page = Invoke-MgGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                        $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                         foreach ($m in @($page.value ?? @())) {
                             if ($m.id) { $members += [string]$m.id }
                         }
@@ -227,7 +227,7 @@ function Invoke-NRGCollectAADIdentityGovernance {
 
         # PIM role management policy details (activation rules)
         try {
-            $pimPolicies = Invoke-MgGraphRequest -Method GET `
+            $pimPolicies = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/roleManagementPolicies?$filter=scopeType eq ''DirectoryRole''&$expand=rules&$top=50' `
                 -ErrorAction Stop
 

@@ -337,7 +337,7 @@ function Test-NRGControlAADExternalCollab {
     }
     $collab = Get-NRGNestedProperty -Object $gov -Path 'Data.ExternalCollab'
     $gaps = @()
-    if (Get-SafeProp $collab 'AllowedToCreateTenants') { $gaps += 'Users can create new tenants' }
+    if (Get-NRGNestedProperty -Object $collab -Path 'DefaultUserRolePermissions.AllowedToCreateTenants') { $gaps += 'Users can create new tenants' }
     if ((Get-SafeProp $collab 'BlockMsolPowerShell') -ne $true) { $gaps += 'Legacy MSOL PowerShell not blocked' }
     if ($gaps.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'External collaboration settings properly restricted.'
@@ -728,31 +728,22 @@ function Test-NRGControlAADDeviceCode {
     [CmdletBinding()] param()
     $cid = 'AAD-11.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $auth = Get-NRGRawData -Key 'AAD-AuthPolicies'
-    if (-not $auth -or -not $auth.Success) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
-    }
-    # Authentication flows policy — deviceCodeFlow
-    $flowPolicy = Get-NRGNestedProperty -Object $auth -Path 'Data.AuthenticationFlowsPolicy'
-    $deviceCodeBlocked = $flowPolicy -and (
-        (Get-NRGSafeProperty -Object $flowPolicy -Property 'DeviceCodeFlow') -eq 'blocked' -or
-        (Get-NRGNestedProperty -Object $flowPolicy -Path 'selfServiceSignUp.isEnabled') -eq $false
-    )
-    # CA policy blocking device code is the more reliable check
+    # The signal IS collected: Invoke-NRGCollectAADCAPolicies stores each policy's
+    # authentication-flow condition as Conditions.AuthFlows (the raw Graph
+    # authenticationFlows object, which carries transferMethods). A CA policy that
+    # blocks device code has transferMethods containing 'deviceCode'.
     $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
-    $caBlocks = $false
-    if ($ca -and $ca.Success) {
-        $caBlocks = @($ca.Data.Policies | Where-Object {
-            $_.State -eq 'enabled' -and
-            $_.Conditions.AuthenticationFlows -and
-            ($_.Conditions.AuthenticationFlows.TransferMethods -contains 'deviceCodeFlow' -or
-             $_.Conditions.AuthenticationFlows.TransferMethods -contains 'deviceCode')
-        }).Count -gt 0
+    if (-not $ca -or -not $ca.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Conditional Access policy data not collected'; return
     }
-    if ($deviceCodeBlocked -or $caBlocks) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Device code authentication flow is blocked. Adversary-in-the-middle phishing via device code is prevented.'
+    $caBlocks = @($ca.Data.Policies | Where-Object {
+        $_.State -eq 'enabled' -and
+        ((@($_.Conditions.AuthFlows) | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'transferMethods') }) -join ',') -match 'deviceCode'
+    }).Count -gt 0
+    if ($caBlocks) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Device code authentication flow is blocked by a Conditional Access policy. Adversary-in-the-middle phishing via device code is prevented.'
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Device code authentication flow is not blocked. Attackers use this flow in phishing campaigns where victims visit a URL and enter a code — no password required to compromise the account.' -CurrentValue 'Device code flow: allowed' -RequiredValue 'CA policy blocking deviceCodeFlow for all users' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Device code authentication flow is not blocked. Attackers use this flow in phishing campaigns where victims visit a URL and enter a code — no password required to compromise the account.' -CurrentValue 'No CA policy blocks deviceCodeFlow' -RequiredValue 'CA policy blocking deviceCodeFlow for all users' -Remediation $ctrl.Remediation
     }
 }
 
@@ -771,8 +762,12 @@ function Test-NRGControlAADNoGuestInPrivRoles {
         'Application Administrator','Cloud Application Administrator','Conditional Access Administrator',
         'Intune Administrator','User Administrator','Authentication Policy Administrator'
     )
+    # Collector stores RoleDefinitionName (not RoleName) and no UserType — guests
+    # are identifiable by the #EXT# marker in PrincipalUPN. Reading the old
+    # RoleName/UserType keys made $guestPriv always empty -> a guest holding
+    # Global Administrator was silently reported Satisfied (Critical false-negative).
     $guestPriv = @($roles.Data.RoleAssignments | Where-Object {
-        $_.RoleName -in $privRoleNames -and $_.UserType -eq 'Guest'
+        $_.RoleDefinitionName -in $privRoleNames -and $_.PrincipalUPN -like '*#EXT#*'
     })
     if ($guestPriv.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No guest accounts hold highly privileged directory roles.'
@@ -790,13 +785,9 @@ function Test-NRGControlAADRiskyServicePrincipals {
     if (-not $auth -or -not $auth.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
     }
-    $riskyApps = @(Get-NRGNestedProperty -Object $auth -Path 'Data.RiskyServicePrincipals' -Default @())
-    if ($riskyApps.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No risky service principals detected by Identity Protection.'
-    } else {
-        $names = ($riskyApps | Select-Object -First 5 | ForEach-Object { $_.DisplayName }) -join ', '
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($riskyApps.Count) risky service principal(s) detected: $names. Compromised service principals have persistent, non-interactive access to all assigned resource scopes." -CurrentValue "$($riskyApps.Count) risky service principals" -RequiredValue 'Zero unreviewed risky service principals' -Remediation $ctrl.Remediation
-    }
+    # 'Data.RiskyServicePrincipals' is never populated by any collector, so this
+    # check always saw an empty list and reported a false Satisfied. Not assessed.
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Risky service principal data not collected; not assessed.'
 }
 
 # ── AAD-11.4 Token Protection (Binding) Conditional Access ───────────────────
@@ -852,12 +843,12 @@ function Test-NRGControlAADCrossTenantAccess {
     if (-not $auth -or -not $auth.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
     }
-    $xtap = Get-NRGNestedProperty -Object $auth -Path 'Data.CrossTenantAccessPolicy'
+    $xtap = Get-NRGNestedProperty -Object $auth -Path 'Data.CrossTenantAccess'
     if (-not $xtap) {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Cross-tenant access policy data not available. Verify in Entra ID > External Identities > Cross-tenant access settings that inbound defaults do not trust MFA or device compliance from unknown tenants.' -Remediation $ctrl.Remediation; return
     }
-    $trustsMFA    = [bool](Get-NRGNestedProperty -Object $xtap -Path 'DefaultInbound.TrustSettings.IsMfaAccepted' -Default $false)
-    $trustsDevice = [bool](Get-NRGNestedProperty -Object $xtap -Path 'DefaultInbound.TrustSettings.IsCompliantDeviceAccepted' -Default $false)
+    $trustsMFA    = [bool](Get-NRGNestedProperty -Object $xtap -Path 'InboundTrust.IsMfaAccepted' -Default $false)
+    $trustsDevice = [bool](Get-NRGNestedProperty -Object $xtap -Path 'InboundTrust.IsCompliantDeviceAccepted' -Default $false)
     if (-not $trustsMFA -and -not $trustsDevice) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Cross-tenant default inbound settings do not trust external MFA or device compliance claims.'
     } else {

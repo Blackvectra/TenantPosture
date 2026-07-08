@@ -13,6 +13,7 @@
       "EvaluatorFunction": "Test-NRGControlAADLegacyAuth",
       "Remediation": "Create a CA policy: All Users, Client apps = Other clients + Exchange ActiveSync, Grant = Block access.",
       "References": {
+        "CISControls": ["6.3", "4.1"],
         "CIS": "5.2.2.3",
         "SCuBA": "MS.AAD.1.1v1",
         "NIST": "IA-2, IA-5(1)",
@@ -41,8 +42,9 @@
       "EvaluatorFunction": "Test-NRGControlAADMFA",
       "Remediation": "CA policy: Users = All, Apps = All cloud apps, Grant = Require MFA. Or enable Security Defaults.",
       "References": {
+        "CISControls": ["6.3", "6.4"],
         "CIS": "5.2.2.1",
-        "SCuBA": "MS.AAD.3.2v2",
+        "SCuBA": "MS.AAD.3.2v1",
         "NIST": "IA-2(1), IA-2(2)",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -69,6 +71,7 @@
       "EvaluatorFunction": "Test-NRGControlAADPhishResistantMFA",
       "Remediation": "CA policy targeting privileged roles with Authentication Strength = Phishing-resistant MFA. Must cover Global Administrator at minimum.",
       "References": {
+        "CISControls": ["6.5"],
         "CIS": "5.2.2.2",
         "SCuBA": "MS.AAD.3.6v1",
         "NIST": "IA-2(1), IA-2(2), IA-2(6)",
@@ -98,6 +101,7 @@
       "EvaluatorFunction": "Test-NRGControlAADCA",
       "Remediation": "Deploy at minimum: (1) block legacy auth, (2) require MFA all users, (3) phishing-resistant MFA for admin roles.",
       "References": {
+        "CISControls": ["4.1", "6.5"],
         "CIS": "5.2.2",
         "SCuBA": "MS.AAD.1.1v1",
         "NIST": "AC-17, IA-2",
@@ -126,6 +130,7 @@
       "EvaluatorFunction": "Test-NRGControlAADPrivAccess",
       "Remediation": "Reduce GA count to 2-8 break-glass accounts. Remove GA from any on-premises synced accounts and assign to cloud-only accounts.",
       "References": {
+        "CISControls": ["5.4", "6.8"],
         "CIS": "5.1.2.1",
         "SCuBA": "MS.AAD.7.2v1",
         "NIST": "AC-6, AC-6(5)",
@@ -154,8 +159,9 @@
       "EvaluatorFunction": "Test-NRGControlEXOMailboxAudit",
       "Remediation": "Set-OrganizationConfig -AuditDisabled $false",
       "References": {
+        "CISControls": ["8.2", "8.5"],
         "CIS": "2.1.1",
-        "SCuBA": "MS.EXO.2.1v1",
+        "SCuBA": "MS.EXO.13.1v1",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
@@ -182,6 +188,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOSmtpAuth",
       "Remediation": "Set-TransportConfig -SmtpClientAuthenticationDisabled $true",
       "References": {
+        "CISControls": ["4.8"],
         "CIS": "2.1.4",
         "SCuBA": "MS.EXO.3.1v1",
         "NIST": "SC-8, IA-2",
@@ -210,6 +217,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOAutoForward",
       "Remediation": "Set-HostedOutboundSpamFilterPolicy -Identity Default -AutoForwardingMode Off. Set-RemoteDomain * -AutoForwardEnabled $false",
       "References": {
+        "CISControls": ["3.13"],
         "CIS": "2.1.2",
         "SCuBA": "MS.EXO.4.1v1",
         "NIST": "SC-7, SI-8",
@@ -237,8 +245,9 @@
       "EvaluatorFunction": "Test-NRGControlEXODKIM",
       "Remediation": "Enable-DkimSigningConfig -Identity domain.com. Publish the CNAME records from M365 admin center.",
       "References": {
+        "CISControls": ["9.5"],
         "CIS": "2.2.1",
-        "SCuBA": "MS.EXO.9.1v1",
+        "SCuBA": "MS.EXO.9.1v2",
         "NIST": "SC-8, SC-13",
         "CMMC": "SC.L2-3.13.8",
         "MITRE": [
@@ -265,6 +274,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOAntiPhish",
       "Remediation": "Set-AntiPhishPolicy -Identity Default -EnableTargetedUserProtection $true -EnableOrganizationDomainsProtection $true -EnableMailboxIntelligence $true -EnableExternalSenderTag $true",
       "References": {
+        "CISControls": ["9.7", "10.1"],
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.4v1",
         "NIST": "SI-3, SI-8",
@@ -293,8 +303,9 @@
       "EvaluatorFunction": "Test-NRGControlEXOModernAuth",
       "Remediation": "Set-OrganizationConfig -OAuth2ClientProfileEnabled $true",
       "References": {
+        "CISControls": ["9.1"],
         "CIS": "2.1.5",
-        "SCuBA": "MS.EXO.1.1v1",
+        "SCuBA": "MS.EXO.1.1v2",
         "NIST": "IA-2, SC-8",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -321,6 +332,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOHonorDMARC",
       "Remediation": "Set-AntiPhishPolicy -Identity Default -HonorDmarcPolicy $true",
       "References": {
+        "CISControls": ["9.5"],
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.4v1",
         "NIST": "SI-8",
@@ -349,6 +361,7 @@
       "EvaluatorFunction": "Test-NRGControlDNSSPF",
       "Remediation": "Publish: v=spf1 include:spf.protection.outlook.com -all. Add include: for all third-party senders before the -all qualifier.",
       "References": {
+        "CISControls": ["9.5"],
         "CIS": "2.2.2",
         "SCuBA": "MS.EXO.9.2v1",
         "NIST": "SI-8, SC-8",
@@ -377,8 +390,9 @@
       "EvaluatorFunction": "Test-NRGControlDNSDKIM",
       "Remediation": "Enable DKIM in M365 admin center for each domain. Publish the two CNAME records provided.",
       "References": {
+        "CISControls": ["9.5"],
         "CIS": "2.2.1",
-        "SCuBA": "MS.EXO.9.1v1",
+        "SCuBA": "MS.EXO.9.1v2",
         "NIST": "SC-8, SC-13",
         "CMMC": "SC.L2-3.13.8",
         "MITRE": [
@@ -405,8 +419,9 @@
       "EvaluatorFunction": "Test-NRGControlDNSDMARC",
       "Remediation": "Start with p=none and rua= reporting. Advance to p=quarantine then p=reject as all legitimate senders pass alignment. Target: v=DMARC1; p=reject; pct=100; rua=mailto:dmarc@domain.com",
       "References": {
+        "CISControls": ["9.5"],
         "CIS": "2.2.3",
-        "SCuBA": "MS.EXO.9.3v1",
+        "SCuBA": "MS.EXO.9.3v2",
         "NIST": "SI-8, SC-8",
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
@@ -433,6 +448,7 @@
       "EvaluatorFunction": "Test-NRGControlDNSMTASTS",
       "Remediation": "Publish _mta-sts TXT record and host policy file at https://mta-sts.domain.com/.well-known/mta-sts.txt with mode: enforce.",
       "References": {
+        "CISControls": ["3.10"],
         "CIS": "2.2.4",
         "SCuBA": "MS.EXO.9.4v1",
         "NIST": "SC-8, SC-8(1)",
@@ -461,6 +477,7 @@
       "EvaluatorFunction": "Test-NRGControlDNSTLSRPT",
       "Remediation": "Publish: _smtp._tls.domain.com TXT 'v=TLSRPTv1; rua=mailto:tlsrpt@domain.com'",
       "References": {
+        "CISControls": ["3.10"],
         "CIS": "2.2.4",
         "SCuBA": "",
         "NIST": "AU-2, SC-8",
@@ -488,6 +505,7 @@
       "EvaluatorFunction": "Test-NRGControlDNSDNSSEC",
       "Remediation": "Enable DNSSEC at your registrar. GoDaddy: Domains > DNS > DNSSEC > Enable. Free for up to 5 domains.",
       "References": {
+        "CISControls": [],
         "CIS": "2.2.5",
         "SCuBA": "",
         "NIST": "SC-20, SC-21",
@@ -516,6 +534,7 @@
       "EvaluatorFunction": "Test-NRGControlDNSDkimRotation",
       "Remediation": "Rotate DKIM keys: Set-DkimSigningConfig -Identity domain.com -KeyCreationTime (Get-Date) -BodyCanonicalization Relaxed -HeaderCanonicalization Relaxed. Plan a 12-month cadence and document rotation in the change record.",
       "References": {
+        "CISControls": ["9.5"],
         "CIS": "2.2.1",
         "SCuBA": "",
         "NIST": "SC-12, SC-13, SC-17",
@@ -544,6 +563,7 @@
       "EvaluatorFunction": "Test-NRGControlDNSCAA",
       "Remediation": "Publish CAA records at the registrar naming approved CAs. Example: 'domain.com. IN CAA 0 issue \"digicert.com\"' and 'domain.com. IN CAA 0 issuewild \";\"' to deny wildcard issuance. Include 'iodef' contact email for mis-issuance reports.",
       "References": {
+        "CISControls": ["3.10"],
         "CIS": "2.2.5",
         "SCuBA": "",
         "NIST": "SC-12, SC-17, CM-7",
@@ -572,6 +592,7 @@
       "EvaluatorFunction": "Test-NRGControlDNSTLSCertExpiry",
       "Remediation": "Renew TLS certs at least 30 days before expiry. Automate renewal via ACME (Let's Encrypt) or your registrar's managed cert service. Alert when DaysUntilExpiry drops below 30.",
       "References": {
+        "CISControls": ["3.10"],
         "CIS": "2.2.5",
         "SCuBA": "",
         "NIST": "SC-12, SC-17",
@@ -600,6 +621,7 @@
       "EvaluatorFunction": "Test-NRGControlDNSCertTransparency",
       "Remediation": "Review crt.sh entries for the domain. Confirm each unrecognized issuer corresponds to an approved third-party (CDN, SaaS subdomain). Add the approved CA to CAA. Subscribe to CT log monitoring (e.g., Cert Spotter) for ongoing mis-issuance detection.",
       "References": {
+        "CISControls": ["3.10"],
         "CIS": "2.2.5",
         "SCuBA": "",
         "NIST": "SC-12, SC-17, AU-6",
@@ -628,6 +650,7 @@
       "EvaluatorFunction": "Test-NRGControlDefender",
       "Remediation": "Defender portal > Policies > Safe Attachments > Create policy for all recipients with Action = Block. Requires Defender for Office 365 Plan 1.",
       "References": {
+        "CISControls": ["9.7", "10.7"],
         "CIS": "2.3.1",
         "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-3",
@@ -656,6 +679,7 @@
       "EvaluatorFunction": "Test-NRGControlDefender",
       "Remediation": "Create Safe Links policy with AllowClickThrough=$false, TrackClicks=$true, EnableForInternalSenders=$true. Requires Defender for Office 365 Plan 1.",
       "References": {
+        "CISControls": ["9.3"],
         "CIS": "2.3.2",
         "SCuBA": "MS.DEFENDER.2.1v1",
         "NIST": "SI-3",
@@ -684,6 +708,7 @@
       "EvaluatorFunction": "Test-NRGControlDefender",
       "Remediation": "Set-AntiPhishPolicy -Identity Default -EnableSpoofIntelligence $true",
       "References": {
+        "CISControls": ["9.7"],
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.3v1",
         "NIST": "SI-8, SI-3",
@@ -712,6 +737,7 @@
       "EvaluatorFunction": "Test-NRGControlDefender",
       "Remediation": "Set-AntiPhishPolicy -Identity Default -HonorDmarcPolicy $true",
       "References": {
+        "CISControls": ["9.5"],
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.4v1",
         "NIST": "SI-8",
@@ -740,6 +766,7 @@
       "EvaluatorFunction": "Test-NRGControlDefender",
       "Remediation": "Set-AntiPhishPolicy -Identity Default -PhishThresholdLevel 2",
       "References": {
+        "CISControls": ["9.7"],
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.4v1",
         "NIST": "SI-3, SI-4",
@@ -767,6 +794,7 @@
       "EvaluatorFunction": "Test-NRGControlDefender",
       "Remediation": "Set-AntiPhishPolicy -Identity Default -EnableFirstContactSafetyTips $true",
       "References": {
+        "CISControls": ["9.7"],
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.5v1",
         "NIST": "SI-3",
@@ -794,6 +822,7 @@
       "EvaluatorFunction": "Test-NRGControlSharePoint",
       "Remediation": "Set-SPOTenant -SharingCapability ExistingExternalUserSharingOnly",
       "References": {
+        "CISControls": ["3.3", "6.8"],
         "CIS": "7.2.1",
         "SCuBA": "MS.SHAREPOINT.1.1v1",
         "NIST": "AC-3, AC-17",
@@ -821,6 +850,7 @@
       "EvaluatorFunction": "Test-NRGControlSharePoint",
       "Remediation": "Set-SPOTenant -DefaultSharingLinkType Internal",
       "References": {
+        "CISControls": ["3.3"],
         "CIS": "7.2.2",
         "SCuBA": "MS.SHAREPOINT.1.2v1",
         "NIST": "AC-3",
@@ -848,6 +878,7 @@
       "EvaluatorFunction": "Test-NRGControlSharePoint",
       "Remediation": "Set-SPOTenant -LegacyAuthProtocolsEnabled $false",
       "References": {
+        "CISControls": [],
         "CIS": "7.3.1",
         "SCuBA": "MS.SHAREPOINT.2.1v1",
         "NIST": "IA-2, SC-8",
@@ -876,8 +907,9 @@
       "EvaluatorFunction": "Test-NRGControlSharePoint",
       "Remediation": "Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60",
       "References": {
+        "CISControls": ["6.2", "3.4"],
         "CIS": "7.2.6",
-        "SCuBA": "MS.SHAREPOINT.1.4v1",
+        "SCuBA": "MS.SHAREPOINT.3.3v1",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -903,6 +935,7 @@
       "EvaluatorFunction": "Test-NRGControlSharePoint",
       "Remediation": "Set-SPOTenant -ConditionalAccessPolicy AllowLimitedAccess",
       "References": {
+        "CISControls": ["3.3", "13.5"],
         "CIS": "7.3.2",
         "SCuBA": "MS.SHAREPOINT.3.1v1",
         "NIST": "AC-3, AC-17",
@@ -930,6 +963,7 @@
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowFederatedUsers $false, or restrict to an allowlist of trusted domains.",
       "References": {
+        "CISControls": ["4.8", "6.7"],
         "CIS": "8.2.1",
         "SCuBA": "MS.TEAMS.1.1v1",
         "NIST": "AC-17, SC-7",
@@ -958,8 +992,9 @@
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowTeamsConsumer $false -AllowTeamsConsumerInbound $false",
       "References": {
+        "CISControls": ["4.8"],
         "CIS": "8.2.2",
-        "SCuBA": "MS.TEAMS.1.2v1",
+        "SCuBA": "MS.TEAMS.1.2v2",
         "NIST": "AC-17",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -986,8 +1021,9 @@
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowAnonymousUsersToJoinMeeting $false",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "8.5.1",
-        "SCuBA": "MS.TEAMS.2.1v1",
+        "SCuBA": "MS.TEAMS.2.1v2",
         "NIST": "AC-3, AC-17",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -1013,8 +1049,9 @@
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowExternalParticipantGiveRequestControl $false",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "8.5.3",
-        "SCuBA": "MS.TEAMS.2.2v1",
+        "SCuBA": "MS.TEAMS.2.2v2",
         "NIST": "AC-3",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -1040,6 +1077,7 @@
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Ensure Purview retention policies cover SharePoint to capture Teams recording data.",
       "References": {
+        "CISControls": ["3.4"],
         "CIS": "8.6.1",
         "NIST": "AU-9, AU-11",
         "CMMC": "AU.L2-3.3.1",
@@ -1067,6 +1105,7 @@
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTeamsClientConfiguration -AllowGuestUser $false, or configure guest invitation permissions in Entra External Identities.",
       "References": {
+        "CISControls": ["4.8"],
         "CIS": "8.2.3",
         "SCuBA": "MS.TEAMS.1.3v1",
         "NIST": "AC-2, AC-3",
@@ -1094,6 +1133,7 @@
       "EvaluatorFunction": "Test-NRGControlPurview",
       "Remediation": "Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true",
       "References": {
+        "CISControls": ["8.2", "8.5"],
         "CIS": "3.1.1",
         "SCuBA": "",
         "NIST": "AU-2, AU-12",
@@ -1121,6 +1161,7 @@
       "EvaluatorFunction": "Test-NRGControlPurview",
       "Remediation": "Configure custom retention policies in Purview Compliance > Audit > Retention policies. E5 provides 1-year default.",
       "References": {
+        "CISControls": ["8.10"],
         "CIS": "3.1.2",
         "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.2",
@@ -1148,6 +1189,7 @@
       "EvaluatorFunction": "Test-NRGControlPurview",
       "Remediation": "Create DLP policies in Purview > Data loss prevention using Microsoft-provided templates (Financial, PII, Health) across Exchange, SharePoint, Teams.",
       "References": {
+        "CISControls": ["3.13"],
         "CIS": "3.3.1",
         "SCuBA": "",
         "NIST": "SC-28, AC-4",
@@ -1176,6 +1218,7 @@
       "EvaluatorFunction": "Test-NRGControlPurview",
       "Remediation": "Create labels in Purview > Information protection. Publish via label policies. Minimum tiers: Internal, Confidential, Highly Confidential.",
       "References": {
+        "CISControls": ["3.7"],
         "CIS": "3.4.1",
         "SCuBA": "MS.DEFENDER.4.1v2",
         "NIST": "AC-16, SC-28",
@@ -1204,6 +1247,7 @@
       "EvaluatorFunction": "Test-NRGControlIntune",
       "Remediation": "Create compliance policies per platform in Intune > Devices > Compliance. Require encryption, password, and OS version minimums.",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "4.1.1",
         "SCuBA": "",
         "NIST": "CM-2, CM-6",
@@ -1232,6 +1276,7 @@
       "EvaluatorFunction": "Test-NRGControlIntune",
       "Remediation": "Create CA policy: require compliant device or hybrid join for all cloud apps.",
       "References": {
+        "CISControls": ["13.5"],
         "CIS": "4.1.3",
         "SCuBA": "",
         "NIST": "AC-3, CM-7",
@@ -1259,6 +1304,7 @@
       "EvaluatorFunction": "Test-NRGControlIntune",
       "Remediation": "Intune compliance policy for Windows: Device Health > Require BitLocker = Require.",
       "References": {
+        "CISControls": ["3.6"],
         "CIS": "4.1.2",
         "SCuBA": "",
         "NIST": "SC-28",
@@ -1287,13 +1333,13 @@
       "EvaluatorFunction": "Test-NRGControlIntune",
       "Remediation": "Create app protection policies in Intune > Apps > App protection policies for iOS and Android targeting Office apps.",
       "References": {
+        "CISControls": ["3.3", "4.12"],
         "CIS": "4.3.1",
         "SCuBA": "",
         "NIST": "AC-19, SC-28",
         "CMMC": "AC.L2-3.1.19",
         "MITRE": [
-          "T1005",
-          "T1533"
+          "T1005"
         ],
         "HIPAA": "\u00a7164.310(d)(1), \u00a7164.312(a)(1)",
         "SOC2": "CC6.1",
@@ -1315,6 +1361,7 @@
       "EvaluatorFunction": "Test-NRGControlIntune",
       "Remediation": "Create Endpoint Security > Antivirus policy in Intune. Set CloudBlockLevel = High, enable real-time protection and tamper protection.",
       "References": {
+        "CISControls": ["10.1", "10.2"],
         "CIS": "4.4.1",
         "SCuBA": "",
         "NIST": "SI-3",
@@ -1342,6 +1389,7 @@
       "EvaluatorFunction": "Test-NRGControlPowerPlatform",
       "Remediation": "Power Platform Admin Center > Policies > Tenant Isolation: enable and configure inbound/outbound restrictions.",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "9.1.1",
         "NIST": "AC-4, SC-7",
         "CMMC": "SC.L2-3.13.1",
@@ -1370,6 +1418,7 @@
       "EvaluatorFunction": "Test-NRGControlPowerPlatform",
       "Remediation": "Power Platform Admin Center > Policies > Data policies: create environment policy. Move business connectors to Business group, block consumer connectors.",
       "References": {
+        "CISControls": ["3.13"],
         "CIS": "9.2.1",
         "NIST": "AC-4, SC-7",
         "CMMC": "MP.L2-3.8.1",
@@ -1397,6 +1446,7 @@
       "EvaluatorFunction": "Test-NRGControlPowerPlatform",
       "Remediation": "Power Platform Admin Center > Settings: restrict environment creation to admins only.",
       "References": {
+        "CISControls": ["6.8"],
         "CIS": "9.3.1",
         "NIST": "CM-5, AC-6",
         "CMMC": "CM.L2-3.4.5",
@@ -1424,6 +1474,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOPop3",
       "Remediation": "Set-TransportConfig -PopEnabled $false. Per-mailbox: Get-CASMailbox -ResultSize Unlimited | Set-CASMailbox -PopEnabled $false",
       "References": {
+        "CISControls": ["4.8"],
         "CIS": "2.1.6",
         "SCuBA": "MS.EXO.5.1v1",
         "NIST": "SC-8, IA-2",
@@ -1452,8 +1503,8 @@
       "EvaluatorFunction": "Test-NRGControlEXOImap",
       "Remediation": "Set-TransportConfig -ImapEnabled $false. Per-mailbox: Get-CASMailbox -ResultSize Unlimited | Set-CASMailbox -ImapEnabled $false",
       "References": {
+        "CISControls": ["4.8"],
         "CIS": "2.1.6",
-        "SCuBA": "MS.EXO.5.2v1",
         "NIST": "SC-8, IA-2",
         "CMMC": "SC.L2-3.13.8",
         "MITRE": [
@@ -1480,6 +1531,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOCustomerLockbox",
       "Remediation": "Enable in M365 admin center > Settings > Security & privacy > Customer Lockbox. Requires E5 or E5 Compliance add-on.",
       "References": {
+        "CISControls": ["3.3"],
         "CIS": "1.3.6",
         "SCuBA": "MS.EXO.6.1v1",
         "NIST": "AC-3, PE-18",
@@ -1507,6 +1559,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOSharedMailbox",
       "Remediation": "Get-Mailbox -RecipientTypeDetails SharedMailbox | ForEach-Object { Set-MgUser -UserId $_.ExternalDirectoryObjectId -AccountEnabled $false }",
       "References": {
+        "CISControls": ["5.3"],
         "CIS": "1.1.3",
         "SCuBA": "MS.EXO.7.1v1",
         "NIST": "AC-2, IA-2",
@@ -1535,6 +1588,7 @@
       "EvaluatorFunction": "Test-NRGControlAADSignInRisk",
       "Remediation": "CA policy: Condition = Sign-in risk high/medium, Grant = Require MFA or Block. Requires Entra P2.",
       "References": {
+        "CISControls": ["6.7"],
         "CIS": "5.2.2.6",
         "SCuBA": "MS.AAD.2.1v1",
         "NIST": "AC-7, IA-2",
@@ -1563,6 +1617,7 @@
       "EvaluatorFunction": "Test-NRGControlAADUserRisk",
       "Remediation": "CA policy: Condition = User risk high, Grant = Require password change. Requires Entra P2.",
       "References": {
+        "CISControls": ["6.7"],
         "CIS": "5.2.2.7",
         "SCuBA": "MS.AAD.2.2v1",
         "NIST": "AC-7, IA-5",
@@ -1591,6 +1646,7 @@
       "EvaluatorFunction": "Test-NRGControlAADNamedLocations",
       "Remediation": "Entra ID > Security > Named locations > Add IP ranges location. Mark office and VPN IP ranges as trusted.",
       "References": {
+        "CISControls": [],
         "CIS": "5.2.1",
         "SCuBA": "",
         "NIST": "AC-17",
@@ -1618,8 +1674,9 @@
       "EvaluatorFunction": "Test-NRGControlAADDeviceComplianceCA",
       "Remediation": "CA policy: Grant = Require device to be marked as compliant, or Require hybrid Azure AD joined device.",
       "References": {
+        "CISControls": ["13.5"],
         "CIS": "5.2.2.8",
-        "SCuBA": "MS.AAD.3.3v1",
+        "SCuBA": "MS.AAD.3.3v2",
         "NIST": "CM-7, AC-17",
         "CMMC": "CM.L2-3.4.1",
         "MITRE": [
@@ -1645,6 +1702,7 @@
       "EvaluatorFunction": "Test-NRGControlAADNoPermanentAdmins",
       "Remediation": "Convert permanent role assignments to PIM eligible. Keep only break-glass accounts as permanent GA.",
       "References": {
+        "CISControls": ["6.8", "5.4"],
         "CIS": "5.1.2.2",
         "SCuBA": "MS.AAD.7.3v1",
         "NIST": "AC-6(5)",
@@ -1673,6 +1731,7 @@
       "EvaluatorFunction": "Test-NRGControlAADPIMMFA",
       "Remediation": "PIM > Roles > Select role > Settings > Require MFA on activation.",
       "References": {
+        "CISControls": ["6.5"],
         "CIS": "5.1.3.1",
         "SCuBA": "MS.AAD.7.4v1",
         "NIST": "IA-2(1)",
@@ -1701,6 +1760,7 @@
       "EvaluatorFunction": "Test-NRGControlAADPIMJustification",
       "Remediation": "PIM > Roles > Select role > Settings > Require justification on activation.",
       "References": {
+        "CISControls": ["6.8"],
         "CIS": "5.1.3.2",
         "SCuBA": "MS.AAD.7.5v1",
         "NIST": "AC-6(9), AU-12",
@@ -1728,6 +1788,7 @@
       "EvaluatorFunction": "Test-NRGControlAADPIMApproval",
       "Remediation": "PIM > Global Administrator > Settings > Require approval > Add approvers.",
       "References": {
+        "CISControls": ["6.8"],
         "CIS": "5.1.3.3",
         "SCuBA": "MS.AAD.7.5v1",
         "NIST": "AC-6(5)",
@@ -1755,6 +1816,7 @@
       "EvaluatorFunction": "Test-NRGControlAADPIMDuration",
       "Remediation": "PIM > Roles > Select role > Settings > Maximum activation duration = 8 hours.",
       "References": {
+        "CISControls": ["6.8"],
         "CIS": "5.1.3.4",
         "SCuBA": "MS.AAD.7.4v1",
         "NIST": "AC-6",
@@ -1782,6 +1844,7 @@
       "EvaluatorFunction": "Test-NRGControlAADGuestInvite",
       "Remediation": "Entra ID > External Identities > External collaboration settings > Guest invite settings = Admins and users in the Guest Inviter role.",
       "References": {
+        "CISControls": ["6.8"],
         "CIS": "5.3.1",
         "SCuBA": "MS.AAD.5.1v1",
         "NIST": "AC-2",
@@ -1809,8 +1872,8 @@
       "EvaluatorFunction": "Test-NRGControlAADExternalCollab",
       "Remediation": "Entra ID > User settings > Restrict non-admin users from creating tenants. Block MSOL PowerShell via authorization policy.",
       "References": {
+        "CISControls": ["6.8"],
         "CIS": "5.3.2",
-        "SCuBA": "MS.AAD.5.4v1",
         "NIST": "CM-7, AC-6",
         "CMMC": "CM.L2-3.4.6",
         "MITRE": [
@@ -1836,6 +1899,7 @@
       "EvaluatorFunction": "Test-NRGControlAADGuestPermissions",
       "Remediation": "Entra ID > External Identities > External collaboration settings > Guest user access = Most restricted.",
       "References": {
+        "CISControls": ["6.8"],
         "CIS": "5.3.3",
         "SCuBA": "MS.AAD.5.2v1",
         "NIST": "AC-3",
@@ -1864,6 +1928,7 @@
       "EvaluatorFunction": "Test-NRGControlAADSSPR",
       "Remediation": "Entra ID > Password reset > Properties > Self service password reset enabled = All or Selected.",
       "References": {
+        "CISControls": [],
         "CIS": "5.4.1",
         "SCuBA": "",
         "NIST": "IA-5",
@@ -1891,6 +1956,7 @@
       "EvaluatorFunction": "Test-NRGControlAADSSPRMethods",
       "Remediation": "Entra ID > Password reset > Authentication methods > Number of methods required = 2.",
       "References": {
+        "CISControls": [],
         "CIS": "5.4.2",
         "SCuBA": "",
         "NIST": "IA-2(1), IA-5",
@@ -1918,6 +1984,7 @@
       "EvaluatorFunction": "Test-NRGControlAADUserAppReg",
       "Remediation": "Entra ID > User settings > App registrations > Users can register applications = No.",
       "References": {
+        "CISControls": ["6.8"],
         "CIS": "5.5.1",
         "SCuBA": "MS.AAD.6.1v1",
         "NIST": "CM-5, AC-6",
@@ -1946,8 +2013,9 @@
       "EvaluatorFunction": "Test-NRGControlAADUserConsent",
       "Remediation": "Entra ID > Enterprise apps > Consent and permissions > User consent settings = Do not allow user consent.",
       "References": {
+        "CISControls": ["6.8"],
         "CIS": "5.5.2",
-        "SCuBA": "MS.AAD.6.2v1",
+        "SCuBA": "MS.AAD.5.2v1",
         "NIST": "AC-3",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -1974,8 +2042,9 @@
       "EvaluatorFunction": "Test-NRGControlAADAdminConsentWorkflow",
       "Remediation": "Entra ID > Enterprise apps > Consent and permissions > Admin consent requests > Yes + configure reviewers.",
       "References": {
+        "CISControls": ["6.1"],
         "CIS": "5.5.3",
-        "SCuBA": "MS.AAD.6.3v1",
+        "SCuBA": "MS.AAD.5.3v1",
         "NIST": "AC-3",
         "CMMC": "AC.L2-3.1.1",
         "MITRE": [
@@ -2001,6 +2070,7 @@
       "EvaluatorFunction": "Test-NRGControlAADPasswordProtection",
       "Remediation": "Entra ID > Security > Authentication methods > Password protection > Lockout threshold \u226410.",
       "References": {
+        "CISControls": [],
         "CIS": "5.6.1",
         "SCuBA": "",
         "NIST": "AC-7",
@@ -2028,6 +2098,7 @@
       "EvaluatorFunction": "Test-NRGControlAADBreakGlass",
       "Remediation": "Create two cloud-only GA accounts with strong random passwords, exclude from all CA policies, store credentials in secure offline location. Monitor for sign-in activity.",
       "References": {
+        "CISControls": ["5.4"],
         "CIS": "5.1.2.3",
         "SCuBA": "MS.AAD.7.1v1",
         "NIST": "CP-2, AC-2",
@@ -2055,6 +2126,7 @@
       "EvaluatorFunction": "Test-NRGControlDefenderPresetPolicies",
       "Remediation": "Defender portal > Email & Collaboration > Policies > Preset security policies > Apply Standard or Strict protection.",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "2.3.3",
         "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-3",
@@ -2082,6 +2154,7 @@
       "EvaluatorFunction": "Test-NRGControlDefenderZAP",
       "Remediation": "Set-HostedContentFilterPolicy -ZapEnabled $true",
       "References": {
+        "CISControls": ["9.7", "10.7"],
         "CIS": "2.1.8",
         "SCuBA": "MS.DEFENDER.1.2v1",
         "NIST": "SI-3",
@@ -2109,6 +2182,7 @@
       "EvaluatorFunction": "Test-NRGControlDefenderCommonAttachments",
       "Remediation": "Set-MalwareFilterPolicy -Default -EnableFileFilter $true",
       "References": {
+        "CISControls": ["9.6"],
         "CIS": "2.1.9",
         "SCuBA": "MS.DEFENDER.1.3v1",
         "NIST": "SI-3",
@@ -2137,6 +2211,7 @@
       "EvaluatorFunction": "Test-NRGControlDefenderQuarantine",
       "Remediation": "Set-HostedContentFilterPolicy -PhishSpamAction Quarantine",
       "References": {
+        "CISControls": ["9.7"],
         "CIS": "2.1.10",
         "SCuBA": "MS.DEFENDER.1.4v1",
         "NIST": "SI-8",
@@ -2164,6 +2239,7 @@
       "EvaluatorFunction": "Test-NRGControlDefenderHCSpam",
       "Remediation": "Set-HostedContentFilterPolicy -HighConfidenceSpamAction Quarantine",
       "References": {
+        "CISControls": ["9.7"],
         "CIS": "2.1.11",
         "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-8",
@@ -2191,6 +2267,7 @@
       "EvaluatorFunction": "Test-NRGControlDefenderBulkThreshold",
       "Remediation": "Set-HostedContentFilterPolicy -BulkThreshold 6",
       "References": {
+        "CISControls": ["9.7"],
         "CIS": "2.1.12",
         "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-8",
@@ -2218,6 +2295,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOConnectionFilter",
       "Remediation": "Set-HostedConnectionFilterPolicy -Identity Default -EnableSafeList $false",
       "References": {
+        "CISControls": ["9.7"],
         "CIS": "2.1.13",
         "SCuBA": "",
         "NIST": "SI-8",
@@ -2245,6 +2323,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOOutboundLimits",
       "Remediation": "Set-HostedOutboundSpamFilterPolicy: configure RecipientLimitInternalPerHour, RecipientLimitExternalPerHour, ActionWhenThresholdReached = Alert.",
       "References": {
+        "CISControls": ["9.7"],
         "CIS": "2.1.14",
         "SCuBA": "",
         "NIST": "SI-8, AU-12",
@@ -2273,8 +2352,9 @@
       "EvaluatorFunction": "Test-NRGControlEXOAlertForwarding",
       "Remediation": "Defender portal > Policies > Alert policies > Enable: Email forwarding activities.",
       "References": {
+        "CISControls": ["8.11", "13.1"],
         "CIS": "2.1.15",
-        "SCuBA": "MS.EXO.8.1v1",
+        "SCuBA": "MS.EXO.8.1v2",
         "NIST": "AU-12, SI-4",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
@@ -2300,6 +2380,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOAlertVolume",
       "Remediation": "Defender portal > Policies > Alert policies > Enable: Unusual increase in email reported as phish.",
       "References": {
+        "CISControls": ["13.1", "8.11"],
         "CIS": "2.1.16",
         "NIST": "SI-4, AU-12",
         "CMMC": "SI.L2-3.14.6",
@@ -2327,6 +2408,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOTransportAudit",
       "Remediation": "Set-OrganizationConfig -AuditDisabled $false",
       "References": {
+        "CISControls": ["8.2", "8.5"],
         "CIS": "3.1.1",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
@@ -2355,13 +2437,12 @@
       "EvaluatorFunction": "Test-NRGControlSPOOneDriveSync",
       "Remediation": "Set-SPOTenant -AllowedDomainGuidsForSyncApp @('your-tenant-guid')",
       "References": {
+        "CISControls": ["3.3", "13.5"],
         "CIS": "7.2.7",
-        "SCuBA": "MS.SHAREPOINT.1.5v1",
         "NIST": "SC-28, AC-19",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
-          "T1005",
-          "T1533"
+          "T1005"
         ],
         "SOC2": "CC6.6, CC6.7",
         "HIPAA": "\u00a7164.310(d)(1)",
@@ -2383,6 +2464,7 @@
       "EvaluatorFunction": "Test-NRGControlSPOLinkExpiration",
       "Remediation": "Set-SPOTenant -RequireAnonymousLinksExpireInDays 30",
       "References": {
+        "CISControls": ["3.4"],
         "CIS": "7.2.3",
         "SCuBA": "MS.SHAREPOINT.1.3v1",
         "NIST": "AC-3",
@@ -2410,6 +2492,7 @@
       "EvaluatorFunction": "Test-NRGControlSPOAppsFromStore",
       "Remediation": "SharePoint Admin Center > Settings > Apps > disable apps from the SharePoint store.",
       "References": {
+        "CISControls": ["2.5"],
         "CIS": "7.3.3",
         "SCuBA": "",
         "NIST": "CM-7",
@@ -2437,6 +2520,7 @@
       "EvaluatorFunction": "Test-NRGControlSPOCustomScript",
       "Remediation": "Set-SPOSite -DenyAddAndCustomizePages 1 (applies to all sites)",
       "References": {
+        "CISControls": ["2.7"],
         "CIS": "7.3.4",
         "SCuBA": "MS.SHAREPOINT.2.2v1",
         "NIST": "SC-18, SI-3",
@@ -2464,6 +2548,7 @@
       "EvaluatorFunction": "Test-NRGControlSPO3PStorage",
       "Remediation": "SharePoint Admin Center > Settings > Third-party storage services > Off",
       "References": {
+        "CISControls": ["3.3"],
         "CIS": "7.3.5",
         "SCuBA": "",
         "NIST": "AC-4",
@@ -2492,6 +2577,7 @@
       "EvaluatorFunction": "Test-NRGControlSPOEmailAttestation",
       "Remediation": "Set-SPOTenant -EmailAttestationRequired $true -EmailAttestationReAuthDays 30",
       "References": {
+        "CISControls": ["3.3"],
         "CIS": "7.2.4",
         "SCuBA": "",
         "NIST": "IA-3, AC-3",
@@ -2519,13 +2605,14 @@
       "EvaluatorFunction": "Test-NRGControlSPOReauth",
       "Remediation": "Set-SPOTenant -EmailAttestationReAuthDays 30",
       "References": {
+        "CISControls": ["6.2"],
         "CIS": "7.2.5",
         "NIST": "AC-12",
         "CMMC": "AC.L2-3.1.11",
         "MITRE": [
           "T1078"
         ],
-        "SCuBA": "MS.SHAREPOINT.3.3v2",
+        "SCuBA": "MS.SHAREPOINT.3.3v1",
         "HIPAA": "\u00a7164.312(d)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.3",
@@ -2546,13 +2633,13 @@
       "EvaluatorFunction": "Test-NRGControlSPODomainSync",
       "Remediation": "Set-SPOTenant -AllowedDomainGuidsForSyncApp (Get-SPOTenant).TenantId",
       "References": {
+        "CISControls": ["3.3", "13.5"],
         "CIS": "7.2.8",
         "SCuBA": "",
         "NIST": "AC-4, SC-28",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
-          "T1005",
-          "T1533"
+          "T1005"
         ],
         "HIPAA": "\u00a7164.308(a)(4)(ii)(A), \u00a7164.310(d)(1)",
         "SOC2": "CC6.6, CC6.7",
@@ -2574,6 +2661,7 @@
       "EvaluatorFunction": "Test-NRGControlTeamsSkype",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowPublicUsers $false",
       "References": {
+        "CISControls": ["4.8"],
         "CIS": "8.2.4",
         "SCuBA": "MS.TEAMS.1.4v1",
         "NIST": "AC-17",
@@ -2602,8 +2690,9 @@
       "EvaluatorFunction": "Test-NRGControlTeamsUnverifiedApps",
       "Remediation": "Teams Admin Center > Teams apps > Permission policies > Block all apps from unknown publishers.",
       "References": {
+        "CISControls": ["2.5"],
         "CIS": "8.3.1",
-        "SCuBA": "MS.TEAMS.3.1v1",
+        "SCuBA": "MS.TEAMS.5.2v2",
         "NIST": "CM-7",
         "CMMC": "CM.L2-3.4.6",
         "MITRE": [
@@ -2629,6 +2718,7 @@
       "EvaluatorFunction": "Test-NRGControlTeams3PStorage",
       "Remediation": "Set-CsTeamsClientConfiguration -AllowDropbox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false",
       "References": {
+        "CISControls": ["4.8"],
         "CIS": "8.3.2",
         "SCuBA": "",
         "NIST": "AC-4",
@@ -2657,6 +2747,7 @@
       "EvaluatorFunction": "Test-NRGControlTeamsEmailIntegration",
       "Remediation": "Set-CsTeamsClientConfiguration -AllowEmailIntoChannels $false",
       "References": {
+        "CISControls": ["4.8"],
         "CIS": "8.3.3",
         "NIST": "SI-8",
         "CMMC": "SI.L2-3.14.7",
@@ -2684,6 +2775,7 @@
       "EvaluatorFunction": "Test-NRGControlTeamsRecordingExternal",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowCloudRecordingForCalls $false for externally-scoped policies",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "8.5.4",
         "SCuBA": "",
         "NIST": "AU-9",
@@ -2711,6 +2803,7 @@
       "EvaluatorFunction": "Test-NRGControlTeamsBroadChannel",
       "Remediation": "Review AllowChannelMeetingScheduling in meeting policy \u2014 restrict if channels have broad guest membership.",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "8.5.5",
         "SCuBA": "",
         "NIST": "AC-3",
@@ -2738,6 +2831,7 @@
       "EvaluatorFunction": "Test-NRGControlTeamsExternalChat",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowFederatedUsers $false or restrict to allowlist.",
       "References": {
+        "CISControls": ["4.8"],
         "CIS": "8.2.5",
         "SCuBA": "MS.TEAMS.1.5v1",
         "NIST": "AC-17",
@@ -2766,6 +2860,7 @@
       "EvaluatorFunction": "Test-NRGControlTeamsPSTN",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowPSTNUsersToBypassLobby $false",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "8.5.6",
         "NIST": "AC-3, IA-3",
         "CMMC": "AC.L2-3.1.1",
@@ -2793,6 +2888,7 @@
       "EvaluatorFunction": "Test-NRGControlPurviewAuditSearch",
       "Remediation": "Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true",
       "References": {
+        "CISControls": ["8.11"],
         "CIS": "3.1.1",
         "SCuBA": "",
         "NIST": "AU-2, AU-12",
@@ -2820,6 +2916,7 @@
       "EvaluatorFunction": "Test-NRGControlPurviewCommCompliance",
       "Remediation": "Purview > Communication compliance > Create policy. Requires E5 Compliance.",
       "References": {
+        "CISControls": ["3.14"],
         "CIS": "3.2.1",
         "SCuBA": "",
         "NIST": "AU-12",
@@ -2847,6 +2944,7 @@
       "EvaluatorFunction": "Test-NRGControlPurviewInfoBarriers",
       "Remediation": "Set-PolicyConfig -InformationBarrierMode MultiSegment. Requires E5 Compliance.",
       "References": {
+        "CISControls": ["3.12"],
         "CIS": "3.2.2",
         "SCuBA": "",
         "NIST": "AC-4",
@@ -2874,6 +2972,7 @@
       "EvaluatorFunction": "Test-NRGControlPurviewInsiderRisk",
       "Remediation": "Purview > Insider risk management > Create policy (Departing user data theft, Data leaks). Requires E5 Compliance.",
       "References": {
+        "CISControls": ["3.14"],
         "CIS": "3.2.3",
         "SCuBA": "",
         "NIST": "SI-4",
@@ -2902,6 +3001,7 @@
       "EvaluatorFunction": "Test-NRGControlPurviewRetention",
       "Remediation": "Purview > Data lifecycle management > Retention policies. Create policies for Exchange, SharePoint, OneDrive, Teams.",
       "References": {
+        "CISControls": ["3.4"],
         "CIS": "3.3.2",
         "SCuBA": "",
         "NIST": "AU-11",
@@ -2929,6 +3029,7 @@
       "EvaluatorFunction": "Test-NRGControlPurviewAutoLabel",
       "Remediation": "Purview > Information protection > Auto-labeling > Create policy for sensitive info types (SSN, credit card, etc.).",
       "References": {
+        "CISControls": ["3.7"],
         "CIS": "3.4.2",
         "SCuBA": "MS.DEFENDER.4.1v2",
         "NIST": "AC-16, SC-28",
@@ -2956,6 +3057,7 @@
       "EvaluatorFunction": "Test-NRGControlIntuneEDR",
       "Remediation": "Intune > Endpoint security > Endpoint detection and response > Create policy for Windows.",
       "References": {
+        "CISControls": ["10.7", "13.2"],
         "CIS": "4.4.2",
         "SCuBA": "",
         "NIST": "SI-3, SI-4",
@@ -2984,6 +3086,7 @@
       "EvaluatorFunction": "Test-NRGControlIntuneASR",
       "Remediation": "Intune > Endpoint security > Attack surface reduction > Create ASR rules policy. Enable at minimum: Block Office macros, Block credential stealing, Block JS/VBS launching executables.",
       "References": {
+        "CISControls": ["10.5"],
         "CIS": "4.4.3",
         "SCuBA": "",
         "NIST": "SI-3, CM-7",
@@ -3012,6 +3115,7 @@
       "EvaluatorFunction": "Test-NRGControlIntuneFirewall",
       "Remediation": "Intune > Endpoint security > Firewall > Create Windows Firewall policy. Enable domain, private, and public profiles.",
       "References": {
+        "CISControls": ["4.5"],
         "CIS": "4.4.4",
         "SCuBA": "",
         "NIST": "SC-7",
@@ -3040,6 +3144,7 @@
       "EvaluatorFunction": "Test-NRGControlIntuneMacEncryption",
       "Remediation": "Intune > Devices > Compliance > macOS > Create policy > System Security > Require encryption = Require.",
       "References": {
+        "CISControls": ["3.6"],
         "CIS": "4.2.1",
         "SCuBA": "",
         "NIST": "SC-28",
@@ -3068,6 +3173,7 @@
       "EvaluatorFunction": "Test-NRGControlIntuneWindowsUpdate",
       "Remediation": "Intune > Devices > Windows update rings > Create update ring with feature and quality update schedules.",
       "References": {
+        "CISControls": ["7.3"],
         "CIS": "4.5.1",
         "SCuBA": "",
         "NIST": "SI-2",
@@ -3096,6 +3202,7 @@
       "EvaluatorFunction": "Test-NRGControlAADPIMAlerts",
       "Remediation": "PIM > Alerts > Review and enable: Roles assigned outside PIM, Redundant assignments, Stale assignments, Too many GA admins.",
       "References": {
+        "CISControls": ["13.1"],
         "CIS": "5.1.3.5",
         "SCuBA": "MS.AAD.7.7v1",
         "NIST": "AC-6(9), AU-12",
@@ -3123,6 +3230,7 @@
       "EvaluatorFunction": "Test-NRGControlAADAccessReviews",
       "Remediation": "PIM > Azure AD roles > Access reviews > Create recurring quarterly review for Global Admin, Privileged Role Admin, Security Admin.",
       "References": {
+        "CISControls": ["6.8"],
         "CIS": "5.1.4.1",
         "SCuBA": "MS.AAD.7.6v1",
         "NIST": "AC-2(9)",
@@ -3150,6 +3258,7 @@
       "EvaluatorFunction": "Test-NRGControlAADAuthenticatorNumberMatch",
       "Remediation": "Entra ID > Security > Authentication methods > Microsoft Authenticator > Configure > Require number matching = Enabled.",
       "References": {
+        "CISControls": ["6.3"],
         "CIS": "5.2.1.1",
         "SCuBA": "MS.AAD.3.4v1",
         "NIST": "IA-2(1)",
@@ -3177,6 +3286,7 @@
       "EvaluatorFunction": "Test-NRGControlAADPasswordless",
       "Remediation": "Entra ID > Security > Authentication methods > FIDO2 security key > Enable. Consider Windows Hello for Business via Intune policy.",
       "References": {
+        "CISControls": ["6.5", "6.3"],
         "CIS": "5.2.1.2",
         "NIST": "IA-2(1), IA-5",
         "CMMC": "IA.L2-3.5.3",
@@ -3205,6 +3315,7 @@
       "EvaluatorFunction": "Test-NRGControlAADIdentityProtection",
       "Remediation": "CA policy: Condition = User risk = High, Grant = Require password change. Requires Entra P2.",
       "References": {
+        "CISControls": ["6.7"],
         "CIS": "5.2.2.7",
         "SCuBA": "MS.AAD.2.2v1",
         "NIST": "IR-4, AC-7",
@@ -3233,8 +3344,9 @@
       "EvaluatorFunction": "Test-NRGControlAADPrivCloudOnly",
       "Remediation": "Create dedicated .admin or .onmicrosoft.com accounts for all privileged role holders. Remove privileged roles from on-premises synced accounts.",
       "References": {
+        "CISControls": ["5.4"],
         "CIS": "5.1.1.1",
-        "SCuBA": "MS.AAD.7.8v1",
+        "SCuBA": "MS.AAD.7.3v1",
         "NIST": "AC-6(5)",
         "CMMC": "AC.L2-3.1.6",
         "MITRE": [
@@ -3260,6 +3372,7 @@
       "EvaluatorFunction": "Test-NRGControlAADBreakGlassMonitoring",
       "Remediation": "Create a Sentinel or Defender XDR alert rule for sign-in from break-glass account UPNs. Notify SOC immediately on any sign-in.",
       "References": {
+        "CISControls": ["13.1"],
         "CIS": "5.1.2.4",
         "SCuBA": "MS.AAD.7.1v1",
         "NIST": "AU-2, IR-4",
@@ -3287,6 +3400,7 @@
       "EvaluatorFunction": "Test-NRGControlAADSignInFrequency",
       "Remediation": "CA policy: Session controls > Sign-in frequency > set to 1 hour for privileged users, 8 hours for standard users.",
       "References": {
+        "CISControls": ["4.3"],
         "CIS": "5.2.3.1",
         "SCuBA": "",
         "NIST": "AC-12",
@@ -3315,6 +3429,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOAuditAgeLimit",
       "Remediation": "Set-Mailbox -Identity All -AuditLogAgeLimit 180",
       "References": {
+        "CISControls": ["8.10"],
         "CIS": "2.1.3",
         "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.2",
@@ -3342,6 +3457,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOAdminAudit",
       "Remediation": "Set-AdminAuditLogConfig -AdminAuditLogEnabled $true",
       "References": {
+        "CISControls": ["8.2", "8.5"],
         "CIS": "3.1.1",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
@@ -3369,6 +3485,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOSafeAttachmentsSPO",
       "Remediation": "Defender portal > Policies > Safe Attachments > Global settings > Enable Defender for Office 365 for SharePoint, OneDrive, and Teams.",
       "References": {
+        "CISControls": ["9.7", "10.1"],
         "CIS": "2.3.4",
         "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-3",
@@ -3397,6 +3514,7 @@
       "EvaluatorFunction": "Test-NRGControlEXOAntiSpamInbound",
       "Remediation": "Set-HostedContentFilterPolicy -Identity Default -SpamAction MoveToJmf -BulkThreshold 6 -ZapEnabled $true",
       "References": {
+        "CISControls": ["9.7"],
         "CIS": "2.1.7",
         "NIST": "SI-8",
         "CMMC": "SI.L2-3.14.2",
@@ -3424,6 +3542,7 @@
       "EvaluatorFunction": "Test-NRGControlDefenderUnauthSender",
       "Remediation": "Set-AntiPhishPolicy -Identity Default -EnableUnauthenticatedSender $true",
       "References": {
+        "CISControls": ["9.7"],
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.5v1",
         "NIST": "SI-3",
@@ -3452,6 +3571,7 @@
       "EvaluatorFunction": "Test-NRGControlDefenderViaTag",
       "Remediation": "Set-AntiPhishPolicy -Identity Default -EnableViaTag $true",
       "References": {
+        "CISControls": ["9.7"],
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.5v1",
         "NIST": "SI-8",
@@ -3480,6 +3600,7 @@
       "EvaluatorFunction": "Test-NRGControlDefenderMDCA",
       "Remediation": "Defender XDR > Settings > Cloud Apps > Connected apps > Office 365 > Connect.",
       "References": {
+        "CISControls": ["13.1"],
         "CIS": "2.4.1",
         "SCuBA": "",
         "NIST": "SI-4",
@@ -3508,6 +3629,7 @@
       "EvaluatorFunction": "Test-NRGControlDefenderAlertNotification",
       "Remediation": "Defender portal > Settings > Email notifications > Create notification rule for High and Critical severity alerts.",
       "References": {
+        "CISControls": ["13.1", "8.11"],
         "CIS": "3.1.3",
         "NIST": "IR-6, AU-6",
         "CMMC": "IR.L2-3.6.1",
@@ -3535,6 +3657,7 @@
       "EvaluatorFunction": "Test-NRGControlSPOSiteAdmins",
       "Remediation": "Review site admins: Get-SPOSite -Limit ALL | ForEach-Object { Get-SPOUser -Site $_.Url -Group 'Site Collection Administrators' }",
       "References": {
+        "CISControls": ["5.4", "6.8"],
         "CIS": "7.1.1",
         "SCuBA": "",
         "NIST": "AC-2(9)",
@@ -3562,6 +3685,7 @@
       "EvaluatorFunction": "Test-NRGControlSPOSharingNotifications",
       "Remediation": "Set-SPOTenant -NotifyOwnersWhenItemsReshared $true",
       "References": {
+        "CISControls": ["3.14"],
         "CIS": "7.2.9",
         "SCuBA": "",
         "NIST": "AC-3, AU-12",
@@ -3589,6 +3713,7 @@
       "EvaluatorFunction": "Test-NRGControlSPOVersionHistory",
       "Remediation": "Verify via SharePoint Admin Center > Settings that versioning is enabled and version limits are adequate (\u2265100 versions).",
       "References": {
+        "CISControls": ["11.1", "11.2"],
         "CIS": "7.3.6",
         "SCuBA": "",
         "NIST": "CP-9, CP-10",
@@ -3616,8 +3741,9 @@
       "EvaluatorFunction": "Test-NRGControlSPOGuestExpiry",
       "Remediation": "Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60",
       "References": {
+        "CISControls": ["6.2", "3.4"],
         "CIS": "7.2.6",
-        "SCuBA": "MS.SHAREPOINT.1.4v1",
+        "SCuBA": "MS.SHAREPOINT.3.3v1",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -3643,6 +3769,7 @@
       "EvaluatorFunction": "Test-NRGControlTeamsWatermarks",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowWatermarkForScreenSharing $true",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "8.5.7",
         "SCuBA": "",
         "NIST": "AC-4",
@@ -3670,8 +3797,9 @@
       "EvaluatorFunction": "Test-NRGControlTeamsAutoAdmit",
       "Remediation": "Set-CsTeamsMeetingPolicy -AutoAdmittedUsers EveryoneInCompanyExcludingGuests",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "8.5.2",
-        "SCuBA": "MS.TEAMS.2.3v1",
+        "SCuBA": "MS.TEAMS.2.3v2",
         "NIST": "AC-3, IA-3",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -3697,6 +3825,7 @@
       "EvaluatorFunction": "Test-NRGControlTeamsMeetingChat",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowMeetingChat EnabledExceptAnonymous",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "8.5.8",
         "SCuBA": "",
         "NIST": "AC-3",
@@ -3724,6 +3853,7 @@
       "EvaluatorFunction": "Test-NRGControlTeamsChatCopy",
       "Remediation": "Purview > DLP > Create policy targeting Teams with sensitive info types to restrict copy/paste of protected content.",
       "References": {
+        "CISControls": ["3.13"],
         "CIS": "8.3.4",
         "SCuBA": "",
         "NIST": "AC-4, SC-28",
@@ -3751,6 +3881,7 @@
       "EvaluatorFunction": "Test-NRGControlPurviewSIEMExport",
       "Remediation": "Connect Microsoft Sentinel M365 data connector, or use Defender XDR > Settings > Microsoft Defender XDR > Audit log export.",
       "References": {
+        "CISControls": ["8.9", "8.10"],
         "CIS": "3.1.3",
         "NIST": "AU-4, AU-9",
         "CMMC": "AU.L2-3.3.1",
@@ -3778,6 +3909,7 @@
       "EvaluatorFunction": "Test-NRGControlPurviewEDiscovery",
       "Remediation": "Purview > Roles & scopes > eDiscovery Manager. Assign eDiscovery Manager role to compliance team members.",
       "References": {
+        "CISControls": ["3.14"],
         "CIS": "3.5.1",
         "SCuBA": "",
         "NIST": "AU-11, IR-4",
@@ -3805,6 +3937,7 @@
       "EvaluatorFunction": "Test-NRGControlPurviewComplianceScore",
       "Remediation": "compliance.microsoft.com > Compliance Manager > Improvement actions > Assign to owners and set target dates.",
       "References": {
+        "CISControls": [],
         "CIS": "3.5.2",
         "SCuBA": "",
         "NIST": "CA-7",
@@ -3832,6 +3965,7 @@
       "EvaluatorFunction": "Test-NRGControlPurviewSensitiveInfoTypes",
       "Remediation": "Purview > DLP > Create or edit policies > Add conditions using sensitive information types (SSN, credit card, health info, etc.).",
       "References": {
+        "CISControls": ["3.13", "3.7"],
         "CIS": "3.3.1",
         "SCuBA": "",
         "NIST": "SC-28, AC-4",
@@ -3860,6 +3994,7 @@
       "EvaluatorFunction": "Test-NRGControlIntuneEnrollmentRestrictions",
       "Remediation": "Intune > Devices > Enrollment > Enrollment restrictions > Create policy restricting to managed platforms and minimum OS versions.",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "4.1.4",
         "SCuBA": "",
         "NIST": "CM-7, AC-3",
@@ -3887,6 +4022,7 @@
       "EvaluatorFunction": "Test-NRGControlIntuneAppConfig",
       "Remediation": "Intune > Apps > App configuration policies > Create policy for iOS/Android targeting Outlook, Teams, Edge.",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "4.3.2",
         "SCuBA": "",
         "NIST": "CM-6, AC-19",
@@ -3914,6 +4050,7 @@
       "EvaluatorFunction": "Test-NRGControlIntuneConditionalLaunch",
       "Remediation": "Intune > Apps > App protection policies > Conditional launch > Add: Jailbroken/rooted devices = Block, Min OS version = current-1.",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "4.3.3",
         "SCuBA": "",
         "NIST": "SC-28, CM-7",
@@ -3941,6 +4078,7 @@
       "EvaluatorFunction": "Test-NRGControlPPLConnectorClassification",
       "Remediation": "Power Platform Admin Center > Data policies > Edit existing policy > Review all connectors and assign to Business or Blocked groups.",
       "References": {
+        "CISControls": ["3.13"],
         "CIS": "9.2.2",
         "NIST": "AC-4",
         "CMMC": "MP.L2-3.8.1",
@@ -3968,6 +4106,7 @@
       "EvaluatorFunction": "Test-NRGControlPPLAutomate",
       "Remediation": "Power Platform Admin Center > Tenant settings > Power Automate > Disable for guests.",
       "References": {
+        "CISControls": ["6.8"],
         "CIS": "9.3.2",
         "NIST": "CM-5, AC-3",
         "CMMC": "AC.L2-3.1.2",
@@ -3996,6 +4135,7 @@
       "EvaluatorFunction": "Test-NRGControlPPLPowerApps",
       "Remediation": "Power Platform Admin Center > Settings > Power Apps > Disable portal creation by non-admins.",
       "References": {
+        "CISControls": ["6.8"],
         "CIS": "9.3.3",
         "NIST": "CM-5, AC-6",
         "CMMC": "CM.L2-3.4.5",
@@ -4025,6 +4165,7 @@
       "Remediation": "CA policy: Conditions > Authentication flows > Device code flow, Grant = Block. Applies to all users. Reference: MS.AAD.3.9v1 (SCuBA).",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "5.2.2.10",
         "SCuBA": "MS.AAD.3.9v1",
         "NIST": "IA-2",
@@ -4050,11 +4191,11 @@
       "Automated": true,
       "CollectorDependency": "AAD-DirectoryRoles",
       "EvaluatorFunction": "Test-NRGControlAADNoGuestInPrivRoles",
-      "Remediation": "Remove guest accounts from all privileged roles. Use cloud-only member accounts for all administrative functions. Reference: MS.AAD.7.7v1 (SCuBA).",
+      "Remediation": "Remove guest accounts from all privileged roles. Use cloud-only member accounts for all administrative functions.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["6.8", "5.4"],
         "CIS": "5.1.1.2",
-        "SCuBA": "MS.AAD.7.7v1",
         "NIST": "AC-2, AC-6(5)",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -4081,6 +4222,7 @@
       "Remediation": "Entra ID > Identity Protection > Risky workload identities. Investigate and remediate flagged service principals. Disable or rotate credentials for compromised identities. Requires Entra ID P2 Workload Identities.",
       "LicenseRequirement": "Entra ID P2 + Workload Identities add-on",
       "References": {
+        "CISControls": ["5.5"],
         "CIS": "5.1.5.1",
         "SCuBA": "MS.AAD.7.9v1",
         "NIST": "IA-3, IR-4",
@@ -4109,6 +4251,7 @@
       "Remediation": "CA policy: Session controls > Token protection. Enable for Exchange Online and SharePoint Online at minimum. Requires Entra ID P1+. Note: may cause issues with non-compliant clients \u2014 test in report-only mode first.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
+        "CISControls": [],
         "CIS": "5.2.3.2",
         "SCuBA": "",
         "NIST": "AC-12, IA-2",
@@ -4137,6 +4280,7 @@
       "Remediation": "CA policy > Session controls > Customize continuous access evaluation > Strict enforcement.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
+        "CISControls": ["6.2"],
         "CIS": "5.2.3.3",
         "SCuBA": "",
         "NIST": "AC-12",
@@ -4164,8 +4308,8 @@
       "Remediation": "Entra ID > External Identities > Cross-tenant access settings > Default settings > Inbound trust. Disable 'Trust MFA from Microsoft Entra tenants' and 'Trust compliant devices' unless specific B2B partner trust is required.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "5.3.5",
-        "SCuBA": "MS.AAD.5.4v1",
         "NIST": "AC-17, IA-2",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -4192,6 +4336,7 @@
       "Remediation": "CA policy: Target admin roles > Require compliant device or Hybrid AD join. Alternatively define a named device group as a PAW group and require membership.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1 + Intune",
       "References": {
+        "CISControls": ["12.8"],
         "CIS": "5.1.1.3",
         "SCuBA": "MS.AAD.7.2v1",
         "NIST": "AC-17, CM-7",
@@ -4219,6 +4364,7 @@
       "Remediation": "Entra ID > Security > Conditional Access > Terms of use > Create ToU document. Add to CA policy: Grant > Require terms of use.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
+        "CISControls": [],
         "CIS": "5.3.6",
         "SCuBA": "",
         "NIST": "AC-8",
@@ -4246,8 +4392,8 @@
       "Remediation": "CA policy > Users > Select Workload identities > Apply conditions and access controls to high-privilege service principals. Requires Entra Workload Identities Premium add-on.",
       "LicenseRequirement": "Entra Workload Identities Premium (add-on)",
       "References": {
+        "CISControls": ["6.8", "5.5"],
         "CIS": "5.1.5.2",
-        "SCuBA": "MS.AAD.5.5v1",
         "NIST": "IA-3, AC-6",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -4274,6 +4420,7 @@
       "Remediation": "Purview > DLP > Create or edit policy > Choose where to apply > Enable Exchange, SharePoint, OneDrive, Teams, Devices simultaneously. Reference: MS.DEFENDER.4.1v2 (SCuBA).",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
+        "CISControls": ["3.13"],
         "CIS": "3.3.4",
         "SCuBA": "MS.DEFENDER.4.1v2",
         "NIST": "SC-28, AC-4",
@@ -4302,6 +4449,7 @@
       "Remediation": "Purview > DLP > Edit policy > Add condition > Content contains > Sensitive info types. Reference: MS.DEFENDER.4.2v1 (SCuBA).",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
+        "CISControls": ["3.13"],
         "CIS": "3.3.5",
         "SCuBA": "MS.DEFENDER.4.2v1",
         "NIST": "SC-28",
@@ -4330,6 +4478,7 @@
       "Remediation": "Defender XDR > Cloud Apps > Policies > OAuth app policies. Create policy: App = apps with high privileges, consented by users. Requires Microsoft Defender for Cloud Apps. Reference: MS.DEFENDER.5.1v1 (SCuBA).",
       "LicenseRequirement": "Microsoft Defender for Cloud Apps (M365 E5 or add-on)",
       "References": {
+        "CISControls": ["13.1"],
         "CIS": "2.4.2",
         "SCuBA": "MS.DEFENDER.5.1v1",
         "NIST": "SI-4, AU-12",
@@ -4358,6 +4507,7 @@
       "Remediation": "Defender portal > Settings > Email & collaboration > User tags > Global Settings > Priority account protection. Tag executives and admins as priority accounts.",
       "LicenseRequirement": "Defender for Office 365 Plan 2 (M365 E5 or add-on)",
       "References": {
+        "CISControls": [],
         "CIS": "2.3.5",
         "NIST": "SI-3, IR-4",
         "CMMC": "SI.L2-3.14.2",
@@ -4386,6 +4536,7 @@
       "Remediation": "Purview > DLP > Create policy > Devices location > Enable. Requires Defender for Endpoint onboarding + Microsoft 365 E5 or Microsoft 365 E5 Compliance.",
       "LicenseRequirement": "M365 E5 or E5 Compliance add-on",
       "References": {
+        "CISControls": ["3.13"],
         "CIS": "3.3.6",
         "NIST": "SC-28, MP-7",
         "CMMC": "MP.L2-3.8.1",
@@ -4414,6 +4565,7 @@
       "Remediation": "Defender portal > Email & collaboration > Attack simulation training > Simulations > Launch simulation. Schedule recurring simulations covering credential harvest, link in attachment, drive-by URL techniques. Requires Defender for Office 365 Plan 2.",
       "LicenseRequirement": "Defender for Office 365 Plan 2 (M365 E5 or add-on)",
       "References": {
+        "CISControls": ["14.2"],
         "CIS": "2.3.6",
         "SCuBA": "",
         "NIST": "AT-2, AT-3",
@@ -4441,6 +4593,7 @@
       "Remediation": "Set-SafeLinksPolicy -EnableSafeLinksForO365 $true. Or via Defender portal > Policies > Safe links > Enable Office 365 apps protection. Reference: MS.DEFENDER.2.1v1 (SCuBA).",
       "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)",
       "References": {
+        "CISControls": ["9.3"],
         "CIS": "2.3.2",
         "SCuBA": "MS.DEFENDER.2.1v1",
         "NIST": "SI-3",
@@ -4469,6 +4622,7 @@
       "Remediation": "Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false } | Set-Mailbox -AuditEnabled $true. Reference: MS.EXO.4.1v1 (SCuBA).",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["8.2", "8.5"],
         "CIS": "3.1.2",
         "SCuBA": "MS.EXO.4.1v1",
         "NIST": "AU-2, AU-12",
@@ -4494,11 +4648,12 @@
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
       "EvaluatorFunction": "Test-NRGControlEXOPriorityAccountProtection",
-      "Remediation": "Set-AntiPhishPolicy > TargetedUsersToProtect \u2014 add executive UPNs. Enable EnableTargetedUserProtection. Reference: MS.DEFENDER.1.6v1 (SCuBA).",
+      "Remediation": "Set-AntiPhishPolicy > TargetedUsersToProtect \u2014 add executive UPNs. Enable EnableTargetedUserProtection. Reference: MS.DEFENDER.2.1v1 (SCuBA).",
       "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)",
       "References": {
+        "CISControls": ["9.7", "10.1"],
         "CIS": "2.1.6",
-        "SCuBA": "MS.DEFENDER.1.6v1",
+        "SCuBA": "MS.DEFENDER.2.1v1",
         "NIST": "SI-3",
         "CMMC": "SI.L2-3.14.2",
         "MITRE": [
@@ -4525,6 +4680,7 @@
       "Remediation": "Set-HostedContentFilterPolicy -Identity Default -AllowedSenderDomains @() \u2014 remove all allowed sender domains. Use mail flow rules for legitimate trusted partner exemptions with scoped conditions instead.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["9.7"],
         "CIS": "2.1.13",
         "SCuBA": "",
         "NIST": "SI-8",
@@ -4552,6 +4708,7 @@
       "Remediation": "Set-CsTeamsMeetingPolicy -MeetingRecordingExpirationDays 60. Reference: MS.TEAMS.1.6v1 (SCuBA).",
       "LicenseRequirement": "Included (M365 Business Standard+)",
       "References": {
+        "CISControls": ["3.4"],
         "CIS": "8.5.9",
         "SCuBA": "MS.TEAMS.1.6v1",
         "NIST": "AU-11",
@@ -4576,11 +4733,12 @@
       "Automated": true,
       "CollectorDependency": "Teams-Config",
       "EvaluatorFunction": "Test-NRGControlTeamsAnonymousStart",
-      "Remediation": "Set-CsTeamsMeetingPolicy -AllowAnonymousUsersToStartMeeting $false. Reference: MS.TEAMS.2.2v1 (SCuBA).",
+      "Remediation": "Set-CsTeamsMeetingPolicy -AllowAnonymousUsersToStartMeeting $false. Reference: MS.TEAMS.2.2v2 (SCuBA).",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "8.5.3",
-        "SCuBA": "MS.TEAMS.2.2v1",
+        "SCuBA": "MS.TEAMS.2.2v2",
         "NIST": "AC-3, IA-3",
         "CMMC": "AC.L2-3.1.2",
         "MITRE": [
@@ -4606,6 +4764,7 @@
       "Remediation": "Teams Admin Center > External access > Allow only specific external domains. Add business partner domains only. Reference: MS.TEAMS.1.3v1 (SCuBA).",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["4.8", "6.7"],
         "CIS": "8.2.6",
         "SCuBA": "MS.TEAMS.1.3v1",
         "NIST": "AC-17",
@@ -4634,6 +4793,7 @@
       "Remediation": "Set-CsTeamsMeetingBroadcastPolicy -AllowBroadcastToAnonymousUsers $false. Reference: MS.TEAMS.1.7v2 (SCuBA).",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["4.1"],
         "CIS": "8.5.10",
         "SCuBA": "MS.TEAMS.1.7v2",
         "NIST": "AC-3",
@@ -4661,6 +4821,7 @@
       "Remediation": "Intune > Endpoint security > Account protection > Create Windows LAPS policy. Configure: Admin account managed = Yes, Password age = 30 days, Password complexity = Large letters + small letters + numbers + special characters.",
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
+        "CISControls": ["5.4", "4.7"],
         "CIS": "4.1.5",
         "SCuBA": "",
         "NIST": "AC-2, IA-5",
@@ -4689,6 +4850,7 @@
       "Remediation": "Intune > Devices > Windows > Windows enrollment > Windows Hello for Business settings. Or deploy via endpoint protection policy: Use Windows Hello for Business = Enabled.",
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
+        "CISControls": [],
         "CIS": "4.1.6",
         "SCuBA": "",
         "NIST": "IA-2(1)",
@@ -4717,6 +4879,7 @@
       "Remediation": "Intune > Devices > Compliance policies > Create policy > OS minimum version = latest-1. Review noncompliant devices report and address outliers.",
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
+        "CISControls": ["7.3"],
         "CIS": "4.5.5",
         "SCuBA": "",
         "NIST": "SI-2",
@@ -4745,6 +4908,7 @@
       "Remediation": "Intune > Devices > Compliance > iOS/Android policy > System security > Require password = Require. Set minimum length = 6, complexity = Numeric + symbols.",
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
+        "CISControls": ["4.3", "4.10"],
         "CIS": "4.2.2",
         "SCuBA": "",
         "NIST": "IA-5, AC-11",
@@ -4773,6 +4937,7 @@
       "Remediation": "Assign Microsoft 365 E5 or E5 Compliance license to users, then enable Audit Premium: Purview > Audit > Audit log retention policies. Verify MailItemsAccessed events appear in audit search.",
       "LicenseRequirement": "M365 E5 or E5 Compliance add-on",
       "References": {
+        "CISControls": ["8.5"],
         "CIS": "3.1.4",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
@@ -4801,6 +4966,7 @@
       "Remediation": "Purview > Audit > Audit log retention policies > New retention policy. Priority: All activities, Users: All, Duration: 1 year or longer. Requires Audit Premium.",
       "LicenseRequirement": "M365 E5 or E5 Compliance add-on",
       "References": {
+        "CISControls": ["8.10"],
         "CIS": "3.1.5",
         "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.2",
@@ -4829,6 +4995,7 @@
       "Remediation": "Purview > Information protection > Sensitivity labels > Create label hierarchy (Public, Internal, Confidential, Highly Confidential). Create label policy and publish to all users.",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
+        "CISControls": ["3.7"],
         "CIS": "3.4.1",
         "SCuBA": "MS.DEFENDER.4.1v2",
         "NIST": "AC-16, SC-28",
@@ -4857,6 +5024,7 @@
       "Remediation": "Purview > Records management > Labels > Create record label with retention action. Publish via label policy. Required for healthcare (HIPAA), government, and financial organizations.",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
+        "CISControls": ["3.4"],
         "CIS": "3.3.3",
         "SCuBA": "",
         "NIST": "AU-11, IR-4",
@@ -4884,6 +5052,7 @@
       "Remediation": "Purview > Information protection > Labels > Create/verify labels with Files & emails scope. Enable Copilot integration in label settings. Reference: Microsoft Copilot security baseline.",
       "LicenseRequirement": "M365 Business Premium or E3+ (Copilot requires M365 Copilot add-on)",
       "References": {
+        "CISControls": ["3.7"],
         "CIS": "3.4.1",
         "SCuBA": "",
         "NIST": "AC-16, SC-28",
@@ -4911,6 +5080,7 @@
       "Remediation": "Purview > DLP > Create policy > Locations: Include Microsoft 365 Copilot. Add sensitive info types as conditions. Requires M365 E5 Compliance or equivalent.",
       "LicenseRequirement": "M365 E5 Compliance add-on",
       "References": {
+        "CISControls": ["3.13"],
         "CIS": "3.3.4",
         "SCuBA": "",
         "NIST": "SC-28, AC-4",
@@ -4939,6 +5109,7 @@
       "Remediation": "M365 Admin Center > Settings > Microsoft 365 Copilot > Control access. Assign licenses only to approved users with a documented business need.",
       "LicenseRequirement": "M365 Copilot add-on license ($30/user/month)",
       "References": {
+        "CISControls": ["6.8"],
         "CIS": "5.5.1",
         "SCuBA": "",
         "NIST": "AC-2",
@@ -4966,6 +5137,7 @@
       "Remediation": "Power Platform Admin Center > Copilot Studio > Policies > Require admin approval for agent publishing. Apply DLP policies to Copilot Studio environment connectors.",
       "LicenseRequirement": "Power Platform + Copilot Studio license",
       "References": {
+        "CISControls": ["6.8"],
         "CIS": "9.3.4",
         "SCuBA": "",
         "NIST": "CM-7, AC-6",
@@ -4994,6 +5166,7 @@
       "Remediation": "Ensure Unified Audit Log is enabled (Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true). Copilot interactions are searchable in Purview > Content explorer and Audit > Search.",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
+        "CISControls": ["8.2", "8.10"],
         "CIS": "3.1.1",
         "SCuBA": "",
         "NIST": "AU-2, AU-12",
@@ -5022,6 +5195,7 @@
       "Remediation": "Entra ID > Users > [select user] > Authentication methods > Add method. For bulk: Get-MgUser | where MFA not registered \u2192 require combined registration via CA policy targeted at these users.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["6.3"],
         "CIS": "5.2.1",
         "SCuBA": "MS.AAD.3.1v1",
         "NIST": "IA-2(1)",
@@ -5050,8 +5224,8 @@
       "Remediation": "Entra ID > External Identities > All users > Filter by guest, sort by last sign-in. Disable or delete accounts inactive 90+ days. Implement access reviews: PIM > Access reviews > Create review for guest users.",
       "LicenseRequirement": "Included (all plans) \u2014 Access Reviews require Entra P2",
       "References": {
+        "CISControls": ["5.3"],
         "CIS": "5.3.4",
-        "SCuBA": "MS.AAD.5.3v1",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L2-3.1.2",
         "ISO27001": "A.5.18, A.6.5",
@@ -5077,6 +5251,7 @@
       "Remediation": "Verify each account represents an active user. Disable accounts for departed employees immediately. Revoke all active sessions. Remove assigned licenses. Review for any recent inbox rules or forwarding.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["5.3"],
         "CIS": "5.1.6.1",
         "SCuBA": "",
         "NIST": "AC-2(9)",
@@ -5104,6 +5279,7 @@
       "Remediation": "Entra ID > Enterprise applications > All applications > Filter by permissions. Review each AllPrincipals grant. Revoke unnecessary grants: Remove-MgOAuth2PermissionGrant -OAuth2PermissionGrantId <id>.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["2.1"],
         "CIS": "5.5.4",
         "NIST": "AC-3",
         "CMMC": "AC.L2-3.1.2",
@@ -5132,8 +5308,9 @@
       "Remediation": "For each listed mailbox: verify the forwarding is intentional and business-justified. Remove unauthorized: Set-Mailbox -Identity <upn> -ForwardingSmtpAddress $null. Also set transport rule to block auto-forward and create an alert policy for new forwarding rules.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["3.13", "8.11"],
         "CIS": "2.1.2",
-        "SCuBA": "MS.EXO.1.1v1",
+        "SCuBA": "MS.EXO.1.1v2",
         "NIST": "AC-4",
         "CMMC": "AC.L2-3.1.2",
         "ISO27001": "A.8.12",
@@ -5159,6 +5336,7 @@
       "Remediation": "Set-AzureADUser -ObjectId <guid> -AccountEnabled $false for each shared mailbox account. Or in M365 Admin: Active users > select user > Block sign-in. Verify delegates can still access via Outlook.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["5.3"],
         "CIS": "2.1.5",
         "SCuBA": "MS.EXO.10.1v1",
         "NIST": "IA-5",
@@ -5186,6 +5364,7 @@
       "Remediation": "Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false } | Set-Mailbox -AuditEnabled $true",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["8.2", "8.5"],
         "CIS": "2.1.3",
         "SCuBA": "MS.EXO.4.1v1",
         "NIST": "AU-2",
@@ -5214,6 +5393,7 @@
       "Remediation": "For each listed user: Set-CASMailbox -Identity <upn> -SmtpClientAuthenticationDisabled $true. If SMTP AUTH is required (printer, scanner, legacy app) use a dedicated service account with a strong password and IP restriction.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["4.8"],
         "CIS": "2.1.1",
         "NIST": "IA-2",
         "CMMC": "IA.L2-3.5.3",
@@ -5242,6 +5422,7 @@
       "Remediation": "Review Microsoft Secure Score improvement actions at security.microsoft.com > Secure Score. Prioritize Identity and Email improvement actions first.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": [],
         "CIS": "3.5.2",
         "SCuBA": "",
         "NIST": "CA-7",
@@ -5269,8 +5450,9 @@
       "Remediation": "Get-Mailbox -ResultSize Unlimited -Filter \"ForwardingSmtpAddress -ne `$null\" | Set-Mailbox -ForwardingSmtpAddress $null -ForwardingAddress $null -DeliverToMailboxAndForward $false. Also block at transport layer: Set-RemoteDomain Default -AutoForwardEnabled $false.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["3.13", "8.11"],
         "CIS": "6.2.1",
-        "SCuBA": "MS.EXO.1.1v1",
+        "SCuBA": "MS.EXO.1.1v2",
         "NIST": "AU-6, IR-4, SI-4",
         "CMMC": "AU.L2-3.3.5, IR.L2-3.6.1, SI.L2-3.14.6",
         "MITRE": [
@@ -5296,8 +5478,9 @@
       "Remediation": "Audit: foreach ($m in Get-Mailbox -ResultSize Unlimited) { Get-InboxRule -Mailbox $m.UserPrincipalName | Where-Object { $_.ForwardTo -or $_.RedirectTo -or $_.ForwardAsAttachmentTo } }. Disable: Disable-InboxRule -Mailbox <UPN> -Identity <RuleName>. Block at transport: Set-RemoteDomain Default -AutoForwardEnabled $false.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["3.13", "8.11"],
         "CIS": "6.2.1",
-        "SCuBA": "MS.EXO.1.1v1",
+        "SCuBA": "MS.EXO.1.1v2",
         "NIST": "AU-6, IR-4, SI-4",
         "CMMC": "AU.L2-3.3.5, IR.L2-3.6.1, SI.L2-3.14.6",
         "MITRE": [
@@ -5323,6 +5506,7 @@
       "Remediation": "Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false } | Set-Mailbox -AuditEnabled $true. For a single mailbox: Set-Mailbox -Identity <UPN> -AuditEnabled $true.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["8.2", "8.5"],
         "CIS": "3.1.2",
         "SCuBA": "MS.EXO.4.1v1",
         "NIST": "AU-2, AU-3, AU-12",
@@ -5350,6 +5534,7 @@
       "Remediation": "For each affected mailbox: Set-CASMailbox -Identity <UPN> -SmtpClientAuthenticationDisabled $true. Migrate senders to OAuth-based SMTP (Microsoft Graph sendMail API) or App Passwords with MFA. For multifunction devices/scanners, prefer SMTP relay via on-prem connector with IP allowlist, or Direct Send (anonymous) \u2014 neither requires basic auth.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
+        "CISControls": ["4.8"],
         "CIS": "6.2.2",
         "SCuBA": "MS.EXO.4.2v1",
         "NIST": "IA-2, SC-8, SI-4",

@@ -14,8 +14,11 @@
 #      Use CA-issued cert. Self-signed is discouraged per Microsoft Learn.
 #
 #   2. Interactive browser — ATTENDED, default.
-#      Graph: interactive browser (no device code, no broker bypass risk).
-#      Teams/EXO/IPPS: device code (WAM broker crashes when running elevated).
+#      Graph, Teams, EXO, and IPPS all use interactive BROWSER MFA (matching
+#      ScubaGear). No device-code flow — that is the exact flow AAD-11.1 tells
+#      clients to block, and it is EDR-flagged. The WAM broker is disabled at
+#      function entry so browser modern-auth is used without the RuntimeBroker
+#      crash the old device-code paths worked around.
 #
 # TOKEN CACHE HYGIENE:
 #   Connect-MgGraph uses -ContextScope Process so the MSAL token cache is bound to
@@ -33,54 +36,14 @@
 #   register their own Entra app for SharePoint. Do NOT use -PersistLogin (writes tokens
 #   to $HOME\.m365pnppowershell) or -UseWebLogin (removed in PnP v3, cookie hijacking).
 #
-# WAM BROKER DISABLED ($env:MSAL_ALLOW_BROKER = '0'):
+# WAM BROKER DISABLED ($env:MSAL_ALLOW_BROKER = '0', $env:MSAL_DISABLE_TOKENBROKER = '1'):
 #   Set at function entry, before any connection. WAM crashes with NullReferenceException
-#   when pwsh is elevated. Disabling forces MSAL to use device-code/browser.
+#   when pwsh is elevated. Disabling forces MSAL to use interactive browser modern-auth.
 #
 # CVE-2025-54100 (Dec 2025, CVSS 7.8): MSHTML-based Invoke-WebRequest parser injection
 # affects Windows PowerShell 5.1 only. This module requires PowerShell 7.0+ which is
 # not vulnerable.
 #
-
-# Script-scoped scriptblock (not exported)
-$script:ShowDeviceCodeBox = {
-    param([string]$Service, [string]$Url)
-
-    try {
-        $parsed = [System.Uri]$Url
-        # OWASP A10 / ASVS V12.6.1 — HTTPS-only + Microsoft-domain allowlist.
-        # Match either the apex 'microsoft.com' or any '*.microsoft.com'
-        # subdomain. Microsoft uses the apex form for the device-code login
-        # endpoint (https://microsoft.com/devicelogin), which the previous
-        # regex '\.microsoft\.com$' silently rejected because the apex has no
-        # leading dot. HTTP remains rejected (Scheme must equal 'https').
-        # OWASP ASVS V7.4.2 — split the scheme + hostname checks so the warning
-        # tells the operator which guard tripped. A combined message masked
-        # protocol-downgrade attempts when the operator only read "not Microsoft".
-        if ($parsed.Scheme -ne 'https') {
-            Write-Warning "Refusing to open device-code URL: scheme is '$($parsed.Scheme)', must be 'https': $Url"
-            return
-        }
-        $hostOk = $parsed.Host -eq 'microsoft.com' -or $parsed.Host -match '\.microsoft\.com$'
-        if (-not $hostOk) {
-            Write-Warning "Refusing to open device-code URL: host '$($parsed.Host)' is not microsoft.com or a *.microsoft.com subdomain: $Url"
-            return
-        }
-    } catch {
-        Write-Warning "Invalid URL — refusing to open: $Url"
-        return
-    }
-
-    Write-Host ""
-    Write-Host "  +--------------------------------------------------------------+" -ForegroundColor Yellow
-    Write-Host "  |  $Service" -ForegroundColor Yellow
-    Write-Host "  |  Opening devicelogin in browser..." -ForegroundColor Cyan
-    Write-Host "  |  Enter the code shown BELOW this box" -ForegroundColor Yellow
-    Write-Host "  +--------------------------------------------------------------+" -ForegroundColor Yellow
-    try { Start-Process "msedge.exe" -ArgumentList $Url -ErrorAction Stop }
-    catch { try { Start-Process $Url } catch { } }
-    Write-Host ""
-}
 
 function Connect-NRGServices {
     [CmdletBinding(DefaultParameterSetName = 'Interactive')]
@@ -128,8 +91,14 @@ function Connect-NRGServices {
         AuthMode     = $PSCmdlet.ParameterSetName
     }
 
-    # Disable WAM broker BEFORE any connection
+    # Disable the WAM broker + token broker BEFORE any connection so every service
+    # authenticates with interactive BROWSER MFA (matching ScubaGear) rather than
+    # device-code flow. The broker is what caused the RuntimeBroker
+    # NullReferenceException the old device-code paths worked around; with it
+    # disabled, modern-auth browser sign-in is safe. Device-code flow is also the
+    # exact flow AAD-11.1 tells clients to block — the tool should not rely on it.
     $env:MSAL_ALLOW_BROKER = '0'
+    $env:MSAL_DISABLE_TOKENBROKER = '1'
 
     # ── 1. Microsoft Graph ────────────────────────────────────────────────────
     Write-Host "  [*] Microsoft Graph..." -ForegroundColor Cyan
@@ -255,8 +224,8 @@ function Connect-NRGServices {
                 if (-not (Get-Command Connect-MicrosoftTeams -ErrorAction SilentlyContinue)) {
                     Import-Module MicrosoftTeams -Force -ErrorAction SilentlyContinue
                 }
-                & $script:ShowDeviceCodeBox 'Microsoft Teams' 'https://microsoft.com/devicelogin'
-                Connect-MicrosoftTeams -UseDeviceAuthentication -ErrorAction Stop | Out-Null
+                # Interactive browser MFA (matches ScubaGear); no device-code flow.
+                Connect-MicrosoftTeams -ErrorAction Stop | Out-Null
             }
             $result['Teams'] = $true
             Write-Host "  [+] Teams connected" -ForegroundColor Green
@@ -286,38 +255,13 @@ function Connect-NRGServices {
             Connect-ExchangeOnline -AppId $AppId -CertificateThumbprint $CertificateThumbprint `
                                    -Organization $orgDomain -ShowBanner:$false -ErrorAction Stop | Out-Null
         } else {
-            # UseRPSSession bypasses MSAL/WAM entirely — avoids the RuntimeBroker
-            # NullReferenceException that fires on a background thread in EOM v3.x
+            # Interactive browser MFA (matches ScubaGear). The WAM broker is disabled
+            # at the top of this function, so modern-auth sign-in uses the system
+            # browser without the RuntimeBroker crash the old device-code /
+            # UseRPSSession paths worked around.
             $exoParams = @{ ShowBanner = $false; ErrorAction = 'Stop' }
             if ($UserPrincipalName) { $exoParams['UserPrincipalName'] = $UserPrincipalName }
-            try {
-                # Try legacy RPS session first — no MSAL, no WAM, no crash
-                $exoParams['UseRPSSession'] = $true
-                Connect-ExchangeOnline @exoParams | Out-Null
-            } catch [System.Management.Automation.ParameterBindingException] {
-                # UseRPSSession removed in EOM 3.4.0 — fall back to device code
-                $exoParams.Remove('UseRPSSession')
-                & $script:ShowDeviceCodeBox 'Exchange Online' 'https://microsoft.com/devicelogin'
-                try {
-                    $exoParams['Device'] = $true
-                    Connect-ExchangeOnline @exoParams | Out-Null
-                } catch [System.Management.Automation.ParameterBindingException] {
-                    $exoParams.Remove('Device')
-                    Connect-ExchangeOnline @exoParams | Out-Null
-                }
-            } catch {
-                # UseRPSSession might throw a different error if deprecated but present
-                # Try the version check approach
-                $exoParams.Remove('UseRPSSession')
-                & $script:ShowDeviceCodeBox 'Exchange Online' 'https://microsoft.com/devicelogin'
-                try {
-                    $exoParams['Device'] = $true
-                    Connect-ExchangeOnline @exoParams | Out-Null
-                } catch [System.Management.Automation.ParameterBindingException] {
-                    $exoParams.Remove('Device')
-                    Connect-ExchangeOnline @exoParams | Out-Null
-                }
-            }
+            Connect-ExchangeOnline @exoParams | Out-Null
         }
         $result['EXO'] = $true
         Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
@@ -336,35 +280,17 @@ function Connect-NRGServices {
                 # IPPSSession does not yet support app-only cert auth as of EXO V3.5.
                 Write-Host "      Note: IPPSSession does not currently support app-only auth. Skipping." -ForegroundColor DarkYellow
             } else {
-                # Force device code auth — WAM broker causes NullReferenceException
-                # on background thread when no interactive UI parent exists
-                $env:MSAL_ALLOW_BROKER = '0'
-                $env:MSAL_DISABLE_TOKENBROKER = '1'
-
+                # Interactive browser MFA (matches ScubaGear). The WAM broker is
+                # disabled at the top of this function, so modern-auth sign-in uses
+                # the system browser without the RuntimeBroker crash the old
+                # device-code path worked around.
                 $ippsParams = @{
-                    ShowBanner          = $false
-                    ErrorAction         = 'Stop'
-                    UseDeviceAuthentication = $true
+                    ShowBanner  = $false
+                    ErrorAction = 'Stop'
                 }
                 if ($UserPrincipalName) { $ippsParams['UserPrincipalName'] = $UserPrincipalName }
 
-                Write-Host "  [*] Purview requires device code auth — open browser:" -ForegroundColor Cyan
-                Write-Host "      https://microsoft.com/devicelogin" -ForegroundColor Yellow
-                Write-Host "      Sign in as $UserPrincipalName" -ForegroundColor Yellow
-
-                # Fallback if UseDeviceAuthentication param not available in older module
-                try {
-                    Connect-IPPSSession @ippsParams | Out-Null
-                } catch [System.Management.Automation.ParameterBindingException] {
-                    $ippsParams.Remove('UseDeviceAuthentication')
-                    $ippsParams['Device'] = $true
-                    try {
-                        Connect-IPPSSession @ippsParams | Out-Null
-                    } catch [System.Management.Automation.ParameterBindingException] {
-                        $ippsParams.Remove('Device')
-                        Connect-IPPSSession @ippsParams | Out-Null
-                    }
-                }
+                Connect-IPPSSession @ippsParams | Out-Null
                 $result['IPPSSession'] = $true
                 Write-Host "  [+] Purview / Compliance connected" -ForegroundColor Green
             }

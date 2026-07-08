@@ -34,10 +34,15 @@ function Test-NRGControlAADPrivAccess {
     # Well-known Entra ID built-in role template GUID — stable across all tenants
     $GA_ROLE_ID = '62e90394-69f5-4237-9190-012177145e10'
 
-    $allAssignments = @(Get-NRGNestedProperty -Object $roleRaw -Path 'Data.PermanentAssignments' -Default @())
-    $globalAdmins   = @($allAssignments | Where-Object { (Get-NRGSafeProperty -Object $_ -Property 'RoleDefinitionId') -eq $GA_ROLE_ID })
+    # Collector (Invoke-NRGCollectAADRoles) writes Data.RoleAssignments as an array
+    # of hashtables with keys RoleDefinitionId / OnPremisesSyncEnabled. Read via
+    # Get-NRGObjectField (IDictionary-aware) — Get-NRGSafeProperty is property-only
+    # and returns Default for hashtables, which made every GA read $null → a
+    # permanent false "0 Global Administrators" finding independent of collection.
+    $allAssignments = @(Get-NRGNestedProperty -Object $roleRaw -Path 'Data.RoleAssignments' -Default @())
+    $globalAdmins   = @($allAssignments | Where-Object { (Get-NRGObjectField -Item $_ -Key 'RoleDefinitionId') -eq $GA_ROLE_ID })
     $gaCount        = $globalAdmins.Count
-    $syncedGAs      = @($globalAdmins | Where-Object { (Get-NRGSafeProperty -Object $_ -Property 'OnPremSynced') -eq $true })
+    $syncedGAs      = @($globalAdmins | Where-Object { (Get-NRGObjectField -Item $_ -Key 'OnPremisesSyncEnabled') -eq $true })
 
     # Satisfied  = count in [2..8] AND zero on-prem-synced GA
     # Partial    = count in [2..8] but at least one synced GA (correct count, wrong source)

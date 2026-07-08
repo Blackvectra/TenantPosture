@@ -466,12 +466,7 @@ function Test-NRGControlDefenderPriorityAccounts {
     if (-not $def -or -not $def.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
     }
-    $priorityAccounts = @(Get-NRGNestedProperty -Object $def -Path 'Data.PriorityAccounts' -Default @())
-    if ($priorityAccounts.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($priorityAccounts.Count) priority account(s) tagged in Defender. These accounts receive enhanced email protection and differentiated alert prioritization."
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'No priority accounts tagged in Defender for Office 365. Executives and IT admins should be tagged to receive enhanced email filtering, threat tracking, and differentiated incidents.' -Remediation $ctrl.Remediation
-    }
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Priority account data not collected; not assessed.'
 }
 
 # ── DEF-4.5 Endpoint DLP Policy Active ───────────────────────────────────────
@@ -500,12 +495,7 @@ function Test-NRGControlDefenderAttackSim {
     if (-not $def -or -not $def.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
     }
-    $simCampaigns = @(Get-NRGNestedProperty -Object $def -Path 'Data.SimulationCampaigns' -Default @())
-    if ($simCampaigns.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($simCampaigns.Count) attack simulation campaign(s) configured. Users receive phishing simulation training."
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'No attack simulation campaigns detected. Regular phishing simulations measurably reduce user susceptibility and identify training gaps. Requires Defender for Office 365 Plan 2.' -Remediation $ctrl.Remediation
-    }
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Attack-simulation data not collected; not assessed.'
 }
 
 # ── DEF-4.7 Safe Links Policy Protects Office Applications ───────────────────

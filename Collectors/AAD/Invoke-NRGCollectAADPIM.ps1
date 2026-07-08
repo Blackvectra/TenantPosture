@@ -29,7 +29,7 @@ function Invoke-NRGCollectAADPIM {
         # is intentionally discarded — only the fact that the call didn't
         # throw matters (P2 licensing gates this endpoint with a 403).
         try {
-            $null = Invoke-MgGraphRequest -Method GET `
+            $null = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilitySchedules?$top=1' `
                 -ErrorAction Stop
             $result.PIMAvailable = $true
@@ -58,7 +58,7 @@ function Invoke-NRGCollectAADPIM {
             $pageCount = 0
 
             while ($eligLink -and $pageCount -lt $maxPages) {
-                $resp = Invoke-MgGraphRequest -Method GET -Uri $eligLink -ErrorAction Stop
+                $resp = Invoke-NRGGraphRequest -Method GET -Uri $eligLink -ErrorAction Stop
                 foreach ($s in @($resp.value ?? @())) {
                     $eligList.Add(@{
                         Id                 = [string]$s.id
@@ -99,7 +99,7 @@ function Invoke-NRGCollectAADPIM {
             $pageCount2 = 0
 
             while ($activeLink -and $pageCount2 -lt $maxPages) {
-                $resp = Invoke-MgGraphRequest -Method GET -Uri $activeLink -ErrorAction Stop
+                $resp = Invoke-NRGGraphRequest -Method GET -Uri $activeLink -ErrorAction Stop
                 foreach ($s in @($resp.value ?? @())) {
                     $activeList.Add(@{
                         Id               = [string]$s.id
@@ -133,7 +133,7 @@ function Invoke-NRGCollectAADPIM {
 
         # PIM role management policies (activation settings per role)
         try {
-            $policyResp = Invoke-MgGraphRequest -Method GET `
+            $policyResp = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/roleManagementPolicies?$top=50&$filter=scopeType eq ''DirectoryRole''' `
                 -ErrorAction Stop
             $result.Data.RolePolicies = @($policyResp.value ?? @() | ForEach-Object {
