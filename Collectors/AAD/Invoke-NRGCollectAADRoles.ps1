@@ -46,7 +46,7 @@ function Invoke-NRGCollectAADRoles {
 
         # Get all role definitions (we need names to match)
         try {
-            $roleDefResp = Invoke-MgGraphRequest -Method GET `
+            $roleDefResp = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions?$select=id,displayName,isBuiltIn,isEnabled&$top=200' `
                 -ErrorAction Stop
             $result.Data.RoleDefinitions = @($roleDefResp.value ?? @() | ForEach-Object {
@@ -72,7 +72,7 @@ function Invoke-NRGCollectAADRoles {
 
         # Get active (permanent) role assignments — expanded to get principal details
         try {
-            $assignResp = Invoke-MgGraphRequest -Method GET `
+            $assignResp = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments?$expand=principal&$top=500' `
                 -ErrorAction Stop
 
@@ -103,7 +103,7 @@ function Invoke-NRGCollectAADRoles {
             $maxPages   = 200
             $pageCount  = 0
             while ($nextLink -and $pageCount -lt $maxPages) {
-                $pageResp = Invoke-MgGraphRequest -Method GET -Uri $nextLink -ErrorAction Stop
+                $pageResp = Invoke-NRGGraphRequest -Method GET -Uri $nextLink -ErrorAction Stop
                 foreach ($a in @($pageResp.value ?? @())) {
                     $roleName = $roleMap[$a.roleDefinitionId] ?? $a.roleDefinitionId
                     $assignments.Add(@{
@@ -146,7 +146,7 @@ function Invoke-NRGCollectAADRoles {
         # Source flag so evaluators can either union or filter as needed.
         $eligibility = [System.Collections.Generic.List[object]]::new()
         try {
-            $eligResp = Invoke-MgGraphRequest -Method GET `
+            $eligResp = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilitySchedules?$expand=principal&$top=500' `
                 -ErrorAction Stop
             $eligNext = $eligResp.'@odata.nextLink'
@@ -172,7 +172,7 @@ function Invoke-NRGCollectAADRoles {
             $maxPages  = 200
             $pageCount = 0
             while ($eligNext -and $pageCount -lt $maxPages) {
-                $pageResp = Invoke-MgGraphRequest -Method GET -Uri $eligNext -ErrorAction Stop
+                $pageResp = Invoke-NRGGraphRequest -Method GET -Uri $eligNext -ErrorAction Stop
                 foreach ($e in @($pageResp.value ?? @())) {
                     $roleName = $roleMap[$e.roleDefinitionId] ?? $e.roleDefinitionId
                     $eligibility.Add(@{

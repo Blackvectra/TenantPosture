@@ -39,7 +39,7 @@ function Invoke-NRGCollectSharePoint {
         # crashed the collector if Graph returned a partial response. Each
         # value is now read with ?? defaults appropriate to the field's type.
         try {
-            $settings = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/admin/sharepoint/settings' -ErrorAction Stop
+            $settings = Invoke-NRGGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/admin/sharepoint/settings' -ErrorAction Stop
             if ($settings) {
                 $retentionDays = 0
                 $retentionRaw = $settings.deletedUserPersonalSiteRetentionPeriodInDays
@@ -79,7 +79,7 @@ function Invoke-NRGCollectSharePoint {
 
         # Root site
         try {
-            $root = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/sites/root' -ErrorAction Stop
+            $root = Invoke-NRGGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/sites/root' -ErrorAction Stop
             if ($root) {
                 $result.Data.RootSite = @{
                     Id          = $root.id

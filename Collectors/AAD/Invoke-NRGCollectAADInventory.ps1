@@ -31,7 +31,7 @@ function Invoke-NRGCollectAADInventory {
     try {
         # Subscribed SKUs — license detection for report suppression
         try {
-            $skuResp = Invoke-MgGraphRequest -Method GET `
+            $skuResp = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/subscribedSkus?$select=skuPartNumber,skuId,servicePlans,capabilityStatus' `
                 -ErrorAction Stop
             $result.Data.SubscribedSkus = @($skuResp.value | Where-Object { $_.capabilityStatus -in @('Enabled','Warning') } | ForEach-Object {
@@ -51,7 +51,7 @@ function Invoke-NRGCollectAADInventory {
 
         # Guest users + last sign-in
         try {
-            $guests = Invoke-MgGraphRequest -Method GET `
+            $guests = Invoke-NRGGraphRequest -Method GET `
                 -Uri "https://graph.microsoft.com/v1.0/users?`$select=id,displayName,userPrincipalName,accountEnabled,userType,createdDateTime,signInActivity&`$filter=userType eq 'Guest'&`$top=500" `
                 -ErrorAction Stop
             $result.Data.GuestUsers = @($guests.value ?? @() | ForEach-Object {
@@ -75,7 +75,7 @@ function Invoke-NRGCollectAADInventory {
 
         # Stale member accounts (signInActivity requires AuditLog.Read.All)
         try {
-            $staleResp = Invoke-MgGraphRequest -Method GET `
+            $staleResp = Invoke-NRGGraphRequest -Method GET `
                 -Uri "https://graph.microsoft.com/v1.0/users?`$select=id,displayName,userPrincipalName,accountEnabled,signInActivity,assignedLicenses&`$filter=userType eq 'Member' and accountEnabled eq true&`$top=500" `
                 -ErrorAction Stop
             $stale = @($staleResp.value ?? @() | Where-Object {
@@ -102,7 +102,7 @@ function Invoke-NRGCollectAADInventory {
 
         # AllPrincipals OAuth grants (app-level consent visible to all users)
         try {
-            $grants = Invoke-MgGraphRequest -Method GET `
+            $grants = Invoke-NRGGraphRequest -Method GET `
                 -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=consentType eq 'AllPrincipals'&`$top=200&`$expand=clientId" `
                 -ErrorAction Stop
             if (@($grants.value ?? @()).Count -gt 0) {
@@ -110,7 +110,7 @@ function Invoke-NRGCollectAADInventory {
                 $appNames  = @{}
                 foreach ($cid in ($clientIds | Select-Object -First 30)) {
                     try {
-                        $sp = Invoke-MgGraphRequest -Method GET `
+                        $sp = Invoke-NRGGraphRequest -Method GET `
                             -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$cid?`$select=displayName,appId,publisherName" `
                             -ErrorAction Stop
                         $appNames[$cid] = [string]($sp.displayName ?? $cid)
@@ -134,7 +134,7 @@ function Invoke-NRGCollectAADInventory {
 
         # Microsoft Secure Score
         try {
-            $ss = Invoke-MgGraphRequest -Method GET `
+            $ss = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/security/secureScores?$top=1' `
                 -ErrorAction Stop
             $latest = @($ss.value ?? @()) | Select-Object -First 1

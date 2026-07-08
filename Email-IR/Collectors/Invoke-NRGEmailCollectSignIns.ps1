@@ -56,7 +56,7 @@ function Invoke-NRGEmailCollectSignIns {
         $pageCap = [Math]::Ceiling($MaxEvents / 1000)
         $pages   = 0
         while ($uri -and $pages -lt $pageCap -and $events.Count -lt $MaxEvents) {
-            $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+            $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
             if ($resp.value) { $events += $resp.value }
             $uri = if ($resp.'@odata.nextLink') { $resp.'@odata.nextLink' } else { $null }
             $pages++
@@ -92,7 +92,7 @@ function Invoke-NRGEmailCollectSignIns {
         $filter = "createdDateTime ge $cutoff and riskEventTypes_v2/any(t:t eq 'anonymizedIPAddress')"
         $uri = "https://graph.microsoft.com/v1.0/auditLogs/signIns?`$top=1000&`$filter=$filter"
         try {
-            $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+            $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
             if ($resp.value) { $anonEvents = $resp.value }
         } catch {
             # Server-side filter rejected; fall back to client-side over the
@@ -159,7 +159,7 @@ function Invoke-NRGEmailCollectSignIns {
         $uri = "https://graph.microsoft.com/v1.0/identityProtection/riskyUsers?`$top=200&`$filter=riskState ne 'dismissed' and riskState ne 'remediated'"
         $pages = 0
         while ($uri -and $pages -lt 3) {
-            $resp = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+            $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
             if ($resp.value) { $risky += $resp.value }
             $uri = if ($resp.'@odata.nextLink') { $resp.'@odata.nextLink' } else { $null }
             $pages++
