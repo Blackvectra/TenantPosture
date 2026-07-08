@@ -4705,7 +4705,7 @@
       "Automated": true,
       "CollectorDependency": "Teams-Config",
       "EvaluatorFunction": "Test-NRGControlTeamsMeetingRecordingScope",
-      "Remediation": "Set-CsTeamsMeetingPolicy -MeetingRecordingExpirationDays 60. Reference: MS.TEAMS.1.6v1 (SCuBA).",
+      "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -NewMeetingRecordingExpirationDays 60. Reference: MS.TEAMS.1.6v1 (SCuBA).",
       "LicenseRequirement": "Included (M365 Business Standard+)",
       "References": {
         "CISControls": ["3.4"],
@@ -4790,7 +4790,7 @@
       "Automated": true,
       "CollectorDependency": "Teams-Config",
       "EvaluatorFunction": "Test-NRGControlTeamsLiveEvents",
-      "Remediation": "Set-CsTeamsMeetingBroadcastPolicy -AllowBroadcastToAnonymousUsers $false. Reference: MS.TEAMS.1.7v2 (SCuBA).",
+      "Remediation": "Set-CsTeamsMeetingBroadcastPolicy -Identity Global -BroadcastAttendeeVisibilityMode EveryoneInCompany (or -AllowBroadcastScheduling $false to disable live events entirely). Reference: MS.TEAMS.1.7v2 (SCuBA).",
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CISControls": ["4.1"],
