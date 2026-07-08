@@ -466,7 +466,23 @@ function Test-NRGControlDefenderPriorityAccounts {
     if (-not $def -or -not $def.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
     }
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Priority account data not collected; not assessed.'
+    # The Defender "Priority account" user tag has no supported read surface (no Graph
+    # endpoint, no EXO cmdlet). Rather than fabricate a result, surface the closest
+    # machine-readable proxy — named-user impersonation protection in anti-phishing —
+    # and direct the assessor to confirm the tag itself in the portal. Kept as an
+    # advisory (Partial), never a false Satisfied/Gap.
+    $ap = $def.Data['AntiPhishing']
+    $proxyProtected = $false
+    if ($ap -and $ap.Available) {
+        $proxyProtected = @($ap.Policies | Where-Object {
+            (Get-NRGObjectField -Item $_ -Key 'EnableTargetedUserProtection') -and
+            @(Get-NRGObjectField -Item $_ -Key 'TargetedUsersToProtect' -Default @()).Count -gt 0
+        }).Count -gt 0
+    }
+    $proxyNote = if ($proxyProtected) { 'Related signal: named-user impersonation protection IS configured in anti-phishing (see EXO-5.2).' } else { 'Related signal: no named-user impersonation protection is configured (see EXO-5.2).' }
+    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual verification required)" -Severity 'Low' -FrameworkIds $cit `
+        -Detail "The Defender 'Priority account' user tag is not exposed by any supported Graph/EXO read API, so it cannot be assessed programmatically. Verify in Defender portal > Settings > Email & collaboration > User tags that executives and high-value mailboxes carry the Priority account tag. $proxyNote" `
+        -Remediation $ctrl.Remediation
 }
 
 # ── DEF-4.5 Endpoint DLP Policy Active ───────────────────────────────────────
@@ -495,7 +511,18 @@ function Test-NRGControlDefenderAttackSim {
     if (-not $def -or -not $def.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
     }
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Attack-simulation data not collected; not assessed.'
+    $sim = $def.Data['AttackSimulations']
+    if (-not $sim -or -not $sim.Available) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Attack Simulation Training data unavailable (requires AttackSimulation.Read.All consent + Defender for Office 365 P2; API is Global-cloud only); not assessed.'; return
+    }
+    $launched = [int](Get-NRGObjectField -Item $sim -Key 'LaunchedCount' -Default 0)
+    $total    = [int](Get-NRGObjectField -Item $sim -Key 'Count' -Default 0)
+    if ($launched -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Attack Simulation Training is in use — $launched launched/completed campaign(s) found. Users are being phishing-tested and trained."
+    } else {
+        $detail = if ($total -gt 0) { "Attack Simulation Training exists only as draft(s) ($total draft, 0 launched). No users have actually been phishing-tested." } else { 'No Attack Simulation Training campaigns exist. Users are never phishing-tested, so susceptibility to social-engineering attacks is unmeasured and untrained.' }
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail $detail -CurrentValue "$launched launched, $total total campaign(s)" -RequiredValue 'At least one launched/recurring simulation campaign' -Remediation $ctrl.Remediation
+    }
 }
 
 # ── DEF-4.7 Safe Links Policy Protects Office Applications ───────────────────
