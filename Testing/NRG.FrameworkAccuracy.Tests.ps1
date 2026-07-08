@@ -144,4 +144,61 @@ Describe 'Framework crosswalk accuracy' {
             $missing -join ', ' | Should -BeNullOrEmpty
         }
     }
+
+    Context 'CMMC 2.0 references — domain + level correctness' {
+        # CMMC 2.0 L2 practices map 1:1 to NIST SP 800-171 R2 requirements (3.X.Y).
+        # The domain prefix is fixed by the 3.X family; the level (L1/L2) is fixed
+        # by the 17-practice FAR 52.204-21 Level 1 subset. Both are authoritative
+        # and typo-detectable.
+        It 'Every CMMC id has the right domain for its 800-171 family and the right level' {
+            $fam2dom = @{ '3.1'='AC';'3.2'='AT';'3.3'='AU';'3.4'='CM';'3.5'='IA';'3.6'='IR';
+                          '3.7'='MA';'3.8'='MP';'3.9'='PS';'3.10'='PE';'3.11'='RA';'3.12'='CA';
+                          '3.13'='SC';'3.14'='SI' }
+            $L1 = @('3.1.1','3.1.2','3.1.20','3.1.22','3.5.1','3.5.2','3.8.3','3.10.1',
+                    '3.10.3','3.10.4','3.10.5','3.13.1','3.13.5','3.14.1','3.14.2','3.14.4','3.14.5')
+            $rx = [regex]'^([A-Z]{2})\.L([12])-(3\.\d+)\.(\d+)$'
+            $bad = [System.Collections.Generic.List[string]]::new()
+            foreach ($c in $script:Controls) {
+                if ($null -eq $c.References) { continue }
+                $cmmc = [string]$c.References.CMMC
+                if (-not $cmmc) { continue }
+                foreach ($tok in ($cmmc -split '[;,]')) {
+                    $t = $tok.Trim(); if (-not $t) { continue }
+                    $m = $rx.Match($t)
+                    if (-not $m.Success) { $bad.Add("$($c.ControlId) -> '$t' (malformed)"); continue }
+                    $dom = $m.Groups[1].Value; $lvl = $m.Groups[2].Value
+                    $fam = $m.Groups[3].Value; $nist = "$fam.$($m.Groups[4].Value)"
+                    $wantDom = $fam2dom[$fam]
+                    $wantLvl = if ($L1 -contains $nist) { '1' } else { '2' }
+                    if ($dom -ne $wantDom -or $lvl -ne $wantLvl) {
+                        $bad.Add("$($c.ControlId) -> $t (expected $wantDom.L$wantLvl-$nist)")
+                    }
+                }
+            }
+            $bad -join "`n" | Should -BeNullOrEmpty -Because 'CMMC domain must match the 800-171 family and level must match the FAR-17 L1 subset'
+        }
+    }
+
+    Context 'ISO/IEC 27001:2022 references — valid Annex A control numbers' {
+        It 'Every ISO27001 id is a real Annex A 2022 control (A.5.1-37, A.6.1-8, A.7.1-14, A.8.1-34)' {
+            $isoMax = @{ '5'=37; '6'=8; '7'=14; '8'=34 }
+            $rx = [regex]'^A\.(\d+)\.(\d+)$'
+            $bad = [System.Collections.Generic.List[string]]::new()
+            foreach ($c in $script:Controls) {
+                if ($null -eq $c.References) { continue }
+                $iso = [string]$c.References.ISO27001
+                if (-not $iso) { continue }
+                foreach ($tok in ($iso -split '[;,]')) {
+                    $t = $tok.Trim(); if (-not $t) { continue }
+                    $m = $rx.Match($t)
+                    if (-not $m.Success) { $bad.Add("$($c.ControlId) -> '$t' (malformed)"); continue }
+                    $clause = $m.Groups[1].Value; $num = [int]$m.Groups[2].Value
+                    if (-not $isoMax.ContainsKey($clause) -or $num -lt 1 -or $num -gt $isoMax[$clause]) {
+                        $bad.Add("$($c.ControlId) -> $t (out of Annex A range)")
+                    }
+                }
+            }
+            $bad -join "`n" | Should -BeNullOrEmpty -Because 'every ISO 27001:2022 Annex A control number must exist'
+        }
+    }
 }
