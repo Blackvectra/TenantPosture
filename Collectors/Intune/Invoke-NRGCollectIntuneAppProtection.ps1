@@ -38,12 +38,25 @@ function Invoke-NRGCollectIntuneAppProtection {
             while ($next -and $pageCount -lt $maxPages) {
                 $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 foreach ($p in @($page.value)) {
+                    # Conditional-launch settings (INT-3.3): the MAM app-protection
+                    # object carries these access-gating fields directly (no new
+                    # scope). Read via ?? so absent keys are $null (HashTable shape).
+                    $condLaunch = @()
+                    if (($p.deviceComplianceRequired ?? $false) -eq $true)      { $condLaunch += 'DeviceComplianceRequired' }
+                    if ($p.minimumRequiredOsVersion)                            { $condLaunch += 'MinimumRequiredOsVersion' }
+                    if ([int]($p.maximumPinRetries ?? 0) -gt 0)                 { $condLaunch += 'MaximumPinRetries' }
+                    if ($p.periodOfflineBeforeWipeIsEnforced)                   { $condLaunch += 'PeriodOfflineBeforeWipe' }
                     $result.Data.AppProtectionPolicies += @{
                         Id          = $p.id
                         DisplayName = [string]$p.displayName
                         Description = [string]$p.description
                         Type        = [string]$p.'@odata.type'
                         Version     = $p.version
+                        # Fields backing the INT-3.3 conditional-launch evaluation.
+                        DeviceComplianceRequired  = [bool]($p.deviceComplianceRequired ?? $false)
+                        MinimumRequiredOsVersion  = [string]($p.minimumRequiredOsVersion ?? '')
+                        MaximumPinRetries         = [int]($p.maximumPinRetries ?? 0)
+                        ConditionalLaunchSettings = @($condLaunch)
                     }
                 }
                 $next = $page.'@odata.nextLink'
