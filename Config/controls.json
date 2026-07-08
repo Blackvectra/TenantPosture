@@ -105,7 +105,7 @@
         "CIS": "5.2.2",
         "SCuBA": "MS.AAD.1.1v1",
         "NIST": "AC-17, IA-2",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078",
           "T1110"
@@ -221,7 +221,7 @@
         "CIS": "2.1.2",
         "SCuBA": "MS.EXO.4.1v1",
         "NIST": "SC-7, SI-8",
-        "CMMC": "SC.L2-3.13.1",
+        "CMMC": "SC.L1-3.13.1",
         "MITRE": [
           "T1114.003"
         ],
@@ -278,7 +278,7 @@
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.4v1",
         "NIST": "SI-3, SI-8",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566.001",
           "T1598.003"
@@ -336,7 +336,7 @@
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.4v1",
         "NIST": "SI-8",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566",
           "T1036.005"
@@ -365,7 +365,7 @@
         "CIS": "2.2.2",
         "SCuBA": "MS.EXO.9.2v1",
         "NIST": "SI-8, SC-8",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566",
           "T1036.005"
@@ -423,7 +423,7 @@
         "CIS": "2.2.3",
         "SCuBA": "MS.EXO.9.3v2",
         "NIST": "SI-8, SC-8",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566",
           "T1036.005"
@@ -654,7 +654,7 @@
         "CIS": "2.3.1",
         "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-3",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566.001",
           "T1204.002"
@@ -683,7 +683,7 @@
         "CIS": "2.3.2",
         "SCuBA": "MS.DEFENDER.2.1v1",
         "NIST": "SI-3",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566.002",
           "T1204.001"
@@ -712,7 +712,7 @@
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.3v1",
         "NIST": "SI-8, SI-3",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566",
           "T1036.005"
@@ -741,7 +741,7 @@
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.4v1",
         "NIST": "SI-8",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566",
           "T1036.005"
@@ -770,7 +770,7 @@
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.4v1",
         "NIST": "SI-3, SI-4",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566"
         ],
@@ -798,7 +798,7 @@
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.5v1",
         "NIST": "SI-3",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566.001"
         ],
@@ -911,7 +911,7 @@
         "CIS": "7.2.6",
         "SCuBA": "MS.SHAREPOINT.3.3v1",
         "NIST": "AC-2(3)",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078"
         ],
@@ -939,7 +939,7 @@
         "CIS": "7.3.2",
         "SCuBA": "MS.SHAREPOINT.3.1v1",
         "NIST": "AC-3, AC-17",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1213.002"
         ],
@@ -967,7 +967,7 @@
         "CIS": "8.2.1",
         "SCuBA": "MS.TEAMS.1.1v1",
         "NIST": "AC-17, SC-7",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1566",
           "T1534"
@@ -996,7 +996,7 @@
         "CIS": "8.2.2",
         "SCuBA": "MS.TEAMS.1.2v2",
         "NIST": "AC-17",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1566",
           "T1534"
@@ -1025,7 +1025,7 @@
         "CIS": "8.5.1",
         "SCuBA": "MS.TEAMS.2.1v2",
         "NIST": "AC-3, AC-17",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078"
         ],
@@ -1053,7 +1053,7 @@
         "CIS": "8.5.3",
         "SCuBA": "MS.TEAMS.2.2v2",
         "NIST": "AC-3",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078"
         ],
@@ -1109,7 +1109,7 @@
         "CIS": "8.2.3",
         "SCuBA": "MS.TEAMS.1.3v1",
         "NIST": "AC-2, AC-3",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078"
         ],
@@ -1280,7 +1280,7 @@
         "CIS": "4.1.3",
         "SCuBA": "",
         "NIST": "AC-3, CM-7",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078"
         ],
@@ -1365,7 +1365,7 @@
         "CIS": "4.4.1",
         "SCuBA": "",
         "NIST": "SI-3",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1562.001"
         ],
@@ -1392,7 +1392,7 @@
         "CISControls": ["4.1"],
         "CIS": "9.1.1",
         "NIST": "AC-4, SC-7",
-        "CMMC": "SC.L2-3.13.1",
+        "CMMC": "SC.L1-3.13.1",
         "MITRE": [
           "T1048",
           "T1567"
@@ -1563,7 +1563,7 @@
         "CIS": "1.1.3",
         "SCuBA": "MS.EXO.7.1v1",
         "NIST": "AC-2, IA-2",
-        "CMMC": "AC.L2-3.1.1",
+        "CMMC": "AC.L1-3.1.1",
         "MITRE": [
           "T1078",
           "T1098"
@@ -1848,7 +1848,7 @@
         "CIS": "5.3.1",
         "SCuBA": "MS.AAD.5.1v1",
         "NIST": "AC-2",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078"
         ],
@@ -2017,7 +2017,7 @@
         "CIS": "5.5.2",
         "SCuBA": "MS.AAD.5.2v1",
         "NIST": "AC-3",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1528",
           "T1550.001"
@@ -2046,7 +2046,7 @@
         "CIS": "5.5.3",
         "SCuBA": "MS.AAD.5.3v1",
         "NIST": "AC-3",
-        "CMMC": "AC.L2-3.1.1",
+        "CMMC": "AC.L1-3.1.1",
         "MITRE": [
           "T1528"
         ],
@@ -2130,7 +2130,7 @@
         "CIS": "2.3.3",
         "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-3",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566"
         ],
@@ -2158,7 +2158,7 @@
         "CIS": "2.1.8",
         "SCuBA": "MS.DEFENDER.1.2v1",
         "NIST": "SI-3",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566"
         ],
@@ -2186,7 +2186,7 @@
         "CIS": "2.1.9",
         "SCuBA": "MS.DEFENDER.1.3v1",
         "NIST": "SI-3",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566.001",
           "T1204.002"
@@ -2215,7 +2215,7 @@
         "CIS": "2.1.10",
         "SCuBA": "MS.DEFENDER.1.4v1",
         "NIST": "SI-8",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566"
         ],
@@ -2524,7 +2524,7 @@
         "CIS": "7.3.4",
         "SCuBA": "MS.SHAREPOINT.2.2v1",
         "NIST": "SC-18, SI-3",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1059"
         ],
@@ -2581,7 +2581,7 @@
         "CIS": "7.2.4",
         "SCuBA": "",
         "NIST": "IA-3, AC-3",
-        "CMMC": "IA.L2-3.5.2",
+        "CMMC": "IA.L1-3.5.2",
         "MITRE": [
           "T1078"
         ],
@@ -2807,7 +2807,7 @@
         "CIS": "8.5.5",
         "SCuBA": "",
         "NIST": "AC-3",
-        "CMMC": "AC.L2-3.1.1",
+        "CMMC": "AC.L1-3.1.1",
         "MITRE": [
           "T1078"
         ],
@@ -2863,7 +2863,7 @@
         "CISControls": ["4.1"],
         "CIS": "8.5.6",
         "NIST": "AC-3, IA-3",
-        "CMMC": "AC.L2-3.1.1",
+        "CMMC": "AC.L1-3.1.1",
         "MITRE": [
           "T1078"
         ],
@@ -3090,7 +3090,7 @@
         "CIS": "4.4.3",
         "SCuBA": "",
         "NIST": "SI-3, CM-7",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1059",
           "T1003"
@@ -3234,7 +3234,7 @@
         "CIS": "5.1.4.1",
         "SCuBA": "MS.AAD.7.6v1",
         "NIST": "AC-2(9)",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078.004"
         ],
@@ -3489,7 +3489,7 @@
         "CIS": "2.3.4",
         "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-3",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566.001",
           "T1204.002"
@@ -3517,7 +3517,7 @@
         "CISControls": ["9.7"],
         "CIS": "2.1.7",
         "NIST": "SI-8",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566"
         ],
@@ -3546,7 +3546,7 @@
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.5v1",
         "NIST": "SI-3",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566",
           "T1036.005"
@@ -3661,7 +3661,7 @@
         "CIS": "7.1.1",
         "SCuBA": "",
         "NIST": "AC-2(9)",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078"
         ],
@@ -3689,7 +3689,7 @@
         "CIS": "7.2.9",
         "SCuBA": "",
         "NIST": "AC-3, AU-12",
-        "CMMC": "AC.L2-3.1.1",
+        "CMMC": "AC.L1-3.1.1",
         "MITRE": [
           "T1213.002"
         ],
@@ -3717,7 +3717,7 @@
         "CIS": "7.3.6",
         "SCuBA": "",
         "NIST": "CP-9, CP-10",
-        "CMMC": "RE.L2-3.4.2",
+        "CMMC": "CM.L2-3.4.2",
         "MITRE": [
           "T1486"
         ],
@@ -3745,7 +3745,7 @@
         "CIS": "7.2.6",
         "SCuBA": "MS.SHAREPOINT.3.3v1",
         "NIST": "AC-2(3)",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078"
         ],
@@ -3801,7 +3801,7 @@
         "CIS": "8.5.2",
         "SCuBA": "MS.TEAMS.2.3v2",
         "NIST": "AC-3, IA-3",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078"
         ],
@@ -3829,7 +3829,7 @@
         "CIS": "8.5.8",
         "SCuBA": "",
         "NIST": "AC-3",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1566"
         ],
@@ -4109,7 +4109,7 @@
         "CISControls": ["6.8"],
         "CIS": "9.3.2",
         "NIST": "CM-5, AC-3",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1048",
           "T1567"
@@ -4197,7 +4197,7 @@
         "CISControls": ["6.8", "5.4"],
         "CIS": "5.1.1.2",
         "NIST": "AC-2, AC-6(5)",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078",
           "T1078.004"
@@ -4311,7 +4311,7 @@
         "CISControls": ["4.1"],
         "CIS": "5.3.5",
         "NIST": "AC-17, IA-2",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078",
           "T1110"
@@ -4340,7 +4340,7 @@
         "CIS": "5.1.1.3",
         "SCuBA": "MS.AAD.7.2v1",
         "NIST": "AC-17, CM-7",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078.004"
         ],
@@ -4510,7 +4510,7 @@
         "CISControls": [],
         "CIS": "2.3.5",
         "NIST": "SI-3, IR-4",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566",
           "T1078"
@@ -4597,7 +4597,7 @@
         "CIS": "2.3.2",
         "SCuBA": "MS.DEFENDER.2.1v1",
         "NIST": "SI-3",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566.001",
           "T1204.002"
@@ -4655,7 +4655,7 @@
         "CIS": "2.1.6",
         "SCuBA": "MS.DEFENDER.2.1v1",
         "NIST": "SI-3",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566",
           "T1036.005"
@@ -4684,7 +4684,7 @@
         "CIS": "2.1.13",
         "SCuBA": "",
         "NIST": "SI-8",
-        "CMMC": "SI.L2-3.14.2",
+        "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566"
         ],
@@ -4705,7 +4705,7 @@
       "Automated": true,
       "CollectorDependency": "Teams-Config",
       "EvaluatorFunction": "Test-NRGControlTeamsMeetingRecordingScope",
-      "Remediation": "Set-CsTeamsMeetingPolicy -MeetingRecordingExpirationDays 60. Reference: MS.TEAMS.1.6v1 (SCuBA).",
+      "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -NewMeetingRecordingExpirationDays 60. Reference: MS.TEAMS.1.6v1 (SCuBA).",
       "LicenseRequirement": "Included (M365 Business Standard+)",
       "References": {
         "CISControls": ["3.4"],
@@ -4740,7 +4740,7 @@
         "CIS": "8.5.3",
         "SCuBA": "MS.TEAMS.2.2v2",
         "NIST": "AC-3, IA-3",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078"
         ],
@@ -4768,7 +4768,7 @@
         "CIS": "8.2.6",
         "SCuBA": "MS.TEAMS.1.3v1",
         "NIST": "AC-17",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1566",
           "T1534"
@@ -4790,14 +4790,14 @@
       "Automated": true,
       "CollectorDependency": "Teams-Config",
       "EvaluatorFunction": "Test-NRGControlTeamsLiveEvents",
-      "Remediation": "Set-CsTeamsMeetingBroadcastPolicy -AllowBroadcastToAnonymousUsers $false. Reference: MS.TEAMS.1.7v2 (SCuBA).",
+      "Remediation": "Set-CsTeamsMeetingBroadcastPolicy -Identity Global -BroadcastAttendeeVisibilityMode EveryoneInCompany (or -AllowBroadcastScheduling $false to disable live events entirely). Reference: MS.TEAMS.1.7v2 (SCuBA).",
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CISControls": ["4.1"],
         "CIS": "8.5.10",
         "SCuBA": "MS.TEAMS.1.7v2",
         "NIST": "AC-3",
-        "CMMC": "AC.L2-3.1.1",
+        "CMMC": "AC.L1-3.1.1",
         "MITRE": [
           "T1078"
         ],
@@ -4825,7 +4825,7 @@
         "CIS": "4.1.5",
         "SCuBA": "",
         "NIST": "AC-2, IA-5",
-        "CMMC": "IA.L2-3.5.1",
+        "CMMC": "IA.L1-3.5.1",
         "MITRE": [
           "T1110",
           "T1021.002"
@@ -4912,7 +4912,7 @@
         "CIS": "4.2.2",
         "SCuBA": "",
         "NIST": "IA-5, AC-11",
-        "CMMC": "IA.L2-3.5.1",
+        "CMMC": "IA.L1-3.5.1",
         "MITRE": [
           "T1078",
           "T1005"
@@ -5113,7 +5113,7 @@
         "CIS": "5.5.1",
         "SCuBA": "",
         "NIST": "AC-2",
-        "CMMC": "AC.L2-3.1.1",
+        "CMMC": "AC.L1-3.1.1",
         "ISO27001": "A.5.18, A.8.3",
         "MITRE": [
           "T1078"
@@ -5227,7 +5227,7 @@
         "CISControls": ["5.3"],
         "CIS": "5.3.4",
         "NIST": "AC-2(3)",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "ISO27001": "A.5.18, A.6.5",
         "SOC2": "CC6.3",
         "MITRE": [
@@ -5255,7 +5255,7 @@
         "CIS": "5.1.6.1",
         "SCuBA": "",
         "NIST": "AC-2(9)",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "ISO27001": "A.5.18, A.6.5",
         "SOC2": "CC6.3",
         "MITRE": [
@@ -5282,7 +5282,7 @@
         "CISControls": ["2.1"],
         "CIS": "5.5.4",
         "NIST": "AC-3",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "ISO27001": "A.5.23, A.8.4",
         "SOC2": "CC6.3, CC7.2",
         "MITRE": [
@@ -5312,7 +5312,7 @@
         "CIS": "2.1.2",
         "SCuBA": "MS.EXO.1.1v2",
         "NIST": "AC-4",
-        "CMMC": "AC.L2-3.1.2",
+        "CMMC": "AC.L1-3.1.2",
         "ISO27001": "A.8.12",
         "SOC2": "CC6.7",
         "HIPAA": "\u00a7164.312(e)(1), \u00a7164.402",
@@ -5340,7 +5340,7 @@
         "CIS": "2.1.5",
         "SCuBA": "MS.EXO.10.1v1",
         "NIST": "IA-5",
-        "CMMC": "IA.L2-3.5.1",
+        "CMMC": "IA.L1-3.5.1",
         "ISO27001": "A.5.16",
         "SOC2": "CC6.1",
         "MITRE": [

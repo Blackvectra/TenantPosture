@@ -87,10 +87,18 @@ function Invoke-NRGCollectPowerPlatform {
                     $dlp = @(Get-DlpPolicy -ErrorAction Stop)
                     if ($dlp) {
                         $result.Data.DLPPolicies = @($dlp | ForEach-Object {
+                            # PPL-2.1: capture connector classification so the
+                            # evaluator can confirm connectors are actually grouped.
+                            # Get-DlpPolicy classifications are Confidential (Business),
+                            # General (Non-Business), Blocked — match both naming
+                            # conventions to stay robust across module versions.
+                            $cg = @($_.connectorGroups)
                             [ordered]@{
                                 PolicyName  = [string]$_.PolicyName
                                 DisplayName = [string]$_.DisplayName
                                 Type        = [string]$_.EnvironmentType
+                                BusinessConnectors = @($cg | Where-Object { "$($_.classification)" -match 'Confidential|Business' } | ForEach-Object { @($_.connectors) } | Where-Object { $_ })
+                                BlockedConnectors  = @($cg | Where-Object { "$($_.classification)" -match 'Blocked' } | ForEach-Object { @($_.connectors) } | Where-Object { $_ })
                             }
                         })
                         $result.Data.DLPAvailable = $true

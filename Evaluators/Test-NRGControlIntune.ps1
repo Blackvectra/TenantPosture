@@ -286,12 +286,24 @@ function Test-NRGControlIntuneConditionalLaunch {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Intune app protection data not collected'; return
     }
-    # 'ConditionalLaunchSettings' is never stored on the app-protection policy
-    # objects by the collector, so this check always reported a false Partial.
-    # Not assessed.
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-        -Title $ctrl.Title -FrameworkIds $cit `
-        -Detail 'Conditional-launch settings not collected; not assessed.'
+    # Invoke-NRGCollectIntuneAppProtection now stores ConditionalLaunchSettings
+    # (device-compliance, min-OS, max-PIN-retries, offline-wipe) per MAM policy.
+    $appPolicies = @($int.Data.AppProtectionPolicies ?? @())
+    $withLaunch  = @($appPolicies | Where-Object { @(Get-NRGObjectField -Item $_ -Key 'ConditionalLaunchSettings' -Default @()).Count -gt 0 })
+    if ($appPolicies.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -FrameworkIds $cit -Detail 'No app protection (MAM) policies configured.'
+    } elseif ($withLaunch.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "$($withLaunch.Count) of $($appPolicies.Count) app protection policy(ies) enforce conditional launch (device compliance / min-OS / PIN-retry / offline-wipe)."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'App protection policies exist but none enforce conditional launch. Jailbroken/rooted devices and outdated OS versions access corporate apps unchecked.' `
+            -CurrentValue "$($appPolicies.Count) MAM policy(ies), 0 with conditional launch" `
+            -RequiredValue 'Conditional launch (compliance/min-OS/PIN-retry) on MAM policies' -Remediation $ctrl.Remediation
+    }
 }
 
 # ── INT-4.1 Windows LAPS Configured ──────────────────────────────────────────

@@ -639,7 +639,26 @@ function Test-NRGControlEXOPerUserAudit {
     if (-not $exo -or -not $exo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Per-mailbox audit counts not collected; not assessed.'
+    # The authoritative signal is the org-wide master switch. Since 2019 Microsoft
+    # enables mailbox audit by default for every mailbox; default audit ignores the
+    # per-mailbox AuditEnabled flag, so per-mailbox=$false is NOT a gap while the org
+    # switch is on. AuditDisabled=$true means an admin explicitly turned off the
+    # org-wide default — that IS the real, assessable gap.
+    $auditDisabled = Get-NRGNestedProperty -Object $exo -Path 'Data.OrganizationConfig.AuditDisabled' -Default $null
+    if ($null -eq $auditDisabled) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Organization audit configuration not collected; not assessed.'; return
+    }
+    $sampleAll = Get-NRGNestedProperty -Object $exo -Path 'Data.MailboxAuditSummary.SampleMailboxAudit.AllEnabled' -Default $null
+    if (-not [bool]$auditDisabled) {
+        $extra = ''
+        if ($null -ne $sampleAll) {
+            $sampleWord = if ([bool]$sampleAll) { 'all true' } else { 'mixed' }
+            $extra = " Sampled mailboxes: per-mailbox AuditEnabled = $sampleWord (informational; default audit applies regardless)."
+        }
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Organization-wide mailbox audit logging is enabled (AuditDisabled = False) — every mailbox is audited by default.$extra"
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Organization-wide mailbox audit logging is DISABLED (AuditDisabled = True). No mailbox actions (mail access, deletes, rule changes) are recorded, crippling incident-response forensics.' -CurrentValue 'OrganizationConfig.AuditDisabled = True' -RequiredValue 'AuditDisabled = False (org-wide audit on)' -Remediation $ctrl.Remediation
+    }
 }
 
 # ── EXO-5.2 Priority Account Email Protection Configured ─────────────────────
@@ -651,7 +670,22 @@ function Test-NRGControlEXOPriorityAccountProtection {
     if (-not $def -or -not $def.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
     }
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Priority account data not collected; not assessed.'
+    $ap = $def.Data['AntiPhishing']
+    if (-not $ap -or -not $ap.Available) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Anti-phishing (impersonation) policy not available — requires Defender for Office 365 Plan 1.'; return
+    }
+    # Impersonation protection for named VIPs is EnableTargetedUserProtection with a
+    # non-empty TargetedUsersToProtect list, taking action other than NoAction.
+    $protecting = @($ap.Policies | Where-Object {
+        (Get-NRGObjectField -Item $_ -Key 'EnableTargetedUserProtection') -and
+        @(Get-NRGObjectField -Item $_ -Key 'TargetedUsersToProtect' -Default @()).Count -gt 0
+    })
+    if ($protecting.Count -gt 0) {
+        $totalUsers = @($protecting | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'TargetedUsersToProtect' -Default @()) } | ForEach-Object { $_ }).Count
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Anti-phishing impersonation protection is active for named accounts ($totalUsers protected user entry(ies) across $($protecting.Count) policy(ies)). Emails impersonating these executives are flagged or quarantined."
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No anti-phishing policy protects named priority accounts (EnableTargetedUserProtection off or TargetedUsersToProtect empty). Executive-impersonation (CEO fraud / BEC) emails are not specifically detected.' -CurrentValue 'No targeted-user impersonation protection configured' -RequiredValue 'Executives added to TargetedUsersToProtect with protection enabled' -Remediation $ctrl.Remediation
+    }
 }
 
 # ── EXO-5.3 Exchange Online Protection Safe Senders Not Overriding ────────────

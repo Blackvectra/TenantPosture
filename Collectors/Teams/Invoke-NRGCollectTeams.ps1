@@ -21,6 +21,7 @@ function Invoke-NRGCollectTeams {
             MeetingPolicy       = $null
             ClientConfiguration = $null
             GuestMeetingPolicy  = $null
+            BroadcastPolicy     = $null
         }
     }
 
@@ -96,11 +97,36 @@ function Invoke-NRGCollectTeams {
                         AutoAdmittedUsers                = [string]$meet.AutoAdmittedUsers
                         AllowExternalParticipantGiveRequestControl = [bool]$meet.AllowExternalParticipantGiveRequestControl
                         AllowCloudRecording              = [bool]$meet.AllowCloudRecording
+                        # TMS-2.8 (PSTN lobby bypass) + TMS-4.1 (recording expiry).
+                        # Field is NewMeetingRecordingExpirationDays (Get-CsTeamsMeetingPolicy).
+                        AllowPSTNUsersToBypassLobby      = [bool]$meet.AllowPSTNUsersToBypassLobby
+                        NewMeetingRecordingExpirationDays = [int]($meet.NewMeetingRecordingExpirationDays ?? -1)
                     }
                 }
             } catch {
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     Register-NRGException -Source 'Teams-MeetingPolicy' -Message $_.Exception.Message
+                }
+            }
+        }
+
+        # Global meeting broadcast (live events) policy — TMS-4.4.
+        # BroadcastAttendeeVisibilityMode 'Everyone' lets anonymous internet
+        # users watch live events; AllowBroadcastScheduling $false disables
+        # live events entirely. Both come from Get-CsTeamsMeetingBroadcastPolicy.
+        if (Get-Command Get-CsTeamsMeetingBroadcastPolicy -ErrorAction SilentlyContinue) {
+            try {
+                $bcast = Get-CsTeamsMeetingBroadcastPolicy -Identity Global -ErrorAction Stop
+                if ($bcast) {
+                    # Shape-agnostic reads — see FederationConfig note above.
+                    $result.Data.BroadcastPolicy = [ordered]@{
+                        AllowBroadcastScheduling        = [bool](Get-NRGObjectField -Item $bcast -Key 'AllowBroadcastScheduling' -Default $false)
+                        BroadcastAttendeeVisibilityMode = [string](Get-NRGObjectField -Item $bcast -Key 'BroadcastAttendeeVisibilityMode' -Default '')
+                    }
+                }
+            } catch {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Teams-BroadcastPolicy' -Message $_.Exception.Message
                 }
             }
         }
