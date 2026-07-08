@@ -311,7 +311,15 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
     }
 }
 
-Clear-NRGFindings
+# CWE-665 — full state reset between runs. Clear-NRGFindings only resets the
+# findings list; raw collected data, coverage, and exceptions persist in module
+# scope. Two back-to-back single-tenant runs in the same pwsh session would
+# inherit the prior tenant's RawData — any collector that errors mid-way leaves
+# the stale key intact, so the new tenant's evaluators read the prior tenant's
+# data and emit cross-tenant findings labeled with the new tenant's metadata.
+# Match the contract in CLAUDE.md ("Clear-NRGState must be called between batch
+# clients") and the batch orchestrator (Invoke-NRGBatchAssessment.ps1:216).
+Clear-NRGState
 
 # OWASP ASVS V7.3.2 — wrap the entire run in try/finally so service sessions
 # always disconnect, even if a collector / evaluator / publisher throws.

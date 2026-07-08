@@ -97,6 +97,22 @@ function Connect-NRGEmailAdminServices {
     $ctx = Get-MgContext
     if (-not $ctx) { throw "Connect-MgGraph returned no context. Authentication failed." }
 
+    # CWE-345 — tenant context binding. When -TenantId was supplied, the
+    # operator named a specific tenant to triage (per clients.json in the
+    # batch path). MSAL SSO can silently return a context bound to a DIFFERENT
+    # tenant the operator is also a member/guest of (cached account picker,
+    # browser session reuse). The triage that follows would then read sign-in
+    # logs and mailboxes from the wrong tenant while writing the IoCs into the
+    # expected client's output directory — a categorical GDAP/BAA boundary
+    # violation and a silent assessment failure. Mirror the
+    # Invoke-NRGBatchAssessment.ps1 line 234 check: disconnect and throw on
+    # mismatch so the caller surfaces a clear failure instead of misrouting
+    # tenant data.
+    if ($TenantId -and $ctx.TenantId -and ($ctx.TenantId -ne $TenantId)) {
+        Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+        throw "Tenant context mismatch: requested TenantId '$TenantId' but Graph returned context for '$($ctx.TenantId)'. MSAL may have used a cached account for a different tenant. Sign out, clear the MSAL token cache (Disconnect-MgGraph), and re-run."
+    }
+
     Write-Host "  [+] Connected as admin: $($ctx.Account)" -ForegroundColor Green
     Write-Host "      Tenant: $($ctx.TenantId)" -ForegroundColor DarkGray
 
