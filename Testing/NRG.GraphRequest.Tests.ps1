@@ -5,7 +5,7 @@
 # Pins behavior of Lib/Invoke-NRGGraphRequest.ps1 — the shape-pinning proxy
 # over Invoke-MgGraphRequest introduced in v4.12.2.
 #
-# Root-cause regression guard for the clienta.org 2026-07-07 mass-false-gap run:
+# Root-cause regression guard for a July-2026 client mass-false-gap run:
 # newer Microsoft.Graph SDK builds return PSCustomObject, on which a bare
 # `$resp.'@odata.nextLink'` throws under Set-StrictMode -Version Latest when the
 # property is absent (every single-page / small-tenant response). The proxy must
