@@ -159,9 +159,36 @@ function Test-NRGControlIntuneEDR {
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune endpoint security data not collected'; return }
     $edrPolicies = @($int.Data['EndpointDetectionPolicies'] ?? @())
     if ($edrPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($edrPolicies.Count) EDR/MDE onboarding policy(ies) deployed via Intune."
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($edrPolicies.Count) Microsoft Defender for Endpoint onboarding policy(ies) deployed via Intune."
+        return
+    }
+
+    # No Intune-managed MDE onboarding policy. This does NOT mean endpoints are
+    # unprotected: a third-party EDR (Cortex XDR, CrowdStrike, SentinelOne,
+    # Webroot, etc.) runs its own agent that Intune cannot see, so asserting a
+    # confident Critical "no EDR" gap here is a false positive for any MSP that
+    # standardizes on a non-Microsoft stack. Two honest outcomes:
+    #   1) The operator declared a third-party EDR in Config/branding.psd1
+    #      (EdrStack) — record it as Satisfied-by-declaration and point the
+    #      assessor at that vendor's console for agent-health verification.
+    #   2) Nothing declared — emit a manual-verification advisory (Partial),
+    #      never a confident gap, since we cannot see a third-party agent.
+    $edrStack = if ($script:NRGBrand -is [System.Collections.IDictionary]) {
+        [string]$script:NRGBrand['EdrStack']
+    } else { '' }
+
+    if (-not [string]::IsNullOrWhiteSpace($edrStack)) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "No Microsoft Defender for Endpoint onboarding policy is deployed via Intune, but a third-party EDR is declared for this environment: $edrStack. Third-party EDR agents are not visible to Intune. Confirm agent coverage and health in the $edrStack console." `
+            -CurrentValue "Third-party EDR: $edrStack" -RequiredValue 'Managed EDR agent on every endpoint'
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No EDR onboarding policy found in Intune. Endpoints may not be reporting to Defender for Endpoint.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title "$($ctrl.Title) (Manual verification required)" -Severity 'Medium' -FrameworkIds $cit `
+            -Detail 'No Microsoft Defender for Endpoint onboarding policy is deployed via Intune. This is expected when endpoints run a third-party EDR (Cortex XDR, CrowdStrike, SentinelOne, Webroot, etc.), which Intune cannot see. Manually confirm every endpoint runs a managed EDR agent. If Microsoft Defender for Endpoint is the intended EDR, deploy an onboarding policy via Intune > Endpoint security > Endpoint detection and response. To suppress this advisory for a client standardized on a third-party EDR, set EdrStack in Config/branding.psd1.' `
+            -CurrentValue 'No Intune-managed MDE onboarding; third-party EDR not visible to Intune' `
+            -RequiredValue 'Managed EDR agent on every endpoint (Microsoft or third-party)' `
+            -Remediation $ctrl.Remediation
     }
 }
 
