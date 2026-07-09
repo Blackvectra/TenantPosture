@@ -5,10 +5,18 @@
 Built by Matthew Levorson — NRG Technology Services / NextLayerSec LLC  
 GitHub: [Blackvectra/NRG-Assessment-Tool](https://github.com/Blackvectra/NRG-Assessment-Tool)
 
+[![CI](https://github.com/Blackvectra/NRG-Assessment-Tool/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Blackvectra/NRG-Assessment-Tool/actions/workflows/ci.yml)
+[![Secret Scan](https://github.com/Blackvectra/NRG-Assessment-Tool/actions/workflows/secret-scan.yml/badge.svg?branch=main)](https://github.com/Blackvectra/NRG-Assessment-Tool/actions/workflows/secret-scan.yml)
+[![Release](https://github.com/Blackvectra/NRG-Assessment-Tool/actions/workflows/release.yml/badge.svg)](https://github.com/Blackvectra/NRG-Assessment-Tool/actions/workflows/release.yml)
+[![PowerShell 7](https://img.shields.io/badge/PowerShell-7.0%2B-5391FE?logo=powershell&logoColor=white)](https://learn.microsoft.com/powershell/scripting/install/installing-powershell)
+[![Controls](https://img.shields.io/badge/controls-195-0c7d8c)](Config/controls.json)
+
 [![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF_Best_Practices-Passing_(self--assessed)-blue)](docs/OPENSSF-BEST-PRACTICES.md)
 [![SSDF](https://img.shields.io/badge/NIST_SP_800--218-self--attested-green)](docs/SECURE-DEVELOPMENT.md)
 [![CISA BOD 20-01](https://img.shields.io/badge/Vulnerability_Disclosure-CISA_BOD_20--01-orange)](docs/VULNERABILITY-DISCLOSURE-POLICY.md)
 [![Security Policy](https://img.shields.io/badge/security-policy-red)](SECURITY.md)
+
+<sub>Workflow badges render for signed-in users with repository access (this repo is private).</sub>
 
 > **Security:** Report vulnerabilities privately via the [GitHub Security tab](https://github.com/Blackvectra/NRG-Assessment-Tool/security/advisories/new) or `security@nrgtechservices.com`. We follow a 7-day Critical / 30-day High fix SLA; see [`SECURITY.md`](SECURITY.md) for the full policy.
 
@@ -16,9 +24,18 @@ GitHub: [Blackvectra/NRG-Assessment-Tool](https://github.com/Blackvectra/NRG-Ass
 
 ## What It Does
 
-Connects to a Microsoft 365 tenant via delegated auth (or GDAP for MSP batch runs), collects raw configuration data across all M365 services, evaluates 195 security controls, and produces client-ready HTML and Markdown reports with framework citations.
+Connects to a Microsoft 365 tenant via delegated auth (or GDAP for MSP batch runs), collects raw configuration data across all M365 services, evaluates **195 security controls with license-aware scoring**, and produces client-ready HTML and Markdown reports with citations into six frameworks (CIS M365, CISA SCuBA, NIST 800-53r5, CMMC 2.0, ISO 27001, MITRE ATT&CK) plus CIS Controls v8.1.
 
 **Zero writes to tenant. Read-only by design.**
+
+Four entry points:
+
+| Script | Purpose |
+|---|---|
+| `Invoke-NRGAssessment.ps1` | Single-tenant interactive assessment |
+| `Invoke-NRGBatchAssessment.ps1` | All clients in `Config/clients.json` via GDAP, one login |
+| `Invoke-NRGSignInTriage.ps1` (+ batch variant) | Admin-scope sign-in IoC triage — ranks likely-compromised users |
+| `Invoke-NRGEmailAssessment.ps1` | Per-user mailbox incident-response deep-dive (Email-IR mode) |
 
 ---
 
@@ -47,12 +64,14 @@ This installs/pins required PowerShell modules (with EOM at the known-good 3.2.0
 ### Prerequisites
 
 ```powershell
-# Install required modules (exact versions — supply chain pinned)
-Install-PSResource -Name Microsoft.Graph.Authentication -Version 2.20.0 -TrustRepository
-Install-PSResource -Name ExchangeOnlineManagement       -Version 3.4.0  -TrustRepository
-Install-PSResource -Name MicrosoftTeams                -Version 6.4.0  -TrustRepository
-Install-PSResource -Name Microsoft.Online.SharePoint.PowerShell -Version 16.0.24720.12000 -TrustRepository
-Install-PSResource -Name Pester                        -Version 5.6.1  -TrustRepository
+# Install required modules. Versions match the manifest's pinned ranges —
+# Graph.Authentication [2.20.0, <3.0) and ExchangeOnlineManagement [3.2.0, <4.0);
+# major-version bumps are adopted deliberately, never by surprise.
+Install-PSResource -Name Microsoft.Graph.Authentication -Version '[2.20.0,2.99.99]' -TrustRepository
+Install-PSResource -Name ExchangeOnlineManagement       -Version '[3.2.0,3.99.99]'  -TrustRepository
+Install-PSResource -Name MicrosoftTeams                 -TrustRepository   # optional — Teams collector
+Install-PSResource -Name Microsoft.Online.SharePoint.PowerShell -TrustRepository   # optional — SPO-2.x/3.x tenant controls
+Install-PSResource -Name Pester -Version '[5.5.0,5.99.99]' -TrustRepository        # tests only
 ```
 
 ### Single Tenant Run
@@ -138,7 +157,7 @@ NRG-Assessment.psd1               ← Module manifest (220 exports, dependency d
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
-  Connect-NRGServices.ps1         Auth (browser/device code, process-scoped MSAL)
+  Connect-NRGServices.ps1         Auth (interactive browser MFA / app-only cert; process-scoped MSAL)
   ConvertTo-NRGHtmlSafe.ps1       XSS prevention (all tenant data escapes through here)
   Get-NRGControlDefinitions.ps1   controls.json loader + content validation
 
@@ -150,15 +169,15 @@ Collectors/                       READ-ONLY — raw data collection, no scoring
   Intune/ PowerPlatform/          (5 files)
 
 Evaluators/                       SCORING ONLY — reads raw data, writes findings
-  Test-NRGControl-AAD.ps1         32 controls
-  Test-NRGControlEXO.ps1          21 controls
-  Test-NRGControlDNS.ps1          6 controls
-  Test-NRGControlDefender.ps1     16 controls
+  Test-NRGControl-AAD.ps1         46 controls
+  Test-NRGControlEXO.ps1          31 controls
+  Test-NRGControlDefender.ps1     23 controls
+  Test-NRGControlTeams.ps1        22 controls
+  Test-NRGControlPurview.ps1      18 controls
   Test-NRGControlSharePoint.ps1   17 controls
-  Test-NRGControlTeams.ps1        18 controls
-  Test-NRGControlPurview.ps1      14 controls
-  Test-NRGControlIntune.ps1       13 controls
-  Test-NRGControlPowerPlatform.ps1 6 controls
+  Test-NRGControlIntune.ps1       17 controls
+  Test-NRGControlPowerPlatform.ps1 11 controls
+  Test-NRGControlDNS.ps1          10 controls
 
 Publishers/
   Publish-NRGAssessmentHTML.ps1   Interactive HTML report with exec summary + findings
@@ -168,34 +187,39 @@ Config/
   controls.json                   195 control definitions + framework citations
   frameworks.json                 CIS, SCuBA, NIST, CMMC, MITRE metadata
   clients.json                    MSP client registry (TenantId + GDAP config)
+  schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
+  framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/
-  NRG.Security.Tests.ps1          100 Pester tests (OWASP/ASVS static + runtime)
+Testing/                          10 Pester suites, 220 tests — the FULL suite gates every PR
+  NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
+  NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
+  NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
+  ...                             coverage-score, license, maturity-tier, report, helper suites
 
-.github/workflows/security.yml    CI: PSScriptAnalyzer + Pester + Gitleaks + TruffleHog
+.github/workflows/                6 workflows: ci, secret-scan, codeql, dependency-review, scorecard, release
 ```
 
 ---
 
 ## Controls Coverage
 
-**195 controls across 9 workloads**
+**195 controls across 9 workloads** — every count below is generated from `Config/controls.json` and schema-validated in CI.
 
 | Workload | Controls | Key Areas |
 |---|---|---|
-| Entra ID (AAD) | 32 | MFA, legacy auth, CA policies, PIM, guest access, SSPR, app consent, break-glass |
-| Exchange Online | 21 | Audit, SMTP auth, auto-forward, DKIM, anti-phish, modern auth, DMARC |
-| DNS Email Auth | 6 | SPF, DKIM, DMARC enforcement, MTA-STS, TLS-RPT, DNSSEC |
-| Defender | 16 | Safe Attachments/Links, spoof intel, ZAP, quarantine, preset policies |
-| SharePoint | 17 | External sharing, OneDrive sync, custom script, link expiration, guest expiry |
-| Teams | 18 | Federation, consumer accounts, meeting lobby, external chat, app governance |
-| Purview | 14 | Unified audit log, DLP, sensitivity labels, retention, insider risk |
-| Intune | 13 | Device compliance, BitLocker, EDR, ASR rules, MAM, conditional launch |
-| Power Platform | 6 | Tenant isolation, DLP policy, connector classification, governance |
+| Entra ID (AAD) | 46 | MFA, legacy auth, CA policies, PIM, guest access, app consent, risky users & workload identities, break-glass |
+| Exchange Online | 31 | Mailbox audit, SMTP auth, auto-forward, DKIM, anti-phish, priority-account protection, DMARC |
+| Defender for O365 | 23 | Safe Attachments/Links, spoof intel, ZAP, quarantine, attack-simulation training, preset policies |
+| Teams | 22 | Federation allowlists, meeting lobby, PSTN bypass, recording expiry, live events, app governance |
+| Purview | 18 | Unified audit log, DLP, sensitivity labels, retention, insider risk |
+| SharePoint / OneDrive | 17 | External sharing, link expiration, email attestation, guest expiry, unmanaged sync |
+| Intune | 17 | Device compliance, BitLocker, EDR, ASR rules, MAM conditional launch |
+| Power Platform | 11 | Tenant isolation, DLP connector classification, maker governance |
+| DNS Email Auth | 10 | External SPF, DKIM, DMARC enforcement, MTA-STS, TLS-RPT, DNSSEC — resolved from public DNS, not just tenant config |
 
-**Severity distribution:** 9 Critical · 59 High · 52 Medium · 23 Low
+**Severity distribution:** 11 Critical · 92 High · 65 Medium · 27 Low
 
-**Framework citations per control:** CIS M365 v6.0.1 · CISA SCuBA v1.7.1 · NIST SP 800-53 Rev 5 · CMMC 2.0 L2 · MITRE ATT&CK v16.1
+**Framework citations per control:** CIS M365 Foundations v6.0.1 · CISA SCuBA (ScubaGear v1.8.0 policy IDs) · NIST SP 800-53 Rev 5 · CMMC 2.0 · ISO/IEC 27001:2022 · MITRE ATT&CK — plus CIS Controls v8.1 safeguards, SOC 2, HIPAA, and PCI DSS references. Controls whose license requirement the tenant doesn't meet are routed to an Upgrade Unlocks section instead of dragging the score down.
 
 ---
 
@@ -216,11 +240,11 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-**77 automated Pester tests** cover all of the above — static analysis on every push via GitHub Actions.
+**220 automated Pester tests across 10 suites** cover all of the above plus framework-citation accuracy — the full suite gates every pull request in CI.
 
 ```powershell
-# Run the security test suite
-Invoke-Pester ./Testing/NRG.Security.Tests.ps1 -Output Detailed
+# Run the full test suite (same thing CI runs)
+Invoke-Pester ./Testing -Output Detailed
 ```
 
 ---
@@ -251,15 +275,18 @@ GDAP relationships must be active in Partner Center before the batch runner can 
 
 ## CI/CD
 
-GitHub Actions runs on every push to `main`:
+Six GitHub Actions workflows run on every push and pull request to `main`:
 
-| Job | Tool | What it checks |
-|---|---|---|
-| PSScriptAnalyzer | PowerShell static analysis | Code quality, syntax, anti-patterns |
-| Pester | NRG.Security.Tests.ps1 | 77 OWASP/ASVS security invariants |
-| Gitleaks | Secret detection | Credentials, tokens, API keys |
-| TruffleHog | Deep secret scan | Verified secrets in all commits |
-| SBOM | CycloneDX cdxgen | Software bill of materials on release |
+| Workflow | What it does |
+|---|---|
+| **CI** | Full Pester suite (220 tests, 10 files) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
+| **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
+| **Dependency Review** | Flags vulnerable dependency changes on PRs |
+| **Scorecard** | OpenSSF Scorecard supply-chain posture, weekly |
+| **Release** | On `v*` tags: CycloneDX SBOM generation + Authenticode signature/integrity verification |
+
+The framework-accuracy suite validates every SCuBA citation against the bundled ScubaGear v1.8.0 policy list, every CIS Controls citation against the v8.1 safeguard list, CMMC domain/level correctness, and ISO 27001:2022 Annex-A ranges — a wrong citation fails the PR, not the client report.
 
 ---
 
@@ -269,4 +296,4 @@ Internal use — NRG Technology Services / NextLayerSec LLC. Not licensed for re
 
 ---
 
-*NRG-Assessment v4.12.1 · 195 posture controls + 7 EMAIL + 7 SIGNIN · 255 exported functions · Pester suite*
+*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 232 exported functions · 220-test Pester suite gating CI*
