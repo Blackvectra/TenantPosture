@@ -35,6 +35,8 @@ Describe 'Network egress surface' {
             'www.powershellgallery.com'    # module install (setup only)
             'rdap.org'                     # IP geolocation / ASN (sign-in triage)
             'crt.sh'                       # Certificate Transparency (DNS checks)
+            'cloudflare-dns.com'           # DNS-over-HTTPS resolver (Resolve-NRGDns, DNS email-auth)
+            'dns.google'                   # DNS-over-HTTPS fallback resolver
             'aka.ms'                        # Microsoft doc redirects
             'timestamp.digicert.com'       # Authenticode timestamp (release signing)
             'timestamp.sectigo.com'        # Authenticode timestamp (release signing)
