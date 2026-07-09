@@ -231,7 +231,7 @@ function Test-NRGControlDefenderZAP {
     if (-not $exo -or -not $exo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
-    $defaultPolicy = @($exo.Data.AntiSpamPolicies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    $defaultPolicy = @($exo.Data['AntiSpamPolicies'] | Where-Object { $_.IsDefault }) | Select-Object -First 1
     if (-not $defaultPolicy) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default anti-spam policy found'; return
     }
@@ -272,7 +272,7 @@ function Test-NRGControlDefenderQuarantine {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
     # High confidence phish should go to quarantine, not junk
-    $defaultPolicy = @($exo.Data.AntiSpamPolicies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    $defaultPolicy = @($exo.Data['AntiSpamPolicies'] | Where-Object { $_.IsDefault }) | Select-Object -First 1
     if (-not $defaultPolicy) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default spam policy found'; return
     }
@@ -293,7 +293,7 @@ function Test-NRGControlDefenderHCSpam {
     if (-not $exo -or -not $exo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
-    $defaultPolicy = @($exo.Data.AntiSpamPolicies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    $defaultPolicy = @($exo.Data['AntiSpamPolicies'] | Where-Object { $_.IsDefault }) | Select-Object -First 1
     if (-not $defaultPolicy) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default policy found'; return }
     $hcAction = [string]($defaultPolicy.HighConfidenceSpamAction ?? 'MoveToJmf')
     if ($hcAction -eq 'Quarantine') {
@@ -312,7 +312,7 @@ function Test-NRGControlDefenderBulkThreshold {
     if (-not $exo -or -not $exo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
-    $defaultPolicy = @($exo.Data.AntiSpamPolicies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    $defaultPolicy = @($exo.Data['AntiSpamPolicies'] | Where-Object { $_.IsDefault }) | Select-Object -First 1
     if (-not $defaultPolicy) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default policy found'; return }
     $threshold = $defaultPolicy.BulkThreshold ?? 7
     if ($threshold -le 6) {
@@ -414,7 +414,7 @@ function Test-NRGControlDefenderDLPWorkloads {
     if (-not $pvw -or -not $pvw.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview DLP data not collected'; return
     }
-    $dlpPolicies = @($pvw.Data.DLPPolicies ?? @())
+    $dlpPolicies = @($pvw.Data['DLPPolicies'] ?? @())
     if ($dlpPolicies.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No DLP policies configured. Sensitive data can be emailed, shared via Teams, or uploaded to SharePoint with no controls.' -Remediation $ctrl.Remediation; return
     }
@@ -437,7 +437,7 @@ function Test-NRGControlDefenderDLPSITs {
     if (-not $pvw -or -not $pvw.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview DLP data not collected'; return
     }
-    $dlpPolicies = @($pvw.Data.DLPPolicies ?? @())
+    $dlpPolicies = @($pvw.Data['DLPPolicies'] ?? @())
     $withSITs = @($dlpPolicies | Where-Object { @($_.SensitiveInfoTypes ?? @()).Count -gt 0 })
     if ($withSITs.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($withSITs.Count) DLP policy(ies) use sensitive information types for automatic classification and detection."
@@ -494,7 +494,7 @@ function Test-NRGControlDefenderEndpointDLP {
     if (-not $pvw -or -not $pvw.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return
     }
-    $endpointDLP = @($pvw.Data.DLPPolicies ?? @() | Where-Object { $_.Workloads -contains 'Devices' -or $_.Workloads -contains 'EndpointDevices' })
+    $endpointDLP = @($pvw.Data['DLPPolicies'] ?? @() | Where-Object { $_.Workloads -contains 'Devices' -or $_.Workloads -contains 'EndpointDevices' })
     if ($endpointDLP.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($endpointDLP.Count) Endpoint DLP policy(ies) active. Sensitive data actions on endpoints (copy to USB, print, upload) are monitored or blocked."
     } else {

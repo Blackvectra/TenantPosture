@@ -555,22 +555,10 @@ if (-not $skipCollection) {
     Write-Host ""
     Write-Host "[-] Running evaluators..." -ForegroundColor Cyan
 
-    function Invoke-NRGEvaluator { param([string]$fn)
-        if (Get-Command $fn -ErrorAction SilentlyContinue) {
-            try { & $fn }
-            catch {
-                # Strict-mode tightening (v4.6.x audit fix): a property-access
-                # crash on partial collector data now surfaces both as a warning
-                # for the operator console AND as a Register-NRGException so the
-                # incident is captured in the JSON output for follow-up.
-                $errMsg = $_.Exception.Message.Split([char]10)[0]
-                Write-Warning "Evaluator $($fn) — $errMsg"
-                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                    try { Register-NRGException -Source $fn -Message $errMsg } catch { }
-                }
-            }
-        }
-    }
+    # Evaluator invocation is delegated to the module's Invoke-NRGEvaluatorSafe,
+    # which additionally back-fills an 'Error' finding for any control an
+    # evaluator owns but fails to assess — so a single evaluator bug can never
+    # silently drop a control from the report. See Lib/Invoke-NRGEvaluatorSafe.ps1.
 
     # All evaluators discovered by name from the loaded module
     $evaluators = @(Get-Command -Module NRG-Assessment -Name 'Test-NRGControl*' -ErrorAction SilentlyContinue |
@@ -599,7 +587,7 @@ if (-not $skipCollection) {
     }
 
     foreach ($ev in $evaluators) {
-        Invoke-NRGEvaluator $ev
+        Invoke-NRGEvaluatorSafe -EvaluatorFunction $ev
     }
 
     $findings = Get-NRGFindings
