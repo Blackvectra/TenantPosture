@@ -58,7 +58,7 @@ function Invoke-NRGEmailCollectSignIns {
         while ($uri -and $pages -lt $pageCap -and $events.Count -lt $MaxEvents) {
             $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
             if ($resp.value) { $events += $resp.value }
-            $uri = if ($resp.'@odata.nextLink') { $resp.'@odata.nextLink' } else { $null }
+            $uri = if ($resp['@odata.nextLink']) { $resp['@odata.nextLink'] } else { $null }
             $pages++
         }
         # Trim to cap (defensive — pages can return slightly over)
@@ -161,7 +161,7 @@ function Invoke-NRGEmailCollectSignIns {
         while ($uri -and $pages -lt 3) {
             $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
             if ($resp.value) { $risky += $resp.value }
-            $uri = if ($resp.'@odata.nextLink') { $resp.'@odata.nextLink' } else { $null }
+            $uri = if ($resp['@odata.nextLink']) { $resp['@odata.nextLink'] } else { $null }
             $pages++
         }
         $riskyBag.Data = [ordered]@{

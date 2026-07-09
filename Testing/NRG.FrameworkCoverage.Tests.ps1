@@ -35,23 +35,28 @@ Describe 'controls.json — framework citation coverage' {
 
     Context 'Every control has every required framework citation' {
 
-        $requiredFrameworks = @('CIS','CMMC','NIST','MITRE','HIPAA','SOC2','PCIDSS','ISO27001')
+        # Pester 5: discovery-time loop variables are NOT visible inside It
+        # bodies at run time ($fw would read $null and every control would
+        # look like an offender). -TestCases threads the value through
+        # correctly — this is why these tests failed on their first-ever
+        # execution when the full suite was wired into CI.
+        $fwCases = @('CIS','CMMC','NIST','MITRE','HIPAA','SOC2','PCIDSS','ISO27001') |
+            ForEach-Object { @{ fw = $_ } }
 
-        foreach ($fw in $requiredFrameworks) {
-            It "100% of controls have a non-empty $fw citation" {
-                $offenders = @($script:Controls | Where-Object {
-                    $val = $null
-                    if ($_.PSObject.Properties['References'] -and $_.References) {
-                        $prop = $_.References.PSObject.Properties[$fw]
-                        if ($prop) { $val = $prop.Value }
-                    }
-                    # MITRE may be a string OR an array; empty array also fails
-                    if ($val -is [array]) { return $val.Count -eq 0 }
-                    [string]::IsNullOrWhiteSpace([string]$val)
-                } | ForEach-Object { $_.ControlId })
+        It '100% of controls have a non-empty <fw> citation' -TestCases $fwCases {
+            param($fw)
+            $offenders = @($script:Controls | Where-Object {
+                $val = $null
+                if ($_.PSObject.Properties['References'] -and $_.References) {
+                    $prop = $_.References.PSObject.Properties[$fw]
+                    if ($prop) { $val = $prop.Value }
+                }
+                # MITRE may be a string OR an array; empty array also fails
+                if ($val -is [array]) { return $val.Count -eq 0 }
+                [string]::IsNullOrWhiteSpace([string]$val)
+            } | ForEach-Object { $_.ControlId })
 
-                $offenders | Should -BeNullOrEmpty -Because "$fw must be cited for every control — this gate exists because the MSP product depends on it"
-            }
+            $offenders | Should -BeNullOrEmpty -Because "$fw must be cited for every control — this gate exists because the MSP product depends on it"
         }
     }
 
@@ -99,26 +104,25 @@ Describe 'controls.json — framework citation coverage' {
         # These are the 10 confirmed HIPAA mapping errors the audit caught.
         # If a future PR reverts any of them, this test fires.
 
-        $fixed = @{
-            'EXO-1.1'  = '§164.312(b)'
-            'EXO-1.2' = '§164.312(e)(1)'
-            'EXO-5.1' = '§164.312(b)'
-            'EXO-7.3' = '§164.312(b)'
-            'AAD-7.2' = '§164.312(a)(2)(ii)'
-            'INT-4.3' = '§164.308(a)(1)(ii)(B)'
-            'PVW-1.1' = '§164.312(b)'
-            'PVW-2.4' = '§164.308(a)(6)'
-            'PVW-4.2' = '§164.316(b)(2)(i)'
-            'PVW-4.3' = '§164.502(b)'
-        }
-        foreach ($entry in $fixed.GetEnumerator()) {
-            $id  = $entry.Key
-            $expected = $entry.Value
-            It "$id HIPAA citation still references $expected" {
-                $c = $script:Controls | Where-Object ControlId -eq $id
-                $c | Should -Not -BeNullOrEmpty
-                [string]$c.References.HIPAA | Should -Match ([regex]::Escape($expected))
-            }
+        # -TestCases, not a discovery-time foreach — see the Pester 5 scoping
+        # note in the coverage Context above.
+        $hipaaCases = @(
+            @{ id = 'EXO-1.1'; expected = '§164.312(b)' }
+            @{ id = 'EXO-1.2'; expected = '§164.312(e)(1)' }
+            @{ id = 'EXO-5.1'; expected = '§164.312(b)' }
+            @{ id = 'EXO-7.3'; expected = '§164.312(b)' }
+            @{ id = 'AAD-7.2'; expected = '§164.312(a)(2)(ii)' }
+            @{ id = 'INT-4.3'; expected = '§164.308(a)(1)(ii)(B)' }
+            @{ id = 'PVW-1.1'; expected = '§164.312(b)' }
+            @{ id = 'PVW-2.4'; expected = '§164.308(a)(6)' }
+            @{ id = 'PVW-4.2'; expected = '§164.316(b)(2)(i)' }
+            @{ id = 'PVW-4.3'; expected = '§164.502(b)' }
+        )
+        It '<id> HIPAA citation still references <expected>' -TestCases $hipaaCases {
+            param($id, $expected)
+            $c = $script:Controls | Where-Object ControlId -eq $id
+            $c | Should -Not -BeNullOrEmpty
+            [string]$c.References.HIPAA | Should -Match ([regex]::Escape($expected))
         }
     }
 }

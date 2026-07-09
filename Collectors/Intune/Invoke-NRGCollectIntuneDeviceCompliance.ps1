@@ -50,7 +50,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
                     $result.Data.CompliancePolicies += @{
                         Id          = $p.id
                         DisplayName = [string]$p.displayName
-                        Platform    = [string]$p.'@odata.type'
+                        Platform    = [string]$p['@odata.type']
                         Description = [string]$p.description
                         Version     = $p.version
                         # Pull through fields the evaluator looks at; not all platforms expose them
@@ -60,7 +60,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
                         StorageRequireEncryption= $p.storageRequireEncryption
                     }
                 }
-                $next = $page.'@odata.nextLink'
+                $next = $page['@odata.nextLink']
                 $pageCount++
             }
             if ($pageCount -ge $maxPages -and $next) {
@@ -84,7 +84,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
             while ($next -and $pageCount -lt $maxPages) {
                 $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 foreach ($p in @($page.value)) {
-                    $odata = [string]$p.'@odata.type'
+                    $odata = [string]$p['@odata.type']
                     $entry = @{
                         Id          = $p.id
                         DisplayName = [string]$p.displayName
@@ -98,7 +98,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
                         $result.Data.UpdatePolicies += $entry
                     }
                 }
-                $next = $page.'@odata.nextLink'
+                $next = $page['@odata.nextLink']
                 $pageCount++
             }
             if ($pageCount -ge $maxPages -and $next) {
@@ -123,7 +123,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
             while ($next -and $pageCount -lt $maxPages) {
                 $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 if ($page.value) { $enrollAll += $page.value }
-                $next = $page.'@odata.nextLink'
+                $next = $page['@odata.nextLink']
                 $pageCount++
             }
             if ($pageCount -ge $maxPages -and $next) {
@@ -133,7 +133,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
                 }
             }
             foreach ($p in $enrollAll) {
-                $odata = [string]$p.'@odata.type'
+                $odata = [string]$p['@odata.type']
                 $entry = @{
                     Id          = $p.id
                     DisplayName = [string]$p.displayName
@@ -178,7 +178,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
             while ($next -and $pageCount -lt $maxPages) {
                 $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 if ($page.value) { $devList += $page.value }
-                $next = $page.'@odata.nextLink'
+                $next = $page['@odata.nextLink']
                 $pageCount++
             }
             if ($pageCount -ge $maxPages -and $next) {

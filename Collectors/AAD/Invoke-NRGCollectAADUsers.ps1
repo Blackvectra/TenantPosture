@@ -56,7 +56,7 @@ function Invoke-NRGCollectAADUsers {
                     LastPasswordChange       = [string]($u.lastPasswordChangeDateTime ?? '')
                 })
             }
-            $nextLink = $pageResp.'@odata.nextLink'
+            $nextLink = $pageResp['@odata.nextLink']
             $pageCount++
         }
         if ($pageCount -ge $maxPages -and $nextLink) {
@@ -89,7 +89,7 @@ function Invoke-NRGCollectAADUsers {
                         IsPasswordlessCapable = [bool]($r.isPasswordlessCapable ?? $false)
                     })
                 }
-                $regLink = $regResp.'@odata.nextLink'
+                $regLink = $regResp['@odata.nextLink']
                 $regPage++
             }
             if ($regPage -ge $maxPages -and $regLink) {

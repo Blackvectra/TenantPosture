@@ -150,7 +150,7 @@ function Invoke-NRGCollectAADIdentityGovernance {
                         foreach ($m in @($page.value ?? @())) {
                             if ($m.id) { $members += [string]$m.id }
                         }
-                        $next = $page.'@odata.nextLink'
+                        $next = $page['@odata.nextLink']
                         $pageCount++
                     }
                 } catch {
@@ -234,9 +234,9 @@ function Invoke-NRGCollectAADIdentityGovernance {
             $result.Data.PIMRolePolicies = @($pimPolicies.value ?? @() | ForEach-Object {
                 $policy = $_
                 # Extract key rules
-                $mfaRule           = @($policy.rules ?? @()) | Where-Object { $_.'@odata.type' -match 'authenticationContext' -or $_.id -eq 'Enablement_EndUser_Assignment' } | Select-Object -First 1
+                $mfaRule           = @($policy.rules ?? @()) | Where-Object { $_['@odata.type'] -match 'authenticationContext' -or $_.id -eq 'Enablement_EndUser_Assignment' } | Select-Object -First 1
                 $justRule          = @($policy.rules ?? @()) | Where-Object { $_.id -eq 'Justification_EndUser_Assignment' } | Select-Object -First 1
-                $approvalRule      = @($policy.rules ?? @()) | Where-Object { $_.'@odata.type' -match 'approvalSetting' -or $_.id -eq 'Approval_EndUser_Assignment' } | Select-Object -First 1
+                $approvalRule      = @($policy.rules ?? @()) | Where-Object { $_['@odata.type'] -match 'approvalSetting' -or $_.id -eq 'Approval_EndUser_Assignment' } | Select-Object -First 1
                 $expiryRule        = @($policy.rules ?? @()) | Where-Object { $_.id -eq 'Expiration_EndUser_Assignment' } | Select-Object -First 1
 
                 @{

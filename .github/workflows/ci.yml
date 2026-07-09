@@ -75,25 +75,34 @@ jobs:
           $p = (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1)
           Write-Host ('Pester version: {0} at {1}' -f $p.Version, $p.ModuleBase)
 
-          # AST parse check — distinguishes syntax errors in the test file
-          # from Pester runtime issues.
-          $tokens = $null
-          $errors = $null
-          $null = [System.Management.Automation.Language.Parser]::ParseFile(
-            './Testing/NRG.Security.Tests.ps1', [ref]$tokens, [ref]$errors)
-          if ($errors -and $errors.Count -gt 0) {
-            Write-Host ''
-            Write-Host 'PARSE ERRORS IN TEST FILE:' -ForegroundColor Red
-            $errors | ForEach-Object { Write-Host ('  Line {0}: {1}' -f $_.Extent.StartLineNumber, $_.Message) }
-            throw 'Test file does not parse — fix syntax before Pester can run.'
+          # AST parse check over EVERY test file — distinguishes syntax errors
+          # from Pester runtime issues before the suite runs.
+          $bad = $false
+          foreach ($tf in Get-ChildItem ./Testing -Filter '*.Tests.ps1' -File) {
+            $tokens = $null
+            $errors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile(
+              $tf.FullName, [ref]$tokens, [ref]$errors)
+            if ($errors -and $errors.Count -gt 0) {
+              $bad = $true
+              Write-Host ('PARSE ERRORS IN {0}:' -f $tf.Name) -ForegroundColor Red
+              $errors | ForEach-Object { Write-Host ('  Line {0}: {1}' -f $_.Extent.StartLineNumber, $_.Message) }
+            }
           }
-          Write-Host 'Test file AST parses cleanly.'
+          if ($bad) { throw 'One or more test files do not parse — fix syntax before Pester can run.' }
+          Write-Host 'All test files AST-parse cleanly.'
 
       - name: Run Pester
         shell: pwsh
         run: |
+          # Run the ENTIRE Testing/ suite. This previously ran only
+          # NRG.Security.Tests.ps1, which meant the framework-accuracy guards
+          # (SCuBA/CIS/CMMC/ISO citation validation), the Graph-shape tests,
+          # and the reader-helper tests existed but never gated a merge — the
+          # 70-citation SCuBA mis-mapping shipped precisely because these
+          # weren't enforced. ScubaGear runs its full unit suite in CI; so do we.
           $config = New-PesterConfiguration
-          $config.Run.Path = './Testing/NRG.Security.Tests.ps1'
+          $config.Run.Path = './Testing'
           $config.Run.Exit = $true
           $config.Run.Throw = $false
           $config.Output.Verbosity = 'Diagnostic'
@@ -302,3 +311,29 @@ jobs:
           $j = Get-Content -LiteralPath ./Config/controls.json -Raw | ConvertFrom-Json -ErrorAction Stop
           if (-not $j.controls) { throw 'controls.json missing top-level "controls" array.' }
           Write-Host ('controls.json: {0} controls' -f $j.controls.Count)
+
+      - name: Schema Validation — controls.json + clients.json
+        shell: pwsh
+        run: |
+          # Enforce the JSON Schemas (draft-07, supported by Test-Json on
+          # pwsh 7.4+). Mirrors ScubaGear's ScubaConfigValidator practice of
+          # machine-validating tool configuration before use — a malformed
+          # control row or client row fails the PR, not the client engagement.
+          $checks = @(
+            @{ Data = './Config/controls.json'; Schema = './Config/schema/controls.schema.json' }
+            @{ Data = './Config/clients.json';  Schema = './Config/schema/clients.schema.json' }
+          )
+          $failed = $false
+          foreach ($c in $checks) {
+            $raw = Get-Content -LiteralPath $c.Data -Raw
+            $errs = $null
+            $ok = Test-Json -Json $raw -SchemaFile $c.Schema -ErrorAction SilentlyContinue -ErrorVariable errs
+            if ($ok) {
+              Write-Host ('PASS  {0} conforms to {1}' -f $c.Data, $c.Schema) -ForegroundColor Green
+            } else {
+              $failed = $true
+              Write-Host ('FAIL  {0} violates {1}:' -f $c.Data, $c.Schema) -ForegroundColor Red
+              $errs | ForEach-Object { Write-Host ('  {0}' -f $_.Exception.Message) }
+            }
+          }
+          if ($failed) { throw 'JSON Schema validation failed — see errors above.' }

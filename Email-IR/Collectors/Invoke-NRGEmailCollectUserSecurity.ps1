@@ -111,7 +111,7 @@ function Invoke-NRGEmailCollectUserSecurity {
             # #microsoft.graph.phoneAuthenticationMethod. Keep the per-type
             # display fields the operator needs to recognize their own
             # methods vs an attacker's.
-            $mType = ([string]$m.'@odata.type') -replace '^#microsoft\.graph\.', ''
+            $mType = ([string]$m['@odata.type']) -replace '^#microsoft\.graph\.', ''
             $created = $null
             if ($m.PSObject -and ($m.PSObject.Properties.Name -contains 'createdDateTime')) {
                 $created = [string]$m.createdDateTime
