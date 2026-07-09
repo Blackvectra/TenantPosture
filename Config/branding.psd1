@@ -12,6 +12,13 @@
 
     LogoUrl        = ''
 
+    # Optional: declare a third-party EDR standardized across this environment
+    # (e.g. 'Cortex XDR', 'CrowdStrike Falcon', 'SentinelOne'). When set, the
+    # INT-2.1 EDR control acknowledges the third-party agent — which Intune
+    # cannot see — instead of raising a false "no EDR" gap. Leave '' if
+    # Microsoft Defender for Endpoint (onboarded via Intune) is the EDR.
+    EdrStack       = ''
+
     HourlyRate     = 185
     AssessmentFee  = 2500
     RegulatedFee   = 3500

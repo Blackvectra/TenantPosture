@@ -172,7 +172,15 @@ function Publish-NRGAssessmentHTML {
 
     # ── License groups (only show what the tenant actually needs) ─────────────
     $licGroups = @{}
-    foreach ($f in ($Findings | Where-Object State -eq 'Gap')) {
+    # Count both open Gaps that need a license AND license-gated NotApplicable
+    # findings (controls an evaluator could not assess because the tenant lacks
+    # the license — e.g. Safe Attachments without Defender for Office 365 P1).
+    # The latter are deliberately kept out of the compliance score (NotApplicable)
+    # but must still surface here as upgrade opportunities. They are recognised by
+    # the "upgrade opportunity" marker the evaluators place in the detail, so
+    # unrelated NotApplicable findings (data-not-collected, no-devices, etc.) are
+    # never mis-counted as license gaps.
+    foreach ($f in ($Findings | Where-Object { $_.State -eq 'Gap' -or ($_.State -eq 'NotApplicable' -and $_.Detail -match 'upgrade opportunity') })) {
         $ctrl = $cdefs[$f.ControlId]
         if ($ctrl -and $ctrl.LicenseRequirement -and
             $ctrl.LicenseRequirement -notmatch '^Included' -and

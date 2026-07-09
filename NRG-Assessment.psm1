@@ -142,7 +142,7 @@ $script:ExportedFunctions = @(
     'Get-NRGFrameworkCitations', 'Get-NRGFrameworkDefinitions',
     'Get-NRGFindingRiskCost', 'Get-NRGAggregateRisk',
     'Set-NRGSensitiveFileAcl', 'Set-NRGSensitiveFileContent',
-    'Get-NRGTenantLicenseProfile', 'Test-NRGLicenseRequirementMet',
+    'Get-NRGTenantLicenseProfile', 'Test-NRGLicenseRequirementMet', 'Get-NRGControlLicenseStatus',
     'Get-NRGSafeProperty', 'Get-NRGNestedProperty',
     'Test-NRGSignatureStatus',
     'Get-NRGMaturityTier',

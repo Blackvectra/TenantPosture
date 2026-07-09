@@ -46,6 +46,7 @@
         'Set-NRGSensitiveFileContent',
         'Get-NRGTenantLicenseProfile',
         'Test-NRGLicenseRequirementMet',
+        'Get-NRGControlLicenseStatus',
         'Get-NRGSafeProperty',
         'Get-NRGNestedProperty',
         'Test-NRGSignatureStatus',
