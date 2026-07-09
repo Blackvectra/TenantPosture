@@ -137,7 +137,7 @@ function Test-NRGControlPurviewCommCompliance {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
-    $policies = @($pvw.Data.CommCompliancePolicies ?? @())
+    $policies = @($pvw.Data['CommCompliancePolicies'] ?? @())
     if ($policies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($policies.Count) communication compliance policy(ies) active."
     } else {
@@ -152,7 +152,7 @@ function Test-NRGControlPurviewInfoBarriers {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
-    $ibMode = [string]($pvw.Data.InformationBarriersMode ?? 'Legacy')
+    $ibMode = [string]($pvw.Data['InformationBarriersMode'] ?? 'Legacy')
     if ($ibMode -match 'SingleSegment|MultiSegment|Mixed') {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Information barriers mode: $ibMode"
     } else {
@@ -167,7 +167,7 @@ function Test-NRGControlPurviewInsiderRisk {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
-    $irPolicies = @($pvw.Data.InsiderRiskPolicies ?? @())
+    $irPolicies = @($pvw.Data['InsiderRiskPolicies'] ?? @())
     if ($irPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($irPolicies.Count) insider risk management policy(ies) active."
     } else {
@@ -182,7 +182,7 @@ function Test-NRGControlPurviewRetention {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
-    $retPolicies = @($pvw.Data.RetentionPolicies ?? @())
+    $retPolicies = @($pvw.Data['RetentionPolicies'] ?? @())
     $coveredWorkloads = @($retPolicies | ForEach-Object { $_.Workloads ?? @() } | Select-Object -Unique)
     $requiredWorkloads = @('Exchange','SharePoint','OneDriveForBusiness','Teams')
     $missing = @($requiredWorkloads | Where-Object { $_ -notin $coveredWorkloads })
@@ -202,7 +202,7 @@ function Test-NRGControlPurviewAutoLabel {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview label data not collected'; return }
-    $autoLabels = @($pvw.Data.AutoLabelPolicies ?? @())
+    $autoLabels = @($pvw.Data['AutoLabelPolicies'] ?? @())
     if ($autoLabels.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($autoLabels.Count) auto-labeling policy(ies) active. Sensitive content labeled without user action."
     } else {
@@ -279,7 +279,7 @@ function Test-NRGControlPurviewSensitiveInfoTypes {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Purview label data not collected'; return
     }
-    $dlpPolicies = @($pvw.Data.DLPPolicies ?? @())
+    $dlpPolicies = @($pvw.Data['DLPPolicies'] ?? @())
     if ($dlpPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
@@ -314,7 +314,7 @@ function Test-NRGControlPurviewAuditRetention {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
-    $retentionPolicies = @($pvw.Data.AuditRetentionPolicies ?? @())
+    $retentionPolicies = @($pvw.Data['AuditRetentionPolicies'] ?? @())
     $longTerm = @($retentionPolicies | Where-Object { [int]($_.RetentionDays ?? 0) -ge 365 })
     if ($longTerm.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($longTerm.Count) audit log retention policy(ies) extending logs ≥365 days."
@@ -330,8 +330,8 @@ function Test-NRGControlPurviewLabelsPublished {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview label data not collected'; return }
-    $labels        = @($pvw.Data.SensitivityLabels ?? @())
-    $labelPolicies = @($pvw.Data.LabelPolicies ?? @())
+    $labels        = @($pvw.Data['SensitivityLabels'] ?? @())
+    $labelPolicies = @($pvw.Data['LabelPolicies'] ?? @())
     if ($labels.Count -gt 0 -and $labelPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($labels.Count) sensitivity label(s) defined, $($labelPolicies.Count) label policy(ies) published to users."
     } elseif ($labels.Count -gt 0) {
@@ -348,7 +348,7 @@ function Test-NRGControlPurviewRecordsManagement {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
-    $retentionLabels = @($pvw.Data.RetentionLabels ?? @())
+    $retentionLabels = @($pvw.Data['RetentionLabels'] ?? @())
     $recordLabels    = @($retentionLabels | Where-Object { $_.IsRecordLabel -eq $true })
     if ($recordLabels.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($recordLabels.Count) records management label(s) configured. Immutable records can be declared for regulatory or legal requirements."

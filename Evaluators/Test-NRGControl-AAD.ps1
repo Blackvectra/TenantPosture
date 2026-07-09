@@ -53,7 +53,7 @@ function Test-NRGControlAADLegacyAuth {
         return
     }
 
-    $blockPolicies = @($caData.Data.Policies | Where-Object {
+    $blockPolicies = @($caData.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and
         (($_.Conditions.ClientAppTypes -contains 'other') -or
          ($_.Conditions.ClientAppTypes -contains 'exchangeActiveSync')) -and
@@ -90,14 +90,14 @@ function Test-NRGControlAADPhishResistantMFA {
     }
 
     # Look for CA policy targeting roles AND using Authentication Strength (phishing-resistant)
-    $phishResistantPolicies = @($caData.Data.Policies | Where-Object {
+    $phishResistantPolicies = @($caData.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and
         @($_.Conditions.Users.IncludeRoles).Count -gt 0 -and
         (-not [string]::IsNullOrEmpty($_.GrantControls.AuthStrengthId))
     })
 
     # Also check for policies targeting roles with MFA (lower bar — Partial)
-    $mfaForRolePolicies = @($caData.Data.Policies | Where-Object {
+    $mfaForRolePolicies = @($caData.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and
         @($_.Conditions.Users.IncludeRoles).Count -gt 0 -and
         ($_.GrantControls.BuiltInControls -contains 'mfa')
@@ -133,7 +133,7 @@ function Test-NRGControlAADSignInRisk {
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    $riskPolicies = @($ca.Data.Policies | Where-Object {
+    $riskPolicies = @($ca.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and @($_.Conditions.SignInRiskLevels).Count -gt 0 -and
         ($_.GrantControls.BuiltInControls -contains 'mfa' -or -not [string]::IsNullOrEmpty($_.GrantControls.AuthStrengthId))
     })
@@ -153,7 +153,7 @@ function Test-NRGControlAADUserRisk {
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    $riskPolicies = @($ca.Data.Policies | Where-Object {
+    $riskPolicies = @($ca.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and @($_.Conditions.UserRiskLevels).Count -gt 0 -and
         ($_.GrantControls.BuiltInControls -contains 'mfa' -or $_.GrantControls.BuiltInControls -contains 'passwordChange')
     })
@@ -193,7 +193,7 @@ function Test-NRGControlAADDeviceComplianceCA {
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    $compliancePolicies = @($ca.Data.Policies | Where-Object {
+    $compliancePolicies = @($ca.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and
         ($_.GrantControls.BuiltInControls -contains 'compliantDevice' -or $_.GrantControls.BuiltInControls -contains 'domainJoinedDevice')
     })
@@ -219,11 +219,11 @@ function Test-NRGControlAADNoPermanentAdmins {
     }
     $permanentPriv = @()
     if ($roles -and $roles.Success) {
-        $permanentPriv = @($roles.Data.RoleAssignments | Where-Object {
+        $permanentPriv = @($roles.Data['RoleAssignments'] | Where-Object {
             $_.IsPriv -and $_.PrincipalType -notmatch 'servicePrincipal'
         })
     }
-    $eligibleCount = @($pim.Data.EligibleSchedules).Count
+    $eligibleCount = @($pim.Data['EligibleSchedules']).Count
     if ($permanentPriv.Count -eq 0 -and $eligibleCount -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "No permanent privileged role assignments. $eligibleCount eligible (PIM) assignment(s) configured."
     } elseif ($permanentPriv.Count -gt 0) {
@@ -239,10 +239,10 @@ function Test-NRGControlAADPIMMFA {
     $cid = 'AAD-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $gov = Get-NRGRawData -Key 'AAD-IdentityGovernance'
-    if (-not $gov -or -not $gov.Success -or @($gov.Data.PIMRolePolicies).Count -eq 0) {
+    if (-not $gov -or -not $gov.Success -or @($gov.Data['PIMRolePolicies']).Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'PIM policy data not collected or PIM not licensed'; return
     }
-    $noMFA = @($gov.Data.PIMRolePolicies | Where-Object { $_.RequiresMFA -eq $false })
+    $noMFA = @($gov.Data['PIMRolePolicies'] | Where-Object { $_.RequiresMFA -eq $false })
     if ($noMFA.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All PIM role policies require MFA on activation.'
     } else {
@@ -256,10 +256,10 @@ function Test-NRGControlAADPIMJustification {
     $cid = 'AAD-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $gov = Get-NRGRawData -Key 'AAD-IdentityGovernance'
-    if (-not $gov -or -not $gov.Success -or @($gov.Data.PIMRolePolicies).Count -eq 0) {
+    if (-not $gov -or -not $gov.Success -or @($gov.Data['PIMRolePolicies']).Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'PIM policy data not collected'; return
     }
-    $noJust = @($gov.Data.PIMRolePolicies | Where-Object { $_.RequiresJustification -eq $false })
+    $noJust = @($gov.Data['PIMRolePolicies'] | Where-Object { $_.RequiresJustification -eq $false })
     if ($noJust.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All PIM role policies require justification on activation.'
     } else {
@@ -273,11 +273,11 @@ function Test-NRGControlAADPIMApproval {
     $cid = 'AAD-3.5'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $gov = Get-NRGRawData -Key 'AAD-IdentityGovernance'
-    if (-not $gov -or -not $gov.Success -or @($gov.Data.PIMRolePolicies).Count -eq 0) {
+    if (-not $gov -or -not $gov.Success -or @($gov.Data['PIMRolePolicies']).Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'PIM policy data not collected'; return
     }
     # Focus on Global Administrator role policy specifically
-    $gaPolicy = @($gov.Data.PIMRolePolicies | Where-Object { $_.DisplayName -match 'Global' -or $_.ScopeId -match 'Global' }) | Select-Object -First 1
+    $gaPolicy = @($gov.Data['PIMRolePolicies'] | Where-Object { $_.DisplayName -match 'Global' -or $_.ScopeId -match 'Global' }) | Select-Object -First 1
     if (-not $gaPolicy) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Global Administrator PIM policy not found in collected data'; return
     }
@@ -294,11 +294,11 @@ function Test-NRGControlAADPIMDuration {
     $cid = 'AAD-3.6'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $gov = Get-NRGRawData -Key 'AAD-IdentityGovernance'
-    if (-not $gov -or -not $gov.Success -or @($gov.Data.PIMRolePolicies).Count -eq 0) {
+    if (-not $gov -or -not $gov.Success -or @($gov.Data['PIMRolePolicies']).Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'PIM policy data not collected'; return
     }
-    $longDuration = @($gov.Data.PIMRolePolicies | Where-Object { $_.MaxDurationHours -gt 8 })
-    $unknownDuration = @($gov.Data.PIMRolePolicies | Where-Object { $null -eq $_.MaxDurationHours })
+    $longDuration = @($gov.Data['PIMRolePolicies'] | Where-Object { $_.MaxDurationHours -gt 8 })
+    $unknownDuration = @($gov.Data['PIMRolePolicies'] | Where-Object { $null -eq $_.MaxDurationHours })
     if ($longDuration.Count -eq 0 -and $unknownDuration.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All PIM role policies have max activation ≤8 hours.'
     } else {
@@ -472,10 +472,10 @@ function Test-NRGControlAADPasswordProtection {
     $cid = 'AAD-7.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $auth = Get-NRGRawData -Key 'AAD-AuthPolicies'
-    if (-not $auth -or -not $auth.Success -or -not $auth.Data.PasswordProtection) {
+    if (-not $auth -or -not $auth.Success -or -not $auth.Data['PasswordProtection']) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Password protection data not collected (requires beta endpoint access)'; return
     }
-    $pp = $auth.Data.PasswordProtection
+    $pp = $auth.Data['PasswordProtection']
     $lockout = [int]($pp.LockoutThreshold ?? 10)
     if ($lockout -le 10) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Password lockout threshold: $lockout failed attempts."
@@ -493,8 +493,8 @@ function Test-NRGControlAADBreakGlass {
     if (-not $gov -or -not $gov.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Identity governance data not collected'; return
     }
-    $bgAccounts = @($gov.Data.BreakGlassIndicators | Where-Object { $_.CAExcluded -eq $true -and -not $_.Synced })
-    $allGAs     = @($gov.Data.BreakGlassIndicators)
+    $bgAccounts = @($gov.Data['BreakGlassIndicators'] | Where-Object { $_.CAExcluded -eq $true -and -not $_.Synced })
+    $allGAs     = @($gov.Data['BreakGlassIndicators'])
     if ($bgAccounts.Count -ge 2) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($bgAccounts.Count) cloud-only GA account(s) excluded from CA policies — consistent with break-glass pattern."
     } elseif ($bgAccounts.Count -eq 1) {
@@ -622,7 +622,7 @@ function Test-NRGControlAADIdentityProtection {
             -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
     # Check for user risk policy as proxy for Identity Protection workflow
-    $userRiskPolicies = @($ca.Data.Policies | Where-Object {
+    $userRiskPolicies = @($ca.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and @($_.Conditions.UserRiskLevels).Count -gt 0
     })
     if ($userRiskPolicies.Count -gt 0) {
@@ -647,7 +647,7 @@ function Test-NRGControlAADPrivCloudOnly {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Directory role data not collected'; return
     }
-    $syncedPriv = @($roles.Data.PrivRoles | Where-Object {
+    $syncedPriv = @($roles.Data['PrivRoles'] | Where-Object {
         $_.OnPremisesSyncEnabled -eq $true -and $_.PrincipalType -notmatch 'servicePrincipal'
     })
     if ($syncedPriv.Count -eq 0) {
@@ -683,7 +683,7 @@ function Test-NRGControlAADBreakGlassMonitoring {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Identity governance data not collected'; return
     }
-    $bgAccounts = @($gov.Data.BreakGlassIndicators | Where-Object { $_.CAExcluded -eq $true })
+    $bgAccounts = @($gov.Data['BreakGlassIndicators'] | Where-Object { $_.CAExcluded -eq $true })
     if ($bgAccounts.Count -ge 2) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
@@ -706,7 +706,7 @@ function Test-NRGControlAADSignInFrequency {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    $freqPolicies = @($ca.Data.Policies | Where-Object {
+    $freqPolicies = @($ca.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and
         $_.SessionControls.SignInFrequency -and
         $_.SessionControls.SignInFrequency.IsEnabled -eq $true
@@ -736,7 +736,7 @@ function Test-NRGControlAADDeviceCode {
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Conditional Access policy data not collected'; return
     }
-    $caBlocks = @($ca.Data.Policies | Where-Object {
+    $caBlocks = @($ca.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and
         ((@($_.Conditions.AuthFlows) | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'transferMethods') }) -join ',') -match 'deviceCode'
     }).Count -gt 0
@@ -766,7 +766,7 @@ function Test-NRGControlAADNoGuestInPrivRoles {
     # are identifiable by the #EXT# marker in PrincipalUPN. Reading the old
     # RoleName/UserType keys made $guestPriv always empty -> a guest holding
     # Global Administrator was silently reported Satisfied (Critical false-negative).
-    $guestPriv = @($roles.Data.RoleAssignments | Where-Object {
+    $guestPriv = @($roles.Data['RoleAssignments'] | Where-Object {
         $_.RoleDefinitionName -in $privRoleNames -and $_.PrincipalUPN -like '*#EXT#*'
     })
     if ($guestPriv.Count -eq 0) {
@@ -817,7 +817,7 @@ function Test-NRGControlAADTokenProtection {
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    $tokenPolicies = @($ca.Data.Policies | Where-Object {
+    $tokenPolicies = @($ca.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and
         $_.SessionControls.SignInFrequency -and
         $_.SessionControls.SignInFrequency.AuthenticationType -eq 'primaryAndSecondaryAuthentication' -or
@@ -840,7 +840,7 @@ function Test-NRGControlAADContinuousAccess {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
     # CAE is enabled by default in most tenants; CA policy can enforce strict mode
-    $caePolicies = @($ca.Data.Policies | Where-Object {
+    $caePolicies = @($ca.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and
         $_.SessionControls.ContinuousAccessEvaluation -and
         $_.SessionControls.ContinuousAccessEvaluation.Mode -eq 'strict'
@@ -885,7 +885,7 @@ function Test-NRGControlAADPrivilegedWorkstation {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
     # PAW is indicated by CA policies that scope privileged role activation/use to specific named device groups
-    $pawPolicies = @($ca.Data.Policies | Where-Object {
+    $pawPolicies = @($ca.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and
         ($_.DisplayName -match 'PAW|Privileged Workstation|Admin Workstation' -or
          ($_.Conditions.Devices -and $_.Conditions.Users.IncludeRoles -and @($_.Conditions.Users.IncludeRoles).Count -gt 0))
@@ -906,7 +906,7 @@ function Test-NRGControlAADTermsOfUse {
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    $touPolicies = @($ca.Data.Policies | Where-Object {
+    $touPolicies = @($ca.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and $_.GrantControls.TermsOfUse -and @($_.GrantControls.TermsOfUse).Count -gt 0
     })
     if ($touPolicies.Count -gt 0) {
@@ -925,7 +925,7 @@ function Test-NRGControlAADWorkloadIdentityCA {
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    $wliPolicies = @($ca.Data.Policies | Where-Object {
+    $wliPolicies = @($ca.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and
         $_.Conditions.ClientApplications -and
         ($_.Conditions.ClientApplications.IncludeServicePrincipals -or
