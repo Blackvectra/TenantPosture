@@ -33,11 +33,11 @@ function Test-NRGControlIntune {
 
     # Merge fields the legacy ITN-1.x checks expect into a single $d view
     $d = @{
-        CompliancePolicies       = if ($dc  -and $dc.Success)  { $dc.Data.CompliancePolicies }       else { @() }
-        ConfigurationProfiles    = if ($dc  -and $dc.Success)  { $dc.Data.ConfigurationProfiles }    else { @() }
-        AppProtectionPolicies    = if ($app -and $app.Success) { $app.Data.AppProtectionPolicies }   else { @() }
-        EnrollmentConfig         = if ($dc  -and $dc.Success)  { $dc.Data.EnrollmentConfig }         else { @() }
-        EndpointSecurityPolicies = if ($es  -and $es.Success)  { $es.Data.EndpointSecurityPolicies } else { @() }
+        CompliancePolicies       = if ($dc  -and $dc.Success)  { $dc.Data['CompliancePolicies'] }       else { @() }
+        ConfigurationProfiles    = if ($dc  -and $dc.Success)  { $dc.Data['ConfigurationProfiles'] }    else { @() }
+        AppProtectionPolicies    = if ($app -and $app.Success) { $app.Data['AppProtectionPolicies'] }   else { @() }
+        EnrollmentConfig         = if ($dc  -and $dc.Success)  { $dc.Data['EnrollmentConfig'] }         else { @() }
+        EndpointSecurityPolicies = if ($es  -and $es.Success)  { $es.Data['EndpointSecurityPolicies'] } else { @() }
     }
 
     # ITN-1.1 — Device compliance policy active
@@ -157,7 +157,7 @@ function Test-NRGControlIntuneEDR {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-EndpointSecurity'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune endpoint security data not collected'; return }
-    $edrPolicies = @($int.Data.EndpointDetectionPolicies ?? @())
+    $edrPolicies = @($int.Data['EndpointDetectionPolicies'] ?? @())
     if ($edrPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($edrPolicies.Count) EDR/MDE onboarding policy(ies) deployed via Intune."
     } else {
@@ -172,7 +172,7 @@ function Test-NRGControlIntuneASR {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-EndpointSecurity'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune endpoint security data not collected'; return }
-    $asrPolicies = @($int.Data.ASRPolicies ?? @())
+    $asrPolicies = @($int.Data['ASRPolicies'] ?? @())
     if ($asrPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($asrPolicies.Count) ASR rule policy(ies) deployed."
     } else {
@@ -187,7 +187,7 @@ function Test-NRGControlIntuneFirewall {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-EndpointSecurity'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune endpoint security data not collected'; return }
-    $fwPolicies = @($int.Data.FirewallPolicies ?? @())
+    $fwPolicies = @($int.Data['FirewallPolicies'] ?? @())
     if ($fwPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($fwPolicies.Count) firewall policy(ies) deployed via Intune."
     } else {
@@ -202,7 +202,7 @@ function Test-NRGControlIntuneMacEncryption {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-DeviceCompliance'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune compliance data not collected'; return }
-    $macPolicies = @($int.Data.CompliancePolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Platform') -match 'macOS|Mac' })
+    $macPolicies = @($int.Data['CompliancePolicies'] | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Platform') -match 'macOS|Mac' })
     if ($macPolicies.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No macOS compliance policies found — may not have managed macOS devices'
         return
@@ -222,7 +222,7 @@ function Test-NRGControlIntuneWindowsUpdate {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-DeviceCompliance'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune compliance data not collected'; return }
-    $winUpdatePolicies = @($int.Data.UpdatePolicies ?? @())
+    $winUpdatePolicies = @($int.Data['UpdatePolicies'] ?? @())
     if ($winUpdatePolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($winUpdatePolicies.Count) Windows Update compliance policy(ies) deployed."
     } else {
@@ -240,7 +240,7 @@ function Test-NRGControlIntuneEnrollmentRestrictions {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Intune data not collected'; return
     }
-    $restrictions = @($int.Data.EnrollmentRestrictions ?? @())
+    $restrictions = @($int.Data['EnrollmentRestrictions'] ?? @())
     if ($restrictions.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
@@ -263,7 +263,7 @@ function Test-NRGControlIntuneAppConfig {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Intune app protection data not collected'; return
     }
-    $appConfig = @($int.Data.AppConfigPolicies ?? @())
+    $appConfig = @($int.Data['AppConfigPolicies'] ?? @())
     if ($appConfig.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
@@ -288,7 +288,7 @@ function Test-NRGControlIntuneConditionalLaunch {
     }
     # Invoke-NRGCollectIntuneAppProtection now stores ConditionalLaunchSettings
     # (device-compliance, min-OS, max-PIN-retries, offline-wipe) per MAM policy.
-    $appPolicies = @($int.Data.AppProtectionPolicies ?? @())
+    $appPolicies = @($int.Data['AppProtectionPolicies'] ?? @())
     $withLaunch  = @($appPolicies | Where-Object { @(Get-NRGObjectField -Item $_ -Key 'ConditionalLaunchSettings' -Default @()).Count -gt 0 })
     if ($appPolicies.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
@@ -313,7 +313,7 @@ function Test-NRGControlIntuneWindowsLAPS {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-EndpointSecurity'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune data not collected'; return }
-    $lapsPolicies = @($int.Data.LAPSPolicies ?? @())
+    $lapsPolicies = @($int.Data['LAPSPolicies'] ?? @())
     if ($lapsPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($lapsPolicies.Count) Windows LAPS policy(ies) deployed. Local administrator passwords are unique, rotated, and escrowed in Entra ID."
     } else {
@@ -328,7 +328,7 @@ function Test-NRGControlIntuneWindowsHello {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-DeviceCompliance'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune data not collected'; return }
-    $helloPolicies = @($int.Data.WindowsHelloPolicies ?? @())
+    $helloPolicies = @($int.Data['WindowsHelloPolicies'] ?? @())
     if ($helloPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($helloPolicies.Count) Windows Hello for Business policy(ies) deployed. Phishing-resistant passwordless authentication on enrolled endpoints."
     } else {
@@ -369,7 +369,7 @@ function Test-NRGControlIntuneMobilePIN {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-DeviceCompliance'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune data not collected'; return }
-    $mobilePolicies = @($int.Data.CompliancePolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Platform') -match 'iOS|Android' })
+    $mobilePolicies = @($int.Data['CompliancePolicies'] | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Platform') -match 'iOS|Android' })
     if ($mobilePolicies.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No iOS or Android compliance policies — may not have managed mobile devices'; return
     }

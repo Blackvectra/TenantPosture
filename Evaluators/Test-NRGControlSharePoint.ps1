@@ -14,7 +14,7 @@
 function Test-NRGControlSharePoint {
     [CmdletBinding()] param()
     $raw = Get-NRGRawData -Key 'SharePoint'
-    if (-not $raw -or -not $raw.Success -or -not $raw.Data.TenantSettings) {
+    if (-not $raw -or -not $raw.Success -or -not $raw.Data['TenantSettings']) {
         foreach ($cid in @('SPO-1.1','SPO-1.2','SPO-1.3','SPO-1.4','SPO-1.5')) {
             $c = Get-NRGControlById -ControlId $cid
             if ($c) {
@@ -26,7 +26,7 @@ function Test-NRGControlSharePoint {
         return
     }
 
-    $s = $raw.Data.TenantSettings
+    $s = $raw.Data['TenantSettings']
 
     # SPO-1.1 — External sharing
     $c = Get-NRGControlById -ControlId 'SPO-1.1'

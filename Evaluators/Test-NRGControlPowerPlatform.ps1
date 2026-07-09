@@ -96,7 +96,7 @@ function Test-NRGControlPPLConnectorClassification {
     }
     # Invoke-NRGCollectPowerPlatform now stores per-policy connector
     # classification (Business/Blocked connectors) from Get-DlpPolicy.
-    $policies      = @($ppl.Data.DLPPolicies ?? @())
+    $policies      = @($ppl.Data['DLPPolicies'] ?? @())
     $businessConns = @($policies | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'BusinessConnectors' -Default @()).Count } | Measure-Object -Sum).Sum
     $blockedConns  = @($policies | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'BlockedConnectors'  -Default @()).Count } | Measure-Object -Sum).Sum
     if ($policies.Count -eq 0) {

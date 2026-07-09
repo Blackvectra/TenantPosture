@@ -55,8 +55,8 @@ function Test-NRGControlInventoryStaleGuests {
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Inventory data not collected'; return
     }
-    $staleGuests = @($inv.Data.GuestUsers | Where-Object { $_.IsStale -eq $true })
-    $allGuests   = @($inv.Data.GuestUsers).Count
+    $staleGuests = @($inv.Data['GuestUsers'] | Where-Object { $_.IsStale -eq $true })
+    $allGuests   = @($inv.Data['GuestUsers']).Count
     if ($staleGuests.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$allGuests guest account(s) found — all have signed in within the past 90 days. No stale guest access detected."
     } else {
@@ -80,7 +80,7 @@ function Test-NRGControlInventoryStaleMembers {
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Inventory data not collected'; return
     }
-    $stale = @($inv.Data.StaleMembers ?? @() | Where-Object { $_.HasLicense -eq $true })
+    $stale = @($inv.Data['StaleMembers'] ?? @() | Where-Object { $_.HasLicense -eq $true })
     if ($stale.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All licensed member accounts have been active within the past 90 days. No dormant employee accounts detected.'
     } else {
@@ -104,7 +104,7 @@ function Test-NRGControlInventoryOAuthApps {
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Inventory data not collected'; return
     }
-    $apps = @($inv.Data.OAuthGrantedApps ?? @())
+    $apps = @($inv.Data['OAuthGrantedApps'] ?? @())
     if ($apps.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No tenant-wide (AllPrincipals) OAuth consent grants found. Third-party app access is properly scoped to consenting individuals only.'
     } else {
@@ -145,7 +145,7 @@ function Test-NRGControlInventoryExternalForwarding {
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
     }
-    $fwd = @($inv.Data.ForwardingMailboxes ?? @())
+    $fwd = @($inv.Data['ForwardingMailboxes'] ?? @())
     if ($fwd.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No mailboxes are configured with an external forwarding address. Email is not being silently copied to external destinations.'
     } else {
@@ -169,7 +169,7 @@ function Test-NRGControlInventorySharedMailboxSignIn {
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
     }
-    $shared = @($inv.Data.AllSharedMailboxes ?? @())
+    $shared = @($inv.Data['AllSharedMailboxes'] ?? @())
     if ($shared.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No shared mailboxes found.'; return
     }
@@ -178,7 +178,7 @@ function Test-NRGControlInventorySharedMailboxSignIn {
     $enabledShared = @()
     if ($users -and $users.Success) {
         $userIndex = @{}
-        foreach ($u in @($users.Data.Users)) { $userIndex[$u.UserPrincipalName.ToLower()] = $u }
+        foreach ($u in @($users.Data['Users'])) { $userIndex[$u.UserPrincipalName.ToLower()] = $u }
         foreach ($mb in $shared) {
             $smtp = [string]($mb.PrimarySmtp ?? '').ToLower()
             if ($userIndex.ContainsKey($smtp) -and $userIndex[$smtp].AccountEnabled -eq $true) {
@@ -206,7 +206,7 @@ function Test-NRGControlInventoryMailboxAuditDisabled {
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
     }
-    $noAudit = @($inv.Data.AuditDisabledMailboxes ?? @())
+    $noAudit = @($inv.Data['AuditDisabledMailboxes'] ?? @())
     if ($noAudit.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All mailboxes have audit logging enabled. Mailbox access, inbox rules, and delegation changes are being recorded.'
     } else {
@@ -227,7 +227,7 @@ function Test-NRGControlInventorySMTPAuthUsers {
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
     }
-    $smtp = @($inv.Data.SmtpAuthEnabledPerUser ?? @())
+    $smtp = @($inv.Data['SmtpAuthEnabledPerUser'] ?? @())
     if ($smtp.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No per-user SMTP AUTH overrides. The org-level SMTP AUTH disable is enforced across all users — legacy client authentication is blocked.'
     } else {
@@ -245,10 +245,10 @@ function Test-NRGControlInventorySecureScore {
     $cid = 'AAD-13.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $inv = Get-NRGRawData -Key 'AAD-Inventory'
-    if (-not $inv -or -not $inv.Success -or -not $inv.Data.SecureScore) {
+    if (-not $inv -or -not $inv.Success -or -not $inv.Data['SecureScore']) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Secure Score data not collected (requires SecurityEvents.Read.All)'; return
     }
-    $ss  = $inv.Data.SecureScore
+    $ss  = $inv.Data['SecureScore']
     $pct = [int]($ss.Percentage ?? 0)
     $cur = [int]($ss.CurrentScore ?? 0)
     $max = [int]($ss.MaxScore ?? 0)

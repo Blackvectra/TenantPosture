@@ -149,6 +149,7 @@ $script:ExportedFunctions = @(
     'Get-NRGCoverageScore',
     'Get-NRGObjectField',
     'Invoke-NRGGraphRequest',
+    'Invoke-NRGEvaluatorSafe',
 
     # ── Collectors — AAD ──────────────────────────────────────────────────────
     'Invoke-NRGCollectAADAuthPolicies', 'Invoke-NRGCollectAADCAPolicies',
