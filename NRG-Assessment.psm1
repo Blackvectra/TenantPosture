@@ -150,6 +150,7 @@ $script:ExportedFunctions = @(
     'Get-NRGObjectField',
     'Invoke-NRGGraphRequest',
     'Invoke-NRGEvaluatorSafe',
+    'Resolve-NRGDns',
 
     # ── Collectors — AAD ──────────────────────────────────────────────────────
     'Invoke-NRGCollectAADAuthPolicies', 'Invoke-NRGCollectAADCAPolicies',
