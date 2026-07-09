@@ -40,6 +40,7 @@
         'Get-NRGControlById',
         'Get-NRGFindingRiskCost',
         'Get-NRGAggregateRisk',
+        'Get-NRGRemediationRoadmap',
         'Get-NRGFrameworkCitations',
         'Get-NRGFrameworkDefinitions',
         'Set-NRGSensitiveFileAcl',

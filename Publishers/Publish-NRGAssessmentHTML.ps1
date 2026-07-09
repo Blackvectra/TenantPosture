@@ -166,8 +166,15 @@ function Publish-NRGAssessmentHTML {
     # available (e.g. unit-test load of just the publisher).
     $hasBusinessPremium = if ($licProfile) { $licProfile.HasBusinessPremium } else { $false }
     $hasEntraP2         = if ($licProfile) { $licProfile.HasEntraP2 }         else { $false }
-    $suppressedLicReqs  = if ($licProfile) { $licProfile.SuppressedLicenseRequirements }
-                          else            { [System.Collections.Generic.HashSet[string]]::new() }
+    # NB: assign the HashSet DIRECTLY, never as the output of an if-block. An
+    # if/else expression ENUMERATES an IEnumerable result — an empty HashSet
+    # would yield $null (then .Contains() below throws) and a non-empty one
+    # would collapse to a plain case-sensitive string[]. Direct assignment
+    # preserves the real OrdinalIgnoreCase HashSet.
+    $suppressedLicReqs = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    if ($licProfile -and $licProfile.SuppressedLicenseRequirements) {
+        $suppressedLicReqs = $licProfile.SuppressedLicenseRequirements
+    }
     $tierLabel          = if ($licProfile) { $licProfile.TierLabel } else { 'Unknown' }
 
     # ── License groups (only show what the tenant actually needs) ─────────────
@@ -281,6 +288,61 @@ function Publish-NRGAssessmentHTML {
             # Risk calc failure must never break the rest of the report
             Write-Warning "Risk exposure calculation failed: $($_.Exception.Message)"
             $riskHtml = ''
+        }
+    }
+
+    # ── Score-lift remediation roadmap (PR: Get-NRGRemediationRoadmap) ────────
+    # Turns the grade into a guide: ranks the zero-license quick wins by exact
+    # compliance-score points returned, with a running projected score. Degrades
+    # to an empty $scoreRoadmapHtml if the helper isn't loaded or throws — the
+    # rest of the report renders unchanged.
+    $scoreRoadmapHtml = ''
+    if (Get-Command Get-NRGRemediationRoadmap -CommandType Function -ErrorAction SilentlyContinue) {
+        try {
+            $rm = Get-NRGRemediationRoadmap -Findings $Findings
+            if ($rm.QuickWinCount -gt 0) {
+                $rows = ''
+                foreach ($q in $rm.QuickWins) {
+                    $sevCls = switch ($q.Severity) { 'Critical' {'svc'} 'High' {'svh'} 'Medium' {'svm'} default {'svl'} }
+                    $rem    = if ($q.Remediation) { hx $q.Remediation } else { '' }
+                    $rows += @"
+<tr>
+  <td style='text-align:center;font-weight:700;color:var(--mut)'>$($q.Rank)</td>
+  <td><span class='mono'>$(hx $q.ControlId)</span> <span class='sv $sevCls' style='margin-left:4px'>$(hx $q.Severity)</span><div style='font-size:.82rem;color:var(--mut);margin-top:2px'>$(hx $q.Title)</div>$(if($rem){"<div style='font-size:.8rem;margin-top:4px'>$rem</div>"})</td>
+  <td style='text-align:right;white-space:nowrap;font-weight:700;color:var(--pass)'>+$($q.ScoreLift)</td>
+  <td style='text-align:right;white-space:nowrap;font-weight:700'>$($q.CumulativeScore)</td>
+</tr>
+"@
+                }
+                $unlockNote = if ($rm.LicenseUnlockCount -gt 0) {
+                    "<div class='rm-lic-note'>&#128273; $($rm.LicenseUnlockCount) additional fix$(if($rm.LicenseUnlockCount -ne 1){'es'}) require a license upgrade first — see <strong>License Gap Analysis</strong> above. Those are not counted in the projection below because a license purchase changes the scoring denominator.</div>"
+                } else { '' }
+                $scoreRoadmapHtml = @"
+<div class='card mt' id='score-roadmap'>
+  <div class='card-hd'>
+    <div><div class='card-label'>Prioritized Remediation Roadmap</div><div class='card-sub'>Zero-license quick wins ranked by exact compliance-score points returned</div></div>
+    <div class='rm-proj'><span class='rm-proj-n'>$($rm.BaselineScore) &rarr; $($rm.ProjectedScoreAllQuickWins)</span><span class='rm-proj-s'>projected score</span></div>
+  </div>
+  <div class='rm-headline'>Completing these <strong>$($rm.QuickWinCount)</strong> configuration change$(if($rm.QuickWinCount -ne 1){'s'}) — all covered by the tenant's current licensing — raises the compliance score by <strong>+$($rm.QuickWinPointGain) point$(if($rm.QuickWinPointGain -ne 1){'s'})</strong>, from $($rm.BaselineScore) to $($rm.ProjectedScoreAllQuickWins).</div>
+  $unlockNote
+  <div style='overflow-x:auto'>
+  <table class='rm-tbl' style='width:100%;border-collapse:collapse;font-size:.9rem;margin-top:10px'>
+    <thead><tr style='border-bottom:2px solid var(--bdr);text-align:left'>
+      <th style='padding:6px 8px;text-align:center'>#</th>
+      <th style='padding:6px 8px'>Control &amp; fix</th>
+      <th style='padding:6px 8px;text-align:right'>Score lift</th>
+      <th style='padding:6px 8px;text-align:right'>Running score</th>
+    </tr></thead>
+    <tbody>$rows</tbody>
+  </table>
+  </div>
+  <div class='rm-method'>Projection is exact: each fix moves a Gap or Partial to Satisfied in the same coverage formula that produces the score ring (Gap +1.0, Partial +0.5 of one control's weight). Quick wins do not change the scoring denominator, so the running score is arithmetic, not an estimate.</div>
+</div>
+"@
+            }
+        } catch {
+            Write-Warning "Remediation roadmap render failed: $($_.Exception.Message)"
+            $scoreRoadmapHtml = ''
         }
     }
 
@@ -779,6 +841,14 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
 .rm-phase{background:var(--card);padding:22px 20px}
 .rm-ph-hd{font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px}
 .rm-ph-t{font-size:1rem;font-weight:900;color:var(--txt);margin-bottom:10px}
+.mono{font-family:'Segoe UI Mono','Consolas',monospace;font-weight:700}
+.rm-proj{text-align:right;white-space:nowrap}
+.rm-proj-n{display:block;font-size:1.15rem;font-weight:900;color:var(--pass)}
+.rm-proj-s{display:block;font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+.rm-headline{font-size:.92rem;color:#374151;margin:4px 0 2px;line-height:1.5}
+.rm-lic-note{font-size:.82rem;color:#374151;background:#fff8ec;border:1px solid #f3e2bd;border-radius:8px;padding:8px 12px;margin-top:10px}
+.rm-method{font-size:.76rem;color:var(--mut);margin-top:10px;line-height:1.45}
+.rm-tbl tbody tr{border-bottom:1px solid #eff2f8}
 .rm-item{display:flex;gap:8px;margin-bottom:7px;font-size:.79rem;color:#374151;align-items:flex-start}
 .rm-bullet{flex-shrink:0;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:900;margin-top:1px}
 .p1-bullet{background:#fef2f2;color:#991b1b}
@@ -920,6 +990,9 @@ $(if($actsHtml){
 
 <!-- NAMED INVENTORY FINDINGS -->
 $(if ($namedHtml) { "<div class='cnt' style='padding-top:0;padding-bottom:0'>$namedHtml</div>" })
+
+<!-- SCORE-LIFT REMEDIATION ROADMAP -->
+$scoreRoadmapHtml
 
 <!-- ROADMAP + BEST PRACTICES -->
 <div class='cnt' style='padding-top:0'>$roadmapHtml</div>
