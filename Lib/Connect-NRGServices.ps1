@@ -101,6 +101,38 @@ function Connect-NRGServices {
     $env:MSAL_ALLOW_BROKER = '0'
     $env:MSAL_DISABLE_TOKENBROKER = '1'
 
+    # ── MSAL assembly-conflict preflight ──────────────────────────────────────
+    # The #1 failure mode in M365 PowerShell tooling (ours AND CISA's ScubaGear)
+    # is a Microsoft.Identity.Client version clash between the Graph and Exchange
+    # modules. Surface the specific cause up front instead of letting the cryptic
+    # "Could not load file or assembly 'Microsoft.Identity.Client'" (or
+    # "Method not found ...WithBroker") fire mid-connect. Non-fatal — a warning
+    # only; a clean machine sees nothing and the run proceeds.
+    if (Get-Command Get-NRGModuleHealth -ErrorAction SilentlyContinue) {
+        try {
+            $health = Get-NRGModuleHealth
+            if ($health.HasConflictRisk) {
+                Write-Host "  [!] Module preflight: Microsoft.Identity.Client (MSAL) assembly-conflict risk." -ForegroundColor Yellow
+                foreach ($m in $health.Modules) {
+                    if ($m.MultipleVersions) {
+                        Write-Host "      $($m.Name): $(@($m.Versions).Count) versions installed ($(@($m.Versions) -join ', ')) — keep only one." -ForegroundColor DarkYellow
+                    }
+                    if ($m.OneDrivePath) {
+                        Write-Host "      $($m.Name): installed under a OneDrive-synced path — move PowerShell modules out of OneDrive." -ForegroundColor DarkYellow
+                    }
+                }
+                Write-Host "      This is what causes 'Could not load file or assembly Microsoft.Identity.Client' at Exchange connect." -ForegroundColor DarkYellow
+                Write-Host "      Fix: run .\Install-NRGPrerequisites.ps1, or uninstall the extra versions and Install-Module ExchangeOnlineManagement -RequiredVersion 3.2.0 -Force." -ForegroundColor DarkYellow
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    $bad = @($health.Modules | Where-Object { $_.MultipleVersions -or $_.OneDrivePath } | ForEach-Object { $_.Name })
+                    Register-NRGException -Source 'ModulePreflight' -Message ("MSAL assembly-conflict risk on: {0}" -f ($bad -join ', '))
+                }
+            }
+        } catch {
+            Write-Verbose "Module preflight skipped: $($_.Exception.Message)"
+        }
+    }
+
     # ── 1. Microsoft Graph ────────────────────────────────────────────────────
     Write-Host "  [*] Microsoft Graph..." -ForegroundColor Cyan
     try {
