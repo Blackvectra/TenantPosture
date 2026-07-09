@@ -16,7 +16,7 @@
 #          $null on absent keys instead, so the existing `?? $default` guards
 #          throughout the collectors behave as originally written.
 #
-#          Root-cause fix for the ndaco.org 2026-07-07 mass-false-gap run,
+#          Root-cause fix for a July-2026 client mass-false-gap run,
 #          where ~20 Graph collectors bailed with empty data and the evaluators
 #          scored empty as "Gap" (e.g. reported 0 Global Admins when 4 existed).
 #
