@@ -42,25 +42,29 @@ function Invoke-NRGCollectAADAuthPolicies {
                     Description                   = [string]$amp.description
                     PolicyVersion                 = [string]$amp.policyVersion
                     AuthenticationMethodConfigs   = @($amp.authenticationMethodConfigurations | ForEach-Object {
+                        # featureSettings is absent on most method configs; a bare
+                        # $_.featureSettings then throws and empties this whole list.
+                        $cfg = $_
+                        $fs  = Get-NRGObjectField -Item $cfg -Key 'featureSettings'
                         @{
-                            Id      = [string]$_.id
-                            State   = [string]$_.state
-                            OdataType = [string]$_['@odata.type']
-                            IncludeTargets = @($_.includeTargets ?? @())
-                            ExcludeTargets = @($_.excludeTargets ?? @())
-                            FeatureSettings = if ($_.featureSettings) {
+                            Id      = [string](Get-NRGObjectField -Item $cfg -Key 'id' -Default '')
+                            State   = [string](Get-NRGObjectField -Item $cfg -Key 'state' -Default '')
+                            OdataType = [string](Get-NRGObjectField -Item $cfg -Key '@odata.type' -Default '')
+                            IncludeTargets = @(Get-NRGObjectField -Item $cfg -Key 'includeTargets' -Default @())
+                            ExcludeTargets = @(Get-NRGObjectField -Item $cfg -Key 'excludeTargets' -Default @())
+                            FeatureSettings = if ($fs) {
                                 @{
-                                    NumberMatchingRequiredState    = [string]($_.featureSettings.numberMatchingRequiredState ?? '')
-                                    AdditionalContextFeatureState  = [string]($_.featureSettings.additionalContextFeatureState ?? '')
+                                    NumberMatchingRequiredState    = [string](Get-NRGNestedProperty -Object $cfg -Path 'featureSettings.numberMatchingRequiredState' -Default '')
+                                    AdditionalContextFeatureState  = [string](Get-NRGNestedProperty -Object $cfg -Path 'featureSettings.additionalContextFeatureState' -Default '')
                                 }
                             } else { $null }
                         }
                     })
-                    RegistrationEnforcement = if ($amp.registrationEnforcement) {
+                    RegistrationEnforcement = if (Get-NRGObjectField -Item $amp -Key 'registrationEnforcement') {
                         @{
                             AuthenticationMethodsRegistrationCampaign = @{
-                                State          = [string]($amp.registrationEnforcement.authenticationMethodsRegistrationCampaign.state ?? 'unknown')
-                                SnoozeDuration = [int]($amp.registrationEnforcement.authenticationMethodsRegistrationCampaign.snoozeDurationInDays ?? 0)
+                                State          = [string](Get-NRGNestedProperty -Object $amp -Path 'registrationEnforcement.authenticationMethodsRegistrationCampaign.state' -Default 'unknown')
+                                SnoozeDuration = [int](Get-NRGNestedProperty -Object $amp -Path 'registrationEnforcement.authenticationMethodsRegistrationCampaign.snoozeDurationInDays' -Default 0)
                             }
                         }
                     } else { $null }
@@ -79,19 +83,19 @@ function Invoke-NRGCollectAADAuthPolicies {
                 -ErrorAction Stop
             if ($authPol) {
                 $result.Data.AuthorizationPolicy = @{
-                    Id                           = [string]$authPol.id
-                    AllowInvitesFrom             = [string]($authPol.allowInvitesFrom ?? 'unknown')
-                    AllowedToSignUpEmailBasedSubscriptions = [bool]($authPol.allowedToSignUpEmailBasedSubscriptions ?? $true)
-                    AllowedToUseSSPR             = [bool]($authPol.allowedToUseSSPR ?? $true)
-                    BlockMsolPowerShell           = $authPol.blockMsolPowerShell
+                    Id                           = [string](Get-NRGObjectField -Item $authPol -Key 'id' -Default '')
+                    AllowInvitesFrom             = [string](Get-NRGObjectField -Item $authPol -Key 'allowInvitesFrom' -Default 'unknown')
+                    AllowedToSignUpEmailBasedSubscriptions = [bool](Get-NRGObjectField -Item $authPol -Key 'allowedToSignUpEmailBasedSubscriptions' -Default $true)
+                    AllowedToUseSSPR             = [bool](Get-NRGObjectField -Item $authPol -Key 'allowedToUseSSPR' -Default $true)
+                    BlockMsolPowerShell           = (Get-NRGObjectField -Item $authPol -Key 'blockMsolPowerShell' -Default $null)
                     DefaultUserRolePermissions    = @{
-                        AllowedToCreateApps        = [bool]($authPol.defaultUserRolePermissions.allowedToCreateApps ?? $true)
-                        AllowedToCreateGroups      = [bool]($authPol.defaultUserRolePermissions.allowedToCreateGroups ?? $true)
-                        AllowedToCreateTenants     = [bool]($authPol.defaultUserRolePermissions.allowedToCreateTenants ?? $true)
-                        AllowedToReadBitlockerKeys = [bool]($authPol.defaultUserRolePermissions.allowedToReadBitlockerKeysForOwnedDevice ?? $true)
+                        AllowedToCreateApps        = [bool](Get-NRGNestedProperty -Object $authPol -Path 'defaultUserRolePermissions.allowedToCreateApps' -Default $true)
+                        AllowedToCreateGroups      = [bool](Get-NRGNestedProperty -Object $authPol -Path 'defaultUserRolePermissions.allowedToCreateGroups' -Default $true)
+                        AllowedToCreateTenants     = [bool](Get-NRGNestedProperty -Object $authPol -Path 'defaultUserRolePermissions.allowedToCreateTenants' -Default $true)
+                        AllowedToReadBitlockerKeys = [bool](Get-NRGNestedProperty -Object $authPol -Path 'defaultUserRolePermissions.allowedToReadBitlockerKeysForOwnedDevice' -Default $true)
                     }
-                    GuestUserRoleId              = [string]($authPol.guestUserRoleId ?? '')
-                    PermissionGrantPoliciesAssigned = @($authPol.permissionGrantPoliciesAssigned ?? @())
+                    GuestUserRoleId              = [string](Get-NRGObjectField -Item $authPol -Key 'guestUserRoleId' -Default '')
+                    PermissionGrantPoliciesAssigned = @(Get-NRGObjectField -Item $authPol -Key 'permissionGrantPoliciesAssigned' -Default @())
                 }
             }
         } catch {

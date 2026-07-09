@@ -71,10 +71,38 @@ function Test-NRGControlAADMFA {
     $registeredPct   = [math]::Round((($totalEnabled - $unregisteredCnt) / $totalEnabled) * 100, 1)
 
     if ($unregisteredCnt -eq 0) {
+        # Cross-reference: verify an MFA-enforcing CA policy exists.
+        # Registration alone does NOT prove enforcement — without this check,
+        # a tenant with 100% registration and zero enforcing policy was
+        # reported Satisfied (false pass). Ported from the NLS twin.
+        $caRaw = Get-NRGRawData -Key 'AAD-CAPolicies'
+        $hasMfaCaPolicy = $false
+        if ($caRaw -and $caRaw.Success) {
+            $policies = @($caRaw.Data['Policies'])
+            $hasMfaCaPolicy = $policies | Where-Object {
+                $_.State -eq 'enabled' -and
+                $_.Conditions.Users.IncludeUsers -contains 'All' -and
+                $_.GrantControls.BuiltInControls -contains 'mfa'
+            } | Select-Object -First 1
+        }
+
+        if (-not $hasMfaCaPolicy) {
+            # 100% registered but no enforcing policy — Partial, not Satisfied
+            Add-NRGFinding -ControlId 'AAD-1.2' -State 'Partial' `
+                -Category 'Identity' -Title 'MFA Required for All Users' `
+                -Severity 'Critical' `
+                -Detail '100% MFA registered but no CA policy found enforcing MFA for All Users / All Cloud Apps. Registration alone does not prove enforcement.' `
+                -CurrentValue "100% MFA registered ($totalEnabled/$totalEnabled enabled members). Security Defaults: disabled. No enforcing CA policy detected." `
+                -RequiredValue '100% MFA registration AND enforced CA policy (or Security Defaults)' `
+                -Remediation 'Create a Conditional Access policy requiring MFA for All users on All cloud apps. Registration alone is insufficient — a CA policy is required to enforce MFA at sign-in.' `
+                -FrameworkIds @('IA-2(1)','IA-2(2)')
+            return
+        }
+
         Add-NRGFinding -ControlId 'AAD-1.2' -State 'Satisfied' `
             -Category 'Identity' -Title 'MFA Required for All Users' `
             -Severity 'Critical' `
-            -CurrentValue "100% MFA registered ($totalEnabled/$totalEnabled enabled members). Security Defaults: disabled (assumes CA-managed enforcement)." `
+            -CurrentValue "100% MFA registered ($totalEnabled/$totalEnabled enabled members). Security Defaults: disabled. Enforcing CA policy found." `
             -RequiredValue '100% MFA registration AND enforced CA policy (or Security Defaults)' `
             -FrameworkIds @('IA-2(1)','IA-2(2)')
     }
