@@ -66,7 +66,7 @@ function Invoke-NRGCollectAADPIM {
                         RoleDisplayName    = [string]($s.roleDefinition.displayName ?? '')
                         PrincipalId        = [string]$s.principalId
                         PrincipalUPN       = [string]($s.principal.userPrincipalName ?? '')
-                        PrincipalType      = [string]($s.principal.'@odata.type' ?? '')
+                        PrincipalType      = [string]($s.principal['@odata.type'] ?? '')
                         Status             = [string]$s.status
                         MemberType         = [string]$s.memberType
                         StartDateTime      = [string]($s.scheduleInfo.startDateTime ?? '')
@@ -74,7 +74,7 @@ function Invoke-NRGCollectAADPIM {
                         DirectoryScopeId   = [string]$s.directoryScopeId
                     })
                 }
-                $eligLink = $resp.'@odata.nextLink'
+                $eligLink = $resp['@odata.nextLink']
                 $pageCount++
             }
             if ($pageCount -ge $maxPages -and $eligLink) {
@@ -107,7 +107,7 @@ function Invoke-NRGCollectAADPIM {
                         RoleDisplayName  = [string]($s.roleDefinition.displayName ?? '')
                         PrincipalId      = [string]$s.principalId
                         PrincipalUPN     = [string]($s.principal.userPrincipalName ?? '')
-                        PrincipalType    = [string]($s.principal.'@odata.type' ?? '')
+                        PrincipalType    = [string]($s.principal['@odata.type'] ?? '')
                         AssignmentType   = [string]$s.assignmentType
                         MemberType       = [string]$s.memberType
                         Status           = [string]$s.status
@@ -115,7 +115,7 @@ function Invoke-NRGCollectAADPIM {
                         Expiration       = [string]($s.scheduleInfo.expiration.type ?? 'noExpiration')
                     })
                 }
-                $activeLink = $resp.'@odata.nextLink'
+                $activeLink = $resp['@odata.nextLink']
                 $pageCount2++
             }
             if ($pageCount2 -ge $maxPages -and $activeLink) {

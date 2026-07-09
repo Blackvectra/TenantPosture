@@ -1,133 +1,111 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://blackvectra.com/schemas/nls-controls-v1.schema.json",
-  "title": "NRG Assessment Tool — Control Definition Schema v1.0",
-  "description": "Validates Config/controls.json. Every control must pass this schema before merge.",
+  "$id": "https://blackvectra.com/schemas/nrg-controls-v2.schema.json",
+  "title": "NRG Assessment Tool — Control Definition Schema v2.0",
+  "description": "Validates Config/controls.json against the ACTUAL v4.x control shape (13 required keys per control; References with 9 required framework citations plus optional SCuBA). v1 of this schema described a retired design (NRG-AAD-0001 IDs, Profile/RawDataKeys/EvidenceFormat/Tags/Owner fields) that never matched shipped data, so it was never enforceable. v2 is enforced in CI (ci.yml, Schema Validation step) and mirrors the ScubaGear practice of machine-validating tool configuration before use.",
   "type": "object",
-  "required": ["$schema", "version", "generatedAt", "controls"],
   "additionalProperties": false,
+  "required": ["controls"],
   "properties": {
-    "$schema":      { "type": "string" },
-    "version":      { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
-    "generatedAt":  { "type": "string", "format": "date-time" },
     "controls": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/definitions/Control" }
+      "items": { "$ref": "#/definitions/control" }
     }
   },
   "definitions": {
-    "Control": {
+    "control": {
       "type": "object",
-      "required": [
-        "ControlId", "Title", "Description", "BusinessRisk",
-        "Severity", "Workload", "Category", "Automated",
-        "Profile", "CollectorDependency", "RawDataKeys",
-        "EvaluatorFunction", "EvidenceFormat", "Remediation",
-        "Frameworks", "MitreAttack", "Tags", "Status",
-        "Owner", "ReviewCadenceDays", "LastReviewed"
-      ],
       "additionalProperties": false,
+      "required": [
+        "ControlId",
+        "Title",
+        "Description",
+        "BusinessRisk",
+        "Severity",
+        "Workload",
+        "Category",
+        "Automated",
+        "CollectorDependency",
+        "EvaluatorFunction",
+        "Remediation",
+        "References",
+        "LicenseRequirement"
+      ],
       "properties": {
         "ControlId": {
           "type": "string",
-          "pattern": "^NRG-(AAD|EXO|DNS|DEF|SPO|TMS|INT|PVW|PPL)-\\d{4}$",
-          "description": "NRG-{WORKLOAD}-{NNNN}"
+          "pattern": "^(AAD|EXO|DEF|TMS|PVW|SPO|INT|PPL|DNS)-\\d+\\.\\d+$",
+          "description": "Workload-prefixed dotted ID, e.g. AAD-1.1. Prefix must match the Workload field."
         },
-        "Title":        { "type": "string", "minLength": 10, "maxLength": 120 },
-        "Description":  { "type": "string", "minLength": 20 },
-        "BusinessRisk": { "type": "string", "minLength": 20 },
+        "Title": { "type": "string", "minLength": 5 },
+        "Description": { "type": "string", "minLength": 10 },
+        "BusinessRisk": { "type": "string", "minLength": 10 },
         "Severity": {
           "type": "string",
           "enum": ["Critical", "High", "Medium", "Low", "Informational"]
         },
         "Workload": {
           "type": "string",
-          "enum": ["AAD", "EXO", "DNS", "DEF", "SPO", "TMS", "INT", "PVW", "PPL"]
+          "enum": ["AAD", "EXO", "DEF", "TMS", "PVW", "SPO", "INT", "PPL", "DNS"]
         },
-        "Category": {
-          "type": "string",
-          "enum": ["Identity", "Email", "Endpoint", "Data", "Collaboration", "Governance", "Network"]
-        },
+        "Category": { "type": "string", "minLength": 3 },
         "Automated": { "type": "boolean" },
-        "Profile": {
-          "type": "array",
-          "items": { "type": "string", "enum": ["E3-L1", "E3-L2", "E5-L1", "E5-L2", "All"] },
-          "minItems": 1
-        },
         "CollectorDependency": {
+          "type": "string",
+          "minLength": 3,
+          "description": "Raw-data key the evaluator reads (e.g. AAD-AuthPolicies, Teams-Config)."
+        },
+        "EvaluatorFunction": {
+          "type": "string",
+          "pattern": "^Test-NRGControl[A-Za-z0-9-]+$",
+          "description": "Function name in Evaluators/ — must exist and be exported."
+        },
+        "Remediation": { "type": "string", "minLength": 5 },
+        "LicenseRequirement": { "type": "string", "minLength": 3 },
+        "References": { "$ref": "#/definitions/references" }
+      }
+    },
+    "references": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "CISControls",
+        "CIS",
+        "NIST",
+        "CMMC",
+        "MITRE",
+        "ISO27001",
+        "SOC2",
+        "HIPAA",
+        "PCIDSS"
+      ],
+      "properties": {
+        "CISControls": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string", "pattern": "^\\d+\\.\\d+$" },
+          "description": "CIS Controls v8.1 safeguard IDs (validated against the authoritative list by Testing/NRG.FrameworkAccuracy.Tests.ps1)."
         },
-        "RawDataKeys": {
-          "type": "array",
-          "items": { "type": "string" }
+        "CIS": {
+          "type": "string",
+          "description": "CIS Microsoft 365 Foundations Benchmark recommendation number."
         },
-        "EvaluatorFunction": { "type": "string", "pattern": "^Test-NRGControl-" },
-        "EvidenceFormat": {
-          "type": "object",
-          "required": ["Type", "RequiredProperties"],
-          "properties": {
-            "Type":               { "type": "string" },
-            "RequiredProperties": { "type": "array", "items": { "type": "string" } },
-            "Schema":             { "type": "string" }
-          }
+        "SCuBA": {
+          "type": "string",
+          "pattern": "^$|^MS\\.(AAD|EXO|DEFENDER|SHAREPOINT|TEAMS|POWERPLATFORM)\\.\\d+\\.\\d+v\\d+$",
+          "description": "Optional CISA ScubaGear policy ID (empty string = no SCuBA equivalent). Semantic match to the baseline text is guarded by Testing/NRG.FrameworkAccuracy.Tests.ps1 against Config/framework-baselines/scuba-ids-v1.8.0.txt."
         },
-        "Remediation": {
-          "type": "object",
-          "required": ["Summary", "EffortHours", "EffortLevel", "ExternalRefs"],
-          "properties": {
-            "Summary":        { "type": "string" },
-            "EffortHours":    { "type": "integer", "minimum": 0 },
-            "EffortLevel":    { "type": "string", "enum": ["Quick", "Standard", "Significant", "Major"] },
-            "RemediationDocId": { "type": ["string", "null"] },
-            "ExternalRefs":   { "type": "array", "items": { "type": "string" } },
-            "RollbackPlan":   { "type": ["string", "null"] }
-          }
-        },
-        "Frameworks": {
-          "type": "object",
-          "properties": {
-            "CIS-M365-v6.0.1":  { "$ref": "#/definitions/FrameworkRef" },
-            "CISA-SCuBA-M365":  { "$ref": "#/definitions/FrameworkRef" },
-            "NIST-800-53-r5":   { "$ref": "#/definitions/FrameworkRef" },
-            "NIST-800-171-r2":  { "$ref": "#/definitions/FrameworkRef" },
-            "CMMC-2.0-L2":      { "$ref": "#/definitions/FrameworkRef" },
-            "HIPAA-SR":         { "$ref": "#/definitions/FrameworkRef" },
-            "OWASP-Top10-2025": { "$ref": "#/definitions/FrameworkRef" },
-            "OWASP-ASVS-v5":    { "$ref": "#/definitions/FrameworkRef" },
-            "OSSTMM-v3":        { "$ref": "#/definitions/FrameworkRef" }
-          },
-          "additionalProperties": false
-        },
-        "MitreAttack": {
+        "NIST": { "type": "string" },
+        "CMMC": { "type": "string" },
+        "MITRE": {
           "type": "array",
           "items": { "type": "string", "pattern": "^T\\d{4}(\\.\\d{3})?$" }
         },
-        "Tags": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "Status": {
-          "type": "string",
-          "enum": ["Active", "Draft", "Deprecated"]
-        },
-        "DeprecatedBy": { "type": ["string", "null"] },
-        "Owner":               { "type": "string" },
-        "ReviewCadenceDays":   { "type": "integer", "minimum": 30 },
-        "LastReviewed":        { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+        "ISO27001": { "type": "string" },
+        "SOC2": { "type": "string" },
+        "HIPAA": { "type": "string" },
+        "PCIDSS": { "type": "string" }
       }
-    },
-    "FrameworkRef": {
-      "type": "object",
-      "required": ["controls", "relationship"],
-      "properties": {
-        "controls":     { "type": "array", "items": { "type": "string" } },
-        "relationship": { "type": "string", "enum": ["equivalent-to", "subset-of", "intersects-with", "superset-of"] },
-        "baselineVersion": { "type": "string" },
-        "notes":        { "type": "string" }
-      },
-      "additionalProperties": false
     }
   }
 }

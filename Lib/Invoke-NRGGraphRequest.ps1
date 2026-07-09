@@ -10,7 +10,7 @@
 #          -OutputType HashTable so every collector reads a stable, StrictMode-
 #          safe object shape regardless of the installed Microsoft.Graph SDK
 #          version. Newer SDK builds return PSCustomObject by default, on which
-#          a bare `$resp.'@odata.nextLink'` (or `$resp.value`) THROWS under
+#          a bare `$resp['@odata.nextLink']` (or `$resp.value`) THROWS under
 #          Set-StrictMode -Version Latest when the property is absent — which
 #          it is on any single-page (small-tenant) response. Hashtables return
 #          $null on absent keys instead, so the existing `?? $default` guards

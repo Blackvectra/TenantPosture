@@ -95,7 +95,7 @@ function Invoke-NRGCollectAADCAPolicies {
                 @{
                     Id          = [string]$_.id
                     DisplayName = [string]$_.displayName
-                    OdataType   = [string]($_.'@odata.type' ?? '')
+                    OdataType   = [string]($_['@odata.type'] ?? '')
                     IsTrusted   = [bool]($_.isTrusted ?? $false)
                     IpRanges    = @($_.ipRanges ?? @() | ForEach-Object { [string]($_.cidrAddress ?? '') })
                     CountriesAndRegions = @($_.countriesAndRegions ?? @())

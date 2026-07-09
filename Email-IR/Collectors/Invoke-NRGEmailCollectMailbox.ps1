@@ -88,7 +88,7 @@ function Invoke-NRGEmailCollectMailbox {
         while ($uri -and $pages -lt $pageCap) {
             $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
             if ($resp.value) { $sentItems += $resp.value }
-            $uri = if ($resp.'@odata.nextLink') { $resp.'@odata.nextLink' } else { $null }
+            $uri = if ($resp['@odata.nextLink']) { $resp['@odata.nextLink'] } else { $null }
             $pages++
         }
 
@@ -147,7 +147,7 @@ function Invoke-NRGEmailCollectMailbox {
         while ($uri -and $pages -lt 5) {
             $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
             if ($resp.value) { $inboxItems += $resp.value }
-            $uri = if ($resp.'@odata.nextLink') { $resp.'@odata.nextLink' } else { $null }
+            $uri = if ($resp['@odata.nextLink']) { $resp['@odata.nextLink'] } else { $null }
             $pages++
         }
         $normalized = foreach ($m in $inboxItems) {

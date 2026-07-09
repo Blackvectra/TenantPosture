@@ -332,9 +332,17 @@
     # module from loading on operator workstations that hadn't installed
     # Teams yet — the wrong failure mode for an optional collector.
     # See: v4.6.6 hotfix.
+    #
+    # MaximumVersion caps (ScubaGear RequiredVersions.ps1 pattern): both SDKs
+    # have shipped behavior changes inside a major that broke this tool —
+    # Invoke-MgGraphRequest's default output shape flipped to PSCustomObject
+    # (the StrictMode nextLink crash), and an EXO module bump caused an MSAL
+    # assembly manifest conflict. A cap makes adopting the next major a
+    # deliberate, tested edit instead of a surprise on the operator's next
+    # Update-Module.
     RequiredModules = @(
-        @{ ModuleName = 'Microsoft.Graph.Authentication'; ModuleVersion = '2.20.0' },
-        @{ ModuleName = 'ExchangeOnlineManagement';       ModuleVersion = '3.2.0' }
+        @{ ModuleName = 'Microsoft.Graph.Authentication'; ModuleVersion = '2.20.0'; MaximumVersion = '2.99.99' },
+        @{ ModuleName = 'ExchangeOnlineManagement';       ModuleVersion = '3.2.0';  MaximumVersion = '3.99.99' }
     )
 
     # Module metadata
