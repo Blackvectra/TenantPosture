@@ -57,6 +57,7 @@
         'Invoke-NRGGraphRequest',
         'Invoke-NRGEvaluatorSafe',
         'Resolve-NRGDns',
+        'Get-NRGModuleHealth',
 
         # ── Collectors — AAD ──────────────────────────────────────────────────
         'Invoke-NRGCollectAADAuthPolicies',
