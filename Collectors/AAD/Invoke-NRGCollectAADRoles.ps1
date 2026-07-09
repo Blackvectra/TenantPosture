@@ -49,13 +49,19 @@ function Invoke-NRGCollectAADRoles {
             $roleDefResp = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions?$select=id,displayName,isBuiltIn,isEnabled&$top=200' `
                 -ErrorAction Stop
+            # Shape-safe: a role definition missing any $select'd field (isBuiltIn,
+            # isEnabled) would otherwise throw and empty the whole map, so every
+            # assignment falls back to a GUID name and the GA-by-name filter finds
+            # nothing — another path to a false "0 Global Administrators".
             $result.Data.RoleDefinitions = @($roleDefResp.value ?? @() | ForEach-Object {
+                $rd = $_
+                $dn = [string](Get-NRGObjectField -Item $rd -Key 'displayName' -Default '')
                 @{
-                    Id          = [string]$_.id
-                    DisplayName = [string]$_.displayName
-                    IsBuiltIn   = [bool]$_.isBuiltIn
-                    IsEnabled   = [bool]$_.isEnabled
-                    IsPriv      = ($privRoleNames -contains $_.displayName)
+                    Id          = [string](Get-NRGObjectField -Item $rd -Key 'id' -Default '')
+                    DisplayName = $dn
+                    IsBuiltIn   = [bool](Get-NRGObjectField -Item $rd -Key 'isBuiltIn' -Default $false)
+                    IsEnabled   = [bool](Get-NRGObjectField -Item $rd -Key 'isEnabled' -Default $true)
+                    IsPriv      = ($privRoleNames -contains $dn)
                 }
             })
         } catch {
@@ -70,6 +76,14 @@ function Invoke-NRGCollectAADRoles {
             $roleMap[$rd.Id] = $rd.DisplayName
         }
 
+        # Honest-success flags: at least one privileged-assignment SOURCE must
+        # actually collect, or the collector reports Success=$false so GA-count /
+        # privileged-role evaluators route to NotApplicable instead of a false
+        # "0 Global Administrators". PIM tenants have 0 permanent + N eligible;
+        # non-PIM tenants have N permanent + 0 eligible — either alone is valid.
+        $assignmentsOk = $false
+        $eligibilityOk = $false
+
         # Get active (permanent) role assignments — expanded to get principal details
         try {
             $assignResp = Invoke-NRGGraphRequest -Method GET `
@@ -79,20 +93,34 @@ function Invoke-NRGCollectAADRoles {
             $assignments = [System.Collections.Generic.List[object]]::new()
             $nextLink = $assignResp['@odata.nextLink']
 
-            foreach ($a in @($assignResp.value ?? @())) {
-                $roleName = $roleMap[$a.roleDefinitionId] ?? $a.roleDefinitionId
-                $assignments.Add(@{
-                    Id                   = [string]$a.id
-                    RoleDefinitionId     = [string]$a.roleDefinitionId
+            # Safe per-assignment projection. The expanded 'principal' is a
+            # directoryObject that may be a user, GROUP, or SERVICE PRINCIPAL.
+            # Groups/SPs have NO userPrincipalName, so a bare
+            # $a.principal.userPrincipalName THROWS on those rows (PS 7.4 missing
+            # key; PS 7.5+ / PSCustomObject on $null.leaf) and aborted the whole
+            # enumeration — the root cause of a tenant with real Global Admins
+            # reporting "Permanent Global Administrator count: 0". Read every
+            # principal field through the shape-safe helper.
+            $mkAssignment = {
+                param($a)
+                $pr = Get-NRGObjectField -Item $a -Key 'principal' -Default @{}
+                $roleName = $roleMap[(Get-NRGObjectField -Item $a -Key 'roleDefinitionId')] ?? (Get-NRGObjectField -Item $a -Key 'roleDefinitionId' -Default '')
+                @{
+                    Id                   = [string](Get-NRGObjectField -Item $a -Key 'id' -Default '')
+                    RoleDefinitionId     = [string](Get-NRGObjectField -Item $a -Key 'roleDefinitionId' -Default '')
                     RoleDefinitionName   = $roleName
-                    PrincipalId          = [string]$a.principalId
-                    PrincipalType        = [string]($a.principal['@odata.type'] ?? 'unknown')
-                    PrincipalDisplayName = [string]($a.principal.displayName ?? 'unknown')
-                    PrincipalUPN         = [string]($a.principal.userPrincipalName ?? '')
-                    DirectoryScopeId     = [string]($a.directoryScopeId ?? '/')
+                    PrincipalId          = [string](Get-NRGObjectField -Item $a -Key 'principalId' -Default '')
+                    PrincipalType        = [string](Get-NRGObjectField -Item $pr -Key '@odata.type' -Default 'unknown')
+                    PrincipalDisplayName = [string](Get-NRGObjectField -Item $pr -Key 'displayName' -Default 'unknown')
+                    PrincipalUPN         = [string](Get-NRGObjectField -Item $pr -Key 'userPrincipalName' -Default '')
+                    DirectoryScopeId     = [string](Get-NRGObjectField -Item $a -Key 'directoryScopeId' -Default '/')
                     IsPriv               = ($privRoleNames -contains $roleName)
-                    OnPremisesSyncEnabled = $a.principal.onPremisesSyncEnabled
-                })
+                    OnPremisesSyncEnabled = (Get-NRGObjectField -Item $pr -Key 'onPremisesSyncEnabled' -Default $null)
+                }
+            }
+
+            foreach ($a in @($assignResp.value ?? @())) {
+                $assignments.Add((& $mkAssignment $a))
             }
 
             # Page through remaining assignments.
@@ -105,19 +133,7 @@ function Invoke-NRGCollectAADRoles {
             while ($nextLink -and $pageCount -lt $maxPages) {
                 $pageResp = Invoke-NRGGraphRequest -Method GET -Uri $nextLink -ErrorAction Stop
                 foreach ($a in @($pageResp.value ?? @())) {
-                    $roleName = $roleMap[$a.roleDefinitionId] ?? $a.roleDefinitionId
-                    $assignments.Add(@{
-                        Id                   = [string]$a.id
-                        RoleDefinitionId     = [string]$a.roleDefinitionId
-                        RoleDefinitionName   = $roleName
-                        PrincipalId          = [string]$a.principalId
-                        PrincipalType        = [string]($a.principal['@odata.type'] ?? 'unknown')
-                        PrincipalDisplayName = [string]($a.principal.displayName ?? 'unknown')
-                        PrincipalUPN         = [string]($a.principal.userPrincipalName ?? '')
-                        DirectoryScopeId     = [string]($a.directoryScopeId ?? '/')
-                        IsPriv               = ($privRoleNames -contains $roleName)
-                        OnPremisesSyncEnabled = $a.principal.onPremisesSyncEnabled
-                    })
+                    $assignments.Add((& $mkAssignment $a))
                 }
                 $nextLink = $pageResp['@odata.nextLink']
                 $pageCount++
@@ -131,6 +147,7 @@ function Invoke-NRGCollectAADRoles {
 
             $result.Data.RoleAssignments = $assignments.ToArray()
             $result.Data.PrivRoles       = @($assignments | Where-Object { $_.IsPriv })
+            $assignmentsOk = $true
 
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
@@ -151,45 +168,39 @@ function Invoke-NRGCollectAADRoles {
                 -ErrorAction Stop
             $eligNext = $eligResp['@odata.nextLink']
 
-            foreach ($e in @($eligResp.value ?? @())) {
-                $roleName = $roleMap[$e.roleDefinitionId] ?? $e.roleDefinitionId
-                $eligibility.Add(@{
-                    Id                   = [string]$e.id
-                    RoleDefinitionId     = [string]$e.roleDefinitionId
+            # Same shape-safe projection as permanent assignments, plus the
+            # PIM schedule window (scheduleInfo.expiration.endDateTime is also a
+            # deep chain that throws when absent).
+            $mkEligible = {
+                param($e)
+                $pr = Get-NRGObjectField -Item $e -Key 'principal' -Default @{}
+                $roleName = $roleMap[(Get-NRGObjectField -Item $e -Key 'roleDefinitionId')] ?? (Get-NRGObjectField -Item $e -Key 'roleDefinitionId' -Default '')
+                @{
+                    Id                   = [string](Get-NRGObjectField -Item $e -Key 'id' -Default '')
+                    RoleDefinitionId     = [string](Get-NRGObjectField -Item $e -Key 'roleDefinitionId' -Default '')
                     RoleDefinitionName   = $roleName
-                    PrincipalId          = [string]$e.principalId
-                    PrincipalType        = [string]($e.principal['@odata.type'] ?? 'unknown')
-                    PrincipalDisplayName = [string]($e.principal.displayName ?? 'unknown')
-                    PrincipalUPN         = [string]($e.principal.userPrincipalName ?? '')
-                    DirectoryScopeId     = [string]($e.directoryScopeId ?? '/')
+                    PrincipalId          = [string](Get-NRGObjectField -Item $e -Key 'principalId' -Default '')
+                    PrincipalType        = [string](Get-NRGObjectField -Item $pr -Key '@odata.type' -Default 'unknown')
+                    PrincipalDisplayName = [string](Get-NRGObjectField -Item $pr -Key 'displayName' -Default 'unknown')
+                    PrincipalUPN         = [string](Get-NRGObjectField -Item $pr -Key 'userPrincipalName' -Default '')
+                    DirectoryScopeId     = [string](Get-NRGObjectField -Item $e -Key 'directoryScopeId' -Default '/')
                     IsPriv               = ($privRoleNames -contains $roleName)
-                    OnPremisesSyncEnabled= $e.principal.onPremisesSyncEnabled
-                    StartDateTime        = [string]($e.scheduleInfo.startDateTime ?? '')
-                    EndDateTime          = [string]($e.scheduleInfo.expiration.endDateTime ?? '')
-                    MemberType           = [string]($e.memberType ?? 'Direct')
-                })
+                    OnPremisesSyncEnabled= (Get-NRGObjectField -Item $pr -Key 'onPremisesSyncEnabled' -Default $null)
+                    StartDateTime        = [string](Get-NRGNestedProperty -Object $e -Path 'scheduleInfo.startDateTime' -Default '')
+                    EndDateTime          = [string](Get-NRGNestedProperty -Object $e -Path 'scheduleInfo.expiration.endDateTime' -Default '')
+                    MemberType           = [string](Get-NRGObjectField -Item $e -Key 'memberType' -Default 'Direct')
+                }
+            }
+
+            foreach ($e in @($eligResp.value ?? @())) {
+                $eligibility.Add((& $mkEligible $e))
             }
             $maxPages  = 200
             $pageCount = 0
             while ($eligNext -and $pageCount -lt $maxPages) {
                 $pageResp = Invoke-NRGGraphRequest -Method GET -Uri $eligNext -ErrorAction Stop
                 foreach ($e in @($pageResp.value ?? @())) {
-                    $roleName = $roleMap[$e.roleDefinitionId] ?? $e.roleDefinitionId
-                    $eligibility.Add(@{
-                        Id                   = [string]$e.id
-                        RoleDefinitionId     = [string]$e.roleDefinitionId
-                        RoleDefinitionName   = $roleName
-                        PrincipalId          = [string]$e.principalId
-                        PrincipalType        = [string]($e.principal['@odata.type'] ?? 'unknown')
-                        PrincipalDisplayName = [string]($e.principal.displayName ?? 'unknown')
-                        PrincipalUPN         = [string]($e.principal.userPrincipalName ?? '')
-                        DirectoryScopeId     = [string]($e.directoryScopeId ?? '/')
-                        IsPriv               = ($privRoleNames -contains $roleName)
-                        OnPremisesSyncEnabled= $e.principal.onPremisesSyncEnabled
-                        StartDateTime        = [string]($e.scheduleInfo.startDateTime ?? '')
-                        EndDateTime          = [string]($e.scheduleInfo.expiration.endDateTime ?? '')
-                        MemberType           = [string]($e.memberType ?? 'Direct')
-                    })
+                    $eligibility.Add((& $mkEligible $e))
                 }
                 $eligNext = $pageResp['@odata.nextLink']
                 $pageCount++
@@ -201,6 +212,7 @@ function Invoke-NRGCollectAADRoles {
                 }
             }
             $result.Data.RoleEligibilitySchedules = $eligibility.ToArray()
+            $eligibilityOk = $true
         } catch {
             # PIM not licensed (Entra P1+) — non-fatal. Note also covered by
             # the dedicated PIM collector wrapper, but reading it here lets
@@ -225,10 +237,15 @@ function Invoke-NRGCollectAADRoles {
         }
         $result.Data.AllPrivilegedAssignments = @($combined.ToArray() | Where-Object { $_.IsPriv })
 
-        $result.Success = $true
+        # Success only if at least one privileged-assignment source collected.
+        $result.Success = ($assignmentsOk -or $eligibilityOk)
         if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
-            Register-NRGCoverage -Family 'AAD-Roles' -Status 'Collected' `
-                -Note "$($result.Data.RoleAssignments.Count) assignments"
+            if ($result.Success) {
+                Register-NRGCoverage -Family 'AAD-Roles' -Status 'Collected' `
+                    -Note "$($result.Data.RoleAssignments.Count) permanent, $($result.Data.RoleEligibilitySchedules.Count) eligible"
+            } else {
+                Register-NRGCoverage -Family 'AAD-Roles' -Status 'Failed' -Note 'role assignments + eligibility both failed — see exceptions'
+            }
         }
 
     } catch {
