@@ -50,7 +50,7 @@ function Invoke-NRGCollectIntuneAppProtection {
                         Id          = $p.id
                         DisplayName = [string]$p.displayName
                         Description = [string]$p.description
-                        Type        = [string]$p.'@odata.type'
+                        Type        = [string]$p['@odata.type']
                         Version     = $p.version
                         # Fields backing the INT-3.3 conditional-launch evaluation.
                         DeviceComplianceRequired  = [bool]($p.deviceComplianceRequired ?? $false)
@@ -59,7 +59,7 @@ function Invoke-NRGCollectIntuneAppProtection {
                         ConditionalLaunchSettings = @($condLaunch)
                     }
                 }
-                $next = $page.'@odata.nextLink'
+                $next = $page['@odata.nextLink']
                 $pageCount++
             }
             if ($pageCount -ge $maxPages -and $next) {
@@ -86,11 +86,11 @@ function Invoke-NRGCollectIntuneAppProtection {
                         Id          = $p.id
                         DisplayName = [string]$p.displayName
                         Description = [string]$p.description
-                        Type        = [string]$p.'@odata.type'
+                        Type        = [string]$p['@odata.type']
                         Channel     = 'MDM'
                     }
                 }
-                $next = $page.'@odata.nextLink'
+                $next = $page['@odata.nextLink']
                 $pageCount++
             }
             if ($pageCount -ge $maxPages -and $next) {
@@ -117,11 +117,11 @@ function Invoke-NRGCollectIntuneAppProtection {
                         Id          = $p.id
                         DisplayName = [string]$p.displayName
                         Description = [string]$p.description
-                        Type        = [string]$p.'@odata.type'
+                        Type        = [string]$p['@odata.type']
                         Channel     = 'MAM'
                     }
                 }
-                $next = $page.'@odata.nextLink'
+                $next = $page['@odata.nextLink']
                 $pageCount++
             }
             if ($pageCount -ge $maxPages -and $next) {

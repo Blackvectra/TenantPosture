@@ -55,7 +55,7 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
             while ($next -and $pageCount -lt $maxPages) {
                 $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 if ($page.value) { $all += $page.value }
-                $next = $page.'@odata.nextLink'
+                $next = $page['@odata.nextLink']
                 $pageCount++
             }
             if ($pageCount -ge $maxPages -and $next) {
@@ -139,7 +139,7 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
             while ($next -and $pageCount -lt $maxPages) {
                 $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 if ($page.value) { $intentAll += $page.value }
-                $next = $page.'@odata.nextLink'
+                $next = $page['@odata.nextLink']
                 $pageCount++
             }
             if ($pageCount -ge $maxPages -and $next) {

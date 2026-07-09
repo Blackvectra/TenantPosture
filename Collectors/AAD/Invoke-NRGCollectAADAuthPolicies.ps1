@@ -45,7 +45,7 @@ function Invoke-NRGCollectAADAuthPolicies {
                         @{
                             Id      = [string]$_.id
                             State   = [string]$_.state
-                            OdataType = [string]$_.'@odata.type'
+                            OdataType = [string]$_['@odata.type']
                             IncludeTargets = @($_.includeTargets ?? @())
                             ExcludeTargets = @($_.excludeTargets ?? @())
                             FeatureSettings = if ($_.featureSettings) {
