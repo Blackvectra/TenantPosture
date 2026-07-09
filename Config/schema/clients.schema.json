@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://blackvectra.com/schemas/nrg-clients-v1.schema.json",
+  "title": "NRG Assessment Tool — Batch Client List Schema v1.0",
+  "description": "Validates Config/clients.json (the GDAP batch client list read by Invoke-NRGBatchAssessment). Enforced in CI (ci.yml, Schema Validation step). A malformed client row previously failed only at run time, mid-batch — schema validation moves that failure to the pull request. Mirrors the ScubaGear practice of machine-validating tool configuration before use.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["clients"],
+  "properties": {
+    "clients": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/client" }
+    }
+  },
+  "definitions": {
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ClientName",
+        "TenantDomain",
+        "TenantId",
+        "DelegatedOrg",
+        "DnsDomains",
+        "SkipPurview",
+        "SkipTeams",
+        "SkipSharePoint",
+        "SkipIntune",
+        "SkipPowerPlatform",
+        "SkipDNS",
+        "Notes",
+        "Active"
+      ],
+      "properties": {
+        "ClientName": { "type": "string", "minLength": 2 },
+        "TenantDomain": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9.-]*\\.[a-zA-Z]{2,}$",
+          "description": "Primary domain used for output folder naming."
+        },
+        "TenantId": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "description": "Entra tenant GUID (from the OpenID configuration endpoint issuer)."
+        },
+        "DelegatedOrg": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9-]*\\.onmicrosoft\\.com$",
+          "description": "The .onmicrosoft.com ROUTING domain (not the primary domain) — required for GDAP delegated EXO connections."
+        },
+        "DnsDomains": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9.-]*\\.[a-zA-Z]{2,}$"
+          },
+          "description": "Domains whose SPF/DKIM/DMARC records the DNS collector resolves."
+        },
+        "SkipPurview": { "type": "boolean" },
+        "SkipTeams": { "type": "boolean" },
+        "SkipSharePoint": { "type": "boolean" },
+        "SkipIntune": { "type": "boolean" },
+        "SkipPowerPlatform": { "type": "boolean" },
+        "SkipDNS": { "type": "boolean" },
+        "Notes": { "type": "string" },
+        "Active": { "type": "boolean" }
+      }
+    }
+  }
+}

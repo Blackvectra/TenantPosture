@@ -77,7 +77,7 @@ function Invoke-NRGCollectAADRoles {
                 -ErrorAction Stop
 
             $assignments = [System.Collections.Generic.List[object]]::new()
-            $nextLink = $assignResp.'@odata.nextLink'
+            $nextLink = $assignResp['@odata.nextLink']
 
             foreach ($a in @($assignResp.value ?? @())) {
                 $roleName = $roleMap[$a.roleDefinitionId] ?? $a.roleDefinitionId
@@ -86,7 +86,7 @@ function Invoke-NRGCollectAADRoles {
                     RoleDefinitionId     = [string]$a.roleDefinitionId
                     RoleDefinitionName   = $roleName
                     PrincipalId          = [string]$a.principalId
-                    PrincipalType        = [string]($a.principal.'@odata.type' ?? 'unknown')
+                    PrincipalType        = [string]($a.principal['@odata.type'] ?? 'unknown')
                     PrincipalDisplayName = [string]($a.principal.displayName ?? 'unknown')
                     PrincipalUPN         = [string]($a.principal.userPrincipalName ?? '')
                     DirectoryScopeId     = [string]($a.directoryScopeId ?? '/')
@@ -111,7 +111,7 @@ function Invoke-NRGCollectAADRoles {
                         RoleDefinitionId     = [string]$a.roleDefinitionId
                         RoleDefinitionName   = $roleName
                         PrincipalId          = [string]$a.principalId
-                        PrincipalType        = [string]($a.principal.'@odata.type' ?? 'unknown')
+                        PrincipalType        = [string]($a.principal['@odata.type'] ?? 'unknown')
                         PrincipalDisplayName = [string]($a.principal.displayName ?? 'unknown')
                         PrincipalUPN         = [string]($a.principal.userPrincipalName ?? '')
                         DirectoryScopeId     = [string]($a.directoryScopeId ?? '/')
@@ -119,7 +119,7 @@ function Invoke-NRGCollectAADRoles {
                         OnPremisesSyncEnabled = $a.principal.onPremisesSyncEnabled
                     })
                 }
-                $nextLink = $pageResp.'@odata.nextLink'
+                $nextLink = $pageResp['@odata.nextLink']
                 $pageCount++
             }
             if ($pageCount -ge $maxPages -and $nextLink) {
@@ -149,7 +149,7 @@ function Invoke-NRGCollectAADRoles {
             $eligResp = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleEligibilitySchedules?$expand=principal&$top=500' `
                 -ErrorAction Stop
-            $eligNext = $eligResp.'@odata.nextLink'
+            $eligNext = $eligResp['@odata.nextLink']
 
             foreach ($e in @($eligResp.value ?? @())) {
                 $roleName = $roleMap[$e.roleDefinitionId] ?? $e.roleDefinitionId
@@ -158,7 +158,7 @@ function Invoke-NRGCollectAADRoles {
                     RoleDefinitionId     = [string]$e.roleDefinitionId
                     RoleDefinitionName   = $roleName
                     PrincipalId          = [string]$e.principalId
-                    PrincipalType        = [string]($e.principal.'@odata.type' ?? 'unknown')
+                    PrincipalType        = [string]($e.principal['@odata.type'] ?? 'unknown')
                     PrincipalDisplayName = [string]($e.principal.displayName ?? 'unknown')
                     PrincipalUPN         = [string]($e.principal.userPrincipalName ?? '')
                     DirectoryScopeId     = [string]($e.directoryScopeId ?? '/')
@@ -180,7 +180,7 @@ function Invoke-NRGCollectAADRoles {
                         RoleDefinitionId     = [string]$e.roleDefinitionId
                         RoleDefinitionName   = $roleName
                         PrincipalId          = [string]$e.principalId
-                        PrincipalType        = [string]($e.principal.'@odata.type' ?? 'unknown')
+                        PrincipalType        = [string]($e.principal['@odata.type'] ?? 'unknown')
                         PrincipalDisplayName = [string]($e.principal.displayName ?? 'unknown')
                         PrincipalUPN         = [string]($e.principal.userPrincipalName ?? '')
                         DirectoryScopeId     = [string]($e.directoryScopeId ?? '/')
@@ -191,7 +191,7 @@ function Invoke-NRGCollectAADRoles {
                         MemberType           = [string]($e.memberType ?? 'Direct')
                     })
                 }
-                $eligNext = $pageResp.'@odata.nextLink'
+                $eligNext = $pageResp['@odata.nextLink']
                 $pageCount++
             }
             if ($pageCount -ge $maxPages -and $eligNext) {

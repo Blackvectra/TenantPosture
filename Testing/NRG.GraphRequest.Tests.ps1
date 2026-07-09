@@ -51,13 +51,20 @@ Describe 'Invoke-NRGGraphRequest' {
             $script:capturedMethod | Should -Be 'GET'
         }
 
-        It 'Returns a hashtable whose absent @odata.nextLink reads as $null (no throw under StrictMode)' {
+        It 'Returns a hashtable whose absent @odata.nextLink reads as $null via indexer (no throw under StrictMode)' {
             Set-StrictMode -Version Latest
             $resp = Invoke-NRGGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/users'
+            $resp | Should -BeOfType [System.Collections.IDictionary]
             # This is the exact access pattern the collectors use for paging.
-            { $resp.'@odata.nextLink' } | Should -Not -Throw
-            $resp.'@odata.nextLink'     | Should -BeNullOrEmpty
-            @($resp.value).Count        | Should -Be 1
+            # INDEXER, not dot-access: on PowerShell 7.0-7.4, StrictMode throws
+            # on dot-access to a MISSING hashtable key ($h.'absent'); only the
+            # indexer ($h['absent']) reads as $null on every supported version.
+            # PowerShell 7.5 relaxed the dot-access behavior, which is why the
+            # original fix appeared to work on 7.5 workstations while still
+            # crashing 7.0-7.4 operators. Collectors must use the indexer.
+            { $resp['@odata.nextLink'] } | Should -Not -Throw
+            $resp['@odata.nextLink']     | Should -BeNullOrEmpty
+            @($resp.value).Count         | Should -Be 1
         }
     }
 

@@ -18,7 +18,10 @@ Describe 'Publish-NRGMonthlyReport' {
         . (Join-Path $script:RepoRoot 'Publishers' 'Publish-NRGMonthlyReport.ps1')
 
         $script:tmp = Join-Path ([IO.Path]::GetTempPath()) ("nrg-monthly-" + [Guid]::NewGuid().ToString('N').Substring(0,8))
-        New-Item -ItemType Directory -Force -LiteralPath $script:tmp | Out-Null
+        # New-Item has no -LiteralPath parameter (one of the few provider
+        # cmdlets without it) — -Path is correct here. The original -LiteralPath
+        # made BeforeAll throw, so this whole Describe had never actually run.
+        New-Item -ItemType Directory -Force -Path $script:tmp | Out-Null
 
         # Minimal delta fixture
         $script:deltaPath = Join-Path $script:tmp 'delta.psd1'
