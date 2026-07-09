@@ -47,6 +47,66 @@ jobs:
           path: sbom/nrg-assessment.cdx.json
           if-no-files-found: error
 
+  package:
+    name: Package + checksums
+    runs-on: ubuntu-latest
+    # Runs only after the verification jobs pass — a release asset is never
+    # published from a tree that failed SBOM generation or integrity checks.
+    needs: [sbom, authenticode]
+    permissions:
+      # Needed to create/update the GitHub Release and upload assets.
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download SBOM from the sbom job
+        uses: actions/download-artifact@v7
+        with:
+          name: sbom-cyclonedx
+          path: sbom/
+
+      - name: Build release zip + SHA256SUMS
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag  = '${{ github.ref_name }}'
+          $name = "NRG-Assessment-$tag"
+          # Stage everything a client/operator needs; exclude repo plumbing.
+          $exclude = @('.git', '.github', 'output', 'Testing')
+          New-Item -ItemType Directory -Path "./$name" | Out-Null
+          Get-ChildItem -Force | Where-Object {
+              $_.Name -ne $name -and $exclude -notcontains $_.Name
+          } | Copy-Item -Destination "./$name" -Recurse
+          Compress-Archive -Path "./$name" -DestinationPath "./$name.zip"
+          $sums = foreach ($f in @("./$name.zip", './sbom/nrg-assessment.cdx.json')) {
+              if (Test-Path -LiteralPath $f) {
+                  $h = (Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash.ToLower()
+                  '{0}  {1}' -f $h, (Split-Path $f -Leaf)
+              }
+          }
+          $sums | Out-File -FilePath ./SHA256SUMS -Encoding utf8NoBOM
+          Get-Content ./SHA256SUMS
+          Write-Host "Clients verify with: (Get-FileHash $name.zip -Algorithm SHA256).Hash"
+
+      - name: Create GitHub Release with assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = '${{ github.ref_name }}'
+          # Create the release if the tag doesn't have one yet (idempotent),
+          # with auto-generated notes categorized by .github/release.yml.
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+              gh release create $tag --title "NRG-Assessment $tag" --generate-notes --draft
+          }
+          $assets = @("NRG-Assessment-$tag.zip", 'SHA256SUMS')
+          if (Test-Path -LiteralPath ./sbom/nrg-assessment.cdx.json) { $assets += './sbom/nrg-assessment.cdx.json' }
+          gh release upload $tag @assets --clobber
+          Write-Host "Assets uploaded to release $tag (draft until published)."
+
   authenticode:
     name: Authenticode + integrity check
     runs-on: windows-latest

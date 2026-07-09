@@ -1,0 +1,26 @@
+# Release-notes categorization — used by GitHub's "Generate release notes"
+# button and API. Groups PRs by label so generated notes read as a changelog
+# instead of a flat PR list. (Same practice as CISA ScubaGear's release.yml.)
+#
+# Labels are applied on the PR; unlabeled PRs land in "Other changes".
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+  categories:
+    - title: "🛡️ Security"
+      labels: [security]
+    - title: "🎯 Accuracy & framework mappings"
+      labels: [accuracy, frameworks]
+    - title: "✨ New controls & features"
+      labels: [enhancement, feature]
+    - title: "🐛 Fixes"
+      labels: [bug, fix]
+    - title: "🧪 Tests & CI"
+      labels: [ci, tests]
+    - title: "📚 Documentation"
+      labels: [documentation]
+    - title: "📦 Dependencies"
+      labels: [dependencies]
+    - title: "Other changes"
+      labels: ["*"]
