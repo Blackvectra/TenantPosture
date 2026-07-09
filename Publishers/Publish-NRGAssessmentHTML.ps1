@@ -29,7 +29,13 @@ function Publish-NRGAssessmentHTML {
             return $true
         })]
         [string] $OutputPath,
-        [string] $ClientName = ''
+        [string] $ClientName = '',
+
+        # Optional in-report downloads. Each item: @{ Label; FileName; Mime;
+        # Content }. Rendered as CSP-safe <a download> data-URI buttons so the
+        # single HTML can carry the remediation script, a CSV matrix, etc.,
+        # instead of the run scattering a dozen sidecar files. Empty = no card.
+        [object[]] $Attachments = @()
     )
 
     if (-not (Get-Command ConvertTo-NRGHtmlSafe -ErrorAction SilentlyContinue)) {
@@ -343,6 +349,36 @@ function Publish-NRGAssessmentHTML {
         } catch {
             Write-Warning "Remediation roadmap render failed: $($_.Exception.Message)"
             $scoreRoadmapHtml = ''
+        }
+    }
+
+    # ── Embedded downloads card (CSP-safe <a download> data-URIs) ────────────
+    # Lets the single self-contained report CARRY the sidecar deliverables
+    # (remediation script, CSV matrix, evidence JSON) instead of the run writing
+    # a folder full of files. default-src 'none' does not block <a download>
+    # navigations to data: URIs, so no script and no CSP change is needed.
+    $attachHtml = ''
+    if ($Attachments -and @($Attachments).Count -gt 0) {
+        $btns = ''
+        foreach ($a in $Attachments) {
+            if ($null -eq $a) { continue }
+            $label = [string](& { if ($a -is [System.Collections.IDictionary]) { $a['Label'] } else { $a.Label } })
+            $fname = [string](& { if ($a -is [System.Collections.IDictionary]) { $a['FileName'] } else { $a.FileName } })
+            $mime  = [string](& { if ($a -is [System.Collections.IDictionary]) { $a['Mime'] } else { $a.Mime } })
+            $body  =         (& { if ($a -is [System.Collections.IDictionary]) { $a['Content'] } else { $a.Content } })
+            if ([string]::IsNullOrWhiteSpace($fname) -or $null -eq $body) { continue }
+            if ([string]::IsNullOrWhiteSpace($mime))  { $mime = 'application/octet-stream' }
+            if ([string]::IsNullOrWhiteSpace($label)) { $label = $fname }
+            $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$body))
+            $btns += "<a class='dl-btn' download='$(hx $fname)' href='data:$(hx $mime);base64,$b64'>&#11015; $(hx $label)</a>"
+        }
+        if ($btns) {
+            $attachHtml = @"
+<div class='card mt' id='downloads'>
+  <div class='card-hd'><div><div class='card-label'>Downloads</div><div class='card-sub'>Sidecar deliverables embedded in this report — no separate files needed</div></div></div>
+  <div class='dl-row'>$btns</div>
+</div>
+"@
         }
     }
 
@@ -849,6 +885,9 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
 .rm-lic-note{font-size:.82rem;color:#374151;background:#fff8ec;border:1px solid #f3e2bd;border-radius:8px;padding:8px 12px;margin-top:10px}
 .rm-method{font-size:.76rem;color:var(--mut);margin-top:10px;line-height:1.45}
 .rm-tbl tbody tr{border-bottom:1px solid #eff2f8}
+.dl-row{display:flex;flex-wrap:wrap;gap:10px}
+.dl-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;background:var(--P);color:#fff;font-weight:700;font-size:.85rem;text-decoration:none;border:1px solid rgba(0,0,0,.08)}
+.dl-btn:hover{filter:brightness(1.08)}
 .rm-item{display:flex;gap:8px;margin-bottom:7px;font-size:.79rem;color:#374151;align-items:flex-start}
 .rm-bullet{flex-shrink:0;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:900;margin-top:1px}
 .p1-bullet{background:#fef2f2;color:#991b1b}
@@ -993,6 +1032,9 @@ $(if ($namedHtml) { "<div class='cnt' style='padding-top:0;padding-bottom:0'>$na
 
 <!-- SCORE-LIFT REMEDIATION ROADMAP -->
 $scoreRoadmapHtml
+
+<!-- EMBEDDED DOWNLOADS -->
+$attachHtml
 
 <!-- ROADMAP + BEST PRACTICES -->
 <div class='cnt' style='padding-top:0'>$roadmapHtml</div>
