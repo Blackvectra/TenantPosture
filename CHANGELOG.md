@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+Accuracy + hardening pass (targeting v4.13.0):
+
+- **Framework accuracy:** corrected 70 systematically-mismatched SCuBA citations
+  against the ScubaGear v1.8.0 baseline text (34 remapped, 36 removed); fixed
+  7 CMMC 2.0 domain/level errors across 64 rows; all six frameworks now
+  CI-validated against bundled authoritative ID lists.
+- **Fixed a real PS 7.0–7.4 crash:** StrictMode throws on dot-access to missing
+  hashtable keys — every collector paging loop (`$resp.'@odata.nextLink'`)
+  crashed on single-page responses for operators on ≤7.4 (PS 7.5 masked it).
+  All paging/@odata reads switched to null-safe indexer form.
+- **11 controls made actionable** (were placeholder NotApplicable): INT-3.3,
+  PPL-2.1, TMS-2.8/4.1/4.4, AAD-11.3, DEF-4.6, EXO-5.1/5.2, plus honest
+  advisories for DEF-4.4/SPO-2.4. Two new read-only Graph scopes
+  (IdentityRiskyServicePrincipal.Read.All, AttackSimulation.Read.All — require
+  one-time admin re-consent per tenant); optional SharePoint Management Shell
+  path for SPO-2.2/2.6/3.2/3.4.
+- **CI now gates on the full test suite** (220 tests / 10 files — previously 1)
+  and enforces JSON Schemas for `controls.json` (schema v2, rewritten to match
+  the real control shape) and `clients.json` (new).
+- Manifest MaximumVersion caps on Graph.Authentication (<3.0) and
+  ExchangeOnlineManagement (<4.0).
+- Release pipeline: packaged zip + SHA256SUMS + SBOM attached to a draft
+  GitHub Release on `v*` tags; categorized release notes (`.github/release.yml`).
+- README refreshed to match shipped reality (counts, workflows, entry points).
+
 ## v4.12.1 (2026-06-11)
 
 Port of NLS-Assessment v4.12.1 (security fixes + EMAIL-4.x persistence checks + batch triage sweep). NRG-named throughout.
