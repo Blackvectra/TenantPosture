@@ -64,7 +64,7 @@ function Test-NRGControlEXOSmtpAuth {
         return
     }
 
-    $smtpAuth = $exoData.Data.SmtpAuthConfig
+    $smtpAuth = $exoData.Data['SmtpAuthConfig']
     if (-not $smtpAuth) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'SMTP auth configuration not collected'
@@ -110,10 +110,10 @@ function Test-NRGControlEXOAutoForward {
         return
     }
 
-    $defaultPolicy = @($exoData.Data.OutboundSpamPolicies ?? @()) |
+    $defaultPolicy = @($exoData.Data['OutboundSpamPolicies'] ?? @()) |
         Where-Object { $_.IsDefault } | Select-Object -First 1
 
-    $wildcardRemote = @($exoData.Data.RemoteDomains ?? @()) |
+    $wildcardRemote = @($exoData.Data['RemoteDomains'] ?? @()) |
         Where-Object { $_.IsDefault } | Select-Object -First 1
 
     $policyBlocked  = $defaultPolicy -and $defaultPolicy.AutoForwardingMode -eq 'Off'
@@ -161,7 +161,7 @@ function Test-NRGControlEXODKIM {
         return
     }
 
-    $dkimConfigs = @($exoData.Data.DkimSigningConfigs ?? @())
+    $dkimConfigs = @($exoData.Data['DkimSigningConfigs'] ?? @())
     if ($dkimConfigs.Count -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'No DKIM signing configuration found'
@@ -211,7 +211,7 @@ function Test-NRGControlEXOAntiPhish {
         return
     }
 
-    $defaultPolicy = @($exoData.Data.AntiPhishPolicies ?? @()) |
+    $defaultPolicy = @($exoData.Data['AntiPhishPolicies'] ?? @()) |
         Where-Object { $_.IsDefault } | Select-Object -First 1
 
     if (-not $defaultPolicy) {
@@ -295,7 +295,7 @@ function Test-NRGControlEXOHonorDMARC {
         return
     }
 
-    $defaultPolicy = @($exoData.Data.AntiPhishPolicies ?? @()) |
+    $defaultPolicy = @($exoData.Data['AntiPhishPolicies'] ?? @()) |
         Where-Object { $_.IsDefault } | Select-Object -First 1
 
     if ($defaultPolicy -and $defaultPolicy.HonorDmarcPolicy -eq $true) {
@@ -366,7 +366,7 @@ function Test-NRGControlEXOCustomerLockbox {
     # output. Prior versions referenced $orgConfig without ever assigning it
     # (lost in PR conflict resolution) — under StrictMode this silently
     # killed the evaluator via the loader's try/catch.
-    $orgConfig = $exoData.Data.OrganizationConfig
+    $orgConfig = $exoData.Data['OrganizationConfig']
     if (-not $orgConfig) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'Organization config not collected'
@@ -435,7 +435,7 @@ function Test-NRGControlEXOConnectionFilter {
     if (-not $cf -or -not $cf.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Connection filter data not collected'; return
     }
-    $defaultCF = @($cf.Data.ConnectionFilter | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    $defaultCF = @($cf.Data['ConnectionFilter'] | Where-Object { $_.IsDefault }) | Select-Object -First 1
     if (-not $defaultCF) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default connection filter found'; return }
     $safeListEnabled = [bool]($defaultCF.EnableSafeList ?? $false)
     if (-not $safeListEnabled) {
@@ -454,7 +454,7 @@ function Test-NRGControlEXOOutboundLimits {
     if (-not $exo -or -not $exo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
-    $defaultOutbound = @($exo.Data.OutboundSpamPolicies | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    $defaultOutbound = @($exo.Data['OutboundSpamPolicies'] | Where-Object { $_.IsDefault }) | Select-Object -First 1
     if (-not $defaultOutbound) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default outbound policy found'; return }
     # v4.6.4 ADVISORY MARK: hardcoded Satisfied without inspecting any threshold —
     # tag as manual review required pending v4.7.0 cleanup. AutoForwardingMode
@@ -607,7 +607,7 @@ function Test-NRGControlEXOAntiSpamInbound {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
-    $policies = @($exo.Data.AntiSpamPolicies ?? @())
+    $policies = @($exo.Data['AntiSpamPolicies'] ?? @())
     $default  = $policies | Where-Object { $_.IsDefault } | Select-Object -First 1
     if (-not $default) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
@@ -725,7 +725,7 @@ function Test-NRGControlEXOMailboxForwarding {
         return
     }
 
-    $fwd = @($inv.Data.ForwardingMailboxes ?? @())
+    $fwd = @($inv.Data['ForwardingMailboxes'] ?? @())
     $count = $fwd.Count
 
     if ($count -eq 0) {
@@ -770,7 +770,7 @@ function Test-NRGControlEXOInboxRulesForwarding {
     # Only count rules that actually forward externally — the collector also
     # tracks disabled-rule fingerprints, but for this control we score on the
     # active exfil surface.
-    $rules = @(@($inv.Data.InboxRulesForwarding ?? @()) | Where-Object { $_.IsExternal })
+    $rules = @(@($inv.Data['InboxRulesForwarding'] ?? @()) | Where-Object { $_.IsExternal })
     $count = $rules.Count
 
     if ($count -eq 0) {
@@ -813,7 +813,7 @@ function Test-NRGControlEXOAuditDisabledMailboxes {
         return
     }
 
-    $disabled = @($inv.Data.AuditDisabledMailboxes ?? @())
+    $disabled = @($inv.Data['AuditDisabledMailboxes'] ?? @())
     $count = $disabled.Count
 
     if ($count -eq 0) {
@@ -856,7 +856,7 @@ function Test-NRGControlEXOSmtpAuthExceptions {
         return
     }
 
-    $exceptions = @($inv.Data.SmtpAuthEnabledPerUser ?? @())
+    $exceptions = @($inv.Data['SmtpAuthEnabledPerUser'] ?? @())
     $count = $exceptions.Count
 
     if ($count -eq 0) {
