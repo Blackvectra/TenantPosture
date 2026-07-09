@@ -182,4 +182,30 @@ Describe 'HTML report renders the roadmap and survives every license tier' {
         $html | Should -Match 'Prioritized Remediation Roadmap'
         $html | Should -Match 'projected score'
     }
+
+    It 'embeds -Attachments as CSP-safe download buttons whose data-URIs round-trip' {
+        Clear-NRGState
+        Add-NRGFinding -ControlId 'AAD-2.1' -State 'Gap' -Category 'Identity' -Title 'MFA' -Severity 'Critical' -Detail 'x' -Remediation 'CA'
+        $findings = @(Get-NRGFindings)
+        $out = Join-Path $script:OutDir ("a-" + [guid]::NewGuid().ToString('N').Substring(0,6) + ".html")
+        $meta = @{ TenantDomain = 'example.test'; AssessmentDate = '2026-07-09'; Operator = 't'; ToolVersion = 'test'; Brand = $script:NRGBrand }
+        $atts = @(
+            @{ Label = 'Remediation script'; FileName = 'rem.ps1'; Mime = 'text/plain'; Content = "# hello`nSet-X 1`n" },
+            @{ Label = 'Findings CSV';       FileName = 'f.csv';   Mime = 'text/csv';   Content = "ControlId,State`nAAD-2.1,Gap`n" }
+        )
+        Publish-NRGAssessmentHTML -Metadata $meta -Findings $findings -Connections @{ Graph = $true } -OutputPath $out -ClientName 'T' -Attachments $atts | Out-Null
+        $html = Get-Content -Raw $out
+        $html | Should -Match "id='downloads'"
+        $html | Should -Match "download='rem.ps1'"
+        $html | Should -Match "download='f.csv'"
+        # decode the ps1 data-URI and confirm byte-exact round-trip
+        $m = [regex]::Match($html, "download='rem\.ps1' href='data:text/plain;base64,([A-Za-z0-9+/=]+)'")
+        $m.Success | Should -BeTrue
+        [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($m.Groups[1].Value)) | Should -Be "# hello`nSet-X 1`n"
+    }
+
+    It 'renders no downloads card when no attachments are supplied' {
+        $html = Invoke-Render -Skus @(@{ SkuPartNumber = 'SPB'; ServicePlans = @() })
+        $html | Should -Not -Match "id='downloads'"
+    }
 }

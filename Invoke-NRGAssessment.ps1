@@ -125,6 +125,19 @@ param(
     })]
     [string[]] $DnsDomains,
     [switch] $JsonOnly,
+
+    # ── Output profile ───────────────────────────────────────────────────────
+    # Default (neither switch): the CONSOLIDATED profile — just two files, the
+    # self-contained interactive report (<name>-assessment.html, which embeds
+    # the remediation script + findings CSV as in-report downloads) and the
+    # machine/evidence record (<name>-results.json). This ends the old ~9-file
+    # sprawl per run.
+    # -AllFiles restores every sidecar deliverable as its own file (Markdown
+    # summary, engineer playbook + executive summary, playbook HTML, standalone
+    # remediation .ps1, XLSX matrix, delta). Batch mode passes this for parity.
+    # -JsonOnly emits only the JSON (unchanged).
+    [switch] $AllFiles,
+
     [switch] $WhatIfConnections,
 
     # Launch the local web GUI instead of running a scan in the terminal.
@@ -663,74 +676,113 @@ if (-not $JsonOnly) {
     #    rendered into a different format. Inherited permissions on a shared
     #    MSP workstation or synced OneDrive would otherwise make these world-
     #    readable. Set-NRGSensitiveFileAcl is a no-op on non-Windows.
-    # Markdown summary
-    if (Get-Command Publish-NRGAssessmentSummary -ErrorAction SilentlyContinue) {
-        $mdPath = Join-Path $OutputPath "$baseName-assessment.md"
-        try {
-            Publish-NRGAssessmentSummary -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $mdPath
-            Write-Host "  [+] Markdown: $mdPath" -ForegroundColor Green
-            Set-NRGSensitiveFileAcl -Path $mdPath -ErrorAction SilentlyContinue
-        } catch { Write-Warning "Markdown publish failed: $($_.Exception.Message)" }
-    }
+    # ── Build in-report downloads for the consolidated single-file report ────
+    # The default profile writes only the HTML report + JSON. So the report
+    # itself CARRIES the small text deliverables (remediation script, findings
+    # CSV) as embedded <a download> data-URI buttons instead of scattering
+    # sidecar files. Under -AllFiles these are ALSO written standalone.
+    $reportAttachments = @()
 
-    # HTML report
-    if (Get-Command Publish-NRGAssessmentHTML -ErrorAction SilentlyContinue) {
-        $htmlPath = Join-Path $OutputPath "$baseName-assessment.html"
-        try {
-            Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath
-            Write-Host "  [+] HTML: $htmlPath" -ForegroundColor Green
-            Set-NRGSensitiveFileAcl -Path $htmlPath -ErrorAction SilentlyContinue
-        } catch {
-        $stack = $_.ScriptStackTrace
-        Write-Warning "HTML failed: $($_.Exception.Message)"
-        Write-Warning "Stack: $stack"
-    }
-    }
+    # Findings CSV — small, always embeddable.
+    try {
+        $csvText = @($findings | ForEach-Object {
+            [pscustomobject][ordered]@{
+                ControlId = $_.ControlId
+                Severity  = $_.Severity
+                State     = $_.State
+                Category  = $_.Category
+                Title     = $_.Title
+            }
+        }) | ConvertTo-Csv -NoTypeInformation | Out-String
+        if (-not [string]::IsNullOrWhiteSpace($csvText)) {
+            $reportAttachments += @{ Label = 'Findings (CSV)'; FileName = "$baseName-findings.csv"; Mime = 'text/csv'; Content = $csvText }
+        }
+    } catch { Write-Warning "Findings CSV build failed: $($_.Exception.Message)" }
 
-    # Remediation playbook + executive summary
-    # The publisher writes two deliverables: an engineer playbook (-OutputPath)
-    # and a client-facing executive summary (-ExecutivePath). Both -Connections
-    # and -ExecutivePath are mandatory on the function — omitting them in v4.6.1
-    # caused PowerShell to interactively prompt and then fail.
-    if (Get-Command Publish-NRGRemediationPlaybook -ErrorAction SilentlyContinue) {
-        $pbPath     = Join-Path $OutputPath "$baseName-playbook.md"
-        $execPath   = Join-Path $OutputPath "$baseName-executive.md"
-        $pbHtmlPath = Join-Path $OutputPath "$baseName-playbook.html"
-        try {
-            Publish-NRGRemediationPlaybook `
-                -Metadata $reportMetadata `
-                -Findings $findings `
-                -Connections $conn `
-                -OutputPath $pbPath `
-                -ExecutivePath $execPath `
-                -HtmlOutputPath $pbHtmlPath
-            Write-Host "  [+] Playbook (md):   $pbPath" -ForegroundColor Green
-            Write-Host "  [+] Playbook (html): $pbHtmlPath" -ForegroundColor Green
-            Write-Host "  [+] Executive:       $execPath" -ForegroundColor Green
-            Set-NRGSensitiveFileAcl -Path $pbPath     -ErrorAction SilentlyContinue
-            Set-NRGSensitiveFileAcl -Path $execPath   -ErrorAction SilentlyContinue
-            Set-NRGSensitiveFileAcl -Path $pbHtmlPath -ErrorAction SilentlyContinue
-        } catch { Write-Warning "Playbook publish failed: $($_.Exception.Message)" }
-    }
-
-    # Remediation script
+    # Remediation script — generate once; embed its content, and (under
+    # -AllFiles) also leave it as a standalone .ps1. In the default profile the
+    # sidecar file is removed after its content is captured for embedding.
     if (Get-Command Publish-NRGRemediationScript -ErrorAction SilentlyContinue) {
         $rsPath = Join-Path $OutputPath "$baseName-remediation.ps1"
         try {
             Publish-NRGRemediationScript -Metadata $reportMetadata -Findings $findings -OutputPath $rsPath
-            Write-Host "  [+] Remediation: $rsPath" -ForegroundColor Green
-            Set-NRGSensitiveFileAcl -Path $rsPath -ErrorAction SilentlyContinue
+            $remContent = Get-Content -Raw -LiteralPath $rsPath -ErrorAction Stop
+            if (-not [string]::IsNullOrWhiteSpace($remContent)) {
+                $reportAttachments += @{ Label = 'Remediation script (PowerShell)'; FileName = "$baseName-remediation.ps1"; Mime = 'text/plain'; Content = $remContent }
+            }
+            if ($AllFiles) {
+                Set-NRGSensitiveFileAcl -Path $rsPath -ErrorAction SilentlyContinue
+                Write-Host "  [+] Remediation: $rsPath" -ForegroundColor Green
+            } else {
+                # Consolidated profile: the content is embedded in the HTML —
+                # don't leave the sidecar file (and don't leave tenant data on
+                # disk unnecessarily).
+                Remove-Item -LiteralPath $rsPath -Force -ErrorAction SilentlyContinue
+            }
         } catch { Write-Warning "Remediation publish failed: $($_.Exception.Message)" }
     }
 
-    # XLSX compliance matrix
-    if (Get-Command Publish-NRGComplianceMatrix -ErrorAction SilentlyContinue) {
-        $xlsxPath = Join-Path $OutputPath "$baseName-compliance-matrix.xlsx"
+    # HTML report (always in a non-JsonOnly run) — carries the embedded downloads.
+    if (Get-Command Publish-NRGAssessmentHTML -ErrorAction SilentlyContinue) {
+        $htmlPath = Join-Path $OutputPath "$baseName-assessment.html"
         try {
-            Publish-NRGComplianceMatrix -Metadata $reportMetadata -Findings $findings -OutputPath $xlsxPath
-            Write-Host "  [+] XLSX matrix: $xlsxPath" -ForegroundColor Green
-            Set-NRGSensitiveFileAcl -Path $xlsxPath -ErrorAction SilentlyContinue
-        } catch { Write-Warning "XLSX publish failed: $($_.Exception.Message)" }
+            Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath -Attachments $reportAttachments
+            Write-Host "  [+] HTML: $htmlPath" -ForegroundColor Green
+            Set-NRGSensitiveFileAcl -Path $htmlPath -ErrorAction SilentlyContinue
+        } catch {
+            $stack = $_.ScriptStackTrace
+            Write-Warning "HTML failed: $($_.Exception.Message)"
+            Write-Warning "Stack: $stack"
+        }
+    }
+
+    # ── Standalone sidecar deliverables (only with -AllFiles) ────────────────
+    # Every file below contains the same tenant inventory (CA policies, admin
+    # UPNs, OAuth grants, DMARC records) in a different format, so each gets the
+    # same ACL hardening as the JSON baseline. Set-NRGSensitiveFileAcl is a
+    # no-op on non-Windows.
+    if ($AllFiles) {
+        # Markdown summary
+        if (Get-Command Publish-NRGAssessmentSummary -ErrorAction SilentlyContinue) {
+            $mdPath = Join-Path $OutputPath "$baseName-assessment.md"
+            try {
+                Publish-NRGAssessmentSummary -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $mdPath
+                Write-Host "  [+] Markdown: $mdPath" -ForegroundColor Green
+                Set-NRGSensitiveFileAcl -Path $mdPath -ErrorAction SilentlyContinue
+            } catch { Write-Warning "Markdown publish failed: $($_.Exception.Message)" }
+        }
+
+        # Remediation playbook + executive summary
+        if (Get-Command Publish-NRGRemediationPlaybook -ErrorAction SilentlyContinue) {
+            $pbPath     = Join-Path $OutputPath "$baseName-playbook.md"
+            $execPath   = Join-Path $OutputPath "$baseName-executive.md"
+            $pbHtmlPath = Join-Path $OutputPath "$baseName-playbook.html"
+            try {
+                Publish-NRGRemediationPlaybook `
+                    -Metadata $reportMetadata `
+                    -Findings $findings `
+                    -Connections $conn `
+                    -OutputPath $pbPath `
+                    -ExecutivePath $execPath `
+                    -HtmlOutputPath $pbHtmlPath
+                Write-Host "  [+] Playbook (md):   $pbPath" -ForegroundColor Green
+                Write-Host "  [+] Playbook (html): $pbHtmlPath" -ForegroundColor Green
+                Write-Host "  [+] Executive:       $execPath" -ForegroundColor Green
+                Set-NRGSensitiveFileAcl -Path $pbPath     -ErrorAction SilentlyContinue
+                Set-NRGSensitiveFileAcl -Path $execPath   -ErrorAction SilentlyContinue
+                Set-NRGSensitiveFileAcl -Path $pbHtmlPath -ErrorAction SilentlyContinue
+            } catch { Write-Warning "Playbook publish failed: $($_.Exception.Message)" }
+        }
+
+        # XLSX compliance matrix
+        if (Get-Command Publish-NRGComplianceMatrix -ErrorAction SilentlyContinue) {
+            $xlsxPath = Join-Path $OutputPath "$baseName-compliance-matrix.xlsx"
+            try {
+                Publish-NRGComplianceMatrix -Metadata $reportMetadata -Findings $findings -OutputPath $xlsxPath
+                Write-Host "  [+] XLSX matrix: $xlsxPath" -ForegroundColor Green
+                Set-NRGSensitiveFileAcl -Path $xlsxPath -ErrorAction SilentlyContinue
+            } catch { Write-Warning "XLSX publish failed: $($_.Exception.Message)" }
+        }
     }
 
     # Delta report (if baseline provided)

@@ -75,6 +75,14 @@ param(
     [string] $OnlyClient,
 
     [switch] $JsonOnly,
+
+    # Emit every sidecar deliverable per client (Markdown, playbook, executive,
+    # playbook HTML, standalone remediation .ps1, XLSX). Default is the
+    # consolidated 2-file profile (report HTML + JSON) per client — the report
+    # carries the remediation script and findings CSV as embedded downloads,
+    # which matters even more across a full batch.
+    [switch] $AllFiles,
+
     [switch] $WhatIf
 )
 
@@ -271,6 +279,7 @@ foreach ($client in $clients) {
             if ($client.SkipPowerPlatform) { $params['SkipPowerPlatform'] = $true }
             if ($client.SkipDNS)           { $params['SkipDNS']           = $true }
             if ($JsonOnly)                 { $params['JsonOnly']           = $true }
+            if ($AllFiles)                 { $params['AllFiles']           = $true }
             if ($client.DnsDomains -and @($client.DnsDomains).Count -gt 0) {
                 $params['DnsDomains'] = @($client.DnsDomains)
             }
