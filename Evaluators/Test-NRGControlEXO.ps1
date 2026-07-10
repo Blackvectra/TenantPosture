@@ -328,9 +328,28 @@ function Test-NRGControlEXOPop3 {
             -Title $control.Title -Detail 'EXO data not collected'
         return
     }
-    # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
-    Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-        -Title "$($control.Title) (Manual review required)" -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). POP3 state requires Get-CASMailboxPlan — not collected in current run. Verify manually: Get-CASMailboxPlan | Select PopEnabled'
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
+    $plans = @($exoData.Data['CASMailboxPlans'] ?? @())
+    if ($plans.Count -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'CAS mailbox plan data not collected (Get-CASMailboxPlan needs EXO admin rights) — POP3 state not assessed.'
+        return
+    }
+    $popOn = @($plans | Where-Object { (Get-NRGObjectField -Item $_ -Key 'PopEnabled') -eq $true })
+    if ($popOn.Count -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail "POP3 is disabled on all $($plans.Count) CAS mailbox plan(s). New mailboxes cannot use the legacy POP3 basic-auth protocol." `
+            -CurrentValue 'POP3 disabled on all mailbox plans'
+    } else {
+        $names = @($popOn | ForEach-Object { Get-NRGObjectField -Item $_ -Key 'Name' })
+        Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+            -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
+            -Detail "POP3 is enabled on $($popOn.Count) of $($plans.Count) CAS mailbox plan(s). POP3 is a legacy basic-auth protocol that bypasses modern-auth / MFA and is a common password-spray target." `
+            -CurrentValue "POP3 enabled on: $($names -join ', ')" `
+            -RequiredValue 'POP3 disabled on all mailbox plans' `
+            -Remediation $control.Remediation
+    }
 }
 
 # ── EXO-2.4 IMAP Access Disabled ─────────────────────────────────────────────
@@ -342,8 +361,34 @@ function Test-NRGControlEXOImap {
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
 
-    Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-        -Title "$($control.Title) (Manual review required)" -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). IMAP state requires Get-CASMailboxPlan — not collected in current run. Verify manually: Get-CASMailboxPlan | Select ImapEnabled'
+    $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    if (-not $exoData -or -not $exoData.Success) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'EXO data not collected'
+        return
+    }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
+    $plans = @($exoData.Data['CASMailboxPlans'] ?? @())
+    if ($plans.Count -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -Detail 'CAS mailbox plan data not collected (Get-CASMailboxPlan needs EXO admin rights) — IMAP state not assessed.'
+        return
+    }
+    $imapOn = @($plans | Where-Object { (Get-NRGObjectField -Item $_ -Key 'ImapEnabled') -eq $true })
+    if ($imapOn.Count -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail "IMAP4 is disabled on all $($plans.Count) CAS mailbox plan(s). New mailboxes cannot use the legacy IMAP4 basic-auth protocol." `
+            -CurrentValue 'IMAP4 disabled on all mailbox plans'
+    } else {
+        $names = @($imapOn | ForEach-Object { Get-NRGObjectField -Item $_ -Key 'Name' })
+        Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+            -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
+            -Detail "IMAP4 is enabled on $($imapOn.Count) of $($plans.Count) CAS mailbox plan(s). IMAP4 is a legacy basic-auth protocol that bypasses modern-auth / MFA and is a common password-spray target." `
+            -CurrentValue "IMAP4 enabled on: $($names -join ', ')" `
+            -RequiredValue 'IMAP4 disabled on all mailbox plans' `
+            -Remediation $control.Remediation
+    }
 }
 
 # ── EXO-2.5 Customer Lockbox Enabled ─────────────────────────────────────────
@@ -455,11 +500,26 @@ function Test-NRGControlEXOOutboundLimits {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
     $defaultOutbound = @($exo.Data['OutboundSpamPolicies'] | Where-Object { $_.IsDefault }) | Select-Object -First 1
-    if (-not $defaultOutbound) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default outbound policy found'; return }
-    # v4.6.4 ADVISORY MARK: hardcoded Satisfied without inspecting any threshold —
-    # tag as manual review required pending v4.7.0 cleanup. AutoForwardingMode
-    # already checked in EXO-1.3 — here check action on limit breach.
-    Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Informational' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Outbound spam policy exists. EXO enforces sending limits by default — verify ActionWhenThresholdReached is set to alert an admin.'
+    if (-not $defaultOutbound) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default outbound spam policy found'; return }
+    # Discriminating signal: does the default outbound-spam policy notify an admin
+    # when a user is detected sending spam (i.e. likely compromised)? CIS M365 and
+    # Microsoft's MDO guidance recommend NotifyOutboundSpam = $true so a hijacked
+    # mailbox is caught fast. Recipient rate limits are reported as context.
+    $notify = (Get-NRGObjectField -Item $defaultOutbound -Key 'NotifyOutboundSpam') -eq $true
+    $action = [string](Get-NRGObjectField -Item $defaultOutbound -Key 'ActionWhenThresholdReached')
+    if ($notify) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "Outbound spam admin notification is enabled on the default policy (action on limit: $(if($action){$action}else{'service default'})). A user sending spam — a strong compromise signal — alerts an admin." `
+            -CurrentValue 'NotifyOutboundSpam = $true'
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'The default outbound spam policy does NOT notify an administrator when a user is detected sending spam. A compromised mailbox blasting spam goes unseen until a downstream block or client complaint.' `
+            -CurrentValue 'NotifyOutboundSpam = $false' `
+            -RequiredValue 'Set-HostedOutboundSpamFilterPolicy -Identity Default -NotifyOutboundSpam $true -NotifyOutboundSpamRecipients <admin>' `
+            -Remediation $ctrl.Remediation
+    }
 }
 
 # ── EXO-3.3 Alert Policy — Forwarding Rules ──────────────────────────────────
