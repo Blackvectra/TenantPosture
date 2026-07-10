@@ -39,9 +39,6 @@
         # ── ImplementationPending: automatable, tracked coverage debt ─────────
         @{ ControlId = 'AAD-13.1'; Kind = 'ImplementationPending'; Reason = 'Microsoft Graph security/secureScores exposes the current Secure Score — buildable.' }
         @{ ControlId = 'AAD-8.2';  Kind = 'ImplementationPending'; Reason = 'Graph identityGovernance/accessReviews exposes access-review definitions — buildable.' }
-        @{ ControlId = 'EXO-2.3';  Kind = 'ImplementationPending'; Reason = 'Get-CASMailboxPlan / Get-CASMailbox exposes POP3 enablement — buildable.' }
-        @{ ControlId = 'EXO-2.4';  Kind = 'ImplementationPending'; Reason = 'Get-CASMailboxPlan / Get-CASMailbox exposes IMAP enablement — buildable.' }
-        @{ ControlId = 'EXO-3.2';  Kind = 'ImplementationPending'; Reason = 'Get-HostedOutboundSpamFilterPolicy exposes outbound recipient/message limits — buildable.' }
         @{ ControlId = 'SPO-2.4';  Kind = 'ImplementationPending'; Reason = 'SPO tenant DenyAddAndCustomizePages setting is collectable — buildable.' }
         @{ ControlId = 'SPO-2.5';  Kind = 'ImplementationPending'; Reason = 'SPO third-party storage tenant setting is collectable — buildable.' }
         @{ ControlId = 'SPO-3.1';  Kind = 'ImplementationPending'; Reason = 'Site collection administrators are enumerable via SPO/PnP — buildable.' }
