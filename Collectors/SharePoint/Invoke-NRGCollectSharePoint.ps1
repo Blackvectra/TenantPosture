@@ -113,6 +113,11 @@ function Invoke-NRGCollectSharePoint {
                         NotifyOwnersWhenItemsReshared     = [bool]($t.NotifyOwnersWhenItemsReshared ?? $false)  # SPO-3.2
                         ExternalUserExpirationRequired    = [bool]($t.ExternalUserExpirationRequired ?? $false) # SPO-3.4
                         ExternalUserExpireInDays          = [int]($t.ExternalUserExpireInDays ?? 0)             # SPO-3.4
+                        # SPO-3.3: org-wide version-history default applied to NEW document
+                        # libraries / OneDrive accounts. Field names per Get-SPOTenant docs.
+                        EnableAutoExpirationVersionTrim   = [bool]($t.EnableAutoExpirationVersionTrim ?? $false)
+                        MajorVersionLimit                 = [int]($t.MajorVersionLimit ?? 0)
+                        ExpireVersionsAfterDays           = [int]($t.ExpireVersionsAfterDays ?? 0)
                     }
                 }
             } catch {

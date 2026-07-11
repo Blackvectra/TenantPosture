@@ -35,13 +35,13 @@
         @{ ControlId = 'EXO-2.6'; Kind = 'Manual'; Reason = 'Shared-mailbox sign-in blocked state is per-user; no reliable tenant-scope signal.' }
         @{ ControlId = 'EXO-3.4'; Kind = 'Manual'; Reason = 'Alert-policy volume/threshold review has no supported read API.' }
         @{ ControlId = 'PPL-1.3'; Kind = 'Manual'; Reason = 'Power Platform setting not exposed by the admin API used by the collector.' }
+        # Verified per-site / deprecated — no tenant-level read signal:
+        @{ ControlId = 'SPO-2.4'; Kind = 'Manual'; Reason = 'Custom-script (DenyAddAndCustomizePages) is a per-site-collection setting; Microsoft removed the tenant-level default, so it needs per-site enumeration, not a tenant read.' }
+        @{ ControlId = 'SPO-2.5'; Kind = 'Manual'; Reason = 'The third-party storage services toggle was retired from Get-SPOTenant and the SharePoint admin center — no supported read API remains.' }
+        @{ ControlId = 'SPO-3.1'; Kind = 'Manual'; Reason = 'Site collection administrators require per-site enumeration (Get-SPOUser / Get-SPOSite owners per site) — not a tenant-level signal.' }
 
         # ── ImplementationPending: automatable, tracked coverage debt ─────────
-        @{ ControlId = 'AAD-13.1'; Kind = 'ImplementationPending'; Reason = 'Microsoft Graph security/secureScores exposes the current Secure Score — buildable.' }
-        @{ ControlId = 'AAD-8.2';  Kind = 'ImplementationPending'; Reason = 'Graph identityGovernance/accessReviews exposes access-review definitions — buildable.' }
-        @{ ControlId = 'SPO-2.4';  Kind = 'ImplementationPending'; Reason = 'SPO tenant DenyAddAndCustomizePages setting is collectable — buildable.' }
-        @{ ControlId = 'SPO-2.5';  Kind = 'ImplementationPending'; Reason = 'SPO third-party storage tenant setting is collectable — buildable.' }
-        @{ ControlId = 'SPO-3.1';  Kind = 'ImplementationPending'; Reason = 'Site collection administrators are enumerable via SPO/PnP — buildable.' }
-        @{ ControlId = 'SPO-3.3';  Kind = 'ImplementationPending'; Reason = 'Version-history / library retention settings are collectable — buildable.' }
+        @{ ControlId = 'AAD-13.1'; Kind = 'ImplementationPending'; Reason = 'Graph security/secureScores is buildable via the AAD-Inventory collector (SecurityEvents.Read.All held); pass/fail needs a defensible score threshold — next increment.' }
+        @{ ControlId = 'AAD-8.2';  Kind = 'ImplementationPending'; Reason = 'Graph identityGovernance/accessReviews requires the AccessReview.Read.All scope, which is NOT in the current 23-scope consent — needs a one-time client re-consent before it can collect.' }
     )
 }
