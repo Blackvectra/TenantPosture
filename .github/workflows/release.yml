@@ -61,7 +61,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Download SBOM from the sbom job
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: sbom-cyclonedx
           path: sbom/
