@@ -1,29 +1,82 @@
 #Requires -Version 7.0
-#
-# Invoke-NRGEmailAssessment.ps1
-# Email-focused incident-response variant of the NRG-Assessment tool.
-# Assesses ONE user's email account during a suspected compromise instead
-# of the full tenant.
-#
-# NRG Technology Services / NextLayerSec LLC — nrgtechservices.com
-# Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC
-#
-# Use when: a user's mailbox is suspected of being hacked (BEC, phish-stolen
-# credentials, attacker-deleted inbox rules, mass outbound to external).
-# Runs with the user's OWN credentials (delegated, no admin scope required).
-#
-# Usage:
-#   .\Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@corp.com
-#   .\Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@corp.com -WindowDays 14 -EnableThreatIntel
-#
-# Produces:
-#   - .\output\<upn>\<timestamp>-email-results.json   (raw collected data)
-#   - .\output\<upn>\<timestamp>-email-incident.html  (incident report)
-#   - .\output\<upn>\<timestamp>-email-incident.md    (markdown summary)
-#
-# Exit codes:
-#   0 success            2 no findings              4 fatal error
-#   1 auth failure       3 partial collection      10 critical IoC found
+
+<#
+.SYNOPSIS
+    Email-IR mailbox deep-dive — assess ONE user's mailbox during a suspected
+    account compromise (BEC, stolen credentials, attacker inbox rules).
+
+.DESCRIPTION
+    The single-mailbox incident-response variant of NRG-Assessment. Instead of
+    the full 195-control tenant sweep, it focuses on one user's email account
+    and looks for the fingerprints of a compromise: malicious/hidden inbox rules,
+    external auto-forwarding, mass or anomalous outbound activity, the origin of
+    a phishing message, weak or missing authentication methods, and risky OAuth
+    app consents.
+
+    Runs with the user's OWN delegated credentials — NO admin scope is required,
+    so a helpdesk technician (or the affected user, guided) can run it. Point it
+    at a mailbox, sign in, and read the incident report.
+
+    Use this when you ALREADY know which mailbox is suspect. If you suspect
+    compromise but don't know which user, use Invoke-NRGSignInTriage.ps1, which
+    ranks likely-compromised users tenant-wide first.
+
+.PARAMETER UserPrincipalName
+    The mailbox to assess, as a UPN (e.g. alice@corp.com). Mandatory.
+
+.PARAMETER OutputPath
+    Output directory. Defaults to .\output\<upn>\.
+
+.PARAMETER TenantId
+    Optional explicit tenant GUID. Useful when the browser has a stale session
+    for a different tenant — the connect step refuses a mismatched login.
+
+.PARAMETER WindowDays
+    How far back to scan SENT items, in days (1-90, default 7). The INBOX window
+    is always 30 days, because the original phish often predates the first
+    outbound IoC by days or weeks.
+
+.PARAMETER EnableThreatIntel
+    Opt-in enrichment: look up sender-domain registration age via public RDAP.
+    This submits the queried domains to a public service — leave off if your
+    data-handling policy prohibits it.
+
+.PARAMETER FailOnCriticalIoC
+    Exit non-zero (10) when any Critical IoC is found. For CI / SOAR pipelines
+    that file a ticket on detection.
+
+.PARAMETER NonInteractive
+    Skip the confirmation pause so the script runs unattended (cron / Task
+    Scheduler / SOAR).
+
+.EXAMPLE
+    .\Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@corp.com
+
+    Assess Alice's mailbox with the default 7-day sent-items window.
+
+.EXAMPLE
+    .\Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@corp.com -WindowDays 14 -EnableThreatIntel
+
+    Widen the outbound window to 14 days and enrich sender domains with RDAP
+    registration-age lookups.
+
+.EXAMPLE
+    .\Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@corp.com -NonInteractive -FailOnCriticalIoC
+
+    Unattended run for a SOAR playbook: no prompts, exit code 10 if a Critical
+    IoC is detected.
+
+.OUTPUTS
+    .\output\<upn>\<timestamp>-email-incident.html   interactive incident report
+    .\output\<upn>\<timestamp>-email-incident.md     markdown summary
+    .\output\<upn>\<timestamp>-email-results.json    raw collected data
+
+.NOTES
+    NRG Technology Services / NextLayerSec LLC — nrgtechservices.com
+    Read-only: all Graph and Exchange calls are GET/read-only.
+    Exit codes: 0 success | 1 auth failure | 2 no findings |
+                3 partial collection | 4 fatal error | 10 critical IoC found.
+#>
 
 [CmdletBinding()]
 param(

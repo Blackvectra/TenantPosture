@@ -1,27 +1,97 @@
 #Requires -Version 7.0
-#
-# Invoke-NRGSignInTriage.ps1
-# Admin-scope incident-response triage entry point. Pulls the tenant's
-# sign-in logs, scores users for IoCs, and (optionally) deep-dives the
-# top N suspicious users' mailboxes in the same admin session.
-#
-# NRG Technology Services / NextLayerSec LLC — nrgtechservices.com
-# Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC
-#
-# Workflow:
-#   Phase 0 — Detection (this tool): admin signs in once, sign-in logs
-#             triaged for failed→success clusters / anonymous-IP / impossible
-#             travel / Identity Protection risky users, users ranked by
-#             IoC score.
-#   Phase 1 — Deep-dive (auto with -DeepDive): for each top-ranked user,
-#             admin uses Mail.Read.All to pull mailbox data and run the
-#             per-user Email-IR evaluators (Test-NRGEmailControl-*).
-#   Phase 2 — Response: operator reviews the unified triage report and
-#             takes containment + recovery action per finding.
-#
-# Use when: you SUSPECT compromise but don't yet know which users are
-# affected. (Use Invoke-NRGEmailAssessment.ps1 when you ALREADY know
-# which user — that's the user-credential per-user variant.)
+
+<#
+.SYNOPSIS
+    Admin-scope sign-in triage — find likely-compromised users tenant-wide, then
+    auto-deep-dive their mailboxes. The "who got popped?" tool.
+
+.DESCRIPTION
+    An incident-response triage entry point for when you SUSPECT compromise but
+    don't yet know which user. The admin signs in once and the tool:
+
+      Phase 0 (Detection): pulls the tenant sign-in logs and scores every user
+        for indicators of compromise — failed->success bursts, anonymous-IP /
+        Tor sign-ins, impossible travel, Entra Identity Protection risky users,
+        and out-of-(home)-state logins — then ranks users by IoC score.
+      Phase 1 (Deep-dive): for each top-ranked user, uses Mail.Read.All to pull
+        the mailbox and run the per-user Email-IR checks (inbox rules,
+        forwarding, outbound, phish origin). Skip with -SkipMailDive.
+      Phase 2 (Response): produces one unified triage report to drive
+        containment and recovery per finding.
+
+    When you ALREADY know which mailbox is suspect, use the per-user variant
+    Invoke-NRGEmailAssessment.ps1 (which needs no admin scope). To sweep every
+    GDAP client at once, use Invoke-NRGBatchSignInTriage.ps1.
+
+.PARAMETER OutputPath
+    Output directory. Defaults to .\output\IR-Triage\.
+
+.PARAMETER WindowDays
+    Sign-in lookback window, in days (1-90, default 7). The inbox window during
+    a deep-dive stays at 30 days (phish often predates outbound IoCs).
+
+.PARAMETER MaxSignInEvents
+    Cap on raw sign-in events pulled from the audit log (100-25000, default
+    5000). The IoC heuristics still work on the most recent events.
+
+.PARAMETER SkipMailDive
+    Triage only — never request Mail.Read.All and never read a mailbox. Use when
+    a client BAA prohibits mailbox reads or you just want a fast ranking pass.
+
+.PARAMETER DeepDive
+    Auto-dive the top N users by IoC score (0-50, default 5; 0 = triage only but
+    still request Mail.Read.All so you can dive interactively afterwards).
+
+.PARAMETER DeepDiveMinScore
+    Minimum IoC score a user must reach to qualify for a deep-dive (0-500,
+    default 30). Caps noise from low-confidence flags.
+
+.PARAMETER TenantId
+    Optional explicit tenant GUID (guards against a stale browser session for a
+    different tenant).
+
+.PARAMETER HomeState
+    Home state/region for the out-of-state IoC. Omit to AUTO-DETECT it as the
+    modal (most-frequent) location across successful sign-ins in the window.
+
+.PARAMETER HomeCountry
+    Home country for the out-of-state IoC. Omit to auto-detect (as with -HomeState).
+
+.PARAMETER EnableThreatIntel
+    IP threat-intel enrichment of suspicious source IPs (RDAP geolocation/ASN +
+    Tor exit list). On by default; pass -EnableThreatIntel:$false to skip the
+    external calls.
+
+.PARAMETER NonInteractive
+    Skip the consent-disclosure pause so the script runs unattended.
+
+.EXAMPLE
+    .\Invoke-NRGSignInTriage.ps1
+
+    Full triage: rank all users, then deep-dive the top 5 scoring at least 30.
+
+.EXAMPLE
+    .\Invoke-NRGSignInTriage.ps1 -SkipMailDive
+
+    Rank users only — no mailbox is read (e.g. a BAA restriction). Fast pass.
+
+.EXAMPLE
+    .\Invoke-NRGSignInTriage.ps1 -DeepDive 10 -WindowDays 14 -HomeState 'North Dakota' -HomeCountry 'US'
+
+    Widen the window to 14 days, deep-dive the top 10, and pin the home location
+    for the out-of-state IoC instead of auto-detecting it.
+
+.OUTPUTS
+    .\output\IR-Triage\<timestamp>-signin-triage.html  unified triage report
+    plus the per-user Email-IR reports for each deep-dived mailbox.
+
+.NOTES
+    NRG Technology Services / NextLayerSec LLC — nrgtechservices.com
+    Read-only: all Graph and Exchange calls are GET/read-only.
+    Required scopes: AuditLog.Read.All, IdentityRiskyUser.Read.All, and
+    Mail.Read.All (only when a deep-dive runs).
+    Exit codes: 0 clean | 1 auth failure | 2 no findings | 10 critical IoC found.
+#>
 
 [CmdletBinding()]
 param(
