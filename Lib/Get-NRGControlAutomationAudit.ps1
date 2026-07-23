@@ -88,11 +88,28 @@ function Get-NRGControlAutomationAudit {
             }
             if (-not $cid) { continue }   # unresolved dynamic ControlId (e.g. loop guard) — skip
 
-            $state    = & $literalOf (& $paramArg $call 'State')
+            # Collect the -State value(s). A literal is one state; a dynamic
+            # expression such as -State $(if ($x) {'Satisfied'} else {'Gap'})
+            # contributes EVERY state literal reachable inside it — otherwise a
+            # control that discriminates via an inline if/else would be misread
+            # as emitting only its (separate, literal) NotApplicable guard.
+            $stateArg = & $paramArg $call 'State'
+            $knownStates = @('Satisfied', 'Gap', 'Partial', 'NotApplicable', 'Error')
+            $states = @()
+            if ($stateArg) {
+                $lit = & $literalOf $stateArg
+                if ($lit) {
+                    $states = @($lit)
+                } else {
+                    # walk the expression for any string constants that are states
+                    $consts = $stateArg.FindAll({ param($n) $n -is [System.Management.Automation.Language.StringConstantExpressionAst] }, $true)
+                    $states = @($consts | ForEach-Object { $_.Value } | Where-Object { $_ -in $knownStates })
+                }
+            }
             $advisory = [bool]($call.Extent.Text -match 'ADVISORY ONLY|Manual review required|Manual verification|manually verif|not exposed by any supported')
 
             if (-not $map.ContainsKey($cid)) { $map[$cid] = @{ States = [System.Collections.Generic.HashSet[string]]::new(); Advisory = $false } }
-            if ($state) { [void]$map[$cid].States.Add($state) }
+            foreach ($s in $states) { [void]$map[$cid].States.Add($s) }
             if ($advisory) { $map[$cid].Advisory = $true }
         }
         $fnCache[$fn] = $map
