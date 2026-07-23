@@ -1,5 +1,6 @@
 #Requires -Version 7.0
 #Requires -Modules @{ ModuleName='Microsoft.Graph.Authentication'; ModuleVersion='2.0.0' }
+
 <#
 .SYNOPSIS
     NRG Sign-In Triage Batch Runner — run the IR triage across every GDAP client.
