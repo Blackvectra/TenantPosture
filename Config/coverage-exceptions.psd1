@@ -39,8 +39,5 @@
         @{ ControlId = 'SPO-2.4'; Kind = 'Manual'; Reason = 'Custom-script (DenyAddAndCustomizePages) is a per-site-collection setting; Microsoft removed the tenant-level default, so it needs per-site enumeration, not a tenant read.' }
         @{ ControlId = 'SPO-2.5'; Kind = 'Manual'; Reason = 'The third-party storage services toggle was retired from Get-SPOTenant and the SharePoint admin center — no supported read API remains.' }
         @{ ControlId = 'SPO-3.1'; Kind = 'Manual'; Reason = 'Site collection administrators require per-site enumeration (Get-SPOUser / Get-SPOSite owners per site) — not a tenant-level signal.' }
-
-        # ── ImplementationPending: automatable, tracked coverage debt ─────────
-        @{ ControlId = 'AAD-8.2';  Kind = 'ImplementationPending'; Reason = 'Graph identityGovernance/accessReviews requires the AccessReview.Read.All scope, which is NOT in the current 23-scope consent — needs a one-time client re-consent before it can collect.' }
     )
 }
