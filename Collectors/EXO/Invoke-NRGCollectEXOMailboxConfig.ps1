@@ -63,9 +63,9 @@ function Invoke-NRGCollectEXOMailboxConfig {
                     # EXO-3.2: admin notification on outbound spam (CIS/MDO recommend $true)
                     NotifyOutboundSpam            = if ($null -ne $_.NotifyOutboundSpam) { [bool]$_.NotifyOutboundSpam } else { $false }
                     ActionWhenThresholdReached    = [string]$_.ActionWhenThresholdReached
-                    RecipientLimitExternalPerHour = try { [int]$_.RecipientLimitExternalPerHour } catch { 0 }
-                    RecipientLimitInternalPerHour = try { [int]$_.RecipientLimitInternalPerHour } catch { 0 }
-                    RecipientLimitPerDay          = try { [int]$_.RecipientLimitPerDay } catch { 0 }
+                    RecipientLimitExternalPerHour = [int]($_.RecipientLimitExternalPerHour -as [int])
+                    RecipientLimitInternalPerHour = [int]($_.RecipientLimitInternalPerHour -as [int])
+                    RecipientLimitPerDay          = [int]($_.RecipientLimitPerDay -as [int])
                 }
             })
         } catch {

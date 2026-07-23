@@ -10,7 +10,8 @@
 #      SecurityEvents.Read.All, AuditLog.Read.All, RoleManagement.Read.All,
 #      Organization.Read.All, Sites.Read.All, DeviceManagementConfiguration.Read.All,
 #      DeviceManagementApps.Read.All, UserAuthenticationMethod.Read.All,
-#      IdentityRiskyServicePrincipal.Read.All, AttackSimulation.Read.All.
+#      IdentityRiskyServicePrincipal.Read.All, AttackSimulation.Read.All,
+#      AccessReview.Read.All.
 #      EXO: Exchange.ManageAsApp + Global Reader role. See docs/AUTH-APP-ONLY.md.
 #      Use CA-issued cert. Self-signed is discouraged per Microsoft Learn.
 #
@@ -164,13 +165,17 @@ function Connect-NRGServices {
             'Policy.Read.PermissionGrant',
             'PrivilegedAccess.Read.AzureAD',
             'TeamSettings.Read.All',
-            # ── v4.13 added (2) — require client re-consent ──────────────
+            # ── require client re-consent ────────────────────────────────
             #   IdentityRiskyServicePrincipal.Read.All → AAD-11.3 (risky
             #     workload identities; needs Entra ID P2 + Workload IDs add-on)
             #   AttackSimulation.Read.All → DEF-4.6 (attack-sim training;
             #     Global cloud only, needs Defender for Office 365 P2)
+            #   AccessReview.Read.All → AAD-8.2 (access reviews for privileged
+            #     roles; needs Entra ID P2). Until re-consented the collector
+            #     gets 403 and AAD-8.2 reports NotApplicable.
             'IdentityRiskyServicePrincipal.Read.All',
-            'AttackSimulation.Read.All'
+            'AttackSimulation.Read.All',
+            'AccessReview.Read.All'
         )
 
         # ── Reuse an existing Graph context if the caller already established one ──

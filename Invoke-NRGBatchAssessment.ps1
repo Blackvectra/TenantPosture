@@ -185,7 +185,8 @@ try {
         'PrivilegedAccess.Read.AzureAD',
         'TeamSettings.Read.All',
         'IdentityRiskyServicePrincipal.Read.All',
-        'AttackSimulation.Read.All'
+        'AttackSimulation.Read.All',
+        'AccessReview.Read.All'
     ) -ContextScope Process -NoWelcome -ErrorAction Stop
     Write-Host '  [+] Graph authenticated' -ForegroundColor Green
 } catch {
