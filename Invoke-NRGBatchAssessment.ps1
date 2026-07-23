@@ -20,7 +20,8 @@
                     RoleManagement.Read.All, User.Read.All, UserAuthenticationMethod.Read.All
     - Exchange Online: must hold an admin role in each client via GDAP
 
-    Output per client: output\<tenantdomain>\<timestamp>-assessment.html + .md + .json
+    Output per client: output\<tenantdomain>\<timestamp>-assessment.html + -results.json
+                       (consolidated 2-file profile; -AllFiles adds the sidecars).
     Batch summary:     output\batch-summary-<timestamp>.md
 
 .PARAMETER ClientsFile
@@ -160,11 +161,14 @@ if ($WhatIf) {
 # Partner Center GDAP relationships grant the delegated access — no per-client auth needed
 Write-Host '[-] Authenticating (one-time browser login)...' -ForegroundColor Cyan
 try {
-    # v4.6.4 EMERGENCY FIX (Medium #9): aligned with Connect-NRGServices /
-    # CLAUDE.md to request the same 21 scopes the single-tenant orchestrator
-    # asks for. Previously this batch script requested only 9, which silently
-    # disabled SharePoint, Teams, OAuth grant inspection, PIM, and full
-    # Intune reporting on every GDAP batch run.
+    # Request the SAME 23 scopes as Connect-NRGServices / CLAUDE.md. This one
+    # login must cover everything the per-client orchestrator needs, because the
+    # orchestrator now REUSES this context instead of reconnecting (reconnecting
+    # with a superset of scopes would trigger MSAL incremental-consent re-auth on
+    # every client). The two re-consent-only scopes
+    # (IdentityRiskyServicePrincipal / AttackSimulation) are requested here too so
+    # AAD-11.3 / DEF-4.6 collect in batch wherever the client tenant has granted
+    # them; where they haven't, those two controls simply report NotApplicable.
     Connect-MgGraph -Scopes @(
         'User.Read.All','Group.Read.All','Directory.Read.All',
         'Policy.Read.All','AuditLog.Read.All','Application.Read.All',
@@ -179,7 +183,9 @@ try {
         'DeviceManagementServiceConfig.Read.All',
         'Policy.Read.PermissionGrant',
         'PrivilegedAccess.Read.AzureAD',
-        'TeamSettings.Read.All'
+        'TeamSettings.Read.All',
+        'IdentityRiskyServicePrincipal.Read.All',
+        'AttackSimulation.Read.All'
     ) -ContextScope Process -NoWelcome -ErrorAction Stop
     Write-Host '  [+] Graph authenticated' -ForegroundColor Green
 } catch {
