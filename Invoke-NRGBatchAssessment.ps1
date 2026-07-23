@@ -292,6 +292,35 @@ foreach ($client in $clients) {
 
             # Run assessment — collectors + evaluators + publishers
             & $orchPath @params
+
+            # ── Post-run tenant guardrail (defense in depth) ─────────────────
+            # The pre-run checks verify the Graph/EXO CONTEXT before collecting;
+            # this verifies the RESULT after. Read back the report just written
+            # and confirm the tenant it actually reflects matches this client.
+            # Catches any path where collection ran against the wrong tenant
+            # (stale session, reuse gone wrong) before the operator ships the
+            # report to the wrong client.
+            try {
+                $latestJson = Get-ChildItem -LiteralPath $clientOut -Filter '*-results.json' -ErrorAction SilentlyContinue |
+                    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+                if ($latestJson) {
+                    $collected = Get-Content -LiteralPath $latestJson.FullName -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
+                    $collectedTid = ''
+                    if ($collected.Connections -and $collected.Connections.TenantId) { $collectedTid = [string]$collected.Connections.TenantId }
+                    elseif ($collected.Metadata -and $collected.Metadata.TenantId)    { $collectedTid = [string]$collected.Metadata.TenantId }
+                    if ($collectedTid -and $collectedTid -ne $client.TenantId) {
+                        Write-Warning "POST-RUN TENANT MISMATCH for $($client.ClientName): report tenant $collectedTid != expected $($client.TenantId). The report may reflect the WRONG tenant — do NOT deliver it."
+                        $status = 'TenantVerifyFailed'
+                        $errMsg = "Collected tenant $collectedTid != expected $($client.TenantId)"
+                    } else {
+                        Write-Host "  [+] Post-run tenant verified ($collectedTid)" -ForegroundColor DarkGreen
+                    }
+                } else {
+                    Write-Warning "Post-run guardrail: no results.json found for $($client.ClientName) — cannot verify collected tenant."
+                }
+            } catch {
+                Write-Warning "Post-run tenant verification failed to read results for $($client.ClientName): $($_.Exception.Message)"
+            }
         }
 
     } catch {
