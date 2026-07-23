@@ -41,7 +41,6 @@
         @{ ControlId = 'SPO-3.1'; Kind = 'Manual'; Reason = 'Site collection administrators require per-site enumeration (Get-SPOUser / Get-SPOSite owners per site) — not a tenant-level signal.' }
 
         # ── ImplementationPending: automatable, tracked coverage debt ─────────
-        @{ ControlId = 'AAD-13.1'; Kind = 'ImplementationPending'; Reason = 'Graph security/secureScores is buildable via the AAD-Inventory collector (SecurityEvents.Read.All held); pass/fail needs a defensible score threshold — next increment.' }
         @{ ControlId = 'AAD-8.2';  Kind = 'ImplementationPending'; Reason = 'Graph identityGovernance/accessReviews requires the AccessReview.Read.All scope, which is NOT in the current 23-scope consent — needs a one-time client re-consent before it can collect.' }
     )
 }
