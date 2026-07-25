@@ -17,10 +17,15 @@ function Invoke-NRGCollectAADPIM {
     $result = @{
         Success  = $false
         PIMAvailable = $false
+        # AAD-8.2: set $true only when the access-review definitions were actually
+        # read. Stays $false when AccessReview.Read.All hasn't been consented, so
+        # the evaluator reports NotApplicable rather than a false "no reviews" gap.
+        AccessReviewsCollected = $false
         Data     = @{
             EligibleSchedules = @()
             ActiveSchedules   = @()
             RolePolicies      = @()
+            AccessReviews     = @()
         }
     }
 
@@ -151,6 +156,47 @@ function Invoke-NRGCollectAADPIM {
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-PIM-Policies' -Message $_.Exception.Message
+            }
+        }
+
+        # Access review definitions for privileged roles (AAD-8.2). Requires the
+        # AccessReview.Read.All scope — a re-consent scope. On 403 (scope not yet
+        # consented) leave AccessReviewsCollected = $false so the evaluator reports
+        # NotApplicable, not a false gap. Read-only GET.
+        try {
+            $arList  = [System.Collections.Generic.List[object]]::new()
+            $arLink  = 'https://graph.microsoft.com/v1.0/identityGovernance/accessReviews/definitions?$top=100'
+            $arPages = 0
+            while ($arLink -and $arPages -lt 50) {
+                $arResp = Invoke-NRGGraphRequest -Method GET -Uri $arLink -ErrorAction Stop
+                foreach ($d in @($arResp.value ?? @())) {
+                    $scopeQuery = [string](Get-NRGNestedProperty -Object $d -Path 'scope.query' -Default '')
+                    $recurType  = [string](Get-NRGNestedProperty -Object $d -Path 'settings.recurrence.pattern.type' -Default 'noRecurrence')
+                    $arList.Add(@{
+                        Id           = [string]$d.id
+                        DisplayName  = [string]($d.displayName ?? '')
+                        Status       = [string]($d.status ?? '')
+                        ScopeQuery   = $scopeQuery
+                        IsRecurring  = [bool]($recurType -and $recurType -ne 'noRecurrence')
+                        # A review targets privileged directory roles when its scope
+                        # queries roleManagement/directory (the PIM role-assignment
+                        # instances) rather than a group or app.
+                        TargetsRoles = [bool]($scopeQuery -match 'roleManagement/directory|roleAssignmentScheduleInstances|directoryRole')
+                    })
+                }
+                $arLink = [string]($arResp.'@odata.nextLink' ?? '')
+                $arPages++
+            }
+            $result.Data.AccessReviews = @($arList)
+            $result.AccessReviewsCollected = $true
+        } catch {
+            if ($_.Exception.Message -match '403|Forbidden|Unauthorized|Authorization_RequestDenied|Accepted') {
+                if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
+                    Register-NRGCoverage -Family 'AAD-AccessReviews' -Status 'NotCollected' `
+                        -Note 'AccessReview.Read.All not consented (re-consent required for AAD-8.2)'
+                }
+            } elseif (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'AAD-AccessReviews' -Message $_.Exception.Message
             }
         }
 

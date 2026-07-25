@@ -141,8 +141,9 @@ $script:ExportedFunctions = @(
     'Get-NRGControlDefinitions', 'Get-NRGControlById',
     'Get-NRGFrameworkCitations', 'Get-NRGFrameworkDefinitions',
     'Get-NRGFindingRiskCost', 'Get-NRGAggregateRisk',
+    'Get-NRGRemediationRoadmap',
     'Set-NRGSensitiveFileAcl', 'Set-NRGSensitiveFileContent',
-    'Get-NRGTenantLicenseProfile', 'Test-NRGLicenseRequirementMet',
+    'Get-NRGTenantLicenseProfile', 'Test-NRGLicenseRequirementMet', 'Get-NRGControlLicenseStatus',
     'Get-NRGSafeProperty', 'Get-NRGNestedProperty',
     'Test-NRGSignatureStatus',
     'Get-NRGMaturityTier',
@@ -150,6 +151,9 @@ $script:ExportedFunctions = @(
     'Get-NRGObjectField',
     'Invoke-NRGGraphRequest',
     'Invoke-NRGEvaluatorSafe',
+    'Resolve-NRGDns',
+    'Get-NRGModuleHealth',
+    'Get-NRGControlAutomationAudit',
 
     # ── Collectors — AAD ──────────────────────────────────────────────────────
     'Invoke-NRGCollectAADAuthPolicies', 'Invoke-NRGCollectAADCAPolicies',

@@ -31,10 +31,25 @@ function Test-NRGControlDefender {
         $sa = $defData.Data['SafeAttachments']
 
         if (-not $sa -or -not $sa.Available) {
-            Add-NRGFinding -ControlId 'DEF-1.1' -State 'Gap' -Category $ctrl.Category `
-                -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $citations `
-                -Detail 'Safe Attachments is not available or could not be collected. Defender for Office 365 Plan 1 license required.' `
-                -CurrentValue 'Safe Attachments unavailable' -Remediation $ctrl.Remediation
+            # "Unavailable" is ambiguous: either the tenant lacks Defender for
+            # Office 365 P1 (Safe Attachments literally cannot exist — an upgrade
+            # opportunity, NOT a misconfiguration) or the read failed on a
+            # licensed tenant (a real collection problem). Decide honestly from
+            # the license profile instead of asserting a confident High gap.
+            $lic = Get-NRGControlLicenseStatus -ControlId 'DEF-1.1'
+            if ($lic -eq 'Met') {
+                $why = if ($sa -and $sa.Error) { "Collector error: $($sa.Error)" } else { 'No policy data returned.' }
+                Add-NRGFinding -ControlId 'DEF-1.1' -State 'Error' -Category $ctrl.Category `
+                    -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $citations `
+                    -Detail "Safe Attachments could not be collected even though the tenant is licensed for Defender for Office 365 Plan 1. $why Re-run collection and verify Exchange Online / Defender connectivity." `
+                    -CurrentValue 'Collection failed' -Remediation $ctrl.Remediation
+            } else {
+                Add-NRGFinding -ControlId 'DEF-1.1' -State 'NotApplicable' -Category $ctrl.Category `
+                    -Title $ctrl.Title -FrameworkIds $citations `
+                    -Detail 'Safe Attachments requires Defender for Office 365 Plan 1, which is not part of this tenant''s licensing. Not scored as a gap — surfaced as a licensing upgrade opportunity.' `
+                    -CurrentValue 'Defender for Office 365 P1 not licensed' `
+                    -RequiredValue 'Defender for Office 365 Plan 1' -Remediation $ctrl.Remediation
+            }
         } elseif ($sa.AnyBlockEnabled) {
             Add-NRGFinding -ControlId 'DEF-1.1' -State 'Satisfied' -Category $ctrl.Category `
                 -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $citations `
@@ -59,10 +74,21 @@ function Test-NRGControlDefender {
         $sl = $defData.Data['SafeLinks']
 
         if (-not $sl -or -not $sl.Available) {
-            Add-NRGFinding -ControlId 'DEF-1.2' -State 'Gap' -Category $ctrl.Category `
-                -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $citations `
-                -Detail 'Safe Links is not available. Defender for Office 365 Plan 1 required.' `
-                -Remediation $ctrl.Remediation
+            # Same license-vs-collection disambiguation as DEF-1.1.
+            $lic = Get-NRGControlLicenseStatus -ControlId 'DEF-1.2'
+            if ($lic -eq 'Met') {
+                $why = if ($sl -and $sl.Error) { "Collector error: $($sl.Error)" } else { 'No policy data returned.' }
+                Add-NRGFinding -ControlId 'DEF-1.2' -State 'Error' -Category $ctrl.Category `
+                    -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $citations `
+                    -Detail "Safe Links could not be collected even though the tenant is licensed for Defender for Office 365 Plan 1. $why Re-run collection and verify Exchange Online / Defender connectivity." `
+                    -CurrentValue 'Collection failed' -Remediation $ctrl.Remediation
+            } else {
+                Add-NRGFinding -ControlId 'DEF-1.2' -State 'NotApplicable' -Category $ctrl.Category `
+                    -Title $ctrl.Title -FrameworkIds $citations `
+                    -Detail 'Safe Links requires Defender for Office 365 Plan 1, which is not part of this tenant''s licensing. Not scored as a gap — surfaced as a licensing upgrade opportunity.' `
+                    -CurrentValue 'Defender for Office 365 P1 not licensed' `
+                    -RequiredValue 'Defender for Office 365 Plan 1' -Remediation $ctrl.Remediation
+            }
         } elseif ($sl.EnabledNonDefaultCount -gt 0) {
             $defaultPol = @($sl.Policies | Where-Object { $_.IsDefault }) | Select-Object -First 1
             $gaps = @()
@@ -536,7 +562,16 @@ function Test-NRGControlDefenderSafeLinksOffice {
     }
     $sl = $def.Data['SafeLinks']
     if (-not $sl -or -not $sl.Available) {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Safe Links not available — requires Defender for Office 365 Plan 1.' -Remediation $ctrl.Remediation; return
+        # Same license-vs-collection disambiguation as DEF-1.1 — never a
+        # confident High gap when the tenant simply lacks the MDO P1 license.
+        $lic = Get-NRGControlLicenseStatus -ControlId $cid
+        if ($lic -eq 'Met') {
+            $why = if ($sl -and $sl.Error) { "Collector error: $($sl.Error)" } else { 'No policy data returned.' }
+            Add-NRGFinding -ControlId $cid -State 'Error' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "Safe Links could not be collected even though the tenant is licensed for Defender for Office 365 Plan 1. $why Re-run collection and verify connectivity." -CurrentValue 'Collection failed' -Remediation $ctrl.Remediation
+        } else {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Safe Links for Office applications requires Defender for Office 365 Plan 1, which is not part of this tenant''s licensing. Not scored as a gap — surfaced as a licensing upgrade opportunity.' -CurrentValue 'Defender for Office 365 P1 not licensed' -RequiredValue 'Defender for Office 365 Plan 1' -Remediation $ctrl.Remediation
+        }
+        return
     }
     $officeProtected = @($sl.Policies | Where-Object { $_.EnableSafeLinksForO365 -eq $true -or $_.EnableSafeLinksForOffice -eq $true }).Count -gt 0
     if ($officeProtected) {

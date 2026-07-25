@@ -22,6 +22,14 @@ jobs:
   analysis:
     name: Scorecard analysis
     runs-on: ubuntu-latest
+    # OSSF Scorecard only supports PUBLIC repositories: several of its checks
+    # (ListCommits / contributors / branch-protection via GraphQL) require a
+    # token scope the default GITHUB_TOKEN does not have on a private repo, so
+    # the action hard-errors with "Resource not accessible by integration" and
+    # fails the run on every push. Gate the job on visibility — it is cleanly
+    # SKIPPED while this repo is private and starts running automatically if it
+    # is ever made public. No red X, no lost coverage.
+    if: ${{ github.event.repository.private == false }}
     permissions:
       # Needed to upload the SARIF results to Code Scanning
       security-events: write

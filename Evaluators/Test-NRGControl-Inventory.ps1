@@ -249,13 +249,49 @@ function Test-NRGControlInventorySecureScore {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Secure Score data not collected (requires SecurityEvents.Read.All)'; return
     }
     $ss  = $inv.Data['SecureScore']
-    $pct = [int]($ss.Percentage ?? 0)
-    $cur = [int]($ss.CurrentScore ?? 0)
-    $max = [int]($ss.MaxScore ?? 0)
-    $posture = if ($pct -ge 70) { 'Strong' } elseif ($pct -ge 50) { 'Moderate' } elseif ($pct -ge 30) { 'At Risk' } else { 'Critical' }
-    Add-NRGFinding -ControlId $cid -State $(if ($pct -ge 70) {'Satisfied'} elseif ($pct -ge 50) {'Partial'} else {'Gap'}) `
-        -Category $ctrl.Category -Title $ctrl.Title -Severity $(if ($pct -lt 30) {'High'} elseif ($pct -lt 50) {'Medium'} else {'Low'}) `
-        -FrameworkIds $cit `
-        -Detail "Microsoft Secure Score: $cur / $max ($pct%) — $posture. This is Microsoft's own assessment of your tenant configuration across identity, data, apps, and devices. Score as of $($ss.CreatedDate)." `
-        -CurrentValue "Score: $cur/$max ($pct%)" -RequiredValue 'Target: 70%+ (Strong posture)'
+    $pct = [int](Get-NRGObjectField -Item $ss -Key 'Percentage' -Default 0)
+    $cur = [int](Get-NRGObjectField -Item $ss -Key 'CurrentScore' -Default 0)
+    $max = [int](Get-NRGObjectField -Item $ss -Key 'MaxScore' -Default 0)
+
+    # Prefer Microsoft's OWN peer benchmark (averageComparativeScores) over an
+    # arbitrary percentage: are you at/above the average tenant of your size?
+    # AllTenants is the broadest, most stable basis; fall back to TotalSeats.
+    $benchScore = $null
+    $benchBasis = ''
+    $comps = @(Get-NRGObjectField -Item $ss -Key 'AverageComparativeScores' -Default @())
+    foreach ($basis in @('AllTenants', 'TotalSeats', 'IndustryTypes')) {
+        $hit = @($comps | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'Basis') -eq $basis }) | Select-Object -First 1
+        if ($hit) {
+            $benchScore = [double](Get-NRGObjectField -Item $hit -Key 'AverageScore' -Default 0)
+            $benchBasis = $basis
+            break
+        }
+    }
+
+    if ($null -ne $benchScore -and $max -gt 0 -and $benchScore -gt 0) {
+        # Benchmark available — judge against Microsoft's peer average.
+        $benchPct = [int](($benchScore / $max) * 100)
+        $basisLabel = switch ($benchBasis) { 'AllTenants' {'all Microsoft 365 tenants'} 'TotalSeats' {'tenants of similar size'} default {'tenants in your industry'} }
+        if ($pct -ge $benchPct) {
+            Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title `
+                -Severity 'Informational' -FrameworkIds $cit `
+                -Detail "Microsoft Secure Score $cur / $max ($pct%) is at or above the $benchPct% average for $basisLabel. Configuration posture across identity, data, apps, and devices meets or beats the peer benchmark. Score as of $($ss.CreatedDate)." `
+                -CurrentValue "$pct% (peer average $benchPct%)"
+        } else {
+            Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
+                -Severity $ctrl.Severity -FrameworkIds $cit `
+                -Detail "Microsoft Secure Score $cur / $max ($pct%) is BELOW the $benchPct% average for $basisLabel. Microsoft's own assessment rates this tenant behind comparable organizations — work the ranked improvement actions to close the gap." `
+                -CurrentValue "$pct% (peer average $benchPct%)" `
+                -RequiredValue "At or above the peer benchmark ($benchPct%)" `
+                -Remediation $ctrl.Remediation
+        }
+    } else {
+        # No comparative benchmark returned — fall back to an absolute posture band.
+        $posture = if ($pct -ge 70) { 'Strong' } elseif ($pct -ge 50) { 'Moderate' } elseif ($pct -ge 30) { 'At Risk' } else { 'Critical' }
+        Add-NRGFinding -ControlId $cid -State $(if ($pct -ge 70) {'Satisfied'} elseif ($pct -ge 50) {'Partial'} else {'Gap'}) `
+            -Category $ctrl.Category -Title $ctrl.Title -Severity $(if ($pct -lt 30) {'High'} elseif ($pct -lt 50) {'Medium'} else {'Low'}) `
+            -FrameworkIds $cit `
+            -Detail "Microsoft Secure Score: $cur / $max ($pct%) — $posture. Microsoft's own assessment of your tenant configuration across identity, data, apps, and devices (peer benchmark unavailable in this run). Score as of $($ss.CreatedDate)." `
+            -CurrentValue "Score: $cur/$max ($pct%)" -RequiredValue 'Target: 70%+ (Strong posture)' -Remediation $ctrl.Remediation
+    }
 }

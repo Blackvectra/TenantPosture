@@ -20,7 +20,8 @@
                     RoleManagement.Read.All, User.Read.All, UserAuthenticationMethod.Read.All
     - Exchange Online: must hold an admin role in each client via GDAP
 
-    Output per client: output\<tenantdomain>\<timestamp>-assessment.html + .md + .json
+    Output per client: output\<tenantdomain>\<timestamp>-assessment.html + -results.json
+                       (consolidated 2-file profile; -AllFiles adds the sidecars).
     Batch summary:     output\batch-summary-<timestamp>.md
 
 .PARAMETER ClientsFile
@@ -75,6 +76,14 @@ param(
     [string] $OnlyClient,
 
     [switch] $JsonOnly,
+
+    # Emit every sidecar deliverable per client (Markdown, playbook, executive,
+    # playbook HTML, standalone remediation .ps1, XLSX). Default is the
+    # consolidated 2-file profile (report HTML + JSON) per client — the report
+    # carries the remediation script and findings CSV as embedded downloads,
+    # which matters even more across a full batch.
+    [switch] $AllFiles,
+
     [switch] $WhatIf
 )
 
@@ -152,11 +161,14 @@ if ($WhatIf) {
 # Partner Center GDAP relationships grant the delegated access — no per-client auth needed
 Write-Host '[-] Authenticating (one-time browser login)...' -ForegroundColor Cyan
 try {
-    # v4.6.4 EMERGENCY FIX (Medium #9): aligned with Connect-NRGServices /
-    # CLAUDE.md to request the same 21 scopes the single-tenant orchestrator
-    # asks for. Previously this batch script requested only 9, which silently
-    # disabled SharePoint, Teams, OAuth grant inspection, PIM, and full
-    # Intune reporting on every GDAP batch run.
+    # Request the SAME 23 scopes as Connect-NRGServices / CLAUDE.md. This one
+    # login must cover everything the per-client orchestrator needs, because the
+    # orchestrator now REUSES this context instead of reconnecting (reconnecting
+    # with a superset of scopes would trigger MSAL incremental-consent re-auth on
+    # every client). The two re-consent-only scopes
+    # (IdentityRiskyServicePrincipal / AttackSimulation) are requested here too so
+    # AAD-11.3 / DEF-4.6 collect in batch wherever the client tenant has granted
+    # them; where they haven't, those two controls simply report NotApplicable.
     Connect-MgGraph -Scopes @(
         'User.Read.All','Group.Read.All','Directory.Read.All',
         'Policy.Read.All','AuditLog.Read.All','Application.Read.All',
@@ -171,7 +183,10 @@ try {
         'DeviceManagementServiceConfig.Read.All',
         'Policy.Read.PermissionGrant',
         'PrivilegedAccess.Read.AzureAD',
-        'TeamSettings.Read.All'
+        'TeamSettings.Read.All',
+        'IdentityRiskyServicePrincipal.Read.All',
+        'AttackSimulation.Read.All',
+        'AccessReview.Read.All'
     ) -ContextScope Process -NoWelcome -ErrorAction Stop
     Write-Host '  [+] Graph authenticated' -ForegroundColor Green
 } catch {
@@ -271,12 +286,42 @@ foreach ($client in $clients) {
             if ($client.SkipPowerPlatform) { $params['SkipPowerPlatform'] = $true }
             if ($client.SkipDNS)           { $params['SkipDNS']           = $true }
             if ($JsonOnly)                 { $params['JsonOnly']           = $true }
+            if ($AllFiles)                 { $params['AllFiles']           = $true }
             if ($client.DnsDomains -and @($client.DnsDomains).Count -gt 0) {
                 $params['DnsDomains'] = @($client.DnsDomains)
             }
 
             # Run assessment — collectors + evaluators + publishers
             & $orchPath @params
+
+            # ── Post-run tenant guardrail (defense in depth) ─────────────────
+            # The pre-run checks verify the Graph/EXO CONTEXT before collecting;
+            # this verifies the RESULT after. Read back the report just written
+            # and confirm the tenant it actually reflects matches this client.
+            # Catches any path where collection ran against the wrong tenant
+            # (stale session, reuse gone wrong) before the operator ships the
+            # report to the wrong client.
+            try {
+                $latestJson = Get-ChildItem -LiteralPath $clientOut -Filter '*-results.json' -ErrorAction SilentlyContinue |
+                    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+                if ($latestJson) {
+                    $collected = Get-Content -LiteralPath $latestJson.FullName -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
+                    $collectedTid = ''
+                    if ($collected.Connections -and $collected.Connections.TenantId) { $collectedTid = [string]$collected.Connections.TenantId }
+                    elseif ($collected.Metadata -and $collected.Metadata.TenantId)    { $collectedTid = [string]$collected.Metadata.TenantId }
+                    if ($collectedTid -and $collectedTid -ne $client.TenantId) {
+                        Write-Warning "POST-RUN TENANT MISMATCH for $($client.ClientName): report tenant $collectedTid != expected $($client.TenantId). The report may reflect the WRONG tenant — do NOT deliver it."
+                        $status = 'TenantVerifyFailed'
+                        $errMsg = "Collected tenant $collectedTid != expected $($client.TenantId)"
+                    } else {
+                        Write-Host "  [+] Post-run tenant verified ($collectedTid)" -ForegroundColor DarkGreen
+                    }
+                } else {
+                    Write-Warning "Post-run guardrail: no results.json found for $($client.ClientName) — cannot verify collected tenant."
+                }
+            } catch {
+                Write-Warning "Post-run tenant verification failed to read results for $($client.ClientName): $($_.Exception.Message)"
+            }
         }
 
     } catch {
