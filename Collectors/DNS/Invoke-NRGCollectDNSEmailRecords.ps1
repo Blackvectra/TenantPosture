@@ -152,7 +152,7 @@ function Invoke-NRGCollectDNSEmailRecords {
         # NOT require EXO. When EXO failed to connect (assembly conflict) the
         # AcceptedDomains fallback above yields nothing — so derive the domain
         # list from Graph verifiedDomains instead, so DNS still collects. Only
-        # the DKIM check genuinely needs EXO. (clienta.org 2026-07-07: EXO was down
+        # the DKIM check genuinely needs EXO. (observed on a client run: EXO was down
         # and no -Domains was passed, so DNS silently collected nothing.)
         if ((-not $Domains -or $Domains.Count -eq 0) -and
             (Get-Command Invoke-NRGGraphRequest -ErrorAction SilentlyContinue)) {
@@ -238,13 +238,14 @@ function Invoke-NRGCollectDNSEmailRecords {
                 Errors  = @()
             }
 
-            # SPF
+            # SPF — resolved via public DoH (Resolve-NRGDns), which returns clean
+            # record strings so there is no fragile .Strings access, and queries
+            # a PUBLIC resolver so split-DNS / corporate resolvers can't hide a
+            # published record (both were real false-"no SPF" causes).
             try {
-                $txtRecords = @(Resolve-DnsName -Name $domain -Type TXT -ErrorAction Stop -ErrorVariable dnsErr)
-                $spfRecord  = $txtRecords |
-                    Where-Object { ($_.Strings -join '') -like 'v=spf1*' } |
-                    Select-Object -First 1
-                if ($spfRecord) { $d.SPF = ($spfRecord.Strings -join '') }
+                $spfRecord = @(Resolve-NRGDns -Name $domain -Type TXT) |
+                    Where-Object { $_ -like 'v=spf1*' } | Select-Object -First 1
+                if ($spfRecord) { $d.SPF = [string]$spfRecord }
             } catch {
                 $d.Errors += "SPF: $($_.Exception.Message)"
             }
@@ -296,26 +297,33 @@ function Invoke-NRGCollectDNSEmailRecords {
 
             foreach ($sel in $dkimSelectors) {
                 try {
-                    $dkimFqdn    = "${sel}._domainkey.${domain}"
-                    $dkimRecords = @(Resolve-DnsName -Name $dkimFqdn -Type TXT -ErrorAction Stop)
-                    $dkimMatch   = $dkimRecords |
-                        Where-Object { ($_.Strings -join '') -like 'v=DKIM1*' } |
-                        Select-Object -First 1
-                    if ($dkimMatch) {
-                        if ($sel -eq 'selector1') { $d.DKIM.Selector1 = ($dkimMatch.Strings -join '') } elseif ($sel -eq 'selector2') { $d.DKIM.Selector2 = ($dkimMatch.Strings -join '') } else { $d.DKIM.CustomSelectors += @{ Selector = $sel; Record = ($dkimMatch.Strings -join '') } }
+                    $dkimFqdn = "${sel}._domainkey.${domain}"
+                    # Microsoft 365 publishes DKIM as a CNAME
+                    # (selector1._domainkey.<domain> -> selectorX-...._domainkey.
+                    # <tenant>.onmicrosoft.com), NOT as a TXT 'v=DKIM1' record —
+                    # the previous TXT-only lookup NEVER matched an M365 tenant and
+                    # reported "no DKIM" on every one. Check CNAME first (the M365
+                    # case), then fall back to a direct TXT key (custom/third-party
+                    # DKIM). Either present => DKIM is published for this selector.
+                    $dkimVal = @(Resolve-NRGDns -Name $dkimFqdn -Type CNAME) | Select-Object -First 1
+                    if (-not $dkimVal) {
+                        $dkimVal = @(Resolve-NRGDns -Name $dkimFqdn -Type TXT) |
+                            Where-Object { $_ -like 'v=DKIM1*' -or $_ -like '*p=*' } | Select-Object -First 1
+                    }
+                    if ($dkimVal) {
+                        if     ($sel -eq 'selector1') { $d.DKIM.Selector1 = [string]$dkimVal }
+                        elseif ($sel -eq 'selector2') { $d.DKIM.Selector2 = [string]$dkimVal }
+                        else { $d.DKIM.CustomSelectors += @{ Selector = $sel; Record = [string]$dkimVal } }
                     }
                 } catch { }  # DKIM not found on this selector — non-fatal
             }
 
             # DMARC
             try {
-                $dmarcFqdn    = "_dmarc.$domain"
-                $dmarcRecords = @(Resolve-DnsName -Name $dmarcFqdn -Type TXT -ErrorAction Stop)
-                $dmarcMatch   = $dmarcRecords |
-                    Where-Object { ($_.Strings -join '') -like 'v=DMARC1*' } |
-                    Select-Object -First 1
+                $dmarcMatch = @(Resolve-NRGDns -Name "_dmarc.$domain" -Type TXT) |
+                    Where-Object { $_ -like 'v=DMARC1*' } | Select-Object -First 1
                 if ($dmarcMatch) {
-                    $dmarcStr     = ($dmarcMatch.Strings -join '')
+                    $dmarcStr     = [string]$dmarcMatch
                     $d.DMARC      = $dmarcStr
 
                     # Parse policy value — safe extraction, no eval
@@ -332,14 +340,9 @@ function Invoke-NRGCollectDNSEmailRecords {
 
             # MTA-STS DNS record
             try {
-                $mtaStsFqdn    = "_mta-sts.$domain"
-                $mtaStsRecords = @(Resolve-DnsName -Name $mtaStsFqdn -Type TXT -ErrorAction Stop)
-                $mtaStsMatch   = $mtaStsRecords |
-                    Where-Object { ($_.Strings -join '') -like 'v=STSv1*' } |
-                    Select-Object -First 1
-                if ($mtaStsMatch) {
-                    $d.MTASTS.DNSRecord = ($mtaStsMatch.Strings -join '')
-                }
+                $mtaStsMatch = @(Resolve-NRGDns -Name "_mta-sts.$domain" -Type TXT) |
+                    Where-Object { $_ -like 'v=STSv1*' } | Select-Object -First 1
+                if ($mtaStsMatch) { $d.MTASTS.DNSRecord = [string]$mtaStsMatch }
             } catch { }
 
             # MTA-STS policy file (HTTPS fetch — validate URL before opening)
@@ -379,26 +382,25 @@ function Invoke-NRGCollectDNSEmailRecords {
 
             # TLS-RPT
             try {
-                $tlsRptFqdn    = "_smtp._tls.$domain"
-                $tlsRptRecords = @(Resolve-DnsName -Name $tlsRptFqdn -Type TXT -ErrorAction Stop)
-                $tlsRptMatch   = $tlsRptRecords |
-                    Where-Object { ($_.Strings -join '') -like 'v=TLSRPTv1*' } |
-                    Select-Object -First 1
-                if ($tlsRptMatch) { $d.TLSRPT = ($tlsRptMatch.Strings -join '') }
+                $tlsRptMatch = @(Resolve-NRGDns -Name "_smtp._tls.$domain" -Type TXT) |
+                    Where-Object { $_ -like 'v=TLSRPTv1*' } | Select-Object -First 1
+                if ($tlsRptMatch) { $d.TLSRPT = [string]$tlsRptMatch }
             } catch { }
 
             # DNSSEC (DS record presence at parent zone)
             try {
-                $dsRecords = @(Resolve-DnsName -Name $domain -Type DS -ErrorAction SilentlyContinue)
+                $dsRecords = @(Resolve-NRGDns -Name $domain -Type DS)
                 if ($dsRecords.Count -gt 0) { $d.DNSSEC = $true }
             } catch { }
 
-            # MX
+            # MX — DoH returns each answer as 'PREF exchange.' e.g. '10 host.'
             try {
-                $mxRecords = @(Resolve-DnsName -Name $domain -Type MX -ErrorAction Stop)
-                $d.MX = @($mxRecords |
-                    Where-Object { $_.Type -eq 'MX' } |
-                    ForEach-Object { @{ Exchange = [string]$_.NameExchange; Preference = [int]$_.Preference } })
+                $d.MX = @(@(Resolve-NRGDns -Name $domain -Type MX) | ForEach-Object {
+                    $parts = ([string]$_).Trim() -split '\s+', 2
+                    if ($parts.Count -eq 2) {
+                        @{ Preference = [int]$parts[0]; Exchange = $parts[1].TrimEnd('.') }
+                    }
+                } | Where-Object { $_ })
             } catch { }
 
             # ── CAA records (RFC 8659) ────────────────────────────────────────
@@ -406,21 +408,23 @@ function Invoke-NRGCollectDNSEmailRecords {
             # any CA may issue, which is fine but means there's no defense
             # against an attacker who phishes a domain admin into approving
             # a cert from a CA the org doesn't use.
+            # Resolved via DoH — the previous Resolve-DnsName -Type CAA threw
+            # 'Cannot convert value CAA to RecordType' on older Windows DnsClient
+            # modules, so CAA was never actually checked. DoH returns each record
+            # as 'FLAGS TAG "VALUE"', e.g. '0 issue "digicert.com"'.
             try {
-                $caaRecords = @(Resolve-DnsName -Name $domain -Type CAA -ErrorAction Stop |
-                                Where-Object { $_.Type -eq 'CAA' })
-                if ($caaRecords.Count -gt 0) {
+                $caaParsed = @(@(Resolve-NRGDns -Name $domain -Type CAA) | ForEach-Object {
+                    $m = [regex]::Match([string]$_, '^\s*(\d+)\s+(\w+)\s+"?([^"]*)"?\s*$')
+                    if ($m.Success) {
+                        @{ Flags = [int]$m.Groups[1].Value; Tag = $m.Groups[2].Value; Value = $m.Groups[3].Value.Trim() }
+                    }
+                } | Where-Object { $_ })
+                if ($caaParsed.Count -gt 0) {
                     $d.CAA.Present = $true
-                    $d.CAA.Records = @($caaRecords | ForEach-Object {
-                        @{
-                            Flags = [int]($_.Flags ?? 0)
-                            Tag   = [string]$_.Tag
-                            Value = [string]$_.Value
-                        }
-                    })
-                    $d.CAA.IssuanceAllowed = @($caaRecords | Where-Object { $_.Tag -eq 'issue' }     | ForEach-Object { [string]$_.Value })
-                    $d.CAA.WildcardAllowed = @($caaRecords | Where-Object { $_.Tag -eq 'issuewild' } | ForEach-Object { [string]$_.Value })
-                    $d.CAA.IodefContact    = @($caaRecords | Where-Object { $_.Tag -eq 'iodef' }     | ForEach-Object { [string]$_.Value })
+                    $d.CAA.Records = $caaParsed
+                    $d.CAA.IssuanceAllowed = @($caaParsed | Where-Object { $_.Tag -eq 'issue' }     | ForEach-Object { $_.Value })
+                    $d.CAA.WildcardAllowed = @($caaParsed | Where-Object { $_.Tag -eq 'issuewild' } | ForEach-Object { $_.Value })
+                    $d.CAA.IodefContact    = @($caaParsed | Where-Object { $_.Tag -eq 'iodef' }     | ForEach-Object { $_.Value })
                 }
             } catch {
                 $d.Errors += "CAA: $($_.Exception.Message)"

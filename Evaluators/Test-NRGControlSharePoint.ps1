@@ -330,13 +330,37 @@ function Test-NRGControlSPOVersionHistory {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    # v4.6.4 CRITICAL FIX: prior code returned hardcoded Satisfied without
-    # actually inspecting any version-history config — that's a production
-    # false-negative. Downgrade to NotApplicable with explicit manual-review
-    # marker until a real per-site-collection check is implemented in v4.7.0.
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-        -Title "$($ctrl.Title) (Manual review required)" -FrameworkIds $cit `
-        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Version history retention varies per site collection and cannot be assumed from tenant-level data. Verify via SharePoint Admin Center > Settings that version limits have not been reduced to zero on any site collection.'
+    # Assesses the ORG-WIDE version-history default (Get-SPOTenant) applied to new
+    # document libraries / OneDrive accounts — the setting behind SharePoint Admin
+    # Center > Settings > Version history limits, and the org's ransomware-recovery
+    # baseline. Per-site overrides aren't covered (that needs per-site enumeration);
+    # the tenant default is the governing, assessable signal.
+    $sp = $spo.Data['TenantSettingsSPO']
+    if (-not $sp) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'SharePoint Management Shell (Get-SPOTenant) data not collected — version-history default not assessed. Requires a Connect-SPOService session.'
+        return
+    }
+    $autoTrim  = (Get-NRGObjectField -Item $sp -Key 'EnableAutoExpirationVersionTrim') -eq $true
+    $majorLimit = [int](Get-NRGObjectField -Item $sp -Key 'MajorVersionLimit' -Default 0)
+    if ($autoTrim) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail 'Automatic version-history trimming is the org default (EnableAutoExpirationVersionTrim = $true). New document libraries keep an intelligent version set — files can be rolled back after ransomware encryption.' `
+            -CurrentValue 'Automatic version expiration (intelligent retention)'
+    } elseif ($majorLimit -ge 100) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "The org default keeps $majorLimit major versions per file — adequate for ransomware recovery (>= 100)." `
+            -CurrentValue "MajorVersionLimit = $majorLimit"
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "The org-wide version-history default keeps only $majorLimit major version(s) per file and automatic trimming is off. Too few versions to reliably roll back files after ransomware encryption or accidental overwrite." `
+            -CurrentValue "MajorVersionLimit = $majorLimit, EnableAutoExpirationVersionTrim = `$false" `
+            -RequiredValue 'Automatic version trimming, or >= 100 major versions' `
+            -Remediation $ctrl.Remediation
+    }
 }
 
 # ── SPO-3.4 SharePoint Guest Access Expiration Enabled ────────────────────────

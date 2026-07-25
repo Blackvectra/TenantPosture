@@ -282,3 +282,57 @@ function Test-NRGLicenseRequirementMet {
     if ($null -eq $LicenseProfile -or -not $LicenseProfile.SuppressedLicenseRequirements) { return $false }
     return [bool]$LicenseProfile.SuppressedLicenseRequirements.Contains($LicenseRequirement)
 }
+
+function Get-NRGControlLicenseStatus {
+    <#
+    .SYNOPSIS
+        Evaluator-facing license gate. Given a ControlId, answers whether the
+        tenant holds the license that control's assessment requires.
+    .DESCRIPTION
+        Returns one of three strings so an evaluator can pick an HONEST state
+        when the workload's data is unavailable, instead of emitting a
+        confident (and often false) gap:
+
+          'Met'     — the tenant holds the required license (or the control has
+                      no license requirement). Unavailable data is therefore a
+                      real collection problem, not a licensing gap → the
+                      evaluator should emit 'Error'.
+          'NotMet'  — the tenant demonstrably lacks the license, so the control
+                      literally cannot be configured — it is not a
+                      misconfiguration → the evaluator should emit
+                      'NotApplicable' (license-gated, an upgrade opportunity),
+                      keeping it out of the compliance score.
+          'Unknown' — no SubscribedSkus data was collected, so licensing cannot
+                      be determined → the evaluator should stay conservative
+                      ('NotApplicable' advisory), never a confident gap.
+
+        Reads the license profile from the already-collected AAD-Inventory raw
+        data via Get-NRGTenantLicenseProfile — no extra Graph call.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [string] $ControlId)
+
+    $req = ''
+    if (Get-Command Get-NRGControlById -ErrorAction SilentlyContinue) {
+        try {
+            $c = Get-NRGControlById -ControlId $ControlId
+            if ($c -and $c.LicenseRequirement) { $req = [string]$c.LicenseRequirement }
+        } catch { }
+    }
+    if ([string]::IsNullOrEmpty($req) -or $req -match '^Included') { return 'Met' }
+
+    $prof = $null
+    if (Get-Command Get-NRGTenantLicenseProfile -ErrorAction SilentlyContinue) {
+        try { $prof = Get-NRGTenantLicenseProfile } catch { $prof = $null }
+    }
+    if ($null -eq $prof) { return 'Unknown' }
+
+    # No SKU data collected at all → we can't tell; stay conservative.
+    $skuCount = @($prof.SkuPartNumbers).Count
+    $spCount  = @($prof.ServicePlans).Count
+    if ($skuCount -eq 0 -and $spCount -eq 0) { return 'Unknown' }
+
+    if (Test-NRGLicenseRequirementMet -LicenseRequirement $req -LicenseProfile $prof) { return 'Met' }
+    return 'NotMet'
+}

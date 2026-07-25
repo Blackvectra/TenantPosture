@@ -18,6 +18,7 @@ function Invoke-NRGCollectEXOMailboxConfig {
         Data    = @{
             TransportConfig          = $null
             OutboundSpamPolicies     = @()
+            CASMailboxPlans          = @()
             RemoteDomains            = @()
             AcceptedDomains          = @()
             OrganizationConfig       = $null
@@ -55,15 +56,41 @@ function Invoke-NRGCollectEXOMailboxConfig {
             $policies = @(Get-HostedOutboundSpamFilterPolicy -ErrorAction Stop)
             $result.Data.OutboundSpamPolicies = @($policies | ForEach-Object {
                 @{
-                    Name               = [string]$_.Name
-                    IsDefault          = [bool]$_.IsDefault
-                    AutoForwardingMode = [string]$_.AutoForwardingMode
-                    Enabled            = [bool]$_.Enabled
+                    Name                          = [string]$_.Name
+                    IsDefault                     = [bool]$_.IsDefault
+                    AutoForwardingMode            = [string]$_.AutoForwardingMode
+                    Enabled                       = [bool]$_.Enabled
+                    # EXO-3.2: admin notification on outbound spam (CIS/MDO recommend $true)
+                    NotifyOutboundSpam            = if ($null -ne $_.NotifyOutboundSpam) { [bool]$_.NotifyOutboundSpam } else { $false }
+                    ActionWhenThresholdReached    = [string]$_.ActionWhenThresholdReached
+                    RecipientLimitExternalPerHour = [int]($_.RecipientLimitExternalPerHour -as [int])
+                    RecipientLimitInternalPerHour = [int]($_.RecipientLimitInternalPerHour -as [int])
+                    RecipientLimitPerDay          = [int]($_.RecipientLimitPerDay -as [int])
                 }
             })
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-OutboundSpam' -Message $_.Exception.Message
+            }
+        }
+
+        # CAS mailbox plans — org-level default POP3/IMAP enablement (EXO-2.3/2.4).
+        # POP/IMAP are legacy basic-auth protocols; CIS recommends disabling them.
+        # Get-CASMailboxPlan exposes the per-license default that new mailboxes
+        # inherit — a tenant-scope, read-only signal (no per-user enumeration).
+        try {
+            $plans = @(Get-CASMailboxPlan -ErrorAction Stop)
+            $result.Data.CASMailboxPlans = @($plans | ForEach-Object {
+                @{
+                    Name        = [string]$_.Name
+                    DisplayName = [string]$_.DisplayName
+                    PopEnabled  = if ($null -ne $_.PopEnabled)  { [bool]$_.PopEnabled }  else { $true }
+                    ImapEnabled = if ($null -ne $_.ImapEnabled) { [bool]$_.ImapEnabled } else { $true }
+                }
+            })
+        } catch {
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'EXO-CASMailboxPlans' -Message $_.Exception.Message
             }
         }
 

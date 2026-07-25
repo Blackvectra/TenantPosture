@@ -534,10 +534,42 @@ function Test-NRGControlAADAccessReviews {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'PIM not available — access reviews require Entra P2'; return
     }
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-        -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
-        -Detail 'PIM is available. Verify recurring access reviews are configured: PIM > Azure AD roles > Access reviews > Create a quarterly review for privileged roles.' `
-        -Remediation $ctrl.Remediation
+    # Access review definitions need the AccessReview.Read.All scope, which is a
+    # re-consent scope (like AAD-11.3 / DEF-4.6). Until the enterprise app is
+    # re-consented the collector can't read them — report NotApplicable, never a
+    # false "no reviews" gap.
+    if (-not $pim.AccessReviewsCollected) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title `
+            -Detail 'Access review data not collected — requires the AccessReview.Read.All scope (re-consent the enterprise app in each tenant). Verify manually in PIM > Microsoft Entra roles > Access reviews.'
+        return
+    }
+    $reviews = @($pim.Data['AccessReviews'] ?? @())
+    $activeStatuses = @('InProgress', 'NotStarted', 'Applying', 'Applied')
+    $roleReviews = @($reviews | Where-Object {
+        (Get-NRGObjectField -Item $_ -Key 'TargetsRoles') -eq $true -and
+        ([string](Get-NRGObjectField -Item $_ -Key 'Status')) -in $activeStatuses
+    })
+    if ($roleReviews.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "$($roleReviews.Count) active access review(s) recertify privileged directory-role assignments. Standing admin access is periodically re-attested instead of accumulating unchecked." `
+            -CurrentValue "$($roleReviews.Count) role access review(s) active"
+    } elseif ($reviews.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail "$($reviews.Count) access review(s) exist but none target privileged directory roles. Groups/apps are reviewed, but Global Admin and other privileged role assignments are not recertified." `
+            -CurrentValue 'Access reviews present, none for privileged roles' `
+            -RequiredValue 'A recurring access review scoped to privileged directory roles' `
+            -Remediation $ctrl.Remediation
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'No access reviews are configured. Privileged role assignments are never recertified, so stale or over-provisioned admin access accumulates unnoticed.' `
+            -CurrentValue 'No access reviews configured' `
+            -RequiredValue 'A recurring access review scoped to privileged directory roles' `
+            -Remediation $ctrl.Remediation
+    }
 }
 
 # ── AAD-9.1 Authenticator Number Matching Enabled ────────────────────────────

@@ -10,7 +10,8 @@
 #      SecurityEvents.Read.All, AuditLog.Read.All, RoleManagement.Read.All,
 #      Organization.Read.All, Sites.Read.All, DeviceManagementConfiguration.Read.All,
 #      DeviceManagementApps.Read.All, UserAuthenticationMethod.Read.All,
-#      IdentityRiskyServicePrincipal.Read.All, AttackSimulation.Read.All.
+#      IdentityRiskyServicePrincipal.Read.All, AttackSimulation.Read.All,
+#      AccessReview.Read.All.
 #      EXO: Exchange.ManageAsApp + Global Reader role. See docs/AUTH-APP-ONLY.md.
 #      Use CA-issued cert. Self-signed is discouraged per Microsoft Learn.
 #
@@ -101,6 +102,38 @@ function Connect-NRGServices {
     $env:MSAL_ALLOW_BROKER = '0'
     $env:MSAL_DISABLE_TOKENBROKER = '1'
 
+    # ── MSAL assembly-conflict preflight ──────────────────────────────────────
+    # The #1 failure mode in M365 PowerShell tooling (ours AND CISA's ScubaGear)
+    # is a Microsoft.Identity.Client version clash between the Graph and Exchange
+    # modules. Surface the specific cause up front instead of letting the cryptic
+    # "Could not load file or assembly 'Microsoft.Identity.Client'" (or
+    # "Method not found ...WithBroker") fire mid-connect. Non-fatal — a warning
+    # only; a clean machine sees nothing and the run proceeds.
+    if (Get-Command Get-NRGModuleHealth -ErrorAction SilentlyContinue) {
+        try {
+            $health = Get-NRGModuleHealth
+            if ($health.HasConflictRisk) {
+                Write-Host "  [!] Module preflight: Microsoft.Identity.Client (MSAL) assembly-conflict risk." -ForegroundColor Yellow
+                foreach ($m in $health.Modules) {
+                    if ($m.MultipleVersions) {
+                        Write-Host "      $($m.Name): $(@($m.Versions).Count) versions installed ($(@($m.Versions) -join ', ')) — keep only one." -ForegroundColor DarkYellow
+                    }
+                    if ($m.OneDrivePath) {
+                        Write-Host "      $($m.Name): installed under a OneDrive-synced path — move PowerShell modules out of OneDrive." -ForegroundColor DarkYellow
+                    }
+                }
+                Write-Host "      This is what causes 'Could not load file or assembly Microsoft.Identity.Client' at Exchange connect." -ForegroundColor DarkYellow
+                Write-Host "      Fix: run .\Install-NRGPrerequisites.ps1, or uninstall the extra versions and Install-Module ExchangeOnlineManagement -RequiredVersion 3.2.0 -Force." -ForegroundColor DarkYellow
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    $bad = @($health.Modules | Where-Object { $_.MultipleVersions -or $_.OneDrivePath } | ForEach-Object { $_.Name })
+                    Register-NRGException -Source 'ModulePreflight' -Message ("MSAL assembly-conflict risk on: {0}" -f ($bad -join ', '))
+                }
+            }
+        } catch {
+            Write-Verbose "Module preflight skipped: $($_.Exception.Message)"
+        }
+    }
+
     # ── 1. Microsoft Graph ────────────────────────────────────────────────────
     Write-Host "  [*] Microsoft Graph..." -ForegroundColor Cyan
     try {
@@ -132,44 +165,76 @@ function Connect-NRGServices {
             'Policy.Read.PermissionGrant',
             'PrivilegedAccess.Read.AzureAD',
             'TeamSettings.Read.All',
-            # ── v4.13 added (2) — require client re-consent ──────────────
+            # ── require client re-consent ────────────────────────────────
             #   IdentityRiskyServicePrincipal.Read.All → AAD-11.3 (risky
             #     workload identities; needs Entra ID P2 + Workload IDs add-on)
             #   AttackSimulation.Read.All → DEF-4.6 (attack-sim training;
             #     Global cloud only, needs Defender for Office 365 P2)
+            #   AccessReview.Read.All → AAD-8.2 (access reviews for privileged
+            #     roles; needs Entra ID P2). Until re-consented the collector
+            #     gets 403 and AAD-8.2 reports NotApplicable.
             'IdentityRiskyServicePrincipal.Read.All',
-            'AttackSimulation.Read.All'
+            'AttackSimulation.Read.All',
+            'AccessReview.Read.All'
         )
 
-        # Force-load the LATEST Microsoft.Graph.Authentication to prevent assembly conflicts
-        # when multiple versions exist or EOM has loaded an older bundled version
-        $mgAuthVersions = @(Get-Module -ListAvailable -Name Microsoft.Graph.Authentication |
-            Sort-Object Version -Descending)
-        if ($mgAuthVersions) {
-            Import-Module $mgAuthVersions[0].Path -Force -ErrorAction SilentlyContinue -WarningAction SilentlyContinue 3>$null
+        # ── Reuse an existing Graph context if the caller already established one ──
+        # The GDAP batch runner (Invoke-NRGBatchAssessment) connects to each client
+        # tenant with Connect-MgGraph -TenantId AND verifies the context before it
+        # invokes this orchestrator. Re-running Connect-MgGraph here with a superset
+        # of scopes would trigger MSAL INCREMENTAL CONSENT — an interactive re-auth
+        # per client that breaks unattended batch and, with no -TenantId, can
+        # silently switch context to the operator's home tenant. A force-reload of
+        # Microsoft.Graph.Authentication would also drop the active session. So when
+        # a context already exists that holds the core read scopes, reuse it and skip
+        # the reconnect. The two re-consent-only scopes (IdentityRiskyServicePrincipal
+        # / AttackSimulation) simply stay absent → AAD-11.3 / DEF-4.6 report
+        # NotApplicable in batch, which is the already-documented behaviour.
+        $reuseGraphContext = $false
+        if (-not $isAppOnly) {
+            try {
+                $existingCtx = Get-MgContext -ErrorAction SilentlyContinue
+                if ($existingCtx -and $existingCtx.Scopes) {
+                    $coreNeeded = @('Directory.Read.All', 'Policy.Read.All', 'User.Read.All')
+                    $haveCore = (@($coreNeeded | Where-Object { $existingCtx.Scopes -contains $_ }).Count -eq $coreNeeded.Count)
+                    if ($haveCore) { $reuseGraphContext = $true }
+                }
+            } catch { $reuseGraphContext = $false }
         }
 
-        # Pre-import Graph sub-modules before Connect-MgGraph locks the version
-        $graphSubModules = @(
-            'Microsoft.Graph.Reports',
-            'Microsoft.Graph.Identity.Governance',
-            'Microsoft.Graph.Identity.SignIns',
-            'Microsoft.Graph.Users'
-        )
-        foreach ($gm in $graphSubModules) {
-            if (Get-Module -ListAvailable -Name $gm -ErrorAction SilentlyContinue) {
-                Import-Module $gm -ErrorAction SilentlyContinue -WarningAction SilentlyContinue 3>$null
-            }
-        }
-
-        if ($isAppOnly) {
-            Connect-MgGraph -TenantId $TenantId -ClientId $AppId `
-                            -CertificateThumbprint $CertificateThumbprint `
-                            -ContextScope Process -NoWelcome -ErrorAction Stop
+        if ($reuseGraphContext) {
+            Write-Host "  [*] Microsoft Graph (reusing the caller's existing session)..." -ForegroundColor Cyan
         } else {
-            # -ContextScope Process scopes MSAL token cache to this PS process —
-            # token does NOT persist to msal_token_cache.bin on disk.
-            Connect-MgGraph -Scopes $scopes -ContextScope Process -NoWelcome -ErrorAction Stop
+            # Force-load the LATEST Microsoft.Graph.Authentication to prevent assembly conflicts
+            # when multiple versions exist or EOM has loaded an older bundled version
+            $mgAuthVersions = @(Get-Module -ListAvailable -Name Microsoft.Graph.Authentication |
+                Sort-Object Version -Descending)
+            if ($mgAuthVersions) {
+                Import-Module $mgAuthVersions[0].Path -Force -ErrorAction SilentlyContinue -WarningAction SilentlyContinue 3>$null
+            }
+
+            # Pre-import Graph sub-modules before Connect-MgGraph locks the version
+            $graphSubModules = @(
+                'Microsoft.Graph.Reports',
+                'Microsoft.Graph.Identity.Governance',
+                'Microsoft.Graph.Identity.SignIns',
+                'Microsoft.Graph.Users'
+            )
+            foreach ($gm in $graphSubModules) {
+                if (Get-Module -ListAvailable -Name $gm -ErrorAction SilentlyContinue) {
+                    Import-Module $gm -ErrorAction SilentlyContinue -WarningAction SilentlyContinue 3>$null
+                }
+            }
+
+            if ($isAppOnly) {
+                Connect-MgGraph -TenantId $TenantId -ClientId $AppId `
+                                -CertificateThumbprint $CertificateThumbprint `
+                                -ContextScope Process -NoWelcome -ErrorAction Stop
+            } else {
+                # -ContextScope Process scopes MSAL token cache to this PS process —
+                # token does NOT persist to msal_token_cache.bin on disk.
+                Connect-MgGraph -Scopes $scopes -ContextScope Process -NoWelcome -ErrorAction Stop
+            }
         }
 
         $ctx = Get-MgContext -ErrorAction Stop
@@ -252,7 +317,25 @@ function Connect-NRGServices {
     # (v3.2.0+). See docs/security/THREAT-MODEL.md.
     Write-Host "  [*] Exchange Online..." -ForegroundColor Cyan
     try {
-        if ($isAppOnly) {
+        # ── Reuse an existing EXO session if the caller already established one ──
+        # The GDAP batch runner connects EXO with -DelegatedOrganization <client>
+        # AND verifies the session tenant before invoking the orchestrator. This
+        # interactive branch has NO -DelegatedOrganization, so reconnecting here
+        # would open a session against the OPERATOR's own tenant and collect the
+        # wrong mailboxes. So if a Connected EXO session already exists, reuse it.
+        $reuseExoSession = $false
+        if (-not $isAppOnly -and (Get-Command Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+            try {
+                $exoConn = @(Get-ConnectionInformation -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Connected' })
+                if ($exoConn.Count -gt 0) { $reuseExoSession = $true }
+            } catch { $reuseExoSession = $false }
+        }
+
+        if ($reuseExoSession) {
+            $result['EXO'] = $true
+            Write-Host "  [+] Exchange Online (reusing the caller's existing session)" -ForegroundColor Green
+        }
+        elseif ($isAppOnly) {
             $orgDomain = if ($OrganizationDomain) {
                 $OrganizationDomain
             } elseif ($result.TenantDomain -match '\.onmicrosoft\.com$') {
@@ -262,6 +345,8 @@ function Connect-NRGServices {
             }
             Connect-ExchangeOnline -AppId $AppId -CertificateThumbprint $CertificateThumbprint `
                                    -Organization $orgDomain -ShowBanner:$false -ErrorAction Stop | Out-Null
+            $result['EXO'] = $true
+            Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
         } else {
             # Interactive browser MFA (matches ScubaGear). The WAM broker is disabled
             # at the top of this function, so modern-auth sign-in uses the system
@@ -270,9 +355,9 @@ function Connect-NRGServices {
             $exoParams = @{ ShowBanner = $false; ErrorAction = 'Stop' }
             if ($UserPrincipalName) { $exoParams['UserPrincipalName'] = $UserPrincipalName }
             Connect-ExchangeOnline @exoParams | Out-Null
+            $result['EXO'] = $true
+            Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
         }
-        $result['EXO'] = $true
-        Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
     } catch {
         Write-Host "  [!] EXO: $($_.Exception.Message)" -ForegroundColor Yellow
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {

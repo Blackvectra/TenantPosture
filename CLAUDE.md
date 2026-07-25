@@ -60,11 +60,11 @@ Every evaluator must guard against missing data as its first action. If `Get-NRG
 
 Each entry in `Config/controls.json` is validated by `Config/schema/controls.schema.json`. Required fields: `ControlId` (workload-prefixed, e.g. `AAD-1.1`), `Title`, `Description`, `BusinessRisk`, `Severity` (`Critical|High|Medium|Low|Informational`), `Workload` (one of AAD, EXO, DEF, TMS, PVW, SPO, INT, PPL, DNS), `Category`, `Automated` (boolean), `CollectorDependency` (raw-data key name the evaluator depends on), `EvaluatorFunction` (function name in `Evaluators/`), `Remediation`, `References` (array of framework citations), `LicenseRequirement` (string matched against `Get-NRGTenantLicenseProfile` output).
 
-## Graph Scopes (23 total)
+## Graph Scopes (24 total)
 
-`Application.Read.All`, `AttackSimulation.Read.All`, `AuditLog.Read.All`, `DeviceManagementApps.Read.All`, `DeviceManagementConfiguration.Read.All`, `DeviceManagementManagedDevices.Read.All`, `DeviceManagementServiceConfig.Read.All`, `Directory.Read.All`, `Group.Read.All`, `IdentityRiskyServicePrincipal.Read.All`, `IdentityRiskyUser.Read.All`, `Organization.Read.All`, `Policy.Read.All`, `Policy.Read.PermissionGrant`, `Reports.Read.All`, `RoleManagement.Read.All`, `SecurityEvents.Read.All`, `SharePointTenantSettings.Read.All`, `Sites.Read.All`, `TeamSettings.Read.All`, `User.Read.All`, `UserAuthenticationMethod.Read.All`, `PrivilegedAccess.Read.AzureAD`.
+`AccessReview.Read.All`, `Application.Read.All`, `AttackSimulation.Read.All`, `AuditLog.Read.All`, `DeviceManagementApps.Read.All`, `DeviceManagementConfiguration.Read.All`, `DeviceManagementManagedDevices.Read.All`, `DeviceManagementServiceConfig.Read.All`, `Directory.Read.All`, `Group.Read.All`, `IdentityRiskyServicePrincipal.Read.All`, `IdentityRiskyUser.Read.All`, `Organization.Read.All`, `Policy.Read.All`, `Policy.Read.PermissionGrant`, `Reports.Read.All`, `RoleManagement.Read.All`, `SecurityEvents.Read.All`, `SharePointTenantSettings.Read.All`, `Sites.Read.All`, `TeamSettings.Read.All`, `User.Read.All`, `UserAuthenticationMethod.Read.All`, `PrivilegedAccess.Read.AzureAD`.
 
-The two 2026 additions — `IdentityRiskyServicePrincipal.Read.All` (AAD-11.3) and `AttackSimulation.Read.All` (DEF-4.6) — require a one-time admin re-consent in each client tenant's enterprise app before those two controls collect data; until re-consented, both collectors fail gracefully and the controls report NotApplicable.
+Three additions — `IdentityRiskyServicePrincipal.Read.All` (AAD-11.3), `AttackSimulation.Read.All` (DEF-4.6), and `AccessReview.Read.All` (AAD-8.2) — require a one-time admin re-consent in each client tenant's enterprise app before those controls collect data; until re-consented, the collectors fail gracefully (403) and the controls report NotApplicable.
 
 Do not add scopes without updating `Connect-NRGServices.ps1`. The scope list must remain in sync with the enterprise app registration in each client tenant.
 

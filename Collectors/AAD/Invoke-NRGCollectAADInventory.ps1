@@ -144,6 +144,17 @@ function Invoke-NRGCollectAADInventory {
                     MaxScore       = [double]($latest.maxScore ?? 0)
                     Percentage     = if ($latest.maxScore -gt 0) { [int](($latest.currentScore / $latest.maxScore) * 100) } else { 0 }
                     CreatedDate    = [string]($latest.createdDateTime ?? '')
+                    # AAD-13.1: Microsoft's peer benchmark — averageComparativeScores
+                    # gives the average score by basis (AllTenants / TotalSeats /
+                    # IndustryTypes). Lets the evaluator judge "above or below peers"
+                    # instead of an arbitrary threshold. Field names per the
+                    # secureScore / averageComparativeScore Graph resource types.
+                    AverageComparativeScores = @(($latest.averageComparativeScores ?? @()) | ForEach-Object {
+                        @{
+                            Basis        = [string]($_.basis ?? '')
+                            AverageScore = [double]($_.averageScore ?? 0)
+                        }
+                    })
                     ActiveProfiles = @($latest.activeUserCount ?? 0)
                     ControlScores  = @($latest.controlScores ?? @() | Select-Object -First 20 | ForEach-Object {
                         @{

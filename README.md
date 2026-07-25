@@ -122,6 +122,61 @@ Every run now classifies the tenant into a **Tenant Security Maturity Tier** (In
 .\Invoke-NRGBatchAssessment.ps1 -WhatIf
 ```
 
+### Incident Response — Email-IR (mailbox compromise)
+
+Three separate entry points for a *suspected account compromise* (BEC, stolen
+credentials, attacker inbox rules, mass outbound). These are distinct from the
+posture assessment above — they focus on one or more **mailboxes during an
+incident**, not the 195 tenant controls.
+
+**1. You already know which user** — `Invoke-NRGEmailAssessment.ps1`
+Runs with **the user's own credentials** (delegated sign-in, *no admin scope
+needed*). Scans inbox rules, forwarding, outbound activity, phish origin, auth
+methods, and OAuth consents for that one mailbox.
+
+```powershell
+# Assess one mailbox (browser sign-in as that user, or an admin who can read it)
+.\Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@corp.com
+
+# Wider sent-items window + public RDAP domain-age enrichment
+.\Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@corp.com -WindowDays 14 -EnableThreatIntel
+
+# Unattended / SOAR: no prompts, exit 10 if any Critical IoC is found
+.\Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@corp.com -NonInteractive -FailOnCriticalIoC
+```
+Output: `.\output\<upn>\<timestamp>-email-incident.html` + `-email-incident.md` + `-email-results.json`.
+
+**2. You suspect compromise but don't know which user** — `Invoke-NRGSignInTriage.ps1`
+**Admin sign-in.** Pulls the tenant sign-in logs, scores every user for IoCs
+(failed→success bursts, anonymous-IP / Tor, impossible travel, Identity
+Protection risky users, out-of-state), ranks them, then auto deep-dives the top
+users' mailboxes in the same session (`Mail.Read.All`).
+
+```powershell
+# Full triage: rank users, then deep-dive the top 5 scoring >= 30
+.\Invoke-NRGSignInTriage.ps1
+
+# Triage only — rank users, do NOT read any mailbox (e.g. BAA restriction)
+.\Invoke-NRGSignInTriage.ps1 -SkipMailDive
+
+# Dive deeper / widen the window
+.\Invoke-NRGSignInTriage.ps1 -DeepDive 10 -WindowDays 14
+```
+Output goes to `.\output\IR-Triage\`. Required admin scopes: `AuditLog.Read.All`,
+`IdentityRiskyUser.Read.All`, and `Mail.Read.All` (only when deep-diving).
+
+**3. Morning sweep across every GDAP client** — `Invoke-NRGBatchSignInTriage.ps1`
+Runs the sign-in triage across all active clients in `Config\clients.json`, one
+login via GDAP — the same multi-tenant model as the batch assessment.
+
+```powershell
+.\Invoke-NRGBatchSignInTriage.ps1
+```
+
+> Tip: run `Get-Help .\Invoke-NRGSignInTriage.ps1 -Full` for every parameter, or
+> open the script header — each lists its full switch set and exit codes
+> (`0` ok, `1` auth, `10` critical IoC found).
+
 ### Local Web GUI
 
 For operators who prefer clicking over typing, `-Web` boots a local browser
