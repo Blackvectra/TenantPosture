@@ -161,7 +161,7 @@ if ($WhatIf) {
 # Partner Center GDAP relationships grant the delegated access — no per-client auth needed
 Write-Host '[-] Authenticating (one-time browser login)...' -ForegroundColor Cyan
 try {
-    # Request the SAME 23 scopes as Connect-NRGServices / CLAUDE.md. This one
+    # Request the SAME 24 scopes as Connect-NRGServices / CLAUDE.md. This one
     # login must cover everything the per-client orchestrator needs, because the
     # orchestrator now REUSES this context instead of reconnecting (reconnecting
     # with a superset of scopes would trigger MSAL incremental-consent re-auth on
