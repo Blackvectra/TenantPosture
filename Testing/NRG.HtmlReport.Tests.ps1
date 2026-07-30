@@ -118,11 +118,15 @@ Describe 'Publish-NRGAssessmentHTML end-to-end render' {
     }
 
     It 'HTML-escapes hostile finding content (no live markup injection)' {
-        # The raw <script> payload must NOT survive into the document...
-        $script:html | Should -Not -Match ('<script>{0}</script>' -f [regex]::Escape($script:XssMarker))
-        $script:html | Should -Not -Match ('onerror={0}' -f [regex]::Escape($script:XssMarker))
-        # ...but its text must still be present (escaped), proving it rendered
-        # through ConvertTo-NRGHtmlSafe rather than being silently dropped.
+        # No LIVE markup may survive: the raw tags (with a literal '<') must be
+        # turned into &lt;...&gt; entities by ConvertTo-NRGHtmlSafe. We assert on
+        # the raw TAG, not on the "onerror=" attribute substring — that inert
+        # text legitimately survives *inside* the escaped entity and its presence
+        # is not a vulnerability.
+        $script:html | Should -Not -Match ('<script>{0}' -f [regex]::Escape($script:XssMarker))
+        $script:html | Should -Not -Match ('<img[^>]*onerror={0}' -f [regex]::Escape($script:XssMarker))
+        # ...but the payload text must still be present (escaped), proving it
+        # rendered through the escaper rather than being silently dropped.
         $script:html | Should -Match ([regex]::Escape($script:XssMarker))
     }
 
