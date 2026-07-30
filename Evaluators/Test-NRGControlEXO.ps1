@@ -452,26 +452,77 @@ function Test-NRGControlEXOSharedMailbox {
     if (-not $control) { return }
     $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
-    # Shared mailbox sign-in state requires Graph User.Read.All to check AccountEnabled
-    # This data is in AAD-Users if collected
-    $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
-
-    if (-not $exoData -or -not $exoData.Success) {
+    # v4.12.2: implemented for real. This was previously a manual-review
+    # placeholder because the check needs EXO shared mailboxes joined against
+    # AAD AccountEnabled — but
+    # Invoke-NRGCollectEXOInventory already performs exactly that join and
+    # publishes the result as SharedMailboxSignIn, tagging each hit with the
+    # evidence it rests on:
+    #   Source = 'AAD-Users'    confirmed enabled via Graph accountEnabled
+    #   Source = 'LicenseProxy' inferred from a license/reconciliation signal
+    #                           because AAD user data was unavailable
+    # Those are not the same claim, so they do not produce the same verdict.
+    $inv = Get-NRGRawData -Key 'EXO-Inventory'
+    if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'EXO data not collected'
+            -Title $control.Title -Detail 'EXO inventory not collected'
         return
     }
 
-    # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
-    # Shared mailbox sign-in state requires cross-referencing AAD Users with EXO shared mailboxes
-    Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
-        -Title "$($control.Title) (Manual review required)" -Severity 'High' -FrameworkIds $citations `
-        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Shared mailbox direct sign-in status requires manual verification. Run: Get-Mailbox -RecipientTypeDetails SharedMailbox | ForEach-Object { Get-MgUser -UserId $_.ExternalDirectoryObjectId | Select DisplayName,AccountEnabled }' `
-        -CurrentValue 'Manual review required' -RequiredValue 'All shared mailbox accounts have AccountEnabled = $false' `
-        -Remediation $control.Remediation
+    $allShared = @($inv.Data['AllSharedMailboxes'] ?? @())
+    if ($allShared.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'SharedMailboxes')) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title `
+            -Detail 'Shared mailbox enumeration did not complete (see Exceptions) — sign-in state could not be assessed.'
+        return
+    }
+
+    if ($allShared.Count -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail 'No shared mailboxes exist in this tenant, so none can be signed into directly.'
+        return
+    }
+
+    $risky     = @($inv.Data['SharedMailboxSignIn'] ?? @())
+    $confirmed = @($risky | Where-Object { $_.Source -eq 'AAD-Users' })
+    $probable  = @($risky | Where-Object { $_.Source -ne 'AAD-Users' })
+
+    $affected = @($risky | ForEach-Object {
+        [ordered]@{
+            DisplayName = [string]$_.DisplayName
+            UPN         = [string]$_.UPN
+            SignInState = [string]$_.SignInState
+            Evidence    = if ($_.Source -eq 'AAD-Users') { 'Confirmed via Entra accountEnabled' }
+                          else { 'Inferred from license state — AAD user data unavailable' }
+        }
+    })
+
+    if ($confirmed.Count -gt 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+            -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
+            -Detail "$($confirmed.Count) of $($allShared.Count) shared mailbox(es) have direct sign-in enabled. A shared mailbox is accessed by delegation, so an enabled sign-in is an account with a password that no one owns, no one monitors, and that is typically excluded from MFA — a standing foothold for password spray." `
+            -CurrentValue "$($confirmed.Count) shared mailbox(es) with sign-in enabled" `
+            -RequiredValue 'All shared mailbox accounts disabled (BlockCredential) — access via delegation only' `
+            -Remediation $control.Remediation -AffectedObjects $affected
+    }
+    elseif ($probable.Count -gt 0) {
+        # Only the weaker license-based signal fired. Report it, but do not
+        # dress a heuristic up as a confirmed finding.
+        Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+            -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
+            -Detail "$($probable.Count) of $($allShared.Count) shared mailbox(es) carry a license or reconciliation flag suggesting an active account, but Entra user data was unavailable so sign-in state could not be confirmed. Verify these directly before treating them as clean." `
+            -CurrentValue "$($probable.Count) shared mailbox(es) flagged by license heuristic (unconfirmed)" `
+            -RequiredValue 'All shared mailbox accounts confirmed disabled (BlockCredential)' `
+            -Remediation $control.Remediation -AffectedObjects $affected
+    }
+    else {
+        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail "$($allShared.Count) shared mailbox(es) found — none have direct sign-in enabled. Access is by delegation only, as intended."
+    }
 }
 
-# ── EXO-3.1 Connection Filter No Safe List Bypass ────────────────────────────
 function Test-NRGControlEXOConnectionFilter {
     [CmdletBinding()] param()
     $cid = 'EXO-3.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
@@ -547,8 +598,63 @@ function Test-NRGControlEXOAlertVolume {
     [CmdletBinding()] param()
     $cid = 'EXO-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Unusual mail volume alert requires manual verification in Defender portal: Alerts > Alert policies > Unusual increase in email reported as phish.' -Remediation $ctrl.Remediation
+
+    # v4.12.2: implemented against Get-ProtectionAlert policy configuration
+    # (Purview.ProtectionAlerts). Matching is by policy name / threat type /
+    # operation against phish-reporting and mail-volume wording, because no
+    # machine-readable "this is the unusual mail volume policy" flag exists.
+    # A custom-named policy can therefore be under-detected, which the Gap text
+    # states so the reader knows to confirm before acting.
+    $pvw = Get-NRGRawData -Key 'Purview'
+    if (-not $pvw -or -not $pvw.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'Purview data not collected'
+        return
+    }
+    $status = Get-NRGNestedProperty -Object $pvw -Path 'Data.SectionStatus.ProtectionAlerts' -Default $null
+    if ($status -ne 'Collected') {
+        $why = if ($status -eq 'Failed') { 'the Get-ProtectionAlert query failed (see Exceptions)' }
+               else { 'Get-ProtectionAlert was unavailable — this requires a Security & Compliance (IPPS) session' }
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail "Alert policy configuration could not be read: $why. Mail volume alerting was not assessed."
+        return
+    }
+
+    $policies = @($pvw.Data['ProtectionAlerts'] ?? @())
+    $pattern  = 'unusual.*(mail|email)|(mail|email).*volume|reported as phish|phish.*report|suspicious email sending'
+    $matched  = @($policies | Where-Object {
+        (@([string]$_.Name, [string]$_.ThreatType, (@($_.Operation) -join ' ')) -join ' ') -match $pattern
+    })
+    $active = @($matched | Where-Object { -not $_.Disabled })
+
+    if ($active.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'No enabled alert policy was found covering unusual mail volume or user-reported phish. A compromised mailbox sending outbound spam is often first visible as a volume spike, and without this alert that spike is only noticed once the tenant is being throttled or blocklisted. (Detection matches policy name, operation and threat type against mail-volume and phish-reporting wording, so a custom-named policy may exist and not be matched — verify in the portal before remediating.)' `
+            -CurrentValue "0 of $($policies.Count) alert policies match mail volume / phish reporting" `
+            -RequiredValue 'An enabled alert policy for unusual mail volume or user-reported phish' `
+            -Remediation $ctrl.Remediation
+        return
+    }
+
+    $silent = @($active | Where-Object { @($_.NotifyUser).Count -eq 0 })
+    if ($silent.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "$($active.Count) enabled alert policy(ies) cover unusual mail volume / user-reported phish, each with notification recipients."
+    } else {
+        $affected = @($silent | ForEach-Object {
+            [ordered]@{ DisplayName = [string]$_.Name; Severity = [string]$_.Severity; Recipients = 'none configured' }
+        })
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail "$($silent.Count) of $($active.Count) matching alert policy(ies) are enabled but notify nobody, so a mail volume spike is recorded without anyone being told." `
+            -CurrentValue "$($silent.Count) matching policies with no recipients" `
+            -RequiredValue 'Mail volume / phish reporting alert enabled with notification recipients' `
+            -Remediation $ctrl.Remediation -AffectedObjects $affected
+    }
 }
+
 
 # ── EXO-3.5 Transport Rules Audit Enabled ────────────────────────────────────
 function Test-NRGControlEXOTransportAudit {
@@ -675,7 +781,10 @@ function Test-NRGControlEXOAntiSpamInbound {
     }
     $gaps = @()
     if ($default.SpamAction     -ne 'MoveToJmf' -and $default.SpamAction -ne 'Quarantine') { $gaps += "SpamAction=$($default.SpamAction)" }
-    if ($default.BulkThreshold  -gt 7)  { $gaps += "BulkThreshold=$($default.BulkThreshold)" }
+    # BulkThreshold 6, not Microsoft's default of 7: the control's own
+    # Remediation instructs -BulkThreshold 6, and an evaluator that passes 7
+    # while the remediation says 6 contradicts itself in the client's report.
+    if ($default.BulkThreshold  -gt 6)  { $gaps += "BulkThreshold=$($default.BulkThreshold)" }
     if ($default.ZapEnabled -ne $true)  { $gaps += 'ZapEnabled=False' }
     if ($gaps.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
@@ -685,7 +794,7 @@ function Test-NRGControlEXOAntiSpamInbound {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
             -Detail "Anti-spam policy has sub-optimal settings: $($gaps -join ', ')" `
-            -CurrentValue ($gaps -join ', ') -RequiredValue 'SpamAction=MoveToJmf/Quarantine, BulkThreshold≤7, ZapEnabled=True' `
+            -CurrentValue ($gaps -join ', ') -RequiredValue 'SpamAction=MoveToJmf/Quarantine, BulkThreshold≤6, ZapEnabled=True' `
             -Remediation $ctrl.Remediation
     }
 }
@@ -832,6 +941,18 @@ function Test-NRGControlEXOInboxRulesForwarding {
     # active exfil surface.
     $rules = @(@($inv.Data['InboxRulesForwarding'] ?? @()) | Where-Object { $_.IsExternal })
     $count = $rules.Count
+
+    # An empty list means "no attacker rules found" only if the mailbox sweep
+    # actually ran. The sweep is the most failure-prone query in the collector
+    # (per-mailbox Get-InboxRule across the tenant, routinely throttled), and
+    # claiming a clean result after it failed is a false all-clear on the
+    # primary BEC persistence check.
+    if ($count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'InboxRulesForwarding')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title `
+            -Detail 'Inbox rule sweep did not complete (see Exceptions) — forwarding rules could not be assessed. Re-run before treating this control as clean.'
+        return
+    }
 
     if ($count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `

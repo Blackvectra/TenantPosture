@@ -8,6 +8,31 @@
 # These are the "blood test" findings — they name EXACTLY who and what is at risk.
 #
 
+# Returns $true only when the named collector section was actually collected.
+# Used for both EXO-Inventory and AAD-Inventory, which share this shape.
+#
+# Every such list defaults to @() and each query has its own
+# try/catch, so the collector reports Success = $true even when an individual
+# query failed (throttling and transient 403s are routine on real tenants).
+# That makes an empty list ambiguous — "scanned, found nothing" or "never
+# scanned" — and reading it as compliance produces a false clean bill of health
+# on exactly the checks a client is paying for. Any evaluator about to conclude
+# Satisfied from an EMPTY list must gate on this first.
+#
+# Absent SectionStatus (data captured before this map existed) is treated as
+# collected so a replayed older JSON keeps its previous behaviour rather than
+# silently turning every inventory finding into NotApplicable.
+function Test-NRGInventorySectionCollected {
+    [CmdletBinding()]
+    param(
+        [AllowNull()] $Inventory,
+        [Parameter(Mandatory)] [string] $Section
+    )
+    $status = Get-NRGNestedProperty -Object $Inventory -Path "Data.SectionStatus.$Section" -Default $null
+    if ($null -eq $status) { return $true }
+    return ($status -eq 'Collected')
+}
+
 # ── INV-1.1 Users Without MFA — Named List ────────────────────────────────────
 function Test-NRGControlInventoryMFAUsers {
     [CmdletBinding()] param()
@@ -57,6 +82,11 @@ function Test-NRGControlInventoryStaleGuests {
     }
     $staleGuests = @($inv.Data['GuestUsers'] | Where-Object { $_.IsStale -eq $true })
     $allGuests   = @($inv.Data['GuestUsers']).Count
+    if ($allGuests -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'GuestUsers')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'Guest account enumeration did not complete (see Exceptions) — stale guest access could not be assessed.'
+        return
+    }
     if ($staleGuests.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$allGuests guest account(s) found — all have signed in within the past 90 days. No stale guest access detected."
     } else {
@@ -81,6 +111,11 @@ function Test-NRGControlInventoryStaleMembers {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Inventory data not collected'; return
     }
     $stale = @($inv.Data['StaleMembers'] ?? @() | Where-Object { $_.HasLicense -eq $true })
+    if (@($inv.Data['StaleMembers']).Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'StaleMembers')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'Dormant account enumeration did not complete (see Exceptions) — stale licensed accounts could not be assessed.'
+        return
+    }
     if ($stale.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All licensed member accounts have been active within the past 90 days. No dormant employee accounts detected.'
     } else {
@@ -105,6 +140,11 @@ function Test-NRGControlInventoryOAuthApps {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Inventory data not collected'; return
     }
     $apps = @($inv.Data['OAuthGrantedApps'] ?? @())
+    if ($apps.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'OAuthGrantedApps')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'OAuth consent grant enumeration did not complete (see Exceptions) — tenant-wide app consent could not be assessed.'
+        return
+    }
     if ($apps.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No tenant-wide (AllPrincipals) OAuth consent grants found. Third-party app access is properly scoped to consenting individuals only.'
     } else {
@@ -146,6 +186,11 @@ function Test-NRGControlInventoryExternalForwarding {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
     }
     $fwd = @($inv.Data['ForwardingMailboxes'] ?? @())
+    if ($fwd.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'ForwardingMailboxes')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'Forwarding mailbox enumeration did not complete (see Exceptions) — external forwarding could not be assessed. Re-run before relying on this control.'
+        return
+    }
     if ($fwd.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No mailboxes are configured with an external forwarding address. Email is not being silently copied to external destinations.'
     } else {
@@ -170,11 +215,25 @@ function Test-NRGControlInventorySharedMailboxSignIn {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
     }
     $shared = @($inv.Data['AllSharedMailboxes'] ?? @())
+    if ($shared.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'SharedMailboxes')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'Shared mailbox enumeration did not complete (see Exceptions) — shared mailbox sign-in state could not be assessed.'
+        return
+    }
     if ($shared.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No shared mailboxes found.'; return
     }
     # Cross-reference with AAD users to find which shared mailboxes have enabled accounts
     $users = Get-NRGRawData -Key 'AAD-Users'
+    # The sign-in state of a shared mailbox is only knowable by joining against
+    # AAD users. Without that data the join silently yields zero matches, and
+    # the branch below would report "all have interactive sign-in blocked" —
+    # a definitive compliance claim about a check that never ran.
+    if (-not $users -or -not $users.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail "$($shared.Count) shared mailbox(es) found, but AAD user data was not collected — sign-in state could not be determined."
+        return
+    }
     $enabledShared = @()
     if ($users -and $users.Success) {
         $userIndex = @{}
@@ -207,6 +266,11 @@ function Test-NRGControlInventoryMailboxAuditDisabled {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
     }
     $noAudit = @($inv.Data['AuditDisabledMailboxes'] ?? @())
+    if ($noAudit.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'AuditDisabledMailboxes')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'Mailbox audit enumeration did not complete (see Exceptions) — audit coverage could not be assessed.'
+        return
+    }
     if ($noAudit.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All mailboxes have audit logging enabled. Mailbox access, inbox rules, and delegation changes are being recorded.'
     } else {
@@ -228,6 +292,11 @@ function Test-NRGControlInventorySMTPAuthUsers {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
     }
     $smtp = @($inv.Data['SmtpAuthEnabledPerUser'] ?? @())
+    if ($smtp.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'SmtpAuthEnabledPerUser')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'Per-user SMTP AUTH enumeration did not complete (see Exceptions) — legacy authentication overrides could not be assessed.'
+        return
+    }
     if ($smtp.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No per-user SMTP AUTH overrides. The org-level SMTP AUTH disable is enforced across all users — legacy client authentication is blocked.'
     } else {

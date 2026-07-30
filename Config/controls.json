@@ -812,7 +812,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSharePoint",
       "Remediation": "Set-SPOTenant -SharingCapability ExistingExternalUserSharingOnly",
       "References": {
@@ -840,7 +840,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSharePoint",
       "Remediation": "Set-SPOTenant -DefaultSharingLinkType Internal",
       "References": {
@@ -868,7 +868,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSharePoint",
       "Remediation": "Set-SPOTenant -LegacyAuthProtocolsEnabled $false",
       "References": {
@@ -896,7 +896,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSharePoint",
       "Remediation": "Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60",
       "References": {
@@ -923,7 +923,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSharePoint",
       "Remediation": "Set-SPOTenant -ConditionalAccessPolicy AllowLimitedAccess",
       "References": {
@@ -950,7 +950,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowFederatedUsers $false, or restrict to an allowlist of trusted domains.",
       "References": {
@@ -979,7 +979,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowTeamsConsumer $false -AllowTeamsConsumerInbound $false",
       "References": {
@@ -1007,7 +1007,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowAnonymousUsersToJoinMeeting $false",
       "References": {
@@ -1034,7 +1034,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowExternalParticipantGiveRequestControl $false",
       "References": {
@@ -1062,7 +1062,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Ensure Purview retention policies cover SharePoint to capture Teams recording data.",
       "References": {
@@ -1089,7 +1089,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTeamsClientConfiguration -AllowGuestUser $false, or configure guest invitation permissions in Entra External Identities.",
       "References": {
@@ -1116,7 +1116,7 @@
       "Workload": "PVW",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Purview-AuditConfig",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurview",
       "Remediation": "Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true",
       "References": {
@@ -1144,7 +1144,7 @@
       "Workload": "PVW",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Purview-AuditConfig",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurview",
       "Remediation": "Configure custom retention policies in Purview Compliance > Audit > Retention policies. E5 provides 1-year default.",
       "References": {
@@ -1172,7 +1172,7 @@
       "Workload": "PVW",
       "Category": "Data",
       "Automated": true,
-      "CollectorDependency": "Purview-DLP",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurview",
       "Remediation": "Create DLP policies in Purview > Data loss prevention using Microsoft-provided templates (Financial, PII, Health) across Exchange, SharePoint, Teams.",
       "References": {
@@ -1201,7 +1201,7 @@
       "Workload": "PVW",
       "Category": "Data",
       "Automated": true,
-      "CollectorDependency": "Purview-Labels",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurview",
       "Remediation": "Create labels in Purview > Information protection. Publish via label policies. Minimum tiers: Internal, Confidential, Highly Confidential.",
       "References": {
@@ -1371,7 +1371,7 @@
       "Workload": "PPL",
       "Category": "Data",
       "Automated": true,
-      "CollectorDependency": "PowerPlatform-TenantSettings",
+      "CollectorDependency": "PowerPlatform",
       "EvaluatorFunction": "Test-NRGControlPowerPlatform",
       "Remediation": "Power Platform Admin Center > Policies > Tenant Isolation: enable and configure inbound/outbound restrictions.",
       "References": {
@@ -1400,7 +1400,7 @@
       "Workload": "PPL",
       "Category": "Data",
       "Automated": true,
-      "CollectorDependency": "PowerPlatform-DLP",
+      "CollectorDependency": "PowerPlatform",
       "EvaluatorFunction": "Test-NRGControlPowerPlatform",
       "Remediation": "Power Platform Admin Center > Policies > Data policies: create environment policy. Move business connectors to Business group, block consumer connectors.",
       "References": {
@@ -1428,7 +1428,7 @@
       "Workload": "PPL",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "PowerPlatform-TenantSettings",
+      "CollectorDependency": "PowerPlatform",
       "EvaluatorFunction": "Test-NRGControlPowerPlatform",
       "Remediation": "Power Platform Admin Center > Settings: restrict environment creation to admins only.",
       "References": {
@@ -1539,7 +1539,7 @@
       "Workload": "EXO",
       "Category": "Email",
       "Automated": true,
-      "CollectorDependency": "EXO-MailboxConfig",
+      "CollectorDependency": "EXO-Inventory",
       "EvaluatorFunction": "Test-NRGControlEXOSharedMailbox",
       "Remediation": "Get-Mailbox -RecipientTypeDetails SharedMailbox | ForEach-Object { Set-MgUser -UserId $_.ExternalDirectoryObjectId -AccountEnabled $false }",
       "References": {
@@ -2354,7 +2354,7 @@
       "Workload": "EXO",
       "Category": "Email",
       "Automated": true,
-      "CollectorDependency": "EXO-ConnectionFilter",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlEXOAlertVolume",
       "Remediation": "Defender portal > Policies > Alert policies > Enable: Unusual increase in email reported as phish.",
       "References": {
@@ -2411,7 +2411,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSPOOneDriveSync",
       "Remediation": "Set-SPOTenant -AllowedDomainGuidsForSyncApp @('your-tenant-guid')",
       "References": {
@@ -2438,7 +2438,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSPOLinkExpiration",
       "Remediation": "Set-SPOTenant -RequireAnonymousLinksExpireInDays 30",
       "References": {
@@ -2466,7 +2466,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSPOAppsFromStore",
       "Remediation": "SharePoint Admin Center > Settings > Apps > disable apps from the SharePoint store.",
       "References": {
@@ -2494,7 +2494,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSPOCustomScript",
       "Remediation": "Set-SPOSite -DenyAddAndCustomizePages 1 (applies to all sites)",
       "References": {
@@ -2514,16 +2514,16 @@
     },
     {
       "ControlId": "SPO-2.5",
-      "Title": "Third-Party Cloud Storage Disabled in SharePoint",
-      "Description": "Third-party storage services (Dropbox, Box, Google Drive) are disabled in SharePoint and OneDrive. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
+      "Title": "Third-Party Cloud Storage Connectors Disabled",
+      "Description": "Third-party cloud storage providers (Dropbox, Box, Google Drive, ShareFile) are disabled so corporate files cannot be moved into storage the tenant does not control or audit. Verified against the Teams client configuration, which is the connector surface exposed to PowerShell; the Microsoft 365 admin centre \u0022Third-party storage services\u0022 toggle is not readable via API and remains a manual check.",
       "BusinessRisk": "Third-party storage integration allows organizational data to move to unmanaged cloud services outside DLP policy coverage.",
       "Severity": "Medium",
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlSPO3PStorage",
-      "Remediation": "SharePoint Admin Center > Settings > Third-party storage services > Off",
+      "Remediation": "Disable the connectors: Set-CsTeamsClientConfiguration -Identity Global -AllowDropBox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false. Then confirm the separate Microsoft 365 admin centre setting: admin.microsoft.com > Settings > Org settings > Services > Third-party storage services > off.",
       "References": {
         "CISControls": ["3.3"],
         "CIS": "7.3.5",
@@ -2550,7 +2550,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSPOEmailAttestation",
       "Remediation": "Set-SPOTenant -EmailAttestationRequired $true -EmailAttestationReAuthDays 30",
       "References": {
@@ -2578,7 +2578,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSPOReauth",
       "Remediation": "Set-SPOTenant -EmailAttestationReAuthDays 30",
       "References": {
@@ -2606,7 +2606,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSPODomainSync",
       "Remediation": "Set-SPOTenant -AllowedDomainGuidsForSyncApp (Get-SPOTenant).TenantId",
       "References": {
@@ -2634,7 +2634,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsSkype",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowPublicUsers $false",
       "References": {
@@ -2662,7 +2662,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsUnverifiedApps",
       "Remediation": "Teams Admin Center > Teams apps > Permission policies > Block all apps from unknown publishers.",
       "References": {
@@ -2690,7 +2690,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeams3PStorage",
       "Remediation": "Set-CsTeamsClientConfiguration -AllowDropbox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false",
       "References": {
@@ -2719,7 +2719,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsEmailIntegration",
       "Remediation": "Set-CsTeamsClientConfiguration -AllowEmailIntoChannels $false",
       "References": {
@@ -2747,7 +2747,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsRecordingExternal",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowCloudRecordingForCalls $false for externally-scoped policies",
       "References": {
@@ -2775,7 +2775,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsBroadChannel",
       "Remediation": "Review AllowChannelMeetingScheduling in meeting policy \u2014 restrict if channels have broad guest membership.",
       "References": {
@@ -2803,7 +2803,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsExternalChat",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowFederatedUsers $false or restrict to allowlist.",
       "References": {
@@ -2832,7 +2832,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsPSTN",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowPSTNUsersToBypassLobby $false",
       "References": {
@@ -2860,7 +2860,7 @@
       "Workload": "PVW",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Purview-AuditConfig",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurviewAuditSearch",
       "Remediation": "Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true",
       "References": {
@@ -2888,7 +2888,7 @@
       "Workload": "PVW",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Purview-AuditConfig",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurviewCommCompliance",
       "Remediation": "Purview > Communication compliance > Create policy. Requires E5 Compliance.",
       "References": {
@@ -2916,7 +2916,7 @@
       "Workload": "PVW",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Purview-AuditConfig",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurviewInfoBarriers",
       "Remediation": "Set-PolicyConfig -InformationBarrierMode MultiSegment. Requires E5 Compliance.",
       "References": {
@@ -2944,7 +2944,7 @@
       "Workload": "PVW",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Purview-AuditConfig",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurviewInsiderRisk",
       "Remediation": "Purview > Insider risk management > Create policy (Departing user data theft, Data leaks). Requires E5 Compliance.",
       "References": {
@@ -2973,7 +2973,7 @@
       "Workload": "PVW",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Purview-AuditConfig",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurviewRetention",
       "Remediation": "Purview > Data lifecycle management > Retention policies. Create policies for Exchange, SharePoint, OneDrive, Teams.",
       "References": {
@@ -3001,7 +3001,7 @@
       "Workload": "PVW",
       "Category": "Data",
       "Automated": true,
-      "CollectorDependency": "Purview-Labels",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurviewAutoLabel",
       "Remediation": "Purview > Information protection > Auto-labeling > Create policy for sensitive info types (SSN, credit card, etc.).",
       "References": {
@@ -3596,7 +3596,7 @@
       "Workload": "DEF",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Defender-Policies",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlDefenderAlertNotification",
       "Remediation": "Defender portal > Settings > Email notifications > Create notification rule for High and Critical severity alerts.",
       "References": {
@@ -3624,7 +3624,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSPOSiteAdmins",
       "Remediation": "Review site admins: Get-SPOSite -Limit ALL | ForEach-Object { Get-SPOUser -Site $_.Url -Group 'Site Collection Administrators' }",
       "References": {
@@ -3652,7 +3652,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSPOSharingNotifications",
       "Remediation": "Set-SPOTenant -NotifyOwnersWhenItemsReshared $true",
       "References": {
@@ -3680,7 +3680,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSPOVersionHistory",
       "Remediation": "Verify via SharePoint Admin Center > Settings that versioning is enabled and version limits are adequate (\u2265100 versions).",
       "References": {
@@ -3708,7 +3708,7 @@
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint-TenantSettings",
+      "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSPOGuestExpiry",
       "Remediation": "Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60",
       "References": {
@@ -3735,7 +3735,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsWatermarks",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowWatermarkForScreenSharing $true",
       "References": {
@@ -3763,7 +3763,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsAutoAdmit",
       "Remediation": "Set-CsTeamsMeetingPolicy -AutoAdmittedUsers EveryoneInCompanyExcludingGuests",
       "References": {
@@ -3791,7 +3791,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsMeetingChat",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowMeetingChat EnabledExceptAnonymous",
       "References": {
@@ -3819,7 +3819,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlTeamsChatCopy",
       "Remediation": "Purview > DLP > Create policy targeting Teams with sensitive info types to restrict copy/paste of protected content.",
       "References": {
@@ -3847,7 +3847,7 @@
       "Workload": "PVW",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Purview-AuditConfig",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurviewSIEMExport",
       "Remediation": "Connect Microsoft Sentinel M365 data connector, or use Defender XDR > Settings > Microsoft Defender XDR > Audit log export.",
       "References": {
@@ -3875,7 +3875,7 @@
       "Workload": "PVW",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Purview-AuditConfig",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurviewEDiscovery",
       "Remediation": "Purview > Roles & scopes > eDiscovery Manager. Assign eDiscovery Manager role to compliance team members.",
       "References": {
@@ -3903,7 +3903,7 @@
       "Workload": "PVW",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Purview-AuditConfig",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurviewComplianceScore",
       "Remediation": "compliance.microsoft.com > Compliance Manager > Improvement actions > Assign to owners and set target dates.",
       "References": {
@@ -3931,7 +3931,7 @@
       "Workload": "PVW",
       "Category": "Data",
       "Automated": true,
-      "CollectorDependency": "Purview-Labels",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurviewSensitiveInfoTypes",
       "Remediation": "Purview > DLP > Create or edit policies > Add conditions using sensitive information types (SSN, credit card, health info, etc.).",
       "References": {
@@ -4044,7 +4044,7 @@
       "Workload": "PPL",
       "Category": "Data",
       "Automated": true,
-      "CollectorDependency": "PowerPlatform-DLP",
+      "CollectorDependency": "PowerPlatform",
       "EvaluatorFunction": "Test-NRGControlPPLConnectorClassification",
       "Remediation": "Power Platform Admin Center > Data policies > Edit existing policy > Review all connectors and assign to Business or Blocked groups.",
       "References": {
@@ -4072,7 +4072,7 @@
       "Workload": "PPL",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "PowerPlatform-TenantSettings",
+      "CollectorDependency": "PowerPlatform",
       "EvaluatorFunction": "Test-NRGControlPPLAutomate",
       "Remediation": "Power Platform Admin Center > Tenant settings > Power Automate > Disable for guests.",
       "References": {
@@ -4101,7 +4101,7 @@
       "Workload": "PPL",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "PowerPlatform-TenantSettings",
+      "CollectorDependency": "PowerPlatform",
       "EvaluatorFunction": "Test-NRGControlPPLPowerApps",
       "Remediation": "Power Platform Admin Center > Settings > Power Apps > Disable portal creation by non-admins.",
       "References": {
@@ -4383,7 +4383,7 @@
       "Workload": "DEF",
       "Category": "Data",
       "Automated": true,
-      "CollectorDependency": "Purview-Labels",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlDefenderDLPWorkloads",
       "Remediation": "Purview > DLP > Create or edit policy > Choose where to apply > Enable Exchange, SharePoint, OneDrive, Teams, Devices simultaneously. Reference: MS.DEFENDER.4.2v1 (SCuBA).",
       "LicenseRequirement": "M365 Business Premium or E3+",
@@ -4412,7 +4412,7 @@
       "Workload": "DEF",
       "Category": "Data",
       "Automated": true,
-      "CollectorDependency": "Purview-Labels",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlDefenderDLPSITs",
       "Remediation": "Purview > DLP > Edit policy > Add condition > Content contains > Sensitive info types. Reference: MS.DEFENDER.4.1v2 (SCuBA).",
       "LicenseRequirement": "M365 Business Premium or E3+",
@@ -4441,7 +4441,7 @@
       "Workload": "DEF",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Defender-Policies",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlDefenderRiskyAppAlerts",
       "Remediation": "Defender XDR > Cloud Apps > Policies > OAuth app policies. Create policy: App = apps with high privileges, consented by users. Requires Microsoft Defender for Cloud Apps. Reference: MS.DEFENDER.5.1v1 (SCuBA).",
       "LicenseRequirement": "Microsoft Defender for Cloud Apps (M365 E5 or add-on)",
@@ -4499,7 +4499,7 @@
       "Workload": "DEF",
       "Category": "Data",
       "Automated": true,
-      "CollectorDependency": "Purview-Labels",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlDefenderEndpointDLP",
       "Remediation": "Purview > DLP > Create policy > Devices location > Enable. Requires Defender for Endpoint onboarding + Microsoft 365 E5 or Microsoft 365 E5 Compliance.",
       "LicenseRequirement": "M365 E5 or E5 Compliance add-on",
@@ -4671,7 +4671,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsMeetingRecordingScope",
       "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -NewMeetingRecordingExpirationDays 60.",
       "LicenseRequirement": "Included (M365 Business Standard+)",
@@ -4698,7 +4698,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsAnonymousStart",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowAnonymousUsersToStartMeeting $false. Reference: MS.TEAMS.1.2v2 (SCuBA).",
       "LicenseRequirement": "Included (all plans)",
@@ -4726,7 +4726,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsFederationAllowlist",
       "Remediation": "Teams Admin Center > External access > Allow only specific external domains. Add business partner domains only. Reference: MS.TEAMS.2.1v2 (SCuBA).",
       "LicenseRequirement": "Included (all plans)",
@@ -4755,7 +4755,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams-Config",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsLiveEvents",
       "Remediation": "Set-CsTeamsMeetingBroadcastPolicy -Identity Global -BroadcastAttendeeVisibilityMode EveryoneInCompany (or -AllowBroadcastScheduling $false to disable live events entirely).",
       "LicenseRequirement": "Included (all plans)",
@@ -4898,7 +4898,7 @@
       "Workload": "PVW",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Purview-AuditConfig",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurviewAuditPremium",
       "Remediation": "Assign Microsoft 365 E5 or E5 Compliance license to users, then enable Audit Premium: Purview > Audit > Audit log retention policies. Verify MailItemsAccessed events appear in audit search.",
       "LicenseRequirement": "M365 E5 or E5 Compliance add-on",
@@ -4927,7 +4927,7 @@
       "Workload": "PVW",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Purview-AuditConfig",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurviewAuditRetention",
       "Remediation": "Purview > Audit > Audit log retention policies > New retention policy. Priority: All activities, Users: All, Duration: 1 year or longer. Requires Audit Premium.",
       "LicenseRequirement": "M365 E5 or E5 Compliance add-on",
@@ -4956,7 +4956,7 @@
       "Workload": "PVW",
       "Category": "Data",
       "Automated": true,
-      "CollectorDependency": "Purview-Labels",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurviewLabelsPublished",
       "Remediation": "Purview > Information protection > Sensitivity labels > Create label hierarchy (Public, Internal, Confidential, Highly Confidential). Create label policy and publish to all users.",
       "LicenseRequirement": "M365 Business Premium or E3+",
@@ -4984,7 +4984,7 @@
       "Workload": "PVW",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Purview-AuditConfig",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurviewRecordsManagement",
       "Remediation": "Purview > Records management > Labels > Create record label with retention action. Publish via label policy. Required for healthcare (HIPAA), government, and financial organizations.",
       "LicenseRequirement": "M365 Business Premium or E3+",

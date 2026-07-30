@@ -22,6 +22,16 @@ function Invoke-NRGCollectPurview {
             DLPPolicies         = @()
             RetentionPolicies   = @()
             SensitivityLabels   = @()
+            # Alert POLICY configuration (Get-ProtectionAlert), not fired alerts.
+            # EXO-ConnectionFilter separately collects /security/alerts_v2, which
+            # is the list of alerts that have triggered — a different question
+            # from whether anyone is configured to be told when they do.
+            ProtectionAlerts    = @()
+            # Per-section outcome: an empty ProtectionAlerts list means "no alert
+            # policies configured" only when the query actually ran. Without this
+            # the DEF-3.4 / DEF-4.3 evaluators cannot tell that apart from a
+            # missing IPPS session and would report a confident Gap either way.
+            SectionStatus       = @{ ProtectionAlerts = 'NotRun' }
         }
     }
 
@@ -102,6 +112,42 @@ function Invoke-NRGCollectPurview {
             } catch {
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     Register-NRGException -Source 'Purview-Labels' -Message $_.Exception.Message
+                }
+            }
+        }
+
+        # Alert policies (Purview / Defender alert configuration).
+        # NotifyUser is the list of recipients emailed when the policy fires; an
+        # enabled policy with an empty NotifyUser raises an alert nobody is told
+        # about, which is the failure mode DEF-3.4 exists to catch.
+        if (Get-Command Get-ProtectionAlert -ErrorAction SilentlyContinue) {
+            try {
+                $alerts = Get-ProtectionAlert -ErrorAction Stop
+                # Read every field through Get-NRGObjectField rather than direct
+                # property access. Set-StrictMode -Version Latest is active
+                # module-wide, and under it referencing a property the object
+                # does not have THROWS before a ?? default can apply. The exact
+                # shape of Get-ProtectionAlert output is not guaranteed across
+                # tenants and module versions, so a single missing field would
+                # otherwise abort the whole section and silently disable
+                # DEF-3.4 / DEF-4.3 / EXO-3.4.
+                $result.Data.ProtectionAlerts = @($alerts | ForEach-Object {
+                    $a = $_
+                    @{
+                        Name         = [string](Get-NRGObjectField -Item $a -Key 'Name'       -Default '')
+                        Category     = [string](Get-NRGObjectField -Item $a -Key 'Category'   -Default '')
+                        Severity     = [string](Get-NRGObjectField -Item $a -Key 'Severity'   -Default '')
+                        Disabled     = [bool]  (Get-NRGObjectField -Item $a -Key 'Disabled'   -Default $false)
+                        NotifyUser   = @(       Get-NRGObjectField -Item $a -Key 'NotifyUser' -Default @())
+                        ThreatType   = [string](Get-NRGObjectField -Item $a -Key 'ThreatType' -Default '')
+                        Operation    = @(       Get-NRGObjectField -Item $a -Key 'Operation'  -Default @())
+                    }
+                })
+                $result.Data.SectionStatus.ProtectionAlerts = 'Collected'
+            } catch {
+                $result.Data.SectionStatus.ProtectionAlerts = 'Failed'
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Purview-ProtectionAlerts' -Message $_.Exception.Message
                 }
             }
         }

@@ -47,6 +47,11 @@ function Invoke-NRGCollectPowerPlatform {
             TenantIsolation = $null
             DLPPolicies     = @()
             DLPAvailable    = $false
+            # Tenant governance flags (PPL-1.3). $null means "not read" — the
+            # BAP-API fallback path below cannot retrieve these, so the
+            # evaluator must not read absence as "creation is unrestricted".
+            TenantGovernance = $null
+            SectionStatus    = @{ TenantGovernance = 'NotRun' }
             Source          = 'none'   # 'module' | 'bap-api' | 'none'
         }
     }
@@ -125,6 +130,48 @@ function Invoke-NRGCollectPowerPlatform {
                 } catch {
                     $msg = "Get-PowerAppTenantIsolationPolicy failed: $($_.Exception.Message)"
                     $result.Errors += $msg
+                }
+            }
+
+            # Tenant governance settings (PPL-1.3 environment creation).
+            # Get-TenantSettings returns a nested object; the governance flag
+            # documented by Microsoft is
+            # powerPlatform.governance.disableEnvironmentCreationByNonAdminUsers.
+            # Property casing has varied across module versions, so read it
+            # defensively rather than assuming one spelling, and record whether
+            # the call actually ran so the evaluator can tell "not restricted"
+            # apart from "never read".
+            if (Get-Command Get-TenantSettings -ErrorAction SilentlyContinue) {
+                try {
+                    $ts = Get-TenantSettings -ErrorAction Stop
+                    $gov = $null
+                    if ($ts) {
+                        $pp  = if ($ts.PSObject.Properties['powerPlatform']) { $ts.powerPlatform } else { $null }
+                        $gov = if ($pp -and $pp.PSObject.Properties['governance']) { $pp.governance } else { $null }
+                    }
+                    $flag = $null
+                    foreach ($name in @('disableEnvironmentCreationByNonAdminUsers',
+                                        'disableEnvironmentCreationByNonAdminusers')) {
+                        if ($gov -and $gov.PSObject.Properties[$name]) { $flag = [bool]$gov.$name; break }
+                        if ($null -eq $flag -and $ts -and $ts.PSObject.Properties[$name]) { $flag = [bool]$ts.$name; break }
+                    }
+                    $trial = $null
+                    foreach ($name in @('disableTrialEnvironmentCreationByNonAdminUsers',
+                                        'disableTrialEnvironmentCreationByNonAdminusers')) {
+                        if ($gov -and $gov.PSObject.Properties[$name]) { $trial = [bool]$gov.$name; break }
+                    }
+                    $result.Data.TenantGovernance = [ordered]@{
+                        EnvironmentCreationRestricted      = $flag
+                        TrialEnvironmentCreationRestricted = $trial
+                    }
+                    $result.Data.SectionStatus.TenantGovernance = 'Collected'
+                } catch {
+                    $result.Data.SectionStatus.TenantGovernance = 'Failed'
+                    $msg = "Get-TenantSettings failed: $($_.Exception.Message)"
+                    $result.Errors += $msg
+                    if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                        Register-NRGException -Source 'PPL-TenantSettings' -Message $msg
+                    }
                 }
             }
 

@@ -40,6 +40,19 @@ function Test-NRGControlAADPrivAccess {
     # and returns Default for hashtables, which made every GA read $null → a
     # permanent false "0 Global Administrators" finding independent of collection.
     $allAssignments = @(Get-NRGNestedProperty -Object $roleRaw -Path 'Data.RoleAssignments' -Default @())
+
+    # The collector's Success is (assignments -OR- eligibility), so an empty
+    # assignment list can survive a failed read. Counting Global Admins from it
+    # would then report "fewer than 2 Global Administrators" — a false alarm on
+    # a tenant that may have plenty, which is just as damaging to the report's
+    # credibility as a false pass.
+    $roleSection = Get-NRGNestedProperty -Object $roleRaw -Path 'Data.SectionStatus.RoleAssignments' -Default $null
+    if ($allAssignments.Count -eq 0 -and $null -ne $roleSection -and $roleSection -ne 'Collected') {
+        Add-NRGFinding -ControlId 'AAD-3.1' -State 'NotApplicable' `
+            -Category 'Identity' -Title 'Global Administrator Count 2-8, Cloud-Only' `
+            -Detail 'Role assignment enumeration did not complete (see Exceptions) — Global Administrator count could not be determined.'
+        return
+    }
     $globalAdmins   = @($allAssignments | Where-Object { (Get-NRGObjectField -Item $_ -Key 'RoleDefinitionId') -eq $GA_ROLE_ID })
     $gaCount        = $globalAdmins.Count
     $syncedGAs      = @($globalAdmins | Where-Object { (Get-NRGObjectField -Item $_ -Key 'OnPremisesSyncEnabled') -eq $true })

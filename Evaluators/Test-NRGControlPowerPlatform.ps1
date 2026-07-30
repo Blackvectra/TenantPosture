@@ -72,15 +72,50 @@ function Test-NRGControlPowerPlatform {
         }
     }
 
-    # PPL-1.3 — Default environment tenant isolation
-    # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
+    # PPL-1.3 — Environment creation restricted to admins
+    # v4.12.2: implemented against Get-TenantSettings
+    # (powerPlatform.governance.disableEnvironmentCreationByNonAdminUsers),
+    # collected into PowerPlatform.TenantGovernance. Was a manual-review
+    # placeholder; the flag is documented and the admin module is already a
+    # dependency of this collector.
     $c = Get-NRGControlById -ControlId 'PPL-1.3'
     if ($c) {
-        Add-NRGFinding -ControlId 'PPL-1.3' -State 'Partial' `
-            -Category 'Power Platform' -Title "$($c.Title) (Manual review required)" -Severity 'Medium' `
-            -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Tenant isolation status requires Microsoft.PowerApps.Administration.PowerShell module to assess.' `
-            -Remediation $c.Remediation `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PPL-1.3')
+        $govStatus = Get-NRGNestedProperty -Object $raw -Path 'Data.SectionStatus.TenantGovernance' -Default $null
+        $restricted = Get-NRGNestedProperty -Object $raw -Path 'Data.TenantGovernance.EnvironmentCreationRestricted' -Default $null
+
+        if ($govStatus -ne 'Collected' -or $null -eq $restricted) {
+            $why = if ($govStatus -eq 'Failed') {
+                'the Get-TenantSettings query failed (see Exceptions)'
+            } else {
+                'Get-TenantSettings was unavailable — it needs the Microsoft.PowerApps.Administration.PowerShell module, which the BAP-API fallback path cannot substitute for'
+            }
+            Add-NRGFinding -ControlId 'PPL-1.3' -State 'NotApplicable' `
+                -Category 'Power Platform' -Title $c.Title `
+                -Detail "Tenant governance settings could not be read: $why. Environment creation restriction was not assessed."
+        }
+        elseif ($restricted) {
+            $trial = Get-NRGNestedProperty -Object $raw -Path 'Data.TenantGovernance.TrialEnvironmentCreationRestricted' -Default $null
+            if ($trial -eq $false) {
+                Add-NRGFinding -ControlId 'PPL-1.3' -State 'Partial' `
+                    -Category 'Power Platform' -Title $c.Title -Severity 'Medium' `
+                    -Detail 'Standard environment creation is restricted to admins, but TRIAL environment creation is still open to non-admins. A trial environment is a fully functional environment outside the governance baseline, so this leaves the same gap by another route.' `
+                    -CurrentValue 'Environment creation restricted; trial creation unrestricted' `
+                    -RequiredValue 'Both standard and trial environment creation restricted to admins' `
+                    -Remediation $c.Remediation
+            } else {
+                Add-NRGFinding -ControlId 'PPL-1.3' -State 'Satisfied' `
+                    -Category 'Power Platform' -Title $c.Title -Severity 'Informational' `
+                    -Detail 'Environment creation is restricted to tenant, Power Platform and Dynamics 365 admins.'
+            }
+        }
+        else {
+            Add-NRGFinding -ControlId 'PPL-1.3' -State 'Gap' `
+                -Category 'Power Platform' -Title $c.Title -Severity $c.Severity `
+                -Detail 'Any licensed user can create Power Platform environments. Each new environment is a data boundary outside the tenant DLP baseline, created without review, and typically invisible to the security team until it already holds business data.' `
+                -CurrentValue 'Environment creation open to non-admin users' `
+                -RequiredValue 'Environment creation restricted to admins' `
+                -Remediation $c.Remediation
+        }
     }
 }
 
@@ -125,7 +160,7 @@ function Test-NRGControlPPLAutomate {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Power Platform settings not collected'; return
     }
-    $guestFlows     = Get-NRGNestedProperty -Object $ppl -Path 'Data.TenantSettings.DisableFlowsForGuestUsers' -Default $false
+    $guestFlows     = Get-NRGNestedProperty -Object $raw -Path 'Data.TenantSettings.DisableFlowsForGuestUsers' -Default $false
     $gaps = @()
     if (-not $guestFlows) { $gaps += 'Guest users can create flows' }
     if ($gaps.Count -eq 0) {
@@ -149,7 +184,7 @@ function Test-NRGControlPPLPowerApps {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Power Platform settings not collected'; return
     }
-    $canvasAppsEnabled = -not (Get-NRGNestedProperty -Object $ppl -Path 'Data.TenantSettings.DisablePortalsCreationByNonAdminUsers' -Default $false)
+    $canvasAppsEnabled = -not (Get-NRGNestedProperty -Object $raw -Path 'Data.TenantSettings.DisablePortalsCreationByNonAdminUsers' -Default $false)
     if (-not $canvasAppsEnabled) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
