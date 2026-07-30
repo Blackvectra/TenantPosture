@@ -547,7 +547,7 @@ function Test-NRGControlEXOAlertVolume {
     [CmdletBinding()] param()
     $cid = 'EXO-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Unusual mail volume alert requires manual verification in Defender portal: Alerts > Alert policies > Unusual increase in email reported as phish.' -Remediation $ctrl.Remediation
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Unusual mail volume alert requires manual verification in Defender portal: Alerts > Alert policies > Unusual increase in email reported as phish.' -Remediation $ctrl.Remediation
 }
 
 # ── EXO-3.5 Transport Rules Audit Enabled ────────────────────────────────────
