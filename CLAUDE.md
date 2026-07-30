@@ -24,7 +24,7 @@ The v4.12.0 Email-IR mode lives in the top-level `Email-IR/` subtree (`Lib/`, `C
 
 `Evaluators/` contains one file per workload, each function evaluating one control: `Test-NRGControl-AAD.ps1` (41 functions), `Test-NRGControlDefender.ps1` (18 functions), `Test-NRGControlTeams.ps1` (17 functions), `Test-NRGControlPurview.ps1` (15 functions), `Test-NRGControlSharePoint.ps1` (13 functions), `Test-NRGControlIntune.ps1` (13 functions), `Test-NRGControlCopilot.ps1` (5 functions), `Test-NRGControlPowerPlatform.ps1` (4 functions).
 
-`Publishers/` contains `Publish-NRGAssessmentHTML.ps1` (1682-line interactive HTML report generator).
+`Publishers/` contains `Publish-NRGAssessmentHTML.ps1` (the interactive HTML report generator).
 
 `Config/` contains `clients.json` (batch client list with TenantId, DelegatedOrg, and skip flags), `controls.json` (control definitions including `ControlId`, `Title`, `Severity`, `Workload`, `Category`, `CollectorDependency`, `EvaluatorFunction`, `Remediation`, `References`, and `LicenseRequirement` per control), `frameworks.json` (framework definitions for CIS / SCuBA / NIST / CMMC / ISO 27001 / SOC 2 / HIPAA / PCI DSS / DISA STIG / MITRE ATT&CK), `branding.psd1` (company name, contact, colors, hourly rate, fees), and `schema/controls.schema.json` (JSON Schema validating controls.json shape).
 
