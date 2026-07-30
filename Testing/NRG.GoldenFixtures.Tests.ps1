@@ -545,6 +545,58 @@ Describe 'Failed collection is never reported as compliance (EXO inventory)' {
     }
 }
 
+Describe 'EXO-4.4 anti-spam thresholds agree with the control remediation' {
+
+    # The evaluator previously passed BulkThreshold = 7 while the control's own
+    # Remediation instructed -BulkThreshold 6, so a client on Microsoft's
+    # default was told Satisfied by a control whose remediation told them to
+    # change the very setting that passed. These pin the resolved boundary.
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+
+        function script:SpamRaw {
+            param([int] $Bulk, [string] $Action = 'MoveToJmf', [bool] $Zap = $true)
+            [ordered]@{
+                CollectorId='EXO'; CollectedAt='2026-07-30T00:00:00.0000000+00:00'; Success=$true
+                Data=@{ AntiSpamPolicies = @([pscustomobject]@{
+                    IsDefault=$true; SpamAction=$Action; BulkThreshold=$Bulk; ZapEnabled=$Zap }) }
+            }
+        }
+        function script:SpamVerdict {
+            Test-NRGControlEXOAntiSpamInbound | Out-Null
+            return @(Get-NRGFindings | Where-Object { $_.ControlId -eq 'EXO-4.4' })[0]
+        }
+    }
+
+    BeforeEach { Clear-NRGState }
+    AfterAll   { Clear-NRGState }
+
+    It 'Satisfied at BulkThreshold 6 (the value the remediation instructs)' {
+        Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (SpamRaw -Bulk 6)
+        (SpamVerdict).State | Should -Be 'Satisfied'
+    }
+
+    It 'Partial at BulkThreshold 7 — Microsoft default is above the control requirement' {
+        Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (SpamRaw -Bulk 7)
+        $v = SpamVerdict
+        $v.State | Should -Be 'Partial' `
+            -Because 'passing 7 while the remediation says 6 made the control contradict itself in the client report'
+        $v.CurrentValue | Should -Match 'BulkThreshold=7'
+    }
+
+    It 'Partial when spam action leaves mail in the inbox' {
+        Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (SpamRaw -Bulk 6 -Action 'NoAction')
+        (SpamVerdict).State | Should -Be 'Partial'
+    }
+
+    It 'Partial when zero-hour auto purge is off' {
+        Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (SpamRaw -Bulk 6 -Zap $false)
+        (SpamVerdict).State | Should -Be 'Partial'
+    }
+}
+
 Describe 'Failed collection is never reported as compliance (AAD inventory + joins)' {
 
     BeforeAll {

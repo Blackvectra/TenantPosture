@@ -675,7 +675,10 @@ function Test-NRGControlEXOAntiSpamInbound {
     }
     $gaps = @()
     if ($default.SpamAction     -ne 'MoveToJmf' -and $default.SpamAction -ne 'Quarantine') { $gaps += "SpamAction=$($default.SpamAction)" }
-    if ($default.BulkThreshold  -gt 7)  { $gaps += "BulkThreshold=$($default.BulkThreshold)" }
+    # BulkThreshold 6, not Microsoft's default of 7: the control's own
+    # Remediation instructs -BulkThreshold 6, and an evaluator that passes 7
+    # while the remediation says 6 contradicts itself in the client's report.
+    if ($default.BulkThreshold  -gt 6)  { $gaps += "BulkThreshold=$($default.BulkThreshold)" }
     if ($default.ZapEnabled -ne $true)  { $gaps += 'ZapEnabled=False' }
     if ($gaps.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
@@ -685,7 +688,7 @@ function Test-NRGControlEXOAntiSpamInbound {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
             -Detail "Anti-spam policy has sub-optimal settings: $($gaps -join ', ')" `
-            -CurrentValue ($gaps -join ', ') -RequiredValue 'SpamAction=MoveToJmf/Quarantine, BulkThreshold≤7, ZapEnabled=True' `
+            -CurrentValue ($gaps -join ', ') -RequiredValue 'SpamAction=MoveToJmf/Quarantine, BulkThreshold≤6, ZapEnabled=True' `
             -Remediation $ctrl.Remediation
     }
 }
