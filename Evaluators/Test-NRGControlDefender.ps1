@@ -412,7 +412,7 @@ function Test-NRGControlDefenderMDCA {
     # MDCA connection status requires a dedicated collector that doesn't exist
     # yet. v4.11.1: removed the unused $ca proxy read — the finding is
     # ADVISORY-ONLY (manual review) so no data dependency is needed.
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
         -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Microsoft Defender for Cloud Apps connection status requires manual verification: Defender XDR > Settings > Cloud Apps > Connected apps. Verify M365 connector is active.' `
         -Remediation $ctrl.Remediation
@@ -425,7 +425,7 @@ function Test-NRGControlDefenderAlertNotification {
     [CmdletBinding()] param()
     $cid = 'DEF-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
         -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Defender alert notification configuration requires manual verification: Defender portal > Settings > Email notifications. Verify security team is subscribed to high/critical alert emails.' `
         -Remediation $ctrl.Remediation
@@ -480,7 +480,7 @@ function Test-NRGControlDefenderRiskyAppAlerts {
     $cid = 'DEF-4.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     # Check for Defender for Cloud Apps or MDCA alert policies on risky apps
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Risky application alert configuration requires Microsoft Defender for Cloud Apps. Verify in Defender XDR > Cloud Apps > Policies > OAuth app policies that alerts are configured for high-privilege app consent and risky OAuth grants.' -Remediation $ctrl.Remediation
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Risky application alert configuration requires Microsoft Defender for Cloud Apps. Verify in Defender XDR > Cloud Apps > Policies > OAuth app policies that alerts are configured for high-privilege app consent and risky OAuth grants.' -Remediation $ctrl.Remediation
 }
 
 # ── DEF-4.4 Priority Account Protection Enabled ──────────────────────────────

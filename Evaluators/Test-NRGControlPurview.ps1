@@ -216,7 +216,7 @@ function Test-NRGControlPurviewSIEMExport {
     [CmdletBinding()] param()
     $cid = 'PVW-3.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
         -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Audit log SIEM export status cannot be determined via Graph API alone. Verify via Purview > Audit > Export settings or Microsoft Sentinel connector status.' `
         -Remediation $ctrl.Remediation
@@ -263,7 +263,7 @@ function Test-NRGControlPurviewComplianceScore {
     [CmdletBinding()] param()
     $cid = 'PVW-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit `
         -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Compliance Score requires manual review at compliance.microsoft.com > Compliance Manager. Verify improvement actions are assigned and tracked.' `
         -Remediation $ctrl.Remediation
