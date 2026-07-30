@@ -214,14 +214,59 @@ function Test-NRGControlSPO3PStorage {
     [CmdletBinding()] param()
     $cid = 'SPO-2.5'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $spo = Get-NRGRawData -Key 'SharePoint'
-    if (-not $spo -or -not $spo.Success) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
+
+    # v4.12.2: implemented, and RE-SCOPED to what is actually readable.
+    #
+    # The control previously claimed to check the admin-centre "third-party
+    # storage services" toggle, but no Get-SPOTenant property exposes it, which
+    # is why it sat as a manual-review placeholder. The connectors that ARE
+    # readable are the Teams client third-party storage providers
+    # (Get-CsTeamsClientConfiguration: AllowDropBox / AllowBox / AllowGoogleDrive
+    # / AllowShareFile), already collected by the Teams collector. Those are the
+    # same providers, surfaced through the collaboration client rather than the
+    # SharePoint admin page, so the finding assesses them and says plainly which
+    # surface it covered — rather than implying it verified a setting it cannot
+    # read.
+    $tms = Get-NRGRawData -Key 'Teams'
+    if (-not $tms -or -not $tms.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title `
+            -Detail 'Teams client configuration not collected — third-party cloud storage connector state could not be assessed.'
+        return
     }
-    # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
-    # Check OneDriveForGuestsEnabled as proxy for third-party storage
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Third-party storage service status requires manual verification: SharePoint Admin Center > Settings > Third-party storage services.' -Remediation $ctrl.Remediation
+    $client = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfiguration' -Default $null
+    if (-not $client) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title `
+            -Detail 'Teams client configuration unavailable (Get-CsTeamsClientConfiguration did not return) — third-party cloud storage connector state could not be assessed.'
+        return
+    }
+
+    $providers = [ordered]@{
+        Dropbox     = [bool](Get-NRGObjectField -Item $client -Key 'AllowDropBox'     -Default $false)
+        Box         = [bool](Get-NRGObjectField -Item $client -Key 'AllowBox'         -Default $false)
+        GoogleDrive = [bool](Get-NRGObjectField -Item $client -Key 'AllowGoogleDrive' -Default $false)
+        ShareFile   = [bool](Get-NRGObjectField -Item $client -Key 'AllowShareFile'   -Default $false)
+    }
+    $enabled = @($providers.Keys | Where-Object { $providers[$_] })
+
+    $portalNote = 'Scope note: this verifies the Teams client third-party storage connectors (Get-CsTeamsClientConfiguration). The Microsoft 365 admin centre "Third-party storage services" toggle is not exposed to PowerShell and is a separate manual check.'
+
+    if ($enabled.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "No third-party cloud storage providers are enabled in the Teams client (Dropbox, Box, Google Drive, ShareFile all off). $portalNote"
+    } else {
+        $affected = @($enabled | ForEach-Object { [ordered]@{ DisplayName = $_; Status = 'Enabled' } })
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "$($enabled.Count) third-party cloud storage provider(s) are enabled in the Teams client: $($enabled -join ', '). Corporate files can be moved into storage the tenant does not control, does not audit and cannot retain or legally hold. $portalNote" `
+            -CurrentValue "Enabled: $($enabled -join ', ')" `
+            -RequiredValue 'All third-party cloud storage providers disabled' `
+            -Remediation $ctrl.Remediation -AffectedObjects $affected
+    }
 }
+
 
 # ── SPO-2.6 Email Attestation for Sharing ────────────────────────────────────
 function Test-NRGControlSPOEmailAttestation {
@@ -290,7 +335,7 @@ function Test-NRGControlSPOSiteAdmins {
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
     # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
         -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Site collection admin enumeration requires iterating all sites (impractical at scale). Verify via SharePoint Admin Center > Sites > Active sites > filter by admins, or run Get-SPOSite -Limit ALL | Get-SPOUser -Group "Site Collection Administrators".' `
         -Remediation $ctrl.Remediation

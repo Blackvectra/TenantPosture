@@ -412,7 +412,7 @@ function Test-NRGControlDefenderMDCA {
     # MDCA connection status requires a dedicated collector that doesn't exist
     # yet. v4.11.1: removed the unused $ca proxy read — the finding is
     # ADVISORY-ONLY (manual review) so no data dependency is needed.
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
         -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Microsoft Defender for Cloud Apps connection status requires manual verification: Defender XDR > Settings > Cloud Apps > Connected apps. Verify M365 connector is active.' `
         -Remediation $ctrl.Remediation
@@ -425,13 +425,78 @@ function Test-NRGControlDefenderAlertNotification {
     [CmdletBinding()] param()
     $cid = 'DEF-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-        -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
-        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Defender alert notification configuration requires manual verification: Defender portal > Settings > Email notifications. Verify security team is subscribed to high/critical alert emails.' `
-        -Remediation $ctrl.Remediation
+
+    # v4.12.2: implemented. Reads alert POLICY configuration from
+    # Get-ProtectionAlert (collected into Purview.ProtectionAlerts), which is a
+    # different question from EXO-ConnectionFilter's /security/alerts_v2 feed:
+    # that lists alerts which have fired, this asks whether anyone is configured
+    # to be told when they do. An enabled policy with an empty NotifyUser raises
+    # an alert into an empty room.
+    $pvw = Get-NRGRawData -Key 'Purview'
+    if (-not $pvw -or -not $pvw.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'Purview data not collected'
+        return
+    }
+
+    $status = Get-NRGNestedProperty -Object $pvw -Path 'Data.SectionStatus.ProtectionAlerts' -Default $null
+    if ($status -ne 'Collected') {
+        $why = if ($status -eq 'Failed') {
+            'the Get-ProtectionAlert query failed (see Exceptions)'
+        } else {
+            'Get-ProtectionAlert was unavailable — this requires a Security & Compliance (IPPS) session'
+        }
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title `
+            -Detail "Alert policy configuration could not be read: $why. Alert notification state was not assessed."
+        return
+    }
+
+    $policies = @($pvw.Data['ProtectionAlerts'] ?? @())
+    if ($policies.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'No alert policies are configured. Nothing in the tenant will raise a security alert, so a compromise produces no notification to anyone.' `
+            -CurrentValue 'Zero alert policies' -RequiredValue 'High and Critical alert policies enabled with email recipients' `
+            -Remediation $ctrl.Remediation
+        return
+    }
+
+    $enabled = @($policies | Where-Object { -not $_.Disabled })
+    $high    = @($enabled  | Where-Object { $_.Severity -in @('High','Critical') })
+    $silent  = @($high     | Where-Object { @($_.NotifyUser).Count -eq 0 })
+
+    if ($high.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail "$($enabled.Count) alert policy(ies) are enabled but none are High or Critical severity, so the most serious events do not raise a prioritised alert." `
+            -CurrentValue "$($enabled.Count) enabled policies, 0 at High/Critical" `
+            -RequiredValue 'High and Critical alert policies enabled with email recipients' `
+            -Remediation $ctrl.Remediation
+        return
+    }
+
+    if ($silent.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "All $($high.Count) enabled High/Critical alert policy(ies) have email recipients configured."
+    } else {
+        $affected = @($silent | ForEach-Object {
+            [ordered]@{
+                DisplayName = [string]$_.Name
+                Severity    = [string]$_.Severity
+                Recipients  = 'none configured'
+            }
+        })
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "$($silent.Count) of $($high.Count) enabled High/Critical alert policy(ies) have no email recipients. These alerts fire into the portal where nobody is watching — during an incident the tenant is generating exactly the signal that is needed and delivering it to no one." `
+            -CurrentValue "$($silent.Count) High/Critical policies with no recipients" `
+            -RequiredValue 'Every enabled High/Critical alert policy has at least one notification recipient' `
+            -Remediation $ctrl.Remediation -AffectedObjects $affected
+    }
 }
 
-# ── DEF-4.1 DLP Policy Covers All Key Workloads ───────────────────────────────
 function Test-NRGControlDefenderDLPWorkloads {
     [CmdletBinding()] param()
     $cid = 'DEF-4.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
@@ -479,11 +544,77 @@ function Test-NRGControlDefenderRiskyAppAlerts {
     [CmdletBinding()] param()
     $cid = 'DEF-4.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    # Check for Defender for Cloud Apps or MDCA alert policies on risky apps
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Risky application alert configuration requires Microsoft Defender for Cloud Apps. Verify in Defender XDR > Cloud Apps > Policies > OAuth app policies that alerts are configured for high-privilege app consent and risky OAuth grants.' -Remediation $ctrl.Remediation
+
+    # v4.12.2: implemented against Get-ProtectionAlert policy configuration.
+    #
+    # Matching caveat, stated plainly because it affects how much weight the
+    # finding deserves: there is no machine-readable "this policy covers OAuth
+    # consent" flag, so a policy is matched by its Name / Operation / ThreatType
+    # against consent and application-permission wording. A tenant using custom
+    # or non-English policy names can therefore be under-detected. The Gap text
+    # says so, and the check is deliberately broad rather than exact so that it
+    # errs toward finding a policy rather than declaring one missing.
+    $pvw = Get-NRGRawData -Key 'Purview'
+    if (-not $pvw -or -not $pvw.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'Purview data not collected'
+        return
+    }
+
+    $status = Get-NRGNestedProperty -Object $pvw -Path 'Data.SectionStatus.ProtectionAlerts' -Default $null
+    if ($status -ne 'Collected') {
+        $why = if ($status -eq 'Failed') {
+            'the Get-ProtectionAlert query failed (see Exceptions)'
+        } else {
+            'Get-ProtectionAlert was unavailable — this requires a Security & Compliance (IPPS) session'
+        }
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title `
+            -Detail "Alert policy configuration could not be read: $why. OAuth consent alerting was not assessed."
+        return
+    }
+
+    $policies = @($pvw.Data['ProtectionAlerts'] ?? @())
+    $pattern  = 'consent|oauth|application permission|app permission|service principal|risky app'
+
+    $matched = @($policies | Where-Object {
+        $hay = @(
+            [string]$_.Name
+            [string]$_.ThreatType
+            (@($_.Operation) -join ' ')
+        ) -join ' '
+        $hay -match $pattern
+    })
+    $active = @($matched | Where-Object { -not $_.Disabled })
+
+    if ($active.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "No enabled alert policy was found covering OAuth consent or application permission grants. Consent phishing grants an attacker-controlled app standing access to mail and files without ever taking a password, and without an alert that grant is silent. (Detection matches policy name, operation and threat type against consent and application-permission wording, so a custom-named policy may exist and not be matched — verify in the portal before remediating.)" `
+            -CurrentValue "0 of $($policies.Count) alert policies match OAuth/consent coverage" `
+            -RequiredValue 'An enabled alert policy covering OAuth consent / application permission grants' `
+            -Remediation $ctrl.Remediation
+        return
+    }
+
+    $silent = @($active | Where-Object { @($_.NotifyUser).Count -eq 0 })
+    if ($silent.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "$($active.Count) enabled alert policy(ies) cover OAuth consent / application permission activity, each with notification recipients configured."
+    } else {
+        $affected = @($silent | ForEach-Object {
+            [ordered]@{ DisplayName = [string]$_.Name; Severity = [string]$_.Severity; Recipients = 'none configured' }
+        })
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail "$($silent.Count) of $($active.Count) OAuth/consent alert policy(ies) are enabled but have no notification recipients, so a consent-phishing grant is recorded without anyone being told." `
+            -CurrentValue "$($silent.Count) matching policies with no recipients" `
+            -RequiredValue 'OAuth consent alert policy enabled with notification recipients' `
+            -Remediation $ctrl.Remediation -AffectedObjects $affected
+    }
 }
 
-# ── DEF-4.4 Priority Account Protection Enabled ──────────────────────────────
 function Test-NRGControlDefenderPriorityAccounts {
     [CmdletBinding()] param()
     $cid = 'DEF-4.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
