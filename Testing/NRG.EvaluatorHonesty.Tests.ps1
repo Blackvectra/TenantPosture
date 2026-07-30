@@ -58,3 +58,50 @@ Describe 'No evaluator reports a PASS on data that was never collected' {
             -Because "no data was collected for $ControlId, so a $($falsePasses.State -join '/') verdict is a green check with no evidence — the evaluator must guard to NotApplicable (or Error)"
     }
 }
+
+Describe 'Advisory controls (no automated check) never claim compliance' {
+
+    # Static companion to the runtime guard above. Some controls have no
+    # programmatic check yet and only emit an advisory "manual review required"
+    # finding. Those must be NotApplicable — never Satisfied/Partial — because
+    # Partial alone is worth 0.5 toward the compliance score, i.e. free credit
+    # for a verdict the tool never computed. This scans the evaluator source via
+    # AST so a regression is caught before it can inflate a client's number.
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        $script:EvalDir  = Join-Path $script:RepoRoot 'Evaluators'
+    }
+
+    It 'No Add-NRGFinding carrying an ADVISORY / "no programmatic check" marker uses State Satisfied or Partial' {
+        $offenders = @()
+        foreach ($file in Get-ChildItem -LiteralPath $script:EvalDir -Filter '*.ps1' -File) {
+            $tokens = $null; $errors = $null
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors)
+            $calls = $ast.FindAll({
+                param($n)
+                $n -is [System.Management.Automation.Language.CommandAst] -and
+                $n.GetCommandName() -eq 'Add-NRGFinding'
+            }, $true)
+            foreach ($call in $calls) {
+                if ($call.Extent.Text -notmatch 'no programmatic check is implemented|ADVISORY ONLY') { continue }
+                $state = $null
+                $els = $call.CommandElements
+                for ($i = 0; $i -lt $els.Count - 1; $i++) {
+                    if ($els[$i] -is [System.Management.Automation.Language.CommandParameterAst] -and
+                        $els[$i].ParameterName -eq 'State') {
+                        $val = $els[$i + 1]
+                        if ($val -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                            $state = $val.Value
+                        }
+                    }
+                }
+                if ($state -in @('Satisfied', 'Partial')) {
+                    $offenders += ('{0}:{1} -> State {2}' -f $file.Name, $call.Extent.StartLineNumber, $state)
+                }
+            }
+        }
+        $offenders -join "`n" | Should -BeNullOrEmpty `
+            -Because "an advisory control with no automated check must be NotApplicable; Satisfied/Partial hands out compliance-score credit (Partial = 0.5) for a verdict the tool never computed"
+    }
+}

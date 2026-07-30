@@ -76,7 +76,7 @@ function Test-NRGControlPowerPlatform {
     # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
     $c = Get-NRGControlById -ControlId 'PPL-1.3'
     if ($c) {
-        Add-NRGFinding -ControlId 'PPL-1.3' -State 'Partial' `
+        Add-NRGFinding -ControlId 'PPL-1.3' -State 'NotApplicable' `
             -Category 'Power Platform' -Title "$($c.Title) (Manual review required)" -Severity 'Medium' `
             -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Tenant isolation status requires Microsoft.PowerApps.Administration.PowerShell module to assess.' `
             -Remediation $c.Remediation `

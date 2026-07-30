@@ -464,7 +464,7 @@ function Test-NRGControlEXOSharedMailbox {
 
     # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
     # Shared mailbox sign-in state requires cross-referencing AAD Users with EXO shared mailboxes
-    Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+    Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
         -Title "$($control.Title) (Manual review required)" -Severity 'High' -FrameworkIds $citations `
         -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Shared mailbox direct sign-in status requires manual verification. Run: Get-Mailbox -RecipientTypeDetails SharedMailbox | ForEach-Object { Get-MgUser -UserId $_.ExternalDirectoryObjectId | Select DisplayName,AccountEnabled }' `
         -CurrentValue 'Manual review required' -RequiredValue 'All shared mailbox accounts have AccountEnabled = $false' `

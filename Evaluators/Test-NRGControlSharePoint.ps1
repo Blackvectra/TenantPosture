@@ -220,7 +220,7 @@ function Test-NRGControlSPO3PStorage {
     }
     # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
     # Check OneDriveForGuestsEnabled as proxy for third-party storage
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Third-party storage service status requires manual verification: SharePoint Admin Center > Settings > Third-party storage services.' -Remediation $ctrl.Remediation
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Third-party storage service status requires manual verification: SharePoint Admin Center > Settings > Third-party storage services.' -Remediation $ctrl.Remediation
 }
 
 # ── SPO-2.6 Email Attestation for Sharing ────────────────────────────────────
@@ -290,7 +290,7 @@ function Test-NRGControlSPOSiteAdmins {
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
     # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
         -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Site collection admin enumeration requires iterating all sites (impractical at scale). Verify via SharePoint Admin Center > Sites > Active sites > filter by admins, or run Get-SPOSite -Limit ALL | Get-SPOUser -Group "Site Collection Administrators".' `
         -Remediation $ctrl.Remediation
