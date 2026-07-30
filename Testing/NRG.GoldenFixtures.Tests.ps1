@@ -545,6 +545,93 @@ Describe 'Failed collection is never reported as compliance (EXO inventory)' {
     }
 }
 
+Describe 'EXO-2.6 shared mailbox sign-in — implemented, evidence-graded' {
+
+    # Was a manual-review placeholder that always returned NotApplicable despite
+    # being High severity. The join it needed (EXO shared mailboxes against AAD
+    # accountEnabled) was already being done by the collector and published as
+    # SharedMailboxSignIn. Each hit is tagged with the evidence behind it, and
+    # the verdict follows that evidence rather than flattening a heuristic into
+    # a confirmed finding.
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+
+        function script:SharedRaw {
+            param([object[]] $All = @(), [object[]] $Risky = @(), [string] $Section = 'Collected')
+            [ordered]@{
+                CollectorId='EXO-Inventory'; CollectedAt='2026-07-30T00:00:00.0000000+00:00'; Success=$true
+                Data=@{
+                    AllSharedMailboxes  = $All
+                    SharedMailboxSignIn = $Risky
+                    SectionStatus       = @{ SharedMailboxes = $Section }
+                }
+            }
+        }
+        function script:MB { param([string]$Name) [pscustomobject]@{ DisplayName=$Name; PrimarySmtp="$Name@contoso.com" } }
+        function script:Risk {
+            param([string]$Name,[string]$Source='AAD-Users',[string]$State='Enabled')
+            [pscustomobject]@{ DisplayName=$Name; UPN="$Name@contoso.com"
+                               PrimarySmtp="$Name@contoso.com"; SignInState=$State; Source=$Source }
+        }
+        function script:SharedVerdict {
+            Test-NRGControlEXOSharedMailbox | Out-Null
+            return @(Get-NRGFindings | Where-Object { $_.ControlId -eq 'EXO-2.6' })[0]
+        }
+    }
+
+    BeforeEach { Clear-NRGState }
+    AfterAll   { Clear-NRGState }
+
+    It 'no longer returns a permanent NotApplicable placeholder' {
+        Set-NRGRawData -Key 'EXO-Inventory' -Data (SharedRaw -All @((MB 'billing')) -Risky @())
+        (SharedVerdict).State | Should -Not -Be 'NotApplicable' `
+            -Because 'a High severity control that can only ever say "manual review required" is scaffolding, not an assessment'
+    }
+
+    It 'Satisfied when shared mailboxes exist and none can sign in' {
+        Set-NRGRawData -Key 'EXO-Inventory' -Data (SharedRaw -All @((MB 'billing'),(MB 'support')) -Risky @())
+        (SharedVerdict).State | Should -Be 'Satisfied'
+    }
+
+    It 'Satisfied when the tenant has no shared mailboxes at all' {
+        Set-NRGRawData -Key 'EXO-Inventory' -Data (SharedRaw -All @() -Risky @())
+        (SharedVerdict).State | Should -Be 'Satisfied'
+    }
+
+    It 'Gap — naming the mailbox — when sign-in is CONFIRMED enabled via Entra' {
+        Set-NRGRawData -Key 'EXO-Inventory' -Data (SharedRaw `
+            -All @((MB 'billing'),(MB 'support')) -Risky @((Risk 'billing')))
+        $v = SharedVerdict
+        $v.State | Should -Be 'Gap'
+        $v.Severity | Should -Be 'High'
+        ($v.AffectedObjects | ConvertTo-Json -Depth 4) | Should -Match 'billing@contoso\.com'
+        ($v.AffectedObjects | ConvertTo-Json -Depth 4) | Should -Match 'Confirmed via Entra'
+    }
+
+    It 'Partial — not Gap — when only the license heuristic fired and Entra data was unavailable' {
+        Set-NRGRawData -Key 'EXO-Inventory' -Data (SharedRaw `
+            -All @((MB 'billing')) -Risky @((Risk 'billing' 'LicenseProxy' 'Probable')))
+        $v = SharedVerdict
+        $v.State | Should -Be 'Partial' `
+            -Because 'an inferred signal is not a confirmed finding — reporting a guess as a Gap is how a report loses credibility'
+        ($v.AffectedObjects | ConvertTo-Json -Depth 4) | Should -Match 'Inferred from license state'
+    }
+
+    It 'a confirmed hit outranks heuristic-only noise in the same tenant' {
+        Set-NRGRawData -Key 'EXO-Inventory' -Data (SharedRaw `
+            -All @((MB 'billing'),(MB 'support')) `
+            -Risky @((Risk 'billing' 'LicenseProxy' 'Probable'), (Risk 'support')))
+        (SharedVerdict).State | Should -Be 'Gap'
+    }
+
+    It 'NotApplicable when the shared mailbox enumeration itself failed' {
+        Set-NRGRawData -Key 'EXO-Inventory' -Data (SharedRaw -All @() -Risky @() -Section 'Failed')
+        (SharedVerdict).State | Should -Be 'NotApplicable'
+    }
+}
+
 Describe 'EXO-4.4 anti-spam thresholds agree with the control remediation' {
 
     # The evaluator previously passed BulkThreshold = 7 while the control's own
