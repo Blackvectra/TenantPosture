@@ -22,6 +22,16 @@ function Invoke-NRGCollectPurview {
             DLPPolicies         = @()
             RetentionPolicies   = @()
             SensitivityLabels   = @()
+            # Alert POLICY configuration (Get-ProtectionAlert), not fired alerts.
+            # EXO-ConnectionFilter separately collects /security/alerts_v2, which
+            # is the list of alerts that have triggered — a different question
+            # from whether anyone is configured to be told when they do.
+            ProtectionAlerts    = @()
+            # Per-section outcome: an empty ProtectionAlerts list means "no alert
+            # policies configured" only when the query actually ran. Without this
+            # the DEF-3.4 / DEF-4.3 evaluators cannot tell that apart from a
+            # missing IPPS session and would report a confident Gap either way.
+            SectionStatus       = @{ ProtectionAlerts = 'NotRun' }
         }
     }
 
@@ -102,6 +112,33 @@ function Invoke-NRGCollectPurview {
             } catch {
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     Register-NRGException -Source 'Purview-Labels' -Message $_.Exception.Message
+                }
+            }
+        }
+
+        # Alert policies (Purview / Defender alert configuration).
+        # NotifyUser is the list of recipients emailed when the policy fires; an
+        # enabled policy with an empty NotifyUser raises an alert nobody is told
+        # about, which is the failure mode DEF-3.4 exists to catch.
+        if (Get-Command Get-ProtectionAlert -ErrorAction SilentlyContinue) {
+            try {
+                $alerts = Get-ProtectionAlert -ErrorAction Stop
+                $result.Data.ProtectionAlerts = @($alerts | ForEach-Object {
+                    @{
+                        Name         = [string]$_.Name
+                        Category     = [string]$_.Category
+                        Severity     = [string]$_.Severity
+                        Disabled     = [bool]($_.Disabled ?? $false)
+                        NotifyUser   = @($_.NotifyUser ?? @())
+                        ThreatType   = [string]($_.ThreatType ?? '')
+                        Operation    = @($_.Operation ?? @())
+                    }
+                })
+                $result.Data.SectionStatus.ProtectionAlerts = 'Collected'
+            } catch {
+                $result.Data.SectionStatus.ProtectionAlerts = 'Failed'
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Purview-ProtectionAlerts' -Message $_.Exception.Message
                 }
             }
         }

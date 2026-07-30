@@ -3596,7 +3596,7 @@
       "Workload": "DEF",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Defender-Policies",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlDefenderAlertNotification",
       "Remediation": "Defender portal > Settings > Email notifications > Create notification rule for High and Critical severity alerts.",
       "References": {
@@ -4441,7 +4441,7 @@
       "Workload": "DEF",
       "Category": "Governance",
       "Automated": true,
-      "CollectorDependency": "Defender-Policies",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlDefenderRiskyAppAlerts",
       "Remediation": "Defender XDR > Cloud Apps > Policies > OAuth app policies. Create policy: App = apps with high privileges, consented by users. Requires Microsoft Defender for Cloud Apps. Reference: MS.DEFENDER.5.1v1 (SCuBA).",
       "LicenseRequirement": "Microsoft Defender for Cloud Apps (M365 E5 or add-on)",
