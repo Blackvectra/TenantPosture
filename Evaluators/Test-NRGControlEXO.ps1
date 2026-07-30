@@ -598,8 +598,63 @@ function Test-NRGControlEXOAlertVolume {
     [CmdletBinding()] param()
     $cid = 'EXO-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Unusual mail volume alert requires manual verification in Defender portal: Alerts > Alert policies > Unusual increase in email reported as phish.' -Remediation $ctrl.Remediation
+
+    # v4.12.2: implemented against Get-ProtectionAlert policy configuration
+    # (Purview.ProtectionAlerts). Matching is by policy name / threat type /
+    # operation against phish-reporting and mail-volume wording, because no
+    # machine-readable "this is the unusual mail volume policy" flag exists.
+    # A custom-named policy can therefore be under-detected, which the Gap text
+    # states so the reader knows to confirm before acting.
+    $pvw = Get-NRGRawData -Key 'Purview'
+    if (-not $pvw -or -not $pvw.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'Purview data not collected'
+        return
+    }
+    $status = Get-NRGNestedProperty -Object $pvw -Path 'Data.SectionStatus.ProtectionAlerts' -Default $null
+    if ($status -ne 'Collected') {
+        $why = if ($status -eq 'Failed') { 'the Get-ProtectionAlert query failed (see Exceptions)' }
+               else { 'Get-ProtectionAlert was unavailable — this requires a Security & Compliance (IPPS) session' }
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail "Alert policy configuration could not be read: $why. Mail volume alerting was not assessed."
+        return
+    }
+
+    $policies = @($pvw.Data['ProtectionAlerts'] ?? @())
+    $pattern  = 'unusual.*(mail|email)|(mail|email).*volume|reported as phish|phish.*report|suspicious email sending'
+    $matched  = @($policies | Where-Object {
+        (@([string]$_.Name, [string]$_.ThreatType, (@($_.Operation) -join ' ')) -join ' ') -match $pattern
+    })
+    $active = @($matched | Where-Object { -not $_.Disabled })
+
+    if ($active.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'No enabled alert policy was found covering unusual mail volume or user-reported phish. A compromised mailbox sending outbound spam is often first visible as a volume spike, and without this alert that spike is only noticed once the tenant is being throttled or blocklisted. (Detection matches policy name, operation and threat type against mail-volume and phish-reporting wording, so a custom-named policy may exist and not be matched — verify in the portal before remediating.)' `
+            -CurrentValue "0 of $($policies.Count) alert policies match mail volume / phish reporting" `
+            -RequiredValue 'An enabled alert policy for unusual mail volume or user-reported phish' `
+            -Remediation $ctrl.Remediation
+        return
+    }
+
+    $silent = @($active | Where-Object { @($_.NotifyUser).Count -eq 0 })
+    if ($silent.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "$($active.Count) enabled alert policy(ies) cover unusual mail volume / user-reported phish, each with notification recipients."
+    } else {
+        $affected = @($silent | ForEach-Object {
+            [ordered]@{ DisplayName = [string]$_.Name; Severity = [string]$_.Severity; Recipients = 'none configured' }
+        })
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail "$($silent.Count) of $($active.Count) matching alert policy(ies) are enabled but notify nobody, so a mail volume spike is recorded without anyone being told." `
+            -CurrentValue "$($silent.Count) matching policies with no recipients" `
+            -RequiredValue 'Mail volume / phish reporting alert enabled with notification recipients' `
+            -Remediation $ctrl.Remediation -AffectedObjects $affected
+    }
 }
+
 
 # ── EXO-3.5 Transport Rules Audit Enabled ────────────────────────────────────
 function Test-NRGControlEXOTransportAudit {
