@@ -545,6 +545,76 @@ Describe 'Failed collection is never reported as compliance (EXO inventory)' {
     }
 }
 
+Describe 'Failed role collection is never reported as compliance (AAD roles)' {
+
+    # Invoke-NRGCollectAADRoles sets Success = (assignments -OR- eligibility).
+    # On a PIM-managed tenant where the permanent-assignment read 403s but
+    # eligibility succeeds, Success stays $true while RoleAssignments and
+    # PrivRoles are empty. Every real tenant has at least one privileged
+    # assignment, so empty there is a failed read — never a clean tenant.
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+
+        function script:NewRoles {
+            param([hashtable] $Data)
+            [ordered]@{
+                CollectorId = 'AAD-Roles'
+                CollectedAt = '2026-07-30T00:00:00.0000000+00:00'
+                Success     = $true      # eligibility succeeded, assignments did not
+                Data        = $Data
+            }
+        }
+        function script:RoleVerdict {
+            param([string] $Evaluator, [string] $ControlId)
+            & $Evaluator | Out-Null
+            return @(Get-NRGFindings | Where-Object { $_.ControlId -eq $ControlId })[0]
+        }
+    }
+
+    BeforeEach { Clear-NRGState }
+    AfterAll   { Clear-NRGState }
+
+    It 'AAD-11.2 reports NotApplicable — not "no guest admins" — when the assignment read failed' {
+        Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRoles @{
+            RoleAssignments = @(); PrivRoles = @()
+            SectionStatus   = @{ RoleAssignments = 'Failed'; RoleEligibilitySchedules = 'Collected' }
+        })
+        (RoleVerdict 'Test-NRGControlAADNoGuestInPrivRoles' 'AAD-11.2').State | Should -Be 'NotApplicable' `
+            -Because 'claiming no guest holds a privileged role after failing to read role assignments is a false pass on a tenant-takeover control'
+    }
+
+    It 'AAD-10.2 reports NotApplicable — not "no synced admins" — when the assignment read failed' {
+        Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRoles @{
+            RoleAssignments = @(); PrivRoles = @()
+            SectionStatus   = @{ RoleAssignments = 'Failed'; RoleEligibilitySchedules = 'Collected' }
+        })
+        (RoleVerdict 'Test-NRGControlAADPrivCloudOnly' 'AAD-10.2').State | Should -Be 'NotApplicable'
+    }
+
+    It 'AAD-3.1 reports NotApplicable — not "fewer than 2 Global Admins" — when the assignment read failed' {
+        Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRoles @{
+            RoleAssignments = @(); PrivRoles = @()
+            SectionStatus   = @{ RoleAssignments = 'Failed'; RoleEligibilitySchedules = 'Collected' }
+        })
+        (RoleVerdict 'Test-NRGControlAADPrivAccess' 'AAD-3.1').State | Should -Be 'NotApplicable' `
+            -Because 'telling a client they have no Global Administrators when the read failed is a false ALARM — just as damaging to credibility as a false pass'
+    }
+
+    It 'a COLLECTED-but-genuinely-clean tenant still passes AAD-11.2' {
+        Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRoles @{
+            RoleAssignments = @( [pscustomobject]@{ RoleDefinitionName = 'Global Administrator'
+                                                    PrincipalUPN = 'admin@contoso.com'
+                                                    PrincipalDisplayName = 'Alice' } )
+            PrivRoles     = @()
+            SectionStatus = @{ RoleAssignments = 'Collected'; RoleEligibilitySchedules = 'Collected' }
+        })
+        (RoleVerdict 'Test-NRGControlAADNoGuestInPrivRoles' 'AAD-11.2').State | Should -Be 'Satisfied' `
+            -Because 'the guard must not suppress genuine compliance'
+    }
+}
+
 Describe 'Golden fixtures — ransomware attack path' {
 
     # Ransomware in M365 arrives by mail, executes on an endpoint, and spreads

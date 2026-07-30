@@ -27,6 +27,17 @@ function Invoke-NRGCollectAADRoles {
             # correct combined view.
             RoleEligibilitySchedules = @()
             AllPrivilegedAssignments = @()
+            # Per-source collection outcome. Success below is
+            # (assignments -OR- eligibility), so a tenant where the permanent
+            # -assignment call failed but eligibility succeeded still reports
+            # Success = $true with RoleAssignments / PrivRoles empty. Evaluators
+            # that read those lists must not treat empty as "nothing found":
+            # every real tenant has at least one privileged assignment, so an
+            # empty list is a failed read, not a clean tenant.
+            SectionStatus = @{
+                RoleAssignments          = 'NotRun'
+                RoleEligibilitySchedules = 'NotRun'
+            }
         }
     }
 
@@ -148,8 +159,10 @@ function Invoke-NRGCollectAADRoles {
             $result.Data.RoleAssignments = $assignments.ToArray()
             $result.Data.PrivRoles       = @($assignments | Where-Object { $_.IsPriv })
             $assignmentsOk = $true
+            $result.Data.SectionStatus.RoleAssignments = 'Collected'
 
         } catch {
+            $result.Data.SectionStatus.RoleAssignments = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-RoleAssignments' -Message $_.Exception.Message
             }
@@ -213,7 +226,9 @@ function Invoke-NRGCollectAADRoles {
             }
             $result.Data.RoleEligibilitySchedules = $eligibility.ToArray()
             $eligibilityOk = $true
+            $result.Data.SectionStatus.RoleEligibilitySchedules = 'Collected'
         } catch {
+            $result.Data.SectionStatus.RoleEligibilitySchedules = 'Failed'
             # PIM not licensed (Entra P1+) — non-fatal. Note also covered by
             # the dedicated PIM collector wrapper, but reading it here lets
             # AAD-Roles consumers see a unified view without cross-collector
