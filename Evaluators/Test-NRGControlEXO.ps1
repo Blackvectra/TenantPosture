@@ -833,6 +833,18 @@ function Test-NRGControlEXOInboxRulesForwarding {
     $rules = @(@($inv.Data['InboxRulesForwarding'] ?? @()) | Where-Object { $_.IsExternal })
     $count = $rules.Count
 
+    # An empty list means "no attacker rules found" only if the mailbox sweep
+    # actually ran. The sweep is the most failure-prone query in the collector
+    # (per-mailbox Get-InboxRule across the tenant, routinely throttled), and
+    # claiming a clean result after it failed is a false all-clear on the
+    # primary BEC persistence check.
+    if ($count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'InboxRulesForwarding')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title `
+            -Detail 'Inbox rule sweep did not complete (see Exceptions) — forwarding rules could not be assessed. Re-run before treating this control as clean.'
+        return
+    }
+
     if ($count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `

@@ -8,6 +8,30 @@
 # These are the "blood test" findings — they name EXACTLY who and what is at risk.
 #
 
+# Returns $true only when the named EXO-Inventory section was actually collected.
+#
+# Every list in EXO-Inventory defaults to @() and each query has its own
+# try/catch, so the collector reports Success = $true even when an individual
+# query failed (throttling and transient 403s are routine on real tenants).
+# That makes an empty list ambiguous — "scanned, found nothing" or "never
+# scanned" — and reading it as compliance produces a false clean bill of health
+# on exactly the checks a client is paying for. Any evaluator about to conclude
+# Satisfied from an EMPTY list must gate on this first.
+#
+# Absent SectionStatus (data captured before this map existed) is treated as
+# collected so a replayed older JSON keeps its previous behaviour rather than
+# silently turning every inventory finding into NotApplicable.
+function Test-NRGInventorySectionCollected {
+    [CmdletBinding()]
+    param(
+        [AllowNull()] $Inventory,
+        [Parameter(Mandatory)] [string] $Section
+    )
+    $status = Get-NRGNestedProperty -Object $Inventory -Path "Data.SectionStatus.$Section" -Default $null
+    if ($null -eq $status) { return $true }
+    return ($status -eq 'Collected')
+}
+
 # ── INV-1.1 Users Without MFA — Named List ────────────────────────────────────
 function Test-NRGControlInventoryMFAUsers {
     [CmdletBinding()] param()
@@ -146,6 +170,11 @@ function Test-NRGControlInventoryExternalForwarding {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
     }
     $fwd = @($inv.Data['ForwardingMailboxes'] ?? @())
+    if ($fwd.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'ForwardingMailboxes')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'Forwarding mailbox enumeration did not complete (see Exceptions) — external forwarding could not be assessed. Re-run before relying on this control.'
+        return
+    }
     if ($fwd.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No mailboxes are configured with an external forwarding address. Email is not being silently copied to external destinations.'
     } else {
@@ -170,6 +199,11 @@ function Test-NRGControlInventorySharedMailboxSignIn {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
     }
     $shared = @($inv.Data['AllSharedMailboxes'] ?? @())
+    if ($shared.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'SharedMailboxes')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'Shared mailbox enumeration did not complete (see Exceptions) — shared mailbox sign-in state could not be assessed.'
+        return
+    }
     if ($shared.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No shared mailboxes found.'; return
     }
@@ -207,6 +241,11 @@ function Test-NRGControlInventoryMailboxAuditDisabled {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
     }
     $noAudit = @($inv.Data['AuditDisabledMailboxes'] ?? @())
+    if ($noAudit.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'AuditDisabledMailboxes')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'Mailbox audit enumeration did not complete (see Exceptions) — audit coverage could not be assessed.'
+        return
+    }
     if ($noAudit.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All mailboxes have audit logging enabled. Mailbox access, inbox rules, and delegation changes are being recorded.'
     } else {
@@ -228,6 +267,11 @@ function Test-NRGControlInventorySMTPAuthUsers {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
     }
     $smtp = @($inv.Data['SmtpAuthEnabledPerUser'] ?? @())
+    if ($smtp.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'SmtpAuthEnabledPerUser')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'Per-user SMTP AUTH enumeration did not complete (see Exceptions) — legacy authentication overrides could not be assessed.'
+        return
+    }
     if ($smtp.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No per-user SMTP AUTH overrides. The org-level SMTP AUTH disable is enforced across all users — legacy client authentication is blocked.'
     } else {

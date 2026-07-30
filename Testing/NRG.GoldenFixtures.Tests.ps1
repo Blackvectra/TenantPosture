@@ -484,6 +484,67 @@ Describe 'Golden fixtures — privilege escalation attack path' {
     }
 }
 
+Describe 'Failed collection is never reported as compliance (EXO inventory)' {
+
+    # The EXO-Inventory collector runs several independent queries, each with its
+    # own try/catch, then sets Success = $true regardless. A failure therefore
+    # leaves one list empty while the overall result still looks healthy. These
+    # are the named-list controls an MSP actually sells on, so an empty-means-
+    # clean reading is the highest-consequence false result in the tool.
+    #
+    # Each control is pinned twice: FAILED section must be NotApplicable, and a
+    # COLLECTED-but-empty section must still be Satisfied so the guard does not
+    # suppress genuine passes.
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+
+        function script:NewInv {
+            param([hashtable] $Data)
+            [ordered]@{
+                CollectorId = 'EXO-Inventory'
+                CollectedAt = '2026-07-30T00:00:00.0000000+00:00'
+                Success     = $true
+                Data        = $Data
+            }
+        }
+        function script:InvVerdict {
+            param([string] $Evaluator, [string] $ControlId)
+            & $Evaluator | Out-Null
+            return @(Get-NRGFindings | Where-Object { $_.ControlId -eq $ControlId })[0]
+        }
+    }
+
+    BeforeEach { Clear-NRGState }
+    AfterAll   { Clear-NRGState }
+
+    $cases = @(
+        @{ Control = 'EXO-6.1'; Evaluator = 'Test-NRGControlInventoryExternalForwarding'; Key = 'ForwardingMailboxes';    Section = 'ForwardingMailboxes' }
+        @{ Control = 'EXO-6.2'; Evaluator = 'Test-NRGControlInventorySharedMailboxSignIn'; Key = 'AllSharedMailboxes';    Section = 'SharedMailboxes' }
+        @{ Control = 'EXO-6.3'; Evaluator = 'Test-NRGControlInventoryMailboxAuditDisabled'; Key = 'AuditDisabledMailboxes'; Section = 'AuditDisabledMailboxes' }
+        @{ Control = 'EXO-6.4'; Evaluator = 'Test-NRGControlInventorySMTPAuthUsers';        Key = 'SmtpAuthEnabledPerUser'; Section = 'SmtpAuthEnabledPerUser' }
+    )
+
+    It '<Control> reports NotApplicable when its collection section FAILED' -TestCases $cases {
+        Set-NRGRawData -Key 'EXO-Inventory' -Data (NewInv @{
+            $Key          = @()
+            SectionStatus = @{ $Section = 'Failed' }
+        })
+        (InvVerdict $Evaluator $Control).State | Should -Be 'NotApplicable' `
+            -Because "$Control would otherwise tell the client they are clean on the strength of a query that never returned"
+    }
+
+    It '<Control> still reports Satisfied when the section COLLECTED and found nothing' -TestCases $cases {
+        Set-NRGRawData -Key 'EXO-Inventory' -Data (NewInv @{
+            $Key          = @()
+            SectionStatus = @{ $Section = 'Collected' }
+        })
+        (InvVerdict $Evaluator $Control).State | Should -Be 'Satisfied' `
+            -Because 'a genuinely clean tenant must still pass — the guard must not suppress real compliance'
+    }
+}
+
 Describe 'Golden fixtures — ransomware attack path' {
 
     # Ransomware in M365 arrives by mail, executes on an endpoint, and spreads
@@ -572,6 +633,29 @@ Describe 'Golden fixtures — ransomware attack path' {
             @($v.AffectedObjects).Count | Should -BeGreaterThan 0 `
                 -Because 'this finding is only actionable during an incident if it names the mailbox, the rule and the destination'
             ($v.AffectedObjects | ConvertTo-Json -Depth 4) | Should -Match 'attacker@evil\.tld'
+        }
+
+        It 'reports NotApplicable — never Satisfied — when the inbox rule sweep FAILED' {
+            # Regression guard. The collector defaults every list to @() and gives
+            # each query its own try/catch, so a throttled per-mailbox sweep still
+            # leaves Success = $true with an empty list. Before SectionStatus this
+            # rendered as "No inbox rules forward mail externally" — a false
+            # all-clear on the primary BEC persistence check.
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (NewRaw3 'EXO' @{
+                InboxRulesForwarding = @()
+                SectionStatus        = @{ InboxRulesForwarding = 'Failed' }
+            })
+            (GetVerdict3 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2').State | Should -Be 'NotApplicable' `
+                -Because 'a failed scan is not evidence of a clean tenant — claiming otherwise is the exact false assurance this tool exists to avoid'
+        }
+
+        It 'still reports Satisfied when the sweep COMPLETED and genuinely found nothing' {
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (NewRaw3 'EXO' @{
+                InboxRulesForwarding = @()
+                SectionStatus        = @{ InboxRulesForwarding = 'Collected' }
+            })
+            (GetVerdict3 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2').State | Should -Be 'Satisfied' `
+                -Because 'the fix must not turn every genuinely clean tenant into NotApplicable'
         }
 
         It 'ignores internal-only forwarding rules (no false positive)' {

@@ -48,6 +48,22 @@ function Invoke-NRGCollectEXOInventory {
                 AcceptedDomainsKnown = 0
                 ScanLimitReached     = $false
             }
+            # Per-section collection outcome. Every list above defaults to @(),
+            # and each query below has its own try/catch so one failure does not
+            # abort the rest — but that means an EMPTY list is ambiguous: it can
+            # mean "scanned, found nothing" (good) or "the query failed" (unknown).
+            # Success alone cannot distinguish them, so evaluators that would
+            # otherwise read an empty list as compliance MUST consult this map.
+            # Reporting "no external forwarding found" after a throttled
+            # Get-Mailbox is a false clean bill of health on the primary BEC
+            # exfiltration check.
+            SectionStatus = @{
+                ForwardingMailboxes    = 'NotRun'
+                InboxRulesForwarding   = 'NotRun'
+                SharedMailboxes        = 'NotRun'
+                AuditDisabledMailboxes = 'NotRun'
+                SmtpAuthEnabledPerUser = 'NotRun'
+            }
         }
     }
 
@@ -92,7 +108,9 @@ function Invoke-NRGCollectEXOInventory {
                     MailboxType               = [string]$_.RecipientTypeDetails
                 }
             })
+            $result.Data.SectionStatus.ForwardingMailboxes = 'Collected'
         } catch {
+            $result.Data.SectionStatus.ForwardingMailboxes = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-ForwardingMailboxes' -Message $_.Exception.Message
             }
@@ -162,7 +180,9 @@ function Invoke-NRGCollectEXOInventory {
                 }
             }
             $result.Data.InboxRulesForwarding = @($rulesFound)
+            $result.Data.SectionStatus.InboxRulesForwarding = 'Collected'
         } catch {
+            $result.Data.SectionStatus.InboxRulesForwarding = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-InboxRulesForwarding' -Message $_.Exception.Message
             }
@@ -230,7 +250,9 @@ function Invoke-NRGCollectEXOInventory {
                 }
             }
             $result.Data.SharedMailboxSignIn = @($signInRisky)
+            $result.Data.SectionStatus.SharedMailboxes = 'Collected'
         } catch {
+            $result.Data.SectionStatus.SharedMailboxes = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-SharedMailbox' -Message $_.Exception.Message
             }
@@ -246,7 +268,9 @@ function Invoke-NRGCollectEXOInventory {
                     MailboxType = [string]$_.RecipientTypeDetails
                 }
             })
+            $result.Data.SectionStatus.AuditDisabledMailboxes = 'Collected'
         } catch {
+            $result.Data.SectionStatus.AuditDisabledMailboxes = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-AuditDisabled' -Message $_.Exception.Message
             }
@@ -262,7 +286,9 @@ function Invoke-NRGCollectEXOInventory {
                     UPN         = [string]$_.Name
                 }
             })
+            $result.Data.SectionStatus.SmtpAuthEnabledPerUser = 'Collected'
         } catch {
+            $result.Data.SectionStatus.SmtpAuthEnabledPerUser = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-SMTPAuthPerUser' -Message $_.Exception.Message
             }
