@@ -227,6 +227,90 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
         }
     }
 
+    Context 'EXO-1.2 — SMTP AUTH Disabled (legacy protocol that bypasses MFA)' {
+
+        It 'Satisfied when SMTP AUTH is off tenant-wide with no per-mailbox exceptions' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                SmtpAuthConfig = [pscustomobject]@{ TenantDisabled = $true; PerMailboxEnabledCount = 0 }
+            })
+            (GetVerdict 'Test-NRGControlEXOSmtpAuth' 'EXO-1.2').State | Should -Be 'Satisfied'
+        }
+
+        It 'Partial when disabled tenant-wide but individual mailboxes re-enable it' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                SmtpAuthConfig = [pscustomobject]@{
+                    TenantDisabled = $true; PerMailboxEnabledCount = 3
+                    SampleEnabled  = @('scanner@contoso.com', 'crm@contoso.com') }
+            })
+            $v = GetVerdict 'Test-NRGControlEXOSmtpAuth' 'EXO-1.2'
+            $v.State | Should -Be 'Partial' `
+                -Because 'per-mailbox exceptions are the exact hole attackers use — a tenant-wide "off" must not mask them'
+            $v.Detail | Should -Match 'scanner@contoso\.com' -Because 'the client needs to know WHICH mailboxes are exposed'
+        }
+
+        It 'NotApplicable when SMTP auth config was not collected' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{ })
+            (GetVerdict 'Test-NRGControlEXOSmtpAuth' 'EXO-1.2').State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'EXO-1.3 — External Auto-Forwarding Blocked (the classic BEC exfil path)' {
+
+        It 'Satisfied only when BOTH the spam policy and remote domain block forwarding' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OutboundSpamPolicies = @( [pscustomobject]@{ IsDefault = $true; AutoForwardingMode = 'Off' } )
+                RemoteDomains        = @( [pscustomobject]@{ IsDefault = $true; AutoForwardEnabled = $false } )
+            })
+            (GetVerdict 'Test-NRGControlEXOAutoForward' 'EXO-1.3').State | Should -Be 'Satisfied'
+        }
+
+        It 'Partial when the spam policy blocks but the remote-domain wildcard still allows forwarding' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OutboundSpamPolicies = @( [pscustomobject]@{ IsDefault = $true; AutoForwardingMode = 'Off' } )
+                RemoteDomains        = @( [pscustomobject]@{ IsDefault = $true; AutoForwardEnabled = $true } )
+            })
+            (GetVerdict 'Test-NRGControlEXOAutoForward' 'EXO-1.3').State | Should -Be 'Partial' `
+                -Because 'half-blocked forwarding still leaks mail — reporting this as Satisfied would be a false assurance in a BEC scenario'
+        }
+
+        It 'Gap when neither control blocks external forwarding' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OutboundSpamPolicies = @( [pscustomobject]@{ IsDefault = $true; AutoForwardingMode = 'On' } )
+                RemoteDomains        = @( [pscustomobject]@{ IsDefault = $true; AutoForwardEnabled = $true } )
+            })
+            (GetVerdict 'Test-NRGControlEXOAutoForward' 'EXO-1.3').State | Should -Be 'Gap'
+        }
+    }
+
+    Context 'DNS-1.1 — SPF Record Hardening' {
+
+        It 'Satisfied on hard fail (-all)' {
+            Set-NRGRawData -Key 'DNS-EmailRecords' -Data (NewRaw 'DNS' @{
+                DomainCount = 1
+                Domains     = @{ 'contoso.com' = [pscustomobject]@{
+                    SPF = 'v=spf1 include:spf.protection.outlook.com -all' } }
+            })
+            (GetVerdict 'Test-NRGControlDNSSPF' 'DNS-1.1').State | Should -Be 'Satisfied'
+        }
+
+        It 'Partial on soft fail (~all) — spoofed mail still gets delivered' {
+            Set-NRGRawData -Key 'DNS-EmailRecords' -Data (NewRaw 'DNS' @{
+                DomainCount = 1
+                Domains     = @{ 'contoso.com' = [pscustomobject]@{
+                    SPF = 'v=spf1 include:spf.protection.outlook.com ~all' } }
+            })
+            (GetVerdict 'Test-NRGControlDNSSPF' 'DNS-1.1').State | Should -Be 'Partial'
+        }
+
+        It 'Gap when the domain has no SPF record at all' {
+            Set-NRGRawData -Key 'DNS-EmailRecords' -Data (NewRaw 'DNS' @{
+                DomainCount = 1
+                Domains     = @{ 'contoso.com' = [pscustomobject]@{ SPF = $null } }
+            })
+            (GetVerdict 'Test-NRGControlDNSSPF' 'DNS-1.1').State | Should -Be 'Gap'
+        }
+    }
+
     Context 'Cross-cutting — a compliant tenant is never reported as vulnerable' {
 
         It 'the compliant fixtures above produce zero Gap findings for their controls' {
