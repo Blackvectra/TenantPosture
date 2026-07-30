@@ -339,3 +339,250 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
         }
     }
 }
+
+Describe 'Golden fixtures — privilege escalation attack path' {
+
+    # The tenant-takeover chain: an attacker who lands one account works toward
+    # standing admin rights. These controls are what stop the escalation, and
+    # their middle verdicts encode distinctions most assessment tools miss —
+    # notably that a correct GA COUNT still leaves you exposed if any of those
+    # admins is synced from on-prem AD (MITRE T1078.002: compromise the domain
+    # controller, inherit Global Admin).
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+
+        $script:GA_ROLE_ID = '62e90394-69f5-4237-9190-012177145e10'
+
+        function script:NewRaw2 {
+            param([string] $CollectorId, [hashtable] $Data, [bool] $Success = $true)
+            [ordered]@{
+                CollectorId = $CollectorId
+                CollectedAt = '2026-07-30T00:00:00.0000000+00:00'
+                Success     = $Success
+                Data        = $Data
+            }
+        }
+        function script:GetVerdict2 {
+            param([string] $Evaluator, [string] $ControlId)
+            & $Evaluator | Out-Null
+            return @(Get-NRGFindings | Where-Object { $_.ControlId -eq $ControlId })[0]
+        }
+        function script:NewGA {
+            param([string] $Upn, [bool] $Synced = $false)
+            [pscustomobject]@{
+                RoleDefinitionId     = $script:GA_ROLE_ID
+                RoleDefinitionName   = 'Global Administrator'
+                PrincipalUPN         = $Upn
+                PrincipalDisplayName = $Upn
+                OnPremisesSyncEnabled = $Synced
+                PrincipalType        = 'user'
+                IsPriv               = $true
+            }
+        }
+    }
+
+    BeforeEach { Clear-NRGState }
+    AfterAll   { Clear-NRGState }
+
+    Context 'AAD-3.1 — Global Administrator count and origin' {
+
+        It 'Satisfied when 2-8 Global Admins exist and all are cloud-only' {
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw2 'AAD' @{
+                RoleAssignments = @( (NewGA 'admin1@contoso.com'), (NewGA 'admin2@contoso.com'), (NewGA 'admin3@contoso.com') )
+            })
+            (GetVerdict2 'Test-NRGControlAADPrivAccess' 'AAD-3.1').State | Should -Be 'Satisfied'
+        }
+
+        It 'Partial when the count is right but a GA is synced from on-prem AD (T1078.002)' {
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw2 'AAD' @{
+                RoleAssignments = @(
+                    (NewGA 'admin1@contoso.com'),
+                    (NewGA 'admin2@contoso.com'),
+                    (NewGA 'dcadmin@contoso.com' -Synced $true)
+                )
+            })
+            $v = GetVerdict2 'Test-NRGControlAADPrivAccess' 'AAD-3.1'
+            $v.State | Should -Be 'Partial' `
+                -Because 'a synced GA means on-prem AD compromise yields immediate Entra Global Admin — a correct count alone is not safety, and most tools only count'
+            $v.CurrentValue | Should -Match 'dcadmin@contoso\.com' -Because 'the client must know which admin is the escalation path'
+        }
+
+        It 'Gap when fewer than 2 Global Admins exist (lockout / recovery risk)' {
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw2 'AAD' @{
+                RoleAssignments = @( (NewGA 'onlyadmin@contoso.com') )
+            })
+            (GetVerdict2 'Test-NRGControlAADPrivAccess' 'AAD-3.1').State | Should -Be 'Gap' `
+                -Because 'a single GA is a availability risk, not just a security one — losing it locks the client out of their own tenant'
+        }
+
+        It 'Gap when more than 8 permanent Global Admins exist (excess attack surface)' {
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw2 'AAD' @{
+                RoleAssignments = @( 1..9 | ForEach-Object { NewGA "admin$_@contoso.com" } )
+            })
+            (GetVerdict2 'Test-NRGControlAADPrivAccess' 'AAD-3.1').State | Should -Be 'Gap'
+        }
+    }
+
+    Context 'AAD-3.2 — No standing privileged access (PIM)' {
+
+        It 'Satisfied when no permanent privileged assignments exist and PIM eligibility is configured' {
+            Set-NRGRawData -Key 'AAD-PIMSchedules'   -Data (NewRaw2 'AAD' @{ EligibleSchedules = @('sched1', 'sched2') })
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw2 'AAD' @{ RoleAssignments   = @() })
+            (GetVerdict2 'Test-NRGControlAADNoPermanentAdmins' 'AAD-3.2').State | Should -Be 'Satisfied'
+        }
+
+        It 'Gap when a human holds a permanent privileged role' {
+            Set-NRGRawData -Key 'AAD-PIMSchedules'   -Data (NewRaw2 'AAD' @{ EligibleSchedules = @('sched1') })
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw2 'AAD' @{
+                RoleAssignments = @( [pscustomobject]@{
+                    IsPriv = $true; PrincipalType = 'user'
+                    PrincipalDisplayName = 'Standing Admin'; PrincipalUPN = 'standing@contoso.com' } )
+            })
+            $v = GetVerdict2 'Test-NRGControlAADNoPermanentAdmins' 'AAD-3.2'
+            $v.State | Should -Be 'Gap'
+            $v.CurrentValue | Should -Match 'Standing Admin'
+        }
+
+        It 'does NOT flag a service principal as a standing admin (no false positive)' {
+            Set-NRGRawData -Key 'AAD-PIMSchedules'   -Data (NewRaw2 'AAD' @{ EligibleSchedules = @('sched1') })
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw2 'AAD' @{
+                RoleAssignments = @( [pscustomobject]@{
+                    IsPriv = $true; PrincipalType = 'servicePrincipal'
+                    PrincipalDisplayName = 'Backup App'; PrincipalUPN = '' } )
+            })
+            (GetVerdict2 'Test-NRGControlAADNoPermanentAdmins' 'AAD-3.2').State | Should -Be 'Satisfied' `
+                -Because 'service principals are excluded by design — flagging them would generate noise the client cannot action'
+        }
+
+        It 'NotApplicable when PIM is unlicensed rather than pretending it is a gap' {
+            $pim = NewRaw2 'AAD' @{} $false
+            $pim['PIMAvailable'] = $false
+            Set-NRGRawData -Key 'AAD-PIMSchedules' -Data $pim
+            (GetVerdict2 'Test-NRGControlAADNoPermanentAdmins' 'AAD-3.2').State | Should -Be 'NotApplicable' `
+                -Because 'a client without Entra P2 cannot use PIM — scoring it as a failure would be an unfair, unfixable finding'
+        }
+    }
+
+    Context 'AAD-6.2 — User Consent to Apps (consent-phishing entry point)' {
+
+        It 'Satisfied when user consent is restricted to low-impact permissions' {
+            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (NewRaw2 'AAD' @{
+                ExternalCollab = @{ PermissionGrantPolicies = @('ManagePermissionGrantsForSelf.microsoft-user-default-low') }
+            })
+            (GetVerdict2 'Test-NRGControlAADUserConsent' 'AAD-6.2').State | Should -Be 'Satisfied'
+        }
+
+        It 'Gap when the legacy unrestricted consent policy is in place' {
+            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (NewRaw2 'AAD' @{
+                ExternalCollab = @{ PermissionGrantPolicies = @('ManagePermissionGrantsForSelf.microsoft-user-default-legacy') }
+            })
+            (GetVerdict2 'Test-NRGControlAADUserConsent' 'AAD-6.2').State | Should -Be 'Gap' `
+                -Because 'unrestricted consent lets a phishing app read mail and files with no admin involvement — the OAuth consent-phishing path'
+        }
+    }
+}
+
+Describe 'Golden fixtures — ransomware attack path' {
+
+    # Ransomware in M365 arrives by mail, executes on an endpoint, and spreads
+    # through cloud storage. These controls cover that chain: block the delivery
+    # (attachment filtering), harden the endpoint (ASR), and detect the
+    # exfiltration/persistence step (attacker inbox rules forwarding mail out).
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+
+        function script:NewRaw3 {
+            param([string] $CollectorId, [hashtable] $Data, [bool] $Success = $true)
+            [ordered]@{
+                CollectorId = $CollectorId
+                CollectedAt = '2026-07-30T00:00:00.0000000+00:00'
+                Success     = $Success
+                Data        = $Data
+            }
+        }
+        function script:GetVerdict3 {
+            param([string] $Evaluator, [string] $ControlId)
+            & $Evaluator | Out-Null
+            return @(Get-NRGFindings | Where-Object { $_.ControlId -eq $ControlId })[0]
+        }
+    }
+
+    BeforeEach { Clear-NRGState }
+    AfterAll   { Clear-NRGState }
+
+    Context 'DEF-2.3 — Common attachment filter (malware delivery)' {
+
+        It 'Satisfied when the common attachment filter is enabled on a malware policy' {
+            Set-NRGRawData -Key 'Defender-Policies' -Data (NewRaw3 'DEF' @{
+                MalwareFilter = [pscustomobject]@{ Available = $true; FileFilterEnabledCount = 1 }
+            })
+            (GetVerdict3 'Test-NRGControlDefenderCommonAttachments' 'DEF-2.3').State | Should -Be 'Satisfied'
+        }
+
+        It 'Gap when no policy blocks high-risk file types' {
+            Set-NRGRawData -Key 'Defender-Policies' -Data (NewRaw3 'DEF' @{
+                MalwareFilter = [pscustomobject]@{ Available = $true; FileFilterEnabledCount = 0 }
+            })
+            (GetVerdict3 'Test-NRGControlDefenderCommonAttachments' 'DEF-2.3').State | Should -Be 'Gap'
+        }
+
+        It 'NotApplicable when malware filter data could not be read' {
+            Set-NRGRawData -Key 'Defender-Policies' -Data (NewRaw3 'DEF' @{
+                MalwareFilter = [pscustomobject]@{ Available = $false }
+            })
+            (GetVerdict3 'Test-NRGControlDefenderCommonAttachments' 'DEF-2.3').State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'INT-2.2 — Attack Surface Reduction rules (endpoint execution)' {
+
+        It 'Satisfied when ASR policies are deployed' {
+            Set-NRGRawData -Key 'Intune-EndpointSecurity' -Data (NewRaw3 'INT' @{
+                ASRPolicies = @([pscustomobject]@{ DisplayName = 'ASR Baseline' })
+            })
+            (GetVerdict3 'Test-NRGControlIntuneASR' 'INT-2.2').State | Should -Be 'Satisfied'
+        }
+
+        It 'Gap when no ASR policy exists (Office macro and credential-theft vectors open)' {
+            Set-NRGRawData -Key 'Intune-EndpointSecurity' -Data (NewRaw3 'INT' @{ ASRPolicies = @() })
+            (GetVerdict3 'Test-NRGControlIntuneASR' 'INT-2.2').State | Should -Be 'Gap'
+        }
+    }
+
+    Context 'EXO-7.2 — Attacker inbox rules forwarding externally (persistence/exfil)' {
+
+        It 'Satisfied when no inbox rule forwards mail outside the tenant' {
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (NewRaw3 'EXO' @{ InboxRulesForwarding = @() })
+            (GetVerdict3 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2').State | Should -Be 'Satisfied'
+        }
+
+        It 'Gap naming the mailbox and rule when external forwarding is found' {
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (NewRaw3 'EXO' @{
+                InboxRulesForwarding = @(
+                    [pscustomobject]@{ IsExternal = $true; Mailbox = 'cfo@contoso.com'
+                                       RuleName = '.'; ExternalRecipients = @('attacker@evil.tld') }
+                )
+            })
+            $v = GetVerdict3 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2'
+            $v.State | Should -Be 'Gap'
+            @($v.AffectedObjects).Count | Should -BeGreaterThan 0 `
+                -Because 'this finding is only actionable during an incident if it names the mailbox, the rule and the destination'
+            ($v.AffectedObjects | ConvertTo-Json -Depth 4) | Should -Match 'attacker@evil\.tld'
+        }
+
+        It 'ignores internal-only forwarding rules (no false positive)' {
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (NewRaw3 'EXO' @{
+                InboxRulesForwarding = @(
+                    [pscustomobject]@{ IsExternal = $false; Mailbox = 'sales@contoso.com'
+                                       RuleName = 'To team'; ExternalRecipients = @() }
+                )
+            })
+            (GetVerdict3 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2').State | Should -Be 'Satisfied' `
+                -Because 'internal forwarding is normal business behaviour — flagging it would bury the real attacker rule in noise'
+        }
+    }
+}
