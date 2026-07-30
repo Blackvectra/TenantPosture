@@ -8,7 +8,11 @@ function Test-NRGAADDataAvailable {
     $ca   = Get-NRGRawData -Key 'AAD-CAPolicies'
     $auth = Get-NRGRawData -Key 'AAD-AuthPolicies'
     $usr  = Get-NRGRawData -Key 'AAD-Users'
-    $rol  = Get-NRGRawData -Key 'AAD-Roles'
+    # 'AAD-DirectoryRoles' is the key Invoke-NRGCollectAADRoles actually writes.
+    # This previously read 'AAD-Roles', which no collector sets, so the clause
+    # below was always false — the helper could not see role data even when it
+    # had been collected successfully.
+    $rol  = Get-NRGRawData -Key 'AAD-DirectoryRoles'
     # At least one AAD collector must have succeeded
     return ($ca   -and $ca.Success)   -or
            ($auth -and $auth.Success) -or
