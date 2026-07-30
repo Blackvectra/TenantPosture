@@ -123,15 +123,24 @@ function Invoke-NRGCollectPurview {
         if (Get-Command Get-ProtectionAlert -ErrorAction SilentlyContinue) {
             try {
                 $alerts = Get-ProtectionAlert -ErrorAction Stop
+                # Read every field through Get-NRGObjectField rather than direct
+                # property access. Set-StrictMode -Version Latest is active
+                # module-wide, and under it referencing a property the object
+                # does not have THROWS before a ?? default can apply. The exact
+                # shape of Get-ProtectionAlert output is not guaranteed across
+                # tenants and module versions, so a single missing field would
+                # otherwise abort the whole section and silently disable
+                # DEF-3.4 / DEF-4.3 / EXO-3.4.
                 $result.Data.ProtectionAlerts = @($alerts | ForEach-Object {
+                    $a = $_
                     @{
-                        Name         = [string]$_.Name
-                        Category     = [string]$_.Category
-                        Severity     = [string]$_.Severity
-                        Disabled     = [bool]($_.Disabled ?? $false)
-                        NotifyUser   = @($_.NotifyUser ?? @())
-                        ThreatType   = [string]($_.ThreatType ?? '')
-                        Operation    = @($_.Operation ?? @())
+                        Name         = [string](Get-NRGObjectField -Item $a -Key 'Name'       -Default '')
+                        Category     = [string](Get-NRGObjectField -Item $a -Key 'Category'   -Default '')
+                        Severity     = [string](Get-NRGObjectField -Item $a -Key 'Severity'   -Default '')
+                        Disabled     = [bool]  (Get-NRGObjectField -Item $a -Key 'Disabled'   -Default $false)
+                        NotifyUser   = @(       Get-NRGObjectField -Item $a -Key 'NotifyUser' -Default @())
+                        ThreatType   = [string](Get-NRGObjectField -Item $a -Key 'ThreatType' -Default '')
+                        Operation    = @(       Get-NRGObjectField -Item $a -Key 'Operation'  -Default @())
                     }
                 })
                 $result.Data.SectionStatus.ProtectionAlerts = 'Collected'
