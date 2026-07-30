@@ -545,6 +545,126 @@ Describe 'Failed collection is never reported as compliance (EXO inventory)' {
     }
 }
 
+Describe 'DEF-3.4 / DEF-4.3 alert policy configuration — implemented' {
+
+    # Both were High severity manual-review placeholders. They read alert POLICY
+    # configuration from Get-ProtectionAlert, which answers a different question
+    # from the /security/alerts_v2 feed collected elsewhere: that lists alerts
+    # which fired, this asks whether anyone is configured to be told when they
+    # do. An enabled policy with an empty NotifyUser raises an alert into an
+    # empty room.
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+
+        function script:PvwRaw {
+            param([object[]] $Alerts = @(), [string] $Section = 'Collected')
+            [ordered]@{
+                CollectorId='Purview'; CollectedAt='2026-07-30T00:00:00.0000000+00:00'; Success=$true
+                Data=@{ ProtectionAlerts = $Alerts; SectionStatus = @{ ProtectionAlerts = $Section } }
+            }
+        }
+        function script:Pol {
+            param([string]$Name,[string]$Sev='High',[bool]$Disabled=$false,[string[]]$Notify=@('soc@contoso.com'),
+                  [string]$Threat='',[string[]]$Op=@())
+            [pscustomobject]@{ Name=$Name; Category='ThreatManagement'; Severity=$Sev
+                               Disabled=$Disabled; NotifyUser=$Notify; ThreatType=$Threat; Operation=$Op }
+        }
+        function script:AlertVerdict {
+            param([string]$Evaluator,[string]$ControlId)
+            & $Evaluator | Out-Null
+            return @(Get-NRGFindings | Where-Object { $_.ControlId -eq $ControlId })[0]
+        }
+    }
+
+    BeforeEach { Clear-NRGState }
+    AfterAll   { Clear-NRGState }
+
+    Context 'DEF-3.4 — high severity alerts reach a human' {
+
+        It 'no longer returns a permanent placeholder' {
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @((Pol 'Malware campaign detected')))
+            (AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4').State | Should -Not -Be 'NotApplicable'
+        }
+
+        It 'Satisfied when every enabled High/Critical policy has recipients' {
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
+                (Pol 'Malware campaign detected'), (Pol 'Elevation of privilege' 'Critical')))
+            (AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4').State | Should -Be 'Satisfied'
+        }
+
+        It 'Gap — naming the policy — when a High policy has no recipients' {
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
+                (Pol 'Malware campaign detected'),
+                (Pol 'Elevation of privilege' 'Critical' $false @())))
+            $v = AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4'
+            $v.State | Should -Be 'Gap'
+            ($v.AffectedObjects | ConvertTo-Json -Depth 4) | Should -Match 'Elevation of privilege'
+        }
+
+        It 'ignores DISABLED policies when judging coverage' {
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
+                (Pol 'Malware campaign detected'),
+                (Pol 'Retired policy' 'High' $true @())))
+            (AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4').State | Should -Be 'Satisfied' `
+                -Because 'a disabled policy with no recipients is not a live blind spot'
+        }
+
+        It 'Gap when the tenant has no alert policies at all' {
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @())
+            (AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4').State | Should -Be 'Gap'
+        }
+
+        It 'NotApplicable when Get-ProtectionAlert could not run (no IPPS session)' {
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @() -Section 'NotRun')
+            (AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4').State | Should -Be 'NotApplicable' `
+                -Because 'an unavailable session is not evidence that alerting is unconfigured'
+        }
+    }
+
+    Context 'DEF-4.3 — OAuth consent alerting' {
+
+        It 'Satisfied when a consent-related policy is enabled with recipients' {
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
+                (Pol 'Tenant-wide admin consent to an application')))
+            (AlertVerdict 'Test-NRGControlDefenderRiskyAppAlerts' 'DEF-4.3').State | Should -Be 'Satisfied'
+        }
+
+        It 'matches on Operation as well as Name' {
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
+                (Pol 'Custom policy 7' 'High' $false @('soc@contoso.com') '' @('ConsentToApplication'))))
+            (AlertVerdict 'Test-NRGControlDefenderRiskyAppAlerts' 'DEF-4.3').State | Should -Be 'Satisfied' `
+                -Because 'a differently-named policy is still real coverage — matching only on Name would under-detect'
+        }
+
+        It 'Gap when nothing covers OAuth consent' {
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @((Pol 'Malware campaign detected')))
+            $v = AlertVerdict 'Test-NRGControlDefenderRiskyAppAlerts' 'DEF-4.3'
+            $v.State | Should -Be 'Gap'
+            $v.Detail | Should -Match 'verify in the portal' `
+                -Because 'the finding must disclose that detection is name-based and could miss a custom-named policy'
+        }
+
+        It 'Partial — not Satisfied — when the consent policy notifies nobody' {
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
+                (Pol 'Tenant-wide admin consent to an application' 'High' $false @())))
+            (AlertVerdict 'Test-NRGControlDefenderRiskyAppAlerts' 'DEF-4.3').State | Should -Be 'Partial'
+        }
+
+        It 'a disabled consent policy does not count as coverage' {
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
+                (Pol 'Tenant-wide admin consent to an application' 'High' $true)))
+            (AlertVerdict 'Test-NRGControlDefenderRiskyAppAlerts' 'DEF-4.3').State | Should -Be 'Gap'
+        }
+
+        It 'NotApplicable when Get-ProtectionAlert could not run' {
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @() -Section 'Failed')
+            (AlertVerdict 'Test-NRGControlDefenderRiskyAppAlerts' 'DEF-4.3').State | Should -Be 'NotApplicable'
+        }
+    }
+}
+
 Describe 'EXO-2.6 shared mailbox sign-in — implemented, evidence-graded' {
 
     # Was a manual-review placeholder that always returned NotApplicable despite
