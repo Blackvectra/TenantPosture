@@ -17,6 +17,16 @@ function Invoke-NRGCollectAADInventory {
     $result = @{
         Success = $false
         Data = @{
+            # Per-section collection outcome. Each block below has its own
+            # try/catch and Success is set unconditionally at the end, so an
+            # empty list here is ambiguous — "enumerated, found none" or "the
+            # query failed". Evaluators that would otherwise read empty as
+            # compliance must consult this first.
+            SectionStatus       = @{
+                GuestUsers       = 'NotRun'
+                StaleMembers     = 'NotRun'
+                OAuthGrantedApps = 'NotRun'
+            }
             GuestUsers          = @()
             StaleMembers        = @()
             OAuthGrantedApps    = @()
@@ -67,7 +77,9 @@ function Invoke-NRGCollectAADInventory {
                     IsStale           = $daysSince -gt 90
                 }
             })
+            $result.Data.SectionStatus.GuestUsers = 'Collected'
         } catch {
+            $result.Data.SectionStatus.GuestUsers = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-GuestInventory' -Message $_.Exception.Message
             }
@@ -94,7 +106,9 @@ function Invoke-NRGCollectAADInventory {
                 }
             })
             $result.Data.StaleMembers = $stale
+            $result.Data.SectionStatus.StaleMembers = 'Collected'
         } catch {
+            $result.Data.SectionStatus.StaleMembers = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-StaleAccounts' -Message $_.Exception.Message
             }
@@ -126,7 +140,9 @@ function Invoke-NRGCollectAADInventory {
                     }
                 })
             }
+            $result.Data.SectionStatus.OAuthGrantedApps = 'Collected'
         } catch {
+            $result.Data.SectionStatus.OAuthGrantedApps = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-OAuthGrants' -Message $_.Exception.Message
             }

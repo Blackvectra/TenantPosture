@@ -8,9 +8,10 @@
 # These are the "blood test" findings — they name EXACTLY who and what is at risk.
 #
 
-# Returns $true only when the named EXO-Inventory section was actually collected.
+# Returns $true only when the named collector section was actually collected.
+# Used for both EXO-Inventory and AAD-Inventory, which share this shape.
 #
-# Every list in EXO-Inventory defaults to @() and each query has its own
+# Every such list defaults to @() and each query has its own
 # try/catch, so the collector reports Success = $true even when an individual
 # query failed (throttling and transient 403s are routine on real tenants).
 # That makes an empty list ambiguous — "scanned, found nothing" or "never
@@ -81,6 +82,11 @@ function Test-NRGControlInventoryStaleGuests {
     }
     $staleGuests = @($inv.Data['GuestUsers'] | Where-Object { $_.IsStale -eq $true })
     $allGuests   = @($inv.Data['GuestUsers']).Count
+    if ($allGuests -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'GuestUsers')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'Guest account enumeration did not complete (see Exceptions) — stale guest access could not be assessed.'
+        return
+    }
     if ($staleGuests.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$allGuests guest account(s) found — all have signed in within the past 90 days. No stale guest access detected."
     } else {
@@ -105,6 +111,11 @@ function Test-NRGControlInventoryStaleMembers {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Inventory data not collected'; return
     }
     $stale = @($inv.Data['StaleMembers'] ?? @() | Where-Object { $_.HasLicense -eq $true })
+    if (@($inv.Data['StaleMembers']).Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'StaleMembers')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'Dormant account enumeration did not complete (see Exceptions) — stale licensed accounts could not be assessed.'
+        return
+    }
     if ($stale.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All licensed member accounts have been active within the past 90 days. No dormant employee accounts detected.'
     } else {
@@ -129,6 +140,11 @@ function Test-NRGControlInventoryOAuthApps {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Inventory data not collected'; return
     }
     $apps = @($inv.Data['OAuthGrantedApps'] ?? @())
+    if ($apps.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'OAuthGrantedApps')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'OAuth consent grant enumeration did not complete (see Exceptions) — tenant-wide app consent could not be assessed.'
+        return
+    }
     if ($apps.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No tenant-wide (AllPrincipals) OAuth consent grants found. Third-party app access is properly scoped to consenting individuals only.'
     } else {
@@ -209,6 +225,15 @@ function Test-NRGControlInventorySharedMailboxSignIn {
     }
     # Cross-reference with AAD users to find which shared mailboxes have enabled accounts
     $users = Get-NRGRawData -Key 'AAD-Users'
+    # The sign-in state of a shared mailbox is only knowable by joining against
+    # AAD users. Without that data the join silently yields zero matches, and
+    # the branch below would report "all have interactive sign-in blocked" —
+    # a definitive compliance claim about a check that never ran.
+    if (-not $users -or -not $users.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail "$($shared.Count) shared mailbox(es) found, but AAD user data was not collected — sign-in state could not be determined."
+        return
+    }
     $enabledShared = @()
     if ($users -and $users.Success) {
         $userIndex = @{}

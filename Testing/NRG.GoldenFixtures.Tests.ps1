@@ -545,6 +545,66 @@ Describe 'Failed collection is never reported as compliance (EXO inventory)' {
     }
 }
 
+Describe 'Failed collection is never reported as compliance (AAD inventory + joins)' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+
+        function script:NewAADInv {
+            param([hashtable] $Data)
+            [ordered]@{ CollectorId='AAD-Inventory'; CollectedAt='2026-07-30T00:00:00.0000000+00:00'
+                        Success=$true; Data=$Data }
+        }
+        function script:AADInvVerdict {
+            param([string] $Evaluator, [string] $ControlId)
+            & $Evaluator | Out-Null
+            return @(Get-NRGFindings | Where-Object { $_.ControlId -eq $ControlId })[0]
+        }
+    }
+
+    BeforeEach { Clear-NRGState }
+    AfterAll   { Clear-NRGState }
+
+    $invCases = @(
+        @{ Control='AAD-12.2'; Evaluator='Test-NRGControlInventoryStaleGuests';  Key='GuestUsers';       Section='GuestUsers' }
+        @{ Control='AAD-12.3'; Evaluator='Test-NRGControlInventoryStaleMembers'; Key='StaleMembers';     Section='StaleMembers' }
+        @{ Control='AAD-12.4'; Evaluator='Test-NRGControlInventoryOAuthApps';    Key='OAuthGrantedApps'; Section='OAuthGrantedApps' }
+    )
+
+    It '<Control> reports NotApplicable when its enumeration FAILED' -TestCases $invCases {
+        Set-NRGRawData -Key 'AAD-Inventory' -Data (NewAADInv @{
+            $Key = @(); SectionStatus = @{ $Section = 'Failed' }
+        })
+        (AADInvVerdict $Evaluator $Control).State | Should -Be 'NotApplicable' `
+            -Because "$Control would otherwise state a definitive all-clear from a query that never returned"
+    }
+
+    It '<Control> still reports Satisfied when the enumeration COMPLETED and found nothing' -TestCases $invCases {
+        Set-NRGRawData -Key 'AAD-Inventory' -Data (NewAADInv @{
+            $Key = @(); SectionStatus = @{ $Section = 'Collected' }
+        })
+        (AADInvVerdict $Evaluator $Control).State | Should -Be 'Satisfied'
+    }
+
+    It 'EXO-6.2 reports NotApplicable when the AAD user join data is missing' {
+        # Shared-mailbox sign-in state is only knowable by joining against AAD
+        # users. Without them the join yields zero matches and the evaluator
+        # would claim "all have interactive sign-in blocked" — a definitive
+        # verdict on a comparison that never happened.
+        Set-NRGRawData -Key 'EXO-Inventory' -Data ([ordered]@{
+            CollectorId='EXO-Inventory'; CollectedAt='2026-07-30T00:00:00.0000000+00:00'; Success=$true
+            Data=@{
+                AllSharedMailboxes = @([pscustomobject]@{ DisplayName='Billing'; PrimarySmtp='billing@contoso.com' })
+                SectionStatus      = @{ SharedMailboxes = 'Collected' }
+            }
+        })
+        # AAD-Users deliberately absent
+        (AADInvVerdict 'Test-NRGControlInventorySharedMailboxSignIn' 'EXO-6.2').State | Should -Be 'NotApplicable' `
+            -Because 'a cross-reference that could not run is not evidence that every shared mailbox is blocked'
+    }
+}
+
 Describe 'Failed role collection is never reported as compliance (AAD roles)' {
 
     # Invoke-NRGCollectAADRoles sets Success = (assignments -OR- eligibility).
