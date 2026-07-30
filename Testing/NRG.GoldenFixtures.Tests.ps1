@@ -545,6 +545,142 @@ Describe 'Failed collection is never reported as compliance (EXO inventory)' {
     }
 }
 
+Describe 'Newly implemented controls — EXO-3.4, TMS-3.4, SPO-2.5, PPL-1.3' {
+
+    # Four manual-review placeholders replaced with real checks against data the
+    # collectors were already gathering (or, for PPL-1.3, one documented call in
+    # a module the collector already imports). Each pins the honest-degradation
+    # arm too: when the source could not be read the verdict is NotApplicable,
+    # never a confident pass or a false alarm.
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+
+        function script:Raw {
+            param([string]$Id,[hashtable]$Data,[bool]$Success=$true)
+            [ordered]@{ CollectorId=$Id; CollectedAt='2026-07-30T00:00:00.0000000+00:00'
+                        Success=$Success; Data=$Data }
+        }
+        function script:V { param([string]$Fn,[string]$Cid)
+            & $Fn | Out-Null
+            return @(Get-NRGFindings | Where-Object { $_.ControlId -eq $Cid })[0]
+        }
+    }
+    BeforeEach { Clear-NRGState }
+    AfterAll   { Clear-NRGState }
+
+    Context 'EXO-3.4 — unusual mail volume alerting' {
+        It 'Satisfied when a phish-reporting alert policy is enabled with recipients' {
+            Set-NRGRawData -Key 'Purview' -Data (Raw 'Purview' @{
+                ProtectionAlerts=@([pscustomobject]@{ Name='Unusual increase in email reported as phish'
+                    Severity='High'; Disabled=$false; NotifyUser=@('soc@contoso.com'); ThreatType=''; Operation=@() })
+                SectionStatus=@{ ProtectionAlerts='Collected' } })
+            (V 'Test-NRGControlEXOAlertVolume' 'EXO-3.4').State | Should -Be 'Satisfied'
+        }
+        It 'Gap — disclosing the name-match caveat — when nothing covers mail volume' {
+            Set-NRGRawData -Key 'Purview' -Data (Raw 'Purview' @{
+                ProtectionAlerts=@([pscustomobject]@{ Name='Malware detected'; Severity='High'
+                    Disabled=$false; NotifyUser=@('soc@contoso.com'); ThreatType=''; Operation=@() })
+                SectionStatus=@{ ProtectionAlerts='Collected' } })
+            $v = V 'Test-NRGControlEXOAlertVolume' 'EXO-3.4'
+            $v.State | Should -Be 'Gap'
+            $v.Detail | Should -Match 'verify in the portal'
+        }
+        It 'NotApplicable when Get-ProtectionAlert never ran' {
+            Set-NRGRawData -Key 'Purview' -Data (Raw 'Purview' @{
+                ProtectionAlerts=@(); SectionStatus=@{ ProtectionAlerts='NotRun' } })
+            (V 'Test-NRGControlEXOAlertVolume' 'EXO-3.4').State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'TMS-3.4 — Teams chat DLP coverage' {
+        It 'Satisfied when an enabled DLP policy targets Teams' {
+            Set-NRGRawData -Key 'Purview' -Data (Raw 'Purview' @{
+                DLPPolicies=@([pscustomobject]@{ Name='Teams PII'; Enabled=$true; Mode='Enable'
+                                                 Workloads=@('Teams','Exchange') }) })
+            (V 'Test-NRGControlTeamsChatCopy' 'TMS-3.4').State | Should -Be 'Satisfied'
+        }
+        It 'Partial when a Teams DLP policy exists but is not enabled' {
+            Set-NRGRawData -Key 'Purview' -Data (Raw 'Purview' @{
+                DLPPolicies=@([pscustomobject]@{ Name='Teams PII'; Enabled=$false; Mode='TestWithNotifications'
+                                                 Workloads=@('Teams') }) })
+            (V 'Test-NRGControlTeamsChatCopy' 'TMS-3.4').State | Should -Be 'Partial' `
+                -Because 'a policy in test mode enforces nothing, so reporting it as coverage would overstate protection'
+        }
+        It 'Gap when DLP exists but never covers Teams' {
+            Set-NRGRawData -Key 'Purview' -Data (Raw 'Purview' @{
+                DLPPolicies=@([pscustomobject]@{ Name='Mail only'; Enabled=$true; Mode='Enable'
+                                                 Workloads=@('Exchange') }) })
+            (V 'Test-NRGControlTeamsChatCopy' 'TMS-3.4').State | Should -Be 'Gap'
+        }
+        It 'NotApplicable when Purview data is absent' {
+            (V 'Test-NRGControlTeamsChatCopy' 'TMS-3.4').State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'SPO-2.5 — third-party cloud storage connectors' {
+        It 'Satisfied when every connector is off' {
+            Set-NRGRawData -Key 'Teams' -Data (Raw 'Teams' @{
+                ClientConfiguration=@{ AllowDropBox=$false; AllowBox=$false
+                                       AllowGoogleDrive=$false; AllowShareFile=$false } })
+            (V 'Test-NRGControlSPO3PStorage' 'SPO-2.5').State | Should -Be 'Satisfied'
+        }
+        It 'Gap naming each enabled connector' {
+            Set-NRGRawData -Key 'Teams' -Data (Raw 'Teams' @{
+                ClientConfiguration=@{ AllowDropBox=$true; AllowBox=$false
+                                       AllowGoogleDrive=$true; AllowShareFile=$false } })
+            $v = V 'Test-NRGControlSPO3PStorage' 'SPO-2.5'
+            $v.State | Should -Be 'Gap'
+            $v.CurrentValue | Should -Match 'Dropbox'
+            $v.CurrentValue | Should -Match 'GoogleDrive'
+        }
+        It 'states which surface it actually verified' {
+            Set-NRGRawData -Key 'Teams' -Data (Raw 'Teams' @{
+                ClientConfiguration=@{ AllowDropBox=$false; AllowBox=$false
+                                       AllowGoogleDrive=$false; AllowShareFile=$false } })
+            (V 'Test-NRGControlSPO3PStorage' 'SPO-2.5').Detail | Should -Match 'admin centre' `
+                -Because 'the control cannot read the admin-centre toggle, so the finding must say what it did and did not verify'
+        }
+        It 'NotApplicable when Teams client configuration was not collected' {
+            Set-NRGRawData -Key 'Teams' -Data (Raw 'Teams' @{})
+            (V 'Test-NRGControlSPO3PStorage' 'SPO-2.5').State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'PPL-1.3 — environment creation restricted' {
+        It 'Satisfied when creation is restricted to admins' {
+            Set-NRGRawData -Key 'PowerPlatform' -Data (Raw 'PowerPlatform' @{
+                Environments=@('e1'); TenantIsolation=$null; DLPPolicies=@()
+                TenantGovernance=@{ EnvironmentCreationRestricted=$true; TrialEnvironmentCreationRestricted=$true }
+                SectionStatus=@{ TenantGovernance='Collected' } })
+            (V 'Test-NRGControlPowerPlatform' 'PPL-1.3').State | Should -Be 'Satisfied'
+        }
+        It 'Partial when standard creation is locked but trial creation is not' {
+            Set-NRGRawData -Key 'PowerPlatform' -Data (Raw 'PowerPlatform' @{
+                Environments=@('e1'); TenantIsolation=$null; DLPPolicies=@()
+                TenantGovernance=@{ EnvironmentCreationRestricted=$true; TrialEnvironmentCreationRestricted=$false }
+                SectionStatus=@{ TenantGovernance='Collected' } })
+            (V 'Test-NRGControlPowerPlatform' 'PPL-1.3').State | Should -Be 'Partial' `
+                -Because 'a trial environment is a fully functional environment outside the DLP baseline — the same gap by another route'
+        }
+        It 'Gap when any user can create environments' {
+            Set-NRGRawData -Key 'PowerPlatform' -Data (Raw 'PowerPlatform' @{
+                Environments=@('e1'); TenantIsolation=$null; DLPPolicies=@()
+                TenantGovernance=@{ EnvironmentCreationRestricted=$false; TrialEnvironmentCreationRestricted=$false }
+                SectionStatus=@{ TenantGovernance='Collected' } })
+            (V 'Test-NRGControlPowerPlatform' 'PPL-1.3').State | Should -Be 'Gap'
+        }
+        It 'NotApplicable when the settings call could not run (BAP fallback path)' {
+            Set-NRGRawData -Key 'PowerPlatform' -Data (Raw 'PowerPlatform' @{
+                Environments=@('e1'); TenantIsolation=$null; DLPPolicies=@()
+                TenantGovernance=$null; SectionStatus=@{ TenantGovernance='NotRun' } })
+            (V 'Test-NRGControlPowerPlatform' 'PPL-1.3').State | Should -Be 'NotApplicable' `
+                -Because 'the BAP-API fallback cannot read tenant settings, and absence is not evidence of an open tenant'
+        }
+    }
+}
+
 Describe 'DEF-3.4 / DEF-4.3 alert policy configuration — implemented' {
 
     # Both were High severity manual-review placeholders. They read alert POLICY

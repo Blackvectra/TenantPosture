@@ -2354,7 +2354,7 @@
       "Workload": "EXO",
       "Category": "Email",
       "Automated": true,
-      "CollectorDependency": "EXO-ConnectionFilter",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlEXOAlertVolume",
       "Remediation": "Defender portal > Policies > Alert policies > Enable: Unusual increase in email reported as phish.",
       "References": {
@@ -2514,16 +2514,16 @@
     },
     {
       "ControlId": "SPO-2.5",
-      "Title": "Third-Party Cloud Storage Disabled in SharePoint",
-      "Description": "Third-party storage services (Dropbox, Box, Google Drive) are disabled in SharePoint and OneDrive. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
+      "Title": "Third-Party Cloud Storage Connectors Disabled",
+      "Description": "Third-party cloud storage providers (Dropbox, Box, Google Drive, ShareFile) are disabled so corporate files cannot be moved into storage the tenant does not control or audit. Verified against the Teams client configuration, which is the connector surface exposed to PowerShell; the Microsoft 365 admin centre \u0022Third-party storage services\u0022 toggle is not readable via API and remains a manual check.",
       "BusinessRisk": "Third-party storage integration allows organizational data to move to unmanaged cloud services outside DLP policy coverage.",
       "Severity": "Medium",
       "Workload": "SPO",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "SharePoint",
+      "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlSPO3PStorage",
-      "Remediation": "SharePoint Admin Center > Settings > Third-party storage services > Off",
+      "Remediation": "Disable the connectors: Set-CsTeamsClientConfiguration -Identity Global -AllowDropBox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false. Then confirm the separate Microsoft 365 admin centre setting: admin.microsoft.com > Settings > Org settings > Services > Third-party storage services > off.",
       "References": {
         "CISControls": ["3.3"],
         "CIS": "7.3.5",
@@ -3819,7 +3819,7 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlTeamsChatCopy",
       "Remediation": "Purview > DLP > Create policy targeting Teams with sensitive info types to restrict copy/paste of protected content.",
       "References": {

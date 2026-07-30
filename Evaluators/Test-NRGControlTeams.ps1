@@ -368,17 +368,50 @@ function Test-NRGControlTeamsChatCopy {
     [CmdletBinding()] param()
     $cid = 'TMS-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $tms = Get-NRGRawData -Key 'Teams'
-    if (-not $tms -or -not $tms.Success) {
+
+    # v4.12.2: implemented. Teams chat content is governed by Purview DLP, so
+    # the assessable question is whether any enabled DLP policy targets the
+    # Teams workload. Reads Purview.DLPPolicies, which already carries the
+    # per-policy Workloads list.
+    $pvw = Get-NRGRawData -Key 'Purview'
+    if (-not $pvw -or -not $pvw.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'Teams data not collected'; return
+            -Title $ctrl.Title -Detail 'Purview DLP data not collected — Teams chat DLP coverage could not be assessed'
+        return
     }
-    # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
-    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-        -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit `
-        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Chat copy prevention requires Information Protection policy with DLP. Verify via Purview > DLP > Teams policies if chat content exfiltration prevention is required.' `
-        -Remediation $ctrl.Remediation
+
+    $dlp = @($pvw.Data['DLPPolicies'] ?? @())
+    if ($dlp.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'No DLP policies exist, so meeting and channel chat content is not inspected for sensitive information before it leaves the tenant.' `
+            -CurrentValue 'Zero DLP policies' -RequiredValue 'An enabled DLP policy covering the Teams workload' `
+            -Remediation $ctrl.Remediation
+        return
+    }
+
+    $teamsPolicies  = @($dlp | Where-Object { @($_.Workloads) -match 'Teams' })
+    $enabledTeams   = @($teamsPolicies | Where-Object { $_.Enabled })
+
+    if ($enabledTeams.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "$($enabledTeams.Count) enabled DLP policy(ies) cover the Teams workload, so sensitive content in chat is inspected."
+    } elseif ($teamsPolicies.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail "$($teamsPolicies.Count) DLP policy(ies) target Teams but none are enabled — they are in test or disabled mode, so nothing is enforced." `
+            -CurrentValue "$($teamsPolicies.Count) Teams DLP policies, 0 enabled" `
+            -RequiredValue 'At least one enabled DLP policy covering Teams' -Remediation $ctrl.Remediation
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "$($dlp.Count) DLP policy(ies) exist but none target the Teams workload, so chat content is outside DLP inspection even though mail and files are covered." `
+            -CurrentValue "0 of $($dlp.Count) DLP policies cover Teams" `
+            -RequiredValue 'An enabled DLP policy covering the Teams workload' -Remediation $ctrl.Remediation
+    }
 }
+
 
 # ── TMS-4.1 Meeting Recording Storage and Permissions Scoped ─────────────────
 function Test-NRGControlTeamsMeetingRecordingScope {
