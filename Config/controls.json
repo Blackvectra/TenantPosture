@@ -1539,7 +1539,7 @@
       "Workload": "EXO",
       "Category": "Email",
       "Automated": true,
-      "CollectorDependency": "EXO-MailboxConfig",
+      "CollectorDependency": "EXO-Inventory",
       "EvaluatorFunction": "Test-NRGControlEXOSharedMailbox",
       "Remediation": "Get-Mailbox -RecipientTypeDetails SharedMailbox | ForEach-Object { Set-MgUser -UserId $_.ExternalDirectoryObjectId -AccountEnabled $false }",
       "References": {

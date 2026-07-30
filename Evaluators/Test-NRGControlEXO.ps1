@@ -452,26 +452,77 @@ function Test-NRGControlEXOSharedMailbox {
     if (-not $control) { return }
     $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
-    # Shared mailbox sign-in state requires Graph User.Read.All to check AccountEnabled
-    # This data is in AAD-Users if collected
-    $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
-
-    if (-not $exoData -or -not $exoData.Success) {
+    # v4.12.2: implemented for real. This was previously a manual-review
+    # placeholder because the check needs EXO shared mailboxes joined against
+    # AAD AccountEnabled — but
+    # Invoke-NRGCollectEXOInventory already performs exactly that join and
+    # publishes the result as SharedMailboxSignIn, tagging each hit with the
+    # evidence it rests on:
+    #   Source = 'AAD-Users'    confirmed enabled via Graph accountEnabled
+    #   Source = 'LicenseProxy' inferred from a license/reconciliation signal
+    #                           because AAD user data was unavailable
+    # Those are not the same claim, so they do not produce the same verdict.
+    $inv = Get-NRGRawData -Key 'EXO-Inventory'
+    if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'EXO data not collected'
+            -Title $control.Title -Detail 'EXO inventory not collected'
         return
     }
 
-    # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
-    # Shared mailbox sign-in state requires cross-referencing AAD Users with EXO shared mailboxes
-    Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-        -Title "$($control.Title) (Manual review required)" -Severity 'High' -FrameworkIds $citations `
-        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Shared mailbox direct sign-in status requires manual verification. Run: Get-Mailbox -RecipientTypeDetails SharedMailbox | ForEach-Object { Get-MgUser -UserId $_.ExternalDirectoryObjectId | Select DisplayName,AccountEnabled }' `
-        -CurrentValue 'Manual review required' -RequiredValue 'All shared mailbox accounts have AccountEnabled = $false' `
-        -Remediation $control.Remediation
+    $allShared = @($inv.Data['AllSharedMailboxes'] ?? @())
+    if ($allShared.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'SharedMailboxes')) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title `
+            -Detail 'Shared mailbox enumeration did not complete (see Exceptions) — sign-in state could not be assessed.'
+        return
+    }
+
+    if ($allShared.Count -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail 'No shared mailboxes exist in this tenant, so none can be signed into directly.'
+        return
+    }
+
+    $risky     = @($inv.Data['SharedMailboxSignIn'] ?? @())
+    $confirmed = @($risky | Where-Object { $_.Source -eq 'AAD-Users' })
+    $probable  = @($risky | Where-Object { $_.Source -ne 'AAD-Users' })
+
+    $affected = @($risky | ForEach-Object {
+        [ordered]@{
+            DisplayName = [string]$_.DisplayName
+            UPN         = [string]$_.UPN
+            SignInState = [string]$_.SignInState
+            Evidence    = if ($_.Source -eq 'AAD-Users') { 'Confirmed via Entra accountEnabled' }
+                          else { 'Inferred from license state — AAD user data unavailable' }
+        }
+    })
+
+    if ($confirmed.Count -gt 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+            -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
+            -Detail "$($confirmed.Count) of $($allShared.Count) shared mailbox(es) have direct sign-in enabled. A shared mailbox is accessed by delegation, so an enabled sign-in is an account with a password that no one owns, no one monitors, and that is typically excluded from MFA — a standing foothold for password spray." `
+            -CurrentValue "$($confirmed.Count) shared mailbox(es) with sign-in enabled" `
+            -RequiredValue 'All shared mailbox accounts disabled (BlockCredential) — access via delegation only' `
+            -Remediation $control.Remediation -AffectedObjects $affected
+    }
+    elseif ($probable.Count -gt 0) {
+        # Only the weaker license-based signal fired. Report it, but do not
+        # dress a heuristic up as a confirmed finding.
+        Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+            -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
+            -Detail "$($probable.Count) of $($allShared.Count) shared mailbox(es) carry a license or reconciliation flag suggesting an active account, but Entra user data was unavailable so sign-in state could not be confirmed. Verify these directly before treating them as clean." `
+            -CurrentValue "$($probable.Count) shared mailbox(es) flagged by license heuristic (unconfirmed)" `
+            -RequiredValue 'All shared mailbox accounts confirmed disabled (BlockCredential)' `
+            -Remediation $control.Remediation -AffectedObjects $affected
+    }
+    else {
+        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail "$($allShared.Count) shared mailbox(es) found — none have direct sign-in enabled. Access is by delegation only, as intended."
+    }
 }
 
-# ── EXO-3.1 Connection Filter No Safe List Bypass ────────────────────────────
 function Test-NRGControlEXOConnectionFilter {
     [CmdletBinding()] param()
     $cid = 'EXO-3.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
