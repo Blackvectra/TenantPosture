@@ -215,7 +215,7 @@ function Test-NRGControlSPO3PStorage {
     $cid = 'SPO-2.5'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
 
-    # v4.12.2: implemented, and RE-SCOPED to what is actually readable.
+    # v4.13.0: implemented, and RE-SCOPED to what is actually readable.
     #
     # The control previously claimed to check the admin-centre "third-party
     # storage services" toggle, but no Get-SPOTenant property exposes it, which

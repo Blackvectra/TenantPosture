@@ -426,7 +426,7 @@ function Test-NRGControlDefenderAlertNotification {
     $cid = 'DEF-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
 
-    # v4.12.2: implemented. Reads alert POLICY configuration from
+    # v4.13.0: implemented. Reads alert POLICY configuration from
     # Get-ProtectionAlert (collected into Purview.ProtectionAlerts), which is a
     # different question from EXO-ConnectionFilter's /security/alerts_v2 feed:
     # that lists alerts which have fired, this asks whether anyone is configured
@@ -545,7 +545,7 @@ function Test-NRGControlDefenderRiskyAppAlerts {
     $cid = 'DEF-4.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
 
-    # v4.12.2: implemented against Get-ProtectionAlert policy configuration.
+    # v4.13.0: implemented against Get-ProtectionAlert policy configuration.
     #
     # Matching caveat, stated plainly because it affects how much weight the
     # finding deserves: there is no machine-readable "this policy covers OAuth

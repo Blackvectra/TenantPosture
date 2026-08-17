@@ -452,7 +452,7 @@ function Test-NRGControlEXOSharedMailbox {
     if (-not $control) { return }
     $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
-    # v4.12.2: implemented for real. This was previously a manual-review
+    # v4.13.0: implemented for real. This was previously a manual-review
     # placeholder because the check needs EXO shared mailboxes joined against
     # AAD AccountEnabled — but
     # Invoke-NRGCollectEXOInventory already performs exactly that join and
@@ -599,7 +599,7 @@ function Test-NRGControlEXOAlertVolume {
     $cid = 'EXO-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
 
-    # v4.12.2: implemented against Get-ProtectionAlert policy configuration
+    # v4.13.0: implemented against Get-ProtectionAlert policy configuration
     # (Purview.ProtectionAlerts). Matching is by policy name / threat type /
     # operation against phish-reporting and mail-volume wording, because no
     # machine-readable "this is the unusual mail volume policy" flag exists.

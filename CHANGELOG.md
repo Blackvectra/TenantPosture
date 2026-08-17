@@ -4,6 +4,50 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **Eliminated the false-compliance bug class (25 controls).** Collectors that run
+  several independent queries wrap each in its own try/catch, then set
+  `Success = $true` regardless — so an EMPTY result list was ambiguous between
+  "queried, found nothing" and "the query failed", and evaluators were reading it
+  as compliance. A throttled or 403'd `Get-Mailbox` therefore reported "No
+  mailboxes are configured with an external forwarding address" and "No inbox
+  rules forward mail externally" — a clean bill of health on the primary BEC
+  exfiltration and persistence checks. Collectors now publish
+  `Data.SectionStatus` (NotRun/Collected/Failed) and evaluators consult it
+  before concluding Satisfied, reporting NotApplicable with a re-run prompt
+  instead. Fixed across EXO-6.1/6.2/6.3/6.4, EXO-7.2, AAD-3.1, AAD-10.2,
+  AAD-11.2, AAD-12.2/12.3/12.4. AAD-3.1 also fixed in the other direction: it
+  reported "fewer than 2 Global Administrators" when the role read failed, a
+  false alarm that costs as much credibility as a false pass.
+- **Advisory controls no longer inflate the score.** 11 controls with no
+  programmatic check emitted `Partial`, worth 0.5 each toward the compliance
+  score — free credit on every tenant for verdicts never computed. All now
+  `NotApplicable` (excluded from the denominator) and still surfaced as manual
+  review. Enforced by a new static AST guard.
+- **7 placeholder controls implemented for real**, coverage 184 -> 191 of 195:
+  EXO-2.6 (shared mailbox sign-in, evidence-graded: confirmed via Entra = Gap,
+  license-heuristic = Partial), DEF-3.4 and DEF-4.3 (alert policy notification
+  coverage via `Get-ProtectionAlert`), EXO-3.4 (unusual mail volume alerting),
+  TMS-3.4 (Teams DLP coverage), PPL-1.3 (environment creation restriction via
+  `Get-TenantSettings`). SPO-2.5 re-scoped to the connector surface that is
+  actually readable, with every finding stating which surface it verified.
+- **EXO-4.4 no longer contradicts itself:** passed BulkThreshold 7 while its own
+  remediation instructed 6. Now flags above 6. Changes client-visible verdicts
+  for tenants on the Microsoft default.
+- **Fixed 66 controls declaring raw-data keys no collector produces**
+  (`Teams-Config`, `Purview-AuditConfig`, `SharePoint-TenantSettings`,
+  `PowerPlatform-DLP`, ...) plus one orphan read (`AAD-Roles`, real key
+  `AAD-DirectoryRoles`). Harmless at runtime today, structurally misleading for
+  anything built on the metadata.
+- **Five new CI suites:** docs-freshness (headline counts computed from source,
+  so no README number can go stale), HTML report render + XSS-escaping smoke
+  test, evaluator honesty (no Satisfied/Partial on uncollected data),
+  collector contract (every declared dependency is a real collector key), and
+  golden fixtures pinning both-direction verdicts across the Critical, BEC,
+  ransomware and privilege-escalation control paths.
+- StrictMode safety: external cmdlet output whose shape is not guaranteed now
+  reads through `Get-*ObjectField` — direct dot-access throws before a `??`
+  default can apply, which would have silently disabled three new controls.
+
 - **Framework accuracy:** corrected 70 systematically-mismatched SCuBA citations
   against the ScubaGear v1.8.0 baseline text (34 remapped, 36 removed); fixed
   7 CMMC 2.0 domain/level errors across 64 rows; all six frameworks now
