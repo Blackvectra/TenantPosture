@@ -369,7 +369,7 @@ function Test-NRGControlTeamsChatCopy {
     $cid = 'TMS-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
 
-    # v4.12.2: implemented. Teams chat content is governed by Purview DLP, so
+    # v4.13.0: implemented. Teams chat content is governed by Purview DLP, so
     # the assessable question is whether any enabled DLP policy targets the
     # Teams workload. Reads Purview.DLPPolicies, which already carries the
     # per-policy Workloads list.

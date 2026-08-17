@@ -73,7 +73,7 @@ function Test-NRGControlPowerPlatform {
     }
 
     # PPL-1.3 — Environment creation restricted to admins
-    # v4.12.2: implemented against Get-TenantSettings
+    # v4.13.0: implemented against Get-TenantSettings
     # (powerPlatform.governance.disableEnvironmentCreationByNonAdminUsers),
     # collected into PowerPlatform.TenantGovernance. Was a manual-review
     # placeholder; the flag is documented and the admin module is already a
