@@ -3,13 +3,9 @@
 # Test-NRGControlTeams.ps1
 # Evaluates Microsoft Teams controls. Reads: Get-NRGRawData -Key 'Teams'
 #
-# Controls:
-#   TMS-1.1  External federation restricted (not allow-all)
-#   TMS-1.2  Anonymous meeting join controlled
-#   TMS-1.3  Consumer Teams access restricted
-#   TMS-1.4  Auto-admit policy is not 'everyone'
-#   TMS-1.5  Cloud storage integrations restricted
-#   TMS-1.6  External participant request-control disabled
+# Controls: TMS-1.1 through TMS-4.4 (22 controls).
+#   Config/controls.json is authoritative — each control's EvaluatorFunction
+#   names the function in this file that scores it.
 #
 
 function Test-NRGControlTeams {

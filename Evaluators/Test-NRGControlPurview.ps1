@@ -3,11 +3,9 @@
 # Test-NRGControlPurview.ps1
 # Evaluates Purview controls. Reads: Get-NRGRawData -Key 'Purview'
 #
-# Controls:
-#   PVW-1.1  Unified Audit Log ingestion enabled
-#   PVW-1.2  DLP policies active for sensitive information types
-#   PVW-1.3  Retention policies configured
-#   PVW-1.4  Sensitivity labels published
+# Controls: PVW-1.1 through PVW-4.4 (18 controls).
+#   Config/controls.json is authoritative — each control's EvaluatorFunction
+#   names the function in this file that scores it.
 #
 
 function Test-NRGControlPurview {

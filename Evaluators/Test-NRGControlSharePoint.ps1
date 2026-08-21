@@ -3,12 +3,9 @@
 # Test-NRGControlSharePoint.ps1
 # Evaluates SharePoint Online controls. Reads: Get-NRGRawData -Key 'SharePoint'
 #
-# Controls:
-#   SPO-1.1  External sharing restricted (not Anyone)
-#   SPO-1.2  Legacy auth protocols disabled
-#   SPO-1.3  Unmanaged sync app restricted
-#   SPO-1.4  Resharing by external users disabled
-#   SPO-1.5  Default site creation restricted (info)
+# Controls: SPO-1.1 through SPO-3.4 (17 controls).
+#   Config/controls.json is authoritative — each control's EvaluatorFunction
+#   names the function in this file that scores it.
 #
 
 function Test-NRGControlSharePoint {
