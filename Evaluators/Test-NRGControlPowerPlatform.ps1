@@ -3,10 +3,9 @@
 # Test-NRGControlPowerPlatform.ps1
 # Evaluates Power Platform controls. Reads: Get-NRGRawData -Key 'PowerPlatform'
 #
-# Controls:
-#   PPL-1.1  Environment count within governance baseline
-#   PPL-1.2  DLP policy active (requires Microsoft.PowerApps.Administration module)
-#   PPL-1.3  Default environment tenant isolation
+# Controls: PPL-1.1 through PPL-3.5 (11 controls).
+#   Config/controls.json is authoritative — each control's EvaluatorFunction
+#   names the function in this file that scores it.
 #
 
 function Test-NRGControlPowerPlatform {

@@ -4,12 +4,9 @@
 # Evaluates Intune controls. Reads from the three split raw-data keys produced by
 # Invoke-NRGCollectIntuneEndpointSecurity / DeviceCompliance / AppProtection.
 #
-# Controls:
-#   ITN-1.1  Device compliance policy active
-#   ITN-1.2  Configuration profiles deployed
-#   ITN-1.3  App protection (MAM) policies configured
-#   ITN-1.4  Enrolled device compliance ratio
-#   ITN-1.5  Enrollment restriction policy configured
+# Controls: INT-1.1 through INT-4.4 (17 controls).
+#   Config/controls.json is authoritative — each control's EvaluatorFunction
+#   names the function in this file that scores it.
 #
 
 function Test-NRGControlIntune {
