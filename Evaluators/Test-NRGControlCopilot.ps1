@@ -250,7 +250,7 @@ function Test-NRGControlAICopilotStudio {
             -FrameworkIds $cit `
             -CurrentValue "$($externalBots.Count) of $($bots.Count) bot(s) appear to allow external publishing" `
             -RequiredValue 'All Copilot Studio bots internal-only; external publishing disabled by tenant policy' `
-            -Detail "One or more Copilot Studio agents have an external publisher domain. External publishing means anyone on the internet can interact with the bot — for an MSP client this almost always indicates unintended exposure of a SharePoint-connected, Graph-connected, or third-party-connected bot." `
+            -Detail "External publishing is enabled at the tenant level for Copilot Studio, and $($externalBots.Count) of $($bots.Count) detected agent(s) carry a non-tenant publisher domain. External publishing means anyone on the internet can interact with the agent. In most environments this indicates unintended exposure of an agent connected to SharePoint, Microsoft Graph, or a third-party service." `
             -Remediation $ctrl.Remediation
     } else {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' `

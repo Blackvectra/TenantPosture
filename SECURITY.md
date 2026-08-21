@@ -6,7 +6,10 @@ This tool is **read-only by design.** No cmdlets that write, modify, or delete t
 
 Enforced by: CI static analysis (`Read-Only Posture` test in `NRG.Security.Tests.ps1`) verifies no tenant write cmdlets appear outside of `-Remediation` strings in any production file.
 
-The one sanctioned write path is the optional `Register-NRGTenantApp` onboarding helper, which creates a read-only enterprise app in a customer tenant. It is gated behind `-RegisterApp` + `SupportsShouldProcess` (`-WhatIf` / `-Confirm`) and is not invoked during an assessment scan.
+Two sanctioned write paths ship in this repository. Neither executes during an assessment run:
+
+1. `Register-NRGTenantApp` — optional onboarding helper that creates a read-only enterprise app in a customer tenant. Gated behind `-RegisterApp` + `SupportsShouldProcess` (`-WhatIf` / `-Confirm`).
+2. `Apply-NRGBaseline.ps1` and the scripts it dot-sources from `Apply/` — the explicit write-mode remediation tool, which modifies tenant configuration by design. It is a separate entry point, never invoked by `Invoke-NRGAssessment.ps1`, and carries mandatory `-WhatIf` support with `-Confirm` on auth-policy and admin-role changes.
 
 ---
 
@@ -54,7 +57,8 @@ If 90 days elapse from triage without a fix, we will publish the advisory with t
 
 ### What's in scope
 
-- The PowerShell module (`NRG-Assessment.psm1`, `Lib/`, `Collectors/`, `Evaluators/`, `Publishers/`) and entry scripts (`Invoke-NRGAssessment.ps1`, `Invoke-NRGBatchAssessment.ps1`)
+- The PowerShell module (`NRG-Assessment.psm1`, `Lib/`, `Collectors/`, `Evaluators/`, `Publishers/`, `Email-IR/`) and all entry scripts (`Invoke-NRGAssessment.ps1`, `Invoke-NRGBatchAssessment.ps1`, `Invoke-NRGSignInTriage.ps1`, `Invoke-NRGBatchSignInTriage.ps1`, `Invoke-NRGEmailAssessment.ps1`, `Install-NRGPrerequisites.ps1`)
+- The write-mode remediation tool (`Apply-NRGBaseline.ps1` and `Apply/`) — the only code in this repository that modifies tenant configuration
 - The HTML/Markdown/XLSX/JSON report artifacts (XSS, injection, sensitive-data leakage in output)
 - The control definition pipeline (`Config/controls.json`, schema validation, framework citations)
 - The local web GUI (`Lib/Start-NRGWebServer.ps1`, `Web/`) — loopback-only by design
@@ -139,7 +143,8 @@ The JSON control definition file is validated at load time before any evaluator 
 
 Each row below names the workflow file that implements it, so this list can be verified against `.github/workflows/` at any time.
 
-**On every push and pull request to `main`:**
+**On every push and pull request to `main`** — note: the `ci.yml`, `codeql.yml`, `secret-scan.yml` and `dependency-review.yml` triggers are temporarily commented out pending a GitHub Actions billing reset, and those four run on manual dispatch only. Each workflow file carries a restore note in its header.
+
 
 1. **PSScriptAnalyzer** (`ci.yml`) — static analysis; Error severity fails the build. Findings upload to Code Scanning as SARIF.
 2. **Pester** (`ci.yml`) — OWASP/ASVS security invariants (static + runtime).
@@ -186,4 +191,4 @@ If you suspect a credential leak, malicious dependency, signed-release tamper, o
 
 ---
 
-*NRG-Assessment v4.10.1 · Hardened against OWASP Top 10:2025, ASVS v5, CVE-2025-54100 · NIST SP 800-218 (SSDF) aligned · CISA BOD 20-01 VDP compliant*
+*NRG-Assessment v4.12.1 · Hardened against OWASP Top 10:2025, ASVS v5, CVE-2025-54100 · NIST SP 800-218 (SSDF) aligned · CISA BOD 20-01 VDP compliant*

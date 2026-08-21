@@ -189,7 +189,7 @@ function Test-NRGControlPurviewRetention {
     if ($missing.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Retention policies cover all key workloads: $($requiredWorkloads -join ', ')"
     } elseif ($retPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail "Retention policies exist but missing coverage for: $($missing -join ', ')" -CurrentValue "Missing: $($missing -join ', ')" -RequiredValue 'Exchange, SharePoint, OneDrive, Teams all covered'
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail "Retention policies exist but are missing coverage for: $($missing -join ', ')" -CurrentValue "Missing: $($missing -join ', ')" -RequiredValue 'Exchange, SharePoint, OneDrive, Teams all covered'
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No retention policies configured. Data cannot be preserved for legal or regulatory requirements.' -Remediation $ctrl.Remediation
     }
