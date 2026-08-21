@@ -185,7 +185,7 @@ function Test-NRGControlIntuneEDR {
     } else {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
             -Title "$($ctrl.Title) (Manual verification required)" -Severity 'Medium' -FrameworkIds $cit `
-            -Detail 'No Microsoft Defender for Endpoint onboarding policy is deployed via Intune. This is expected when endpoints run a third-party EDR (Cortex XDR, CrowdStrike, SentinelOne, Webroot, etc.), which Intune cannot see. Manually confirm every endpoint runs a managed EDR agent. If Microsoft Defender for Endpoint is the intended EDR, deploy an onboarding policy via Intune > Endpoint security > Endpoint detection and response. To suppress this advisory for a client standardized on a third-party EDR, set EdrStack in Config/branding.psd1.' `
+            -Detail 'No Microsoft Defender for Endpoint onboarding policy is deployed via Intune. This is expected when endpoints run a third-party EDR (Cortex XDR, CrowdStrike, SentinelOne, Webroot, etc.), which Intune cannot see. Manually confirm every endpoint runs a managed EDR agent. If Microsoft Defender for Endpoint is the intended EDR, deploy an onboarding policy via Intune > Endpoint security > Endpoint detection and response.' `
             -CurrentValue 'No Intune-managed MDE onboarding; third-party EDR not visible to Intune' `
             -RequiredValue 'Managed EDR agent on every endpoint (Microsoft or third-party)' `
             -Remediation $ctrl.Remediation

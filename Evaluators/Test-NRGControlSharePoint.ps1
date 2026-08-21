@@ -205,7 +205,7 @@ function Test-NRGControlSPOCustomScript {
     # requires Get-SPOSite enumeration (out of scope for a tenant-settings read).
     # Kept as an advisory (Partial) rather than a fabricated pass/fail.
     Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Per-site review required)" -Severity 'Low' -FrameworkIds $cit `
-        -Detail 'Custom-script permission is controlled per site collection (DenyAddAndCustomizePages), not by a tenant-wide switch. Custom script is blocked by default on modern tenants. Confirm no site collection has been re-enabled for custom script: Get-SPOSite -Limit All | Where-Object { $_.DenyAddAndCustomizePages -ne ''Enabled'' }.' `
+        -Detail 'Custom-script permission is controlled per site collection (DenyAddAndCustomizePages), not by a tenant-wide switch. Custom script is blocked by default on modern tenants. Confirm no site collection has been re-enabled for custom script.' `
         -Remediation $ctrl.Remediation
 }
 
@@ -337,7 +337,7 @@ function Test-NRGControlSPOSiteAdmins {
     # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
     Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
-        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Site collection admin enumeration requires iterating all sites (impractical at scale). Verify via SharePoint Admin Center > Sites > Active sites > filter by admins, or run Get-SPOSite -Limit ALL | Get-SPOUser -Group "Site Collection Administrators".' `
+        -Detail 'This control requires manual verification — enumerating site collection administrators means querying every site individually, which does not scale to a full tenant within an assessment run. Review them in SharePoint Admin Center > Sites > Active sites.' `
         -Remediation $ctrl.Remediation
 }
 

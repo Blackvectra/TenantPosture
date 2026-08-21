@@ -264,7 +264,7 @@ function Test-NRGControlDefenderZAP {
     if ($defaultPolicy.ZapEnabled -eq $true) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Zero-hour auto purge (ZAP) is enabled. Malicious mail delivered before detection is retroactively removed.'
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'ZAP is disabled. Malware or phishing delivered before detection is NOT retroactively removed from user mailboxes.' -CurrentValue 'ZapEnabled = $false' -RequiredValue 'Set-HostedContentFilterPolicy -ZapEnabled $true' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'ZAP is disabled. Malware or phishing delivered before detection is NOT retroactively removed from user mailboxes.' -CurrentValue 'ZapEnabled = $false' -RequiredValue 'Set-HostedContentFilterPolicy -Identity Default -SpamZapEnabled $true -PhishZapEnabled $true' -Remediation $ctrl.Remediation
     }
 }
 
@@ -414,7 +414,7 @@ function Test-NRGControlDefenderMDCA {
     # ADVISORY-ONLY (manual review) so no data dependency is needed.
     Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
-        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Microsoft Defender for Cloud Apps connection status requires manual verification: Defender XDR > Settings > Cloud Apps > Connected apps. Verify M365 connector is active.' `
+        -Detail 'This control requires manual verification — Defender for Cloud Apps connection state is not exposed to the APIs this assessment uses. Confirm in Defender XDR > Settings > Cloud Apps > Connected apps that the Microsoft 365 connector is active.' `
         -Remediation $ctrl.Remediation
 }
 
