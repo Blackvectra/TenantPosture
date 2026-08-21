@@ -835,7 +835,7 @@
       "ControlId": "SPO-1.2",
       "Title": "Default Sharing Link Not Anonymous",
       "Description": "Default sharing link type is Internal or Specific people \u2014 not Anyone.",
-      "BusinessRisk": "Default anonymous links means users create them accidentally without understanding the exposure.",
+      "BusinessRisk": "Defaulting to anonymous links means users create them accidentally, without understanding the exposure.",
       "Severity": "Medium",
       "Workload": "SPO",
       "Category": "Collaboration",
@@ -1310,7 +1310,7 @@
       "ControlId": "INT-1.4",
       "Title": "Mobile Application Management Configured",
       "Description": "Intune app protection policies enforce data containment on iOS and Android.",
-      "BusinessRisk": "BYOD without MAM can copy corporate data from managed apps to personal apps with no controls.",
+      "BusinessRisk": "On BYOD devices without MAM, users can copy corporate data from managed apps to personal apps with no controls.",
       "Severity": "Medium",
       "Workload": "INT",
       "Category": "Endpoint",
@@ -1528,7 +1528,7 @@
         "PCIDSS": "Req 7.2.5",
         "ISO27001": "A.5.23, A.8.16"
       },
-      "LicenseRequirement": "Included (M365 Business Standard+)"
+      "LicenseRequirement": "M365 E5 or E5 Compliance add-on"
     },
     {
       "ControlId": "EXO-2.6",
@@ -1585,7 +1585,7 @@
         "SOC2": "CC6.1, CC7.2",
         "PCIDSS": "Req 8.5"
       },
-      "LicenseRequirement": "Included (M365 Business Standard+)"
+      "LicenseRequirement": "Entra ID P2"
     },
     {
       "ControlId": "AAD-1.5",
@@ -1614,7 +1614,7 @@
         "SOC2": "CC6.1, CC7.2",
         "PCIDSS": "Req 8.5"
       },
-      "LicenseRequirement": "Included (M365 Business Standard+)"
+      "LicenseRequirement": "Entra ID P2"
     },
     {
       "ControlId": "AAD-2.2",
@@ -2515,7 +2515,7 @@
     {
       "ControlId": "SPO-2.5",
       "Title": "Third-Party Cloud Storage Connectors Disabled",
-      "Description": "Third-party cloud storage providers (Dropbox, Box, Google Drive, ShareFile) are disabled so corporate files cannot be moved into storage the tenant does not control or audit. Verified against the Teams client configuration, which is the connector surface exposed to PowerShell; the Microsoft 365 admin centre \u0022Third-party storage services\u0022 toggle is not readable via API and remains a manual check.",
+      "Description": "Third-party cloud storage providers (Dropbox, Box, Google Drive, ShareFile) are disabled so corporate files cannot be moved into storage the tenant does not control or audit. Verified against the Teams client configuration, which is the connector surface exposed to PowerShell; the Microsoft 365 admin center \u0022Third-party storage services\u0022 toggle is not readable via API and remains a manual check.",
       "BusinessRisk": "Third-party storage integration allows organizational data to move to unmanaged cloud services outside DLP policy coverage.",
       "Severity": "Medium",
       "Workload": "SPO",
@@ -2523,7 +2523,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlSPO3PStorage",
-      "Remediation": "Disable the connectors: Set-CsTeamsClientConfiguration -Identity Global -AllowDropBox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false. Then confirm the separate Microsoft 365 admin centre setting: admin.microsoft.com > Settings > Org settings > Services > Third-party storage services > off.",
+      "Remediation": "Disable the connectors: Set-CsTeamsClientConfiguration -Identity Global -AllowDropBox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false. Then confirm the separate Microsoft 365 admin center setting: admin.microsoft.com > Settings > Org settings > Services > Third-party storage services > off.",
       "References": {
         "CISControls": ["3.3"],
         "CIS": "7.3.5",
@@ -3562,7 +3562,7 @@
       "ControlId": "DEF-3.3",
       "Title": "Defender for Cloud Apps Connected",
       "Description": "Microsoft Defender for Cloud Apps M365 connector is active for shadow IT discovery and session controls.",
-      "BusinessRisk": "Without MDCA, OAuth app abuse, shadow IT cloud usage, and anomalous user behavior in cloud apps goes undetected.",
+      "BusinessRisk": "Without MDCA, OAuth app abuse, shadow IT cloud usage, and anomalous user behavior in cloud apps go undetected.",
       "Severity": "Medium",
       "Workload": "DEF",
       "Category": "Governance",
@@ -5072,7 +5072,7 @@
       "CollectorDependency": "M365Copilot",
       "EvaluatorFunction": "Test-NRGControlAICopilotLicensedOnly",
       "Remediation": "M365 Admin Center > Settings > Microsoft 365 Copilot > Control access. Assign licenses only to approved users with a documented business need.",
-      "LicenseRequirement": "M365 Copilot add-on license ($30/user/month)",
+      "LicenseRequirement": "M365 Copilot add-on license",
       "References": {
         "CISControls": ["6.8"],
         "CIS": "5.5.1",

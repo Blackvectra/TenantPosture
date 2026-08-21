@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 #
-# NRG-Assessment.psm1  (v4.11.1)
+# NRG-Assessment.psm1  (version sourced from NRG-Assessment.psd1 at runtime)
 # Module loader — dot-sources all functions from Lib, Collectors, Evaluators, Publishers.
 #
 # Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC
@@ -32,8 +32,20 @@ $ErrorActionPreference = 'Stop'
 # directive in production code going forward.
 Set-StrictMode -Version Latest
 
-$script:NRGAssessmentVersion = '4.11.1'
+# Version is resolved from the sibling manifest at load time rather than kept
+# as a literal here. The literal drifted across four releases (it read 4.11.1
+# while the manifest said 4.12.1), and because $NRGAssessmentVersion is exported
+# via VariablesToExport, module-direct callers and the report metadata saw the
+# stale value. Fallback to 'unknown' is defensive: manifest parsing should never
+# fail at load time, but if it does the module should load with a clearly
+# flagged version rather than silently shipping a wrong one.
 $script:NRGModuleRoot        = $PSScriptRoot
+$script:NRGAssessmentVersion = try {
+    $manifest = Import-PowerShellDataFile -LiteralPath (Join-Path $PSScriptRoot 'NRG-Assessment.psd1') -ErrorAction Stop
+    [string]$manifest.ModuleVersion
+} catch {
+    'unknown'
+}
 
 # Thread-safe collections for module state
 $script:NRGFindings   = [System.Collections.Generic.List[object]]::new()
