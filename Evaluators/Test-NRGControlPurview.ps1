@@ -218,7 +218,7 @@ function Test-NRGControlPurviewSIEMExport {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
-        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Audit log SIEM export status cannot be determined via Graph API alone. Verify via Purview > Audit > Export settings or Microsoft Sentinel connector status.' `
+        -Detail 'This control requires manual verification — whether an external SIEM is consuming the audit log is not observable from Microsoft 365. Confirm in Purview > Audit > Export settings, or check the Microsoft Sentinel connector state.' `
         -Remediation $ctrl.Remediation
 }
 
@@ -265,7 +265,7 @@ function Test-NRGControlPurviewComplianceScore {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit `
-        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Compliance Score requires manual review at compliance.microsoft.com > Compliance Manager. Verify improvement actions are assigned and tracked.' `
+        -Detail 'This control requires manual verification — Compliance Manager improvement actions are not exposed to the APIs this assessment uses. Review them at compliance.microsoft.com > Compliance Manager and confirm each is assigned to an owner with a target date.' `
         -Remediation $ctrl.Remediation
 }
 
