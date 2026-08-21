@@ -20,13 +20,13 @@ This baseline covers SharePoint Online and OneDrive for Business configuration. 
 **Criticality:** High
 
 **Description:**
-SharePoint and OneDrive external sharing must be set to `ExistingExternalUsersOnly` or `Disabled`. `Anyone` (anonymous links) must not be permitted.
+SharePoint and OneDrive external sharing must be set to `ExistingExternalUserSharingOnly` or `Disabled`. `Anyone` (anonymous links) must not be permitted.
 
 **Check:**
 ```powershell
 Get-SPOTenant | Select-Object SharingCapability, OneDriveSharingCapability
 ```
-`Disabled` or `ExistingExternalUsersOnly` → Satisfied. `NewAndExistingExternalUsers` → Partial. `ExternalUserAndGuestSharing` (Anyone) → Gap.
+`Disabled` or `ExistingExternalUserSharingOnly` → Satisfied. `ExternalUserSharingOnly` → Partial. `ExternalUserAndGuestSharing` (Anyone links) → Gap.
 
 **Remediation:**
 SharePoint Admin Center → Policies → Sharing → Set both SharePoint and OneDrive to `New and existing guests` or more restrictive.

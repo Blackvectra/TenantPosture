@@ -115,10 +115,10 @@ Defender portal → Safe Links → Create policy. Enable for email and Office ap
 **Criticality:** High
 
 **Description:**
-The anti-phishing policy must have `HonorDmarcPolicy = True`. Without this setting, EOP's implicit intra-org trust (`compauth=pass reason=703`) can allow exact-domain spoofs to bypass DMARC enforcement even when `p=reject` is published.
+The anti-phishing policy must have `HonorDmarcPolicy = True`. Without this setting, Exchange Online composite authentication can pass a message on sender reputation, allowing exact-domain spoofs to bypass DMARC enforcement even when `p=reject` is published.
 
 **Rationale:**
-`compauth=pass reason=703` is an Exchange Online implicit trust mechanism that passes authentication for messages appearing to originate from within the organization. This bypasses DMARC enforcement for exact-domain spoofing unless `HonorDmarcPolicy` is explicitly enabled.
+Exchange Online composite authentication can mark a message as authenticated on the strength of sender reputation rather than DMARC alignment. That bypasses DMARC enforcement for exact-domain spoofing unless `HonorDmarcPolicy` is explicitly enabled.
 
 **Check:**
 ```powershell
@@ -128,7 +128,7 @@ All active policies must have `HonorDmarcPolicy = True`.
 
 **Remediation:**
 ```powershell
-Set-AntiPhishPolicy -Identity "Default" -HonorDmarcPolicy $true
+Set-AntiPhishPolicy -Identity "Office365 AntiPhish Default" -HonorDmarcPolicy $true
 ```
 
 **Framework Mappings:**

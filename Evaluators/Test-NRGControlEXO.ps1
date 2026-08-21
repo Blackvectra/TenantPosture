@@ -126,7 +126,7 @@ function Test-NRGControlEXOAutoForward {
     } elseif ($policyBlocked) {
         Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
             -Title $control.Title -Severity 'Low' -FrameworkIds $citations `
-            -Detail 'Outbound spam policy blocks auto-forward, but remote domain wildcard (*) still allows it. Set-RemoteDomain * -AutoForwardEnabled $false.' `
+            -Detail 'Outbound spam policy blocks auto-forward, but the default remote domain still allows it. Set-RemoteDomain -Identity Default -AutoForwardEnabled $false.' `
             -CurrentValue 'Remote domain AutoForwardEnabled = $true' `
             -RequiredValue 'Remote domain AutoForwardEnabled = $false'
     } elseif ($remoteBlocked) {
@@ -353,7 +353,6 @@ function Test-NRGControlEXOPop3 {
 }
 
 # ── EXO-2.4 IMAP Access Disabled ─────────────────────────────────────────────
-# v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
 function Test-NRGControlEXOImap {
     [CmdletBinding()] param()
 
@@ -593,7 +592,6 @@ function Test-NRGControlEXOAlertForwarding {
 }
 
 # ── EXO-3.4 Alert Policy — Unusual Mail Volume ───────────────────────────────
-# v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
 function Test-NRGControlEXOAlertVolume {
     [CmdletBinding()] param()
     $cid = 'EXO-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }

@@ -209,7 +209,6 @@ function Test-NRGControlPurviewAutoLabel {
 }
 
 # ── PVW-3.1 Audit Logs Exported to SIEM ──────────────────────────────────────
-# v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
 function Test-NRGControlPurviewSIEMExport {
     [CmdletBinding()] param()
     $cid = 'PVW-3.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
@@ -256,7 +255,6 @@ function Test-NRGControlPurviewEDiscovery {
 }
 
 # ── PVW-3.3 Microsoft Purview Compliance Score Reviewed ──────────────────────
-# v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
 function Test-NRGControlPurviewComplianceScore {
     [CmdletBinding()] param()
     $cid = 'PVW-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
@@ -317,7 +315,7 @@ function Test-NRGControlPurviewAuditRetention {
     if ($longTerm.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($longTerm.Count) audit log retention policy(ies) extending logs ≥365 days."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No audit log retention policy extending beyond 90 days found. Default retention is 90 days. Breaches discovered weeks or months later cannot be investigated. Requires Audit Premium or custom retention policy.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No audit log retention policy extending beyond the platform default was found. Audit (Standard) retains 180 days. Breaches discovered weeks or months later cannot be investigated. Requires Audit Premium or custom retention policy.' -Remediation $ctrl.Remediation
     }
 }
 

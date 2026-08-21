@@ -403,8 +403,6 @@ function Test-NRGControlDefenderViaTag {
 }
 
 # ── DEF-3.3 Defender for Cloud Apps Connected ────────────────────────────────
-# v4.6.4 ADVISORY MARK: hardcoded Partial — no programmatic check, marked
-# Manual review required pending v4.7.0 cleanup.
 function Test-NRGControlDefenderMDCA {
     [CmdletBinding()] param()
     $cid = 'DEF-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
@@ -419,8 +417,6 @@ function Test-NRGControlDefenderMDCA {
 }
 
 # ── DEF-3.4 Defender Alerts Email Notification ──────────────────────────────
-# v4.6.4 ADVISORY MARK: hardcoded Partial — no programmatic check, marked
-# Manual review required pending v4.7.0 cleanup.
 function Test-NRGControlDefenderAlertNotification {
     [CmdletBinding()] param()
     $cid = 'DEF-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
@@ -538,8 +534,6 @@ function Test-NRGControlDefenderDLPSITs {
 }
 
 # ── DEF-4.3 Risky Application Alerts Configured ──────────────────────────────
-# v4.6.4 ADVISORY MARK: hardcoded Partial — no programmatic check, marked
-# Manual review required pending v4.7.0 cleanup.
 function Test-NRGControlDefenderRiskyAppAlerts {
     [CmdletBinding()] param()
     $cid = 'DEF-4.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
