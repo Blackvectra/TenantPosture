@@ -58,8 +58,8 @@ Accuracy + hardening pass (targeting v4.13.0):
   All paging/@odata reads switched to null-safe indexer form.
 - **11 controls made actionable** (were placeholder NotApplicable): INT-3.3,
   PPL-2.1, TMS-2.8/4.1/4.4, AAD-11.3, DEF-4.6, EXO-5.1/5.2, plus honest
-  advisories for DEF-4.4/SPO-2.4. Two new read-only Graph scopes
-  (IdentityRiskyServicePrincipal.Read.All, AttackSimulation.Read.All — require
+  advisories for DEF-4.4/SPO-2.4. Three new read-only Graph scopes
+  (IdentityRiskyServicePrincipal.Read.All, AttackSimulation.Read.All, AccessReview.Read.All — require
   one-time admin re-consent per tenant); optional SharePoint Management Shell
   path for SPO-2.2/2.6/3.2/3.4.
 - **CI now gates on the full test suite** (220 tests / 10 files — previously 1)
@@ -459,7 +459,7 @@ Patch release closing the correctness sweep defined in `docs/CORRECTNESS-SWEEP-v
 
 ### Security / privacy
 
-- **`.gitignore` now excludes `output/`.** NRG had the same gap as NRG (only `Reports/` was excluded); NRG never had real client data committed because the port excluded `output/` at copy time, but future `Invoke-NRGAssessment` runs would have started tracking output files.
+- **`.gitignore` now excludes `output/`.** NRG had the same gap as NLS (only `Reports/` was excluded); NRG never had real client data committed because the port excluded `output/` at copy time, but future `Invoke-NRGAssessment` runs would have started tracking output files.
 - **Sample HTML sanitization.** `sample-report/example-assessment.html` had 7 occurrences of real personal domain `mattlevorson.com` (secondary domain on the source tenant) and 2 admin display names rendered as `NRG Technology Services / NextLayerSec LLC` (collision from `Matthew Levorson → NRG Technology Services / NextLayerSec LLC` sanitization). Replaced with `example2.com` / `Admin 2` / `Admin 3`.
 - **Branding/PII leaks** in initial NRG port surfaced and fixed: NRG phone number in `branding.psd1`, "North Dakota" geographic identifier in CLAUDE.md, real client names ClientA / Client B in sample configs.
 

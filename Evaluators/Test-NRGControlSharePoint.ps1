@@ -331,7 +331,6 @@ function Test-NRGControlSPOSiteAdmins {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
     Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
         -Detail 'This control requires manual verification — enumerating site collection administrators means querying every site individually, which does not scale to a full tenant within an assessment run. Review them in SharePoint Admin Center > Sites > Active sites.' `

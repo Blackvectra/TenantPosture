@@ -314,14 +314,19 @@ Edit `Config\clients.json` to add tenants:
 
 ```json
 {
-  "ClientName":   "Client Name",
-  "TenantDomain": "client.com",
-  "TenantId":     "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-  "DelegatedOrg": "client.onmicrosoft.com",
-  "DnsDomains":   ["client.com"],
-  "SkipPurview":  false,
+  "ClientName":        "Client Name",
+  "TenantDomain":      "client.com",
+  "TenantId":          "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "DelegatedOrg":      "client.onmicrosoft.com",
+  "DnsDomains":        ["client.com"],
+  "SkipPurview":       false,
+  "SkipTeams":         false,
+  "SkipSharePoint":    false,
+  "SkipIntune":        false,
   "SkipPowerPlatform": true,
-  "Active":       true
+  "SkipDNS":           false,
+  "Notes":             "Business Standard tenant — Purview and Power Platform skipped.",
+  "Active":            true
 }
 ```
 

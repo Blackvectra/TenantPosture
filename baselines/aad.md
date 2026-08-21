@@ -178,7 +178,7 @@ Create dedicated cloud-only admin accounts for privileged roles. Remove privileg
 **Criticality:** Medium
 
 **Description:**
-A Conditional Access policy must be configured to respond to Entra ID Protection sign-in risk signals. High-risk sign-ins should require MFA step-up or be blocked. Requires Entra ID P2 or Microsoft 365 Business Premium.
+A Conditional Access policy must be configured to respond to Entra ID Protection sign-in risk signals. High-risk sign-ins should require MFA step-up or be blocked. Requires Microsoft Entra ID P2; Microsoft 365 Business Premium includes Entra ID P1 only.
 
 **Rationale:**
 Sign-in risk detection identifies anomalous authentication patterns (impossible travel, anonymous IP, atypical location, token anomalies). Without a policy, detections are logged but not acted on.
@@ -206,7 +206,7 @@ Create CA policy: Conditions → Sign-in risk → High → Grant → Require MFA
 **Criticality:** Medium
 
 **Description:**
-A Conditional Access policy must respond to Entra ID Protection user risk signals. High user risk should require password change or block sign-in. Requires Entra ID P2 or Microsoft 365 Business Premium.
+A Conditional Access policy must respond to Entra ID Protection user risk signals. High user risk should require password change or block sign-in. Requires Microsoft Entra ID P2; Microsoft 365 Business Premium includes Entra ID P1 only.
 
 **Rationale:**
 User risk reflects confirmed or suspected account compromise (leaked credentials, confirmed malicious sign-in). Without a policy, a compromised account continues to operate until manually discovered.
