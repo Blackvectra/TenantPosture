@@ -1655,7 +1655,7 @@
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
       "EvaluatorFunction": "Test-NRGControlAADDeviceComplianceCA",
-      "Remediation": "CA policy: Grant = Require device to be marked as compliant, or Require hybrid Azure AD joined device.",
+      "Remediation": "CA policy: Grant = Require device to be marked as compliant, or Require Microsoft Entra hybrid joined device.",
       "References": {
         "CISControls": ["13.5"],
         "CIS": "5.2.2.8",
@@ -2601,7 +2601,7 @@
       "ControlId": "SPO-2.8",
       "Title": "OneDrive Sync Restricted by Tenant Domain GUID",
       "Description": "OneDrive sync is restricted to authorized tenant GUIDs preventing cross-tenant syncing. (No SCuBA equivalent \u2014 NRG/CIS hardening beyond SCuBA scope.)",
-      "BusinessRisk": "Without GUID restriction, users can sync organizational data to personal O365 tenants or competitor tenants.",
+      "BusinessRisk": "Without GUID restriction, users can sync organizational data to personal Microsoft 365 tenants or competitor tenants.",
       "Severity": "High",
       "Workload": "SPO",
       "Category": "Collaboration",
@@ -3203,7 +3203,7 @@
       "Automated": true,
       "CollectorDependency": "AAD-PIMSchedules",
       "EvaluatorFunction": "Test-NRGControlAADAccessReviews",
-      "Remediation": "PIM > Azure AD roles > Access reviews > Create recurring quarterly review for Global Admin, Privileged Role Admin, Security Admin.",
+      "Remediation": "PIM > Microsoft Entra roles > Access reviews > Create recurring quarterly review for Global Admin, Privileged Role Admin, Security Admin.",
       "References": {
         "CISControls": ["6.8"],
         "CIS": "5.1.4.1",
