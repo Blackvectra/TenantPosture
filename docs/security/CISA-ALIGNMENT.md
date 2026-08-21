@@ -29,7 +29,7 @@ Some SCuBA controls require manual verification or out-of-scope data sources:
 
 ## CISA BOD 18-01 Relevance
 
-BOD 18-01 mandates DMARC, DKIM, SPF, and HTTPS for federal executive branch domains. NRG-Assessment DNS evaluators (DNS-1.1 through DNS-1.6) directly assess BOD 18-01 requirements and can be used as compliance leverage when engaging government IT teams (NDIT, county agencies) on email authentication enforcement.
+BOD 18-01 mandates DMARC, DKIM, SPF, and HTTPS for federal executive branch domains. NRG-Assessment DNS evaluators (DNS-1.1 through DNS-1.6) directly assess BOD 18-01 requirements and can be used as compliance leverage when engaging government IT teams (state IT agencies, county governments) on email authentication enforcement.
 
 **DNS controls mapped to BOD 18-01:**
 - DNS-1.1 — SPF published (BOD 18-01 §2.a)
