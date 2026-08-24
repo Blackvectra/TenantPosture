@@ -10,8 +10,13 @@
 #   - Each section: description, business risk, exact command, validation
 #   - Header warns: review before running, test in non-prod first
 #
-# SECURITY: Remediation strings are sourced from controls.json which is
-#   content-validated at load time. No tenant data interpolated into code.
+# SECURITY: Remediation strings are sourced from controls.json, which is
+#   content-validated at load time. Tenant values (TenantDomain, Operator,
+#   AssessmentDate, ToolVersion) ARE interpolated into the generated script —
+#   into single-quoted PowerShell literals via EscPs1Literal, which doubles
+#   embedded quotes, and into comment lines with newlines stripped so a value
+#   cannot terminate the comment and inject code. Any new interpolation site
+#   must go through the same two helpers.
 #
 
 function Publish-NRGRemediationScript {

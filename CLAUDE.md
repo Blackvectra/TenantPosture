@@ -92,7 +92,7 @@ The report produces 13 sections: Executive Overview with score ring and license 
 
 **Phase 3** covers delta and drift detection comparing current run JSON against a prior snapshot for CA policy changes, new admin role assignments, new OAuth app registrations, and DMARC policy regression; a Markdown summary publisher for ConnectWise ticket output; and a remediation playbook publisher consuming baseline `RemediationCmdlet` fields.
 
-**Phase 4** covers `Apply-NRGBaseline.ps1` as a write-mode deployment script with mandatory `WhatIf` support and `-Confirm` required for auth policy or admin role changes; Windows LAPS (INT-4.1) and Windows Hello for Business (INT-4.2) evaluators; and implementation of the five Copilot governance controls which currently return `NotApplicable`.
+**Phase 4 is complete.** `Apply-NRGBaseline.ps1` ships as the write-mode deployment script with mandatory `WhatIf` support and `-Confirm` on auth-policy and admin-role changes, dot-sourcing six scripts from `Apply/`. The Windows LAPS (INT-4.1) and Windows Hello for Business (INT-4.2) evaluators exist, and the Copilot governance controls emit real Satisfied / Partial / Gap verdicts rather than a placeholder.
 
 ## Environment
 

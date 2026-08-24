@@ -1,6 +1,6 @@
 # Release Checklist — NRG-Assessment
 
-Every patch release (v4.6.x, v4.7.x, …) follows this checklist. It exists so that "security + bugs + polish, every release" is a verifiable contract instead of an aspiration.
+Every patch release follows this checklist. It exists so that "security + bugs + polish, every release" is a verifiable contract instead of an aspiration.
 
 ## Pre-release — security pass
 
@@ -8,7 +8,7 @@ Run on the branch before merging the release PR.
 
 - [ ] **OWASP Top 10:2021 delta walk.** Re-read `docs/CORRECTNESS-SWEEP-v4.6.5.md` § OWASP. For each of A01–A10, note in the CHANGELOG entry whether the new release changed the posture (better / same / new gap opened). Don't ship a release that *worsens* any category without an explicit note.
 - [ ] **`simplify` skill code-review pass** on the PR diff. Apply confirmed findings; document refuted findings + intentional skips in the PR body.
-- [ ] **Adversarial-fixture Pester suite passes** (`Testing/NRG.PublisherSafety.Tests.ps1`, lands in v4.6.6). Confirms no new HTML / MD / PS injection vectors in the diff.
+- [ ] **Publisher output safety.** `Invoke-Pester ./Testing/NRG.HtmlReport.Tests.ps1 ./Testing/NRG.GoldenFixtures.Tests.ps1` passes. Confirms no new HTML / MD / PS injection vectors in the diff. (A dedicated adversarial-fixture suite, `NRG.PublisherSafety.Tests.ps1`, is not yet written.)
 - [ ] **All standing CI green:** PSScriptAnalyzer, Pester Tests, Module Manifest + controls.json. Optional Copilot reviewer comments triaged.
 - [ ] **One real-tenant run** against an internal tenant. Confirm:
   - Zero `WARNING: Evaluator ... cannot be found on this object`
@@ -52,8 +52,8 @@ For the in-house workflow (free, self-signed). For an external release with a pa
 .\tools\Verify-Integrity.ps1        # exits 0 if all manifest entries match
 
 # 4. Tag + push
-git tag -s "v4.6.x" -m "v4.6.x — release notes here"
-git push origin "v4.6.x"
+git tag -s "vX.Y.Z" -m "vX.Y.Z — release notes here"
+git push origin "vX.Y.Z"
 ```
 
 If the operator workstation doesn't have the cert (e.g., a different engineer is releasing), run `New-NRGCodeSigningCert.ps1` first. The signature won't verify on workstations that don't trust the cert — that's the point. For internal-only releases, install the cert into TrustedPublisher on every workstation that runs the tool.
@@ -75,4 +75,4 @@ The point isn't that every step is perfect every time — it's that skipped step
 
 ---
 
-*Owner: NRG Technology Services / NextLayerSec LLC. Updated whenever the polish roadmap progresses (v4.6.6, v4.6.7, v4.6.8, v4.6.9 will each tighten parts of this list).*
+*Owner: NRG Technology Services / NextLayerSec LLC. Updated whenever the release process changes.*

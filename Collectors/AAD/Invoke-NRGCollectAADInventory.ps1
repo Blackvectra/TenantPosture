@@ -5,8 +5,10 @@
 #   - Guest users with last sign-in date
 #   - Stale member accounts (no sign-in 90+ days)
 #   - Service principals with AllPrincipals OAuth grants
-#   - Users registered with legacy auth methods only
-#   - Sign-in risk detections (recent)
+#
+# LegacyAuthOnlyUsers and RecentRiskEvents are declared in the Data block but
+# are not populated by any code path. They are reserved for a future collector
+# and must not be read as evidence of anything.
 #
 # Requires: AuditLog.Read.All, User.Read.All, Application.Read.All
 #
