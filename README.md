@@ -356,7 +356,9 @@ The framework-accuracy suite validates every SCuBA citation against the bundled 
 
 ## License
 
-Internal use — NRG Technology Services / NextLayerSec LLC. Not licensed for redistribution.
+Released under the [MIT License](LICENSE). Copyright (c) 2026 Matthew Levorson — NRG Technology Services / NextLayerSec LLC.
+
+MIT permits use, modification, redistribution and commercial use, including by third parties, provided the copyright notice and licence text are retained. The software is provided as-is, without warranty.
 
 ---
 
