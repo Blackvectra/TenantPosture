@@ -477,5 +477,20 @@ function Publish-NRGDeltaReport {
     # AppendLine above and no other consumer reads $toolVer. Removed to keep
     # the file lint-clean under PSReviewUnusedVariable.
 
-    $sb.ToString() | Out-File -LiteralPath $OutputPath -Encoding utf8
+    # Publisher self-hardens via Set-NRGSensitiveFileContent: the file is
+    # pre-created and its ACL applied BEFORE tenant data lands. Writing with a
+    # bare Out-File lets the file inherit the parent directory ACL for the
+    # duration of the write, which on a shared MSP workstation or a synced
+    # OneDrive folder is a window in which a co-resident process can read CA
+    # policies, admin UPNs, OAuth grants and DMARC records. Hardening travels
+    # with the terminal write so no caller can forget it. The Out-File fallback
+    # preserves behaviour if Lib/ has not been dot-sourced.
+    if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileContent -Path $OutputPath -Content $sb.ToString()
+    } else {
+        $sb.ToString() | Out-File -LiteralPath $OutputPath -Encoding utf8
+        if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+            Set-NRGSensitiveFileAcl -Path $OutputPath -ErrorAction SilentlyContinue
+        }
+    }
 }
