@@ -356,6 +356,7 @@
         PSData = @{
             Tags         = @('M365', 'Security', 'Assessment', 'MSP', 'CIS', 'SCuBA', 'NIST', 'CMMC')
             ProjectUri   = 'https://github.com/Blackvectra/NRG-Assessment-Tool'
+            LicenseUri   = 'https://github.com/Blackvectra/NRG-Assessment-Tool/blob/main/LICENSE'
             ReleaseNotes = @'
 v4.6.4 EMERGENCY (Part A): orchestrator + Apply + evaluator + control-def fixes.
 
