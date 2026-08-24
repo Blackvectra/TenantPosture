@@ -339,7 +339,7 @@ GDAP relationships must be active in Partner Center before the batch runner can 
 
 ## CI/CD
 
-Six GitHub Actions workflows run on every push and pull request to `main`:
+Six GitHub Actions workflows cover the repository. Note that the `ci`, `codeql`, `secret-scan` and `dependency-review` triggers are temporarily commented out pending a GitHub Actions billing reset, so those four run on manual dispatch only; each workflow file carries a restore note in its header:
 
 | Workflow | What it does |
 |---|---|

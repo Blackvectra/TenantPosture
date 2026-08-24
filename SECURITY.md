@@ -94,7 +94,7 @@ Researchers who comply with this policy will be acknowledged in the advisory (wi
 
 ## Security Controls Applied
 
-### OWASP Top 10:2025
+### OWASP Top 10:2021
 
 | Control | Implementation |
 |---|---|
@@ -191,4 +191,4 @@ If you suspect a credential leak, malicious dependency, signed-release tamper, o
 
 ---
 
-*NRG-Assessment v4.12.1 · Hardened against OWASP Top 10:2025, ASVS v5, CVE-2025-54100 · NIST SP 800-218 (SSDF) aligned · CISA BOD 20-01 VDP compliant*
+*NRG-Assessment v4.12.1 · Hardened against OWASP Top 10:2021, ASVS v5, CVE-2025-54100 · NIST SP 800-218 (SSDF) aligned · CISA BOD 20-01 VDP compliant*
