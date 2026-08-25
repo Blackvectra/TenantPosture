@@ -208,7 +208,7 @@ so CLI and GUI workflows can be mixed freely.
 Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (276 exports, dependency declarations)
+NRG-Assessment.psd1               ← Module manifest (280 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -249,7 +249,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          32 Pester suites — the FULL suite gates every PR
+Testing/                          33 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -333,6 +333,33 @@ Two properties the tests enforce, because both are easy to break by accident:
 
 Every control carries **two or more** options by design. A single option is a directive, and a client already standardised on a third-party endpoint suite or an existing badge system should be able to satisfy the control with what they have.
 
+### Endpoint compliance — `DeviceCompliance` scanner
+
+The tenant half of the assessment reads Intune **policy**. This reads device **state** — what the machine actually reports, not what a policy asked for.
+
+`Device\Invoke-NRGDeviceCompliance.ps1` runs **on the endpoint**, pushed by ConnectWise RMM (or an Intune platform script) as SYSTEM. It writes one JSON file; the RMM collects it; the assessment ingests a folder of them:
+
+```powershell
+# On the endpoint, via RMM script task
+.\Invoke-NRGDeviceCompliance.ps1          # -> C:\ProgramData\NRG\device-compliance.json
+
+# On your workstation, same run as the tenant assessment
+.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com `
+    -DeviceResults .\collected\clientname\ -NISTMatrix
+```
+
+**35 checks** across encryption and boot integrity, malware defence, network exposure, accounts and privilege, patch state, session lock, legacy surface and audit policy. Each maps to an 800-53 control, so device findings land in the same report, the same score, and the same NIST family rollup as everything else.
+
+Three properties, all enforced by test:
+
+- **Windows PowerShell 5.1.** Stock Windows ships 5.1, not 7. The endpoint script is the single carve-out from the repo-wide `#Requires -Version 7` floor, and the security suite asserts it *earns* that exception — no MSHTML, no COM, no `Invoke-Expression`, no network — rather than silently bypassing the rule.
+- **Standalone.** No module import, no network, no credential. It has to run on a bare machine with nothing installed.
+- **Read-only.** It reads local state and writes exactly one file. A static guard fails the build on `Set-ItemProperty`, `Enable-BitLocker`, `Set-MpPreference` and friends.
+
+**Elevation is reported, never assumed.** BitLocker, TPM, Secure Boot and the audit policy return nothing without admin rights — which is indistinguishable from *"not configured"*. Those land as `NotAssessed` and are **excluded from the fleet denominator**, so a control reads *"2 of 5 compliant — 1 device could not run this check (the collector ran without administrative rights)"* rather than inventing a pass or a failure for a machine nobody measured.
+
+Findings aggregate per control, not per device — one row saying *"41 of 60 failing"* with the hostnames in `AffectedObjects`, instead of 2,100 rows nobody reads.
+
 ### Device build standard
 
 The guide above is organised by 800-53 control. The **build standard** is the same material sequenced the way the work happens — a technician images, enrols, encrypts, hardens and hands over; they do not work AC-11 then SC-28. It is emitted by the same command:
@@ -384,7 +411,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **32 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **33 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -428,7 +455,7 @@ Six GitHub Actions workflows cover the repository. Note that the `ci`, `codeql`,
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (32 suites) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (33 suites) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -447,4 +474,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 276 exported functions · full Pester suite (32 suites) gating CI*
+*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 280 exported functions · full Pester suite (33 suites) gating CI*

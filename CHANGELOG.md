@@ -4,6 +4,40 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **Endpoint device compliance scanner (`DEV-*`, 35 checks).** The tenant half of
+  the assessment reads Intune POLICY; this reads device STATE. `Device/
+  Invoke-NRGDeviceCompliance.ps1` runs on the endpoint (RMM-deployed, as SYSTEM),
+  writes one JSON result, and `-DeviceResults <folder>` on the assessment ingests
+  a folder of them. Findings aggregate per control with failing hostnames in
+  AffectedObjects — one row saying "41 of 60 failing", not 2,100 rows nobody
+  reads — and each maps to 800-53 so device findings land in the same report,
+  score and NIST family rollup as everything else.
+  Checks span encryption and boot integrity (BitLocker, TPM, Secure Boot, VBS),
+  malware defence (real-time protection, tamper protection, ASR, controlled
+  folder access, MDE onboarding), network exposure (firewall, SMBv1, LLMNR, RDP
+  NLA), accounts (local admins, RID 500/501, LAPS), patch state, session lock,
+  legacy surface and audit policy.
+- **The endpoint script is Windows PowerShell 5.1** — stock Windows ships 5.1,
+  not 7 — and is the single carve-out from the repo-wide `#Requires -Version 7`
+  floor. The security suite scopes that exception to the top-level `Device/`
+  folder and asserts it EARNS it: no MSHTML, no COM, no Invoke-Expression, no
+  network. A separate static guard pins no PS7-only syntax, no module import,
+  and read-only behaviour apart from the single result write.
+- **Elevation is reported, never assumed.** BitLocker, TPM, Secure Boot and the
+  audit policy return nothing without admin rights, which is indistinguishable
+  from "not configured". Those emit NotAssessed and are excluded from the fleet
+  denominator, so a control reads "2 of 5 compliant — 1 device could not run
+  this check" rather than inventing a pass or a failure for a machine nobody
+  measured.
+- **`$rows = if (...) { @(...) } else { @() }` assigns `$null`.** An if-block
+  yielding an empty array is enumerated away by the pipeline, so `$rows.Count`
+  threw under StrictMode for every control absent from a result file. Caught by
+  the new suite before it shipped; build such variables in two statements.
+- **A device control that genuinely does not apply now says so.** "RDP disabled
+  on every machine" and "BitLocker unreadable everywhere" both report
+  NotApplicable, but the first is good news and the second is a blind spot, and
+  the detail now distinguishes them.
+
 - **Managed device build standard (`Config/device-baseline.json`).** The device
   guide answers "what does 800-53 require"; this answers "what do I do to this
   laptop, and in what order". 27 requirements across five lifecycle stages —
