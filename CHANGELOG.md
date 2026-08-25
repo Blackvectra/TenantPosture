@@ -4,6 +4,33 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **Device guide — reference material, no scanning (`New-NRGDeviceGuide.ps1`).**
+  Not everything is a scan. This renders `Config/nist-physical.json` into a
+  printable NIST device and endpoint guide — 31 controls across five areas with
+  98 implementation options, as Markdown plus self-contained HTML with print
+  styling and no external assets. It **connects to nothing**: no sign-in, no
+  Graph, no Exchange Online, no endpoint touched. That independence is the
+  point — the guide is usable before a tenant is attached, during a sales
+  conversation, and on a site with nothing open. `-ResultsPath` optionally
+  annotates it with a prior run's verdicts.
+  Two invariants are enforced by test, because both are easy to break by
+  accident: a static guard fails the build if `Invoke-NRGGraphRequest`,
+  `Connect-MgGraph`, `Invoke-RestMethod` or friends ever appear in either file;
+  and supplying findings may change what the guide reports as *already done* but
+  never what it *recommends* — a test diffs the rendered options with and
+  without findings and requires them identical, so two clients with the same
+  obligations cannot get different advice because one happened to be scanned.
+- **The guide claimed assessment results it never had.** `@($null).Count` is 1,
+  not 0, so an omitted `-Findings` still counted as "findings supplied" and
+  every control printed "Assessment result: Not assessed" against an assessment
+  that had never run. Caught by the test asserting the no-findings guide carries
+  no verdicts at all.
+- **`New-Item -ItemType Directory -Path` replaced with
+  `[IO.Directory]::CreateDirectory`.** `New-Item` has no `-LiteralPath` overload
+  and its `-Path` interprets wildcards, so an output directory containing `[`
+  or `]` failed outright — and it violated the repo's own ASVS V12.3.1
+  literal-path invariant, which the static security suite caught.
+
 - **Standalone NIST SP 800-53 Rev 5 matrix (`-NISTMatrix`).** Clients assessed
   against 800-53 should not have to read their posture out of a multi-framework
   report. `Publish-NRGNISTMatrix.ps1` emits a single-framework deliverable from

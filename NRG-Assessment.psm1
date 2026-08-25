@@ -164,6 +164,7 @@ $script:ExportedFunctions = @(
     'Get-NRGNISTPhysicalPosture', 'Get-NRGNISTPhysicalDefinitions',
     'Get-NRGNISTControlCatalog', 'Get-NRGNISTControlTitle', 'Get-NRGNISTFamilyTitle',
     'Publish-NRGNISTMatrix',
+    'Publish-NRGDeviceGuide',
     'Get-NRGObjectField',
     'Invoke-NRGGraphRequest',
     'Invoke-NRGEvaluatorSafe',
