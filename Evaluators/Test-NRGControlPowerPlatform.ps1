@@ -28,7 +28,13 @@ function Test-NRGControlPowerPlatform {
     # PPL-1.1 — Environment count
     $c = Get-NRGControlById -ControlId 'PPL-1.1'
     if ($c) {
-        $envCount = @($d.Environments).Count
+        # Read through Get-NRGObjectField, not dot-access: Set-StrictMode
+        # -Version Latest is active module-wide, so a Data block missing this
+        # key THROWS rather than yielding $null. The live collector always
+        # sets it, but replayed result JSON written before a key existed does
+        # not — and a throw here aborts every remaining PPL control in this
+        # function, including PPL-1.3.
+        $envCount = @(Get-NRGObjectField -Item $d -Key 'Environments' -Default @()).Count
         if ($envCount -eq 0) {
             Add-NRGFinding -ControlId 'PPL-1.1' -State 'Satisfied' `
                 -Category 'Power Platform' -Title $c.Title -Severity 'Informational' `
@@ -51,12 +57,12 @@ function Test-NRGControlPowerPlatform {
     # PPL-1.2 — DLP policy
     $c = Get-NRGControlById -ControlId 'PPL-1.2'
     if ($c) {
-        if (-not $d.DLPAvailable) {
+        if (-not (Get-NRGObjectField -Item $d -Key 'DLPAvailable' -Default $false)) {
             Add-NRGFinding -ControlId 'PPL-1.2' -State 'NotApplicable' `
                 -Category 'Power Platform' -Title $c.Title `
                 -Detail 'Power Platform DLP data not available. Install Microsoft.PowerApps.Administration.PowerShell for full DLP assessment: Install-Module Microsoft.PowerApps.Administration.PowerShell -Scope CurrentUser -Force'
         } else {
-            $count = @($d.DLPPolicies).Count
+            $count = @(Get-NRGObjectField -Item $d -Key 'DLPPolicies' -Default @()).Count
             if ($count -gt 0) {
                 Add-NRGFinding -ControlId 'PPL-1.2' -State 'Satisfied' `
                     -Category 'Power Platform' -Title $c.Title -Severity 'Informational' `

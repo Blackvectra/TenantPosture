@@ -215,9 +215,10 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
     }
 
     Context 'v4.6.4 — drifted LicenseRequirement strings must suppress on the holding tenant' {
-        # Each of these 7 strings is the EXACT controls.json value. Prior
-        # versions of Get-NRGTenantLicenseProfile did not map any of them to a
-        # tier flag → BP / E5 / Copilot tenants still saw "Requires: <X>"
+        # These are controls.json LicenseRequirement values (current, or a
+        # historical form that differs only by a trailing price annotation).
+        # Prior versions of Get-NRGTenantLicenseProfile did not map any of them
+        # to a tier flag → BP / E5 / Copilot tenants still saw "Requires: <X>"
         # noise on the report.
 
         It 'Defender for Office 365 Plan 2 (M365 E5 or add-on) — suppressed on E5' {
@@ -255,13 +256,33 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
                 Should -BeTrue
         }
 
-        It 'M365 Copilot add-on license ($30/user/month) — exact special-char string suppresses on Copilot tenant' {
+        It 'M365 Copilot add-on license — suppresses on a Copilot tenant' {
             $skus = @(@{ SkuPartNumber = 'Microsoft_365_Copilot'; ServicePlans = @('M365_COPILOT_BUSINESS_CHAT') })
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
-            # Literal string with dollar sign and parentheses — make sure we
-            # match it as a raw string, not a regex pattern.
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Copilot add-on license' -LicenseProfile $p |
+                Should -BeTrue
+        }
+
+        It 'M365 Copilot add-on license ($30/user/month) — a trailing price annotation still suppresses' {
+            # controls.json carried the price suffix historically and may again.
+            # Matching is exact, so a price edit would otherwise flip the answer
+            # to "not licensed" and tell a Copilot tenant, on its own report,
+            # that it needs to buy Copilot. The literal has a dollar sign and
+            # parentheses in it — it must be handled as a raw string, never as
+            # a regex pattern.
+            $skus = @(@{ SkuPartNumber = 'Microsoft_365_Copilot'; ServicePlans = @('M365_COPILOT_BUSINESS_CHAT') })
+            $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
             Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 Copilot add-on license ($30/user/month)' -LicenseProfile $p |
                 Should -BeTrue
+        }
+
+        It 'does not strip a meaningful parenthetical that distinguishes two requirements' {
+            # "(add-on)" is not a price. Stripping it would collapse distinct
+            # requirements into one and suppress a real upgrade need.
+            $skus = @(@{ SkuPartNumber = 'ENTERPRISEPREMIUM'; ServicePlans = @('THREAT_INTELLIGENCE') })
+            $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
+            Test-NRGLicenseRequirementMet -LicenseRequirement 'Some Unheld Product (add-on)' -LicenseProfile $p |
+                Should -BeFalse
         }
 
         It 'Power Platform + Copilot Studio license — suppressed when PowerApps Per User SKU present' {

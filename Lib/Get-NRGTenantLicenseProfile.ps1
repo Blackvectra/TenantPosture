@@ -280,7 +280,24 @@ function Test-NRGLicenseRequirementMet {
     if ([string]::IsNullOrEmpty($LicenseRequirement)) { return $true }
     if ($LicenseRequirement -match '^Included') { return $true }
     if ($null -eq $LicenseProfile -or -not $LicenseProfile.SuppressedLicenseRequirements) { return $false }
-    return [bool]$LicenseProfile.SuppressedLicenseRequirements.Contains($LicenseRequirement)
+    if ($LicenseProfile.SuppressedLicenseRequirements.Contains($LicenseRequirement)) { return $true }
+
+    # Matching is otherwise exact, which makes it brittle against the one kind
+    # of edit these strings actually receive: a trailing price annotation.
+    # "M365 Copilot add-on license ($30/user/month)" and "M365 Copilot add-on
+    # license" are the same requirement, but an exact-match miss silently flips
+    # the answer to "not licensed" — and the visible effect is a Copilot tenant
+    # being told on its own report that it needs to buy Copilot. Retry once
+    # with a trailing price parenthetical removed.
+    #
+    # Deliberately narrow: the parenthetical must contain a currency amount, so
+    # meaningful qualifiers like "(add-on)" or "(M365 E5 or add-on)" — which
+    # distinguish genuinely different requirements — are never stripped.
+    $priceStripped = [regex]::Replace($LicenseRequirement, '\s*\([^()]*\$\s*\d[^()]*\)\s*$', '')
+    if ($priceStripped -ne $LicenseRequirement -and $priceStripped) {
+        return [bool]$LicenseProfile.SuppressedLicenseRequirements.Contains($priceStripped)
+    }
+    return $false
 }
 
 function Get-NRGControlLicenseStatus {
