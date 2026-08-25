@@ -489,6 +489,94 @@ function Publish-NRGAssessmentHTML {
 "@
     }
 
+    # ── NIST physical / device controls HTML ─────────────────────────────────
+    # A tenant scan says a great deal about endpoint posture and nothing at all
+    # about a locked server room, a certificate of destruction, or a returned
+    # badge. Those are real 800-53 controls a client working an 800-53 or CMMC
+    # assessment must satisfy, and omitting them silently is the dangerous
+    # option: a reader seeing a clean family table would reasonably infer the
+    # physical families were assessed and passed.
+    #
+    # So each row states its scope explicitly and, where the tool cannot see the
+    # control, says so and names the evidence the assessor must collect instead.
+    # Attested rows carry no verdict and contribute to no score.
+    $physHtml = ''
+    $physCov  = $null
+    if (Get-Command Get-NRGNISTPhysicalPosture -ErrorAction SilentlyContinue) {
+        try { $physCov = Get-NRGNISTPhysicalPosture -Findings $Findings }
+        catch { $physCov = $null }
+    }
+    if ($physCov -and $physCov.Available -and @($physCov.Groups).Count -gt 0) {
+        $statusMeta = @{
+            'Met'                  = @{Cls='pv-met';  Txt='Met'}
+            'Partial'              = @{Cls='pv-part'; Txt='Partial'}
+            'Gap'                  = @{Cls='pv-gap';  Txt='Gap'}
+            'Not assessed'         = @{Cls='pv-na';   Txt='Not assessed'}
+            'Attestation required' = @{Cls='pv-att';  Txt='Attestation required'}
+        }
+        $scopeMeta = @{
+            'Tenant'   = 'Evidenced by this assessment'
+            'Hybrid'   = 'Partly evidenced &mdash; rest is off-tenant'
+            'Attested' = 'Not visible from Microsoft 365'
+        }
+        $physGroups = ''
+        foreach ($grp in $physCov.Groups) {
+            $itemHtml = ''
+            foreach ($it in $grp.Items) {
+                $sm  = if ($statusMeta.ContainsKey($it.Status)) { $statusMeta[$it.Status] } else { @{Cls='pv-na'; Txt=$it.Status} }
+                $sct = if ($scopeMeta.ContainsKey($it.Scope))   { $scopeMeta[$it.Scope]   } else { $it.Scope }
+
+                # Evidence chips: the tool controls behind a Tenant/Hybrid row,
+                # so a reader can trace the verdict back to a scored control
+                # rather than taking the rollup on faith.
+                $evHtml = ''
+                foreach ($ev in @($it.Evidence)) {
+                    $evCls = switch ($ev.State) {
+                        'Satisfied' { 'ev-ok' }
+                        'Partial'   { 'ev-pt' }
+                        'Gap'       { 'ev-gp' }
+                        default     { 'ev-na' }
+                    }
+                    $evHtml += "<span class='pv-ev $evCls'>$(hx $ev.ControlId)</span>"
+                }
+
+                $optHtml = ''
+                foreach ($opt in @($it.Options)) { $optHtml += "<li>$(hx $opt)</li>" }
+
+                $itemHtml += @"
+<div class='pv-item'>
+  <div class='pv-hd'>
+    <div class='pv-cid'>$(hx $it.NistControl)</div>
+    <div class='pv-ttl'>$(hx $it.NistTitle)<div class='pv-scope'>$sct</div></div>
+    <span class='pv-st $($sm.Cls)'>$($sm.Txt)</span>
+  </div>
+  $(if ($it.DeviceAspect) { "<div class='pv-asp'>$(hx $it.DeviceAspect)</div>" })
+  $(if ($evHtml) { "<div class='pv-evs'><span class='pv-lbl'>Evidence from this assessment</span>$evHtml</div>" })
+  $(if ($it.OffTenantEvidence) { "<div class='pv-off'><span class='pv-lbl'>&#128203; Evidence the assessor must collect</span>$(hx $it.OffTenantEvidence)</div>" })
+  $(if ($optHtml) { "<div class='pv-opt'><span class='pv-lbl'>&#9654; Implementation options</span><ul>$optHtml</ul></div>" })
+</div>
+"@
+            }
+            $physGroups += @"
+<div class='pv-grp'>
+  <div class='pv-gh'>$(hx $grp.Title)</div>
+  $(if ($grp.Description) { "<div class='pv-gd'>$(hx $grp.Description)</div>" })
+  $itemHtml
+</div>
+"@
+        }
+        $physHtml = @"
+<div class="card mt" id="nist-physical">
+  <div class="card-hd">
+    <div><div class="card-label">NIST SP 800-53 &mdash; Physical, Media and Device Controls</div><div class="card-sub">$($physCov.TenantItems) evidenced from the tenant &middot; $($physCov.HybridItems) partly evidenced &middot; $($physCov.AttestedItems) not visible from Microsoft 365</div></div>
+    <div class="pv-badge">$($physCov.AttestationCount) need off-tenant evidence</div>
+  </div>
+  <div class="pv-intro">A Microsoft 365 assessment can evidence endpoint posture &mdash; encryption, patch level, screen lock, endpoint protection, device identity &mdash; and it cannot see a locked server room, a certificate of destruction, or a returned badge. Those are still 800-53 controls, so they are listed here with the implementation options for each and the evidence an assessor has to collect directly. <strong>Nothing in this section is scored</strong>: rows marked <em>Attestation required</em> were never assessed by this tool and are not claimed as compliant.</div>
+  $physGroups
+</div>
+"@
+    }
+
     # ── License card HTML ────────────────────────────────────────────────────
     $licCard = ''
     if ($licGroups.Count -gt 0) {
@@ -886,6 +974,34 @@ th.nf-n{text-align:right}
 .nf-bar{display:inline-block;width:74px;height:7px;border-radius:4px;background:var(--bdr);overflow:hidden;vertical-align:middle;margin-right:8px}
 .nf-fill{height:100%;border-radius:4px;transition:width 1s ease .3s}
 .nf-note{padding:12px 18px;font-size:.7rem;color:var(--mut);line-height:1.6;border-top:1px solid var(--bdr);background:var(--bg)}
+.pv-badge{font-size:.72rem;font-weight:800;background:#7c2d12;color:#fff;padding:4px 12px;border-radius:20px;white-space:nowrap}
+.pv-intro{padding:14px 18px;font-size:.76rem;color:var(--txt);line-height:1.65;border-bottom:1px solid var(--bdr);background:var(--bg)}
+.pv-grp{border-bottom:1px solid var(--bdr)}
+.pv-grp:last-child{border-bottom:none}
+.pv-gh{padding:11px 18px 3px;font-size:.8rem;font-weight:900;letter-spacing:-.01em}
+.pv-gd{padding:0 18px 10px;font-size:.71rem;color:var(--mut);line-height:1.55}
+.pv-item{padding:12px 18px;border-top:1px solid var(--bdr)}
+.pv-hd{display:flex;align-items:flex-start;gap:12px}
+.pv-cid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:900;font-size:.78rem;color:#4c1d95;min-width:62px;white-space:nowrap;padding-top:1px}
+.pv-ttl{flex:1;font-size:.82rem;font-weight:700;line-height:1.35}
+.pv-scope{font-size:.66rem;font-weight:600;color:var(--mut);margin-top:2px}
+.pv-st{font-size:.63rem;font-weight:800;padding:3px 9px;border-radius:20px;white-space:nowrap;letter-spacing:.03em}
+.pv-met{background:#d1fae5;color:#065f46}
+.pv-part{background:#fef3c7;color:#92400e}
+.pv-gap{background:#fee2e2;color:#991b1b}
+.pv-na{background:#e5e7eb;color:#4b5563}
+.pv-att{background:#ede9fe;color:#5b21b6}
+.pv-asp{font-size:.75rem;color:var(--txt);line-height:1.6;margin:7px 0 0 74px}
+.pv-evs,.pv-off,.pv-opt{margin:8px 0 0 74px;font-size:.73rem;line-height:1.6;color:var(--mut)}
+.pv-lbl{display:block;font-size:.6rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin-bottom:3px}
+.pv-ev{display:inline-block;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.66rem;font-weight:700;padding:2px 7px;border-radius:4px;margin:0 4px 4px 0}
+.ev-ok{background:#d1fae5;color:#065f46}
+.ev-pt{background:#fef3c7;color:#92400e}
+.ev-gp{background:#fee2e2;color:#991b1b}
+.ev-na{background:#e5e7eb;color:#4b5563}
+.pv-opt ul{margin:0;padding-left:17px}
+.pv-opt li{margin-bottom:3px}
+@media(max-width:720px){.pv-asp,.pv-evs,.pv-off,.pv-opt{margin-left:0}}
 
 /* License card */
 .lic-body{padding:18px 24px;display:flex;flex-direction:column;gap:14px}
@@ -1043,6 +1159,7 @@ th.nf-n{text-align:right}
     <span class="nav-a" data-goto="exec">Overview</span>
     <span class="nav-a" data-goto="fw-section">Frameworks</span>
     $(if($nistHtml){'<span class="nav-a" data-goto="nist-families">NIST 800-53</span>'})
+    $(if($physHtml){'<span class="nav-a" data-goto="nist-physical">Physical &amp; Device</span>'})
     $(if($licGroups.Count -gt 0){'<span class="nav-a" data-goto="licensing">License Gaps</span>'})
     <span class="nav-a" data-goto="named">Named Findings</span>
     <span class="nav-a" data-goto="actions">Priority Actions</span>
@@ -1106,6 +1223,9 @@ $riskHtml
 
 <!-- NIST 800-53 CONTROL FAMILY ROLLUP -->
 $nistHtml
+
+<!-- NIST PHYSICAL / MEDIA / DEVICE CONTROLS -->
+$physHtml
 
 <!-- LICENSE GAPS -->
 $licCard

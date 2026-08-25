@@ -161,6 +161,7 @@ $script:ExportedFunctions = @(
     'Get-NRGMaturityTier',
     'Get-NRGCoverageScore',
     'Get-NRGNISTFamilyCoverage', 'Get-NRGNISTControlIdsFromFinding',
+    'Get-NRGNISTPhysicalPosture', 'Get-NRGNISTPhysicalDefinitions',
     'Get-NRGObjectField',
     'Invoke-NRGGraphRequest',
     'Invoke-NRGEvaluatorSafe',
