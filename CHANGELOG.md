@@ -4,6 +4,48 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **NIST SP 800-53 Rev 5 coverage rolled up by control family.** The report scored
+  NIST as one aggregate percentage, which tells a reader working an 800-53,
+  FedRAMP, or CMMC assessment nothing about WHICH families are weak — every other
+  view groups by M365 workload, the engineer's lens rather than the auditor's.
+  All 195 controls already carried a `References.NIST` citation, so only the
+  rollup was missing. `Lib/Get-NRGNISTFamilyCoverage.ps1` groups findings by
+  family (12 families, 57 distinct 800-53 controls) and by individual control,
+  reusing `Get-NRGCoverageScore` so family scores use the identical formula and
+  denominator rules as every other score in the tool. Renders in the HTML report
+  (`id="nist-families"`), the Markdown summary, and a `NIST Families` sheet in
+  the XLSX matrix. A finding citing controls in two families counts in each — so
+  family rows do not sum to the assessment total, which every surface states on
+  the page. `NotApplicable` stays out of the denominator, and a family with
+  nothing assessable reads "Not assessed", never a red 0%.
+- **Physical, media and device 800-53 controls now stated explicitly.** A tenant
+  scan can evidence endpoint posture and cannot see a locked server room, a
+  certificate of destruction, or a returned badge. Omitting those controls
+  silently was the dangerous option: a reader looking at a clean family table
+  would reasonably infer the physical families had been assessed and passed.
+  `Config/nist-physical.json` defines 31 controls across AC, CM, IA, MA, MP, PE,
+  PS, SC and SI, each naming the device aspect it covers, the tool controls that
+  evidence it, the evidence an assessor must collect off-tenant, and two or more
+  implementation options. Scopes: Tenant (10), Hybrid (7), Attested (14).
+  Nothing in the section is scored — Attested rows always read "Attestation
+  required", never Satisfied and never Partial.
+- **PPL-1.2 crashed the whole Power Platform evaluator under StrictMode.**
+  `$d.DLPAvailable`, `$d.Environments` and `$d.DLPPolicies` were read by direct
+  dot-access; a `Data` block missing any of them threw, and because all four
+  PPL-1.x controls share one function the throw took PPL-1.1, PPL-1.2 and
+  PPL-1.3 down with it. Same class as the seven Conditional Access crashes: a
+  guard that assumes a field exists in order to check whether it exists.
+- **Seven paid-off entries removed from the coverage-debt list.** DEF-3.4,
+  DEF-4.3, EXO-2.6, EXO-3.4, PPL-1.3, SPO-2.5 and TMS-3.4 genuinely discriminate
+  now but were still listed in `coverage-exceptions.psd1`.
+- **A Copilot tenant could be told, on its own report, that it needs to buy
+  Copilot.** LicenseRequirement matching is exact and the controls.json string
+  lost its price suffix while the suppression set kept the bare form.
+  `Test-NRGLicenseRequirementMet` now retries once with a trailing price
+  parenthetical stripped — narrowly, requiring a currency amount inside it, so
+  qualifiers like "(add-on)" that distinguish real requirements are never
+  collapsed.
+
 - **Eliminated the false-compliance bug class (25 controls).** Collectors that run
   several independent queries wrap each in its own try/catch, then set
   `Success = $true` regardless — so an EMPTY result list was ambiguous between
