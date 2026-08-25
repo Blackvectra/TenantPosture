@@ -208,7 +208,7 @@ so CLI and GUI workflows can be mixed freely.
 Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (274 exports, dependency declarations)
+NRG-Assessment.psd1               ← Module manifest (275 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -249,7 +249,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          30 Pester suites — the FULL suite gates every PR
+Testing/                          31 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -310,6 +310,29 @@ Three things the document is careful not to claim:
 - **Physical, media, maintenance and personnel controls stay unscored**, with the evidence an assessor has to collect directly and two or more implementation options each.
 - **Controls that came back `NotApplicable` are named, not dropped.** They get their own sheet stating that a missing license or an unconnected service is neither a pass nor a gap. A matrix that omits what it could not evaluate reads as full coverage of a smaller scope.
 
+### Device guide — reference material, no scanning
+
+Not everything is a scan. `New-NRGDeviceGuide.ps1` renders a **printable NIST device and endpoint guide** and connects to nothing — no sign-in, no Graph, no Exchange Online, and no endpoint is touched:
+
+```powershell
+# Markdown + self-contained HTML, no tenant required
+.\New-NRGDeviceGuide.ps1 -ClientName 'Example Client'
+
+# Optionally annotate with what a prior run already evidenced
+.\New-NRGDeviceGuide.ps1 -ResultsPath .\output\client\20260825-results.json
+```
+
+31 controls spanning five areas — Endpoint Protection, Device Identity and Access, Media Protection, Physical and Environmental, Maintenance and Personnel — with **98 implementation options**. Each control states what it covers, how to satisfy it, and (where the tenant cannot see it) the evidence to keep.
+
+That independence is the point: the guide is usable before a tenant is connected, during a sales conversation, and on a site with nothing open. The HTML references no external asset and carries print styling, so it emails, opens offline, and prints.
+
+Two properties the tests enforce, because both are easy to break by accident:
+
+- **It touches nothing.** A static guard fails the build if `Invoke-NRGGraphRequest`, `Connect-MgGraph`, `Invoke-RestMethod` or friends ever appear in either file. Otherwise the guide quietly becomes something that needs an authenticated session, and you find out in front of a client.
+- **Findings never change the advice.** `-ResultsPath` may change what the guide reports as *already done*; it may never change what it recommends you *do*. A test diffs the rendered options with and without findings and requires them identical — otherwise two clients with the same obligations get different advice because one happened to be scanned first.
+
+Every control carries **two or more** options by design. A single option is a directive, and a client already standardised on a third-party endpoint suite or an existing badge system should be able to satisfy the control with what they have.
+
 ### Physical, media and device controls
 
 A tenant scan can evidence endpoint posture — encryption, patch level, screen lock, endpoint protection, device identity. It cannot see a locked server room, a certificate of destruction, or a returned badge. Those are still 800-53 controls a client working an 800-53 or CMMC assessment has to satisfy, and leaving them out silently is the dangerous option: a reader looking at a clean family table would reasonably infer the physical families were assessed and passed.
@@ -345,7 +368,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **30 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **31 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -389,7 +412,7 @@ Six GitHub Actions workflows cover the repository. Note that the `ci`, `codeql`,
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (30 suites) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (31 suites) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -408,4 +431,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 274 exported functions · full Pester suite (30 suites) gating CI*
+*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 275 exported functions · full Pester suite (31 suites) gating CI*

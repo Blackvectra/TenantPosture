@@ -61,6 +61,7 @@
         'Get-NRGNISTControlTitle',
         'Get-NRGNISTFamilyTitle',
         'Publish-NRGNISTMatrix',
+        'Publish-NRGDeviceGuide',
         'Get-NRGObjectField',
         'Invoke-NRGGraphRequest',
         'Invoke-NRGEvaluatorSafe',
