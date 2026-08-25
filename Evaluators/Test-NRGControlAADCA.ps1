@@ -44,9 +44,9 @@ function Test-NRGControlAADCA {
     }).Count -gt 0
 
     $mfaAllUsers = @($enabled | Where-Object {
-        $_.Conditions.Users.IncludeUsers -contains 'All' -and
-        $_.Conditions.Applications.IncludeApplications -contains 'All' -and
-        $_.GrantControls.BuiltInControls -contains 'mfa'
+        @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.IncludeUsers' -Default @()) -contains 'All' -and
+        @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Applications.IncludeApplications' -Default @()) -contains 'All' -and
+        @(Get-NRGNestedProperty -Object $_ -Path 'GrantControls.BuiltInControls' -Default @()) -contains 'mfa'
     }).Count -gt 0
 
     $mfaAdmins = @($enabled | Where-Object {
