@@ -524,12 +524,51 @@ function Test-NRGControlDefenderDLPSITs {
     if (-not $pvw -or -not $pvw.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview DLP data not collected'; return
     }
+    # Sensitive information types live on the DLP RULE
+    # (ContentContainsSensitiveInformation), not the parent policy —
+    # Get-DlpCompliancePolicy exposes no SIT field. This previously read
+    # $policy.SensitiveInfoTypes, a property that never exists, so under
+    # StrictMode it threw and the control reported Error on every tenant.
     $dlpPolicies = @($pvw.Data['DLPPolicies'] ?? @())
-    $withSITs = @($dlpPolicies | Where-Object { @($_.SensitiveInfoTypes ?? @()).Count -gt 0 })
+    $ruleStatus  = Get-NRGNestedProperty -Object $pvw -Path 'Data.SectionStatus.DLPRules' -Default $null
+    $dlpRules    = @($pvw.Data['DLPRules'] ?? @())
+
+    if ($ruleStatus -ne 'Collected') {
+        $why = if ($ruleStatus -eq 'Failed') { 'the Get-DlpComplianceRule query failed (see Exceptions)' }
+               else { 'Get-DlpComplianceRule was unavailable — this requires a Security & Compliance (IPPS) session' }
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title `
+            -Detail "DLP rule configuration could not be read: $why. Sensitive information type coverage was not assessed."
+        return
+    }
+
+    if ($dlpPolicies.Count -eq 0 -and $dlpRules.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'No DLP policies or rules exist, so no content is inspected for regulated data of any kind.' `
+            -CurrentValue 'Zero DLP rules' -RequiredValue 'DLP rules referencing sensitive information types' `
+            -Remediation $ctrl.Remediation
+        return
+    }
+
+    $activeRules = @($dlpRules | Where-Object { -not $_.Disabled })
+    $withSITs    = @($activeRules | Where-Object { @($_.SensitiveInfoTypes).Count -gt 0 })
+
     if ($withSITs.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($withSITs.Count) DLP policy(ies) use sensitive information types for automatic classification and detection."
+        $sitNames = @($withSITs | ForEach-Object { $_.SensitiveInfoTypes } | Sort-Object -Unique)
+        $shown    = @($sitNames | Select-Object -First 8) -join ', '
+        $more     = if ($sitNames.Count -gt 8) { " (+$($sitNames.Count - 8) more)" } else { '' }
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "$($withSITs.Count) of $($activeRules.Count) enabled DLP rule(s) match on sensitive information types: $shown$more." `
+            -CurrentValue "$($sitNames.Count) distinct sensitive information type(s) in use"
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'DLP policies exist but none use sensitive information types. Without SITs, DLP cannot automatically detect credit cards, SSNs, health data, or other regulated content.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "$($activeRules.Count) enabled DLP rule(s) exist but none match on a sensitive information type. Without SITs the rules cannot automatically detect credit card numbers, national identifiers, or health data — they only act on the other conditions configured." `
+            -CurrentValue "0 of $($activeRules.Count) enabled rules use sensitive information types" `
+            -RequiredValue 'At least one enabled DLP rule matching on sensitive information types' `
+            -Remediation $ctrl.Remediation
     }
 }
 
