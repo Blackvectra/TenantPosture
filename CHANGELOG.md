@@ -4,6 +4,27 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **Managed device build standard (`Config/device-baseline.json`).** The device
+  guide answers "what does 800-53 require"; this answers "what do I do to this
+  laptop, and in what order". 27 requirements across five lifecycle stages —
+  procurement, provisioning, hardening, in service, offboarding — of which 23
+  are mandatory. Rendered by `Publish-NRGDeviceBaseline.ps1` as a printable
+  checklist plus the reasoning underneath, and emitted alongside the guide by
+  `New-NRGDeviceGuide.ps1`. Same no-network contract, statically enforced.
+  Every requirement states why it exists, how to do it, the 800-53 control it
+  satisfies, and whether the assessment can verify it — roughly a third cannot
+  be checked from a tenant (BIOS passwords, firmware settings, certificates of
+  destruction) and those rows say so rather than letting a reader assume the
+  scan covers them. Tests pin that every `VerifiedBy` exists in controls.json
+  and every `Nist` entry resolves in the 800-53 catalog; both rot silently
+  otherwise.
+- **Two more instances of the PowerShell backtick trap**, caught before they
+  shipped this time. A backtick inside a double-quoted string is the escape
+  character, so ```M``` lost its code formatting and ```$(...)``` escaped the
+  interpolation outright, emitting the literal source text. A `\"` in the same
+  file was worse — a backslash is not a PowerShell escape, so it terminated the
+  string and broke the parse.
+
 - **Device guide — reference material, no scanning (`New-NRGDeviceGuide.ps1`).**
   Not everything is a scan. This renders `Config/nist-physical.json` into a
   printable NIST device and endpoint guide — 31 controls across five areas with
