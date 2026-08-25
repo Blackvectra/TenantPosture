@@ -110,12 +110,35 @@ try {
 
     Publish-NRGDeviceGuide -OutputPath $OutputPath -Findings $findings -ClientName $ClientName
 
+    # The build standard is emitted alongside the control reference, because
+    # they answer different questions for different readers and an operator
+    # almost always wants both: the guide says what 800-53 requires, the
+    # baseline says what to do to the laptop and in what order.
+    $baseDir  = Split-Path -Parent $OutputPath
+    $baseName = [System.IO.Path]::GetFileNameWithoutExtension($OutputPath)
+    $baselinePath = if ($baseDir) { Join-Path $baseDir "$baseName-baseline.md" } else { "$baseName-baseline.md" }
+    try {
+        Publish-NRGDeviceBaseline -OutputPath $baselinePath -ClientName $ClientName
+    } catch {
+        Write-Warning "Device baseline standard not generated: $($_.Exception.Message)"
+        $baselinePath = $null
+    }
+
     $htmlPath = [System.IO.Path]::ChangeExtension($OutputPath, '.html')
     Write-Host ''
     Write-Host '  NIST SP 800-53 device and endpoint guide' -ForegroundColor Green
     Write-Host "  [+] Markdown: $OutputPath" -ForegroundColor Green
     if (Test-Path -LiteralPath $htmlPath) {
         Write-Host "  [+] HTML:     $htmlPath" -ForegroundColor Green
+    }
+    if ($baselinePath -and (Test-Path -LiteralPath $baselinePath)) {
+        Write-Host ''
+        Write-Host '  Managed device baseline (build standard)' -ForegroundColor Green
+        Write-Host "  [+] Markdown: $baselinePath" -ForegroundColor Green
+        $bHtml = [System.IO.Path]::ChangeExtension($baselinePath, '.html')
+        if (Test-Path -LiteralPath $bHtml) {
+            Write-Host "  [+] HTML:     $bHtml" -ForegroundColor Green
+        }
     }
     Write-Host '  Reference material only — this script connected to nothing.' -ForegroundColor DarkGray
     Write-Host ''
