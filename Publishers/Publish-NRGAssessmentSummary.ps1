@@ -168,6 +168,35 @@ function Publish-NRGAssessmentSummary {
     $null = $sb.AppendLine("| SharePoint Online | $(if ($Connections.SharePoint) { '✅' } else { '❌' }) |")
     $null = $sb.AppendLine()
 
+    # NIST SP 800-53 Rev 5 control-family coverage.
+    # Sits ahead of the gap tables because a compliance reader working an
+    # 800-53 / FedRAMP / CMMC assessment needs the family posture first —
+    # every other section of this summary is organised by M365 workload, which
+    # is the engineer's lens rather than the auditor's. Rendered only when the
+    # findings actually carry NIST citations, so an Email-IR or partial run
+    # does not emit an empty table.
+    $nistCov = $null
+    if (Get-Command Get-NRGNISTFamilyCoverage -ErrorAction SilentlyContinue) {
+        try { $nistCov = Get-NRGNISTFamilyCoverage -Findings $Findings -ErrorHandling 'Gap' }
+        catch { $nistCov = $null }
+    }
+    if ($nistCov -and $nistCov.FamilyCount -gt 0) {
+        $null = $sb.AppendLine("## NIST SP 800-53 Rev 5 — Control Family Coverage")
+        $null = $sb.AppendLine()
+        $null = $sb.AppendLine("| Family | Name | Assessed | Met | Partial | Gap | N/A | Coverage |")
+        $null = $sb.AppendLine("|--------|------|---------:|----:|--------:|----:|----:|---------:|")
+        foreach ($fam in $nistCov.Families) {
+            # Scored -eq 0 means every finding in the family was NotApplicable.
+            # Printing 0% there would report a failing grade for a question the
+            # tool never got to ask.
+            $covTxt = if ($fam.Scored -gt 0) { "$([int]$fam.Score)%" } else { 'Not assessed' }
+            $null = $sb.AppendLine("| $(EscMd $fam.Family) | $(EscMd $fam.Name) | $($fam.Assessed) | $($fam.Satisfied) | $($fam.Partial) | $($fam.Gap) | $($fam.NA) | $covTxt |")
+        }
+        $null = $sb.AppendLine()
+        $null = $sb.AppendLine("_$($nistCov.NistControlCount) distinct 800-53 controls exercised. A control mapped to more than one family is counted in each, so family rows do not sum to the assessment total. N/A rows are excluded from Coverage — they are controls this assessment could not evaluate, not controls the tenant passed._")
+        $null = $sb.AppendLine()
+    }
+
     # Critical and High gaps
     if ($criticalGaps.Count -gt 0) {
         $null = $sb.AppendLine("## ⛔ Critical Gaps — Immediate Action Required")

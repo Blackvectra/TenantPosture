@@ -421,6 +421,74 @@ function Publish-NRGAssessmentHTML {
         $fwHtml += "<div class='fw-card'><div class='fw-hd' style='background:$($fwMeta[$fw].Bg)'>$(hx $fw)</div><div class='fw-body'><div class='fw-sc' style='color:$col'>$fsc<span class='fw-den'>%</span></div><div class='fw-name'>$(hx $fwMeta[$fw].Full)</div></div></div>"
     }
 
+    # ── NIST 800-53 control-family rollup ────────────────────────────────────
+    # The single NIST percentage above answers "are we compliant"; it does not
+    # answer "with what". A reader working an 800-53, FedRAMP, or CMMC
+    # assessment needs the breakdown by control family, because that is the
+    # unit their own documentation, POA&M, and auditor conversations are
+    # organised around. Every other view in this report groups by M365
+    # workload, which is the right lens for the engineer doing the fixing and
+    # the wrong one for the compliance reader signing off.
+    #
+    # A finding citing controls in two families counts in both — see the
+    # rationale in Lib/Get-NRGNISTFamilyCoverage.ps1. Family rows therefore do
+    # not sum to the assessment total, and the column is labelled "Assessed"
+    # rather than "Controls" to make that explicit.
+    $nistHtml = ''
+    $nistCov  = $null
+    if (Get-Command Get-NRGNISTFamilyCoverage -ErrorAction SilentlyContinue) {
+        try { $nistCov = Get-NRGNISTFamilyCoverage -Findings $Findings -ErrorHandling 'Gap' }
+        catch { $nistCov = $null }
+    }
+    if ($nistCov -and $nistCov.FamilyCount -gt 0) {
+        $nistRows = ''
+        foreach ($fam in $nistCov.Families) {
+            # A family assessed only through NotApplicable findings has no
+            # denominator. Get-NRGCoverageScore returns 0 there, which would
+            # render as a red 0% — a failing grade for a question the tool
+            # never got to ask. Show an explicit dash instead.
+            $famNotScored = ($fam.Scored -le 0)
+            $fcol  = if ($famNotScored) { '#94a3b8' } else { scoreColor ([int]$fam.Score) }
+            $fbar  = if ($famNotScored) { 0 } else { [int]$fam.Score }
+            $scTxt = if ($famNotScored) { '&mdash;' } else { "$([int]$fam.Score)%" }
+            $ctlList = @($fam.NistControls) -join ', '
+            $nistRows += @"
+<tr>
+  <td class='nf-id'>$(hx $fam.Family)</td>
+  <td class='nf-nm'>$(hx $fam.Name)<div class='nf-ctl'>$(hx $ctlList)</div></td>
+  <td class='nf-n'>$($fam.Assessed)</td>
+  <td class='nf-n nf-ok'>$($fam.Satisfied)</td>
+  <td class='nf-n nf-pt'>$($fam.Partial)</td>
+  <td class='nf-n nf-gp'>$($fam.Gap)</td>
+  <td class='nf-n nf-na'>$($fam.NA)</td>
+  <td class='nf-sc'>
+    <div class='nf-bar'><div class='nf-fill' style='width:$fbar%;background:$fcol'></div></div>
+    <span style='color:$fcol'>$scTxt</span>
+  </td>
+</tr>
+"@
+        }
+        $nistHtml = @"
+<div class="card mt" id="nist-families">
+  <div class="card-hd">
+    <div><div class="card-label">NIST SP 800-53 Rev 5 &mdash; Control Family Coverage</div><div class="card-sub">$($nistCov.FamilyCount) families and $($nistCov.NistControlCount) 800-53 controls exercised by this assessment</div></div>
+    <div class="nf-badge">$(hx $fwScores['NIST'])% overall</div>
+  </div>
+  <div class="nf-wrap">
+    <table class="nf-tbl">
+      <thead><tr>
+        <th>Family</th><th>Name / 800-53 controls exercised</th>
+        <th class='nf-n'>Assessed</th><th class='nf-n'>Met</th><th class='nf-n'>Partial</th>
+        <th class='nf-n'>Gap</th><th class='nf-n'>N/A</th><th>Coverage</th>
+      </tr></thead>
+      <tbody>$nistRows</tbody>
+    </table>
+  </div>
+  <div class="nf-note">A control mapped to more than one family is counted in each &mdash; family rows do not sum to the assessment total. <strong>N/A</strong> rows are excluded from the coverage percentage: they are controls this tool could not assess (missing license, data not collected), not controls the tenant passed. A family showing &mdash; had no assessable control at all.</div>
+</div>
+"@
+    }
+
     # ── License card HTML ────────────────────────────────────────────────────
     $licCard = ''
     if ($licGroups.Count -gt 0) {
@@ -799,6 +867,25 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
 .fw-sc{font-size:2rem;font-weight:900;line-height:1}
 .fw-den{font-size:.62rem;font-weight:600;color:var(--mut)}
 .fw-name{font-size:.7rem;color:var(--mut);font-weight:600;line-height:1.4;margin-top:4px}
+.nf-badge{font-size:.72rem;font-weight:800;background:#4c1d95;color:#fff;padding:4px 12px;border-radius:20px;letter-spacing:.02em}
+.nf-wrap{overflow-x:auto}
+.nf-tbl{width:100%;border-collapse:collapse;font-size:.78rem}
+.nf-tbl th{text-align:left;padding:9px 14px;font-size:.63rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);background:var(--bg);border-bottom:1px solid var(--bdr);white-space:nowrap}
+.nf-tbl td{padding:10px 14px;border-bottom:1px solid var(--bdr);vertical-align:top}
+.nf-tbl tr:last-child td{border-bottom:none}
+.nf-id{font-weight:900;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#4c1d95;white-space:nowrap}
+.nf-nm{font-weight:600;min-width:220px}
+.nf-ctl{font-size:.66rem;color:var(--mut);font-weight:500;margin-top:3px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.nf-n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:700}
+th.nf-n{text-align:right}
+.nf-ok{color:#059669}
+.nf-pt{color:#ca8a04}
+.nf-gp{color:#dc2626}
+.nf-na{color:#94a3b8}
+.nf-sc{white-space:nowrap;font-weight:800;min-width:130px}
+.nf-bar{display:inline-block;width:74px;height:7px;border-radius:4px;background:var(--bdr);overflow:hidden;vertical-align:middle;margin-right:8px}
+.nf-fill{height:100%;border-radius:4px;transition:width 1s ease .3s}
+.nf-note{padding:12px 18px;font-size:.7rem;color:var(--mut);line-height:1.6;border-top:1px solid var(--bdr);background:var(--bg)}
 
 /* License card */
 .lic-body{padding:18px 24px;display:flex;flex-direction:column;gap:14px}
@@ -955,6 +1042,7 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
   <div class="hdr-nav">
     <span class="nav-a" data-goto="exec">Overview</span>
     <span class="nav-a" data-goto="fw-section">Frameworks</span>
+    $(if($nistHtml){'<span class="nav-a" data-goto="nist-families">NIST 800-53</span>'})
     $(if($licGroups.Count -gt 0){'<span class="nav-a" data-goto="licensing">License Gaps</span>'})
     <span class="nav-a" data-goto="named">Named Findings</span>
     <span class="nav-a" data-goto="actions">Priority Actions</span>
@@ -1015,6 +1103,9 @@ $riskHtml
   <div class="card-hd"><div class="card-label">Framework Compliance Matrix</div><div class="card-sub">Controls mapped to CIS, CISA SCuBA, NIST SP 800-53, and CMMC 2.0</div></div>
   <div class="fw-grid">$fwHtml</div>
 </div>
+
+<!-- NIST 800-53 CONTROL FAMILY ROLLUP -->
+$nistHtml
 
 <!-- LICENSE GAPS -->
 $licCard

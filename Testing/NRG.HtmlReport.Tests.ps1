@@ -26,6 +26,13 @@ Describe 'Publish-NRGAssessmentHTML end-to-end render' {
         $severities = @('Critical', 'High', 'Medium', 'Low', 'Informational')
         $workloads  = @('AAD', 'EXO', 'DEF', 'TMS', 'PVW', 'SPO', 'INT', 'PPL', 'DNS')
 
+        # Real citations are emitted by Get-NRGFrameworkCitations as
+        # "Framework:value" pairs. Keep the synthetic set in that shape — the
+        # NIST family rollup parses the NIST: prefix off this exact string, so
+        # a fixture using a different separator would silently exercise none of
+        # that code path.
+        $script:NistRefs = @('AC-2, IA-2', 'AU-6', 'SC-8(1)', 'SI-4', 'CM-6, AC-3')
+
         $script:TitleMarker = 'ZZUNIQUEFINDINGTITLE'
         $script:GapCount    = 0
         $n = 0
@@ -40,7 +47,8 @@ Describe 'Publish-NRGAssessmentHTML end-to-end render' {
                     -Detail ("Synthetic detail for {0} {1}" -f $wl, $st) `
                     -CurrentValue 'current-x' -RequiredValue 'required-y' `
                     -Remediation 'Do the thing.' `
-                    -FrameworkIds @('CIS-1.1', 'SCUBA-MS.AAD.1.1v1')
+                    -FrameworkIds @('CIS:1.1', 'SCuBA:MS.AAD.1.1v1',
+                                    ("NIST:{0}" -f $script:NistRefs[$n % $script:NistRefs.Count]))
             }
         }
 
@@ -105,9 +113,31 @@ Describe 'Publish-NRGAssessmentHTML end-to-end render' {
     }
 
     It 'contains the core report sections' {
-        foreach ($anchor in 'id="exec"', 'id="findings"', 'id="fw-section"') {
+        foreach ($anchor in 'id="exec"', 'id="findings"', 'id="fw-section"', 'id="nist-families"') {
             $script:html | Should -BeLike "*$anchor*" -Because "section marker $anchor must render"
         }
+    }
+
+    It 'renders the NIST 800-53 family rollup with its cited families' {
+        # The fixture cites AC, IA, AU, SC, SI and CM. Each must appear as a
+        # family row with its full 800-53 name — a rollup that rendered the
+        # section shell but no rows would still satisfy the anchor check above.
+        foreach ($fam in 'Access Control', 'Identification and Authentication',
+                         'Audit and Accountability', 'System and Communications Protection',
+                         'System and Information Integrity', 'Configuration Management') {
+            $script:html | Should -BeLike "*$fam*" -Because "NIST family '$fam' is cited by the fixture and must roll up"
+        }
+        # The control enhancement must survive parsing intact, not be truncated
+        # to its base control.
+        $script:html | Should -BeLike '*SC-8(1)*'
+    }
+
+    It 'states that NIST family rows do not sum to the assessment total' {
+        # A cross-family control is counted in every family it cites. Without
+        # this caveat on the page, a reader adding the Assessed column and
+        # getting more than the control count would reasonably conclude the
+        # numbers are wrong.
+        $script:html | Should -BeLike '*do not sum to the assessment total*'
     }
 
     It 'renders findings from every workload (report is not empty)' {

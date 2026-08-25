@@ -34,6 +34,8 @@ The v4.12.0 Email-IR mode lives in the top-level `Email-IR/` subtree (`Lib/`, `C
 
 License-aware scoring is encoded per control via the `LicenseRequirement` string field in `controls.json` (e.g. "M365 Business Premium or Entra ID P1", "Defender for Office 365 P1", "E5 Compliance"). There are no separate per-tier baseline JSON files — the requirement lives on each control row.
 
+**NIST SP 800-53 Rev 5 rollup.** All 195 controls carry a `References.NIST` citation, spanning 12 of the 20 800-53 families. `Lib/Get-NRGNISTFamilyCoverage.ps1` rolls findings up by control family (AC, AU, IA, SC, SI, …) and by individual 800-53 control, using the same score formula and denominator rules as `Get-NRGCoverageScore`. It parses the `NIST:` prefix off the flattened `FrameworkIds` string — never the bare identifier shape, which would also match CMMC's `IA.L2-3.5.3`. A finding citing controls in two families is counted in each, so family rows deliberately do not sum to the assessment total; every surface that renders them says so. The rollup appears in the HTML report (`id="nist-families"`), the Markdown summary, and a dedicated `NIST Families` sheet in the XLSX matrix. `NRG.NISTFamily.Tests.ps1` pins both the parsing and the controls.json invariant that every control carries a parseable NIST citation — a control missing one vanishes from the family view, shrinking that family's denominator and inflating its coverage.
+
 License detection runs via `SubscribedSkus` in `Lib/Get-NRGTenantLicenseProfile.ps1`, which returns a `HashSet` of LicenseRequirement strings the tenant satisfies. `Test-NRGLicenseRequirementMet` answers per-control whether the tenant has the licenses needed. Controls whose requirement isn't met are routed to the Upgrade Unlocks section of the HTML report and do not count against the compliance score.
 
 ## Data Flow
@@ -84,7 +86,7 @@ Test sequence before first full run: run with `-WhatIf` first, then `-OnlyClient
 
 ## HTML Report Structure
 
-The report produces 13 sections: Executive Overview with score ring and license tier badge; Framework Compliance Matrix covering CIS M365 v6, CISA SCuBA, NIST 800-53r5, and CMMC 2.0; NRG Baseline Compliance with tier-detected score and deviation table; License Gap Analysis; Priority Actions with current state and business risk per finding; Additional Gaps for Medium findings; Attack Scenario Analysis for BEC, Ransomware, Domain Spoofing, and Privilege Escalation; What's Working; NRG Services and Quote; Security Roadmap; Named Findings; Upgrade Unlocks; and All Findings. (Note: `-ClientType` and `-NRGHourlyRate` are NOT parameters on any entry point, and they are not `clients.json` fields either — branding and rates live in `Config/branding.psd1`.)
+The report produces 14 sections: Executive Overview with score ring and license tier badge; Framework Compliance Matrix covering CIS M365 v6, CISA SCuBA, NIST 800-53r5, and CMMC 2.0; NIST SP 800-53 Rev 5 Control Family Coverage; NRG Baseline Compliance with tier-detected score and deviation table; License Gap Analysis; Priority Actions with current state and business risk per finding; Additional Gaps for Medium findings; Attack Scenario Analysis for BEC, Ransomware, Domain Spoofing, and Privilege Escalation; What's Working; NRG Services and Quote; Security Roadmap; Named Findings; Upgrade Unlocks; and All Findings. (Note: `-ClientType` and `-NRGHourlyRate` are NOT parameters on any entry point, and they are not `clients.json` fields either — branding and rates live in `Config/branding.psd1`.)
 
 ## Known Gaps and Roadmap
 
