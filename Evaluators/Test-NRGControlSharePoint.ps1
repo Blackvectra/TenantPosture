@@ -3,12 +3,9 @@
 # Test-NRGControlSharePoint.ps1
 # Evaluates SharePoint Online controls. Reads: Get-NRGRawData -Key 'SharePoint'
 #
-# Controls:
-#   SPO-1.1  External sharing restricted (not Anyone)
-#   SPO-1.2  Legacy auth protocols disabled
-#   SPO-1.3  Unmanaged sync app restricted
-#   SPO-1.4  Resharing by external users disabled
-#   SPO-1.5  Default site creation restricted (info)
+# Controls: SPO-1.1 through SPO-3.4 (17 controls).
+#   Config/controls.json is authoritative — each control's EvaluatorFunction
+#   names the function in this file that scores it.
 #
 
 function Test-NRGControlSharePoint {
@@ -205,7 +202,7 @@ function Test-NRGControlSPOCustomScript {
     # requires Get-SPOSite enumeration (out of scope for a tenant-settings read).
     # Kept as an advisory (Partial) rather than a fabricated pass/fail.
     Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Per-site review required)" -Severity 'Low' -FrameworkIds $cit `
-        -Detail 'Custom-script permission is controlled per site collection (DenyAddAndCustomizePages), not by a tenant-wide switch. Custom script is blocked by default on modern tenants. Confirm no site collection has been re-enabled for custom script: Get-SPOSite -Limit All | Where-Object { $_.DenyAddAndCustomizePages -ne ''Enabled'' }.' `
+        -Detail 'Custom-script permission is controlled per site collection (DenyAddAndCustomizePages), not by a tenant-wide switch. Custom script is blocked by default on modern tenants. Confirm no site collection has been re-enabled for custom script.' `
         -Remediation $ctrl.Remediation
 }
 
@@ -215,7 +212,7 @@ function Test-NRGControlSPO3PStorage {
     $cid = 'SPO-2.5'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
 
-    # v4.12.2: implemented, and RE-SCOPED to what is actually readable.
+    # v4.13.0: implemented, and RE-SCOPED to what is actually readable.
     #
     # The control previously claimed to check the admin-centre "third-party
     # storage services" toggle, but no Get-SPOTenant property exposes it, which
@@ -334,10 +331,9 @@ function Test-NRGControlSPOSiteAdmins {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    # v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
     Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
-        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Site collection admin enumeration requires iterating all sites (impractical at scale). Verify via SharePoint Admin Center > Sites > Active sites > filter by admins, or run Get-SPOSite -Limit ALL | Get-SPOUser -Group "Site Collection Administrators".' `
+        -Detail 'This control requires manual verification — enumerating site collection administrators means querying every site individually, which does not scale to a full tenant within an assessment run. Review them in SharePoint Admin Center > Sites > Active sites.' `
         -Remediation $ctrl.Remediation
 }
 

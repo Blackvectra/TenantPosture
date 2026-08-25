@@ -4,12 +4,9 @@
 # Evaluates Intune controls. Reads from the three split raw-data keys produced by
 # Invoke-NRGCollectIntuneEndpointSecurity / DeviceCompliance / AppProtection.
 #
-# Controls:
-#   ITN-1.1  Device compliance policy active
-#   ITN-1.2  Configuration profiles deployed
-#   ITN-1.3  App protection (MAM) policies configured
-#   ITN-1.4  Enrolled device compliance ratio
-#   ITN-1.5  Enrollment restriction policy configured
+# Controls: INT-1.1 through INT-4.4 (17 controls).
+#   Config/controls.json is authoritative — each control's EvaluatorFunction
+#   names the function in this file that scores it.
 #
 
 function Test-NRGControlIntune {
@@ -185,7 +182,7 @@ function Test-NRGControlIntuneEDR {
     } else {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
             -Title "$($ctrl.Title) (Manual verification required)" -Severity 'Medium' -FrameworkIds $cit `
-            -Detail 'No Microsoft Defender for Endpoint onboarding policy is deployed via Intune. This is expected when endpoints run a third-party EDR (Cortex XDR, CrowdStrike, SentinelOne, Webroot, etc.), which Intune cannot see. Manually confirm every endpoint runs a managed EDR agent. If Microsoft Defender for Endpoint is the intended EDR, deploy an onboarding policy via Intune > Endpoint security > Endpoint detection and response. To suppress this advisory for a client standardized on a third-party EDR, set EdrStack in Config/branding.psd1.' `
+            -Detail 'No Microsoft Defender for Endpoint onboarding policy is deployed via Intune. This is expected when endpoints run a third-party EDR (Cortex XDR, CrowdStrike, SentinelOne, Webroot, etc.), which Intune cannot see. Manually confirm every endpoint runs a managed EDR agent. If Microsoft Defender for Endpoint is the intended EDR, deploy an onboarding policy via Intune > Endpoint security > Endpoint detection and response.' `
             -CurrentValue 'No Intune-managed MDE onboarding; third-party EDR not visible to Intune' `
             -RequiredValue 'Managed EDR agent on every endpoint (Microsoft or third-party)' `
             -Remediation $ctrl.Remediation

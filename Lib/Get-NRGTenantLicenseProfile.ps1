@@ -220,7 +220,7 @@ function Get-NRGTenantLicenseProfile {
     # M365 Copilot add-on — exact string includes special chars and a $ amount;
     # HashSet uses OrdinalIgnoreCase but we still must match the literal string.
     if ([bool]($partNumbers -match '^Microsoft_365_Copilot$')) {
-        $null = $suppressedLicReqs.Add('M365 Copilot add-on license ($30/user/month)')
+        $null = $suppressedLicReqs.Add('M365 Copilot add-on license')
     }
     # Power Platform + Copilot Studio — Copilot Studio is sold as part-number
     # Microsoft_Copilot_Studio_in_Microsoft_Teams or POWERAPPS_PER_USER.

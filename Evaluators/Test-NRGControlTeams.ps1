@@ -3,13 +3,9 @@
 # Test-NRGControlTeams.ps1
 # Evaluates Microsoft Teams controls. Reads: Get-NRGRawData -Key 'Teams'
 #
-# Controls:
-#   TMS-1.1  External federation restricted (not allow-all)
-#   TMS-1.2  Anonymous meeting join controlled
-#   TMS-1.3  Consumer Teams access restricted
-#   TMS-1.4  Auto-admit policy is not 'everyone'
-#   TMS-1.5  Cloud storage integrations restricted
-#   TMS-1.6  External participant request-control disabled
+# Controls: TMS-1.1 through TMS-4.4 (22 controls).
+#   Config/controls.json is authoritative — each control's EvaluatorFunction
+#   names the function in this file that scores it.
 #
 
 function Test-NRGControlTeams {
@@ -322,7 +318,10 @@ function Test-NRGControlTeamsAutoAdmit {
     }
     if (-not (Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy')) { Add-NRGFinding -ControlId 'TMS-3.2' -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams meeting policy not collected; not assessed.'; return }
     $autoAdmit = [string](Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AutoAdmittedUsers' -Default 'Everyone')
-    $secure    = @('EveryoneInCompanyExcludingGuests','EveryoneInCompany','EveryoneInSameAndFederatedCompany','OrganizerOnly')
+    # Must match the accepted set in TMS-1.4, which reads the same property.
+    # 'InvitedUsers' was missing here, so a tenant set to InvitedUsers was
+    # reported Satisfied by TMS-1.4 and Gap by TMS-3.2 in the same report.
+    $secure    = @('OrganizerOnly','InvitedUsers','EveryoneInCompanyExcludingGuests','EveryoneInCompany','EveryoneInSameAndFederatedCompany')
     if ($autoAdmit -in $secure) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
@@ -330,9 +329,9 @@ function Test-NRGControlTeamsAutoAdmit {
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "Auto-admit is '$autoAdmit' — anonymous and external users join meetings without lobby admission." `
+            -Detail "Auto-admit is '$autoAdmit', so participants from outside the organization are admitted without waiting in the lobby." `
             -CurrentValue "AutoAdmittedUsers = $autoAdmit" `
-            -RequiredValue 'EveryoneInCompanyExcludingGuests or more restrictive' -Remediation $ctrl.Remediation
+            -RequiredValue 'OrganizerOnly, InvitedUsers, or EveryoneInCompanyExcludingGuests' -Remediation $ctrl.Remediation
     }
 }
 
@@ -369,7 +368,7 @@ function Test-NRGControlTeamsChatCopy {
     $cid = 'TMS-3.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
 
-    # v4.12.2: implemented. Teams chat content is governed by Purview DLP, so
+    # v4.13.0: implemented. Teams chat content is governed by Purview DLP, so
     # the assessable question is whether any enabled DLP policy targets the
     # Teams workload. Reads Purview.DLPPolicies, which already carries the
     # per-policy Workloads list.
@@ -458,7 +457,11 @@ function Test-NRGControlTeamsFederationAllowlist {
     if ($allowAllDomains -and $specificDomains.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Teams federation is open to all external domains. Any Teams user at any organization can contact your users.' -CurrentValue 'Open federation — all domains allowed' -RequiredValue 'Allowlist specific trusted domains only' -Remediation $ctrl.Remediation
     } elseif ($allowAllDomains -and $specificDomains.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail "$($specificDomains.Count) specific domain(s) in allowlist but federation is still open. Restrict to allowlist-only mode." -Remediation $ctrl.Remediation
+        # A populated AllowedDomains list IS allowlist mode — federation is
+        # limited to those domains. TMS-1.1 reads the same two fields and
+        # scores this Satisfied; reporting Partial here told the client their
+        # federation was both restricted and still open in one deliverable.
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Federation is limited to $($specificDomains.Count) allowlisted domain(s)."
     } else {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Teams federation restricted to specific domains or disabled.'
     }

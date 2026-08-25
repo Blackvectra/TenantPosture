@@ -12,38 +12,38 @@
       "SkipIntune":        false,
       "SkipPowerPlatform": false,
       "SkipDNS":           false,
-      "Notes":             "NRG internal tenant",
-      "Active":            true
+      "Notes":             "Own tenant. Replace TenantId with the real GUID before running.",
+      "Active":            false
     },
     {
-      "ClientName":        "NDACo",
-      "TenantDomain":      "ndaco.org",
+      "ClientName":        "Example Client",
+      "TenantDomain":      "example.com",
       "TenantId":          "00000000-0000-0000-0000-000000000000",
-      "DelegatedOrg":      "ndaco.onmicrosoft.com",
-      "DnsDomains":        ["ndaco.org"],
+      "DelegatedOrg":      "example.onmicrosoft.com",
+      "DnsDomains":        ["example.com"],
       "SkipPurview":       true,
       "SkipTeams":         false,
       "SkipSharePoint":    false,
       "SkipIntune":        false,
       "SkipPowerPlatform": true,
       "SkipDNS":           false,
-      "Notes":             "County government. NDIT controls DNS.",
-      "Active":            true
+      "Notes":             "Sample entry showing Skip flags for a Business Standard tenant. Replace with real client data before running.",
+      "Active":            false
     },
     {
-      "ClientName":        "Dunn County",
-      "TenantDomain":      "dunncountynd.gov",
+      "ClientName":        "Example Client 2",
+      "TenantDomain":      "example2.com",
       "TenantId":          "00000000-0000-0000-0000-000000000000",
-      "DelegatedOrg":      "dunncountynd.onmicrosoft.com",
-      "DnsDomains":        ["dunncountynd.gov"],
-      "SkipPurview":       true,
+      "DelegatedOrg":      "example2.onmicrosoft.com",
+      "DnsDomains":        ["example2.com"],
+      "SkipPurview":       false,
       "SkipTeams":         false,
       "SkipSharePoint":    false,
       "SkipIntune":        false,
-      "SkipPowerPlatform": true,
+      "SkipPowerPlatform": false,
       "SkipDNS":           false,
-      "Notes":             "County government. NDCourts relay dependency.",
-      "Active":            true
+      "Notes":             "Sample entry. Replace with real client data before running.",
+      "Active":            false
     }
   ]
 }

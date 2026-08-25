@@ -1,20 +1,17 @@
 # Microsoft Entra ID Baseline
 
-**NRG Assessment Tool — Baseline Documentation**
-*Product: Microsoft Entra ID (Azure Active Directory)*
+**NRG-Assessment — Baseline Documentation**
+*Product: Microsoft Entra ID*
 
 ---
 
 ## Introduction
 
-This baseline defines the security configuration requirements for Microsoft Entra ID as assessed by the NRG Assessment Tool. Each control maps to one or more security frameworks and produces a finding of **Satisfied**, **Partial**, **Gap**, or **N/A**.
+This baseline lists the 46 Microsoft Entra ID controls evaluated by NRG-Assessment. Each control produces a finding of **Satisfied**, **Partial**, **Gap**, **Not Applicable** or **Error**.
 
-Controls are evaluated against:
-- NIST SP 800-53 Rev 5
-- CIS Microsoft 365 Foundations Benchmark v3
-- CISA SCuBA AAD Secure Configuration Baseline
-- CMMC 2.0 Level 2
-- MITRE ATT&CK Enterprise
+This file is generated from `Config/controls.json`, which is the single source of truth for control IDs, titles, severities, remediation and framework citations. Do not edit it by hand — change the control definition and regenerate, or the two will disagree. `Testing/*.BaselineDocs.Tests.ps1` fails the build if they do.
+
+**Severity breakdown:** 6 Critical · 23 High · 12 Medium · 5 Low
 
 ---
 
@@ -22,323 +19,1444 @@ Controls are evaluated against:
 
 ### AAD-1.1 — Legacy Authentication Blocked
 
-**Criticality:** High
+**Severity:** Critical  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
-Legacy authentication protocols (Basic Auth, SMTP Auth via legacy clients, POP3, IMAP) do not support modern multi-factor authentication. All legacy authentication must be blocked via Conditional Access.
+A Conditional Access policy blocks legacy authentication protocols. Legacy auth bypasses MFA entirely.
 
-**Rationale:**
-Legacy auth is the primary attack vector for password spray and credential stuffing against M365 tenants. Blocking it eliminates a class of attacks that bypass MFA entirely.
-
-**Check:**
-Conditional Access policy exists that blocks legacy authentication (client app conditions: `Exchange ActiveSync Clients`, `Other Clients`) targeting `All Users`.
+**Business risk:**
+Any account using legacy auth can be compromised without MFA. Attackers actively spray legacy auth endpoints because MFA cannot intercept them.
 
 **Remediation:**
-```powershell
-# Verify legacy auth block policy exists
-Get-MgIdentityConditionalAccessPolicy | Where-Object {
-    $_.Conditions.ClientAppTypes -contains 'exchangeActiveSync' -or
-    $_.Conditions.ClientAppTypes -contains 'other'
-} | Select-Object DisplayName, State
-```
-Create a CA policy: Conditions → Client apps → Exchange ActiveSync + Other clients → Block.
+Create a CA policy: All Users, Client apps = Other clients + Exchange ActiveSync, Grant = Block access.
 
-**Framework Mappings:**
+**Framework mappings:**
 
-| Framework | Control |
+| Framework | Reference |
 |---|---|
-| NIST SP 800-53 | IA-2, IA-2(12), SC-8 |
-| CIS M365 v3 | 5.2.2.3 |
-| SCuBA AAD | MS.AAD.1.1v1 |
+| NIST SP 800-53 Rev 5 | IA-2, IA-5(1) |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.3 |
+| CIS Controls v8.1 | 6.3, 4.1 |
+| CISA SCuBA | MS.AAD.1.1v1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
-| MITRE ATT&CK | T1078, T1110 |
+| ISO/IEC 27001:2022 | A.5.17 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(d) |
+| PCI DSS | Req 8.3 |
+| MITRE ATT&CK | T1078, T1110.003 |
 
 ---
 
 ### AAD-1.2 — MFA Required for All Users
 
-**Criticality:** High
+**Severity:** Critical  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
-Multi-factor authentication must be enforced for all users via Conditional Access. Security Defaults or per-user MFA do not satisfy this control — a CA policy is required.
+A Conditional Access policy or Security Defaults requires MFA for all users on every sign-in.
 
-**Rationale:**
-MFA blocks over 99% of automated credential attacks. Per-user MFA is not auditable at scale and does not support risk-based conditions.
-
-**Check:**
-Conditional Access policy exists in `Enabled` state targeting `All Users` with grant control requiring MFA. Security Defaults alone scores `Partial`.
+**Business risk:**
+Without MFA, a single stolen password enables full account takeover. Password spray, phishing, and credential stuffing all succeed.
 
 **Remediation:**
-Create CA policy: Users → All users → Conditions → (as needed) → Grant → Require MFA. Exclude break-glass accounts.
+CA policy: Users = All, Apps = All cloud apps, Grant = Require MFA. Or enable Security Defaults.
 
-**Framework Mappings:**
+**Framework mappings:**
 
-| Framework | Control |
+| Framework | Reference |
 |---|---|
-| NIST SP 800-53 | IA-2, IA-2(1), IA-2(2) |
-| CIS M365 v3 | 5.2.3.1 |
-| SCuBA AAD | MS.AAD.3.1v1 |
+| NIST SP 800-53 Rev 5 | IA-2(1), IA-2(2) |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.1 |
+| CIS Controls v8.1 | 6.3, 6.4 |
+| CISA SCuBA | MS.AAD.3.2v1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
-| MITRE ATT&CK | T1078, T1556 |
+| ISO/IEC 27001:2022 | A.5.17, A.8.5 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(d) |
+| PCI DSS | Req 8.4 |
+| MITRE ATT&CK | T1078, T1621 |
 
 ---
 
-### AAD-1.3 — Phishing-Resistant MFA for Privileged Roles
+### AAD-1.3 — Phishing-Resistant MFA Required for Admins
 
-**Criticality:** High
+**Severity:** Critical  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
-Accounts assigned privileged directory roles (Global Admin, Privileged Role Admin, Security Admin, etc.) must use phishing-resistant MFA methods: FIDO2 security key or certificate-based authentication. TOTP/authenticator app alone does not satisfy this control for privileged accounts.
+CA policy requires phishing-resistant MFA (Authentication Strength: FIDO2, CBA, or Windows Hello) for all privileged directory roles.
 
-**Rationale:**
-AiTM (Adversary-in-the-Middle) phishing attacks bypass standard push/TOTP MFA. Privileged accounts are the highest-value targets. FIDO2 and certificate-based auth are not vulnerable to AiTM.
-
-**Check:**
-CA policy exists requiring authentication strength of `Phishing-resistant MFA` for users assigned any privileged directory role.
+**Business risk:**
+Standard MFA is bypassed by AiTM proxy phishing attacks. Attackers use Evilginx2 to steal session tokens even when MFA is completed.
 
 **Remediation:**
-Create CA policy: Users → Directory roles → [all privileged roles] → Grant → Require authentication strength → Phishing-resistant MFA.
+CA policy targeting privileged roles with Authentication Strength = Phishing-resistant MFA. Must cover Global Administrator at minimum.
 
-**Framework Mappings:**
+**Framework mappings:**
 
-| Framework | Control |
+| Framework | Reference |
 |---|---|
-| NIST SP 800-53 | IA-2(1), IA-2(2), IA-2(6) |
-| CIS M365 v3 | 5.2.3.5 |
-| SCuBA AAD | MS.AAD.3.2v1 |
+| NIST SP 800-53 Rev 5 | IA-2(1), IA-2(2), IA-2(6) |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.2 |
+| CIS Controls v8.1 | 6.5 |
+| CISA SCuBA | MS.AAD.3.6v1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
-| MITRE ATT&CK | T1078.004, T1557 |
+| ISO/IEC 27001:2022 | A.8.2, A.8.5 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(d), §164.308(a)(4)(ii)(B) |
+| PCI DSS | Req 8.4 |
+| MITRE ATT&CK | T1078.004, T1621, T1557 |
 
 ---
 
-### AAD-1.4 — Global Administrator Count
+### AAD-1.4 — Sign-in Risk CA Policy
 
-**Criticality:** High
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Entra ID P2
 
 **Description:**
-The number of active Global Administrator accounts must be between 2 and 4. Fewer than 2 creates a break-glass risk. More than 4 indicates overprivileged accounts that expand the attack surface.
+CA policy enforces MFA or blocks access when sign-in risk is elevated. Requires Entra ID P2.
 
-**Rationale:**
-Global Admin is the highest-privilege role in M365. Every additional Global Admin account is a credential theft target. Excess admins are one of the most common misconfigurations found in MSP-managed tenants.
-
-**Check:**
-Count of enabled accounts assigned the Global Administrator role is ≥2 and ≤4.
+**Business risk:**
+Without sign-in risk policies, compromised credentials and impossible travel go unchallenged.
 
 **Remediation:**
-```powershell
-# Enumerate Global Admins
-$gaRole = Get-MgDirectoryRole | Where-Object { $_.DisplayName -eq 'Global Administrator' }
-Get-MgDirectoryRoleMember -DirectoryRoleId $gaRole.Id |
-    Select-Object DisplayName, UserPrincipalName
-```
-Remove Global Admin from accounts that don't require it. Use scoped admin roles (Exchange Admin, Security Admin) instead.
+CA policy: Condition = Sign-in risk high/medium, Grant = Require MFA or Block. Requires Entra P2.
 
-**Framework Mappings:**
+**Framework mappings:**
 
-| Framework | Control |
+| Framework | Reference |
 |---|---|
-| NIST SP 800-53 | AC-2, AC-6, AC-6(7) |
-| CIS M365 v3 | 1.1.1 |
-| SCuBA AAD | MS.AAD.7.1v1 |
-| CMMC 2.0 | AC.L2-3.1.5 |
-| MITRE ATT&CK | T1078.004 |
+| NIST SP 800-53 Rev 5 | AC-7, IA-2 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.6 |
+| CIS Controls v8.1 | 6.7 |
+| CISA SCuBA | MS.AAD.2.3v1 |
+| CMMC 2.0 | AC.L2-3.1.8 |
+| ISO/IEC 27001:2022 | A.8.16 |
+| SOC 2 | CC6.1, CC7.2 |
+| HIPAA | §164.312(a)(1) |
+| PCI DSS | Req 8.5 |
+| MITRE ATT&CK | T1078, T1621 |
 
 ---
 
-### AAD-1.5 — Privileged Accounts Cloud-Only
+### AAD-1.5 — User Risk CA Policy
 
-**Criticality:** High
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
 
-**Description:**
-Accounts assigned privileged directory roles must be cloud-only (not synced from on-premises Active Directory). Synced privileged accounts inherit on-premises AD vulnerabilities — a DCSync or credential compromise on-premises directly yields cloud admin access.
-
-**Rationale:**
-Hybrid identity introduces a lateral movement path from on-premises to cloud. A single on-premises credential compromise can result in full M365 tenant takeover if the compromised account holds cloud admin roles.
-
-**Check:**
-No accounts with `OnPremisesSyncEnabled = true` are assigned privileged directory roles.
-
-**Remediation:**
-Create dedicated cloud-only admin accounts for privileged roles. Remove privileged roles from synced accounts.
-
-**Framework Mappings:**
-
-| Framework | Control |
-|---|---|
-| NIST SP 800-53 | AC-2, AC-6, SC-7 |
-| CIS M365 v3 | 1.1.3 |
-| SCuBA AAD | MS.AAD.7.3v1 |
-| CMMC 2.0 | AC.L2-3.1.6 |
-| MITRE ATT&CK | T1078.002, T1003 |
-
----
-
-### AAD-2.1 — Sign-In Risk Policy Enabled
-
-**Criticality:** Medium
+**License required:** Entra ID P2
 
 **Description:**
-A Conditional Access policy must be configured to respond to Entra ID Protection sign-in risk signals. High-risk sign-ins should require MFA step-up or be blocked. Requires Entra ID P2 or Microsoft 365 Business Premium.
+CA policy enforces password change or blocks access when user risk is elevated.
 
-**Rationale:**
-Sign-in risk detection identifies anomalous authentication patterns (impossible travel, anonymous IP, atypical location, token anomalies). Without a policy, detections are logged but not acted on.
-
-**Check:**
-CA policy exists in `Enabled` state using sign-in risk conditions (`High` at minimum) with grant control requiring MFA or blocking access.
+**Business risk:**
+High user risk indicates credential compromise. Without automated response, compromised accounts remain active.
 
 **Remediation:**
-Create CA policy: Conditions → Sign-in risk → High → Grant → Require MFA.
+CA policy: Condition = User risk high, Grant = Require password change. Requires Entra P2.
 
-**Framework Mappings:**
+**Framework mappings:**
 
-| Framework | Control |
+| Framework | Reference |
 |---|---|
-| NIST SP 800-53 | SI-4, AU-6, RA-5 |
-| CIS M365 v3 | 5.2.5.1 |
-| SCuBA AAD | MS.AAD.2.1v1 |
-| CMMC 2.0 | SI.L2-3.14.6 |
+| NIST SP 800-53 Rev 5 | AC-7, IA-5 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.7 |
+| CIS Controls v8.1 | 6.7 |
+| CISA SCuBA | MS.AAD.2.1v1 |
+| CMMC 2.0 | AC.L2-3.1.8 |
+| ISO/IEC 27001:2022 | A.8.16 |
+| SOC 2 | CC6.1, CC7.2 |
+| HIPAA | §164.312(a)(1) |
+| PCI DSS | Req 8.5 |
 | MITRE ATT&CK | T1078, T1110 |
 
 ---
 
-### AAD-2.2 — User Risk Policy Enabled
+### AAD-2.1 — Conditional Access Policies Deployed
 
-**Criticality:** Medium
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
 
-**Description:**
-A Conditional Access policy must respond to Entra ID Protection user risk signals. High user risk should require password change or block sign-in. Requires Entra ID P2 or Microsoft 365 Business Premium.
-
-**Rationale:**
-User risk reflects confirmed or suspected account compromise (leaked credentials, confirmed malicious sign-in). Without a policy, a compromised account continues to operate until manually discovered.
-
-**Check:**
-CA policy exists using user risk conditions (`High` at minimum) with grant control requiring password change or blocking access.
-
-**Framework Mappings:**
-
-| Framework | Control |
-|---|---|
-| NIST SP 800-53 | IA-5, SI-4 |
-| CIS M365 v3 | 5.2.5.2 |
-| SCuBA AAD | MS.AAD.2.3v1 |
-| CMMC 2.0 | IA.L2-3.5.2 |
-| MITRE ATT&CK | T1078, T1586 |
-
----
-
-### AAD-2.3 — Guest Access Restricted
-
-**Criticality:** Medium
+**License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
-Guest user access permissions must be restricted. The default guest access level allows guests to enumerate directory objects. `GuestUserRoleId` must be set to `Restricted Guest User` (least privilege).
+At minimum three enabled CA policies provide coverage for legacy auth block, MFA all users, and MFA for admins.
 
-**Rationale:**
-Overpermissioned guest access allows external users to enumerate users, groups, and other directory objects — useful reconnaissance for external attackers who gain access to a guest account.
-
-**Check:**
-`Get-MgPolicyAuthorizationPolicy` returns `GuestUserRoleId` equal to `2af84b1e-32c8-42b7-82bc-daa82404023b` (Restricted Guest User).
+**Business risk:**
+Without CA, access control is password-only. Security Defaults is a fallback — not a substitute for a mature CA posture.
 
 **Remediation:**
-External Identities → External collaboration settings → Guest user access → Guest users have limited access to properties and memberships of directory objects.
+Deploy at minimum: (1) block legacy auth, (2) require MFA all users, (3) phishing-resistant MFA for admin roles.
 
-**Framework Mappings:**
+**Framework mappings:**
 
-| Framework | Control |
+| Framework | Reference |
 |---|---|
-| NIST SP 800-53 | AC-2, AC-3, AC-6 |
-| CIS M365 v3 | 5.1.5.2 |
-| SCuBA AAD | MS.AAD.8.1v1 |
-| CMMC 2.0 | AC.L2-3.1.1 |
-| MITRE ATT&CK | T1087.004 |
+| NIST SP 800-53 Rev 5 | AC-17, IA-2 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2 |
+| CIS Controls v8.1 | 4.1, 6.5 |
+| CISA SCuBA | MS.AAD.1.1v1 |
+| CMMC 2.0 | AC.L1-3.1.2 |
+| ISO/IEC 27001:2022 | A.5.15, A.8.3 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(a)(1) |
+| PCI DSS | Req 7.2 |
+| MITRE ATT&CK | T1078, T1110 |
 
 ---
 
-### AAD-2.4 — Password Hash Sync or Passthrough Auth (Hybrid Only)
+### AAD-2.2 — Named Locations Defined
 
-**Criticality:** Medium
+**Severity:** Low  |  **Category:** Identity  |  **Automated:** Yes
 
-**Description:**
-Hybrid environments using AD Connect must have Password Hash Synchronization (PHS) enabled as a fallback, even when Passthrough Authentication (PTA) is the primary method. PHS enables Entra ID Protection leaked credential detection.
-
-**Rationale:**
-Without PHS, Entra ID Protection cannot evaluate whether credentials appear in breach databases. PHS also provides resilience if on-premises AD becomes unavailable.
-
-**Check:**
-Applied only when `OnPremisesSyncEnabled` accounts exist in the tenant. PHS enabled status checked via `Get-MgOrganization`.
-
-**Framework Mappings:**
-
-| Framework | Control |
-|---|---|
-| NIST SP 800-53 | IA-5, SI-4 |
-| CIS M365 v3 | 1.2.1 |
-| SCuBA AAD | MS.AAD.6.1v1 |
-| CMMC 2.0 | IA.L2-3.5.2 |
-| MITRE ATT&CK | T1589.001 |
-
----
-
-### AAD-3.1 — Privileged Identity Management Enabled
-
-**Criticality:** Medium
+**License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
-Privileged Identity Management (PIM) must be active for the tenant, with privileged roles configured for Just-In-Time (JIT) activation. Permanent privileged role assignments must be minimized. Requires Entra ID P2.
+At least one trusted named location (IP range) is defined in Entra ID for use in CA policies.
 
-**Rationale:**
-Permanent admin assignments mean any credential compromise immediately yields admin access. PIM enforces time-limited elevation with approval workflows and audit logs.
+**Business risk:**
+Without named locations, CA cannot distinguish access from trusted office networks vs untrusted locations.
 
-**Check:**
-PIM is activated for the tenant. No more than 2 permanent Global Admin assignments exist outside of break-glass accounts.
+**Remediation:**
+Entra ID > Security > Named locations > Add IP ranges location. Mark office and VPN IP ranges as trusted.
 
-**Framework Mappings:**
+**Framework mappings:**
 
-| Framework | Control |
+| Framework | Reference |
 |---|---|
-| NIST SP 800-53 | AC-2(7), AC-6(5) |
-| CIS M365 v3 | 1.1.9 |
-| SCuBA AAD | MS.AAD.7.4v1 |
-| CMMC 2.0 | AC.L2-3.1.6 |
-| MITRE ATT&CK | T1078.004 |
-
----
-
-### AAD-3.2 — Self-Service Password Reset Configured
-
-**Criticality:** Low
-
-**Description:**
-Self-Service Password Reset (SSPR) should be enabled and require at least two authentication methods. SSPR with weak method requirements (single factor, security questions only) is a risk.
-
-**Rationale:**
-SSPR with strong method requirements reduces help desk burden and attack surface. SSPR misconfigured with single-factor or weak methods becomes an account takeover vector.
-
-**Check:**
-SSPR is enabled (`All` or `Selected`). Number of required methods is ≥2. Security questions are not the only configured method.
-
-**Framework Mappings:**
-
-| Framework | Control |
-|---|---|
-| NIST SP 800-53 | IA-5, IA-5(1) |
-| CIS M365 v3 | 1.3.1 |
-| SCuBA AAD | MS.AAD.5.1v1 |
-| CMMC 2.0 | IA.L2-3.5.2 |
+| NIST SP 800-53 Rev 5 | AC-17 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.1 |
+| CMMC 2.0 | AC.L2-3.1.12 |
+| ISO/IEC 27001:2022 | A.8.3 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(a)(1) |
+| PCI DSS | Req 8.2.2 |
 | MITRE ATT&CK | T1078 |
 
 ---
 
-## Removed / Superseded Policies
+### AAD-2.3 — Device Compliance Enforced via CA
 
-| Control | Reason |
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** M365 Business Premium or Entra ID P1 + Intune
+
+**Description:**
+CA policy requires compliant or hybrid-joined device for access to M365 resources.
+
+**Business risk:**
+Without device compliance enforcement, unmanaged personal devices access corporate data with no endpoint controls.
+
+**Remediation:**
+CA policy: Grant = Require device to be marked as compliant, or Require Microsoft Entra hybrid joined device.
+
+**Framework mappings:**
+
+| Framework | Reference |
 |---|---|
-| Per-user MFA enforcement | Superseded by Conditional Access MFA (AAD-1.2) |
-| Security Defaults | Superseded by Conditional Access policies |
+| NIST SP 800-53 Rev 5 | CM-7, AC-17 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.8 |
+| CIS Controls v8.1 | 13.5 |
+| CISA SCuBA | MS.AAD.3.7v1 |
+| CMMC 2.0 | CM.L2-3.4.1 |
+| ISO/IEC 27001:2022 | A.8.1 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.310(d)(1), §164.312(a)(1) |
+| PCI DSS | Req 1.3 |
+| MITRE ATT&CK | T1078 |
 
 ---
 
-## Related Baselines
+### AAD-3.1 — Global Administrator Count 2-8, Cloud-Only
 
-- [Exchange Online](exo.md) — Email authentication and mailbox security
-- [Defender for Office 365](defender.md) — Anti-phishing and threat protection
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+The tenant has 2-8 Global Administrators, all cloud-only (not synced from on-premises AD).
+
+**Business risk:**
+More than 8 GAs increases attack surface. Synced GA accounts allow on-prem compromise to escalate directly to cloud tenant control.
+
+**Remediation:**
+Reduce GA count to 2-8 break-glass accounts. Remove GA from any on-premises synced accounts and assign to cloud-only accounts.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-6, AC-6(5) |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.2.1 |
+| CIS Controls v8.1 | 5.4, 6.8 |
+| CISA SCuBA | MS.AAD.7.1v1 |
+| CMMC 2.0 | AC.L2-3.1.6 |
+| ISO/IEC 27001:2022 | A.8.2 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.308(a)(4)(ii)(C), §164.312(a)(2)(i) |
+| PCI DSS | Req 7.2.1 |
+| MITRE ATT&CK | T1078.004, T1098 |
+
+---
+
+### AAD-3.2 — No Permanent Admin Role Assignments
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Entra ID P2
+
+**Description:**
+Privileged roles use PIM eligible assignments — no permanent active assignments outside break-glass accounts.
+
+**Business risk:**
+Permanent admin accounts are always high-value targets. PIM limits the window of privilege exposure to when it is actually needed.
+
+**Remediation:**
+Convert permanent role assignments to PIM eligible. Keep only break-glass accounts as permanent GA.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-6(5) |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.2.2 |
+| CIS Controls v8.1 | 6.8, 5.4 |
+| CISA SCuBA | MS.AAD.7.3v1 |
+| CMMC 2.0 | AC.L2-3.1.6 |
+| ISO/IEC 27001:2022 | A.8.2 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.308(a)(4)(ii)(C) |
+| PCI DSS | Req 7.2.5 |
+| MITRE ATT&CK | T1078.004, T1548 |
+
+---
+
+### AAD-3.3 — PIM Requires MFA on Activation
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Entra ID P2
+
+**Description:**
+PIM role management policies require MFA when users activate an eligible role assignment.
+
+**Business risk:**
+Without MFA on activation, a compromised account can silently elevate to Global Admin via PIM with just a password.
+
+**Remediation:**
+PIM > Roles > Select role > Settings > Require MFA on activation.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IA-2(1) |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.3.1 |
+| CIS Controls v8.1 | 6.5 |
+| CMMC 2.0 | IA.L2-3.5.3 |
+| ISO/IEC 27001:2022 | A.8.2, A.8.5 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(d) |
+| PCI DSS | Req 8.4 |
+| MITRE ATT&CK | T1078.004, T1548 |
+
+---
+
+### AAD-3.4 — PIM Requires Justification on Activation
+
+**Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Entra ID P2
+
+**Description:**
+PIM requires users to provide a reason when activating an eligible role assignment.
+
+**Business risk:**
+Without justification, privileged access activations have no audit trail. Insider threat and accidental escalation go undocumented.
+
+**Remediation:**
+PIM > Roles > Select role > Settings > Require justification on activation.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-6(9), AU-12 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.3.2 |
+| CIS Controls v8.1 | 6.8 |
+| CMMC 2.0 | AU.L2-3.3.1 |
+| ISO/IEC 27001:2022 | A.8.2, A.8.15 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.308(a)(1)(ii)(D) |
+| PCI DSS | Req 10.2 |
+| MITRE ATT&CK | T1078.004 |
+
+---
+
+### AAD-3.5 — PIM GA Activation Requires Approval
+
+**Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Entra ID P2
+
+**Description:**
+Global Administrator PIM activation requires approval from a designated reviewer.
+
+**Business risk:**
+Self-approval GA elevation means any compromised eligible account reaches global admin without a second control point.
+
+**Remediation:**
+PIM > Global Administrator > Settings > Require approval > Add approvers.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-6(5) |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.3.3 |
+| CIS Controls v8.1 | 6.8 |
+| CISA SCuBA | MS.AAD.7.6v1 |
+| CMMC 2.0 | AC.L2-3.1.5 |
+| ISO/IEC 27001:2022 | A.8.2 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.308(a)(4)(ii)(B) |
+| PCI DSS | Req 7.2.4 |
+| MITRE ATT&CK | T1078.004 |
+
+---
+
+### AAD-3.6 — PIM Max Activation Duration 8 Hours or Less
+
+**Severity:** Low  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Entra ID P2
+
+**Description:**
+PIM role policies set maximum activation duration to 8 hours or less.
+
+**Business risk:**
+Longer activation windows increase the time a compromised activation session can be abused.
+
+**Remediation:**
+PIM > Roles > Select role > Settings > Maximum activation duration = 8 hours.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-6 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.3.4 |
+| CIS Controls v8.1 | 6.8 |
+| CMMC 2.0 | AC.L2-3.1.5 |
+| ISO/IEC 27001:2022 | A.8.2 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.308(a)(4)(ii)(C) |
+| PCI DSS | Req 7.2.5 |
+| MITRE ATT&CK | T1078.004 |
+
+---
+
+### AAD-4.1 — Guest Invite Permissions Restricted
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Only admins or Guest Inviter role members can invite external guest users.
+
+**Business risk:**
+Any member being able to invite guests enables uncontrolled external access provisioning without IT oversight.
+
+**Remediation:**
+Entra ID > External Identities > External collaboration settings > Guest invite settings = Admins and users in the Guest Inviter role.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-2 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.3.1 |
+| CIS Controls v8.1 | 6.8 |
+| CISA SCuBA | MS.AAD.8.2v1 |
+| CMMC 2.0 | AC.L1-3.1.2 |
+| ISO/IEC 27001:2022 | A.5.18, A.5.19 |
+| SOC 2 | CC6.2 |
+| HIPAA | §164.308(a)(4) |
+| PCI DSS | Req 7.2.3 |
+| MITRE ATT&CK | T1078 |
+
+---
+
+### AAD-4.2 — External Collaboration Settings Restricted
+
+**Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Users cannot create new tenants and legacy MSOL PowerShell is blocked.
+
+**Business risk:**
+Unrestricted external collaboration settings enable shadow IT tenant creation and legacy protocol abuse.
+
+**Remediation:**
+Entra ID > User settings > Restrict non-admin users from creating tenants. Block MSOL PowerShell via authorization policy.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | CM-7, AC-6 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.3.2 |
+| CIS Controls v8.1 | 6.8 |
+| CMMC 2.0 | CM.L2-3.4.6 |
+| ISO/IEC 27001:2022 | A.5.19, A.5.21 |
+| SOC 2 | CC6.2, CC6.6 |
+| HIPAA | §164.308(a)(4) |
+| PCI DSS | Req 1.3.1 |
+| MITRE ATT&CK | T1078 |
+
+---
+
+### AAD-4.3 — B2B Guest Default Permissions Restricted
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Guest users are assigned the Restricted Guest User role — not member-equivalent permissions.
+
+**Business risk:**
+Guest users with member-level permissions can enumerate users, groups, and applications — gathering intelligence for targeted attacks.
+
+**Remediation:**
+Entra ID > External Identities > External collaboration settings > Guest user access = Most restricted.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-3 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.3.3 |
+| CIS Controls v8.1 | 6.8 |
+| CISA SCuBA | MS.AAD.8.1v1 |
+| CMMC 2.0 | AC.L2-3.1.3 |
+| ISO/IEC 27001:2022 | A.5.18 |
+| SOC 2 | CC6.2 |
+| HIPAA | §164.308(a)(4) |
+| PCI DSS | Req 7.2.4 |
+| MITRE ATT&CK | T1087, T1069 |
+
+---
+
+### AAD-5.1 — Self-Service Password Reset Enabled
+
+**Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+SSPR is enabled allowing users to reset their own passwords without helpdesk involvement.
+
+**Business risk:**
+Without SSPR, helpdesk becomes a social engineering target — attackers call claiming to be users to get password resets.
+
+**Remediation:**
+Entra ID > Password reset > Properties > Self service password reset enabled = All or Selected.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IA-5 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.4.1 |
+| CMMC 2.0 | IA.L2-3.5.7 |
+| ISO/IEC 27001:2022 | A.5.17 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.308(a)(5)(ii)(D) |
+| PCI DSS | Req 8.3.5 |
+| MITRE ATT&CK | T1078 |
+
+---
+
+### AAD-5.2 — SSPR Requires Multiple Authentication Methods
+
+**Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+SSPR is configured to require at least two authentication methods for password reset.
+
+**Business risk:**
+Single-method SSPR allows account takeover via one compromised recovery method (phone SIM swap, email compromise).
+
+**Remediation:**
+Entra ID > Password reset > Authentication methods > Number of methods required = 2.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IA-2(1), IA-5 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.4.2 |
+| CMMC 2.0 | IA.L2-3.5.3 |
+| ISO/IEC 27001:2022 | A.5.17 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.308(a)(5)(ii)(D) |
+| PCI DSS | Req 8.3.5 |
+| MITRE ATT&CK | T1078 |
+
+---
+
+### AAD-6.1 — User App Registration Disabled
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Non-admin users cannot register new applications in Entra ID.
+
+**Business risk:**
+Users registering apps can accidentally or deliberately grant excessive API permissions, creating OAuth attack surfaces.
+
+**Remediation:**
+Entra ID > User settings > App registrations > Users can register applications = No.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | CM-5, AC-6 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.5.1 |
+| CIS Controls v8.1 | 6.8 |
+| CISA SCuBA | MS.AAD.5.1v1 |
+| CMMC 2.0 | CM.L2-3.4.5 |
+| ISO/IEC 27001:2022 | A.8.19 |
+| SOC 2 | CC6.3, CC8.1 |
+| HIPAA | §164.308(a)(4)(ii)(B) |
+| PCI DSS | Req 6.5.4 |
+| MITRE ATT&CK | T1528, T1550.001 |
+
+---
+
+### AAD-6.2 — User Consent to Apps Restricted
+
+**Severity:** Critical  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Users cannot consent to application permissions — all consent goes through admin workflow.
+
+**Business risk:**
+Consent phishing grants attacker-controlled apps access to mailbox and files. Users cannot distinguish malicious OAuth consent from legitimate.
+
+**Remediation:**
+Entra ID > Enterprise apps > Consent and permissions > User consent settings = Do not allow user consent.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-3 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.5.2 |
+| CIS Controls v8.1 | 6.8 |
+| CISA SCuBA | MS.AAD.5.2v1 |
+| CMMC 2.0 | AC.L1-3.1.2 |
+| ISO/IEC 27001:2022 | A.5.23, A.8.19 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.308(a)(4) |
+| PCI DSS | Req 6.4.3 |
+| MITRE ATT&CK | T1528, T1550.001 |
+
+---
+
+### AAD-6.3 — Admin Consent Workflow Enabled
+
+**Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Admin consent workflow allows users to request app access that goes through an approval process.
+
+**Business risk:**
+Without a consent workflow, users with blocked consent have no approved path — they use shadow IT alternatives instead.
+
+**Remediation:**
+Entra ID > Enterprise apps > Consent and permissions > Admin consent requests > Yes + configure reviewers.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-3 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.5.3 |
+| CIS Controls v8.1 | 6.1 |
+| CISA SCuBA | MS.AAD.5.3v1 |
+| CMMC 2.0 | AC.L1-3.1.1 |
+| ISO/IEC 27001:2022 | A.8.19 |
+| SOC 2 | CC6.3, CC8.1 |
+| HIPAA | §164.308(a)(4)(ii)(B) |
+| PCI DSS | Req 6.5.4 |
+| MITRE ATT&CK | T1528 |
+
+---
+
+### AAD-7.1 — Password Protection Lockout Configured
+
+**Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Account lockout threshold is configured at 10 or fewer failed attempts.
+
+**Business risk:**
+High lockout thresholds allow extensive brute force attempts before accounts are locked.
+
+**Remediation:**
+Entra ID > Security > Authentication methods > Password protection > Lockout threshold ≤10.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-7 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.6.1 |
+| CMMC 2.0 | AC.L2-3.1.8 |
+| ISO/IEC 27001:2022 | A.5.17, A.8.5 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.308(a)(5)(ii)(C), §164.308(a)(5)(ii)(D) |
+| PCI DSS | Req 8.3.4 |
+| MITRE ATT&CK | T1110 |
+
+---
+
+### AAD-7.2 — Break-Glass Accounts Configured
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+At least two cloud-only GA accounts are excluded from CA policies as emergency access accounts.
+
+**Business risk:**
+Without break-glass accounts, a CA policy misconfiguration can lock all admins out of the tenant permanently.
+
+**Remediation:**
+Create two cloud-only GA accounts with strong random passwords, exclude from all CA policies, store credentials in secure offline location. Monitor for sign-in activity.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | CP-2, AC-2 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.2.3 |
+| CIS Controls v8.1 | 5.4 |
+| CMMC 2.0 | IR.L2-3.6.1 |
+| ISO/IEC 27001:2022 | A.5.30, A.8.2 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(a)(2)(ii) |
+| PCI DSS | Req 7.2.1 |
+| MITRE ATT&CK | T1078.004 |
+
+---
+
+### AAD-8.1 — PIM Alerts Configured
+
+**Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Entra ID P2
+
+**Description:**
+PIM security alerts are configured to detect stale, redundant, and outside-PIM role assignments.
+
+**Business risk:**
+Without PIM alerts, over-privileged accounts, dormant admins, and bypass assignments go undetected indefinitely.
+
+**Remediation:**
+PIM > Alerts > Review and enable: Roles assigned outside PIM, Redundant assignments, Stale assignments, Too many GA admins.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-6(9), AU-12 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.3.5 |
+| CIS Controls v8.1 | 13.1 |
+| CISA SCuBA | MS.AAD.7.7v1 |
+| CMMC 2.0 | AU.L2-3.3.1 |
+| ISO/IEC 27001:2022 | A.8.15, A.8.16 |
+| SOC 2 | CC7.2 |
+| HIPAA | §164.308(a)(1)(ii)(D), §164.312(b) |
+| PCI DSS | Req 10.2 |
+| MITRE ATT&CK | T1078.004 |
+
+---
+
+### AAD-8.2 — Access Reviews for Privileged Roles
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Entra ID P2
+
+**Description:**
+Recurring access reviews are configured for privileged directory roles via PIM.
+
+**Business risk:**
+Without access reviews, stale privileged accounts accumulate over time, increasing attack surface with every employee departure or role change.
+
+**Remediation:**
+PIM > Microsoft Entra roles > Access reviews > Create recurring quarterly review for Global Admin, Privileged Role Admin, Security Admin.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-2(9) |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.4.1 |
+| CIS Controls v8.1 | 6.8 |
+| CMMC 2.0 | AC.L1-3.1.2 |
+| ISO/IEC 27001:2022 | A.5.18, A.8.2 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.308(a)(4) |
+| PCI DSS | Req 7.2.4 |
+| MITRE ATT&CK | T1078.004 |
+
+---
+
+### AAD-9.1 — Authenticator Number Matching Enabled
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Microsoft Authenticator number matching is explicitly enabled to prevent MFA fatigue attacks.
+
+**Business risk:**
+Without number matching, attackers can spam MFA push requests until a user accidentally approves. MFA fatigue is a documented breach technique.
+
+**Remediation:**
+Entra ID > Security > Authentication methods > Microsoft Authenticator > Configure > Require number matching = Enabled.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IA-2(1) |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.1.1 |
+| CIS Controls v8.1 | 6.3 |
+| CISA SCuBA | MS.AAD.3.3v2 |
+| CMMC 2.0 | IA.L2-3.5.3 |
+| ISO/IEC 27001:2022 | A.5.17, A.8.5 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(d) |
+| PCI DSS | Req 8.4 |
+| MITRE ATT&CK | T1621 |
+
+---
+
+### AAD-9.2 — Passwordless Authentication Methods Available
+
+**Severity:** Low  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+FIDO2 security keys or Windows Hello for Business are enabled as passwordless authentication options.
+
+**Business risk:**
+Password-based auth carries inherent credential theft risk. Passwordless methods eliminate the credential as an attack vector entirely.
+
+**Remediation:**
+Entra ID > Security > Authentication methods > FIDO2 security key > Enable. Consider Windows Hello for Business via Intune policy.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IA-2(1), IA-5 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.1.2 |
+| CIS Controls v8.1 | 6.5, 6.3 |
+| CISA SCuBA | MS.AAD.3.1v1 |
+| CMMC 2.0 | IA.L2-3.5.3 |
+| ISO/IEC 27001:2022 | A.5.17, A.8.5 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(d) |
+| PCI DSS | Req 8.4 |
+| MITRE ATT&CK | T1078, T1110 |
+
+---
+
+### AAD-10.1 — Identity Protection Risky User Workflow
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Entra ID P2
+
+**Description:**
+Automated response to Identity Protection risky user signals via CA user risk policy.
+
+**Business risk:**
+Identity Protection detects credential compromise, leaked credentials, and anomalous sign-ins. Without automated response, the human follow-up is too slow.
+
+**Remediation:**
+CA policy: Condition = User risk = High, Grant = Require password change. Requires Entra P2.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IR-4, AC-7 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.7 |
+| CIS Controls v8.1 | 6.7 |
+| CISA SCuBA | MS.AAD.2.2v1 |
+| CMMC 2.0 | IR.L2-3.6.1 |
+| ISO/IEC 27001:2022 | A.5.27, A.8.16 |
+| SOC 2 | CC7.2, CC7.3 |
+| HIPAA | §164.308(a)(1)(ii)(D), §164.308(a)(6) |
+| PCI DSS | Req 10.7 |
+| MITRE ATT&CK | T1078, T1110 |
+
+---
+
+### AAD-10.2 — Privileged Accounts Use Dedicated Cloud-Only Accounts
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+All privileged role holders use separate cloud-only accounts, not their day-to-day synced accounts.
+
+**Business risk:**
+Using the same account for email and admin work means email phishing can compromise admin credentials. Dedicated admin accounts separate the blast radius.
+
+**Remediation:**
+Create dedicated .admin or .onmicrosoft.com accounts for all privileged role holders. Remove privileged roles from on-premises synced accounts.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-6(5) |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.1.1 |
+| CIS Controls v8.1 | 5.4 |
+| CISA SCuBA | MS.AAD.7.3v1 |
+| CMMC 2.0 | AC.L2-3.1.6 |
+| ISO/IEC 27001:2022 | A.8.2 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(a)(2)(i) |
+| PCI DSS | Req 8.2.1 |
+| MITRE ATT&CK | T1078.004 |
+
+---
+
+### AAD-10.3 — Break-Glass Account Sign-In Monitoring
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Alerts are configured to notify immediately if break-glass accounts are used.
+
+**Business risk:**
+Break-glass accounts bypass all CA policies. Any use should be treated as an incident — either a genuine emergency or unauthorized access.
+
+**Remediation:**
+Create a Sentinel or Defender XDR alert rule for sign-in from break-glass account UPNs. Notify SOC immediately on any sign-in.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AU-2, IR-4 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.2.4 |
+| CIS Controls v8.1 | 13.1 |
+| CMMC 2.0 | IR.L2-3.6.1 |
+| ISO/IEC 27001:2022 | A.8.15 |
+| SOC 2 | CC7.2 |
+| HIPAA | §164.308(a)(1)(ii)(D), §164.312(b) |
+| PCI DSS | Req 10.2.5 |
+| MITRE ATT&CK | T1078.004 |
+
+---
+
+### AAD-10.4 — Sign-in Frequency Session Control Configured
+
+**Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** M365 Business Premium or Entra ID P1
+
+**Description:**
+CA policy enforces sign-in frequency to limit the lifetime of stolen session tokens.
+
+**Business risk:**
+Stolen tokens (from AiTM, token theft via malware) remain valid for the full session lifetime. Sign-in frequency limits re-use to the configured window.
+
+**Remediation:**
+CA policy: Session controls > Sign-in frequency > set to 1 hour for privileged users, 8 hours for standard users.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-12 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.3.1 |
+| CIS Controls v8.1 | 4.3 |
+| CMMC 2.0 | AC.L2-3.1.10 |
+| ISO/IEC 27001:2022 | A.5.17, A.8.3 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(a)(2)(iii) |
+| PCI DSS | Req 8.2.8 |
+| MITRE ATT&CK | T1550.001, T1539 |
+
+---
+
+### AAD-11.1 — Device Code Authentication Flow Blocked
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** M365 Business Premium or Entra ID P1
+
+**Description:**
+A Conditional Access policy blocks the device code authentication flow for all users.
+
+**Business risk:**
+Device code phishing attacks send victims to a legitimate Microsoft URL where they enter an attacker-controlled code — no password required. The attack is especially effective against less technical users.
+
+**Remediation:**
+CA policy: Conditions > Authentication flows > Device code flow, Grant = Block. Applies to all users.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IA-2 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.10 |
+| CIS Controls v8.1 | 4.1 |
+| CISA SCuBA | MS.AAD.3.9v1 |
+| CMMC 2.0 | IA.L2-3.5.3 |
+| ISO/IEC 27001:2022 | A.5.17 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(d) |
+| PCI DSS | Req 8.4 |
+| MITRE ATT&CK | T1528, T1111 |
+
+---
+
+### AAD-11.2 — No Guest Accounts in Highly Privileged Roles
+
+**Severity:** Critical  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+No guest accounts hold Global Administrator, Privileged Role Administrator, or other highly privileged directory roles.
+
+**Business risk:**
+Guest accounts are outside the tenant's identity governance. A compromised guest account holding a privileged role provides tenant-wide administrative access from an uncontrolled identity.
+
+**Remediation:**
+Remove guest accounts from all privileged roles. Use cloud-only member accounts for all administrative functions.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-2, AC-6(5) |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.1.2 |
+| CIS Controls v8.1 | 6.8, 5.4 |
+| CMMC 2.0 | AC.L1-3.1.2 |
+| ISO/IEC 27001:2022 | A.5.18, A.8.2 |
+| SOC 2 | CC6.2, CC6.3 |
+| HIPAA | §164.308(a)(4)(ii)(B) |
+| PCI DSS | Req 7.2.3 |
+| MITRE ATT&CK | T1078, T1078.004 |
+
+---
+
+### AAD-11.3 — Risky Service Principals Reviewed and Remediated
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Entra ID P2 + Workload Identities add-on
+
+**Description:**
+No service principals are flagged as risky by Entra ID Identity Protection without active remediation.
+
+**Business risk:**
+Risky service principals represent compromised application identities with persistent, non-interactive access to all assigned resource scopes. Unlike user accounts, they have no MFA and no session expiry.
+
+**Remediation:**
+Entra ID > Identity Protection > Risky workload identities. Investigate and remediate flagged service principals. Disable or rotate credentials for compromised identities. Requires Entra ID P2 Workload Identities.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IA-3, IR-4 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.5.1 |
+| CIS Controls v8.1 | 5.5 |
+| CMMC 2.0 | IR.L2-3.6.1 |
+| ISO/IEC 27001:2022 | A.5.23, A.8.30 |
+| SOC 2 | CC7.2 |
+| HIPAA | §164.308(a)(1)(ii)(D) |
+| PCI DSS | Req 6.4.3 |
+| MITRE ATT&CK | T1078.004, T1550.001 |
+
+---
+
+### AAD-11.4 — Token Protection (Session Binding) Enforced
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** M365 Business Premium or Entra ID P1
+
+**Description:**
+CA policy enforces token protection to bind tokens to the originating device, blocking replay attacks.
+
+**Business risk:**
+AiTM (adversary-in-the-middle) phishing steals authenticated session tokens. Without token binding, stolen tokens work from any device — effectively bypassing MFA entirely.
+
+**Remediation:**
+CA policy: Session controls > Token protection. Enable for Exchange Online and SharePoint Online at minimum. Requires Entra ID P1+. Note: may cause issues with non-compliant clients — test in report-only mode first.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-12, IA-2 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.3.2 |
+| CMMC 2.0 | AC.L2-3.1.10 |
+| ISO/IEC 27001:2022 | A.5.17 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(d), §164.312(c)(2) |
+| PCI DSS | Req 8.3 |
+| MITRE ATT&CK | T1550.001, T1539 |
+
+---
+
+### AAD-11.5 — Continuous Access Evaluation Strict Mode
+
+**Severity:** Low  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** M365 Business Premium or Entra ID P1
+
+**Description:**
+CA policy enforces CAE strict mode ensuring near-real-time session revocation when risk or network conditions change.
+
+**Business risk:**
+Default CAE uses best-effort revocation with up to 60-minute delays. Strict mode provides near-real-time enforcement when IP changes or risk signals fire.
+
+**Remediation:**
+CA policy > Session controls > Customize continuous access evaluation > Strict enforcement.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-12 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.3.3 |
+| CIS Controls v8.1 | 6.2 |
+| CMMC 2.0 | AC.L2-3.1.11 |
+| ISO/IEC 27001:2022 | A.5.17, A.8.16 |
+| SOC 2 | CC6.1, CC7.2 |
+| HIPAA | §164.312(d) |
+| PCI DSS | Req 8.3 |
+| MITRE ATT&CK | T1550.001 |
+
+---
+
+### AAD-11.6 — Cross-Tenant Inbound Trust Settings Restricted
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Default cross-tenant access settings do not trust external MFA or device compliance claims from unknown tenants.
+
+**Business risk:**
+Trusting MFA from all external tenants means an attacker controlling a weak tenant can satisfy your MFA requirements using their own weaker authentication — effectively bypassing your Conditional Access policies.
+
+**Remediation:**
+Entra ID > External Identities > Cross-tenant access settings > Default settings > Inbound trust. Disable 'Trust MFA from Microsoft Entra tenants' and 'Trust compliant devices' unless specific B2B partner trust is required.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-17, IA-2 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.3.5 |
+| CIS Controls v8.1 | 4.1 |
+| CMMC 2.0 | AC.L1-3.1.2 |
+| ISO/IEC 27001:2022 | A.5.23, A.8.22 |
+| SOC 2 | CC6.6 |
+| HIPAA | §164.308(a)(4)(ii)(A) |
+| PCI DSS | Req 1.4 |
+| MITRE ATT&CK | T1078, T1110 |
+
+---
+
+### AAD-11.7 — Privileged Access Workstation or Device Scope for Admins
+
+**Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** M365 Business Premium or Entra ID P1 + Intune
+
+**Description:**
+Conditional Access enforces that privileged role activations or admin operations occur from compliant or specifically designated devices.
+
+**Business risk:**
+Admins authenticating from any arbitrary device — including personal laptops with no endpoint controls — expose privileged credentials to malware on unmanaged endpoints.
+
+**Remediation:**
+CA policy: Target admin roles > Require compliant device or Hybrid AD join. Alternatively define a named device group as a PAW group and require membership.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-17, CM-7 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.1.3 |
+| CIS Controls v8.1 | 12.8 |
+| CMMC 2.0 | AC.L1-3.1.2 |
+| ISO/IEC 27001:2022 | A.8.2 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.308(a)(3)(ii)(A) |
+| PCI DSS | Req 7.2.4 |
+| MITRE ATT&CK | T1078.004 |
+
+---
+
+### AAD-11.8 — Terms of Use Policy Enforced
+
+**Severity:** Low  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** M365 Business Premium or Entra ID P1
+
+**Description:**
+A CA policy enforces Terms of Use acceptance for users accessing organizational resources.
+
+**Business risk:**
+Without ToU enforcement, there is no documented acknowledgment of acceptable use policy — creating legal and HR gaps, especially for guest users and contractors.
+
+**Remediation:**
+Entra ID > Security > Conditional Access > Terms of use > Create ToU document. Add to CA policy: Grant > Require terms of use.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-8 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.3.6 |
+| CMMC 2.0 | AC.L2-3.1.9 |
+| ISO/IEC 27001:2022 | A.5.10 |
+| SOC 2 | CC1.4, CC6.3 |
+| HIPAA | §164.308(a)(4)(ii)(B) |
+| PCI DSS | Req 12.3 |
+| MITRE ATT&CK | T1078 |
+
+---
+
+### AAD-11.9 — Workload Identity Conditional Access Policy
+
+**Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Entra Workload Identities Premium (add-on)
+
+**Description:**
+CA policies are applied to service principals and managed identities, not just user accounts.
+
+**Business risk:**
+Without CA policies on workload identities, compromised service principals face no access controls — no location restriction, no risk-based blocking, no session limits.
+
+**Remediation:**
+CA policy > Users > Select Workload identities > Apply conditions and access controls to high-privilege service principals. Requires Entra Workload Identities Premium add-on.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IA-3, AC-6 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.5.2 |
+| CIS Controls v8.1 | 6.8, 5.5 |
+| CMMC 2.0 | IA.L2-3.5.3 |
+| ISO/IEC 27001:2022 | A.5.16, A.8.2 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(d) |
+| PCI DSS | Req 8.6 |
+| MITRE ATT&CK | T1078.004, T1550.001 |
+
+---
+
+### AAD-12.1 — Users Without MFA — Named List
+
+**Severity:** Critical  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Identifies every enabled user account with no MFA method registered by name and UPN.
+
+**Business risk:**
+Each account without MFA can be compromised with a stolen password alone. A single phished credential gives an attacker full mailbox access, Teams, SharePoint, and the ability to initiate wire transfers or BEC campaigns.
+
+**Remediation:**
+Entra ID > Users > [select user] > Authentication methods > Add method. For bulk: Get-MgUser | where MFA not registered → require combined registration via CA policy targeted at these users.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IA-2(1) |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.1 |
+| CIS Controls v8.1 | 6.3 |
+| CISA SCuBA | MS.AAD.3.1v1 |
+| CMMC 2.0 | IA.L2-3.5.3 |
+| ISO/IEC 27001:2022 | A.5.17, A.8.5 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(d) |
+| PCI DSS | Req 8.4 |
+| MITRE ATT&CK | T1078, T1110 |
+
+---
+
+### AAD-12.2 — Stale Guest Accounts — Named List
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans) — Access Reviews require Entra P2
+
+**Description:**
+Identifies guest accounts with no sign-in activity in 90+ days.
+
+**Business risk:**
+Stale guest accounts from former vendors, contractors, and partners retain access to SharePoint sites, Teams channels, and any resource they were granted. Ex-partners can exfiltrate data months after their engagement ends.
+
+**Remediation:**
+Entra ID > External Identities > All users > Filter by guest, sort by last sign-in. Disable or delete accounts inactive 90+ days. Implement access reviews: PIM > Access reviews > Create review for guest users.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-2(3) |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.3.4 |
+| CIS Controls v8.1 | 5.3 |
+| CMMC 2.0 | AC.L1-3.1.2 |
+| ISO/IEC 27001:2022 | A.5.18, A.6.5 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.308(a)(4)(ii)(C) |
+| PCI DSS | Req 8.2.4 |
+| MITRE ATT&CK | T1078 |
+
+---
+
+### AAD-12.3 — Stale Licensed Member Accounts — Named List
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Identifies licensed member accounts with no sign-in activity in 90+ days — likely departed employees.
+
+**Business risk:**
+Active accounts for departed employees are a primary threat vector. Former employees know the organization's structure, workflows, and email conventions — making them highly effective social engineers if accounts are ever used maliciously.
+
+**Remediation:**
+Verify each account represents an active user. Disable accounts for departed employees immediately. Revoke all active sessions. Remove assigned licenses. Review for any recent inbox rules or forwarding.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-2(9) |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.6.1 |
+| CIS Controls v8.1 | 5.3 |
+| CMMC 2.0 | AC.L1-3.1.2 |
+| ISO/IEC 27001:2022 | A.5.18, A.6.5 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.308(a)(4)(ii)(C) |
+| PCI DSS | Req 8.2.4 |
+| MITRE ATT&CK | T1078 |
+
+---
+
+### AAD-12.4 — OAuth Apps with Tenant-Wide Consent — Named List
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Identifies all applications that have been granted OAuth permissions across ALL users (AllPrincipals consent type).
+
+**Business risk:**
+Apps with AllPrincipals consent can access every user's mailbox, files, calendar, and identity. Consent phishing campaigns trick admins into granting these permissions to malicious apps. Many legitimate apps accumulate excessive scopes over time.
+
+**Remediation:**
+Entra ID > Enterprise applications > All applications > Filter by permissions. Review each AllPrincipals grant. Revoke unnecessary grants: Remove-MgOAuth2PermissionGrant -OAuth2PermissionGrantId <id>.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-3 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.5.4 |
+| CIS Controls v8.1 | 2.1 |
+| CISA SCuBA | MS.AAD.5.2v1 |
+| CMMC 2.0 | AC.L1-3.1.2 |
+| ISO/IEC 27001:2022 | A.5.23, A.8.4 |
+| SOC 2 | CC6.3, CC7.2 |
+| HIPAA | §164.308(a)(4), §164.308(a)(1)(ii)(D) |
+| PCI DSS | Req 6.4.3 |
+| MITRE ATT&CK | T1528, T1550.001 |
+
+---
+
+### AAD-13.1 — Microsoft Secure Score
+
+**Severity:** Medium  |  **Category:** Governance  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Microsoft's own assessment of the tenant's security posture across identity, data, apps, and devices.
+
+**Business risk:**
+Microsoft Secure Score measures the same controls through Microsoft's lens. A score below 50% indicates fundamental security gaps across the tenant. It is independently verifiable and useful for trend tracking.
+
+**Remediation:**
+Review Microsoft Secure Score improvement actions at security.microsoft.com > Secure Score. Prioritize Identity and Email improvement actions first.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | CA-7 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.5.2 |
+| CMMC 2.0 | CA.L2-3.12.3 |
+| ISO/IEC 27001:2022 | A.5.36 |
+| SOC 2 | CC4.1 |
+| HIPAA | §164.308(a)(8) |
+| PCI DSS | Req 11.6.1 |
+| MITRE ATT&CK | T1078 |
+
+---
+
+*Generated from `Config/controls.json` · NRG Technology Services / NextLayerSec LLC*

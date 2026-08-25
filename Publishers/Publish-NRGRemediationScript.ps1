@@ -10,8 +10,13 @@
 #   - Each section: description, business risk, exact command, validation
 #   - Header warns: review before running, test in non-prod first
 #
-# SECURITY: Remediation strings are sourced from controls.json which is
-#   content-validated at load time. No tenant data interpolated into code.
+# SECURITY: Remediation strings are sourced from controls.json, which is
+#   content-validated at load time. Tenant values (TenantDomain, Operator,
+#   AssessmentDate, ToolVersion) ARE interpolated into the generated script —
+#   into single-quoted PowerShell literals via EscPs1Literal, which doubles
+#   embedded quotes, and into comment lines with newlines stripped so a value
+#   cannot terminate the comment and inject code. Any new interpolation site
+#   must go through the same two helpers.
 #
 
 function Publish-NRGRemediationScript {
@@ -363,5 +368,20 @@ function Publish-NRGRemediationScript {
     $null = $sb.AppendLine("Write-Host 'Remediation script complete.' -ForegroundColor Cyan")
     $null = $sb.AppendLine("Write-Host 'Re-run NRG-Assessment to validate changes.' -ForegroundColor Cyan")
 
-    $sb.ToString() | Out-File -LiteralPath $OutputPath -Encoding utf8
+    # Publisher self-hardens via Set-NRGSensitiveFileContent: the file is
+    # pre-created and its ACL applied BEFORE tenant data lands. Writing with a
+    # bare Out-File lets the file inherit the parent directory ACL for the
+    # duration of the write, which on a shared MSP workstation or a synced
+    # OneDrive folder is a window in which a co-resident process can read CA
+    # policies, admin UPNs, OAuth grants and DMARC records. Hardening travels
+    # with the terminal write so no caller can forget it. The Out-File fallback
+    # preserves behaviour if Lib/ has not been dot-sourced.
+    if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileContent -Path $OutputPath -Content $sb.ToString()
+    } else {
+        $sb.ToString() | Out-File -LiteralPath $OutputPath -Encoding utf8
+        if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+            Set-NRGSensitiveFileAcl -Path $OutputPath -ErrorAction SilentlyContinue
+        }
+    }
 }

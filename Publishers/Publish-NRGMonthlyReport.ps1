@@ -157,6 +157,34 @@ function Publish-NRGMonthlyReport {
     $prior = $null
     if ($PriorMonthPath) {
         $prior = Get-Content -LiteralPath $PriorMonthPath -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
+
+        # Validate the prior-month file before any of it reaches the report.
+        # This JSON is operator-supplied, and on a shared workstation it can be
+        # replaced on disk between runs. Score and Period are rendered into the
+        # compliance-framed trend note, so a falsified "Score: 100" or an
+        # attacker-chosen Period string would be presented to the client as
+        # this tool's own compliance history. ConvertTo-NRGHtmlSafe blocks
+        # script injection; it does not stop content falsification.
+        if ($prior -isnot [hashtable]) {
+            throw "Prior-month JSON must deserialize to a hashtable; got [$($prior.GetType().FullName)]. File: $PriorMonthPath"
+        }
+        foreach ($req in 'Score', 'Period') {
+            if (-not $prior.Contains($req)) {
+                throw "Prior-month JSON is missing required key '$req'. File: $PriorMonthPath"
+            }
+        }
+        # Strict integer check — a lenient -as [int] would accept $true (1)
+        # and "42.5" (42), both of which mean the file is not what it claims.
+        $priorScore = $null
+        try { $priorScore = [int]$prior['Score'] } catch {
+            throw "Prior-month JSON 'Score' must be an integer 0-100; got '$($prior['Score'])'. File: $PriorMonthPath"
+        }
+        if ($priorScore -lt 0 -or $priorScore -gt 100) {
+            throw "Prior-month JSON 'Score' must be between 0 and 100; got $priorScore. File: $PriorMonthPath"
+        }
+        if ([string]$prior['Period'] -notmatch '^\s*([A-Z][a-z]+ \d{4}|\d{4}-\d{2})\s*$') {
+            throw "Prior-month JSON 'Period' must look like 'May 2026' or '2026-05'; got '$($prior['Period'])'. File: $PriorMonthPath"
+        }
     }
 
     # Resolve the three table populations:
@@ -498,7 +526,22 @@ $licCallout
     if ($outDir -and -not (Test-Path -LiteralPath $outDir)) {
         New-Item -ItemType Directory -Force -LiteralPath $outDir | Out-Null
     }
-    $html | Out-File -LiteralPath $OutputPath -Encoding utf8 -NoNewline
+    # Publisher self-hardens via Set-NRGSensitiveFileContent: the file is
+    # pre-created and its ACL applied BEFORE tenant data lands. Writing with a
+    # bare Out-File lets the file inherit the parent directory ACL for the
+    # duration of the write, which on a shared MSP workstation or a synced
+    # OneDrive folder is a window in which a co-resident process can read CA
+    # policies, admin UPNs, OAuth grants and DMARC records. Hardening travels
+    # with the terminal write so no caller can forget it. The Out-File fallback
+    # preserves behaviour if Lib/ has not been dot-sourced.
+    if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileContent -Path $OutputPath -Content $html
+    } else {
+        $html | Out-File -LiteralPath $OutputPath -Encoding utf8 -NoNewline
+        if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+            Set-NRGSensitiveFileAcl -Path $OutputPath -ErrorAction SilentlyContinue
+        }
+    }
 
     # Sibling JSON — becomes next month's -PriorMonthPath input.
     $jsonOut = [ordered]@{
@@ -523,7 +566,22 @@ $licCallout
     }
     $jsonPath = $OutputPath -replace '\.html?$', '.json'
     if ($jsonPath -eq $OutputPath) { $jsonPath = "$OutputPath.json" }
-    $jsonOut | ConvertTo-Json -Depth 8 | Out-File -LiteralPath $jsonPath -Encoding utf8
+    # Publisher self-hardens via Set-NRGSensitiveFileContent: the file is
+    # pre-created and its ACL applied BEFORE tenant data lands. Writing with a
+    # bare Out-File lets the file inherit the parent directory ACL for the
+    # duration of the write, which on a shared MSP workstation or a synced
+    # OneDrive folder is a window in which a co-resident process can read CA
+    # policies, admin UPNs, OAuth grants and DMARC records. Hardening travels
+    # with the terminal write so no caller can forget it. The Out-File fallback
+    # preserves behaviour if Lib/ has not been dot-sourced.
+    if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileContent -Path $jsonPath -Content ($jsonOut | ConvertTo-Json -Depth 8)
+    } else {
+        $jsonOut | ConvertTo-Json -Depth 8 | Out-File -LiteralPath $jsonPath -Encoding utf8
+        if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+            Set-NRGSensitiveFileAcl -Path $jsonPath -ErrorAction SilentlyContinue
+        }
+    }
 
     Write-Host "  [+] Monthly report: $OutputPath" -ForegroundColor Green
     Write-Host "  [+] Monthly state:  $jsonPath" -ForegroundColor Green

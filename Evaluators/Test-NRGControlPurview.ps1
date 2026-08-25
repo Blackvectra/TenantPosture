@@ -3,11 +3,9 @@
 # Test-NRGControlPurview.ps1
 # Evaluates Purview controls. Reads: Get-NRGRawData -Key 'Purview'
 #
-# Controls:
-#   PVW-1.1  Unified Audit Log ingestion enabled
-#   PVW-1.2  DLP policies active for sensitive information types
-#   PVW-1.3  Retention policies configured
-#   PVW-1.4  Sensitivity labels published
+# Controls: PVW-1.1 through PVW-4.4 (18 controls).
+#   Config/controls.json is authoritative — each control's EvaluatorFunction
+#   names the function in this file that scores it.
 #
 
 function Test-NRGControlPurview {
@@ -189,7 +187,7 @@ function Test-NRGControlPurviewRetention {
     if ($missing.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Retention policies cover all key workloads: $($requiredWorkloads -join ', ')"
     } elseif ($retPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail "Retention policies exist but missing coverage for: $($missing -join ', ')" -CurrentValue "Missing: $($missing -join ', ')" -RequiredValue 'Exchange, SharePoint, OneDrive, Teams all covered'
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail "Retention policies exist but are missing coverage for: $($missing -join ', ')" -CurrentValue "Missing: $($missing -join ', ')" -RequiredValue 'Exchange, SharePoint, OneDrive, Teams all covered'
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No retention policies configured. Data cannot be preserved for legal or regulatory requirements.' -Remediation $ctrl.Remediation
     }
@@ -211,14 +209,13 @@ function Test-NRGControlPurviewAutoLabel {
 }
 
 # ── PVW-3.1 Audit Logs Exported to SIEM ──────────────────────────────────────
-# v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
 function Test-NRGControlPurviewSIEMExport {
     [CmdletBinding()] param()
     $cid = 'PVW-3.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
-        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Audit log SIEM export status cannot be determined via Graph API alone. Verify via Purview > Audit > Export settings or Microsoft Sentinel connector status.' `
+        -Detail 'This control requires manual verification — whether an external SIEM is consuming the audit log is not observable from Microsoft 365. Confirm in Purview > Audit > Export settings, or check the Microsoft Sentinel connector state.' `
         -Remediation $ctrl.Remediation
 }
 
@@ -258,14 +255,13 @@ function Test-NRGControlPurviewEDiscovery {
 }
 
 # ── PVW-3.3 Microsoft Purview Compliance Score Reviewed ──────────────────────
-# v4.6.4 ADVISORY MARK: no programmatic check, manual review required.
 function Test-NRGControlPurviewComplianceScore {
     [CmdletBinding()] param()
     $cid = 'PVW-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit `
-        -Detail 'ADVISORY ONLY — no programmatic check is implemented for this control (v4.6.4). Compliance Score requires manual review at compliance.microsoft.com > Compliance Manager. Verify improvement actions are assigned and tracked.' `
+        -Detail 'This control requires manual verification — Compliance Manager improvement actions are not exposed to the APIs this assessment uses. Review them at compliance.microsoft.com > Compliance Manager and confirm each is assigned to an owner with a target date.' `
         -Remediation $ctrl.Remediation
 }
 
@@ -319,7 +315,7 @@ function Test-NRGControlPurviewAuditRetention {
     if ($longTerm.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($longTerm.Count) audit log retention policy(ies) extending logs ≥365 days."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No audit log retention policy extending beyond 90 days found. Default retention is 90 days. Breaches discovered weeks or months later cannot be investigated. Requires Audit Premium or custom retention policy.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No audit log retention policy extending beyond the platform default was found. Audit (Standard) retains 180 days. Breaches discovered weeks or months later cannot be investigated. Requires Audit Premium or custom retention policy.' -Remediation $ctrl.Remediation
     }
 }
 

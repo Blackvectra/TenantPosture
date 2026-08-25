@@ -24,7 +24,7 @@ The v4.12.0 Email-IR mode lives in the top-level `Email-IR/` subtree (`Lib/`, `C
 
 `Evaluators/` contains one file per workload, each function evaluating one control: `Test-NRGControl-AAD.ps1` (41 functions), `Test-NRGControlDefender.ps1` (18 functions), `Test-NRGControlTeams.ps1` (17 functions), `Test-NRGControlPurview.ps1` (15 functions), `Test-NRGControlSharePoint.ps1` (13 functions), `Test-NRGControlIntune.ps1` (13 functions), `Test-NRGControlCopilot.ps1` (5 functions), `Test-NRGControlPowerPlatform.ps1` (4 functions).
 
-`Publishers/` contains `Publish-NRGAssessmentHTML.ps1` (the interactive HTML report generator).
+`Publishers/` contains 7 publishers: `Publish-NRGAssessmentHTML.ps1` (interactive HTML report), `Publish-NRGAssessmentSummary.ps1` (Markdown summary), `Publish-NRGComplianceMatrix.ps1` (XLSX matrix), `Publish-NRGDeltaReport.ps1` (run-over-run drift), `Publish-NRGMonthlyReport.ps1`, `Publish-NRGRemediationPlaybook.ps1`, and `Publish-NRGRemediationScript.ps1`.
 
 `Config/` contains `clients.json` (batch client list with TenantId, DelegatedOrg, and skip flags), `controls.json` (control definitions including `ControlId`, `Title`, `Severity`, `Workload`, `Category`, `CollectorDependency`, `EvaluatorFunction`, `Remediation`, `References`, and `LicenseRequirement` per control), `frameworks.json` (framework definitions for CIS / SCuBA / NIST / CMMC / ISO 27001 / SOC 2 / HIPAA / PCI DSS / DISA STIG / MITRE ATT&CK), `branding.psd1` (company name, contact, colors, hourly rate, fees), and `schema/controls.schema.json` (JSON Schema validating controls.json shape).
 
@@ -56,6 +56,12 @@ Every collector must initialize a result object with `CollectorId`, `CollectedAt
 
 Every evaluator must guard against missing data as its first action. If `Get-NRGRawData` returns null or `Success` is false, register `NotApplicable` and return immediately. Never allow a null reference to propagate into evaluation logic. `Add-NRGFinding` accepts `ControlId`, `State`, `Category`, `Title`, `Severity`, `Detail`, `FrameworkIds`, `CurrentValue`, `RequiredValue`, `Remediation` (NOT `RemediationSteps` — that parameter does not exist), and `AffectedObjects` (structured per-finding objects, e.g. recipient warn-lists or flagged inbox rules).
 
+**Empty is not clean — `SectionStatus`.** Collectors that run several independent queries wrap each in its own `try/catch` so one failure does not abort the rest, then set `Success = $true` regardless. That makes an EMPTY list ambiguous: it can mean "queried, found nothing" (compliant) or "the query failed" (unknown), and `Success` cannot tell them apart. Any collector with independent sub-queries MUST therefore publish `Data.SectionStatus`, a map of section name to `NotRun` / `Collected` / `Failed`, and any evaluator about to conclude `Satisfied` from an empty list MUST consult it first and report `NotApplicable` when the section did not complete. Reading an empty list as compliance produced false clean bills of health on the BEC exfiltration, persistence and tenant-takeover controls — the highest-consequence class of bug this tool can have. Collectors implementing this today: `EXO-Inventory`, `AAD-DirectoryRoles`, `AAD-Inventory`, `Purview`, `PowerPlatform`. Absent `SectionStatus` is treated as collected so replayed older result JSON keeps its previous behaviour.
+
+**Advisory controls never claim compliance.** A control with no programmatic check must emit `NotApplicable`, never `Satisfied` or `Partial`. `Partial` is worth 0.5 toward the compliance score, so an advisory control scored as `Partial` hands every tenant free credit for a verdict the tool never computed. Enforced statically by `NRG.EvaluatorHonesty.Tests.ps1`.
+
+**StrictMode.** `Set-StrictMode -Version Latest` is active module-wide. Referencing a property an object does not have THROWS before a `??` default can apply, so fields read off external cmdlet output whose shape is not guaranteed must go through `Get-NRGObjectField`, not direct dot-access.
+
 ## Control Schema
 
 Each entry in `Config/controls.json` is validated by `Config/schema/controls.schema.json`. Required fields: `ControlId` (workload-prefixed, e.g. `AAD-1.1`), `Title`, `Description`, `BusinessRisk`, `Severity` (`Critical|High|Medium|Low|Informational`), `Workload` (one of AAD, EXO, DEF, TMS, PVW, SPO, INT, PPL, DNS), `Category`, `Automated` (boolean), `CollectorDependency` (raw-data key name the evaluator depends on), `EvaluatorFunction` (function name in `Evaluators/`), `Remediation`, `References` (array of framework citations), `LicenseRequirement` (string matched against `Get-NRGTenantLicenseProfile` output).
@@ -82,11 +88,11 @@ The report produces 13 sections: Executive Overview with score ring and license 
 
 ## Known Gaps and Roadmap
 
-**Phase 2 priorities** are: extending `Invoke-NRGCollectDNSEmailRecords` with DKIM key rotation age via `Get-DkimSigningConfig`, CAA record validation, TLS certificate expiry on mail hostnames, and CT log checks via `crt.sh`; creating `Invoke-NRGCollectEXOInventory` for external forwarding rules, shared mailbox sign-in state, per-user audit exceptions, and SMTP AUTH per-user overrides; populating real CISA ScubaGear rule identifiers into `controls.json` `FrameworkIds` fields from https://github.com/cisagov/ScubaGear; and creating dedicated evaluator files `Test-NRGControlEXO.ps1` and `Test-NRGControlDNS.ps1` which currently do not exist.
+**Phase 2 priorities** are: extending `Invoke-NRGCollectDNSEmailRecords` with DKIM key rotation age via `Get-DkimSigningConfig`, CAA record validation, TLS certificate expiry on mail hostnames, and CT log checks via `crt.sh`; populating real CISA ScubaGear rule identifiers into `controls.json` `FrameworkIds` fields from https://github.com/cisagov/ScubaGear; and populating remaining framework identifiers. (`Invoke-NRGCollectEXOInventory`, `Test-NRGControlEXO.ps1` and `Test-NRGControlDNS.ps1` are DONE and now exist.)
 
 **Phase 3** covers delta and drift detection comparing current run JSON against a prior snapshot for CA policy changes, new admin role assignments, new OAuth app registrations, and DMARC policy regression; a Markdown summary publisher for ConnectWise ticket output; and a remediation playbook publisher consuming baseline `RemediationCmdlet` fields.
 
-**Phase 4** covers `Apply-NRGBaseline.ps1` as a write-mode deployment script with mandatory `WhatIf` support and `-Confirm` required for auth policy or admin role changes; Windows LAPS (INT-4.1) and Windows Hello for Business (INT-4.2) evaluators; and implementation of the five Copilot governance controls which currently return `NotApplicable`.
+**Phase 4 is complete.** `Apply-NRGBaseline.ps1` ships as the write-mode deployment script with mandatory `WhatIf` support and `-Confirm` on auth-policy and admin-role changes, dot-sourcing six scripts from `Apply/`. The Windows LAPS (INT-4.1) and Windows Hello for Business (INT-4.2) evaluators exist, and the Copilot governance controls emit real Satisfied / Partial / Gap verdicts rather than a placeholder.
 
 ## Environment
 

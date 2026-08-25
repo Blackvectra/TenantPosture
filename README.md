@@ -249,7 +249,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          26 Pester suites — the FULL suite gates every PR
+Testing/                          27 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -299,7 +299,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **26 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **27 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -314,14 +314,19 @@ Edit `Config\clients.json` to add tenants:
 
 ```json
 {
-  "ClientName":   "Client Name",
-  "TenantDomain": "client.com",
-  "TenantId":     "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-  "DelegatedOrg": "client.onmicrosoft.com",
-  "DnsDomains":   ["client.com"],
-  "SkipPurview":  false,
+  "ClientName":        "Client Name",
+  "TenantDomain":      "client.com",
+  "TenantId":          "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "DelegatedOrg":      "client.onmicrosoft.com",
+  "DnsDomains":        ["client.com"],
+  "SkipPurview":       false,
+  "SkipTeams":         false,
+  "SkipSharePoint":    false,
+  "SkipIntune":        false,
   "SkipPowerPlatform": true,
-  "Active":       true
+  "SkipDNS":           false,
+  "Notes":             "Business Standard tenant — Purview and Power Platform skipped.",
+  "Active":            true
 }
 ```
 
@@ -334,11 +339,11 @@ GDAP relationships must be active in Partner Center before the batch runner can 
 
 ## CI/CD
 
-Six GitHub Actions workflows run on every push and pull request to `main`:
+Six GitHub Actions workflows cover the repository. Note that the `ci`, `codeql`, `secret-scan` and `dependency-review` triggers are temporarily commented out pending a GitHub Actions billing reset, so those four run on manual dispatch only; each workflow file carries a restore note in its header:
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (26 suites) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (27 suites) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -351,8 +356,10 @@ The framework-accuracy suite validates every SCuBA citation against the bundled 
 
 ## License
 
-Internal use — NRG Technology Services / NextLayerSec LLC. Not licensed for redistribution.
+**Proprietary — all rights reserved.** Copyright (c) 2026 Matthew Levorson — NRG Technology Services / NextLayerSec LLC. See [LICENSE](LICENSE).
+
+This is not open-source software. No right to use, copy, modify, redistribute or resell it is granted without prior written permission from the owner, and receiving a copy does not itself confer one. Assessment reports produced by running the tool belong to the customer they were produced for.
 
 ---
 
-*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 266 exported functions · full Pester suite (26 suites) gating CI*
+*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 266 exported functions · full Pester suite (27 suites) gating CI*

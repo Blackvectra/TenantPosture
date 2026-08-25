@@ -106,7 +106,22 @@ function Publish-NRGComplianceMatrix {
     if ([string]::IsNullOrWhiteSpace($matrixBase)) { $matrixBase = 'compliance-matrix' }
     $tmpJson = Join-Path $outputDir "$matrixBase-matrix-input.json"
     try {
-        $payload | ConvertTo-Json -Depth 6 -Compress | Out-File -LiteralPath $tmpJson -Encoding utf8
+        # Publisher self-hardens via Set-NRGSensitiveFileContent: the file is
+            # pre-created and its ACL applied BEFORE tenant data lands. Writing with a
+            # bare Out-File lets the file inherit the parent directory ACL for the
+            # duration of the write, which on a shared MSP workstation or a synced
+            # OneDrive folder is a window in which a co-resident process can read CA
+            # policies, admin UPNs, OAuth grants and DMARC records. Hardening travels
+            # with the terminal write so no caller can forget it. The Out-File fallback
+            # preserves behaviour if Lib/ has not been dot-sourced.
+        if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+            Set-NRGSensitiveFileContent -Path $tmpJson -Content ($payload | ConvertTo-Json -Depth 6 -Compress)
+        } else {
+            $payload | ConvertTo-Json -Depth 6 -Compress | Out-File -LiteralPath $tmpJson -Encoding utf8
+            if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+                Set-NRGSensitiveFileAcl -Path $tmpJson -ErrorAction SilentlyContinue
+            }
+        }
         if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
             Set-NRGSensitiveFileAcl -Path $tmpJson -ErrorAction SilentlyContinue
         }

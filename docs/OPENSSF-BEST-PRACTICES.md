@@ -32,7 +32,7 @@ Each row below names the OpenSSF criterion ID, what we do, and where the evidenc
 
 | ID | Criterion | Status | Evidence |
 |---|---|---|---|
-| `repo_public` | Source code under version control | ✓ | GitHub-hosted git |
+| `repo_public` | Source repository publicly readable | ✗ | Private repository. Source is under git version control and distributed to clients under licence, but is not public. This criterion is not met. |
 | `repo_track` | Changes tracked between releases | ✓ | `CHANGELOG.md` per release |
 | `repo_distributed` | Distributed VCS used | ✓ | git |
 | `version_unique` | Unique version per release | ✓ | `ModuleVersion` in `NRG-Assessment.psd1`; semver tags `v4.9.0` etc. |
