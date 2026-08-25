@@ -4,6 +4,35 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **Standalone NIST SP 800-53 Rev 5 matrix (`-NISTMatrix`).** Clients assessed
+  against 800-53 should not have to read their posture out of a multi-framework
+  report. `Publish-NRGNISTMatrix.ps1` emits a single-framework deliverable from
+  the same run — Markdown always, XLSX when openpyxl is present — across six
+  sheets: Summary, Control Matrix (one row per 800-53 control and the tenant
+  control evidencing it), By Control, By Family, Physical & Device, and Not
+  Assessed. Official Rev 5 titles come from a new
+  `Config/nist-800-53-catalog.json`, because a row reading `AC-6(9)  Gap` is not
+  something an auditor can work from. `-AllFiles` implies the switch.
+  **Strictly additive:** `Publish-NRGComplianceMatrix` keeps all ten frameworks,
+  no existing output changes, and a test asserts that publishing the NIST matrix
+  does not move the CIS, SCuBA or CMMC score by a point.
+- **The matrix refuses to overstate its scope.** The score is labelled as
+  coverage of the 57 controls the tool exercises, not 800-53 baseline
+  completion. The physical/media/personnel section stays unscored. Controls that
+  came back `NotApplicable` get their own sheet stating that a missing license or
+  an unconnected service is neither a pass nor a gap — a matrix that omits what
+  it could not evaluate reads as full coverage of a smaller scope.
+- **Rollup tables gained an Error column.** Met + Partial + Gap + N/A did not
+  reach Assessed on any tenant with a thrown evaluator, so a reader adding a row
+  up came short with no way to tell whether the missing rows were passes or
+  failures. Fixed in the NIST matrix, the HTML family table and the Markdown
+  summary; the XLSX family sheet already had it.
+- **Two backticked terms lost their code formatting in the NIST matrix.** A
+  backtick inside a PowerShell double-quoted string is the escape character. The
+  regression test asserts with `.Contains` and an explicit character, because a
+  backtick is *also* the escape character in a `-like` wildcard — the obvious
+  `-BeLike '*`x`*'` assertion silently tests for something else.
+
 - **NIST SP 800-53 Rev 5 coverage rolled up by control family.** The report scored
   NIST as one aggregate percentage, which tells a reader working an 800-53,
   FedRAMP, or CMMC assessment nothing about WHICH families are weak — every other

@@ -183,17 +183,17 @@ function Publish-NRGAssessmentSummary {
     if ($nistCov -and $nistCov.FamilyCount -gt 0) {
         $null = $sb.AppendLine("## NIST SP 800-53 Rev 5 — Control Family Coverage")
         $null = $sb.AppendLine()
-        $null = $sb.AppendLine("| Family | Name | Assessed | Met | Partial | Gap | N/A | Coverage |")
-        $null = $sb.AppendLine("|--------|------|---------:|----:|--------:|----:|----:|---------:|")
+        $null = $sb.AppendLine("| Family | Name | Assessed | Met | Partial | Gap | Error | N/A | Coverage |")
+        $null = $sb.AppendLine("|--------|------|---------:|----:|--------:|----:|------:|----:|---------:|")
         foreach ($fam in $nistCov.Families) {
             # Scored -eq 0 means every finding in the family was NotApplicable.
             # Printing 0% there would report a failing grade for a question the
             # tool never got to ask.
             $covTxt = if ($fam.Scored -gt 0) { "$([int]$fam.Score)%" } else { 'Not assessed' }
-            $null = $sb.AppendLine("| $(EscMd $fam.Family) | $(EscMd $fam.Name) | $($fam.Assessed) | $($fam.Satisfied) | $($fam.Partial) | $($fam.Gap) | $($fam.NA) | $covTxt |")
+            $null = $sb.AppendLine("| $(EscMd $fam.Family) | $(EscMd $fam.Name) | $($fam.Assessed) | $($fam.Satisfied) | $($fam.Partial) | $($fam.Gap) | $($fam.Error) | $($fam.NA) | $covTxt |")
         }
         $null = $sb.AppendLine()
-        $null = $sb.AppendLine("_$($nistCov.NistControlCount) distinct 800-53 controls exercised. A control mapped to more than one family is counted in each, so family rows do not sum to the assessment total. N/A rows are excluded from Coverage — they are controls this assessment could not evaluate, not controls the tenant passed._")
+        $null = $sb.AppendLine("_$($nistCov.NistControlCount) distinct 800-53 controls exercised. Met + Partial + Gap + Error + N/A sums to Assessed on every row. A control mapped to more than one family is counted in each, so family rows do not sum to the assessment total. N/A and Error are both excluded from Coverage — N/A means this assessment could not evaluate the control, Error means the evaluator threw before reaching a verdict. Neither is a control the tenant passed._")
         $null = $sb.AppendLine()
     }
 

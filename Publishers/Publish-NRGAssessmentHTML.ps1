@@ -460,6 +460,7 @@ function Publish-NRGAssessmentHTML {
   <td class='nf-n nf-ok'>$($fam.Satisfied)</td>
   <td class='nf-n nf-pt'>$($fam.Partial)</td>
   <td class='nf-n nf-gp'>$($fam.Gap)</td>
+  <td class='nf-n nf-er'>$($fam.Error)</td>
   <td class='nf-n nf-na'>$($fam.NA)</td>
   <td class='nf-sc'>
     <div class='nf-bar'><div class='nf-fill' style='width:$fbar%;background:$fcol'></div></div>
@@ -479,12 +480,12 @@ function Publish-NRGAssessmentHTML {
       <thead><tr>
         <th>Family</th><th>Name / 800-53 controls exercised</th>
         <th class='nf-n'>Assessed</th><th class='nf-n'>Met</th><th class='nf-n'>Partial</th>
-        <th class='nf-n'>Gap</th><th class='nf-n'>N/A</th><th>Coverage</th>
+        <th class='nf-n'>Gap</th><th class='nf-n'>Error</th><th class='nf-n'>N/A</th><th>Coverage</th>
       </tr></thead>
       <tbody>$nistRows</tbody>
     </table>
   </div>
-  <div class="nf-note">A control mapped to more than one family is counted in each &mdash; family rows do not sum to the assessment total. <strong>N/A</strong> rows are excluded from the coverage percentage: they are controls this tool could not assess (missing license, data not collected), not controls the tenant passed. A family showing &mdash; had no assessable control at all.</div>
+  <div class="nf-note">A control mapped to more than one family is counted in each &mdash; family rows do not sum to the assessment total. Met + Partial + Gap + Error + N/A sums to Assessed on every row. <strong>N/A</strong> and <strong>Error</strong> are both excluded from the coverage percentage &mdash; N/A means this tool could not assess the control (missing license, data not collected) and Error means the evaluator threw before reaching a verdict. Neither is a control the tenant passed. A family showing &mdash; had no assessable control at all.</div>
 </div>
 "@
     }
@@ -969,6 +970,7 @@ th.nf-n{text-align:right}
 .nf-ok{color:#059669}
 .nf-pt{color:#ca8a04}
 .nf-gp{color:#dc2626}
+.nf-er{color:#b91c1c}
 .nf-na{color:#94a3b8}
 .nf-sc{white-space:nowrap;font-weight:800;min-width:130px}
 .nf-bar{display:inline-block;width:74px;height:7px;border-radius:4px;background:var(--bdr);overflow:hidden;vertical-align:middle;margin-right:8px}
