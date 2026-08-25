@@ -249,7 +249,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          28 Pester suites — the FULL suite gates every PR
+Testing/                          29 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -288,6 +288,22 @@ The rollup covers 12 families and 57 distinct 800-53 controls, and appears in th
 
 Two things it will not do. A control mapped to more than one family is counted in **each** family it cites, so family rows do not sum to the assessment total — the report says so on the page rather than leaving a reader to discover it. And `NotApplicable` rows stay out of the coverage percentage entirely: a control the tool could not evaluate is not a control the tenant passed, and a family with nothing assessable reads "Not assessed", never a red 0%.
 
+### Physical, media and device controls
+
+A tenant scan can evidence endpoint posture — encryption, patch level, screen lock, endpoint protection, device identity. It cannot see a locked server room, a certificate of destruction, or a returned badge. Those are still 800-53 controls a client working an 800-53 or CMMC assessment has to satisfy, and leaving them out silently is the dangerous option: a reader looking at a clean family table would reasonably infer the physical families were assessed and passed.
+
+So the report carries a **Physical, Media and Device Controls** section covering 31 800-53 controls spanning AC, CM, IA, MA, MP, PE, PS, SC and SI, driven by [`Config/nist-physical.json`](Config/nist-physical.json). Every row states its scope:
+
+| Scope | Meaning | Count |
+|---|---|---:|
+| **Tenant** | Fully evidenced by controls scored in this assessment — BitLocker/FileVault, ASR, LAPS, Windows Hello, update rings, device compliance, endpoint DLP | 10 |
+| **Hybrid** | The tenant evidences part; the rest is off-tenant — remote access, external systems, nonlocal maintenance, asset inventory, personnel termination | 7 |
+| **Attested** | Not observable from Microsoft 365 under any configuration — facility access, visitor records, fire and environmental controls, media storage/transport/sanitisation, maintenance personnel, wireless | 14 |
+
+Each row names the device aspect it covers, links back to the tool controls that evidence it, states the evidence an assessor must collect off-tenant, and lists **two or more implementation options** — so a client already standardised on a third-party EDR or an existing badge system sees alternatives rather than a single directive.
+
+**Nothing in this section is scored.** Tenant and Hybrid rows reflect findings already scored under their own control IDs; counting them again would double-count. Attested rows were never assessed and read *Attestation required* — never Satisfied, never Partial. That is the same rule the tool applies to advisory controls, enforced here by `NRG.NISTPhysical.Tests.ps1`, which feeds the posture a findings set that satisfies every control in the tool and asserts the attested rows still refuse to claim anything.
+
 ---
 
 ## Security Hardening
@@ -307,7 +323,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **28 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **29 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -370,4 +386,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 268 exported functions · full Pester suite (28 suites) gating CI*
+*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 270 exported functions · full Pester suite (29 suites) gating CI*

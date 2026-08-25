@@ -113,7 +113,7 @@ Describe 'Publish-NRGAssessmentHTML end-to-end render' {
     }
 
     It 'contains the core report sections' {
-        foreach ($anchor in 'id="exec"', 'id="findings"', 'id="fw-section"', 'id="nist-families"') {
+        foreach ($anchor in 'id="exec"', 'id="findings"', 'id="fw-section"', 'id="nist-families"', 'id="nist-physical"') {
             $script:html | Should -BeLike "*$anchor*" -Because "section marker $anchor must render"
         }
     }
@@ -138,6 +138,22 @@ Describe 'Publish-NRGAssessmentHTML end-to-end render' {
         # getting more than the control count would reasonably conclude the
         # numbers are wrong.
         $script:html | Should -BeLike '*do not sum to the assessment total*'
+    }
+
+    It 'renders the physical/device section without claiming compliance for attested controls' {
+        # The section is rendered from Config/nist-physical.json, so it appears
+        # regardless of what the synthetic findings contain. What must hold in
+        # the OUTPUT is that the not-observable controls carry the attestation
+        # label and the page says the section is unscored — the two sentences
+        # that stop a reader inferring a physical pass from a clean NIST table.
+        $script:html | Should -BeLike '*Attestation required*'
+        $script:html | Should -BeLike '*Nothing in this section is scored*'
+        # A representative control from each family the tenant cannot see.
+        foreach ($c in 'MP-6', 'PE-3', 'MA-5') {
+            $script:html | Should -BeLike "*$c*" -Because "$c is not observable from M365 and must still be listed"
+        }
+        # And the section must actually offer options, not just verdicts.
+        $script:html | Should -BeLike '*Implementation options*'
     }
 
     It 'renders findings from every workload (report is not empty)' {
