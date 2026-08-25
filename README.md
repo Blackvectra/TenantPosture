@@ -208,7 +208,7 @@ so CLI and GUI workflows can be mixed freely.
 Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (270 exports, dependency declarations)
+NRG-Assessment.psd1               ← Module manifest (274 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -249,7 +249,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          29 Pester suites — the FULL suite gates every PR
+Testing/                          30 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -288,6 +288,28 @@ The rollup covers 12 families and 57 distinct 800-53 controls, and appears in th
 
 Two things it will not do. A control mapped to more than one family is counted in **each** family it cites, so family rows do not sum to the assessment total — the report says so on the page rather than leaving a reader to discover it. And `NotApplicable` rows stay out of the coverage percentage entirely: a control the tool could not evaluate is not a control the tenant passed, and a family with nothing assessable reads "Not assessed", never a red 0%.
 
+### Standalone NIST 800-53 matrix
+
+Clients assessed against 800-53 should not have to read their posture out of a multi-framework report. `-NISTMatrix` emits a **single-framework deliverable** from the same run — Markdown always, XLSX when `openpyxl` is present:
+
+```powershell
+# Just the NIST matrix, no other sidecars
+.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -NISTMatrix
+
+# -AllFiles implies it, so the full profile stays a superset
+.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -AllFiles
+```
+
+The workbook has six sheets: **Summary** (posture, scope, caveats), **Control Matrix** (one row per 800-53 control and the tenant control evidencing it — the matrix proper), **By Control**, **By Family**, **Physical & Device**, and **Not Assessed**. Every row carries the official Rev 5 control title from [`Config/nist-800-53-catalog.json`](Config/nist-800-53-catalog.json), because a row reading `AC-6(9)   Gap` is not something an auditor can work from.
+
+This is **purely additive**. `Publish-NRGComplianceMatrix` keeps every framework it has today — CIS, SCuBA, CMMC, ISO 27001, SOC 2, HIPAA, PCI DSS, MITRE — and none of the existing report changes. Same findings, same scores, one extra document organised the way an 800-53 reader works. A test asserts that publishing the NIST matrix does not move the CIS, SCuBA or CMMC score by a single point.
+
+Three things the document is careful not to claim:
+
+- **The score is coverage of what was exercised, not baseline completion.** A tenant scan reaches 57 of the 800-53 controls. A Low, Moderate or High baseline contains many that no cloud scan can reach, and the Summary sheet says so in as many words.
+- **Physical, media, maintenance and personnel controls stay unscored**, with the evidence an assessor has to collect directly and two or more implementation options each.
+- **Controls that came back `NotApplicable` are named, not dropped.** They get their own sheet stating that a missing license or an unconnected service is neither a pass nor a gap. A matrix that omits what it could not evaluate reads as full coverage of a smaller scope.
+
 ### Physical, media and device controls
 
 A tenant scan can evidence endpoint posture — encryption, patch level, screen lock, endpoint protection, device identity. It cannot see a locked server room, a certificate of destruction, or a returned badge. Those are still 800-53 controls a client working an 800-53 or CMMC assessment has to satisfy, and leaving them out silently is the dangerous option: a reader looking at a clean family table would reasonably infer the physical families were assessed and passed.
@@ -323,7 +345,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **29 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **30 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -367,7 +389,7 @@ Six GitHub Actions workflows cover the repository. Note that the `ci`, `codeql`,
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (29 suites) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (30 suites) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -386,4 +408,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 270 exported functions · full Pester suite (29 suites) gating CI*
+*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 274 exported functions · full Pester suite (30 suites) gating CI*

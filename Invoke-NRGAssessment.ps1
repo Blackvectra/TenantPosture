@@ -138,6 +138,13 @@ param(
     # -JsonOnly emits only the JSON (unchanged).
     [switch] $AllFiles,
 
+    # Standalone NIST SP 800-53 Rev 5 matrix (Markdown + XLSX), for clients
+    # assessed against 800-53 who should not have to read their posture out of
+    # a multi-framework report. Purely additive — every other framework the tool
+    # cites is untouched, and this emits one extra document from the same run.
+    # Implied by -AllFiles.
+    [switch] $NISTMatrix,
+
     [switch] $WhatIfConnections,
 
     # Launch the local web GUI instead of running a scan in the terminal.
@@ -783,6 +790,22 @@ if (-not $JsonOnly) {
                 Set-NRGSensitiveFileAcl -Path $xlsxPath -ErrorAction SilentlyContinue
             } catch { Write-Warning "XLSX publish failed: $($_.Exception.Message)" }
         }
+    }
+
+    # Standalone NIST 800-53 Rev 5 matrix. Separate from -AllFiles so an
+    # 800-53 client can be served without generating every other sidecar, and
+    # implied by -AllFiles so the consolidated profile stays a superset.
+    if (($NISTMatrix -or $AllFiles) -and (Get-Command Publish-NRGNISTMatrix -ErrorAction SilentlyContinue)) {
+        $nistPath = Join-Path $OutputPath "$baseName-nist-800-53-matrix.md"
+        try {
+            Publish-NRGNISTMatrix -Metadata $reportMetadata -Findings $findings -OutputPath $nistPath
+            Write-Host "  [+] NIST matrix (md): $nistPath" -ForegroundColor Green
+            Set-NRGSensitiveFileAcl -Path $nistPath -ErrorAction SilentlyContinue
+            $nistXlsx = [System.IO.Path]::ChangeExtension($nistPath, '.xlsx')
+            if (Test-Path -LiteralPath $nistXlsx) {
+                Write-Host "  [+] NIST matrix (xlsx): $nistXlsx" -ForegroundColor Green
+            }
+        } catch { Write-Warning "NIST matrix publish failed: $($_.Exception.Message)" }
     }
 
     # Delta report (if baseline provided)
