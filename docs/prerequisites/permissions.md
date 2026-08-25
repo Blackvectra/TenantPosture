@@ -32,7 +32,7 @@ The built-in **Security Reader** role in Exchange Online covers all required Exc
 
 ---
 
-## SharePoint / PnP PowerShell
+## SharePoint Online
 
 | Permission | Used By |
 |---|---|

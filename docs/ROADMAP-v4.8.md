@@ -144,7 +144,7 @@ v4.7 and v4.8 land independently. If v4.7 F1 (maturity) is in by the time F13 sh
 1. **CIS IG matrix licensing.** Embedding CIS Controls v8.1 IG mapping data — verify CIS membership terms allow redistribution in our `baselines/cis-ig-matrix.json`. If not, cite + link from the doc rather than embed.
 2. **Attestation operator identity.** When operator runs from a partner tenant under GDAP, `AttestedBy` should record the operator UPN, not the client tenant identity. Confirm UPN is available from the connection context at attestation time.
 3. **Portfolio dashboard scale.** At ~50+ clients the workload heatmap gets dense. Threshold for switching to a paginated/grouped view?
-4. **Maester integration license.** Maester is MIT — compatible with this repo's CC BY-ND license on docs. Confirm derivative-work boundary before adopting any code directly.
+4. **Maester integration license.** Maester is MIT — compatible with this repo's MIT licence. Confirm derivative-work boundary before adopting any code directly.
 
 ---
 

@@ -73,6 +73,52 @@ Write-Host "[4/6] Checking PowerShell modules..." -ForegroundColor Cyan
 # - EOM pinned to 3.2.0 because 3.4.0 has the WAM broker NullReferenceException
 # - Graph.Authentication 2.x for modern MSAL flow
 # - Teams 5.x+ for device code auth
+# ── Module install scope: avoid OneDrive-synced paths ────────────────────────
+# The CurrentUser module directory lives under Documents, and on machines with
+# Known Folder Move enabled Documents is redirected into OneDrive. OneDrive then
+# syncs, locks and sometimes partially materialises the module DLLs, which is a
+# documented cause of "Could not load file or assembly Microsoft.Identity.Client"
+# at Exchange connect. Get-NRGModuleHealth already flags this at run time; there
+# is no point in this installer creating the condition it will later warn about.
+#
+# AllUsers ($env:ProgramFiles\PowerShell\Modules) is never redirected, so when
+# the user path is synced and the session is elevated we install there instead.
+$installScope = 'CurrentUser'
+$userModuleDir = ($env:PSModulePath -split [IO.Path]::PathSeparator |
+    Where-Object { $_ -like "$HOME*" } | Select-Object -First 1)
+$userPathIsSynced = [bool]($userModuleDir -match '(?i)\bOneDrive\b')
+
+$isElevated = $false
+try {
+    $isElevated = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
+        ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+} catch { $isElevated = $false }
+
+if ($userPathIsSynced) {
+    Write-Host "  [!] Your PowerShell module folder is inside OneDrive:" -ForegroundColor Yellow
+    Write-Host "      $userModuleDir" -ForegroundColor DarkYellow
+    Write-Host "      OneDrive locks and partially syncs module DLLs, which causes the" -ForegroundColor DarkYellow
+    Write-Host "      'Could not load file or assembly Microsoft.Identity.Client' error." -ForegroundColor DarkYellow
+    if ($isElevated) {
+        $installScope = 'AllUsers'
+        Write-Host "  [+] Elevated session detected — installing to AllUsers instead" -ForegroundColor Green
+        Write-Host "      ($env:ProgramFiles\PowerShell\Modules is never OneDrive-synced)." -ForegroundColor DarkGray
+    } else {
+        Write-Host "  [!] Not elevated, so modules will still install into OneDrive." -ForegroundColor Yellow
+        Write-Host "      Fix it with ONE of:" -ForegroundColor Yellow
+        Write-Host "        1. Re-run this script from an elevated PowerShell 7 window" -ForegroundColor DarkYellow
+        Write-Host "           (installs to AllUsers, outside OneDrive)." -ForegroundColor DarkYellow
+        Write-Host "        2. OneDrive > Settings > Sync and back up > Manage backup —" -ForegroundColor DarkYellow
+        Write-Host "           turn OFF backup for Documents, then move" -ForegroundColor DarkYellow
+        Write-Host "           <OneDrive>\Documents\PowerShell back to $HOME\Documents\PowerShell." -ForegroundColor DarkYellow
+        Write-Host "        3. Right-click the PowerShell folder in OneDrive >" -ForegroundColor DarkYellow
+        Write-Host "           'Always keep on this device' (mitigates, does not remove the lock)." -ForegroundColor DarkYellow
+    }
+} else {
+    Write-Host "  [+] Module path is not OneDrive-synced: $userModuleDir" -ForegroundColor Green
+}
+Write-Host ""
+
 $moduleSpecs = @(
     @{ Name='Microsoft.Graph.Authentication'; MinVersion='2.0.0';  PinVersion=$null   }
     @{ Name='ExchangeOnlineManagement';       MinVersion='3.0.0';  PinVersion='3.2.0' }
@@ -90,7 +136,7 @@ foreach ($spec in $moduleSpecs) {
         if (-not $installed) {
             Write-Host "  [*] Installing $name $target..." -ForegroundColor Yellow
             try {
-                Install-PSResource -Name $name -Version $spec.PinVersion -TrustRepository -Scope CurrentUser -Reinstall -ErrorAction Stop
+                Install-PSResource -Name $name -Version $spec.PinVersion -TrustRepository -Scope $installScope -Reinstall -ErrorAction Stop
                 Write-Host "  [+] $name $target installed" -ForegroundColor Green
             } catch {
                 Write-Host "  [!] Install failed: $($_.Exception.Message)" -ForegroundColor Red
@@ -103,7 +149,7 @@ foreach ($spec in $moduleSpecs) {
                 Write-Host "      Downgrading to $target..." -ForegroundColor Yellow
                 try {
                     Uninstall-PSResource -Name $name -ErrorAction SilentlyContinue
-                    Install-PSResource -Name $name -Version $spec.PinVersion -TrustRepository -Scope CurrentUser -Reinstall -ErrorAction Stop
+                    Install-PSResource -Name $name -Version $spec.PinVersion -TrustRepository -Scope $installScope -Reinstall -ErrorAction Stop
                     Write-Host "  [+] $name downgraded to $target" -ForegroundColor Green
                 } catch {
                     Write-Host "  [!] Downgrade failed: $($_.Exception.Message)" -ForegroundColor Red
@@ -111,7 +157,7 @@ foreach ($spec in $moduleSpecs) {
             } else {
                 Write-Host "      Installing recommended version $target..." -ForegroundColor Yellow
                 try {
-                    Install-PSResource -Name $name -Version $spec.PinVersion -TrustRepository -Scope CurrentUser -Reinstall -ErrorAction Stop
+                    Install-PSResource -Name $name -Version $spec.PinVersion -TrustRepository -Scope $installScope -Reinstall -ErrorAction Stop
                     Write-Host "  [+] $name $target installed" -ForegroundColor Green
                 } catch {
                     Write-Host "  [!] Install failed: $($_.Exception.Message)" -ForegroundColor Red
@@ -126,7 +172,7 @@ foreach ($spec in $moduleSpecs) {
         if (-not $installed -or $installed.Version -lt $min -or $Force) {
             Write-Host "  [*] Installing $name (min $min)..." -ForegroundColor Yellow
             try {
-                Install-PSResource -Name $name -TrustRepository -Scope CurrentUser -ErrorAction Stop
+                Install-PSResource -Name $name -TrustRepository -Scope $installScope -ErrorAction Stop
                 $newest = Get-Module -ListAvailable -Name $name | Sort-Object Version -Descending | Select-Object -First 1
                 Write-Host "  [+] $name $($newest.Version) installed" -ForegroundColor Green
             } catch {

@@ -4,6 +4,50 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **Eliminated the false-compliance bug class (25 controls).** Collectors that run
+  several independent queries wrap each in its own try/catch, then set
+  `Success = $true` regardless — so an EMPTY result list was ambiguous between
+  "queried, found nothing" and "the query failed", and evaluators were reading it
+  as compliance. A throttled or 403'd `Get-Mailbox` therefore reported "No
+  mailboxes are configured with an external forwarding address" and "No inbox
+  rules forward mail externally" — a clean bill of health on the primary BEC
+  exfiltration and persistence checks. Collectors now publish
+  `Data.SectionStatus` (NotRun/Collected/Failed) and evaluators consult it
+  before concluding Satisfied, reporting NotApplicable with a re-run prompt
+  instead. Fixed across EXO-6.1/6.2/6.3/6.4, EXO-7.2, AAD-3.1, AAD-10.2,
+  AAD-11.2, AAD-12.2/12.3/12.4. AAD-3.1 also fixed in the other direction: it
+  reported "fewer than 2 Global Administrators" when the role read failed, a
+  false alarm that costs as much credibility as a false pass.
+- **Advisory controls no longer inflate the score.** 11 controls with no
+  programmatic check emitted `Partial`, worth 0.5 each toward the compliance
+  score — free credit on every tenant for verdicts never computed. All now
+  `NotApplicable` (excluded from the denominator) and still surfaced as manual
+  review. Enforced by a new static AST guard.
+- **7 placeholder controls implemented for real**, coverage 184 -> 191 of 195:
+  EXO-2.6 (shared mailbox sign-in, evidence-graded: confirmed via Entra = Gap,
+  license-heuristic = Partial), DEF-3.4 and DEF-4.3 (alert policy notification
+  coverage via `Get-ProtectionAlert`), EXO-3.4 (unusual mail volume alerting),
+  TMS-3.4 (Teams DLP coverage), PPL-1.3 (environment creation restriction via
+  `Get-TenantSettings`). SPO-2.5 re-scoped to the connector surface that is
+  actually readable, with every finding stating which surface it verified.
+- **EXO-4.4 no longer contradicts itself:** passed BulkThreshold 7 while its own
+  remediation instructed 6. Now flags above 6. Changes client-visible verdicts
+  for tenants on the Microsoft default.
+- **Fixed 66 controls declaring raw-data keys no collector produces**
+  (`Teams-Config`, `Purview-AuditConfig`, `SharePoint-TenantSettings`,
+  `PowerPlatform-DLP`, ...) plus one orphan read (`AAD-Roles`, real key
+  `AAD-DirectoryRoles`). Harmless at runtime today, structurally misleading for
+  anything built on the metadata.
+- **Five new CI suites:** docs-freshness (headline counts computed from source,
+  so no README number can go stale), HTML report render + XSS-escaping smoke
+  test, evaluator honesty (no Satisfied/Partial on uncollected data),
+  collector contract (every declared dependency is a real collector key), and
+  golden fixtures pinning both-direction verdicts across the Critical, BEC,
+  ransomware and privilege-escalation control paths.
+- StrictMode safety: external cmdlet output whose shape is not guaranteed now
+  reads through `Get-*ObjectField` — direct dot-access throws before a `??`
+  default can apply, which would have silently disabled three new controls.
+
 - **Framework accuracy:** corrected 70 systematically-mismatched SCuBA citations
   against the ScubaGear v1.8.0 baseline text (34 remapped, 36 removed); fixed
   7 CMMC 2.0 domain/level errors across 64 rows; all six frameworks now
@@ -14,8 +58,8 @@ Accuracy + hardening pass (targeting v4.13.0):
   All paging/@odata reads switched to null-safe indexer form.
 - **11 controls made actionable** (were placeholder NotApplicable): INT-3.3,
   PPL-2.1, TMS-2.8/4.1/4.4, AAD-11.3, DEF-4.6, EXO-5.1/5.2, plus honest
-  advisories for DEF-4.4/SPO-2.4. Two new read-only Graph scopes
-  (IdentityRiskyServicePrincipal.Read.All, AttackSimulation.Read.All — require
+  advisories for DEF-4.4/SPO-2.4. Three new read-only Graph scopes
+  (IdentityRiskyServicePrincipal.Read.All, AttackSimulation.Read.All, AccessReview.Read.All — require
   one-time admin re-consent per tenant); optional SharePoint Management Shell
   path for SPO-2.2/2.6/3.2/3.4.
 - **CI now gates on the full test suite** (220 tests / 10 files — previously 1)
@@ -415,7 +459,7 @@ Patch release closing the correctness sweep defined in `docs/CORRECTNESS-SWEEP-v
 
 ### Security / privacy
 
-- **`.gitignore` now excludes `output/`.** NRG had the same gap as NRG (only `Reports/` was excluded); NRG never had real client data committed because the port excluded `output/` at copy time, but future `Invoke-NRGAssessment` runs would have started tracking output files.
+- **`.gitignore` now excludes `output/`.** NRG had the same gap as NLS (only `Reports/` was excluded); NRG never had real client data committed because the port excluded `output/` at copy time, but future `Invoke-NRGAssessment` runs would have started tracking output files.
 - **Sample HTML sanitization.** `sample-report/example-assessment.html` had 7 occurrences of real personal domain `mattlevorson.com` (secondary domain on the source tenant) and 2 admin display names rendered as `NRG Technology Services / NextLayerSec LLC` (collision from `Matthew Levorson → NRG Technology Services / NextLayerSec LLC` sanitization). Replaced with `example2.com` / `Admin 2` / `Admin 3`.
 - **Branding/PII leaks** in initial NRG port surfaced and fixed: NRG phone number in `branding.psd1`, "North Dakota" geographic identifier in CLAUDE.md, real client names ClientA / Client B in sample configs.
 

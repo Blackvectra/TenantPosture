@@ -178,7 +178,7 @@ Each wave is one PR per repo, lockstep across both repos.
 4. **Maturity tier history forgery** (F1). `output/<tenant>/maturity-history.json` is local. Easy to forge locally. Current mitigation: file is covered by the existing signed integrity manifest. Sufficient, or escalate?
 5. **GDAP enumeration opt-in** (F8). Partner Center API requires partner consent separate from tenant consent. `-IncludeGDAPReview` flag (opt-in) is the proposed default. Confirm before Wave 3.
 6. **Portfolio scale at 50+ clients** (F13). Workload heatmap gets dense beyond ~50 rows. Set a threshold (e.g. ≥ 50 clients) for switching to a paginated/grouped view?
-7. **Maester license boundary** (F14). MIT — compatible with both repo licenses (NRG-Assessment: MIT; NRG-Assessment: CC BY-ND on docs). Confirm derivative-work boundary before adopting any Maester code directly.
+7. **Maester license boundary** (F14). MIT — compatible with this repo's MIT licence. Confirm derivative-work boundary before adopting any Maester code directly.
 8. **Operator UPN at attestation time** (F12). When operator runs from a partner tenant under GDAP, `AttestedBy` should record the operator UPN, not the client tenant identity. Confirm UPN is available from the connection context at attestation time.
 
 ---

@@ -29,7 +29,7 @@ Open PowerShell 7 (`pwsh`) and run:
 Install-Module Microsoft.Graph          -Scope CurrentUser -Force
 Install-Module ExchangeOnlineManagement -Scope CurrentUser -Force
 Install-Module MicrosoftTeams           -Scope CurrentUser -Force
-Install-Module PnP.PowerShell           -Scope CurrentUser -Force
+Install-Module Microsoft.Online.SharePoint.PowerShell -Scope CurrentUser -Force   # optional — SPO tenant controls
 ```
 
 ---
@@ -50,7 +50,7 @@ Or download the ZIP from GitHub → Code → Download ZIP.
 Before running a full assessment, verify connections:
 
 ```powershell
-pwsh -ExecutionPolicy RemoteSigned -File .\PowerShell\NRGAssessment\Invoke-NRGAssessment.ps1 `
+pwsh -ExecutionPolicy RemoteSigned -File .\Invoke-NRGAssessment.ps1 `
      -UserPrincipalName admin@client.com -WhatIfConnections
 ```
 
@@ -61,11 +61,11 @@ A browser window will open for each service. Sign in with an account that has th
 ## Step 5 — Run Assessment
 
 ```powershell
-pwsh -ExecutionPolicy RemoteSigned -File .\PowerShell\NRGAssessment\Invoke-NRGAssessment.ps1 `
+pwsh -ExecutionPolicy RemoteSigned -File .\Invoke-NRGAssessment.ps1 `
      -UserPrincipalName admin@client.com
 ```
 
-Reports are written to `.\Reports\<TenantDomain>-<Timestamp>\`.
+Reports are written to `.\output\<TenantDomain>\<Timestamp>-*`.
 
 ---
 

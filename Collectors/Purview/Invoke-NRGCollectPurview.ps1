@@ -20,6 +20,12 @@ function Invoke-NRGCollectPurview {
             AuditConfig         = $null
             UnifiedAuditEnabled = $false
             DLPPolicies         = @()
+            # DLP RULES, not policies. Sensitive information types are defined on
+            # the rule (ContentContainsSensitiveInformation), never on the parent
+            # policy — Get-DlpCompliancePolicy exposes no SIT field at all. DEF-4.2
+            # previously read $policy.SensitiveInfoTypes, which does not exist, so
+            # it could only ever throw under StrictMode or report a false Gap.
+            DLPRules            = @()
             RetentionPolicies   = @()
             SensitivityLabels   = @()
             # Alert POLICY configuration (Get-ProtectionAlert), not fired alerts.
@@ -31,7 +37,7 @@ function Invoke-NRGCollectPurview {
             # policies configured" only when the query actually ran. Without this
             # the DEF-3.4 / DEF-4.3 evaluators cannot tell that apart from a
             # missing IPPS session and would report a confident Gap either way.
-            SectionStatus       = @{ ProtectionAlerts = 'NotRun' }
+            SectionStatus       = @{ ProtectionAlerts = 'NotRun'; DLPRules = 'NotRun' }
         }
     }
 
@@ -72,6 +78,38 @@ function Invoke-NRGCollectPurview {
             } catch {
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     Register-NRGException -Source 'Purview-DLP' -Message $_.Exception.Message
+                }
+            }
+        }
+
+        # DLP rules — carries the sensitive information types (DEF-4.2).
+        if (Get-Command Get-DlpComplianceRule -ErrorAction SilentlyContinue) {
+            try {
+                $rules = Get-DlpComplianceRule -ErrorAction Stop
+                $result.Data.DLPRules = @($rules | ForEach-Object {
+                    $r = $_
+                    # ContentContainsSensitiveInformation is an array of hashtables,
+                    # each naming one SIT. Read every field through Get-NRGObjectField:
+                    # rule shape varies by workload and StrictMode is active.
+                    $sits = @(Get-NRGObjectField -Item $r -Key 'ContentContainsSensitiveInformation' -Default @())
+                    $sitNames = @($sits | ForEach-Object {
+                        $one = $_
+                        $n = Get-NRGObjectField -Item $one -Key 'name' -Default ''
+                        if (-not $n) { $n = Get-NRGObjectField -Item $one -Key 'Name' -Default '' }
+                        if ($n) { [string]$n }
+                    } | Where-Object { $_ })
+                    @{
+                        Name             = [string](Get-NRGObjectField -Item $r -Key 'Name'             -Default '')
+                        ParentPolicyName = [string](Get-NRGObjectField -Item $r -Key 'ParentPolicyName' -Default '')
+                        Disabled         = [bool]  (Get-NRGObjectField -Item $r -Key 'Disabled'         -Default $false)
+                        SensitiveInfoTypes = @($sitNames)
+                    }
+                })
+                $result.Data.SectionStatus.DLPRules = 'Collected'
+            } catch {
+                $result.Data.SectionStatus.DLPRules = 'Failed'
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Purview-DLPRules' -Message $_.Exception.Message
                 }
             }
         }

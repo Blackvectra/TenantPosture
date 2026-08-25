@@ -12,38 +12,38 @@
       "SkipIntune":        false,
       "SkipPowerPlatform": false,
       "SkipDNS":           false,
-      "Notes":             "NRG internal tenant",
-      "Active":            true
+      "Notes":             "Own tenant. Replace TenantId with the real GUID before running.",
+      "Active":            false
     },
     {
-      "ClientName":        "ClientA",
-      "TenantDomain":      "clienta.org",
+      "ClientName":        "Example Client",
+      "TenantDomain":      "example.com",
       "TenantId":          "00000000-0000-0000-0000-000000000000",
-      "DelegatedOrg":      "clienta.onmicrosoft.com",
-      "DnsDomains":        ["clienta.org"],
+      "DelegatedOrg":      "example.onmicrosoft.com",
+      "DnsDomains":        ["example.com"],
       "SkipPurview":       true,
       "SkipTeams":         false,
       "SkipSharePoint":    false,
       "SkipIntune":        false,
       "SkipPowerPlatform": true,
       "SkipDNS":           false,
-      "Notes":             "County government. the state IT agency controls DNS.",
-      "Active":            true
+      "Notes":             "Sample entry showing Skip flags for a Business Standard tenant. Replace with real client data before running.",
+      "Active":            false
     },
     {
-      "ClientName":        "Client B",
-      "TenantDomain":      "clientbnd.gov",
+      "ClientName":        "Example Client 2",
+      "TenantDomain":      "example2.com",
       "TenantId":          "00000000-0000-0000-0000-000000000000",
-      "DelegatedOrg":      "clientbnd.onmicrosoft.com",
-      "DnsDomains":        ["clientbnd.gov"],
-      "SkipPurview":       true,
+      "DelegatedOrg":      "example2.onmicrosoft.com",
+      "DnsDomains":        ["example2.com"],
+      "SkipPurview":       false,
       "SkipTeams":         false,
       "SkipSharePoint":    false,
       "SkipIntune":        false,
-      "SkipPowerPlatform": true,
+      "SkipPowerPlatform": false,
       "SkipDNS":           false,
-      "Notes":             "County government. state courts relay dependency.",
-      "Active":            true
+      "Notes":             "Sample entry. Replace with real client data before running.",
+      "Active":            false
     }
   ]
 }

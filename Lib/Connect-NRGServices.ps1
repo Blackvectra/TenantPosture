@@ -138,7 +138,7 @@ function Connect-NRGServices {
     Write-Host "  [*] Microsoft Graph..." -ForegroundColor Cyan
     try {
         # v4.6.4 EMERGENCY FIX (Medium #9): align the requested Graph scopes
-        # with CLAUDE.md (21 scopes). Previously 15 — missing scopes caused
+        # with CLAUDE.md. Previously 15 — missing scopes caused
         # silent permission failures in:
         #   - SharePoint tenant settings (Sites.Read.All deprecated for
         #     /admin/sharepoint/settings; SharePointTenantSettings.Read.All

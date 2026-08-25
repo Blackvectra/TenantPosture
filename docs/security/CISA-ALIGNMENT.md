@@ -15,7 +15,7 @@ NRG-Assessment evaluates controls that directly map to CISA's Secure Cloud Busin
 | MS.DEFENDER | DEF-1.x through DEF-3.x | Safe Attachments, Safe Links, spoof intel, ZAP, quarantine, honor DMARC |
 | MS.SHAREPOINT | SPO-1.x through SPO-3.x | External sharing, unmanaged devices, link types, guest access |
 | MS.TEAMS | TMS-1.x through TMS-3.x | External access, anonymous meetings, consumer users, app governance |
-| MS.PURVIEW | PVW-1.x through PVW-3.x | Audit log, DLP, sensitivity labels, retention, eDiscovery |
+| (no SCuBA baseline) | PVW-1.x through PVW-3.x | Audit log, DLP, sensitivity labels, retention, eDiscovery — CISA publishes no Purview baseline; these are NRG/CIS hardening |
 
 ### SCuBA Controls Not Yet Automated
 
@@ -29,7 +29,7 @@ Some SCuBA controls require manual verification or out-of-scope data sources:
 
 ## CISA BOD 18-01 Relevance
 
-BOD 18-01 mandates DMARC, DKIM, SPF, and HTTPS for federal executive branch domains. NRG-Assessment DNS evaluators (DNS-1.1 through DNS-1.6) directly assess BOD 18-01 requirements and can be used as compliance leverage when engaging government IT teams (the state IT agency, county agencies) on email authentication enforcement.
+BOD 18-01 mandates DMARC, DKIM, SPF, and HTTPS for federal executive branch domains. NRG-Assessment DNS evaluators (DNS-1.1 through DNS-1.6) directly assess BOD 18-01 requirements and can be used as compliance leverage when engaging government IT teams (state IT agencies, county governments) on email authentication enforcement.
 
 **DNS controls mapped to BOD 18-01:**
 - DNS-1.1 — SPF published (BOD 18-01 §2.a)
@@ -41,7 +41,7 @@ BOD 18-01 mandates DMARC, DKIM, SPF, and HTTPS for federal executive branch doma
 
 ## Not a CISA Pledge Signatory
 
-NRG Technology Services / NextLayerSec LLC and NRG Technology Services / NextLayerSec LLC are not signatories to the CISA Secure by Design pledge. This tool aligns with Secure by Design principles as a matter of engineering practice, not formal commitment.
+NRG Technology Services / NextLayerSec LLC is not a signatory to the CISA Secure by Design pledge. This tool aligns with Secure by Design principles as a matter of engineering practice, not formal commitment.
 
 ---
 
@@ -57,4 +57,4 @@ NRG Technology Services / NextLayerSec LLC and NRG Technology Services / NextLay
 
 ---
 
-*NRG-Assessment v4.5.5 · NRG Technology Services / NextLayerSec LLC · NRG Technology Services / NextLayerSec LLC*
+*NRG-Assessment v4.12.1 · NRG Technology Services / NextLayerSec LLC*

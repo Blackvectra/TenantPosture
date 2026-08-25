@@ -140,7 +140,7 @@ The role check happens client-side on token claims AND server-side on every API 
   "completedAt": "2026-05-28T14:33:09Z",
   "status": "Completed",                      // Queued|Running|Completed|Failed
   "triggeredBy": {
-    "upn": "matt@clientc.example",
+    "upn": "admin@example.com",
     "displayName": "Matt Levorson",
     "directoryRoles": ["Global Administrator"]
   },
@@ -164,14 +164,14 @@ The role check happens client-side on token claims AND server-side on every API 
 {
   "id": "11111111-2222-3333-4444-...",        // also partition key
   "tenantId": "11111111-2222-3333-4444-...",
-  "primaryDomain": "clientc.example",
+  "primaryDomain": "example.com",
   "displayName": "Client C",
   "consentedAt": "2026-05-28T14:00:00Z",
-  "consentedBy": "matt@clientc.example",
+  "consentedBy": "admin@example.com",
   "active": true,
   "settings": {
     "scanSchedule": "weekly",                  // weekly|monthly|onDemand
-    "alertEmail": "it@clientc.example"
+    "alertEmail": "it@example.com"
   },
   "schemaVersion": 1
 }
