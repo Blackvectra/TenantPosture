@@ -105,6 +105,7 @@
     "SI-2": "Flaw Remediation",
     "SI-3": "Malicious Code Protection",
     "SI-4": "System Monitoring",
+    "SI-7": "Software, Firmware, and Information Integrity",
     "SI-8": "Spam Protection"
   }
 }

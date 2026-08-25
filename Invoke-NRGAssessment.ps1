@@ -138,6 +138,19 @@ param(
     # -JsonOnly emits only the JSON (unchanged).
     [switch] $AllFiles,
 
+    # Folder of endpoint results written by Device\Invoke-NRGDeviceCompliance.ps1
+    # and collected by RMM. Supplying it adds the DEV-* endpoint controls to the
+    # same report and the same NIST matrix. Omit it and every DEV control
+    # reports NotApplicable with a prompt — never absent, so a forgotten
+    # collection is visible rather than silently halving the assessment.
+    [Parameter(Mandatory = $false)]
+    [ValidateScript({
+        if ($_ -match '\.\.[\\\/]') { throw 'Path traversal not allowed.' }
+        if (-not (Test-Path -LiteralPath $_)) { throw "Device results path not found: $_" }
+        return $true
+    })]
+    [string] $DeviceResults,
+
     # Standalone NIST SP 800-53 Rev 5 matrix (Markdown + XLSX), for clients
     # assessed against 800-53 who should not have to read their posture out of
     # a multi-framework report. Purely additive — every other framework the tool
@@ -569,6 +582,27 @@ if (-not $skipCollection) {
     if ($conn.Graph) {
         Write-Host "  [*] M365 Copilot: Licensing, label alignment, DLP coverage, Studio bots..."
         Invoke-NRGCollector 'Invoke-NRGCollectM365Copilot'
+    }
+
+    # Endpoint compliance results. No connection required: the endpoints already
+    # ran the collector and the RMM already gathered the output. This reads
+    # files, nothing else.
+    if ($DeviceResults) {
+        Write-Host "  [*] Endpoints: ingesting device compliance results..."
+        if (Get-Command Invoke-NRGCollectDeviceCompliance -ErrorAction SilentlyContinue) {
+            try {
+                Invoke-NRGCollectDeviceCompliance -ResultsPath $DeviceResults
+                $devRaw = Get-NRGRawData -Key 'Device-Compliance'
+                if ($devRaw -and $devRaw.Success) {
+                    $dc = [int]$devRaw.Data.DeviceCount
+                    $ne = $dc - [int]$devRaw.Data.ElevatedCount
+                    Write-Host "      $dc device result(s) ingested." -ForegroundColor Green
+                    if ($ne -gt 0) {
+                        Write-Warning "$ne device(s) ran without administrative rights — encryption, TPM, Secure Boot and audit-policy checks are unassessed on those, and are reported as such rather than as passes."
+                    }
+                }
+            } catch { Write-Warning "Device results ingestion failed: $($_.Exception.Message)" }
+        }
     }
 
     # ── Run evaluators ───────────────────────────────────────────────────────

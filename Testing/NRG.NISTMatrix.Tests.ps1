@@ -48,11 +48,22 @@ Describe 'NIST 800-53 standalone matrix' {
             foreach ($id in @(Get-NRGNISTControlIdsFromFinding -Finding $f)) { $null = $script:CitedIds.Add($id) }
         }
 
-        # Every identifier the physical/device config names.
+        # Every identifier the physical/device configs name. Both nist-physical
+        # (the guide) and device-controls (the endpoint checks) cite the
+        # catalog, so both must be counted or the orphan check below reports
+        # live entries as dead.
         $script:PhysicalIds = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
         $physCfg = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config/nist-physical.json') -Raw -Encoding utf8 | ConvertFrom-Json
         foreach ($g in $physCfg.groups) {
             foreach ($i in $g.Items) { $null = $script:PhysicalIds.Add([string]$i.NistControl) }
+        }
+        $devCfg = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config/device-controls.json') -Raw -Encoding utf8 | ConvertFrom-Json
+        foreach ($c in $devCfg.controls) {
+            foreach ($n in @($c.Nist)) { $null = $script:PhysicalIds.Add([string]$n) }
+        }
+        $baseCfg = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config/device-baseline.json') -Raw -Encoding utf8 | ConvertFrom-Json
+        foreach ($st in $baseCfg.stages) {
+            foreach ($i in $st.Items) { foreach ($n in @($i.Nist)) { $null = $script:PhysicalIds.Add([string]$n) } }
         }
 
         # A findings set spanning every state, built from the real citations so
