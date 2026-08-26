@@ -247,6 +247,179 @@ function Publish-NRGNISTMatrix {
     }
 
     # ─────────────────────────────────────────────────────────────────────────
+    # HTML — the NIST-only report. Self-contained, no external assets, print
+    # styling. This is the artifact that goes to an 800-53 client instead of the
+    # multi-framework report, so it deliberately mentions no other framework
+    # anywhere on the page.
+    # ─────────────────────────────────────────────────────────────────────────
+    function Esc { param([object]$v) ConvertTo-NRGHtmlSafe $v }
+    function ScoreCol { param([int]$n)
+        if ($n -ge 85) { '#059669' } elseif ($n -ge 65) { '#ca8a04' } elseif ($n -ge 40) { '#ea580c' } else { '#dc2626' }
+    }
+
+    $famRows = ''
+    foreach ($fam in $cov.Families) {
+        $unscored = ($fam.Scored -le 0)
+        $col = if ($unscored) { '#94a3b8' } else { ScoreCol ([int]$fam.Score) }
+        $bar = if ($unscored) { 0 } else { [int]$fam.Score }
+        $txt = if ($unscored) { 'Not assessed' } else { "$([int]$fam.Score)%" }
+        $famRows += "<tr><td class='fid'>$(Esc $fam.Family)</td><td class='fnm'>$(Esc $fam.Name)<div class='fct'>$(Esc (@($fam.NistControls) -join ', '))</div></td>" +
+                    "<td class='n'>$($fam.Assessed)</td><td class='n ok'>$($fam.Satisfied)</td><td class='n pt'>$($fam.Partial)</td>" +
+                    "<td class='n gp'>$($fam.Gap)</td><td class='n er'>$($fam.Error)</td><td class='n na'>$($fam.NA)</td>" +
+                    "<td class='sc'><div class='bar'><div class='fill' style='width:$bar%;background:$col'></div></div><span style='color:$col'>$txt</span></td></tr>"
+    }
+
+    $stateCls = @{ 'Satisfied'='s-ok'; 'Partial'='s-pt'; 'Gap'='s-gp'; 'NotApplicable'='s-na'; 'Error'='s-er' }
+    $matrixRowsHtml = ''
+    foreach ($r in $sortedRows) {
+        $cls = if ($stateCls.ContainsKey([string]$r.State)) { $stateCls[[string]$r.State] } else { 's-na' }
+        $matrixRowsHtml += "<tr><td class='fid'>$(Esc $r.NistControl)</td><td class='mt'>$(Esc $r.NistTitle)</td>" +
+                           "<td class='tc'>$(Esc $r.ToolControl)</td><td>$(Esc $r.Title)</td>" +
+                           "<td><span class='st $cls'>$(Esc $r.State)</span></td><td class='sv'>$(Esc $r.Severity)</td>" +
+                           "<td class='cv'>$(Esc $r.CurrentValue)</td><td class='cv'>$(Esc $r.RequiredValue)</td></tr>"
+    }
+
+    $naRowsHtml = ''
+    foreach ($c in $notAssessed) {
+        $naRowsHtml += "<tr><td class='fid'>$(Esc $c.NistControl)</td><td>$(Esc (Get-NRGNISTControlTitle -ControlId $c.NistControl))</td><td class='tc'>$(Esc (@($c.ControlIds) -join ', '))</td></tr>"
+    }
+
+    $physHtmlSec = ''
+    if ($phys -and $phys.Available -and @($phys.Groups).Count -gt 0) {
+        $scopeCls = @{ 'Tenant'='p-t'; 'Hybrid'='p-h'; 'Attested'='p-a' }
+        $physRowsHtml = ''
+        foreach ($grp in $phys.Groups) {
+            $physRowsHtml += "<tr class='gh'><td colspan='4'>$(Esc $grp.Title)</td></tr>"
+            foreach ($it in $grp.Items) {
+                $pc = if ($scopeCls.ContainsKey([string]$it.Scope)) { $scopeCls[[string]$it.Scope] } else { 'p-a' }
+                $physRowsHtml += "<tr><td class='fid'>$(Esc $it.NistControl)</td><td>$(Esc $it.NistTitle)</td>" +
+                                 "<td><span class='st $pc'>$(Esc $it.Scope)</span></td><td class='cv'>$(Esc $it.Status)</td></tr>"
+            }
+        }
+        $physHtmlSec = @"
+<div class="card">
+  <div class="hd"><div class="lbl">Physical, Media and Device Controls</div>
+  <div class="sub">$($phys.TenantItems) evidenced from the tenant &middot; $($phys.HybridItems) partly &middot; $($phys.AttestedItems) not visible from Microsoft 365</div></div>
+  <div class="note"><strong>Nothing in this section is scored.</strong> A Microsoft 365 assessment cannot see a locked server room, a certificate of destruction, or a returned badge. Rows marked <em>Attestation required</em> were never assessed and are not claimed as compliant.</div>
+  <div class="wrap"><table><thead><tr><th>800-53</th><th>Control</th><th>Scope</th><th>Status</th></tr></thead><tbody>$physRowsHtml</tbody></table></div>
+</div>
+"@
+    }
+
+    # The hero score stays white deliberately: the header is a dark purple
+    # gradient, and the red end of the score palette reads badly on it.
+    # Colour carries the verdict in the family table below instead.
+    $nistHtmlDoc = @"
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NIST SP 800-53 Rev 5 — $(Esc $tenant)</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111827;background:#eef2f8}
+.wrapper{max-width:1200px;margin:0 auto;padding:0 20px 60px}
+header{background:linear-gradient(138deg,#4c1d95 0%,#1e1035 100%);color:#fff;padding:38px 0 30px}
+header .wrapper{padding-bottom:0}
+.eyebrow{font-size:.64rem;letter-spacing:.2em;text-transform:uppercase;color:#c4b5fd;font-weight:700;margin-bottom:8px}
+h1{margin:0 0 8px;font-size:1.9rem;letter-spacing:-.03em}
+.meta{font-size:.82rem;color:rgba(255,255,255,.55)}
+.meta strong{color:rgba(255,255,255,.9);font-weight:600}
+.hero{display:flex;align-items:center;gap:26px;margin-top:22px;flex-wrap:wrap}
+.big{font-size:3.4rem;font-weight:900;line-height:1;letter-spacing:-.04em}
+.big span{font-size:1.1rem;font-weight:600;color:rgba(255,255,255,.5)}
+.herotxt{font-size:.85rem;color:rgba(255,255,255,.72);max-width:52ch;line-height:1.6}
+.card{background:#fff;border-radius:12px;margin:22px 0;box-shadow:0 1px 3px rgba(0,0,0,.05),0 4px 18px rgba(15,37,68,.07);overflow:hidden}
+.hd{padding:16px 22px;border-bottom:1px solid #e2e8f0}
+.lbl{font-weight:800;font-size:1.02rem;letter-spacing:-.01em}
+.sub{font-size:.78rem;color:#6b7280;margin-top:3px}
+.note{padding:12px 22px;font-size:.78rem;color:#4b5563;line-height:1.6;background:#f8fafc;border-bottom:1px solid #e2e8f0}
+.wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th{text-align:left;padding:9px 12px;font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:#6b7280;background:#eef2f8;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+td{padding:8px 12px;border-bottom:1px solid #eef2f8;vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr.gh td{background:#4c1d95;color:#fff;font-weight:800;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em}
+.fid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:800;color:#4c1d95;white-space:nowrap}
+.fnm{font-weight:600;min-width:200px}
+.fct{font-size:.66rem;color:#6b7280;font-weight:500;margin-top:3px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.5}
+.mt{min-width:180px}
+.tc{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;white-space:nowrap;color:#334155}
+.cv{color:#6b7280;font-size:.75rem}
+.sv{white-space:nowrap;font-size:.75rem}
+.n{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+th.n{text-align:right}
+.ok{color:#059669}.pt{color:#ca8a04}.gp{color:#dc2626}.er{color:#b91c1c}.na{color:#94a3b8}
+.sc{white-space:nowrap;font-weight:800;min-width:132px}
+.bar{display:inline-block;width:72px;height:7px;border-radius:4px;background:#e2e8f0;overflow:hidden;vertical-align:middle;margin-right:8px}
+.fill{height:100%;border-radius:4px}
+.st{display:inline-block;font-size:.63rem;font-weight:800;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.s-ok{background:#d1fae5;color:#065f46}.s-pt{background:#fef3c7;color:#92400e}
+.s-gp{background:#fee2e2;color:#991b1b}.s-na{background:#e5e7eb;color:#4b5563}.s-er{background:#fee2e2;color:#991b1b}
+.p-t{background:#d1fae5;color:#065f46}.p-h{background:#fef3c7;color:#92400e}.p-a{background:#ede9fe;color:#5b21b6}
+.scope{padding:16px 22px;font-size:.8rem;line-height:1.7;color:#374151}
+.scope li{margin-bottom:6px}
+footer{color:#6b7280;font-size:.76rem;padding:0 4px;line-height:1.6}
+@media print{body{background:#fff}header{background:#4c1d95 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.card{box-shadow:none;border:1px solid #e2e8f0;page-break-inside:auto}tr{page-break-inside:avoid}}
+</style></head><body>
+<header><div class="wrapper">
+  <div class="eyebrow">NIST SP 800-53 Revision 5</div>
+  <h1>Compliance Matrix</h1>
+  <div class="meta"><strong>$(Esc $tenant)</strong> &middot; $(Esc $date)$(if ($ver) { " &middot; v$(Esc $ver)" })</div>
+  <div class="hero">
+    <div class="big">$($overall.Score)<span>%</span></div>
+    <div class="herotxt">Coverage of the <strong>$($cov.NistControlCount)</strong> 800-53 controls this assessment exercises, across <strong>$($cov.FamilyCount)</strong> of 20 families. This is <strong>not</strong> an 800-53 baseline completion percentage &mdash; a Low, Moderate or High baseline contains many controls no tenant scan can reach.</div>
+  </div>
+</div></header>
+
+<div class="wrapper">
+  <div class="card">
+    <div class="hd"><div class="lbl">Scope of this assessment</div></div>
+    <div class="scope"><ul>
+      <li>Microsoft 365 tenant configuration$(if ($phys) { ' and managed endpoint state' }). The score covers only what this tool exercises.</li>
+      <li>Physical, media, maintenance and personnel controls appear below, <strong>unscored</strong>, with the evidence an assessor must collect directly.</li>
+      <li>A tool control mapped to more than one 800-53 control appears under each, so rows do not sum to the finding count.</li>
+      <li><strong>Not assessable</strong> rows are excluded from the score. They are controls this tool could not evaluate &mdash; missing license, unconnected service, failed query &mdash; <strong>not</strong> controls the tenant passed.</li>
+    </ul></div>
+  </div>
+
+  <div class="card">
+    <div class="hd"><div class="lbl">Coverage by control family</div>
+    <div class="sub">Met + Partial + Gap + Error + N/A equals Assessed on every row</div></div>
+    <div class="wrap"><table><thead><tr><th>Family</th><th>Name / controls exercised</th><th class="n">Assessed</th><th class="n">Met</th><th class="n">Partial</th><th class="n">Gap</th><th class="n">Error</th><th class="n">N/A</th><th>Coverage</th></tr></thead><tbody>$famRows</tbody></table></div>
+  </div>
+
+  <div class="card">
+    <div class="hd"><div class="lbl">Control matrix</div>
+    <div class="sub">One row per 800-53 control and the tenant control evidencing it &mdash; gaps first within each control</div></div>
+    <div class="wrap"><table><thead><tr><th>800-53</th><th>Title</th><th>Tenant control</th><th>Finding</th><th>Status</th><th>Severity</th><th>Current</th><th>Required</th></tr></thead><tbody>$matrixRowsHtml</tbody></table></div>
+  </div>
+
+  $(if ($naRowsHtml) { @"
+<div class="card">
+  <div class="hd"><div class="lbl">Cited but not assessable this run</div></div>
+  <div class="note">Every finding behind these controls returned <strong>NotApplicable</strong> &mdash; a missing license, an unconnected service, or a query that did not complete. They are <strong>not</strong> passes and <strong>not</strong> gaps. Re-running with the relevant service connected turns them into a verdict.</div>
+  <div class="wrap"><table><thead><tr><th>800-53</th><th>Title</th><th>Tenant controls</th></tr></thead><tbody>$naRowsHtml</tbody></table></div>
+</div>
+"@ })
+
+  $physHtmlSec
+
+  <footer>NIST SP 800-53 Revision 5 only. Read-only assessment &mdash; no tenant configuration was modified.</footer>
+</div>
+</body></html>
+"@
+
+    $htmlOut = [System.IO.Path]::ChangeExtension($OutputPath, '.html')
+    if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
+        Set-NRGSensitiveFileContent -Path $htmlOut -Content $nistHtmlDoc
+    } else {
+        $nistHtmlDoc | Out-File -LiteralPath $htmlOut -Encoding utf8
+        if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {
+            Set-NRGSensitiveFileAcl -Path $htmlOut -ErrorAction SilentlyContinue
+        }
+    }
+
+    # ─────────────────────────────────────────────────────────────────────────
     # XLSX — best effort. A missing openpyxl must not fail the Markdown above.
     # ─────────────────────────────────────────────────────────────────────────
     $xlsxPath = [System.IO.Path]::ChangeExtension($OutputPath, '.xlsx')

@@ -249,7 +249,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          33 Pester suites — the FULL suite gates every PR
+Testing/                          34 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -287,6 +287,22 @@ All 195 controls carry an 800-53 citation, and the report rolls them up **by con
 The rollup covers 12 families and 57 distinct 800-53 controls, and appears in three places: a family table in the HTML report, the same table in the Markdown summary, and a dedicated `NIST Families` sheet in the XLSX matrix.
 
 Two things it will not do. A control mapped to more than one family is counted in **each** family it cites, so family rows do not sum to the assessment total — the report says so on the page rather than leaving a reader to discover it. And `NotApplicable` rows stay out of the coverage percentage entirely: a control the tool could not evaluate is not a control the tenant passed, and a family with nothing assessable reads "Not assessed", never a red 0%.
+
+### NIST-first reporting (NRG default)
+
+NRG's practice is built on NIST SP 800-53, so **the report defaults to NIST only**:
+
+```powershell
+.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com          # NIST only
+.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -Framework All    # all four
+.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -Framework CIS    # one other
+```
+
+**This narrows the report, never the assessment.** Every one of the 195 controls still carries its CIS, SCuBA, CMMC, ISO 27001, SOC 2, HIPAA, PCI DSS and MITRE citations; every framework is still scored; the results JSON and the XLSX matrix are byte-identical either way. `-Framework` decides what the HTML puts in front of the reader and nothing else — a test renders the report both ways and asserts no framework score moves.
+
+`-NISTMatrix` additionally emits a **standalone NIST-only HTML report** alongside the Markdown and XLSX — a self-contained page with the family table, the full control matrix, the not-assessable list and the physical/device section, that names no other framework anywhere on it. That's the artifact for a client who is assessed against 800-53 and shouldn't have to read their posture out of a multi-framework document.
+
+> **The NLS twin defaults to `All`.** That is the single deliberate behavioural difference between the two repos, and each pins its own default by test — it's exactly the setting a careless sync would silently flip, and the failure would be invisible because the report still renders and still scores correctly.
 
 ### Standalone NIST 800-53 matrix
 
@@ -411,7 +427,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **33 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **34 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -455,7 +471,7 @@ Six GitHub Actions workflows cover the repository. Note that the `ci`, `codeql`,
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (33 suites) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (34 suites) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -474,4 +490,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 280 exported functions · full Pester suite (33 suites) gating CI*
+*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 280 exported functions · full Pester suite (34 suites) gating CI*

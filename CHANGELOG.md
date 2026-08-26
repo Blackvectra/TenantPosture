@@ -4,6 +4,26 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **NIST-first reporting.** `Invoke-NRGAssessment.ps1 -Framework <NIST|CIS|SCuBA|CMMC|All>`
+  selects which framework cards the HTML report presents. **NRG defaults to
+  NIST; NLS defaults to All** — the one deliberate behavioural difference
+  between the twins, pinned in each repo by its own test because a careless
+  mirror would silently flip it and the report would still render and still
+  score correctly while showing the wrong practice's frameworks to a client.
+  Narrowing the report never narrows the assessment: every control keeps every
+  citation, every framework is still scored, and the results JSON and XLSX
+  matrix are identical either way. A test renders the report both ways and
+  asserts no framework score moves.
+- **Standalone NIST-only HTML report.** `-NISTMatrix` now emits a self-contained
+  HTML page beside the Markdown and XLSX — family table, full control matrix,
+  not-assessable list and the unscored physical/device section — that names no
+  other framework anywhere on it. A test greps for CIS, SCuBA, CMMC, ISO 27001,
+  SOC 2, HIPAA, PCI DSS and MITRE and fails on any leak, because a stray
+  framework name in one table cell undermines the whole premise of the document.
+- **The framework grid sizes itself.** `.fw-grid` interpolated the column count
+  from a hardcoded 4, so a single-framework report rendered one card at quarter
+  width with three empty columns beside it.
+
 - **Endpoint device compliance scanner (`DEV-*`, 35 checks).** The tenant half of
   the assessment reads Intune POLICY; this reads device STATE. `Device/
   Invoke-NRGDeviceCompliance.ps1` runs on the endpoint (RMM-deployed, as SYSTEM),
