@@ -97,6 +97,27 @@
             NotApplicableReason = 'The system has no wireless access points. The head office network is wired throughout and wireless is not deployed on any segment within the boundary. Verified against the network diagram dated 2026-01-14.'
         }
 
+        # ── The network requirements ────────────────────────────────────────
+        #
+        # This tool assesses a Microsoft 365 tenant and the endpoints. It does
+        # not read a firewall, switch or access point configuration, and that
+        # is deliberate — the network is often run by the client or another
+        # provider, so a scan of ours would be reading someone else's system.
+        #
+        # So the 3.13.x boundary requirements arrive with no automated
+        # evidence, and they are answered HERE. Say who runs the equipment and
+        # what they attest to. "Inherited" is the honest answer when the
+        # boundary is someone else's; do not mark it Implemented because the
+        # firewall is presumably configured — an assessor will ask who
+        # configured it and to see the evidence.
+
+        '3.13.5' = @{
+            Status          = 'Inherited'
+            InheritedFrom   = 'Client-managed network — Example Client internal IT'
+            ResponsibleRole = 'Client IT Manager'
+            Narrative       = 'The perimeter firewall and the DMZ segment carrying the public-facing systems are configured and maintained by the client internal IT team, not by the MSP. Configuration review and the segment diagram are held by the client and produced on request. The MSP responsibility begins at the Microsoft 365 tenant and the managed endpoints.'
+        }
+
         # ── Overriding what the assessment found ────────────────────────────
         #
         # Legitimate when the tenant scan cannot see the whole requirement. The
