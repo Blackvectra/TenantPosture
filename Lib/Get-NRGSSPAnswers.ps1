@@ -1,6 +1,7 @@
 #Requires -Version 7.0
 #
 # Get-NRGSSPAnswers.ps1
+# Dependencies: Get-NRGObjectField, Config/ssp/*.psd1
 #
 # Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC
 # Purpose: Loads the per-client SSP answers file — the half of a System

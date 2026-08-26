@@ -1,6 +1,9 @@
 #Requires -Version 7.0
 #
 # Get-NRGSSPPosture.ps1
+# Dependencies: Get-NRGObjectField, Get-NRGControlDefinitions,
+#               Config/nist-800-171-r2.json, Config/device-controls.json,
+#               Config/operational-impact.json
 #
 # Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC
 # Purpose: Builds the System Security Plan view — all 110 NIST SP 800-171 Rev 2
