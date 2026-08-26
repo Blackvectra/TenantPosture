@@ -247,8 +247,12 @@ Worth knowing so you do not promise it:
   Program Management, Risk Assessment, System and Services Acquisition, Supply
   Chain Risk Management, PII Processing. Those are documents and processes; no
   scanner reaches them.
-- **Network equipment is not assessed.** Switches, firewalls and access points
-  need config ingestion, which does not exist yet.
+- **Network equipment is not assessed, and is not planned.** Switches,
+  firewalls and access points are outside what this tool reaches, and outside
+  what we manage for most clients — the boundary is frequently theirs or
+  another provider's. In the SSP the network requirements land in the 69 that
+  carry no automated evidence, where they are answered as `Inherited` (naming
+  who runs the equipment) or `Not applicable`, never guessed at.
 - **Physical and environmental controls are never scored** — locked rooms, badge
   logs, certificates of destruction. They appear in the device guide as
   attestation items and are deliberately never claimed as compliant.
