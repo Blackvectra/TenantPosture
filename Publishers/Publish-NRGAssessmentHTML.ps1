@@ -35,7 +35,14 @@ function Publish-NRGAssessmentHTML {
         # Content }. Rendered as CSP-safe <a download> data-URI buttons so the
         # single HTML can carry the remediation script, a CSV matrix, etc.,
         # instead of the run scattering a dozen sidecar files. Empty = no card.
-        [object[]] $Attachments = @()
+        [object[]] $Attachments = @(),
+
+        # Which frameworks the report presents. NRG runs NIST-only by default —
+        # the tool still CITES every framework on every control and still scores
+        # them, this only decides what the report puts in front of the reader.
+        # Narrowing the report never narrows the assessment.
+        [ValidateNotNullOrEmpty()]
+        [string[]] $Frameworks = @('CIS','SCuBA','NIST','CMMC')
     )
 
     if (-not (Get-Command ConvertTo-NRGHtmlSafe -ErrorAction SilentlyContinue)) {
@@ -151,10 +158,16 @@ function Publish-NRGAssessmentHTML {
     }
 
     # ── Framework scores ──────────────────────────────────────────────────────
+    # Scored for every framework regardless of what is displayed: the JSON
+    # export and any later re-render need them, and a narrowed report must not
+    # become a narrowed record.
     $fwScores = @{}
     foreach ($fw in @('CIS','SCuBA','NIST','CMMC')) {
         $fwScores[$fw] = (Get-NRGCoverageScore -Findings $Findings -FrameworkId $fw -ErrorHandling 'Gap').Score
     }
+    # Displayed set, in canonical order, ignoring anything unrecognised.
+    $fwShow = @(@('CIS','SCuBA','NIST','CMMC') | Where-Object { $_ -in $Frameworks })
+    if ($fwShow.Count -eq 0) { $fwShow = @('NIST') }
 
     # ── License detection — suppress gaps the tenant already has licenses for ────
     # Detection is centralised in Lib/Get-NRGTenantLicenseProfile.ps1 so the
@@ -416,7 +429,7 @@ function Publish-NRGAssessmentHTML {
         CMMC  = @{Full='CMMC 2.0 Level 2';             Bg='#134e4a'}
     }
     $fwHtml = ''
-    foreach ($fw in @('CIS','SCuBA','NIST','CMMC')) {
+    foreach ($fw in $fwShow) {
         $fsc = $fwScores[$fw]; $col = scoreColor $fsc
         $fwHtml += "<div class='fw-card'><div class='fw-hd' style='background:$($fwMeta[$fw].Bg)'>$(hx $fw)</div><div class='fw-body'><div class='fw-sc' style='color:$col'>$fsc<span class='fw-den'>%</span></div><div class='fw-name'>$(hx $fwMeta[$fw].Full)</div></div></div>"
     }
@@ -949,7 +962,7 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
 .wl-ok{font-size:.66rem;font-weight:700;color:var(--pass);margin-top:2px}.wl-na{color:#94a3b8;font-size:.65rem;font-weight:500;margin-top:2px}
 
 /* Framework matrix */
-.fw-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:var(--bdr)}
+.fw-grid{display:grid;grid-template-columns:repeat($($fwShow.Count),1fr);gap:0;background:var(--bdr)}
 .fw-card{background:var(--card)}
 .fw-hd{padding:9px 18px;font-size:.78rem;font-weight:900;color:#fff;letter-spacing:.05em}
 .fw-body{padding:16px 18px;display:flex;flex-direction:column;gap:4px}
@@ -1129,7 +1142,7 @@ th.nf-n{text-align:right}
   .cnt{padding:12px 28px 24px}.hdr-top{padding:20px 28px 14px}.ftr{padding:14px 28px;margin-top:16px}
   .card{box-shadow:none;break-inside:avoid;border:1px solid #dde3ec}
   .extr{display:table-row!important}.exp{cursor:default}
-  .fw-grid{grid-template-columns:repeat(4,1fr)!important}
+  .fw-grid{grid-template-columns:repeat($($fwShow.Count),1fr)!important}
   .wl-grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))!important}
   .exbody{grid-template-columns:1fr 1fr 1fr!important}
   .hdr-nav{display:none}
@@ -1149,7 +1162,7 @@ th.nf-n{text-align:right}
         <span><strong>Tenant</strong> $tD</span>
         <span><strong>License Tier</strong> $(hx $tierLabel)</span>
         $(if($op){"<span><strong>Prepared by</strong> $op</span>"})
-        <span><strong>Frameworks</strong> CIS M365 v6 &middot; CISA SCuBA &middot; NIST SP 800-53r5 &middot; CMMC 2.0</span>
+        <span><strong>Framework$(if ($fwShow.Count -ne 1) { 's' })</strong> $(hx (($fwShow | ForEach-Object { $fwMeta[$_].Full }) -join ' · '))</span>
       </div>
     </div>
     <div class="hdr-right">
@@ -1219,7 +1232,7 @@ $riskHtml
 
 <!-- FRAMEWORK COMPLIANCE -->
 <div class="card mt" id="fw-section">
-  <div class="card-hd"><div class="card-label">Framework Compliance Matrix</div><div class="card-sub">Controls mapped to CIS, CISA SCuBA, NIST SP 800-53, and CMMC 2.0</div></div>
+  <div class="card-hd"><div class="card-label">$(if ($fwShow.Count -eq 1) { "$(hx $fwMeta[$fwShow[0]].Full) Compliance" } else { 'Framework Compliance Matrix' })</div><div class="card-sub">$(hx ("Controls mapped to " + (($fwShow | ForEach-Object { $fwMeta[$_].Full }) -join ', ')))</div></div>
   <div class="fw-grid">$fwHtml</div>
 </div>
 

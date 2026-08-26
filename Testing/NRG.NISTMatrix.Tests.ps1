@@ -332,6 +332,59 @@ Describe 'NIST 800-53 standalone matrix' {
         }
     }
 
+    Context 'HTML deliverable — the NIST-only report' {
+
+        BeforeAll {
+            $script:NistHtmlPath = [System.IO.Path]::ChangeExtension($script:MdPath, '.html')
+            $script:NistHtml = if (Test-Path -LiteralPath $script:NistHtmlPath) {
+                Get-Content -LiteralPath $script:NistHtmlPath -Raw
+            } else { '' }
+        }
+
+        It 'writes a well-formed, self-contained HTML report' {
+            $script:NistHtml.Length | Should -BeGreaterThan 10000
+            $script:NistHtml | Should -Match '<!DOCTYPE html>'
+            $script:NistHtml | Should -Match '</html>'
+            $script:NistHtml | Should -Not -Match 'src="http'
+            $script:NistHtml | Should -Not -Match 'href="http'
+            $script:NistHtml | Should -Not -Match '@import'
+            $script:NistHtml | Should -Match '@media print'
+        }
+
+        It 'mentions no framework other than NIST anywhere on the page' {
+            # This is the artifact that goes to an 800-53 client instead of the
+            # multi-framework report. A stray "CMMC" in a table cell undermines
+            # the whole premise.
+            foreach ($fw in 'CIS', 'SCuBA', 'CMMC', 'ISO 27001', 'SOC 2', 'HIPAA', 'PCI DSS', 'MITRE') {
+                $script:NistHtml | Should -Not -Match ('\b' + [regex]::Escape($fw)) `
+                    -Because "a NIST-only report must not name $fw"
+            }
+        }
+
+        It 'carries the same scope caveats as the Markdown' {
+            $script:NistHtml | Should -BeLike '*an 800-53 baseline completion percentage*'
+            $script:NistHtml | Should -BeLike '*controls the tenant passed*'
+            $script:NistHtml | Should -BeLike '*Nothing in this section is scored*'
+        }
+
+        It 'renders the family table, the control matrix and the physical section' {
+            $script:NistHtml | Should -BeLike '*Coverage by control family*'
+            $script:NistHtml | Should -BeLike '*Control matrix*'
+            $script:NistHtml | Should -BeLike '*Physical, Media and Device Controls*'
+        }
+
+        It 'escapes hostile finding text rather than emitting live markup' {
+            $p = Join-Path $script:Tmp 'xss.md'
+            Publish-NRGNISTMatrix -Metadata $script:Metadata -OutputPath $p -Findings @(
+                @{ ControlId = 'AAD-1.1'; State = 'Gap'; Severity = 'High'
+                   Title = '<script>nrgnistprobe</script>'; FrameworkIds = @('NIST:AC-2') }
+            )
+            $h = Get-Content -LiteralPath ([System.IO.Path]::ChangeExtension($p, '.html')) -Raw
+            $h | Should -Not -Match '<script>nrgnistprobe'
+            $h | Should -Match 'nrgnistprobe'
+        }
+    }
+
     Context 'XLSX deliverable' {
 
         It 'writes the workbook alongside the Markdown when openpyxl is available' -Skip:(-not (

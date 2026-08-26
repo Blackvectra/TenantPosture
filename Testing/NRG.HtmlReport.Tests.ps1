@@ -176,6 +176,64 @@ Describe 'Publish-NRGAssessmentHTML end-to-end render' {
         $script:html | Should -Match ([regex]::Escape($script:XssMarker))
     }
 
+    It 'defaults to every framework when -Frameworks is not passed' {
+        # The publisher default stays multi-framework; the NRG entry point is
+        # what narrows it. Changing the publisher default would silently narrow
+        # NLS and every direct caller too.
+        foreach ($fw in 'CIS', 'SCuBA', 'NIST', 'CMMC') {
+            $script:html | Should -BeLike "*>$fw<*" -Because "$fw must appear by default"
+        }
+    }
+
+    Context 'Single-framework report (-Frameworks NIST)' {
+
+        BeforeAll {
+            $script:NistOnlyPath = Join-Path $script:tmp 'nist-only.html'
+            Publish-NRGAssessmentHTML -Metadata $script:metadata -Findings $script:findings `
+                -Connections $script:connections -OutputPath $script:NistOnlyPath `
+                -ClientName 'Contoso Ltd' -Frameworks @('NIST')
+            $script:NistOnly = Get-Content -LiteralPath $script:NistOnlyPath -Raw
+        }
+
+        It 'renders exactly one framework card' {
+            ([regex]::Matches($script:NistOnly, "class='fw-card'")).Count | Should -Be 1
+        }
+
+        It 'sizes the grid to the number of cards, not a hardcoded four' {
+            # Otherwise a single card renders at a quarter width with three
+            # empty columns beside it.
+            $script:NistOnly | Should -Match 'fw-grid\{display:grid;grid-template-columns:repeat\(1,1fr\)'
+        }
+
+        It 'names no other framework in the matrix card or the footer' {
+            $script:NistOnly | Should -Not -Match 'card-label">Framework Compliance Matrix'
+            $script:NistOnly | Should -BeLike '*NIST SP 800-53 Rev 5 Compliance*'
+            foreach ($fw in 'CIS M365 Foundations', 'CISA SCuBA', 'CMMC 2.0') {
+                $script:NistOnly | Should -Not -BeLike "*$fw*" -Because "a NIST-only report must not advertise $fw"
+            }
+        }
+
+        It 'still carries the NIST family and physical sections' {
+            $script:NistOnly | Should -BeLike '*id="nist-families"*'
+            $script:NistOnly | Should -BeLike '*id="nist-physical"*'
+        }
+
+        It 'still renders every finding — narrowing the report never narrows the assessment' {
+            $full = ([regex]::Matches($script:html,      [regex]::Escape($script:TitleMarker))).Count
+            $nist = ([regex]::Matches($script:NistOnly,  [regex]::Escape($script:TitleMarker))).Count
+            $nist | Should -Be $full -Because 'the framework selection is presentation only'
+        }
+
+        It 'falls back to NIST rather than rendering an empty matrix on an unknown framework' {
+            $p = Join-Path $script:tmp 'bogus.html'
+            Publish-NRGAssessmentHTML -Metadata $script:metadata -Findings $script:findings `
+                -Connections $script:connections -OutputPath $p -Frameworks @('NOTAFRAMEWORK')
+            $txt = Get-Content -LiteralPath $p -Raw
+            ([regex]::Matches($txt, "class='fw-card'")).Count | Should -Be 1
+            $txt | Should -BeLike '*NIST SP 800-53 Rev 5*'
+        }
+    }
+
     It 'leaks no object-stringification artifacts' {
         # These strings only appear when a hashtable/array is accidentally
         # interpolated instead of formatted — never in intentional report HTML.

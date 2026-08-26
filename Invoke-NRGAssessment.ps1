@@ -151,6 +151,15 @@ param(
     })]
     [string] $DeviceResults,
 
+    # Which framework(s) the REPORT presents. NRG assesses against NIST
+    # SP 800-53 Rev 5, so that is the default here. This narrows the report,
+    # never the assessment: every control still carries its CIS, SCuBA, CMMC,
+    # ISO 27001, SOC 2, HIPAA, PCI DSS and MITRE citations, every framework is
+    # still scored, and the results JSON and XLSX matrix are unchanged. Pass
+    # -Framework All for the multi-framework report, or name one explicitly.
+    [ValidateSet('NIST','CIS','SCuBA','CMMC','All')]
+    [string] $Framework = 'NIST',
+
     # Standalone NIST SP 800-53 Rev 5 matrix (Markdown + XLSX), for clients
     # assessed against 800-53 who should not have to read their posture out of
     # a multi-framework report. Purely additive — every other framework the tool
@@ -767,7 +776,8 @@ if (-not $JsonOnly) {
     if (Get-Command Publish-NRGAssessmentHTML -ErrorAction SilentlyContinue) {
         $htmlPath = Join-Path $OutputPath "$baseName-assessment.html"
         try {
-            Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath -Attachments $reportAttachments
+            $fwSelection = if ($Framework -eq 'All') { @('CIS','SCuBA','NIST','CMMC') } else { @($Framework) }
+            Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath -Attachments $reportAttachments -Frameworks $fwSelection
             Write-Host "  [+] HTML: $htmlPath" -ForegroundColor Green
             Set-NRGSensitiveFileAcl -Path $htmlPath -ErrorAction SilentlyContinue
         } catch {
