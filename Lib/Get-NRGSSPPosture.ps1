@@ -523,6 +523,7 @@ function Get-NRGControlOperationalImpact {
 
     $out = [ordered]@{
         Archetype  = $key
+        Effort     = [string](Get-NRGObjectField -Item $arch -Key 'Effort'     -Default '')
         Summary    = [string](Get-NRGObjectField -Item $arch -Key 'Summary'    -Default '')
         Users      = [string](Get-NRGObjectField -Item $arch -Key 'Users'      -Default '')
         Admins     = [string](Get-NRGObjectField -Item $arch -Key 'Admins'     -Default '')
@@ -540,7 +541,7 @@ function Get-NRGControlOperationalImpact {
     # control-specific difference to it, which is what the reader needs.
     $ov = Get-NRGObjectField -Item (Get-NRGObjectField -Item $Catalog -Key 'overrides' -Default $null) -Key $ControlId -Default $null
     if ($ov) {
-        foreach ($f in @('Summary', 'Users', 'Admins', 'Watchouts', 'Reversible')) {
+        foreach ($f in @('Effort', 'Summary', 'Users', 'Admins', 'Watchouts', 'Reversible')) {
             $v = [string](Get-NRGObjectField -Item $ov -Key $f -Default '')
             if ($v) { $out['Overrides'][$f] = $v; $out['Overridden'] = $true }
         }

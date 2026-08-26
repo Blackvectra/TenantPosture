@@ -186,6 +186,14 @@ param(
     })]
     [string] $SSPAnswers,
 
+    # The NIST 800-53 Rev 5 improvement plan — what to do next, in what order,
+    # and what it will cost. Ordered steps with the exact projected coverage
+    # after each, the families each one moves, and what the change will break.
+    # Single-framework by design: it names NIST and nothing else, because a
+    # plan that hedges across four frameworks orders its steps for none of
+    # them. Implied by -AllFiles.
+    [switch] $ImprovementPlan,
+
     [switch] $WhatIfConnections,
 
     # Launch the local web GUI instead of running a scan in the terminal.
@@ -909,6 +917,37 @@ if (-not $JsonOnly) {
                 Write-Host "      $openCount of 110 requirements still need a written answer — see 'Still to answer'." -ForegroundColor Yellow
             }
         } catch { Write-Warning "SSP publish failed: $($_.Exception.Message)" }
+    }
+
+    # NIST 800-53 improvement plan. Same shape as the two above: its own switch
+    # so it can be produced without every other sidecar, implied by -AllFiles.
+    if (($ImprovementPlan -or $AllFiles) -and (Get-Command Publish-NRGImprovementPlan -ErrorAction SilentlyContinue)) {
+        $planPath = Join-Path $OutputPath "$baseName-nist-improvement-plan.md"
+        try {
+            # Resolved here rather than inside the plan so a tenant whose SKU
+            # query failed is treated as "no licence data" — every gated
+            # control lands in Buy first rather than being promised as a quick
+            # win the tenant cannot actually action.
+            $planLicense = if (Get-Command Get-NRGTenantLicenseProfile -ErrorAction SilentlyContinue) {
+                try { Get-NRGTenantLicenseProfile } catch { $null }
+            } else { $null }
+
+            $plan = Get-NRGNISTImprovementPlan -Findings $findings -LicenseProfile $planLicense
+            if ($plan['Available']) {
+                Publish-NRGImprovementPlan -Plan $plan -Metadata $reportMetadata `
+                    -OutputPath $planPath -ClientName ([string]$reportMetadata.TenantDomain)
+                Write-Host "  [+] NIST improvement plan (md): $planPath" -ForegroundColor Green
+                Set-NRGSensitiveFileAcl -Path $planPath -ErrorAction SilentlyContinue
+                $planHtml = [System.IO.Path]::ChangeExtension($planPath, '.html')
+                if (Test-Path -LiteralPath $planHtml) {
+                    Write-Host "  [+] NIST improvement plan (html): $planHtml" -ForegroundColor Green
+                    Set-NRGSensitiveFileAcl -Path $planHtml -ErrorAction SilentlyContinue
+                }
+                Write-Host "      NIST coverage $($plan['Baseline']['Score'])% -> $($plan['Projected']['Score'])% across $($plan['Projected']['StepCount']) steps." -ForegroundColor Cyan
+            } else {
+                Write-Warning 'No NIST-cited findings to plan against — improvement plan skipped.'
+            }
+        } catch { Write-Warning "Improvement plan publish failed: $($_.Exception.Message)" }
     }
 
     # Delta report (if baseline provided)

@@ -167,6 +167,7 @@ $script:ExportedFunctions = @(
     'Get-NRGSSPPosture', 'Get-NRGSSPAnswers', 'Get-NRGNIST171Catalog',
     'Get-NRGNIST171RequirementIdsFromCmmc', 'Get-NRGOperationalImpactCatalog',
     'Get-NRGControlOperationalImpact', 'Publish-NRGSSP', 'Group-NRGSSPImpact', 'Get-NRGSSPImpactLabel',
+    'Get-NRGNISTImprovementPlan', 'Publish-NRGImprovementPlan',
     'Publish-NRGDeviceGuide',
     'Publish-NRGDeviceBaseline',
     'Invoke-NRGCollectDeviceCompliance', 'Test-NRGControlDevice', 'Get-NRGDeviceControlDefinitions', 'Get-NRGDeviceFrameworkIds',

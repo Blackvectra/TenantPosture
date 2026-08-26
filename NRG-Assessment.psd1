@@ -70,6 +70,8 @@
         'Publish-NRGSSP',
         'Group-NRGSSPImpact',
         'Get-NRGSSPImpactLabel',
+        'Get-NRGNISTImprovementPlan',
+        'Publish-NRGImprovementPlan',
         'Publish-NRGDeviceGuide',
         'Publish-NRGDeviceBaseline',
         'Invoke-NRGCollectDeviceCompliance',

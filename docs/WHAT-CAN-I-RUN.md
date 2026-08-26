@@ -15,6 +15,7 @@ coming back to this after six months, start here.
 | Assess every client | `Invoke-NRGBatchAssessment.ps1` |
 | Include their laptops | Add `-DeviceResults .\collected\client\` |
 | Hand a client a NIST document | Add `-NISTMatrix` |
+| Get closer to NIST, in order | Add `-ImprovementPlan` |
 | Build a CMMC / 800-171 plan | Add `-SSP` |
 | Find out who got phished | `Invoke-NRGSignInTriage.ps1` |
 | Investigate one mailbox | `Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@client.com` |
@@ -51,6 +52,7 @@ Parameters worth knowing:
 | `-NISTMatrix` | Also emit the standalone NIST-only matrix (Markdown + HTML + XLSX). |
 | `-SSP` | Also emit the 800-171 Rev 2 System Security Plan (see below). |
 | `-SSPAnswers <psd1>` | The client's written answers for the 69 requirements no scan reaches. |
+| `-ImprovementPlan` | Also emit the NIST 800-53 improvement plan — what to do next, in order. |
 | `-DeviceResults <folder>` | Fold in endpoint scan results (see below). |
 | `-AllFiles` | Every sidecar deliverable, not just the two-file default. Implies `-NISTMatrix`. |
 | `-Quick` | Critical + High controls only. Faster, noisier-free. |
@@ -142,6 +144,39 @@ Output: `output\<upn>\<timestamp>-email-incident.html`.
 
 ## Documents (no scanning)
 
+### `-ImprovementPlan` — what to do next, in order
+
+The one that moves the number. Everything else here reports a position; this
+reports a route.
+
+```powershell
+.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -ImprovementPlan
+```
+
+Ordered steps against NIST 800-53 Rev 5, each with the **exact** projected
+coverage after it, the families it moves, and what it will break. Two tracks,
+because that is how the work actually splits:
+
+- **Do now** — licensed, and documented as changing nothing a user will notice.
+  These go in this week; there is nothing to plan around.
+- **Schedule** — licensed, but somebody will feel it. Needs a window, a message
+  to users, or a discovery pass first.
+
+Licence-blocked controls are listed separately and get **no projected number** —
+buying a licence changes the denominator and a licensed-but-unconfigured control
+is still a gap, so a figure there would be a guess dressed as arithmetic.
+
+The projection is not an estimate. Closing a gap adds one to the numerator,
+closing a partial adds a half, the denominator does not move, and every
+cumulative figure is recomputed from counts rather than summed from rounded
+steps. A test re-derives all of them independently.
+
+**Completing it does not make anyone 800-53 compliant** — it closes what a
+tenant scan and an endpoint scan can see. The plan says that on its first page.
+
+Single framework on purpose: it names NIST and nothing else, because a plan
+hedging across four frameworks orders its steps for none of them.
+
 ### `-SSP` — the CMMC / 800-171 plan
 
 Not a separate script — a switch on the main assessment. Emits a worked System
@@ -218,7 +253,7 @@ Evaluators/      turn raw data into findings
 Publishers/      turn findings into documents
 Lib/             shared helpers — scoring, NIST rollups, escaping, file ACLs
 Device/          the endpoint script. PS 5.1. Does not run on your machine.
-Testing/         35 Pester suites. Run: Invoke-Pester ./Testing/
+Testing/         36 Pester suites. Run: Invoke-Pester ./Testing/
 docs/            this file, and the policy docs
 ```
 
