@@ -210,7 +210,7 @@ so CLI and GUI workflows can be mixed freely.
 Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (289 exports, dependency declarations)
+NRG-Assessment.psd1               ← Module manifest (291 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -251,7 +251,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          35 Pester suites — the FULL suite gates every PR
+Testing/                          36 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -327,6 +327,33 @@ Three things the document is careful not to claim:
 - **The score is coverage of what was exercised, not baseline completion.** A tenant scan reaches 57 of the 800-53 controls. A Low, Moderate or High baseline contains many that no cloud scan can reach, and the Summary sheet says so in as many words.
 - **Physical, media, maintenance and personnel controls stay unscored**, with the evidence an assessor has to collect directly and two or more implementation options each.
 - **Controls that came back `NotApplicable` are named, not dropped.** They get their own sheet stating that a missing license or an unconnected service is neither a pass nor a gap. A matrix that omits what it could not evaluate reads as full coverage of a smaller scope.
+
+### Improvement plan — the one that moves the number
+
+Every other deliverable here reports a **position**: you are at 61%, these families are weak, these controls failed. `-ImprovementPlan` reports a **route**.
+
+```powershell
+.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -ImprovementPlan
+```
+
+Ordered steps against NIST 800-53 Rev 5. Each one carries the exact projected coverage after it, the 800-53 families it moves, and **what the change will break** — because a plan gets approved by someone accountable for the disruption, not just for the score.
+
+Two tracks, because that is how the work actually splits:
+
+- **Do now** — licensed, and documented as changing nothing a user will notice. There is nothing to plan around; these go in this week.
+- **Schedule** — licensed, but somebody will feel it. Needs a window, a message to users, or a discovery pass first.
+
+A control lands in *Do now* only if the tool has **documented** that users notice nothing. A control with no impact entry never lands there: an undocumented impact is not evidence of no impact, and that is exactly the mistake that gets a change approved without anyone checking.
+
+**The projection is arithmetic, not an estimate.** Coverage is `round(100 * (Satisfied + 0.5*Partial) / Scored)` — the same formula and denominator rule as every other score in the tool. Closing a gap adds 1.0 to the numerator, closing a partial adds 0.5, and the denominator does not move because the control was already assessed. Every cumulative figure is recomputed from counts rather than accumulated from rounded per-step deltas, so there is no drift; a test re-derives all of them independently and fails if the implementation ever starts summing.
+
+Licence-blocked controls are listed separately and get **no projected number**. Buying a licence changes the denominator, and a licensed-but-unconfigured control is still a gap — a figure there would be a guess dressed as arithmetic.
+
+Family movement is computed by replaying the plan through the same rollup, not by per-family arithmetic. A control supporting two families moves both, and hand-rolled arithmetic gets that wrong in a way nobody notices until an auditor adds the column up.
+
+**Completing every step does not make an organisation 800-53 compliant.** It closes what a Microsoft 365 tenant scan and an endpoint scan can observe — a subset of 800-53, and 14 of the 20 families. The plan states that ceiling on its first page rather than letting a reader infer that 100% means done.
+
+Single framework on purpose: the document names NIST and nothing else. A plan that hedges across four frameworks orders its steps for none of them, and a test greps for the others and fails on any leak.
 
 ### System Security Plan — NIST 800-171 Rev 2 / CMMC Level 2
 
@@ -457,7 +484,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **35 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **36 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -501,7 +528,7 @@ Six GitHub Actions workflows cover the repository. Note that the `ci`, `codeql`,
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (35 suites) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (36 suites) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -520,4 +547,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 289 exported functions · full Pester suite (35 suites) gating CI*
+*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 291 exported functions · full Pester suite (36 suites) gating CI*
