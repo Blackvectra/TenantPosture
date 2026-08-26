@@ -2,7 +2,7 @@
   "version": "1.0",
   "framework": "NIST SP 800-53 Revision 5",
   "purpose": "Definitions for the DEV-* endpoint checks emitted by Device/Invoke-NRGDeviceCompliance.ps1. The endpoint script owns the check LOGIC (it has to, to run standalone on a bare machine); this file owns the judgement — title, severity, NIST citation, remediation and business risk. Keeping them apart means the endpoint script stays small and dumb and the reporting stays central.",
-  "note": "These are deliberately NOT in controls.json. That file is the 195 tenant controls, a stated product number; DEV-* controls only produce findings when device results are supplied via -DeviceResults, and mixing them in would silently change the tenant control count. Findings are emitted with Category 'Endpoint' — the vocabulary Add-NRGFinding already enforces. The Group field here is finer-grained grouping for this file and the device documents, not a finding category.",
+  "note": "These are deliberately NOT in controls.json. That file is the 195 tenant controls, a stated product number; DEV-* controls only produce findings when device results are supplied via -DeviceResults, and mixing them in would silently change the tenant control count. Findings are emitted with Category 'Endpoint' — the vocabulary Add-NRGFinding already enforces. The Group field here is finer-grained grouping for this file and the device documents, not a finding category. Nist171 lists the 800-171 Rev 2 requirements each check evidences, used by the SSP generator. Plain requirement IDs rather than CMMC practice IDs on purpose: a CMMC ID encodes a Level, and asserting the wrong Level is a visible error in front of an assessor. Empty means the mapping was arguable and was deliberately left out — an inflated mapping is worse than an honest gap.",
   "controls": [
     {
       "ControlId": "DEV-1.1",
@@ -15,7 +15,10 @@
       "RequiresElevation": true,
       "Remediation": "Deploy an Intune disk-encryption policy enforcing BitLocker with TPM (plus PIN where the threat model warrants it) and escrow the recovery key to Entra ID.",
       "BusinessRisk": "An unencrypted laptop that leaves the building is a reportable data breach rather than a hardware loss. This is the single control that most often decides whether a lost device requires notification.",
-      "Group": "Encryption"
+      "Group": "Encryption",
+      "Nist171": [
+        "3.13.16"
+      ]
     },
     {
       "ControlId": "DEV-1.2",
@@ -28,7 +31,10 @@
       "RequiresElevation": true,
       "Remediation": "Extend the BitLocker policy to fixed data drives, not just the OS volume.",
       "BusinessRisk": "A second internal drive holding the actual working data is a common blind spot — the OS volume is encrypted and the data is not.",
-      "Group": "Encryption"
+      "Group": "Encryption",
+      "Nist171": [
+        "3.13.16"
+      ]
     },
     {
       "ControlId": "DEV-1.3",
@@ -42,7 +48,10 @@
       "RequiresElevation": true,
       "Remediation": "Ensure the encryption policy creates a recovery password protector and escrows it. Verify the key is visible in Entra ID for the device.",
       "BusinessRisk": "Without a recovery protector a forgotten PIN or a TPM change turns an encrypted disk into permanently unrecoverable data.",
-      "Group": "Encryption"
+      "Group": "Encryption",
+      "Nist171": [
+        "3.13.16"
+      ]
     },
     {
       "ControlId": "DEV-1.4",
@@ -56,7 +65,8 @@
       "RequiresElevation": true,
       "Remediation": "Enable the TPM in firmware and initialise it. Devices without a usable TPM cannot bind BitLocker or Windows Hello to hardware and should be scheduled for replacement.",
       "BusinessRisk": "Without a hardware root of trust, BitLocker degrades to a password and Windows Hello cannot bind a credential to the device.",
-      "Group": "Boot integrity"
+      "Group": "Boot integrity",
+      "Nist171": []
     },
     {
       "ControlId": "DEV-1.5",
@@ -70,7 +80,8 @@
       "RequiresElevation": true,
       "Remediation": "Enable UEFI Secure Boot in firmware. A device installed in legacy BIOS mode needs conversion (MBR2GPT) or a rebuild.",
       "BusinessRisk": "Without Secure Boot a bootkit can load before the operating system and before any security product on it.",
-      "Group": "Boot integrity"
+      "Group": "Boot integrity",
+      "Nist171": []
     },
     {
       "ControlId": "DEV-1.6",
@@ -83,7 +94,8 @@
       "RequiresElevation": false,
       "Remediation": "Enable memory integrity (HVCI) and Credential Guard via an Intune Endpoint Security policy on hardware that supports it.",
       "BusinessRisk": "VBS is what isolates derived credentials from a kernel-level compromise; without it a single privileged intrusion yields reusable domain credentials.",
-      "Group": "Boot integrity"
+      "Group": "Boot integrity",
+      "Nist171": []
     },
     {
       "ControlId": "DEV-2.1",
@@ -96,7 +108,10 @@
       "RequiresElevation": false,
       "Remediation": "Enable real-time protection via an Intune antivirus policy. If a third-party AV is primary, confirm its health in that product's console and record it as the compensating control.",
       "BusinessRisk": "Real-time protection off means malware is only found on a scheduled scan, which on a workstation may be days after execution.",
-      "Group": "Malware defence"
+      "Group": "Malware defence",
+      "Nist171": [
+        "3.14.2"
+      ]
     },
     {
       "ControlId": "DEV-2.2",
@@ -110,7 +125,10 @@
       "RequiresElevation": false,
       "Remediation": "Enable tamper protection tenant-wide in the Defender portal, or via an Intune Endpoint Security antivirus policy.",
       "BusinessRisk": "Without tamper protection, any process with administrative rights can simply switch the antivirus off — which is exactly what ransomware does first.",
-      "Group": "Malware defence"
+      "Group": "Malware defence",
+      "Nist171": [
+        "3.14.2"
+      ]
     },
     {
       "ControlId": "DEV-2.3",
@@ -123,7 +141,10 @@
       "RequiresElevation": false,
       "Remediation": "Investigate update connectivity for the device. Persistent staleness usually means a proxy, a metered connection, or a device that has not been online.",
       "BusinessRisk": "Stale definitions miss the current campaign. A device weeks behind is protected against last month's threats only.",
-      "Group": "Malware defence"
+      "Group": "Malware defence",
+      "Nist171": [
+        "3.14.4"
+      ]
     },
     {
       "ControlId": "DEV-2.4",
@@ -137,7 +158,10 @@
       "RequiresElevation": false,
       "Remediation": "Set MAPS reporting to Advanced via Intune antivirus policy.",
       "BusinessRisk": "Cloud-delivered protection is what catches never-before-seen samples; without it detection falls back to local signatures alone.",
-      "Group": "Malware defence"
+      "Group": "Malware defence",
+      "Nist171": [
+        "3.14.2"
+      ]
     },
     {
       "ControlId": "DEV-2.5",
@@ -150,7 +174,10 @@
       "RequiresElevation": false,
       "Remediation": "Set PUA protection to Enabled (block) rather than Audit.",
       "BusinessRisk": "PUA covers the adware, bundleware and remote-access tooling that precedes many hands-on-keyboard intrusions.",
-      "Group": "Malware defence"
+      "Group": "Malware defence",
+      "Nist171": [
+        "3.14.2"
+      ]
     },
     {
       "ControlId": "DEV-2.6",
@@ -164,7 +191,10 @@
       "RequiresElevation": false,
       "Remediation": "Deploy the office-macro, script and credential-theft ASR rule set in Block mode. Audit mode first if line-of-business software is unknown, but Audit is not the destination.",
       "BusinessRisk": "ASR blocks the specific techniques that start most endpoint intrusions without needing to identify the malware itself. Rules left in Audit report the technique and allow it.",
-      "Group": "Malware defence"
+      "Group": "Malware defence",
+      "Nist171": [
+        "3.14.2"
+      ]
     },
     {
       "ControlId": "DEV-2.7",
@@ -178,7 +208,10 @@
       "RequiresElevation": false,
       "Remediation": "Enable controlled folder access via Intune, with a tested allow-list for line-of-business applications.",
       "BusinessRisk": "This is the ransomware-specific control: it stops untrusted processes writing to user document folders even if execution was not prevented.",
-      "Group": "Malware defence"
+      "Group": "Malware defence",
+      "Nist171": [
+        "3.14.2"
+      ]
     },
     {
       "ControlId": "DEV-2.8",
@@ -192,7 +225,10 @@
       "RequiresElevation": false,
       "Remediation": "Onboard the device via the Intune Defender for Endpoint connector.",
       "BusinessRisk": "EDR telemetry is usually the only way to reconstruct what an intruder did. A device that is not onboarded is invisible after the fact.",
-      "Group": "Malware defence"
+      "Group": "Malware defence",
+      "Nist171": [
+        "3.14.6"
+      ]
     },
     {
       "ControlId": "DEV-3.1",
@@ -205,7 +241,10 @@
       "RequiresElevation": false,
       "Remediation": "Deploy an Intune firewall policy enabling all three profiles.",
       "BusinessRisk": "The host firewall is the control that still applies when the laptop is on a hotel or home network with no perimeter in front of it.",
-      "Group": "Network exposure"
+      "Group": "Network exposure",
+      "Nist171": [
+        "3.13.1"
+      ]
     },
     {
       "ControlId": "DEV-3.2",
@@ -219,7 +258,10 @@
       "RequiresElevation": false,
       "Remediation": "Set the default inbound action to Block on all profiles; add explicit allow rules for what is genuinely needed.",
       "BusinessRisk": "A default-allow inbound profile exposes every listening service on the machine to whatever network it joins.",
-      "Group": "Network exposure"
+      "Group": "Network exposure",
+      "Nist171": [
+        "3.13.6"
+      ]
     },
     {
       "ControlId": "DEV-3.3",
@@ -232,7 +274,10 @@
       "RequiresElevation": false,
       "Remediation": "Remove the SMB1Protocol optional feature and confirm the server-side registry value is not forcing it on.",
       "BusinessRisk": "SMBv1 is the protocol WannaCry and NotPetya spread over. It has no safe configuration and no remaining legitimate use in a modern estate.",
-      "Group": "Legacy protocol"
+      "Group": "Legacy protocol",
+      "Nist171": [
+        "3.4.7"
+      ]
     },
     {
       "ControlId": "DEV-3.4",
@@ -246,7 +291,10 @@
       "RequiresElevation": false,
       "Remediation": "Set the Turn off multicast name resolution policy (EnableMulticast = 0) via Intune or Group Policy.",
       "BusinessRisk": "LLMNR and NBT-NS poisoning is the standard opening move for internal credential capture. It requires no exploit, only a foothold on the same subnet.",
-      "Group": "Legacy protocol"
+      "Group": "Legacy protocol",
+      "Nist171": [
+        "3.4.7"
+      ]
     },
     {
       "ControlId": "DEV-3.5",
@@ -260,7 +308,10 @@
       "RequiresElevation": false,
       "Remediation": "Where RDP must be enabled, require Network Level Authentication and restrict access by firewall rule and Conditional Access.",
       "BusinessRisk": "Without NLA the logon screen is reachable before authentication, which is both a brute-force target and a pre-auth exploit surface.",
-      "Group": "Network exposure"
+      "Group": "Network exposure",
+      "Nist171": [
+        "3.1.12"
+      ]
     },
     {
       "ControlId": "DEV-4.1",
@@ -274,7 +325,10 @@
       "RequiresElevation": false,
       "Remediation": "Review the membership against who should hold local administrator rights. Remove day-to-day user accounts and use an approved elevation path instead.",
       "BusinessRisk": "Most endpoint malware needs administrative rights to persist. Standing admin on a daily-driver account removes that obstacle entirely.",
-      "Group": "Privilege"
+      "Group": "Privilege",
+      "Nist171": [
+        "3.1.5"
+      ]
     },
     {
       "ControlId": "DEV-4.2",
@@ -288,7 +342,10 @@
       "RequiresElevation": false,
       "Remediation": "Disable the RID 500 account. Renaming it is not sufficient — the SID is what an attacker enumerates.",
       "BusinessRisk": "The built-in administrator is the one account guaranteed to exist on every Windows machine, which makes it the default target for password spraying.",
-      "Group": "Privilege"
+      "Group": "Privilege",
+      "Nist171": [
+        "3.1.5"
+      ]
     },
     {
       "ControlId": "DEV-4.3",
@@ -301,7 +358,10 @@
       "RequiresElevation": false,
       "Remediation": "Disable the RID 501 guest account.",
       "BusinessRisk": "An enabled guest account allows unauthenticated enumeration and, in some share configurations, unauthenticated read access.",
-      "Group": "Privilege"
+      "Group": "Privilege",
+      "Nist171": [
+        "3.1.5"
+      ]
     },
     {
       "ControlId": "DEV-4.4",
@@ -316,7 +376,10 @@
       "RequiresElevation": false,
       "Remediation": "Deploy Windows LAPS via Intune with escrow to Entra ID and automatic rotation. Remove any pre-existing shared local account.",
       "BusinessRisk": "A shared local administrator password means one recovered credential unlocks every device that shares it. This is the single most common way a one-machine compromise becomes an estate-wide one.",
-      "Group": "Privilege"
+      "Group": "Privilege",
+      "Nist171": [
+        "3.1.5"
+      ]
     },
     {
       "ControlId": "DEV-4.5",
@@ -329,7 +392,8 @@
       "RequiresElevation": false,
       "Remediation": "Remove PasswordNeverExpires from enabled local accounts, or document the LAPS-managed account as the deliberate exception.",
       "BusinessRisk": "A non-expiring local password is a credential that survives every rotation policy the organisation thinks it has.",
-      "Group": "Privilege"
+      "Group": "Privilege",
+      "Nist171": []
     },
     {
       "ControlId": "DEV-5.1",
@@ -343,7 +407,10 @@
       "RequiresElevation": false,
       "Remediation": "No action — inventory. Compare the reported build against the servicing branches still receiving security updates.",
       "BusinessRisk": "An out-of-support build stops receiving security fixes entirely, which no other control on this list compensates for.",
-      "Group": "Patch state"
+      "Group": "Patch state",
+      "Nist171": [
+        "3.4.1"
+      ]
     },
     {
       "ControlId": "DEV-5.2",
@@ -356,7 +423,10 @@
       "RequiresElevation": false,
       "Remediation": "Deploy Intune update rings with an enforced deadline, and a compliance policy setting a minimum OS version so an unpatched device loses access.",
       "BusinessRisk": "Nearly all exploited endpoint vulnerabilities have a patch available at the time of exploitation. The gap between release and installation is the actual exposure.",
-      "Group": "Patch state"
+      "Group": "Patch state",
+      "Nist171": [
+        "3.14.1"
+      ]
     },
     {
       "ControlId": "DEV-5.3",
@@ -369,7 +439,10 @@
       "RequiresElevation": false,
       "Remediation": "Enforce a reboot deadline in the update ring. A machine that never reboots never finishes patching.",
       "BusinessRisk": "A patch installed but not rebooted into is not yet protecting the machine, while the reporting shows it as installed.",
-      "Group": "Patch state"
+      "Group": "Patch state",
+      "Nist171": [
+        "3.14.1"
+      ]
     },
     {
       "ControlId": "DEV-6.1",
@@ -382,7 +455,10 @@
       "RequiresElevation": false,
       "Remediation": "Set the interactive logon machine inactivity limit via Intune (900 seconds or less is typical for workstations).",
       "BusinessRisk": "The unattended desk is the most common physical exposure in any office, and the only one that happens every day.",
-      "Group": "Session"
+      "Group": "Session",
+      "Nist171": [
+        "3.1.10"
+      ]
     },
     {
       "ControlId": "DEV-6.2",
@@ -395,7 +471,10 @@
       "RequiresElevation": false,
       "Remediation": "Where a screen-saver policy is used, require a password on resume. The machine inactivity limit (DEV-6.1) is the stronger control.",
       "BusinessRisk": "A screen saver that does not lock is decoration, not a control.",
-      "Group": "Session"
+      "Group": "Session",
+      "Nist171": [
+        "3.1.10"
+      ]
     },
     {
       "ControlId": "DEV-7.1",
@@ -409,7 +488,10 @@
       "RequiresElevation": true,
       "Remediation": "Remove the MicrosoftWindowsPowerShellV2Root optional feature.",
       "BusinessRisk": "The v2 engine bypasses script block logging, AMSI and constrained language mode. Downgrading to it is a standard evasion step.",
-      "Group": "Legacy surface"
+      "Group": "Legacy surface",
+      "Nist171": [
+        "3.4.7"
+      ]
     },
     {
       "ControlId": "DEV-7.2",
@@ -424,7 +506,10 @@
       "RequiresElevation": false,
       "Remediation": "Enable script block logging via Intune or Group Policy, and confirm the events reach wherever logs are retained.",
       "BusinessRisk": "Script block logging is usually the only record of what a fileless PowerShell intrusion actually did.",
-      "Group": "Logging"
+      "Group": "Logging",
+      "Nist171": [
+        "3.3.1"
+      ]
     },
     {
       "ControlId": "DEV-7.3",
@@ -438,7 +523,10 @@
       "RequiresElevation": false,
       "Remediation": "Set NoDriveTypeAutoRun to 255 via policy.",
       "BusinessRisk": "AutoRun executes attacker-supplied content on insertion, which is what makes a dropped USB stick a working delivery mechanism.",
-      "Group": "Legacy surface"
+      "Group": "Legacy surface",
+      "Nist171": [
+        "3.4.7"
+      ]
     },
     {
       "ControlId": "DEV-7.4",
@@ -452,7 +540,8 @@
       "RequiresElevation": false,
       "Remediation": "Enable Restricted Admin mode / protected credential delegation via policy.",
       "BusinessRisk": "Limits credentials being left in memory on the machine an administrator connects TO, which is how one compromised server harvests admin credentials.",
-      "Group": "Privilege"
+      "Group": "Privilege",
+      "Nist171": []
     },
     {
       "ControlId": "DEV-8.1",
@@ -466,7 +555,11 @@
       "RequiresElevation": false,
       "Remediation": "Enable Include command line in process creation events via policy.",
       "BusinessRisk": "Without it, process-creation events record the binary but not its arguments — and the arguments are where the intent is.",
-      "Group": "Logging"
+      "Group": "Logging",
+      "Nist171": [
+        "3.3.1",
+        "3.3.2"
+      ]
     },
     {
       "ControlId": "DEV-8.2",
@@ -480,7 +573,11 @@
       "RequiresElevation": true,
       "Remediation": "Enable Audit Process Creation (Success) in the advanced audit policy.",
       "BusinessRisk": "Process creation events are the backbone of endpoint investigation. Without them there is no timeline to reconstruct.",
-      "Group": "Logging"
+      "Group": "Logging",
+      "Nist171": [
+        "3.3.1",
+        "3.3.2"
+      ]
     }
   ]
 }
