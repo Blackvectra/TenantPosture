@@ -210,7 +210,7 @@ so CLI and GUI workflows can be mixed freely.
 Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (280 exports, dependency declarations)
+NRG-Assessment.psd1               ← Module manifest (289 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -251,7 +251,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          34 Pester suites — the FULL suite gates every PR
+Testing/                          35 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -327,6 +327,34 @@ Three things the document is careful not to claim:
 - **The score is coverage of what was exercised, not baseline completion.** A tenant scan reaches 57 of the 800-53 controls. A Low, Moderate or High baseline contains many that no cloud scan can reach, and the Summary sheet says so in as many words.
 - **Physical, media, maintenance and personnel controls stay unscored**, with the evidence an assessor has to collect directly and two or more implementation options each.
 - **Controls that came back `NotApplicable` are named, not dropped.** They get their own sheet stating that a missing license or an unconnected service is neither a pass nor a gap. A matrix that omits what it could not evaluate reads as full coverage of a smaller scope.
+
+### System Security Plan — NIST 800-171 Rev 2 / CMMC Level 2
+
+`-SSP` turns the same run into a **worked System Security Plan** against all 110 NIST SP 800-171 Rev 2 requirements — the baseline CMMC Level 2 is assessed against. Markdown, self-contained HTML, and an XLSX working copy:
+
+```powershell
+# The plan, from the same scan
+.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -SSP
+
+# With the client's written answers
+.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -SSP `
+    -SSPAnswers .\Config\ssp\example.com.psd1
+```
+
+Every requirement is a row that answers four questions in order: **is this in place**, **what proves it**, **how do we close it**, and **what will closing it do to the business**. The last one is the reason the document exists. Every other deliverable here answers "what is wrong"; a client reading a gap list asks "if we fix that, what breaks?" — and until now the tool had no answer, so remediation got scheduled on guesswork or not scheduled at all. [`Config/operational-impact.json`](Config/operational-impact.json) holds that answer for all 230 controls and it renders beside every action, with what users notice, what it costs administrators, what actually goes wrong, and whether it can be backed out.
+
+The join needs no mapping table: a CMMC practice ID embeds its 800-171 requirement number (`IA.L2-3.5.3` → `3.5.3`), and every control already carries a CMMC citation. The endpoint checks use the explicit `Nist171` array in `device-controls.json`.
+
+**41 of the 110 requirements have automated evidence here. The other 69 do not, and the document never pretends otherwise.** They are policy, process, physical security and personnel — no scan reaches them. They are answered by the client in `Config/ssp/<client>.psd1` (see [`Config/ssp/example.psd1`](Config/ssp/example.psd1)), read with `Import-PowerShellDataFile` so an answers file emailed between the MSP and the client can never execute. Requirements with neither evidence nor an answer are counted on the first page and listed on the last, because an SSP with 69 blanks is not a finished document and a reader must not be able to mistake it for one.
+
+Four rules the generator enforces, tested adversarially in `NRG.SSP.Tests.ps1`:
+
+- **A requirement with no mapped control is never derived as implemented.** A test feeds it a findings set in which every control in the tool passes and proves those 69 still refuse to claim anything.
+- **A mapped control that produced no finding is an unknown, never a pass.** Skipped workloads and unlicensed features are the normal case.
+- **A status the client asserts never counts as one the tool verified.** It renders stamped *client-attested* and stays out of the tool-verified total. That separation is the difference between an SSP and a wish list.
+- **An undocumented operational impact renders as "not documented", never as "no impact."** "No impact" is the answer that gets a change approved without anyone checking.
+
+Rev 2, not Rev 3 — DoD Class Deviation 2023-O0006 makes Rev 2 the standard CMMC Level 2 is scored against, and publishing against Rev 3 would have the client assessed on the wrong one.
 
 ### Device guide — reference material, no scanning
 
@@ -429,7 +457,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **34 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **35 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -473,7 +501,7 @@ Six GitHub Actions workflows cover the repository. Note that the `ci`, `codeql`,
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (34 suites) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (35 suites) · PSScriptAnalyzer with SARIF upload · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -492,4 +520,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 280 exported functions · full Pester suite (34 suites) gating CI*
+*NRG-Assessment v4.12.1 · 195 posture controls + EMAIL/SIGNIN IR heuristics · 289 exported functions · full Pester suite (35 suites) gating CI*

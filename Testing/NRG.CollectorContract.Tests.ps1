@@ -21,7 +21,12 @@
 # reporting — would read a key that never exists and degrade to a permanent,
 # silent NotApplicable.
 
-Describe 'controls.json CollectorDependency matches the collectors' actual keys' {
+# Double-quoted deliberately. The apostrophe in "collectors'" closed the
+# single-quoted string, so everything after it parsed as code and the whole
+# file failed to parse — which Pester reports as a container failure, not as a
+# test failure, and a container failure is easy to skim past in a green run.
+# This suite was therefore guarding nothing.
+Describe "controls.json CollectorDependency matches the collectors' actual keys" {
 
     BeforeAll {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }

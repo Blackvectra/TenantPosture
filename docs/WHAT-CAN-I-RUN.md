@@ -15,6 +15,7 @@ coming back to this after six months, start here.
 | Assess every client | `Invoke-NRGBatchAssessment.ps1` |
 | Include their laptops | Add `-DeviceResults .\collected\client\` |
 | Hand a client a NIST document | Add `-NISTMatrix` |
+| Build a CMMC / 800-171 plan | Add `-SSP` |
 | Find out who got phished | `Invoke-NRGSignInTriage.ps1` |
 | Investigate one mailbox | `Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@client.com` |
 | Print device guidance (no scan) | `New-NRGDeviceGuide.ps1` |
@@ -48,6 +49,8 @@ Parameters worth knowing:
 |---|---|
 | `-Framework NIST\|CIS\|SCuBA\|CMMC\|All` | Which frameworks the report shows. Default **NIST**. |
 | `-NISTMatrix` | Also emit the standalone NIST-only matrix (Markdown + HTML + XLSX). |
+| `-SSP` | Also emit the 800-171 Rev 2 System Security Plan (see below). |
+| `-SSPAnswers <psd1>` | The client's written answers for the 69 requirements no scan reaches. |
 | `-DeviceResults <folder>` | Fold in endpoint scan results (see below). |
 | `-AllFiles` | Every sidecar deliverable, not just the two-file default. Implies `-NISTMatrix`. |
 | `-Quick` | Critical + High controls only. Faster, noisier-free. |
@@ -139,6 +142,31 @@ Output: `output\<upn>\<timestamp>-email-incident.html`.
 
 ## Documents (no scanning)
 
+### `-SSP` — the CMMC / 800-171 plan
+
+Not a separate script — a switch on the main assessment. Emits a worked System
+Security Plan against all 110 NIST SP 800-171 Rev 2 requirements, as Markdown,
+HTML and an XLSX working copy.
+
+```powershell
+.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -SSP `
+    -SSPAnswers .\Config\ssp\client.com.psd1
+```
+
+Each requirement answers four questions: is it in place, what proves it, how do
+we close it, and **what will closing it do to the business**. That last one is
+why the document exists — it is the question a client asks back at every gap
+list, and the answer lives in `Config/operational-impact.json`.
+
+**41 of the 110 are evidenced by the scan. The other 69 are not**, and the plan
+says so on the first page and lists them on the last. Those are policy,
+process, physical and personnel; you answer them in
+`Config/ssp/<client>.psd1` — copy `Config/ssp/example.psd1` and fill it in.
+Answers survive between assessments instead of being retyped every year.
+
+A status you assert in the answers file renders stamped *client-attested* and
+never counts as tool-verified. That is deliberate and not adjustable.
+
 ### `New-NRGDeviceGuide.ps1` — connects to nothing
 
 Reference material for devices. No sign-in, no Graph, no endpoint access — so it
@@ -190,7 +218,7 @@ Evaluators/      turn raw data into findings
 Publishers/      turn findings into documents
 Lib/             shared helpers — scoring, NIST rollups, escaping, file ACLs
 Device/          the endpoint script. PS 5.1. Does not run on your machine.
-Testing/         34 Pester suites. Run: Invoke-Pester ./Testing/
+Testing/         35 Pester suites. Run: Invoke-Pester ./Testing/
 docs/            this file, and the policy docs
 ```
 
@@ -204,6 +232,9 @@ docs/            this file, and the policy docs
 | `device-baseline.json` | The 27-item build standard |
 | `nist-physical.json` | The 31 physical / media / device controls |
 | `nist-800-53-catalog.json` | Official 800-53 Rev 5 titles |
+| `nist-800-171-r2.json` | The 110 CMMC L2 requirements and their 800-171A objectives |
+| `operational-impact.json` | What enabling each control does to the business |
+| `ssp/<client>.psd1` | Your answers for the 69 requirements no scan reaches |
 | `branding.psd1` | Company name, colours, rates |
 
 ---

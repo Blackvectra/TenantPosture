@@ -167,6 +167,25 @@ param(
     # Implied by -AllFiles.
     [switch] $NISTMatrix,
 
+    # System Security Plan against NIST SP 800-171 Rev 2 — the CMMC Level 2
+    # baseline. All 110 requirements as a worked checklist: is it in place, what
+    # proves it, how to close it, and what closing it will do to the business.
+    # 41 requirements are evidenced from the tenant and endpoints; the other 69
+    # are answered by the client in Config/ssp/<client>.psd1 and render as open
+    # questions until they are. Markdown + HTML + XLSX. Implied by -AllFiles.
+    [switch] $SSP,
+
+    # Explicit path to the SSP answers file. Without it, -SSP looks for
+    # Config/ssp/<tenant-domain>.psd1 and renders the plan with every narrative
+    # blank if there is none — which is a truthful "not answered yet", not a
+    # failure.
+    [ValidateScript({
+        if ($_ -match '\.\.[\\\/]') { throw 'Path traversal not allowed in -SSPAnswers.' }
+        if (-not (Test-Path -LiteralPath $_)) { throw "SSP answers file not found: $_" }
+        return $true
+    })]
+    [string] $SSPAnswers,
+
     [switch] $WhatIfConnections,
 
     # Launch the local web GUI instead of running a scan in the terminal.
@@ -850,6 +869,46 @@ if (-not $JsonOnly) {
                 Write-Host "  [+] NIST matrix (xlsx): $nistXlsx" -ForegroundColor Green
             }
         } catch { Write-Warning "NIST matrix publish failed: $($_.Exception.Message)" }
+    }
+
+    # System Security Plan (NIST SP 800-171 Rev 2 / CMMC Level 2). Same shape as
+    # the NIST matrix above: its own switch so a defence-contractor client can
+    # be served without every other sidecar, and implied by -AllFiles.
+    if (($SSP -or $AllFiles) -and (Get-Command Publish-NRGSSP -ErrorAction SilentlyContinue)) {
+        $sspPath = Join-Path $OutputPath "$baseName-ssp-800-171.md"
+        try {
+            # The CONNECTED domain, not the -TenantDomain parameter: under GDAP
+            # the two differ, and looking the answers file up by the partner's
+            # domain would silently attach one client's narratives to another
+            # client's plan.
+            $sspClient = [string]$reportMetadata.TenantDomain
+            $sspAnswerSet = if ($SSPAnswers) {
+                Get-NRGSSPAnswers -Path $SSPAnswers
+            } else {
+                Get-NRGSSPAnswers -ClientName $sspClient
+            }
+            $sspPosture = Get-NRGSSPPosture -Findings $findings -Answers $sspAnswerSet
+            Publish-NRGSSP -Posture $sspPosture -Metadata $reportMetadata -Answers $sspAnswerSet `
+                -OutputPath $sspPath -ClientName $sspClient
+            Write-Host "  [+] SSP (md): $sspPath" -ForegroundColor Green
+            Set-NRGSensitiveFileAcl -Path $sspPath -ErrorAction SilentlyContinue
+            foreach ($ext in @('.html', '.xlsx')) {
+                $side = [System.IO.Path]::ChangeExtension($sspPath, $ext)
+                if (Test-Path -LiteralPath $side) {
+                    Write-Host "  [+] SSP ($($ext.TrimStart('.'))): $side" -ForegroundColor Green
+                    Set-NRGSensitiveFileAcl -Path $side -ErrorAction SilentlyContinue
+                }
+            }
+            # The count of unanswered requirements is the number that decides
+            # whether this plan can be signed, so it is said at the console
+            # rather than left for someone to find on page forty.
+            $openCount = @($sspPosture['Requirements'] | Where-Object {
+                $_['MappedControls'] -eq 0 -and -not $_['Narrative'] -and $_['StatusSource'] -eq 'None'
+            }).Count
+            if ($openCount -gt 0) {
+                Write-Host "      $openCount of 110 requirements still need a written answer — see 'Still to answer'." -ForegroundColor Yellow
+            }
+        } catch { Write-Warning "SSP publish failed: $($_.Exception.Message)" }
     }
 
     # Delta report (if baseline provided)
