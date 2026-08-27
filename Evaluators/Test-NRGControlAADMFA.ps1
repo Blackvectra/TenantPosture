@@ -35,8 +35,17 @@ function Test-NRGControlAADMFA {
     }
 
     $secDefEnabled = if ($userRaw -and $userRaw.Success) { $userRaw.Data['SecurityDefaultsEnabled'] } else { $null }
-    $users         = if ($userRaw -and $userRaw.Success) { @($userRaw.Data['Users']) }           else { @() }
-    $mfaReg        = if ($userRaw -and $userRaw.Success) { @($userRaw.Data['MFARegistration']) } else { @() }
+    # Two statements. An if-block yielding an empty array assigns $null, and
+    # BOTH branches can yield empty here — a tenant with no users collected
+    # hits it through the true branch, not just the false one. Nothing
+    # downstream calls .Count today, but the trap is one edit away from being
+    # a crash.
+    $users  = @()
+    $mfaReg = @()
+    if ($userRaw -and $userRaw.Success) {
+        $users  = @($userRaw.Data['Users'])
+        $mfaReg = @($userRaw.Data['MFARegistration'])
+    }
 
     # Security Defaults satisfies AAD-1.2 by itself (MFA universally required).
     if ($secDefEnabled -eq $true) {

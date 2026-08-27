@@ -133,8 +133,15 @@ function Apply-NRGAADMFA {
                 Write-Verbose "Get-NRGBreakGlassExclusions threw: $($_.Exception.Message)"
             }
         }
-        $excludeUsers  = if ($bg -and $bg.ExcludeUsers)  { @($bg.ExcludeUsers)  } else { @() }
-        $excludeGroups = if ($bg -and $bg.ExcludeGroups) { @($bg.ExcludeGroups) } else { @() }
+        # Two statements. An if-block yielding an empty array assigns $null,
+        # and the .Count interpolated into $action below then threw a
+        # StrictMode property error — on a tenant with NO break-glass
+        # accounts, which is precisely the tenant this code exists to warn
+        # about. The warning printed and the policy was never created.
+        $excludeUsers  = @()
+        $excludeGroups = @()
+        if ($bg -and $bg.ExcludeUsers)  { $excludeUsers  = @($bg.ExcludeUsers)  }
+        if ($bg -and $bg.ExcludeGroups) { $excludeGroups = @($bg.ExcludeGroups) }
 
         $bgWarning = $null
         if (-not $bg -or -not $bg.Found) {
