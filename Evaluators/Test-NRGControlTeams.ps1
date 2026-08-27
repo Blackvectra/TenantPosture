@@ -180,6 +180,14 @@ function Test-NRGControlTeamsUnverifiedApps {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $tms 'AppConfig')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AppConfig was not collected; not assessed.'
+        return
+    }
     $allowAll = Get-NRGNestedProperty -Object $tms -Path 'Data.AppConfig.AllowAllApps' -Default $true
     if (-not $allowAll) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Teams app installation restricted — not all apps are allowed.'
@@ -195,6 +203,14 @@ function Test-NRGControlTeams3PStorage {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $tms 'ClientConfiguration')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'ClientConfiguration was not collected; not assessed.'
+        return
+    }
     $dropbox = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfiguration.AllowDropBox' -Default $false
     $box     = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfiguration.AllowBox' -Default $false
     $gdrive  = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfiguration.AllowGoogleDrive' -Default $false
@@ -229,6 +245,14 @@ function Test-NRGControlTeamsRecordingExternal {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $tms 'MeetingPolicy')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'MeetingPolicy was not collected; not assessed.'
+        return
+    }
     $allowExtRecord = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowCloudRecordingForCalls' -Default $true
     if (-not $allowExtRecord) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'External participants cannot initiate cloud recordings.'
@@ -244,6 +268,14 @@ function Test-NRGControlTeamsBroadChannel {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $tms 'MeetingPolicy')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'MeetingPolicy was not collected; not assessed.'
+        return
+    }
     $broadInvite = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowChannelMeetingScheduling' -Default $true
     if (-not $broadInvite) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Broad channel meeting scheduling restricted.'
@@ -259,6 +291,14 @@ function Test-NRGControlTeamsExternalChat {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $tms 'FederationConfig')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'FederationConfig was not collected; not assessed.'
+        return
+    }
     $extChat = Get-NRGNestedProperty -Object $tms -Path 'Data.FederationConfig.AllowFederatedUsers' -Default $true
     if (-not $extChat) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'External user chat is disabled.'
@@ -292,6 +332,14 @@ function Test-NRGControlTeamsWatermarks {
     if (-not $tms -or -not $tms.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Teams data not collected'; return
+    }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $tms 'MeetingPolicy')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'MeetingPolicy was not collected; not assessed.'
+        return
     }
     $watermark = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowWatermarkForScreenSharing' -Default $false
     if ($watermark) {
@@ -344,6 +392,14 @@ function Test-NRGControlTeamsMeetingChat {
     if (-not $tms -or -not $tms.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Teams data not collected'; return
+    }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $tms 'MeetingPolicy')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'MeetingPolicy was not collected; not assessed.'
+        return
     }
     $chatEnabled = [string](Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowMeetingChat' -Default 'Enabled')
     if ($chatEnabled -eq 'Disabled') {
@@ -452,6 +508,14 @@ function Test-NRGControlTeamsFederationAllowlist {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $tms 'FederationConfig')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'FederationConfig was not collected; not assessed.'
+        return
+    }
     $allowAllDomains = [bool](Get-NRGNestedProperty -Object $tms -Path 'Data.FederationConfig.AllowFederatedUsers' -Default $false)
     $specificDomains = @(Get-NRGNestedProperty -Object $tms -Path 'Data.FederationConfig.AllowedDomains' -Default @())
     if ($allowAllDomains -and $specificDomains.Count -eq 0) {

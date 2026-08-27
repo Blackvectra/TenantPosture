@@ -35,7 +35,17 @@ function Test-NRGControlPowerPlatform {
         # not — and a throw here aborts every remaining PPL control in this
         # function, including PPL-1.3.
         $envCount = @(Get-NRGObjectField -Item $d -Key 'Environments' -Default @()).Count
-        if ($envCount -eq 0) {
+        # Empty is not clean. Zero environments is a legitimate, compliant
+        # answer AND what a failed environment query looks like, and the two
+        # were indistinguishable — a throttled query reported "No Power
+        # Platform environments — Satisfied". Only the section status can tell
+        # them apart.
+        if (-not (Test-NRGSectionCollected $raw 'Environments')) {
+            Add-NRGFinding -ControlId 'PPL-1.1' -State 'NotApplicable' `
+                -Category 'Power Platform' -Title $c.Title `
+                -Detail 'Environment list was not collected; environment count not assessed.'
+        }
+        elseif ($envCount -eq 0) {
             Add-NRGFinding -ControlId 'PPL-1.1' -State 'Satisfied' `
                 -Category 'Power Platform' -Title $c.Title -Severity 'Informational' `
                 -CurrentValue 'No Power Platform environments'
@@ -165,7 +175,17 @@ function Test-NRGControlPPLAutomate {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Power Platform settings not collected'; return
     }
-    $guestFlows     = Get-NRGNestedProperty -Object $raw -Path 'Data.TenantSettings.DisableFlowsForGuestUsers' -Default $false
+    # $ppl, not $raw. This function never set $raw — that name belongs to
+    # Test-NRGControlPowerPlatform — so under StrictMode the read THREW and
+    # PPL-2.2 produced no finding on any run, while still counting toward the
+    # control total. A control that silently evaluates to nothing is worse than
+    # one that fails loudly: the report simply has no row for it.
+    if (-not (Test-NRGSectionCollected $ppl 'TenantSettings')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'TenantSettings was not collected; not assessed.'
+        return
+    }
+    $guestFlows     = Get-NRGNestedProperty -Object $ppl -Path 'Data.TenantSettings.DisableFlowsForGuestUsers' -Default $false
     $gaps = @()
     if (-not $guestFlows) { $gaps += 'Guest users can create flows' }
     if ($gaps.Count -eq 0) {
@@ -189,7 +209,14 @@ function Test-NRGControlPPLPowerApps {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Power Platform settings not collected'; return
     }
-    $canvasAppsEnabled = -not (Get-NRGNestedProperty -Object $raw -Path 'Data.TenantSettings.DisablePortalsCreationByNonAdminUsers' -Default $false)
+    # $ppl, not $raw — same never-set-variable bug as PPL-2.2 above. PPL-2.3
+    # threw under StrictMode and produced no finding on any run.
+    if (-not (Test-NRGSectionCollected $ppl 'TenantSettings')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail 'TenantSettings was not collected; not assessed.'
+        return
+    }
+    $canvasAppsEnabled = -not (Get-NRGNestedProperty -Object $ppl -Path 'Data.TenantSettings.DisablePortalsCreationByNonAdminUsers' -Default $false)
     if (-not $canvasAppsEnabled) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `

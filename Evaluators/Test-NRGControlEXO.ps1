@@ -467,6 +467,14 @@ function Test-NRGControlEXOSharedMailbox {
             -Title $control.Title -Detail 'EXO inventory not collected'
         return
     }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $inv 'AllSharedMailboxes')) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category -Title $control.Title -Detail 'AllSharedMailboxes was not collected; not assessed.'
+        return
+    }
 
     $allShared = @($inv.Data['AllSharedMailboxes'] ?? @())
     if ($allShared.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'SharedMailboxes')) {
@@ -663,6 +671,14 @@ function Test-NRGControlEXOTransportAudit {
     if (-not $exo -or -not $exo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
     }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $exo 'OrganizationConfig')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'OrganizationConfig was not collected; not assessed.'
+        return
+    }
     $auditDisabled = Get-NRGNestedProperty -Object $exo -Path 'Data.OrganizationConfig.AuditDisabled' -Default $null
     if ($auditDisabled -ne $true) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Organization-level audit logging is enabled, covering transport rule changes.'
@@ -715,6 +731,14 @@ function Test-NRGControlEXOAdminAudit {
     if (-not $exo -or -not $exo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'EXO data not collected'; return
+    }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $exo 'OrganizationConfig')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'OrganizationConfig was not collected; not assessed.'
+        return
     }
     $orgAudit = Get-NRGNestedProperty -Object $exo -Path 'Data.OrganizationConfig.AuditDisabled' -Default $null
     if ($orgAudit -ne $true) {
@@ -891,6 +915,14 @@ function Test-NRGControlEXOMailboxForwarding {
             -Title $ctrl.Title -Detail 'EXO inventory data not collected'
         return
     }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $inv 'ForwardingMailboxes')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'ForwardingMailboxes was not collected; not assessed.'
+        return
+    }
 
     $fwd = @($inv.Data['ForwardingMailboxes'] ?? @())
     $count = $fwd.Count
@@ -931,6 +963,14 @@ function Test-NRGControlEXOInboxRulesForwarding {
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'EXO inventory data not collected'
+        return
+    }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $inv 'InboxRulesForwarding')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'InboxRulesForwarding was not collected; not assessed.'
         return
     }
 
@@ -991,6 +1031,14 @@ function Test-NRGControlEXOAuditDisabledMailboxes {
             -Title $ctrl.Title -Detail 'EXO inventory data not collected'
         return
     }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $inv 'AuditDisabledMailboxes')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AuditDisabledMailboxes was not collected; not assessed.'
+        return
+    }
 
     $disabled = @($inv.Data['AuditDisabledMailboxes'] ?? @())
     $count = $disabled.Count
@@ -1032,6 +1080,14 @@ function Test-NRGControlEXOSmtpAuthExceptions {
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'EXO inventory data not collected'
+        return
+    }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $inv 'SmtpAuthEnabledPerUser')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SmtpAuthEnabledPerUser was not collected; not assessed.'
         return
     }
 

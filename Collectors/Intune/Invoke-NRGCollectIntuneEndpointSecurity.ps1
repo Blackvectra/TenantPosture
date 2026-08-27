@@ -40,6 +40,13 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
         'endpointSecurityAntivirus'                   = 'Antivirus'
     }
 
+    # Empty is not clean: every section below initialises to @(), so an empty
+    # list cannot be told apart from a query that failed. Both the settings-catalog and the legacy intents endpoint feed the same sections.
+    # A section is only 'Failed' when EVERY query feeding it failed —
+    # one surviving feeder still yields real data.
+    $cfgFailed = $false
+    $intentFailed = $false
+
     try {
         # ── Unified settings-catalog endpoint security policies ──────────────
         # configurationPolicies is the modern surface; templateReference.templateFamily
@@ -122,6 +129,7 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
                 }
             }
         } catch {
+            $cfgFailed = $true
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Intune-EndpointSecurity-ConfigPolicies' -Message $_.Exception.Message
             }
@@ -179,9 +187,19 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
                 }
             }
         } catch {
+            $intentFailed = $true
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Intune-EndpointSecurity-Intents' -Message $_.Exception.Message
             }
+        }
+
+        $result.Data.SectionStatus = @{
+            LAPSPolicies              = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
+            ASRPolicies               = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
+            FirewallPolicies          = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
+            EndpointDetectionPolicies = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
+            AntivirusPolicies         = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
+            EndpointSecurityPolicies  = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
         }
 
         $result.Success = $true

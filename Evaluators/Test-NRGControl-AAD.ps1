@@ -361,6 +361,14 @@ function Test-NRGControlAADExternalCollab {
     if (-not $gov -or -not $gov.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Identity governance data not collected'; return
     }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $gov 'ExternalCollab')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'ExternalCollab was not collected; not assessed.'
+        return
+    }
     $collab = Get-NRGNestedProperty -Object $gov -Path 'Data.ExternalCollab'
     $gaps = @()
     if (Get-NRGNestedProperty -Object $collab -Path 'DefaultUserRolePermissions.AllowedToCreateTenants') { $gaps += 'Users can create new tenants' }
@@ -463,6 +471,14 @@ function Test-NRGControlAADUserConsent {
     $gov = Get-NRGRawData -Key 'AAD-IdentityGovernance'
     if (-not $gov -or -not $gov.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Identity governance data not collected'; return
+    }
+    # Empty is not clean. A failed ExternalCollab sub-query leaves no consent
+    # policies to inspect, and "no unrestricted consent policy found" then reads
+    # as "user consent is restricted" — a false pass on the control that stops
+    # consent phishing.
+    if (-not (Test-NRGSectionCollected $gov 'ExternalCollab')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'ExternalCollab was not collected; not assessed.'
+        return
     }
     $consentPolicies = @((Get-SafeProp (Get-SafeProp $gov.Data 'ExternalCollab') 'PermissionGrantPolicies') ?? @())
     # ManagePermissionGrantsForSelf.microsoft-user-default-legacy = users can consent to anything
@@ -608,6 +624,14 @@ function Test-NRGControlAADAuthenticatorNumberMatch {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
     }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $auth 'AuthMethodsPolicy')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AuthMethodsPolicy was not collected; not assessed.'
+        return
+    }
     $ampConfigs = @(Get-NRGNestedProperty -Object $auth -Path 'Data.AuthMethodsPolicy.AuthenticationMethodConfigs' -Default @())
     $mfaConfig  = $ampConfigs | Where-Object { $_.Id -eq 'MicrosoftAuthenticator' } | Select-Object -First 1
     # Microsoft enforced number matching as the platform default in May 2023.
@@ -650,6 +674,14 @@ function Test-NRGControlAADPasswordless {
     if (-not $auth -or -not $auth.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
+    }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $auth 'AuthMethodsPolicy')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AuthMethodsPolicy was not collected; not assessed.'
+        return
     }
     $ampConfigs = @(Get-NRGNestedProperty -Object $auth -Path 'Data.AuthMethodsPolicy.AuthenticationMethodConfigs' -Default @())
     $fido2      = $ampConfigs | Where-Object { (Get-SafeProp $_ 'Id') -eq 'Fido2' } | Select-Object -First 1
@@ -926,6 +958,14 @@ function Test-NRGControlAADCrossTenantAccess {
     $auth = Get-NRGRawData -Key 'AAD-AuthPolicies'
     if (-not $auth -or -not $auth.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
+    }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $auth 'CrossTenantAccess')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CrossTenantAccess was not collected; not assessed.'
+        return
     }
     $xtap = Get-NRGNestedProperty -Object $auth -Path 'Data.CrossTenantAccess'
     if (-not $xtap) {
