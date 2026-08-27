@@ -51,7 +51,11 @@ function Invoke-NRGCollectPowerPlatform {
             # BAP-API fallback path below cannot retrieve these, so the
             # evaluator must not read absence as "creation is unrestricted".
             TenantGovernance = $null
-            SectionStatus    = @{ TenantGovernance = 'NotRun' }
+            # Environments initialises to @(), so an empty list cannot be told
+            # apart from a query that failed — and zero environments is a
+            # legitimate compliant answer, which is exactly what made the
+            # confusion dangerous. Tracked explicitly.
+            SectionStatus    = @{ TenantGovernance = 'NotRun'; Environments = 'NotRun' }
             Source          = 'none'   # 'module' | 'bap-api' | 'none'
         }
     }
@@ -68,6 +72,7 @@ function Invoke-NRGCollectPowerPlatform {
             if (Get-Command Get-AdminPowerAppEnvironment -ErrorAction SilentlyContinue) {
                 try {
                     $envs = @(Get-AdminPowerAppEnvironment -ErrorAction Stop)
+                    $result.Data.SectionStatus.Environments = 'Collected'
                     $result.Data.Environments = @($envs | ForEach-Object {
                         [ordered]@{
                             Id          = [string]$_.EnvironmentName
@@ -209,6 +214,7 @@ function Invoke-NRGCollectPowerPlatform {
                 $bapResp = Invoke-RestMethod -Method GET -Uri $bapUri -Headers $hdr -ErrorAction Stop
                 if ($bapResp.value) {
                     $result.Data.Source = 'bap-api'
+                    $result.Data.SectionStatus.Environments = 'Collected'
                     $result.Data.Environments = @($bapResp.value | ForEach-Object {
                         [ordered]@{
                             Id          = [string]$_.name

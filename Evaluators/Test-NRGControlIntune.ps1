@@ -28,18 +28,47 @@ function Test-NRGControlIntune {
         return
     }
 
-    # Merge fields the legacy ITN-1.x checks expect into a single $d view
+    # Merge fields the legacy ITN-1.x checks expect into a single $d view.
+    #
+    # Two traps live in this merge and both produced false passes.
+    #
+    #   @($null).Count is 1, not 0. A section the collector never populated
+    #   came back $null, was wrapped by @(...) downstream into a one-element
+    #   array containing $null, and INT-1.1 reported "1 compliance policies
+    #   active — Satisfied" on a tenant where the query had simply failed.
+    #   Nulls are stripped here so an absent section counts 0.
+    #
+    #   `$x = if (...) { ... } else { @() }` assigns $null, because the
+    #   if-block enumerates the empty array away. Built with an explicit
+    #   helper instead.
+    $pick = {
+        param($raw, [string]$section)
+        if (-not $raw -or -not $raw.Success) { return @() }
+        return @($raw.Data[$section] | Where-Object { $null -ne $_ })
+    }
+    # Which sections can be trusted as evidence. A section whose sub-query
+    # failed is an unknown, and a control that depends on it must say so
+    # rather than reading the resulting emptiness as compliance.
+    $collected = @{
+        CompliancePolicies       = (Test-NRGSectionCollected $dc  'CompliancePolicies')
+        ConfigurationProfiles    = (Test-NRGSectionCollected $dc  'ConfigurationProfiles')
+        AppProtectionPolicies    = (Test-NRGSectionCollected $app 'AppProtectionPolicies')
+        EnrollmentConfig         = (Test-NRGSectionCollected $dc  'EnrollmentConfig')
+        EndpointSecurityPolicies = (Test-NRGSectionCollected $es  'EndpointSecurityPolicies')
+    }
     $d = @{
-        CompliancePolicies       = if ($dc  -and $dc.Success)  { $dc.Data['CompliancePolicies'] }       else { @() }
-        ConfigurationProfiles    = if ($dc  -and $dc.Success)  { $dc.Data['ConfigurationProfiles'] }    else { @() }
-        AppProtectionPolicies    = if ($app -and $app.Success) { $app.Data['AppProtectionPolicies'] }   else { @() }
-        EnrollmentConfig         = if ($dc  -and $dc.Success)  { $dc.Data['EnrollmentConfig'] }         else { @() }
-        EndpointSecurityPolicies = if ($es  -and $es.Success)  { $es.Data['EndpointSecurityPolicies'] } else { @() }
+        CompliancePolicies       = & $pick $dc  'CompliancePolicies'
+        ConfigurationProfiles    = & $pick $dc  'ConfigurationProfiles'
+        AppProtectionPolicies    = & $pick $app 'AppProtectionPolicies'
+        EnrollmentConfig         = & $pick $dc  'EnrollmentConfig'
+        EndpointSecurityPolicies = & $pick $es  'EndpointSecurityPolicies'
     }
 
     # ITN-1.1 — Device compliance policy active
     $c = Get-NRGControlById -ControlId 'INT-1.1'
-    if ($c) {
+    if ($c -and -not $collected['CompliancePolicies']) {
+        Add-NRGFinding -ControlId 'INT-1.1' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -Detail 'CompliancePolicies was not collected; not assessed.'
+    } elseif ($c) {
         $count = @($d.CompliancePolicies).Count
         if ($count -gt 0) {
             Add-NRGFinding -ControlId 'INT-1.1' -State 'Satisfied' `
@@ -59,7 +88,9 @@ function Test-NRGControlIntune {
 
     # ITN-1.2 — Configuration profiles deployed
     $c = Get-NRGControlById -ControlId 'INT-1.2'
-    if ($c) {
+    if ($c -and -not $collected['ConfigurationProfiles']) {
+        Add-NRGFinding -ControlId 'INT-1.2' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -Detail 'ConfigurationProfiles was not collected; not assessed.'
+    } elseif ($c) {
         $count = @($d.ConfigurationProfiles).Count
         if ($count -gt 0) {
             Add-NRGFinding -ControlId 'INT-1.2' -State 'Satisfied' `
@@ -76,7 +107,9 @@ function Test-NRGControlIntune {
 
     # INT-1.3 — BitLocker encryption required on Windows compliance policy
     $c = Get-NRGControlById -ControlId 'INT-1.3'
-    if ($c) {
+    if ($c -and -not $collected['CompliancePolicies']) {
+        Add-NRGFinding -ControlId 'INT-1.3' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -Detail 'CompliancePolicies was not collected; not assessed.'
+    } elseif ($c) {
         # Check if any Windows compliance policy requires BitLocker
         $winPolicies = @($d.CompliancePolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Platform') -match 'Windows|Win10' })
         $bitlockerRequired = @($winPolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'BitLockerEnabled') -eq $true })
@@ -101,7 +134,9 @@ function Test-NRGControlIntune {
 
     # INT-1.4 — Mobile Application Management (MAM) app protection policies
     $c = Get-NRGControlById -ControlId 'INT-1.4'
-    if ($c) {
+    if ($c -and -not $collected['AppProtectionPolicies']) {
+        Add-NRGFinding -ControlId 'INT-1.4' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -Detail 'AppProtectionPolicies was not collected; not assessed.'
+    } elseif ($c) {
         $mamPolicies = @($d.AppProtectionPolicies)
         $count = $mamPolicies.Count
         if ($count -gt 0) {
@@ -121,7 +156,9 @@ function Test-NRGControlIntune {
     }
     # INT-1.5 — Antivirus policy deployed via Intune
     $c = Get-NRGControlById -ControlId 'INT-1.5'
-    if ($c) {
+    if ($c -and -not $collected['EndpointSecurityPolicies']) {
+        Add-NRGFinding -ControlId 'INT-1.5' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -Detail 'EndpointSecurityPolicies was not collected; not assessed.'
+    } elseif ($c) {
         # Check endpoint security AV policies; fall back to enrollment config as proxy
         $avPolicies = @($d.EndpointSecurityPolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'TemplateType') -match 'Antivirus|MicrosoftDefender' })
         $enrollConfig = @($d.EnrollmentConfig)
@@ -154,6 +191,14 @@ function Test-NRGControlIntuneEDR {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-EndpointSecurity'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune endpoint security data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $int 'EndpointDetectionPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EndpointDetectionPolicies was not collected; not assessed.'
+        return
+    }
     $edrPolicies = @($int.Data['EndpointDetectionPolicies'] ?? @())
     if ($edrPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($edrPolicies.Count) Microsoft Defender for Endpoint onboarding policy(ies) deployed via Intune."
@@ -246,6 +291,14 @@ function Test-NRGControlIntuneWindowsUpdate {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-DeviceCompliance'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune compliance data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $int 'UpdatePolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'UpdatePolicies was not collected; not assessed.'
+        return
+    }
     $winUpdatePolicies = @($int.Data['UpdatePolicies'] ?? @())
     if ($winUpdatePolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($winUpdatePolicies.Count) Windows Update compliance policy(ies) deployed."
@@ -263,6 +316,14 @@ function Test-NRGControlIntuneEnrollmentRestrictions {
     if (-not $int -or -not $int.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Intune data not collected'; return
+    }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $int 'EnrollmentRestrictions')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EnrollmentRestrictions was not collected; not assessed.'
+        return
     }
     $restrictions = @($int.Data['EnrollmentRestrictions'] ?? @())
     if ($restrictions.Count -gt 0) {
@@ -286,6 +347,14 @@ function Test-NRGControlIntuneAppConfig {
     if (-not $int -or -not $int.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'Intune app protection data not collected'; return
+    }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $int 'AppConfigPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AppConfigPolicies was not collected; not assessed.'
+        return
     }
     $appConfig = @($int.Data['AppConfigPolicies'] ?? @())
     if ($appConfig.Count -gt 0) {
@@ -352,6 +421,14 @@ function Test-NRGControlIntuneWindowsHello {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-DeviceCompliance'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $int 'WindowsHelloPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'WindowsHelloPolicies was not collected; not assessed.'
+        return
+    }
     $helloPolicies = @($int.Data['WindowsHelloPolicies'] ?? @())
     if ($helloPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($helloPolicies.Count) Windows Hello for Business policy(ies) deployed. Phishing-resistant passwordless authentication on enrolled endpoints."
@@ -367,6 +444,14 @@ function Test-NRGControlIntuneUpdateCompliance {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-DeviceCompliance'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $int 'OSComplianceSummary')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'OSComplianceSummary was not collected; not assessed.'
+        return
+    }
     $osSummary    = Get-NRGNestedProperty -Object $int -Path 'Data.OSComplianceSummary' -Default $null
     $osCompliant  = if ($osSummary) {
         [int](Get-NRGNestedProperty -Object $osSummary -Path 'CompliantCount' -Default 0)

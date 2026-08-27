@@ -156,7 +156,7 @@ $script:ExportedFunctions = @(
     'Get-NRGRemediationRoadmap',
     'Set-NRGSensitiveFileAcl', 'Set-NRGSensitiveFileContent',
     'Get-NRGTenantLicenseProfile', 'Test-NRGLicenseRequirementMet', 'Get-NRGControlLicenseStatus',
-    'Get-NRGSafeProperty', 'Get-NRGNestedProperty',
+    'Get-NRGSafeProperty', 'Get-NRGNestedProperty', 'Test-NRGSectionCollected',
     'Test-NRGSignatureStatus',
     'Get-NRGMaturityTier',
     'Get-NRGCoverageScore',

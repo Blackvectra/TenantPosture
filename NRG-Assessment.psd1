@@ -50,6 +50,7 @@
         'Get-NRGControlLicenseStatus',
         'Get-NRGSafeProperty',
         'Get-NRGNestedProperty',
+        'Test-NRGSectionCollected',
         'Test-NRGSignatureStatus',
         'Get-NRGMaturityTier',
         'Get-NRGCoverageScore',
