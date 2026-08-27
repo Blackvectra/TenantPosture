@@ -416,7 +416,11 @@
     "PPL-3.2": "copilot-restriction",
     "PPL-3.3": "copilot-restriction",
     "PPL-3.4": "copilot-restriction",
-    "PPL-3.5": "none-visible"
+    "PPL-3.5": "none-visible",
+    "EXO-8.1": "admin-review-workload",
+    "EXO-8.2": "admin-review-workload",
+    "AAD-14.1": "admin-elevation-friction",
+    "DEF-5.1": "mail-flow-quarantine"
   },
   "deviceControls": {
     "DEV-1.1": "device-encryption",
@@ -485,6 +489,24 @@
     "DNS-1.3": {
       "Summary": "Tells the world's mail servers to quarantine or reject mail that fails authentication for your domain. It is the control that stops your domain being spoofed and the control most capable of stopping your own mail.",
       "Watchouts": "Publish p=none first and read aggregate reports until every legitimate sender passes SPF or DKIM — marketing platform, accounting package, e-signature service, the alerting system on the firewall. Only then move to quarantine, and to reject after that. Going straight to reject is the classic way to break a client's mail on a Friday."
+    },
+    "EXO-8.2": {
+      "Summary": "Removing a transport rule that redirects mail externally stops an exfiltration path — and stops whatever legitimate process was relying on it.",
+      "Admins": "Identify what consumes the redirected mail before deleting the rule. Archiving, e-discovery, a compliance mailbox and a ticketing intake all legitimately use CopyTo, and they break silently.",
+      "Watchouts": "A rule that copies to an external address is sometimes a genuine, approved arrangement with an accountant or a managed service. Confirm ownership before removing; the finding is that it exists undocumented, not that it is automatically malicious."
+    },
+    "EXO-8.1": {
+      "Summary": "Tightening or removing a mail connector changes how mail is routed. Get it wrong and mail stops flowing entirely.",
+      "Watchouts": "Never delete a connector during business hours without knowing what routes through it. A hybrid Exchange server, a third-party filtering gateway and a scan-to-email appliance all depend on connectors, and removing one takes mail down for everybody it serves."
+    },
+    "AAD-14.1": {
+      "Summary": "Rotating or removing an application credential breaks the integration using it the moment the old value stops working.",
+      "Users": "Nothing directly — until an integration they depend on stops, which looks to them like the application being broken.",
+      "Watchouts": "Add the new credential BEFORE removing the old one; Entra allows both to exist. Removing first guarantees an outage. Anything using the credential in a place you have forgotten (a scheduled task, a CI pipeline, a vendor system) surfaces only when it fails."
+    },
+    "DEF-5.1": {
+      "Summary": "Expiring an allow entry means the sender, URL or file it covered goes back through normal filtering — which may block it again.",
+      "Watchouts": "The entry existed for a reason, even if the reason is undocumented. Contact the owner before expiring it, or you re-create the original incident. Fix the underlying authentication problem (usually SPF/DKIM on the sender side) rather than re-adding the allow."
     }
   }
 }

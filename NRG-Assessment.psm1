@@ -228,6 +228,9 @@ $script:ExportedFunctions = @(
     'Test-NRGControlDNSTLSCertExpiry', 'Test-NRGControlDNSCertTransparency',
 
     # ── Evaluators — EXO ──────────────────────────────────────────────────────
+    'Test-NRGControlEXOMailFlowConnectors', 'Test-NRGControlEXOTransportRuleContents',
+    'Test-NRGControlDefenderTenantAllowBlockList', 'Test-NRGControlAADAppCredentialExpiry',
+    'Get-NRGAcceptedDomainSet', 'Test-NRGRecipientIsExternal',
     'Test-NRGControlEXOMailboxAudit', 'Test-NRGControlEXOSmtpAuth',
     'Test-NRGControlEXOAutoForward', 'Test-NRGControlEXODKIM',
     'Test-NRGControlEXOAntiPhish', 'Test-NRGControlEXOModernAuth',

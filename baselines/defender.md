@@ -742,6 +742,35 @@ Set-SafeLinksPolicy -Identity <PolicyName> -EnableSafeLinksForOffice $true. Or v
 | PCI DSS | Req 5.2 |
 | MITRE ATT&CK | T1566.001, T1204.002 |
 
+### DEF-5.1 — Tenant Allow/Block List Entries Time-Boxed
+
+**Severity:** High  |  **Category:** Email  |  **Automated:** Yes
+
+**License required:** Included (EOP)
+
+**Description:**
+No allow entry in the Tenant Allow/Block List is permanent; every filtering override carries an expiry.
+
+**Business risk:**
+An allow entry overrides a filtering verdict outright — mail, a URL or a file hash on the allow list bypasses the detonation and reputation checks that would otherwise stop it. Entries are routinely added under pressure during an incident to unblock a sender and are almost never removed afterwards. A never-expiring allow is a permanent, undocumented hole in mail filtering that no anti-spam or anti-phishing policy review will surface, because it lives on a different surface entirely.
+
+**Remediation:**
+Defender portal > Policies & rules > Threat policies > Tenant Allow/Block Lists. Review every allow entry. Remove any whose reason no longer applies, and set an expiry date on the rest — Microsoft caps allow entries at 30 or 90 days for exactly this reason. Block entries may remain permanent.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | SI-3, SI-4, SI-8, CM-7 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.6 |
+| CIS Controls v8.1 | 9.6, 13.4 |
+| CMMC 2.0 | SI.L2-3.14.2, SI.L1-3.14.5 |
+| MITRE ATT&CK | T1566.001, T1566.002, T1562.001 |
+| ISO/IEC 27001:2022 | A.8.7 |
+| SOC 2 | CC6.8 |
+| HIPAA | §164.308(a)(5)(ii)(B) |
+| PCI DSS v4.0 | Req 5.2 |
+
 ---
 
 *Generated from `Config/controls.json` · NRG Technology Services / NextLayerSec LLC*
