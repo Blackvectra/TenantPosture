@@ -6,7 +6,7 @@
 # every control that says Automated = $true in controls.json must be PROVEN (by
 # AST inspection, via Get-NRGControlAutomationAudit) to produce both a pass and a
 # fail from tenant data — or be explicitly listed in Config/coverage-exceptions.psd1
-# with a reason. This is what makes "195 automated controls" a defensible,
+# with a reason. This is what makes "199 automated controls" a defensible,
 # self-maintaining claim instead of a marketing number. No other M365 assessment
 # tool gates its own coverage this way.
 
@@ -24,8 +24,8 @@ Describe 'Coverage honesty gate' {
         foreach ($e in @($script:ExceptionData.Exceptions)) { $script:ExMap[[string]$e.ControlId] = $e }
     }
 
-    It 'audits all 195 controls' {
-        $script:Audit.Count | Should -Be 195
+    It 'audits all 199 controls' {
+        $script:Audit.Count | Should -Be 199
     }
 
     It 'every Automated=true control either discriminates or is a documented exception' {

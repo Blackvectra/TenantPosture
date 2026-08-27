@@ -997,6 +997,64 @@ For each affected mailbox: Set-CASMailbox -Identity <UPN> -SmtpClientAuthenticat
 | PCI DSS | Req 4.2.1 |
 | MITRE ATT&CK | T1110.003, T1078 |
 
+### EXO-8.1 — Mail Flow Connectors Reviewed and Hardened
+
+**Severity:** High  |  **Category:** Email  |  **Automated:** Yes
+
+**License required:** Included (EOP)
+
+**Description:**
+Every enabled inbound and outbound connector is recognised, TLS-enforced, and scoped to known senders or recipients.
+
+**Business risk:**
+A connector reroutes mail into or out of the tenant at the transport layer. An attacker who adds one has persistence that survives every password reset and MFA enrolment, because it lives in no mailbox and looks nothing like an inbox rule. An inbound connector scoped to no sender IP or domain will accept mail claiming to be from any domain; an outbound connector routing all mail through a smart host puts every outbound message through infrastructure that may not be yours.
+
+**Remediation:**
+Exchange admin center > Mail flow > Connectors. Review every enabled connector against a known list. Delete any nobody recognises. On inbound connectors set RequireTls $true and scope to specific SenderIPAddresses or SenderDomains. On outbound connectors set TlsSettings to EncryptionOnly or better and avoid a * recipient domain unless a smart host genuinely handles all mail.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-4, SC-7, SC-8, SI-4 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 6.2.2 |
+| CIS Controls v8.1 | 4.1, 13.4 |
+| CMMC 2.0 | SC.L1-3.13.1, SC.L2-3.13.8 |
+| MITRE ATT&CK | T1071.003, T1114.003, T1090 |
+| ISO/IEC 27001:2022 | A.8.20 |
+| SOC 2 | CC6.6 |
+| HIPAA | §164.312(e)(1) |
+| PCI DSS v4.0 | Req 1.3 |
+
+### EXO-8.2 — No Transport Rule Redirects Mail Externally
+
+**Severity:** Critical  |  **Category:** Email  |  **Automated:** Yes
+
+**License required:** Included (EOP)
+
+**Description:**
+No enabled transport rule redirects, blind-copies or copies mail to a recipient outside the tenant.
+
+**Business risk:**
+A transport rule that sends mail to an external address is organisation-wide exfiltration applied at the transport layer. No mailbox carries a forwarding flag, so the per-mailbox forwarding controls (EXO-1.3, EXO-7.1, EXO-7.2) are blind to it. One rule can copy every inbound invoice or every message matching a keyword to an attacker, silently and indefinitely.
+
+**Remediation:**
+Exchange admin center > Mail flow > Rules. Inspect every enabled rule for RedirectMessageTo, BlindCopyTo and CopyTo actions with recipients outside your accepted domains. Remove any not documented and approved. Also review rules setting SCL -1, which bypass spam filtering for whatever they match.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-4, AC-20, SC-7, SI-4 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 6.2.1 |
+| CIS Controls v8.1 | 3.3, 13.4 |
+| CMMC 2.0 | AC.L1-3.1.3, SC.L1-3.13.1 |
+| MITRE ATT&CK | T1114.003, T1020, T1537 |
+| ISO/IEC 27001:2022 | A.8.12 |
+| SOC 2 | CC6.7 |
+| HIPAA | §164.312(e)(1) |
+| PCI DSS v4.0 | Req 1.3 |
+
 ---
 
 *Generated from `Config/controls.json` · NRG Technology Services / NextLayerSec LLC*

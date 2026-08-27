@@ -13,7 +13,10 @@
       "EvaluatorFunction": "Test-NRGControlAADLegacyAuth",
       "Remediation": "Create a CA policy: All Users, Client apps = Other clients + Exchange ActiveSync, Grant = Block access.",
       "References": {
-        "CISControls": ["6.3", "4.1"],
+        "CISControls": [
+          "6.3",
+          "4.1"
+        ],
         "CIS": "5.2.2.3",
         "SCuBA": "MS.AAD.1.1v1",
         "NIST": "IA-2, IA-5(1)",
@@ -24,7 +27,7 @@
         ],
         "ISO27001": "A.5.17",
         "SOC2": "CC6.1",
-        "HIPAA": "\u00a7164.312(d)",
+        "HIPAA": "§164.312(d)",
         "PCIDSS": "Req 8.3"
       },
       "LicenseRequirement": "M365 Business Premium or Entra ID P1"
@@ -42,7 +45,10 @@
       "EvaluatorFunction": "Test-NRGControlAADMFA",
       "Remediation": "CA policy: Users = All, Apps = All cloud apps, Grant = Require MFA. Or enable Security Defaults.",
       "References": {
-        "CISControls": ["6.3", "6.4"],
+        "CISControls": [
+          "6.3",
+          "6.4"
+        ],
         "CIS": "5.2.2.1",
         "SCuBA": "MS.AAD.3.2v1",
         "NIST": "IA-2(1), IA-2(2)",
@@ -53,7 +59,7 @@
         ],
         "ISO27001": "A.5.17, A.8.5",
         "SOC2": "CC6.1",
-        "HIPAA": "\u00a7164.312(d)",
+        "HIPAA": "§164.312(d)",
         "PCIDSS": "Req 8.4"
       },
       "LicenseRequirement": "M365 Business Premium or Entra ID P1"
@@ -71,7 +77,9 @@
       "EvaluatorFunction": "Test-NRGControlAADPhishResistantMFA",
       "Remediation": "CA policy targeting privileged roles with Authentication Strength = Phishing-resistant MFA. Must cover Global Administrator at minimum.",
       "References": {
-        "CISControls": ["6.5"],
+        "CISControls": [
+          "6.5"
+        ],
         "CIS": "5.2.2.2",
         "SCuBA": "MS.AAD.3.6v1",
         "NIST": "IA-2(1), IA-2(2), IA-2(6)",
@@ -83,7 +91,7 @@
         ],
         "ISO27001": "A.8.2, A.8.5",
         "SOC2": "CC6.1",
-        "HIPAA": "\u00a7164.312(d), \u00a7164.308(a)(4)(ii)(B)",
+        "HIPAA": "§164.312(d), §164.308(a)(4)(ii)(B)",
         "PCIDSS": "Req 8.4"
       },
       "LicenseRequirement": "M365 Business Premium or Entra ID P1"
@@ -92,7 +100,7 @@
       "ControlId": "AAD-2.1",
       "Title": "Conditional Access Policies Deployed",
       "Description": "At minimum three enabled CA policies provide coverage for legacy auth block, MFA all users, and MFA for admins.",
-      "BusinessRisk": "Without CA, access control is password-only. Security Defaults is a fallback \u2014 not a substitute for a mature CA posture.",
+      "BusinessRisk": "Without CA, access control is password-only. Security Defaults is a fallback — not a substitute for a mature CA posture.",
       "Severity": "High",
       "Workload": "AAD",
       "Category": "Identity",
@@ -101,7 +109,10 @@
       "EvaluatorFunction": "Test-NRGControlAADCA",
       "Remediation": "Deploy at minimum: (1) block legacy auth, (2) require MFA all users, (3) phishing-resistant MFA for admin roles.",
       "References": {
-        "CISControls": ["4.1", "6.5"],
+        "CISControls": [
+          "4.1",
+          "6.5"
+        ],
         "CIS": "5.2.2",
         "SCuBA": "MS.AAD.1.1v1",
         "NIST": "AC-17, IA-2",
@@ -112,7 +123,7 @@
         ],
         "ISO27001": "A.5.15, A.8.3",
         "SOC2": "CC6.1",
-        "HIPAA": "\u00a7164.312(a)(1)",
+        "HIPAA": "§164.312(a)(1)",
         "PCIDSS": "Req 7.2"
       },
       "LicenseRequirement": "M365 Business Premium or Entra ID P1"
@@ -130,7 +141,10 @@
       "EvaluatorFunction": "Test-NRGControlAADPrivAccess",
       "Remediation": "Reduce GA count to 2-8 break-glass accounts. Remove GA from any on-premises synced accounts and assign to cloud-only accounts.",
       "References": {
-        "CISControls": ["5.4", "6.8"],
+        "CISControls": [
+          "5.4",
+          "6.8"
+        ],
         "CIS": "5.1.2.1",
         "SCuBA": "MS.AAD.7.1v1",
         "NIST": "AC-6, AC-6(5)",
@@ -140,7 +154,7 @@
           "T1098"
         ],
         "ISO27001": "A.8.2",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(C), \u00a7164.312(a)(2)(i)",
+        "HIPAA": "§164.308(a)(4)(ii)(C), §164.312(a)(2)(i)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 7.2.1"
       },
@@ -159,7 +173,10 @@
       "EvaluatorFunction": "Test-NRGControlEXOMailboxAudit",
       "Remediation": "Set-OrganizationConfig -AuditDisabled $false",
       "References": {
-        "CISControls": ["8.2", "8.5"],
+        "CISControls": [
+          "8.2",
+          "8.5"
+        ],
         "CIS": "2.1.1",
         "SCuBA": "MS.EXO.13.1v1",
         "NIST": "AU-2, AU-12",
@@ -170,7 +187,7 @@
         ],
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
-        "HIPAA": "\u00a7164.312(b)",
+        "HIPAA": "§164.312(b)",
         "PCIDSS": "Req 10.2"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
@@ -188,7 +205,9 @@
       "EvaluatorFunction": "Test-NRGControlEXOSmtpAuth",
       "Remediation": "Set-TransportConfig -SmtpClientAuthenticationDisabled $true",
       "References": {
-        "CISControls": ["4.8"],
+        "CISControls": [
+          "4.8"
+        ],
         "CIS": "2.1.4",
         "SCuBA": "MS.EXO.5.1v1",
         "NIST": "SC-8, IA-2",
@@ -198,7 +217,7 @@
           "T1114.002"
         ],
         "ISO27001": "A.8.24",
-        "HIPAA": "\u00a7164.312(e)(1)",
+        "HIPAA": "§164.312(e)(1)",
         "SOC2": "CC6.7, CC6.1",
         "PCIDSS": "Req 4.2.1"
       },
@@ -217,7 +236,9 @@
       "EvaluatorFunction": "Test-NRGControlEXOAutoForward",
       "Remediation": "Set-HostedOutboundSpamFilterPolicy -Identity Default -AutoForwardingMode Off. Set-RemoteDomain -Identity Default -AutoForwardEnabled $false",
       "References": {
-        "CISControls": ["3.13"],
+        "CISControls": [
+          "3.13"
+        ],
         "CIS": "2.1.2",
         "SCuBA": "MS.EXO.1.1v2",
         "NIST": "SC-7, SI-8",
@@ -226,7 +247,7 @@
           "T1114.003"
         ],
         "ISO27001": "A.8.12",
-        "HIPAA": "\u00a7164.312(e)(1), \u00a7164.402",
+        "HIPAA": "§164.312(e)(1), §164.402",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 3.4, Req 4.2"
       },
@@ -245,7 +266,9 @@
       "EvaluatorFunction": "Test-NRGControlEXODKIM",
       "Remediation": "Enable-DkimSigningConfig -Identity domain.com. Publish the CNAME records from M365 admin center.",
       "References": {
-        "CISControls": ["9.5"],
+        "CISControls": [
+          "9.5"
+        ],
         "CIS": "2.2.1",
         "SCuBA": "MS.EXO.3.1v1",
         "NIST": "SC-8, SC-13",
@@ -254,7 +277,7 @@
           "T1566",
           "T1036.005"
         ],
-        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "HIPAA": "§164.312(e)(2)(i)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 4.2",
         "ISO27001": "A.8.23, A.8.24"
@@ -274,7 +297,10 @@
       "EvaluatorFunction": "Test-NRGControlEXOAntiPhish",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -EnableTargetedUserProtection $true -EnableOrganizationDomainsProtection $true -EnableMailboxIntelligence $true",
       "References": {
-        "CISControls": ["9.7", "10.1"],
+        "CISControls": [
+          "9.7",
+          "10.1"
+        ],
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.2.1v1",
         "NIST": "SI-3, SI-8",
@@ -283,7 +309,7 @@
           "T1566.001",
           "T1598.003"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.4.1",
         "ISO27001": "A.8.7, A.8.23"
@@ -303,7 +329,9 @@
       "EvaluatorFunction": "Test-NRGControlEXOModernAuth",
       "Remediation": "Set-OrganizationConfig -OAuth2ClientProfileEnabled $true",
       "References": {
-        "CISControls": ["9.1"],
+        "CISControls": [
+          "9.1"
+        ],
         "CIS": "2.1.5",
         "NIST": "IA-2, SC-8",
         "CMMC": "IA.L2-3.5.3",
@@ -311,7 +339,7 @@
           "T1078",
           "T1110"
         ],
-        "HIPAA": "\u00a7164.312(d)",
+        "HIPAA": "§164.312(d)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.3",
         "ISO27001": "A.5.17"
@@ -331,7 +359,9 @@
       "EvaluatorFunction": "Test-NRGControlEXOHonorDMARC",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -HonorDmarcPolicy $true",
       "References": {
-        "CISControls": ["9.5"],
+        "CISControls": [
+          "9.5"
+        ],
         "CIS": "2.1.7",
         "NIST": "SI-8",
         "CMMC": "SI.L1-3.14.2",
@@ -339,7 +369,7 @@
           "T1566",
           "T1036.005"
         ],
-        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "HIPAA": "§164.312(e)(2)(i)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 5.4.1",
         "ISO27001": "A.8.23"
@@ -359,7 +389,9 @@
       "EvaluatorFunction": "Test-NRGControlDNSSPF",
       "Remediation": "Publish: v=spf1 include:spf.protection.outlook.com -all. Add include: for all third-party senders before the -all qualifier.",
       "References": {
-        "CISControls": ["9.5"],
+        "CISControls": [
+          "9.5"
+        ],
         "CIS": "2.2.2",
         "SCuBA": "MS.EXO.2.2v2",
         "NIST": "SI-8, SC-8",
@@ -368,7 +400,7 @@
           "T1566",
           "T1036.005"
         ],
-        "HIPAA": "\u00a7164.312(e)(1)",
+        "HIPAA": "§164.312(e)(1)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 5.4.1",
         "ISO27001": "A.8.23"
@@ -388,7 +420,9 @@
       "EvaluatorFunction": "Test-NRGControlDNSDKIM",
       "Remediation": "Enable DKIM in M365 admin center for each domain. Publish the two CNAME records provided.",
       "References": {
-        "CISControls": ["9.5"],
+        "CISControls": [
+          "9.5"
+        ],
         "CIS": "2.2.1",
         "SCuBA": "MS.EXO.3.1v1",
         "NIST": "SC-8, SC-13",
@@ -398,7 +432,7 @@
           "T1036.005"
         ],
         "ISO27001": "A.8.23, A.8.24",
-        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "HIPAA": "§164.312(e)(2)(i)",
         "PCIDSS": "Req 4.2",
         "SOC2": "CC6.7"
       },
@@ -417,7 +451,9 @@
       "EvaluatorFunction": "Test-NRGControlDNSDMARC",
       "Remediation": "Start with p=none and rua= reporting. Advance to p=quarantine then p=reject as all legitimate senders pass alignment. Target: v=DMARC1; p=reject; pct=100; rua=mailto:dmarc@domain.com",
       "References": {
-        "CISControls": ["9.5"],
+        "CISControls": [
+          "9.5"
+        ],
         "CIS": "2.2.3",
         "SCuBA": "MS.EXO.4.2v1",
         "NIST": "SI-8, SC-8",
@@ -428,7 +464,7 @@
         ],
         "ISO27001": "A.8.23",
         "PCIDSS": "Req 5.4.1",
-        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "HIPAA": "§164.312(e)(2)(i)",
         "SOC2": "CC6.7"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
@@ -446,7 +482,9 @@
       "EvaluatorFunction": "Test-NRGControlDNSMTASTS",
       "Remediation": "Publish _mta-sts TXT record and host policy file at https://mta-sts.domain.com/.well-known/mta-sts.txt with mode: enforce.",
       "References": {
-        "CISControls": ["3.10"],
+        "CISControls": [
+          "3.10"
+        ],
         "CIS": "2.2.4",
         "NIST": "SC-8, SC-8(1)",
         "CMMC": "SC.L2-3.13.8",
@@ -454,7 +492,7 @@
           "T1557",
           "T1600.001"
         ],
-        "HIPAA": "\u00a7164.312(e)(2)(ii)",
+        "HIPAA": "§164.312(e)(2)(ii)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 4.2.1",
         "ISO27001": "A.8.24"
@@ -474,7 +512,9 @@
       "EvaluatorFunction": "Test-NRGControlDNSTLSRPT",
       "Remediation": "Publish: _smtp._tls.domain.com TXT 'v=TLSRPTv1; rua=mailto:tlsrpt@domain.com'",
       "References": {
-        "CISControls": ["3.10"],
+        "CISControls": [
+          "3.10"
+        ],
         "CIS": "2.2.4",
         "SCuBA": "",
         "NIST": "AU-2, SC-8",
@@ -482,7 +522,7 @@
         "MITRE": [
           "T1557"
         ],
-        "HIPAA": "\u00a7164.312(e)(2)(ii)",
+        "HIPAA": "§164.312(e)(2)(ii)",
         "SOC2": "CC6.7, CC7.2",
         "PCIDSS": "Req 4.2.1",
         "ISO27001": "A.8.24"
@@ -511,7 +551,7 @@
           "T1557",
           "T1584.002"
         ],
-        "HIPAA": "\u00a7164.312(c)(1)",
+        "HIPAA": "§164.312(c)(1)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 1.4",
         "ISO27001": "A.8.20"
@@ -531,7 +571,9 @@
       "EvaluatorFunction": "Test-NRGControlDNSDkimRotation",
       "Remediation": "Rotate DKIM keys: Rotate-DkimSigningConfig -Identity domain.com -KeySize 2048. Plan a 12-month cadence and document rotation in the change record.",
       "References": {
-        "CISControls": ["9.5"],
+        "CISControls": [
+          "9.5"
+        ],
         "CIS": "2.2.1",
         "SCuBA": "",
         "NIST": "SC-12, SC-13, SC-17",
@@ -540,7 +582,7 @@
           "T1566",
           "T1606.001"
         ],
-        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "HIPAA": "§164.312(e)(2)(i)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 3.7",
         "ISO27001": "A.8.24"
@@ -560,7 +602,9 @@
       "EvaluatorFunction": "Test-NRGControlDNSCAA",
       "Remediation": "Publish CAA records at the registrar naming approved CAs. Example: 'domain.com. IN CAA 0 issue \"digicert.com\"' and 'domain.com. IN CAA 0 issuewild \";\"' to deny wildcard issuance. Include 'iodef' contact email for mis-issuance reports.",
       "References": {
-        "CISControls": ["3.10"],
+        "CISControls": [
+          "3.10"
+        ],
         "CIS": "2.2.5",
         "SCuBA": "",
         "NIST": "SC-12, SC-17, CM-7",
@@ -569,7 +613,7 @@
           "T1583.001",
           "T1606.001"
         ],
-        "HIPAA": "\u00a7164.312(c)(1)",
+        "HIPAA": "§164.312(c)(1)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 4.2.1",
         "ISO27001": "A.8.24"
@@ -589,7 +633,9 @@
       "EvaluatorFunction": "Test-NRGControlDNSTLSCertExpiry",
       "Remediation": "Renew TLS certs at least 30 days before expiry. Automate renewal via ACME (Let's Encrypt) or your registrar's managed cert service. Alert when DaysUntilExpiry drops below 30.",
       "References": {
-        "CISControls": ["3.10"],
+        "CISControls": [
+          "3.10"
+        ],
         "CIS": "2.2.5",
         "SCuBA": "",
         "NIST": "SC-12, SC-17",
@@ -598,7 +644,7 @@
           "T1557",
           "T1600.001"
         ],
-        "HIPAA": "\u00a7164.312(e)(2)(ii)",
+        "HIPAA": "§164.312(e)(2)(ii)",
         "SOC2": "CC6.7, CC7.2",
         "PCIDSS": "Req 4.2.1",
         "ISO27001": "A.8.24"
@@ -618,7 +664,9 @@
       "EvaluatorFunction": "Test-NRGControlDNSCertTransparency",
       "Remediation": "Review crt.sh entries for the domain. Confirm each unrecognized issuer corresponds to an approved third-party (CDN, SaaS subdomain). Add the approved CA to CAA. Subscribe to CT log monitoring (e.g., Cert Spotter) for ongoing mis-issuance detection.",
       "References": {
-        "CISControls": ["3.10"],
+        "CISControls": [
+          "3.10"
+        ],
         "CIS": "2.2.5",
         "SCuBA": "",
         "NIST": "SC-12, SC-17, AU-6",
@@ -627,7 +675,7 @@
           "T1583.001",
           "T1606.001"
         ],
-        "HIPAA": "\u00a7164.312(c)(1)",
+        "HIPAA": "§164.312(c)(1)",
         "SOC2": "CC7.2",
         "PCIDSS": "Req 11.6.1",
         "ISO27001": "A.8.16"
@@ -647,7 +695,10 @@
       "EvaluatorFunction": "Test-NRGControlDefender",
       "Remediation": "Defender portal > Policies > Safe Attachments > Create policy for all recipients with Action = Block. Requires Defender for Office 365 Plan 1.",
       "References": {
-        "CISControls": ["9.7", "10.7"],
+        "CISControls": [
+          "9.7",
+          "10.7"
+        ],
         "CIS": "2.3.1",
         "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-3",
@@ -657,7 +708,7 @@
           "T1204.002"
         ],
         "ISO27001": "A.8.7",
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.2"
       },
@@ -676,7 +727,9 @@
       "EvaluatorFunction": "Test-NRGControlDefender",
       "Remediation": "Create Safe Links policy with AllowClickThrough=$false, TrackClicks=$true, EnableForInternalSenders=$true. Requires Defender for Office 365 Plan 1.",
       "References": {
-        "CISControls": ["9.3"],
+        "CISControls": [
+          "9.3"
+        ],
         "CIS": "2.3.2",
         "SCuBA": "MS.DEFENDER.1.3v1",
         "NIST": "SI-3",
@@ -686,7 +739,7 @@
           "T1204.001"
         ],
         "ISO27001": "A.8.7",
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.2"
       },
@@ -705,7 +758,9 @@
       "EvaluatorFunction": "Test-NRGControlDefender",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -EnableSpoofIntelligence $true",
       "References": {
-        "CISControls": ["9.7"],
+        "CISControls": [
+          "9.7"
+        ],
         "CIS": "2.1.7",
         "SCuBA": "MS.DEFENDER.1.3v1",
         "NIST": "SI-8, SI-3",
@@ -714,7 +769,7 @@
           "T1566",
           "T1036.005"
         ],
-        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "HIPAA": "§164.312(e)(2)(i)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 5.4.1",
         "ISO27001": "A.8.23"
@@ -734,7 +789,9 @@
       "EvaluatorFunction": "Test-NRGControlDefender",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -HonorDmarcPolicy $true",
       "References": {
-        "CISControls": ["9.5"],
+        "CISControls": [
+          "9.5"
+        ],
         "CIS": "2.1.7",
         "NIST": "SI-8",
         "CMMC": "SI.L1-3.14.2",
@@ -742,7 +799,7 @@
           "T1566",
           "T1036.005"
         ],
-        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "HIPAA": "§164.312(e)(2)(i)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 5.4.1",
         "ISO27001": "A.8.23"
@@ -762,14 +819,16 @@
       "EvaluatorFunction": "Test-NRGControlDefender",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -PhishThresholdLevel 2",
       "References": {
-        "CISControls": ["9.7"],
+        "CISControls": [
+          "9.7"
+        ],
         "CIS": "2.1.7",
         "NIST": "SI-3, SI-4",
         "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.4.1",
         "ISO27001": "A.8.7, A.8.23"
@@ -789,14 +848,16 @@
       "EvaluatorFunction": "Test-NRGControlDefender",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -EnableFirstContactSafetyTips $true",
       "References": {
-        "CISControls": ["9.7"],
+        "CISControls": [
+          "9.7"
+        ],
         "CIS": "2.1.7",
         "NIST": "SI-3",
         "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566.001"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.4.1",
         "ISO27001": "A.8.7"
@@ -806,7 +867,7 @@
     {
       "ControlId": "SPO-1.1",
       "Title": "External Sharing Restricted",
-      "Description": "SharePoint external sharing is set to Existing Guests or less \u2014 not Anyone (anonymous links).",
+      "Description": "SharePoint external sharing is set to Existing Guests or less — not Anyone (anonymous links).",
       "BusinessRisk": "Anonymous sharing links can be accessed by anyone with the URL, with no authentication or audit trail.",
       "Severity": "High",
       "Workload": "SPO",
@@ -816,7 +877,10 @@
       "EvaluatorFunction": "Test-NRGControlSharePoint",
       "Remediation": "Set-SPOTenant -SharingCapability ExistingExternalUserSharingOnly",
       "References": {
-        "CISControls": ["3.3", "6.8"],
+        "CISControls": [
+          "3.3",
+          "6.8"
+        ],
         "CIS": "7.2.1",
         "SCuBA": "MS.SHAREPOINT.1.1v1",
         "NIST": "AC-3, AC-17",
@@ -825,7 +889,7 @@
           "T1213.002"
         ],
         "ISO27001": "A.5.19, A.5.21",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.312(e)(1)",
+        "HIPAA": "§164.308(a)(4)(ii)(B), §164.312(e)(1)",
         "SOC2": "CC6.2, CC6.7",
         "PCIDSS": "Req 7.2.4"
       },
@@ -834,7 +898,7 @@
     {
       "ControlId": "SPO-1.2",
       "Title": "Default Sharing Link Not Anonymous",
-      "Description": "Default sharing link type is Internal or Specific people \u2014 not Anyone.",
+      "Description": "Default sharing link type is Internal or Specific people — not Anyone.",
       "BusinessRisk": "Defaulting to anonymous links means users create them accidentally, without understanding the exposure.",
       "Severity": "Medium",
       "Workload": "SPO",
@@ -844,7 +908,9 @@
       "EvaluatorFunction": "Test-NRGControlSharePoint",
       "Remediation": "Set-SPOTenant -DefaultSharingLinkType Internal",
       "References": {
-        "CISControls": ["3.3"],
+        "CISControls": [
+          "3.3"
+        ],
         "CIS": "7.2.2",
         "SCuBA": "MS.SHAREPOINT.2.1v1",
         "NIST": "AC-3",
@@ -852,7 +918,7 @@
         "MITRE": [
           "T1213.002"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.312(a)(2)(i)",
+        "HIPAA": "§164.308(a)(4)(ii)(B), §164.312(a)(2)(i)",
         "SOC2": "CC6.2",
         "PCIDSS": "Req 8.2.1",
         "ISO27001": "A.5.16, A.5.18"
@@ -881,7 +947,7 @@
           "T1110"
         ],
         "ISO27001": "A.5.17, A.8.5",
-        "HIPAA": "\u00a7164.312(d)",
+        "HIPAA": "§164.312(d)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.3"
       },
@@ -900,14 +966,17 @@
       "EvaluatorFunction": "Test-NRGControlSharePoint",
       "Remediation": "Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60",
       "References": {
-        "CISControls": ["6.2", "3.4"],
+        "CISControls": [
+          "6.2",
+          "3.4"
+        ],
         "CIS": "7.2.6",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(C)",
+        "HIPAA": "§164.308(a)(4)(ii)(C)",
         "SOC2": "CC6.3",
         "PCIDSS": "Req 8.2.4",
         "ISO27001": "A.5.18"
@@ -927,14 +996,17 @@
       "EvaluatorFunction": "Test-NRGControlSharePoint",
       "Remediation": "Set-SPOTenant -ConditionalAccessPolicy AllowLimitedAccess",
       "References": {
-        "CISControls": ["3.3", "13.5"],
+        "CISControls": [
+          "3.3",
+          "13.5"
+        ],
         "CIS": "7.3.2",
         "NIST": "AC-3, AC-17",
         "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1213.002"
         ],
-        "HIPAA": "\u00a7164.310(d)(1), \u00a7164.312(a)(1)",
+        "HIPAA": "§164.310(d)(1), §164.312(a)(1)",
         "SOC2": "CC6.6",
         "PCIDSS": "Req 1.3",
         "ISO27001": "A.8.1"
@@ -954,7 +1026,10 @@
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowFederatedUsers $false, or restrict to an allowlist of trusted domains.",
       "References": {
-        "CISControls": ["4.8", "6.7"],
+        "CISControls": [
+          "4.8",
+          "6.7"
+        ],
         "CIS": "8.2.1",
         "SCuBA": "MS.TEAMS.2.1v2",
         "NIST": "AC-17, SC-7",
@@ -964,7 +1039,7 @@
           "T1534"
         ],
         "ISO27001": "A.5.23, A.8.22",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(A), \u00a7164.312(e)(1)",
+        "HIPAA": "§164.308(a)(4)(ii)(A), §164.312(e)(1)",
         "SOC2": "CC6.6",
         "PCIDSS": "Req 1.4"
       },
@@ -983,7 +1058,9 @@
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowTeamsConsumer $false -AllowTeamsConsumerInbound $false",
       "References": {
-        "CISControls": ["4.8"],
+        "CISControls": [
+          "4.8"
+        ],
         "CIS": "8.2.2",
         "NIST": "AC-17",
         "CMMC": "AC.L1-3.1.2",
@@ -991,7 +1068,7 @@
           "T1566",
           "T1534"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
         "SOC2": "CC6.2, CC6.6",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.5.23"
@@ -1011,14 +1088,16 @@
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowAnonymousUsersToJoinMeeting $false",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "8.5.1",
         "NIST": "AC-3, AC-17",
         "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.312(a)(2)(i)",
+        "HIPAA": "§164.312(a)(2)(i)",
         "SOC2": "CC6.1, CC6.2",
         "PCIDSS": "Req 8.2.1",
         "ISO27001": "A.5.16"
@@ -1038,7 +1117,9 @@
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowExternalParticipantGiveRequestControl $false",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "8.5.3",
         "SCuBA": "MS.TEAMS.1.1v1",
         "NIST": "AC-3",
@@ -1046,7 +1127,7 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.312(a)(1), \u00a7164.502",
+        "HIPAA": "§164.312(a)(1), §164.502",
         "SOC2": "CC6.1, C1.1",
         "PCIDSS": "Req 7.2.5",
         "ISO27001": "A.5.18, A.8.3"
@@ -1066,14 +1147,16 @@
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Ensure Purview retention policies cover SharePoint to capture Teams recording data.",
       "References": {
-        "CISControls": ["3.4"],
+        "CISControls": [
+          "3.4"
+        ],
         "CIS": "8.6.1",
         "NIST": "AU-9, AU-11",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
           "T1213"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(A), \u00a7164.310(d)(2)(ii)",
+        "HIPAA": "§164.308(a)(4)(ii)(A), §164.310(d)(2)(ii)",
         "SOC2": "CC6.7, C1.1",
         "PCIDSS": "Req 3.5.1",
         "ISO27001": "A.5.23, A.8.10"
@@ -1093,14 +1176,16 @@
       "EvaluatorFunction": "Test-NRGControlTeams",
       "Remediation": "Set-CsTeamsClientConfiguration -AllowGuestUser $false, or configure guest invitation permissions in Entra External Identities.",
       "References": {
-        "CISControls": ["4.8"],
+        "CISControls": [
+          "4.8"
+        ],
         "CIS": "8.2.3",
         "NIST": "AC-2, AC-3",
         "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)",
+        "HIPAA": "§164.308(a)(4)",
         "SOC2": "CC6.2",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.5.18"
@@ -1120,7 +1205,10 @@
       "EvaluatorFunction": "Test-NRGControlPurview",
       "Remediation": "Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true",
       "References": {
-        "CISControls": ["8.2", "8.5"],
+        "CISControls": [
+          "8.2",
+          "8.5"
+        ],
         "CIS": "3.1.1",
         "SCuBA": "",
         "NIST": "AU-2, AU-12",
@@ -1130,7 +1218,7 @@
         ],
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
-        "HIPAA": "\u00a7164.312(b), \u00a7164.308(a)(1)(ii)(D)",
+        "HIPAA": "§164.312(b), §164.308(a)(1)(ii)(D)",
         "PCIDSS": "Req 10.2"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
@@ -1148,7 +1236,9 @@
       "EvaluatorFunction": "Test-NRGControlPurview",
       "Remediation": "Configure custom retention policies in Purview Compliance > Audit > Retention policies. E5 provides 1-year default.",
       "References": {
-        "CISControls": ["8.10"],
+        "CISControls": [
+          "8.10"
+        ],
         "CIS": "3.1.2",
         "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.2",
@@ -1156,7 +1246,7 @@
           "T1562.008"
         ],
         "SCuBA": "MS.DEFENDER.6.3v1",
-        "HIPAA": "\u00a7164.312(b), \u00a7164.316(b)(2)(i)",
+        "HIPAA": "§164.312(b), §164.316(b)(2)(i)",
         "SOC2": "CC7.2, A1.2",
         "PCIDSS": "Req 10.5",
         "ISO27001": "A.8.15"
@@ -1176,7 +1266,9 @@
       "EvaluatorFunction": "Test-NRGControlPurview",
       "Remediation": "Create DLP policies in Purview > Data loss prevention using Microsoft-provided templates (Financial, PII, Health) across Exchange, SharePoint, Teams.",
       "References": {
-        "CISControls": ["3.13"],
+        "CISControls": [
+          "3.13"
+        ],
         "CIS": "3.3.1",
         "SCuBA": "",
         "NIST": "SC-28, AC-4",
@@ -1185,7 +1277,7 @@
           "T1048",
           "T1567"
         ],
-        "HIPAA": "\u00a7164.312(e)(1), \u00a7164.502(b)",
+        "HIPAA": "§164.312(e)(1), §164.502(b)",
         "SOC2": "CC6.7, C1.1",
         "PCIDSS": "Req 3.4",
         "ISO27001": "A.8.12"
@@ -1205,7 +1297,9 @@
       "EvaluatorFunction": "Test-NRGControlPurview",
       "Remediation": "Create labels in Purview > Information protection. Publish via label policies. Minimum tiers: Internal, Confidential, Highly Confidential.",
       "References": {
-        "CISControls": ["3.7"],
+        "CISControls": [
+          "3.7"
+        ],
         "CIS": "3.4.1",
         "NIST": "AC-16, SC-28",
         "CMMC": "MP.L2-3.8.1",
@@ -1213,7 +1307,7 @@
           "T1048",
           "T1005"
         ],
-        "HIPAA": "\u00a7164.502(b), \u00a7164.312(c)(1)",
+        "HIPAA": "§164.502(b), §164.312(c)(1)",
         "SOC2": "C1.1",
         "PCIDSS": "Req 3.4, Req 7.2",
         "ISO27001": "A.8.11, A.8.12"
@@ -1233,7 +1327,9 @@
       "EvaluatorFunction": "Test-NRGControlIntune",
       "Remediation": "Create compliance policies per platform in Intune > Devices > Compliance. Require encryption, password, and OS version minimums.",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "4.1.1",
         "SCuBA": "",
         "NIST": "CM-2, CM-6",
@@ -1243,7 +1339,7 @@
           "T1082"
         ],
         "ISO27001": "A.8.1",
-        "HIPAA": "\u00a7164.310(d)(1), \u00a7164.312(a)(1)",
+        "HIPAA": "§164.310(d)(1), §164.312(a)(1)",
         "SOC2": "CC6.1, CC6.6",
         "PCIDSS": "Req 1.3"
       },
@@ -1262,7 +1358,9 @@
       "EvaluatorFunction": "Test-NRGControlIntune",
       "Remediation": "Create CA policy: require compliant device or hybrid join for all cloud apps.",
       "References": {
-        "CISControls": ["13.5"],
+        "CISControls": [
+          "13.5"
+        ],
         "CIS": "4.1.3",
         "SCuBA": "",
         "NIST": "AC-3, CM-7",
@@ -1272,7 +1370,7 @@
         ],
         "ISO27001": "A.8.1, A.8.3",
         "SOC2": "CC6.1",
-        "HIPAA": "\u00a7164.312(a)(1), \u00a7164.310(d)(1)",
+        "HIPAA": "§164.312(a)(1), §164.310(d)(1)",
         "PCIDSS": "Req 1.3"
       },
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1"
@@ -1290,7 +1388,9 @@
       "EvaluatorFunction": "Test-NRGControlIntune",
       "Remediation": "Intune compliance policy for Windows: Device Health > Require BitLocker = Require.",
       "References": {
-        "CISControls": ["3.6"],
+        "CISControls": [
+          "3.6"
+        ],
         "CIS": "4.1.2",
         "SCuBA": "",
         "NIST": "SC-28",
@@ -1299,7 +1399,7 @@
           "T1005",
           "T1025"
         ],
-        "HIPAA": "\u00a7164.312(a)(2)(iv), \u00a7164.310(d)(1)",
+        "HIPAA": "§164.312(a)(2)(iv), §164.310(d)(1)",
         "SOC2": "CC6.7, CC6.1",
         "PCIDSS": "Req 3.5.1",
         "ISO27001": "A.8.1, A.8.24"
@@ -1319,7 +1419,10 @@
       "EvaluatorFunction": "Test-NRGControlIntune",
       "Remediation": "Create app protection policies in Intune > Apps > App protection policies for iOS and Android targeting Office apps.",
       "References": {
-        "CISControls": ["3.3", "4.12"],
+        "CISControls": [
+          "3.3",
+          "4.12"
+        ],
         "CIS": "4.3.1",
         "SCuBA": "",
         "NIST": "AC-19, SC-28",
@@ -1327,7 +1430,7 @@
         "MITRE": [
           "T1005"
         ],
-        "HIPAA": "\u00a7164.310(d)(1), \u00a7164.312(a)(1)",
+        "HIPAA": "§164.310(d)(1), §164.312(a)(1)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 1.3",
         "ISO27001": "A.8.1"
@@ -1347,7 +1450,10 @@
       "EvaluatorFunction": "Test-NRGControlIntune",
       "Remediation": "Create Endpoint Security > Antivirus policy in Intune. Set CloudBlockLevel = High, enable real-time protection and tamper protection.",
       "References": {
-        "CISControls": ["10.1", "10.2"],
+        "CISControls": [
+          "10.1",
+          "10.2"
+        ],
         "CIS": "4.4.1",
         "SCuBA": "",
         "NIST": "SI-3",
@@ -1355,7 +1461,7 @@
         "MITRE": [
           "T1562.001"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.2",
         "ISO27001": "A.8.7"
@@ -1375,7 +1481,9 @@
       "EvaluatorFunction": "Test-NRGControlPowerPlatform",
       "Remediation": "Power Platform Admin Center > Policies > Tenant Isolation: enable and configure inbound/outbound restrictions.",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "9.1.1",
         "NIST": "AC-4, SC-7",
         "CMMC": "SC.L1-3.13.1",
@@ -1384,7 +1492,7 @@
           "T1567"
         ],
         "SCuBA": "MS.POWERPLATFORM.3.1v1",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(A), \u00a7164.312(a)(1)",
+        "HIPAA": "§164.308(a)(4)(ii)(A), §164.312(a)(1)",
         "SOC2": "CC6.6",
         "PCIDSS": "Req 1.4",
         "ISO27001": "A.5.23, A.8.22"
@@ -1404,7 +1512,9 @@
       "EvaluatorFunction": "Test-NRGControlPowerPlatform",
       "Remediation": "Power Platform Admin Center > Policies > Data policies: create environment policy. Move business connectors to Business group, block consumer connectors.",
       "References": {
-        "CISControls": ["3.13"],
+        "CISControls": [
+          "3.13"
+        ],
         "CIS": "9.2.1",
         "NIST": "AC-4, SC-7",
         "CMMC": "MP.L2-3.8.1",
@@ -1412,7 +1522,7 @@
           "T1048"
         ],
         "SCuBA": "MS.POWERPLATFORM.2.1v1",
-        "HIPAA": "\u00a7164.312(e)(1)",
+        "HIPAA": "§164.312(e)(1)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 3.4",
         "ISO27001": "A.8.12"
@@ -1432,7 +1542,9 @@
       "EvaluatorFunction": "Test-NRGControlPowerPlatform",
       "Remediation": "Power Platform Admin Center > Settings: restrict environment creation to admins only.",
       "References": {
-        "CISControls": ["6.8"],
+        "CISControls": [
+          "6.8"
+        ],
         "CIS": "9.3.1",
         "NIST": "CM-5, AC-6",
         "CMMC": "CM.L2-3.4.5",
@@ -1440,7 +1552,7 @@
           "T1578"
         ],
         "SCuBA": "MS.POWERPLATFORM.1.1v1",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
         "SOC2": "CC6.3, CC8.1",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.5.23, A.8.32"
@@ -1460,7 +1572,9 @@
       "EvaluatorFunction": "Test-NRGControlEXOPop3",
       "Remediation": "Disable for newly licensed mailboxes: Get-CASMailboxPlan -Filter {PopEnabled -eq $true} | Set-CASMailboxPlan -PopEnabled $false. Disable for existing mailboxes: Get-CASMailbox -ResultSize Unlimited | Set-CASMailbox -PopEnabled $false",
       "References": {
-        "CISControls": ["4.8"],
+        "CISControls": [
+          "4.8"
+        ],
         "CIS": "2.1.6",
         "NIST": "SC-8, IA-2",
         "CMMC": "SC.L2-3.13.8",
@@ -1468,7 +1582,7 @@
           "T1078",
           "T1110"
         ],
-        "HIPAA": "\u00a7164.312(e)(2)(ii)",
+        "HIPAA": "§164.312(e)(2)(ii)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 4.2.1",
         "ISO27001": "A.8.24"
@@ -1488,7 +1602,9 @@
       "EvaluatorFunction": "Test-NRGControlEXOImap",
       "Remediation": "Disable for newly licensed mailboxes: Get-CASMailboxPlan -Filter {ImapEnabled -eq $true} | Set-CASMailboxPlan -ImapEnabled $false. Disable for existing mailboxes: Get-CASMailbox -ResultSize Unlimited | Set-CASMailbox -ImapEnabled $false",
       "References": {
-        "CISControls": ["4.8"],
+        "CISControls": [
+          "4.8"
+        ],
         "CIS": "2.1.6",
         "NIST": "SC-8, IA-2",
         "CMMC": "SC.L2-3.13.8",
@@ -1496,7 +1612,7 @@
           "T1078",
           "T1110"
         ],
-        "HIPAA": "\u00a7164.312(e)(2)(ii)",
+        "HIPAA": "§164.312(e)(2)(ii)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 4.2.1",
         "ISO27001": "A.8.24"
@@ -1516,14 +1632,16 @@
       "EvaluatorFunction": "Test-NRGControlEXOCustomerLockbox",
       "Remediation": "Enable in M365 admin center > Settings > Security & privacy > Customer Lockbox. Requires E5 or E5 Compliance add-on.",
       "References": {
-        "CISControls": ["3.3"],
+        "CISControls": [
+          "3.3"
+        ],
         "CIS": "1.3.6",
         "NIST": "AC-3, PE-18",
         "CMMC": "PE.L1-3.10.1",
         "MITRE": [
           "T1078.004"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(A), \u00a7164.312(b)",
+        "HIPAA": "§164.308(a)(4)(ii)(A), §164.312(b)",
         "SOC2": "CC6.1, CC6.6",
         "PCIDSS": "Req 7.2.5",
         "ISO27001": "A.5.23, A.8.16"
@@ -1543,7 +1661,9 @@
       "EvaluatorFunction": "Test-NRGControlEXOSharedMailbox",
       "Remediation": "Get-Mailbox -ResultSize Unlimited -RecipientTypeDetails SharedMailbox | ForEach-Object { Update-MgUser -UserId $_.ExternalDirectoryObjectId -AccountEnabled:$false }",
       "References": {
-        "CISControls": ["5.3"],
+        "CISControls": [
+          "5.3"
+        ],
         "CIS": "1.1.3",
         "NIST": "AC-2, IA-2",
         "CMMC": "AC.L1-3.1.1",
@@ -1551,7 +1671,7 @@
           "T1078",
           "T1098"
         ],
-        "HIPAA": "\u00a7164.312(a)(2)(i)",
+        "HIPAA": "§164.312(a)(2)(i)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.2.1",
         "ISO27001": "A.5.16, A.8.5"
@@ -1571,7 +1691,9 @@
       "EvaluatorFunction": "Test-NRGControlAADSignInRisk",
       "Remediation": "CA policy: Condition = Sign-in risk high/medium, Grant = Require MFA or Block. Requires Entra P2.",
       "References": {
-        "CISControls": ["6.7"],
+        "CISControls": [
+          "6.7"
+        ],
         "CIS": "5.2.2.6",
         "SCuBA": "MS.AAD.2.3v1",
         "NIST": "AC-7, IA-2",
@@ -1581,7 +1703,7 @@
           "T1621"
         ],
         "ISO27001": "A.8.16",
-        "HIPAA": "\u00a7164.312(a)(1)",
+        "HIPAA": "§164.312(a)(1)",
         "SOC2": "CC6.1, CC7.2",
         "PCIDSS": "Req 8.5"
       },
@@ -1600,7 +1722,9 @@
       "EvaluatorFunction": "Test-NRGControlAADUserRisk",
       "Remediation": "CA policy: Condition = User risk high, Grant = Require password change. Requires Entra P2.",
       "References": {
-        "CISControls": ["6.7"],
+        "CISControls": [
+          "6.7"
+        ],
         "CIS": "5.2.2.7",
         "SCuBA": "MS.AAD.2.1v1",
         "NIST": "AC-7, IA-5",
@@ -1610,7 +1734,7 @@
           "T1110"
         ],
         "ISO27001": "A.8.16",
-        "HIPAA": "\u00a7164.312(a)(1)",
+        "HIPAA": "§164.312(a)(1)",
         "SOC2": "CC6.1, CC7.2",
         "PCIDSS": "Req 8.5"
       },
@@ -1638,7 +1762,7 @@
           "T1078"
         ],
         "ISO27001": "A.8.3",
-        "HIPAA": "\u00a7164.312(a)(1)",
+        "HIPAA": "§164.312(a)(1)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.2.2"
       },
@@ -1657,7 +1781,9 @@
       "EvaluatorFunction": "Test-NRGControlAADDeviceComplianceCA",
       "Remediation": "CA policy: Grant = Require device to be marked as compliant, or Require Microsoft Entra hybrid joined device.",
       "References": {
-        "CISControls": ["13.5"],
+        "CISControls": [
+          "13.5"
+        ],
         "CIS": "5.2.2.8",
         "SCuBA": "MS.AAD.3.7v1",
         "NIST": "CM-7, AC-17",
@@ -1667,7 +1793,7 @@
         ],
         "ISO27001": "A.8.1",
         "SOC2": "CC6.1",
-        "HIPAA": "\u00a7164.310(d)(1), \u00a7164.312(a)(1)",
+        "HIPAA": "§164.310(d)(1), §164.312(a)(1)",
         "PCIDSS": "Req 1.3"
       },
       "LicenseRequirement": "M365 Business Premium or Entra ID P1 + Intune"
@@ -1675,7 +1801,7 @@
     {
       "ControlId": "AAD-3.2",
       "Title": "No Permanent Admin Role Assignments",
-      "Description": "Privileged roles use PIM eligible assignments \u2014 no permanent active assignments outside break-glass accounts.",
+      "Description": "Privileged roles use PIM eligible assignments — no permanent active assignments outside break-glass accounts.",
       "BusinessRisk": "Permanent admin accounts are always high-value targets. PIM limits the window of privilege exposure to when it is actually needed.",
       "Severity": "High",
       "Workload": "AAD",
@@ -1685,7 +1811,10 @@
       "EvaluatorFunction": "Test-NRGControlAADNoPermanentAdmins",
       "Remediation": "Convert permanent role assignments to PIM eligible. Keep only break-glass accounts as permanent GA.",
       "References": {
-        "CISControls": ["6.8", "5.4"],
+        "CISControls": [
+          "6.8",
+          "5.4"
+        ],
         "CIS": "5.1.2.2",
         "SCuBA": "MS.AAD.7.3v1",
         "NIST": "AC-6(5)",
@@ -1695,7 +1824,7 @@
           "T1548"
         ],
         "ISO27001": "A.8.2",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(C)",
+        "HIPAA": "§164.308(a)(4)(ii)(C)",
         "SOC2": "CC6.3",
         "PCIDSS": "Req 7.2.5"
       },
@@ -1714,7 +1843,9 @@
       "EvaluatorFunction": "Test-NRGControlAADPIMMFA",
       "Remediation": "PIM > Roles > Select role > Settings > Require MFA on activation.",
       "References": {
-        "CISControls": ["6.5"],
+        "CISControls": [
+          "6.5"
+        ],
         "CIS": "5.1.3.1",
         "NIST": "IA-2(1)",
         "CMMC": "IA.L2-3.5.3",
@@ -1723,7 +1854,7 @@
           "T1548"
         ],
         "ISO27001": "A.8.2, A.8.5",
-        "HIPAA": "\u00a7164.312(d)",
+        "HIPAA": "§164.312(d)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.4"
       },
@@ -1742,7 +1873,9 @@
       "EvaluatorFunction": "Test-NRGControlAADPIMJustification",
       "Remediation": "PIM > Roles > Select role > Settings > Require justification on activation.",
       "References": {
-        "CISControls": ["6.8"],
+        "CISControls": [
+          "6.8"
+        ],
         "CIS": "5.1.3.2",
         "NIST": "AC-6(9), AU-12",
         "CMMC": "AU.L2-3.3.1",
@@ -1750,7 +1883,7 @@
           "T1078.004"
         ],
         "ISO27001": "A.8.2, A.8.15",
-        "HIPAA": "\u00a7164.308(a)(1)(ii)(D)",
+        "HIPAA": "§164.308(a)(1)(ii)(D)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 10.2"
       },
@@ -1769,7 +1902,9 @@
       "EvaluatorFunction": "Test-NRGControlAADPIMApproval",
       "Remediation": "PIM > Global Administrator > Settings > Require approval > Add approvers.",
       "References": {
-        "CISControls": ["6.8"],
+        "CISControls": [
+          "6.8"
+        ],
         "CIS": "5.1.3.3",
         "SCuBA": "MS.AAD.7.6v1",
         "NIST": "AC-6(5)",
@@ -1778,7 +1913,7 @@
           "T1078.004"
         ],
         "ISO27001": "A.8.2",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
         "SOC2": "CC6.3",
         "PCIDSS": "Req 7.2.4"
       },
@@ -1797,14 +1932,16 @@
       "EvaluatorFunction": "Test-NRGControlAADPIMDuration",
       "Remediation": "PIM > Roles > Select role > Settings > Maximum activation duration = 8 hours.",
       "References": {
-        "CISControls": ["6.8"],
+        "CISControls": [
+          "6.8"
+        ],
         "CIS": "5.1.3.4",
         "NIST": "AC-6",
         "CMMC": "AC.L2-3.1.5",
         "MITRE": [
           "T1078.004"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(C)",
+        "HIPAA": "§164.308(a)(4)(ii)(C)",
         "SOC2": "CC6.3",
         "PCIDSS": "Req 7.2.5",
         "ISO27001": "A.8.2"
@@ -1824,7 +1961,9 @@
       "EvaluatorFunction": "Test-NRGControlAADGuestInvite",
       "Remediation": "Entra ID > External Identities > External collaboration settings > Guest invite settings = Admins and users in the Guest Inviter role.",
       "References": {
-        "CISControls": ["6.8"],
+        "CISControls": [
+          "6.8"
+        ],
         "CIS": "5.3.1",
         "SCuBA": "MS.AAD.8.2v1",
         "NIST": "AC-2",
@@ -1834,7 +1973,7 @@
         ],
         "ISO27001": "A.5.18, A.5.19",
         "SOC2": "CC6.2",
-        "HIPAA": "\u00a7164.308(a)(4)",
+        "HIPAA": "§164.308(a)(4)",
         "PCIDSS": "Req 7.2.3"
       },
       "LicenseRequirement": "Included (all plans)"
@@ -1852,7 +1991,9 @@
       "EvaluatorFunction": "Test-NRGControlAADExternalCollab",
       "Remediation": "Entra ID > User settings > Restrict non-admin users from creating tenants. Block MSOL PowerShell via authorization policy.",
       "References": {
-        "CISControls": ["6.8"],
+        "CISControls": [
+          "6.8"
+        ],
         "CIS": "5.3.2",
         "NIST": "CM-7, AC-6",
         "CMMC": "CM.L2-3.4.6",
@@ -1860,7 +2001,7 @@
           "T1078"
         ],
         "ISO27001": "A.5.19, A.5.21",
-        "HIPAA": "\u00a7164.308(a)(4)",
+        "HIPAA": "§164.308(a)(4)",
         "SOC2": "CC6.2, CC6.6",
         "PCIDSS": "Req 1.3.1"
       },
@@ -1869,8 +2010,8 @@
     {
       "ControlId": "AAD-4.3",
       "Title": "B2B Guest Default Permissions Restricted",
-      "Description": "Guest users are assigned the Restricted Guest User role \u2014 not member-equivalent permissions.",
-      "BusinessRisk": "Guest users with member-level permissions can enumerate users, groups, and applications \u2014 gathering intelligence for targeted attacks.",
+      "Description": "Guest users are assigned the Restricted Guest User role — not member-equivalent permissions.",
+      "BusinessRisk": "Guest users with member-level permissions can enumerate users, groups, and applications — gathering intelligence for targeted attacks.",
       "Severity": "High",
       "Workload": "AAD",
       "Category": "Identity",
@@ -1879,7 +2020,9 @@
       "EvaluatorFunction": "Test-NRGControlAADGuestPermissions",
       "Remediation": "Entra ID > External Identities > External collaboration settings > Guest user access = Most restricted.",
       "References": {
-        "CISControls": ["6.8"],
+        "CISControls": [
+          "6.8"
+        ],
         "CIS": "5.3.3",
         "SCuBA": "MS.AAD.8.1v1",
         "NIST": "AC-3",
@@ -1889,7 +2032,7 @@
           "T1069"
         ],
         "ISO27001": "A.5.18",
-        "HIPAA": "\u00a7164.308(a)(4)",
+        "HIPAA": "§164.308(a)(4)",
         "SOC2": "CC6.2",
         "PCIDSS": "Req 7.2.4"
       },
@@ -1899,7 +2042,7 @@
       "ControlId": "AAD-5.1",
       "Title": "Self-Service Password Reset Enabled",
       "Description": "SSPR is enabled allowing users to reset their own passwords without helpdesk involvement.",
-      "BusinessRisk": "Without SSPR, helpdesk becomes a social engineering target \u2014 attackers call claiming to be users to get password resets.",
+      "BusinessRisk": "Without SSPR, helpdesk becomes a social engineering target — attackers call claiming to be users to get password resets.",
       "Severity": "Medium",
       "Workload": "AAD",
       "Category": "Identity",
@@ -1917,7 +2060,7 @@
           "T1078"
         ],
         "ISO27001": "A.5.17",
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(D)",
+        "HIPAA": "§164.308(a)(5)(ii)(D)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.3.5"
       },
@@ -1944,7 +2087,7 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(D)",
+        "HIPAA": "§164.308(a)(5)(ii)(D)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.3.5",
         "ISO27001": "A.5.17"
@@ -1964,7 +2107,9 @@
       "EvaluatorFunction": "Test-NRGControlAADUserAppReg",
       "Remediation": "Entra ID > User settings > App registrations > Users can register applications = No.",
       "References": {
-        "CISControls": ["6.8"],
+        "CISControls": [
+          "6.8"
+        ],
         "CIS": "5.5.1",
         "SCuBA": "MS.AAD.5.1v1",
         "NIST": "CM-5, AC-6",
@@ -1974,7 +2119,7 @@
           "T1550.001"
         ],
         "ISO27001": "A.8.19",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
         "SOC2": "CC6.3, CC8.1",
         "PCIDSS": "Req 6.5.4"
       },
@@ -1983,7 +2128,7 @@
     {
       "ControlId": "AAD-6.2",
       "Title": "User Consent to Apps Restricted",
-      "Description": "Users cannot consent to application permissions \u2014 all consent goes through admin workflow.",
+      "Description": "Users cannot consent to application permissions — all consent goes through admin workflow.",
       "BusinessRisk": "Consent phishing grants attacker-controlled apps access to mailbox and files. Users cannot distinguish malicious OAuth consent from legitimate.",
       "Severity": "Critical",
       "Workload": "AAD",
@@ -1993,7 +2138,9 @@
       "EvaluatorFunction": "Test-NRGControlAADUserConsent",
       "Remediation": "Entra ID > Enterprise apps > Consent and permissions > User consent settings = Do not allow user consent.",
       "References": {
-        "CISControls": ["6.8"],
+        "CISControls": [
+          "6.8"
+        ],
         "CIS": "5.5.2",
         "SCuBA": "MS.AAD.5.2v1",
         "NIST": "AC-3",
@@ -2004,7 +2151,7 @@
         ],
         "ISO27001": "A.5.23, A.8.19",
         "SOC2": "CC6.3",
-        "HIPAA": "\u00a7164.308(a)(4)",
+        "HIPAA": "§164.308(a)(4)",
         "PCIDSS": "Req 6.4.3"
       },
       "LicenseRequirement": "Included (all plans)"
@@ -2013,7 +2160,7 @@
       "ControlId": "AAD-6.3",
       "Title": "Admin Consent Workflow Enabled",
       "Description": "Admin consent workflow allows users to request app access that goes through an approval process.",
-      "BusinessRisk": "Without a consent workflow, users with blocked consent have no approved path \u2014 they use shadow IT alternatives instead.",
+      "BusinessRisk": "Without a consent workflow, users with blocked consent have no approved path — they use shadow IT alternatives instead.",
       "Severity": "Medium",
       "Workload": "AAD",
       "Category": "Identity",
@@ -2022,7 +2169,9 @@
       "EvaluatorFunction": "Test-NRGControlAADAdminConsentWorkflow",
       "Remediation": "Entra ID > Enterprise apps > Consent and permissions > Admin consent requests > Yes + configure reviewers.",
       "References": {
-        "CISControls": ["6.1"],
+        "CISControls": [
+          "6.1"
+        ],
         "CIS": "5.5.3",
         "SCuBA": "MS.AAD.5.3v1",
         "NIST": "AC-3",
@@ -2031,7 +2180,7 @@
           "T1528"
         ],
         "ISO27001": "A.8.19",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
         "SOC2": "CC6.3, CC8.1",
         "PCIDSS": "Req 6.5.4"
       },
@@ -2048,7 +2197,7 @@
       "Automated": true,
       "CollectorDependency": "AAD-AuthPolicies",
       "EvaluatorFunction": "Test-NRGControlAADPasswordProtection",
-      "Remediation": "Entra ID > Security > Authentication methods > Password protection > Lockout threshold \u226410.",
+      "Remediation": "Entra ID > Security > Authentication methods > Password protection > Lockout threshold ≤10.",
       "References": {
         "CISControls": [],
         "CIS": "5.6.1",
@@ -2058,7 +2207,7 @@
         "MITRE": [
           "T1110"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(C), \u00a7164.308(a)(5)(ii)(D)",
+        "HIPAA": "§164.308(a)(5)(ii)(C), §164.308(a)(5)(ii)(D)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.3.4",
         "ISO27001": "A.5.17, A.8.5"
@@ -2078,7 +2227,9 @@
       "EvaluatorFunction": "Test-NRGControlAADBreakGlass",
       "Remediation": "Create two cloud-only GA accounts with strong random passwords, exclude from all CA policies, store credentials in secure offline location. Monitor for sign-in activity.",
       "References": {
-        "CISControls": ["5.4"],
+        "CISControls": [
+          "5.4"
+        ],
         "CIS": "5.1.2.3",
         "NIST": "CP-2, AC-2",
         "CMMC": "IR.L2-3.6.1",
@@ -2087,7 +2238,7 @@
         ],
         "ISO27001": "A.5.30, A.8.2",
         "SOC2": "CC6.1",
-        "HIPAA": "\u00a7164.312(a)(2)(ii)",
+        "HIPAA": "§164.312(a)(2)(ii)",
         "PCIDSS": "Req 7.2.1"
       },
       "LicenseRequirement": "Included (all plans)"
@@ -2105,7 +2256,9 @@
       "EvaluatorFunction": "Test-NRGControlDefenderPresetPolicies",
       "Remediation": "Defender portal > Email & Collaboration > Policies > Preset security policies > Apply Standard or Strict protection.",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "2.3.3",
         "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-3",
@@ -2113,7 +2266,7 @@
         "MITRE": [
           "T1566"
         ],
-        "HIPAA": "\u00a7164.308(a)(8)",
+        "HIPAA": "§164.308(a)(8)",
         "SOC2": "CC8.1",
         "PCIDSS": "Req 2.2",
         "ISO27001": "A.8.9"
@@ -2133,7 +2286,10 @@
       "EvaluatorFunction": "Test-NRGControlDefenderZAP",
       "Remediation": "Set-HostedContentFilterPolicy -ZapEnabled $true",
       "References": {
-        "CISControls": ["9.7", "10.7"],
+        "CISControls": [
+          "9.7",
+          "10.7"
+        ],
         "CIS": "2.1.8",
         "SCuBA": "MS.DEFENDER.1.2v1",
         "NIST": "SI-3",
@@ -2142,7 +2298,7 @@
           "T1566"
         ],
         "ISO27001": "A.8.7",
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.4.2"
       },
@@ -2161,7 +2317,9 @@
       "EvaluatorFunction": "Test-NRGControlDefenderCommonAttachments",
       "Remediation": "Set-MalwareFilterPolicy -Identity Default -EnableFileFilter $true",
       "References": {
-        "CISControls": ["9.6"],
+        "CISControls": [
+          "9.6"
+        ],
         "CIS": "2.1.9",
         "SCuBA": "MS.EXO.9.1v2",
         "NIST": "SI-3",
@@ -2171,7 +2329,7 @@
           "T1204.002"
         ],
         "ISO27001": "A.8.7",
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.2"
       },
@@ -2180,7 +2338,7 @@
     {
       "ControlId": "DEF-2.4",
       "Title": "Phishing Directed to Quarantine Not Junk",
-      "Description": "Phishing spam action is Quarantine \u2014 not MoveToJmf (junk folder). Quarantined mail is admin-managed.",
+      "Description": "Phishing spam action is Quarantine — not MoveToJmf (junk folder). Quarantined mail is admin-managed.",
       "BusinessRisk": "Phishing in junk folders can still be accessed and clicked by users. Quarantine prevents all interaction.",
       "Severity": "High",
       "Workload": "DEF",
@@ -2190,14 +2348,16 @@
       "EvaluatorFunction": "Test-NRGControlDefenderQuarantine",
       "Remediation": "Set-HostedContentFilterPolicy -PhishSpamAction Quarantine",
       "References": {
-        "CISControls": ["9.7"],
+        "CISControls": [
+          "9.7"
+        ],
         "CIS": "2.1.10",
         "NIST": "SI-8",
         "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1566"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.4.2",
         "ISO27001": "A.8.7"
@@ -2217,7 +2377,9 @@
       "EvaluatorFunction": "Test-NRGControlDefenderHCSpam",
       "Remediation": "Set-HostedContentFilterPolicy -HighConfidenceSpamAction Quarantine",
       "References": {
-        "CISControls": ["9.7"],
+        "CISControls": [
+          "9.7"
+        ],
         "CIS": "2.1.11",
         "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-8",
@@ -2225,7 +2387,7 @@
         "MITRE": [
           "T1566"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.4.2",
         "ISO27001": "A.8.7"
@@ -2245,7 +2407,9 @@
       "EvaluatorFunction": "Test-NRGControlDefenderBulkThreshold",
       "Remediation": "Set-HostedContentFilterPolicy -BulkThreshold 6",
       "References": {
-        "CISControls": ["9.7"],
+        "CISControls": [
+          "9.7"
+        ],
         "CIS": "2.1.12",
         "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-8",
@@ -2253,7 +2417,7 @@
         "MITRE": [
           "T1566"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.4.1",
         "ISO27001": "A.8.23"
@@ -2264,7 +2428,7 @@
       "ControlId": "EXO-3.1",
       "Title": "Connection Filter Safe List Bypass Disabled",
       "Description": "Microsoft safe list bypass is disabled on the default connection filter policy.",
-      "BusinessRisk": "Safe list bypass allows senders on Microsoft-maintained lists to skip all EOP filtering \u2014 third-party senders can exploit this.",
+      "BusinessRisk": "Safe list bypass allows senders on Microsoft-maintained lists to skip all EOP filtering — third-party senders can exploit this.",
       "Severity": "Medium",
       "Workload": "EXO",
       "Category": "Email",
@@ -2273,7 +2437,9 @@
       "EvaluatorFunction": "Test-NRGControlEXOConnectionFilter",
       "Remediation": "Set-HostedConnectionFilterPolicy -Identity Default -EnableSafeList $false",
       "References": {
-        "CISControls": ["9.7"],
+        "CISControls": [
+          "9.7"
+        ],
         "CIS": "2.1.13",
         "SCuBA": "",
         "NIST": "SI-8",
@@ -2281,7 +2447,7 @@
         "MITRE": [
           "T1566"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.4.1",
         "ISO27001": "A.8.7"
@@ -2301,7 +2467,9 @@
       "EvaluatorFunction": "Test-NRGControlEXOOutboundLimits",
       "Remediation": "Set-HostedOutboundSpamFilterPolicy: configure RecipientLimitInternalPerHour, RecipientLimitExternalPerHour, ActionWhenThresholdReached = Alert.",
       "References": {
-        "CISControls": ["9.7"],
+        "CISControls": [
+          "9.7"
+        ],
         "CIS": "2.1.14",
         "SCuBA": "",
         "NIST": "SI-8, AU-12",
@@ -2310,7 +2478,7 @@
           "T1078",
           "T1114.003"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B), \u00a7164.402",
+        "HIPAA": "§164.308(a)(5)(ii)(B), §164.402",
         "SOC2": "CC6.8, CC7.2",
         "PCIDSS": "Req 5.4",
         "ISO27001": "A.8.7, A.8.16"
@@ -2319,7 +2487,7 @@
     },
     {
       "ControlId": "EXO-3.3",
-      "Title": "Alert Policy \u2014 Email Forwarding Rules",
+      "Title": "Alert Policy — Email Forwarding Rules",
       "Description": "An alert policy notifies admins when new email forwarding rules are created.",
       "BusinessRisk": "Forwarding rules are the primary BEC persistence mechanism. Without alerts, silent exfiltration continues indefinitely.",
       "Severity": "High",
@@ -2330,7 +2498,10 @@
       "EvaluatorFunction": "Test-NRGControlEXOAlertForwarding",
       "Remediation": "Defender portal > Policies > Alert policies > Enable: Email forwarding activities.",
       "References": {
-        "CISControls": ["8.11", "13.1"],
+        "CISControls": [
+          "8.11",
+          "13.1"
+        ],
         "CIS": "2.1.15",
         "SCuBA": "MS.DEFENDER.5.1v1",
         "NIST": "AU-12, SI-4",
@@ -2338,7 +2509,7 @@
         "MITRE": [
           "T1114.003"
         ],
-        "HIPAA": "\u00a7164.308(a)(1)(ii)(D), \u00a7164.308(a)(6)",
+        "HIPAA": "§164.308(a)(1)(ii)(D), §164.308(a)(6)",
         "SOC2": "CC7.2, CC7.3",
         "PCIDSS": "Req 10.7",
         "ISO27001": "A.8.16"
@@ -2347,7 +2518,7 @@
     },
     {
       "ControlId": "EXO-3.4",
-      "Title": "Alert Policy \u2014 Unusual Mail Volume",
+      "Title": "Alert Policy — Unusual Mail Volume",
       "Description": "An alert policy detects unusual increases in email reported as phish by users.",
       "BusinessRisk": "Volume spikes indicate active phishing campaigns. Without alerts, campaigns run until users complain.",
       "Severity": "Medium",
@@ -2358,7 +2529,10 @@
       "EvaluatorFunction": "Test-NRGControlEXOAlertVolume",
       "Remediation": "Defender portal > Policies > Alert policies > Enable: Unusual increase in email reported as phish.",
       "References": {
-        "CISControls": ["13.1", "8.11"],
+        "CISControls": [
+          "13.1",
+          "8.11"
+        ],
         "CIS": "2.1.16",
         "NIST": "SI-4, AU-12",
         "CMMC": "SI.L2-3.14.6",
@@ -2366,7 +2540,7 @@
           "T1566"
         ],
         "SCuBA": "MS.DEFENDER.5.1v1",
-        "HIPAA": "\u00a7164.308(a)(1)(ii)(D), \u00a7164.308(a)(6)",
+        "HIPAA": "§164.308(a)(1)(ii)(D), §164.308(a)(6)",
         "SOC2": "CC7.2, CC7.3",
         "PCIDSS": "Req 10.7",
         "ISO27001": "A.8.16"
@@ -2386,7 +2560,10 @@
       "EvaluatorFunction": "Test-NRGControlEXOTransportAudit",
       "Remediation": "Set-OrganizationConfig -AuditDisabled $false",
       "References": {
-        "CISControls": ["8.2", "8.5"],
+        "CISControls": [
+          "8.2",
+          "8.5"
+        ],
         "CIS": "3.1.1",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
@@ -2395,7 +2572,7 @@
           "T1070.008"
         ],
         "SCuBA": "MS.DEFENDER.6.1v1",
-        "HIPAA": "\u00a7164.312(b), \u00a7164.308(a)(1)(ii)(D)",
+        "HIPAA": "§164.312(b), §164.308(a)(1)(ii)(D)",
         "SOC2": "CC7.2, CC8.1",
         "PCIDSS": "Req 10.2, Req 6.5.3",
         "ISO27001": "A.8.15, A.8.32"
@@ -2415,7 +2592,10 @@
       "EvaluatorFunction": "Test-NRGControlSPOOneDriveSync",
       "Remediation": "Set-SPOTenant -AllowedDomainGuidsForSyncApp @('your-tenant-guid')",
       "References": {
-        "CISControls": ["3.3", "13.5"],
+        "CISControls": [
+          "3.3",
+          "13.5"
+        ],
         "CIS": "7.2.7",
         "NIST": "SC-28, AC-19",
         "CMMC": "MP.L2-3.8.1",
@@ -2423,7 +2603,7 @@
           "T1005"
         ],
         "SOC2": "CC6.6, CC6.7",
-        "HIPAA": "\u00a7164.310(d)(1)",
+        "HIPAA": "§164.310(d)(1)",
         "PCIDSS": "Req 1.3",
         "ISO27001": "A.8.1"
       },
@@ -2442,7 +2622,9 @@
       "EvaluatorFunction": "Test-NRGControlSPOLinkExpiration",
       "Remediation": "Set-SPOTenant -RequireAnonymousLinksExpireInDays 30",
       "References": {
-        "CISControls": ["3.4"],
+        "CISControls": [
+          "3.4"
+        ],
         "CIS": "7.2.3",
         "SCuBA": "MS.SHAREPOINT.3.1v1",
         "NIST": "AC-3",
@@ -2450,7 +2632,7 @@
         "MITRE": [
           "T1213.002"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(C)",
+        "HIPAA": "§164.308(a)(4)(ii)(C)",
         "SOC2": "CC6.3",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.5.18"
@@ -2470,7 +2652,9 @@
       "EvaluatorFunction": "Test-NRGControlSPOAppsFromStore",
       "Remediation": "SharePoint Admin Center > Settings > Apps > disable apps from the SharePoint store.",
       "References": {
-        "CISControls": ["2.5"],
+        "CISControls": [
+          "2.5"
+        ],
         "CIS": "7.3.3",
         "SCuBA": "",
         "NIST": "CM-7",
@@ -2478,7 +2662,7 @@
         "MITRE": [
           "T1195"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
         "SOC2": "CC6.3, CC8.1",
         "PCIDSS": "Req 6.4.3",
         "ISO27001": "A.5.23, A.8.19"
@@ -2489,7 +2673,7 @@
       "ControlId": "SPO-2.4",
       "Title": "Custom Script Disabled on SharePoint Sites",
       "Description": "Custom script execution is disabled on personal and all SharePoint sites.",
-      "BusinessRisk": "Custom scripts enable JavaScript injection into SharePoint pages \u2014 XSS, credential harvesting, and data exfiltration.",
+      "BusinessRisk": "Custom scripts enable JavaScript injection into SharePoint pages — XSS, credential harvesting, and data exfiltration.",
       "Severity": "High",
       "Workload": "SPO",
       "Category": "Collaboration",
@@ -2498,14 +2682,16 @@
       "EvaluatorFunction": "Test-NRGControlSPOCustomScript",
       "Remediation": "Set-SPOSite -DenyAddAndCustomizePages 1 (applies to all sites)",
       "References": {
-        "CISControls": ["2.7"],
+        "CISControls": [
+          "2.7"
+        ],
         "CIS": "7.3.4",
         "NIST": "SC-18, SI-3",
         "CMMC": "SI.L1-3.14.2",
         "MITRE": [
           "T1059"
         ],
-        "HIPAA": "\u00a7164.312(c)(1), \u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.312(c)(1), §164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8, CC8.1",
         "PCIDSS": "Req 6.4.1",
         "ISO27001": "A.8.28"
@@ -2515,7 +2701,7 @@
     {
       "ControlId": "SPO-2.5",
       "Title": "Third-Party Cloud Storage Connectors Disabled",
-      "Description": "Third-party cloud storage providers (Dropbox, Box, Google Drive, ShareFile) are disabled so corporate files cannot be moved into storage the tenant does not control or audit. Verified against the Teams client configuration, which is the connector surface exposed to PowerShell; the Microsoft 365 admin center \u0022Third-party storage services\u0022 toggle is not readable via API and remains a manual check.",
+      "Description": "Third-party cloud storage providers (Dropbox, Box, Google Drive, ShareFile) are disabled so corporate files cannot be moved into storage the tenant does not control or audit. Verified against the Teams client configuration, which is the connector surface exposed to PowerShell; the Microsoft 365 admin center \"Third-party storage services\" toggle is not readable via API and remains a manual check.",
       "BusinessRisk": "Third-party storage integration allows organizational data to move to unmanaged cloud services outside DLP policy coverage.",
       "Severity": "Medium",
       "Workload": "SPO",
@@ -2525,7 +2711,9 @@
       "EvaluatorFunction": "Test-NRGControlSPO3PStorage",
       "Remediation": "Disable the connectors: Set-CsTeamsClientConfiguration -Identity Global -AllowDropBox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false. Then confirm the separate Microsoft 365 admin center setting: admin.microsoft.com > Settings > Org settings > Services > Third-party storage services > off.",
       "References": {
-        "CISControls": ["3.3"],
+        "CISControls": [
+          "3.3"
+        ],
         "CIS": "7.3.5",
         "SCuBA": "",
         "NIST": "AC-4",
@@ -2534,7 +2722,7 @@
           "T1048",
           "T1567"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.312(e)(1)",
+        "HIPAA": "§164.308(a)(4)(ii)(B), §164.312(e)(1)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.5.23"
@@ -2545,7 +2733,7 @@
       "ControlId": "SPO-2.6",
       "Title": "Email Attestation Required for Sharing",
       "Description": "External users must verify their email address before accessing shared SharePoint content.",
-      "BusinessRisk": "Without email attestation, anonymous link recipients have no identity verification \u2014 links shared to wrong address are accessed by unintended parties.",
+      "BusinessRisk": "Without email attestation, anonymous link recipients have no identity verification — links shared to wrong address are accessed by unintended parties.",
       "Severity": "Medium",
       "Workload": "SPO",
       "Category": "Collaboration",
@@ -2554,7 +2742,9 @@
       "EvaluatorFunction": "Test-NRGControlSPOEmailAttestation",
       "Remediation": "Set-SPOTenant -EmailAttestationRequired $true -EmailAttestationReAuthDays 30",
       "References": {
-        "CISControls": ["3.3"],
+        "CISControls": [
+          "3.3"
+        ],
         "CIS": "7.2.4",
         "SCuBA": "",
         "NIST": "IA-3, AC-3",
@@ -2562,7 +2752,7 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(C), \u00a7164.312(d)",
+        "HIPAA": "§164.308(a)(4)(ii)(C), §164.312(d)",
         "SOC2": "CC6.2",
         "PCIDSS": "Req 8.3",
         "ISO27001": "A.5.17, A.5.18"
@@ -2582,7 +2772,9 @@
       "EvaluatorFunction": "Test-NRGControlSPOReauth",
       "Remediation": "Set-SPOTenant -EmailAttestationReAuthDays 30",
       "References": {
-        "CISControls": ["6.2"],
+        "CISControls": [
+          "6.2"
+        ],
         "CIS": "7.2.5",
         "NIST": "AC-12",
         "CMMC": "AC.L2-3.1.11",
@@ -2590,7 +2782,7 @@
           "T1078"
         ],
         "SCuBA": "MS.SHAREPOINT.3.3v1",
-        "HIPAA": "\u00a7164.312(d)",
+        "HIPAA": "§164.312(d)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.3",
         "ISO27001": "A.5.17"
@@ -2610,7 +2802,10 @@
       "EvaluatorFunction": "Test-NRGControlSPODomainSync",
       "Remediation": "Set-SPOTenant -AllowedDomainGuidsForSyncApp (Get-SPOTenant).TenantId",
       "References": {
-        "CISControls": ["3.3", "13.5"],
+        "CISControls": [
+          "3.3",
+          "13.5"
+        ],
         "CIS": "7.2.8",
         "SCuBA": "",
         "NIST": "AC-4, SC-28",
@@ -2618,7 +2813,7 @@
         "MITRE": [
           "T1005"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(A), \u00a7164.310(d)(1)",
+        "HIPAA": "§164.308(a)(4)(ii)(A), §164.310(d)(1)",
         "SOC2": "CC6.6, CC6.7",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.5.23, A.8.1"
@@ -2638,7 +2833,9 @@
       "EvaluatorFunction": "Test-NRGControlTeamsSkype",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowPublicUsers $false",
       "References": {
-        "CISControls": ["4.8"],
+        "CISControls": [
+          "4.8"
+        ],
         "CIS": "8.2.4",
         "NIST": "AC-17",
         "CMMC": "AC.L2-3.1.12",
@@ -2646,7 +2843,7 @@
           "T1566",
           "T1534"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.312(e)(1)",
+        "HIPAA": "§164.308(a)(4)(ii)(B), §164.312(e)(1)",
         "SOC2": "CC6.6",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.5.23"
@@ -2666,7 +2863,9 @@
       "EvaluatorFunction": "Test-NRGControlTeamsUnverifiedApps",
       "Remediation": "Teams Admin Center > Teams apps > Permission policies > Block all apps from unknown publishers.",
       "References": {
-        "CISControls": ["2.5"],
+        "CISControls": [
+          "2.5"
+        ],
         "CIS": "8.3.1",
         "SCuBA": "MS.TEAMS.5.2v2",
         "NIST": "CM-7",
@@ -2674,7 +2873,7 @@
         "MITRE": [
           "T1195"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(4)(ii)(B), §164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8, CC8.1",
         "PCIDSS": "Req 6.4.3",
         "ISO27001": "A.5.23, A.8.19"
@@ -2694,7 +2893,9 @@
       "EvaluatorFunction": "Test-NRGControlTeams3PStorage",
       "Remediation": "Set-CsTeamsClientConfiguration -AllowDropbox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false",
       "References": {
-        "CISControls": ["4.8"],
+        "CISControls": [
+          "4.8"
+        ],
         "CIS": "8.3.2",
         "SCuBA": "",
         "NIST": "AC-4",
@@ -2704,7 +2905,7 @@
           "T1567"
         ],
         "SOC2": "CC6.7",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.312(e)(1)",
+        "HIPAA": "§164.308(a)(4)(ii)(B), §164.312(e)(1)",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.5.23"
       },
@@ -2713,7 +2914,7 @@
     {
       "ControlId": "TMS-2.4",
       "Title": "Teams Email Integration Disabled",
-      "Description": "Email into Teams channels is disabled \u2014 channel email addresses cannot receive inbound email.",
+      "Description": "Email into Teams channels is disabled — channel email addresses cannot receive inbound email.",
       "BusinessRisk": "Channel email addresses bypass email security controls. Phishing payloads can be injected directly into Teams without going through EOP.",
       "Severity": "High",
       "Workload": "TMS",
@@ -2723,7 +2924,9 @@
       "EvaluatorFunction": "Test-NRGControlTeamsEmailIntegration",
       "Remediation": "Set-CsTeamsClientConfiguration -AllowEmailIntoChannels $false",
       "References": {
-        "CISControls": ["4.8"],
+        "CISControls": [
+          "4.8"
+        ],
         "CIS": "8.3.3",
         "NIST": "SI-8",
         "CMMC": "SI.L2-3.14.7",
@@ -2731,7 +2934,7 @@
           "T1566"
         ],
         "SCuBA": "MS.TEAMS.4.1v1",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.312(e)(1)",
+        "HIPAA": "§164.308(a)(4)(ii)(B), §164.312(e)(1)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 4.2",
         "ISO27001": "A.5.23"
@@ -2751,7 +2954,9 @@
       "EvaluatorFunction": "Test-NRGControlTeamsRecordingExternal",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowCloudRecordingForCalls $false for externally-scoped policies",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "8.5.4",
         "SCuBA": "",
         "NIST": "AU-9",
@@ -2759,7 +2964,7 @@
         "MITRE": [
           "T1113"
         ],
-        "HIPAA": "\u00a7164.502, \u00a7164.312(e)(1)",
+        "HIPAA": "§164.502, §164.312(e)(1)",
         "SOC2": "C1.1",
         "PCIDSS": "Req 3.4",
         "ISO27001": "A.8.10, A.8.12"
@@ -2770,16 +2975,18 @@
       "ControlId": "TMS-2.6",
       "Title": "Broad Channel Meeting Invite Restricted",
       "Description": "Channel meeting scheduling that invites all channel members is restricted or requires deliberate selection.",
-      "BusinessRisk": "Channel meetings can inadvertently include all members \u2014 including external guests \u2014 in sensitive meeting invites.",
+      "BusinessRisk": "Channel meetings can inadvertently include all members — including external guests — in sensitive meeting invites.",
       "Severity": "Low",
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsBroadChannel",
-      "Remediation": "Review AllowChannelMeetingScheduling in meeting policy \u2014 restrict if channels have broad guest membership.",
+      "Remediation": "Review AllowChannelMeetingScheduling in meeting policy — restrict if channels have broad guest membership.",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "8.5.5",
         "SCuBA": "",
         "NIST": "AC-3",
@@ -2787,7 +2994,7 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
         "SOC2": "CC6.2",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.5.18"
@@ -2807,7 +3014,9 @@
       "EvaluatorFunction": "Test-NRGControlTeamsExternalChat",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowFederatedUsers $false or restrict to allowlist.",
       "References": {
-        "CISControls": ["4.8"],
+        "CISControls": [
+          "4.8"
+        ],
         "CIS": "8.2.5",
         "SCuBA": "MS.TEAMS.2.3v2",
         "NIST": "AC-17",
@@ -2816,7 +3025,7 @@
           "T1566",
           "T1534"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B), \u00a7164.312(e)(1)",
+        "HIPAA": "§164.308(a)(4)(ii)(B), §164.312(e)(1)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 4.2",
         "ISO27001": "A.5.23"
@@ -2836,7 +3045,9 @@
       "EvaluatorFunction": "Test-NRGControlTeamsPSTN",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowPSTNUsersToBypassLobby $false",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "8.5.6",
         "NIST": "AC-3, IA-3",
         "CMMC": "AC.L1-3.1.1",
@@ -2844,7 +3055,7 @@
           "T1078"
         ],
         "SCuBA": "MS.TEAMS.1.5v1",
-        "HIPAA": "\u00a7164.312(a)(1)",
+        "HIPAA": "§164.312(a)(1)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 7.2",
         "ISO27001": "A.5.18"
@@ -2864,7 +3075,9 @@
       "EvaluatorFunction": "Test-NRGControlPurviewAuditSearch",
       "Remediation": "Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true",
       "References": {
-        "CISControls": ["8.11"],
+        "CISControls": [
+          "8.11"
+        ],
         "CIS": "3.1.1",
         "SCuBA": "",
         "NIST": "AU-2, AU-12",
@@ -2874,7 +3087,7 @@
         ],
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
-        "HIPAA": "\u00a7164.312(b)",
+        "HIPAA": "§164.312(b)",
         "PCIDSS": "Req 10.7"
       },
       "LicenseRequirement": "Included (M365 Business Standard+)"
@@ -2892,7 +3105,9 @@
       "EvaluatorFunction": "Test-NRGControlPurviewCommCompliance",
       "Remediation": "Purview > Communication compliance > Create policy. Requires E5 Compliance.",
       "References": {
-        "CISControls": ["3.14"],
+        "CISControls": [
+          "3.14"
+        ],
         "CIS": "3.2.1",
         "SCuBA": "",
         "NIST": "AU-12",
@@ -2900,7 +3115,7 @@
         "MITRE": [
           "T1114"
         ],
-        "HIPAA": "\u00a7164.308(a)(1)(ii)(D), \u00a7164.502(j)",
+        "HIPAA": "§164.308(a)(1)(ii)(D), §164.502(j)",
         "SOC2": "CC7.2",
         "PCIDSS": "Req 12.10.1",
         "ISO27001": "A.5.34, A.8.16"
@@ -2920,7 +3135,9 @@
       "EvaluatorFunction": "Test-NRGControlPurviewInfoBarriers",
       "Remediation": "Set-PolicyConfig -InformationBarrierMode MultiSegment. Requires E5 Compliance.",
       "References": {
-        "CISControls": ["3.12"],
+        "CISControls": [
+          "3.12"
+        ],
         "CIS": "3.2.2",
         "SCuBA": "",
         "NIST": "AC-4",
@@ -2928,7 +3145,7 @@
         "MITRE": [
           "T1048"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(A)",
+        "HIPAA": "§164.308(a)(4)(ii)(A)",
         "SOC2": "C1.1, CC6.1",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.5.18, A.8.3"
@@ -2948,7 +3165,9 @@
       "EvaluatorFunction": "Test-NRGControlPurviewInsiderRisk",
       "Remediation": "Purview > Insider risk management > Create policy (Departing user data theft, Data leaks). Requires E5 Compliance.",
       "References": {
-        "CISControls": ["3.14"],
+        "CISControls": [
+          "3.14"
+        ],
         "CIS": "3.2.3",
         "SCuBA": "",
         "NIST": "SI-4",
@@ -2957,7 +3176,7 @@
           "T1005",
           "T1048"
         ],
-        "HIPAA": "\u00a7164.308(a)(6)",
+        "HIPAA": "§164.308(a)(6)",
         "SOC2": "CC7.2, CC7.3",
         "PCIDSS": "Req 12.10",
         "ISO27001": "A.6.8, A.8.16"
@@ -2977,7 +3196,9 @@
       "EvaluatorFunction": "Test-NRGControlPurviewRetention",
       "Remediation": "Purview > Data lifecycle management > Retention policies. Create policies for Exchange, SharePoint, OneDrive, Teams.",
       "References": {
-        "CISControls": ["3.4"],
+        "CISControls": [
+          "3.4"
+        ],
         "CIS": "3.3.2",
         "SCuBA": "",
         "NIST": "AU-11",
@@ -2986,7 +3207,7 @@
           "T1070.008"
         ],
         "SOC2": "A1.2, CC2.1",
-        "HIPAA": "\u00a7164.316(b)(2)(i), \u00a7164.308(a)(7)(ii)(A)",
+        "HIPAA": "§164.316(b)(2)(i), §164.308(a)(7)(ii)(A)",
         "PCIDSS": "Req 10.5",
         "ISO27001": "A.8.10, A.8.13"
       },
@@ -3005,14 +3226,16 @@
       "EvaluatorFunction": "Test-NRGControlPurviewAutoLabel",
       "Remediation": "Purview > Information protection > Auto-labeling > Create policy for sensitive info types (SSN, credit card, etc.).",
       "References": {
-        "CISControls": ["3.7"],
+        "CISControls": [
+          "3.7"
+        ],
         "CIS": "3.4.2",
         "NIST": "AC-16, SC-28",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
           "T1005"
         ],
-        "HIPAA": "\u00a7164.502(b), \u00a7164.312(c)(1)",
+        "HIPAA": "§164.502(b), §164.312(c)(1)",
         "SOC2": "C1.1",
         "PCIDSS": "Req 3.4",
         "ISO27001": "A.8.11"
@@ -3032,7 +3255,10 @@
       "EvaluatorFunction": "Test-NRGControlIntuneEDR",
       "Remediation": "Intune > Endpoint security > Endpoint detection and response > Create policy for Windows.",
       "References": {
-        "CISControls": ["10.7", "13.2"],
+        "CISControls": [
+          "10.7",
+          "13.2"
+        ],
         "CIS": "4.4.2",
         "SCuBA": "",
         "NIST": "SI-3, SI-4",
@@ -3043,7 +3269,7 @@
         ],
         "ISO27001": "A.8.7, A.8.16",
         "PCIDSS": "Req 11.5",
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B), \u00a7164.308(a)(6)",
+        "HIPAA": "§164.308(a)(5)(ii)(B), §164.308(a)(6)",
         "SOC2": "CC6.8, CC7.2, CC7.3"
       },
       "LicenseRequirement": "Microsoft Defender for Endpoint Plan 2"
@@ -3061,7 +3287,9 @@
       "EvaluatorFunction": "Test-NRGControlIntuneASR",
       "Remediation": "Intune > Endpoint security > Attack surface reduction > Create ASR rules policy. Enable at minimum: Block Office macros, Block credential stealing, Block JS/VBS launching executables.",
       "References": {
-        "CISControls": ["10.5"],
+        "CISControls": [
+          "10.5"
+        ],
         "CIS": "4.4.3",
         "SCuBA": "",
         "NIST": "SI-3, CM-7",
@@ -3070,7 +3298,7 @@
           "T1059",
           "T1003"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.4",
         "ISO27001": "A.8.7"
@@ -3090,7 +3318,9 @@
       "EvaluatorFunction": "Test-NRGControlIntuneFirewall",
       "Remediation": "Intune > Endpoint security > Firewall > Create Windows Firewall policy. Enable domain, private, and public profiles.",
       "References": {
-        "CISControls": ["4.5"],
+        "CISControls": [
+          "4.5"
+        ],
         "CIS": "4.4.4",
         "SCuBA": "",
         "NIST": "SC-7",
@@ -3099,7 +3329,7 @@
           "T1021",
           "T1590"
         ],
-        "HIPAA": "\u00a7164.312(a)(1), \u00a7164.312(e)(1)",
+        "HIPAA": "§164.312(a)(1), §164.312(e)(1)",
         "SOC2": "CC6.6",
         "PCIDSS": "Req 1.2",
         "ISO27001": "A.8.20, A.8.21"
@@ -3119,7 +3349,9 @@
       "EvaluatorFunction": "Test-NRGControlIntuneMacEncryption",
       "Remediation": "Intune > Devices > Compliance > macOS > Create policy > System Security > Require encryption = Require.",
       "References": {
-        "CISControls": ["3.6"],
+        "CISControls": [
+          "3.6"
+        ],
         "CIS": "4.2.1",
         "SCuBA": "",
         "NIST": "SC-28",
@@ -3128,7 +3360,7 @@
           "T1005",
           "T1025"
         ],
-        "HIPAA": "\u00a7164.312(a)(2)(iv), \u00a7164.310(d)(1)",
+        "HIPAA": "§164.312(a)(2)(iv), §164.310(d)(1)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 3.5.1",
         "ISO27001": "A.8.1, A.8.24"
@@ -3148,7 +3380,9 @@
       "EvaluatorFunction": "Test-NRGControlIntuneWindowsUpdate",
       "Remediation": "Intune > Devices > Windows update rings > Create update ring with feature and quality update schedules.",
       "References": {
-        "CISControls": ["7.3"],
+        "CISControls": [
+          "7.3"
+        ],
         "CIS": "4.5.1",
         "SCuBA": "",
         "NIST": "SI-2",
@@ -3157,7 +3391,7 @@
           "T1190",
           "T1068"
         ],
-        "HIPAA": "\u00a7164.308(a)(1)(ii)(B), \u00a7164.308(a)(8)",
+        "HIPAA": "§164.308(a)(1)(ii)(B), §164.308(a)(8)",
         "SOC2": "CC7.1, CC8.1",
         "PCIDSS": "Req 6.3.3",
         "ISO27001": "A.8.8"
@@ -3177,7 +3411,9 @@
       "EvaluatorFunction": "Test-NRGControlAADPIMAlerts",
       "Remediation": "PIM > Alerts > Review and enable: Roles assigned outside PIM, Redundant assignments, Stale assignments, Too many GA admins.",
       "References": {
-        "CISControls": ["13.1"],
+        "CISControls": [
+          "13.1"
+        ],
         "CIS": "5.1.3.5",
         "SCuBA": "MS.AAD.7.7v1",
         "NIST": "AC-6(9), AU-12",
@@ -3185,7 +3421,7 @@
         "MITRE": [
           "T1078.004"
         ],
-        "HIPAA": "\u00a7164.308(a)(1)(ii)(D), \u00a7164.312(b)",
+        "HIPAA": "§164.308(a)(1)(ii)(D), §164.312(b)",
         "SOC2": "CC7.2",
         "PCIDSS": "Req 10.2",
         "ISO27001": "A.8.15, A.8.16"
@@ -3205,7 +3441,9 @@
       "EvaluatorFunction": "Test-NRGControlAADAccessReviews",
       "Remediation": "PIM > Microsoft Entra roles > Access reviews > Create recurring quarterly review for Global Admin, Privileged Role Admin, Security Admin.",
       "References": {
-        "CISControls": ["6.8"],
+        "CISControls": [
+          "6.8"
+        ],
         "CIS": "5.1.4.1",
         "NIST": "AC-2(9)",
         "CMMC": "AC.L1-3.1.2",
@@ -3214,7 +3452,7 @@
         ],
         "ISO27001": "A.5.18, A.8.2",
         "SOC2": "CC6.3",
-        "HIPAA": "\u00a7164.308(a)(4)",
+        "HIPAA": "§164.308(a)(4)",
         "PCIDSS": "Req 7.2.4"
       },
       "LicenseRequirement": "Entra ID P2"
@@ -3232,7 +3470,9 @@
       "EvaluatorFunction": "Test-NRGControlAADAuthenticatorNumberMatch",
       "Remediation": "Entra ID > Security > Authentication methods > Microsoft Authenticator > Configure > Require number matching = Enabled.",
       "References": {
-        "CISControls": ["6.3"],
+        "CISControls": [
+          "6.3"
+        ],
         "CIS": "5.2.1.1",
         "SCuBA": "MS.AAD.3.3v2",
         "NIST": "IA-2(1)",
@@ -3241,7 +3481,7 @@
           "T1621"
         ],
         "ISO27001": "A.5.17, A.8.5",
-        "HIPAA": "\u00a7164.312(d)",
+        "HIPAA": "§164.312(d)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.4"
       },
@@ -3260,7 +3500,10 @@
       "EvaluatorFunction": "Test-NRGControlAADPasswordless",
       "Remediation": "Entra ID > Security > Authentication methods > FIDO2 security key > Enable. Consider Windows Hello for Business via Intune policy.",
       "References": {
-        "CISControls": ["6.5", "6.3"],
+        "CISControls": [
+          "6.5",
+          "6.3"
+        ],
         "CIS": "5.2.1.2",
         "NIST": "IA-2(1), IA-5",
         "CMMC": "IA.L2-3.5.3",
@@ -3269,7 +3512,7 @@
           "T1110"
         ],
         "SCuBA": "MS.AAD.3.1v1",
-        "HIPAA": "\u00a7164.312(d)",
+        "HIPAA": "§164.312(d)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.4",
         "ISO27001": "A.5.17, A.8.5"
@@ -3289,7 +3532,9 @@
       "EvaluatorFunction": "Test-NRGControlAADIdentityProtection",
       "Remediation": "CA policy: Condition = User risk = High, Grant = Require password change. Requires Entra P2.",
       "References": {
-        "CISControls": ["6.7"],
+        "CISControls": [
+          "6.7"
+        ],
         "CIS": "5.2.2.7",
         "SCuBA": "MS.AAD.2.2v1",
         "NIST": "IR-4, AC-7",
@@ -3298,7 +3543,7 @@
           "T1078",
           "T1110"
         ],
-        "HIPAA": "\u00a7164.308(a)(1)(ii)(D), \u00a7164.308(a)(6)",
+        "HIPAA": "§164.308(a)(1)(ii)(D), §164.308(a)(6)",
         "SOC2": "CC7.2, CC7.3",
         "PCIDSS": "Req 10.7",
         "ISO27001": "A.5.27, A.8.16"
@@ -3318,7 +3563,9 @@
       "EvaluatorFunction": "Test-NRGControlAADPrivCloudOnly",
       "Remediation": "Create dedicated .admin or .onmicrosoft.com accounts for all privileged role holders. Remove privileged roles from on-premises synced accounts.",
       "References": {
-        "CISControls": ["5.4"],
+        "CISControls": [
+          "5.4"
+        ],
         "CIS": "5.1.1.1",
         "SCuBA": "MS.AAD.7.3v1",
         "NIST": "AC-6(5)",
@@ -3328,7 +3575,7 @@
         ],
         "ISO27001": "A.8.2",
         "SOC2": "CC6.1",
-        "HIPAA": "\u00a7164.312(a)(2)(i)",
+        "HIPAA": "§164.312(a)(2)(i)",
         "PCIDSS": "Req 8.2.1"
       },
       "LicenseRequirement": "Included (all plans)"
@@ -3337,7 +3584,7 @@
       "ControlId": "AAD-10.3",
       "Title": "Break-Glass Account Sign-In Monitoring",
       "Description": "Alerts are configured to notify immediately if break-glass accounts are used.",
-      "BusinessRisk": "Break-glass accounts bypass all CA policies. Any use should be treated as an incident \u2014 either a genuine emergency or unauthorized access.",
+      "BusinessRisk": "Break-glass accounts bypass all CA policies. Any use should be treated as an incident — either a genuine emergency or unauthorized access.",
       "Severity": "High",
       "Workload": "AAD",
       "Category": "Identity",
@@ -3346,14 +3593,16 @@
       "EvaluatorFunction": "Test-NRGControlAADBreakGlassMonitoring",
       "Remediation": "Create a Sentinel or Defender XDR alert rule for sign-in from break-glass account UPNs. Notify SOC immediately on any sign-in.",
       "References": {
-        "CISControls": ["13.1"],
+        "CISControls": [
+          "13.1"
+        ],
         "CIS": "5.1.2.4",
         "NIST": "AU-2, IR-4",
         "CMMC": "IR.L2-3.6.1",
         "MITRE": [
           "T1078.004"
         ],
-        "HIPAA": "\u00a7164.308(a)(1)(ii)(D), \u00a7164.312(b)",
+        "HIPAA": "§164.308(a)(1)(ii)(D), §164.312(b)",
         "SOC2": "CC7.2",
         "PCIDSS": "Req 10.2.5",
         "ISO27001": "A.8.15"
@@ -3373,7 +3622,9 @@
       "EvaluatorFunction": "Test-NRGControlAADSignInFrequency",
       "Remediation": "CA policy: Session controls > Sign-in frequency > set to 1 hour for privileged users, 8 hours for standard users.",
       "References": {
-        "CISControls": ["4.3"],
+        "CISControls": [
+          "4.3"
+        ],
         "CIS": "5.2.3.1",
         "SCuBA": "",
         "NIST": "AC-12",
@@ -3382,7 +3633,7 @@
           "T1550.001",
           "T1539"
         ],
-        "HIPAA": "\u00a7164.312(a)(2)(iii)",
+        "HIPAA": "§164.312(a)(2)(iii)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.2.8",
         "ISO27001": "A.5.17, A.8.3"
@@ -3402,14 +3653,16 @@
       "EvaluatorFunction": "Test-NRGControlEXOAuditAgeLimit",
       "Remediation": "Get-Mailbox -ResultSize Unlimited | Set-Mailbox -AuditLogAgeLimit 180",
       "References": {
-        "CISControls": ["8.10"],
+        "CISControls": [
+          "8.10"
+        ],
         "CIS": "2.1.3",
         "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.2",
         "MITRE": [
           "T1070.008"
         ],
-        "HIPAA": "\u00a7164.312(b), \u00a7164.316(b)(2)(i)",
+        "HIPAA": "§164.312(b), §164.316(b)(2)(i)",
         "SCuBA": "MS.DEFENDER.6.3v1",
         "SOC2": "CC7.2, A1.2",
         "PCIDSS": "Req 10.5",
@@ -3430,7 +3683,10 @@
       "EvaluatorFunction": "Test-NRGControlEXOAdminAudit",
       "Remediation": "Set-AdminAuditLogConfig -AdminAuditLogEnabled $true",
       "References": {
-        "CISControls": ["8.2", "8.5"],
+        "CISControls": [
+          "8.2",
+          "8.5"
+        ],
         "CIS": "3.1.1",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
@@ -3438,7 +3694,7 @@
           "T1070.008"
         ],
         "SCuBA": "MS.DEFENDER.6.1v1",
-        "HIPAA": "\u00a7164.312(b)",
+        "HIPAA": "§164.312(b)",
         "SOC2": "CC7.2, CC8.1",
         "PCIDSS": "Req 10.2",
         "ISO27001": "A.8.15, A.8.18"
@@ -3458,7 +3714,10 @@
       "EvaluatorFunction": "Test-NRGControlEXOSafeAttachmentsSPO",
       "Remediation": "Defender portal > Policies > Safe Attachments > Global settings > Enable Defender for Office 365 for SharePoint, OneDrive, and Teams.",
       "References": {
-        "CISControls": ["9.7", "10.1"],
+        "CISControls": [
+          "9.7",
+          "10.1"
+        ],
         "CIS": "2.3.4",
         "SCuBA": "MS.DEFENDER.1.1v1",
         "NIST": "SI-3",
@@ -3467,7 +3726,7 @@
           "T1566.001",
           "T1204.002"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.2",
         "ISO27001": "A.8.7"
@@ -3487,7 +3746,9 @@
       "EvaluatorFunction": "Test-NRGControlEXOAntiSpamInbound",
       "Remediation": "Set-HostedContentFilterPolicy -Identity Default -SpamAction MoveToJmf -BulkThreshold 6 -ZapEnabled $true",
       "References": {
-        "CISControls": ["9.7"],
+        "CISControls": [
+          "9.7"
+        ],
         "CIS": "2.1.7",
         "NIST": "SI-8",
         "CMMC": "SI.L1-3.14.2",
@@ -3495,7 +3756,7 @@
           "T1566"
         ],
         "SCuBA": "MS.DEFENDER.1.2v1",
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.4",
         "ISO27001": "A.8.7"
@@ -3515,7 +3776,9 @@
       "EvaluatorFunction": "Test-NRGControlDefenderUnauthSender",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -EnableUnauthenticatedSender $true",
       "References": {
-        "CISControls": ["9.7"],
+        "CISControls": [
+          "9.7"
+        ],
         "CIS": "2.1.7",
         "NIST": "SI-3",
         "CMMC": "SI.L1-3.14.2",
@@ -3523,7 +3786,7 @@
           "T1566",
           "T1036.005"
         ],
-        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "HIPAA": "§164.312(e)(2)(i)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 5.4.1",
         "ISO27001": "A.8.23"
@@ -3534,7 +3797,7 @@
       "ControlId": "DEF-3.2",
       "Title": "Via Tag Enabled in Anti-Phishing Policy",
       "Description": "Anti-phishing policy shows the via tag when a sender uses a relay service.",
-      "BusinessRisk": "Relay-based spoofing is harder to detect without the via tag \u2014 attackers use legitimate relays to send spoofed email that passes SPF.",
+      "BusinessRisk": "Relay-based spoofing is harder to detect without the via tag — attackers use legitimate relays to send spoofed email that passes SPF.",
       "Severity": "Low",
       "Workload": "DEF",
       "Category": "Email",
@@ -3543,7 +3806,9 @@
       "EvaluatorFunction": "Test-NRGControlDefenderViaTag",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -EnableViaTag $true",
       "References": {
-        "CISControls": ["9.7"],
+        "CISControls": [
+          "9.7"
+        ],
         "CIS": "2.1.7",
         "NIST": "SI-8",
         "CMMC": "SI.L2-3.14.7",
@@ -3551,7 +3816,7 @@
           "T1566",
           "T1036.005"
         ],
-        "HIPAA": "\u00a7164.312(e)(2)(i)",
+        "HIPAA": "§164.312(e)(2)(i)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 5.4.1",
         "ISO27001": "A.8.23"
@@ -3571,7 +3836,9 @@
       "EvaluatorFunction": "Test-NRGControlDefenderMDCA",
       "Remediation": "Defender XDR > Settings > Cloud Apps > Connected apps > Office 365 > Connect.",
       "References": {
-        "CISControls": ["13.1"],
+        "CISControls": [
+          "13.1"
+        ],
         "CIS": "2.4.1",
         "SCuBA": "",
         "NIST": "SI-4",
@@ -3580,7 +3847,7 @@
           "T1528",
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(1)(ii)(D), \u00a7164.312(b)",
+        "HIPAA": "§164.308(a)(1)(ii)(D), §164.312(b)",
         "SOC2": "CC7.2, CC6.6",
         "PCIDSS": "Req 10.4, Req 11.5",
         "ISO27001": "A.5.23, A.8.16"
@@ -3600,7 +3867,10 @@
       "EvaluatorFunction": "Test-NRGControlDefenderAlertNotification",
       "Remediation": "Defender portal > Settings > Email notifications > Create notification rule for High and Critical severity alerts.",
       "References": {
-        "CISControls": ["13.1", "8.11"],
+        "CISControls": [
+          "13.1",
+          "8.11"
+        ],
         "CIS": "3.1.3",
         "NIST": "IR-6, AU-6",
         "CMMC": "IR.L2-3.6.1",
@@ -3608,7 +3878,7 @@
           "T1562.008"
         ],
         "SCuBA": "MS.DEFENDER.5.2v1",
-        "HIPAA": "\u00a7164.308(a)(6)",
+        "HIPAA": "§164.308(a)(6)",
         "SOC2": "CC7.3, CC7.4",
         "PCIDSS": "Req 12.10.1",
         "ISO27001": "A.5.24, A.6.8"
@@ -3628,7 +3898,10 @@
       "EvaluatorFunction": "Test-NRGControlSPOSiteAdmins",
       "Remediation": "Review site admins: Get-SPOSite -Limit ALL | ForEach-Object { Get-SPOUser -Site $_.Url -Group 'Site Collection Administrators' }",
       "References": {
-        "CISControls": ["5.4", "6.8"],
+        "CISControls": [
+          "5.4",
+          "6.8"
+        ],
         "CIS": "7.1.1",
         "SCuBA": "",
         "NIST": "AC-2(9)",
@@ -3636,7 +3909,7 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)",
+        "HIPAA": "§164.308(a)(4)",
         "SOC2": "CC6.3",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.5.18, A.8.2"
@@ -3656,7 +3929,9 @@
       "EvaluatorFunction": "Test-NRGControlSPOSharingNotifications",
       "Remediation": "Set-SPOTenant -NotifyOwnersWhenItemsReshared $true",
       "References": {
-        "CISControls": ["3.14"],
+        "CISControls": [
+          "3.14"
+        ],
         "CIS": "7.2.9",
         "SCuBA": "",
         "NIST": "AC-3, AU-12",
@@ -3664,7 +3939,7 @@
         "MITRE": [
           "T1213.002"
         ],
-        "HIPAA": "\u00a7164.308(a)(1)(ii)(D)",
+        "HIPAA": "§164.308(a)(1)(ii)(D)",
         "SOC2": "CC7.2",
         "PCIDSS": "Req 10.7",
         "ISO27001": "A.8.16"
@@ -3682,9 +3957,12 @@
       "Automated": true,
       "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-NRGControlSPOVersionHistory",
-      "Remediation": "Verify via SharePoint Admin Center > Settings that versioning is enabled and version limits are adequate (\u2265100 versions).",
+      "Remediation": "Verify via SharePoint Admin Center > Settings that versioning is enabled and version limits are adequate (≥100 versions).",
       "References": {
-        "CISControls": ["11.1", "11.2"],
+        "CISControls": [
+          "11.1",
+          "11.2"
+        ],
         "CIS": "7.3.6",
         "SCuBA": "",
         "NIST": "CP-9, CP-10",
@@ -3692,7 +3970,7 @@
         "MITRE": [
           "T1486"
         ],
-        "HIPAA": "\u00a7164.312(c)(1), \u00a7164.308(a)(7)(ii)(A)",
+        "HIPAA": "§164.312(c)(1), §164.308(a)(7)(ii)(A)",
         "SOC2": "A1.2",
         "PCIDSS": "Req 10.5",
         "ISO27001": "A.8.13"
@@ -3703,7 +3981,7 @@
       "ControlId": "SPO-3.4",
       "Title": "SharePoint Guest Access Expiration Required",
       "Description": "External guest access to SharePoint requires periodic re-authentication and is configured to expire.",
-      "BusinessRisk": "Permanent guest access accumulates over time \u2014 departed vendors and ex-clients retain access to organizational data indefinitely.",
+      "BusinessRisk": "Permanent guest access accumulates over time — departed vendors and ex-clients retain access to organizational data indefinitely.",
       "Severity": "Medium",
       "Workload": "SPO",
       "Category": "Collaboration",
@@ -3712,14 +3990,17 @@
       "EvaluatorFunction": "Test-NRGControlSPOGuestExpiry",
       "Remediation": "Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60",
       "References": {
-        "CISControls": ["6.2", "3.4"],
+        "CISControls": [
+          "6.2",
+          "3.4"
+        ],
         "CIS": "7.2.6",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(C)",
+        "HIPAA": "§164.308(a)(4)(ii)(C)",
         "SOC2": "CC6.3",
         "PCIDSS": "Req 8.2.4",
         "ISO27001": "A.5.18"
@@ -3739,7 +4020,9 @@
       "EvaluatorFunction": "Test-NRGControlTeamsWatermarks",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowWatermarkForScreenSharing $true",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "8.5.7",
         "SCuBA": "",
         "NIST": "AC-4",
@@ -3747,7 +4030,7 @@
         "MITRE": [
           "T1113"
         ],
-        "HIPAA": "\u00a7164.502(b), \u00a7164.312(c)(1)",
+        "HIPAA": "§164.502(b), §164.312(c)(1)",
         "SOC2": "C1.1",
         "PCIDSS": "Req 3.4",
         "ISO27001": "A.8.11"
@@ -3757,7 +4040,7 @@
     {
       "ControlId": "TMS-3.2",
       "Title": "Auto-Admit Only Authenticated Organization Users",
-      "Description": "Teams meetings auto-admit only authenticated internal users \u2014 all others wait in lobby.",
+      "Description": "Teams meetings auto-admit only authenticated internal users — all others wait in lobby.",
       "BusinessRisk": "Auto-admitting Everyone or All Federated allows uninvited external participants to join internal meetings without any approval.",
       "Severity": "High",
       "Workload": "TMS",
@@ -3767,7 +4050,9 @@
       "EvaluatorFunction": "Test-NRGControlTeamsAutoAdmit",
       "Remediation": "Set-CsTeamsMeetingPolicy -AutoAdmittedUsers EveryoneInCompanyExcludingGuests",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "8.5.2",
         "SCuBA": "MS.TEAMS.1.3v1",
         "NIST": "AC-3, IA-3",
@@ -3775,7 +4060,7 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.312(d), \u00a7164.308(a)(4)",
+        "HIPAA": "§164.312(d), §164.308(a)(4)",
         "SOC2": "CC6.1, CC6.2",
         "PCIDSS": "Req 8.3",
         "ISO27001": "A.5.17, A.5.18"
@@ -3795,7 +4080,9 @@
       "EvaluatorFunction": "Test-NRGControlTeamsMeetingChat",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowMeetingChat EnabledExceptAnonymous",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "8.5.8",
         "SCuBA": "",
         "NIST": "AC-3",
@@ -3803,7 +4090,7 @@
         "MITRE": [
           "T1566"
         ],
-        "HIPAA": "\u00a7164.502, \u00a7164.312(a)(1)",
+        "HIPAA": "§164.502, §164.312(a)(1)",
         "SOC2": "C1.1",
         "PCIDSS": "Req 7.2",
         "ISO27001": "A.5.18"
@@ -3823,7 +4110,9 @@
       "EvaluatorFunction": "Test-NRGControlTeamsChatCopy",
       "Remediation": "Purview > DLP > Create policy targeting Teams with sensitive info types to restrict copy/paste of protected content.",
       "References": {
-        "CISControls": ["3.13"],
+        "CISControls": [
+          "3.13"
+        ],
         "CIS": "8.3.4",
         "SCuBA": "",
         "NIST": "AC-4, SC-28",
@@ -3831,7 +4120,7 @@
         "MITRE": [
           "T1048"
         ],
-        "HIPAA": "\u00a7164.312(e)(1), \u00a7164.502(b)",
+        "HIPAA": "§164.312(e)(1), §164.502(b)",
         "SOC2": "CC6.7, C1.1",
         "PCIDSS": "Req 3.4",
         "ISO27001": "A.8.12"
@@ -3851,7 +4140,10 @@
       "EvaluatorFunction": "Test-NRGControlPurviewSIEMExport",
       "Remediation": "Connect Microsoft Sentinel M365 data connector, or use Defender XDR > Settings > Microsoft Defender XDR > Audit log export.",
       "References": {
-        "CISControls": ["8.9", "8.10"],
+        "CISControls": [
+          "8.9",
+          "8.10"
+        ],
         "CIS": "3.1.3",
         "NIST": "AU-4, AU-9",
         "CMMC": "AU.L2-3.3.1",
@@ -3859,7 +4151,7 @@
           "T1562.008"
         ],
         "SCuBA": "MS.DEFENDER.5.2v1",
-        "HIPAA": "\u00a7164.312(b), \u00a7164.308(a)(6)",
+        "HIPAA": "§164.312(b), §164.308(a)(6)",
         "SOC2": "CC7.2, CC7.3",
         "PCIDSS": "Req 10.4, Req 11.5",
         "ISO27001": "A.8.15, A.8.16"
@@ -3879,7 +4171,9 @@
       "EvaluatorFunction": "Test-NRGControlPurviewEDiscovery",
       "Remediation": "Purview > Roles & scopes > eDiscovery Manager. Assign eDiscovery Manager role to compliance team members.",
       "References": {
-        "CISControls": ["3.14"],
+        "CISControls": [
+          "3.14"
+        ],
         "CIS": "3.5.1",
         "SCuBA": "",
         "NIST": "AU-11, IR-4",
@@ -3887,7 +4181,7 @@
         "MITRE": [
           "T1114"
         ],
-        "HIPAA": "\u00a7164.316, \u00a7164.524",
+        "HIPAA": "§164.316, §164.524",
         "SOC2": "CC7.4",
         "PCIDSS": "Req 12.10.5",
         "ISO27001": "A.5.33"
@@ -3915,7 +4209,7 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(8)",
+        "HIPAA": "§164.308(a)(8)",
         "SOC2": "CC4.1, CC4.2",
         "PCIDSS": "Req 12.11",
         "ISO27001": "A.5.36"
@@ -3935,7 +4229,10 @@
       "EvaluatorFunction": "Test-NRGControlPurviewSensitiveInfoTypes",
       "Remediation": "Purview > DLP > Create or edit policies > Add conditions using sensitive information types (SSN, credit card, health info, etc.).",
       "References": {
-        "CISControls": ["3.13", "3.7"],
+        "CISControls": [
+          "3.13",
+          "3.7"
+        ],
         "CIS": "3.3.1",
         "SCuBA": "",
         "NIST": "SC-28, AC-4",
@@ -3944,7 +4241,7 @@
           "T1048",
           "T1005"
         ],
-        "HIPAA": "\u00a7164.502(b), \u00a7164.312(e)(1)",
+        "HIPAA": "§164.502(b), §164.312(e)(1)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 3.4, Req 12.5.3",
         "ISO27001": "A.8.12"
@@ -3955,7 +4252,7 @@
       "ControlId": "INT-3.1",
       "Title": "Device Enrollment Restrictions Configured",
       "Description": "Intune enrollment restrictions limit which platforms, ownership types, and OS versions can enroll.",
-      "BusinessRisk": "Without enrollment restrictions, any device \u2014 including unmanaged personal or obsolete devices \u2014 can enroll and receive corporate app access.",
+      "BusinessRisk": "Without enrollment restrictions, any device — including unmanaged personal or obsolete devices — can enroll and receive corporate app access.",
       "Severity": "Medium",
       "Workload": "INT",
       "Category": "Endpoint",
@@ -3964,7 +4261,9 @@
       "EvaluatorFunction": "Test-NRGControlIntuneEnrollmentRestrictions",
       "Remediation": "Intune > Devices > Enrollment > Enrollment restrictions > Create policy restricting to managed platforms and minimum OS versions.",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "4.1.4",
         "SCuBA": "",
         "NIST": "CM-7, AC-3",
@@ -3972,7 +4271,7 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(C), \u00a7164.310(d)(1)",
+        "HIPAA": "§164.308(a)(4)(ii)(C), §164.310(d)(1)",
         "SOC2": "CC6.2",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.8.1"
@@ -3992,7 +4291,9 @@
       "EvaluatorFunction": "Test-NRGControlIntuneAppConfig",
       "Remediation": "Intune > Apps > App configuration policies > Create policy for iOS/Android targeting Outlook, Teams, Edge.",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "4.3.2",
         "SCuBA": "",
         "NIST": "CM-6, AC-19",
@@ -4000,7 +4301,7 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.310(d)(1)",
+        "HIPAA": "§164.310(d)(1)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 1.3",
         "ISO27001": "A.8.1"
@@ -4020,7 +4321,9 @@
       "EvaluatorFunction": "Test-NRGControlIntuneConditionalLaunch",
       "Remediation": "Intune > Apps > App protection policies > Conditional launch > Add: Jailbroken/rooted devices = Block, Min OS version = current-1.",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "4.3.3",
         "SCuBA": "",
         "NIST": "SC-28, CM-7",
@@ -4028,7 +4331,7 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.312(a)(1), \u00a7164.310(d)(1)",
+        "HIPAA": "§164.312(a)(1), §164.310(d)(1)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 7.2, Req 1.3",
         "ISO27001": "A.8.1"
@@ -4039,7 +4342,7 @@
       "ControlId": "PPL-2.1",
       "Title": "Power Platform Connector Classification Reviewed",
       "Description": "Connectors in Power Platform DLP policies are classified as Business, Non-Business, or Blocked.",
-      "BusinessRisk": "Unclassified connectors default to Non-Business \u2014 flows can still mix data between business connectors and unclassified ones.",
+      "BusinessRisk": "Unclassified connectors default to Non-Business — flows can still mix data between business connectors and unclassified ones.",
       "Severity": "Medium",
       "Workload": "PPL",
       "Category": "Data",
@@ -4048,7 +4351,9 @@
       "EvaluatorFunction": "Test-NRGControlPPLConnectorClassification",
       "Remediation": "Power Platform Admin Center > Data policies > Edit existing policy > Review all connectors and assign to Business or Blocked groups.",
       "References": {
-        "CISControls": ["3.13"],
+        "CISControls": [
+          "3.13"
+        ],
         "CIS": "9.2.2",
         "NIST": "AC-4",
         "CMMC": "MP.L2-3.8.1",
@@ -4056,7 +4361,7 @@
           "T1048"
         ],
         "SCuBA": "MS.POWERPLATFORM.2.1v1",
-        "HIPAA": "\u00a7164.308(a)(1)(ii)(D)",
+        "HIPAA": "§164.308(a)(1)(ii)(D)",
         "SOC2": "CC6.6",
         "PCIDSS": "Req 6.4.3",
         "ISO27001": "A.5.23, A.8.30"
@@ -4076,7 +4381,9 @@
       "EvaluatorFunction": "Test-NRGControlPPLAutomate",
       "Remediation": "Power Platform Admin Center > Tenant settings > Power Automate > Disable for guests.",
       "References": {
-        "CISControls": ["6.8"],
+        "CISControls": [
+          "6.8"
+        ],
         "CIS": "9.3.2",
         "NIST": "CM-5, AC-3",
         "CMMC": "AC.L1-3.1.2",
@@ -4085,7 +4392,7 @@
           "T1567"
         ],
         "SCuBA": "MS.POWERPLATFORM.1.1v1",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
         "SOC2": "CC8.1",
         "PCIDSS": "Req 6.5.3",
         "ISO27001": "A.5.23, A.8.32"
@@ -4105,7 +4412,9 @@
       "EvaluatorFunction": "Test-NRGControlPPLPowerApps",
       "Remediation": "Power Platform Admin Center > Settings > Power Apps > Disable portal creation by non-admins.",
       "References": {
-        "CISControls": ["6.8"],
+        "CISControls": [
+          "6.8"
+        ],
         "CIS": "9.3.3",
         "NIST": "CM-5, AC-6",
         "CMMC": "CM.L2-3.4.5",
@@ -4114,7 +4423,7 @@
           "T1190"
         ],
         "SCuBA": "MS.POWERPLATFORM.5.1v1",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
         "SOC2": "CC8.1",
         "PCIDSS": "Req 6.5.3",
         "ISO27001": "A.5.23, A.8.32"
@@ -4125,7 +4434,7 @@
       "ControlId": "AAD-11.1",
       "Title": "Device Code Authentication Flow Blocked",
       "Description": "A Conditional Access policy blocks the device code authentication flow for all users.",
-      "BusinessRisk": "Device code phishing attacks send victims to a legitimate Microsoft URL where they enter an attacker-controlled code \u2014 no password required. The attack is especially effective against less technical users.",
+      "BusinessRisk": "Device code phishing attacks send victims to a legitimate Microsoft URL where they enter an attacker-controlled code — no password required. The attack is especially effective against less technical users.",
       "Severity": "High",
       "Workload": "AAD",
       "Category": "Identity",
@@ -4135,7 +4444,9 @@
       "Remediation": "CA policy: Conditions > Authentication flows > Device code flow, Grant = Block. Applies to all users.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "5.2.2.10",
         "SCuBA": "MS.AAD.3.9v1",
         "NIST": "IA-2",
@@ -4145,7 +4456,7 @@
           "T1111"
         ],
         "ISO27001": "A.5.17",
-        "HIPAA": "\u00a7164.312(d)",
+        "HIPAA": "§164.312(d)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.4"
       }
@@ -4164,7 +4475,10 @@
       "Remediation": "Remove guest accounts from all privileged roles. Use cloud-only member accounts for all administrative functions.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["6.8", "5.4"],
+        "CISControls": [
+          "6.8",
+          "5.4"
+        ],
         "CIS": "5.1.1.2",
         "NIST": "AC-2, AC-6(5)",
         "CMMC": "AC.L1-3.1.2",
@@ -4174,7 +4488,7 @@
         ],
         "ISO27001": "A.5.18, A.8.2",
         "SOC2": "CC6.2, CC6.3",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
         "PCIDSS": "Req 7.2.3"
       }
     },
@@ -4192,7 +4506,9 @@
       "Remediation": "Entra ID > Identity Protection > Risky workload identities. Investigate and remediate flagged service principals. Disable or rotate credentials for compromised identities. Requires Entra ID P2 Workload Identities.",
       "LicenseRequirement": "Entra ID P2 + Workload Identities add-on",
       "References": {
-        "CISControls": ["5.5"],
+        "CISControls": [
+          "5.5"
+        ],
         "CIS": "5.1.5.1",
         "NIST": "IA-3, IR-4",
         "CMMC": "IR.L2-3.6.1",
@@ -4200,7 +4516,7 @@
           "T1078.004",
           "T1550.001"
         ],
-        "HIPAA": "\u00a7164.308(a)(1)(ii)(D)",
+        "HIPAA": "§164.308(a)(1)(ii)(D)",
         "SOC2": "CC7.2",
         "PCIDSS": "Req 6.4.3",
         "ISO27001": "A.5.23, A.8.30"
@@ -4210,14 +4526,14 @@
       "ControlId": "AAD-11.4",
       "Title": "Token Protection (Session Binding) Enforced",
       "Description": "CA policy enforces token protection to bind tokens to the originating device, blocking replay attacks.",
-      "BusinessRisk": "AiTM (adversary-in-the-middle) phishing steals authenticated session tokens. Without token binding, stolen tokens work from any device \u2014 effectively bypassing MFA entirely.",
+      "BusinessRisk": "AiTM (adversary-in-the-middle) phishing steals authenticated session tokens. Without token binding, stolen tokens work from any device — effectively bypassing MFA entirely.",
       "Severity": "High",
       "Workload": "AAD",
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
       "EvaluatorFunction": "Test-NRGControlAADTokenProtection",
-      "Remediation": "CA policy: Session controls > Token protection. Enable for Exchange Online and SharePoint Online at minimum. Requires Entra ID P1+. Note: may cause issues with non-compliant clients \u2014 test in report-only mode first.",
+      "Remediation": "CA policy: Session controls > Token protection. Enable for Exchange Online and SharePoint Online at minimum. Requires Entra ID P1+. Note: may cause issues with non-compliant clients — test in report-only mode first.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
         "CISControls": [],
@@ -4230,7 +4546,7 @@
           "T1539"
         ],
         "ISO27001": "A.5.17",
-        "HIPAA": "\u00a7164.312(d), \u00a7164.312(c)(2)",
+        "HIPAA": "§164.312(d), §164.312(c)(2)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.3"
       }
@@ -4249,7 +4565,9 @@
       "Remediation": "CA policy > Session controls > Customize continuous access evaluation > Strict enforcement.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
-        "CISControls": ["6.2"],
+        "CISControls": [
+          "6.2"
+        ],
         "CIS": "5.2.3.3",
         "SCuBA": "",
         "NIST": "AC-12",
@@ -4257,7 +4575,7 @@
         "MITRE": [
           "T1550.001"
         ],
-        "HIPAA": "\u00a7164.312(d)",
+        "HIPAA": "§164.312(d)",
         "SOC2": "CC6.1, CC7.2",
         "PCIDSS": "Req 8.3",
         "ISO27001": "A.5.17, A.8.16"
@@ -4267,7 +4585,7 @@
       "ControlId": "AAD-11.6",
       "Title": "Cross-Tenant Inbound Trust Settings Restricted",
       "Description": "Default cross-tenant access settings do not trust external MFA or device compliance claims from unknown tenants.",
-      "BusinessRisk": "Trusting MFA from all external tenants means an attacker controlling a weak tenant can satisfy your MFA requirements using their own weaker authentication \u2014 effectively bypassing your Conditional Access policies.",
+      "BusinessRisk": "Trusting MFA from all external tenants means an attacker controlling a weak tenant can satisfy your MFA requirements using their own weaker authentication — effectively bypassing your Conditional Access policies.",
       "Severity": "High",
       "Workload": "AAD",
       "Category": "Identity",
@@ -4277,7 +4595,9 @@
       "Remediation": "Entra ID > External Identities > Cross-tenant access settings > Default settings > Inbound trust. Disable 'Trust MFA from Microsoft Entra tenants' and 'Trust compliant devices' unless specific B2B partner trust is required.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "5.3.5",
         "NIST": "AC-17, IA-2",
         "CMMC": "AC.L1-3.1.2",
@@ -4286,7 +4606,7 @@
           "T1110"
         ],
         "ISO27001": "A.5.23, A.8.22",
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(A)",
+        "HIPAA": "§164.308(a)(4)(ii)(A)",
         "SOC2": "CC6.6",
         "PCIDSS": "Req 1.4"
       }
@@ -4295,7 +4615,7 @@
       "ControlId": "AAD-11.7",
       "Title": "Privileged Access Workstation or Device Scope for Admins",
       "Description": "Conditional Access enforces that privileged role activations or admin operations occur from compliant or specifically designated devices.",
-      "BusinessRisk": "Admins authenticating from any arbitrary device \u2014 including personal laptops with no endpoint controls \u2014 expose privileged credentials to malware on unmanaged endpoints.",
+      "BusinessRisk": "Admins authenticating from any arbitrary device — including personal laptops with no endpoint controls — expose privileged credentials to malware on unmanaged endpoints.",
       "Severity": "Medium",
       "Workload": "AAD",
       "Category": "Identity",
@@ -4305,14 +4625,16 @@
       "Remediation": "CA policy: Target admin roles > Require compliant device or Hybrid AD join. Alternatively define a named device group as a PAW group and require membership.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1 + Intune",
       "References": {
-        "CISControls": ["12.8"],
+        "CISControls": [
+          "12.8"
+        ],
         "CIS": "5.1.1.3",
         "NIST": "AC-17, CM-7",
         "CMMC": "AC.L1-3.1.2",
         "MITRE": [
           "T1078.004"
         ],
-        "HIPAA": "\u00a7164.308(a)(3)(ii)(A)",
+        "HIPAA": "§164.308(a)(3)(ii)(A)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.8.2"
@@ -4322,7 +4644,7 @@
       "ControlId": "AAD-11.8",
       "Title": "Terms of Use Policy Enforced",
       "Description": "A CA policy enforces Terms of Use acceptance for users accessing organizational resources.",
-      "BusinessRisk": "Without ToU enforcement, there is no documented acknowledgment of acceptable use policy \u2014 creating legal and HR gaps, especially for guest users and contractors.",
+      "BusinessRisk": "Without ToU enforcement, there is no documented acknowledgment of acceptable use policy — creating legal and HR gaps, especially for guest users and contractors.",
       "Severity": "Low",
       "Workload": "AAD",
       "Category": "Identity",
@@ -4340,7 +4662,7 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
         "SOC2": "CC1.4, CC6.3",
         "PCIDSS": "Req 12.3",
         "ISO27001": "A.5.10"
@@ -4350,7 +4672,7 @@
       "ControlId": "AAD-11.9",
       "Title": "Workload Identity Conditional Access Policy",
       "Description": "CA policies are applied to service principals and managed identities, not just user accounts.",
-      "BusinessRisk": "Without CA policies on workload identities, compromised service principals face no access controls \u2014 no location restriction, no risk-based blocking, no session limits.",
+      "BusinessRisk": "Without CA policies on workload identities, compromised service principals face no access controls — no location restriction, no risk-based blocking, no session limits.",
       "Severity": "Medium",
       "Workload": "AAD",
       "Category": "Identity",
@@ -4360,7 +4682,10 @@
       "Remediation": "CA policy > Users > Select Workload identities > Apply conditions and access controls to high-privilege service principals. Requires Entra Workload Identities Premium add-on.",
       "LicenseRequirement": "Entra Workload Identities Premium (add-on)",
       "References": {
-        "CISControls": ["6.8", "5.5"],
+        "CISControls": [
+          "6.8",
+          "5.5"
+        ],
         "CIS": "5.1.5.2",
         "NIST": "IA-3, AC-6",
         "CMMC": "IA.L2-3.5.3",
@@ -4368,7 +4693,7 @@
           "T1078.004",
           "T1550.001"
         ],
-        "HIPAA": "\u00a7164.312(d)",
+        "HIPAA": "§164.312(d)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.6",
         "ISO27001": "A.5.16, A.8.2"
@@ -4388,7 +4713,9 @@
       "Remediation": "Purview > DLP > Create or edit policy > Choose where to apply > Enable Exchange, SharePoint, OneDrive, Teams, Devices simultaneously.",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
-        "CISControls": ["3.13"],
+        "CISControls": [
+          "3.13"
+        ],
         "CIS": "3.3.4",
         "SCuBA": "MS.DEFENDER.4.2v1",
         "NIST": "SC-28, AC-4",
@@ -4399,7 +4726,7 @@
         ],
         "ISO27001": "A.8.12",
         "SOC2": "CC6.7",
-        "HIPAA": "\u00a7164.312(e)(1)",
+        "HIPAA": "§164.312(e)(1)",
         "PCIDSS": "Req 3.4"
       }
     },
@@ -4417,7 +4744,9 @@
       "Remediation": "Purview > DLP > Edit policy > Add condition > Content contains > Sensitive info types.",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
-        "CISControls": ["3.13"],
+        "CISControls": [
+          "3.13"
+        ],
         "CIS": "3.3.5",
         "SCuBA": "MS.DEFENDER.4.1v2",
         "NIST": "SC-28",
@@ -4428,7 +4757,7 @@
         ],
         "ISO27001": "A.8.12",
         "SOC2": "CC6.7",
-        "HIPAA": "\u00a7164.312(e)(1)",
+        "HIPAA": "§164.312(e)(1)",
         "PCIDSS": "Req 3.4"
       }
     },
@@ -4446,7 +4775,9 @@
       "Remediation": "Defender XDR > Cloud Apps > Policies > OAuth app policies. Create policy: App = apps with high privileges, consented by users. Requires Microsoft Defender for Cloud Apps.",
       "LicenseRequirement": "Microsoft Defender for Cloud Apps (M365 E5 or add-on)",
       "References": {
-        "CISControls": ["13.1"],
+        "CISControls": [
+          "13.1"
+        ],
         "CIS": "2.4.2",
         "SCuBA": "MS.DEFENDER.5.1v1",
         "NIST": "SI-4, AU-12",
@@ -4455,7 +4786,7 @@
           "T1528",
           "T1550.001"
         ],
-        "HIPAA": "\u00a7164.308(a)(6)",
+        "HIPAA": "§164.308(a)(6)",
         "SOC2": "CC7.2, CC7.3",
         "PCIDSS": "Req 6.4.3",
         "ISO27001": "A.5.23, A.6.8"
@@ -4484,7 +4815,7 @@
           "T1078"
         ],
         "SCuBA": "MS.DEFENDER.2.1v1",
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(A)",
+        "HIPAA": "§164.308(a)(5)(ii)(A)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.8.2"
@@ -4493,8 +4824,8 @@
     {
       "ControlId": "DEF-4.5",
       "Title": "Endpoint DLP Policy Active on Managed Devices",
-      "Description": "Endpoint DLP policies monitor or block sensitive data actions on Windows endpoints \u2014 copy to USB, upload to unsanctioned sites, print.",
-      "BusinessRisk": "Without Endpoint DLP, a user can copy an entire SharePoint document library to a USB drive or personal Google Drive without any policy enforcement \u2014 no alert, no block, no log.",
+      "Description": "Endpoint DLP policies monitor or block sensitive data actions on Windows endpoints — copy to USB, upload to unsanctioned sites, print.",
+      "BusinessRisk": "Without Endpoint DLP, a user can copy an entire SharePoint document library to a USB drive or personal Google Drive without any policy enforcement — no alert, no block, no log.",
       "Severity": "High",
       "Workload": "DEF",
       "Category": "Data",
@@ -4504,7 +4835,9 @@
       "Remediation": "Purview > DLP > Create policy > Devices location > Enable. Requires Defender for Endpoint onboarding + Microsoft 365 E5 or Microsoft 365 E5 Compliance.",
       "LicenseRequirement": "M365 E5 or E5 Compliance add-on",
       "References": {
-        "CISControls": ["3.13"],
+        "CISControls": [
+          "3.13"
+        ],
         "CIS": "3.3.6",
         "NIST": "SC-28, MP-7",
         "CMMC": "MP.L2-3.8.1",
@@ -4516,14 +4849,14 @@
         "SOC2": "CC6.7",
         "PCIDSS": "Req 3.4, Req 5.4",
         "SCuBA": "MS.DEFENDER.4.2v1",
-        "HIPAA": "\u00a7164.312(e)(1), \u00a7164.310(d)(1)"
+        "HIPAA": "§164.312(e)(1), §164.310(d)(1)"
       }
     },
     {
       "ControlId": "DEF-4.6",
       "Title": "Attack Simulation Training Campaigns Active",
       "Description": "Regular phishing simulation campaigns are run via Attack Simulation Training in Defender.",
-      "BusinessRisk": "Human error causes >90% of breaches. Without regular simulation, users have no trained muscle memory for identifying phishing \u2014 click-through rates on real attacks remain high.",
+      "BusinessRisk": "Human error causes >90% of breaches. Without regular simulation, users have no trained muscle memory for identifying phishing — click-through rates on real attacks remain high.",
       "Severity": "Low",
       "Workload": "DEF",
       "Category": "Governance",
@@ -4533,7 +4866,9 @@
       "Remediation": "Defender portal > Email & collaboration > Attack simulation training > Simulations > Launch simulation. Schedule recurring simulations covering credential harvest, link in attachment, drive-by URL techniques. Requires Defender for Office 365 Plan 2.",
       "LicenseRequirement": "Defender for Office 365 Plan 2 (M365 E5 or add-on)",
       "References": {
-        "CISControls": ["14.2"],
+        "CISControls": [
+          "14.2"
+        ],
         "CIS": "2.3.6",
         "SCuBA": "",
         "NIST": "AT-2, AT-3",
@@ -4541,7 +4876,7 @@
         "MITRE": [
           "T1566"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(i)",
+        "HIPAA": "§164.308(a)(5)(i)",
         "SOC2": "CC2.2, CC2.3",
         "PCIDSS": "Req 12.6.3",
         "ISO27001": "A.6.3"
@@ -4561,7 +4896,9 @@
       "Remediation": "Set-SafeLinksPolicy -Identity <PolicyName> -EnableSafeLinksForOffice $true. Or via Defender portal > Policies > Safe links > Enable Office 365 apps protection.",
       "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)",
       "References": {
-        "CISControls": ["9.3"],
+        "CISControls": [
+          "9.3"
+        ],
         "CIS": "2.3.2",
         "SCuBA": "MS.DEFENDER.1.3v1",
         "NIST": "SI-3",
@@ -4570,7 +4907,7 @@
           "T1566.001",
           "T1204.002"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.2",
         "ISO27001": "A.8.7"
@@ -4579,7 +4916,7 @@
     {
       "ControlId": "EXO-5.1",
       "Title": "Per-User Mailbox Audit Logging Enabled for All Mailboxes",
-      "Description": "AuditEnabled is set to $true on all mailboxes \u2014 no mailboxes have audit logging explicitly disabled.",
+      "Description": "AuditEnabled is set to $true on all mailboxes — no mailboxes have audit logging explicitly disabled.",
       "BusinessRisk": "Mailboxes without audit logging cannot be investigated after a BEC incident. Inbox rules, delegation grants, and mail access are not recorded for unaudited mailboxes.",
       "Severity": "High",
       "Workload": "EXO",
@@ -4590,7 +4927,10 @@
       "Remediation": "Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false } | Set-Mailbox -AuditEnabled $true.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["8.2", "8.5"],
+        "CISControls": [
+          "8.2",
+          "8.5"
+        ],
         "CIS": "3.1.2",
         "SCuBA": "MS.EXO.13.1v1",
         "NIST": "AU-2, AU-12",
@@ -4601,7 +4941,7 @@
         ],
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
-        "HIPAA": "\u00a7164.312(b)",
+        "HIPAA": "§164.312(b)",
         "PCIDSS": "Req 10.2"
       }
     },
@@ -4616,10 +4956,13 @@
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
       "EvaluatorFunction": "Test-NRGControlEXOPriorityAccountProtection",
-      "Remediation": "Set-AntiPhishPolicy > TargetedUsersToProtect \u2014 add executive UPNs. Enable EnableTargetedUserProtection.",
+      "Remediation": "Set-AntiPhishPolicy > TargetedUsersToProtect — add executive UPNs. Enable EnableTargetedUserProtection.",
       "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)",
       "References": {
-        "CISControls": ["9.7", "10.1"],
+        "CISControls": [
+          "9.7",
+          "10.1"
+        ],
         "CIS": "2.1.6",
         "SCuBA": "MS.DEFENDER.2.1v1",
         "NIST": "SI-3",
@@ -4628,7 +4971,7 @@
           "T1566",
           "T1036.005"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(A)",
+        "HIPAA": "§164.308(a)(5)(ii)(A)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.8.2"
@@ -4645,10 +4988,12 @@
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
       "EvaluatorFunction": "Test-NRGControlEXOSafeSenderOverride",
-      "Remediation": "Set-HostedContentFilterPolicy -Identity Default -AllowedSenderDomains @() \u2014 remove all allowed sender domains. Use mail flow rules for legitimate trusted partner exemptions with scoped conditions instead.",
+      "Remediation": "Set-HostedContentFilterPolicy -Identity Default -AllowedSenderDomains @() — remove all allowed sender domains. Use mail flow rules for legitimate trusted partner exemptions with scoped conditions instead.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["9.7"],
+        "CISControls": [
+          "9.7"
+        ],
         "CIS": "2.1.13",
         "SCuBA": "",
         "NIST": "SI-8",
@@ -4656,7 +5001,7 @@
         "MITRE": [
           "T1566"
         ],
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(B)",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
         "SOC2": "CC6.8",
         "PCIDSS": "Req 5.4.1",
         "ISO27001": "A.8.7"
@@ -4676,14 +5021,16 @@
       "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -NewMeetingRecordingExpirationDays 60.",
       "LicenseRequirement": "Included (M365 Business Standard+)",
       "References": {
-        "CISControls": ["3.4"],
+        "CISControls": [
+          "3.4"
+        ],
         "CIS": "8.5.9",
         "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
           "T1113"
         ],
-        "HIPAA": "\u00a7164.316(b)(2)(i), \u00a7164.502",
+        "HIPAA": "§164.316(b)(2)(i), §164.502",
         "SOC2": "A1.2, C1.1",
         "PCIDSS": "Req 3.2.1",
         "ISO27001": "A.5.33, A.8.10"
@@ -4693,7 +5040,7 @@
       "ControlId": "TMS-4.2",
       "Title": "Anonymous Users Cannot Start Meetings",
       "Description": "Anonymous (unauthenticated) users cannot independently start Teams meetings.",
-      "BusinessRisk": "If anonymous users can start meetings, attackers can open a meeting in an organization's tenant without any authenticated identity \u2014 creating an untracked communication channel.",
+      "BusinessRisk": "If anonymous users can start meetings, attackers can open a meeting in an organization's tenant without any authenticated identity — creating an untracked communication channel.",
       "Severity": "High",
       "Workload": "TMS",
       "Category": "Collaboration",
@@ -4703,7 +5050,9 @@
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowAnonymousUsersToStartMeeting $false.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "8.5.3",
         "SCuBA": "MS.TEAMS.1.2v2",
         "NIST": "AC-3, IA-3",
@@ -4711,7 +5060,7 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.312(a)(2)(i), \u00a7164.312(d)",
+        "HIPAA": "§164.312(a)(2)(i), §164.312(d)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.2.1",
         "ISO27001": "A.5.16"
@@ -4731,7 +5080,10 @@
       "Remediation": "Teams Admin Center > External access > Allow only specific external domains. Add business partner domains only.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["4.8", "6.7"],
+        "CISControls": [
+          "4.8",
+          "6.7"
+        ],
         "CIS": "8.2.6",
         "SCuBA": "MS.TEAMS.2.1v2",
         "NIST": "AC-17",
@@ -4740,7 +5092,7 @@
           "T1566",
           "T1534"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(A)",
+        "HIPAA": "§164.308(a)(4)(ii)(A)",
         "SOC2": "CC6.6",
         "PCIDSS": "Req 1.4",
         "ISO27001": "A.5.23, A.8.22"
@@ -4760,14 +5112,16 @@
       "Remediation": "Set-CsTeamsMeetingBroadcastPolicy -Identity Global -BroadcastAttendeeVisibilityMode EveryoneInCompany (or -AllowBroadcastScheduling $false to disable live events entirely).",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["4.1"],
+        "CISControls": [
+          "4.1"
+        ],
         "CIS": "8.5.10",
         "NIST": "AC-3",
         "CMMC": "AC.L1-3.1.1",
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.502, \u00a7164.308(a)(4)",
+        "HIPAA": "§164.502, §164.308(a)(4)",
         "SOC2": "C1.1",
         "PCIDSS": "Req 7.2.4",
         "ISO27001": "A.5.18"
@@ -4777,7 +5131,7 @@
       "ControlId": "INT-4.1",
       "Title": "Windows LAPS Deployed via Intune",
       "Description": "Windows Local Administrator Password Solution (LAPS) is deployed via Intune, generating unique randomized local admin passwords escrowed in Entra ID.",
-      "BusinessRisk": "Shared or static local admin passwords enable pass-the-hash lateral movement \u2014 one compromised endpoint hands the attacker credentials that work on every other endpoint with the same password.",
+      "BusinessRisk": "Shared or static local admin passwords enable pass-the-hash lateral movement — one compromised endpoint hands the attacker credentials that work on every other endpoint with the same password.",
       "Severity": "High",
       "Workload": "INT",
       "Category": "Endpoint",
@@ -4787,7 +5141,10 @@
       "Remediation": "Intune > Endpoint security > Account protection > Create Windows LAPS policy. Configure: Admin account managed = Yes, Password age = 30 days, Password complexity = Large letters + small letters + numbers + special characters.",
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
-        "CISControls": ["5.4", "4.7"],
+        "CISControls": [
+          "5.4",
+          "4.7"
+        ],
         "CIS": "4.1.5",
         "SCuBA": "",
         "NIST": "AC-2, IA-5",
@@ -4798,7 +5155,7 @@
         ],
         "ISO27001": "A.5.17, A.8.2",
         "SOC2": "CC6.1",
-        "HIPAA": "\u00a7164.308(a)(5)(ii)(D)",
+        "HIPAA": "§164.308(a)(5)(ii)(D)",
         "PCIDSS": "Req 2.2.2"
       }
     },
@@ -4806,7 +5163,7 @@
       "ControlId": "INT-4.2",
       "Title": "Windows Hello for Business Deployed",
       "Description": "Windows Hello for Business is deployed via Intune policy, enabling phishing-resistant passwordless authentication on enrolled Windows endpoints.",
-      "BusinessRisk": "WHfB eliminates password-based credential theft on enrolled endpoints \u2014 LSASS dumping yields nothing, phishing yields nothing. It is the highest-value passwordless deployment available at no extra license cost.",
+      "BusinessRisk": "WHfB eliminates password-based credential theft on enrolled endpoints — LSASS dumping yields nothing, phishing yields nothing. It is the highest-value passwordless deployment available at no extra license cost.",
       "Severity": "Medium",
       "Workload": "INT",
       "Category": "Endpoint",
@@ -4826,7 +5183,7 @@
           "T1110"
         ],
         "ISO27001": "A.5.17, A.8.5",
-        "HIPAA": "\u00a7164.312(d)",
+        "HIPAA": "§164.312(d)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.4"
       }
@@ -4834,7 +5191,7 @@
     {
       "ControlId": "INT-4.3",
       "Title": "Device OS Version Compliance Enforced",
-      "Description": "Device compliance policies enforce minimum OS versions and compliance rate is \u226590% across enrolled devices.",
+      "Description": "Device compliance policies enforce minimum OS versions and compliance rate is ≥90% across enrolled devices.",
       "BusinessRisk": "Endpoints running outdated OS versions contain unpatched known exploits. KEV-listed vulnerabilities are actively exploited by ransomware operators and nation-state actors.",
       "Severity": "High",
       "Workload": "INT",
@@ -4845,7 +5202,9 @@
       "Remediation": "Intune > Devices > Compliance policies > Create policy > OS minimum version = latest-1. Review noncompliant devices report and address outliers.",
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
-        "CISControls": ["7.3"],
+        "CISControls": [
+          "7.3"
+        ],
         "CIS": "4.5.5",
         "SCuBA": "",
         "NIST": "SI-2",
@@ -4856,7 +5215,7 @@
         ],
         "ISO27001": "A.8.8",
         "SOC2": "CC7.1, CC8.1",
-        "HIPAA": "\u00a7164.308(a)(1)(ii)(B)",
+        "HIPAA": "§164.308(a)(1)(ii)(B)",
         "PCIDSS": "Req 6.3.3"
       }
     },
@@ -4864,7 +5223,7 @@
       "ControlId": "INT-4.4",
       "Title": "Mobile Device Compliance Requires PIN or Biometric",
       "Description": "iOS and Android compliance policies require a PIN or biometric lock before accessing managed apps.",
-      "BusinessRisk": "Unlocked mobile devices give physical access to all managed apps, corporate email, Teams conversations, and OneDrive files \u2014 no attacker credential required.",
+      "BusinessRisk": "Unlocked mobile devices give physical access to all managed apps, corporate email, Teams conversations, and OneDrive files — no attacker credential required.",
       "Severity": "High",
       "Workload": "INT",
       "Category": "Endpoint",
@@ -4874,7 +5233,10 @@
       "Remediation": "Intune > Devices > Compliance > iOS/Android policy > System security > Require password = Require. Set minimum length = 6, complexity = Numeric + symbols.",
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
-        "CISControls": ["4.3", "4.10"],
+        "CISControls": [
+          "4.3",
+          "4.10"
+        ],
         "CIS": "4.2.2",
         "SCuBA": "",
         "NIST": "IA-5, AC-11",
@@ -4883,7 +5245,7 @@
           "T1078",
           "T1005"
         ],
-        "HIPAA": "\u00a7164.312(a)(2)(iii), \u00a7164.312(d)",
+        "HIPAA": "§164.312(a)(2)(iii), §164.312(d)",
         "SOC2": "CC6.1",
         "PCIDSS": "Req 8.4",
         "ISO27001": "A.5.17, A.8.1"
@@ -4893,7 +5255,7 @@
       "ControlId": "PVW-4.1",
       "Title": "Microsoft Purview Audit (Premium) Enabled",
       "Description": "Advanced Audit (now Microsoft Purview Audit Premium) is enabled for all users, capturing high-value events including MailItemsAccessed.",
-      "BusinessRisk": "Standard audit does not capture MailItemsAccessed \u2014 the event that tells you which emails a compromised account read during a breach. Without it, mail exfil investigations are blind.",
+      "BusinessRisk": "Standard audit does not capture MailItemsAccessed — the event that tells you which emails a compromised account read during a breach. Without it, mail exfil investigations are blind.",
       "Severity": "High",
       "Workload": "PVW",
       "Category": "Governance",
@@ -4903,7 +5265,9 @@
       "Remediation": "Assign Microsoft 365 E5 or E5 Compliance license to users, then enable Audit Premium: Purview > Audit > Audit log retention policies. Verify MailItemsAccessed events appear in audit search.",
       "LicenseRequirement": "M365 E5 or E5 Compliance add-on",
       "References": {
-        "CISControls": ["8.5"],
+        "CISControls": [
+          "8.5"
+        ],
         "CIS": "3.1.4",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
@@ -4913,7 +5277,7 @@
         ],
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
-        "HIPAA": "\u00a7164.312(b)",
+        "HIPAA": "§164.312(b)",
         "PCIDSS": "Req 10.2.1",
         "SCuBA": "MS.DEFENDER.6.1v1"
       }
@@ -4932,7 +5296,9 @@
       "Remediation": "Purview > Audit > Audit log retention policies > New retention policy. Priority: All activities, Users: All, Duration: 1 year or longer. Requires Audit Premium.",
       "LicenseRequirement": "M365 E5 or E5 Compliance add-on",
       "References": {
-        "CISControls": ["8.10"],
+        "CISControls": [
+          "8.10"
+        ],
         "CIS": "3.1.5",
         "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.2",
@@ -4942,7 +5308,7 @@
         ],
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2, A1.2",
-        "HIPAA": "\u00a7164.316(b)(2)(i), \u00a7164.312(b)",
+        "HIPAA": "§164.316(b)(2)(i), §164.312(b)",
         "PCIDSS": "Req 10.5.1",
         "SCuBA": "MS.DEFENDER.6.3v1"
       }
@@ -4961,7 +5327,9 @@
       "Remediation": "Purview > Information protection > Sensitivity labels > Create label hierarchy (Public, Internal, Confidential, Highly Confidential). Create label policy and publish to all users.",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
-        "CISControls": ["3.7"],
+        "CISControls": [
+          "3.7"
+        ],
         "CIS": "3.4.1",
         "NIST": "AC-16, SC-28",
         "CMMC": "MP.L2-3.8.1",
@@ -4971,7 +5339,7 @@
         ],
         "ISO27001": "A.8.11",
         "SOC2": "C1.1",
-        "HIPAA": "\u00a7164.502(b)",
+        "HIPAA": "§164.502(b)",
         "PCIDSS": "Req 3.4"
       }
     },
@@ -4979,7 +5347,7 @@
       "ControlId": "PVW-4.4",
       "Title": "Records Management Labels Configured for Regulated Data",
       "Description": "Records management retention labels are configured for content subject to legal or regulatory hold requirements.",
-      "BusinessRisk": "Without immutable records declarations, content subject to litigation hold can be modified or deleted \u2014 creating legal liability and spoliation risk.",
+      "BusinessRisk": "Without immutable records declarations, content subject to litigation hold can be modified or deleted — creating legal liability and spoliation risk.",
       "Severity": "Low",
       "Workload": "PVW",
       "Category": "Governance",
@@ -4989,7 +5357,9 @@
       "Remediation": "Purview > Records management > Labels > Create record label with retention action. Publish via label policy. Required for healthcare (HIPAA), government, and financial organizations.",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
-        "CISControls": ["3.4"],
+        "CISControls": [
+          "3.4"
+        ],
         "CIS": "3.3.3",
         "SCuBA": "",
         "NIST": "AU-11, IR-4",
@@ -4997,7 +5367,7 @@
         "MITRE": [
           "T1070.008"
         ],
-        "HIPAA": "\u00a7164.316(b)(2)(i), \u00a7164.530(j)",
+        "HIPAA": "§164.316(b)(2)(i), §164.530(j)",
         "SOC2": "A1.2, C1.1",
         "PCIDSS": "Req 10.5",
         "ISO27001": "A.5.33, A.8.13"
@@ -5007,7 +5377,7 @@
       "ControlId": "PPL-3.1",
       "Title": "M365 Copilot Sensitivity Label Enforcement",
       "Description": "Sensitivity labels are published with Files & emails scope and an auto-labeling policy is active, enabling Microsoft 365 Copilot to respect data classification boundaries when grounding on tenant content.",
-      "BusinessRisk": "Without sensitivity labels, Copilot can access and surface any data the user can reach \u2014 including HR files, financial records, and confidential strategies \u2014 with no awareness of sensitivity. Copilot dramatically amplifies over-sharing risk.",
+      "BusinessRisk": "Without sensitivity labels, Copilot can access and surface any data the user can reach — including HR files, financial records, and confidential strategies — with no awareness of sensitivity. Copilot dramatically amplifies over-sharing risk.",
       "Severity": "High",
       "Workload": "PPL",
       "Category": "Data",
@@ -5017,7 +5387,9 @@
       "Remediation": "Purview > Information protection > Labels > Create/verify labels with Files & emails scope. Enable Copilot integration in label settings. Reference: Microsoft Copilot security baseline.",
       "LicenseRequirement": "M365 Business Premium or E3+ (Copilot requires M365 Copilot add-on)",
       "References": {
-        "CISControls": ["3.7"],
+        "CISControls": [
+          "3.7"
+        ],
         "CIS": "3.4.1",
         "SCuBA": "",
         "NIST": "AC-16, SC-28",
@@ -5027,7 +5399,7 @@
         "MITRE": [
           "T1005"
         ],
-        "HIPAA": "\u00a7164.502(b), \u00a7164.312(a)(1)",
+        "HIPAA": "§164.502(b), §164.312(a)(1)",
         "PCIDSS": "Req 3.4, Req 7.2"
       }
     },
@@ -5035,7 +5407,7 @@
       "ControlId": "PPL-3.2",
       "Title": "DLP Policy Active for Copilot Interactions",
       "Description": "At least one enabled Data Loss Prevention policy includes the Microsoft 365 Copilot location, blocking sensitive-information types in Copilot prompts and responses.",
-      "BusinessRisk": "Without DLP covering Copilot, users can extract sensitive data by prompting Copilot to summarize, translate, or reformat confidential content \u2014 bypassing all other data controls.",
+      "BusinessRisk": "Without DLP covering Copilot, users can extract sensitive data by prompting Copilot to summarize, translate, or reformat confidential content — bypassing all other data controls.",
       "Severity": "High",
       "Workload": "PPL",
       "Category": "Data",
@@ -5045,14 +5417,16 @@
       "Remediation": "Purview > DLP > Create policy > Locations: Include Microsoft 365 Copilot. Add sensitive info types as conditions. Requires M365 E5 Compliance or equivalent.",
       "LicenseRequirement": "M365 E5 Compliance add-on",
       "References": {
-        "CISControls": ["3.13"],
+        "CISControls": [
+          "3.13"
+        ],
         "CIS": "3.3.4",
         "SCuBA": "",
         "NIST": "SC-28, AC-4",
         "CMMC": "SC.L2-3.13.16",
         "ISO27001": "A.8.12",
         "SOC2": "CC6.7",
-        "HIPAA": "\u00a7164.312(e)(1)",
+        "HIPAA": "§164.312(e)(1)",
         "MITRE": [
           "T1005",
           "T1048"
@@ -5063,7 +5437,7 @@
     {
       "ControlId": "PPL-3.3",
       "Title": "Copilot Access Restricted to Licensed Users",
-      "Description": "Microsoft 365 Copilot license assignment is scoped to a defined subset of users with documented business need \u2014 not blanket-assigned tenant-wide.",
+      "Description": "Microsoft 365 Copilot license assignment is scoped to a defined subset of users with documented business need — not blanket-assigned tenant-wide.",
       "BusinessRisk": "Uncontrolled Copilot access means unlicensed users may gain Copilot capabilities through shared accounts or feature rollouts, bypassing governance controls.",
       "Severity": "Medium",
       "Workload": "PPL",
@@ -5074,7 +5448,9 @@
       "Remediation": "M365 Admin Center > Settings > Microsoft 365 Copilot > Control access. Assign licenses only to approved users with a documented business need.",
       "LicenseRequirement": "M365 Copilot add-on license",
       "References": {
-        "CISControls": ["6.8"],
+        "CISControls": [
+          "6.8"
+        ],
         "CIS": "5.5.1",
         "SCuBA": "",
         "NIST": "AC-2",
@@ -5083,7 +5459,7 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
         "SOC2": "CC6.3",
         "PCIDSS": "Req 7.2.1"
       }
@@ -5092,7 +5468,7 @@
       "ControlId": "PPL-3.4",
       "Title": "Copilot Studio Agent Publishing Governed",
       "Description": "Copilot Studio (Power Virtual Agents) bots are not externally published to anonymous channels; bot publisher domains are confined to the tenant's onmicrosoft.com domain.",
-      "BusinessRisk": "Ungoverned Copilot Studio agents can be built to query sensitive SharePoint libraries, connect to external APIs, and respond to any user in the organization \u2014 creating unreviewed data exposure channels at scale.",
+      "BusinessRisk": "Ungoverned Copilot Studio agents can be built to query sensitive SharePoint libraries, connect to external APIs, and respond to any user in the organization — creating unreviewed data exposure channels at scale.",
       "Severity": "High",
       "Workload": "PPL",
       "Category": "Governance",
@@ -5102,7 +5478,9 @@
       "Remediation": "Power Platform Admin Center > Copilot Studio > Policies > Require admin approval for agent publishing. Apply DLP policies to Copilot Studio environment connectors.",
       "LicenseRequirement": "Power Platform + Copilot Studio license",
       "References": {
-        "CISControls": ["6.8"],
+        "CISControls": [
+          "6.8"
+        ],
         "CIS": "9.3.4",
         "SCuBA": "",
         "NIST": "CM-7, AC-6",
@@ -5112,7 +5490,7 @@
           "T1078",
           "T1190"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(B)",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
         "SOC2": "CC8.1",
         "PCIDSS": "Req 6.5.3"
       }
@@ -5121,7 +5499,7 @@
       "ControlId": "PPL-3.5",
       "Title": "Copilot Interaction Audit Logging Active",
       "Description": "Unified Audit Log ingestion is enabled and a Purview retention policy explicitly covers Copilot interactions so prompts/responses are searchable beyond platform-default retention.",
-      "BusinessRisk": "Without Copilot interaction logging, an insider using Copilot to extract sensitive data leaves no audit trail \u2014 the interaction is functionally invisible to security and compliance teams.",
+      "BusinessRisk": "Without Copilot interaction logging, an insider using Copilot to extract sensitive data leaves no audit trail — the interaction is functionally invisible to security and compliance teams.",
       "Severity": "High",
       "Workload": "PPL",
       "Category": "Governance",
@@ -5131,14 +5509,17 @@
       "Remediation": "Ensure Unified Audit Log is enabled (Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true). Copilot interactions are searchable in Purview > Content explorer and Audit > Search.",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
-        "CISControls": ["8.2", "8.10"],
+        "CISControls": [
+          "8.2",
+          "8.10"
+        ],
         "CIS": "3.1.1",
         "SCuBA": "",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
-        "HIPAA": "\u00a7164.312(b)",
+        "HIPAA": "§164.312(b)",
         "MITRE": [
           "T1114",
           "T1562.008"
@@ -5148,7 +5529,7 @@
     },
     {
       "ControlId": "AAD-12.1",
-      "Title": "Users Without MFA \u2014 Named List",
+      "Title": "Users Without MFA — Named List",
       "Description": "Identifies every enabled user account with no MFA method registered by name and UPN.",
       "BusinessRisk": "Each account without MFA can be compromised with a stolen password alone. A single phished credential gives an attacker full mailbox access, Teams, SharePoint, and the ability to initiate wire transfers or BEC campaigns.",
       "Severity": "Critical",
@@ -5157,17 +5538,19 @@
       "Automated": true,
       "CollectorDependency": "AAD-Users",
       "EvaluatorFunction": "Test-NRGControlInventoryMFAUsers",
-      "Remediation": "Entra ID > Users > [select user] > Authentication methods > Add method. For bulk: Get-MgUser | where MFA not registered \u2192 require combined registration via CA policy targeted at these users.",
+      "Remediation": "Entra ID > Users > [select user] > Authentication methods > Add method. For bulk: Get-MgUser | where MFA not registered → require combined registration via CA policy targeted at these users.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["6.3"],
+        "CISControls": [
+          "6.3"
+        ],
         "CIS": "5.2.1",
         "SCuBA": "MS.AAD.3.1v1",
         "NIST": "IA-2(1)",
         "CMMC": "IA.L2-3.5.3",
         "ISO27001": "A.5.17, A.8.5",
         "SOC2": "CC6.1",
-        "HIPAA": "\u00a7164.312(d)",
+        "HIPAA": "§164.312(d)",
         "MITRE": [
           "T1078",
           "T1110"
@@ -5177,7 +5560,7 @@
     },
     {
       "ControlId": "AAD-12.2",
-      "Title": "Stale Guest Accounts \u2014 Named List",
+      "Title": "Stale Guest Accounts — Named List",
       "Description": "Identifies guest accounts with no sign-in activity in 90+ days.",
       "BusinessRisk": "Stale guest accounts from former vendors, contractors, and partners retain access to SharePoint sites, Teams channels, and any resource they were granted. Ex-partners can exfiltrate data months after their engagement ends.",
       "Severity": "High",
@@ -5187,9 +5570,11 @@
       "CollectorDependency": "AAD-Inventory",
       "EvaluatorFunction": "Test-NRGControlInventoryStaleGuests",
       "Remediation": "Entra ID > External Identities > All users > Filter by guest, sort by last sign-in. Disable or delete accounts inactive 90+ days. Implement access reviews: PIM > Access reviews > Create review for guest users.",
-      "LicenseRequirement": "Included (all plans) \u2014 Access Reviews require Entra P2",
+      "LicenseRequirement": "Included (all plans) — Access Reviews require Entra P2",
       "References": {
-        "CISControls": ["5.3"],
+        "CISControls": [
+          "5.3"
+        ],
         "CIS": "5.3.4",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L1-3.1.2",
@@ -5198,15 +5583,15 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(C)",
+        "HIPAA": "§164.308(a)(4)(ii)(C)",
         "PCIDSS": "Req 8.2.4"
       }
     },
     {
       "ControlId": "AAD-12.3",
-      "Title": "Stale Licensed Member Accounts \u2014 Named List",
-      "Description": "Identifies licensed member accounts with no sign-in activity in 90+ days \u2014 likely departed employees.",
-      "BusinessRisk": "Active accounts for departed employees are a primary threat vector. Former employees know the organization's structure, workflows, and email conventions \u2014 making them highly effective social engineers if accounts are ever used maliciously.",
+      "Title": "Stale Licensed Member Accounts — Named List",
+      "Description": "Identifies licensed member accounts with no sign-in activity in 90+ days — likely departed employees.",
+      "BusinessRisk": "Active accounts for departed employees are a primary threat vector. Former employees know the organization's structure, workflows, and email conventions — making them highly effective social engineers if accounts are ever used maliciously.",
       "Severity": "High",
       "Workload": "AAD",
       "Category": "Identity",
@@ -5216,7 +5601,9 @@
       "Remediation": "Verify each account represents an active user. Disable accounts for departed employees immediately. Revoke all active sessions. Remove assigned licenses. Review for any recent inbox rules or forwarding.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["5.3"],
+        "CISControls": [
+          "5.3"
+        ],
         "CIS": "5.1.6.1",
         "SCuBA": "",
         "NIST": "AC-2(9)",
@@ -5226,13 +5613,13 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(4)(ii)(C)",
+        "HIPAA": "§164.308(a)(4)(ii)(C)",
         "PCIDSS": "Req 8.2.4"
       }
     },
     {
       "ControlId": "AAD-12.4",
-      "Title": "OAuth Apps with Tenant-Wide Consent \u2014 Named List",
+      "Title": "OAuth Apps with Tenant-Wide Consent — Named List",
       "Description": "Identifies all applications that have been granted OAuth permissions across ALL users (AllPrincipals consent type).",
       "BusinessRisk": "Apps with AllPrincipals consent can access every user's mailbox, files, calendar, and identity. Consent phishing campaigns trick admins into granting these permissions to malicious apps. Many legitimate apps accumulate excessive scopes over time.",
       "Severity": "High",
@@ -5244,7 +5631,9 @@
       "Remediation": "Entra ID > Enterprise applications > All applications > Filter by permissions. Review each AllPrincipals grant. Revoke unnecessary grants: Remove-MgOAuth2PermissionGrant -OAuth2PermissionGrantId <id>.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["2.1"],
+        "CISControls": [
+          "2.1"
+        ],
         "CIS": "5.5.4",
         "NIST": "AC-3",
         "CMMC": "AC.L1-3.1.2",
@@ -5255,13 +5644,13 @@
           "T1550.001"
         ],
         "SCuBA": "MS.AAD.5.2v1",
-        "HIPAA": "\u00a7164.308(a)(4), \u00a7164.308(a)(1)(ii)(D)",
+        "HIPAA": "§164.308(a)(4), §164.308(a)(1)(ii)(D)",
         "PCIDSS": "Req 6.4.3"
       }
     },
     {
       "ControlId": "EXO-6.1",
-      "Title": "Mailboxes with External Email Forwarding \u2014 Named List",
+      "Title": "Mailboxes with External Email Forwarding — Named List",
       "Description": "Identifies every mailbox with a ForwardingSmtpAddress set to an external domain.",
       "BusinessRisk": "External email forwarding is the #1 BEC persistence technique. An attacker who compromises a mailbox sets forwarding to maintain access even after a password reset. Forwarding to a personal account also creates an unauthorized data copy outside organizational control.",
       "Severity": "Critical",
@@ -5273,14 +5662,17 @@
       "Remediation": "For each listed mailbox: verify the forwarding is intentional and business-justified. Remove unauthorized: Set-Mailbox -Identity <upn> -ForwardingSmtpAddress $null. Also set transport rule to block auto-forward and create an alert policy for new forwarding rules.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["3.13", "8.11"],
+        "CISControls": [
+          "3.13",
+          "8.11"
+        ],
         "CIS": "2.1.2",
         "SCuBA": "MS.EXO.1.1v2",
         "NIST": "AC-4",
         "CMMC": "AC.L1-3.1.2",
         "ISO27001": "A.8.12",
         "SOC2": "CC6.7",
-        "HIPAA": "\u00a7164.312(e)(1), \u00a7164.402",
+        "HIPAA": "§164.312(e)(1), §164.402",
         "MITRE": [
           "T1114.003"
         ],
@@ -5289,9 +5681,9 @@
     },
     {
       "ControlId": "EXO-6.2",
-      "Title": "Shared Mailboxes with Sign-In Enabled \u2014 Named List",
+      "Title": "Shared Mailboxes with Sign-In Enabled — Named List",
       "Description": "Identifies shared mailboxes where the associated user account has interactive sign-in enabled.",
-      "BusinessRisk": "Shared mailboxes are designed to be accessed via delegation, not direct login. An enabled shared mailbox account bypasses the per-user MFA requirement \u2014 it's a permanent backdoor into email with no authentication strength requirement.",
+      "BusinessRisk": "Shared mailboxes are designed to be accessed via delegation, not direct login. An enabled shared mailbox account bypasses the per-user MFA requirement — it's a permanent backdoor into email with no authentication strength requirement.",
       "Severity": "High",
       "Workload": "EXO",
       "Category": "Email",
@@ -5301,7 +5693,9 @@
       "Remediation": "Update-MgUser -UserId <guid> -AccountEnabled:$false for each shared mailbox account. Or in M365 Admin: Active users > select user > Block sign-in. Verify delegates can still access via Outlook.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["5.3"],
+        "CISControls": [
+          "5.3"
+        ],
         "CIS": "2.1.5",
         "NIST": "IA-5",
         "CMMC": "IA.L1-3.5.1",
@@ -5310,13 +5704,13 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.312(a)(2)(i)",
+        "HIPAA": "§164.312(a)(2)(i)",
         "PCIDSS": "Req 8.2.1"
       }
     },
     {
       "ControlId": "EXO-6.3",
-      "Title": "Mailboxes with Audit Logging Disabled \u2014 Named List",
+      "Title": "Mailboxes with Audit Logging Disabled — Named List",
       "Description": "Identifies mailboxes with AuditEnabled explicitly set to $false.",
       "BusinessRisk": "A compromised mailbox with audit disabled cannot be investigated. After a BEC incident, forensics cannot determine what emails were read, what rules were created, who accessed the mailbox, or when the compromise began.",
       "Severity": "High",
@@ -5328,14 +5722,17 @@
       "Remediation": "Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false } | Set-Mailbox -AuditEnabled $true",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["8.2", "8.5"],
+        "CISControls": [
+          "8.2",
+          "8.5"
+        ],
         "CIS": "2.1.3",
         "SCuBA": "MS.EXO.13.1v1",
         "NIST": "AU-2",
         "CMMC": "AU.L2-3.3.1",
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
-        "HIPAA": "\u00a7164.312(b)",
+        "HIPAA": "§164.312(b)",
         "MITRE": [
           "T1114",
           "T1070.008"
@@ -5345,9 +5742,9 @@
     },
     {
       "ControlId": "EXO-6.4",
-      "Title": "Per-User SMTP AUTH Override \u2014 Named List",
+      "Title": "Per-User SMTP AUTH Override — Named List",
       "Description": "Identifies users with individual SMTP AUTH enabled, bypassing the org-level SMTP AUTH disable.",
-      "BusinessRisk": "SMTP AUTH does not support MFA. Users with per-user SMTP AUTH enabled can authenticate to Exchange via legacy protocols with just a password \u2014 bypassing all Conditional Access policies and MFA requirements.",
+      "BusinessRisk": "SMTP AUTH does not support MFA. Users with per-user SMTP AUTH enabled can authenticate to Exchange via legacy protocols with just a password — bypassing all Conditional Access policies and MFA requirements.",
       "Severity": "High",
       "Workload": "EXO",
       "Category": "Email",
@@ -5357,7 +5754,9 @@
       "Remediation": "For each listed user: Set-CASMailbox -Identity <upn> -SmtpClientAuthenticationDisabled $true. If SMTP AUTH is required (printer, scanner, legacy app) use a dedicated service account with a strong password and IP restriction.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["4.8"],
+        "CISControls": [
+          "4.8"
+        ],
         "CIS": "2.1.1",
         "NIST": "IA-2",
         "CMMC": "IA.L2-3.5.3",
@@ -5367,7 +5766,7 @@
           "T1110"
         ],
         "SCuBA": "MS.EXO.5.1v1",
-        "HIPAA": "\u00a7164.312(e)(1)",
+        "HIPAA": "§164.312(e)(1)",
         "SOC2": "CC6.7",
         "PCIDSS": "Req 4.2.1"
       }
@@ -5394,7 +5793,7 @@
         "MITRE": [
           "T1078"
         ],
-        "HIPAA": "\u00a7164.308(a)(8)",
+        "HIPAA": "§164.308(a)(8)",
         "SOC2": "CC4.1",
         "PCIDSS": "Req 11.6.1",
         "ISO27001": "A.5.36"
@@ -5414,7 +5813,10 @@
       "Remediation": "Get-Mailbox -ResultSize Unlimited -Filter \"ForwardingSmtpAddress -ne `$null\" | Set-Mailbox -ForwardingSmtpAddress $null -ForwardingAddress $null -DeliverToMailboxAndForward $false. Also block at transport layer: Set-RemoteDomain Default -AutoForwardEnabled $false.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["3.13", "8.11"],
+        "CISControls": [
+          "3.13",
+          "8.11"
+        ],
         "CIS": "6.2.1",
         "SCuBA": "MS.EXO.1.1v2",
         "NIST": "AU-6, IR-4, SI-4",
@@ -5424,7 +5826,7 @@
         ],
         "ISO27001": "A.8.12",
         "SOC2": "CC6.7",
-        "HIPAA": "\u00a7164.312(e)(1), \u00a7164.402",
+        "HIPAA": "§164.312(e)(1), §164.402",
         "PCIDSS": "Req 3.4"
       }
     },
@@ -5442,7 +5844,10 @@
       "Remediation": "Audit: foreach ($m in Get-Mailbox -ResultSize Unlimited) { Get-InboxRule -Mailbox $m.UserPrincipalName | Where-Object { $_.ForwardTo -or $_.RedirectTo -or $_.ForwardAsAttachmentTo } }. Disable: Disable-InboxRule -Mailbox <UPN> -Identity <RuleName>. Block at transport: Set-RemoteDomain Default -AutoForwardEnabled $false.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["3.13", "8.11"],
+        "CISControls": [
+          "3.13",
+          "8.11"
+        ],
         "CIS": "6.2.1",
         "SCuBA": "MS.EXO.1.1v2",
         "NIST": "AU-6, IR-4, SI-4",
@@ -5452,7 +5857,7 @@
         ],
         "ISO27001": "A.8.12",
         "SOC2": "CC6.7",
-        "HIPAA": "\u00a7164.312(e)(1), \u00a7164.402",
+        "HIPAA": "§164.312(e)(1), §164.402",
         "PCIDSS": "Req 3.4"
       }
     },
@@ -5460,7 +5865,7 @@
       "ControlId": "EXO-7.3",
       "Title": "No Mailboxes with Per-User Audit Explicitly Disabled",
       "Description": "No mailboxes have AuditEnabled = $false set explicitly. As of January 2019, mailbox audit is on by default org-wide; explicit per-user disable is a deliberate override and almost always wrong.",
-      "BusinessRisk": "Mailboxes with audit explicitly disabled cannot be investigated after a compromise. Inbox-rule creation, mail access by delegates, and sent-item modification are not captured for the disabled mailbox \u2014 a deliberate or accidental blind spot that thwarts incident response.",
+      "BusinessRisk": "Mailboxes with audit explicitly disabled cannot be investigated after a compromise. Inbox-rule creation, mail access by delegates, and sent-item modification are not captured for the disabled mailbox — a deliberate or accidental blind spot that thwarts incident response.",
       "Severity": "Medium",
       "Workload": "EXO",
       "Category": "Email",
@@ -5470,7 +5875,10 @@
       "Remediation": "Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false } | Set-Mailbox -AuditEnabled $true. For a single mailbox: Set-Mailbox -Identity <UPN> -AuditEnabled $true.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["8.2", "8.5"],
+        "CISControls": [
+          "8.2",
+          "8.5"
+        ],
         "CIS": "3.1.2",
         "SCuBA": "MS.EXO.13.1v1",
         "NIST": "AU-2, AU-3, AU-12",
@@ -5480,7 +5888,7 @@
         ],
         "ISO27001": "A.8.15",
         "SOC2": "CC7.2",
-        "HIPAA": "\u00a7164.312(b)",
+        "HIPAA": "§164.312(b)",
         "PCIDSS": "Req 10.2"
       }
     },
@@ -5488,17 +5896,19 @@
       "ControlId": "EXO-7.4",
       "Title": "No Per-User SMTP AUTH Overrides",
       "Description": "No mailboxes have SmtpClientAuthenticationDisabled = $false set at the mailbox level. Per-user overrides bypass the tenant-level SMTP AUTH disable and re-enable basic authentication for that mailbox.",
-      "BusinessRisk": "Per-user SMTP AUTH exceptions re-enable basic auth for the affected mailboxes \u2014 bypassing MFA and Conditional Access. They are a classic password-spray and credential-stuffing target, and they are usually granted ad-hoc for legacy scanners or line-of-business apps and then forgotten.",
+      "BusinessRisk": "Per-user SMTP AUTH exceptions re-enable basic auth for the affected mailboxes — bypassing MFA and Conditional Access. They are a classic password-spray and credential-stuffing target, and they are usually granted ad-hoc for legacy scanners or line-of-business apps and then forgotten.",
       "Severity": "High",
       "Workload": "EXO",
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
       "EvaluatorFunction": "Test-NRGControlEXOSmtpAuthExceptions",
-      "Remediation": "For each affected mailbox: Set-CASMailbox -Identity <UPN> -SmtpClientAuthenticationDisabled $true. Migrate senders to OAuth-based SMTP (Microsoft Graph sendMail API) or App Passwords with MFA. For multifunction devices/scanners, prefer SMTP relay via on-prem connector with IP allowlist, or Direct Send (anonymous) \u2014 neither requires basic auth.",
+      "Remediation": "For each affected mailbox: Set-CASMailbox -Identity <UPN> -SmtpClientAuthenticationDisabled $true. Migrate senders to OAuth-based SMTP (Microsoft Graph sendMail API) or App Passwords with MFA. For multifunction devices/scanners, prefer SMTP relay via on-prem connector with IP allowlist, or Direct Send (anonymous) — neither requires basic auth.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
-        "CISControls": ["4.8"],
+        "CISControls": [
+          "4.8"
+        ],
         "CIS": "6.2.2",
         "SCuBA": "MS.EXO.5.1v1",
         "NIST": "IA-2, SC-8, SI-4",
@@ -5509,9 +5919,137 @@
         ],
         "ISO27001": "A.8.24",
         "SOC2": "CC6.7",
-        "HIPAA": "\u00a7164.312(e)(1)",
+        "HIPAA": "§164.312(e)(1)",
         "PCIDSS": "Req 4.2.1"
       }
+    },
+    {
+      "ControlId": "EXO-8.1",
+      "Title": "Mail Flow Connectors Reviewed and Hardened",
+      "Description": "Every enabled inbound and outbound connector is recognised, TLS-enforced, and scoped to known senders or recipients.",
+      "BusinessRisk": "A connector reroutes mail into or out of the tenant at the transport layer. An attacker who adds one has persistence that survives every password reset and MFA enrolment, because it lives in no mailbox and looks nothing like an inbox rule. An inbound connector scoped to no sender IP or domain will accept mail claiming to be from any domain; an outbound connector routing all mail through a smart host puts every outbound message through infrastructure that may not be yours.",
+      "Severity": "High",
+      "Workload": "EXO",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-Inventory",
+      "EvaluatorFunction": "Test-NRGControlEXOMailFlowConnectors",
+      "Remediation": "Exchange admin center > Mail flow > Connectors. Review every enabled connector against a known list. Delete any nobody recognises. On inbound connectors set RequireTls $true and scope to specific SenderIPAddresses or SenderDomains. On outbound connectors set TlsSettings to EncryptionOnly or better and avoid a * recipient domain unless a smart host genuinely handles all mail.",
+      "References": {
+        "CIS": "6.2.2",
+        "CISControls": [
+          "4.1",
+          "13.4"
+        ],
+        "NIST": "AC-4, SC-7, SC-8, SI-4",
+        "CMMC": "SC.L1-3.13.1, SC.L2-3.13.8",
+        "MITRE": [
+          "T1071.003",
+          "T1114.003",
+          "T1090"
+        ],
+        "ISO27001": "A.8.20",
+        "SOC2": "CC6.6",
+        "HIPAA": "§164.312(e)(1)",
+        "PCIDSS": "Req 1.3"
+      },
+      "LicenseRequirement": "Included (EOP)"
+    },
+    {
+      "ControlId": "EXO-8.2",
+      "Title": "No Transport Rule Redirects Mail Externally",
+      "Description": "No enabled transport rule redirects, blind-copies or copies mail to a recipient outside the tenant.",
+      "BusinessRisk": "A transport rule that sends mail to an external address is organisation-wide exfiltration applied at the transport layer. No mailbox carries a forwarding flag, so the per-mailbox forwarding controls (EXO-1.3, EXO-7.1, EXO-7.2) are blind to it. One rule can copy every inbound invoice or every message matching a keyword to an attacker, silently and indefinitely.",
+      "Severity": "Critical",
+      "Workload": "EXO",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-Inventory",
+      "EvaluatorFunction": "Test-NRGControlEXOTransportRuleContents",
+      "Remediation": "Exchange admin center > Mail flow > Rules. Inspect every enabled rule for RedirectMessageTo, BlindCopyTo and CopyTo actions with recipients outside your accepted domains. Remove any not documented and approved. Also review rules setting SCL -1, which bypass spam filtering for whatever they match.",
+      "References": {
+        "CIS": "6.2.1",
+        "CISControls": [
+          "3.3",
+          "13.4"
+        ],
+        "NIST": "AC-4, AC-20, SC-7, SI-4",
+        "CMMC": "AC.L2-3.1.3, SC.L1-3.13.1",
+        "MITRE": [
+          "T1114.003",
+          "T1020",
+          "T1537"
+        ],
+        "ISO27001": "A.8.12",
+        "SOC2": "CC6.7",
+        "HIPAA": "§164.312(e)(1)",
+        "PCIDSS": "Req 1.3"
+      },
+      "LicenseRequirement": "Included (EOP)"
+    },
+    {
+      "ControlId": "AAD-14.1",
+      "Title": "Application Credentials Current and Short-Lived",
+      "Description": "App registration client secrets and certificates are unexpired and issued with a bounded lifetime.",
+      "BusinessRisk": "A client secret is a standing bearer credential to everything its application can reach. No MFA applies to it, no Conditional Access evaluates it, and no sign-in risk is scored against it. A long-lived secret keeps working for everyone who has ever seen it — a departed administrator, a stale runbook, a CI variable, a chat message — until somebody rotates it, and nothing forces rotation. An expired credential is the other half of the same problem: the fix under outage pressure is a new secret with the longest lifetime available and no reminder set.",
+      "Severity": "High",
+      "Workload": "AAD",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "AAD-Inventory",
+      "EvaluatorFunction": "Test-NRGControlAADAppCredentialExpiry",
+      "Remediation": "Entra admin center > App registrations > Certificates and secrets. Remove expired credentials rather than leaving them in place. Reissue anything with a lifetime beyond 180 days at a shorter term and record the rotation date. Prefer certificate credentials or workload identity federation over client secrets where the application supports them.",
+      "References": {
+        "CIS": "1.3.4",
+        "CISControls": [
+          "5.4",
+          "6.2"
+        ],
+        "NIST": "IA-5, IA-5(1), AC-2",
+        "CMMC": "IA.L2-3.5.10, AC.L1-3.1.1",
+        "MITRE": [
+          "T1078.004",
+          "T1550.001",
+          "T1098.001"
+        ],
+        "ISO27001": "A.5.17",
+        "SOC2": "CC6.1",
+        "HIPAA": "§164.312(d)",
+        "PCIDSS": "Req 8.3"
+      },
+      "LicenseRequirement": "Included (Entra ID Free)"
+    },
+    {
+      "ControlId": "DEF-5.1",
+      "Title": "Tenant Allow/Block List Entries Time-Boxed",
+      "Description": "No allow entry in the Tenant Allow/Block List is permanent; every filtering override carries an expiry.",
+      "BusinessRisk": "An allow entry overrides a filtering verdict outright — mail, a URL or a file hash on the allow list bypasses the detonation and reputation checks that would otherwise stop it. Entries are routinely added under pressure during an incident to unblock a sender and are almost never removed afterwards. A never-expiring allow is a permanent, undocumented hole in mail filtering that no anti-spam or anti-phishing policy review will surface, because it lives on a different surface entirely.",
+      "Severity": "High",
+      "Workload": "DEF",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-Inventory",
+      "EvaluatorFunction": "Test-NRGControlDefenderTenantAllowBlockList",
+      "Remediation": "Defender portal > Policies & rules > Threat policies > Tenant Allow/Block Lists. Review every allow entry. Remove any whose reason no longer applies, and set an expiry date on the rest — Microsoft caps allow entries at 30 or 90 days for exactly this reason. Block entries may remain permanent.",
+      "References": {
+        "CIS": "2.1.6",
+        "CISControls": [
+          "9.6",
+          "13.4"
+        ],
+        "NIST": "SI-3, SI-4, SI-8, CM-7",
+        "CMMC": "SI.L1-3.14.2, SI.L1-3.14.5",
+        "MITRE": [
+          "T1566.001",
+          "T1566.002",
+          "T1562.001"
+        ],
+        "ISO27001": "A.8.7",
+        "SOC2": "CC6.8",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
+        "PCIDSS": "Req 5.2"
+      },
+      "LicenseRequirement": "Included (EOP)"
     }
   ]
 }
