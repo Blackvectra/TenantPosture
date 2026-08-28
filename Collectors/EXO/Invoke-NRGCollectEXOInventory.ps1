@@ -46,6 +46,7 @@ function Invoke-NRGCollectEXOInventory {
             OutboundConnectors     = @()
             TransportRules         = @()
             TenantAllowBlockList   = @()
+            MailboxRecoverability  = $null
             Stats = @{
                 MailboxesScanned     = 0
                 InboxRulesEvaluated  = 0
@@ -70,6 +71,7 @@ function Invoke-NRGCollectEXOInventory {
                 MailFlowConnectors     = 'NotRun'
                 TransportRules         = 'NotRun'
                 TenantAllowBlockList   = 'NotRun'
+                MailboxRecoverability  = 'NotRun'
             }
         }
     }
@@ -298,6 +300,65 @@ function Invoke-NRGCollectEXOInventory {
             $result.Data.SectionStatus.SmtpAuthEnabledPerUser = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-SMTPAuthPerUser' -Message $_.Exception.Message
+            }
+        }
+
+        # ── Mailbox recoverability (EXO-9.1, EXO-9.2) ────────────────────────
+        # What survives a deletion. Two independent windows:
+        #
+        #   A hold — litigation hold, an In-Place hold, or a retention policy —
+        #   preserves content past a user hard-delete and past the mailbox
+        #   itself being removed. Without one, a departing employee's mailbox is
+        #   gone 30 days after the account is deleted, and a hard-deleted item
+        #   is gone as soon as the recoverable-items window closes.
+        #
+        #   RetainDeletedItemsFor is that window. It defaults to 14 days and
+        #   caps at 30. Fourteen days is a fortnight to notice that mail is
+        #   missing, which is routinely not long enough — ransomware and BEC are
+        #   frequently discovered later than that.
+        #
+        # Counts and a capped named list, not a full dump: this is inventory,
+        # not a mailbox export, and the JSON already carries UPNs elsewhere.
+        try {
+            $mbx = @(Get-Mailbox -ResultSize Unlimited -ErrorAction Stop |
+                     Where-Object { $_.RecipientTypeDetails -notin @('DiscoveryMailbox') })
+            $noHold = @()
+            $shortWindow = @()
+            $windowDays = @()
+            foreach ($m in $mbx) {
+                $lit   = [bool](Get-NRGObjectField -Item $m -Key 'LitigationHoldEnabled' -Default $false)
+                $inPl  = @(Get-NRGObjectField -Item $m -Key 'InPlaceHolds' -Default @())
+                $rpol  = [string](Get-NRGObjectField -Item $m -Key 'RetentionPolicy')
+                $held  = $lit -or ($inPl.Count -gt 0) -or [bool]$rpol
+                $upn   = [string](Get-NRGObjectField -Item $m -Key 'UserPrincipalName')
+                if (-not $held) { $noHold += @{ UPN = $upn; DisplayName = [string](Get-NRGObjectField -Item $m -Key 'DisplayName') } }
+
+                # RetainDeletedItemsFor arrives as a timespan-ish object whose
+                # shape varies by EXO module version; read it as a string and
+                # take the day component rather than trusting a .Days property.
+                $raw = [string](Get-NRGObjectField -Item $m -Key 'RetainDeletedItemsFor')
+                $days = $null
+                if ($raw -match '^(\d+)\.') { $days = [int]$Matches[1] }
+                elseif ($raw -match '^(\d+):') { $days = 0 }
+                if ($null -ne $days) {
+                    $windowDays += $days
+                    if ($days -lt 30) { $shortWindow += @{ UPN = $upn; Days = $days } }
+                }
+            }
+            $result.Data.MailboxRecoverability = @{
+                TotalMailboxes      = $mbx.Count
+                WithHold            = ($mbx.Count - $noHold.Count)
+                WithoutHold         = $noHold.Count
+                WithoutHoldSample   = @($noHold | Select-Object -First 100)
+                ShortRetentionCount = $shortWindow.Count
+                ShortRetentionSample= @($shortWindow | Select-Object -First 100)
+                MinRetentionDays    = $(if ($windowDays.Count) { ($windowDays | Measure-Object -Minimum).Minimum } else { $null })
+            }
+            $result.Data.SectionStatus.MailboxRecoverability = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.MailboxRecoverability = 'Failed'
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'EXO-MailboxRecoverability' -Message $_.Exception.Message
             }
         }
 

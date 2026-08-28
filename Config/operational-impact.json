@@ -420,7 +420,10 @@
     "EXO-8.1": "admin-review-workload",
     "EXO-8.2": "admin-review-workload",
     "AAD-14.1": "admin-elevation-friction",
-    "DEF-5.1": "mail-flow-quarantine"
+    "DEF-5.1": "mail-flow-quarantine",
+    "EXO-9.1": "storage-retention",
+    "EXO-9.2": "storage-retention",
+    "SPO-4.1": "storage-retention"
   },
   "deviceControls": {
     "DEV-1.1": "device-encryption",
@@ -507,6 +510,15 @@
     "DEF-5.1": {
       "Summary": "Expiring an allow entry means the sender, URL or file it covered goes back through normal filtering — which may block it again.",
       "Watchouts": "The entry existed for a reason, even if the reason is undocumented. Contact the owner before expiring it, or you re-create the original incident. Fix the underlying authentication problem (usually SPF/DKIM on the sender side) rather than re-adding the allow."
+    },
+    "EXO-9.1": {
+      "Summary": "Putting every mailbox under retention or hold makes deleted mail undeletable for the retention period — which is the point, and also a discovery obligation.",
+      "Users": "Nothing visible. Deleting mail appears to work; the copy is preserved where users cannot see it.",
+      "Watchouts": "Retained mail is discoverable in litigation. Retaining longer than the organisation own stated retention policy creates its own liability, so agree the period with whoever owns that policy before applying it. Litigation hold also needs Exchange Online Plan 2 — check licensing before promising it."
+    },
+    "SPO-4.1": {
+      "Summary": "Extending departed-user OneDrive retention keeps leavers files longer. Costs storage and keeps their data in scope.",
+      "Watchouts": "A retained OneDrive still counts toward tenant storage and still contains whatever the leaver had. Pair the change with an offboarding step that reassigns ownership, so retention is a safety net rather than an archive nobody reviews."
     }
   }
 }

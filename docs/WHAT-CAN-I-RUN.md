@@ -29,7 +29,7 @@ coming back to this after six months, start here.
 
 ### `Invoke-NRGAssessment.ps1` — the main one
 
-One tenant, 199 controls, client-ready report. Everything else orbits this.
+One tenant, 202 controls, client-ready report. Everything else orbits this.
 
 ```powershell
 .\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com
@@ -262,7 +262,7 @@ docs/            this file, and the policy docs
 | File | What it holds |
 |---|---|
 | `clients.json` | Your client list — TenantId, DelegatedOrg, skip flags |
-| `controls.json` | The 199 tenant controls and every framework citation |
+| `controls.json` | The 202 tenant controls and every framework citation |
 | `device-controls.json` | The 35 endpoint checks (`DEV-*`) |
 | `device-baseline.json` | The 27-item build standard |
 | `nist-physical.json` | The 31 physical / media / device controls |

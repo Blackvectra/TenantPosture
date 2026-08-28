@@ -168,6 +168,9 @@
         'Test-NRGControlDNSCertTransparency',
 
         # ── Evaluators — EXO ──────────────────────────────────────────────────
+        'Test-NRGControlEXOMailboxHoldCoverage',
+        'Test-NRGControlEXODeletedItemRetention',
+        'Test-NRGControlSPODepartedUserRetention',
         'Test-NRGControlEXOMailFlowConnectors',
         'Test-NRGControlEXOTransportRuleContents',
         'Test-NRGControlDefenderTenantAllowBlockList',

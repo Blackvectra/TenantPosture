@@ -545,6 +545,35 @@ Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60
 | PCI DSS | Req 8.2.4 |
 | MITRE ATT&CK | T1078 |
 
+### SPO-4.1 — Departed-User OneDrive Retention Configured
+
+**Severity:** Medium  |  **Category:** Collaboration  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+A deleted user OneDrive is retained long enough for the business to retrieve its contents before permanent deletion.
+
+**Business risk:**
+When a user account is deleted their OneDrive is kept for a configurable period and then destroyed. The default is 30 days, which is frequently shorter than the time it takes anyone to realise a departing employee was the only person holding a document. Once the period elapses the content is unrecoverable — there is no backup behind it.
+
+**Remediation:**
+Set-SPOTenant -DeletedUserPersonalSiteRetentionPeriodInDays 365 (maximum 3650). Pair it with an offboarding step that reassigns ownership of the OneDrive before the account is deleted, so retention is a safety net rather than the plan.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | CP-9, CP-10, SI-12 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.2.10 |
+| CIS Controls v8.1 | 11.1, 3.4 |
+| CMMC 2.0 | MP.L2-3.8.9 |
+| MITRE ATT&CK | T1485, T1531 |
+| ISO/IEC 27001:2022 | A.8.13 |
+| SOC 2 | A1.2 |
+| HIPAA | §164.308(a)(7)(ii)(A) |
+| PCI DSS v4.0 | Req 10.5 |
+
 ---
 
 *Generated from `Config/controls.json` · NRG Technology Services / NextLayerSec LLC*

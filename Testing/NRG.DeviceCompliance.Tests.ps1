@@ -213,7 +213,7 @@ Describe 'Endpoint device compliance' {
         }
 
         It 'does not collide with the tenant control set' {
-            # DEV-* is deliberately outside controls.json: that file is the 199
+            # DEV-* is deliberately outside controls.json: that file is the 202
             # tenant controls, a stated product number.
             $tenant = @((Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config/controls.json') -Raw -Encoding utf8 |
                 ConvertFrom-Json).controls | ForEach-Object { $_.ControlId })
