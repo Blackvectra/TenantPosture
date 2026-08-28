@@ -1055,6 +1055,64 @@ Exchange admin center > Mail flow > Rules. Inspect every enabled rule for Redire
 | HIPAA | §164.312(e)(1) |
 | PCI DSS v4.0 | Req 1.3 |
 
+### EXO-9.1 — Mailboxes Protected by Hold or Retention Policy
+
+**Severity:** High  |  **Category:** Email  |  **Automated:** Yes
+
+**License required:** Exchange Online Plan 2 or M365 E3
+
+**Description:**
+Every mailbox is covered by a litigation hold, an In-Place hold, or a retention policy, so content survives deletion of the item, the mailbox, or the account.
+
+**Business risk:**
+Without a hold, a mailbox is not recoverable once the account is deleted — Microsoft keeps it 30 days and then it is gone permanently. A hard-deleted item is gone as soon as the recoverable-items window closes. This is the control that decides whether a ransomware or insider incident is a recovery exercise or a permanent loss, and it is the one clients assume is already in place because Microsoft is hosting the mail.
+
+**Remediation:**
+Apply a Purview retention policy scoped to all Exchange mailboxes (Purview > Data lifecycle management > Retention policies), or enable litigation hold per mailbox: Set-Mailbox -Identity <UPN> -LitigationHoldEnabled $true -LitigationHoldDuration <days>. A tenant-wide retention policy is the maintainable option; per-mailbox litigation hold does not follow new starters.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | CP-9, CP-10, AU-11, SI-12 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 6.1.4 |
+| CIS Controls v8.1 | 11.1, 11.2 |
+| CMMC 2.0 | AU.L2-3.3.1, MP.L2-3.8.9 |
+| MITRE ATT&CK | T1485, T1486, T1070.008 |
+| ISO/IEC 27001:2022 | A.8.13 |
+| SOC 2 | A1.2 |
+| HIPAA | §164.308(a)(7)(ii)(A) |
+| PCI DSS v4.0 | Req 10.5 |
+
+### EXO-9.2 — Deleted Item Retention Window at Maximum
+
+**Severity:** Medium  |  **Category:** Email  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Mailboxes retain deleted items for the full 30 days rather than the 14-day default.
+
+**Business risk:**
+RetainDeletedItemsFor is the window in which a user, an administrator or an attacker-deleted message can still be recovered without a hold. It defaults to 14 days. Business email compromise and ransomware are routinely discovered later than a fortnight, and mail deleted by an attacker covering their tracks is unrecoverable once the window closes — including the evidence of what they did.
+
+**Remediation:**
+Set-Mailbox -Identity <UPN> -RetainDeletedItemsFor 30. Apply tenant-wide with: Get-Mailbox -ResultSize Unlimited | Set-Mailbox -RetainDeletedItemsFor 30. 30 days is the maximum; beyond it requires a hold (EXO-9.1).
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | CP-10, AU-11, SI-12 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 6.1.5 |
+| CIS Controls v8.1 | 11.1 |
+| CMMC 2.0 | AU.L2-3.3.1 |
+| MITRE ATT&CK | T1070.008, T1485 |
+| ISO/IEC 27001:2022 | A.8.13 |
+| SOC 2 | A1.2 |
+| HIPAA | §164.308(a)(7)(ii)(A) |
+| PCI DSS v4.0 | Req 10.5 |
+
 ---
 
 *Generated from `Config/controls.json` · NRG Technology Services / NextLayerSec LLC*

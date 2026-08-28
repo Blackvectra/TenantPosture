@@ -5,7 +5,6 @@
   "url": "https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final",
   "purpose": "Control identifiers and official titles for the 800-53 Rev 5 controls this assessment exercises, plus the full Rev 5 family list. Used by the standalone NIST matrix so every row names the control the way the reader's own documentation, POA&M, and auditor do — a bare 'AC-6(9)' is not a deliverable.",
   "note": "Titles are the Rev 5 titles, which differ from Rev 4 in several places this assessment touches: AC-11 is 'Device Lock' (was 'Session Lock'), AT-2 is 'Literacy Training and Awareness' (was 'Security Awareness Training'), AU-2 is 'Event Logging' (was 'Audit Events'), AU-4 is 'Audit Log Storage Capacity', AC-6(9) is 'Log Use of Privileged Functions', and AC-16 gained 'and Privacy'. Citing a Rev 4 title under a Rev 5 heading is the kind of error an auditor notices first.",
-
   "families": {
     "AC": "Access Control",
     "AT": "Awareness and Training",
@@ -28,7 +27,6 @@
     "SI": "System and Information Integrity",
     "SR": "Supply Chain Risk Management"
   },
-
   "controls": {
     "AC-2": "Account Management",
     "AC-2(3)": "Account Management | Disable Accounts",
@@ -106,6 +104,7 @@
     "SI-3": "Malicious Code Protection",
     "SI-4": "System Monitoring",
     "SI-7": "Software, Firmware, and Information Integrity",
-    "SI-8": "Spam Protection"
+    "SI-8": "Spam Protection",
+    "SI-12": "Information Management and Retention"
   }
 }

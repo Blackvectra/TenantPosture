@@ -6050,6 +6050,99 @@
         "PCIDSS": "Req 5.2"
       },
       "LicenseRequirement": "Included (EOP)"
+    },
+    {
+      "ControlId": "EXO-9.1",
+      "Title": "Mailboxes Protected by Hold or Retention Policy",
+      "Description": "Every mailbox is covered by a litigation hold, an In-Place hold, or a retention policy, so content survives deletion of the item, the mailbox, or the account.",
+      "BusinessRisk": "Without a hold, a mailbox is not recoverable once the account is deleted — Microsoft keeps it 30 days and then it is gone permanently. A hard-deleted item is gone as soon as the recoverable-items window closes. This is the control that decides whether a ransomware or insider incident is a recovery exercise or a permanent loss, and it is the one clients assume is already in place because Microsoft is hosting the mail.",
+      "Severity": "High",
+      "Workload": "EXO",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-Inventory",
+      "EvaluatorFunction": "Test-NRGControlEXOMailboxHoldCoverage",
+      "Remediation": "Apply a Purview retention policy scoped to all Exchange mailboxes (Purview > Data lifecycle management > Retention policies), or enable litigation hold per mailbox: Set-Mailbox -Identity <UPN> -LitigationHoldEnabled $true -LitigationHoldDuration <days>. A tenant-wide retention policy is the maintainable option; per-mailbox litigation hold does not follow new starters.",
+      "References": {
+        "CIS": "6.1.4",
+        "CISControls": [
+          "11.1",
+          "11.2"
+        ],
+        "NIST": "CP-9, CP-10, AU-11, SI-12",
+        "CMMC": "AU.L2-3.3.1, MP.L2-3.8.9",
+        "MITRE": [
+          "T1485",
+          "T1486",
+          "T1070.008"
+        ],
+        "ISO27001": "A.8.13",
+        "SOC2": "A1.2",
+        "HIPAA": "§164.308(a)(7)(ii)(A)",
+        "PCIDSS": "Req 10.5"
+      },
+      "LicenseRequirement": "Exchange Online Plan 2 or M365 E3"
+    },
+    {
+      "ControlId": "EXO-9.2",
+      "Title": "Deleted Item Retention Window at Maximum",
+      "Description": "Mailboxes retain deleted items for the full 30 days rather than the 14-day default.",
+      "BusinessRisk": "RetainDeletedItemsFor is the window in which a user, an administrator or an attacker-deleted message can still be recovered without a hold. It defaults to 14 days. Business email compromise and ransomware are routinely discovered later than a fortnight, and mail deleted by an attacker covering their tracks is unrecoverable once the window closes — including the evidence of what they did.",
+      "Severity": "Medium",
+      "Workload": "EXO",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-Inventory",
+      "EvaluatorFunction": "Test-NRGControlEXODeletedItemRetention",
+      "Remediation": "Set-Mailbox -Identity <UPN> -RetainDeletedItemsFor 30. Apply tenant-wide with: Get-Mailbox -ResultSize Unlimited | Set-Mailbox -RetainDeletedItemsFor 30. 30 days is the maximum; beyond it requires a hold (EXO-9.1).",
+      "References": {
+        "CIS": "6.1.5",
+        "CISControls": [
+          "11.1"
+        ],
+        "NIST": "CP-10, AU-11, SI-12",
+        "CMMC": "AU.L2-3.3.1",
+        "MITRE": [
+          "T1070.008",
+          "T1485"
+        ],
+        "ISO27001": "A.8.13",
+        "SOC2": "A1.2",
+        "HIPAA": "§164.308(a)(7)(ii)(A)",
+        "PCIDSS": "Req 10.5"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "SPO-4.1",
+      "Title": "Departed-User OneDrive Retention Configured",
+      "Description": "A deleted user OneDrive is retained long enough for the business to retrieve its contents before permanent deletion.",
+      "BusinessRisk": "When a user account is deleted their OneDrive is kept for a configurable period and then destroyed. The default is 30 days, which is frequently shorter than the time it takes anyone to realise a departing employee was the only person holding a document. Once the period elapses the content is unrecoverable — there is no backup behind it.",
+      "Severity": "Medium",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-NRGControlSPODepartedUserRetention",
+      "Remediation": "Set-SPOTenant -DeletedUserPersonalSiteRetentionPeriodInDays 365 (maximum 3650). Pair it with an offboarding step that reassigns ownership of the OneDrive before the account is deleted, so retention is a safety net rather than the plan.",
+      "References": {
+        "CIS": "7.2.10",
+        "CISControls": [
+          "11.1",
+          "3.4"
+        ],
+        "NIST": "CP-9, CP-10, SI-12",
+        "CMMC": "MP.L2-3.8.9",
+        "MITRE": [
+          "T1485",
+          "T1531"
+        ],
+        "ISO27001": "A.8.13",
+        "SOC2": "A1.2",
+        "HIPAA": "§164.308(a)(7)(ii)(A)",
+        "PCIDSS": "Req 10.5"
+      },
+      "LicenseRequirement": "Included (all plans)"
     }
   ]
 }
