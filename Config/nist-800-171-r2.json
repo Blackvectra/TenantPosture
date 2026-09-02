@@ -1,0 +1,2076 @@
+{
+  "version": "1.0",
+  "framework": "NIST SP 800-171 Revision 2",
+  "requirementCount": 110,
+  "note": "Rev 2, not Rev 3, because Rev 2 is the standard CMMC Level 2 is assessed against. NIST published Rev 3 in May 2024 but DoD has not authorized it for compliance scoring, SPRS reporting or CMMC assessments (Class Deviation 2023-O0006). An interim rule moving CMMC to Rev 3 was targeted for July 2026 — when it lands, add nist-800-171-r3.json beside this file and switch the Baseline field in the client answers file. Do not edit this one.",
+  "mapping": "No 800-53 mapping is stored here and none is needed. CMMC Level 2 practice IDs embed the 800-171 requirement number (IA.L2-3.5.3 -> 3.5.3), and every control in controls.json already carries a CMMC citation, so the join runs off curation that already exists rather than a mapping table that would rot.",
+  "provenance": "Requirement text is from NIST SP 800-171 Rev 2, a US Government publication in the public domain. Assessment objectives are from SP 800-171A. Converted from a community OSCAL catalog and normalised — the source ships requirement 3.2.1 with surrounding whitespace in its id, which silently drops it from any exact-match join.",
+  "families": {
+    "3.1": "Access Control",
+    "3.2": "Awareness and Training",
+    "3.3": "Audit and Accountability",
+    "3.4": "Configuration Management",
+    "3.5": "Identification and Authentication",
+    "3.6": "Incident Response",
+    "3.7": "Maintenance",
+    "3.8": "Media Protection",
+    "3.9": "Personnel Security",
+    "3.10": "Physical Protection",
+    "3.11": "Risk Assessment",
+    "3.12": "Security Assessment",
+    "3.13": "System and Communications Protection",
+    "3.14": "System and Information Integrity"
+  },
+  "requirements": [
+    {
+      "Id": "3.1.1",
+      "Family": "3.1",
+      "Statement": "Limit system access to authorized users, processes acting on behalf of authorized users, and devices (including other systems).",
+      "Objectives": [
+        {
+          "Label": "3.1.1[a]",
+          "Text": "authorized users are identified."
+        },
+        {
+          "Label": "3.1.1[b]",
+          "Text": "processes acting on behalf of authorized users are identified."
+        },
+        {
+          "Label": "3.1.1[c]",
+          "Text": "devices (and other systems) authorized to connect to the system are identified."
+        },
+        {
+          "Label": "3.1.1[d]",
+          "Text": "system access is limited to authorized users."
+        },
+        {
+          "Label": "3.1.1[e]",
+          "Text": "system access is limited to processes acting on behalf of authorized users."
+        },
+        {
+          "Label": "3.1.1[f]",
+          "Text": "system access is limited to authorized devices (including other systems)."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.2",
+      "Family": "3.1",
+      "Statement": "Limit system access to the types of transactions and functions that authorized users are permitted to execute.",
+      "Objectives": [
+        {
+          "Label": "3.1.2[a]",
+          "Text": "the types of transactions and functions that authorized users are permitted to execute are defined."
+        },
+        {
+          "Label": "3.1.2[b]",
+          "Text": "system access is limited to the defined types of transactions and functions for authorized users."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.3",
+      "Family": "3.1",
+      "Statement": "Control the flow of CUI in accordance with approved authorizations.",
+      "Objectives": [
+        {
+          "Label": "3.1.3[a]",
+          "Text": "information flow control policies are defined."
+        },
+        {
+          "Label": "3.1.3[b]",
+          "Text": "methods and enforcement mechanisms for controlling the flow of CUI are defined."
+        },
+        {
+          "Label": "3.1.3[c]",
+          "Text": "designated sources and destinations (e.g., networks, individuals, and devices) for CUI within the system and between interconnected systems are identified."
+        },
+        {
+          "Label": "3.1.3[d]",
+          "Text": "authorizations for controlling the flow of CUI are defined."
+        },
+        {
+          "Label": "3.1.3[e]",
+          "Text": "approved authorizations for controlling the flow of CUI are enforced."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.4",
+      "Family": "3.1",
+      "Statement": "Separate the duties of individuals to reduce the risk of malevolent activity without collusion.",
+      "Objectives": [
+        {
+          "Label": "3.1.4[a]",
+          "Text": "the duties of individuals requiring separation are defined."
+        },
+        {
+          "Label": "3.1.4[b]",
+          "Text": "responsibilities for duties that require separation are assigned to separate individuals."
+        },
+        {
+          "Label": "3.1.4[c]",
+          "Text": "access privileges that enable individuals to exercise the duties that require separation are granted to separate individuals."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.5",
+      "Family": "3.1",
+      "Statement": "Employ the principle of least privilege, including for specific security functions and privileged accounts.",
+      "Objectives": [
+        {
+          "Label": "3.1.5[a]",
+          "Text": "privileged accounts are identified."
+        },
+        {
+          "Label": "3.1.5[b]",
+          "Text": "access to privileged accounts is authorized in accordance with the principle of least privilege."
+        },
+        {
+          "Label": "3.1.5[c]",
+          "Text": "security functions are identified."
+        },
+        {
+          "Label": "3.1.5[d]",
+          "Text": "access to security functions is authorized in accordance with the principle of least privilege."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.6",
+      "Family": "3.1",
+      "Statement": "Use non-privileged accounts or roles when accessing non-security functions.",
+      "Objectives": [
+        {
+          "Label": "3.1.6[a]",
+          "Text": "nonsecurity functions are identified."
+        },
+        {
+          "Label": "3.1.6[b]",
+          "Text": "users are required to use non-privileged accounts or roles when accessing nonsecurity functions."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.7",
+      "Family": "3.1",
+      "Statement": "Prevent non-privileged users from executing privileged functions and capture the execution of such functions in audit logs.",
+      "Objectives": [
+        {
+          "Label": "3.1.7[a]",
+          "Text": "privileged functions are defined."
+        },
+        {
+          "Label": "3.1.7[b]",
+          "Text": "non-privileged users are defined."
+        },
+        {
+          "Label": "3.1.7[c]",
+          "Text": "non-privileged users are prevented from executing privileged functions."
+        },
+        {
+          "Label": "3.1.7[d]",
+          "Text": "the execution of privileged functions is captured in audit logs."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.8",
+      "Family": "3.1",
+      "Statement": "Limit unsuccessful logon attempts.",
+      "Objectives": [
+        {
+          "Label": "3.1.8[a]",
+          "Text": "the means of limiting unsuccessful logon attempts is defined."
+        },
+        {
+          "Label": "3.1.8[b]",
+          "Text": "the defined means of limiting unsuccessful logon attempts is implemented."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.9",
+      "Family": "3.1",
+      "Statement": "Provide privacy and security notices consistent with applicable CUI rules.",
+      "Objectives": [
+        {
+          "Label": "3.1.9[a]",
+          "Text": "privacy and security notices required by CUI-specified rules are identified, consistent, and associated with the specific CUI category."
+        },
+        {
+          "Label": "3.1.9[b]",
+          "Text": "privacy and security notices are displayed."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.10",
+      "Family": "3.1",
+      "Statement": "Use session lock with pattern-hiding displays to prevent access and viewing of data after a period of inactivity.",
+      "Objectives": [
+        {
+          "Label": "3.1.10[a]",
+          "Text": "the period of inactivity after which the system initiates a session lock is defined."
+        },
+        {
+          "Label": "3.1.10[b]",
+          "Text": "access to the system and viewing of data is prevented by initiating a session lock after the defined period of inactivity."
+        },
+        {
+          "Label": "3.1.10[c]",
+          "Text": "previously visible information is concealed via a pattern-hiding display after the defined period of inactivity."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.11",
+      "Family": "3.1",
+      "Statement": "Terminate (automatically) a user session after a defined condition.",
+      "Objectives": [
+        {
+          "Label": "3.1.11[a]",
+          "Text": "conditions requiring a user session to terminate are defined."
+        },
+        {
+          "Label": "3.1.11[b]",
+          "Text": "a user session is automatically terminated after any of the defined conditions occur."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.12",
+      "Family": "3.1",
+      "Statement": "Monitor and control remote access sessions.",
+      "Objectives": [
+        {
+          "Label": "3.1.12[a]",
+          "Text": "remote access sessions are permitted."
+        },
+        {
+          "Label": "3.1.12[b]",
+          "Text": "the types of permitted remote access are identified."
+        },
+        {
+          "Label": "3.1.12[c]",
+          "Text": "remote access sessions are controlled."
+        },
+        {
+          "Label": "3.1.12[d]",
+          "Text": "remote access sessions are monitored."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.13",
+      "Family": "3.1",
+      "Statement": "Employ cryptographic mechanisms to protect the confidentiality of remote access sessions.",
+      "Objectives": [
+        {
+          "Label": "3.1.13[a]",
+          "Text": "cryptographic mechanisms to protect the confidentiality of remote access sessions are identified."
+        },
+        {
+          "Label": "3.1.13[b]",
+          "Text": "cryptographic mechanisms to protect the confidentiality of remote access sessions are implemented."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.14",
+      "Family": "3.1",
+      "Statement": "Route remote access via managed access control points.",
+      "Objectives": [
+        {
+          "Label": "3.1.14[a]",
+          "Text": "managed access control points are identified and implemented."
+        },
+        {
+          "Label": "3.1.14[b]",
+          "Text": "remote access is routed through managed network access control points."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.15",
+      "Family": "3.1",
+      "Statement": "Authorize remote execution of privileged commands and remote access to security- relevant information.",
+      "Objectives": [
+        {
+          "Label": "3.1.15[a]",
+          "Text": "privileged commands authorized for remote execution are identified."
+        },
+        {
+          "Label": "3.1.15[b]",
+          "Text": "security-relevant information authorized to be accessed remotely is identified."
+        },
+        {
+          "Label": "3.1.15[c]",
+          "Text": "the execution of the identified privileged commands via remote access is authorized."
+        },
+        {
+          "Label": "3.1.15[d]",
+          "Text": "access to the identified security-relevant information via remote access is authorized."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.16",
+      "Family": "3.1",
+      "Statement": "Authorize wireless access prior to allowing such connections.",
+      "Objectives": [
+        {
+          "Label": "3.1.16[a]",
+          "Text": "wireless access points are identified."
+        },
+        {
+          "Label": "3.1.16[b]",
+          "Text": "wireless access is authorized prior to allowing such connections."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.17",
+      "Family": "3.1",
+      "Statement": "Protect wireless access using authentication and encryption.",
+      "Objectives": [
+        {
+          "Label": "3.1.17[a]",
+          "Text": "wireless access to the system is protected using authentication."
+        },
+        {
+          "Label": "3.1.17[b]",
+          "Text": "wireless access to the system is protected using encryption."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.18",
+      "Family": "3.1",
+      "Statement": "Control connection of mobile devices.",
+      "Objectives": [
+        {
+          "Label": "3.1.18[a]",
+          "Text": "mobile devices that process, store, or transmit CUI are identified."
+        },
+        {
+          "Label": "3.1.18[b]",
+          "Text": "mobile device connections are authorized."
+        },
+        {
+          "Label": "3.1.18[c]",
+          "Text": "mobile device connections are monitored and logged."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.19",
+      "Family": "3.1",
+      "Statement": "Encrypt CUI on mobile devices and mobile computing platforms",
+      "Objectives": [
+        {
+          "Label": "3.1.19[a]",
+          "Text": "mobile devices and mobile computing platforms that process, store, or transmit CUI are identified."
+        },
+        {
+          "Label": "3.1.19[b]",
+          "Text": "encryption is employed to protect CUI on identified mobile devices and mobile computing platforms."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.20",
+      "Family": "3.1",
+      "Statement": "Verify and control/limit connections to and use of external systems.",
+      "Objectives": [
+        {
+          "Label": "3.1.20[a]",
+          "Text": "connections to external systems are identified."
+        },
+        {
+          "Label": "3.1.20[b]",
+          "Text": "the use of external systems is identified."
+        },
+        {
+          "Label": "3.1.20[c]",
+          "Text": "connections to external systems are verified."
+        },
+        {
+          "Label": "3.1.20[d]",
+          "Text": "the use of external systems is verified."
+        },
+        {
+          "Label": "3.1.20[e]",
+          "Text": "connections to external systems are controlled/limited."
+        },
+        {
+          "Label": "3.1.20[f]",
+          "Text": "the use of external systems is controlled/limited."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.21",
+      "Family": "3.1",
+      "Statement": "Limit use of portable storage devices on external systems.",
+      "Objectives": [
+        {
+          "Label": "3.1.21[a]",
+          "Text": "the use of portable storage devices containing CUI on external systems is identified and documented."
+        },
+        {
+          "Label": "3.1.21[b]",
+          "Text": "limits on the use of portable storage devices containing CUI on external systems are defined."
+        },
+        {
+          "Label": "3.1.21[c]",
+          "Text": "the use of portable storage devices containing CUI on external systems is limited as defined."
+        }
+      ]
+    },
+    {
+      "Id": "3.1.22",
+      "Family": "3.1",
+      "Statement": "Control CUI posted or processed on publicly accessible systems.",
+      "Objectives": [
+        {
+          "Label": "3.1.22[a]",
+          "Text": "individuals authorized to post or process information on publicly accessible systems are identified."
+        },
+        {
+          "Label": "3.1.22[b]",
+          "Text": "procedures to ensure CUI is not posted or processed on publicly accessible systems are identified."
+        },
+        {
+          "Label": "3.1.22[c]",
+          "Text": "a review process is in place prior to posting of any content to publicly accessible systems."
+        },
+        {
+          "Label": "3.1.22[d]",
+          "Text": "content on publicly accessible systems is reviewed to ensure that it does not include CUI."
+        },
+        {
+          "Label": "3.1.22[e]",
+          "Text": "mechanisms are in place to remove and address improper posting of CUI."
+        }
+      ]
+    },
+    {
+      "Id": "3.2.1",
+      "Family": "3.2",
+      "Statement": "Ensure that managers, systems administrators, and users of organizational systems are made aware of the security risks associated with their activities and of the applicable policies, standards, and procedures related to the security of those systems.",
+      "Objectives": [
+        {
+          "Label": "3.2.1 [.]",
+          "Text": "1[a] security risks associated with organizational activities involving CUI are identified."
+        },
+        {
+          "Label": "3.2.1 [.]",
+          "Text": "1[b] policies, standards, and procedures related to the security of the system are identified."
+        },
+        {
+          "Label": "3.2.1 [.]",
+          "Text": "1[c] managers, systems administrators, and users of the system are made aware of the security risks associated with their activities."
+        },
+        {
+          "Label": "3.2.1 [.]",
+          "Text": "1[d] managers, systems administrators, and users of the system are made aware of the applicable policies, standards, and procedures related to the security of the system."
+        }
+      ]
+    },
+    {
+      "Id": "3.2.2",
+      "Family": "3.2",
+      "Statement": "Ensure that personnel are trained to carry out their assigned information security- related duties and responsibilities.",
+      "Objectives": [
+        {
+          "Label": "3.2.2[a]",
+          "Text": "information security-related duties, roles, and responsibilities are defined."
+        },
+        {
+          "Label": "3.2.2[b]",
+          "Text": "information security-related duties, roles, and responsibilities are assigned to designated personnel."
+        },
+        {
+          "Label": "3.2.2[c]",
+          "Text": "personnel are adequately trained to carry out their assigned information security-related duties, roles, and responsibilities."
+        }
+      ]
+    },
+    {
+      "Id": "3.2.3",
+      "Family": "3.2",
+      "Statement": "Provide security awareness training on recognizing and reporting potential indicators of insider threat.",
+      "Objectives": [
+        {
+          "Label": "3.2.3[a]",
+          "Text": "potential indicators associated with insider threats are identified."
+        },
+        {
+          "Label": "3.2.3[b]",
+          "Text": "security awareness training on recognizing and reporting potential indicators of insider threat is provided to managers and employees."
+        }
+      ]
+    },
+    {
+      "Id": "3.3.1",
+      "Family": "3.3",
+      "Statement": "Create and retain system audit logs and records to the extent needed to enable the monitoring, analysis, investigation, and reporting of unlawful or unauthorized system activity.",
+      "Objectives": [
+        {
+          "Label": "3.3.1[a]",
+          "Text": "audit logs needed (i.e., event types to be logged) to enable the monitoring, analysis, investigation, and reporting of unlawful or unauthorized system activity are specified."
+        },
+        {
+          "Label": "3.3.1[b]",
+          "Text": "the content of audit records needed to support monitoring, analysis, investigation, and reporting of unlawful or unauthorized system activity is defined."
+        },
+        {
+          "Label": "3.3.1[c]",
+          "Text": "audit records are created (generated)."
+        },
+        {
+          "Label": "3.3.1[d]",
+          "Text": "audit records, once created, contain the defined content."
+        },
+        {
+          "Label": "3.3.1[e]",
+          "Text": "retention requirements for audit records are defined."
+        },
+        {
+          "Label": "3.3.1[f]",
+          "Text": "audit records are retained as defined."
+        }
+      ]
+    },
+    {
+      "Id": "3.3.2",
+      "Family": "3.3",
+      "Statement": "Ensure that the actions of individual system users can be uniquely traced to those users so they can be held accountable for their actions.",
+      "Objectives": [
+        {
+          "Label": "3.3.2[a]",
+          "Text": "the content of the audit records needed to support the ability to uniquely trace users to their actions is defined."
+        },
+        {
+          "Label": "3.3.2[b]",
+          "Text": "audit records, once created, contain the defined content."
+        }
+      ]
+    },
+    {
+      "Id": "3.3.3",
+      "Family": "3.3",
+      "Statement": "Review and update logged events.",
+      "Objectives": [
+        {
+          "Label": "3.3.3[a]",
+          "Text": "a process for determining when to review logged events is defined."
+        },
+        {
+          "Label": "3.3.3[b]",
+          "Text": "event types being logged are reviewed in accordance with the defined review process."
+        },
+        {
+          "Label": "3.3.3[c]",
+          "Text": "event types being logged are updated based on the review."
+        }
+      ]
+    },
+    {
+      "Id": "3.3.4",
+      "Family": "3.3",
+      "Statement": "Alert in the event of an audit logging process failure.",
+      "Objectives": [
+        {
+          "Label": "3.3.4[a]",
+          "Text": "personnel or roles to be alerted in the event of an audit logging process failure are identified."
+        },
+        {
+          "Label": "3.3.4[b]",
+          "Text": "types of audit logging process failures for which alert will be generated are defined."
+        },
+        {
+          "Label": "3.3.4[c]",
+          "Text": "identified personnel or roles are alerted in the event of an audit logging process failure."
+        }
+      ]
+    },
+    {
+      "Id": "3.3.5",
+      "Family": "3.3",
+      "Statement": "Correlate audit record review, analysis, and reporting processes for investigation and response to indications of unlawful, unauthorized, suspicious, or unusual activity.",
+      "Objectives": [
+        {
+          "Label": "3.3.5[a]",
+          "Text": "audit record review, analysis, and reporting processes for investigation and response to indications of unlawful, unauthorized, suspicious, or unusual activity are defined."
+        },
+        {
+          "Label": "3.3.5[b]",
+          "Text": "defined audit record review, analysis, and reporting processes are correlated."
+        }
+      ]
+    },
+    {
+      "Id": "3.3.6",
+      "Family": "3.3",
+      "Statement": "Provide audit record reduction and report generation to support on-demand analysis and reporting.",
+      "Objectives": [
+        {
+          "Label": "3.3.6[a]",
+          "Text": "an audit record reduction capability that supports on-demand analysis is provided."
+        },
+        {
+          "Label": "3.3.6[b]",
+          "Text": "a report generation capability that supports on-demand reporting is provided."
+        }
+      ]
+    },
+    {
+      "Id": "3.3.7",
+      "Family": "3.3",
+      "Statement": "Provide a system capability that compares and synchronizes internal system clocks with an authoritative source to generate time stamps for audit records.",
+      "Objectives": [
+        {
+          "Label": "3.3.7[a]",
+          "Text": "internal system clocks are used to generate time stamps for audit records."
+        },
+        {
+          "Label": "3.3.7[b]",
+          "Text": "an authoritative source with which to compare and synchronize internal system clocks is specified."
+        },
+        {
+          "Label": "3.3.7[c]",
+          "Text": "internal system clocks used to generate time stamps for audit records are compared to and synchronized with the specified authoritative time source."
+        }
+      ]
+    },
+    {
+      "Id": "3.3.8",
+      "Family": "3.3",
+      "Statement": "Protect audit information and audit logging tools from unauthorized access, modification, and deletion.",
+      "Objectives": [
+        {
+          "Label": "3.3.8[a]",
+          "Text": "audit information is protected from unauthorized access."
+        },
+        {
+          "Label": "3.3.8[b]",
+          "Text": "audit information is protected from unauthorized modification."
+        },
+        {
+          "Label": "3.3.8[c]",
+          "Text": "audit information is protected from unauthorized deletion."
+        },
+        {
+          "Label": "3.3.8[d]",
+          "Text": "audit logging tools are protected from unauthorized access."
+        },
+        {
+          "Label": "3.3.8[e]",
+          "Text": "audit logging tools are protected from unauthorized modification."
+        },
+        {
+          "Label": "3.3.8[f]",
+          "Text": "audit logging tools are protected from unauthorized deletion."
+        }
+      ]
+    },
+    {
+      "Id": "3.3.9",
+      "Family": "3.3",
+      "Statement": "Limit management of audit logging functionality to a subset of privileged users.",
+      "Objectives": [
+        {
+          "Label": "3.3.9[a]",
+          "Text": "a subset of privileged users granted access to manage audit logging functionality is defined."
+        },
+        {
+          "Label": "3.3.9[b]",
+          "Text": "management of audit logging functionality is limited to the defined subset of privileged users."
+        }
+      ]
+    },
+    {
+      "Id": "3.4.1",
+      "Family": "3.4",
+      "Statement": "Establish and maintain baseline configurations and inventories of organizational systems (including hardware, software, firmware, and documentation) throughout the respective system development life cycles.",
+      "Objectives": [
+        {
+          "Label": "3.4.1[a]",
+          "Text": "a baseline configuration is established."
+        },
+        {
+          "Label": "3.4.1[b]",
+          "Text": "the baseline configuration includes hardware, software, firmware, and documentation."
+        },
+        {
+          "Label": "3.4.1[c]",
+          "Text": "the baseline configuration is maintained (reviewed and updated) throughout the system development life cycle."
+        },
+        {
+          "Label": "3.4.1[d]",
+          "Text": "a system inventory is established."
+        },
+        {
+          "Label": "3.4.1[e]",
+          "Text": "the system inventory includes hardware, software, firmware, and documentation."
+        },
+        {
+          "Label": "3.4.1[f]",
+          "Text": "the inventory is maintained (reviewed and updated) throughout the system development life cycle."
+        }
+      ]
+    },
+    {
+      "Id": "3.4.2",
+      "Family": "3.4",
+      "Statement": "Establish and enforce security configuration settings for information technology products employed in organizational systems.",
+      "Objectives": [
+        {
+          "Label": "3.4.2[a]",
+          "Text": "security configuration settings for information technology products employed in the system are established and included in the baseline configuration."
+        },
+        {
+          "Label": "3.4.2[b]",
+          "Text": "security configuration settings for information technology products employed in the system are enforced."
+        }
+      ]
+    },
+    {
+      "Id": "3.4.3",
+      "Family": "3.4",
+      "Statement": "Track, review, approve or disapprove, and log changes to organizational systems.",
+      "Objectives": [
+        {
+          "Label": "3.4.3[a]",
+          "Text": "changes to the system are tracked."
+        },
+        {
+          "Label": "3.4.3[b]",
+          "Text": "changes to the system are reviewed."
+        },
+        {
+          "Label": "3.4.3[c]",
+          "Text": "changes to the system are approved or disapproved."
+        },
+        {
+          "Label": "3.4.3[d]",
+          "Text": "changes to the system are logged."
+        }
+      ]
+    },
+    {
+      "Id": "3.4.4",
+      "Family": "3.4",
+      "Statement": "Analyze the security impact of changes prior to implementation.",
+      "Objectives": [
+        {
+          "Label": "3.4.4[D]",
+          "Text": "ermine if the security impact of changes to the system is analyzed prior to implementation."
+        }
+      ]
+    },
+    {
+      "Id": "3.4.5",
+      "Family": "3.4",
+      "Statement": "Define, document, approve, and enforce physical and logical access restrictions associated with changes to organizational systems.",
+      "Objectives": [
+        {
+          "Label": "3.4.5[a]",
+          "Text": "physical access restrictions associated with changes to the system are defined."
+        },
+        {
+          "Label": "3.4.5[b]",
+          "Text": "physical access restrictions associated with changes to the system are documented."
+        },
+        {
+          "Label": "3.4.5[c]",
+          "Text": "physical access restrictions associated with changes to the system are approved."
+        },
+        {
+          "Label": "3.4.5[d]",
+          "Text": "physical access restrictions associated with changes to the system are enforced."
+        },
+        {
+          "Label": "3.4.5[e]",
+          "Text": "logical access restrictions associated with changes to the system are defined."
+        },
+        {
+          "Label": "3.4.5[f]",
+          "Text": "logical access restrictions associated with changes to the system are documented."
+        },
+        {
+          "Label": "3.4.5[g]",
+          "Text": "logical access restrictions associated with changes to the system are approved."
+        },
+        {
+          "Label": "3.4.5[h]",
+          "Text": "logical access restrictions associated with changes to the system are enforced."
+        }
+      ]
+    },
+    {
+      "Id": "3.4.6",
+      "Family": "3.4",
+      "Statement": "Employ the principle of least functionality by configuring organizational systems to provide only essential capabilities.",
+      "Objectives": [
+        {
+          "Label": "3.4.6[a]",
+          "Text": "essential system capabilities are defined based on the principle of least functionality."
+        },
+        {
+          "Label": "3.4.6[b]",
+          "Text": "the system is configured to provide only the defined essential capabilities."
+        }
+      ]
+    },
+    {
+      "Id": "3.4.7",
+      "Family": "3.4",
+      "Statement": "Restrict, disable, or prevent the use of nonessential programs, functions, ports, protocols, and services.",
+      "Objectives": [
+        {
+          "Label": "3.4.7[a]",
+          "Text": "essential programs are defined."
+        },
+        {
+          "Label": "3.4.7[b]",
+          "Text": "the use of nonessential programs is defined."
+        },
+        {
+          "Label": "3.4.7[c]",
+          "Text": "the use of nonessential programs is restricted, disabled, or prevented as defined."
+        },
+        {
+          "Label": "3.4.7[d]",
+          "Text": "essential functions are defined."
+        },
+        {
+          "Label": "3.4.7[e]",
+          "Text": "the use of nonessential functions is defined."
+        },
+        {
+          "Label": "3.4.7[f]",
+          "Text": "the use of nonessential functions is restricted, disabled, or prevented as defined."
+        },
+        {
+          "Label": "3.4.7[g]",
+          "Text": "essential ports are defined."
+        },
+        {
+          "Label": "3.4.7[h]",
+          "Text": "the use of nonessential ports is defined."
+        },
+        {
+          "Label": "3.4.7[i]",
+          "Text": "the use of nonessential ports is restricted, disabled, or prevented as defined."
+        },
+        {
+          "Label": "3.4.7[j]",
+          "Text": "essential protocols are defined."
+        },
+        {
+          "Label": "3.4.7[k]",
+          "Text": "the use of nonessential protocols is defined."
+        },
+        {
+          "Label": "3.4.7[l]",
+          "Text": "the use of nonessential protocols is restricted, disabled, or prevented as defined."
+        },
+        {
+          "Label": "3.4.7[m]",
+          "Text": "essential services are defined."
+        },
+        {
+          "Label": "3.4.7[n]",
+          "Text": "the use of nonessential services is defined."
+        },
+        {
+          "Label": "3.4.7[o]",
+          "Text": "the use of nonessential services is restricted, disabled, or prevented as defined."
+        }
+      ]
+    },
+    {
+      "Id": "3.4.8",
+      "Family": "3.4",
+      "Statement": "Apply deny-by-exception (blacklisting) policy to prevent the use of unauthorized software or deny-all, permit-by-exception (whitelisting) policy to allow the execution of authorized software.",
+      "Objectives": [
+        {
+          "Label": "3.4.8[a]",
+          "Text": "a policy specifying whether whitelisting or blacklisting is to be implemented is specified."
+        },
+        {
+          "Label": "3.4.8[b]",
+          "Text": "the software allowed to execute under whitelisting or denied use under blacklisting is specified."
+        },
+        {
+          "Label": "3.4.8[c]",
+          "Text": "whitelisting to allow the execution of authorized software or blacklisting to prevent the use of unauthorized software is implemented as specified."
+        }
+      ]
+    },
+    {
+      "Id": "3.4.9",
+      "Family": "3.4",
+      "Statement": "Control and monitor user-installed software.",
+      "Objectives": [
+        {
+          "Label": "3.4.9[a]",
+          "Text": "a policy for controlling the installation of software by users is established."
+        },
+        {
+          "Label": "3.4.9[b]",
+          "Text": "installation of software by users is controlled based on the established policy."
+        },
+        {
+          "Label": "3.4.9[c]",
+          "Text": "installation of software by users is monitored."
+        }
+      ]
+    },
+    {
+      "Id": "3.5.1",
+      "Family": "3.5",
+      "Statement": "Identify system users, processes acting on behalf of users, and devices.",
+      "Objectives": [
+        {
+          "Label": "3.5.1[a]",
+          "Text": "system users are identified."
+        },
+        {
+          "Label": "3.5.1[b]",
+          "Text": "processes acting on behalf of users are identified."
+        },
+        {
+          "Label": "3.5.1[c]",
+          "Text": "devices accessing the system are identified."
+        }
+      ]
+    },
+    {
+      "Id": "3.5.2",
+      "Family": "3.5",
+      "Statement": "Authenticate (or verify) the identities of users, processes, or devices, as a prerequisite to allowing access to organizational systems.",
+      "Objectives": [
+        {
+          "Label": "3.5.2[a]",
+          "Text": "the identity of each user is authenticated or verified as a prerequisite to system access."
+        },
+        {
+          "Label": "3.5.2[b]",
+          "Text": "the identity of each process acting on behalf of a user is authenticated or verified as a prerequisite to system access."
+        },
+        {
+          "Label": "3.5.2[c]",
+          "Text": "the identity of each device accessing or connecting to the system is authenticated or verified as a prerequisite to system access."
+        }
+      ]
+    },
+    {
+      "Id": "3.5.3",
+      "Family": "3.5",
+      "Statement": "Use multifactor authentication (MFA) for local and network access to privileged accounts and for network access to non- privileged accounts.",
+      "Objectives": [
+        {
+          "Label": "3.5.3[a]",
+          "Text": "privileged accounts are identified."
+        },
+        {
+          "Label": "3.5.3[b]",
+          "Text": "multifactor authentication is implemented for local access to privileged accounts."
+        },
+        {
+          "Label": "3.5.3[c]",
+          "Text": "multifactor authentication is implemented for network access to privileged accounts."
+        },
+        {
+          "Label": "3.5.3[d]",
+          "Text": "multifactor authentication is implemented for network access to non-privileged accounts."
+        }
+      ]
+    },
+    {
+      "Id": "3.5.4",
+      "Family": "3.5",
+      "Statement": "Employ replay-resistant authentication mechanisms for network access to privileged and non-privileged accounts.",
+      "Objectives": [
+        {
+          "Label": "3.5.4[D]",
+          "Text": "ermine if replay-resistant authentication mechanisms are implemented for network account access to privileged and non-privileged accounts."
+        }
+      ]
+    },
+    {
+      "Id": "3.5.5",
+      "Family": "3.5",
+      "Statement": "Prevent reuse of identifiers for a defined period.",
+      "Objectives": [
+        {
+          "Label": "3.5.5[a]",
+          "Text": "a period within which identifiers cannot be reused is defined."
+        },
+        {
+          "Label": "3.5.5[b]",
+          "Text": "reuse of identifiers is prevented within the defined period."
+        }
+      ]
+    },
+    {
+      "Id": "3.5.6",
+      "Family": "3.5",
+      "Statement": "Disable identifiers after a defined period of inactivity.",
+      "Objectives": [
+        {
+          "Label": "3.5.6[a]",
+          "Text": "a period of inactivity after which an identifier is disabled is defined."
+        },
+        {
+          "Label": "3.5.6[b]",
+          "Text": "identifiers are disabled after the defined period of inactivity."
+        }
+      ]
+    },
+    {
+      "Id": "3.5.7",
+      "Family": "3.5",
+      "Statement": "Enforce a minimum password complexity and change of characters when new passwords are created.",
+      "Objectives": [
+        {
+          "Label": "3.5.7[a]",
+          "Text": "password complexity requirements are defined."
+        },
+        {
+          "Label": "3.5.7[b]",
+          "Text": "password change of character requirements are defined."
+        },
+        {
+          "Label": "3.5.7[c]",
+          "Text": "minimum password complexity requirements as defined are enforced when new passwords are created."
+        },
+        {
+          "Label": "3.5.7[d]",
+          "Text": "minimum password change of character requirements as defined are enforced when new passwords are created."
+        }
+      ]
+    },
+    {
+      "Id": "3.5.8",
+      "Family": "3.5",
+      "Statement": "Prohibit password reuse for a specified number of generations.",
+      "Objectives": [
+        {
+          "Label": "3.5.8[a]",
+          "Text": "the number of generations during which a password cannot be reused is specified."
+        },
+        {
+          "Label": "3.5.8[b]",
+          "Text": "reuse of passwords is prohibited during the specified number of generations."
+        }
+      ]
+    },
+    {
+      "Id": "3.5.9",
+      "Family": "3.5",
+      "Statement": "Allow temporary password use for system logons with an immediate change to a permanent password.",
+      "Objectives": [
+        {
+          "Label": "3.5.9[D]",
+          "Text": "ermine if an immediate change to a permanent password is required when a temporary password is used for system logon."
+        }
+      ]
+    },
+    {
+      "Id": "3.5.10",
+      "Family": "3.5",
+      "Statement": "Store and transmit only cryptographically- protected passwords.",
+      "Objectives": [
+        {
+          "Label": "3.5.10[a]",
+          "Text": "passwords are cryptographically protected in storage."
+        },
+        {
+          "Label": "3.5.10[b]",
+          "Text": "passwords are cryptographically protected in transit."
+        }
+      ]
+    },
+    {
+      "Id": "3.5.11",
+      "Family": "3.5",
+      "Statement": "Obscure feedback of authentication information.",
+      "Objectives": [
+        {
+          "Label": "3.5.11[D]",
+          "Text": "ermine if authentication information is obscured during the authentication process."
+        }
+      ]
+    },
+    {
+      "Id": "3.6.1",
+      "Family": "3.6",
+      "Statement": "Establish an operational incident-handling capability for organizational systems that includes preparation, detection, analysis, containment, recovery, and user response activities.",
+      "Objectives": [
+        {
+          "Label": "3.6.1[a]",
+          "Text": "an operational incident-handling capability is established."
+        },
+        {
+          "Label": "3.6.1[b]",
+          "Text": "the operational incident-handling capability includes preparation."
+        },
+        {
+          "Label": "3.6.1[c]",
+          "Text": "the operational incident-handling capability includes detection."
+        },
+        {
+          "Label": "3.6.1[d]",
+          "Text": "the operational incident-handling capability includes analysis."
+        },
+        {
+          "Label": "3.6.1[e]",
+          "Text": "the operational incident-handling capability includes containment."
+        },
+        {
+          "Label": "3.6.1[f]",
+          "Text": "the operational incident-handling capability includes recovery."
+        },
+        {
+          "Label": "3.6.1[g]",
+          "Text": "the operational incident-handling capability includes user response activities."
+        }
+      ]
+    },
+    {
+      "Id": "3.6.2",
+      "Family": "3.6",
+      "Statement": "Track, document, and report incidents to designated officials and/or authorities both internal and external to the organization.",
+      "Objectives": [
+        {
+          "Label": "3.6.2[a]",
+          "Text": "incidents are tracked."
+        },
+        {
+          "Label": "3.6.2[b]",
+          "Text": "incidents are documented."
+        },
+        {
+          "Label": "3.6.2[c]",
+          "Text": "authorities to whom incidents are to be reported are identified."
+        },
+        {
+          "Label": "3.6.2[d]",
+          "Text": "organizational officials to whom incidents are to be reported are identified."
+        },
+        {
+          "Label": "3.6.2[e]",
+          "Text": "identified authorities are notified of incidents."
+        },
+        {
+          "Label": "3.6.2[f]",
+          "Text": "identified organizational officials are notified of incidents."
+        }
+      ]
+    },
+    {
+      "Id": "3.6.3",
+      "Family": "3.6",
+      "Statement": "Test the organizational incident response capability.",
+      "Objectives": [
+        {
+          "Label": "3.6.3[D]",
+          "Text": "ermine if the incident response capability is tested."
+        }
+      ]
+    },
+    {
+      "Id": "3.7.1",
+      "Family": "3.7",
+      "Statement": "Perform maintenance on organizational systems.",
+      "Objectives": [
+        {
+          "Label": "3.7.1[D]",
+          "Text": "ermine if system maintenance is performed."
+        }
+      ]
+    },
+    {
+      "Id": "3.7.2",
+      "Family": "3.7",
+      "Statement": "Provide controls on the tools, techniques, mechanisms, and personnel used to conduct system maintenance.",
+      "Objectives": [
+        {
+          "Label": "3.7.2[a]",
+          "Text": "tools used to conduct system maintenance are controlled."
+        },
+        {
+          "Label": "3.7.2[b]",
+          "Text": "techniques used to conduct system maintenance are controlled."
+        },
+        {
+          "Label": "3.7.2[c]",
+          "Text": "mechanisms used to conduct system maintenance are controlled."
+        },
+        {
+          "Label": "3.7.2[d]",
+          "Text": "personnel used to conduct system maintenance are controlled."
+        }
+      ]
+    },
+    {
+      "Id": "3.7.3",
+      "Family": "3.7",
+      "Statement": "Ensure equipment removed for off-site maintenance is sanitized of any CUI.",
+      "Objectives": [
+        {
+          "Label": "3.7.3[D]",
+          "Text": "ermine if equipment to be removed from organizational spaces for off-site maintenance is sanitized of any CUI."
+        }
+      ]
+    },
+    {
+      "Id": "3.7.4",
+      "Family": "3.7",
+      "Statement": "Check media containing diagnostic and test programs for malicious code before the media are used in organizational systems.",
+      "Objectives": [
+        {
+          "Label": "3.7.4[D]",
+          "Text": "ermine if media containing diagnostic and test programs are checked for malicious code before being used in organizational systems that process, store, or transmit CUI."
+        }
+      ]
+    },
+    {
+      "Id": "3.7.5",
+      "Family": "3.7",
+      "Statement": "Require multifactor authentication to establish nonlocal maintenance sessions via external network connections and terminate such connections when nonlocal maintenance is complete.",
+      "Objectives": [
+        {
+          "Label": "3.7.5[a]",
+          "Text": "multifactor authentication is used to establish nonlocal maintenance sessions via external network connections."
+        },
+        {
+          "Label": "3.7.5[b]",
+          "Text": "nonlocal maintenance sessions established via external network connections are terminated when nonlocal maintenance is complete."
+        }
+      ]
+    },
+    {
+      "Id": "3.7.6",
+      "Family": "3.7",
+      "Statement": "Supervise the maintenance activities of maintenance personnel without required access authorization.",
+      "Objectives": [
+        {
+          "Label": "3.7.6[D]",
+          "Text": "ermine if maintenance personnel without required access authorization are supervised during maintenance activities."
+        }
+      ]
+    },
+    {
+      "Id": "3.8.1",
+      "Family": "3.8",
+      "Statement": "Protect (i.e., physically control and securely store) system media containing CUI, both paper and digital.",
+      "Objectives": [
+        {
+          "Label": "3.8.1[a]",
+          "Text": "paper media containing CUI is physically controlled."
+        },
+        {
+          "Label": "3.8.1[b]",
+          "Text": "digital media containing CUI is physically controlled."
+        },
+        {
+          "Label": "3.8.1[c]",
+          "Text": "paper media containing CUI is securely stored."
+        },
+        {
+          "Label": "3.8.1[d]",
+          "Text": "digital media containing CUI is securely stored."
+        }
+      ]
+    },
+    {
+      "Id": "3.8.2",
+      "Family": "3.8",
+      "Statement": "Limit access to CUI on system media to authorized users.",
+      "Objectives": [
+        {
+          "Label": "3.8.2[D]",
+          "Text": "ermine if access to CUI on system media is limited to authorized users."
+        }
+      ]
+    },
+    {
+      "Id": "3.8.3",
+      "Family": "3.8",
+      "Statement": "Sanitize or destroy system media containing CUI before disposal or release for reuse.",
+      "Objectives": [
+        {
+          "Label": "3.8.3[a]",
+          "Text": "system media containing CUI is sanitized or destroyed before disposal."
+        },
+        {
+          "Label": "3.8.3[b]",
+          "Text": "system media containing CUI is sanitized before it is released for reuse."
+        }
+      ]
+    },
+    {
+      "Id": "3.8.4",
+      "Family": "3.8",
+      "Statement": "Mark media with necessary CUI markings and distribution limitations.",
+      "Objectives": [
+        {
+          "Label": "3.8.4[a]",
+          "Text": "media containing CUI is marked with applicable CUI markings."
+        },
+        {
+          "Label": "3.8.4[b]",
+          "Text": "media containing CUI is marked with distribution limitations."
+        }
+      ]
+    },
+    {
+      "Id": "3.8.5",
+      "Family": "3.8",
+      "Statement": "Control access to media containing CUI and maintain accountability for media during transport outside of controlled areas.",
+      "Objectives": [
+        {
+          "Label": "3.8.5[a]",
+          "Text": "access to media containing CUI is controlled."
+        },
+        {
+          "Label": "3.8.5[b]",
+          "Text": "accountability for media containing CUI is maintained during transport outside of controlled areas."
+        }
+      ]
+    },
+    {
+      "Id": "3.8.6",
+      "Family": "3.8",
+      "Statement": "Implement cryptographic mechanisms to protect the confidentiality of CUI stored on digital media during transport unless otherwise protected by alternative physical safeguards.",
+      "Objectives": [
+        {
+          "Label": "3.8.6[D]",
+          "Text": "ermine if the confidentiality of CUI stored on digital media is protected during transport using cryptographic mechanisms or alternative physical safeguards."
+        }
+      ]
+    },
+    {
+      "Id": "3.8.7",
+      "Family": "3.8",
+      "Statement": "Control the use of removable media on system components.",
+      "Objectives": [
+        {
+          "Label": "3.8.7[D]",
+          "Text": "ermine if the use of removable media on system components is controlled."
+        }
+      ]
+    },
+    {
+      "Id": "3.8.8",
+      "Family": "3.8",
+      "Statement": "Prohibit the use of portable storage devices when such devices have no identifiable owner.",
+      "Objectives": [
+        {
+          "Label": "3.8.8[D]",
+          "Text": "ermine if the use of portable storage devices is prohibited when such devices have no identifiable owner."
+        }
+      ]
+    },
+    {
+      "Id": "3.8.9",
+      "Family": "3.8",
+      "Statement": "Protect the confidentiality of backup CUI at storage locations.",
+      "Objectives": [
+        {
+          "Label": "3.8.9[D]",
+          "Text": "ermine if the confidentiality of backup CUI is protected at storage locations."
+        }
+      ]
+    },
+    {
+      "Id": "3.9.1",
+      "Family": "3.9",
+      "Statement": "Screen individuals prior to authorizing access to organizational systems containing CUI.",
+      "Objectives": [
+        {
+          "Label": "3.9.1[D]",
+          "Text": "ermine if individuals are screened prior to authorizing access to organizational systems containing CUI."
+        }
+      ]
+    },
+    {
+      "Id": "3.9.2",
+      "Family": "3.9",
+      "Statement": "Ensure that organizational systems containing CUI are protected during and after personnel actions such as terminations and transfers.",
+      "Objectives": [
+        {
+          "Label": "3.9.2[a]",
+          "Text": "a policy and/or process for terminating system access and any credentials coincident with personnel actions is established."
+        },
+        {
+          "Label": "3.9.2[b]",
+          "Text": "system access and credentials are terminated consistent with personnel actions such as termination or transfer."
+        },
+        {
+          "Label": "3.9.2[c]",
+          "Text": "the system is protected during and after personnel transfer actions."
+        }
+      ]
+    },
+    {
+      "Id": "3.10.1",
+      "Family": "3.10",
+      "Statement": "Limit physical access to organizational systems, equipment, and the respective operating environments to authorized individuals.",
+      "Objectives": [
+        {
+          "Label": "3.10.1[a]",
+          "Text": "authorized individuals allowed physical access are identified."
+        },
+        {
+          "Label": "3.10.1[b]",
+          "Text": "physical access to organizational systems is limited to authorized individuals."
+        },
+        {
+          "Label": "3.10.1[c]",
+          "Text": "physical access to equipment is limited to authorized individuals."
+        },
+        {
+          "Label": "3.10.1[d]",
+          "Text": "physical access to operating environments is limited to authorized individuals."
+        }
+      ]
+    },
+    {
+      "Id": "3.10.2",
+      "Family": "3.10",
+      "Statement": "Protect and monitor the physical facility and support infrastructure for organizational systems.",
+      "Objectives": [
+        {
+          "Label": "3.10.2[a]",
+          "Text": "the physical facility where organizational systems reside is protected."
+        },
+        {
+          "Label": "3.10.2[b]",
+          "Text": "the support infrastructure for organizational systems is protected."
+        },
+        {
+          "Label": "3.10.2[c]",
+          "Text": "the physical facility where organizational systems reside is monitored."
+        },
+        {
+          "Label": "3.10.2[d]",
+          "Text": "the support infrastructure for organizational systems is monitored."
+        }
+      ]
+    },
+    {
+      "Id": "3.10.3",
+      "Family": "3.10",
+      "Statement": "Escort visitors and monitor visitor activity.",
+      "Objectives": [
+        {
+          "Label": "3.10.3[a]",
+          "Text": "visitors are escorted."
+        },
+        {
+          "Label": "3.10.3[b]",
+          "Text": "visitor activity is monitored."
+        }
+      ]
+    },
+    {
+      "Id": "3.10.4",
+      "Family": "3.10",
+      "Statement": "Maintain audit logs of physical access.",
+      "Objectives": [
+        {
+          "Label": "3.10.4[D]",
+          "Text": "ermine if audit logs of physical access are maintained."
+        }
+      ]
+    },
+    {
+      "Id": "3.10.5",
+      "Family": "3.10",
+      "Statement": "Control and manage physical access devices.",
+      "Objectives": [
+        {
+          "Label": "3.10.5[a]",
+          "Text": "physical access devices are identified."
+        },
+        {
+          "Label": "3.10.5[b]",
+          "Text": "physical access devices are controlled."
+        },
+        {
+          "Label": "3.10.5[c]",
+          "Text": "physical access devices are managed."
+        }
+      ]
+    },
+    {
+      "Id": "3.10.6",
+      "Family": "3.10",
+      "Statement": "Enforce safeguarding measures for CUI at alternate work sites.",
+      "Objectives": [
+        {
+          "Label": "3.10.6[a]",
+          "Text": "safeguarding measures for CUI are defined for alternate work sites."
+        },
+        {
+          "Label": "3.10.6[b]",
+          "Text": "safeguarding measures for CUI are enforced for alternate work sites."
+        }
+      ]
+    },
+    {
+      "Id": "3.11.1",
+      "Family": "3.11",
+      "Statement": "Periodically assess the risk to organizational operations (including mission, functions, image, or reputation), organizational assets, and individuals, resulting from the operation of organizational systems and the associated processing, storage, or transmission of CUI.",
+      "Objectives": [
+        {
+          "Label": "3.11.1[a]",
+          "Text": "the frequency to assess risk to organizational operations, organizational assets, and individuals is defined."
+        },
+        {
+          "Label": "3.11.1[b]",
+          "Text": "risk to organizational operations, organizational assets, and individuals resulting from the operation of an organizational system that processes, stores, or transmits CUI is assessed with the defined frequency."
+        }
+      ]
+    },
+    {
+      "Id": "3.11.2",
+      "Family": "3.11",
+      "Statement": "Scan for vulnerabilities in organizational systems and applications periodically and when new vulnerabilities affecting those systems and applications are identified.",
+      "Objectives": [
+        {
+          "Label": "3.11.2[a]",
+          "Text": "the frequency to scan for vulnerabilities in organizational systems and applications is defined."
+        },
+        {
+          "Label": "3.11.2[b]",
+          "Text": "vulnerability scans are performed on organizational systems with the defined frequency."
+        },
+        {
+          "Label": "3.11.2[c]",
+          "Text": "vulnerability scans are performed on applications with the defined frequency."
+        },
+        {
+          "Label": "3.11.2[d]",
+          "Text": "vulnerability scans are performed on organizational systems when new vulnerabilities are identified."
+        },
+        {
+          "Label": "3.11.2[e]",
+          "Text": "vulnerability scans are performed on applications when new vulnerabilities are identified."
+        }
+      ]
+    },
+    {
+      "Id": "3.11.3",
+      "Family": "3.11",
+      "Statement": "Remediate vulnerabilities in accordance with risk assessments.",
+      "Objectives": [
+        {
+          "Label": "3.11.3[a]",
+          "Text": "vulnerabilities are identified."
+        },
+        {
+          "Label": "3.11.3[b]",
+          "Text": "vulnerabilities are remediated in accordance with risk assessments."
+        }
+      ]
+    },
+    {
+      "Id": "3.12.1",
+      "Family": "3.12",
+      "Statement": "Periodically assess the security controls in organizational systems to determine if the controls are effective in their application.",
+      "Objectives": [
+        {
+          "Label": "3.12.1[a]",
+          "Text": "the frequency of security control assessments is defined."
+        },
+        {
+          "Label": "3.12.1[b]",
+          "Text": "security controls are assessed with the defined frequency to determine if the controls are effective in their application."
+        }
+      ]
+    },
+    {
+      "Id": "3.12.2",
+      "Family": "3.12",
+      "Statement": "Develop and implement plans of action designed to correct deficiencies and reduce or eliminate vulnerabilities in organizational systems.",
+      "Objectives": [
+        {
+          "Label": "3.12.2[a]",
+          "Text": "deficiencies and vulnerabilities to be addressed by the plan of action are identified."
+        },
+        {
+          "Label": "3.12.2[b]",
+          "Text": "a plan of action is developed to correct identified deficiencies and reduce or eliminate identified vulnerabilities."
+        },
+        {
+          "Label": "3.12.2[c]",
+          "Text": "the plan of action is implemented to correct identified deficiencies and reduce or eliminate identified vulnerabilities."
+        }
+      ]
+    },
+    {
+      "Id": "3.12.3",
+      "Family": "3.12",
+      "Statement": "Monitor security controls on an ongoing basis to ensure the continued effectiveness of the controls.",
+      "Objectives": [
+        {
+          "Label": "3.12.3[D]",
+          "Text": "ermine if security controls are monitored on an ongoing basis to ensure the continued effectiveness of those controls."
+        }
+      ]
+    },
+    {
+      "Id": "3.12.4",
+      "Family": "3.12",
+      "Statement": "Develop, document, and periodically update system security plans that describe system boundaries, system environments of operation, how security requirements are implemented, and the relationships with or connections to other systems.",
+      "Objectives": [
+        {
+          "Label": "3.12.4[a]",
+          "Text": "a system security plan is developed."
+        },
+        {
+          "Label": "3.12.4[b]",
+          "Text": "the system boundary is described and documented in the system security plan."
+        },
+        {
+          "Label": "3.12.4[c]",
+          "Text": "the system environment of operation is described and documented in the system security plan."
+        },
+        {
+          "Label": "3.12.4[d]",
+          "Text": "the security requirements identified and approved by the designated authority as non-applicable are identified."
+        },
+        {
+          "Label": "3.12.4[e]",
+          "Text": "the method of security requirement implementation is described and documented in the system security plan."
+        },
+        {
+          "Label": "3.12.4[f]",
+          "Text": "the relationship with or connection to other systems is described and documented in the system security plan."
+        },
+        {
+          "Label": "3.12.4[g]",
+          "Text": "the frequency to update the system security plan is defined."
+        },
+        {
+          "Label": "3.12.4[h]",
+          "Text": "system security plan is updated with the defined frequency."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.1",
+      "Family": "3.13",
+      "Statement": "Monitor, control, and protect communications (i.e., information transmitted or received by organizational systems) at the external boundaries and key internal boundaries of organizational systems.",
+      "Objectives": [
+        {
+          "Label": "3.13.1[a]",
+          "Text": "the external system boundary is defined."
+        },
+        {
+          "Label": "3.13.1[b]",
+          "Text": "key internal system boundaries are defined."
+        },
+        {
+          "Label": "3.13.1[c]",
+          "Text": "communications are monitored at the external system boundary."
+        },
+        {
+          "Label": "3.13.1[d]",
+          "Text": "communications are monitored at key internal boundaries."
+        },
+        {
+          "Label": "3.13.1[e]",
+          "Text": "communications are controlled at the external system boundary."
+        },
+        {
+          "Label": "3.13.1[f]",
+          "Text": "communications are controlled at key internal boundaries."
+        },
+        {
+          "Label": "3.13.1[g]",
+          "Text": "communications are protected at the external system boundary."
+        },
+        {
+          "Label": "3.13.1[h]",
+          "Text": "communications are protected at key internal boundaries."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.2",
+      "Family": "3.13",
+      "Statement": "Employ architectural designs, software development techniques, and systems engineering principles that promote effective information security within organizational systems.",
+      "Objectives": [
+        {
+          "Label": "3.13.2[a]",
+          "Text": "architectural designs that promote effective information security are identified."
+        },
+        {
+          "Label": "3.13.2[b]",
+          "Text": "software development techniques that promote effective information security are identified."
+        },
+        {
+          "Label": "3.13.2[c]",
+          "Text": "systems engineering principles that promote effective information security are identified."
+        },
+        {
+          "Label": "3.13.2[d]",
+          "Text": "identified architectural designs that promote effective information security are employed."
+        },
+        {
+          "Label": "3.13.2[e]",
+          "Text": "identified software development techniques that promote effective information security are employed."
+        },
+        {
+          "Label": "3.13.2[f]",
+          "Text": "identified systems engineering principles that promote effective information security are employed."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.3",
+      "Family": "3.13",
+      "Statement": "Separate user functionality from system management functionality.",
+      "Objectives": [
+        {
+          "Label": "3.13.3[a]",
+          "Text": "user functionality is identified."
+        },
+        {
+          "Label": "3.13.3[b]",
+          "Text": "system management functionality is identified."
+        },
+        {
+          "Label": "3.13.3[c]",
+          "Text": "user functionality is separated from system management functionality."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.4",
+      "Family": "3.13",
+      "Statement": "Prevent unauthorized and unintended information transfer via shared system resources.",
+      "Objectives": [
+        {
+          "Label": "3.13.4[D]",
+          "Text": "ermine if unauthorized and unintended information transfer via shared system resources is prevented."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.5",
+      "Family": "3.13",
+      "Statement": "Implement subnetworks for publicly accessible system components that are physically or logically separated from internal networks.",
+      "Objectives": [
+        {
+          "Label": "3.13.5[a]",
+          "Text": "publicly accessible system components are identified."
+        },
+        {
+          "Label": "3.13.5[b]",
+          "Text": "subnetworks for publicly accessible system components are physically or logically separated from internal networks."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.6",
+      "Family": "3.13",
+      "Statement": "Deny network communications traffic by default and allow network communications traffic by exception (i.e., deny all, permit by exception).",
+      "Objectives": [
+        {
+          "Label": "3.13.6[a]",
+          "Text": "network communications traffic is denied by default."
+        },
+        {
+          "Label": "3.13.6[b]",
+          "Text": "network communications traffic is allowed by exception."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.7",
+      "Family": "3.13",
+      "Statement": "Prevent remote devices from simultaneously establishing non-remote connections with organizational systems and communicating via some other connection to resources in external networks (i.e., split tunneling).",
+      "Objectives": [
+        {
+          "Label": "3.13.7[D]",
+          "Text": "ermine if remote devices are prevented from simultaneously establishing non-remote connections with the system and communicating via some other connection to resources in external networks (i.e., split tunneling)."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.8",
+      "Family": "3.13",
+      "Statement": "Implement cryptographic mechanisms to prevent unauthorized disclosure of CUI during transmission unless otherwise protected by alternative physical safeguards.",
+      "Objectives": [
+        {
+          "Label": "3.13.8[a]",
+          "Text": "cryptographic mechanisms intended to prevent unauthorized disclosure of CUI are identified."
+        },
+        {
+          "Label": "3.13.8[b]",
+          "Text": "alternative physical safeguards intended to prevent unauthorized disclosure of CUI are identified."
+        },
+        {
+          "Label": "3.13.8[c]",
+          "Text": "either cryptographic mechanisms or alternative physical safeguards are implemented to prevent unauthorized disclosure of CUI during transmission."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.9",
+      "Family": "3.13",
+      "Statement": "Terminate network connections associated with communications sessions at the end of the sessions or after a defined period of inactivity.",
+      "Objectives": [
+        {
+          "Label": "3.13.9[a]",
+          "Text": "a period of inactivity to terminate network connections associated with communications sessions is defined."
+        },
+        {
+          "Label": "3.13.9[b]",
+          "Text": "network connections associated with communications sessions are terminated at the end of the sessions."
+        },
+        {
+          "Label": "3.13.9[c]",
+          "Text": "network connections associated with communications sessions are terminated after the defined period of inactivity."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.10",
+      "Family": "3.13",
+      "Statement": "Establish and manage cryptographic keys for cryptography employed in organizational systems.",
+      "Objectives": [
+        {
+          "Label": "3.13.10[a]",
+          "Text": "cryptographic keys are established whenever cryptography is employed."
+        },
+        {
+          "Label": "3.13.10[b]",
+          "Text": "cryptographic keys are managed whenever cryptography is employed."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.11",
+      "Family": "3.13",
+      "Statement": "Employ FIPS-validated cryptography when used to protect the confidentiality of CUI.",
+      "Objectives": [
+        {
+          "Label": "3.13.11[D]",
+          "Text": "ermine if FIPS-validated cryptography is employed to protect the confidentiality of CUI."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.12",
+      "Family": "3.13",
+      "Statement": "Prohibit remote activation of collaborative computing devices and provide indication of devices in use to users present at the device.",
+      "Objectives": [
+        {
+          "Label": "3.13.12[a]",
+          "Text": "collaborative computing devices are identified."
+        },
+        {
+          "Label": "3.13.12[b]",
+          "Text": "collaborative computing devices provide indication to users of devices in use."
+        },
+        {
+          "Label": "3.13.12[c]",
+          "Text": "remote activation of collaborative computing devices is prohibited."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.13",
+      "Family": "3.13",
+      "Statement": "Control and monitor the use of mobile code.",
+      "Objectives": [
+        {
+          "Label": "3.13.13[a]",
+          "Text": "use of mobile code is controlled."
+        },
+        {
+          "Label": "3.13.13[b]",
+          "Text": "use of mobile code is monitored."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.14",
+      "Family": "3.13",
+      "Statement": "Control and monitor the use of Voice over Internet Protocol (VoIP) technologies.",
+      "Objectives": [
+        {
+          "Label": "3.13.14[a]",
+          "Text": "use of Voice over Internet Protocol (VoIP) technologies is controlled."
+        },
+        {
+          "Label": "3.13.14[b]",
+          "Text": "use of Voice over Internet Protocol (VoIP) technologies is monitored."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.15",
+      "Family": "3.13",
+      "Statement": "Protect the authenticity of communications sessions.",
+      "Objectives": [
+        {
+          "Label": "3.13.15[D]",
+          "Text": "ermine if the authenticity of communications sessions is protected."
+        }
+      ]
+    },
+    {
+      "Id": "3.13.16",
+      "Family": "3.13",
+      "Statement": "Protect the confidentiality of CUI at rest.",
+      "Objectives": [
+        {
+          "Label": "3.13.16[D]",
+          "Text": "ermine if the confidentiality of CUI at rest is protected."
+        }
+      ]
+    },
+    {
+      "Id": "3.14.1",
+      "Family": "3.14",
+      "Statement": "Identify, report, and correct system flaws in a timely manner.",
+      "Objectives": [
+        {
+          "Label": "3.14.1[a]",
+          "Text": "the time within which to identify system flaws is specified."
+        },
+        {
+          "Label": "3.14.1[b]",
+          "Text": "system flaws are identified within the specified time frame."
+        },
+        {
+          "Label": "3.14.1[c]",
+          "Text": "the time within which to report system flaws is specified."
+        },
+        {
+          "Label": "3.14.1[d]",
+          "Text": "system flaws are reported within the specified time frame."
+        },
+        {
+          "Label": "3.14.1[e]",
+          "Text": "the time within which to correct system flaws is specified."
+        },
+        {
+          "Label": "3.14.1[f]",
+          "Text": "system flaws are corrected within the specified time frame."
+        }
+      ]
+    },
+    {
+      "Id": "3.14.2",
+      "Family": "3.14",
+      "Statement": "Provide protection from malicious code at designated locations within organizational systems.",
+      "Objectives": [
+        {
+          "Label": "3.14.2[a]",
+          "Text": "designated locations for malicious code protection are identified."
+        },
+        {
+          "Label": "3.14.2[b]",
+          "Text": "protection from malicious code at designated locations is provided."
+        }
+      ]
+    },
+    {
+      "Id": "3.14.3",
+      "Family": "3.14",
+      "Statement": "Monitor system security alerts and advisories and take action in response.",
+      "Objectives": [
+        {
+          "Label": "3.14.3[a]",
+          "Text": "response actions to system security alerts and advisories are identified."
+        },
+        {
+          "Label": "3.14.3[b]",
+          "Text": "system security alerts and advisories are monitored."
+        },
+        {
+          "Label": "3.14.3[c]",
+          "Text": "actions in response to system security alerts and advisories are taken."
+        }
+      ]
+    },
+    {
+      "Id": "3.14.4",
+      "Family": "3.14",
+      "Statement": "Update malicious code protection mechanisms when new releases are available.",
+      "Objectives": [
+        {
+          "Label": "3.14.4[D]",
+          "Text": "ermine if malicious code protection mechanisms are updated when new releases are available."
+        }
+      ]
+    },
+    {
+      "Id": "3.14.5",
+      "Family": "3.14",
+      "Statement": "Perform periodic scans of organizational systems and real-time scans of files from external sources as files are downloaded, opened, or executed.",
+      "Objectives": [
+        {
+          "Label": "3.14.5[a]",
+          "Text": "the frequency for malicious code scans is defined."
+        },
+        {
+          "Label": "3.14.5[b]",
+          "Text": "malicious code scans are performed with the defined frequency."
+        },
+        {
+          "Label": "3.14.5[c]",
+          "Text": "real-time malicious code scans of files from external sources as files are downloaded, opened, or executed are performed."
+        }
+      ]
+    },
+    {
+      "Id": "3.14.6",
+      "Family": "3.14",
+      "Statement": "Monitor organizational systems, including inbound and outbound communications traffic, to detect attacks and indicators of potential attacks.",
+      "Objectives": [
+        {
+          "Label": "3.14.6[a]",
+          "Text": "the system is monitored to detect attacks and indicators of potential attacks."
+        },
+        {
+          "Label": "3.14.6[b]",
+          "Text": "inbound communications traffic is monitored to detect attacks and indicators of potential attacks."
+        },
+        {
+          "Label": "3.14.6[c]",
+          "Text": "outbound communications traffic is monitored to detect attacks and indicators of potential attacks."
+        }
+      ]
+    },
+    {
+      "Id": "3.14.7",
+      "Family": "3.14",
+      "Statement": "Identify unauthorized use of organizational systems",
+      "Objectives": [
+        {
+          "Label": "3.14.7[a]",
+          "Text": "authorized use of the system is defined."
+        },
+        {
+          "Label": "3.14.7[b]",
+          "Text": "unauthorized use of the system is identified."
+        }
+      ]
+    }
+  ]
+}

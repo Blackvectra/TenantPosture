@@ -35,7 +35,14 @@ function Publish-NRGAssessmentHTML {
         # Content }. Rendered as CSP-safe <a download> data-URI buttons so the
         # single HTML can carry the remediation script, a CSV matrix, etc.,
         # instead of the run scattering a dozen sidecar files. Empty = no card.
-        [object[]] $Attachments = @()
+        [object[]] $Attachments = @(),
+
+        # Which frameworks the report presents. NRG runs NIST-only by default —
+        # the tool still CITES every framework on every control and still scores
+        # them, this only decides what the report puts in front of the reader.
+        # Narrowing the report never narrows the assessment.
+        [ValidateNotNullOrEmpty()]
+        [string[]] $Frameworks = @('CIS','SCuBA','NIST','CMMC')
     )
 
     if (-not (Get-Command ConvertTo-NRGHtmlSafe -ErrorAction SilentlyContinue)) {
@@ -151,10 +158,16 @@ function Publish-NRGAssessmentHTML {
     }
 
     # ── Framework scores ──────────────────────────────────────────────────────
+    # Scored for every framework regardless of what is displayed: the JSON
+    # export and any later re-render need them, and a narrowed report must not
+    # become a narrowed record.
     $fwScores = @{}
     foreach ($fw in @('CIS','SCuBA','NIST','CMMC')) {
         $fwScores[$fw] = (Get-NRGCoverageScore -Findings $Findings -FrameworkId $fw -ErrorHandling 'Gap').Score
     }
+    # Displayed set, in canonical order, ignoring anything unrecognised.
+    $fwShow = @(@('CIS','SCuBA','NIST','CMMC') | Where-Object { $_ -in $Frameworks })
+    if ($fwShow.Count -eq 0) { $fwShow = @('NIST') }
 
     # ── License detection — suppress gaps the tenant already has licenses for ────
     # Detection is centralised in Lib/Get-NRGTenantLicenseProfile.ps1 so the
@@ -416,9 +429,166 @@ function Publish-NRGAssessmentHTML {
         CMMC  = @{Full='CMMC 2.0 Level 2';             Bg='#134e4a'}
     }
     $fwHtml = ''
-    foreach ($fw in @('CIS','SCuBA','NIST','CMMC')) {
+    foreach ($fw in $fwShow) {
         $fsc = $fwScores[$fw]; $col = scoreColor $fsc
         $fwHtml += "<div class='fw-card'><div class='fw-hd' style='background:$($fwMeta[$fw].Bg)'>$(hx $fw)</div><div class='fw-body'><div class='fw-sc' style='color:$col'>$fsc<span class='fw-den'>%</span></div><div class='fw-name'>$(hx $fwMeta[$fw].Full)</div></div></div>"
+    }
+
+    # ── NIST 800-53 control-family rollup ────────────────────────────────────
+    # The single NIST percentage above answers "are we compliant"; it does not
+    # answer "with what". A reader working an 800-53, FedRAMP, or CMMC
+    # assessment needs the breakdown by control family, because that is the
+    # unit their own documentation, POA&M, and auditor conversations are
+    # organised around. Every other view in this report groups by M365
+    # workload, which is the right lens for the engineer doing the fixing and
+    # the wrong one for the compliance reader signing off.
+    #
+    # A finding citing controls in two families counts in both — see the
+    # rationale in Lib/Get-NRGNISTFamilyCoverage.ps1. Family rows therefore do
+    # not sum to the assessment total, and the column is labelled "Assessed"
+    # rather than "Controls" to make that explicit.
+    $nistHtml = ''
+    $nistCov  = $null
+    if (Get-Command Get-NRGNISTFamilyCoverage -ErrorAction SilentlyContinue) {
+        try { $nistCov = Get-NRGNISTFamilyCoverage -Findings $Findings -ErrorHandling 'Gap' }
+        catch { $nistCov = $null }
+    }
+    if ($nistCov -and $nistCov.FamilyCount -gt 0) {
+        $nistRows = ''
+        foreach ($fam in $nistCov.Families) {
+            # A family assessed only through NotApplicable findings has no
+            # denominator. Get-NRGCoverageScore returns 0 there, which would
+            # render as a red 0% — a failing grade for a question the tool
+            # never got to ask. Show an explicit dash instead.
+            $famNotScored = ($fam.Scored -le 0)
+            $fcol  = if ($famNotScored) { '#94a3b8' } else { scoreColor ([int]$fam.Score) }
+            $fbar  = if ($famNotScored) { 0 } else { [int]$fam.Score }
+            $scTxt = if ($famNotScored) { '&mdash;' } else { "$([int]$fam.Score)%" }
+            $ctlList = @($fam.NistControls) -join ', '
+            $nistRows += @"
+<tr>
+  <td class='nf-id'>$(hx $fam.Family)</td>
+  <td class='nf-nm'>$(hx $fam.Name)<div class='nf-ctl'>$(hx $ctlList)</div></td>
+  <td class='nf-n'>$($fam.Assessed)</td>
+  <td class='nf-n nf-ok'>$($fam.Satisfied)</td>
+  <td class='nf-n nf-pt'>$($fam.Partial)</td>
+  <td class='nf-n nf-gp'>$($fam.Gap)</td>
+  <td class='nf-n nf-er'>$($fam.Error)</td>
+  <td class='nf-n nf-na'>$($fam.NA)</td>
+  <td class='nf-sc'>
+    <div class='nf-bar'><div class='nf-fill' style='width:$fbar%;background:$fcol'></div></div>
+    <span style='color:$fcol'>$scTxt</span>
+  </td>
+</tr>
+"@
+        }
+        $nistHtml = @"
+<div class="card mt" id="nist-families">
+  <div class="card-hd">
+    <div><div class="card-label">NIST SP 800-53 Rev 5 &mdash; Control Family Coverage</div><div class="card-sub">$($nistCov.FamilyCount) families and $($nistCov.NistControlCount) 800-53 controls exercised by this assessment</div></div>
+    <div class="nf-badge">$(hx $fwScores['NIST'])% overall</div>
+  </div>
+  <div class="nf-wrap">
+    <table class="nf-tbl">
+      <thead><tr>
+        <th>Family</th><th>Name / 800-53 controls exercised</th>
+        <th class='nf-n'>Assessed</th><th class='nf-n'>Met</th><th class='nf-n'>Partial</th>
+        <th class='nf-n'>Gap</th><th class='nf-n'>Error</th><th class='nf-n'>N/A</th><th>Coverage</th>
+      </tr></thead>
+      <tbody>$nistRows</tbody>
+    </table>
+  </div>
+  <div class="nf-note">A control mapped to more than one family is counted in each &mdash; family rows do not sum to the assessment total. Met + Partial + Gap + Error + N/A sums to Assessed on every row. <strong>N/A</strong> and <strong>Error</strong> are both excluded from the coverage percentage &mdash; N/A means this tool could not assess the control (missing license, data not collected) and Error means the evaluator threw before reaching a verdict. Neither is a control the tenant passed. A family showing &mdash; had no assessable control at all.</div>
+</div>
+"@
+    }
+
+    # ── NIST physical / device controls HTML ─────────────────────────────────
+    # A tenant scan says a great deal about endpoint posture and nothing at all
+    # about a locked server room, a certificate of destruction, or a returned
+    # badge. Those are real 800-53 controls a client working an 800-53 or CMMC
+    # assessment must satisfy, and omitting them silently is the dangerous
+    # option: a reader seeing a clean family table would reasonably infer the
+    # physical families were assessed and passed.
+    #
+    # So each row states its scope explicitly and, where the tool cannot see the
+    # control, says so and names the evidence the assessor must collect instead.
+    # Attested rows carry no verdict and contribute to no score.
+    $physHtml = ''
+    $physCov  = $null
+    if (Get-Command Get-NRGNISTPhysicalPosture -ErrorAction SilentlyContinue) {
+        try { $physCov = Get-NRGNISTPhysicalPosture -Findings $Findings }
+        catch { $physCov = $null }
+    }
+    if ($physCov -and $physCov.Available -and @($physCov.Groups).Count -gt 0) {
+        $statusMeta = @{
+            'Met'                  = @{Cls='pv-met';  Txt='Met'}
+            'Partial'              = @{Cls='pv-part'; Txt='Partial'}
+            'Gap'                  = @{Cls='pv-gap';  Txt='Gap'}
+            'Not assessed'         = @{Cls='pv-na';   Txt='Not assessed'}
+            'Attestation required' = @{Cls='pv-att';  Txt='Attestation required'}
+        }
+        $scopeMeta = @{
+            'Tenant'   = 'Evidenced by this assessment'
+            'Hybrid'   = 'Partly evidenced &mdash; rest is off-tenant'
+            'Attested' = 'Not visible from Microsoft 365'
+        }
+        $physGroups = ''
+        foreach ($grp in $physCov.Groups) {
+            $itemHtml = ''
+            foreach ($it in $grp.Items) {
+                $sm  = if ($statusMeta.ContainsKey($it.Status)) { $statusMeta[$it.Status] } else { @{Cls='pv-na'; Txt=$it.Status} }
+                $sct = if ($scopeMeta.ContainsKey($it.Scope))   { $scopeMeta[$it.Scope]   } else { $it.Scope }
+
+                # Evidence chips: the tool controls behind a Tenant/Hybrid row,
+                # so a reader can trace the verdict back to a scored control
+                # rather than taking the rollup on faith.
+                $evHtml = ''
+                foreach ($ev in @($it.Evidence)) {
+                    $evCls = switch ($ev.State) {
+                        'Satisfied' { 'ev-ok' }
+                        'Partial'   { 'ev-pt' }
+                        'Gap'       { 'ev-gp' }
+                        default     { 'ev-na' }
+                    }
+                    $evHtml += "<span class='pv-ev $evCls'>$(hx $ev.ControlId)</span>"
+                }
+
+                $optHtml = ''
+                foreach ($opt in @($it.Options)) { $optHtml += "<li>$(hx $opt)</li>" }
+
+                $itemHtml += @"
+<div class='pv-item'>
+  <div class='pv-hd'>
+    <div class='pv-cid'>$(hx $it.NistControl)</div>
+    <div class='pv-ttl'>$(hx $it.NistTitle)<div class='pv-scope'>$sct</div></div>
+    <span class='pv-st $($sm.Cls)'>$($sm.Txt)</span>
+  </div>
+  $(if ($it.DeviceAspect) { "<div class='pv-asp'>$(hx $it.DeviceAspect)</div>" })
+  $(if ($evHtml) { "<div class='pv-evs'><span class='pv-lbl'>Evidence from this assessment</span>$evHtml</div>" })
+  $(if ($it.OffTenantEvidence) { "<div class='pv-off'><span class='pv-lbl'>&#128203; Evidence the assessor must collect</span>$(hx $it.OffTenantEvidence)</div>" })
+  $(if ($optHtml) { "<div class='pv-opt'><span class='pv-lbl'>&#9654; Implementation options</span><ul>$optHtml</ul></div>" })
+</div>
+"@
+            }
+            $physGroups += @"
+<div class='pv-grp'>
+  <div class='pv-gh'>$(hx $grp.Title)</div>
+  $(if ($grp.Description) { "<div class='pv-gd'>$(hx $grp.Description)</div>" })
+  $itemHtml
+</div>
+"@
+        }
+        $physHtml = @"
+<div class="card mt" id="nist-physical">
+  <div class="card-hd">
+    <div><div class="card-label">NIST SP 800-53 &mdash; Physical, Media and Device Controls</div><div class="card-sub">$($physCov.TenantItems) evidenced from the tenant &middot; $($physCov.HybridItems) partly evidenced &middot; $($physCov.AttestedItems) not visible from Microsoft 365</div></div>
+    <div class="pv-badge">$($physCov.AttestationCount) need off-tenant evidence</div>
+  </div>
+  <div class="pv-intro">A Microsoft 365 assessment can evidence endpoint posture &mdash; encryption, patch level, screen lock, endpoint protection, device identity &mdash; and it cannot see a locked server room, a certificate of destruction, or a returned badge. Those are still 800-53 controls, so they are listed here with the implementation options for each and the evidence an assessor has to collect directly. <strong>Nothing in this section is scored</strong>: rows marked <em>Attestation required</em> were never assessed by this tool and are not claimed as compliant.</div>
+  $physGroups
+</div>
+"@
     }
 
     # ── License card HTML ────────────────────────────────────────────────────
@@ -792,13 +962,61 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
 .wl-ok{font-size:.66rem;font-weight:700;color:var(--pass);margin-top:2px}.wl-na{color:#94a3b8;font-size:.65rem;font-weight:500;margin-top:2px}
 
 /* Framework matrix */
-.fw-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:var(--bdr)}
+.fw-grid{display:grid;grid-template-columns:repeat($($fwShow.Count),1fr);gap:0;background:var(--bdr)}
 .fw-card{background:var(--card)}
 .fw-hd{padding:9px 18px;font-size:.78rem;font-weight:900;color:#fff;letter-spacing:.05em}
 .fw-body{padding:16px 18px;display:flex;flex-direction:column;gap:4px}
 .fw-sc{font-size:2rem;font-weight:900;line-height:1}
 .fw-den{font-size:.62rem;font-weight:600;color:var(--mut)}
 .fw-name{font-size:.7rem;color:var(--mut);font-weight:600;line-height:1.4;margin-top:4px}
+.nf-badge{font-size:.72rem;font-weight:800;background:#4c1d95;color:#fff;padding:4px 12px;border-radius:20px;letter-spacing:.02em}
+.nf-wrap{overflow-x:auto}
+.nf-tbl{width:100%;border-collapse:collapse;font-size:.78rem}
+.nf-tbl th{text-align:left;padding:9px 14px;font-size:.63rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);background:var(--bg);border-bottom:1px solid var(--bdr);white-space:nowrap}
+.nf-tbl td{padding:10px 14px;border-bottom:1px solid var(--bdr);vertical-align:top}
+.nf-tbl tr:last-child td{border-bottom:none}
+.nf-id{font-weight:900;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#4c1d95;white-space:nowrap}
+.nf-nm{font-weight:600;min-width:220px}
+.nf-ctl{font-size:.66rem;color:var(--mut);font-weight:500;margin-top:3px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.nf-n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:700}
+th.nf-n{text-align:right}
+.nf-ok{color:#059669}
+.nf-pt{color:#ca8a04}
+.nf-gp{color:#dc2626}
+.nf-er{color:#b91c1c}
+.nf-na{color:#94a3b8}
+.nf-sc{white-space:nowrap;font-weight:800;min-width:130px}
+.nf-bar{display:inline-block;width:74px;height:7px;border-radius:4px;background:var(--bdr);overflow:hidden;vertical-align:middle;margin-right:8px}
+.nf-fill{height:100%;border-radius:4px;transition:width 1s ease .3s}
+.nf-note{padding:12px 18px;font-size:.7rem;color:var(--mut);line-height:1.6;border-top:1px solid var(--bdr);background:var(--bg)}
+.pv-badge{font-size:.72rem;font-weight:800;background:#7c2d12;color:#fff;padding:4px 12px;border-radius:20px;white-space:nowrap}
+.pv-intro{padding:14px 18px;font-size:.76rem;color:var(--txt);line-height:1.65;border-bottom:1px solid var(--bdr);background:var(--bg)}
+.pv-grp{border-bottom:1px solid var(--bdr)}
+.pv-grp:last-child{border-bottom:none}
+.pv-gh{padding:11px 18px 3px;font-size:.8rem;font-weight:900;letter-spacing:-.01em}
+.pv-gd{padding:0 18px 10px;font-size:.71rem;color:var(--mut);line-height:1.55}
+.pv-item{padding:12px 18px;border-top:1px solid var(--bdr)}
+.pv-hd{display:flex;align-items:flex-start;gap:12px}
+.pv-cid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:900;font-size:.78rem;color:#4c1d95;min-width:62px;white-space:nowrap;padding-top:1px}
+.pv-ttl{flex:1;font-size:.82rem;font-weight:700;line-height:1.35}
+.pv-scope{font-size:.66rem;font-weight:600;color:var(--mut);margin-top:2px}
+.pv-st{font-size:.63rem;font-weight:800;padding:3px 9px;border-radius:20px;white-space:nowrap;letter-spacing:.03em}
+.pv-met{background:#d1fae5;color:#065f46}
+.pv-part{background:#fef3c7;color:#92400e}
+.pv-gap{background:#fee2e2;color:#991b1b}
+.pv-na{background:#e5e7eb;color:#4b5563}
+.pv-att{background:#ede9fe;color:#5b21b6}
+.pv-asp{font-size:.75rem;color:var(--txt);line-height:1.6;margin:7px 0 0 74px}
+.pv-evs,.pv-off,.pv-opt{margin:8px 0 0 74px;font-size:.73rem;line-height:1.6;color:var(--mut)}
+.pv-lbl{display:block;font-size:.6rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin-bottom:3px}
+.pv-ev{display:inline-block;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.66rem;font-weight:700;padding:2px 7px;border-radius:4px;margin:0 4px 4px 0}
+.ev-ok{background:#d1fae5;color:#065f46}
+.ev-pt{background:#fef3c7;color:#92400e}
+.ev-gp{background:#fee2e2;color:#991b1b}
+.ev-na{background:#e5e7eb;color:#4b5563}
+.pv-opt ul{margin:0;padding-left:17px}
+.pv-opt li{margin-bottom:3px}
+@media(max-width:720px){.pv-asp,.pv-evs,.pv-off,.pv-opt{margin-left:0}}
 
 /* License card */
 .lic-body{padding:18px 24px;display:flex;flex-direction:column;gap:14px}
@@ -924,7 +1142,7 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
   .cnt{padding:12px 28px 24px}.hdr-top{padding:20px 28px 14px}.ftr{padding:14px 28px;margin-top:16px}
   .card{box-shadow:none;break-inside:avoid;border:1px solid #dde3ec}
   .extr{display:table-row!important}.exp{cursor:default}
-  .fw-grid{grid-template-columns:repeat(4,1fr)!important}
+  .fw-grid{grid-template-columns:repeat($($fwShow.Count),1fr)!important}
   .wl-grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))!important}
   .exbody{grid-template-columns:1fr 1fr 1fr!important}
   .hdr-nav{display:none}
@@ -944,7 +1162,7 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
         <span><strong>Tenant</strong> $tD</span>
         <span><strong>License Tier</strong> $(hx $tierLabel)</span>
         $(if($op){"<span><strong>Prepared by</strong> $op</span>"})
-        <span><strong>Frameworks</strong> CIS M365 v6 &middot; CISA SCuBA &middot; NIST SP 800-53r5 &middot; CMMC 2.0</span>
+        <span><strong>Framework$(if ($fwShow.Count -ne 1) { 's' })</strong> $(hx (($fwShow | ForEach-Object { $fwMeta[$_].Full }) -join ' · '))</span>
       </div>
     </div>
     <div class="hdr-right">
@@ -955,6 +1173,8 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
   <div class="hdr-nav">
     <span class="nav-a" data-goto="exec">Overview</span>
     <span class="nav-a" data-goto="fw-section">Frameworks</span>
+    $(if($nistHtml){'<span class="nav-a" data-goto="nist-families">NIST 800-53</span>'})
+    $(if($physHtml){'<span class="nav-a" data-goto="nist-physical">Physical &amp; Device</span>'})
     $(if($licGroups.Count -gt 0){'<span class="nav-a" data-goto="licensing">License Gaps</span>'})
     <span class="nav-a" data-goto="named">Named Findings</span>
     <span class="nav-a" data-goto="actions">Priority Actions</span>
@@ -1012,9 +1232,15 @@ $riskHtml
 
 <!-- FRAMEWORK COMPLIANCE -->
 <div class="card mt" id="fw-section">
-  <div class="card-hd"><div class="card-label">Framework Compliance Matrix</div><div class="card-sub">Controls mapped to CIS, CISA SCuBA, NIST SP 800-53, and CMMC 2.0</div></div>
+  <div class="card-hd"><div class="card-label">$(if ($fwShow.Count -eq 1) { "$(hx $fwMeta[$fwShow[0]].Full) Compliance" } else { 'Framework Compliance Matrix' })</div><div class="card-sub">$(hx ("Controls mapped to " + (($fwShow | ForEach-Object { $fwMeta[$_].Full }) -join ', ')))</div></div>
   <div class="fw-grid">$fwHtml</div>
 </div>
+
+<!-- NIST 800-53 CONTROL FAMILY ROLLUP -->
+$nistHtml
+
+<!-- NIST PHYSICAL / MEDIA / DEVICE CONTROLS -->
+$physHtml
 
 <!-- LICENSE GAPS -->
 $licCard

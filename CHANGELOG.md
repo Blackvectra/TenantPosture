@@ -4,6 +4,179 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **NIST-first reporting.** `Invoke-NRGAssessment.ps1 -Framework <NIST|CIS|SCuBA|CMMC|All>`
+  selects which framework cards the HTML report presents. **NRG defaults to
+  NIST; NLS defaults to All** — the one deliberate behavioural difference
+  between the twins, pinned in each repo by its own test because a careless
+  mirror would silently flip it and the report would still render and still
+  score correctly while showing the wrong practice's frameworks to a client.
+  Narrowing the report never narrows the assessment: every control keeps every
+  citation, every framework is still scored, and the results JSON and XLSX
+  matrix are identical either way. A test renders the report both ways and
+  asserts no framework score moves.
+- **Standalone NIST-only HTML report.** `-NISTMatrix` now emits a self-contained
+  HTML page beside the Markdown and XLSX — family table, full control matrix,
+  not-assessable list and the unscored physical/device section — that names no
+  other framework anywhere on it. A test greps for CIS, SCuBA, CMMC, ISO 27001,
+  SOC 2, HIPAA, PCI DSS and MITRE and fails on any leak, because a stray
+  framework name in one table cell undermines the whole premise of the document.
+- **The framework grid sizes itself.** `.fw-grid` interpolated the column count
+  from a hardcoded 4, so a single-framework report rendered one card at quarter
+  width with three empty columns beside it.
+
+- **Endpoint device compliance scanner (`DEV-*`, 35 checks).** The tenant half of
+  the assessment reads Intune POLICY; this reads device STATE. `Device/
+  Invoke-NRGDeviceCompliance.ps1` runs on the endpoint (RMM-deployed, as SYSTEM),
+  writes one JSON result, and `-DeviceResults <folder>` on the assessment ingests
+  a folder of them. Findings aggregate per control with failing hostnames in
+  AffectedObjects — one row saying "41 of 60 failing", not 2,100 rows nobody
+  reads — and each maps to 800-53 so device findings land in the same report,
+  score and NIST family rollup as everything else.
+  Checks span encryption and boot integrity (BitLocker, TPM, Secure Boot, VBS),
+  malware defence (real-time protection, tamper protection, ASR, controlled
+  folder access, MDE onboarding), network exposure (firewall, SMBv1, LLMNR, RDP
+  NLA), accounts (local admins, RID 500/501, LAPS), patch state, session lock,
+  legacy surface and audit policy.
+- **The endpoint script is Windows PowerShell 5.1** — stock Windows ships 5.1,
+  not 7 — and is the single carve-out from the repo-wide `#Requires -Version 7`
+  floor. The security suite scopes that exception to the top-level `Device/`
+  folder and asserts it EARNS it: no MSHTML, no COM, no Invoke-Expression, no
+  network. A separate static guard pins no PS7-only syntax, no module import,
+  and read-only behaviour apart from the single result write.
+- **Elevation is reported, never assumed.** BitLocker, TPM, Secure Boot and the
+  audit policy return nothing without admin rights, which is indistinguishable
+  from "not configured". Those emit NotAssessed and are excluded from the fleet
+  denominator, so a control reads "2 of 5 compliant — 1 device could not run
+  this check" rather than inventing a pass or a failure for a machine nobody
+  measured.
+- **`$rows = if (...) { @(...) } else { @() }` assigns `$null`.** An if-block
+  yielding an empty array is enumerated away by the pipeline, so `$rows.Count`
+  threw under StrictMode for every control absent from a result file. Caught by
+  the new suite before it shipped; build such variables in two statements.
+- **A device control that genuinely does not apply now says so.** "RDP disabled
+  on every machine" and "BitLocker unreadable everywhere" both report
+  NotApplicable, but the first is good news and the second is a blind spot, and
+  the detail now distinguishes them.
+
+- **Managed device build standard (`Config/device-baseline.json`).** The device
+  guide answers "what does 800-53 require"; this answers "what do I do to this
+  laptop, and in what order". 27 requirements across five lifecycle stages —
+  procurement, provisioning, hardening, in service, offboarding — of which 23
+  are mandatory. Rendered by `Publish-NRGDeviceBaseline.ps1` as a printable
+  checklist plus the reasoning underneath, and emitted alongside the guide by
+  `New-NRGDeviceGuide.ps1`. Same no-network contract, statically enforced.
+  Every requirement states why it exists, how to do it, the 800-53 control it
+  satisfies, and whether the assessment can verify it — roughly a third cannot
+  be checked from a tenant (BIOS passwords, firmware settings, certificates of
+  destruction) and those rows say so rather than letting a reader assume the
+  scan covers them. Tests pin that every `VerifiedBy` exists in controls.json
+  and every `Nist` entry resolves in the 800-53 catalog; both rot silently
+  otherwise.
+- **Two more instances of the PowerShell backtick trap**, caught before they
+  shipped this time. A backtick inside a double-quoted string is the escape
+  character, so ```M``` lost its code formatting and ```$(...)``` escaped the
+  interpolation outright, emitting the literal source text. A `\"` in the same
+  file was worse — a backslash is not a PowerShell escape, so it terminated the
+  string and broke the parse.
+
+- **Device guide — reference material, no scanning (`New-NRGDeviceGuide.ps1`).**
+  Not everything is a scan. This renders `Config/nist-physical.json` into a
+  printable NIST device and endpoint guide — 31 controls across five areas with
+  98 implementation options, as Markdown plus self-contained HTML with print
+  styling and no external assets. It **connects to nothing**: no sign-in, no
+  Graph, no Exchange Online, no endpoint touched. That independence is the
+  point — the guide is usable before a tenant is attached, during a sales
+  conversation, and on a site with nothing open. `-ResultsPath` optionally
+  annotates it with a prior run's verdicts.
+  Two invariants are enforced by test, because both are easy to break by
+  accident: a static guard fails the build if `Invoke-NRGGraphRequest`,
+  `Connect-MgGraph`, `Invoke-RestMethod` or friends ever appear in either file;
+  and supplying findings may change what the guide reports as *already done* but
+  never what it *recommends* — a test diffs the rendered options with and
+  without findings and requires them identical, so two clients with the same
+  obligations cannot get different advice because one happened to be scanned.
+- **The guide claimed assessment results it never had.** `@($null).Count` is 1,
+  not 0, so an omitted `-Findings` still counted as "findings supplied" and
+  every control printed "Assessment result: Not assessed" against an assessment
+  that had never run. Caught by the test asserting the no-findings guide carries
+  no verdicts at all.
+- **`New-Item -ItemType Directory -Path` replaced with
+  `[IO.Directory]::CreateDirectory`.** `New-Item` has no `-LiteralPath` overload
+  and its `-Path` interprets wildcards, so an output directory containing `[`
+  or `]` failed outright — and it violated the repo's own ASVS V12.3.1
+  literal-path invariant, which the static security suite caught.
+
+- **Standalone NIST SP 800-53 Rev 5 matrix (`-NISTMatrix`).** Clients assessed
+  against 800-53 should not have to read their posture out of a multi-framework
+  report. `Publish-NRGNISTMatrix.ps1` emits a single-framework deliverable from
+  the same run — Markdown always, XLSX when openpyxl is present — across six
+  sheets: Summary, Control Matrix (one row per 800-53 control and the tenant
+  control evidencing it), By Control, By Family, Physical & Device, and Not
+  Assessed. Official Rev 5 titles come from a new
+  `Config/nist-800-53-catalog.json`, because a row reading `AC-6(9)  Gap` is not
+  something an auditor can work from. `-AllFiles` implies the switch.
+  **Strictly additive:** `Publish-NRGComplianceMatrix` keeps all ten frameworks,
+  no existing output changes, and a test asserts that publishing the NIST matrix
+  does not move the CIS, SCuBA or CMMC score by a point.
+- **The matrix refuses to overstate its scope.** The score is labelled as
+  coverage of the 57 controls the tool exercises, not 800-53 baseline
+  completion. The physical/media/personnel section stays unscored. Controls that
+  came back `NotApplicable` get their own sheet stating that a missing license or
+  an unconnected service is neither a pass nor a gap — a matrix that omits what
+  it could not evaluate reads as full coverage of a smaller scope.
+- **Rollup tables gained an Error column.** Met + Partial + Gap + N/A did not
+  reach Assessed on any tenant with a thrown evaluator, so a reader adding a row
+  up came short with no way to tell whether the missing rows were passes or
+  failures. Fixed in the NIST matrix, the HTML family table and the Markdown
+  summary; the XLSX family sheet already had it.
+- **Two backticked terms lost their code formatting in the NIST matrix.** A
+  backtick inside a PowerShell double-quoted string is the escape character. The
+  regression test asserts with `.Contains` and an explicit character, because a
+  backtick is *also* the escape character in a `-like` wildcard — the obvious
+  `-BeLike '*`x`*'` assertion silently tests for something else.
+
+- **NIST SP 800-53 Rev 5 coverage rolled up by control family.** The report scored
+  NIST as one aggregate percentage, which tells a reader working an 800-53,
+  FedRAMP, or CMMC assessment nothing about WHICH families are weak — every other
+  view groups by M365 workload, the engineer's lens rather than the auditor's.
+  All 195 controls already carried a `References.NIST` citation, so only the
+  rollup was missing. `Lib/Get-NRGNISTFamilyCoverage.ps1` groups findings by
+  family (12 families, 57 distinct 800-53 controls) and by individual control,
+  reusing `Get-NRGCoverageScore` so family scores use the identical formula and
+  denominator rules as every other score in the tool. Renders in the HTML report
+  (`id="nist-families"`), the Markdown summary, and a `NIST Families` sheet in
+  the XLSX matrix. A finding citing controls in two families counts in each — so
+  family rows do not sum to the assessment total, which every surface states on
+  the page. `NotApplicable` stays out of the denominator, and a family with
+  nothing assessable reads "Not assessed", never a red 0%.
+- **Physical, media and device 800-53 controls now stated explicitly.** A tenant
+  scan can evidence endpoint posture and cannot see a locked server room, a
+  certificate of destruction, or a returned badge. Omitting those controls
+  silently was the dangerous option: a reader looking at a clean family table
+  would reasonably infer the physical families had been assessed and passed.
+  `Config/nist-physical.json` defines 31 controls across AC, CM, IA, MA, MP, PE,
+  PS, SC and SI, each naming the device aspect it covers, the tool controls that
+  evidence it, the evidence an assessor must collect off-tenant, and two or more
+  implementation options. Scopes: Tenant (10), Hybrid (7), Attested (14).
+  Nothing in the section is scored — Attested rows always read "Attestation
+  required", never Satisfied and never Partial.
+- **PPL-1.2 crashed the whole Power Platform evaluator under StrictMode.**
+  `$d.DLPAvailable`, `$d.Environments` and `$d.DLPPolicies` were read by direct
+  dot-access; a `Data` block missing any of them threw, and because all four
+  PPL-1.x controls share one function the throw took PPL-1.1, PPL-1.2 and
+  PPL-1.3 down with it. Same class as the seven Conditional Access crashes: a
+  guard that assumes a field exists in order to check whether it exists.
+- **Seven paid-off entries removed from the coverage-debt list.** DEF-3.4,
+  DEF-4.3, EXO-2.6, EXO-3.4, PPL-1.3, SPO-2.5 and TMS-3.4 genuinely discriminate
+  now but were still listed in `coverage-exceptions.psd1`.
+- **A Copilot tenant could be told, on its own report, that it needs to buy
+  Copilot.** LicenseRequirement matching is exact and the controls.json string
+  lost its price suffix while the suppression set kept the bare form.
+  `Test-NRGLicenseRequirementMet` now retries once with a trailing price
+  parenthetical stripped — narrowly, requiring a currency amount inside it, so
+  qualifiers like "(add-on)" that distinguish real requirements are never
+  collapsed.
+
 - **Eliminated the false-compliance bug class (25 controls).** Collectors that run
   several independent queries wrap each in its own try/catch, then set
   `Success = $true` regardless — so an EMPTY result list was ambiguous between

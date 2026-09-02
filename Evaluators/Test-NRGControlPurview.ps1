@@ -135,6 +135,14 @@ function Test-NRGControlPurviewCommCompliance {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $pvw 'CommCompliancePolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CommCompliancePolicies was not collected; not assessed.'
+        return
+    }
     $policies = @($pvw.Data['CommCompliancePolicies'] ?? @())
     if ($policies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($policies.Count) communication compliance policy(ies) active."
@@ -150,6 +158,14 @@ function Test-NRGControlPurviewInfoBarriers {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $pvw 'InformationBarriersMode')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'InformationBarriersMode was not collected; not assessed.'
+        return
+    }
     $ibMode = [string]($pvw.Data['InformationBarriersMode'] ?? 'Legacy')
     if ($ibMode -match 'SingleSegment|MultiSegment|Mixed') {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Information barriers mode: $ibMode"
@@ -165,6 +181,14 @@ function Test-NRGControlPurviewInsiderRisk {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $pvw 'InsiderRiskPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'InsiderRiskPolicies was not collected; not assessed.'
+        return
+    }
     $irPolicies = @($pvw.Data['InsiderRiskPolicies'] ?? @())
     if ($irPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($irPolicies.Count) insider risk management policy(ies) active."
@@ -200,6 +224,14 @@ function Test-NRGControlPurviewAutoLabel {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview label data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $pvw 'AutoLabelPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AutoLabelPolicies was not collected; not assessed.'
+        return
+    }
     $autoLabels = @($pvw.Data['AutoLabelPolicies'] ?? @())
     if ($autoLabels.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($autoLabels.Count) auto-labeling policy(ies) active. Sensitive content labeled without user action."
@@ -295,6 +327,14 @@ function Test-NRGControlPurviewAuditPremium {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $pvw 'AuditConfig')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AuditConfig was not collected; not assessed.'
+        return
+    }
     $premiumEnabled = [bool](Get-NRGNestedProperty -Object $pvw -Path 'Data.AuditConfig.AdvancedAuditEnabled' -Default $false)
     if ($premiumEnabled) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Purview Audit (Premium) is enabled. High-value events including MailItemsAccessed and SearchQueryInitiated are captured.'
@@ -310,6 +350,14 @@ function Test-NRGControlPurviewAuditRetention {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $pvw 'AuditRetentionPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AuditRetentionPolicies was not collected; not assessed.'
+        return
+    }
     $retentionPolicies = @($pvw.Data['AuditRetentionPolicies'] ?? @())
     $longTerm = @($retentionPolicies | Where-Object { [int]($_.RetentionDays ?? 0) -ge 365 })
     if ($longTerm.Count -gt 0) {
@@ -344,6 +392,14 @@ function Test-NRGControlPurviewRecordsManagement {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $pvw 'RetentionLabels')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'RetentionLabels was not collected; not assessed.'
+        return
+    }
     $retentionLabels = @($pvw.Data['RetentionLabels'] ?? @())
     $recordLabels    = @($retentionLabels | Where-Object { $_.IsRecordLabel -eq $true })
     if ($recordLabels.Count -gt 0) {

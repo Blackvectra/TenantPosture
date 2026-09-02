@@ -168,6 +168,78 @@ function Publish-NRGAssessmentSummary {
     $null = $sb.AppendLine("| SharePoint Online | $(if ($Connections.SharePoint) { '✅' } else { '❌' }) |")
     $null = $sb.AppendLine()
 
+    # NIST SP 800-53 Rev 5 control-family coverage.
+    # Sits ahead of the gap tables because a compliance reader working an
+    # 800-53 / FedRAMP / CMMC assessment needs the family posture first —
+    # every other section of this summary is organised by M365 workload, which
+    # is the engineer's lens rather than the auditor's. Rendered only when the
+    # findings actually carry NIST citations, so an Email-IR or partial run
+    # does not emit an empty table.
+    $nistCov = $null
+    if (Get-Command Get-NRGNISTFamilyCoverage -ErrorAction SilentlyContinue) {
+        try { $nistCov = Get-NRGNISTFamilyCoverage -Findings $Findings -ErrorHandling 'Gap' }
+        catch { $nistCov = $null }
+    }
+    if ($nistCov -and $nistCov.FamilyCount -gt 0) {
+        $null = $sb.AppendLine("## NIST SP 800-53 Rev 5 — Control Family Coverage")
+        $null = $sb.AppendLine()
+        $null = $sb.AppendLine("| Family | Name | Assessed | Met | Partial | Gap | Error | N/A | Coverage |")
+        $null = $sb.AppendLine("|--------|------|---------:|----:|--------:|----:|------:|----:|---------:|")
+        foreach ($fam in $nistCov.Families) {
+            # Scored -eq 0 means every finding in the family was NotApplicable.
+            # Printing 0% there would report a failing grade for a question the
+            # tool never got to ask.
+            $covTxt = if ($fam.Scored -gt 0) { "$([int]$fam.Score)%" } else { 'Not assessed' }
+            $null = $sb.AppendLine("| $(EscMd $fam.Family) | $(EscMd $fam.Name) | $($fam.Assessed) | $($fam.Satisfied) | $($fam.Partial) | $($fam.Gap) | $($fam.Error) | $($fam.NA) | $covTxt |")
+        }
+        $null = $sb.AppendLine()
+        $null = $sb.AppendLine("_$($nistCov.NistControlCount) distinct 800-53 controls exercised. Met + Partial + Gap + Error + N/A sums to Assessed on every row. A control mapped to more than one family is counted in each, so family rows do not sum to the assessment total. N/A and Error are both excluded from Coverage — N/A means this assessment could not evaluate the control, Error means the evaluator threw before reaching a verdict. Neither is a control the tenant passed._")
+        $null = $sb.AppendLine()
+    }
+
+    # NIST physical / media / device controls.
+    # Deliberately placed after the family table it qualifies: the family table
+    # is a score, and this section is the statement of what that score does and
+    # does not cover. Nothing here is scored — Attestation-required rows were
+    # never assessed and must not read as compliant.
+    $physCov = $null
+    if (Get-Command Get-NRGNISTPhysicalPosture -ErrorAction SilentlyContinue) {
+        try { $physCov = Get-NRGNISTPhysicalPosture -Findings $Findings }
+        catch { $physCov = $null }
+    }
+    if ($physCov -and $physCov.Available -and @($physCov.Groups).Count -gt 0) {
+        $null = $sb.AppendLine("## NIST SP 800-53 — Physical, Media and Device Controls")
+        $null = $sb.AppendLine()
+        $null = $sb.AppendLine("A Microsoft 365 assessment can evidence endpoint posture — encryption, patch level, screen lock, endpoint protection, device identity — and it cannot see a locked server room, a certificate of destruction, or a returned badge. Those are still 800-53 controls, so they are listed here with implementation options and the evidence an assessor must collect directly.")
+        $null = $sb.AppendLine()
+        $null = $sb.AppendLine("**Nothing in this section is scored.** Rows marked _Attestation required_ were never assessed by this tool and are not claimed as compliant. $($physCov.TenantItems) items are evidenced from the tenant, $($physCov.HybridItems) partly, and $($physCov.AttestedItems) are not visible from Microsoft 365 at all.")
+        $null = $sb.AppendLine()
+
+        foreach ($grp in $physCov.Groups) {
+            $null = $sb.AppendLine("### $(EscMd $grp.Title)")
+            $null = $sb.AppendLine()
+            if ($grp.Description) {
+                $null = $sb.AppendLine("_$(EscMd $grp.Description)_")
+                $null = $sb.AppendLine()
+            }
+            foreach ($it in $grp.Items) {
+                $evTxt = if (@($it.Evidence).Count -gt 0) {
+                    (@($it.Evidence) | ForEach-Object { "$($_.ControlId) ($($_.State))" }) -join ', '
+                } else { '' }
+
+                $null = $sb.AppendLine("**$(EscMd $it.NistControl) $(EscMd $it.NistTitle)** — _$(EscMd $it.Status)_")
+                $null = $sb.AppendLine()
+                if ($it.DeviceAspect)      { $null = $sb.AppendLine("$(EscMd $it.DeviceAspect)"); $null = $sb.AppendLine() }
+                if ($evTxt)                { $null = $sb.AppendLine("- Evidence from this assessment: $(EscMd $evTxt)") }
+                if ($it.OffTenantEvidence) { $null = $sb.AppendLine("- Evidence the assessor must collect: $(EscMd $it.OffTenantEvidence)") }
+                foreach ($opt in @($it.Options)) {
+                    $null = $sb.AppendLine("- Option: $(EscMd $opt)")
+                }
+                $null = $sb.AppendLine()
+            }
+        }
+    }
+
     # Critical and High gaps
     if ($criticalGaps.Count -gt 0) {
         $null = $sb.AppendLine("## ⛔ Critical Gaps — Immediate Action Required")

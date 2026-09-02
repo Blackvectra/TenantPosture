@@ -179,6 +179,14 @@ function Test-NRGControlSPOAppsFromStore {
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $spo 'TenantSettings')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'TenantSettings was not collected; not assessed.'
+        return
+    }
     $appsFromStore = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.AppsForSharePointEnabled' -Default $true
     if (-not $appsFromStore) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Third-party app installation from the SharePoint store is disabled.'
@@ -200,8 +208,12 @@ function Test-NRGControlSPOCustomScript {
     # not a tenant Get-SPOTenant property, so there is no single tenant-wide value
     # to read. Modern tenants block custom script by default; verifying every site
     # requires Get-SPOSite enumeration (out of scope for a tenant-settings read).
-    # Kept as an advisory (Partial) rather than a fabricated pass/fail.
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Per-site review required)" -Severity 'Low' -FrameworkIds $cit `
+    # Advisory: NotApplicable, never Partial. Partial is worth 0.5 toward the
+    # compliance score, so an advisory control scored Partial hands every
+    # tenant free credit for a verdict this function never computed — and this
+    # one computes nothing at all, it only describes where to look. That is the
+    # "advisory controls never claim compliance" rule; it was being broken here.
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title "$($ctrl.Title) (Per-site review required)" -Severity 'Low' -FrameworkIds $cit `
         -Detail 'Custom-script permission is controlled per site collection (DenyAddAndCustomizePages), not by a tenant-wide switch. Custom script is blocked by default on modern tenants. Confirm no site collection has been re-enabled for custom script.' `
         -Remediation $ctrl.Remediation
 }
@@ -295,6 +307,14 @@ function Test-NRGControlSPOReauth {
     $spo = Get-NRGRawData -Key 'SharePoint'
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
+    }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $spo 'TenantSettings')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'TenantSettings was not collected; not assessed.'
+        return
     }
     $reauthDays = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.EmailAttestationReAuthDays' -Default 0
     if ($reauthDays -gt 0 -and $reauthDays -le 30) {

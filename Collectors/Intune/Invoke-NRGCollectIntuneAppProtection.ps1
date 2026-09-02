@@ -29,6 +29,14 @@ function Invoke-NRGCollectIntuneAppProtection {
         }
     }
 
+    # Empty is not clean: every section below initialises to @(), so an empty
+    # list cannot be told apart from a query that failed. App config policies come from both the MDM and MAM endpoints.
+    # A section is only 'Failed' when EVERY query feeding it failed —
+    # one surviving feeder still yields real data.
+    $mamFailed = $false
+    $cfgMdmFailed = $false
+    $cfgMamFailed = $false
+
     try {
         # ── App protection (MAM) policies ────────────────────────────────────
         try {
@@ -69,6 +77,7 @@ function Invoke-NRGCollectIntuneAppProtection {
                 }
             }
         } catch {
+            $mamFailed = $true
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Intune-AppProtection-MAM' -Message $_.Exception.Message
             }
@@ -100,6 +109,7 @@ function Invoke-NRGCollectIntuneAppProtection {
                 }
             }
         } catch {
+            $cfgMdmFailed = $true
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Intune-AppProtection-AppCfg-MDM' -Message $_.Exception.Message
             }
@@ -131,9 +141,15 @@ function Invoke-NRGCollectIntuneAppProtection {
                 }
             }
         } catch {
+            $cfgMamFailed = $true
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Intune-AppProtection-AppCfg-MAM' -Message $_.Exception.Message
             }
+        }
+
+        $result.Data.SectionStatus = @{
+            AppProtectionPolicies     = $(if ($mamFailed) { 'Failed' } else { 'Collected' })
+            AppConfigPolicies         = $(if ($cfgMdmFailed -and $cfgMamFailed) { 'Failed' } else { 'Collected' })
         }
 
         $result.Success = $true

@@ -33,6 +33,22 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
                 NonCompliantCount= 0
                 ByPlatform       = @{}
             }
+            # Empty is not clean. Every section above initialises to @(), so an
+            # empty list is ambiguous — "queried, this tenant has none"
+            # (compliant) or "the query failed" (unknown). Success cannot tell
+            # them apart because it reports on the collector, not the query.
+            # Each sub-query flips its own sections to 'Failed' in its catch,
+            # and evaluators read this through Test-NRGSectionCollected before
+            # concluding anything from an empty list.
+            SectionStatus          = @{
+                CompliancePolicies     = 'Collected'
+                ConfigurationProfiles  = 'Collected'
+                UpdatePolicies         = 'Collected'
+                WindowsHelloPolicies   = 'Collected'
+                EnrollmentRestrictions = 'Collected'
+                EnrollmentConfig       = 'Collected'
+                OSComplianceSummary    = 'Collected'
+            }
         }
     }
 
@@ -70,6 +86,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
                 }
             }
         } catch {
+            $result.Data.SectionStatus['CompliancePolicies'] = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Intune-DeviceCompliance-Policies' -Message $_.Exception.Message
             }
@@ -108,6 +125,8 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
                 }
             }
         } catch {
+            $result.Data.SectionStatus['ConfigurationProfiles'] = 'Failed'
+            $result.Data.SectionStatus['UpdatePolicies'] = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Intune-DeviceCompliance-Config' -Message $_.Exception.Message
             }
@@ -161,6 +180,9 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
                 }
             }
         } catch {
+            $result.Data.SectionStatus['EnrollmentConfig'] = 'Failed'
+            $result.Data.SectionStatus['WindowsHelloPolicies'] = 'Failed'
+            $result.Data.SectionStatus['EnrollmentRestrictions'] = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Intune-DeviceCompliance-Enrollment' -Message $_.Exception.Message
             }
@@ -198,6 +220,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
             }
             $result.Data.OSComplianceSummary.ByPlatform = $byPlatform
         } catch {
+            $result.Data.SectionStatus['OSComplianceSummary'] = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Intune-DeviceCompliance-Devices' -Message $_.Exception.Message
             }

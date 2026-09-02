@@ -138,6 +138,62 @@ param(
     # -JsonOnly emits only the JSON (unchanged).
     [switch] $AllFiles,
 
+    # Folder of endpoint results written by Device\Invoke-NRGDeviceCompliance.ps1
+    # and collected by RMM. Supplying it adds the DEV-* endpoint controls to the
+    # same report and the same NIST matrix. Omit it and every DEV control
+    # reports NotApplicable with a prompt — never absent, so a forgotten
+    # collection is visible rather than silently halving the assessment.
+    [Parameter(Mandatory = $false)]
+    [ValidateScript({
+        if ($_ -match '\.\.[\\\/]') { throw 'Path traversal not allowed.' }
+        if (-not (Test-Path -LiteralPath $_)) { throw "Device results path not found: $_" }
+        return $true
+    })]
+    [string] $DeviceResults,
+
+    # Which framework(s) the REPORT presents. NRG assesses against NIST
+    # SP 800-53 Rev 5, so that is the default here. This narrows the report,
+    # never the assessment: every control still carries its CIS, SCuBA, CMMC,
+    # ISO 27001, SOC 2, HIPAA, PCI DSS and MITRE citations, every framework is
+    # still scored, and the results JSON and XLSX matrix are unchanged. Pass
+    # -Framework All for the multi-framework report, or name one explicitly.
+    [ValidateSet('NIST','CIS','SCuBA','CMMC','All')]
+    [string] $Framework = 'NIST',
+
+    # Standalone NIST SP 800-53 Rev 5 matrix (Markdown + XLSX), for clients
+    # assessed against 800-53 who should not have to read their posture out of
+    # a multi-framework report. Purely additive — every other framework the tool
+    # cites is untouched, and this emits one extra document from the same run.
+    # Implied by -AllFiles.
+    [switch] $NISTMatrix,
+
+    # System Security Plan against NIST SP 800-171 Rev 2 — the CMMC Level 2
+    # baseline. All 110 requirements as a worked checklist: is it in place, what
+    # proves it, how to close it, and what closing it will do to the business.
+    # 41 requirements are evidenced from the tenant and endpoints; the other 69
+    # are answered by the client in Config/ssp/<client>.psd1 and render as open
+    # questions until they are. Markdown + HTML + XLSX. Implied by -AllFiles.
+    [switch] $SSP,
+
+    # Explicit path to the SSP answers file. Without it, -SSP looks for
+    # Config/ssp/<tenant-domain>.psd1 and renders the plan with every narrative
+    # blank if there is none — which is a truthful "not answered yet", not a
+    # failure.
+    [ValidateScript({
+        if ($_ -match '\.\.[\\\/]') { throw 'Path traversal not allowed in -SSPAnswers.' }
+        if (-not (Test-Path -LiteralPath $_)) { throw "SSP answers file not found: $_" }
+        return $true
+    })]
+    [string] $SSPAnswers,
+
+    # The NIST 800-53 Rev 5 improvement plan — what to do next, in what order,
+    # and what it will cost. Ordered steps with the exact projected coverage
+    # after each, the families each one moves, and what the change will break.
+    # Single-framework by design: it names NIST and nothing else, because a
+    # plan that hedges across four frameworks orders its steps for none of
+    # them. Implied by -AllFiles.
+    [switch] $ImprovementPlan,
+
     [switch] $WhatIfConnections,
 
     # Launch the local web GUI instead of running a scan in the terminal.
@@ -564,6 +620,27 @@ if (-not $skipCollection) {
         Invoke-NRGCollector 'Invoke-NRGCollectM365Copilot'
     }
 
+    # Endpoint compliance results. No connection required: the endpoints already
+    # ran the collector and the RMM already gathered the output. This reads
+    # files, nothing else.
+    if ($DeviceResults) {
+        Write-Host "  [*] Endpoints: ingesting device compliance results..."
+        if (Get-Command Invoke-NRGCollectDeviceCompliance -ErrorAction SilentlyContinue) {
+            try {
+                Invoke-NRGCollectDeviceCompliance -ResultsPath $DeviceResults
+                $devRaw = Get-NRGRawData -Key 'Device-Compliance'
+                if ($devRaw -and $devRaw.Success) {
+                    $dc = [int]$devRaw.Data.DeviceCount
+                    $ne = $dc - [int]$devRaw.Data.ElevatedCount
+                    Write-Host "      $dc device result(s) ingested." -ForegroundColor Green
+                    if ($ne -gt 0) {
+                        Write-Warning "$ne device(s) ran without administrative rights — encryption, TPM, Secure Boot and audit-policy checks are unassessed on those, and are reported as such rather than as passes."
+                    }
+                }
+            } catch { Write-Warning "Device results ingestion failed: $($_.Exception.Message)" }
+        }
+    }
+
     # ── Run evaluators ───────────────────────────────────────────────────────
     Write-Host ""
     Write-Host "[-] Running evaluators..." -ForegroundColor Cyan
@@ -726,7 +803,8 @@ if (-not $JsonOnly) {
     if (Get-Command Publish-NRGAssessmentHTML -ErrorAction SilentlyContinue) {
         $htmlPath = Join-Path $OutputPath "$baseName-assessment.html"
         try {
-            Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath -Attachments $reportAttachments
+            $fwSelection = if ($Framework -eq 'All') { @('CIS','SCuBA','NIST','CMMC') } else { @($Framework) }
+            Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath -Attachments $reportAttachments -Frameworks $fwSelection
             Write-Host "  [+] HTML: $htmlPath" -ForegroundColor Green
             Set-NRGSensitiveFileAcl -Path $htmlPath -ErrorAction SilentlyContinue
         } catch {
@@ -783,6 +861,93 @@ if (-not $JsonOnly) {
                 Set-NRGSensitiveFileAcl -Path $xlsxPath -ErrorAction SilentlyContinue
             } catch { Write-Warning "XLSX publish failed: $($_.Exception.Message)" }
         }
+    }
+
+    # Standalone NIST 800-53 Rev 5 matrix. Separate from -AllFiles so an
+    # 800-53 client can be served without generating every other sidecar, and
+    # implied by -AllFiles so the consolidated profile stays a superset.
+    if (($NISTMatrix -or $AllFiles) -and (Get-Command Publish-NRGNISTMatrix -ErrorAction SilentlyContinue)) {
+        $nistPath = Join-Path $OutputPath "$baseName-nist-800-53-matrix.md"
+        try {
+            Publish-NRGNISTMatrix -Metadata $reportMetadata -Findings $findings -OutputPath $nistPath
+            Write-Host "  [+] NIST matrix (md): $nistPath" -ForegroundColor Green
+            Set-NRGSensitiveFileAcl -Path $nistPath -ErrorAction SilentlyContinue
+            $nistXlsx = [System.IO.Path]::ChangeExtension($nistPath, '.xlsx')
+            if (Test-Path -LiteralPath $nistXlsx) {
+                Write-Host "  [+] NIST matrix (xlsx): $nistXlsx" -ForegroundColor Green
+            }
+        } catch { Write-Warning "NIST matrix publish failed: $($_.Exception.Message)" }
+    }
+
+    # System Security Plan (NIST SP 800-171 Rev 2 / CMMC Level 2). Same shape as
+    # the NIST matrix above: its own switch so a defence-contractor client can
+    # be served without every other sidecar, and implied by -AllFiles.
+    if (($SSP -or $AllFiles) -and (Get-Command Publish-NRGSSP -ErrorAction SilentlyContinue)) {
+        $sspPath = Join-Path $OutputPath "$baseName-ssp-800-171.md"
+        try {
+            # The CONNECTED domain, not the -TenantDomain parameter: under GDAP
+            # the two differ, and looking the answers file up by the partner's
+            # domain would silently attach one client's narratives to another
+            # client's plan.
+            $sspClient = [string]$reportMetadata.TenantDomain
+            $sspAnswerSet = if ($SSPAnswers) {
+                Get-NRGSSPAnswers -Path $SSPAnswers
+            } else {
+                Get-NRGSSPAnswers -ClientName $sspClient
+            }
+            $sspPosture = Get-NRGSSPPosture -Findings $findings -Answers $sspAnswerSet
+            Publish-NRGSSP -Posture $sspPosture -Metadata $reportMetadata -Answers $sspAnswerSet `
+                -OutputPath $sspPath -ClientName $sspClient
+            Write-Host "  [+] SSP (md): $sspPath" -ForegroundColor Green
+            Set-NRGSensitiveFileAcl -Path $sspPath -ErrorAction SilentlyContinue
+            foreach ($ext in @('.html', '.xlsx')) {
+                $side = [System.IO.Path]::ChangeExtension($sspPath, $ext)
+                if (Test-Path -LiteralPath $side) {
+                    Write-Host "  [+] SSP ($($ext.TrimStart('.'))): $side" -ForegroundColor Green
+                    Set-NRGSensitiveFileAcl -Path $side -ErrorAction SilentlyContinue
+                }
+            }
+            # The count of unanswered requirements is the number that decides
+            # whether this plan can be signed, so it is said at the console
+            # rather than left for someone to find on page forty.
+            $openCount = @($sspPosture['Requirements'] | Where-Object {
+                $_['MappedControls'] -eq 0 -and -not $_['Narrative'] -and $_['StatusSource'] -eq 'None'
+            }).Count
+            if ($openCount -gt 0) {
+                Write-Host "      $openCount of 110 requirements still need a written answer — see 'Still to answer'." -ForegroundColor Yellow
+            }
+        } catch { Write-Warning "SSP publish failed: $($_.Exception.Message)" }
+    }
+
+    # NIST 800-53 improvement plan. Same shape as the two above: its own switch
+    # so it can be produced without every other sidecar, implied by -AllFiles.
+    if (($ImprovementPlan -or $AllFiles) -and (Get-Command Publish-NRGImprovementPlan -ErrorAction SilentlyContinue)) {
+        $planPath = Join-Path $OutputPath "$baseName-nist-improvement-plan.md"
+        try {
+            # Resolved here rather than inside the plan so a tenant whose SKU
+            # query failed is treated as "no licence data" — every gated
+            # control lands in Buy first rather than being promised as a quick
+            # win the tenant cannot actually action.
+            $planLicense = if (Get-Command Get-NRGTenantLicenseProfile -ErrorAction SilentlyContinue) {
+                try { Get-NRGTenantLicenseProfile } catch { $null }
+            } else { $null }
+
+            $plan = Get-NRGNISTImprovementPlan -Findings $findings -LicenseProfile $planLicense
+            if ($plan['Available']) {
+                Publish-NRGImprovementPlan -Plan $plan -Metadata $reportMetadata `
+                    -OutputPath $planPath -ClientName ([string]$reportMetadata.TenantDomain)
+                Write-Host "  [+] NIST improvement plan (md): $planPath" -ForegroundColor Green
+                Set-NRGSensitiveFileAcl -Path $planPath -ErrorAction SilentlyContinue
+                $planHtml = [System.IO.Path]::ChangeExtension($planPath, '.html')
+                if (Test-Path -LiteralPath $planHtml) {
+                    Write-Host "  [+] NIST improvement plan (html): $planHtml" -ForegroundColor Green
+                    Set-NRGSensitiveFileAcl -Path $planHtml -ErrorAction SilentlyContinue
+                }
+                Write-Host "      NIST coverage $($plan['Baseline']['Score'])% -> $($plan['Projected']['Score'])% across $($plan['Projected']['StepCount']) steps." -ForegroundColor Cyan
+            } else {
+                Write-Warning 'No NIST-cited findings to plan against — improvement plan skipped.'
+            }
+        } catch { Write-Warning "Improvement plan publish failed: $($_.Exception.Message)" }
     }
 
     # Delta report (if baseline provided)

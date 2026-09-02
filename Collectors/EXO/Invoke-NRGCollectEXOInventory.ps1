@@ -42,6 +42,11 @@ function Invoke-NRGCollectEXOInventory {
             AllSharedMailboxes     = @()
             AuditDisabledMailboxes = @()
             SmtpAuthEnabledPerUser = @()
+            InboundConnectors      = @()
+            OutboundConnectors     = @()
+            TransportRules         = @()
+            TenantAllowBlockList   = @()
+            MailboxRecoverability  = $null
             Stats = @{
                 MailboxesScanned     = 0
                 InboxRulesEvaluated  = 0
@@ -63,6 +68,10 @@ function Invoke-NRGCollectEXOInventory {
                 SharedMailboxes        = 'NotRun'
                 AuditDisabledMailboxes = 'NotRun'
                 SmtpAuthEnabledPerUser = 'NotRun'
+                MailFlowConnectors     = 'NotRun'
+                TransportRules         = 'NotRun'
+                TenantAllowBlockList   = 'NotRun'
+                MailboxRecoverability  = 'NotRun'
             }
         }
     }
@@ -291,6 +300,189 @@ function Invoke-NRGCollectEXOInventory {
             $result.Data.SectionStatus.SmtpAuthEnabledPerUser = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-SMTPAuthPerUser' -Message $_.Exception.Message
+            }
+        }
+
+        # ── Mailbox recoverability (EXO-9.1, EXO-9.2) ────────────────────────
+        # What survives a deletion. Two independent windows:
+        #
+        #   A hold — litigation hold, an In-Place hold, or a retention policy —
+        #   preserves content past a user hard-delete and past the mailbox
+        #   itself being removed. Without one, a departing employee's mailbox is
+        #   gone 30 days after the account is deleted, and a hard-deleted item
+        #   is gone as soon as the recoverable-items window closes.
+        #
+        #   RetainDeletedItemsFor is that window. It defaults to 14 days and
+        #   caps at 30. Fourteen days is a fortnight to notice that mail is
+        #   missing, which is routinely not long enough — ransomware and BEC are
+        #   frequently discovered later than that.
+        #
+        # Counts and a capped named list, not a full dump: this is inventory,
+        # not a mailbox export, and the JSON already carries UPNs elsewhere.
+        try {
+            $mbx = @(Get-Mailbox -ResultSize Unlimited -ErrorAction Stop |
+                     Where-Object { $_.RecipientTypeDetails -notin @('DiscoveryMailbox') })
+            $noHold = @()
+            $shortWindow = @()
+            $windowDays = @()
+            foreach ($m in $mbx) {
+                $lit   = [bool](Get-NRGObjectField -Item $m -Key 'LitigationHoldEnabled' -Default $false)
+                $inPl  = @(Get-NRGObjectField -Item $m -Key 'InPlaceHolds' -Default @())
+                $rpol  = [string](Get-NRGObjectField -Item $m -Key 'RetentionPolicy')
+                $held  = $lit -or ($inPl.Count -gt 0) -or [bool]$rpol
+                $upn   = [string](Get-NRGObjectField -Item $m -Key 'UserPrincipalName')
+                if (-not $held) { $noHold += @{ UPN = $upn; DisplayName = [string](Get-NRGObjectField -Item $m -Key 'DisplayName') } }
+
+                # RetainDeletedItemsFor arrives as a timespan-ish object whose
+                # shape varies by EXO module version; read it as a string and
+                # take the day component rather than trusting a .Days property.
+                $raw = [string](Get-NRGObjectField -Item $m -Key 'RetainDeletedItemsFor')
+                $days = $null
+                if ($raw -match '^(\d+)\.') { $days = [int]$Matches[1] }
+                elseif ($raw -match '^(\d+):') { $days = 0 }
+                if ($null -ne $days) {
+                    $windowDays += $days
+                    if ($days -lt 30) { $shortWindow += @{ UPN = $upn; Days = $days } }
+                }
+            }
+            $result.Data.MailboxRecoverability = @{
+                TotalMailboxes      = $mbx.Count
+                WithHold            = ($mbx.Count - $noHold.Count)
+                WithoutHold         = $noHold.Count
+                WithoutHoldSample   = @($noHold | Select-Object -First 100)
+                ShortRetentionCount = $shortWindow.Count
+                ShortRetentionSample= @($shortWindow | Select-Object -First 100)
+                MinRetentionDays    = $(if ($windowDays.Count) { ($windowDays | Measure-Object -Minimum).Minimum } else { $null })
+            }
+            $result.Data.SectionStatus.MailboxRecoverability = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.MailboxRecoverability = 'Failed'
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'EXO-MailboxRecoverability' -Message $_.Exception.Message
+            }
+        }
+
+        # ── Mail flow connectors (EXO-8.1) ───────────────────────────────────
+        # An inbound or outbound connector is how mail is routed into or out of
+        # the tenant, and a connector an attacker adds is durable persistence
+        # that survives a password reset: it is not in anybody's mailbox and
+        # nothing about it looks like an inbox rule.
+        try {
+            $inb = @()
+            if (Get-Command Get-InboundConnector -ErrorAction SilentlyContinue) {
+                $inb = @(Get-InboundConnector -ErrorAction Stop)
+            }
+            $result.Data.InboundConnectors = @($inb | ForEach-Object {
+                @{
+                    Name             = [string](Get-NRGObjectField -Item $_ -Key 'Name')
+                    Enabled          = [bool](Get-NRGObjectField -Item $_ -Key 'Enabled' -Default $false)
+                    ConnectorType    = [string](Get-NRGObjectField -Item $_ -Key 'ConnectorType')
+                    SenderDomains    = @(Get-NRGObjectField -Item $_ -Key 'SenderDomains' -Default @()) | ForEach-Object { [string]$_ }
+                    SenderIPAddresses= @(Get-NRGObjectField -Item $_ -Key 'SenderIPAddresses' -Default @()) | ForEach-Object { [string]$_ }
+                    RequireTls       = [bool](Get-NRGObjectField -Item $_ -Key 'RequireTls' -Default $false)
+                    RestrictDomainsToIPAddresses = [bool](Get-NRGObjectField -Item $_ -Key 'RestrictDomainsToIPAddresses' -Default $false)
+                    WhenCreated      = [string](Get-NRGObjectField -Item $_ -Key 'WhenCreated')
+                }
+            })
+
+            $outb = @()
+            if (Get-Command Get-OutboundConnector -ErrorAction SilentlyContinue) {
+                $outb = @(Get-OutboundConnector -ErrorAction Stop)
+            }
+            $result.Data.OutboundConnectors = @($outb | ForEach-Object {
+                @{
+                    Name          = [string](Get-NRGObjectField -Item $_ -Key 'Name')
+                    Enabled       = [bool](Get-NRGObjectField -Item $_ -Key 'Enabled' -Default $false)
+                    ConnectorType = [string](Get-NRGObjectField -Item $_ -Key 'ConnectorType')
+                    SmartHosts    = @(Get-NRGObjectField -Item $_ -Key 'SmartHosts' -Default @()) | ForEach-Object { [string]$_ }
+                    RecipientDomains = @(Get-NRGObjectField -Item $_ -Key 'RecipientDomains' -Default @()) | ForEach-Object { [string]$_ }
+                    TlsSettings   = [string](Get-NRGObjectField -Item $_ -Key 'TlsSettings')
+                    IsTransportRuleScoped = [bool](Get-NRGObjectField -Item $_ -Key 'IsTransportRuleScoped' -Default $false)
+                    WhenCreated   = [string](Get-NRGObjectField -Item $_ -Key 'WhenCreated')
+                }
+            })
+            $result.Data.SectionStatus.MailFlowConnectors = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.MailFlowConnectors = 'Failed'
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'EXO-MailFlowConnectors' -Message $_.Exception.Message
+            }
+        }
+
+        # ── Transport rule CONTENTS (EXO-8.2) ────────────────────────────────
+        # EXO-3.5 audits whether transport-rule CHANGES are logged. It does not
+        # look at what the rules do. A transport rule that redirects or blind-
+        # copies mail to an external address is org-wide exfiltration that
+        # bypasses the per-mailbox forwarding controls entirely — EXO-1.3 and
+        # EXO-7.1 never see it, because no mailbox is forwarding.
+        try {
+            $rules = @()
+            if (Get-Command Get-TransportRule -ErrorAction SilentlyContinue) {
+                $rules = @(Get-TransportRule -ErrorAction Stop)
+            }
+            $result.Data.TransportRules = @($rules | ForEach-Object {
+                @{
+                    Name         = [string](Get-NRGObjectField -Item $_ -Key 'Name')
+                    State        = [string](Get-NRGObjectField -Item $_ -Key 'State')
+                    Priority     = [string](Get-NRGObjectField -Item $_ -Key 'Priority')
+                    Mode         = [string](Get-NRGObjectField -Item $_ -Key 'Mode')
+                    # The three redirection verbs. Each takes a recipient list;
+                    # any entry outside an accepted domain is an external hop.
+                    RedirectMessageTo = @(Get-NRGObjectField -Item $_ -Key 'RedirectMessageTo' -Default @()) | ForEach-Object { [string]$_ }
+                    BlindCopyTo       = @(Get-NRGObjectField -Item $_ -Key 'BlindCopyTo'       -Default @()) | ForEach-Object { [string]$_ }
+                    CopyTo            = @(Get-NRGObjectField -Item $_ -Key 'CopyTo'            -Default @()) | ForEach-Object { [string]$_ }
+                    # A rule that routes through a named connector is the other
+                    # way mail leaves without a forwarding flag anywhere.
+                    RouteMessageOutboundConnector = [string](Get-NRGObjectField -Item $_ -Key 'RouteMessageOutboundConnector')
+                    # SCL -1 skips spam filtering outright.
+                    SetSCL       = [string](Get-NRGObjectField -Item $_ -Key 'SetSCL')
+                    WhenChanged  = [string](Get-NRGObjectField -Item $_ -Key 'WhenChanged')
+                }
+            })
+            $result.Data.SectionStatus.TransportRules = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.TransportRules = 'Failed'
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'EXO-TransportRules' -Message $_.Exception.Message
+            }
+        }
+
+        # ── Tenant Allow/Block List (DEF-5.1) ────────────────────────────────
+        # Separate surface from the anti-spam allowed-sender list EXO-5.3
+        # checks. An allow entry here overrides filtering verdicts outright, and
+        # entries added during an incident to "unblock" a sender routinely
+        # outlive the incident.
+        try {
+            $tabl = @()
+            if (Get-Command Get-TenantAllowBlockListItems -ErrorAction SilentlyContinue) {
+                foreach ($t in @('Sender', 'Url', 'FileHash')) {
+                    foreach ($allow in @($true, $false)) {
+                        try {
+                            $items = @(Get-TenantAllowBlockListItems -ListType $t -Allow:$allow -ErrorAction Stop)
+                            foreach ($i in $items) { $tabl += @{
+                                ListType   = $t
+                                Action     = $(if ($allow) { 'Allow' } else { 'Block' })
+                                Value      = [string](Get-NRGObjectField -Item $i -Key 'Value')
+                                ExpirationDate = [string](Get-NRGObjectField -Item $i -Key 'ExpirationDate')
+                                # A never-expiring ALLOW is the durable one.
+                                NoExpiration   = [bool](Get-NRGObjectField -Item $i -Key 'NoExpiration' -Default $false)
+                                Notes      = [string](Get-NRGObjectField -Item $i -Key 'Notes')
+                            } }
+                        } catch {
+                            # One list type unavailable (licence/role) must not
+                            # lose the others; the section only fails if the
+                            # cmdlet itself is unusable, handled by the outer catch.
+                            Write-Verbose "TABL $t/$allow unavailable: $($_.Exception.Message)"
+                        }
+                    }
+                }
+                $result.Data.TenantAllowBlockList = @($tabl)
+                $result.Data.SectionStatus.TenantAllowBlockList = 'Collected'
+            }
+        } catch {
+            $result.Data.SectionStatus.TenantAllowBlockList = 'Failed'
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'EXO-TenantAllowBlockList' -Message $_.Exception.Message
             }
         }
 
