@@ -26,6 +26,13 @@ Describe 'Publish-NRGAssessmentHTML end-to-end render' {
         $severities = @('Critical', 'High', 'Medium', 'Low', 'Informational')
         $workloads  = @('AAD', 'EXO', 'DEF', 'TMS', 'PVW', 'SPO', 'INT', 'PPL', 'DNS')
 
+        # Real citations are emitted by Get-NRGFrameworkCitations as
+        # "Framework:value" pairs. Keep the synthetic set in that shape — the
+        # NIST family rollup parses the NIST: prefix off this exact string, so
+        # a fixture using a different separator would silently exercise none of
+        # that code path.
+        $script:NistRefs = @('AC-2, IA-2', 'AU-6', 'SC-8(1)', 'SI-4', 'CM-6, AC-3')
+
         $script:TitleMarker = 'ZZUNIQUEFINDINGTITLE'
         $script:GapCount    = 0
         $n = 0
@@ -40,7 +47,8 @@ Describe 'Publish-NRGAssessmentHTML end-to-end render' {
                     -Detail ("Synthetic detail for {0} {1}" -f $wl, $st) `
                     -CurrentValue 'current-x' -RequiredValue 'required-y' `
                     -Remediation 'Do the thing.' `
-                    -FrameworkIds @('CIS-1.1', 'SCUBA-MS.AAD.1.1v1')
+                    -FrameworkIds @('CIS:1.1', 'SCuBA:MS.AAD.1.1v1',
+                                    ("NIST:{0}" -f $script:NistRefs[$n % $script:NistRefs.Count]))
             }
         }
 
@@ -105,9 +113,47 @@ Describe 'Publish-NRGAssessmentHTML end-to-end render' {
     }
 
     It 'contains the core report sections' {
-        foreach ($anchor in 'id="exec"', 'id="findings"', 'id="fw-section"') {
+        foreach ($anchor in 'id="exec"', 'id="findings"', 'id="fw-section"', 'id="nist-families"', 'id="nist-physical"') {
             $script:html | Should -BeLike "*$anchor*" -Because "section marker $anchor must render"
         }
+    }
+
+    It 'renders the NIST 800-53 family rollup with its cited families' {
+        # The fixture cites AC, IA, AU, SC, SI and CM. Each must appear as a
+        # family row with its full 800-53 name — a rollup that rendered the
+        # section shell but no rows would still satisfy the anchor check above.
+        foreach ($fam in 'Access Control', 'Identification and Authentication',
+                         'Audit and Accountability', 'System and Communications Protection',
+                         'System and Information Integrity', 'Configuration Management') {
+            $script:html | Should -BeLike "*$fam*" -Because "NIST family '$fam' is cited by the fixture and must roll up"
+        }
+        # The control enhancement must survive parsing intact, not be truncated
+        # to its base control.
+        $script:html | Should -BeLike '*SC-8(1)*'
+    }
+
+    It 'states that NIST family rows do not sum to the assessment total' {
+        # A cross-family control is counted in every family it cites. Without
+        # this caveat on the page, a reader adding the Assessed column and
+        # getting more than the control count would reasonably conclude the
+        # numbers are wrong.
+        $script:html | Should -BeLike '*do not sum to the assessment total*'
+    }
+
+    It 'renders the physical/device section without claiming compliance for attested controls' {
+        # The section is rendered from Config/nist-physical.json, so it appears
+        # regardless of what the synthetic findings contain. What must hold in
+        # the OUTPUT is that the not-observable controls carry the attestation
+        # label and the page says the section is unscored — the two sentences
+        # that stop a reader inferring a physical pass from a clean NIST table.
+        $script:html | Should -BeLike '*Attestation required*'
+        $script:html | Should -BeLike '*Nothing in this section is scored*'
+        # A representative control from each family the tenant cannot see.
+        foreach ($c in 'MP-6', 'PE-3', 'MA-5') {
+            $script:html | Should -BeLike "*$c*" -Because "$c is not observable from M365 and must still be listed"
+        }
+        # And the section must actually offer options, not just verdicts.
+        $script:html | Should -BeLike '*Implementation options*'
     }
 
     It 'renders findings from every workload (report is not empty)' {
@@ -128,6 +174,64 @@ Describe 'Publish-NRGAssessmentHTML end-to-end render' {
         # ...but the payload text must still be present (escaped), proving it
         # rendered through the escaper rather than being silently dropped.
         $script:html | Should -Match ([regex]::Escape($script:XssMarker))
+    }
+
+    It 'defaults to every framework when -Frameworks is not passed' {
+        # The publisher default stays multi-framework; the NRG entry point is
+        # what narrows it. Changing the publisher default would silently narrow
+        # NLS and every direct caller too.
+        foreach ($fw in 'CIS', 'SCuBA', 'NIST', 'CMMC') {
+            $script:html | Should -BeLike "*>$fw<*" -Because "$fw must appear by default"
+        }
+    }
+
+    Context 'Single-framework report (-Frameworks NIST)' {
+
+        BeforeAll {
+            $script:NistOnlyPath = Join-Path $script:tmp 'nist-only.html'
+            Publish-NRGAssessmentHTML -Metadata $script:metadata -Findings $script:findings `
+                -Connections $script:connections -OutputPath $script:NistOnlyPath `
+                -ClientName 'Contoso Ltd' -Frameworks @('NIST')
+            $script:NistOnly = Get-Content -LiteralPath $script:NistOnlyPath -Raw
+        }
+
+        It 'renders exactly one framework card' {
+            ([regex]::Matches($script:NistOnly, "class='fw-card'")).Count | Should -Be 1
+        }
+
+        It 'sizes the grid to the number of cards, not a hardcoded four' {
+            # Otherwise a single card renders at a quarter width with three
+            # empty columns beside it.
+            $script:NistOnly | Should -Match 'fw-grid\{display:grid;grid-template-columns:repeat\(1,1fr\)'
+        }
+
+        It 'names no other framework in the matrix card or the footer' {
+            $script:NistOnly | Should -Not -Match 'card-label">Framework Compliance Matrix'
+            $script:NistOnly | Should -BeLike '*NIST SP 800-53 Rev 5 Compliance*'
+            foreach ($fw in 'CIS M365 Foundations', 'CISA SCuBA', 'CMMC 2.0') {
+                $script:NistOnly | Should -Not -BeLike "*$fw*" -Because "a NIST-only report must not advertise $fw"
+            }
+        }
+
+        It 'still carries the NIST family and physical sections' {
+            $script:NistOnly | Should -BeLike '*id="nist-families"*'
+            $script:NistOnly | Should -BeLike '*id="nist-physical"*'
+        }
+
+        It 'still renders every finding — narrowing the report never narrows the assessment' {
+            $full = ([regex]::Matches($script:html,      [regex]::Escape($script:TitleMarker))).Count
+            $nist = ([regex]::Matches($script:NistOnly,  [regex]::Escape($script:TitleMarker))).Count
+            $nist | Should -Be $full -Because 'the framework selection is presentation only'
+        }
+
+        It 'falls back to NIST rather than rendering an empty matrix on an unknown framework' {
+            $p = Join-Path $script:tmp 'bogus.html'
+            Publish-NRGAssessmentHTML -Metadata $script:metadata -Findings $script:findings `
+                -Connections $script:connections -OutputPath $p -Frameworks @('NOTAFRAMEWORK')
+            $txt = Get-Content -LiteralPath $p -Raw
+            ([regex]::Matches($txt, "class='fw-card'")).Count | Should -Be 1
+            $txt | Should -BeLike '*NIST SP 800-53 Rev 5*'
+        }
     }
 
     It 'leaks no object-stringification artifacts' {

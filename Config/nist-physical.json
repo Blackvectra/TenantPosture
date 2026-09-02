@@ -1,0 +1,427 @@
+{
+  "version": "1.0",
+  "framework": "NIST SP 800-53 Rev 5",
+  "purpose": "Physical, media, maintenance and endpoint-device controls, with the implementation options available for each and an explicit statement of what a Microsoft 365 assessment can and cannot evidence.",
+  "note": "Scope values: 'Tenant' = fully evidenced by controls in this assessment. 'Hybrid' = the tenant evidences part of the control; the rest must be confirmed off-tenant. 'Attested' = not observable from Microsoft 365 at all; the assessor must collect evidence and the client must attest. An Attested item NEVER reports as compliant — see the 'Advisory controls never claim compliance' rule in CLAUDE.md.",
+  "groups": [
+    {
+      "Id": "endpoint-protection",
+      "Title": "Endpoint Protection",
+      "Description": "Device-resident controls that Intune and Entra ID can evidence directly. These roll up from controls already scored in this assessment.",
+      "Items": [
+        {
+          "NistControl": "SC-28",
+          "NistTitle": "Protection of Information at Rest",
+          "Scope": "Tenant",
+          "DeviceAspect": "Full-disk encryption on managed laptops, desktops and mobile devices, so a lost or stolen device is a hardware loss rather than a data breach.",
+          "EvidenceControls": ["INT-1.3", "INT-2.4", "INT-1.4"],
+          "Options": [
+            "Intune device configuration profile enforcing BitLocker with TPM + PIN, key escrow to Entra ID (Windows).",
+            "Intune Endpoint Security disk encryption policy enforcing FileVault with key escrow (macOS).",
+            "Intune App Protection policy requiring device-level encryption before corporate data may be accessed (iOS/Android, including BYOD without full enrollment).",
+            "Conditional Access requiring a compliant device, so an unencrypted endpoint cannot reach corporate data at all."
+          ]
+        },
+        {
+          "NistControl": "AC-11",
+          "NistTitle": "Device Lock",
+          "Scope": "Tenant",
+          "DeviceAspect": "Automatic screen lock and credential re-entry after inactivity, on both workstations and mobile devices.",
+          "EvidenceControls": ["INT-4.4"],
+          "Options": [
+            "Intune compliance policy requiring a PIN or biometric with a maximum inactivity timeout (mobile).",
+            "Intune device configuration profile setting the interactive-logon machine inactivity limit and requiring Ctrl+Alt+Del (Windows).",
+            "Intune App Protection policy requiring app-level PIN re-entry after inactivity, for unmanaged devices that hold corporate data."
+          ]
+        },
+        {
+          "NistControl": "SI-3",
+          "NistTitle": "Malicious Code Protection",
+          "Scope": "Tenant",
+          "DeviceAspect": "Anti-malware and endpoint detection running, up to date, and reporting on every managed endpoint.",
+          "EvidenceControls": ["INT-1.5", "INT-2.1", "INT-2.2"],
+          "Options": [
+            "Intune Endpoint Security antivirus policy enforcing Microsoft Defender real-time protection, cloud-delivered protection and tamper protection.",
+            "Defender for Endpoint onboarding via Intune, giving EDR telemetry rather than signature scanning alone.",
+            "Attack Surface Reduction rules in Block mode for the office-macro, script and credential-theft rule set.",
+            "Where a third-party EDR is the standard (for example Cortex XDR), evidence deployment coverage from that console and record it as a compensating control — this assessment can only see the Microsoft stack."
+          ]
+        },
+        {
+          "NistControl": "SI-2",
+          "NistTitle": "Flaw Remediation",
+          "Scope": "Tenant",
+          "DeviceAspect": "Operating-system and application patching on endpoints, within a defined window.",
+          "EvidenceControls": ["INT-2.5", "INT-4.3"],
+          "Options": [
+            "Intune Windows Update rings with a deferral period and enforced deadline, plus Update Compliance reporting.",
+            "Intune compliance policy setting a minimum OS version, so an unpatched device fails compliance and loses access via Conditional Access.",
+            "Autopatch for managed Windows estates, which moves ring management to the service.",
+            "Third-party patching via RMM for non-Microsoft applications, which Intune does not cover by default."
+          ]
+        },
+        {
+          "NistControl": "CM-6",
+          "NistTitle": "Configuration Settings",
+          "Scope": "Tenant",
+          "DeviceAspect": "A defined, enforced hardening baseline on each managed device rather than per-device drift.",
+          "EvidenceControls": ["INT-1.1", "INT-3.2"],
+          "Options": [
+            "Intune Security Baselines (Windows, Defender for Endpoint, Edge) assigned to all managed devices.",
+            "Custom Intune configuration profiles where the baseline needs local deviation, with the deviation documented.",
+            "Group Policy for hybrid-joined devices not yet fully managed by Intune, with a documented plan to converge on one authority."
+          ]
+        },
+        {
+          "NistControl": "CM-7",
+          "NistTitle": "Least Functionality",
+          "Scope": "Tenant",
+          "DeviceAspect": "Unneeded device capability disabled — scripting hosts, unsigned macros, unmanaged app installs, unnecessary services.",
+          "EvidenceControls": ["INT-2.2", "INT-3.1", "INT-3.3"],
+          "Options": [
+            "Attack Surface Reduction rules in Block mode.",
+            "Enrollment restrictions blocking personally-owned platforms that cannot meet the baseline.",
+            "App Protection conditional launch blocking jailbroken or rooted devices, and devices below a minimum patch level.",
+            "AppLocker or Windows Defender Application Control where the environment can support an allow-list."
+          ]
+        },
+        {
+          "NistControl": "IA-5",
+          "NistTitle": "Authenticator Management",
+          "Scope": "Tenant",
+          "DeviceAspect": "Local device credentials — the local administrator password in particular — rotated and individually managed rather than shared across the estate.",
+          "EvidenceControls": ["INT-4.1", "INT-4.2"],
+          "Options": [
+            "Windows LAPS via Intune, escrowing per-device local admin passwords to Entra ID with automatic rotation.",
+            "Windows Hello for Business, replacing the password on the device with a TPM-bound biometric or PIN.",
+            "Where a shared local admin password is still in use anywhere, treat it as a finding in its own right — one recovered credential unlocks every device that shares it."
+          ]
+        }
+      ]
+    },
+    {
+      "Id": "device-identity",
+      "Title": "Device Identity and Access",
+      "Description": "Controls that gate access on what the device is and where it is, rather than only on who the user is.",
+      "Items": [
+        {
+          "NistControl": "IA-3",
+          "NistTitle": "Device Identification and Authentication",
+          "Scope": "Tenant",
+          "DeviceAspect": "The device itself authenticates to the tenant, so access decisions can distinguish a managed endpoint from an unknown one.",
+          "EvidenceControls": ["INT-1.2", "INT-3.1"],
+          "Options": [
+            "Entra ID join or hybrid join for all corporate devices, giving each a device identity to bind policy to.",
+            "Conditional Access grant requiring a compliant or Entra-joined device on the sessions that matter.",
+            "Device enrollment restrictions preventing unknown platforms from obtaining an identity at all."
+          ]
+        },
+        {
+          "NistControl": "AC-19",
+          "NistTitle": "Access Control for Mobile Devices",
+          "Scope": "Tenant",
+          "DeviceAspect": "Corporate data on phones and tablets, including personally-owned ones, is governed rather than merely present.",
+          "EvidenceControls": ["INT-1.4", "INT-3.2", "SPO-2.1"],
+          "Options": [
+            "Full Intune enrollment for corporate-owned mobile devices.",
+            "App Protection Policies (MAM without enrollment) for BYOD, containing corporate data without managing the personal device.",
+            "Conditional Access blocking unmanaged mobile browsers from downloading files, so data can be read but not landed on the device.",
+            "OneDrive sync restricted to managed devices, which prevents a full corporate document library replicating to an unmanaged endpoint."
+          ]
+        },
+        {
+          "NistControl": "AC-20",
+          "NistTitle": "Use of External Systems",
+          "Scope": "Hybrid",
+          "DeviceAspect": "Access from devices the organisation does not own or manage — home computers, contractor laptops, kiosks.",
+          "EvidenceControls": ["INT-1.2", "SPO-2.1"],
+          "OffTenantEvidence": "The written policy defining what staff and contractors may do from personal or third-party equipment, and the contractual terms binding contractors to it. Conditional Access shows what is technically permitted; it does not show what has been agreed.",
+          "Options": [
+            "Conditional Access session controls restricting unmanaged devices to browser-only, no download.",
+            "Windows 365 or Azure Virtual Desktop for contractors, so no corporate data reaches equipment you do not control.",
+            "A written external-systems policy plus contractor access agreements, retained as the evidence for the part Conditional Access cannot show."
+          ]
+        },
+        {
+          "NistControl": "AC-17",
+          "NistTitle": "Remote Access",
+          "Scope": "Hybrid",
+          "DeviceAspect": "Remote sessions into the environment are authorised, monitored and cryptographically protected — including RMM and remote-support tooling.",
+          "EvidenceControls": ["INT-1.2"],
+          "OffTenantEvidence": "VPN, firewall and RMM configuration, and the list of accounts holding remote-support rights. These are the highest-value credentials in an MSP-managed environment and none of them are visible from Microsoft 365.",
+          "Options": [
+            "Conditional Access with device compliance and MFA on every remote-access path into M365.",
+            "MFA on the VPN and on the RMM console itself, not only on M365.",
+            "Named, individually-attributable remote-support accounts rather than a shared technician login, with session logging retained."
+          ]
+        },
+        {
+          "NistControl": "AC-18",
+          "NistTitle": "Wireless Access",
+          "Scope": "Attested",
+          "DeviceAspect": "Corporate wireless authenticates devices and users, and guest wireless is segregated from the corporate network.",
+          "OffTenantEvidence": "Wireless controller or access-point configuration: SSID list, authentication method (WPA2/WPA3-Enterprise vs pre-shared key), guest VLAN segregation, and whether the corporate pre-shared key has ever been rotated after a staff departure.",
+          "Options": [
+            "WPA2/WPA3-Enterprise with certificate authentication, deploying the certificate via Intune SCEP or PKCS so device identity carries onto the wireless network.",
+            "A separate guest SSID on an isolated VLAN with no route to corporate resources.",
+            "Where a pre-shared key is unavoidable, a documented rotation trigger on staff departure — a shared key that has never been rotated is a standing credential held by every former employee."
+          ]
+        },
+        {
+          "NistControl": "CM-8",
+          "NistTitle": "System Component Inventory",
+          "Scope": "Hybrid",
+          "DeviceAspect": "A current, accurate inventory of every device that holds or reaches corporate data.",
+          "EvidenceControls": ["INT-1.1"],
+          "OffTenantEvidence": "Reconciliation between the Intune device list, the RMM asset list, and the finance or procurement asset register. Devices that appear in one and not the others are the ones that go missing.",
+          "Options": [
+            "Intune as the authoritative inventory for managed endpoints, reviewed for stale records on a fixed cadence.",
+            "RMM inventory reconciled against Intune, so an unmanaged-but-present device is visible.",
+            "A documented joiners/movers/leavers process that updates the inventory, rather than an inventory maintained separately from the events that change it."
+          ]
+        }
+      ]
+    },
+    {
+      "Id": "media-protection",
+      "Title": "Media Protection",
+      "Description": "Removable and portable media. Endpoint DLP evidences the digital half; the physical half is attested.",
+      "Items": [
+        {
+          "NistControl": "MP-7",
+          "NistTitle": "Media Use",
+          "Scope": "Tenant",
+          "DeviceAspect": "Restricting what may be copied to USB drives and other removable media from a managed endpoint.",
+          "EvidenceControls": ["DEF-4.5"],
+          "Options": [
+            "Endpoint DLP policy blocking or auditing copies of labelled or sensitive content to removable media.",
+            "Intune device configuration profile disabling removable storage outright where the role does not need it.",
+            "Defender for Endpoint device control, allowing approved encrypted drives by hardware ID while blocking everything else."
+          ]
+        },
+        {
+          "NistControl": "MP-2",
+          "NistTitle": "Media Access",
+          "Scope": "Attested",
+          "DeviceAspect": "Who may physically obtain backup tapes, external drives, and archived media.",
+          "OffTenantEvidence": "The list of individuals with access to the media store or safe, and the log of media checked in and out.",
+          "Options": [
+            "A locked media store with a named access list, reviewed on the same cadence as privileged M365 roles.",
+            "Eliminating the control surface where possible — immutable cloud backup removes the tape handling question entirely.",
+            "A check-in/check-out log retained for the same period as the media itself."
+          ]
+        },
+        {
+          "NistControl": "MP-5",
+          "NistTitle": "Media Transport",
+          "Scope": "Attested",
+          "DeviceAspect": "Media and devices moving off-site — including laptops going home and drives going to a backup vault.",
+          "OffTenantEvidence": "Transport authorisation records, and confirmation that media leaving the site is encrypted at rest before it moves.",
+          "Options": [
+            "Encrypt before transport as an unconditional rule, so a transport failure is not a disclosure.",
+            "A documented custody record for anything leaving the site.",
+            "Courier or vault services with a contractual custody chain, where the volume justifies it."
+          ]
+        },
+        {
+          "NistControl": "MP-6",
+          "NistTitle": "Media Sanitization",
+          "Scope": "Attested",
+          "DeviceAspect": "Devices and drives are sanitised before disposal, resale, or return at end of lease.",
+          "OffTenantEvidence": "Certificates of destruction or sanitisation records for disposed equipment, and the procedure that produces them. This is one of the most commonly missing pieces of evidence in an MSP-managed environment, because disposal usually happens outside the managed-service scope.",
+          "Options": [
+            "Cryptographic erase on self-encrypting and BitLocker-protected drives, which is fast and verifiable when the key is destroyed.",
+            "A certified disposal vendor issuing per-asset certificates of destruction, retained with the asset register.",
+            "Intune remote wipe as the first step for a device that will not be physically recovered — noting that a remote wipe is a request, not a guarantee, and does not substitute for sanitisation of recovered hardware."
+          ]
+        },
+        {
+          "NistControl": "MP-4",
+          "NistTitle": "Media Storage",
+          "Scope": "Attested",
+          "DeviceAspect": "Physical protection of media at rest, in the office and at any off-site location.",
+          "OffTenantEvidence": "Where media is stored, whether that location is locked and access-controlled, and whether it is covered by the same environmental protections as the server room.",
+          "Options": [
+            "Locked, access-controlled storage for any media holding regulated data.",
+            "Off-site copies held under the same controls as on-site, contractually where a third party holds them.",
+            "Reducing physical media holdings to the minimum the retention schedule actually requires."
+          ]
+        }
+      ]
+    },
+    {
+      "Id": "physical-environmental",
+      "Title": "Physical and Environmental Protection",
+      "Description": "Not observable from Microsoft 365 under any configuration. Every item here is assessor-collected and client-attested; none of it is scored, and none of it may be reported as compliant on the strength of a tenant scan.",
+      "Items": [
+        {
+          "NistControl": "PE-2",
+          "NistTitle": "Physical Access Authorizations",
+          "Scope": "Attested",
+          "DeviceAspect": "Who is authorised to enter areas holding systems and media, and how that list is kept current.",
+          "OffTenantEvidence": "The current authorised-entrant list for the server room and any comms cabinet, with evidence it is reviewed and that departed staff are removed.",
+          "Options": [
+            "A named access list reviewed on the same schedule as privileged M365 role assignments, so the two do not drift apart.",
+            "Badge or keypad access with per-person credentials rather than a shared key or code.",
+            "Removal of physical access included in the leaver checklist alongside account disablement."
+          ]
+        },
+        {
+          "NistControl": "PE-3",
+          "NistTitle": "Physical Access Control",
+          "Scope": "Attested",
+          "DeviceAspect": "Entry to facilities and equipment areas is enforced, not merely defined.",
+          "OffTenantEvidence": "Door and cabinet locks, badge system configuration, and how server rooms and comms cabinets are secured outside business hours.",
+          "Options": [
+            "Locked server room and locked comms cabinets, keyed separately from general office space.",
+            "Badge system with per-person credentials and retained entry logs.",
+            "Where the equipment lives in shared or leased space, the landlord's or colocation provider's access controls documented as inherited."
+          ]
+        },
+        {
+          "NistControl": "PE-6",
+          "NistTitle": "Monitoring Physical Access",
+          "Scope": "Attested",
+          "DeviceAspect": "Physical entry is logged and the logs are reviewed, not merely recorded.",
+          "OffTenantEvidence": "Badge-system logs, camera retention period, and evidence that someone actually reviews them on a defined cadence.",
+          "Options": [
+            "Badge log review on a fixed cadence, with the review itself recorded.",
+            "Camera coverage of entry points with a retention period matching the incident-detection window.",
+            "Alerting on out-of-hours entry rather than relying on after-the-fact review."
+          ]
+        },
+        {
+          "NistControl": "PE-8",
+          "NistTitle": "Visitor Access Records",
+          "Scope": "Attested",
+          "DeviceAspect": "Visitors — including vendors and maintenance technicians — are recorded and escorted.",
+          "OffTenantEvidence": "The visitor log, the escort rule, and the retention period applied to both.",
+          "Options": [
+            "A visitor log with escort requirement for any area holding systems or media.",
+            "Vendor and maintenance visits recorded against the specific work performed, so the log ties to MA-2.",
+            "Retention of visitor records for the period the applicable framework requires."
+          ]
+        },
+        {
+          "NistControl": "PE-13",
+          "NistTitle": "Fire Protection",
+          "Scope": "Attested",
+          "DeviceAspect": "Fire detection and suppression covering equipment areas.",
+          "OffTenantEvidence": "Inspection and test certificates for detection and suppression systems serving the server room.",
+          "Options": [
+            "Detection and suppression appropriate to the equipment, with current inspection certificates.",
+            "Where equipment sits in shared or leased space, the landlord's certificates obtained and retained as inherited evidence.",
+            "Reducing on-premises footprint so less of the estate depends on this control at all."
+          ]
+        },
+        {
+          "NistControl": "PE-14",
+          "NistTitle": "Environmental Controls",
+          "Scope": "Attested",
+          "DeviceAspect": "Temperature and humidity kept within the equipment's operating range, and monitored.",
+          "OffTenantEvidence": "Environmental monitoring records or alerting configuration for the server room.",
+          "Options": [
+            "Temperature and humidity sensors with alerting to the same channel that receives infrastructure alerts.",
+            "Documented operating range and escalation path when it is exceeded.",
+            "Cloud migration of workloads whose availability depends on a single room's cooling."
+          ]
+        },
+        {
+          "NistControl": "PE-17",
+          "NistTitle": "Alternate Work Site",
+          "Scope": "Attested",
+          "DeviceAspect": "Security controls applied where staff actually work remotely — home offices and other non-facility locations.",
+          "OffTenantEvidence": "The remote-work policy, and what it requires of the home environment: device use, screen privacy, home network, and printing.",
+          "Options": [
+            "A remote-work policy stating what is required of the home setup, acknowledged by staff.",
+            "Conditional Access and device compliance carrying the technical half of the control to wherever the device is.",
+            "Company-provided equipment for remote work, so the endpoint controls above apply unmodified."
+          ]
+        },
+        {
+          "NistControl": "PE-18",
+          "NistTitle": "Location of System Components",
+          "Scope": "Hybrid",
+          "DeviceAspect": "Where components and data physically reside, including the data residency of the cloud tenant itself.",
+          "EvidenceControls": ["EXO-2.5"],
+          "OffTenantEvidence": "The physical siting of on-premises equipment — away from external walls, water, and public access — and the tenant's declared data residency for any regulated workload.",
+          "Options": [
+            "Confirm and record the tenant's data-residency region, and Advanced Data Residency where a regulator requires it.",
+            "Customer Lockbox, so Microsoft support cannot access content without explicit approval.",
+            "Site on-premises equipment away from public areas, exterior walls, and water ingress paths."
+          ]
+        },
+        {
+          "NistControl": "PE-20",
+          "NistTitle": "Asset Monitoring and Tracking",
+          "Scope": "Hybrid",
+          "DeviceAspect": "Knowing where portable assets are, and being able to act when one is not where it should be.",
+          "EvidenceControls": ["INT-1.1"],
+          "OffTenantEvidence": "The asset register and the loss-reporting procedure — specifically, how quickly a lost laptop is reported and who is authorised to trigger the wipe.",
+          "Options": [
+            "Intune remote wipe and BitLocker key escrow, so a reported loss has an immediate technical response.",
+            "A documented loss-reporting path with a target reporting time, communicated to staff.",
+            "Asset tagging reconciled against the Intune device list, so an unreturned device is detected rather than assumed returned."
+          ]
+        }
+      ]
+    },
+    {
+      "Id": "maintenance-personnel",
+      "Title": "Maintenance and Personnel",
+      "Description": "Controls governing who touches equipment and what happens to devices when people leave. Attested; these are where MSP-managed environments most often have the practice but not the evidence.",
+      "Items": [
+        {
+          "NistControl": "MA-2",
+          "NistTitle": "Controlled Maintenance",
+          "Scope": "Attested",
+          "DeviceAspect": "Maintenance on equipment is scheduled, approved, and recorded — including work performed by the MSP.",
+          "OffTenantEvidence": "Ticket or change records covering maintenance performed on in-scope equipment, showing approval and what was done.",
+          "Options": [
+            "Use the existing RMM or PSA ticket history as the maintenance record, provided it captures approval and scope.",
+            "A change-approval step for maintenance touching in-scope systems.",
+            "Records retained for the period the applicable framework requires, not merely until the ticket closes."
+          ]
+        },
+        {
+          "NistControl": "MA-4",
+          "NistTitle": "Nonlocal Maintenance",
+          "Scope": "Hybrid",
+          "DeviceAspect": "Remote maintenance sessions — the MSP's own remote access — are authorised, authenticated, and logged.",
+          "EvidenceControls": ["INT-1.2"],
+          "OffTenantEvidence": "RMM and remote-support tool configuration: who holds access, whether MFA is enforced on the tool itself, and whether sessions are logged and retained.",
+          "Options": [
+            "MFA on the RMM and remote-support consoles, not only on M365 — the RMM is the higher-value target.",
+            "Named technician accounts rather than a shared login, so a session is attributable.",
+            "Session recording or logging retained, and reviewed after any incident."
+          ]
+        },
+        {
+          "NistControl": "MA-5",
+          "NistTitle": "Maintenance Personnel",
+          "Scope": "Attested",
+          "DeviceAspect": "The people permitted to perform maintenance are authorised, and escorted when they are not cleared for unsupervised access.",
+          "OffTenantEvidence": "The authorised maintenance-personnel list, including MSP staff and any subcontractors, and the escort rule for those without independent authorisation.",
+          "Options": [
+            "A named authorised-personnel list covering MSP staff, reviewed when staff change.",
+            "Escort requirement for vendors and subcontractors without independent authorisation.",
+            "Contractual flow-down of the same requirement to any subcontractor the MSP uses."
+          ]
+        },
+        {
+          "NistControl": "PS-4",
+          "NistTitle": "Personnel Termination",
+          "Scope": "Hybrid",
+          "DeviceAspect": "Equipment, badges and keys are recovered when someone leaves — the physical half of the offboarding that the tenant only shows the digital half of.",
+          "EvidenceControls": ["AAD-12.3"],
+          "OffTenantEvidence": "The leaver checklist and completed instances of it, showing device return, badge return, and key return alongside account disablement. Stale licensed accounts in the tenant are the visible symptom of an offboarding process that did not run; the physical half is not visible at all.",
+          "Options": [
+            "One leaver checklist covering account disablement, device return, badge return, and key return, so the physical steps cannot be forgotten while the digital ones are automated.",
+            "Intune device retirement or wipe triggered as part of the same process.",
+            "Reconciliation of returned devices against the asset register, so an unreturned device is a tracked exception rather than a silent loss."
+          ]
+        }
+      ]
+    }
+  ]
+}

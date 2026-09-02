@@ -508,14 +508,52 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
     Context 'CVE-2025-54100 — PowerShell Version Floor [Static]' {
 
         It 'All .ps1 and .psm1 files require PS 7.0+' {
+            # Device/ is carved out and re-asserted below. Everything that runs
+            # on the ASSESSOR'S machine must be 7.0+.
             $offenders = @()
-            foreach ($file in $script:PsFiles) {
+            $endpointDir = [System.IO.Path]::GetFullPath((Join-Path $script:RepoRoot 'Device'))
+            foreach ($file in ($script:PsFiles | Where-Object { -not $_.FullName.StartsWith($endpointDir, [StringComparison]::OrdinalIgnoreCase) })) {
                 $content = Get-Content -LiteralPath $file.FullName -Raw
                 if ($content -notmatch '#Requires -Version 7') {
                     $offenders += $file.Name
                 }
             }
             $offenders | Should -BeNullOrEmpty -Because '#Requires -Version 7.0 blocks PS 5.1 MSHTML injection (CVE-2025-54100)'
+        }
+
+        It 'the Device/ endpoint collector is the ONLY 5.1 exception, and earns it' {
+            # Stock Windows ships Windows PowerShell 5.1. An endpoint collector
+            # pushed by RMM to a bare machine cannot require 7.0 — so this file
+            # is a deliberate, single exception rather than an oversight.
+            #
+            # The 7.0 floor exists to keep PS 5.1's MSHTML/COM surface out of
+            # the tool. The exception is only defensible while this file carries
+            # none of that surface, so the properties are asserted here rather
+            # than assumed: it renders no HTML, evaluates no supplied string,
+            # instantiates no COM object, and reaches no network. It reads local
+            # state and writes one JSON file.
+            # The TOP-LEVEL Device/ folder only. Collectors/Device/ holds the
+            # ingestion side, which runs on the assessor's machine and is 7.0
+            # like everything else.
+            $endpointDir = [System.IO.Path]::GetFullPath((Join-Path $script:RepoRoot 'Device'))
+            $deviceFiles = @($script:PsFiles | Where-Object { $_.FullName.StartsWith($endpointDir, [StringComparison]::OrdinalIgnoreCase) })
+            $deviceFiles.Count | Should -Be 1 -Because 'exactly one file may claim the 5.1 exception'
+
+            $src = Get-Content -LiteralPath $deviceFiles[0].FullName -Raw
+            $src | Should -Match '#Requires -Version 5\.1' -Because 'the exception must be declared, not implied'
+
+            $tokens = $null; $perr = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($deviceFiles[0].FullName, [ref]$tokens, [ref]$perr)
+            @($perr).Count | Should -Be 0
+            $code = (@($tokens | Where-Object { $_.Kind -ne 'Comment' } | ForEach-Object { $_.Text }) -join ' ')
+
+            foreach ($surface in 'New-Object -ComObject', 'ComObject', 'InternetExplorer',
+                                 'HTMLFile', 'mshtml', 'Invoke-Expression', 'iex ',
+                                 'Add-Type -TypeDefinition', 'ConvertTo-Html',
+                                 'Invoke-RestMethod', 'Invoke-WebRequest') {
+                $code | Should -Not -Match ([regex]::Escape($surface)) `
+                    -Because "the 5.1 exception is only safe while the file carries no $surface"
+            }
         }
     }
 

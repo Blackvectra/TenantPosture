@@ -28,10 +28,12 @@ function Invoke-NRGCollectAADInventory {
                 GuestUsers       = 'NotRun'
                 StaleMembers     = 'NotRun'
                 OAuthGrantedApps = 'NotRun'
+                AppCredentials   = 'NotRun'
             }
             GuestUsers          = @()
             StaleMembers        = @()
             OAuthGrantedApps    = @()
+            AppCredentials      = @()
             LegacyAuthOnlyUsers = @()
             RecentRiskEvents    = @()
             SecureScore         = $null
@@ -192,6 +194,76 @@ function Invoke-NRGCollectAADInventory {
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-SecureScore' -Message $_.Exception.Message
+            }
+        }
+
+        # ── Application / service principal credential expiry (AAD-14.1) ─────
+        # A client secret or certificate on an app registration is a standing
+        # credential to whatever that app can reach. Two failure modes, opposite
+        # in character and both real:
+        #
+        #   Expired / expiring — an integration is about to break, or already
+        #   has, and the usual fix under time pressure is a new secret with the
+        #   longest available lifetime and no calendar entry.
+        #
+        #   Long-lived — a two-year secret is a two-year window. Anyone who has
+        #   ever held it keeps access for its full term, and rotation is the
+        #   only thing that closes it.
+        #
+        # Both are read from the app registration, not the service principal:
+        # credentials live on the application object.
+        try {
+            $apps = @()
+            $next = 'https://graph.microsoft.com/v1.0/applications?$select=id,appId,displayName,passwordCredentials,keyCredentials&$top=999'
+            $maxPages = 200; $pageCount = 0
+            while ($next -and $pageCount -lt $maxPages) {
+                $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                if ($page.value) { $apps += $page.value }
+                $next = $page['@odata.nextLink']
+                $pageCount++
+            }
+            if ($pageCount -ge $maxPages -and $next) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'AAD-AppCredentials' `
+                        -Message "Pagination cap reached ($maxPages pages); application list may be truncated."
+                }
+            }
+
+            $now = Get-Date
+            $creds = foreach ($a in $apps) {
+                $appName = [string](Get-NRGObjectField -Item $a -Key 'displayName')
+                $appId   = [string](Get-NRGObjectField -Item $a -Key 'appId')
+                foreach ($kind in @('passwordCredentials', 'keyCredentials')) {
+                    foreach ($c in @(Get-NRGObjectField -Item $a -Key $kind -Default @())) {
+                        if ($null -eq $c) { continue }
+                        $endRaw = [string](Get-NRGObjectField -Item $c -Key 'endDateTime')
+                        if (-not $endRaw) { continue }
+                        $end = $null
+                        if (-not [DateTime]::TryParse($endRaw, [ref]$end)) { continue }
+                        $startRaw = [string](Get-NRGObjectField -Item $c -Key 'startDateTime')
+                        $start = $null
+                        $lifetimeDays = $null
+                        if ($startRaw -and [DateTime]::TryParse($startRaw, [ref]$start)) {
+                            $lifetimeDays = [int]([Math]::Round(($end - $start).TotalDays))
+                        }
+                        @{
+                            AppDisplayName = $appName
+                            AppId          = $appId
+                            CredentialType = $(if ($kind -eq 'passwordCredentials') { 'Secret' } else { 'Certificate' })
+                            DisplayName    = [string](Get-NRGObjectField -Item $c -Key 'displayName')
+                            EndDateTime    = $end.ToString('o')
+                            DaysRemaining  = [int]([Math]::Floor(($end - $now).TotalDays))
+                            LifetimeDays   = $lifetimeDays
+                        }
+                    }
+                }
+            }
+            $result.Data.AppCredentials = @($creds)
+            $result.Data.SectionStatus.AppCredentials = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.AppCredentials = 'Failed'
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'AAD-AppCredentials' -Message $_.Exception.Message
             }
         }
 

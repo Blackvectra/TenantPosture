@@ -110,6 +110,14 @@ function Test-NRGControlInventoryStaleMembers {
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Inventory data not collected'; return
     }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $inv 'StaleMembers')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'StaleMembers was not collected; not assessed.'
+        return
+    }
     $stale = @($inv.Data['StaleMembers'] ?? @() | Where-Object { $_.HasLicense -eq $true })
     if (@($inv.Data['StaleMembers']).Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'StaleMembers')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
@@ -138,6 +146,14 @@ function Test-NRGControlInventoryOAuthApps {
     $inv = Get-NRGRawData -Key 'AAD-Inventory'
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Inventory data not collected'; return
+    }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $inv 'OAuthGrantedApps')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'OAuthGrantedApps was not collected; not assessed.'
+        return
     }
     $apps = @($inv.Data['OAuthGrantedApps'] ?? @())
     if ($apps.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'OAuthGrantedApps')) {
@@ -185,6 +201,14 @@ function Test-NRGControlInventoryExternalForwarding {
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
     }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $inv 'ForwardingMailboxes')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'ForwardingMailboxes was not collected; not assessed.'
+        return
+    }
     $fwd = @($inv.Data['ForwardingMailboxes'] ?? @())
     if ($fwd.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'ForwardingMailboxes')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
@@ -213,6 +237,14 @@ function Test-NRGControlInventorySharedMailboxSignIn {
     $inv = Get-NRGRawData -Key 'EXO-Inventory'
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
+    }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $inv 'AllSharedMailboxes')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AllSharedMailboxes was not collected; not assessed.'
+        return
     }
     $shared = @($inv.Data['AllSharedMailboxes'] ?? @())
     if ($shared.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'SharedMailboxes')) {
@@ -265,6 +297,14 @@ function Test-NRGControlInventoryMailboxAuditDisabled {
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
     }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $inv 'AuditDisabledMailboxes')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AuditDisabledMailboxes was not collected; not assessed.'
+        return
+    }
     $noAudit = @($inv.Data['AuditDisabledMailboxes'] ?? @())
     if ($noAudit.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'AuditDisabledMailboxes')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
@@ -290,6 +330,14 @@ function Test-NRGControlInventorySMTPAuthUsers {
     $inv = Get-NRGRawData -Key 'EXO-Inventory'
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
+    }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $inv 'SmtpAuthEnabledPerUser')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SmtpAuthEnabledPerUser was not collected; not assessed.'
+        return
     }
     $smtp = @($inv.Data['SmtpAuthEnabledPerUser'] ?? @())
     if ($smtp.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'SmtpAuthEnabledPerUser')) {

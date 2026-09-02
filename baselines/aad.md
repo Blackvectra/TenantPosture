@@ -1457,6 +1457,35 @@ Review Microsoft Secure Score improvement actions at security.microsoft.com > Se
 | PCI DSS | Req 11.6.1 |
 | MITRE ATT&CK | T1078 |
 
+### AAD-14.1 — Application Credentials Current and Short-Lived
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (Entra ID Free)
+
+**Description:**
+App registration client secrets and certificates are unexpired and issued with a bounded lifetime.
+
+**Business risk:**
+A client secret is a standing bearer credential to everything its application can reach. No MFA applies to it, no Conditional Access evaluates it, and no sign-in risk is scored against it. A long-lived secret keeps working for everyone who has ever seen it — a departed administrator, a stale runbook, a CI variable, a chat message — until somebody rotates it, and nothing forces rotation. An expired credential is the other half of the same problem: the fix under outage pressure is a new secret with the longest lifetime available and no reminder set.
+
+**Remediation:**
+Entra admin center > App registrations > Certificates and secrets. Remove expired credentials rather than leaving them in place. Reissue anything with a lifetime beyond 180 days at a shorter term and record the rotation date. Prefer certificate credentials or workload identity federation over client secrets where the application supports them.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IA-5, IA-5(1), AC-2 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 1.3.4 |
+| CIS Controls v8.1 | 5.4, 6.2 |
+| CMMC 2.0 | IA.L2-3.5.10, AC.L1-3.1.1 |
+| MITRE ATT&CK | T1078.004, T1550.001, T1098.001 |
+| ISO/IEC 27001:2022 | A.5.17 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(d) |
+| PCI DSS v4.0 | Req 8.3 |
+
 ---
 
 *Generated from `Config/controls.json` · NRG Technology Services / NextLayerSec LLC*

@@ -245,7 +245,15 @@ function Connect-NRGServices {
                 # UPN parsing (v4.6.3 P2 fix): `($ctx.Account -split '@')[-1]` returns
                 # the WHOLE string when there's no `@`, which then fails downstream
                 # tenant-domain validation with a misleading message. Be explicit.
-                $accountParts = if ($ctx.Account) { ([string]$ctx.Account) -split '@' } else { @() }
+                # Two statements, not `$x = if (...) { ... } else { @() }`. An
+                # if-block yielding an empty array enumerates it away and
+                # assigns $null, so the .Count below threw a StrictMode
+                # property error instead of producing the clean warning this
+                # code was written to produce. The falsy-Account case is the
+                # one branch that existed specifically to be handled, and it
+                # was the one that crashed.
+                $accountParts = @()
+                if ($ctx.Account) { $accountParts = @(([string]$ctx.Account) -split '@') }
                 if ($accountParts.Count -ne 2 -or [string]::IsNullOrWhiteSpace($accountParts[1])) {
                     Write-Warning "Connect-NRGServices: Graph context account '$($ctx.Account)' is not a valid UPN (expected user@tenant.tld)."
                     return $null
