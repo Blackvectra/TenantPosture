@@ -464,11 +464,30 @@ function Publish-NRGAssessmentHTML {
             $fcol  = if ($famNotScored) { '#94a3b8' } else { scoreColor ([int]$fam.Score) }
             $fbar  = if ($famNotScored) { 0 } else { [int]$fam.Score }
             $scTxt = if ($famNotScored) { '&mdash;' } else { "$([int]$fam.Score)%" }
-            $ctlList = @($fam.NistControls) -join ', '
+            # Resolve each 800-53 identifier to its official Rev 5 title. A bare
+            # "AC-2, AC-3, AC-6" tells a reader which controls were exercised
+            # only if they already know 800-53 by heart; the client reading this
+            # report does not, and the whole point of the family view is that it
+            # is the auditor's lens. Titles come from the same catalog the
+            # standalone NIST matrix uses, so the two deliverables cannot drift.
+            # An identifier with no catalog entry renders as the bare code
+            # rather than an empty label — a missing title must not silently
+            # delete the control from the row.
+            $ctlList = (@($fam.NistControls) | ForEach-Object {
+                $nid = [string]$_
+                $nt  = if (Get-Command Get-NRGNISTControlTitle -ErrorAction SilentlyContinue) {
+                    [string](Get-NRGNISTControlTitle -ControlId $nid)
+                } else { '' }
+                if ($nt -and $nt -ne $nid) {
+                    "<span class='nf-cid'>$(hx $nid)</span> $(hx $nt)"
+                } else {
+                    "<span class='nf-cid'>$(hx $nid)</span>"
+                }
+            }) -join ' &middot; '
             $nistRows += @"
 <tr>
   <td class='nf-id'>$(hx $fam.Family)</td>
-  <td class='nf-nm'>$(hx $fam.Name)<div class='nf-ctl'>$(hx $ctlList)</div></td>
+  <td class='nf-nm'>$(hx $fam.Name)<div class='nf-ctl'>$ctlList</div></td>
   <td class='nf-n'>$($fam.Assessed)</td>
   <td class='nf-n nf-ok'>$($fam.Satisfied)</td>
   <td class='nf-n nf-pt'>$($fam.Partial)</td>
@@ -977,7 +996,8 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
 .nf-tbl tr:last-child td{border-bottom:none}
 .nf-id{font-weight:900;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#4c1d95;white-space:nowrap}
 .nf-nm{font-weight:600;min-width:220px}
-.nf-ctl{font-size:.66rem;color:var(--mut);font-weight:500;margin-top:3px;line-height:1.5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.nf-ctl{font-size:.66rem;color:var(--mut);font-weight:500;margin-top:3px;line-height:1.6}
+.nf-cid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;color:var(--ink)}
 .nf-n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:700}
 th.nf-n{text-align:right}
 .nf-ok{color:#059669}
