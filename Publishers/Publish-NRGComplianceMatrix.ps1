@@ -57,8 +57,34 @@ function Publish-NRGComplianceMatrix {
     $cdefs = @{}
     try { foreach ($c in (Get-NRGControlDefinitions)) { $cdefs[$c.ControlId] = $c } } catch { }
 
+    # Official 800-53 Rev 5 titles for every identifier any control cites,
+    # passed through the payload rather than duplicated in the embedded Python.
+    # The family NAMES below are hardcoded on the Python side and that is
+    # already a duplication; adding 77 control titles beside them would be a
+    # second copy of Config/nist-800-53-catalog.json that rots independently of
+    # the real one. Sourced here from the same catalog the standalone NIST
+    # matrix uses, so the two deliverables cannot disagree about what AC-2 is.
+    $nistTitles = @{}
+    if (Get-Command Get-NRGNISTControlTitle -ErrorAction SilentlyContinue) {
+        foreach ($c in $cdefs.Values) {
+            $ref = [string](Get-NRGNestedProperty -Object $c -Path 'References.NIST' -Default '')
+            # No trailing \b: after the ')' of an enhancement there is no
+            # word boundary, so '\b[A-Z]{2}-\d+(\(\d+\))?\b' matches only
+            # 'IA-2' out of 'IA-2(1)' and silently drops every enhancement.
+            foreach ($m in [regex]::Matches($ref, '\b[A-Z]{2}-\d+(?:\(\d+\))?')) {
+                $nid = $m.Value
+                if ($nistTitles.ContainsKey($nid)) { continue }
+                $t = [string](Get-NRGNISTControlTitle -ControlId $nid)
+                # Only real titles. A lookup that echoes the identifier back is
+                # a miss, and storing it would render "AC-2 AC-2" in the sheet.
+                if ($t -and $t -ne $nid) { $nistTitles[$nid] = $t }
+            }
+        }
+    }
+
     # Build serializable data payload
     $payload = @{
+        NistTitles = $nistTitles
         Metadata = @{
             TenantDomain   = [string]($Metadata.TenantDomain  ?? 'Unknown')
             AssessmentDate = [string]($Metadata.AssessmentDate ?? (Get-Date -Format 'yyyy-MM-dd'))
@@ -163,7 +189,7 @@ function Publish-NRGComplianceMatrix {
 
         # Embedded Python — reads JSON, writes XLSX, no string interpolation of tenant data
         $pyScript = @'
-import json, sys, os, re
+import json, re, sys, os
 from openpyxl import Workbook
 from openpyxl.styles import (Font, PatternFill, Alignment, Border, Side,
                               GradientFill)
@@ -174,6 +200,18 @@ out_path  = sys.argv[2]
 
 with open(data_path, encoding='utf-8') as f:
     d = json.load(f)
+
+# Official Rev 5 control titles, supplied by the PowerShell side from
+# Config/nist-800-53-catalog.json. A bare "AC-2, AC-3" only tells a reader
+# which controls were exercised if they already know 800-53 by heart.
+NIST_TITLES = d.get('NistTitles', {}) or {}
+
+def nist_label(nid):
+    """'AC-2 Account Management', or the bare id when the catalog has no
+    entry. A missing title must never delete the identifier from the row."""
+    t = NIST_TITLES.get(nid, '')
+    return ('%s %s' % (nid, t)) if t else nid
+
 
 meta     = d['Metadata']
 findings = d['Findings']
@@ -423,7 +461,7 @@ build_findings_sheet(wb, 'Gaps & Partials', gap_rows, ALL_COLS)
 FW_SHEETS = [
     ('CIS M365 v6', 'CIS',      'CIS',       [('Control ID',16),('Title',36),('State',12),('Severity',10),('CIS Ref',14),('Remediation',40)]),
     ('CISA SCuBA',  'SCuBA',    'SCuBA',      [('Control ID',16),('Title',36),('State',12),('Severity',10),('SCuBA Ref',18),('Remediation',40)]),
-    ('NIST 800-53', 'NIST',     'NIST',       [('Control ID',16),('Title',36),('State',12),('Severity',10),('NIST Ref',14),('Business Risk',40)]),
+    ('NIST 800-53', 'NIST',     'NIST',       [('Control ID',16),('Title',36),('State',12),('Severity',10),('NIST Ref',64),('Business Risk',40)]),
     ('CMMC 2.0',    'CMMC',     'CMMC',       [('Control ID',16),('Title',36),('State',12),('Severity',10),('CMMC Ref',14),('Remediation',40)]),
     ('ISO 27001',   'ISO27001', 'ISO 27001',  [('Control ID',16),('Title',36),('State',12),('Severity',10),('ISO Ref',14),('Remediation',40)]),
     ('SOC 2',       'SOC2',     'SOC 2',      [('Control ID',16),('Title',36),('State',12),('Severity',10),('SOC2 Ref',14),('Remediation',40)]),
@@ -436,6 +474,22 @@ for sheet_title, fw_key, ref_col_name, cols in FW_SHEETS:
               (f.get('SOC2','') if fw_key=='SOC2' else '') or \
               (f.get('HIPAA','') if fw_key=='HIPAA' else '')
         if not ref: continue
+        # NIST only: resolve each identifier in the citation to its official
+        # Rev 5 title. "IA-2, IA-5(1)" is meaningless to anyone not carrying
+        # 800-53 in their head, and this sheet is the one an auditor reads.
+        # Every other framework's ref is left verbatim — a CIS or SCuBA id is
+        # already the whole reference.
+        if fw_key == 'NIST':
+            # No trailing \b — after the ')' of an enhancement there is no word
+            # boundary, so the anchored form matches only 'IA-2' out of
+            # 'IA-2(1)' and drops the enhancement. Deduplicated in order: a
+            # citation listing IA-2 and IA-2(1) must not render IA-2 twice.
+            ids, seen = [], set()
+            for x in re.findall(r'\b[A-Z]{2}-\d+(?:\(\d+\))?', ref):
+                if x not in seen:
+                    seen.add(x); ids.append(x)
+            if ids:
+                ref = '; '.join(nist_label(x) for x in ids)
         fw_rows.append({
             'Control ID': f['ControlId'], 'Title': f['Title'],
             'State': f['State'], 'Severity': f['Severity'],
@@ -525,12 +579,12 @@ for fam in sorted(fam_findings):
         'Family Name': NIST_FAMILY_NAMES.get(fam, fam),
         'Assessed': len(grp), 'Met': sat, 'Partial': part, 'Gap': gap,
         'N/A': na, 'Error': err, 'Coverage': cov,
-        '800-53 Controls': ', '.join(sorted(fam_refs.get(fam, set()))),
+        '800-53 Controls': '; '.join(nist_label(x) for x in sorted(fam_refs.get(fam, set()))),
     })
 if nist_fam_rows:
     build_findings_sheet(wb, 'NIST Families', nist_fam_rows,
         [('Family',10),('Family Name',40),('Assessed',10),('Met',8),('Partial',9),
-         ('Gap',8),('N/A',8),('Error',8),('Coverage',13),('800-53 Controls',52)])
+         ('Gap',8),('N/A',8),('Error',8),('Coverage',13),('800-53 Controls',88)])
 
 # License gaps sheet
 lic_rows = [map_row(f) for f in findings if f['State']=='Gap' and 'Included' not in f['LicenseReq']]

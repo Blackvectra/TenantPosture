@@ -132,6 +132,26 @@ Describe 'Publish-NRGAssessmentHTML end-to-end render' {
         $script:html | Should -BeLike '*SC-8(1)*'
     }
 
+    It 'resolves each 800-53 identifier to its official Rev 5 title' {
+        # A bare "AC-2, AC-3, AC-6" only tells a reader which controls were
+        # exercised if they already know 800-53 by heart, and the client
+        # reading this report does not. Titles come from the same catalog the
+        # standalone NIST matrix uses, so the two deliverables cannot drift.
+        $script:html | Should -BeLike "*<span class='nf-cid'>*" -Because 'identifiers must render as marked-up codes, not a flat string'
+        foreach ($pair in @('AC-2', 'Account Management'), @('IA-2', 'Identification and Authentication')) {
+            $script:html | Should -BeLike "*$($pair[0])</span> $($pair[1])*" `
+                -Because "$($pair[0]) must render beside its official Rev 5 title"
+        }
+    }
+
+    It 'renders the family control list as markup, not escaped text' {
+        # $ctlList carries HTML now. Passing it back through the escaper would
+        # print the tags literally — a regression that looks like garbled text
+        # rather than a crash, so nothing else would catch it.
+        $script:html | Should -Not -BeLike '*&lt;span class=&#39;nf-cid&#39;*'
+        $script:html | Should -Not -BeLike '*&lt;span class=*nf-cid*'
+    }
+
     It 'states that NIST family rows do not sum to the assessment total' {
         # A cross-family control is counted in every family it cites. Without
         # this caveat on the page, a reader adding the Assessed column and
