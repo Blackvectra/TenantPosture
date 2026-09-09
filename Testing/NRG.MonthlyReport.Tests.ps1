@@ -55,8 +55,8 @@ Describe 'Publish-NRGMonthlyReport' {
         )
 
         $script:metadata = @{
-            TenantDomain   = 'clientd.example'
-            ClientName     = 'Client D'
+            TenantDomain   = 'example.com'
+            ClientName     = 'Example Client'
             AssessmentDate = 'May 31, 2026'
             ToolVersion    = '4.11.0'
             Brand          = @{ CompanyName = 'NRG Technology Services / NextLayerSec LLC' }

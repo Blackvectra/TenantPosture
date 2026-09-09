@@ -26,3 +26,10 @@ Thumbs.db
 
 # Claude Code session metadata (worktrees, settings.local.json, etc.)
 .claude/
+
+# Per-tenant monthly delta files. These name a real client and list their live,
+# unremediated findings — a named organisation beside its open security gaps is
+# the most sensitive shape this data takes, and git history is permanent. Only
+# the EXAMPLE- template is tracked.
+Config/monthly-delta/*.psd1
+!Config/monthly-delta/EXAMPLE-*.psd1
