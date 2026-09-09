@@ -274,7 +274,7 @@ New recurring MSP deliverable, distinct from the one-shot assessment HTML. HIPAA
 
 - **`Publishers/Publish-NRGMonthlyReport.ps1`** — emits a self-contained HTML monthly report + sibling JSON state file. Sections: Posture Snapshot (score ring + state bars + baseline/trend note), Work Completed This Period, In Progress, Queued / Roadmap, Residual Risk Statement (Critical/High/Total open + license-blocked callout), HIPAA Defensibility Note (§164.308(a)(1) ongoing risk-management documentation).
 - **`Config/monthly-delta/`** — per-month per-tenant operator-maintained `.psd1` files driving the three status tables. Each row maps to a control via ControlId; HIPAA safeguard citation auto-pulled from `controls.json` `FrameworkIds` (HIPAA-prefixed entry).
-- **`Config/monthly-delta/EXAMPLE-cornerpostcounseling.com-2026-05.psd1`** — reference delta showing supported shape.
+- **`Config/monthly-delta/EXAMPLE-example.com-2026-05.psd1`** — reference delta showing supported shape.
 - **CLI flags on `Invoke-NRGAssessment.ps1`**: `-MonthlyReport`, `-MonthlyDeltaPath`, `-MonthlyPriorPath` (optional, omit on baseline). Path-traversal + missing-file `ValidateScript` guards match `-FromResults` pattern.
 - **`Testing/NRG.MonthlyReport.Tests.ps1`** — 12-case Pester suite. Pins baseline-vs-trend rendering, JSON state shape (next month's input), score formula via `Get-NRGCoverageScore -ErrorHandling Gap`, defensive input handling (missing file, path traversal, malformed delta), empty-arrays graceful render, XSS escaping on operator-supplied delta strings.
 - **Module exports**: `Publish-NRGMonthlyReport` added (count 230 → 231).
