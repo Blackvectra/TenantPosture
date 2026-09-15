@@ -26,6 +26,17 @@ function Invoke-NRGCollectAADPIM {
             ActiveSchedules   = @()
             RolePolicies      = @()
             AccessReviews     = @()
+            # Every section above is pre-initialised to @() and every query below
+            # has its own try/catch, so presence alone cannot distinguish "queried,
+            # this tenant has none" from "the query failed". Test-NRGSectionCollected
+            # reads a present-but-empty array as collected, so without this map a
+            # failed PIM query looked like a tenant with no PIM adoption.
+            SectionStatus = @{
+                EligibleSchedules = 'NotRun'
+                ActiveSchedules   = 'NotRun'
+                RolePolicies      = 'NotRun'
+                AccessReviews     = 'NotRun'
+            }
         }
     }
 
@@ -89,6 +100,7 @@ function Invoke-NRGCollectAADPIM {
                 }
             }
             $result.Data.EligibleSchedules = $eligList.ToArray()
+            $result.Data.SectionStatus.EligibleSchedules = 'Collected'
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-PIM-Eligible' -Message $_.Exception.Message
@@ -130,6 +142,7 @@ function Invoke-NRGCollectAADPIM {
                 }
             }
             $result.Data.ActiveSchedules = $activeList.ToArray()
+            $result.Data.SectionStatus.ActiveSchedules = 'Collected'
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-PIM-Active' -Message $_.Exception.Message
@@ -153,6 +166,7 @@ function Invoke-NRGCollectAADPIM {
                     Rules               = @($_.rules ?? @())
                 }
             })
+            $result.Data.SectionStatus.RolePolicies = 'Collected'
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-PIM-Policies' -Message $_.Exception.Message
@@ -188,6 +202,7 @@ function Invoke-NRGCollectAADPIM {
                 $arPages++
             }
             $result.Data.AccessReviews = @($arList)
+            $result.Data.SectionStatus.AccessReviews = 'Collected'
             $result.AccessReviewsCollected = $true
         } catch {
             if ($_.Exception.Message -match '403|Forbidden|Unauthorized|Authorization_RequestDenied|Accepted') {

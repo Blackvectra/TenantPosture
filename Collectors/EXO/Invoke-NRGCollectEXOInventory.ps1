@@ -94,7 +94,12 @@ function Invoke-NRGCollectEXOInventory {
         $acceptedDomains = @()
         try {
             $acc = @(Get-AcceptedDomain -ErrorAction Stop)
-            $acceptedDomains = @($acc | ForEach-Object { [string]$_.DomainName.ToLowerInvariant() })
+            # Read the field before calling a method on it: a null DomainName
+            # would throw here and leave $acceptedDomains empty, which classifies
+            # every recipient in the tenant as External.
+            $acceptedDomains = @($acc | ForEach-Object {
+                [string](Get-NRGObjectField -Item $_ -Key 'DomainName' -Default '')
+            } | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() })
             $result.Data.Stats.AcceptedDomainsKnown = $acceptedDomains.Count
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {

@@ -4,6 +4,28 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **Graph omits `signInActivity` entirely for users who never signed in.** Documented
+  on the user resource type: the property "isn't returned for a user who never
+  signed in or last signed in before April 2020." Under StrictMode the nested
+  read `$_.signInActivity.lastSignInDateTime ?? ''` therefore THREW on exactly the
+  accounts the guest and stale-account queries exist to find, failing the whole
+  section — so those controls reported `NotApplicable` on any tenant with a single
+  never-signed-in guest, which is nearly all of them. Silently non-functional
+  rather than falsely clean, and nothing surfaced it, because `NotApplicable` is
+  excluded from the score's denominator. All nested API reads now go through
+  `Get-NRGNestedProperty`, enforced statically. Sign-in timestamps now parse with
+  `TryParse` + `InvariantCulture` + `RoundtripKind` rather than a bare `[datetime]`
+  cast, which was culture-sensitive on whatever workstation the tool runs from.
+- **AAD-3.2 claimed "No permanent privileged role assignments" without the role
+  data.** `$permanentPriv` merely stayed empty when `AAD-DirectoryRoles` was
+  missing or its section had not landed, and the Satisfied branch fired anyway —
+  a clean bill of health on a privilege-escalation control, worded identically to
+  a genuinely clean tenant. It now reports `NotApplicable` without that evidence.
+  The PIM half had the same hole: `AAD-PIMSchedules` pre-initialises every section
+  to `@()` and published no `SectionStatus`, so a failed eligible-schedule query
+  read as "no PIM adoption" and scored `Partial` — half credit for a verdict never
+  computed. The collector now publishes `SectionStatus` and the evaluator consults
+  it.
 - **The XLSX compliance matrix was silently not produced on `-FromResults`.**
   `$Metadata.Operator ?? ''` throws under StrictMode when the key is absent —
   the missing-key error fires before `??` can supply the default. The live path
