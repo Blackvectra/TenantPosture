@@ -44,9 +44,13 @@ function Publish-NRGAssessmentSummary {
 
     $brand      = $script:NRGBrand
     $company    = EscMd ($brand.CompanyName ?? 'NRG Technology Services / NextLayerSec LLC')
-    $tenant     = EscMd ($Metadata.TenantDomain ?? 'Unknown Tenant')
-    $assmtDate  = EscMd ($Metadata.AssessmentDate ?? (Get-Date -Format 'MMMM dd, yyyy'))
-    $version    = EscMd ($Metadata.ToolVersion ?? '4.5.5')
+    # Get-NRGObjectField, not dot-access-then-??: StrictMode throws on a
+    # missing key before ?? can apply. These three happen to be present on
+    # every metadata shape today, but the pattern is one absent key away from
+    # silently suppressing this deliverable, as it did for the XLSX matrix.
+    $tenant     = EscMd ([string](Get-NRGObjectField -Item $Metadata -Key 'TenantDomain'   -Default 'Unknown Tenant'))
+    $assmtDate  = EscMd ([string](Get-NRGObjectField -Item $Metadata -Key 'AssessmentDate' -Default (Get-Date -Format 'MMMM dd, yyyy')))
+    $version    = EscMd ([string](Get-NRGObjectField -Item $Metadata -Key 'ToolVersion'    -Default '4.5.5'))
 
     # License tier — added in v4.6.2. The Markdown report previously had no
     # tier indicator at all, which led operators to assume the tool had not

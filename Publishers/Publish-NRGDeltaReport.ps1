@@ -272,7 +272,12 @@ function Publish-NRGDeltaReport {
     if ([string]::IsNullOrWhiteSpace($baseTenantId)) {
         throw "Baseline JSON has no TenantId — cannot verify it matches the current tenant. Re-run assessment to generate a new baseline."
     }
-    $currTenantId = [string]($Metadata.TenantId ?? '')
+    # Get-NRGObjectField, not dot-access-then-??: StrictMode throws on a missing
+    # key before ?? applies, and TenantId is absent from the -FromResults
+    # metadata. Throwing here aborted the delta with a PropertyNotFound instead
+    # of the explicit cross-tenant refusal below — same fail-safe outcome, but
+    # the operator could not tell which baseline check had stopped it.
+    $currTenantId = [string](Get-NRGObjectField -Item $Metadata -Key 'TenantId' -Default '')
     if ($baseTenantId -ne $currTenantId) {
         throw "Baseline tenant ID '$baseTenantId' does not match current tenant ID '$currTenantId'. Refusing to generate delta report — wrong baseline?"
     }
@@ -322,9 +327,10 @@ function Publish-NRGDeltaReport {
                   else { "&#9654; 0" }
 
     # ── Header strings (operator + tenant controlled, strict-escape) ────────
-    $baseDate = EscMdStrict ($baselineRaw.Metadata.AssessmentDate ?? 'prior run')
-    $currDate = EscMdStrict ($Metadata.AssessmentDate ?? (Get-Date -Format 'MMMM dd, yyyy'))
-    $client   = EscMdStrict ($Metadata.TenantDomain   ?? 'Client')
+    $baseMeta = Get-NRGObjectField -Item $baselineRaw -Key 'Metadata' -Default $null
+    $baseDate = EscMdStrict ([string](Get-NRGObjectField -Item $baseMeta  -Key 'AssessmentDate' -Default 'prior run'))
+    $currDate = EscMdStrict ([string](Get-NRGObjectField -Item $Metadata  -Key 'AssessmentDate' -Default (Get-Date -Format 'MMMM dd, yyyy')))
+    $client   = EscMdStrict ([string](Get-NRGObjectField -Item $Metadata  -Key 'TenantDomain'   -Default 'Client'))
 
     $sb = [System.Text.StringBuilder]::new()
     $null = $sb.AppendLine("# Assessment Delta Report")
@@ -471,7 +477,7 @@ function Publish-NRGDeltaReport {
     }
     $null = $sb.AppendLine()
     $null = $sb.AppendLine("---")
-    $null = $sb.AppendLine("*NRG-Assessment v$(EscMdStrict ($Metadata.ToolVersion ?? '4.5.5')) · NRG Technology Services / NextLayerSec LLC · $currDate*")
+    $null = $sb.AppendLine("*NRG-Assessment v$(EscMdStrict ([string](Get-NRGObjectField -Item $Metadata -Key 'ToolVersion' -Default '4.5.5'))) · NRG Technology Services / NextLayerSec LLC · $currDate*")
     # Audit fix (v4.6.x LOW): the prior `$toolVer = EscMdStrict ...` assignment
     # on this line was dead — the value is already inlined into the footer
     # AppendLine above and no other consumer reads $toolVer. Removed to keep

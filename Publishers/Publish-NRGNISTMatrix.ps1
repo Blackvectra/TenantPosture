@@ -138,6 +138,9 @@ function Publish-NRGNISTMatrix {
     $null = $sb.AppendLine("| Controls met | $($overall.Satisfied) |")
     $null = $sb.AppendLine("| Partially met | $($overall.Partial) |")
     $null = $sb.AppendLine("| Gaps | $($overall.Gap) |")
+    # Same rule as the XLSX summary: an omitted Error row leaves a reader
+    # short of the finding count with no way to tell what the missing rows were.
+    $null = $sb.AppendLine("| Errors (collection or evaluation failed) | $($overall.Error) |")
     $null = $sb.AppendLine("| Not assessable | $($overall.NA) |")
     $null = $sb.AppendLine("| Families exercised | $($cov.FamilyCount) of 20 |")
     $null = $sb.AppendLine("| 800-53 controls exercised | $($cov.NistControlCount) |")
@@ -494,7 +497,10 @@ function Publish-NRGNISTMatrixXlsx {
         }
         Overall = @{
             Score = $overall.Score; Satisfied = $overall.Satisfied; Partial = $overall.Partial
-            Gap = $overall.Gap; NA = $overall.NA; Scored = $overall.Scored
+            # Error crosses the boundary too. It was omitted here, which is why
+            # the XLSX Summary sheet could not name it and left a reader adding
+            # met+partial+gaps+N/A to a total short of the finding count.
+            Gap = $overall.Gap; Error = $overall.Error; NA = $overall.NA; Scored = $overall.Scored
             FamilyCount = $cov.FamilyCount; ControlCount = $cov.NistControlCount
         }
         Families = @($cov.Families | ForEach-Object {
@@ -650,6 +656,11 @@ rows = [
     ('Controls met', o['Satisfied']),
     ('Partially met', o['Partial']),
     ('Gaps', o['Gap']),
+    # Errors are scored as failures and sit in the denominator, so naming them
+    # is not optional: without this row a reader adds met+partial+gaps+N/A,
+    # comes up short of the finding count, and cannot tell whether the missing
+    # rows were passes or failures.
+    ('Errors (collection or evaluation failed)', o['Error']),
     ('Not assessable (excluded from score)', o['NA']),
     ('Families exercised', f"{o['FamilyCount']} of 20"),
     ('800-53 controls exercised', o['ControlCount']),

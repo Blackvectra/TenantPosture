@@ -4,6 +4,24 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **The XLSX compliance matrix was silently not produced on `-FromResults`.**
+  `$Metadata.Operator ?? ''` throws under StrictMode when the key is absent —
+  the missing-key error fires before `??` can supply the default. The live path
+  sets `Operator`; the replay path builds a fallback carrying only
+  TenantDomain / AssessmentDate / ToolVersion. Because the entry point wraps
+  each publisher in a `try/catch` that degrades to a warning, the deliverable
+  just did not exist, with one line in console output and no other signal. Six
+  publishers carried the pattern; all now read metadata through
+  `Get-NRGObjectField`, and a static test fails on any new occurrence.
+- **The summary sheets did not account for Error findings.** Errors are scored
+  as failures and sit in the denominator, but the NIST matrix Summary (XLSX and
+  Markdown) and the compliance-matrix Summary listed only met / partial / gaps /
+  not-assessable — so a reader adding the rows came up short of the finding
+  count with no way to tell whether the missing rows were passes or failures.
+  The per-family and per-control rollups already carried an Error column; the
+  headline summaries did not, because `Error` was never placed in the XLSX
+  payload. The compliance-matrix summary now also prints the arithmetic
+  (`41+40+41+40+40=202`) so the invariant is visible rather than implied.
 - **External-recipient classification was wrong for the shape Exchange actually
   returns.** The parser split a recipient string on `@` and required exactly two
   parts. Exchange renders a rule recipient as `"user@dom.tld"
