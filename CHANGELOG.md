@@ -4,6 +4,47 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **External-recipient classification was wrong for the shape Exchange actually
+  returns.** The parser split a recipient string on `@` and required exactly two
+  parts. Exchange renders a rule recipient as `"user@dom.tld"
+  [SMTP:user@dom.tld]` — the address appears **twice**, so the split yields three
+  parts and the guard returned "internal" for **every genuine external rule
+  recipient**. Mailbox forwarding parsed correctly only by luck of having one
+  `@`. EXO-7.2 therefore reported a clean bill of health on tenants with live
+  external forwarding rules: the sweep ran, `SectionStatus` said `Collected`, and
+  every honesty guard passed — the list was not empty-from-failure, it was
+  empty-from-wrong-answer. Extracted to `Lib/Get-NRGRecipientClass.ps1` with a
+  dedicated suite covering the real shapes, because the old parser had **no test
+  coverage at all**: every fixture fed the evaluators a pre-computed
+  `IsExternal` flag and never exercised it.
+- **Classification is now tri-state.** A boolean collapsed "known internal" and
+  "could not tell" into the same, safe-looking answer. A legacy `[EX:/o=…]` DN
+  can be an in-tenant user or a mail contact resolving anywhere, and the string
+  cannot say which — so it is resolved through `Get-Recipient`, and where
+  resolution fails it reports `Unresolved` and the control reports
+  `NotApplicable` rather than clean. Same rule `SectionStatus` applies to an
+  empty list.
+- **EXO-6.1 and EXO-7.1 scored the wrong set.** Both read `ForwardingMailboxes`
+  unfiltered and reported the total as "forwarding externally", discarding the
+  `IsExternal` the collector had already computed — so internal delegation
+  forwarding produced a Critical gap on correctly-configured tenants. EXO-7.2
+  applied the filter correctly thirty lines away in the same file.
+- **`ForwardingAddress` mailboxes were never collected.** The filter named only
+  `ForwardingSmtpAddress`, so every mailbox forwarding via the other property was
+  invisible to the whole assessment. `ForwardingAddress` points at a recipient
+  object, and a mail contact is a recipient object resolving to an external
+  address — so the blind spot covered forwarding straight out of the tenant.
+  Both properties are now collected, one row per mechanism (a mailbox can carry
+  both), and findings count distinct mailboxes rather than rows.
+- **Inbox-rule sweep sees hidden rules and no longer swallows "contains errors".**
+  `-IncludeHidden` (probed, not assumed — an older EXO module lacking it would
+  have failed the whole sweep) surfaces rules planted via EWS or Graph, which is
+  the actual attacker path. Exchange *warns* rather than throws on a rule it
+  cannot interpret and returns it with empty action properties; those warnings
+  were discarded, turning a rule nobody could read into a rule that forwards
+  nowhere. They are now collected as `UnparseableRules` and EXO-7.2 degrades to
+  `NotApplicable` instead of claiming clean. Mailboxes whose rule query threw are
+  counted too.
 - **NIST-first reporting.** `Invoke-NRGAssessment.ps1 -Framework <NIST|CIS|SCuBA|CMMC|All>`
   selects which framework cards the HTML report presents. **NRG defaults to
   NIST; NLS defaults to All** — the one deliberate behavioural difference

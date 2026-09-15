@@ -924,20 +924,36 @@ function Test-NRGControlEXOMailboxForwarding {
         return
     }
 
-    $fwd = @($inv.Data['ForwardingMailboxes'] ?? @())
-    $count = $fwd.Count
+    # External subset only — see EXO-6.1. The collector classifies each row;
+    # scoring the unfiltered list reports internal forwarding as external
+    # exfiltration and produces a Gap on a tenant that has none.
+    # Field access via the helper — a missing property throws under StrictMode,
+    # and Classification / ForwardingMechanism do not exist in result JSON
+    # produced before this collector change.
+    $allFwd     = @($inv.Data['ForwardingMailboxes'] ?? @())
+    $fwd        = @($allFwd | Where-Object { Get-NRGObjectField -Item $_ -Key 'IsExternal' -Default $false })
+    $unresolved = @($allFwd | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Classification' -Default '') -eq 'Unresolved' })
+    $count      = @($fwd | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'UPN' -Default '') } | Sort-Object -Unique).Count
+
+    if ($count -eq 0 -and $unresolved.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title `
+            -Detail "$($unresolved.Count) forwarding target(s) could not be resolved to an address and so could not be classified. Not assessed rather than reported clean."
+        return
+    }
 
     if ($count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail 'No mailboxes have a ForwardingSmtpAddress configured.'
+            -Detail "No mailbox forwards to an external address ($($allFwd.Count) forwarding configuration(s) found, all to accepted domains)."
         return
     }
 
     $affected = @($fwd | ForEach-Object {
         [ordered]@{
-            DisplayName  = [string]$_.UPN
-            ForwardingTo = [string]$_.ForwardingAddress
+            DisplayName  = [string](Get-NRGObjectField -Item $_ -Key 'UPN' -Default '')
+            ForwardingTo = [string](Get-NRGObjectField -Item $_ -Key 'ForwardingAddress' -Default '')
+            Mechanism    = [string](Get-NRGObjectField -Item $_ -Key 'ForwardingMechanism' -Default 'ForwardingSmtpAddress')
         }
     })
 
@@ -977,8 +993,20 @@ function Test-NRGControlEXOInboxRulesForwarding {
     # Only count rules that actually forward externally — the collector also
     # tracks disabled-rule fingerprints, but for this control we score on the
     # active exfil surface.
-    $rules = @(@($inv.Data['InboxRulesForwarding'] ?? @()) | Where-Object { $_.IsExternal })
-    $count = $rules.Count
+    $allRules    = @($inv.Data['InboxRulesForwarding'] ?? @())
+    $rules       = @($allRules | Where-Object { $_.IsExternal })
+    $count       = $rules.Count
+
+    # Rules whose recipients could not be classified, and rules Exchange
+    # itself could not interpret. Both are rules we did not read — not rules
+    # that forward nowhere. Counting them as clean is a coverage gap reported
+    # as a pass on the primary BEC persistence check.
+    # Get-NRGObjectField, not dot-access: under StrictMode a missing property
+    # THROWS, and result JSON replayed from a run before this field existed
+    # does not carry it.
+    $unresolvedRules = @($allRules | Where-Object { Get-NRGObjectField -Item $_ -Key 'IsUnresolved' -Default $false })
+    $unparseable     = @($inv.Data['UnparseableRules'] ?? @())
+    $blindSpots      = $unresolvedRules.Count + $unparseable.Count
 
     # An empty list means "no attacker rules found" only if the mailbox sweep
     # actually ran. The sweep is the most failure-prone query in the collector
@@ -992,10 +1020,22 @@ function Test-NRGControlEXOInboxRulesForwarding {
         return
     }
 
+    if ($count -eq 0 -and $blindSpots -gt 0) {
+        $detail = @(
+            'Not assessed.'
+            if ($unparseable.Count -gt 0) { "$($unparseable.Count) inbox rule(s) could not be interpreted by Exchange, so their forwarding actions were never read." }
+            if ($unresolvedRules.Count -gt 0) { "$($unresolvedRules.Count) rule(s) forward to a recipient that could not be resolved to an address." }
+            'A rule the tool could not read is not a rule that forwards nowhere — review these manually before treating this control as clean.'
+        ) -join ' '
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -Detail $detail
+        return
+    }
+
     if ($count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail 'No inbox rules forward mail externally.'
+            -Detail 'No inbox rules forward mail externally, and every rule recipient resolved to an accepted domain.'
         return
     }
 
@@ -1007,9 +1047,10 @@ function Test-NRGControlEXOInboxRulesForwarding {
         }
     })
 
+    $blindNote = if ($blindSpots -gt 0) { " A further $blindSpots rule(s) could not be read or classified and are not counted here." } else { '' }
     Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
         -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-        -Detail "$count inbox rule(s) forward externally — attacker persistence (T1114.003) or insider data exfil." `
+        -Detail "$count inbox rule(s) forward externally — attacker persistence (T1114.003) or insider data exfil.$blindNote" `
         -CurrentValue "$count inbox rule(s) forwarding externally" `
         -RequiredValue 'Zero inbox rules forwarding to external recipients' `
         -Remediation 'Find: foreach ($m in Get-Mailbox -ResultSize Unlimited) { Get-InboxRule -Mailbox $m.UserPrincipalName | Where-Object { $_.ForwardTo -or $_.RedirectTo -or $_.ForwardAsAttachmentTo } | Select-Object @{n=''Mailbox'';e={$m.UserPrincipalName}}, Name, ForwardTo, RedirectTo, ForwardAsAttachmentTo }. Disable: Disable-InboxRule -Mailbox <UPN> -Identity <RuleName>. Block at transport layer: Set-RemoteDomain Default -AutoForwardEnabled $false plus a mail flow rule rejecting auto-forwarded mail to external recipients.' `

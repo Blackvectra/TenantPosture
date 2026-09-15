@@ -1193,5 +1193,148 @@ Describe 'Golden fixtures — ransomware attack path' {
             (GetVerdict3 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2').State | Should -Be 'Satisfied' `
                 -Because 'internal forwarding is normal business behaviour — flagging it would bury the real attacker rule in noise'
         }
+
+        It 'refuses to claim clean when Exchange could not interpret some rules' {
+            # Exchange WARNS rather than throws on a rule whose actions it
+            # cannot parse, and returns it with empty action properties. The
+            # sweep succeeded and the external list is empty — every
+            # SectionStatus guard passes — but these are rules nobody read.
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (NewRaw3 'EXO' @{
+                InboxRulesForwarding = @()
+                UnparseableRules     = @(
+                    [pscustomobject]@{ Mailbox = 'cfo@contoso.com'; Warning = 'The rule "." contains errors.' }
+                )
+                SectionStatus        = @{ InboxRulesForwarding = 'Collected' }
+            })
+            (GetVerdict3 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2').State | Should -Be 'NotApplicable' `
+                -Because 'a rule the tool could not read is not a rule that forwards nowhere'
+        }
+
+        It 'refuses to claim clean when a rule recipient could not be resolved' {
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (NewRaw3 'EXO' @{
+                InboxRulesForwarding = @(
+                    [pscustomobject]@{ IsExternal = $false; IsUnresolved = $true
+                                       Mailbox = 'ops@contoso.com'; RuleName = 'Legacy'
+                                       ExternalRecipients = @(); UnresolvedRecipients = @('"X" [EX:/o=x/cn=y]') }
+                )
+                SectionStatus        = @{ InboxRulesForwarding = 'Collected' }
+            })
+            (GetVerdict3 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2').State | Should -Be 'NotApplicable'
+        }
+
+        It 'survives result JSON written before UnparseableRules existed' {
+            # Replay compatibility. Under StrictMode a missing property throws,
+            # so reading these fields by dot-access would make every older
+            # results file un-replayable.
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (NewRaw3 'EXO' @{
+                InboxRulesForwarding = @(
+                    [pscustomobject]@{ IsExternal = $false; Mailbox = 'a@contoso.com'
+                                       RuleName = 'Old'; ExternalRecipients = @() }
+                )
+                SectionStatus        = @{ InboxRulesForwarding = 'Collected' }
+            })
+            (GetVerdict3 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2').State | Should -Be 'Satisfied'
+        }
+    }
+
+    Context 'EXO-6.1 / EXO-7.1 — mailbox forwarding is scored on the EXTERNAL subset' {
+
+        # The regression: both evaluators read ForwardingMailboxes unfiltered
+        # and reported the total as "forwarding externally", while the
+        # collector had already classified every row. A tenant whose only
+        # forwarding is internal delegation got a Critical Gap it had not
+        # earned — and the pattern was already applied correctly in EXO-7.2
+        # thirty lines away.
+
+        It 'EXO-6.1 Satisfied when every forwarding target is inside the tenant' {
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (NewRaw3 'EXO' @{
+                ForwardingMailboxes = @(
+                    [pscustomobject]@{ IsExternal = $false; Classification = 'Internal'
+                                       DisplayName = 'Reception'; UPN = 'front@contoso.com'
+                                       ForwardingAddress = 'smtp:ops@contoso.com'
+                                       ForwardingMechanism = 'ForwardingSmtpAddress'
+                                       DeliverToMailboxAndForward = $true }
+                )
+                SectionStatus = @{ ForwardingMailboxes = 'Collected' }
+            })
+            (GetVerdict3 'Test-NRGControlInventoryExternalForwarding' 'EXO-6.1').State | Should -Be 'Satisfied' `
+                -Because 'internal forwarding is a delegation pattern, not exfiltration — scoring it as a Critical gap is a false positive on a correctly configured tenant'
+        }
+
+        It 'EXO-7.1 Satisfied when every forwarding target is inside the tenant' {
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (NewRaw3 'EXO' @{
+                ForwardingMailboxes = @(
+                    [pscustomobject]@{ IsExternal = $false; Classification = 'Internal'
+                                       DisplayName = 'Reception'; UPN = 'front@contoso.com'
+                                       ForwardingAddress = 'smtp:ops@contoso.com'
+                                       ForwardingMechanism = 'ForwardingSmtpAddress'
+                                       DeliverToMailboxAndForward = $true }
+                )
+                SectionStatus = @{ ForwardingMailboxes = 'Collected' }
+            })
+            (GetVerdict3 'Test-NRGControlEXOMailboxForwarding' 'EXO-7.1').State | Should -Be 'Satisfied'
+        }
+
+        It 'EXO-6.1 Gap — and counts mailboxes, not forwarding rows — when a target is external' {
+            # One mailbox carrying BOTH properties produces two rows. Counting
+            # rows would report two mailboxes exfiltrating when there is one.
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (NewRaw3 'EXO' @{
+                ForwardingMailboxes = @(
+                    [pscustomobject]@{ IsExternal = $true; Classification = 'External'
+                                       DisplayName = 'CFO'; UPN = 'cfo@contoso.com'
+                                       ForwardingAddress = 'smtp:attacker@evil.tld'
+                                       ForwardingMechanism = 'ForwardingSmtpAddress'
+                                       DeliverToMailboxAndForward = $false }
+                    [pscustomobject]@{ IsExternal = $true; Classification = 'External'
+                                       DisplayName = 'CFO'; UPN = 'cfo@contoso.com'
+                                       ForwardingAddress = 'Outside Contact'
+                                       ForwardingMechanism = 'ForwardingAddress'
+                                       DeliverToMailboxAndForward = $false }
+                )
+                SectionStatus = @{ ForwardingMailboxes = 'Collected' }
+            })
+            $v = GetVerdict3 'Test-NRGControlInventoryExternalForwarding' 'EXO-6.1'
+            $v.State | Should -Be 'Gap'
+            $v.CurrentValue | Should -Match '^1 mailbox'
+            ($v.AffectedObjects | ConvertTo-Json -Depth 4) | Should -Match 'ForwardingAddress' `
+                -Because 'the finding must name which mechanism carries the forward, or the remediation misses one of them'
+        }
+
+        It 'EXO-6.1 NotApplicable when a forwarding target could not be classified' {
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (NewRaw3 'EXO' @{
+                ForwardingMailboxes = @(
+                    [pscustomobject]@{ IsExternal = $false; Classification = 'Unresolved'
+                                       DisplayName = 'Ops'; UPN = 'ops@contoso.com'
+                                       ForwardingAddress = 'Legacy Contact'
+                                       ForwardingMechanism = 'ForwardingAddress'
+                                       DeliverToMailboxAndForward = $false }
+                )
+                SectionStatus = @{ ForwardingMailboxes = 'Collected' }
+            })
+            (GetVerdict3 'Test-NRGControlInventoryExternalForwarding' 'EXO-6.1').State | Should -Be 'NotApplicable' `
+                -Because 'a target we could not resolve is not evidence of internal forwarding'
+        }
+
+        It 'both survive result JSON written before Classification existed' {
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (NewRaw3 'EXO' @{
+                ForwardingMailboxes = @(
+                    [pscustomobject]@{ IsExternal = $true; DisplayName = 'CFO'; UPN = 'cfo@contoso.com'
+                                       ForwardingAddress = 'smtp:attacker@evil.tld'
+                                       DeliverToMailboxAndForward = $false }
+                )
+                SectionStatus = @{ ForwardingMailboxes = 'Collected' }
+            })
+            (GetVerdict3 'Test-NRGControlInventoryExternalForwarding' 'EXO-6.1').State | Should -Be 'Gap'
+            Clear-NRGState
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (NewRaw3 'EXO' @{
+                ForwardingMailboxes = @(
+                    [pscustomobject]@{ IsExternal = $true; DisplayName = 'CFO'; UPN = 'cfo@contoso.com'
+                                       ForwardingAddress = 'smtp:attacker@evil.tld'
+                                       DeliverToMailboxAndForward = $false }
+                )
+                SectionStatus = @{ ForwardingMailboxes = 'Collected' }
+            })
+            (GetVerdict3 'Test-NRGControlEXOMailboxForwarding' 'EXO-7.1').State | Should -Be 'Gap'
+        }
     }
 }

@@ -80,6 +80,7 @@
         'Get-NRGDeviceControlDefinitions',
         'Get-NRGDeviceFrameworkIds',
         'Get-NRGObjectField',
+        'Get-NRGRecipientClass',
         'Invoke-NRGGraphRequest',
         'Invoke-NRGEvaluatorSafe',
         'Resolve-NRGDns',

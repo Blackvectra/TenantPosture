@@ -7,12 +7,17 @@
 #
 # Returns: structured hashtable under key 'EXO-Inventory' via Set-NRGRawData.
 # Reads:   Get-Mailbox, Get-CASMailbox, Get-InboxRule, Get-AcceptedDomain,
+#          Get-Recipient (resolves legacy-DN rule recipients),
 #          plus AAD-Users raw data (set by Invoke-NRGCollectAADUsers).
 #
 # Data populated:
-#   - ForwardingMailboxes      mailboxes with ForwardingSmtpAddress set
+#   - ForwardingMailboxes      mailboxes with ForwardingSmtpAddress OR
+#                              ForwardingAddress set; one row per mechanism,
+#                              each classified External/Internal/Unresolved
 #   - InboxRulesForwarding     mailbox rules forwarding to external recipients
 #                              (actual exfil vector after credential compromise)
+#   - UnparseableRules         rules Exchange could not interpret — a coverage
+#                              gap, never evidence of a rule that does nothing
 #   - SharedMailboxSignIn      shared mailboxes whose AAD account is not blocked
 #                              (sign-in attack surface — should be BlockCredential)
 #   - AllSharedMailboxes       inventory join key for evaluators
@@ -47,11 +52,18 @@ function Invoke-NRGCollectEXOInventory {
             TransportRules         = @()
             TenantAllowBlockList   = @()
             MailboxRecoverability  = $null
+            # Rules Exchange returned a "contains errors" warning for. Their
+            # action properties come back empty, so they are rules we could not
+            # read — never rules with nothing in them.
+            UnparseableRules       = @()
             Stats = @{
-                MailboxesScanned     = 0
-                InboxRulesEvaluated  = 0
-                AcceptedDomainsKnown = 0
-                ScanLimitReached     = $false
+                MailboxesScanned         = 0
+                MailboxesRuleScanFailed  = 0
+                InboxRulesEvaluated      = 0
+                UnparseableRuleWarnings  = 0
+                AcceptedDomainsKnown     = 0
+                ScanLimitReached         = $false
+                HiddenRulesIncluded      = $false
             }
             # Per-section collection outcome. Every list above defaults to @(),
             # and each query below has its own try/catch so one failure does not
@@ -90,33 +102,80 @@ function Invoke-NRGCollectEXOInventory {
             }
         }
 
-        $isExternalRecipient = {
-            param([string] $Recipient)
-            if ([string]::IsNullOrWhiteSpace($Recipient)) { return $false }
-            # Rule recipients are sometimes display names; we only flag plausible
-            # email addresses for external classification — internal-name recipients
-            # are surfaced separately by the evaluator.
-            $addr = $Recipient.Trim().TrimEnd('>').TrimStart('<')
-            $atSplit = $addr -split '@'
-            if ($atSplit.Count -ne 2) { return $false }
-            $domain = $atSplit[1].ToLowerInvariant()
-            return ($domain -and ($acceptedDomains -notcontains $domain))
+        # ── Recipient classification: External / Internal / Unresolved ───────
+        # Tri-state on purpose. The old boolean collapsed "we know it is
+        # internal" and "we could not tell" into the same $false, which is the
+        # same class of mistake as reading an empty list as compliance.
+        #
+        # Exchange renders rule recipients as:
+        #     "Display Name" [SMTP:user@dom.tld]     <- address appears TWICE
+        #     "Display Name" [EX:/o=ExchangeLabs/...] <- legacy DN, no address
+        # while ForwardingSmtpAddress is a bare  smtp:user@dom.tld.
+        #
+        # A naive  -split '@'  on the first form yields THREE elements, so the
+        # old  if ($atSplit.Count -ne 2) { return $false }  guard rejected every
+        # genuine external rule recipient and classified it internal. Mailbox
+        # forwarding parsed correctly only by luck, because its shape has one
+        # '@'. That is why EXO-7.2 reported clean on a tenant with external
+        # forwarding rules: the list was not empty-from-failure, it was
+        # empty-from-wrong-answer, so every SectionStatus guard passed.
+
+        # Distinct-recipient cache; resolution costs an EXO round trip and the
+        # same recipient recurs across mailboxes.
+        $recipientClassCache = @{}
+
+        # Read-only resolution for legacy DNs and unparseable display names.
+        # Injected rather than called inline so the classifier is testable
+        # without a live Exchange session — the absence of exactly that was
+        # why the old parser shipped broken.
+        $recipientResolver = {
+            param([string] $Lookup)
+            @(Get-Recipient -Identity $Lookup -ErrorAction Stop) | Select-Object -First 1
         }
 
-        # ── Forwarding via ForwardingSmtpAddress (server-side, persistent) ───
+        $classifyRecipient = {
+            param([string] $Recipient)
+            Get-NRGRecipientClass -Recipient $Recipient -AcceptedDomains $acceptedDomains `
+                -Cache $recipientClassCache -Resolver $recipientResolver
+        }
+
+        # ── Forwarding via ForwardingSmtpAddress OR ForwardingAddress ────────
+        # Both properties forward mail and either one alone is a complete exfil
+        # channel. Filtering on ForwardingSmtpAddress only made every mailbox
+        # using ForwardingAddress invisible to the whole assessment — and
+        # ForwardingAddress points at a recipient object, which a mail contact
+        # satisfies, so that blind spot covers forwarding to an external
+        # contact: exactly the case the control exists to catch.
         try {
-            $fwd = @(Get-Mailbox -ResultSize Unlimited -Filter "ForwardingSmtpAddress -ne `$null" -ErrorAction Stop)
-            $result.Data.ForwardingMailboxes = @($fwd | ForEach-Object {
-                $smtp = [string]$_.ForwardingSmtpAddress
-                @{
-                    DisplayName               = [string]$_.DisplayName
-                    UPN                       = [string]$_.UserPrincipalName
-                    ForwardingAddress         = $smtp
-                    IsExternal                = (& $isExternalRecipient $smtp)
-                    DeliverToMailboxAndForward = [bool]$_.DeliverToMailboxAndForward
-                    MailboxType               = [string]$_.RecipientTypeDetails
+            $fwd = @(Get-Mailbox -ResultSize Unlimited `
+                -Filter "ForwardingSmtpAddress -ne `$null -or ForwardingAddress -ne `$null" -ErrorAction Stop)
+
+            $fwdRows = [System.Collections.Generic.List[object]]::new()
+            foreach ($mbx in $fwd) {
+                # A mailbox can carry both. Emit one row per mechanism rather
+                # than picking a winner — hiding either one hides a live
+                # forwarding path. Evaluators count distinct mailboxes.
+                $targets = @()
+                $smtpTarget = [string](Get-NRGObjectField -Item $mbx -Key 'ForwardingSmtpAddress' -Default '')
+                $objTarget  = [string](Get-NRGObjectField -Item $mbx -Key 'ForwardingAddress' -Default '')
+                if (-not [string]::IsNullOrWhiteSpace($smtpTarget)) { $targets += , @('ForwardingSmtpAddress', $smtpTarget) }
+                if (-not [string]::IsNullOrWhiteSpace($objTarget))  { $targets += , @('ForwardingAddress', $objTarget) }
+
+                foreach ($t in $targets) {
+                    $class = & $classifyRecipient $t[1]
+                    $fwdRows.Add(@{
+                        DisplayName                = [string]$mbx.DisplayName
+                        UPN                        = [string]$mbx.UserPrincipalName
+                        ForwardingAddress          = [string]$t[1]
+                        ForwardingMechanism        = [string]$t[0]
+                        Classification             = $class
+                        IsExternal                 = ($class -eq 'External')
+                        DeliverToMailboxAndForward = [bool]$mbx.DeliverToMailboxAndForward
+                        MailboxType                = [string]$mbx.RecipientTypeDetails
+                    })
                 }
-            })
+            }
+            $result.Data.ForwardingMailboxes = @($fwdRows)
             $result.Data.SectionStatus.ForwardingMailboxes = 'Collected'
         } catch {
             $result.Data.SectionStatus.ForwardingMailboxes = 'Failed'
@@ -140,10 +199,46 @@ function Invoke-NRGCollectEXOInventory {
                 $result.Data.Stats.ScanLimitReached = $true
             }
 
-            $rulesFound = [System.Collections.Generic.List[object]]::new()
+            # -IncludeHidden surfaces rules planted through EWS or Graph rather
+            # than Outlook. That is the actual attacker path, and without it the
+            # sweep cannot see the rules it exists to find. Probed rather than
+            # assumed: on an EXO module that lacks the parameter a hard splat
+            # would throw per mailbox and fail the entire sweep.
+            $supportsIncludeHidden = $false
+            $gcInboxRule = Get-Command Get-InboxRule -ErrorAction SilentlyContinue
+            if ($gcInboxRule -and $gcInboxRule.Parameters -and $gcInboxRule.Parameters.ContainsKey('IncludeHidden')) {
+                $supportsIncludeHidden = $true
+            }
+            $result.Data.Stats.HiddenRulesIncluded = $supportsIncludeHidden
+
+            $rulesFound      = [System.Collections.Generic.List[object]]::new()
+            $unparseableList = [System.Collections.Generic.List[object]]::new()
             foreach ($mbx in $boxes) {
                 try {
-                    $rules = @(Get-InboxRule -Mailbox $mbx.UserPrincipalName -ErrorAction Stop)
+                    $ruleParams = @{
+                        Mailbox         = $mbx.UserPrincipalName
+                        ErrorAction     = 'Stop'
+                        WarningAction   = 'SilentlyContinue'
+                        WarningVariable = 'ruleWarn'
+                    }
+                    if ($supportsIncludeHidden) { $ruleParams['IncludeHidden'] = $true }
+                    $ruleWarn = $null
+                    $rules = @(Get-InboxRule @ruleParams)
+
+                    # Exchange warns rather than throws on a rule whose actions
+                    # it cannot interpret, and returns the rule with its action
+                    # properties empty. Swallowing that warning turns a rule we
+                    # could NOT read into a rule with no forwarding — a coverage
+                    # gap reported as a pass, on the BEC persistence check.
+                    foreach ($w in @($ruleWarn)) {
+                        if ($null -eq $w) { continue }
+                        if ($unparseableList.Count -ge 250) { break }
+                        $unparseableList.Add([ordered]@{
+                            Mailbox = [string]$mbx.UserPrincipalName
+                            Warning = [string]$w
+                        })
+                    }
+
                     foreach ($r in $rules) {
                         $result.Data.Stats.InboxRulesEvaluated++
 
@@ -156,13 +251,19 @@ function Invoke-NRGCollectEXOInventory {
                         if ($r.RedirectTo)            { $recipients += @($r.RedirectTo) }
                         if ($recipients.Count -eq 0)  { continue }
 
-                        $externalHits = @($recipients | ForEach-Object { [string]$_ } |
-                            Where-Object { & $isExternalRecipient $_ })
+                        $classified = @($recipients | ForEach-Object {
+                            $rcptStr = [string]$_
+                            @{ Recipient = $rcptStr; Class = (& $classifyRecipient $rcptStr) }
+                        })
+                        $externalHits = @($classified | Where-Object { $_.Class -eq 'External' } |
+                            ForEach-Object { [string]$_.Recipient })
+                        $unresolvedHits = @($classified | Where-Object { $_.Class -eq 'Unresolved' } |
+                            ForEach-Object { [string]$_.Recipient })
 
                         # Only surface a rule when it's forwarding or when it's
                         # disabled (disabled rules can be re-enabled silently —
                         # attackers stage them ahead of activation).
-                        if ($externalHits.Count -gt 0 -or -not $r.Enabled) {
+                        if ($externalHits.Count -gt 0 -or $unresolvedHits.Count -gt 0 -or -not $r.Enabled) {
                             $rulesFound.Add([ordered]@{
                                 Mailbox      = [string]$mbx.UserPrincipalName
                                 DisplayName  = [string]$mbx.DisplayName
@@ -171,7 +272,9 @@ function Invoke-NRGCollectEXOInventory {
                                 Priority     = $r.Priority
                                 Recipients   = @($recipients | ForEach-Object { [string]$_ })
                                 ExternalRecipients = $externalHits
+                                UnresolvedRecipients = $unresolvedHits
                                 IsExternal   = ($externalHits.Count -gt 0)
+                                IsUnresolved = ($unresolvedHits.Count -gt 0)
                                 ForwardAction = @(
                                     if ($r.ForwardTo)             { 'ForwardTo' }
                                     if ($r.ForwardAsAttachmentTo) { 'ForwardAsAttachmentTo' }
@@ -182,6 +285,9 @@ function Invoke-NRGCollectEXOInventory {
                     }
                 } catch {
                     # Per-mailbox failure is non-fatal — record it and continue.
+                    # But COUNT it: a sweep where most mailboxes threw is not a
+                    # clean sweep, and the section status alone cannot say so.
+                    $result.Data.Stats.MailboxesRuleScanFailed++
                     if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                         Register-NRGException -Source 'EXO-InboxRule' `
                             -Message "[$($mbx.UserPrincipalName)] $($_.Exception.Message)"
@@ -189,6 +295,8 @@ function Invoke-NRGCollectEXOInventory {
                 }
             }
             $result.Data.InboxRulesForwarding = @($rulesFound)
+            $result.Data.UnparseableRules     = @($unparseableList)
+            $result.Data.Stats.UnparseableRuleWarnings = $unparseableList.Count
             $result.Data.SectionStatus.InboxRulesForwarding = 'Collected'
         } catch {
             $result.Data.SectionStatus.InboxRulesForwarding = 'Failed'
