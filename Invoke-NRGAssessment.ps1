@@ -98,7 +98,7 @@ param(
     # -MonthlyDeltaPath (operator-maintained .psd1, one per tenant per month).
     # -MonthlyPriorPath is the prior period's <name>.json output and drives
     # the trend note in the snapshot. Omit on first (baseline) report.
-    # See Config/monthly-delta/EXAMPLE-cornerpostcounseling.com-2026-05.psd1
+    # See Config/monthly-delta/EXAMPLE-example.com-2026-05.psd1
     # for the delta-file shape.
     [switch] $MonthlyReport,
     [ValidateScript({
