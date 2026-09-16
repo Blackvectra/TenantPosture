@@ -243,17 +243,35 @@ function Test-NRGControlAADNoPermanentAdmins {
         }
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'PIM data not collected'; return
     }
-    $permanentPriv = @()
-    if ($roles -and $roles.Success) {
-        $permanentPriv = @($roles.Data['RoleAssignments'] | Where-Object {
-            $_.IsPriv -and $_.PrincipalType -notmatch 'servicePrincipal'
-        })
+    # "No permanent privileged role assignments" is a claim about the ROLE data,
+    # so it cannot be made without it. Previously $permanentPriv simply stayed
+    # empty when AAD-DirectoryRoles was missing or its section had not landed,
+    # and the Satisfied branch below fired anyway — producing a clean bill of
+    # health on a privilege-escalation control, worded identically to a genuinely
+    # clean tenant, from data that never arrived.
+    if (-not $roles -or -not $roles.Success -or -not (Test-NRGSectionCollected $roles 'RoleAssignments')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'Directory role assignments were not collected, so permanent privileged assignments could not be evaluated. Not assessed — re-run before treating this control as clean.'
+        return
     }
+    $permanentPriv = @($roles.Data['RoleAssignments'] | Where-Object {
+        $_.IsPriv -and $_.PrincipalType -notmatch 'servicePrincipal'
+    })
+
+    # Same rule for the PIM half. The collector pre-initialises every section to
+    # @(), so an empty EligibleSchedules is ambiguous between "no PIM adoption"
+    # and "the query failed" — and only the section status can tell them apart.
+    $eligibleCollected = Test-NRGSectionCollected $pim 'EligibleSchedules'
     $eligibleCount = @($pim.Data['EligibleSchedules']).Count
-    if ($permanentPriv.Count -eq 0 -and $eligibleCount -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "No permanent privileged role assignments. $eligibleCount eligible (PIM) assignment(s) configured."
-    } elseif ($permanentPriv.Count -gt 0) {
+
+    if ($permanentPriv.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($permanentPriv.Count) permanent privileged role assignment(s) found. Admins should be eligible in PIM and activate only when needed." -CurrentValue "Permanent: $($permanentPriv.PrincipalDisplayName -join ', ')" -RequiredValue 'All privileged roles via PIM eligible assignments only' -Remediation $ctrl.Remediation
+    } elseif (-not $eligibleCollected) {
+        # Roles are clean, but we cannot say whether PIM is in use.
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail 'No permanent privileged assignments were found, but the PIM eligible-schedule query did not complete, so PIM adoption could not be confirmed. Not assessed.'
+    } elseif ($eligibleCount -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "No permanent privileged role assignments. $eligibleCount eligible (PIM) assignment(s) configured."
     } else {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'PIM available but no eligible schedules configured. Consider migrating permanent admins to PIM.'
     }

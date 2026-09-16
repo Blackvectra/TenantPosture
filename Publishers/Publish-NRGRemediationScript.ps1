@@ -47,10 +47,12 @@ function Publish-NRGRemediationScript {
     }
 
     # Raw values
-    $clientRaw  = [string]($Metadata.TenantDomain ?? 'UnknownTenant')
-    $dateRaw    = [string]($Metadata.AssessmentDate ?? (Get-Date -Format 'yyyy-MM-dd'))
-    $versionRaw = [string]($Metadata.ToolVersion ?? '4.5.5')
-    $opUPNRaw   = [string]($Metadata.Operator ?? 'admin')
+    # Get-NRGObjectField, not dot-access-then-??: StrictMode throws on a missing
+    # key before ?? can apply. Operator is absent from the -FromResults metadata.
+    $clientRaw  = [string](Get-NRGObjectField -Item $Metadata -Key 'TenantDomain'   -Default 'UnknownTenant')
+    $dateRaw    = [string](Get-NRGObjectField -Item $Metadata -Key 'AssessmentDate' -Default (Get-Date -Format 'yyyy-MM-dd'))
+    $versionRaw = [string](Get-NRGObjectField -Item $Metadata -Key 'ToolVersion'    -Default '4.5.5')
+    $opUPNRaw   = [string](Get-NRGObjectField -Item $Metadata -Key 'Operator'       -Default 'admin')
 
     # For interpolation into single-quoted PowerShell literals in the generated
     # script. A tenant value like "John's Mailbox" must be doubled to 'John''s

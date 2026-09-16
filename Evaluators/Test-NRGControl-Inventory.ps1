@@ -209,22 +209,49 @@ function Test-NRGControlInventoryExternalForwarding {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'ForwardingMailboxes was not collected; not assessed.'
         return
     }
-    $fwd = @($inv.Data['ForwardingMailboxes'] ?? @())
-    if ($fwd.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'ForwardingMailboxes')) {
+    $allFwd = @($inv.Data['ForwardingMailboxes'] ?? @())
+    if ($allFwd.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'ForwardingMailboxes')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
             -Detail 'Forwarding mailbox enumeration did not complete (see Exceptions) — external forwarding could not be assessed. Re-run before relying on this control.'
         return
     }
+
+    # Score the EXTERNAL subset only. The collector already classified every
+    # row; counting all forwarding mailboxes reported internal forwarding —
+    # a delegation pattern in normal use — as external exfiltration, which is
+    # a false Critical on a correctly-configured tenant.
+    # Via the helper: StrictMode throws on a missing property, and result JSON
+    # from a run before this collector change carries no Classification field.
+    $fwd        = @($allFwd | Where-Object { Get-NRGObjectField -Item $_ -Key 'IsExternal' -Default $false })
+    $unresolved = @($allFwd | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Classification' -Default '') -eq 'Unresolved' })
+
+    if ($fwd.Count -eq 0 -and $unresolved.Count -gt 0) {
+        # A forwarding target we could not resolve is not evidence of internal
+        # forwarding. Claiming clean here is the same mistake as reading an
+        # empty list as compliance.
+        $objects = @($unresolved | ForEach-Object {
+            $mech = [string](Get-NRGObjectField -Item $_ -Key 'ForwardingMechanism' -Default 'ForwardingSmtpAddress')
+            "$($_.DisplayName) ($($_.UPN)) → $($_.ForwardingAddress) [$mech]"
+        })
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -Detail "$($unresolved.Count) forwarding target(s) could not be resolved to an address, so they could not be classified as internal or external. Not assessed — resolve these manually before treating this control as clean." `
+            -AffectedObjects $objects
+        return
+    }
+
     if ($fwd.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No mailboxes are configured with an external forwarding address. Email is not being silently copied to external destinations.'
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "No mailboxes forward to an external address. $($allFwd.Count) mailbox forwarding configuration(s) were found and all resolve to accepted domains in this tenant."
     } else {
+        $mailboxCount = @($fwd | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'UPN' -Default '') } | Sort-Object -Unique).Count
         $objects = @($fwd | ForEach-Object {
             $deliver = if ($_.DeliverToMailboxAndForward) { ' [copy kept]' } else { ' [forward only — emails not in mailbox]' }
-            "$($_.DisplayName) ($($_.UPN)) → $($_.ForwardingAddress)$deliver"
+            $mech    = [string](Get-NRGObjectField -Item $_ -Key 'ForwardingMechanism' -Default 'ForwardingSmtpAddress')
+            "$($_.DisplayName) ($($_.UPN)) → $($_.ForwardingAddress) [$mech]$deliver"
         })
+        $unresolvedNote = if ($unresolved.Count -gt 0) { " A further $($unresolved.Count) forwarding target(s) could not be resolved and are not counted here." } else { '' }
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "$($fwd.Count) mailbox(es) are configured to forward email to external addresses. This is the primary BEC data exfiltration technique — compromised accounts set forwarding rules to silently copy all incoming mail to attacker-controlled addresses. Each of these should be verified as intentional." `
-            -CurrentValue "$($fwd.Count) mailboxes forwarding externally" -RequiredValue 'All external forwarding rules reviewed and approved' `
+            -Detail "$mailboxCount mailbox(es) are configured to forward email to external addresses. This is the primary BEC data exfiltration technique — compromised accounts set forwarding rules to silently copy all incoming mail to attacker-controlled addresses. Each of these should be verified as intentional.$unresolvedNote" `
+            -CurrentValue "$mailboxCount mailboxes forwarding externally" -RequiredValue 'All external forwarding rules reviewed and approved' `
             -Remediation $ctrl.Remediation -AffectedObjects $objects
     }
 }

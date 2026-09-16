@@ -85,11 +85,18 @@ function Publish-NRGComplianceMatrix {
     # Build serializable data payload
     $payload = @{
         NistTitles = $nistTitles
+        # Get-NRGObjectField, not dot-access-then-??: under StrictMode a missing
+        # key THROWS before ?? can supply the default, so `$Metadata.Operator ??
+        # ''` aborts the whole publisher whenever Operator is absent. It is
+        # absent on the -FromResults replay path, whose fallback metadata carries
+        # only TenantDomain / AssessmentDate / ToolVersion — and the caller wraps
+        # this in a try/catch that degrades to a warning, so the XLSX silently
+        # was not produced rather than failing loudly.
         Metadata = @{
-            TenantDomain   = [string]($Metadata.TenantDomain  ?? 'Unknown')
-            AssessmentDate = [string]($Metadata.AssessmentDate ?? (Get-Date -Format 'yyyy-MM-dd'))
-            ToolVersion    = [string]($Metadata.ToolVersion    ?? '4.5.5')
-            Operator       = [string]($Metadata.Operator       ?? '')
+            TenantDomain   = [string](Get-NRGObjectField -Item $Metadata -Key 'TenantDomain'   -Default 'Unknown')
+            AssessmentDate = [string](Get-NRGObjectField -Item $Metadata -Key 'AssessmentDate' -Default (Get-Date -Format 'yyyy-MM-dd'))
+            ToolVersion    = [string](Get-NRGObjectField -Item $Metadata -Key 'ToolVersion'    -Default '4.5.5')
+            Operator       = [string](Get-NRGObjectField -Item $Metadata -Key 'Operator'       -Default '')
         }
         Findings = @($Findings | ForEach-Object {
             $ctrl = $cdefs[$_.ControlId]
@@ -319,6 +326,11 @@ gaps  = sum(1 for f in findings if f['State']=='Gap')
 parts = sum(1 for f in findings if f['State']=='Partial')
 sats  = sum(1 for f in findings if f['State']=='Satisfied')
 nas   = sum(1 for f in findings if f['State']=='NotApplicable')
+# Errors are scored as failures (they sit in the denominator), so the summary
+# MUST name them: without the row a reader adds Satisfied + Partial + Gaps,
+# comes up short of the stated Assessed count, and cannot tell whether the
+# missing rows were passes or failures.
+errs  = sum(1 for f in findings if f['State']=='Error')
 scored = total - nas
 score  = round(100*(sats+0.5*parts)/scored) if scored else 0
 posture = 'Strong' if score>=85 else 'Moderate' if score>=65 else 'At Risk' if score>=40 else 'Critical Risk'
@@ -328,7 +340,8 @@ rows4 = [
     ('Security Score', f'{score}/100', 'Posture', posture),
     ('Total Controls', total,          'Gaps',    gaps),
     ('Satisfied',      sats,           'Partial', parts),
-    ('Not Applicable', nas,            'Assessed',scored),
+    ('Errors',         errs,           'Not Applicable', nas),
+    ('Assessed',       scored,         'Total States', f'{sats}+{parts}+{gaps}+{errs}+{nas}={sats+parts+gaps+errs+nas}'),
 ]
 for i,(l1,v1,l2,v2) in enumerate(rows4,5):
     cell(ws,i,1,l1,LGRAY,NAVY,True)

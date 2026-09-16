@@ -46,9 +46,11 @@ function Publish-NRGRemediationPlaybook {
         return $safe
     }
 
-    $client    = EscMd ($Metadata.TenantDomain ?? 'Client')
-    $date      = EscMd ($Metadata.AssessmentDate ?? (Get-Date -Format 'MMMM dd, yyyy'))
-    $version   = EscMd ($Metadata.ToolVersion ?? $script:NRGAssessmentVersion ?? 'unknown')
+    # Get-NRGObjectField, not dot-access-then-??: see Publish-NRGAssessmentSummary.
+    $client    = EscMd ([string](Get-NRGObjectField -Item $Metadata -Key 'TenantDomain'   -Default 'Client'))
+    $date      = EscMd ([string](Get-NRGObjectField -Item $Metadata -Key 'AssessmentDate' -Default (Get-Date -Format 'MMMM dd, yyyy')))
+    $fallbackVer = if ($script:NRGAssessmentVersion) { [string]$script:NRGAssessmentVersion } else { 'unknown' }
+    $version   = EscMd ([string](Get-NRGObjectField -Item $Metadata -Key 'ToolVersion'    -Default $fallbackVer))
 
     # Load control definitions for remediation text and license requirements
     $controls = @{}
