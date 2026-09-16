@@ -69,8 +69,21 @@ function Invoke-NRGCollectAADInventory {
                 -Uri "https://graph.microsoft.com/v1.0/users?`$select=id,displayName,userPrincipalName,accountEnabled,userType,createdDateTime,signInActivity&`$filter=userType eq 'Guest'&`$top=500" `
                 -ErrorAction Stop
             $result.Data.GuestUsers = @($guests.value ?? @() | ForEach-Object {
-                $lastSign = [string]($_.signInActivity.lastSignInDateTime ?? '')
-                $daysSince = if ($lastSign) { [int]((Get-Date) - [datetime]$lastSign).TotalDays } else { 9999 }
+                # Graph does NOT return signInActivity at all for a user who
+                # never signed in, or who last signed in before April 2020
+                # (documented on the user resource type). Under StrictMode the
+                # nested dot-access therefore THREW on exactly the accounts this
+                # query exists to find, failing the whole section — so the guest
+                # and stale-account controls reported NotApplicable on any tenant
+                # with a single never-signed-in guest, which is nearly all of them.
+                $lastSign  = [string](Get-NRGNestedProperty -Object $_ -Path 'signInActivity.lastSignInDateTime' -Default '')
+                $daysSince = 9999
+                if ($lastSign) {
+                    $parsed = [datetime]::MinValue
+                    if ([datetime]::TryParse($lastSign, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsed)) {
+                        $daysSince = [int]([datetime]::UtcNow - $parsed.ToUniversalTime()).TotalDays
+                    }
+                }
                 @{
                     DisplayName       = [string]$_.displayName
                     UPN               = [string]$_.userPrincipalName
@@ -95,12 +108,23 @@ function Invoke-NRGCollectAADInventory {
                 -Uri "https://graph.microsoft.com/v1.0/users?`$select=id,displayName,userPrincipalName,accountEnabled,signInActivity,assignedLicenses&`$filter=userType eq 'Member' and accountEnabled eq true&`$top=500" `
                 -ErrorAction Stop
             $stale = @($staleResp.value ?? @() | Where-Object {
-                $lastSign = $_.signInActivity.lastSignInDateTime
+                # Absent signInActivity means never signed in (see above), which
+                # is precisely the stale account we are looking for — not an error.
+                $lastSign = [string](Get-NRGNestedProperty -Object $_ -Path 'signInActivity.lastSignInDateTime' -Default '')
                 if (-not $lastSign) { return $true }  # never signed in
-                ((Get-Date) - [datetime]$lastSign).TotalDays -gt 90
+                $parsed = [datetime]::MinValue
+                if (-not [datetime]::TryParse($lastSign, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsed)) { return $true }
+                ([datetime]::UtcNow - $parsed.ToUniversalTime()).TotalDays -gt 90
             } | ForEach-Object {
-                $lastSign = [string]($_.signInActivity.lastSignInDateTime ?? 'Never')
-                $days = if ($lastSign -ne 'Never') { [int]((Get-Date) - [datetime]$lastSign).TotalDays } else { 9999 }
+                $rawSign  = [string](Get-NRGNestedProperty -Object $_ -Path 'signInActivity.lastSignInDateTime' -Default '')
+                $lastSign = if ($rawSign) { $rawSign } else { 'Never' }
+                $days     = 9999
+                if ($rawSign) {
+                    $parsed = [datetime]::MinValue
+                    if ([datetime]::TryParse($rawSign, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsed)) {
+                        $days = [int]([datetime]::UtcNow - $parsed.ToUniversalTime()).TotalDays
+                    }
+                }
                 @{
                     DisplayName     = [string]$_.displayName
                     UPN             = [string]$_.userPrincipalName

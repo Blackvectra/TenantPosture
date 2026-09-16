@@ -172,6 +172,7 @@ $script:ExportedFunctions = @(
     'Publish-NRGDeviceBaseline',
     'Invoke-NRGCollectDeviceCompliance', 'Test-NRGControlDevice', 'Get-NRGDeviceControlDefinitions', 'Get-NRGDeviceFrameworkIds',
     'Get-NRGObjectField',
+    'Get-NRGRecipientClass',
     'Invoke-NRGGraphRequest',
     'Invoke-NRGEvaluatorSafe',
     'Resolve-NRGDns',

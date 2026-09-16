@@ -4,6 +4,87 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **Graph omits `signInActivity` entirely for users who never signed in.** Documented
+  on the user resource type: the property "isn't returned for a user who never
+  signed in or last signed in before April 2020." Under StrictMode the nested
+  read `$_.signInActivity.lastSignInDateTime ?? ''` therefore THREW on exactly the
+  accounts the guest and stale-account queries exist to find, failing the whole
+  section — so those controls reported `NotApplicable` on any tenant with a single
+  never-signed-in guest, which is nearly all of them. Silently non-functional
+  rather than falsely clean, and nothing surfaced it, because `NotApplicable` is
+  excluded from the score's denominator. All nested API reads now go through
+  `Get-NRGNestedProperty`, enforced statically. Sign-in timestamps now parse with
+  `TryParse` + `InvariantCulture` + `RoundtripKind` rather than a bare `[datetime]`
+  cast, which was culture-sensitive on whatever workstation the tool runs from.
+- **AAD-3.2 claimed "No permanent privileged role assignments" without the role
+  data.** `$permanentPriv` merely stayed empty when `AAD-DirectoryRoles` was
+  missing or its section had not landed, and the Satisfied branch fired anyway —
+  a clean bill of health on a privilege-escalation control, worded identically to
+  a genuinely clean tenant. It now reports `NotApplicable` without that evidence.
+  The PIM half had the same hole: `AAD-PIMSchedules` pre-initialises every section
+  to `@()` and published no `SectionStatus`, so a failed eligible-schedule query
+  read as "no PIM adoption" and scored `Partial` — half credit for a verdict never
+  computed. The collector now publishes `SectionStatus` and the evaluator consults
+  it.
+- **The XLSX compliance matrix was silently not produced on `-FromResults`.**
+  `$Metadata.Operator ?? ''` throws under StrictMode when the key is absent —
+  the missing-key error fires before `??` can supply the default. The live path
+  sets `Operator`; the replay path builds a fallback carrying only
+  TenantDomain / AssessmentDate / ToolVersion. Because the entry point wraps
+  each publisher in a `try/catch` that degrades to a warning, the deliverable
+  just did not exist, with one line in console output and no other signal. Six
+  publishers carried the pattern; all now read metadata through
+  `Get-NRGObjectField`, and a static test fails on any new occurrence.
+- **The summary sheets did not account for Error findings.** Errors are scored
+  as failures and sit in the denominator, but the NIST matrix Summary (XLSX and
+  Markdown) and the compliance-matrix Summary listed only met / partial / gaps /
+  not-assessable — so a reader adding the rows came up short of the finding
+  count with no way to tell whether the missing rows were passes or failures.
+  The per-family and per-control rollups already carried an Error column; the
+  headline summaries did not, because `Error` was never placed in the XLSX
+  payload. The compliance-matrix summary now also prints the arithmetic
+  (`41+40+41+40+40=202`) so the invariant is visible rather than implied.
+- **External-recipient classification was wrong for the shape Exchange actually
+  returns.** The parser split a recipient string on `@` and required exactly two
+  parts. Exchange renders a rule recipient as `"user@dom.tld"
+  [SMTP:user@dom.tld]` — the address appears **twice**, so the split yields three
+  parts and the guard returned "internal" for **every genuine external rule
+  recipient**. Mailbox forwarding parsed correctly only by luck of having one
+  `@`. EXO-7.2 therefore reported a clean bill of health on tenants with live
+  external forwarding rules: the sweep ran, `SectionStatus` said `Collected`, and
+  every honesty guard passed — the list was not empty-from-failure, it was
+  empty-from-wrong-answer. Extracted to `Lib/Get-NRGRecipientClass.ps1` with a
+  dedicated suite covering the real shapes, because the old parser had **no test
+  coverage at all**: every fixture fed the evaluators a pre-computed
+  `IsExternal` flag and never exercised it.
+- **Classification is now tri-state.** A boolean collapsed "known internal" and
+  "could not tell" into the same, safe-looking answer. A legacy `[EX:/o=…]` DN
+  can be an in-tenant user or a mail contact resolving anywhere, and the string
+  cannot say which — so it is resolved through `Get-Recipient`, and where
+  resolution fails it reports `Unresolved` and the control reports
+  `NotApplicable` rather than clean. Same rule `SectionStatus` applies to an
+  empty list.
+- **EXO-6.1 and EXO-7.1 scored the wrong set.** Both read `ForwardingMailboxes`
+  unfiltered and reported the total as "forwarding externally", discarding the
+  `IsExternal` the collector had already computed — so internal delegation
+  forwarding produced a Critical gap on correctly-configured tenants. EXO-7.2
+  applied the filter correctly thirty lines away in the same file.
+- **`ForwardingAddress` mailboxes were never collected.** The filter named only
+  `ForwardingSmtpAddress`, so every mailbox forwarding via the other property was
+  invisible to the whole assessment. `ForwardingAddress` points at a recipient
+  object, and a mail contact is a recipient object resolving to an external
+  address — so the blind spot covered forwarding straight out of the tenant.
+  Both properties are now collected, one row per mechanism (a mailbox can carry
+  both), and findings count distinct mailboxes rather than rows.
+- **Inbox-rule sweep sees hidden rules and no longer swallows "contains errors".**
+  `-IncludeHidden` (probed, not assumed — an older EXO module lacking it would
+  have failed the whole sweep) surfaces rules planted via EWS or Graph, which is
+  the actual attacker path. Exchange *warns* rather than throws on a rule it
+  cannot interpret and returns it with empty action properties; those warnings
+  were discarded, turning a rule nobody could read into a rule that forwards
+  nowhere. They are now collected as `UnparseableRules` and EXO-7.2 degrades to
+  `NotApplicable` instead of claiming clean. Mailboxes whose rule query threw are
+  counted too.
 - **NIST-first reporting.** `Invoke-NRGAssessment.ps1 -Framework <NIST|CIS|SCuBA|CMMC|All>`
   selects which framework cards the HTML report presents. **NRG defaults to
   NIST; NLS defaults to All** — the one deliberate behavioural difference

@@ -217,11 +217,16 @@ function Invoke-NRGCollectPowerPlatform {
                     $result.Data.SectionStatus.Environments = 'Collected'
                     $result.Data.Environments = @($bapResp.value | ForEach-Object {
                         [ordered]@{
+                            # Nested reads go through the helper: under StrictMode a
+                            # missing intermediate ('properties', or 'states' on an
+                            # environment the BAP API returns without a management
+                            # state) throws before ?? can apply, which would fail the
+                            # whole Environments section on one unusual environment.
                             Id          = [string]$_.name
-                            DisplayName = [string]($_.properties.displayName ?? '')
-                            Type        = [string]($_.properties.environmentSku ?? '')
-                            Region      = [string]($_.location ?? '')
-                            State       = [string]($_.properties.states.management.id ?? '')
+                            DisplayName = [string](Get-NRGNestedProperty -Object $_ -Path 'properties.displayName'          -Default '')
+                            Type        = [string](Get-NRGNestedProperty -Object $_ -Path 'properties.environmentSku'       -Default '')
+                            Region      = [string](Get-NRGObjectField    -Item   $_ -Key  'location'                        -Default '')
+                            State       = [string](Get-NRGNestedProperty -Object $_ -Path 'properties.states.management.id' -Default '')
                         }
                     })
                     $result.Success = $true
