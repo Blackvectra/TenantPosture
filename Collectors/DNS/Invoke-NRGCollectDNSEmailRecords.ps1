@@ -201,6 +201,12 @@ function Invoke-NRGCollectDNSEmailRecords {
 
             $d = @{
                 Domain  = $domain
+                # Per-record-type resolution outcome: Answered / NoRecord /
+                # LookupFailed. An absent SPF or DMARC record is a Gap, so a
+                # FAILED lookup reported as absence would tell a client their
+                # email authentication is missing when it is not. Evaluators
+                # consult this before scoring an absent record.
+                LookupStatus = @{}
                 SPF     = $null
                 DKIM    = @{
                     Selector1       = $null
@@ -243,8 +249,10 @@ function Invoke-NRGCollectDNSEmailRecords {
             # a PUBLIC resolver so split-DNS / corporate resolvers can't hide a
             # published record (both were real false-"no SPF" causes).
             try {
-                $spfRecord = @(Resolve-NRGDns -Name $domain -Type TXT) |
+                $spfOutcome = ''
+                $spfRecord = @(Resolve-NRGDns -Name $domain -Type TXT -Outcome ([ref]$spfOutcome)) |
                     Where-Object { $_ -like 'v=spf1*' } | Select-Object -First 1
+                $d.LookupStatus['SPF'] = $spfOutcome
                 if ($spfRecord) { $d.SPF = [string]$spfRecord }
             } catch {
                 $d.Errors += "SPF: $($_.Exception.Message)"
@@ -320,8 +328,10 @@ function Invoke-NRGCollectDNSEmailRecords {
 
             # DMARC
             try {
-                $dmarcMatch = @(Resolve-NRGDns -Name "_dmarc.$domain" -Type TXT) |
+                $dmarcOutcome = ''
+                $dmarcMatch = @(Resolve-NRGDns -Name "_dmarc.$domain" -Type TXT -Outcome ([ref]$dmarcOutcome)) |
                     Where-Object { $_ -like 'v=DMARC1*' } | Select-Object -First 1
+                $d.LookupStatus['DMARC'] = $dmarcOutcome
                 if ($dmarcMatch) {
                     $dmarcStr     = [string]$dmarcMatch
                     $d.DMARC      = $dmarcStr
@@ -340,8 +350,10 @@ function Invoke-NRGCollectDNSEmailRecords {
 
             # MTA-STS DNS record
             try {
-                $mtaStsMatch = @(Resolve-NRGDns -Name "_mta-sts.$domain" -Type TXT) |
+                $mtaStsOutcome = ''
+                $mtaStsMatch = @(Resolve-NRGDns -Name "_mta-sts.$domain" -Type TXT -Outcome ([ref]$mtaStsOutcome)) |
                     Where-Object { $_ -like 'v=STSv1*' } | Select-Object -First 1
+                $d.LookupStatus['MTASTS'] = $mtaStsOutcome
                 if ($mtaStsMatch) { $d.MTASTS.DNSRecord = [string]$mtaStsMatch }
             } catch { }
 
@@ -382,25 +394,31 @@ function Invoke-NRGCollectDNSEmailRecords {
 
             # TLS-RPT
             try {
-                $tlsRptMatch = @(Resolve-NRGDns -Name "_smtp._tls.$domain" -Type TXT) |
+                $tlsRptOutcome = ''
+                $tlsRptMatch = @(Resolve-NRGDns -Name "_smtp._tls.$domain" -Type TXT -Outcome ([ref]$tlsRptOutcome)) |
                     Where-Object { $_ -like 'v=TLSRPTv1*' } | Select-Object -First 1
+                $d.LookupStatus['TLSRPT'] = $tlsRptOutcome
                 if ($tlsRptMatch) { $d.TLSRPT = [string]$tlsRptMatch }
             } catch { }
 
             # DNSSEC (DS record presence at parent zone)
             try {
-                $dsRecords = @(Resolve-NRGDns -Name $domain -Type DS)
+                $dsOutcome = ''
+                $dsRecords = @(Resolve-NRGDns -Name $domain -Type DS -Outcome ([ref]$dsOutcome))
+                $d.LookupStatus['DNSSEC'] = $dsOutcome
                 if ($dsRecords.Count -gt 0) { $d.DNSSEC = $true }
             } catch { }
 
             # MX — DoH returns each answer as 'PREF exchange.' e.g. '10 host.'
             try {
-                $d.MX = @(@(Resolve-NRGDns -Name $domain -Type MX) | ForEach-Object {
+                $mxOutcome = ''
+                $d.MX = @(@(Resolve-NRGDns -Name $domain -Type MX -Outcome ([ref]$mxOutcome)) | ForEach-Object {
                     $parts = ([string]$_).Trim() -split '\s+', 2
                     if ($parts.Count -eq 2) {
                         @{ Preference = [int]$parts[0]; Exchange = $parts[1].TrimEnd('.') }
                     }
                 } | Where-Object { $_ })
+                $d.LookupStatus['MX'] = $mxOutcome
             } catch { }
 
             # ── CAA records (RFC 8659) ────────────────────────────────────────
@@ -413,12 +431,14 @@ function Invoke-NRGCollectDNSEmailRecords {
             # modules, so CAA was never actually checked. DoH returns each record
             # as 'FLAGS TAG "VALUE"', e.g. '0 issue "digicert.com"'.
             try {
-                $caaParsed = @(@(Resolve-NRGDns -Name $domain -Type CAA) | ForEach-Object {
+                $caaOutcome = ''
+                $caaParsed = @(@(Resolve-NRGDns -Name $domain -Type CAA -Outcome ([ref]$caaOutcome)) | ForEach-Object {
                     $m = [regex]::Match([string]$_, '^\s*(\d+)\s+(\w+)\s+"?([^"]*)"?\s*$')
                     if ($m.Success) {
                         @{ Flags = [int]$m.Groups[1].Value; Tag = $m.Groups[2].Value; Value = $m.Groups[3].Value.Trim() }
                     }
                 } | Where-Object { $_ })
+                $d.LookupStatus['CAA'] = $caaOutcome
                 if ($caaParsed.Count -gt 0) {
                     $d.CAA.Present = $true
                     $d.CAA.Records = $caaParsed

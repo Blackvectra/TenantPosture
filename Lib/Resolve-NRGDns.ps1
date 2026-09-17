@@ -36,10 +36,36 @@ function Resolve-NRGDns {
         [Parameter(Mandatory)]
         [ValidateSet('A','AAAA','TXT','CNAME','MX','CAA','DS','NS','SOA')]
         [string] $Type,
-        [int] $TimeoutSeconds = 6
+        [int] $TimeoutSeconds = 6,
+
+        # Receives 'Answered' / 'NoRecord' / 'LookupFailed'.
+        #
+        # An empty return is ambiguous exactly the way an empty collector
+        # section is: it can mean "the name genuinely has no record of this
+        # type" or "every resolver we asked failed". For DNS that difference
+        # decides a client-facing verdict — an absent SPF/DMARC record is a
+        # Gap, so a failed lookup reported as absent tells a client their
+        # email authentication is missing when it is not.
+        #
+        # Optional, so every existing caller keeps its current behaviour.
+        [ref] $Outcome
     )
 
     Set-StrictMode -Version Latest
+
+    $setOutcome = {
+        param([string] $State)
+        if ($null -ne $Outcome) { $Outcome.Value = $State }
+    }
+    & $setOutcome 'LookupFailed'
+
+    # DoH Status codes we treat as an AUTHORITATIVE "no such record":
+    #   0 NoError  — name resolves; an absent Answer means NODATA for this type
+    #   3 NXDOMAIN — name does not exist
+    # Anything else (2 SERVFAIL, 5 REFUSED, …) means the resolver could not
+    # answer, which is not evidence of absence — fall through to the next
+    # provider rather than reporting "no record".
+    $authoritativeNoRecord = @(0, 3)
 
     # DoH numeric type codes (RFC 1035 / 6844).
     $typeCode = @{ A = 1; NS = 2; SOA = 6; CNAME = 5; MX = 15; TXT = 16; AAAA = 28; DS = 43; CAA = 257 }[$Type]
@@ -51,9 +77,26 @@ function Resolve-NRGDns {
             $uri  = "${baseUrl}?name=$([uri]::EscapeDataString($Name))&type=$Type"
             $resp = Invoke-RestMethod -Uri $uri -Headers @{ accept = 'application/dns-json' } `
                         -TimeoutSec $TimeoutSeconds -ErrorAction Stop
-            # Status 0 = NoError (Answer may still be empty = record absent);
-            # Status 3 = NXDOMAIN. Either way return whatever matched (possibly none).
-            if ($null -eq $resp -or -not $resp.PSObject.Properties['Answer']) { return @() }
+            if ($null -eq $resp) { continue }
+
+            # Read Status. Previously it was only described in a comment and
+            # never consulted, so a SERVFAIL — which Cloudflare returns as
+            # HTTP 200 with a Status of 2 and no Answer — was indistinguishable
+            # from NXDOMAIN, AND the bare `return` short-circuited the Google
+            # fallback and the Resolve-DnsName fallback beneath it. One failing
+            # resolver therefore produced a confident "no DMARC record".
+            $statusProp = $resp.PSObject.Properties['Status']
+            $status = if ($statusProp) { [int]$statusProp.Value } else { $null }
+            if ($null -ne $status -and $status -notin $authoritativeNoRecord) {
+                continue   # not an answer — ask the next provider
+            }
+
+            if (-not $resp.PSObject.Properties['Answer']) {
+                # Status 0 with no Answer is NODATA; Status 3 is NXDOMAIN.
+                # Both are real answers meaning "no record of this type".
+                & $setOutcome 'NoRecord'
+                return @()
+            }
             $out = @($resp.Answer | Where-Object { $_.type -eq $typeCode } | ForEach-Object {
                 $data = [string]$_.data
                 if ($Type -eq 'TXT') {
@@ -66,6 +109,9 @@ function Resolve-NRGDns {
                     $data
                 }
             })
+            # An Answer that contained no record of the requested type (e.g. a
+            # CNAME-only chain) is still a real answer: no record of this type.
+            & $setOutcome $(if (@($out).Count -gt 0) { 'Answered' } else { 'NoRecord' })
             return @($out)
         } catch {
             continue   # try the next provider
@@ -78,7 +124,7 @@ function Resolve-NRGDns {
     if (Get-Command Resolve-DnsName -ErrorAction SilentlyContinue) {
         try {
             $recs = @(Resolve-DnsName -Name $Name -Type $Type -Server '1.1.1.1' -DnsOnly -ErrorAction Stop)
-            return @($recs | ForEach-Object {
+            $fallback = @($recs | ForEach-Object {
                 if ($Type -eq 'TXT') {
                     $s = $_.PSObject.Properties['Strings']
                     if ($s) { -join @($s.Value) } else { $null }
@@ -86,10 +132,19 @@ function Resolve-NRGDns {
                 elseif ($_.PSObject.Properties['NameExchange']) { [string]$_.NameExchange }
                 else { [string]$_ }
             } | Where-Object { $_ })
+            & $setOutcome $(if ($fallback.Count -gt 0) { 'Answered' } else { 'NoRecord' })
+            return @($fallback)
         } catch {
+            # Resolve-DnsName throws on NXDOMAIN as well as on a genuine
+            # failure, and the exception does not reliably distinguish them.
+            # Leave the outcome as LookupFailed: claiming "no record" from an
+            # error we cannot read is the guess this whole change removes.
+            & $setOutcome 'LookupFailed'
             return @()
         }
     }
 
+    # Every provider failed and Resolve-DnsName is unavailable.
+    & $setOutcome 'LookupFailed'
     return @()
 }

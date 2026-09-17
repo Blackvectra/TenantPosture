@@ -4,6 +4,25 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **A failed DNS lookup was reported as an absent record.** `Resolve-NRGDns`
+  returned `@()` for any DoH response lacking an `Answer` and never read
+  `Status` — but Cloudflare returns SERVFAIL as HTTP 200 with `Status: 2` and no
+  `Answer`, so a failing resolver was indistinguishable from NXDOMAIN. Worse,
+  that was a bare `return`, which also short-circuited the Google fallback and
+  the `Resolve-DnsName` fallback beneath it: one transient SERVFAIL meant the
+  healthy resolver was never asked. The DNS evaluators score an absent record as
+  a **Gap**, so this told a client their SPF/DMARC/MTA-STS was missing when it
+  was not — a false finding in the deliverable an MSP sells remediation from.
+  Only Status 0 (NoError/NODATA) and 3 (NXDOMAIN) are now treated as
+  authoritative "no record"; anything else falls through to the next provider.
+  The resolver gained an optional `-Outcome` returning
+  `Answered` / `NoRecord` / `LookupFailed`, the collector records it per record
+  type in `LookupStatus`, and `Test-NRGDnsLookupSucceeded` gates the six
+  evaluators that score absence so a failed lookup reports `NotApplicable`.
+  Absent `LookupStatus` counts as collected, so replayed older JSON is
+  unaffected. The multi-segment TXT join was checked and is correct — a long
+  SPF or DMARC record split across character-strings is reassembled before
+  parsing.
 - **Graph omits `signInActivity` entirely for users who never signed in.** Documented
   on the user resource type: the property "isn't returned for a user who never
   signed in or last signed in before April 2020." Under StrictMode the nested

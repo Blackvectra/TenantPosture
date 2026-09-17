@@ -10,18 +10,11 @@
 
 name: Dependency Review
 
-# TEMPORARILY PAUSED — GitHub Actions minutes / spending limit reached on this
-# account, so every run failed instantly without ever being assigned a runner
-# and produced a flood of failure notifications. Automatic triggers are
-# commented out below; each workflow can still be run by hand from the
-# Actions tab via workflow_dispatch.
-#
-# TO RESTORE once billing is sorted: delete the `workflow_dispatch:` line and
-# uncomment the original trigger block underneath it.
 on:
+  # Manual runs stay available alongside the automatic triggers.
   workflow_dispatch:
-#   pull_request:
-#     branches: [ main ]
+  pull_request:
+    branches: [ main ]
 permissions:
   contents: read
   # required to comment on PRs with the findings summary
@@ -31,6 +24,7 @@ jobs:
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # GitHub Dependency Graph + Dependency Review API requires GitHub
     # Advanced Security on private repos. Skip on private repos so the
     # workflow doesn't surface "configuration error" failures

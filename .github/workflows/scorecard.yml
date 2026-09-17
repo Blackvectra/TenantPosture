@@ -22,6 +22,7 @@ jobs:
   analysis:
     name: Scorecard analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # OSSF Scorecard only supports PUBLIC repositories: several of its checks
     # (ListCommits / contributors / branch-protection via GraphQL) require a
     # token scope the default GITHUB_TOKEN does not have on a private repo, so
