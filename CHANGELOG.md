@@ -46,7 +46,19 @@ Accuracy + hardening pass (targeting v4.13.0):
   opened the gate. All three closed and pinned by a new
   `NRG.DnsCollector.Tests.ps1`, which drives the collector through a mocked
   resolver injected into module scope — the first test to exercise the
-  collector at all. `-Reason` now carries which
+  collector at all. An adversarial-input pass over the resolver then closed
+  one more false verdict: the `Resolve-DnsName` fallback rendered CAA and DS
+  rows as PSObject text (`@{Section=Answer; Type=CAA; …}`), which the
+  collector's `FLAGS TAG "VALUE"` parse could never match, so a present CAA
+  record scored DNS-2.2 as "No CAA record published" wherever DoH is blocked;
+  every fallback row is now rendered in the DoH text shape and a row that
+  cannot be is a `LookupFailed`, never an `Answered` with unusable data. Same
+  pass hardened `Status` parsing (whole numbers and digit strings only —
+  `''`, `$false` and floats no longer coerce to a code; an `XmlDocument` body
+  is rejected), added Win32 9701 `DNS_ERROR_RECORD_DOES_NOT_EXIST` to the
+  absence codes, made Answer rows lacking `type`/`data` skip rather than fail
+  the provider, and fixed TXT parsing for RFC 1035 `\"` escapes and Google's
+  unquoted pre-joined form. `-Reason` now carries which
   providers failed and why into `$d.Errors` and the Exceptions array, and DNS
   coverage registers `Partial`/`Failed` instead of `Collected` on a run in
   which lookups did not complete.

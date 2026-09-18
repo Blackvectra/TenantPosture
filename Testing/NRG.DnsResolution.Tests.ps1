@@ -126,6 +126,40 @@ Describe 'Resolve-NRGDns — a failed lookup is not an absent record' {
         $o | Should -Be 'LookupFailed'
     }
 
+    It 'reports LookupFailed for Status shapes that -as [int] would silently coerce to a number (<Label>)' -ForEach @(
+        @{ Label = 'empty string'; Value = '' }
+        @{ Label = 'boolean false'; Value = $false }
+        @{ Label = 'float 2.6 (would round to 3)'; Value = 2.6 }
+        @{ Label = 'float 0.4 (would round to 0)'; Value = 0.4 }
+        @{ Label = 'array'; Value = @(0) }
+    ) {
+        # `'' -as [int]` and `$false -as [int]` are both 0 — an authoritative
+        # NoError from a body that carried no answer at all.
+        $v = $Value
+        Mock Invoke-RestMethod { [pscustomobject]@{ Status = $v } }
+        $o = ''
+        $null = @(Resolve-NRGDns -Name 'example.com' -Type 'TXT' -Outcome ([ref]$o))
+        $o | Should -Be 'LookupFailed'
+    }
+
+    It 'still accepts a numeric Status delivered as a digit string' {
+        Mock Invoke-RestMethod { [pscustomobject]@{ Status = '3' } }
+        $o = ''
+        $null = @(Resolve-NRGDns -Name 'example.com' -Type 'TXT' -Outcome ([ref]$o))
+        $o | Should -Be 'NoRecord'
+    }
+
+    It 'reports LookupFailed when the body is an XmlDocument whose root element is <Status>' {
+        # An HTML block page that happens to be well-formed XML is parsed by
+        # Invoke-RestMethod into an XmlDocument, which exposes its root
+        # element as a property — so a page with a <Status>0</Status> root
+        # would have read as NoError.
+        Mock Invoke-RestMethod { [xml]'<Status>0</Status>' }
+        $o = ''
+        $null = @(Resolve-NRGDns -Name 'example.com' -Type 'TXT' -Outcome ([ref]$o))
+        $o | Should -Be 'LookupFailed'
+    }
+
     It 'falls through to the second provider when the first returns a null Status' {
         $script:calls4 = 0
         Mock Invoke-RestMethod {
@@ -218,7 +252,50 @@ Describe 'Resolve-NRGDns — an authoritative answer is still authoritative' {
     }
 }
 
+Describe 'Resolve-NRGDns — Answer rows are read defensively' {
+
+    It 'reports NoRecord, not a failure, when Status 0 carries "Answer": null' {
+        Mock Invoke-RestMethod { [pscustomobject]@{ Status = 0; Answer = $null } }
+        $o = ''
+        $r = @(Resolve-NRGDns -Name 'example.com' -Type 'TXT' -Outcome ([ref]$o))
+        $o       | Should -Be 'NoRecord'
+        $r.Count | Should -Be 0
+    }
+
+    It 'skips a row lacking type or data instead of failing the whole provider' {
+        # A direct $_.type on such a row threw under StrictMode, the catch
+        # recorded the provider as failed, and a valid SPF row in the same
+        # Answer was discarded.
+        Mock Invoke-RestMethod {
+            [pscustomobject]@{ Status = 0; Answer = @(
+                [pscustomobject]@{ name = 'example.com' },
+                [pscustomobject]@{ type = 16 },
+                [pscustomobject]@{ type = 16; data = '"v=spf1 -all"' }
+            ) }
+        }
+        $o = ''; $why = ''
+        $r = @(Resolve-NRGDns -Name 'example.com' -Type 'TXT' -Outcome ([ref]$o) -Reason ([ref]$why))
+        $o       | Should -Be 'Answered'
+        $r       | Should -Be @('v=spf1 -all')
+        $why     | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'Resolve-NRGDns — TXT assembly' {
+
+    It 'unescapes \" and \\ inside a quoted character-string' {
+        Mock Invoke-RestMethod { script:DohAnswer '"foo \" bar" "\\baz"' }
+        $r = @(Resolve-NRGDns -Name 'example.com' -Type 'TXT')
+        $r[0] | Should -Be 'foo " bar\baz'
+    }
+
+    It 'takes an unquoted value whole even when it contains a quoted token (Google shape)' {
+        # Google returns TXT pre-joined and unquoted. Segment-parsing that
+        # form returned only the embedded token.
+        Mock Invoke-RestMethod { script:DohAnswer 'v=spf1 include:a "b" -all' }
+        $r = @(Resolve-NRGDns -Name 'example.com' -Type 'TXT')
+        $r[0] | Should -Be 'v=spf1 include:a "b" -all'
+    }
 
     It 'joins a TXT record split across multiple character-strings' {
         # DNS splits any TXT string over 255 bytes, and long SPF/DMARC records
@@ -296,6 +373,20 @@ Describe 'Resolve-NRGDns — the Resolve-DnsName fallback reads the Win32 DNS co
         $o | Should -Be 'NoRecord'
     }
 
+    It 'maps Win32 9701 (DNS_ERROR_RECORD_DOES_NOT_EXIST) to NoRecord' {
+        function global:Resolve-DnsName { throw [System.ComponentModel.Win32Exception]::new(9701) }
+        $o = ''
+        $null = @(Resolve-NRGDns -Name 'example.com' -Type 'TXT' -Outcome ([ref]$o))
+        $o | Should -Be 'NoRecord'
+    }
+
+    It 'maps the RECORD_DOES_NOT_EXIST error id to NoRecord when no Win32 code is present' {
+        function global:Resolve-DnsName { throw 'example.com : DNS record does not exist (RECORD_DOES_NOT_EXIST)' }
+        $o = ''
+        $null = @(Resolve-NRGDns -Name 'example.com' -Type 'TXT' -Outcome ([ref]$o))
+        $o | Should -Be 'NoRecord'
+    }
+
     It 'maps Win32 9002 (SERVFAIL) to LookupFailed, with the code in -Reason' {
         function global:Resolve-DnsName { throw [System.ComponentModel.Win32Exception]::new(9002) }
         $o = ''; $why = ''
@@ -367,6 +458,51 @@ Describe 'Resolve-NRGDns — the Resolve-DnsName fallback reads the Win32 DNS co
         $r = @(Resolve-NRGDns -Name 'example.com' -Type 'DS' -Outcome ([ref]$o))
         $o       | Should -Be 'NoRecord'
         $r.Count | Should -Be 0
+    }
+
+    It 'renders a CAA row in the DoH text shape so the collector can parse it' {
+        # `[string]$_` produced "@{Section=Answer; Type=CAA; ...}", which the
+        # collector's 'FLAGS TAG "VALUE"' parse could never match — so a
+        # present CAA record scored DNS-2.2 as "No CAA record published" on
+        # a DoH-blocked workstation.
+        function global:Resolve-DnsName {
+            [pscustomobject]@{ Name = 'example.com'; Type = 'CAA'; Section = 'Answer'; Flags = 0; Tag = 'issue'; Value = 'letsencrypt.org' }
+        }
+        $o = ''
+        $r = @(Resolve-NRGDns -Name 'example.com' -Type 'CAA' -Outcome ([ref]$o))
+        $o    | Should -Be 'Answered'
+        $r[0] | Should -Be '0 issue "letsencrypt.org"'
+        $r[0] | Should -Match '^\s*(\d+)\s+(\w+)\s+"?([^"]*)"?\s*$' -Because 'this is the regex the collector applies'
+    }
+
+    It 'reports LookupFailed, never Answered, for a CAA row it cannot render' {
+        function global:Resolve-DnsName {
+            [pscustomobject]@{ Name = 'example.com'; Type = 'CAA'; Section = 'Answer' }
+        }
+        $o = ''; $why = ''
+        $r = @(Resolve-NRGDns -Name 'example.com' -Type 'CAA' -Outcome ([ref]$o) -Reason ([ref]$why))
+        $o       | Should -Be 'LookupFailed'
+        $r.Count | Should -Be 0
+        $why     | Should -Match 'cannot render'
+    }
+
+    It 'renders an MX row as "PREF exchange" like the DoH path' {
+        function global:Resolve-DnsName {
+            [pscustomobject]@{ Name = 'example.com'; Type = 'MX'; Section = 'Answer'; Preference = 10; NameExchange = 'mail.example.com' }
+        }
+        $r = @(Resolve-NRGDns -Name 'example.com' -Type 'MX')
+        $r[0] | Should -Be '10 mail.example.com'
+    }
+
+    It 'renders a DS row from its fields and never as object text' {
+        function global:Resolve-DnsName {
+            [pscustomobject]@{ Name = 'example.com'; Type = 'DS'; Section = 'Answer'; KeyTag = 2371; Algorithm = 13; DigestType = 2; Digest = 'ABCD' }
+        }
+        $o = ''
+        $r = @(Resolve-NRGDns -Name 'example.com' -Type 'DS' -Outcome ([ref]$o))
+        $o    | Should -Be 'Answered'
+        $r[0] | Should -Be '2371 13 2 ABCD'
+        $r[0] | Should -Not -Match '@\{'
     }
 
     It 'still returns the Answer-section row of the requested type alongside Authority rows' {

@@ -98,29 +98,58 @@ function Resolve-NRGDns {
             # DMARC, MTA-STS, TLS-RPT, DS and CAA would have scored Gap. A
             # response we cannot read is a failure, not an answer.
             #
-            # The cast is guarded against a null value as well as an absent
-            # property: `$null -as [int]` is 0, not $null, so `"Status": null`
-            # would otherwise read as NoError and become an authoritative
-            # NoRecord without asking the next provider.
-            $statusProp = if ($resp -is [string]) { $null } else { $resp.PSObject.Properties['Status'] }
-            $status     = if ($statusProp -and $null -ne $statusProp.Value) { $statusProp.Value -as [int] } else { $null }
+            # Status is accepted ONLY as a whole number: an [int]-family value
+            # or a digit string. `-as [int]` alone is far too generous —
+            # `$null`, `''` and `$false` all cast to 0, and 2.6 rounds to 3 —
+            # each of which would have turned an unreadable body into an
+            # authoritative NoRecord. An XmlDocument (an HTML block page that
+            # happened to parse) exposes its root element as a property, so
+            # it is rejected with the plain-string case.
+            $statusProp = if ($resp -is [string] -or $resp -is [System.Xml.XmlNode]) { $null } else { $resp.PSObject.Properties['Status'] }
+            $status     = $null
+            if ($statusProp) {
+                $raw = $statusProp.Value
+                if ($raw -is [string]) {
+                    if ($raw -match '^\s*\d+\s*$') { $status = [int]$raw }
+                } elseif ($null -ne $raw -and $raw -isnot [bool] -and $raw -is [ValueType]) {
+                    $i = $raw -as [int]
+                    if ($null -ne $i -and ([double]$raw) -eq $i) { $status = $i }
+                }
+            }
             if ($null -eq $status) { $failures.Add("${provider}: response carried no readable Status (not a DoH answer)"); continue }
             if ($status -notin $authoritativeNoRecord) { $failures.Add("${provider}: Status $status"); continue }
 
-            if (-not $resp.PSObject.Properties['Answer']) {
-                # Status 0 with no Answer is NODATA; Status 3 is NXDOMAIN.
-                # Both are real answers meaning "no record of this type".
-                & $setOutcome 'NoRecord'; & $setReason
-                return @()
-            }
-            $out = @($resp.Answer | Where-Object { $_.type -eq $typeCode } | ForEach-Object {
-                $data = [string]$_.data
+            # Status 0 with no Answer (absent, null or empty) is NODATA; Status
+            # 3 is NXDOMAIN. Both are real answers meaning "no record of this
+            # type". Rows are read through PSObject.Properties, never
+            # dot-access: a row lacking `type` or `data` is skipped, not
+            # allowed to throw and fail the whole provider — under StrictMode
+            # a direct `$_.type` on such a row did exactly that, discarding a
+            # valid SPF row in the same Answer.
+            $answerProp = $resp.PSObject.Properties['Answer']
+            $rows = if ($answerProp -and $null -ne $answerProp.Value) { @($answerProp.Value) } else { @() }
+            $out = @($rows | ForEach-Object {
+                if ($null -eq $_ -or $_ -is [string]) { return }
+                $tp = $_.PSObject.Properties['type']
+                $dp = $_.PSObject.Properties['data']
+                if (-not $tp -or -not $dp -or $null -eq $tp.Value -or $null -eq $dp.Value) { return }
+                if (($tp.Value -as [int]) -ne $typeCode) { return }
+                $data = [string]$dp.Value
                 if ($Type -eq 'TXT') {
-                    # TXT data arrives as one or more quoted segments, e.g.
-                    # "v=spf1 ..." or "part1" "part2". Join the segment contents.
-                    $segs = [regex]::Matches($data, '"([^"]*)"')
-                    if ($segs.Count -gt 0) { -join ($segs | ForEach-Object { $_.Groups[1].Value }) }
-                    else { $data.Trim('"') }
+                    # TXT data arrives either as one or more quoted
+                    # character-strings — "v=spf1 ..." or "part1" "part2"
+                    # (Cloudflare) — or already unquoted and pre-joined
+                    # (Google). Only a value that STARTS with a quote is
+                    # segment-parsed; a bare value is taken whole, so an
+                    # embedded quoted token in Google's form is not mistaken
+                    # for the only segment. Inside a quoted segment, \" and \\
+                    # are RFC 1035 escapes and are unescaped.
+                    if ($data -match '^\s*"') {
+                        $segs = [regex]::Matches($data, '"((?:[^"\\]|\\.)*)"')
+                        -join ($segs | ForEach-Object { $_.Groups[1].Value -replace '\\(["\\])', '$1' })
+                    } else {
+                        $data
+                    }
                 } else {
                     $data
                 }
@@ -158,16 +187,57 @@ function Resolve-NRGDns {
                 (-not $sec -or $null -eq $sec.Value -or [string]$sec.Value -eq 'Answer') -and
                 (-not $typ -or $null -eq $typ.Value -or [string]$typ.Value -eq $Type)
             })
+            # Render each row in the SAME text shape the DoH path returns, so
+            # the collector's parsers see one format whichever path answered.
+            # The previous `else { [string]$_ }` produced PSObject text
+            # ("@{Section=Answer; Type=CAA; ...}") for CAA and DS rows: a
+            # present CAA record could never match the collector's
+            # `FLAGS TAG "VALUE"` parse, so CAA.Present stayed $false and
+            # DNS-2.2 reported "No CAA record published" — a false Gap on
+            # exactly the DoH-blocked workstation this fallback exists for.
+            # A row whose type this fallback cannot render is a FAILURE for
+            # the lookup, never an "Answered" with unusable data.
+            $unrenderable = [System.Collections.Generic.List[string]]::new()   # a List so the pipeline block can mark it
             $fallback = @($recs | ForEach-Object {
-                if ($Type -eq 'TXT') {
-                    $s = $_.PSObject.Properties['Strings']
-                    if ($s) { -join @($s.Value) } else { $null }
-                } elseif ($_.PSObject.Properties['NameHost']) { [string]$_.NameHost }
-                elseif ($_.PSObject.Properties['NameExchange']) { [string]$_.NameExchange }
-                else { [string]$_ }
+                $p = $_.PSObject.Properties
+                switch ($Type) {
+                    'TXT'   { if ($p['Strings']) { -join @($p['Strings'].Value) } }
+                    'CNAME' { if ($p['NameHost']) { [string]$p['NameHost'].Value } }
+                    'NS'    { if ($p['NameHost']) { [string]$p['NameHost'].Value } }
+                    'MX'    {
+                        # DoH shape: 'PREF exchange.'
+                        if ($p['NameExchange']) {
+                            $pref = if ($p['Preference']) { [string]$p['Preference'].Value } else { '0' }
+                            "$pref $([string]$p['NameExchange'].Value)"
+                        }
+                    }
+                    'A'     { if ($p['IPAddress']) { [string]$p['IPAddress'].Value } }
+                    'AAAA'  { if ($p['IPAddress']) { [string]$p['IPAddress'].Value } }
+                    'CAA'   {
+                        # DoH shape: 'FLAGS TAG "VALUE"'. Only a DnsClient
+                        # build that exposes the CAA fields can render it.
+                        if ($p['Flags'] -and $p['Tag'] -and $p['Value']) {
+                            "$([string]$p['Flags'].Value) $([string]$p['Tag'].Value) `"$([string]$p['Value'].Value)`""
+                        } else { $unrenderable.Add('CAA') }
+                    }
+                    'DS'    {
+                        # DoH shape: 'KEYTAG ALG DIGESTTYPE DIGEST'. The
+                        # collector only tests presence, but render the
+                        # rdata when the fields are there.
+                        if ($p['KeyTag'] -and $p['Algorithm'] -and $p['DigestType'] -and $p['Digest']) {
+                            "$([string]$p['KeyTag'].Value) $([string]$p['Algorithm'].Value) $([string]$p['DigestType'].Value) $([string]$p['Digest'].Value)"
+                        } elseif ($p['KeyTag']) { "$([string]$p['KeyTag'].Value)" }
+                        else { $unrenderable.Add('DS') }
+                    }
+                    'SOA'   { if ($p['PrimaryServer']) { [string]$p['PrimaryServer'].Value } else { $unrenderable.Add('SOA') } }
+                }
             } | Where-Object { $_ })
-            & $setOutcome $(if ($fallback.Count -gt 0) { 'Answered' } else { 'NoRecord' }); & $setReason
-            return @($fallback)
+            if ($unrenderable.Count -gt 0 -and $fallback.Count -eq 0) {
+                $failures.Add("Resolve-DnsName: returned $Type rows this fallback cannot render in the DoH text shape")
+            } else {
+                & $setOutcome $(if ($fallback.Count -gt 0) { 'Answered' } else { 'NoRecord' }); & $setReason
+                return @($fallback)
+            }
         } catch {
             # Resolve-DnsName reports NXDOMAIN and NODATA in one of two
             # shapes: by THROWING, the same way it reports a real failure, or
@@ -175,7 +245,9 @@ function Resolve-NRGDns {
             # Section filter above reduces to an empty answer. The throw has
             # to be read rather than treated uniformly. The Win32 DNS codes
             # distinguish absence from failure: 9003 DNS_ERROR_RCODE_NAME_ERROR
-            # (NXDOMAIN) and 9501 DNS_INFO_NO_RECORDS (NODATA) are
+            # (NXDOMAIN), 9501 DNS_INFO_NO_RECORDS (NODATA) and 9701
+            # DNS_ERROR_RECORD_DOES_NOT_EXIST ("DNS record does not exist",
+            # which the cmdlet emits as RECORD_DOES_NOT_EXIST) are
             # authoritative "no record"; 9002 SERVFAIL, 1460 timeout and
             # anything else are not.
             #
@@ -197,8 +269,9 @@ function Resolve-NRGDns {
                 $text = "$($_.FullyQualifiedErrorId) $($_.Exception.Message)"
                 if     ($text -match 'DNS_ERROR_RCODE_NAME_ERROR') { $code = 9003 }
                 elseif ($text -match 'DNS_INFO_NO_RECORDS')        { $code = 9501 }
+                elseif ($text -match 'RECORD_DOES_NOT_EXIST')      { $code = 9701 }
             }
-            if ($code -in @(9003, 9501)) {
+            if ($code -in @(9003, 9501, 9701)) {
                 & $setOutcome 'NoRecord'; & $setReason
                 return @()
             }
