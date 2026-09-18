@@ -267,7 +267,14 @@ Describe 'Resolve-NRGDns — the Resolve-DnsName fallback reads the Win32 DNS co
     BeforeAll {
         function global:Resolve-DnsName { param($Name, $Type, $Server, [switch] $DnsOnly, $ErrorAction) throw 'stub not configured' }
     }
-    AfterAll { Remove-Item -LiteralPath 'Function:\global:Resolve-DnsName' -ErrorAction SilentlyContinue }
+    # The provider path takes no scope prefix: 'Function:\global:Resolve-DnsName'
+    # is a silent no-op, and the stub then outlived the file — a second run in
+    # the same session failed seven resolver tests, and on Windows it would
+    # have shadowed the real DnsClient cmdlet for the rest of the console.
+    AfterAll {
+        Remove-Item -LiteralPath 'Function:\Resolve-DnsName' -ErrorAction SilentlyContinue
+        if (Get-Command Resolve-DnsName -CommandType Function -ErrorAction SilentlyContinue) { throw 'Resolve-DnsName stub leaked past AfterAll' }
+    }
     BeforeEach { Mock Invoke-RestMethod { throw 'DoH blocked on this network' } }
 
     It 'maps Win32 9003 (DNS_ERROR_RCODE_NAME_ERROR, NXDOMAIN) to NoRecord' {
