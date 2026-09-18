@@ -27,7 +27,10 @@ function Add-NRGDnsLookupFailedFinding {
     param(
         [Parameter(Mandatory)] [object]   $Control,
         [Parameter(Mandatory)] [string]   $ControlId,
-        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Citations,
+        # [AllowNull()] because Get-NRGFrameworkCitations yields $null, not
+        # @(), for a control with no References — a binding error here would
+        # replace the finding with a crash.
+        [Parameter(Mandatory)] [AllowNull()] [AllowEmptyCollection()] [string[]] $Citations,
         [Parameter(Mandatory)] [string]   $Domain,
         [Parameter(Mandatory)] [AllowNull()] [object] $DomainEntry,
         # Key in the collector's LookupStatus map.

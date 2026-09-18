@@ -97,8 +97,13 @@ function Resolve-NRGDns {
             # network that intercepts cloudflare-dns.com, every domain's SPF,
             # DMARC, MTA-STS, TLS-RPT, DS and CAA would have scored Gap. A
             # response we cannot read is a failure, not an answer.
+            #
+            # The cast is guarded against a null value as well as an absent
+            # property: `$null -as [int]` is 0, not $null, so `"Status": null`
+            # would otherwise read as NoError and become an authoritative
+            # NoRecord without asking the next provider.
             $statusProp = if ($resp -is [string]) { $null } else { $resp.PSObject.Properties['Status'] }
-            $status     = if ($statusProp) { $statusProp.Value -as [int] } else { $null }
+            $status     = if ($statusProp -and $null -ne $statusProp.Value) { $statusProp.Value -as [int] } else { $null }
             if ($null -eq $status) { $failures.Add("${provider}: response carried no readable Status (not a DoH answer)"); continue }
             if ($status -notin $authoritativeNoRecord) { $failures.Add("${provider}: Status $status"); continue }
 
@@ -136,6 +141,23 @@ function Resolve-NRGDns {
     if (Get-Command Resolve-DnsName -ErrorAction SilentlyContinue) {
         try {
             $recs = @(Resolve-DnsName -Name $Name -Type $Type -Server '1.1.1.1' -DnsOnly -ErrorAction Stop)
+
+            # Resolve-DnsName returns every record on the wire, not only the
+            # Answer section. A NODATA response carries the zone's SOA in the
+            # Authority section (RFC 2308 §3), and a CNAME chain carries rows of
+            # other types. Without this filter the `[string]$_` branch below
+            # turned that SOA row into a truthy value and reported Answered —
+            # a false pass on DNS-1.6 (DS present) and DNS-1.2 (DKIM CNAME) on
+            # exactly the DoH-blocked workstation this fallback exists for.
+            # Only rows in the Answer section of the requested type count; the
+            # DoH path applies the same type filter. Rows that carry neither
+            # property (older DnsClient shapes) are kept as before.
+            $recs = @($recs | Where-Object {
+                $sec = $_.PSObject.Properties['Section']
+                $typ = $_.PSObject.Properties['Type']
+                (-not $sec -or $null -eq $sec.Value -or [string]$sec.Value -eq 'Answer') -and
+                (-not $typ -or $null -eq $typ.Value -or [string]$typ.Value -eq $Type)
+            })
             $fallback = @($recs | ForEach-Object {
                 if ($Type -eq 'TXT') {
                     $s = $_.PSObject.Properties['Strings']
@@ -147,12 +169,15 @@ function Resolve-NRGDns {
             & $setOutcome $(if ($fallback.Count -gt 0) { 'Answered' } else { 'NoRecord' }); & $setReason
             return @($fallback)
         } catch {
-            # Resolve-DnsName reports NXDOMAIN and NODATA by THROWING, the same
-            # way it reports a real failure, so the exception has to be read
-            # rather than treated uniformly. The Win32 DNS codes distinguish
-            # them: 9003 DNS_ERROR_RCODE_NAME_ERROR (NXDOMAIN) and 9501
-            # DNS_INFO_NO_RECORDS (NODATA) are authoritative "no record";
-            # 9002 SERVFAIL, 1460 timeout and anything else are not.
+            # Resolve-DnsName reports NXDOMAIN and NODATA in one of two
+            # shapes: by THROWING, the same way it reports a real failure, or
+            # (NODATA) by returning only the Authority-section SOA, which the
+            # Section filter above reduces to an empty answer. The throw has
+            # to be read rather than treated uniformly. The Win32 DNS codes
+            # distinguish absence from failure: 9003 DNS_ERROR_RCODE_NAME_ERROR
+            # (NXDOMAIN) and 9501 DNS_INFO_NO_RECORDS (NODATA) are
+            # authoritative "no record"; 9002 SERVFAIL, 1460 timeout and
+            # anything else are not.
             #
             # The first version of this change mapped every throw to
             # LookupFailed. On a workstation where DoH is blocked — which the

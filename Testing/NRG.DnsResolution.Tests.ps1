@@ -116,6 +116,30 @@ Describe 'Resolve-NRGDns — a failed lookup is not an absent record' {
         $o | Should -Be 'LookupFailed'
     }
 
+    It 'reports LookupFailed, not NoRecord, when Status is present but null' {
+        # `$null -as [int]` is 0, so a body carrying "Status": null read as
+        # NoError and became an authoritative NoRecord — contradicting the
+        # rule that a body with no readable Status is a failure.
+        Mock Invoke-RestMethod { [pscustomobject]@{ Status = $null; Answer = @() } }
+        $o = ''
+        $null = @(Resolve-NRGDns -Name 'example.com' -Type 'TXT' -Outcome ([ref]$o))
+        $o | Should -Be 'LookupFailed'
+    }
+
+    It 'falls through to the second provider when the first returns a null Status' {
+        $script:calls4 = 0
+        Mock Invoke-RestMethod {
+            $script:calls4++
+            if ($script:calls4 -eq 1) { [pscustomobject]@{ Status = $null } }
+            else { script:DohAnswer '"v=spf1 -all"' }
+        }
+        $o = ''
+        $r = @(Resolve-NRGDns -Name 'example.com' -Type 'TXT' -Outcome ([ref]$o))
+        $script:calls4 | Should -Be 2
+        $o             | Should -Be 'Answered'
+        $r[0]          | Should -Be 'v=spf1 -all'
+    }
+
     It 'names every provider that failed, and why, through -Reason' {
         # The evaluator's "every resolver failed" is only actionable if the
         # results JSON says what failed. Previously nothing did.
@@ -309,6 +333,45 @@ Describe 'Resolve-NRGDns — the Resolve-DnsName fallback reads the Win32 DNS co
         $r = @(Resolve-NRGDns -Name 'example.com' -Type 'TXT' -Outcome ([ref]$o))
         $o    | Should -Be 'Answered'
         $r[0] | Should -Be 'v=spf1 include:x -all'
+    }
+
+    It 'reports NoRecord, not Answered, when NODATA arrives as an Authority-section SOA' {
+        # Resolve-DnsName returns every record on the wire. A NODATA response
+        # carries the zone's SOA in the Authority section (RFC 2308 §3), and
+        # the `[string]$_` branch stringified it into a truthy "record", so a
+        # DS lookup on an unsigned zone reported Answered — DNS-1.6 scored
+        # Satisfied on a DoH-blocked workstation.
+        function global:Resolve-DnsName {
+            [pscustomobject]@{ Name = 'example.com'; Type = 'SOA'; Section = 'Authority'; TTL = 3600; PrimaryServer = 'ns1.example.com' }
+        }
+        $o = ''
+        $r = @(Resolve-NRGDns -Name 'example.com' -Type 'DS' -Outcome ([ref]$o))
+        $o       | Should -Be 'NoRecord'
+        $r.Count | Should -Be 0
+    }
+
+    It 'ignores Answer-section rows of a different type than the one requested' {
+        # The DoH path filters by type; the fallback must too, or a CNAME
+        # chain's intermediate rows count as the requested record.
+        function global:Resolve-DnsName {
+            [pscustomobject]@{ Name = 'example.com'; Type = 'A'; Section = 'Answer'; IPAddress = '192.0.2.1' }
+        }
+        $o = ''
+        $r = @(Resolve-NRGDns -Name 'example.com' -Type 'DS' -Outcome ([ref]$o))
+        $o       | Should -Be 'NoRecord'
+        $r.Count | Should -Be 0
+    }
+
+    It 'still returns the Answer-section row of the requested type alongside Authority rows' {
+        function global:Resolve-DnsName {
+            [pscustomobject]@{ Name = 'sel1._domainkey.example.com'; Type = 'CNAME'; Section = 'Answer'; NameHost = 'sel1.dkim.provider.example' }
+            [pscustomobject]@{ Name = 'example.com'; Type = 'SOA'; Section = 'Authority'; PrimaryServer = 'ns1.example.com' }
+        }
+        $o = ''
+        $r = @(Resolve-NRGDns -Name 'sel1._domainkey.example.com' -Type 'CNAME' -Outcome ([ref]$o))
+        $o       | Should -Be 'Answered'
+        $r.Count | Should -Be 1
+        $r[0]    | Should -Be 'sel1.dkim.provider.example'
     }
 }
 
