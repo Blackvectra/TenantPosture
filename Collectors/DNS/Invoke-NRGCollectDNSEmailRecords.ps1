@@ -199,6 +199,23 @@ function Invoke-NRGCollectDNSEmailRecords {
             # skip the long-tail sub-steps (TLS probe, crt.sh) once exceeded.
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
+            # Records a lookup outcome on the current domain entry. On a failure
+            # the reason goes where an operator will look for it — the
+            # per-domain Errors list (rendered in the report) and the
+            # Exceptions array — because Resolve-NRGDns never throws, so
+            # previously nothing recorded WHY every resolver failed and the
+            # evaluator's "did not complete" was undiagnosable.
+            $recordLookup = {
+                param([string] $Key, [string] $Outcome, [string] $Reason)
+                $d.LookupStatus[$Key] = $Outcome
+                if ($Outcome -eq 'LookupFailed') {
+                    $d.Errors += "${Key}: lookup did not complete — $Reason"
+                    if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                        Register-NRGException -Source 'DNS-Resolve' -Message "[$domain] ${Key}: $Reason"
+                    }
+                }
+            }
+
             $d = @{
                 Domain  = $domain
                 # Per-record-type resolution outcome: Answered / NoRecord /
@@ -206,7 +223,20 @@ function Invoke-NRGCollectDNSEmailRecords {
                 # FAILED lookup reported as absence would tell a client their
                 # email authentication is missing when it is not. Evaluators
                 # consult this before scoring an absent record.
-                LookupStatus = @{}
+                # Initialised to LookupFailed for every gated record, not left
+                # empty. Test-NRGDnsLookupSucceeded reads an ABSENT key as
+                # collected (so pre-change result JSON keeps its behaviour), and
+                # the first version assigned each key only after its parse
+                # pipeline — so a throw between the resolver returning and that
+                # line left the key absent and the gate fail-OPEN on a live
+                # run. A key can now only move from LookupFailed to something
+                # better. [ordered] because this serialises into the results
+                # JSON and key order must not differ between runs.
+                LookupStatus = [ordered]@{
+                    SPF = 'LookupFailed'; DKIM = 'LookupFailed'; DMARC = 'LookupFailed'
+                    MTASTS = 'LookupFailed'; TLSRPT = 'LookupFailed'; DNSSEC = 'LookupFailed'
+                    MX = 'LookupFailed'; CAA = 'LookupFailed'
+                }
                 SPF     = $null
                 DKIM    = @{
                     Selector1       = $null
@@ -249,10 +279,10 @@ function Invoke-NRGCollectDNSEmailRecords {
             # a PUBLIC resolver so split-DNS / corporate resolvers can't hide a
             # published record (both were real false-"no SPF" causes).
             try {
-                $spfOutcome = ''
-                $spfRecord = @(Resolve-NRGDns -Name $domain -Type TXT -Outcome ([ref]$spfOutcome)) |
+                $spfOutcome = ''; $spfReason = ''
+                $spfRecord = @(Resolve-NRGDns -Name $domain -Type TXT -Outcome ([ref]$spfOutcome) -Reason ([ref]$spfReason)) |
                     Where-Object { $_ -like 'v=spf1*' } | Select-Object -First 1
-                $d.LookupStatus['SPF'] = $spfOutcome
+                & $recordLookup 'SPF' $spfOutcome $spfReason
                 if ($spfRecord) { $d.SPF = [string]$spfRecord }
             } catch {
                 $d.Errors += "SPF: $($_.Exception.Message)"
@@ -303,7 +333,13 @@ function Invoke-NRGCollectDNSEmailRecords {
                 }
             }
 
+            # Per-selector outcome, then worst-of across selectors. The verdict
+            # compares selector1 against selector2, so ONE failed selector can
+            # turn a genuine Satisfied into a false Partial — a failure on any
+            # selector makes the whole DKIM verdict unassessable.
+            $dkimSelectorOutcomes = @()
             foreach ($sel in $dkimSelectors) {
+                $selOutcome = 'LookupFailed'
                 try {
                     $dkimFqdn = "${sel}._domainkey.${domain}"
                     # Microsoft 365 publishes DKIM as a CNAME
@@ -313,10 +349,24 @@ function Invoke-NRGCollectDNSEmailRecords {
                     # reported "no DKIM" on every one. Check CNAME first (the M365
                     # case), then fall back to a direct TXT key (custom/third-party
                     # DKIM). Either present => DKIM is published for this selector.
-                    $dkimVal = @(Resolve-NRGDns -Name $dkimFqdn -Type CNAME) | Select-Object -First 1
+                    $cnameOutcome = ''; $cnameReason = ''; $txtOutcome = ''; $txtReason = ''
+                    $dkimVal = @(Resolve-NRGDns -Name $dkimFqdn -Type CNAME -Outcome ([ref]$cnameOutcome) -Reason ([ref]$cnameReason)) |
+                        Select-Object -First 1
                     if (-not $dkimVal) {
-                        $dkimVal = @(Resolve-NRGDns -Name $dkimFqdn -Type TXT) |
+                        $dkimVal = @(Resolve-NRGDns -Name $dkimFqdn -Type TXT -Outcome ([ref]$txtOutcome) -Reason ([ref]$txtReason)) |
                             Where-Object { $_ -like 'v=DKIM1*' -or $_ -like '*p=*' } | Select-Object -First 1
+                    }
+                    # A record from either lookup is an answer. A failure on
+                    # either with no record is a failure. Only two clean
+                    # "no record" answers mean the selector is absent.
+                    $selOutcome = if ($dkimVal) { 'Answered' }
+                                  elseif ($cnameOutcome -eq 'LookupFailed' -or $txtOutcome -eq 'LookupFailed') { 'LookupFailed' }
+                                  else { 'NoRecord' }
+                    if ($selOutcome -eq 'LookupFailed') {
+                        $d.Errors += "DKIM ${sel}: lookup did not complete — CNAME: $cnameReason | TXT: $txtReason"
+                        if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                            Register-NRGException -Source 'DNS-Resolve' -Message "[$domain] DKIM ${sel}: CNAME: $cnameReason | TXT: $txtReason"
+                        }
                     }
                     if ($dkimVal) {
                         if     ($sel -eq 'selector1') { $d.DKIM.Selector1 = [string]$dkimVal }
@@ -324,14 +374,18 @@ function Invoke-NRGCollectDNSEmailRecords {
                         else { $d.DKIM.CustomSelectors += @{ Selector = $sel; Record = [string]$dkimVal } }
                     }
                 } catch { }  # DKIM not found on this selector — non-fatal
+                $dkimSelectorOutcomes += $selOutcome
             }
+            $d.LookupStatus['DKIM'] = if ($dkimSelectorOutcomes -contains 'LookupFailed') { 'LookupFailed' }
+                                       elseif ($dkimSelectorOutcomes -contains 'Answered') { 'Answered' }
+                                       else { 'NoRecord' }
 
             # DMARC
             try {
-                $dmarcOutcome = ''
-                $dmarcMatch = @(Resolve-NRGDns -Name "_dmarc.$domain" -Type TXT -Outcome ([ref]$dmarcOutcome)) |
+                $dmarcOutcome = ''; $dmarcReason = ''
+                $dmarcMatch = @(Resolve-NRGDns -Name "_dmarc.$domain" -Type TXT -Outcome ([ref]$dmarcOutcome) -Reason ([ref]$dmarcReason)) |
                     Where-Object { $_ -like 'v=DMARC1*' } | Select-Object -First 1
-                $d.LookupStatus['DMARC'] = $dmarcOutcome
+                & $recordLookup 'DMARC' $dmarcOutcome $dmarcReason
                 if ($dmarcMatch) {
                     $dmarcStr     = [string]$dmarcMatch
                     $d.DMARC      = $dmarcStr
@@ -350,10 +404,10 @@ function Invoke-NRGCollectDNSEmailRecords {
 
             # MTA-STS DNS record
             try {
-                $mtaStsOutcome = ''
-                $mtaStsMatch = @(Resolve-NRGDns -Name "_mta-sts.$domain" -Type TXT -Outcome ([ref]$mtaStsOutcome)) |
+                $mtaStsOutcome = ''; $mtaStsReason = ''
+                $mtaStsMatch = @(Resolve-NRGDns -Name "_mta-sts.$domain" -Type TXT -Outcome ([ref]$mtaStsOutcome) -Reason ([ref]$mtaStsReason)) |
                     Where-Object { $_ -like 'v=STSv1*' } | Select-Object -First 1
-                $d.LookupStatus['MTASTS'] = $mtaStsOutcome
+                & $recordLookup 'MTASTS' $mtaStsOutcome $mtaStsReason
                 if ($mtaStsMatch) { $d.MTASTS.DNSRecord = [string]$mtaStsMatch }
             } catch { }
 
@@ -394,31 +448,31 @@ function Invoke-NRGCollectDNSEmailRecords {
 
             # TLS-RPT
             try {
-                $tlsRptOutcome = ''
-                $tlsRptMatch = @(Resolve-NRGDns -Name "_smtp._tls.$domain" -Type TXT -Outcome ([ref]$tlsRptOutcome)) |
+                $tlsRptOutcome = ''; $tlsRptReason = ''
+                $tlsRptMatch = @(Resolve-NRGDns -Name "_smtp._tls.$domain" -Type TXT -Outcome ([ref]$tlsRptOutcome) -Reason ([ref]$tlsRptReason)) |
                     Where-Object { $_ -like 'v=TLSRPTv1*' } | Select-Object -First 1
-                $d.LookupStatus['TLSRPT'] = $tlsRptOutcome
+                & $recordLookup 'TLSRPT' $tlsRptOutcome $tlsRptReason
                 if ($tlsRptMatch) { $d.TLSRPT = [string]$tlsRptMatch }
             } catch { }
 
             # DNSSEC (DS record presence at parent zone)
             try {
-                $dsOutcome = ''
-                $dsRecords = @(Resolve-NRGDns -Name $domain -Type DS -Outcome ([ref]$dsOutcome))
-                $d.LookupStatus['DNSSEC'] = $dsOutcome
+                $dsOutcome = ''; $dsReason = ''
+                $dsRecords = @(Resolve-NRGDns -Name $domain -Type DS -Outcome ([ref]$dsOutcome) -Reason ([ref]$dsReason))
+                & $recordLookup 'DNSSEC' $dsOutcome $dsReason
                 if ($dsRecords.Count -gt 0) { $d.DNSSEC = $true }
             } catch { }
 
             # MX — DoH returns each answer as 'PREF exchange.' e.g. '10 host.'
             try {
-                $mxOutcome = ''
-                $d.MX = @(@(Resolve-NRGDns -Name $domain -Type MX -Outcome ([ref]$mxOutcome)) | ForEach-Object {
+                $mxOutcome = ''; $mxReason = ''
+                $d.MX = @(@(Resolve-NRGDns -Name $domain -Type MX -Outcome ([ref]$mxOutcome) -Reason ([ref]$mxReason)) | ForEach-Object {
                     $parts = ([string]$_).Trim() -split '\s+', 2
                     if ($parts.Count -eq 2) {
                         @{ Preference = [int]$parts[0]; Exchange = $parts[1].TrimEnd('.') }
                     }
                 } | Where-Object { $_ })
-                $d.LookupStatus['MX'] = $mxOutcome
+                & $recordLookup 'MX' $mxOutcome $mxReason
             } catch { }
 
             # ── CAA records (RFC 8659) ────────────────────────────────────────
@@ -431,14 +485,14 @@ function Invoke-NRGCollectDNSEmailRecords {
             # modules, so CAA was never actually checked. DoH returns each record
             # as 'FLAGS TAG "VALUE"', e.g. '0 issue "digicert.com"'.
             try {
-                $caaOutcome = ''
-                $caaParsed = @(@(Resolve-NRGDns -Name $domain -Type CAA -Outcome ([ref]$caaOutcome)) | ForEach-Object {
+                $caaOutcome = ''; $caaReason = ''
+                $caaParsed = @(@(Resolve-NRGDns -Name $domain -Type CAA -Outcome ([ref]$caaOutcome) -Reason ([ref]$caaReason)) | ForEach-Object {
                     $m = [regex]::Match([string]$_, '^\s*(\d+)\s+(\w+)\s+"?([^"]*)"?\s*$')
                     if ($m.Success) {
                         @{ Flags = [int]$m.Groups[1].Value; Tag = $m.Groups[2].Value; Value = $m.Groups[3].Value.Trim() }
                     }
                 } | Where-Object { $_ })
-                $d.LookupStatus['CAA'] = $caaOutcome
+                & $recordLookup 'CAA' $caaOutcome $caaReason
                 if ($caaParsed.Count -gt 0) {
                     $d.CAA.Present = $true
                     $d.CAA.Records = $caaParsed
@@ -632,9 +686,30 @@ function Invoke-NRGCollectDNSEmailRecords {
         $result.Data.DomainCount = $domainResults.Count
         $result.Success         = $true
 
+        # A run in which lookups failed is not a collected run, whatever the
+        # domain count says. Before this the coverage table showed DNS as fully
+        # collected, the batch summary reported success and the run exited 0
+        # even when every lookup on every domain came back LookupFailed and all
+        # ten DNS controls reported NotApplicable.
+        $gatedRecords       = @('SPF', 'DKIM', 'DMARC', 'MTASTS', 'TLSRPT', 'DNSSEC', 'CAA')
+        $domainsWithFailure = 0
+        $domainsAllFailed   = 0
+        $failedRecordTypes  = [System.Collections.Generic.HashSet[string]]::new()
+        $entries = if ($domainResults -is [System.Collections.IDictionary]) { @($domainResults.Values) } else { @($domainResults) }
+        foreach ($entry in $entries) {
+            $ls = Get-NRGObjectField -Item $entry -Key 'LookupStatus' -Default $null
+            if ($null -eq $ls) { continue }
+            $failedHere = @($gatedRecords | Where-Object { [string](Get-NRGObjectField -Item $ls -Key $_ -Default '') -eq 'LookupFailed' })
+            if ($failedHere.Count -gt 0) { $domainsWithFailure++; foreach ($k in $failedHere) { $null = $failedRecordTypes.Add($k) } }
+            if ($failedHere.Count -eq $gatedRecords.Count) { $domainsAllFailed++ }
+        }
+        $coverageStatus = if ($entries.Count -gt 0 -and $domainsAllFailed -eq $entries.Count) { 'Failed' }
+                          elseif ($domainsWithFailure -gt 0) { 'Partial' }
+                          else { 'Collected' }
+        $coverageNote = if ($coverageStatus -eq 'Collected') { "$($domainResults.Count) domains checked" }
+                        else { "$($domainResults.Count) domains checked; lookups did not complete on $domainsWithFailure ($(@($failedRecordTypes) -join ', ')) — see Exceptions" }
         if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
-            Register-NRGCoverage -Family 'DNS-EmailRecords' -Status 'Collected' `
-                -Note "$($domainResults.Count) domains checked"
+            Register-NRGCoverage -Family 'DNS-EmailRecords' -Status $coverageStatus -Note $coverageNote
         }
 
     } catch {

@@ -17,8 +17,21 @@ Accuracy + hardening pass (targeting v4.13.0):
   authoritative "no record"; anything else falls through to the next provider.
   The resolver gained an optional `-Outcome` returning
   `Answered` / `NoRecord` / `LookupFailed`, the collector records it per record
-  type in `LookupStatus`, and `Test-NRGDnsLookupSucceeded` gates the six
-  evaluators that score absence so a failed lookup reports `NotApplicable`.
+  type in `LookupStatus`, and `Add-NRGDnsLookupFailedFinding` gates the seven
+  evaluators that score absence (SPF, DKIM, DMARC, MTA-STS, TLS-RPT, DNSSEC,
+  CAA) so a failed lookup reports `NotApplicable`, with the control's NIST
+  citations so the finding still reaches the family rollup. Review of the first
+  version found four holes, all closed: a DoH body with no readable `Status`
+  (proxy block page, captive portal) was read as `NoRecord` and never fell
+  through; the `Resolve-DnsName` fallback mapped NXDOMAIN to `LookupFailed`
+  (it throws Win32 9003/9501 for absence — now `NoRecord`), which would have
+  made every DNS control unable to report a Gap wherever DoH is blocked;
+  `LookupStatus` was assigned after each parse pipeline, so a throw in between
+  left the gate fail-open on a live run (now initialised to `LookupFailed`);
+  and the DKIM evaluator was not gated at all. `-Reason` now carries which
+  providers failed and why into `$d.Errors` and the Exceptions array, and DNS
+  coverage registers `Partial`/`Failed` instead of `Collected` on a run in
+  which lookups did not complete.
   Absent `LookupStatus` counts as collected, so replayed older JSON is
   unaffected. The multi-segment TXT join was checked and is correct — a long
   SPF or DMARC record split across character-strings is reassembled before
