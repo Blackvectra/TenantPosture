@@ -610,6 +610,65 @@ function Publish-NRGAssessmentHTML {
 "@
     }
 
+    # ── Assessment scope and limitations ─────────────────────────────────────
+    # Sits immediately under the score, because the score is meaningless
+    # without it: a control that silently stopped producing a verdict is
+    # excluded from the denominator, so the number goes UP when the tool goes
+    # blind. This section is the only place that says so.
+    $scopeHtml = ''
+    if (Get-Command Get-NRGAssessmentScope -ErrorAction SilentlyContinue) {
+        try {
+            $scope = Get-NRGAssessmentScope -Findings $Findings -LicenseProfile $licProfile
+        } catch {
+            Write-Verbose "Assessment scope section skipped: $($_.Exception.Message)"
+            $scope = $null
+        }
+        if ($scope -and $scope.Available) {
+            $blindCount = $scope.CollectionIncomplete.Count + $scope.NoResult.Count
+            $tiles = @(
+                "<div class='scope-tile'><div class='scope-n'>$($scope.ScoredControls)</div><div class='scope-l'>Controls scored</div></div>"
+                "<div class='scope-tile$(if($blindCount -gt 0){' warn'})'><div class='scope-n$(if($blindCount -gt 0){' warn'})'>$blindCount</div><div class='scope-l'>Could not be assessed</div></div>"
+                "<div class='scope-tile'><div class='scope-n'>$($scope.NoProgrammaticCheck.Count)</div><div class='scope-l'>Manual review required</div></div>"
+                "<div class='scope-tile'><div class='scope-n'>$($scope.LicenceBlocked.Count)</div><div class='scope-l'>Licence gated</div></div>"
+            ) -join ''
+
+            $limRows = ($scope.Limitations | ForEach-Object { "<li>$(hx $_)</li>" }) -join ''
+
+            # The itemised lists are collapsed: the counts and the plain-language
+            # limitations are what a client reads; the control ids are what the
+            # engineer re-running the assessment needs.
+            $detBlocks = ''
+            foreach ($grp in @(
+                @{ Label = 'Controls that could not be assessed — data did not collect'; Items = $scope.CollectionIncomplete }
+                @{ Label = 'Controls that produced no result at all'; Items = $scope.NoResult }
+                @{ Label = 'Controls with no automated test — manual review'; Items = $scope.NoProgrammaticCheck }
+            )) {
+                $items = @($grp.Items)
+                if ($items.Count -eq 0) { continue }
+                $ids = ($items | ForEach-Object { hx $_.ControlId }) -join ', '
+                $detBlocks += "<details class='scope-det'><summary>$(hx $grp.Label) ($($items.Count))</summary><div class='scope-ids'>$ids</div></details>"
+            }
+            if (@($scope.CoverageIssues).Count -gt 0) {
+                $covRows = ($scope.CoverageIssues | ForEach-Object { "$(hx $_.Family) — $(hx $_.Status): $(hx $_.Note)" }) -join '<br>'
+                $detBlocks += "<details class='scope-det'><summary>Collectors that did not complete ($(@($scope.CoverageIssues).Count))</summary><div class='scope-ids'>$covRows</div></details>"
+            }
+
+            $scopeHtml = @"
+<div class='card mt' id='scope'>
+  <div class='card-hd'>
+    <div><div class='card-label'>Assessment Scope and Limitations</div><div class='card-sub'>What this assessment covered, and what it did not</div></div>
+    <div class='lic-badge'>$($scope.ScoredControls) of $($scope.TotalControls) scored</div>
+  </div>
+  <div class='scope-body'>
+    <div class='scope-grid'>$tiles</div>
+    <ul class='scope-lim'>$limRows</ul>
+    $detBlocks
+  </div>
+</div>
+"@
+        }
+    }
+
     # ── License card HTML ────────────────────────────────────────────────────
     $licCard = ''
     if ($licGroups.Count -gt 0) {
@@ -1042,6 +1101,18 @@ th.nf-n{text-align:right}
 .lic-body{padding:18px 24px;display:flex;flex-direction:column;gap:14px}
 .lic-alert{display:flex;align-items:flex-start;gap:14px;padding:14px 18px;background:#fffbeb;border:1px solid #fde68a;border-radius:9px;font-size:.82rem;line-height:1.65;color:#374151}
 .lic-ico{font-size:1.3rem;margin-top:1px;flex-shrink:0}
+.scope-body{padding:18px 24px;display:flex;flex-direction:column;gap:16px}
+.scope-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.scope-tile{padding:12px 14px;border:1px solid var(--bdr);border-radius:8px;background:#f8fafd}
+.scope-tile.warn{background:#fffbeb;border-color:#fde68a}
+.scope-n{font-size:1.35rem;font-weight:700;color:var(--txt);line-height:1.2}
+.scope-n.warn{color:var(--warn)}
+.scope-l{font-size:.7rem;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin-top:3px}
+.scope-lim{margin:0;padding-left:18px;font-size:.82rem;line-height:1.7;color:#374151}
+.scope-lim li{margin-bottom:5px}
+.scope-det{font-size:.78rem;line-height:1.6;color:#374151}
+.scope-det summary{cursor:pointer;font-weight:600;color:var(--txt);font-size:.8rem;padding:6px 0}
+.scope-ids{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.72rem;color:var(--mut);word-break:break-word;padding:4px 0 8px}
 .lic-rows{display:flex;flex-direction:column;gap:7px}
 .lic-row{display:flex;align-items:center;justify-content:space-between;padding:9px 16px;background:#f8fafd;border-radius:7px;border:1px solid var(--bdr)}
 .lic-tier{font-size:.8rem;font-weight:600;color:var(--txt)}
@@ -1192,6 +1263,7 @@ th.nf-n{text-align:right}
   </div>
   <div class="hdr-nav">
     <span class="nav-a" data-goto="exec">Overview</span>
+    $(if($scopeHtml){'<span class="nav-a" data-goto="scope">Scope &amp; Limits</span>'})
     <span class="nav-a" data-goto="fw-section">Frameworks</span>
     $(if($nistHtml){'<span class="nav-a" data-goto="nist-families">NIST 800-53</span>'})
     $(if($physHtml){'<span class="nav-a" data-goto="nist-physical">Physical &amp; Device</span>'})
@@ -1247,6 +1319,8 @@ th.nf-n{text-align:right}
     <div class="wl-grid">$wlGrid</div>
   </div>
 </div>
+
+$scopeHtml
 
 $riskHtml
 
