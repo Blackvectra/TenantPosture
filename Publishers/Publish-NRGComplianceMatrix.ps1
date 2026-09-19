@@ -174,7 +174,7 @@ function Publish-NRGComplianceMatrix {
             # OneDrive folder is a window in which a co-resident process can read CA
             # policies, admin UPNs, OAuth grants and DMARC records. Hardening travels
             # with the terminal write so no caller can forget it. The Out-File fallback
-            # preserves behaviour if Lib/ has not been dot-sourced.
+            # preserves behavior if Lib/ has not been dot-sourced.
         if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
             Set-NRGSensitiveFileContent -Path $tmpJson -Content ($payload | ConvertTo-Json -Depth 6 -Compress)
         } else {
@@ -529,7 +529,7 @@ if phys_rows:
 # NIST 800-53 control-family rollup sheet.
 # The 'NIST 800-53' sheet above lists findings; this one aggregates them by
 # 800-53 control FAMILY, which is the unit an 800-53 / FedRAMP / CMMC reader
-# organises their own POA&M around. A finding citing controls in two families
+# organizes their own POA&M around. A finding citing controls in two families
 # counts in both, so Assessed does not sum to the assessment total.
 NIST_FAMILY_NAMES = {
     'AC':'Access Control','AT':'Awareness and Training','AU':'Audit and Accountability',

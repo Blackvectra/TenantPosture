@@ -2,7 +2,7 @@
 #
 # NRG.FrameworkDefault.Tests.ps1
 #
-# Pins the one deliberate behavioural difference between the two twins.
+# Pins the one deliberate behavioral difference between the two twins.
 #
 # NRG defaults its report to NIST. The other repo defaults to All.
 # Everything else in these two codebases is mirrored line for line, which makes
@@ -51,7 +51,7 @@ Describe 'Report framework default' {
 
     It 'the PUBLISHER default stays multi-framework in both repos' {
         # Only the entry point differs. Moving the narrowing into the publisher
-        # would change behaviour for every direct caller and for the other twin.
+        # would change behavior for every direct caller and for the other twin.
         $cmd = Get-Command Publish-NRGAssessmentHTML
         $default = $cmd.Parameters['Frameworks'].Attributes |
             Where-Object { $_ -is [System.Management.Automation.ValidateNotNullOrEmptyAttribute] }

@@ -133,7 +133,7 @@
           "NistControl": "AC-20",
           "NistTitle": "Use of External Systems",
           "Scope": "Hybrid",
-          "DeviceAspect": "Access from devices the organisation does not own or manage — home computers, contractor laptops, kiosks.",
+          "DeviceAspect": "Access from devices the organization does not own or manage — home computers, contractor laptops, kiosks.",
           "EvidenceControls": ["INT-1.2", "SPO-2.1"],
           "OffTenantEvidence": "The written policy defining what staff and contractors may do from personal or third-party equipment, and the contractual terms binding contractors to it. Conditional Access shows what is technically permitted; it does not show what has been agreed.",
           "Options": [
@@ -146,7 +146,7 @@
           "NistControl": "AC-17",
           "NistTitle": "Remote Access",
           "Scope": "Hybrid",
-          "DeviceAspect": "Remote sessions into the environment are authorised, monitored and cryptographically protected — including RMM and remote-support tooling.",
+          "DeviceAspect": "Remote sessions into the environment are authorized, monitored and cryptographically protected — including RMM and remote-support tooling.",
           "EvidenceControls": ["INT-1.2"],
           "OffTenantEvidence": "VPN, firewall and RMM configuration, and the list of accounts holding remote-support rights. These are the highest-value credentials in an MSP-managed environment and none of them are visible from Microsoft 365.",
           "Options": [
@@ -194,7 +194,7 @@
           "DeviceAspect": "Restricting what may be copied to USB drives and other removable media from a managed endpoint.",
           "EvidenceControls": ["DEF-4.5"],
           "Options": [
-            "Endpoint DLP policy blocking or auditing copies of labelled or sensitive content to removable media.",
+            "Endpoint DLP policy blocking or auditing copies of labeled or sensitive content to removable media.",
             "Intune device configuration profile disabling removable storage outright where the role does not need it.",
             "Defender for Endpoint device control, allowing approved encrypted drives by hardware ID while blocking everything else."
           ]
@@ -216,7 +216,7 @@
           "NistTitle": "Media Transport",
           "Scope": "Attested",
           "DeviceAspect": "Media and devices moving off-site — including laptops going home and drives going to a backup vault.",
-          "OffTenantEvidence": "Transport authorisation records, and confirmation that media leaving the site is encrypted at rest before it moves.",
+          "OffTenantEvidence": "Transport authorization records, and confirmation that media leaving the site is encrypted at rest before it moves.",
           "Options": [
             "Encrypt before transport as an unconditional rule, so a transport failure is not a disclosure.",
             "A documented custody record for anything leaving the site.",
@@ -227,12 +227,12 @@
           "NistControl": "MP-6",
           "NistTitle": "Media Sanitization",
           "Scope": "Attested",
-          "DeviceAspect": "Devices and drives are sanitised before disposal, resale, or return at end of lease.",
-          "OffTenantEvidence": "Certificates of destruction or sanitisation records for disposed equipment, and the procedure that produces them. This is one of the most commonly missing pieces of evidence in an MSP-managed environment, because disposal usually happens outside the managed-service scope.",
+          "DeviceAspect": "Devices and drives are sanitized before disposal, resale, or return at end of lease.",
+          "OffTenantEvidence": "Certificates of destruction or sanitization records for disposed equipment, and the procedure that produces them. This is one of the most commonly missing pieces of evidence in an MSP-managed environment, because disposal usually happens outside the managed-service scope.",
           "Options": [
             "Cryptographic erase on self-encrypting and BitLocker-protected drives, which is fast and verifiable when the key is destroyed.",
             "A certified disposal vendor issuing per-asset certificates of destruction, retained with the asset register.",
-            "Intune remote wipe as the first step for a device that will not be physically recovered — noting that a remote wipe is a request, not a guarantee, and does not substitute for sanitisation of recovered hardware."
+            "Intune remote wipe as the first step for a device that will not be physically recovered — noting that a remote wipe is a request, not a guarantee, and does not substitute for sanitization of recovered hardware."
           ]
         },
         {
@@ -258,8 +258,8 @@
           "NistControl": "PE-2",
           "NistTitle": "Physical Access Authorizations",
           "Scope": "Attested",
-          "DeviceAspect": "Who is authorised to enter areas holding systems and media, and how that list is kept current.",
-          "OffTenantEvidence": "The current authorised-entrant list for the server room and any comms cabinet, with evidence it is reviewed and that departed staff are removed.",
+          "DeviceAspect": "Who is authorized to enter areas holding systems and media, and how that list is kept current.",
+          "OffTenantEvidence": "The current authorized-entrant list for the server room and any comms cabinet, with evidence it is reviewed and that departed staff are removed.",
           "Options": [
             "A named access list reviewed on the same schedule as privileged M365 role assignments, so the two do not drift apart.",
             "Badge or keypad access with per-person credentials rather than a shared key or code.",
@@ -357,7 +357,7 @@
           "Scope": "Hybrid",
           "DeviceAspect": "Knowing where portable assets are, and being able to act when one is not where it should be.",
           "EvidenceControls": ["INT-1.1"],
-          "OffTenantEvidence": "The asset register and the loss-reporting procedure — specifically, how quickly a lost laptop is reported and who is authorised to trigger the wipe.",
+          "OffTenantEvidence": "The asset register and the loss-reporting procedure — specifically, how quickly a lost laptop is reported and who is authorized to trigger the wipe.",
           "Options": [
             "Intune remote wipe and BitLocker key escrow, so a reported loss has an immediate technical response.",
             "A documented loss-reporting path with a target reporting time, communicated to staff.",
@@ -387,7 +387,7 @@
           "NistControl": "MA-4",
           "NistTitle": "Nonlocal Maintenance",
           "Scope": "Hybrid",
-          "DeviceAspect": "Remote maintenance sessions — the MSP's own remote access — are authorised, authenticated, and logged.",
+          "DeviceAspect": "Remote maintenance sessions — the MSP's own remote access — are authorized, authenticated, and logged.",
           "EvidenceControls": ["INT-1.2"],
           "OffTenantEvidence": "RMM and remote-support tool configuration: who holds access, whether MFA is enforced on the tool itself, and whether sessions are logged and retained.",
           "Options": [
@@ -400,11 +400,11 @@
           "NistControl": "MA-5",
           "NistTitle": "Maintenance Personnel",
           "Scope": "Attested",
-          "DeviceAspect": "The people permitted to perform maintenance are authorised, and escorted when they are not cleared for unsupervised access.",
-          "OffTenantEvidence": "The authorised maintenance-personnel list, including MSP staff and any subcontractors, and the escort rule for those without independent authorisation.",
+          "DeviceAspect": "The people permitted to perform maintenance are authorized, and escorted when they are not cleared for unsupervised access.",
+          "OffTenantEvidence": "The authorized maintenance-personnel list, including MSP staff and any subcontractors, and the escort rule for those without independent authorization.",
           "Options": [
-            "A named authorised-personnel list covering MSP staff, reviewed when staff change.",
-            "Escort requirement for vendors and subcontractors without independent authorisation.",
+            "A named authorized-personnel list covering MSP staff, reviewed when staff change.",
+            "Escort requirement for vendors and subcontractors without independent authorization.",
             "Contractual flow-down of the same requirement to any subcontractor the MSP uses."
           ]
         },

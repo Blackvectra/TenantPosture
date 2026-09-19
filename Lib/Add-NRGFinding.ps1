@@ -16,11 +16,11 @@
 
 
 # Lazy-init helper. Under Set-StrictMode -Version Latest an unset module-scope
-# variable throws on access. The .psm1 initialises these four variables at
+# variable throws on access. The .psm1 initializes these four variables at
 # module load, but when this file is dot-sourced outside the module (test
-# harness, ad-hoc REPL, Pester runtime context), the initialisation has not
+# harness, ad-hoc REPL, Pester runtime context), the initialization has not
 # run yet. This helper guarantees the state containers exist before any
-# accessor touches them, with no observable behaviour change for the normal
+# accessor touches them, with no observable behavior change for the normal
 # module-import path. (v4.6.x audit HIGH #1)
 function Initialize-NRGState {
     if (-not (Get-Variable -Name NRGFindings -Scope Script -ErrorAction SilentlyContinue)) {

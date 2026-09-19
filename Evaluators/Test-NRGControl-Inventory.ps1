@@ -20,7 +20,7 @@
 # Satisfied from an EMPTY list must gate on this first.
 #
 # Absent SectionStatus (data captured before this map existed) is treated as
-# collected so a replayed older JSON keeps its previous behaviour rather than
+# collected so a replayed older JSON keeps its previous behavior rather than
 # silently turning every inventory finding into NotApplicable.
 function Test-NRGInventorySectionCollected {
     [CmdletBinding()]

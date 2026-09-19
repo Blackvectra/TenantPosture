@@ -3,7 +3,7 @@
 # Scope: this is a PowerShell repo. CodeQL does NOT natively support
 # PowerShell (the supported set is c-cpp, csharp, go, java-kotlin,
 # javascript-typescript, python, ruby, rust, swift, actions). We therefore
-# scan only `actions` here, which analyses the GitHub-Actions workflow
+# scan only `actions` here, which analyzes the GitHub-Actions workflow
 # YAML for supply-chain weaknesses (untrusted command injection in
 # `run:` blocks, untrusted action versions, etc.).
 #

@@ -249,7 +249,7 @@ function Publish-NRGRemediationScript {
         # v4.11.1: dropped unused $titleL (the Title was rendered via the
         # raw $f.Title interpolation downstream, not via this escaped form).
         # Workload prefix: strip everything after the first hyphen+digit (per the
-        # original logic) and then strip to safe charset — defence in depth.
+        # original logic) and then strip to safe charset — defense in depth.
         $workloadL  = ([string]$f.ControlId) -replace '-\d.*$',''
         $workloadL  = $workloadL -replace "[^A-Za-z0-9_]", ''
 
@@ -375,7 +375,7 @@ function Publish-NRGRemediationScript {
     # OneDrive folder is a window in which a co-resident process can read CA
     # policies, admin UPNs, OAuth grants and DMARC records. Hardening travels
     # with the terminal write so no caller can forget it. The Out-File fallback
-    # preserves behaviour if Lib/ has not been dot-sourced.
+    # preserves behavior if Lib/ has not been dot-sourced.
     if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
         Set-NRGSensitiveFileContent -Path $OutputPath -Content $sb.ToString()
     } else {

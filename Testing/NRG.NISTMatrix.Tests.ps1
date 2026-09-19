@@ -21,7 +21,7 @@
 #      less rigorous than it is.
 #
 #   3. The document must not overstate scope. A tenant scan reaches a fraction
-#      of any 800-53 baseline. The score has to be labelled as coverage of what
+#      of any 800-53 baseline. The score has to be labeled as coverage of what
 #      was exercised, the physical section has to stay unscored, and controls
 #      that came back NotApplicable have to be named as not-assessed rather than
 #      quietly dropped — a matrix that omits what it could not evaluate reads as
@@ -177,7 +177,7 @@ Describe 'NIST 800-53 standalone matrix' {
             (Get-NRGNISTControlTitle -ControlId 'ZZ-99') | Should -BeNullOrEmpty
         }
 
-        It 'falls back to the base title, clearly marked, for an uncatalogued enhancement' {
+        It 'falls back to the base title, clearly marked, for an uncatalogd enhancement' {
             $t = Get-NRGNISTControlTitle -ControlId 'AC-2(99)'
             $t | Should -Match 'Account Management'
             $t | Should -Match 'enhancement 99'
