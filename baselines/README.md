@@ -36,7 +36,7 @@ Workload prefixes are `AAD`, `EXO`, `DEF`, `TMS`, `PVW`, `SPO`, `INT`, `PPL` and
 | Satisfied | Control requirement is fully met |
 | Partial | Control is partially implemented — remediation recommended |
 | Gap | Control requirement is not met — remediation required |
-| Not Applicable | Not assessed: licence not held, data not collected, or no automated check exists |
+| Not Applicable | Not assessed: license not held, data not collected, or no automated check exists |
 | Error | The check failed to complete |
 
 A control that could not be assessed reports **Not Applicable** and is excluded from the compliance score. It never reports Satisfied or Partial, because neither would be a verdict the tool actually computed.

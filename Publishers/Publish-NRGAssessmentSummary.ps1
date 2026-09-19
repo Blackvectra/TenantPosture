@@ -171,7 +171,7 @@ function Publish-NRGAssessmentSummary {
     # NIST SP 800-53 Rev 5 control-family coverage.
     # Sits ahead of the gap tables because a compliance reader working an
     # 800-53 / FedRAMP / CMMC assessment needs the family posture first —
-    # every other section of this summary is organised by M365 workload, which
+    # every other section of this summary is organized by M365 workload, which
     # is the engineer's lens rather than the auditor's. Rendered only when the
     # findings actually carry NIST citations, so an Email-IR or partial run
     # does not emit an empty table.
@@ -341,7 +341,7 @@ function Publish-NRGAssessmentSummary {
     # OneDrive folder is a window in which a co-resident process can read CA
     # policies, admin UPNs, OAuth grants and DMARC records. Hardening travels
     # with the terminal write so no caller can forget it. The Out-File fallback
-    # preserves behaviour if Lib/ has not been dot-sourced.
+    # preserves behavior if Lib/ has not been dot-sourced.
     if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
         Set-NRGSensitiveFileContent -Path $OutputPath -Content $sb.ToString()
     } else {

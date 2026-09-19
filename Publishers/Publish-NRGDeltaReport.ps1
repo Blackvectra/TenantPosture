@@ -12,7 +12,7 @@
 #   - Score delta
 #
 # Drift detection only fires when both the baseline AND the current run
-# include $script:NRGRawData. The orchestrator now serialises RawData into
+# include $script:NRGRawData. The orchestrator now serializes RawData into
 # every JSON output, so any baseline produced by v4.5.6+ is drift-capable.
 # Older baselines degrade gracefully to a "baseline missing raw data" notice.
 #
@@ -484,7 +484,7 @@ function Publish-NRGDeltaReport {
     # OneDrive folder is a window in which a co-resident process can read CA
     # policies, admin UPNs, OAuth grants and DMARC records. Hardening travels
     # with the terminal write so no caller can forget it. The Out-File fallback
-    # preserves behaviour if Lib/ has not been dot-sourced.
+    # preserves behavior if Lib/ has not been dot-sourced.
     if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
         Set-NRGSensitiveFileContent -Path $OutputPath -Content $sb.ToString()
     } else {

@@ -31,7 +31,7 @@ function Test-NRGAADDataAvailable {
 # synced admins" from it is a false pass on the tenant-takeover controls.
 #
 # Absent SectionStatus (older captured data) is treated as collected so a
-# replayed results JSON keeps its previous behaviour.
+# replayed results JSON keeps its previous behavior.
 function Test-NRGRoleSectionCollected {
     [CmdletBinding()]
     param(

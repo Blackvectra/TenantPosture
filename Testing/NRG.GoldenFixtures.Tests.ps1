@@ -1191,7 +1191,7 @@ Describe 'Golden fixtures — ransomware attack path' {
                 )
             })
             (GetVerdict3 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2').State | Should -Be 'Satisfied' `
-                -Because 'internal forwarding is normal business behaviour — flagging it would bury the real attacker rule in noise'
+                -Because 'internal forwarding is normal business behavior — flagging it would bury the real attacker rule in noise'
         }
     }
 }
