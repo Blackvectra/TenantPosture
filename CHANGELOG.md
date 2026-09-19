@@ -17,8 +17,51 @@ Accuracy + hardening pass (targeting v4.13.0):
   authoritative "no record"; anything else falls through to the next provider.
   The resolver gained an optional `-Outcome` returning
   `Answered` / `NoRecord` / `LookupFailed`, the collector records it per record
-  type in `LookupStatus`, and `Test-NRGDnsLookupSucceeded` gates the six
-  evaluators that score absence so a failed lookup reports `NotApplicable`.
+  type in `LookupStatus`, and `Add-NRGDnsLookupFailedFinding` gates the seven
+  evaluators that score absence (SPF, DKIM, DMARC, MTA-STS, TLS-RPT, DNSSEC,
+  CAA) so a failed lookup reports `NotApplicable`, with the control's NIST
+  citations so the finding still reaches the family rollup. Review of the first
+  version found four holes, all closed: a DoH body with no readable `Status`
+  (proxy block page, captive portal) was read as `NoRecord` and never fell
+  through; the `Resolve-DnsName` fallback mapped NXDOMAIN to `LookupFailed`
+  (it throws Win32 9003/9501 for absence — now `NoRecord`), which would have
+  made every DNS control unable to report a Gap wherever DoH is blocked;
+  `LookupStatus` was assigned after each parse pipeline, so a throw in between
+  left the gate fail-open on a live run (now initialised to `LookupFailed`);
+  and the DKIM evaluator was not gated at all. Independent verification of
+  those fixes found two more, both closed: the `Resolve-DnsName` fallback had
+  no Section/Type filter, so a NODATA response delivered as the zone's SOA in
+  the Authority section was stringified into a truthy "record" and reported
+  `Answered` — a DS lookup on an unsigned zone scored DNS-1.6 Satisfied on a
+  DoH-blocked workstation (only Answer-section rows of the requested type now
+  count); and `"Status": null` read as Status 0 because `$null -as [int]` is
+  `0` (now a failure that falls through). In the collector, `Failed` coverage
+  was unreachable for a single-domain tenant — the per-domain entry list was
+  built with the `$x = if (...) { @(...) }` trap, so the lone hashtable's
+  `.Count` was its key count and every-lookup-failed reported `Partial` on
+  the most common tenant shape; the per-record throw paths were silent (five
+  empty catches, three that never registered an exception) so "see
+  Exceptions" pointed at an empty array; and the outcome was written
+  unvalidated, so a blank would have replaced the fail-closed default and
+  opened the gate. All three closed and pinned by a new
+  `NRG.DnsCollector.Tests.ps1`, which drives the collector through a mocked
+  resolver injected into module scope — the first test to exercise the
+  collector at all. An adversarial-input pass over the resolver then closed
+  one more false verdict: the `Resolve-DnsName` fallback rendered CAA and DS
+  rows as PSObject text (`@{Section=Answer; Type=CAA; …}`), which the
+  collector's `FLAGS TAG "VALUE"` parse could never match, so a present CAA
+  record scored DNS-2.2 as "No CAA record published" wherever DoH is blocked;
+  every fallback row is now rendered in the DoH text shape and a row that
+  cannot be is a `LookupFailed`, never an `Answered` with unusable data. Same
+  pass hardened `Status` parsing (whole numbers and digit strings only —
+  `''`, `$false` and floats no longer coerce to a code; an `XmlDocument` body
+  is rejected), added Win32 9701 `DNS_ERROR_RECORD_DOES_NOT_EXIST` to the
+  absence codes, made Answer rows lacking `type`/`data` skip rather than fail
+  the provider, and fixed TXT parsing for RFC 1035 `\"` escapes and Google's
+  unquoted pre-joined form. `-Reason` now carries which
+  providers failed and why into `$d.Errors` and the Exceptions array, and DNS
+  coverage registers `Partial`/`Failed` instead of `Collected` on a run in
+  which lookups did not complete.
   Absent `LookupStatus` counts as collected, so replayed older JSON is
   unaffected. The multi-segment TXT join was checked and is correct — a long
   SPF or DMARC record split across character-strings is reassembled before
