@@ -4,6 +4,24 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **Export List Sync now exists in NRG.** `NRG.EvaluatorWiring.Tests.ps1` had
+  said since it was written that "Export List Sync checks psd1<->psm1"; the
+  twin repo had that check and this one did not. `Testing/NRG.ExportSync.Tests.ps1`
+  pins `FunctionsToExport` (psd1) to `$script:ExportedFunctions` (psm1) as a set
+  comparison in both directions with a duplicate check, requires every exported
+  name to be DEFINED somewhere under `Lib/`, `Collectors/`, `Evaluators/`,
+  `Publishers/` or `Email-IR/` (read from the AST, so it needs no Graph/EXO
+  modules to run), and pins the README's "N exported functions" to the psm1
+  count. `tools/Sync-ExportedFunctions.ps1 -Validate` runs the same check as an
+  `export-sync` CI job; `-Fix` rewrites the psd1 list from the psm1. Porting it
+  found a latent bug in the tool: `-Fix` located the end of the block with a
+  non-greedy `.*?\)`, which stopped at the first `)` anywhere — inside the
+  section comment "(Email-IR/ subtree)" — and wrote a manifest that no longer
+  parsed. The block now ends at the `)` alone on a line at the block's own
+  indentation, and the rewritten manifest is parsed on a temporary file and
+  checked against the psm1 count before the real file is touched. Mutation
+  tests confirmed the suite fails on a dropped psd1 entry and on an exported
+  name with no definition.
 - **A failed DNS lookup was reported as an absent record.** `Resolve-NRGDns`
   returned `@()` for any DoH response lacking an `Answer` and never read
   `Status` — but Cloudflare returns SERVFAIL as HTTP 200 with `Status: 2` and no

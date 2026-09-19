@@ -7,7 +7,7 @@
 # evaluator file while controls.json (and the module export lists) kept
 # referencing them — 30 AAD controls silently stopped evaluating on every
 # assessment for a month, and no gate caught it: schema validation checks the
-# JSON, Export List Sync checks psd1<->psm1, but nothing verified the
+# JSON, NRG.ExportSync.Tests.ps1 checks psd1<->psm1, but nothing verified the
 # functions actually EXIST. This suite closes that hole.
 
 Describe 'controls.json -> evaluator wiring' {
