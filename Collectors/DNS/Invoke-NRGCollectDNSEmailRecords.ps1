@@ -1,6 +1,16 @@
 #Requires -Version 7.0
 #
 # Invoke-NRGCollectDNSEmailRecords.ps1  (v4.5.6)
+# NRG Technology Services / NextLayerSec LLC
+# Author: Matthew Levorson
+#
+# Sets:         DNS-EmailRecords (Data.Domains.<domain> with per-record LookupStatus
+#               and Errors — LookupStatus is this collector's SectionStatus)
+# Consumes:     EXO-MailboxConfig (custom DKIM selectors, key creation time), optional
+# Cmdlets:      none against the tenant; Resolve-NRGDns (DoH) plus HTTPS/TLS probes
+# Dependencies: Resolve-NRGDns, Get-NRGRawData, Set-NRGRawData, Get-NRGObjectField,
+#               Register-NRGException, Register-NRGCoverage, Test-NRGSafeProbeTarget
+#
 # Collects DNS email authentication and PKI hygiene data for each accepted domain:
 #   - SPF, DKIM, DMARC, MTA-STS, TLS-RPT, DNSSEC, MX  (Phase 1)
 #   - DKIM key rotation age via EXO Get-DkimSigningConfig.KeyCreationTime
@@ -184,7 +194,11 @@ function Invoke-NRGCollectDNSEmailRecords {
             return $result
         }
 
-        $domainResults = @{}
+        # [ordered] all the way down: this map and each per-domain entry are
+        # serialised into the results JSON, and a plain hashtable's key order
+        # is unspecified, so two runs of the same tenant diffed differently
+        # for no reason. LookupStatus alone being [ordered] was not enough.
+        $domainResults = [ordered]@{}
 
         foreach ($domain in $Domains) {
             # Final validation — belt-and-suspenders even though we validated above
@@ -243,7 +257,7 @@ function Invoke-NRGCollectDNSEmailRecords {
                 }
             }
 
-            $d = @{
+            $d = [ordered]@{
                 Domain  = $domain
                 # Per-record-type resolution outcome: Answered / NoRecord /
                 # LookupFailed. An absent SPF or DMARC record is a Gap, so a

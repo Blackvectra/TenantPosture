@@ -1,9 +1,18 @@
 #Requires -Version 7.0
 #
 # Test-NRGControlDNS.ps1  (v4.6.1)
+# NRG Technology Services / NextLayerSec LLC
+# Author: Matthew Levorson
+#
 # Evaluates DNS email authentication + PKI hygiene controls.
 # SCORING ONLY — no DNS / HTTPS queries, reads from module state set by
 # Invoke-NRGCollectDNSEmailRecords.
+#
+# Consumes:     DNS-EmailRecords (Data.Domains.<domain>, incl. LookupStatus, Errors)
+# Sets:         findings only (Add-NRGFinding)
+# Cmdlets:      none (no Graph / EXO)
+# Dependencies: Get-NRGRawData, Get-NRGControlDefinitions, Get-NRGFrameworkCitations,
+#               Get-NRGObjectField, Test-NRGDnsLookupSucceeded, Add-NRGFinding
 #
 # NIST SP 800-53: SI-8, SC-8, SC-12, SC-13, SC-17, AU-6, CM-7
 # MITRE ATT&CK:   T1566, T1036.005, T1557, T1600.001, T1583.001
