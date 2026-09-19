@@ -10,7 +10,7 @@
 
 .DESCRIPTION
     The helper at Lib/Get-NRGTenantLicenseProfile.ps1 is the single source of
-    truth for license-tier detection. These tests pin the canonical behaviour:
+    truth for license-tier detection. These tests pin the canonical behavior:
 
       * SPB resolves to Business Premium (the user's reported tenant)
       * E3 / E5 / EMS chains resolve to the correct tier

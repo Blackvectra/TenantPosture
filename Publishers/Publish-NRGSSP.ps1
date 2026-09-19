@@ -204,7 +204,7 @@ function Publish-NRGSSP {
 
     $null = $sb.AppendLine('## Read this first')
     $null = $sb.AppendLine()
-    $null = $sb.AppendLine("This is a **working System Security Plan, not a finished one**. Of the $($sum['Total']) requirements in $(EscMd $Posture['Baseline']), this assessment observed **$($sum['Evidenced'])** from the Microsoft 365 tenant and the endpoints. The remaining **$($sum['AttestationRequired'])** are policy, process, physical security and personnel — no scan reaches them, and they are answered by the organisation, not by the tool.")
+    $null = $sb.AppendLine("This is a **working System Security Plan, not a finished one**. Of the $($sum['Total']) requirements in $(EscMd $Posture['Baseline']), this assessment observed **$($sum['Evidenced'])** from the Microsoft 365 tenant and the endpoints. The remaining **$($sum['AttestationRequired'])** are policy, process, physical security and personnel — no scan reaches them, and they are answered by the organization, not by the tool.")
     $null = $sb.AppendLine()
     $null = $sb.AppendLine("**$($needAnswer.Count) requirements are still unanswered.** They are listed at the end. Until each one carries a status and a narrative, this document is incomplete, and an assessor will read a blank as a gap.")
     $null = $sb.AppendLine()
@@ -320,11 +320,11 @@ function Publish-NRGSSP {
                 }
                 $null = $sb.AppendLine()
                 if ($r['NotRun'] -gt 0) {
-                    $null = $sb.AppendLine("_$($r['NotRun']) of the $($ev.Count) mapped controls produced no result this run — a skipped workload, a missing licence, or an evaluator that did not complete. Those are not passes and not failures; they are unknowns._")
+                    $null = $sb.AppendLine("_$($r['NotRun']) of the $($ev.Count) mapped controls produced no result this run — a skipped workload, a missing license, or an evaluator that did not complete. Those are not passes and not failures; they are unknowns._")
                     $null = $sb.AppendLine()
                 }
             } else {
-                $null = $sb.AppendLine('**Evidence from this assessment.** None. Nothing in a Microsoft 365 tenant or an endpoint scan evidences this requirement — it is satisfied by policy, process, physical control or personnel practice, and the evidence is whatever the organisation retains.')
+                $null = $sb.AppendLine('**Evidence from this assessment.** None. Nothing in a Microsoft 365 tenant or an endpoint scan evidences this requirement — it is satisfied by policy, process, physical control or personnel practice, and the evidence is whatever the organization retains.')
                 $null = $sb.AppendLine()
             }
 
@@ -406,7 +406,7 @@ function Publish-NRGSSP {
     $null = $sb.AppendLine()
     $null = $sb.AppendLine('---')
     $null = $sb.AppendLine()
-    $null = $sb.AppendLine("_Prepared by $(EscMd $company). This plan records the state of the system on $(EscMd $date). Statuses marked client-attested were asserted by the organisation and not verified by the assessment; statuses drawn from the assessment reflect what the tool could observe in the Microsoft 365 tenant and on scanned endpoints, which is a subset of each requirement._")
+    $null = $sb.AppendLine("_Prepared by $(EscMd $company). This plan records the state of the system on $(EscMd $date). Statuses marked client-attested were asserted by the organization and not verified by the assessment; statuses drawn from the assessment reflect what the tool could observe in the Microsoft 365 tenant and on scanned endpoints, which is a subset of each requirement._")
 
     if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
         Set-NRGSensitiveFileContent -Path $OutputPath -Content $sb.ToString()
@@ -480,11 +480,11 @@ function Publish-NRGSSP {
                     $evRows += "<tr><td class='ec'>$(Esc $e['ControlId'])</td><td class='es'>$(Esc $e['Source'])</td><td><span class='ev $sc'>$(Esc $e['State'])</span></td><td class='et'>$(Esc $e['Title'])</td></tr>"
                 }
                 $note = if ($r['NotRun'] -gt 0) {
-                    "<p class='note'>$($r['NotRun']) of the $($ev.Count) mapped controls produced no result this run &mdash; a skipped workload, a missing licence, or an evaluator that did not complete. Those are not passes and not failures; they are unknowns.</p>"
+                    "<p class='note'>$($r['NotRun']) of the $($ev.Count) mapped controls produced no result this run &mdash; a skipped workload, a missing license, or an evaluator that did not complete. Those are not passes and not failures; they are unknowns.</p>"
                 } else { '' }
                 $evHtml = "<div class='blk'><div class='lbl'>Evidence from this assessment</div><table class='ev-t'><tbody>$evRows</tbody></table>$note</div>"
             } else {
-                $evHtml = "<div class='blk'><div class='lbl'>Evidence from this assessment</div><p class='none'>None. Nothing in a Microsoft 365 tenant or an endpoint scan evidences this requirement &mdash; it is satisfied by policy, process, physical control or personnel practice, and the evidence is whatever the organisation retains.</p></div>"
+                $evHtml = "<div class='blk'><div class='lbl'>Evidence from this assessment</div><p class='none'>None. Nothing in a Microsoft 365 tenant or an endpoint scan evidences this requirement &mdash; it is satisfied by policy, process, physical control or personnel practice, and the evidence is whatever the organization retains.</p></div>"
             }
 
             $narr = if ($r['Narrative']) {
@@ -719,7 +719,7 @@ footer{color:#6b7280;font-size:.78rem;line-height:1.6;padding:0 4px;max-width:90
 <div class="wrap">
   <div class="card">
     <h2>Read this first</h2>
-    <p class="lede">This is a <strong>working System Security Plan, not a finished one</strong>. Of the $($sum['Total']) requirements in $(Esc $Posture['Baseline']), this assessment observed <strong>$($sum['Evidenced'])</strong> from the Microsoft 365 tenant and the endpoints. The remaining <strong>$($sum['AttestationRequired'])</strong> are policy, process, physical security and personnel &mdash; no scan reaches them, and they are answered by the organisation, not by the tool.</p>
+    <p class="lede">This is a <strong>working System Security Plan, not a finished one</strong>. Of the $($sum['Total']) requirements in $(Esc $Posture['Baseline']), this assessment observed <strong>$($sum['Evidenced'])</strong> from the Microsoft 365 tenant and the endpoints. The remaining <strong>$($sum['AttestationRequired'])</strong> are policy, process, physical security and personnel &mdash; no scan reaches them, and they are answered by the organization, not by the tool.</p>
     <div class="warn"><strong>$($needAnswer.Count) requirements are still unanswered.</strong> They are listed at the end. Until each one carries a status and a narrative, this document is incomplete, and an assessor will read a blank as a gap.</div>
     <p class="lede">Even where the assessment reports a requirement met, that means every control this tool maps to it passed &mdash; not that the requirement is satisfied in full. Microsoft 365 observes the tenant slice of a requirement and nothing outside it. The <em>Confidence</em> column says which case each row is in.</p>
     <div class="stats">
@@ -753,7 +753,7 @@ footer{color:#6b7280;font-size:.78rem;line-height:1.6;padding:0 4px;max-width:90
     $openHtml
   </div>
 
-  <footer>Prepared by $(Esc $company). This plan records the state of the system on $(Esc $date). Statuses marked client-attested were asserted by the organisation and not verified by the assessment; statuses drawn from the assessment reflect what the tool could observe in the Microsoft 365 tenant and on scanned endpoints, which is a subset of each requirement.</footer>
+  <footer>Prepared by $(Esc $company). This plan records the state of the system on $(Esc $date). Statuses marked client-attested were asserted by the organization and not verified by the assessment; statuses drawn from the assessment reflect what the tool could observe in the Microsoft 365 tenant and on scanned endpoints, which is a subset of each requirement.</footer>
 </div>
 </body></html>
 "@
@@ -956,7 +956,7 @@ r += 1
 n = ws.cell(row=r, column=1, value=(
     'This is a working plan, not a finished one. %d of the %d requirements were evidenced by the '
     'assessment; the other %d are policy, process, physical and personnel and are answered by the '
-    'organisation. A status left blank reads as a gap to an assessor.'
+    'organization. A status left blank reads as a gap to an assessor.'
     % (summ['Evidenced'], summ['Total'], summ['AttestationRequired'])))
 n.font = Font(size=9, italic=True, color='92400E')
 n.fill = PatternFill('solid', fgColor='FFFBEB')

@@ -2,12 +2,12 @@
   "version": "1.0",
   "purpose": "Answers the question a client actually asks when they see a gap: 'if we turn this on, what breaks?' controls.json already says what a control is, why it matters and how to remediate it. Nothing in this repo said what enabling it will DO to the people who use the tenant, and that is the question that decides whether a remediation gets scheduled or quietly dropped.",
   "note": "Impact clusters. Fourteen separate 'enable auditing' controls have the same operational impact — none — and writing fourteen paragraphs saying so would be noise pretending to be diligence. So the content lives in archetypes and every control names one. Where a control's impact genuinely differs from its archetype it carries an Override, merged over the archetype field by field. A control with no entry renders 'Operational impact not documented' rather than inheriting a default: an unwritten impact statement must never masquerade as 'no impact', because 'no impact' is the answer that gets a change approved.",
-  "fields": "Effort describes the SHAPE of the work — Single setting / Policy change / Staged rollout / Discovery first / Project / Licence purchase / Review only — and deliberately never an hour figure. An invented hour count is a promise the tool cannot keep and the first thing a client holds you to; the shape of the work is something the archetype genuinely determines, and it is what decides whether a change goes in tonight or needs a change window. Summary is the one-line answer. Users is what the people using the tenant notice. Admins is the work the change creates or removes. Watchouts is what actually goes wrong, drawn from the failure that happens in practice rather than the theoretical one. Reversible says whether backing the change out restores the previous state.",
+  "fields": "Effort describes the SHAPE of the work — Single setting / Policy change / Staged rollout / Discovery first / Project / License purchase / Review only — and deliberately never an hour figure. An invented hour count is a promise the tool cannot keep and the first thing a client holds you to; the shape of the work is something the archetype genuinely determines, and it is what decides whether a change goes in tonight or needs a change window. Summary is the one-line answer. Users is what the people using the tenant notice. Admins is the work the change creates or removes. Watchouts is what actually goes wrong, drawn from the failure that happens in practice rather than the theoretical one. Reversible says whether backing the change out restores the previous state.",
   "archetypes": {
     "none-visible": {
       "Effort": "Single setting",
       "Summary": "No user-visible change. Turns on recording or detection that runs behind the tenant.",
-      "Users": "Nothing. No prompts, no blocked actions, no changed behaviour.",
+      "Users": "Nothing. No prompts, no blocked actions, no changed behavior.",
       "Admins": "One configuration change. Data begins accumulating from the moment it is enabled and not before — it is not retroactive, so enabling it during an incident does not recover the history you wanted.",
       "Watchouts": "The common failure is assuming it was already on and only discovering otherwise when the logs are needed. Verify after enabling rather than trusting the setting page.",
       "Reversible": "Yes — disabling restores the prior state, though the data collected in between remains."
@@ -32,7 +32,7 @@
       "Effort": "Project",
       "Summary": "Affected users need a specific credential — a security key, a platform authenticator or a certificate — and cannot sign in without it.",
       "Users": "Cannot sign in from anywhere the required credential is not present. That is the security value and also the entire risk.",
-      "Admins": "Procurement and enrolment before enforcement, not after. Enrol every affected account, verify each one has signed in with the new method, then enforce.",
+      "Admins": "Procurement and enrollment before enforcement, not after. Enroll every affected account, verify each one has signed in with the new method, then enforce.",
       "Watchouts": "Locking out every administrator simultaneously is a real and recoverable-only-by-Microsoft outcome. Configure and verify break-glass accounts excluded from the policy before enforcing, and test the exclusion works.",
       "Reversible": "Yes, provided you retain a path into the tenant to reverse it."
     },
@@ -47,8 +47,8 @@
     "mail-flow-latency": {
       "Effort": "Policy change",
       "Summary": "Mail is inspected before delivery, so some messages arrive minutes later than they used to.",
-      "Users": "Attachment-heavy mail can be delayed while it is analysed. Users who expect a document to arrive as they are on the phone about it will notice.",
-      "Admins": "Set expectations before enabling — the support ticket is 'email is slow', not 'security is working'. Dynamic delivery, where the licence allows it, removes most of the perceived delay.",
+      "Users": "Attachment-heavy mail can be delayed while it is analyzed. Users who expect a document to arrive as they are on the phone about it will notice.",
+      "Admins": "Set expectations before enabling — the support ticket is 'email is slow', not 'security is working'. Dynamic delivery, where the license allows it, removes most of the perceived delay.",
       "Watchouts": "Time-critical automated mail — one-time passcodes, dispatch notifications, alerting — is where delay becomes a business problem rather than an annoyance. Identify those senders and route them deliberately.",
       "Reversible": "Yes, immediately."
     },
@@ -62,9 +62,9 @@
     },
     "mail-delivery-risk": {
       "Effort": "Discovery first",
-      "Summary": "Changes how other mail systems treat mail claiming to be from your domain. Configured wrongly, legitimate mail from the organisation stops being delivered anywhere.",
-      "Users": "Nothing, when it is right. When it is wrong, recipients stop receiving mail from the organisation and the organisation is usually the last to know.",
-      "Admins": "Stage it. Publish in monitoring mode, read the aggregate reports for several weeks until every legitimate sender is identified and authenticated, then tighten. Every third-party service that sends on the organisation's behalf — marketing platform, ticketing system, accounting package, e-signature — must be authenticated first.",
+      "Summary": "Changes how other mail systems treat mail claiming to be from your domain. Configured wrongly, legitimate mail from the organization stops being delivered anywhere.",
+      "Users": "Nothing, when it is right. When it is wrong, recipients stop receiving mail from the organization and the organization is usually the last to know.",
+      "Admins": "Stage it. Publish in monitoring mode, read the aggregate reports for several weeks until every legitimate sender is identified and authenticated, then tighten. Every third-party service that sends on the organization's behalf — marketing platform, ticketing system, accounting package, e-signature — must be authenticated first.",
       "Watchouts": "Moving straight to an enforcing policy without a monitoring period is the single most common way to break a client's outbound mail. The damage is invisible from inside the tenant: sent items look normal.",
       "Reversible": "Yes, and it takes effect as fast as DNS propagates — but mail rejected in the meantime is gone, not queued."
     },
@@ -78,7 +78,7 @@
     },
     "external-collab-friction": {
       "Effort": "Policy change",
-      "Summary": "Guests and external organisations lose access or gain extra steps.",
+      "Summary": "Guests and external organizations lose access or gain extra steps.",
       "Users": "Internal users may no longer be able to invite external collaborators themselves. External participants may be prompted to authenticate where they were not before, or lose access entirely.",
       "Admins": "An invitation request process, and an allow-list to maintain if the restriction is domain-based.",
       "Watchouts": "Active client and vendor projects break at cutover. Enumerate existing guests and the sites they use before restricting, and stage by domain rather than tenant-wide where the setting allows.",
@@ -94,16 +94,16 @@
     },
     "device-gate": {
       "Effort": "Project",
-      "Summary": "Access is refused from devices that do not meet the bar. Enrolment has to come first or people are locked out of their own work.",
+      "Summary": "Access is refused from devices that do not meet the bar. Enrollment has to come first or people are locked out of their own work.",
       "Users": "Personal and unenrolled devices lose access to corporate data. Users who work from a home machine will feel this immediately and strongly.",
-      "Admins": "Enrol and confirm compliance across the fleet before enforcing, then use report-only mode to find what is left. Report-only exists precisely so this change does not have to be a leap.",
-      "Watchouts": "Contractors, seasonal staff and anyone on a device the organisation does not own are the population this locks out. Decide their path — enrolment, app protection policies, or a documented exception — before the policy goes to enforce.",
+      "Admins": "Enroll and confirm compliance across the fleet before enforcing, then use report-only mode to find what is left. Report-only exists precisely so this change does not have to be a leap.",
+      "Watchouts": "Contractors, seasonal staff and anyone on a device the organization does not own are the population this locks out. Decide their path — enrollment, app protection policies, or a documented exception — before the policy goes to enforce.",
       "Reversible": "Yes, immediately."
     },
     "device-config-change": {
       "Effort": "Staged rollout",
       "Summary": "Endpoint configuration changes. Most devices absorb it; a minority surface an application compatibility problem.",
-      "Users": "Usually nothing. Where an application depends on the behaviour being restricted, it stops working.",
+      "Users": "Usually nothing. Where an application depends on the behavior being restricted, it stops working.",
       "Admins": "Pilot on a representative ring — including whatever the finance and clinical or line-of-business applications run on — before broad deployment. Devices apply it at their next check-in, so completion is measured in days, not minutes.",
       "Watchouts": "Older line-of-business software is the usual casualty. The failure is often a silent malfunction rather than an error message, so a pilot needs someone actually using the application, not just booting it.",
       "Reversible": "Yes, though devices need a check-in to pick up the reversal, and an offline device stays in the old state until it returns."
@@ -126,7 +126,7 @@
     },
     "app-consent-friction": {
       "Effort": "Single setting, then ongoing",
-      "Summary": "Users can no longer authorise applications against tenant data themselves; requests come to an administrator instead.",
+      "Summary": "Users can no longer authorize applications against tenant data themselves; requests come to an administrator instead.",
       "Users": "A 'needs admin approval' message where an application used to just connect.",
       "Admins": "A request queue to work, with a response time people can live with. Without one, users route around it — and the route around it is shadow IT on a personal account, which is worse than what you restricted.",
       "Watchouts": "Existing consented applications keep working; this affects new grants. Review what is already consented separately, because that is where the risk already sits.",
@@ -136,15 +136,15 @@
       "Effort": "Policy change",
       "Summary": "Data is kept longer or in more places. Costs money and creates discovery obligations.",
       "Users": "Content may become undeletable for the retention period — deleting appears to work but the item is preserved.",
-      "Admins": "Storage consumption and, above certain tiers, licence cost. Retained data is discoverable in litigation, which is a legal decision as much as a security one — retention longer than the organisation's stated policy is its own liability.",
+      "Admins": "Storage consumption and, above certain tiers, license cost. Retained data is discoverable in litigation, which is a legal decision as much as a security one — retention longer than the organization's stated policy is its own liability.",
       "Watchouts": "Retention and deletion policies that overlap can conflict, and the more restrictive wins in ways that surprise people. Map them before adding another.",
       "Reversible": "The policy is reversible; data already preserved usually is not immediately releasable."
     },
     "meeting-friction": {
       "Effort": "Policy change",
       "Summary": "Meetings behave differently for external and anonymous participants.",
-      "Users": "External attendees may wait in a lobby, be unable to join before an organiser, lose presentation rights, or be unable to join anonymously at all.",
-      "Admins": "Tell the people who run client-facing meetings before it changes, not after. Per-organiser meeting policies let sales and support keep a looser configuration where the business needs it.",
+      "Users": "External attendees may wait in a lobby, be unable to join before an organizer, lose presentation rights, or be unable to join anonymously at all.",
+      "Admins": "Tell the people who run client-facing meetings before it changes, not after. Per-organizer meeting policies let sales and support keep a looser configuration where the business needs it.",
       "Watchouts": "Webinars, client onboarding calls and public-facing sessions are where a lobby requirement becomes a business problem. Scope the policy rather than applying one setting tenant-wide.",
       "Reversible": "Yes, immediately, and meetings already scheduled pick up the change."
     },
@@ -153,7 +153,7 @@
       "Summary": "Users see labels, tips and blocks on their own content. Needs communication and a tuning period or it gets worked around.",
       "Users": "Labels appear in Office applications; some actions produce a policy tip or a block with a justification prompt.",
       "Admins": "Start in simulation or notify-only mode, read what it would have blocked, tune, then enforce. Skipping the simulation is how a DLP rollout blocks the payroll run on day one.",
-      "Watchouts": "Over-broad sensitive information types generate a flood of false positives, and the first hundred false blocks destroy the credibility of the whole programme. Match on real document samples first.",
+      "Watchouts": "Over-broad sensitive information types generate a flood of false positives, and the first hundred false blocks destroy the credibility of the whole program. Match on real document samples first.",
       "Reversible": "Yes for the policy. Labels already applied to content persist and travel with the file."
     },
     "dns-publication": {
@@ -177,12 +177,12 @@
       "Summary": "Existing flows and apps that cross the new boundary stop running, usually without telling their owner.",
       "Users": "Makers lose self-service creation. Flows that combine a business connector with a personal or social one fail on their next run.",
       "Admins": "Inventory existing flows and apps against the intended policy before applying it. The Power Platform admin centre will show which would be affected — read it first.",
-      "Watchouts": "A broken flow fails quietly and its owner may have left the organisation. Business processes silently stop; the discovery is a missing approval three weeks later.",
+      "Watchouts": "A broken flow fails quietly and its owner may have left the organization. Business processes silently stop; the discovery is a missing approval three weeks later.",
       "Reversible": "Yes, and flows resume, but any run that was skipped is not replayed."
     },
     "copilot-restriction": {
       "Effort": "Policy change",
-      "Summary": "Copilot's behaviour or availability changes for some users.",
+      "Summary": "Copilot's behavior or availability changes for some users.",
       "Users": "Either lose access, or find Copilot declines to surface content it previously would have. Both read as 'Copilot is broken' unless explained.",
       "Admins": "Set expectations first. Copilot honours the permissions and labels that already exist, so restricting it usually exposes over-permissioned content rather than creating a new problem.",
       "Watchouts": "Over-shared SharePoint content is what Copilot makes visible. The right fix is the permissions, not the Copilot setting — restricting Copilot hides the symptom and leaves the exposure.",
@@ -204,17 +204,17 @@
       "Watchouts": "Treating the list as the remediation. The list is evidence that work exists.",
       "Reversible": "Not applicable."
     },
-    "licence-dependent": {
-      "Effort": "Licence purchase",
-      "Summary": "Primarily a licence decision — the capability does not exist in the tenant until it is bought.",
+    "license-dependent": {
+      "Effort": "License purchase",
+      "Summary": "Primarily a license decision — the capability does not exist in the tenant until it is bought.",
       "Users": "Nothing until the feature is licensed and configured.",
-      "Admins": "A purchase, then a configuration project. Do not scope the configuration effort as if the licence were the whole cost; the licence is the entry fee.",
-      "Watchouts": "Buying the licence and never configuring the feature is a common and expensive outcome that also produces a false sense of coverage.",
-      "Reversible": "Configuration yes; the licence commitment usually runs to term."
+      "Admins": "A purchase, then a configuration project. Do not scope the configuration effort as if the license were the whole cost; the license is the entry fee.",
+      "Watchouts": "Buying the license and never configuring the feature is a common and expensive outcome that also produces a false sense of coverage.",
+      "Reversible": "Configuration yes; the license commitment usually runs to term."
     },
     "monitoring-integration": {
       "Effort": "Project",
-      "Summary": "Log data flows to another system. No tenant behaviour changes; cost and integration work do.",
+      "Summary": "Log data flows to another system. No tenant behavior changes; cost and integration work do.",
       "Users": "Nothing.",
       "Admins": "Connector configuration, credentials to rotate, and ingestion cost that scales with tenant size. Verify data is actually landing rather than that the connector reports healthy.",
       "Watchouts": "A silently stopped feed is worse than no feed, because it looks like coverage. Alert on the absence of data, not just on the data.",
@@ -277,7 +277,7 @@
     "EXO-1.7": "mail-flow-quarantine",
     "EXO-2.3": "legacy-client-break",
     "EXO-2.4": "legacy-client-break",
-    "EXO-2.5": "licence-dependent",
+    "EXO-2.5": "license-dependent",
     "EXO-2.6": "account-hygiene",
     "EXO-3.1": "mail-flow-quarantine",
     "EXO-3.2": "admin-review-workload",
@@ -385,7 +385,7 @@
     "PVW-3.2": "admin-review-workload",
     "PVW-3.3": "admin-review-workload",
     "PVW-3.4": "data-classification-rollout",
-    "PVW-4.1": "licence-dependent",
+    "PVW-4.1": "license-dependent",
     "PVW-4.2": "storage-retention",
     "PVW-4.3": "data-classification-rollout",
     "PVW-4.4": "storage-retention",
@@ -514,7 +514,7 @@
     "EXO-9.1": {
       "Summary": "Putting every mailbox under retention or hold makes deleted mail undeletable for the retention period — which is the point, and also a discovery obligation.",
       "Users": "Nothing visible. Deleting mail appears to work; the copy is preserved where users cannot see it.",
-      "Watchouts": "Retained mail is discoverable in litigation. Retaining longer than the organisation own stated retention policy creates its own liability, so agree the period with whoever owns that policy before applying it. Litigation hold also needs Exchange Online Plan 2 — check licensing before promising it."
+      "Watchouts": "Retained mail is discoverable in litigation. Retaining longer than the organization own stated retention policy creates its own liability, so agree the period with whoever owns that policy before applying it. Litigation hold also needs Exchange Online Plan 2 — check licensing before promising it."
     },
     "SPO-4.1": {
       "Summary": "Extending departed-user OneDrive retention keeps leavers files longer. Costs storage and keeps their data in scope.",

@@ -27,7 +27,7 @@
 #                        this week; there is nothing to plan around.
 #            Schedule    Licensed, but somebody will feel it. Needs a window,
 #                        a comms message, or a discovery pass first.
-#            Buy first   Blocked on a licence. Listed, never given a projected
+#            Buy first   Blocked on a license. Listed, never given a projected
 #                        score — see below.
 #
 # WHY THE MATH IS EXACT, AND WHERE IT DELIBERATELY STOPS:
@@ -40,7 +40,7 @@
 #   projected coverage after a set of steps is recomputed from counts, not
 #   accumulated from rounded per-step deltas, and there is no drift.
 #
-#   A licence unlock gets NO projected score. Buying a licence changes the
+#   A license unlock gets NO projected score. Buying a license changes the
 #   denominator, and a licensed-but-unconfigured control is a Gap rather than
 #   an automatic pass, so any number attached there would be a guess dressed as
 #   arithmetic. They are listed with what they would unlock and nothing more.
@@ -51,7 +51,7 @@
 #   renders this says so.
 #
 # WHAT THIS IS NOT: a completion plan. Finishing every step here does not make
-#   an organisation NIST compliant. It closes what a Microsoft 365 tenant scan
+#   an organization NIST compliant. It closes what a Microsoft 365 tenant scan
 #   and an endpoint scan can see, which is a subset of 800-53 — 14 of the 20
 #   families, and within those only the controls a cloud tenant evidences. The
 #   remainder is policy, process, physical and personnel. The plan says its own
@@ -60,7 +60,7 @@
 # Inputs:  -Findings        assessment findings (shape-agnostic).
 #          -LicenseProfile  optional; resolved from module state when omitted.
 #                           Null means "no SKU data", and a control with a real
-#                           licence requirement is then classified as blocked —
+#                           license requirement is then classified as blocked —
 #                           conservative, never a false quick win.
 #          -ImpactPath      optional override for operational-impact.json.
 #
@@ -114,7 +114,7 @@ function Get-NRGNISTImprovementPlan {
         Get-NRGOperationalImpactCatalog
     }
 
-    # Control metadata, for the remediation text and the licence requirement.
+    # Control metadata, for the remediation text and the license requirement.
     $defs = @{}
     try { foreach ($c in (Get-NRGControlDefinitions)) { $defs[[string]$c.ControlId] = $c } } catch {
         Write-Verbose "controls.json unavailable to the improvement plan: $($_.Exception.Message)"
@@ -136,7 +136,7 @@ function Get-NRGNISTImprovementPlan {
         $cid  = [string](Get-NRGObjectField -Item $f -Key 'ControlId' -Default '')
         $def  = if ($defs.ContainsKey($cid)) { $defs[$cid] } else { $null }
 
-        # Licence classification. Conservative by construction: anything we
+        # License classification. Conservative by construction: anything we
         # cannot prove the tenant is licensed for is treated as blocked rather
         # than promised as a quick win.
         $licReq = [string](Get-NRGObjectField -Item $def -Key 'LicenseRequirement' -Default '')

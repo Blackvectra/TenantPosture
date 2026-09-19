@@ -107,7 +107,7 @@ function Publish-NRGDeviceGuide {
     $null = $sb.AppendLine()
     $null = $sb.AppendLine("This is a **reference guide, not an assessment**. Nothing here was measured against your environment$(if ($annotate) { ' except where a control is explicitly marked with an assessment result' })  — it sets out what NIST SP 800-53 Revision 5 expects of the devices your people use, and the practical ways to satisfy each control.")
     $null = $sb.AppendLine()
-    $null = $sb.AppendLine("$totalItems controls across $(@($posture.Groups).Count) areas, with $totalOptions implementation options. Most controls list more than one option on purpose: a business already standardised on a third-party endpoint suite, an existing badge system, or a managed print contract should be able to satisfy the control with what it has rather than being told to replace it.")
+    $null = $sb.AppendLine("$totalItems controls across $(@($posture.Groups).Count) areas, with $totalOptions implementation options. Most controls list more than one option on purpose: a business already standardized on a third-party endpoint suite, an existing badge system, or a managed print contract should be able to satisfy the control with what it has rather than being told to replace it.")
     $null = $sb.AppendLine()
     $null = $sb.AppendLine("### How to read this")
     $null = $sb.AppendLine()
@@ -297,7 +297,7 @@ footer{color:#6b7280;font-size:.78rem;line-height:1.6;padding:0 4px}
 <div class="wrap">
   <div class="card lede">
     <p style="margin-top:0">Nothing in this document was collected from a device$(if ($annotate) { ", except where a control carries an explicit assessment result" }). It sets out what <strong>NIST SP 800-53 Revision 5</strong> expects of the devices your people use &mdash; laptops, desktops, phones, the media they hold and the rooms they sit in &mdash; and the practical ways to satisfy each control.</p>
-    <p>Most controls list more than one option deliberately. A business already standardised on a third-party endpoint suite, an existing badge system, or a managed disposal contract should be able to satisfy the control with what it already has, rather than being told to replace it.</p>
+    <p>Most controls list more than one option deliberately. A business already standardized on a third-party endpoint suite, an existing badge system, or a managed disposal contract should be able to satisfy the control with what it already has, rather than being told to replace it.</p>
     <table style="margin-top:14px">
       <thead><tr><th style="width:110px">Marker</th><th>Meaning</th></tr></thead>
       <tbody>

@@ -40,7 +40,7 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
         'endpointSecurityAntivirus'                   = 'Antivirus'
     }
 
-    # Empty is not clean: every section below initialises to @(), so an empty
+    # Empty is not clean: every section below initializes to @(), so an empty
     # list cannot be told apart from a query that failed. Both the settings-catalog and the legacy intents endpoint feed the same sections.
     # A section is only 'Failed' when EVERY query feeding it failed —
     # one surviving feeder still yields real data.

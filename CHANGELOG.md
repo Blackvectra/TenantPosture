@@ -216,7 +216,7 @@ Accuracy + hardening pass (targeting v4.13.0):
   counted too.
 - **NIST-first reporting.** `Invoke-NRGAssessment.ps1 -Framework <NIST|CIS|SCuBA|CMMC|All>`
   selects which framework cards the HTML report presents. **NRG defaults to
-  NIST; NLS defaults to All** — the one deliberate behavioural difference
+  NIST; NLS defaults to All** — the one deliberate behavioral difference
   between the twins, pinned in each repo by its own test because a careless
   mirror would silently flip it and the report would still render and still
   score correctly while showing the wrong practice's frameworks to a client.
@@ -243,7 +243,7 @@ Accuracy + hardening pass (targeting v4.13.0):
   reads — and each maps to 800-53 so device findings land in the same report,
   score and NIST family rollup as everything else.
   Checks span encryption and boot integrity (BitLocker, TPM, Secure Boot, VBS),
-  malware defence (real-time protection, tamper protection, ASR, controlled
+  malware defense (real-time protection, tamper protection, ASR, controlled
   folder access, MDE onboarding), network exposure (firewall, SMBv1, LLMNR, RDP
   NLA), accounts (local admins, RID 500/501, LAPS), patch state, session lock,
   legacy surface and audit policy.
@@ -252,7 +252,7 @@ Accuracy + hardening pass (targeting v4.13.0):
   floor. The security suite scopes that exception to the top-level `Device/`
   folder and asserts it EARNS it: no MSHTML, no COM, no Invoke-Expression, no
   network. A separate static guard pins no PS7-only syntax, no module import,
-  and read-only behaviour apart from the single result write.
+  and read-only behavior apart from the single result write.
 - **Elevation is reported, never assumed.** BitLocker, TPM, Secure Boot and the
   audit policy return nothing without admin rights, which is indistinguishable
   from "not configured". Those emit NotAssessed and are excluded from the fleet
@@ -328,7 +328,7 @@ Accuracy + hardening pass (targeting v4.13.0):
   **Strictly additive:** `Publish-NRGComplianceMatrix` keeps all ten frameworks,
   no existing output changes, and a test asserts that publishing the NIST matrix
   does not move the CIS, SCuBA or CMMC score by a point.
-- **The matrix refuses to overstate its scope.** The score is labelled as
+- **The matrix refuses to overstate its scope.** The score is labeled as
   coverage of the 57 controls the tool exercises, not 800-53 baseline
   completion. The physical/media/personnel section stays unscored. Controls that
   came back `NotApplicable` get their own sheet stating that a missing license or
