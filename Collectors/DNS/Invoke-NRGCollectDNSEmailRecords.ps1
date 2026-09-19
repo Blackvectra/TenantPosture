@@ -138,9 +138,10 @@ function Invoke-NRGCollectDNSEmailRecords {
         [int] $TimeoutSec = 60
     )
 
-    $result = @{
+    # [ordered] because this envelope is serialised into the results JSON.
+    $result = [ordered]@{
         Success     = $false
-        Data        = @{ Domains = @{}; DomainCount = 0 }
+        Data        = [ordered]@{ Domains = [ordered]@{}; DomainCount = 0 }
     }
 
     try {
