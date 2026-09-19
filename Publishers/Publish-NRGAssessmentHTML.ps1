@@ -618,13 +618,14 @@ function Publish-NRGAssessmentHTML {
     $scopeHtml = ''
     if (Get-Command Get-NRGAssessmentScope -ErrorAction SilentlyContinue) {
         try {
-            $scope = Get-NRGAssessmentScope -Findings $Findings -LicenseProfile $licProfile
+            $scope = Get-NRGAssessmentScope -Findings $Findings -LicenseProfile $licProfile `
+                        -QuickScan:([bool](Get-NRGObjectField -Item $Metadata -Key 'QuickScan' -Default $false))
         } catch {
             Write-Verbose "Assessment scope section skipped: $($_.Exception.Message)"
             $scope = $null
         }
         if ($scope -and $scope.Available) {
-            $blindCount = $scope.CollectionIncomplete.Count + $scope.NoResult.Count
+            $blindCount = $scope.CollectionIncomplete.Count + $scope.NoResult.Count + $scope.NotEvaluatedThisMode.Count
             $tiles = @(
                 "<div class='scope-tile'><div class='scope-n'>$($scope.ScoredControls)</div><div class='scope-l'>Controls scored</div></div>"
                 "<div class='scope-tile$(if($blindCount -gt 0){' warn'})'><div class='scope-n$(if($blindCount -gt 0){' warn'})'>$blindCount</div><div class='scope-l'>Could not be assessed</div></div>"
@@ -640,6 +641,7 @@ function Publish-NRGAssessmentHTML {
             $detBlocks = ''
             foreach ($grp in @(
                 @{ Label = 'Controls that could not be assessed — data did not collect'; Items = $scope.CollectionIncomplete }
+                @{ Label = 'Controls not evaluated — quick-scan mode'; Items = $scope.NotEvaluatedThisMode }
                 @{ Label = 'Controls that produced no result at all'; Items = $scope.NoResult }
                 @{ Label = 'Controls with no automated test — manual review'; Items = $scope.NoProgrammaticCheck }
             )) {

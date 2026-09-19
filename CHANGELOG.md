@@ -4,6 +4,35 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **The scope section misclassified its own blind spots.** A code review of the
+  section added one commit earlier found five defects, all real. The worst:
+  `Test-NRGLicenseRequirementMet` returns `$false` when there is **no SKU data**
+  (deliberately — Upgrade Unlocks should over-report an upgrade need rather
+  than hide one), and the classifier inverted it. So "we cannot tell how this
+  tenant is licensed" became "licence gated, benign", and on any run where the
+  licence profile did not populate — including every `-FromResults` republish —
+  controls whose own `Detail` said *"EXO data not collected"* were reported as
+  benign instead of "these are NOT passes". The honesty section had the
+  dishonesty bug. Signals are now consulted only when positively present,
+  strongest first: the evaluator's self-declared advisory marker, then hard
+  evidence from the `CollectorDependency` raw data (only when raw data is
+  populated — an empty map means replay, not universal failure), then licence
+  on explicit evidence only, then prose last. Also fixed: `-Quick` drops
+  evaluators on purpose, and their controls were reported as "produced no
+  result at all… treat this as a tool fault" (they now get a
+  `NotEvaluatedThisMode` bucket); the Markdown publisher omitted
+  `-LicenseProfile` that the HTML publisher passed, so one run's two
+  deliverables bucketed the same control differently; the prose pattern missed
+  *"… collector did not run."* and *"Neither … produced data."*, reporting
+  failed collectors as controls with no automated test; and `-FromResults` now
+  restores `Coverage` and `RawData` into module state, so a republish no longer
+  silently drops the "collectors that did not complete" block. The prose
+  patterns are now derived empirically by running all 179 evaluators against
+  empty state, and a test does exactly that and asserts every resulting
+  `NotApplicable` lands in collection-failed or self-declared-advisory with
+  nothing called licence gated — the test that would have caught four of the
+  five. Six of its assertions fail against the previous commit.
+
 - **The report now says what it did NOT assess.** `NotApplicable` is excluded
   from the compliance denominator, so a control that silently stops producing
   a verdict makes the score go **up** — which is the shape of every
