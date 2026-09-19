@@ -69,16 +69,30 @@ function Get-NRGAssessmentScope {
         # reach module state.
         [hashtable] $Coverage,
 
-        # Optional. When supplied, licence-blocked controls are classified with
-        # Test-NRGLicenseRequirementMet rather than the evaluator's detail text.
+        # Optional. Used ONLY as positive evidence that a control is licence
+        # gated, and only when it carries real SKU data — see the classifier.
         [AllowNull()]
-        [object] $LicenseProfile
+        [object] $LicenseProfile,
+
+        # Collected raw data, keyed the same way controls.json keys
+        # CollectorDependency. Defaults to module state. This is the HARD
+        # evidence for "the collector did not return the data", and it is the
+        # same signal the evaluator itself gated on.
+        [AllowNull()]
+        [object] $RawData,
+
+        # True when the run used -Quick, which deliberately drops evaluators.
+        # Without it the controls those evaluators own emit nothing and get
+        # reported as a tool fault, which is a lie about a mode the operator
+        # chose on purpose.
+        [switch] $QuickScan
     )
 
     Set-StrictMode -Version Latest
 
     $empty = [ordered]@{
         Available            = $false
+        QuickScan            = [bool]$QuickScan
         TotalControls        = 0
         ScoredControls       = 0
         UnscoredControls     = 0
@@ -86,6 +100,7 @@ function Get-NRGAssessmentScope {
         LicenceBlocked       = @()
         CollectionIncomplete = @()
         NoProgrammaticCheck  = @()
+        NotEvaluatedThisMode = @()
         NoResult             = @()
         Errors               = @()
         CoverageIssues       = @()
@@ -127,10 +142,54 @@ function Get-NRGAssessmentScope {
         if ($thisRank -gt $prevRank) { $byId[$cid] = $f }
     }
 
+    # ── Evidence available to the classifier ─────────────────────────────────
+    #
+    # THE RULE THAT GOVERNS ALL OF THIS: absence of evidence is never evidence.
+    # The first version inverted Test-NRGLicenseRequirementMet, which returns
+    # $false when there is NO SKU data (deliberately, so Upgrade Unlocks
+    # over-reports rather than hides an upgrade need). Inverted, "we don't know
+    # the licensing" became "licence gated, benign" — so on any run where the
+    # licence profile did not populate, controls whose own Detail said "EXO
+    # data not collected" were filed as benign. That is precisely the failure
+    # this whole section exists to prevent. Every signal below is therefore
+    # used only when it is POSITIVELY present.
+    $rd = $RawData
+    if ($null -eq $rd -and (Get-Command Get-NRGRawData -ErrorAction SilentlyContinue)) {
+        try { $rd = Get-NRGRawData } catch { $rd = $null }
+    }
+    # An empty raw-data map means we are replaying a results file and know
+    # nothing about collection, NOT that every collector failed.
+    $haveRawData = $false
+    if ($null -ne $rd) {
+        try { $haveRawData = (@($rd.Keys).Count -gt 0) } catch { $haveRawData = $false }
+    }
+
+    # Likewise: a licence profile with no SKU data cannot tell us a control is
+    # licence gated.
+    $haveSkuData = $false
+    if ($null -ne $LicenseProfile) {
+        $sup = Get-NRGObjectField -Item $LicenseProfile -Key 'SuppressedLicenseRequirements' -Default $null
+        if ($null -ne $sup) {
+            try { $haveSkuData = (@($sup).Count -gt 0) } catch { $haveSkuData = $false }
+        }
+    }
+
+    # Prose patterns, derived from what the evaluators ACTUALLY emit (every
+    # evaluator was run against empty state and the distinct Detail strings
+    # collected) rather than from what a classifier author imagines they say.
+    # This is the weakest signal and is consulted last.
+    $collectionRx = 'not collected|was not collected|did not complete|did not run|not assessed|' +
+                    'unavailable|could not be retrieved|could not be determined|no data returned|' +
+                    'produced data|not returned|not found in collected data|not available|' +
+                    '403|Forbidden|consent'
+    # An evaluator that declares itself advisory is authoritative about itself.
+    $advisoryRx   = 'requires manual verification'
+
     # ── Classify every control in the catalogue ──────────────────────────────
     $licenceBlocked = [System.Collections.Generic.List[object]]::new()
     $collectionGap  = [System.Collections.Generic.List[object]]::new()
     $advisory       = [System.Collections.Generic.List[object]]::new()
+    $notThisMode    = [System.Collections.Generic.List[object]]::new()
     $noResult       = [System.Collections.Generic.List[object]]::new()
     $errored        = [System.Collections.Generic.List[object]]::new()
     $workload       = [ordered]@{}
@@ -157,11 +216,18 @@ function Get-NRGAssessmentScope {
         }
 
         if (-not $byId.ContainsKey($cid)) {
-            # Nothing was emitted at all. The control is absent from the
-            # report, not merely unscored.
-            $row.Reason = 'The evaluator produced no result this run.'
-            $noResult.Add([pscustomobject]$row)
             $workload[$wl].Unscored++
+            if ($QuickScan) {
+                # -Quick drops whole evaluators on purpose. Calling that a tool
+                # fault would be a lie about a mode the operator chose.
+                $row.Reason = 'Not evaluated: this run used quick-scan mode, which skips this control''s evaluator.'
+                $notThisMode.Add([pscustomobject]$row)
+            } else {
+                # Nothing was emitted at all. The control is absent from the
+                # report, not merely unscored.
+                $row.Reason = 'The evaluator produced no result this run.'
+                $noResult.Add([pscustomobject]$row)
+            }
             continue
         }
 
@@ -190,32 +256,59 @@ function Get-NRGAssessmentScope {
         $detail = [string](Get-NRGObjectField -Item $f -Key 'Detail' -Default '')
         $row.Reason = if ([string]::IsNullOrWhiteSpace($detail)) { 'Reported not applicable; no reason recorded.' } else { $detail }
 
-        # Licence first: a control the tenant cannot buy its way out of in this
-        # run is expected and benign, and Upgrade Unlocks already prices it.
-        $isLicence = $false
-        if ($row.Licence -and $row.Licence -notmatch '^Included') {
-            if ($null -ne $LicenseProfile -and (Get-Command Test-NRGLicenseRequirementMet -ErrorAction SilentlyContinue)) {
-                try {
-                    $isLicence = -not (Test-NRGLicenseRequirementMet -LicenseRequirement $row.Licence -LicenseProfile $LicenseProfile)
-                } catch {
-                    $isLicence = $false
-                }
+        # ── Classification, strongest evidence first ─────────────────────────
+
+        # 1. The evaluator declares itself advisory. It is authoritative about
+        #    whether it has a programmatic check, and that is true whether or
+        #    not the collector ran.
+        if ($detail -match $advisoryRx) {
+            $advisory.Add([pscustomobject]$row)
+            continue
+        }
+
+        # 2. HARD evidence: the raw data this control depends on is absent or
+        #    the collector reported failure. Same signal the evaluator gated
+        #    on, so it cannot disagree with the finding. Only consulted when
+        #    raw data is present in this run.
+        if ($haveRawData -and $row.Collector) {
+            $failedDep = $null
+            foreach ($depKey in @($row.Collector -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+                $entry = $null
+                try { $entry = $rd[$depKey] } catch { $entry = $null }
+                if ($null -eq $entry) { $failedDep = $depKey; break }
+                $ok = Get-NRGObjectField -Item $entry -Key 'Success' -Default $null
+                if ($null -ne $ok -and -not $ok) { $failedDep = $depKey; break }
             }
-            # The evaluators mark licence-gated NotApplicable findings with
-            # this phrase; it is the only signal available when no profile was
-            # passed (replayed result JSON, for instance).
-            if (-not $isLicence -and $detail -match 'upgrade opportunity') { $isLicence = $true }
+            if ($failedDep) {
+                $row.Reason = "The '$failedDep' collector did not return data, so this control could not be assessed. $detail".Trim()
+                $collectionGap.Add([pscustomobject]$row)
+                continue
+            }
+        }
+
+        # 3. Licence gated — POSITIVE evidence only. Either the evaluator said
+        #    so explicitly, or we hold real SKU data and it says the tenant
+        #    lacks the licence. "No SKU data" is not evidence of anything.
+        $isLicence = $false
+        if ($detail -match 'upgrade opportunity') {
+            $isLicence = $true
+        } elseif ($haveSkuData -and $row.Licence -and $row.Licence -notmatch '^Included' -and
+                  (Get-Command Test-NRGLicenseRequirementMet -ErrorAction SilentlyContinue)) {
+            try {
+                $isLicence = -not (Test-NRGLicenseRequirementMet -LicenseRequirement $row.Licence -LicenseProfile $LicenseProfile)
+            } catch {
+                $isLicence = $false
+            }
         }
         if ($isLicence) {
             $licenceBlocked.Add([pscustomobject]$row)
             continue
         }
 
-        # Collection failure: the collector did not return the data, so the
-        # control COULD have been assessed and was not. This is the bucket a
-        # reader must see — it is the difference between "you are compliant"
-        # and "we did not look".
-        if ($detail -match 'not collected|was not collected|did not complete|not assessed|unavailable|could not be retrieved|no data returned|403|Forbidden|consent') {
+        # 4. Weakest signal: the evaluator's own prose. Kept because a section
+        #    can fail inside a collector that otherwise succeeded, and because
+        #    a replayed results file carries no raw data at all.
+        if ($detail -match $collectionRx) {
             $collectionGap.Add([pscustomobject]$row)
             continue
         }
@@ -250,6 +343,9 @@ function Get-NRGAssessmentScope {
     if ($collectionGap.Count -gt 0) {
         $limitations.Add("$($collectionGap.Count) control(s) could not be assessed because the underlying data did not collect. These are NOT passes. Re-run once the cause is resolved before treating them as anything.")
     }
+    if ($notThisMode.Count -gt 0) {
+        $limitations.Add("$($notThisMode.Count) control(s) were not evaluated because this was a quick scan. They are neither passes nor failures. Run a full assessment to cover them.")
+    }
     if ($noResult.Count -gt 0) {
         $limitations.Add("$($noResult.Count) control(s) produced no result at all this run and do not appear elsewhere in this report. Treat this as a tool fault to investigate, not as a tenant finding.")
     }
@@ -271,6 +367,7 @@ function Get-NRGAssessmentScope {
 
     return [ordered]@{
         Available            = $true
+        QuickScan            = [bool]$QuickScan
         TotalControls        = $total
         ScoredControls       = $scored
         UnscoredControls     = $unscored
@@ -278,6 +375,7 @@ function Get-NRGAssessmentScope {
         LicenceBlocked       = @($licenceBlocked)
         CollectionIncomplete = @($collectionGap)
         NoProgrammaticCheck  = @($advisory)
+        NotEvaluatedThisMode = @($notThisMode)
         NoResult             = @($noResult)
         Errors               = @($errored)
         CoverageIssues       = @($covIssues)

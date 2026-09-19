@@ -72,11 +72,12 @@ Describe 'Get-NRGAssessmentScope — what the assessment did not cover' {
             $s = Get-NRGAssessmentScope -Findings (script:Build -SkipFirst 2 -Override $ov)
 
             $sum = $s.LicenceBlocked.Count + $s.CollectionIncomplete.Count +
-                   $s.NoProgrammaticCheck.Count + $s.NoResult.Count
+                   $s.NoProgrammaticCheck.Count + $s.NotEvaluatedThisMode.Count + $s.NoResult.Count
             $sum | Should -Be $s.UnscoredControls -Because 'a control that is unscored and in no bucket is invisible, which is the whole failure mode'
 
             # And no control appears in two buckets.
-            $all = @($s.LicenceBlocked) + @($s.CollectionIncomplete) + @($s.NoProgrammaticCheck) + @($s.NoResult)
+            $all = @($s.LicenceBlocked) + @($s.CollectionIncomplete) + @($s.NoProgrammaticCheck) +
+                   @($s.NotEvaluatedThisMode) + @($s.NoResult)
             @($all | ForEach-Object { $_.ControlId } | Group-Object | Where-Object Count -gt 1) | Should -BeNullOrEmpty
         }
 
@@ -146,6 +147,125 @@ Describe 'Get-NRGAssessmentScope — what the assessment did not cover' {
             )
             $s = Get-NRGAssessmentScope -Findings $f
             @($s.CollectionIncomplete | ForEach-Object { $_.ControlId }) | Should -Contain $cid
+        }
+    }
+
+    Context 'classified against what the evaluators REALLY emit' {
+
+        # The bug class this context exists for: the first version of the
+        # classifier was tested against Detail strings the author invented to
+        # match the author's own regex. Four misclassifications survived that,
+        # because the evaluators say things like "Teams collector did not run."
+        # and "Neither AAD-Users nor AAD-AuthPolicies collector produced data."
+        # which the regex never matched. This is the same lesson as the
+        # pre-computed IsExternal fixtures: test against the real shape.
+        BeforeAll {
+            Clear-NRGState
+            $evs = @($script:Controls | ForEach-Object { $_.EvaluatorFunction } | Sort-Object -Unique)
+            foreach ($ev in $evs) { try { Invoke-NRGEvaluatorSafe -EvaluatorFunction $ev } catch { } }
+            $script:RealFindings = @(Get-NRGFindings)
+            # No raw data, no licence profile — the state a totally failed
+            # collection run leaves behind.
+            $script:RealScope = Get-NRGAssessmentScope -Findings $script:RealFindings -Coverage @{}
+        }
+
+        It 'produces a finding for every control when every evaluator runs' {
+            $script:RealFindings.Count | Should -Be $script:Total
+            $script:RealScope.NoResult.Count | Should -Be 0
+        }
+
+        It 'classifies every totally-uncollected control as a collection failure or an advisory control' {
+            # NOT as licence gated, and NOT as "no automated test" for a
+            # control that simply had no data.
+            $script:RealScope.LicenceBlocked.Count | Should -Be 0 -Because 'no SKU data was available, so nothing can be called licence gated'
+            ($script:RealScope.CollectionIncomplete.Count + $script:RealScope.NoProgrammaticCheck.Count) |
+                Should -Be $script:Total
+        }
+
+        It 'routes the overwhelming majority to the collection bucket, not to manual review' {
+            # The three genuinely advisory controls say "requires manual
+            # verification"; everything else lost its data.
+            $script:RealScope.NoProgrammaticCheck.Count | Should -BeLessOrEqual 6
+            $script:RealScope.CollectionIncomplete.Count | Should -BeGreaterThan 190
+        }
+
+        It 'puts only self-declared advisory controls in the manual-review bucket' {
+            foreach ($row in $script:RealScope.NoProgrammaticCheck) {
+                $row.Reason | Should -Match 'requires manual verification' -Because "$($row.ControlId) is in the advisory bucket"
+            }
+        }
+    }
+
+    Context 'absence of evidence is never evidence' {
+
+        It 'never calls a control licence gated when the profile carries no SKU data' {
+            # THE bug. Test-NRGLicenseRequirementMet returns $false when there
+            # is no SKU data (deliberately — Upgrade Unlocks should over-report
+            # an upgrade need). Inverting it turned "we don't know" into
+            # "licence gated, benign", so a control whose own Detail said
+            # "EXO data not collected" was filed as benign.
+            $ids = @($script:Controls | ForEach-Object { $_.ControlId })
+            $ov  = @{ $ids[0] = @{ State = 'NotApplicable'; Detail = 'EXO data not collected' } }
+            $emptyProfile = [pscustomobject]@{
+                SuppressedLicenseRequirements = [System.Collections.Generic.HashSet[string]]::new()
+                TierLabel                     = 'Unknown'
+            }
+            $s = Get-NRGAssessmentScope -Findings (script:Build -Override $ov) -Coverage @{} -LicenseProfile $emptyProfile
+            @($s.LicenceBlocked | ForEach-Object { $_.ControlId })       | Should -Not -Contain $ids[0]
+            @($s.CollectionIncomplete | ForEach-Object { $_.ControlId }) | Should -Contain $ids[0]
+        }
+
+        It 'still reports a licence block when the profile DOES carry SKU data' {
+            $ids  = @($script:Controls | ForEach-Object { $_.ControlId })
+            $lic  = @($script:Controls | Where-Object { $_.LicenseRequirement -and $_.LicenseRequirement -notmatch '^Included' } | Select-Object -First 1)
+            $lic.Count | Should -BeGreaterThan 0 -Because 'the fixture needs a licence-gated control to exist'
+            $target = $lic[0].ControlId
+            $ov = @{ $target = @{ State = 'NotApplicable'; Detail = 'Feature not present in this tenant.' } }
+            $realProfile = [pscustomobject]@{
+                SuppressedLicenseRequirements = [System.Collections.Generic.HashSet[string]]::new([string[]]@('Included in all M365 plans'))
+                TierLabel                     = 'Business Basic'
+            }
+            $s = Get-NRGAssessmentScope -Findings (script:Build -Override $ov) -Coverage @{} -LicenseProfile $realProfile
+            @($s.LicenceBlocked | ForEach-Object { $_.ControlId }) | Should -Contain $target
+        }
+
+        It 'never calls every control a collection failure just because raw data is absent' {
+            # The mirror of the same mistake: an empty raw-data map means we
+            # are replaying and know nothing, not that every collector failed.
+            $s = Get-NRGAssessmentScope -Findings (script:Build) -Coverage @{} -RawData @{}
+            $s.CollectionIncomplete.Count | Should -Be 0
+            $s.ScoredControls | Should -Be $script:Total
+        }
+
+        It 'uses raw data as hard evidence when it IS present' {
+            $target = $script:Controls[0]
+            $ov = @{ $target.ControlId = @{ State = 'NotApplicable'; Detail = 'Feature not present in this tenant.' } }
+            $raw = @{ $target.CollectorDependency = [pscustomobject]@{ Success = $false; Data = $null } }
+            $s = Get-NRGAssessmentScope -Findings (script:Build -Override $ov) -Coverage @{} -RawData $raw
+            @($s.CollectionIncomplete | ForEach-Object { $_.ControlId }) | Should -Contain $target.ControlId
+            ($s.CollectionIncomplete | Where-Object { $_.ControlId -eq $target.ControlId }).Reason |
+                Should -Match 'did not return data'
+        }
+    }
+
+    Context 'quick-scan mode' {
+
+        It 'reports skipped controls as not evaluated, never as a tool fault' {
+            # -Quick drops whole evaluators on purpose; calling that a tool
+            # fault is a lie about a mode the operator chose.
+            $s = Get-NRGAssessmentScope -Findings (script:Build -SkipFirst 40) -Coverage @{} -QuickScan
+            $s.QuickScan                    | Should -BeTrue
+            $s.NotEvaluatedThisMode.Count   | Should -Be 40
+            $s.NoResult.Count               | Should -Be 0
+            ($s.Limitations -join ' ')      | Should -Match 'quick scan'
+            ($s.Limitations -join ' ')      | Should -Not -Match 'tool fault'
+        }
+
+        It 'still calls a missing result a tool fault on a full run' {
+            $s = Get-NRGAssessmentScope -Findings (script:Build -SkipFirst 2) -Coverage @{}
+            $s.NoResult.Count             | Should -Be 2
+            $s.NotEvaluatedThisMode.Count | Should -Be 0
+            ($s.Limitations -join ' ')    | Should -Match 'tool fault'
         }
     }
 

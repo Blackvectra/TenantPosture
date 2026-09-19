@@ -167,7 +167,16 @@ function Publish-NRGAssessmentSummary {
     # denominator, so the score RISES when the tool goes blind.
     if (Get-Command Get-NRGAssessmentScope -ErrorAction SilentlyContinue) {
         $scope = $null
-        try { $scope = Get-NRGAssessmentScope -Findings $Findings } catch {
+        # The licence profile and the quick-scan flag are passed here exactly
+        # as the HTML publisher passes them. Omitting them made the same run's
+        # two deliverables bucket the same control differently.
+        $mdLicProfile = if (Get-Command Get-NRGTenantLicenseProfile -ErrorAction SilentlyContinue) {
+            try { Get-NRGTenantLicenseProfile } catch { $null }
+        } else { $null }
+        try {
+            $scope = Get-NRGAssessmentScope -Findings $Findings -LicenseProfile $mdLicProfile `
+                        -QuickScan:([bool](Get-NRGObjectField -Item $Metadata -Key 'QuickScan' -Default $false))
+        } catch {
             Write-Verbose "Assessment scope section skipped: $($_.Exception.Message)"
         }
         if ($scope -and $scope.Available) {
@@ -179,6 +188,7 @@ function Publish-NRGAssessmentSummary {
             $null = $sb.AppendLine("|---------|----------|")
             $null = $sb.AppendLine("| Scored (Satisfied / Partial / Gap / Error) | $($scope.ScoredControls) |")
             $null = $sb.AppendLine("| Could not be assessed — data did not collect | $($scope.CollectionIncomplete.Count) |")
+            $null = $sb.AppendLine("| Not evaluated — quick-scan mode | $($scope.NotEvaluatedThisMode.Count) |")
             $null = $sb.AppendLine("| Produced no result at all | $($scope.NoResult.Count) |")
             $null = $sb.AppendLine("| No automated test — manual review required | $($scope.NoProgrammaticCheck.Count) |")
             $null = $sb.AppendLine("| Licence gated | $($scope.LicenceBlocked.Count) |")
@@ -191,6 +201,7 @@ function Publish-NRGAssessmentSummary {
 
             foreach ($grp in @(
                 @{ Label = 'Could not be assessed — data did not collect'; Items = $scope.CollectionIncomplete }
+                @{ Label = 'Not evaluated — quick-scan mode'; Items = $scope.NotEvaluatedThisMode }
                 @{ Label = 'Produced no result at all'; Items = $scope.NoResult }
                 @{ Label = 'No automated test — manual review required'; Items = $scope.NoProgrammaticCheck }
             )) {
