@@ -1,13 +1,69 @@
 #Requires -Version 7.0
 #
 # Test-NRGControlDNS.ps1  (v4.6.1)
+# NRG Technology Services / NextLayerSec LLC
+# Author: Matthew Levorson
+#
 # Evaluates DNS email authentication + PKI hygiene controls.
 # SCORING ONLY — no DNS / HTTPS queries, reads from module state set by
 # Invoke-NRGCollectDNSEmailRecords.
 #
+# Consumes:     DNS-EmailRecords (Data.Domains.<domain>, incl. LookupStatus, Errors)
+# Sets:         findings only (Add-NRGFinding)
+# Cmdlets:      none (no Graph / EXO)
+# Dependencies: Get-NRGRawData, Get-NRGControlDefinitions, Get-NRGFrameworkCitations,
+#               Get-NRGObjectField, Test-NRGDnsLookupSucceeded, Add-NRGFinding
+#
 # NIST SP 800-53: SI-8, SC-8, SC-12, SC-13, SC-17, AU-6, CM-7
 # MITRE ATT&CK:   T1566, T1036.005, T1557, T1600.001, T1583.001
 #
+
+# ── Shared guard: a failed lookup is not an absent record ────────────────────
+# Emits the NotApplicable finding for a record whose lookup did not complete and
+# returns $true so the caller can `continue` past the domain. One implementation
+# because the first version of this guard was pasted six times — which is how
+# the DKIM evaluator was missed, and how an omitted -FrameworkIds propagated to
+# all six. That omission mattered: a NotApplicable finding with no NIST
+# citation is dropped by the 800-53 family rollup as unmapped, so it never
+# reached the NIST matrix's "Not Assessed" sheet, the one surface that exists
+# to say "this control could not be assessed". The reader of the NIST-only
+# deliverable saw neither a verdict nor a not-assessed row. Every finding this
+# helper emits carries the control's citations, matching the per-domain
+# NotApplicable findings DNS-2.1 / 2.3 / 2.4 already emit.
+function Add-NRGDnsLookupFailedFinding {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)] [object]   $Control,
+        [Parameter(Mandatory)] [string]   $ControlId,
+        # [AllowNull()] because Get-NRGFrameworkCitations yields $null, not
+        # @(), for a control with no References — a binding error here would
+        # replace the finding with a crash.
+        [Parameter(Mandatory)] [AllowNull()] [AllowEmptyCollection()] [string[]] $Citations,
+        [Parameter(Mandatory)] [string]   $Domain,
+        [Parameter(Mandatory)] [AllowNull()] [object] $DomainEntry,
+        # Key in the collector's LookupStatus map.
+        [Parameter(Mandatory)] [string]   $Record,
+        # Human name for the Detail text; defaults to the key.
+        [string] $Label
+    )
+    if (Test-NRGDnsLookupSucceeded -Domain $DomainEntry -Record $Record) { return $false }
+    if (-not $Label) { $Label = $Record }
+
+    # Surface the collector's reason when it recorded one, so the operator
+    # reading the finding does not have to open the results JSON to learn
+    # whether it was SERVFAIL, a proxy, or a timeout.
+    $why  = ''
+    $errs = @(Get-NRGObjectField -Item $DomainEntry -Key 'Errors' -Default @())
+    $hit  = @($errs | Where-Object { [string]$_ -like "${Record}:*" -or [string]$_ -like "${Label} *" }) | Select-Object -First 1
+    if ($hit) { $why = " Reason: $hit" }
+
+    Add-NRGFinding -ControlId $ControlId -State 'NotApplicable' -Category $Control.Category `
+        -Title "$($Control.Title): $Domain" -Severity 'Informational' -Instance $Domain `
+        -FrameworkIds $Citations `
+        -Detail "The $Label lookup for '$Domain' did not complete (every resolver failed). Not assessed — re-run before treating this domain as lacking $Label.$why"
+    return $true
+}
 
 # ── DNS-1.1 SPF Published and Valid ─────────────────────────────────────────
 function Test-NRGControlDNSSPF {
@@ -30,14 +86,10 @@ function Test-NRGControlDNSSPF {
     foreach ($domain in @($dnsDomainMap.Keys)) {
         $d = $dnsDomainMap[$domain]
 
-        if (-not (Test-NRGDnsLookupSucceeded -Domain $d -Record 'SPF')) {
-            # A failed lookup is not an absent record. Without this the tool
-            # reports a Gap on a domain whose SPF exists, because one resolver
-            # could not answer — a false finding in the client deliverable.
-            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Instance $domain `
-                -Detail "The SPF lookup for '$domain' did not complete (every resolver failed). Not assessed — re-run before treating this domain as lacking SPF."
-        } elseif (-not $d.SPF) {
+        if (Add-NRGDnsLookupFailedFinding -Control $control -ControlId $controlId -Citations $citations `
+                -Domain $domain -DomainEntry $d -Record 'SPF' -Label 'SPF') { continue }
+
+        if (-not $d.SPF) {
             Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
                 -FrameworkIds $citations `
@@ -94,6 +146,9 @@ function Test-NRGControlDNSDKIM {
     foreach ($domain in @($dnsDomainMap.Keys)) {
         $d = $dnsDomainMap[$domain]
 
+        if (Add-NRGDnsLookupFailedFinding -Control $control -ControlId $controlId -Citations $citations `
+                -Domain $domain -DomainEntry $d -Record 'DKIM' -Label 'DKIM') { continue }
+
         $hasSelector1 = -not [string]::IsNullOrEmpty($d.DKIM.Selector1)
         $hasSelector2 = -not [string]::IsNullOrEmpty($d.DKIM.Selector2)
         $hasCustom    = @($d.DKIM.CustomSelectors ?? @()).Count -gt 0
@@ -141,14 +196,10 @@ function Test-NRGControlDNSDMARC {
     foreach ($domain in @($dnsDomainMap.Keys)) {
         $d = $dnsDomainMap[$domain]
 
-        if (-not (Test-NRGDnsLookupSucceeded -Domain $d -Record 'DMARC')) {
-            # A failed lookup is not an absent record. Without this the tool
-            # reports a Gap on a domain whose DMARC exists, because one resolver
-            # could not answer — a false finding in the client deliverable.
-            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Instance $domain `
-                -Detail "The DMARC lookup for '$domain' did not complete (every resolver failed). Not assessed — re-run before treating this domain as lacking DMARC."
-        } elseif (-not $d.DMARC) {
+        if (Add-NRGDnsLookupFailedFinding -Control $control -ControlId $controlId -Citations $citations `
+                -Domain $domain -DomainEntry $d -Record 'DMARC' -Label 'DMARC') { continue }
+
+        if (-not $d.DMARC) {
             Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
                 -FrameworkIds $citations `
@@ -216,14 +267,10 @@ function Test-NRGControlDNSMTASTS {
     foreach ($domain in @($dnsDomainMap.Keys)) {
         $d = $dnsDomainMap[$domain]
 
-        if (-not (Test-NRGDnsLookupSucceeded -Domain $d -Record 'MTASTS')) {
-            # A failed lookup is not an absent record. Without this the tool
-            # reports a Gap on a domain whose MTA-STS exists, because one resolver
-            # could not answer — a false finding in the client deliverable.
-            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Instance $domain `
-                -Detail "The MTA-STS lookup for '$domain' did not complete (every resolver failed). Not assessed."
-        } elseif (-not $d.MTASTS.DNSRecord) {
+        if (Add-NRGDnsLookupFailedFinding -Control $control -ControlId $controlId -Citations $citations `
+                -Domain $domain -DomainEntry $d -Record 'MTASTS' -Label 'MTA-STS') { continue }
+
+        if (-not $d.MTASTS.DNSRecord) {
             Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Medium' -Instance $domain `
                 -FrameworkIds $citations `
@@ -271,14 +318,10 @@ function Test-NRGControlDNSTLSRPT {
     foreach ($domain in @($dnsDomainMap.Keys)) {
         $d = $dnsDomainMap[$domain]
 
-        if (-not (Test-NRGDnsLookupSucceeded -Domain $d -Record 'TLSRPT')) {
-            # A failed lookup is not an absent record. Without this the tool
-            # reports a Gap on a domain whose TLS-RPT exists, because one resolver
-            # could not answer — a false finding in the client deliverable.
-            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Instance $domain `
-                -Detail "The TLS-RPT lookup for '$domain' did not complete (every resolver failed). Not assessed."
-        } elseif ($d.TLSRPT) {
+        if (Add-NRGDnsLookupFailedFinding -Control $control -ControlId $controlId -Citations $citations `
+                -Domain $domain -DomainEntry $d -Record 'TLSRPT' -Label 'TLS-RPT') { continue }
+
+        if ($d.TLSRPT) {
             Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations -Detail "$domain TLS-RPT configured."
@@ -315,14 +358,10 @@ function Test-NRGControlDNSDNSSEC {
     foreach ($domain in @($dnsDomainMap.Keys)) {
         $d = $dnsDomainMap[$domain]
 
-        if (-not (Test-NRGDnsLookupSucceeded -Domain $d -Record 'DNSSEC')) {
-            # A failed lookup is not an absent record. Without this the tool
-            # reports a Gap on a domain whose DS exists, because one resolver
-            # could not answer — a false finding in the client deliverable.
-            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Instance $domain `
-                -Detail "The DS lookup for '$domain' did not complete (every resolver failed). Not assessed."
-        } elseif ($d.DNSSEC -eq $true) {
+        if (Add-NRGDnsLookupFailedFinding -Control $control -ControlId $controlId -Citations $citations `
+                -Domain $domain -DomainEntry $d -Record 'DNSSEC' -Label 'DS') { continue }
+
+        if ($d.DNSSEC -eq $true) {
             Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations -Detail "$domain DNSSEC enabled (DS record found at parent zone)."
@@ -439,14 +478,10 @@ function Test-NRGControlDNSCAA {
         if ($d -is [hashtable] -and $d.ContainsKey('CAA')) { $caa = $d['CAA'] }
         elseif ($d.PSObject.Properties['CAA'])             { $caa = $d.CAA }
 
-        if (-not (Test-NRGDnsLookupSucceeded -Domain $d -Record 'CAA')) {
-            # A failed lookup is not an absent record. Without this the tool
-            # reports a Gap on a domain whose CAA exists, because one resolver
-            # could not answer — a false finding in the client deliverable.
-            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Instance $domain `
-                -Detail "The CAA lookup for '$domain' did not complete (every resolver failed). Not assessed."
-        } elseif (-not $caa -or -not $caa.Present) {
+        if (Add-NRGDnsLookupFailedFinding -Control $control -ControlId $controlId -Citations $citations `
+                -Domain $domain -DomainEntry $d -Record 'CAA' -Label 'CAA') { continue }
+
+        if (-not $caa -or -not $caa.Present) {
             Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
                 -FrameworkIds $citations `
