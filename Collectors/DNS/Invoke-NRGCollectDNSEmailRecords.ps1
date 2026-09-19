@@ -1,6 +1,8 @@
 #Requires -Version 7.0
 #
 # Invoke-NRGCollectDNSEmailRecords.ps1  (v4.5.6)
+# Dependencies: Resolve-NRGDns, Get-NRGRawData, Set-NRGRawData, Get-NRGObjectField,
+#               Register-NRGException, Register-NRGCoverage, Test-NRGSafeProbeTarget
 # NRG Technology Services / NextLayerSec LLC
 # Author: Matthew Levorson
 #
@@ -8,8 +10,6 @@
 #               and Errors — LookupStatus is this collector's SectionStatus)
 # Consumes:     EXO-MailboxConfig (custom DKIM selectors, key creation time), optional
 # Cmdlets:      none against the tenant; Resolve-NRGDns (DoH) plus HTTPS/TLS probes
-# Dependencies: Resolve-NRGDns, Get-NRGRawData, Set-NRGRawData, Get-NRGObjectField,
-#               Register-NRGException, Register-NRGCoverage, Test-NRGSafeProbeTarget
 #
 # Collects DNS email authentication and PKI hygiene data for each accepted domain:
 #   - SPF, DKIM, DMARC, MTA-STS, TLS-RPT, DNSSEC, MX  (Phase 1)
