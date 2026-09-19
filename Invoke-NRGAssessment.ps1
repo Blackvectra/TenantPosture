@@ -489,6 +489,34 @@ if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
     if ($Quick) {
         Write-Warning "-Quick has no effect with -FromResults: findings are loaded from the baseline JSON, not re-evaluated. To produce a Quick scan, re-run against the live tenant."
     }
+
+    # Restore the collection-side state the baseline carries. Without this a
+    # republish silently loses it: Get-NRGCoverage returns empty, so the
+    # "collectors that did not complete" block and its limitation line vanish
+    # from the regenerated report even though the JSON records the failures,
+    # and every scope check that reads raw data has nothing to read. Both are
+    # report-only on this path — evaluators are not re-run — so restoring them
+    # cannot change a verdict, only stop the republish from looking cleaner
+    # than the original run.
+    if ($priorData.Contains('Coverage') -and $priorData.Coverage) {
+        $restored = 0
+        foreach ($famKey in @($priorData.Coverage.Keys)) {
+            $entry  = $priorData.Coverage[$famKey]
+            $status = [string](Get-NRGObjectField -Item $entry -Key 'Status' -Default '')
+            $note   = [string](Get-NRGObjectField -Item $entry -Key 'Note'   -Default '')
+            # Register-NRGCoverage validates Status; a baseline written by a
+            # future version could carry a value this build does not know, and
+            # that must not abort the republish.
+            if ($status -notin @('Collected','Partial','NotCollected','Failed')) { continue }
+            try { Register-NRGCoverage -Family ([string]$famKey) -Status $status -Note $note; $restored++ } catch { }
+        }
+        if ($restored -gt 0) { Write-Host "  [+] Restored coverage for $restored collector(s)" -ForegroundColor Green }
+    }
+    if ($priorData.Contains('RawData') -and $priorData.RawData) {
+        foreach ($rdKey in @($priorData.RawData.Keys)) {
+            try { Set-NRGRawData -Key ([string]$rdKey) -Data $priorData.RawData[$rdKey] } catch { }
+        }
+    }
     $tenantTag = if ($reportMetadata.TenantDomain) { ($reportMetadata.TenantDomain -split '\.')[0] } else { 'tenant' }
     # OWASP A01 — strip any non-[a-zA-Z0-9-] before using tenantTag in a file path
     $tenantTag = $tenantTag -replace '[^a-zA-Z0-9-]', ''
