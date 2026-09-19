@@ -4,6 +4,26 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **The report now says what it did NOT assess.** `NotApplicable` is excluded
+  from the compliance denominator, so a control that silently stops producing
+  a verdict makes the score go **up** — which is the shape of every
+  high-consequence bug this tool has had (the omitted `signInActivity`
+  property, the missing PIM `SectionStatus`, the DNS lookup read as an absent
+  record). In each case the score looked fine and nothing in the deliverable
+  said the control had gone quiet. `Lib/Get-NRGAssessmentScope.ps1` sorts all
+  202 controls into exactly one bucket — scored, licence-gated, collection
+  failed, no automated test, or **no result at all** (the set difference
+  `controls.json − findings`, which nothing computed before) — and renders as
+  an **Assessment Scope and Limitations** section directly under the score in
+  the HTML report (`id="scope"`) and in the Markdown summary, with
+  plain-language limitations written for whoever signs the report rather than
+  for the operator. It is a view, not a verdict: `NRG.AssessmentScope.Tests.ps1`
+  (17 tests) pins that it emits no findings and moves no score, that the
+  buckets sum with no control counted twice, that a 403/consent failure is
+  classified as a collection failure rather than as advisory, that the worst
+  state wins for multi-instance controls, that replayed result JSON classifies
+  identically, and that the limitations text never says anything is compliant.
+
 - **Export List Sync now exists in NRG.** `NRG.EvaluatorWiring.Tests.ps1` had
   said since it was written that "Export List Sync checks psd1<->psm1"; the
   twin repo had that check and this one did not. `Testing/NRG.ExportSync.Tests.ps1`

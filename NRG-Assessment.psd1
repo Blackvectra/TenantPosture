@@ -54,6 +54,7 @@
         'Test-NRGSignatureStatus',
         'Get-NRGMaturityTier',
         'Get-NRGCoverageScore',
+        'Get-NRGAssessmentScope',
         'Get-NRGNISTFamilyCoverage',
         'Get-NRGNISTControlIdsFromFinding',
         'Get-NRGNISTPhysicalPosture',

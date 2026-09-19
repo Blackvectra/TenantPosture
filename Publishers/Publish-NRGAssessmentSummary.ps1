@@ -160,6 +160,65 @@ function Publish-NRGAssessmentSummary {
         }
     }
 
+    # ── Assessment scope and limitations ─────────────────────────────────────
+    # Directly under the score and the risk figure, because both are read as
+    # statements about the tenant and both are silent about controls the tool
+    # never reached a verdict on. NotApplicable is excluded from the
+    # denominator, so the score RISES when the tool goes blind.
+    if (Get-Command Get-NRGAssessmentScope -ErrorAction SilentlyContinue) {
+        $scope = $null
+        try { $scope = Get-NRGAssessmentScope -Findings $Findings } catch {
+            Write-Verbose "Assessment scope section skipped: $($_.Exception.Message)"
+        }
+        if ($scope -and $scope.Available) {
+            $null = $sb.AppendLine("## Assessment Scope and Limitations")
+            $null = $sb.AppendLine()
+            $null = $sb.AppendLine("**$($scope.ScoredControls) of $($scope.TotalControls) controls produced a scored verdict.** The remaining $($scope.UnscoredControls) are itemised below and are excluded from the compliance score — they are neither passes nor failures.")
+            $null = $sb.AppendLine()
+            $null = $sb.AppendLine("| Outcome | Controls |")
+            $null = $sb.AppendLine("|---------|----------|")
+            $null = $sb.AppendLine("| Scored (Satisfied / Partial / Gap / Error) | $($scope.ScoredControls) |")
+            $null = $sb.AppendLine("| Could not be assessed — data did not collect | $($scope.CollectionIncomplete.Count) |")
+            $null = $sb.AppendLine("| Produced no result at all | $($scope.NoResult.Count) |")
+            $null = $sb.AppendLine("| No automated test — manual review required | $($scope.NoProgrammaticCheck.Count) |")
+            $null = $sb.AppendLine("| Licence gated | $($scope.LicenceBlocked.Count) |")
+            $null = $sb.AppendLine()
+
+            foreach ($l in $scope.Limitations) {
+                $null = $sb.AppendLine("- $(EscMd $l)")
+            }
+            $null = $sb.AppendLine()
+
+            foreach ($grp in @(
+                @{ Label = 'Could not be assessed — data did not collect'; Items = $scope.CollectionIncomplete }
+                @{ Label = 'Produced no result at all'; Items = $scope.NoResult }
+                @{ Label = 'No automated test — manual review required'; Items = $scope.NoProgrammaticCheck }
+            )) {
+                $items = @($grp.Items)
+                if ($items.Count -eq 0) { continue }
+                $null = $sb.AppendLine("### $($grp.Label) ($($items.Count))")
+                $null = $sb.AppendLine()
+                $null = $sb.AppendLine("| Control | Title | Reason |")
+                $null = $sb.AppendLine("|---------|-------|--------|")
+                foreach ($it in $items) {
+                    $null = $sb.AppendLine("| $(EscMd $it.ControlId) | $(EscMd $it.Title) | $(EscMd $it.Reason) |")
+                }
+                $null = $sb.AppendLine()
+            }
+
+            if (@($scope.CoverageIssues).Count -gt 0) {
+                $null = $sb.AppendLine("### Collectors that did not complete ($(@($scope.CoverageIssues).Count))")
+                $null = $sb.AppendLine()
+                $null = $sb.AppendLine("| Collector | Status | Note |")
+                $null = $sb.AppendLine("|-----------|--------|------|")
+                foreach ($ci in $scope.CoverageIssues) {
+                    $null = $sb.AppendLine("| $(EscMd $ci.Family) | $(EscMd $ci.Status) | $(EscMd $ci.Note) |")
+                }
+                $null = $sb.AppendLine()
+            }
+        }
+    }
+
     # Service connection status
     $null = $sb.AppendLine("## Service Coverage")
     $null = $sb.AppendLine()

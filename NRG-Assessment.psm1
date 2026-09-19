@@ -160,6 +160,7 @@ $script:ExportedFunctions = @(
     'Test-NRGSignatureStatus',
     'Get-NRGMaturityTier',
     'Get-NRGCoverageScore',
+    'Get-NRGAssessmentScope',
     'Get-NRGNISTFamilyCoverage', 'Get-NRGNISTControlIdsFromFinding',
     'Get-NRGNISTPhysicalPosture', 'Get-NRGNISTPhysicalDefinitions',
     'Get-NRGNISTControlCatalog', 'Get-NRGNISTControlTitle', 'Get-NRGNISTFamilyTitle',
