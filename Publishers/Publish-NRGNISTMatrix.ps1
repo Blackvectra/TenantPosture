@@ -10,7 +10,7 @@
 #          Deliberately additive. Publish-NRGComplianceMatrix keeps every
 #          framework it has today (CIS, SCuBA, CMMC, ISO 27001, SOC 2, HIPAA,
 #          PCI DSS, MITRE), and this publisher changes none of it. The same
-#          findings, the same scores, one extra document organised the way an
+#          findings, the same scores, one extra document organized the way an
 #          800-53 reader works: by control, then by family.
 #
 #          Emits Markdown always, and XLSX when openpyxl is available. Markdown
@@ -311,7 +311,7 @@ function Publish-NRGNISTMatrix {
 
     # The hero score stays white deliberately: the header is a dark purple
     # gradient, and the red end of the score palette reads badly on it.
-    # Colour carries the verdict in the family table below instead.
+    # Color carries the verdict in the family table below instead.
     $nistHtmlDoc = @"
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">

@@ -26,12 +26,12 @@
 #
 #            2. Presence of Data.<Section> — the fallback for collectors that
 #               do not publish SectionStatus yet, and for result JSON captured
-#               before SectionStatus existed. A section initialised to $null
+#               before SectionStatus existed. A section initialized to $null
 #               and never populated reads as not collected; a section that
 #               landed reads as collected.
 #
 #          The fallback is deliberately weaker than the contract and cannot
-#          replace it: a section initialised to @() rather than $null is
+#          replace it: a section initialized to @() rather than $null is
 #          indistinguishable from a query that legitimately returned nothing.
 #          That is exactly why collectors with independent sub-queries are
 #          required to publish SectionStatus rather than relying on this.
@@ -78,7 +78,7 @@ function Test-NRGSectionCollected {
     # and the guard suppressed real compliance on clean tenants.
     #
     # The distinction that matters:
-    #   key absent, or present holding $null -> the collector initialised it
+    #   key absent, or present holding $null -> the collector initialized it
     #                                           and the sub-query never filled
     #                                           it. Not collected.
     #   key present holding @()             -> the query ran and found none.

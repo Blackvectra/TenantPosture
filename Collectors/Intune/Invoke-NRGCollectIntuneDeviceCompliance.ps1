@@ -33,7 +33,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
                 NonCompliantCount= 0
                 ByPlatform       = @{}
             }
-            # Empty is not clean. Every section above initialises to @(), so an
+            # Empty is not clean. Every section above initializes to @(), so an
             # empty list is ambiguous — "queried, this tenant has none"
             # (compliant) or "the query failed" (unknown). Success cannot tell
             # them apart because it reports on the collector, not the query.

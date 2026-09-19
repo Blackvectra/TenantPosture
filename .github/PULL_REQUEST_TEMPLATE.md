@@ -49,7 +49,7 @@ Required for every PR. Tick what applies, explain anything skipped.
 ## Documentation
 
 - [ ] `CHANGELOG.md` updated under `## Unreleased`
-- [ ] `README.md` reflects new flags / behaviour if user-facing
+- [ ] `README.md` reflects new flags / behavior if user-facing
 - [ ] `CLAUDE.md` reflects new modules / functions if structural
 - [ ] If this affects the security posture, `SECURITY.md` or `docs/SECURE-DEVELOPMENT.md` updated
 

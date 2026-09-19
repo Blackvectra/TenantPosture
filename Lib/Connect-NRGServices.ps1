@@ -189,7 +189,7 @@ function Connect-NRGServices {
         # a context already exists that holds the core read scopes, reuse it and skip
         # the reconnect. The two re-consent-only scopes (IdentityRiskyServicePrincipal
         # / AttackSimulation) simply stay absent → AAD-11.3 / DEF-4.6 report
-        # NotApplicable in batch, which is the already-documented behaviour.
+        # NotApplicable in batch, which is the already-documented behavior.
         $reuseGraphContext = $false
         if (-not $isAppOnly) {
             try {

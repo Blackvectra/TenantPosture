@@ -25,7 +25,7 @@
 #   round(100 * (Satisfied + Σ delta) / Scored). No estimation, no rounding
 #   drift (we recompute from counts, we don't sum rounded per-step deltas).
 #
-#   License unlocks are listed but NOT given a projected-score number: a licence
+#   License unlocks are listed but NOT given a projected-score number: a license
 #   purchase changes the denominator and the post-upgrade state is speculative
 #   (licensed-but-unconfigured is a Gap, not an automatic Satisfied), so
 #   attaching a precise point value there would overclaim. They are the separate
@@ -62,7 +62,7 @@ function Get-NRGRemediationRoadmap {
 
         # Optional — output of Get-NRGTenantLicenseProfile. If omitted, the
         # helper resolves it from module state. Passing null means "no SKU
-        # data": a control with a real licence requirement is then classified
+        # data": a control with a real license requirement is then classified
         # as a license unlock (conservative — never a false quick win).
         [Parameter()] [AllowNull()] [object] $LicenseProfile
     )

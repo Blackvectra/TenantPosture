@@ -7,10 +7,10 @@
 #          order the work actually happens.
 #
 #          Distinct from Publish-NRGDeviceGuide, deliberately. The guide is
-#          organised by 800-53 control and answers "what does the framework
-#          require". This is organised by lifecycle stage and answers "what do I
+#          organized by 800-53 control and answers "what does the framework
+#          require". This is organized by lifecycle stage and answers "what do I
 #          do to this laptop, and in what order". A technician provisioning a
-#          machine does not work AC-11 then SC-28; they image it, enrol it,
+#          machine does not work AC-11 then SC-28; they image it, enroll it,
 #          encrypt it, harden it, and hand it over. Same controls underneath,
 #          sequenced for the person doing the work.
 #

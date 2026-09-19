@@ -473,7 +473,7 @@ function Test-NRGControlDefenderAlertNotification {
     if ($high.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
-            -Detail "$($enabled.Count) alert policy(ies) are enabled but none are High or Critical severity, so the most serious events do not raise a prioritised alert." `
+            -Detail "$($enabled.Count) alert policy(ies) are enabled but none are High or Critical severity, so the most serious events do not raise a prioritized alert." `
             -CurrentValue "$($enabled.Count) enabled policies, 0 at High/Critical" `
             -RequiredValue 'High and Critical alert policies enabled with email recipients' `
             -Remediation $ctrl.Remediation

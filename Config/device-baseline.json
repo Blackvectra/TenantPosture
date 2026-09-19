@@ -2,7 +2,7 @@
   "version": "1.0",
   "title": "Managed Device Baseline",
   "subtitle": "The standard every managed device meets, from purchase order to disposal.",
-  "purpose": "A build and lifecycle standard, organised the way the work actually happens. The NIST device guide answers 'what does 800-53 require'; this answers 'what do I do to this laptop, and in what order'. Same underlying controls, technician's sequence instead of the auditor's.",
+  "purpose": "A build and lifecycle standard, organized the way the work actually happens. The NIST device guide answers 'what does 800-53 require'; this answers 'what do I do to this laptop, and in what order'. Same underlying controls, technician's sequence instead of the auditor's.",
   "note": "Every item cites the 800-53 control it satisfies and, where the assessment can check it, the tool control that verifies it. Items marked Mandatory are the non-negotiable set — a device that misses one is not a managed device, it is an unmanaged device with an asset tag.",
 
   "stages": [
@@ -36,7 +36,7 @@
           "Requirement": "Device is registered for zero-touch provisioning where the vendor supports it",
           "Mandatory": false,
           "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
-          "Why": "Autopilot / ADE enrolment cannot be skipped by the end user. Manual enrolment can, and the devices that skip it are invisible until something goes wrong on them.",
+          "Why": "Autopilot / ADE enrollment cannot be skipped by the end user. Manual enrollment can, and the devices that skip it are invisible until something goes wrong on them.",
           "How": "Windows Autopilot via the hardware hash or vendor registration; Apple Business Manager for macOS and iOS; Android zero-touch or Knox.",
           "Nist": ["CM-2", "IA-3"],
           "VerifiedBy": ["INT-3.1"]
@@ -55,7 +55,7 @@
     },
     {
       "Id": "provision",
-      "Title": "2. Provisioning and enrolment",
+      "Title": "2. Provisioning and enrollment",
       "Description": "Bringing the device under management. Nothing in later stages can be enforced until this is done, so this is where an incomplete build causes the most damage.",
       "Items": [
         {
@@ -64,17 +64,17 @@
           "Mandatory": true,
           "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
           "Why": "Without a device identity there is nothing for Conditional Access to evaluate, no target for policy, and no way to distinguish this machine from an unknown one.",
-          "How": "Entra join (or hybrid join for domain-attached estates) plus automatic Intune enrolment. Confirm the device appears in both Entra and Intune before hand-over.",
+          "How": "Entra join (or hybrid join for domain-attached estates) plus automatic Intune enrollment. Confirm the device appears in both Entra and Intune before hand-over.",
           "Nist": ["IA-3", "CM-8"],
           "VerifiedBy": ["INT-1.2", "INT-3.1"]
         },
         {
           "Id": "DB-2.2",
-          "Requirement": "Enrolment restrictions block platforms that cannot meet this baseline",
+          "Requirement": "Enrollment restrictions block platforms that cannot meet this baseline",
           "Mandatory": true,
           "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
-          "Why": "A baseline that a device is allowed to enrol without meeting is a suggestion. Restrictions are what make it a standard.",
-          "How": "Intune enrolment restrictions blocking personally-owned platforms and unsupported OS versions, with a documented exception path.",
+          "Why": "A baseline that a device is allowed to enroll without meeting is a suggestion. Restrictions are what make it a standard.",
+          "How": "Intune enrollment restrictions blocking personally-owned platforms and unsupported OS versions, with a documented exception path.",
           "Nist": ["CM-7", "AC-3"],
           "VerifiedBy": ["INT-3.1"]
         },
@@ -218,7 +218,7 @@
           "Mandatory": true,
           "AppliesTo": ["Windows", "macOS"],
           "Why": "Browsers, PDF readers, Java and conferencing clients are the most exploited software on any endpoint, and Windows Update does not touch them.",
-          "How": "RMM-driven third-party patching, or Intune Enterprise App Management where the catalogue covers the estate. Whichever is used, someone must be able to answer 'what is unpatched right now'.",
+          "How": "RMM-driven third-party patching, or Intune Enterprise App Management where the catalog covers the estate. Whichever is used, someone must be able to answer 'what is unpatched right now'.",
           "Nist": ["SI-2", "CM-8"],
           "VerifiedBy": []
         },
@@ -258,7 +258,7 @@
           "Mandatory": true,
           "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
           "Why": "Encryption protects a lost device only until someone guesses the PIN. The response window is what limits that exposure, and staff will not report quickly if they do not know how.",
-          "How": "A documented path staff actually know, a named person authorised to trigger the wipe, and a target reporting time. Test it once a year the way you would test a backup.",
+          "How": "A documented path staff actually know, a named person authorized to trigger the wipe, and a target reporting time. Test it once a year the way you would test a backup.",
           "Nist": ["IR-4", "IR-6", "PE-20"],
           "VerifiedBy": []
         }
@@ -291,11 +291,11 @@
         },
         {
           "Id": "DB-5.3",
-          "Requirement": "Disposed devices are sanitised, with evidence retained",
+          "Requirement": "Disposed devices are sanitized, with evidence retained",
           "Mandatory": true,
           "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
           "Why": "This is the most commonly missing piece of evidence in an MSP-managed environment, because disposal usually happens outside the managed-service scope and nobody owns it.",
-          "How": "Cryptographic erase on encrypted drives (destroy the key), or a certified disposal vendor issuing per-asset certificates of destruction. Retain certificates with the asset register. Note that a remote wipe is a request, not a guarantee, and does not substitute for sanitising recovered hardware.",
+          "How": "Cryptographic erase on encrypted drives (destroy the key), or a certified disposal vendor issuing per-asset certificates of destruction. Retain certificates with the asset register. Note that a remote wipe is a request, not a guarantee, and does not substitute for sanitizing recovered hardware.",
           "Nist": ["MP-6"],
           "VerifiedBy": []
         },

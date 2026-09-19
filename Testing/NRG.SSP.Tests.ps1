@@ -120,7 +120,7 @@ Describe 'System Security Plan (NIST SP 800-171 Rev 2)' {
         It 'carries no requirement id with surrounding whitespace' {
             # The community OSCAL catalog this was converted from ships 3.2.1
             # with padding in its id, which silently drops it from every
-            # exact-match join. Normalisation happened at conversion; this stops
+            # exact-match join. Normalization happened at conversion; this stops
             # it coming back on the next refresh.
             foreach ($r in $script:Reqs) {
                 ([string]$r.Id) | Should -BeExactly (([string]$r.Id).Trim()) -Because 'a padded id joins to nothing and the requirement vanishes silently'
@@ -128,7 +128,7 @@ Describe 'System Security Plan (NIST SP 800-171 Rev 2)' {
         }
 
         It 'is pinned to Rev 2, the revision CMMC Level 2 is assessed against' {
-            # DoD Class Deviation 2023-O0006. Rev 3 exists but is not authorised
+            # DoD Class Deviation 2023-O0006. Rev 3 exists but is not authorized
             # for CMMC scoring; publishing an SSP against it would be assessed
             # against the wrong standard.
             $script:Cat.framework | Should -Match 'Rev(ision)?\s*2'

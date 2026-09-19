@@ -82,7 +82,7 @@ function Invoke-NRGCollectDeviceCompliance {
                 $schema = [string](Get-NRGObjectField -Item $obj -Key 'Schema' -Default '')
                 if ($schema -notmatch '^nrg-device-compliance/') {
                     # Not one of ours. Skipped loudly rather than parsed
-                    # optimistically — a stray JSON in the collection folder must
+                    # optimiztically — a stray JSON in the collection folder must
                     # not become a device with no checks, which would read as a
                     # device that passed nothing.
                     $rejected++

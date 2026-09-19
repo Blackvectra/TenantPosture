@@ -9,7 +9,7 @@
 #
 #          41 of the 110 NIST SP 800-171 Rev 2 requirements have automated
 #          evidence in this tool. The other 69 are policy, process, physical
-#          security and personnel: who authorises access, where the media is
+#          security and personnel: who authorizes access, where the media is
 #          destroyed, how often awareness training runs. Those answers exist in
 #          the client's head or in a binder, and an SSP is not a document until
 #          they are written down. This file is where they live, so they survive

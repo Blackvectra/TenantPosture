@@ -284,7 +284,7 @@ Testing/                          44 Pester suites — the FULL suite gates ever
 
 ### NIST SP 800-53 Rev 5 — family rollup
 
-All 202 controls carry an 800-53 citation, and the report rolls them up **by control family**, not only as a single aggregate percentage. Every other view in the report groups by M365 workload — the right lens for the engineer doing the remediation, the wrong one for a reader working an 800-53, FedRAMP, or CMMC assessment, whose own POA&M is organised by family.
+All 202 controls carry an 800-53 citation, and the report rolls them up **by control family**, not only as a single aggregate percentage. Every other view in the report groups by M365 workload — the right lens for the engineer doing the remediation, the wrong one for a reader working an 800-53, FedRAMP, or CMMC assessment, whose own POA&M is organized by family.
 
 The rollup covers 12 families and 59 distinct 800-53 controls, and appears in three places: a family table in the HTML report, the same table in the Markdown summary, and a dedicated `NIST Families` sheet in the XLSX matrix.
 
@@ -304,7 +304,7 @@ NRG's practice is built on NIST SP 800-53, so **the report defaults to NIST only
 
 `-NISTMatrix` additionally emits a **standalone NIST-only HTML report** alongside the Markdown and XLSX — a self-contained page with the family table, the full control matrix, the not-assessable list and the physical/device section, that names no other framework anywhere on it. That's the artifact for a client who is assessed against 800-53 and shouldn't have to read their posture out of a multi-framework document.
 
-> **The NLS twin defaults to `All`.** That is the single deliberate behavioural difference between the two repos, and each pins its own default by test — it's exactly the setting a careless sync would silently flip, and the failure would be invisible because the report still renders and still scores correctly.
+> **The NLS twin defaults to `All`.** That is the single deliberate behavioral difference between the two repos, and each pins its own default by test — it's exactly the setting a careless sync would silently flip, and the failure would be invisible because the report still renders and still scores correctly.
 
 ### Standalone NIST 800-53 matrix
 
@@ -320,7 +320,7 @@ Clients assessed against 800-53 should not have to read their posture out of a m
 
 The workbook has six sheets: **Summary** (posture, scope, caveats), **Control Matrix** (one row per 800-53 control and the tenant control evidencing it — the matrix proper), **By Control**, **By Family**, **Physical & Device**, and **Not Assessed**. Every row carries the official Rev 5 control title from [`Config/nist-800-53-catalog.json`](Config/nist-800-53-catalog.json), because a row reading `AC-6(9)   Gap` is not something an auditor can work from.
 
-This is **purely additive**. `Publish-NRGComplianceMatrix` keeps every framework it has today — CIS, SCuBA, CMMC, ISO 27001, SOC 2, HIPAA, PCI DSS, MITRE — and none of the existing report changes. Same findings, same scores, one extra document organised the way an 800-53 reader works. A test asserts that publishing the NIST matrix does not move the CIS, SCuBA or CMMC score by a single point.
+This is **purely additive**. `Publish-NRGComplianceMatrix` keeps every framework it has today — CIS, SCuBA, CMMC, ISO 27001, SOC 2, HIPAA, PCI DSS, MITRE — and none of the existing report changes. Same findings, same scores, one extra document organized the way an 800-53 reader works. A test asserts that publishing the NIST matrix does not move the CIS, SCuBA or CMMC score by a single point.
 
 Three things the document is careful not to claim:
 
@@ -347,11 +347,11 @@ A control lands in *Do now* only if the tool has **documented** that users notic
 
 **The projection is arithmetic, not an estimate.** Coverage is `round(100 * (Satisfied + 0.5*Partial) / Scored)` — the same formula and denominator rule as every other score in the tool. Closing a gap adds 1.0 to the numerator, closing a partial adds 0.5, and the denominator does not move because the control was already assessed. Every cumulative figure is recomputed from counts rather than accumulated from rounded per-step deltas, so there is no drift; a test re-derives all of them independently and fails if the implementation ever starts summing.
 
-Licence-blocked controls are listed separately and get **no projected number**. Buying a licence changes the denominator, and a licensed-but-unconfigured control is still a gap — a figure there would be a guess dressed as arithmetic.
+License-blocked controls are listed separately and get **no projected number**. Buying a license changes the denominator, and a licensed-but-unconfigured control is still a gap — a figure there would be a guess dressed as arithmetic.
 
 Family movement is computed by replaying the plan through the same rollup, not by per-family arithmetic. A control supporting two families moves both, and hand-rolled arithmetic gets that wrong in a way nobody notices until an auditor adds the column up.
 
-**Completing every step does not make an organisation 800-53 compliant.** It closes what a Microsoft 365 tenant scan and an endpoint scan can observe — a subset of 800-53, and 14 of the 20 families. The plan states that ceiling on its first page rather than letting a reader infer that 100% means done.
+**Completing every step does not make an organization 800-53 compliant.** It closes what a Microsoft 365 tenant scan and an endpoint scan can observe — a subset of 800-53, and 14 of the 20 families. The plan states that ceiling on its first page rather than letting a reader infer that 100% means done.
 
 Single framework on purpose: the document names NIST and nothing else. A plan that hedges across four frameworks orders its steps for none of them, and a test greps for the others and fails on any leak.
 
@@ -404,7 +404,7 @@ Two properties the tests enforce, because both are easy to break by accident:
 - **It touches nothing.** A static guard fails the build if `Invoke-NRGGraphRequest`, `Connect-MgGraph`, `Invoke-RestMethod` or friends ever appear in either file. Otherwise the guide quietly becomes something that needs an authenticated session, and you find out in front of a client.
 - **Findings never change the advice.** `-ResultsPath` may change what the guide reports as *already done*; it may never change what it recommends you *do*. A test diffs the rendered options with and without findings and requires them identical — otherwise two clients with the same obligations get different advice because one happened to be scanned first.
 
-Every control carries **two or more** options by design. A single option is a directive, and a client already standardised on a third-party endpoint suite or an existing badge system should be able to satisfy the control with what they have.
+Every control carries **two or more** options by design. A single option is a directive, and a client already standardized on a third-party endpoint suite or an existing badge system should be able to satisfy the control with what they have.
 
 ### Endpoint compliance — `DeviceCompliance` scanner
 
@@ -421,7 +421,7 @@ The tenant half of the assessment reads Intune **policy**. This reads device **s
     -DeviceResults .\collected\clientname\ -NISTMatrix
 ```
 
-**35 checks** across encryption and boot integrity, malware defence, network exposure, accounts and privilege, patch state, session lock, legacy surface and audit policy. Each maps to an 800-53 control, so device findings land in the same report, the same score, and the same NIST family rollup as everything else.
+**35 checks** across encryption and boot integrity, malware defense, network exposure, accounts and privilege, patch state, session lock, legacy surface and audit policy. Each maps to an 800-53 control, so device findings land in the same report, the same score, and the same NIST family rollup as everything else.
 
 Three properties, all enforced by test:
 
@@ -435,7 +435,7 @@ Findings aggregate per control, not per device — one row saying *"41 of 60 fai
 
 ### Device build standard
 
-The guide above is organised by 800-53 control. The **build standard** is the same material sequenced the way the work happens — a technician images, enrols, encrypts, hardens and hands over; they do not work AC-11 then SC-28. It is emitted by the same command:
+The guide above is organized by 800-53 control. The **build standard** is the same material sequenced the way the work happens — a technician images, enrolls, encrypts, hardens and hands over; they do not work AC-11 then SC-28. It is emitted by the same command:
 
 ```powershell
 .\New-NRGDeviceGuide.ps1 -ClientName 'Example Client'
@@ -443,11 +443,11 @@ The guide above is organised by 800-53 control. The **build standard** is the sa
 #   nist-device-guide-baseline.md / .html   build standard
 ```
 
-**27 requirements across 5 lifecycle stages, 23 of them mandatory** — procurement and intake, provisioning and enrolment, hardening, in service, offboarding and disposal. It leads with a printable checklist (one unchecked box per requirement) and puts the reasoning underneath, so the person doing the build gets the list and the person justifying an exception gets the argument.
+**27 requirements across 5 lifecycle stages, 23 of them mandatory** — procurement and intake, provisioning and enrollment, hardening, in service, offboarding and disposal. It leads with a printable checklist (one unchecked box per requirement) and puts the reasoning underneath, so the person doing the build gets the list and the person justifying an exception gets the argument.
 
 Every requirement states **why** it exists, **how** to do it, the 800-53 control it satisfies, and whether the assessment can verify it. That last part is the honest one: roughly a third of the standard is build-time work no tenant scan can confirm — BIOS passwords, firmware settings, certificates of destruction — and those rows say *"not checkable from the tenant"* rather than letting a reader assume the assessment covers everything listed.
 
-The mandatory set is deliberately small and non-negotiable: MDM enrolment, per-device local admin passwords, full-disk encryption with escrowed keys, EDR, patching within a window, and the Conditional Access enforcement that gives all of it teeth. A device that misses one is not a managed device; it is an unmanaged device with an asset tag.
+The mandatory set is deliberately small and non-negotiable: MDM enrollment, per-device local admin passwords, full-disk encryption with escrowed keys, EDR, patching within a window, and the Conditional Access enforcement that gives all of it teeth. A device that misses one is not a managed device; it is an unmanaged device with an asset tag.
 
 ### Physical, media and device controls
 
@@ -459,9 +459,9 @@ So the report carries a **Physical, Media and Device Controls** section covering
 |---|---|---:|
 | **Tenant** | Fully evidenced by controls scored in this assessment — BitLocker/FileVault, ASR, LAPS, Windows Hello, update rings, device compliance, endpoint DLP | 10 |
 | **Hybrid** | The tenant evidences part; the rest is off-tenant — remote access, external systems, nonlocal maintenance, asset inventory, personnel termination | 7 |
-| **Attested** | Not observable from Microsoft 365 under any configuration — facility access, visitor records, fire and environmental controls, media storage/transport/sanitisation, maintenance personnel, wireless | 14 |
+| **Attested** | Not observable from Microsoft 365 under any configuration — facility access, visitor records, fire and environmental controls, media storage/transport/sanitization, maintenance personnel, wireless | 14 |
 
-Each row names the device aspect it covers, links back to the tool controls that evidence it, states the evidence an assessor must collect off-tenant, and lists **two or more implementation options** — so a client already standardised on a third-party EDR or an existing badge system sees alternatives rather than a single directive.
+Each row names the device aspect it covers, links back to the tool controls that evidence it, states the evidence an assessor must collect off-tenant, and lists **two or more implementation options** — so a client already standardized on a third-party EDR or an existing badge system sees alternatives rather than a single directive.
 
 **Nothing in this section is scored.** Tenant and Hybrid rows reflect findings already scored under their own control IDs; counting them again would double-count. Attested rows were never assessed and read *Attestation required* — never Satisfied, never Partial. That is the same rule the tool applies to advisory controls, enforced here by `NRG.NISTPhysical.Tests.ps1`, which feeds the posture a findings set that satisfies every control in the tool and asserts the attested rows still refuse to claim anything.
 
