@@ -4,6 +4,44 @@
 
 Accuracy + hardening pass (targeting v4.13.0):
 
+- **Application (app-only) permissions are now assessed — AAD-15.1 / AAD-15.2.**
+  AAD-12.4 reads `oauth2PermissionGrants` with consentType `AllPrincipals`,
+  which is the **delegated** consent table: an app acting as a signed-in user.
+  An app-only grant is an `appRoleAssignment` and is not in that table at all,
+  so a malicious application permission returned **zero rows** from the
+  endpoint AAD-12.4 queries and the report said the tenant was clean. That is
+  the modern persistence and business-email-compromise route, and the tool was
+  blind to it.
+  The distinction is the whole point: an application permission is exercised
+  with **no signed-in user**, so no MFA prompt fires, no Conditional Access
+  policy applies, and the activity does not look like a person in the sign-in
+  logs. `Mail.ReadWrite` app-only reads every mailbox; Exchange
+  `full_access_as_app` takes full control of all of them;
+  `RoleManagement.ReadWrite.Directory` makes the app Global Administrator;
+  `Domain.ReadWrite.All` adds a federated domain and forges tokens for anyone.
+  `Collectors/AAD/Invoke-NRGCollectAADAppPermissions.ps1` asks each high-value
+  RESOURCE who holds a role on it (Microsoft Graph, Exchange Online,
+  SharePoint) rather than asking every principal what it holds — three paged
+  queries instead of hundreds. **No new Graph scope is required**, so there is
+  no re-consent in any client tenant, and a test asserts that.
+  `Config/app-permissions-risk.json` holds the risk judgement as reviewable
+  data in two tiers, each entry carrying the reason it is rated; a permission
+  in neither tier is collected and reported but **not scored**, because absence
+  from the catalogue means unrated, never safe. Microsoft first-party apps
+  legitimately hold these, so they are excluded from the verdict and their
+  count is stated in the finding — set aside, never silently dropped — while an
+  app whose owner cannot be determined is scored rather than waved through.
+  Every watched resource must report `Collected` before either control reaches
+  a verdict: Exchange is where `full_access_as_app` lives, so scoring Graph
+  alone and calling it clean would miss the worst grant in the product.
+  Caught while building it: `@odata.nextLink` read through
+  `Get-NRGNestedProperty` never resolves, because that helper splits its path
+  on `.` and looks for `@odata` then `nextLink`. Paging stopped silently after
+  page one, which would have reported a partial list as a full enumeration on
+  any tenant large enough to page. It now reads through `Get-NRGObjectField`,
+  and a test pins that a second page is followed.
+  26 tests added; control count 202 -> 204.
+
 - **The scope section misclassified its own blind spots.** A code review of the
   section added one commit earlier found five defects, all real. The worst:
   `Test-NRGLicenseRequirementMet` returns `$false` when there is **no SKU data**
