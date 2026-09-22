@@ -1,0 +1,65 @@
+{
+  "_comment": [
+    "Application (app-only) permission risk catalog.",
+    "",
+    "These are APPLICATION permissions, not delegated ones. An app holding one",
+    "of these acts with no signed-in user: no MFA prompt, no Conditional Access",
+    "evaluation, and a sign-in log entry that does not look like a person. That",
+    "is why they are rated far above the equivalent delegated scope, and why",
+    "AAD-12.4 (which reads oauth2PermissionGrants, the DELEGATED consent table)",
+    "cannot see any of this — a malicious app-only grant returns zero rows from",
+    "that endpoint.",
+    "",
+    "Tier1 is tenant takeover: the permission can be used to obtain Global",
+    "Administrator, forge tokens for any user, or read every mailbox outright.",
+    "Tier2 is mass data access across all users without a takeover path.",
+    "",
+    "A permission absent from both lists is reported in the inventory but is",
+    "not scored. Absence from this file is not a judgement that the permission",
+    "is safe — it means this catalog has not rated it."
+  ],
+  "resources": {
+    "00000003-0000-0000-c000-000000000000": "Microsoft Graph",
+    "00000002-0000-0ff1-ce00-000000000000": "Office 365 Exchange Online",
+    "00000003-0000-0ff1-ce00-000000000000": "SharePoint Online"
+  },
+  "microsoftOwnerTenantIds": [
+    "f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+    "72f988bf-86f1-41af-91ab-2d7cd011db47"
+  ],
+  "tier1": [
+    { "Permission": "RoleManagement.ReadWrite.Directory", "Why": "Can assign directory roles, including Global Administrator, to any principal it chooses." },
+    { "Permission": "AppRoleAssignment.ReadWrite.All", "Why": "Can grant itself, or any other app, any application permission in the tenant. Self-escalation to everything below." },
+    { "Permission": "Application.ReadWrite.All", "Why": "Can add credentials to any existing app registration, including ones that already hold privileged permissions, and then authenticate as them." },
+    { "Permission": "Directory.ReadWrite.All", "Why": "Broad write across the directory: users, groups, and their memberships." },
+    { "Permission": "Domain.ReadWrite.All", "Why": "Can add or federate a domain, which allows minting SAML tokens for any user in the tenant — bypassing MFA and every Conditional Access policy." },
+    { "Permission": "Policy.ReadWrite.ConditionalAccess", "Why": "Can disable or weaken the Conditional Access policies the rest of this assessment measures." },
+    { "Permission": "UserAuthenticationMethod.ReadWrite.All", "Why": "Can replace any user's authentication methods, including registering an attacker-controlled MFA method." },
+    { "Permission": "PrivilegedAccess.ReadWrite.AzureAD", "Why": "Can alter Privileged Identity Management assignments and eligibility." },
+    { "Permission": "RoleEligibilitySchedule.ReadWrite.Directory", "Why": "Can make a principal eligible for a privileged role." },
+    { "Permission": "RoleAssignmentSchedule.ReadWrite.Directory", "Why": "Can schedule a privileged role assignment." },
+    { "Permission": "full_access_as_app", "Why": "Exchange Online: full control of EVERY mailbox in the tenant. The single most direct path to mass mail exfiltration." },
+    { "Permission": "Exchange.ManageAsApp", "Why": "Exchange Online: app-only Exchange administration, including transport rules and mailbox delegation." },
+    { "Permission": "Sites.FullControl.All", "Why": "SharePoint: full control of every site collection, including permission changes." }
+  ],
+  "tier2": [
+    { "Permission": "Mail.ReadWrite", "Why": "Read and modify mail in every mailbox." },
+    { "Permission": "Mail.Read", "Why": "Read mail in every mailbox." },
+    { "Permission": "Mail.Send", "Why": "Send mail as any user — the mechanism behind app-based business email compromise." },
+    { "Permission": "MailboxSettings.ReadWrite", "Why": "Create inbox rules in any mailbox, the usual persistence and exfiltration mechanism after a compromise." },
+    { "Permission": "Files.ReadWrite.All", "Why": "Read and modify every file in OneDrive and SharePoint." },
+    { "Permission": "Files.Read.All", "Why": "Read every file in OneDrive and SharePoint." },
+    { "Permission": "Sites.ReadWrite.All", "Why": "Read and modify content in every SharePoint site." },
+    { "Permission": "Sites.Read.All", "Why": "Read content in every SharePoint site." },
+    { "Permission": "User.ReadWrite.All", "Why": "Read and modify every user profile." },
+    { "Permission": "User.Read.All", "Why": "Read every user profile in the directory." },
+    { "Permission": "Group.ReadWrite.All", "Why": "Read and modify every group, including membership of groups used for access control." },
+    { "Permission": "GroupMember.ReadWrite.All", "Why": "Modify membership of any group, including groups that grant access." },
+    { "Permission": "Directory.Read.All", "Why": "Read the entire directory — a complete reconnaissance view of the organization." },
+    { "Permission": "Chat.Read.All", "Why": "Read every Teams chat message in the tenant." },
+    { "Permission": "ChannelMessage.Read.All", "Why": "Read every Teams channel message in the tenant." },
+    { "Permission": "Calendars.ReadWrite", "Why": "Read and modify every user's calendar." },
+    { "Permission": "Organization.ReadWrite.All", "Why": "Modify organization-level settings and branding." },
+    { "Permission": "Device.ReadWrite.All", "Why": "Read and modify device records, which Conditional Access device filters rely on." }
+  ]
+}

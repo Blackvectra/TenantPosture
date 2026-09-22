@@ -29,7 +29,7 @@ coming back to this after six months, start here.
 
 ### `Invoke-NRGAssessment.ps1` — the main one
 
-One tenant, 202 controls, client-ready report. Everything else orbits this.
+One tenant, 204 controls, client-ready report. Everything else orbits this.
 
 ```powershell
 .\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com
@@ -253,7 +253,7 @@ Evaluators/      turn raw data into findings
 Publishers/      turn findings into documents
 Lib/             shared helpers — scoring, NIST rollups, escaping, file ACLs
 Device/          the endpoint script. PS 5.1. Does not run on your machine.
-Testing/         44 Pester suites. Run: Invoke-Pester ./Testing/
+Testing/         45 Pester suites. Run: Invoke-Pester ./Testing/
 docs/            this file, and the policy docs
 ```
 

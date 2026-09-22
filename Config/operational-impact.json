@@ -423,7 +423,9 @@
     "DEF-5.1": "mail-flow-quarantine",
     "EXO-9.1": "storage-retention",
     "EXO-9.2": "storage-retention",
-    "SPO-4.1": "storage-retention"
+    "SPO-4.1": "storage-retention",
+    "AAD-15.1": "app-consent-friction",
+    "AAD-15.2": "inventory-only"
   },
   "deviceControls": {
     "DEV-1.1": "device-encryption",
