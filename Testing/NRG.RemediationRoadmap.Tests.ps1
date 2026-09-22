@@ -176,7 +176,7 @@ Describe 'HTML report renders the roadmap and survives every license tier' {
     }
 
     It 'includes the Prioritized Remediation Roadmap card when quick wins exist' {
-        # Business Premium meets AAD-2.1's licence, so the Gap becomes a
+        # Business Premium meets AAD-2.1's license, so the Gap becomes a
         # zero-license quick win and the card must render.
         $html = Invoke-Render -Skus @(@{ SkuPartNumber = 'SPB'; ServicePlans = @() })
         $html | Should -Match 'Prioritized Remediation Roadmap'

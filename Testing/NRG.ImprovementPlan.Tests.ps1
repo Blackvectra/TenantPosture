@@ -15,8 +15,8 @@
 #      rounded per-step deltas. A test walks the plan and re-derives every
 #      cumulative figure from the baseline independently.
 #
-#   2. A licence-blocked control never gets a projected score, and never lands
-#      in a track that implies it can be actioned. Buying a licence changes the
+#   2. A license-blocked control never gets a projected score, and never lands
+#      in a track that implies it can be actioned. Buying a license changes the
 #      denominator and a licensed-but-unconfigured control is still a gap.
 #
 #   3. "Do now" means the tool has DOCUMENTED that users notice nothing. A
@@ -141,9 +141,9 @@ Describe 'NIST 800-53 improvement plan' {
 
     Context 'What the plan refuses to claim' {
 
-        It 'gives a licence-blocked control no projected score and no rank' {
+        It 'gives a license-blocked control no projected score and no rank' {
             foreach ($b in @($script:Plan['Blocked'])) {
-                $b.Contains('CumulativeScore') | Should -BeFalse -Because "$($b['ControlId']) is licence-blocked and must carry no projected coverage"
+                $b.Contains('CumulativeScore') | Should -BeFalse -Because "$($b['ControlId']) is license-blocked and must carry no projected coverage"
                 $b.Contains('Rank')            | Should -BeFalse
                 $b['Track'] | Should -Be 'Buy first'
             }
@@ -156,7 +156,7 @@ Describe 'NIST 800-53 improvement plan' {
             }
         }
 
-        It 'treats absent licence data as blocked rather than as a quick win' {
+        It 'treats absent license data as blocked rather than as a quick win' {
             # -LicenseProfile $null is "we do not know". A control with a
             # requirement we cannot verify must be blocked, never promised.
             #
@@ -216,7 +216,7 @@ Describe 'NIST 800-53 improvement plan' {
         It 'matches a full replay of the plan through the same rollup' {
             # The implementation computes family movement by replaying. This
             # re-derives it the same way but independently, so a future
-            # optimisation to per-family arithmetic — which gets multi-family
+            # optimization to per-family arithmetic — which gets multi-family
             # controls wrong — fails here rather than in front of an auditor.
             $fixed = @($script:AllSteps | ForEach-Object { [string]$_['ControlId'] })
             $after = foreach ($f in $script:Findings) {
@@ -330,7 +330,7 @@ Describe 'NIST 800-53 improvement plan' {
             # describes the shape of the work and nothing more.
             $allowed = @('Single setting', 'Single setting, then ongoing', 'Policy change',
                          'Policy change, then tuning', 'Staged rollout', 'Discovery first',
-                         'Project', 'Licence purchase', 'Review only')
+                         'Project', 'License purchase', 'Review only')
             foreach ($p in $script:Impact.archetypes.PSObject.Properties) {
                 [string]$p.Value.Effort | Should -BeIn $allowed -Because "archetype '$($p.Name)'"
                 [string]$p.Value.Effort | Should -Not -Match '\d+\s*(h|hr|hour|day|week)'

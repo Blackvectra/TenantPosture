@@ -97,7 +97,7 @@ function Get-NRGCoverageScore {
             # (CIS / SCuBA / NIST / CMMC), but an unescaped value lets a
             # future caller wiring this from operator input or a
             # controls.json field silently change matching semantics via
-            # regex metacharacters (. + * [). Defence in depth.
+            # regex metacharacters (. + * [). Defense in depth.
             $fwPattern = '^' + [regex]::Escape($FrameworkId)
             if (-not $fwIds) { continue }
             $match = $false

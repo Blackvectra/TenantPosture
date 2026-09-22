@@ -1004,13 +1004,13 @@ For each affected mailbox: Set-CASMailbox -Identity <UPN> -SmtpClientAuthenticat
 **License required:** Included (EOP)
 
 **Description:**
-Every enabled inbound and outbound connector is recognised, TLS-enforced, and scoped to known senders or recipients.
+Every enabled inbound and outbound connector is recognized, TLS-enforced, and scoped to known senders or recipients.
 
 **Business risk:**
-A connector reroutes mail into or out of the tenant at the transport layer. An attacker who adds one has persistence that survives every password reset and MFA enrolment, because it lives in no mailbox and looks nothing like an inbox rule. An inbound connector scoped to no sender IP or domain will accept mail claiming to be from any domain; an outbound connector routing all mail through a smart host puts every outbound message through infrastructure that may not be yours.
+A connector reroutes mail into or out of the tenant at the transport layer. An attacker who adds one has persistence that survives every password reset and MFA enrollment, because it lives in no mailbox and looks nothing like an inbox rule. An inbound connector scoped to no sender IP or domain will accept mail claiming to be from any domain; an outbound connector routing all mail through a smart host puts every outbound message through infrastructure that may not be yours.
 
 **Remediation:**
-Exchange admin center > Mail flow > Connectors. Review every enabled connector against a known list. Delete any nobody recognises. On inbound connectors set RequireTls $true and scope to specific SenderIPAddresses or SenderDomains. On outbound connectors set TlsSettings to EncryptionOnly or better and avoid a * recipient domain unless a smart host genuinely handles all mail.
+Exchange admin center > Mail flow > Connectors. Review every enabled connector against a known list. Delete any nobody recognizes. On inbound connectors set RequireTls $true and scope to specific SenderIPAddresses or SenderDomains. On outbound connectors set TlsSettings to EncryptionOnly or better and avoid a * recipient domain unless a smart host genuinely handles all mail.
 
 **Framework mappings:**
 
@@ -1036,7 +1036,7 @@ Exchange admin center > Mail flow > Connectors. Review every enabled connector a
 No enabled transport rule redirects, blind-copies or copies mail to a recipient outside the tenant.
 
 **Business risk:**
-A transport rule that sends mail to an external address is organisation-wide exfiltration applied at the transport layer. No mailbox carries a forwarding flag, so the per-mailbox forwarding controls (EXO-1.3, EXO-7.1, EXO-7.2) are blind to it. One rule can copy every inbound invoice or every message matching a keyword to an attacker, silently and indefinitely.
+A transport rule that sends mail to an external address is organization-wide exfiltration applied at the transport layer. No mailbox carries a forwarding flag, so the per-mailbox forwarding controls (EXO-1.3, EXO-7.1, EXO-7.2) are blind to it. One rule can copy every inbound invoice or every message matching a keyword to an attacker, silently and indefinitely.
 
 **Remediation:**
 Exchange admin center > Mail flow > Rules. Inspect every enabled rule for RedirectMessageTo, BlindCopyTo and CopyTo actions with recipients outside your accepted domains. Remove any not documented and approved. Also review rules setting SCL -1, which bypass spam filtering for whatever they match.

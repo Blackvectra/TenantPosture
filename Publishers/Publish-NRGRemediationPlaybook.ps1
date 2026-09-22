@@ -289,7 +289,7 @@ function Publish-NRGRemediationPlaybook {
     # OneDrive folder is a window in which a co-resident process can read CA
     # policies, admin UPNs, OAuth grants and DMARC records. Hardening travels
     # with the terminal write so no caller can forget it. The Out-File fallback
-    # preserves behaviour if Lib/ has not been dot-sourced.
+    # preserves behavior if Lib/ has not been dot-sourced.
     if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
         Set-NRGSensitiveFileContent -Path $OutputPath -Content $sb.ToString()
     } else {
@@ -395,7 +395,7 @@ function Publish-NRGRemediationPlaybook {
     $null = $exec.AppendLine("2. **Phase 2 Remediation (Week 2–4)** — Address the $($phase2.Count) Medium severity items.")
     # Step 3 — only emitted when a license upgrade actually unlocks gaps. On a
     # tenant that already owns BP / E5, $upgradeNeeded is empty and step 3 is
-    # skipped (the previous behaviour stated "0 controls currently blocked").
+    # skipped (the previous behavior stated "0 controls currently blocked").
     if ($upgradeNeeded.Count -gt 0) {
         $null = $exec.AppendLine("3. **License Review** — Review licensing to address the $($upgradeNeeded.Count) control(s) currently blocked by the current license tier.")
         $null = $exec.AppendLine("4. **Reassessment** — Schedule a follow-up assessment in 90 days to validate remediation and track improvement.")
@@ -414,7 +414,7 @@ function Publish-NRGRemediationPlaybook {
     # OneDrive folder is a window in which a co-resident process can read CA
     # policies, admin UPNs, OAuth grants and DMARC records. Hardening travels
     # with the terminal write so no caller can forget it. The Out-File fallback
-    # preserves behaviour if Lib/ has not been dot-sourced.
+    # preserves behavior if Lib/ has not been dot-sourced.
     if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
         Set-NRGSensitiveFileContent -Path $ExecutivePath -Content $exec.ToString()
     } else {
@@ -550,7 +550,7 @@ function Publish-NRGRemediationPlaybook {
             # OneDrive folder is a window in which a co-resident process can read CA
             # policies, admin UPNs, OAuth grants and DMARC records. Hardening travels
             # with the terminal write so no caller can forget it. The Out-File fallback
-            # preserves behaviour if Lib/ has not been dot-sourced.
+            # preserves behavior if Lib/ has not been dot-sourced.
         if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
             Set-NRGSensitiveFileContent -Path $HtmlOutputPath -Content $html.ToString()
         } else {

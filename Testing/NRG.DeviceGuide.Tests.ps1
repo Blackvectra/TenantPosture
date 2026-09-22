@@ -117,7 +117,7 @@ Describe 'NIST device and endpoint guide' {
         }
 
         It 'gives every control at least two options' {
-            # A single option is a directive. A client already standardised on a
+            # A single option is a directive. A client already standardized on a
             # third-party stack needs alternatives, or the guide reads as a
             # sales document for one vendor.
             $thin = @($script:Items | Where-Object { @($_.Options).Count -lt 2 } | ForEach-Object { $_.NistControl })
@@ -131,7 +131,7 @@ Describe 'NIST device and endpoint guide' {
         }
 
         It 'explains that an Attested control is not a lesser control' {
-            # Without this an operator reasonably deprioritises everything the
+            # Without this an operator reasonably deprioritizes everything the
             # tenant cannot see, which is most of the physical families.
             $script:Md   | Should -BeLike '*not a lesser control*'
             $script:Html | Should -BeLike '*not a lesser control*'

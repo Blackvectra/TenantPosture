@@ -128,7 +128,7 @@ function Test-NRGControlEXOMailFlowConnectors {
         $name = [string](Get-NRGObjectField -Item $c -Key 'Name')
         $tls  = [string](Get-NRGObjectField -Item $c -Key 'TlsSettings')
         if (-not $tls -or $tls -eq 'None') {
-            $concerns.Add(@{ Connector = $name; Direction = 'Outbound'; Issue = 'No TLS setting — organisational mail can leave in cleartext.' })
+            $concerns.Add(@{ Connector = $name; Direction = 'Outbound'; Issue = 'No TLS setting — organizational mail can leave in cleartext.' })
         }
         $rcpt = @(Get-NRGObjectField -Item $c -Key 'RecipientDomains' -Default @())
         if ($rcpt -contains '*') {
@@ -140,13 +140,13 @@ function Test-NRGControlEXOMailFlowConnectors {
     if ($concerns.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity 'Informational' -FrameworkIds $cit -CurrentValue $summary `
-            -Detail "$summary, each TLS-enforced and scoped. Confirm every one is expected — a connector nobody recognises is durable persistence that survives a password reset." `
+            -Detail "$summary, each TLS-enforced and scoped. Confirm every one is expected — a connector nobody recognizes is durable persistence that survives a password reset." `
             -AffectedObjects (@($enabledIn + $enabledOut))
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity $ctrl.Severity -FrameworkIds $cit `
             -CurrentValue "$summary; $($concerns.Count) weakening(s)" `
-            -RequiredValue 'Every enabled connector TLS-enforced, scoped to known senders/recipients, and recognised' `
+            -RequiredValue 'Every enabled connector TLS-enforced, scoped to known senders/recipients, and recognized' `
             -Detail "$summary. $($concerns.Count) configuration weakening(s) found: $((@($concerns | ForEach-Object { "$($_.Connector) ($($_.Direction)) — $($_.Issue)" }) | Select-Object -First 5) -join ' ')" `
             -Remediation $ctrl.Remediation -AffectedObjects $concerns.ToArray()
     }
@@ -220,7 +220,7 @@ function Test-NRGControlEXOTransportRuleContents {
             -Severity 'Medium' -FrameworkIds $cit `
             -CurrentValue "$($active.Count) enabled rules; $($unknown.Count) recipient(s) unresolvable" `
             -RequiredValue 'Every transport-rule recipient resolvable and internal' `
-            -Detail "No transport rule redirects to a recognisably external address, but $($unknown.Count) recipient(s) are group or display names that cannot be resolved to a domain from tenant settings alone: $((@($unknown | ForEach-Object { "$($_.Rule) -> $($_.Recipient)" }) | Select-Object -First 5) -join '; '). Confirm each resolves internally." `
+            -Detail "No transport rule redirects to a recognizably external address, but $($unknown.Count) recipient(s) are group or display names that cannot be resolved to a domain from tenant settings alone: $((@($unknown | ForEach-Object { "$($_.Rule) -> $($_.Recipient)" }) | Select-Object -First 5) -join '; '). Confirm each resolves internally." `
             -Remediation $ctrl.Remediation -AffectedObjects $unknown.ToArray()
     } else {
         $note = if ($scl.Count -gt 0) { " Note: $($scl.Count) rule(s) set SCL -1, bypassing spam filtering — verify each is intentional and narrowly scoped." } else { '' }

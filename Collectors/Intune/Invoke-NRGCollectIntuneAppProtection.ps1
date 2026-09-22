@@ -29,7 +29,7 @@ function Invoke-NRGCollectIntuneAppProtection {
         }
     }
 
-    # Empty is not clean: every section below initialises to @(), so an empty
+    # Empty is not clean: every section below initializes to @(), so an empty
     # list cannot be told apart from a query that failed. App config policies come from both the MDM and MAM endpoints.
     # A section is only 'Failed' when EVERY query feeding it failed —
     # one surviving feeder still yields real data.

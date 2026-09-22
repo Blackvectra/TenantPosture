@@ -63,7 +63,7 @@
         "IA-5"
       ],
       "RequiresElevation": true,
-      "Remediation": "Enable the TPM in firmware and initialise it. Devices without a usable TPM cannot bind BitLocker or Windows Hello to hardware and should be scheduled for replacement.",
+      "Remediation": "Enable the TPM in firmware and initialize it. Devices without a usable TPM cannot bind BitLocker or Windows Hello to hardware and should be scheduled for replacement.",
       "BusinessRisk": "Without a hardware root of trust, BitLocker degrades to a password and Windows Hello cannot bind a credential to the device.",
       "Group": "Boot integrity",
       "Nist171": []
@@ -108,7 +108,7 @@
       "RequiresElevation": false,
       "Remediation": "Enable real-time protection via an Intune antivirus policy. If a third-party AV is primary, confirm its health in that product's console and record it as the compensating control.",
       "BusinessRisk": "Real-time protection off means malware is only found on a scheduled scan, which on a workstation may be days after execution.",
-      "Group": "Malware defence",
+      "Group": "Malware defense",
       "Nist171": [
         "3.14.2"
       ]
@@ -125,7 +125,7 @@
       "RequiresElevation": false,
       "Remediation": "Enable tamper protection tenant-wide in the Defender portal, or via an Intune Endpoint Security antivirus policy.",
       "BusinessRisk": "Without tamper protection, any process with administrative rights can simply switch the antivirus off — which is exactly what ransomware does first.",
-      "Group": "Malware defence",
+      "Group": "Malware defense",
       "Nist171": [
         "3.14.2"
       ]
@@ -141,7 +141,7 @@
       "RequiresElevation": false,
       "Remediation": "Investigate update connectivity for the device. Persistent staleness usually means a proxy, a metered connection, or a device that has not been online.",
       "BusinessRisk": "Stale definitions miss the current campaign. A device weeks behind is protected against last month's threats only.",
-      "Group": "Malware defence",
+      "Group": "Malware defense",
       "Nist171": [
         "3.14.4"
       ]
@@ -158,7 +158,7 @@
       "RequiresElevation": false,
       "Remediation": "Set MAPS reporting to Advanced via Intune antivirus policy.",
       "BusinessRisk": "Cloud-delivered protection is what catches never-before-seen samples; without it detection falls back to local signatures alone.",
-      "Group": "Malware defence",
+      "Group": "Malware defense",
       "Nist171": [
         "3.14.2"
       ]
@@ -174,7 +174,7 @@
       "RequiresElevation": false,
       "Remediation": "Set PUA protection to Enabled (block) rather than Audit.",
       "BusinessRisk": "PUA covers the adware, bundleware and remote-access tooling that precedes many hands-on-keyboard intrusions.",
-      "Group": "Malware defence",
+      "Group": "Malware defense",
       "Nist171": [
         "3.14.2"
       ]
@@ -191,7 +191,7 @@
       "RequiresElevation": false,
       "Remediation": "Deploy the office-macro, script and credential-theft ASR rule set in Block mode. Audit mode first if line-of-business software is unknown, but Audit is not the destination.",
       "BusinessRisk": "ASR blocks the specific techniques that start most endpoint intrusions without needing to identify the malware itself. Rules left in Audit report the technique and allow it.",
-      "Group": "Malware defence",
+      "Group": "Malware defense",
       "Nist171": [
         "3.14.2"
       ]
@@ -208,7 +208,7 @@
       "RequiresElevation": false,
       "Remediation": "Enable controlled folder access via Intune, with a tested allow-list for line-of-business applications.",
       "BusinessRisk": "This is the ransomware-specific control: it stops untrusted processes writing to user document folders even if execution was not prevented.",
-      "Group": "Malware defence",
+      "Group": "Malware defense",
       "Nist171": [
         "3.14.2"
       ]
@@ -225,7 +225,7 @@
       "RequiresElevation": false,
       "Remediation": "Onboard the device via the Intune Defender for Endpoint connector.",
       "BusinessRisk": "EDR telemetry is usually the only way to reconstruct what an intruder did. A device that is not onboarded is invisible after the fact.",
-      "Group": "Malware defence",
+      "Group": "Malware defense",
       "Nist171": [
         "3.14.6"
       ]
@@ -391,7 +391,7 @@
       ],
       "RequiresElevation": false,
       "Remediation": "Remove PasswordNeverExpires from enabled local accounts, or document the LAPS-managed account as the deliberate exception.",
-      "BusinessRisk": "A non-expiring local password is a credential that survives every rotation policy the organisation thinks it has.",
+      "BusinessRisk": "A non-expiring local password is a credential that survives every rotation policy the organization thinks it has.",
       "Group": "Privilege",
       "Nist171": []
     },

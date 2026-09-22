@@ -10,7 +10,7 @@
 #   guarantee — an assessment always emits a finding for every control it owns,
 #   even if the evaluator hit an unhandled property error on partial tenant data.
 #
-# Behaviour:
+# Behavior:
 #   - Runs the evaluator.
 #   - If it throws, records the exception (console + JSON) AND back-fills an
 #     'Error' finding for every control that evaluator owns which does not

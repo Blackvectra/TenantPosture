@@ -407,7 +407,7 @@ function Test-NRGSignInControl-GeoAnomaly {
     Add-NRGFinding -ControlId $cid -State $state -Category $cat `
         -Title $title -Severity $severity -Detail $detail `
         -CurrentValue "$($anomalies.Count) out-of-home sign-in(s), $($successAnoms.Count) successful" `
-        -Remediation "Confirm whether the flagged users actually travelled. Successful sign-ins from a foreign country or a state the user never works from are high-confidence account-takeover IoCs — deep-dive those mailboxes first. Set -HomeState / -HomeCountry to override the auto-detected baseline if the modal state is wrong for this tenant."
+        -Remediation "Confirm whether the flagged users actually traveled. Successful sign-ins from a foreign country or a state the user never works from are high-confidence account-takeover IoCs — deep-dive those mailboxes first. Set -HomeState / -HomeCountry to override the auto-detected baseline if the modal state is wrong for this tenant."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

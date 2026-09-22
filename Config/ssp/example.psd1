@@ -44,7 +44,7 @@
     System = @{
         Name        = 'Example Client Microsoft 365 Environment'
         Owner       = 'Jane Doe, Operations Manager'
-        Description = 'Microsoft 365 E3 tenant with Entra ID identity, Exchange Online mail, SharePoint and OneDrive storage, and Intune-managed Windows endpoints. Supports estimating, project management and accounting for a defence subcontractor.'
+        Description = 'Microsoft 365 E3 tenant with Entra ID identity, Exchange Online mail, SharePoint and OneDrive storage, and Intune-managed Windows endpoints. Supports estimating, project management and accounting for a defense subcontractor.'
         Boundary    = 'The Microsoft 365 tenant, all Entra ID identities, all Intune-enrolled endpoints, and the site network at the head office. Excludes the manufacturing OT network, which is air-gapped and covered by a separate plan.'
         CuiTypes    = @('Controlled Technical Information (CTI)', 'Export Controlled (ITAR)')
         AssessedBy  = 'NRG Technology Services'
@@ -54,7 +54,7 @@
     # the SSP can say where a requirement is met rather than leaving it blank.
     # Only list a provider that genuinely claims the requirement in writing.
     Inherited = @{
-        'Microsoft 365 GCC High' = 'FedRAMP High authorised. Physical and environmental protection (3.10.x) for the datacentre, media sanitisation for cloud storage, and datacentre personnel screening. See the Microsoft customer responsibility matrix for the split.'
+        'Microsoft 365 GCC High' = 'FedRAMP High authorized. Physical and environmental protection (3.10.x) for the datacentre, media sanitization for cloud storage, and datacentre personnel screening. See the Microsoft customer responsibility matrix for the split.'
     }
 
     Requirements = @{
