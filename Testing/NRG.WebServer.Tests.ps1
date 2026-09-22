@@ -23,8 +23,12 @@
       - The -Web flag exists on Invoke-NRGAssessment.ps1 and short-circuits
         to Start-NRGWebServer.
 
-    These tests are static (file-content checks) and run on every CI push;
-    no runtime server is started.
+    Most of these are static (file-content checks) and run on every CI push.
+    The 'Server actually starts' context is NOT static: it boots the real
+    server on a loopback port and probes it. That context exists because every
+    other test here passed while -Web was completely broken -- Pode rejects
+    $using: inside its scriptblocks, so the server died on start and no
+    file-content check could see it. It is skipped when Pode is unavailable.
 #>
 
 Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web/' {
@@ -169,6 +173,136 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             } else { @() }
             $required | Should -Not -Contain 'Pode' `
                 -Because 'Pode is only needed for -Web; CLI users should not be forced to install it'
+        }
+    }
+
+    Context 'No $using: inside the Pode scriptblocks' {
+        # Pode runs the server block and every route body through
+        # Invoke-PodeScriptBlock in its own runspaces. A Using variable is
+        # valid only with Invoke-Command / Start-Job / InlineScript, so Pode
+        # fails the entire server start with "A Using variable cannot be
+        # retrieved." This is a static guard that runs even without Pode
+        # installed, because it is the cheapest possible catch for a bug that
+        # otherwise only shows up at runtime.
+        BeforeAll {
+            $script:Src = Get-Content -LiteralPath $script:ServerPath -Raw
+
+            # Isolate the Pode server block: from the $serverBlock assignment
+            # to the Start-PodeServer call that consumes it. Start-Job above it
+            # legitimately uses $using: and must not be caught.
+            $m = [regex]::Match(
+                $script:Src,
+                '\$serverBlock\s*=\s*\{[\s\S]*?\}\.GetNewClosure\(\)',
+                'IgnoreCase')
+            $script:ServerBlockSrc = if ($m.Success) { $m.Value } else { '' }
+        }
+
+        It 'the Pode server block is present and closed with .GetNewClosure()' {
+            # Start-PodeServer has no -ArgumentList, so the closure is the only
+            # way registration-time values ($Port, $webRoot) reach the block.
+            $script:ServerBlockSrc | Should -Not -BeNullOrEmpty `
+                -Because 'without .GetNewClosure() the server block cannot see $Port or $webRoot'
+        }
+
+        It 'contains no $using: references anywhere inside it' {
+            # Guard first: an unmatched block is the empty string, which has
+            # zero $using: hits and would pass this vacuously -- exactly the
+            # absence-of-evidence shape the rest of this tool refuses.
+            $script:ServerBlockSrc | Should -Not -BeNullOrEmpty `
+                -Because 'an unfound server block must fail this test, not pass it empty'
+            $hits = [regex]::Matches($script:ServerBlockSrc, '\$using:') | ForEach-Object { $_.Value }
+            $hits.Count | Should -Be 0 `
+                -Because 'Pode rejects $using: and fails the whole server start'
+        }
+
+        It 'is consumed by Start-PodeServer' {
+            $script:Src | Should -Match 'Start-PodeServer[^\r\n]*-ScriptBlock\s+\$serverBlock'
+        }
+
+        It 'reads clients.json as $raw.clients, not the wrapper object' {
+            # clients.json is { "clients": [ ... ] }. Enumerating the wrapper
+            # yielded one row whose ClientName/TenantDomain do not exist, so
+            # the picker showed a single blank client.
+            $script:Src | Should -Match '@\(\$raw\.clients\)'
+        }
+    }
+
+    Context 'Server actually starts and serves' -Skip:(-not (Get-Module -ListAvailable -Name Pode | Where-Object { $_.Version -ge [version]'2.10.0' })) {
+        # The test that would have caught the shipped bug. Everything else in
+        # this file is a grep; a grep cannot tell you the server never came up.
+        BeforeAll {
+            $script:Port = Get-Random -Minimum 20000 -Maximum 29000
+            $boot = Join-Path ([System.IO.Path]::GetTempPath()) ("nrgweb-{0}.ps1" -f ([Guid]::NewGuid().ToString('N')))
+            $script:BootFile = $boot
+            $script:LogFile  = "$boot.log"
+            @"
+`$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+. '$($script:ServerPath)'
+Start-NRGWebServer -Port $($script:Port) -ScriptDir '$($script:RepoRoot)' -NoBrowser
+"@ | Set-Content -LiteralPath $boot -Encoding utf8
+
+            $pwshExe = (Get-Process -Id $PID).Path
+            $script:Proc = Start-Process -FilePath $pwshExe `
+                -ArgumentList @('-NoProfile', '-File', $boot) `
+                -RedirectStandardOutput $script:LogFile `
+                -RedirectStandardError  "$($script:LogFile).err" `
+                -PassThru
+            # NOTE: no -WindowStyle. It throws NotSupportedException on
+            # non-Windows editions, which fails the whole context in CI.
+
+            # Poll until it answers rather than sleeping a fixed amount.
+            $script:Up = $false
+            foreach ($i in 1..40) {
+                Start-Sleep -Milliseconds 750
+                try {
+                    $null = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/" -TimeoutSec 3 -UseBasicParsing
+                    $script:Up = $true
+                    break
+                } catch { }
+            }
+        }
+
+        AfterAll {
+            if ($script:Proc -and -not $script:Proc.HasExited) {
+                Stop-Process -Id $script:Proc.Id -Force -ErrorAction SilentlyContinue
+            }
+            foreach ($f in @($script:BootFile, $script:LogFile, "$($script:LogFile).err")) {
+                if ($f) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
+            }
+        }
+
+        It 'comes up and serves the index page' {
+            $script:Up | Should -BeTrue -Because 'the server must actually start, not just parse'
+            $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/" -TimeoutSec 5 -UseBasicParsing
+            $r.StatusCode | Should -Be 200
+            $r.Content | Should -Match '<!DOCTYPE html>'
+        }
+
+        It 'serves /api/clients as a JSON array, never null' {
+            # $clients is built by a pipeline; when it yields nothing the
+            # variable is $null, which serializes as JSON null, and app.js
+            # calls .forEach on it outside its try.
+            $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/api/clients" -TimeoutSec 5 -UseBasicParsing
+            $r.StatusCode | Should -Be 200
+            $r.Content.Trim() | Should -Not -Be 'null'
+            { $r.Content | ConvertFrom-Json -ErrorAction Stop } | Should -Not -Throw
+        }
+
+        It 'serves /api/runs as a JSON array' {
+            $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/api/runs" -TimeoutSec 5 -UseBasicParsing
+            $r.StatusCode | Should -Be 200
+            $r.Content.Trim() | Should -Not -Be 'null'
+        }
+
+        It 'emits the strict CSP header on a real response' {
+            $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/" -TimeoutSec 5 -UseBasicParsing
+            ([string]$r.Headers['Content-Security-Policy']) | Should -Match "default-src 'none'"
+        }
+
+        It 'serves the static assets the page references' {
+            $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/static/app.js" -TimeoutSec 5 -UseBasicParsing
+            $r.StatusCode | Should -Be 200
         }
     }
 }
