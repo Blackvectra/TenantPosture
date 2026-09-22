@@ -122,8 +122,10 @@ function Connect-NRGServices {
                         Write-Host "      $($m.Name): installed under a OneDrive-synced path — move PowerShell modules out of OneDrive." -ForegroundColor DarkYellow
                     }
                 }
-                Write-Host "      This is what causes 'Could not load file or assembly Microsoft.Identity.Client' at Exchange connect." -ForegroundColor DarkYellow
-                Write-Host "      Fix: run .\Install-NRGPrerequisites.ps1, or uninstall the extra versions and Install-Module ExchangeOnlineManagement -RequiredVersion 3.2.0 -Force." -ForegroundColor DarkYellow
+                Write-Host "      This causes 'Could not load file or assembly Microsoft.Identity.Client' at Exchange connect," -ForegroundColor DarkYellow
+                Write-Host "      or a token acquisition that never returns — the run hangs on the first collector with no error." -ForegroundColor DarkYellow
+                Write-Host "      Fix: Repair-NRGModuleHealth -WhatIf   (review, then re-run without -WhatIf)" -ForegroundColor DarkYellow
+                Write-Host "      Then start a NEW PowerShell window — an assembly already loaded cannot be unloaded." -ForegroundColor DarkYellow
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     $bad = @($health.Modules | Where-Object { $_.MultipleVersions -or $_.OneDrivePath } | ForEach-Object { $_.Name })
                     Register-NRGException -Source 'ModulePreflight' -Message ("MSAL assembly-conflict risk on: {0}" -f ($bad -join ', '))
