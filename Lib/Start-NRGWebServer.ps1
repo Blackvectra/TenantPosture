@@ -85,16 +85,35 @@ function Start-NRGWebServer {
     Write-Host ''
 
     # ── Pode server ───────────────────────────────────────────────────────
-    Start-PodeServer -Threads 4 -ScriptBlock {
-        param()
-
+    # $using: does NOT work anywhere below. Pode runs this block, and every
+    # route body, through Invoke-PodeScriptBlock in its own runspaces, and a
+    # Using variable is valid only with Invoke-Command / Start-Job /
+    # InlineScript. Pode fails the whole server start with "A Using variable
+    # cannot be retrieved", which is why -Web never came up. Two mechanisms
+    # replace it, because the two places need different ones:
+    #   - .GetNewClosure() carries $Port / $webRoot into the REGISTRATION-time
+    #     expressions in this block. Start-PodeServer has no -ArgumentList
+    #     (checked on 2.14.1), so a closure is the only way in.
+    #   - Pode state carries config into the route BODIES, which run later in
+    #     other runspaces that the closure does not reach.
+    $serverBlock = {
         # Loopback only. Binding to 127.0.0.1 (not 0.0.0.0) is load-bearing —
         # this server is for the local operator, never the network.
-        Add-PodeEndpoint -Address '127.0.0.1' -Port $using:Port -Protocol Http
+        Add-PodeEndpoint -Address '127.0.0.1' -Port $Port -Protocol Http
 
-        # Shared in-memory state — Pode's state machinery is synchronized across
-        # the worker runspaces, so the SSE-poll handler can read what the scan
-        # handler writes without locking ceremony in the route bodies.
+        # Config for the route bodies. Pode's state machinery is synchronized
+        # across the worker runspaces, so a route body reads this the same way
+        # the status handler reads what the scan handler writes.
+        Set-PodeState -Name 'cfg' -Value @{
+            WebRoot     = $webRoot
+            ClientsFile = $clientsFile
+            OutputRoot  = $outputRoot
+            ScriptDir   = $ScriptDir
+        } | Out-Null
+
+        # Shared in-memory state — same machinery, so the status-poll handler
+        # can read what the scan handler writes without locking ceremony in the
+        # route bodies.
         Set-PodeState -Name 'scans' -Value @{} | Out-Null
 
         # Security headers on every response. Same CSP family as the HTML
@@ -119,13 +138,13 @@ function Start-NRGWebServer {
         }
 
         # ── Static assets ────────────────────────────────────────────────
-        Add-PodeStaticRoute -Path '/static' -Source (Join-Path $using:webRoot 'static')
+        Add-PodeStaticRoute -Path '/static' -Source (Join-Path $webRoot 'static')
 
         # ── Routes ───────────────────────────────────────────────────────
 
         # Index — single-page UI shell.
         Add-PodeRoute -Method Get -Path '/' -ScriptBlock {
-            $indexPath = Join-Path $using:webRoot 'index.html'
+            $indexPath = Join-Path (Get-PodeState -Name 'cfg').WebRoot 'index.html'
             $html = Get-Content -LiteralPath $indexPath -Raw -Encoding utf8
             Write-PodeHtmlResponse -Value $html
         }
@@ -133,7 +152,7 @@ function Start-NRGWebServer {
         # GET /api/clients — list of clients from clients.json. Returns [] if
         # the file doesn't exist (operator can still trigger ad-hoc scans).
         Add-PodeRoute -Method Get -Path '/api/clients' -ScriptBlock {
-            $cf = $using:clientsFile
+            $cf = (Get-PodeState -Name 'cfg').ClientsFile
             if (-not (Test-Path -LiteralPath $cf)) {
                 Write-PodeJsonResponse -Value @()
                 return
@@ -144,7 +163,12 @@ function Start-NRGWebServer {
                 Write-PodeJsonResponse -Value @() -StatusCode 200
                 return
             }
-            $clients = @($raw) | Where-Object { $_.Active -ne $false } | ForEach-Object {
+            # clients.json is { "clients": [ ... ] }, not a bare array — the
+            # same shape Invoke-NRGBatchAssessment reads as $registry.clients.
+            # Enumerating $raw itself yielded ONE row built from the wrapper
+            # object, whose ClientName/TenantDomain do not exist, so the picker
+            # showed a single blank client and never the real list.
+            $clients = @($raw.clients) | Where-Object { $_.Active -ne $false } | ForEach-Object {
                 [ordered]@{
                     name          = [string]$_.ClientName
                     domain        = [string]$_.TenantDomain
@@ -153,14 +177,17 @@ function Start-NRGWebServer {
                     clientType    = [string]$_.ClientType
                 }
             }
-            Write-PodeJsonResponse -Value $clients
+            # @(...) or a pipeline that yields nothing assigns $null, which
+            # serializes as JSON null, and app.js calls .forEach on it outside
+            # its try — so a tenant list with no active rows killed the picker.
+            Write-PodeJsonResponse -Value @($clients)
         }
 
         # GET /api/runs — list of prior runs by scanning the output directory.
         # Each subfolder under output/ is one tenant; each *-results.json is
         # one run.
         Add-PodeRoute -Method Get -Path '/api/runs' -ScriptBlock {
-            $root = $using:outputRoot
+            $root = (Get-PodeState -Name 'cfg').OutputRoot
             if (-not (Test-Path -LiteralPath $root)) {
                 Write-PodeJsonResponse -Value @()
                 return
@@ -210,7 +237,7 @@ function Start-NRGWebServer {
                 Write-PodeTextResponse -Value 'Invalid path segment.'
                 return
             }
-            $htmlPath = Join-Path $using:outputRoot $tenant ($id + '-assessment.html')
+            $htmlPath = Join-Path (Get-PodeState -Name 'cfg').OutputRoot $tenant ($id + '-assessment.html')
             if (-not (Test-Path -LiteralPath $htmlPath)) {
                 Set-PodeResponseStatus -Code 404
                 Write-PodeTextResponse -Value 'Report not found.'
@@ -248,6 +275,12 @@ function Start-NRGWebServer {
                 lines      = New-Object System.Collections.ArrayList
                 percent    = 0
                 resultPath = $null
+                # Read unconditionally by the status response below but only
+                # assigned on completion. Pode's route runspaces do not inherit
+                # this function's StrictMode, so the missing key read as $null
+                # rather than throwing — declared here so the row's shape does
+                # not depend on that staying true.
+                runIdOnDisk = $null
             })
 
             # Stash on shared state so the status endpoint can find it.
@@ -265,7 +298,7 @@ function Start-NRGWebServer {
                 $entryScript = Join-Path $scriptDir 'Invoke-NRGAssessment.ps1'
                 & $entryScript -UserPrincipalName "scan@$domain" 2>&1
             }
-            $job = Start-Job -ScriptBlock $jobScript -ArgumentList $using:ScriptDir, $domain
+            $job = Start-Job -ScriptBlock $jobScript -ArgumentList (Get-PodeState -Name 'cfg').ScriptDir, $domain
             $stateRow.jobId  = $job.Id
             $stateRow.status = 'running'
 
@@ -311,7 +344,7 @@ function Start-NRGWebServer {
                         $row.percent = if ($row.status -eq 'completed') { 100 } else { $row.percent }
                         # Look for the resulting -results.json the entry
                         # script wrote so the UI can link straight to it.
-                        $tenantDir = Join-Path $using:outputRoot ($row.domain)
+                        $tenantDir = Join-Path (Get-PodeState -Name 'cfg').OutputRoot ($row.domain)
                         if (Test-Path -LiteralPath $tenantDir) {
                             $latest = Get-ChildItem -LiteralPath $tenantDir -Filter '*-results.json' -ErrorAction SilentlyContinue |
                                       Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -338,5 +371,7 @@ function Start-NRGWebServer {
                 resultId    = $row.runIdOnDisk
             }
         }
-    }
+    }.GetNewClosure()
+
+    Start-PodeServer -Threads 4 -ScriptBlock $serverBlock
 }
