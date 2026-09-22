@@ -594,6 +594,8 @@ if (-not $skipCollection) {
         Invoke-NRGCollector 'Invoke-NRGCollectAADIdentityGovernance'
         Write-Host "  [*] AAD: Inventory (guests, stale, OAuth, Secure Score)..."
         Invoke-NRGCollector 'Invoke-NRGCollectAADInventory'
+        Write-Host "  [*] AAD: Application (app-only) permission grants..."
+        Invoke-NRGCollector 'Invoke-NRGCollectAADAppPermissions'
 
         if (-not $SkipSharePoint) {
             Write-Host "  [*] SharePoint: Tenant settings via Graph..."

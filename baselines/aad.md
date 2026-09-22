@@ -1457,6 +1457,70 @@ Review Microsoft Secure Score improvement actions at security.microsoft.com > Se
 | PCI DSS | Req 11.6.1 |
 | MITRE ATT&CK | T1078 |
 
+### AAD-15.1 — No Application Holds Tenant-Takeover Permissions
+
+**Severity:** Critical  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Verifies that no non-Microsoft application holds an APPLICATION (app-only) permission that confers tenant takeover — for example RoleManagement.ReadWrite.Directory, Application.ReadWrite.All, Domain.ReadWrite.All, or Exchange full_access_as_app.
+
+**Business risk:**
+An application permission is exercised with no signed-in user, so no MFA prompt occurs and no Conditional Access policy applies. An app holding one of these can make itself Global Administrator, add a federated domain and forge tokens for any user, or read every mailbox in the tenant. Because the activity carries no user identity it does not resemble a compromised account in the sign-in logs, which is why consent-phished and supply-chain apps use this route for persistence. Delegated-consent reporting cannot see these grants at all.
+
+**Remediation:**
+Entra ID > Enterprise applications > select the application > Permissions. Review each application permission and remove any that are not required: Remove-MgServicePrincipalAppRoleAssignment -ServicePrincipalId <spId> -AppRoleAssignmentId <id>. Where the app genuinely needs broad access, scope it down (for Exchange, replace full_access_as_app with an application access policy limiting the app to a mail-enabled security group).
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-6 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.5.4 |
+| CIS Controls v8.1 | 2.1, 5.4 |
+| CMMC 2.0 | AC.L2-3.1.5 |
+| MITRE ATT&CK | T1098.001, T1528, T1550.001 |
+| ISO/IEC 27001:2022 | A.5.15, A.8.2 |
+| SOC 2 | CC6.1, CC6.3 |
+| HIPAA | §164.308(a)(4), §164.312(a)(1) |
+| PCI DSS v4.0 | Req 7.2.1 |
+| CISA SCuBA | MS.AAD.5.2v1 |
+
+---
+
+### AAD-15.2 — Applications with Tenant-Wide Data Permissions — Named List
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Names every non-Microsoft application holding an APPLICATION (app-only) permission that reaches all users' mail, files, sites or chat — for example Mail.ReadWrite, Files.ReadWrite.All, Sites.ReadWrite.All or MailboxSettings.ReadWrite.
+
+**Business risk:**
+These permissions read or modify data for every user in the tenant with no signed-in user and no Conditional Access evaluation. MailboxSettings.ReadWrite in particular allows an app to create inbox rules in any mailbox, the usual persistence and exfiltration mechanism after a business email compromise. Grants accumulate silently as integrations are added and are rarely revoked when the integration is retired, so the list tends to grow past anyone's memory of why each one exists.
+
+**Remediation:**
+Entra ID > Enterprise applications > All applications > Permissions. For each application permission, record a business owner and a reason, or revoke it: Remove-MgServicePrincipalAppRoleAssignment -ServicePrincipalId <spId> -AppRoleAssignmentId <id>. For Exchange and SharePoint, constrain the app with an application access policy or site-level permission rather than a tenant-wide grant.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-3 |
+| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.5.4 |
+| CIS Controls v8.1 | 2.1, 3.3 |
+| CMMC 2.0 | AC.L1-3.1.2 |
+| MITRE ATT&CK | T1528, T1114.002 |
+| ISO/IEC 27001:2022 | A.5.23, A.8.4 |
+| SOC 2 | CC6.3, CC7.2 |
+| HIPAA | §164.308(a)(4), §164.308(a)(1)(ii)(D) |
+| PCI DSS v4.0 | Req 6.4.3 |
+| CISA SCuBA | MS.AAD.5.2v1 |
+
+---
+
 ### AAD-14.1 — Application Credentials Current and Short-Lived
 
 **Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
