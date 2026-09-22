@@ -4,7 +4,7 @@
   "requirementCount": 110,
   "note": "Rev 2, not Rev 3, because Rev 2 is the standard CMMC Level 2 is assessed against. NIST published Rev 3 in May 2024 but DoD has not authorized it for compliance scoring, SPRS reporting or CMMC assessments (Class Deviation 2023-O0006). An interim rule moving CMMC to Rev 3 was targeted for July 2026 — when it lands, add nist-800-171-r3.json beside this file and switch the Baseline field in the client answers file. Do not edit this one.",
   "mapping": "No 800-53 mapping is stored here and none is needed. CMMC Level 2 practice IDs embed the 800-171 requirement number (IA.L2-3.5.3 -> 3.5.3), and every control in controls.json already carries a CMMC citation, so the join runs off curation that already exists rather than a mapping table that would rot.",
-  "provenance": "Requirement text is from NIST SP 800-171 Rev 2, a US Government publication in the public domain. Assessment objectives are from SP 800-171A. Converted from a community OSCAL catalog and normalised — the source ships requirement 3.2.1 with surrounding whitespace in its id, which silently drops it from any exact-match join.",
+  "provenance": "Requirement text is from NIST SP 800-171 Rev 2, a US Government publication in the public domain. Assessment objectives are from SP 800-171A. Converted from a community OSCAL catalog and normalized — the source ships requirement 3.2.1 with surrounding whitespace in its id, which silently drops it from any exact-match join.",
   "families": {
     "3.1": "Access Control",
     "3.2": "Awareness and Training",

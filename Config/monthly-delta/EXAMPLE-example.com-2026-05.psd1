@@ -2,7 +2,7 @@
 #
 # TEMPLATE ONLY. Every value below is illustrative. Do not put a real client
 # name, domain, or their live unremediated findings in a file that is tracked
-# in git — a named organisation next to a list of its open security gaps is
+# in git — a named organization next to a list of its open security gaps is
 # the most sensitive shape this data takes, and git history is permanent.
 # Real per-tenant files are gitignored; see the pattern in .gitignore.
 #

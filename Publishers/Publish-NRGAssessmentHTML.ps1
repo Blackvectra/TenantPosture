@@ -165,12 +165,12 @@ function Publish-NRGAssessmentHTML {
     foreach ($fw in @('CIS','SCuBA','NIST','CMMC')) {
         $fwScores[$fw] = (Get-NRGCoverageScore -Findings $Findings -FrameworkId $fw -ErrorHandling 'Gap').Score
     }
-    # Displayed set, in canonical order, ignoring anything unrecognised.
+    # Displayed set, in canonical order, ignoring anything unrecognized.
     $fwShow = @(@('CIS','SCuBA','NIST','CMMC') | Where-Object { $_ -in $Frameworks })
     if ($fwShow.Count -eq 0) { $fwShow = @('NIST') }
 
     # ── License detection — suppress gaps the tenant already has licenses for ────
-    # Detection is centralised in Lib/Get-NRGTenantLicenseProfile.ps1 so the
+    # Detection is centralized in Lib/Get-NRGTenantLicenseProfile.ps1 so the
     # HTML, Markdown, remediation script, and playbook publishers all see the
     # same suppression set. v4.6.1 inlined the logic here and applied it only
     # to the "License Gap Analysis" card — every other site (Priority Actions,
@@ -202,7 +202,7 @@ function Publish-NRGAssessmentHTML {
     # findings (controls an evaluator could not assess because the tenant lacks
     # the license — e.g. Safe Attachments without Defender for Office 365 P1).
     # The latter are deliberately kept out of the compliance score (NotApplicable)
-    # but must still surface here as upgrade opportunities. They are recognised by
+    # but must still surface here as upgrade opportunities. They are recognized by
     # the "upgrade opportunity" marker the evaluators place in the detail, so
     # unrelated NotApplicable findings (data-not-collected, no-devices, etc.) are
     # never mis-counted as license gaps.
@@ -439,13 +439,13 @@ function Publish-NRGAssessmentHTML {
     # answer "with what". A reader working an 800-53, FedRAMP, or CMMC
     # assessment needs the breakdown by control family, because that is the
     # unit their own documentation, POA&M, and auditor conversations are
-    # organised around. Every other view in this report groups by M365
+    # organized around. Every other view in this report groups by M365
     # workload, which is the right lens for the engineer doing the fixing and
     # the wrong one for the compliance reader signing off.
     #
     # A finding citing controls in two families counts in both — see the
     # rationale in Lib/Get-NRGNISTFamilyCoverage.ps1. Family rows therefore do
-    # not sum to the assessment total, and the column is labelled "Assessed"
+    # not sum to the assessment total, and the column is labeled "Assessed"
     # rather than "Controls" to make that explicit.
     $nistHtml = ''
     $nistCov  = $null
@@ -1412,7 +1412,7 @@ $attachHtml
     # OneDrive folder is a window in which a co-resident process can read CA
     # policies, admin UPNs, OAuth grants and DMARC records. Hardening travels
     # with the terminal write so no caller can forget it. The Out-File fallback
-    # preserves behaviour if Lib/ has not been dot-sourced.
+    # preserves behavior if Lib/ has not been dot-sourced.
     if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
         Set-NRGSensitiveFileContent -Path $OutputPath -Content $html
     } else {

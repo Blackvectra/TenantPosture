@@ -12,9 +12,9 @@
 #          break — because a plan gets approved by someone accountable for the
 #          disruption, not just for the score.
 #
-#          Organised into the two tracks the work actually splits into: things
+#          Organized into the two tracks the work actually splits into: things
 #          that go in this week because nobody will notice, and things that
-#          need a window. A licence-blocked item is listed separately and never
+#          need a window. A license-blocked item is listed separately and never
 #          given a projected number.
 #
 #          SINGLE FRAMEWORK, DELIBERATELY. This document names NIST 800-53 and
@@ -106,7 +106,7 @@ function Publish-NRGImprovementPlan {
     $null = $sb.AppendLine("## Coverage today: $($base['Score'])% &rarr; after this plan: $($proj['Score'])%")
     $null = $sb.AppendLine()
     if ($proj['StepCount'] -eq 0) {
-        $null = $sb.AppendLine('There is nothing to do. Every NIST-cited control that was assessed is already satisfied, or is blocked on a licence. That is a real result, not an empty report.')
+        $null = $sb.AppendLine('There is nothing to do. Every NIST-cited control that was assessed is already satisfied, or is blocked on a license. That is a real result, not an empty report.')
     } else {
         $null = $sb.AppendLine("**$($proj['StepCount']) steps, worth $($proj['PointGain']) points of NIST coverage.** $(if ($tracks.Count -gt 0 -and $tracks[0]['Count'] -gt 0) { "$($tracks[0]['Count']) of them change nothing a user will notice and can go in this week." } else { '' })")
     }
@@ -192,13 +192,13 @@ function Publish-NRGImprovementPlan {
     $null = $sb.AppendLine("This assessment reaches **$($ceiling['Families']) of the $($ceiling['TotalFamilies'])** 800-53 families, across **$($ceiling['NistControls'])** distinct 800-53 controls. The families absent from the table above are not passing &mdash; they were never assessed.")
     $null = $sb.AppendLine()
 
-    # ── Licence-blocked ──────────────────────────────────────────────────────
+    # ── License-blocked ──────────────────────────────────────────────────────
     if ($blocked.Count -gt 0) {
         $null = $sb.AppendLine('---')
         $null = $sb.AppendLine()
-        $null = $sb.AppendLine("## Blocked on a licence &mdash; $($blocked.Count) controls")
+        $null = $sb.AppendLine("## Blocked on a license &mdash; $($blocked.Count) controls")
         $null = $sb.AppendLine()
-        $null = $sb.AppendLine('These cannot be configured until the licence exists, so they carry **no projected score**. Buying a licence changes the denominator, and a licensed-but-unconfigured control is still a gap &mdash; any number here would be a guess dressed as arithmetic. Treat the licence as the entry fee and the configuration as the project.')
+        $null = $sb.AppendLine('These cannot be configured until the license exists, so they carry **no projected score**. Buying a license changes the denominator, and a licensed-but-unconfigured control is still a gap &mdash; any number here would be a guess dressed as arithmetic. Treat the license as the entry fee and the configuration as the project.')
         $null = $sb.AppendLine()
         $null = $sb.AppendLine('| Control | What it would give you | Requires | Severity |')
         $null = $sb.AppendLine('|---|---|---|---|')
@@ -296,15 +296,15 @@ function Publish-NRGImprovementPlan {
         }
         $blockedHtml = @"
 <div class="card">
-  <h2>Blocked on a licence &mdash; $($blocked.Count) controls</h2>
-  <p class="lede">These cannot be configured until the licence exists, so they carry <strong>no projected score</strong>. Buying a licence changes the denominator, and a licensed-but-unconfigured control is still a gap &mdash; any number here would be a guess dressed as arithmetic. Treat the licence as the entry fee and the configuration as the project.</p>
+  <h2>Blocked on a license &mdash; $($blocked.Count) controls</h2>
+  <p class="lede">These cannot be configured until the license exists, so they carry <strong>no projected score</strong>. Buying a license changes the denominator, and a licensed-but-unconfigured control is still a gap &mdash; any number here would be a guess dressed as arithmetic. Treat the license as the entry fee and the configuration as the project.</p>
   <table><thead><tr><th>Control</th><th>What it would give you</th><th>Requires</th><th>Severity</th></tr></thead><tbody>$rows</tbody></table>
 </div>
 "@
     }
 
     $headline = if ($proj['StepCount'] -eq 0) {
-        'There is nothing to do. Every NIST-cited control that was assessed is already satisfied, or is blocked on a licence. That is a real result, not an empty report.'
+        'There is nothing to do. Every NIST-cited control that was assessed is already satisfied, or is blocked on a license. That is a real result, not an empty report.'
     } else {
         "<strong>$($proj['StepCount']) steps, worth $($proj['PointGain']) points of NIST coverage.</strong>$(if ($tracks.Count -gt 0 -and $tracks[0]['Count'] -gt 0) { " $($tracks[0]['Count']) of them change nothing a user will notice and can go in this week." })"
     }

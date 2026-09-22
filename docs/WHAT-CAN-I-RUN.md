@@ -91,7 +91,7 @@ because stock Windows does not have 7.
 .\Invoke-NRGDeviceCompliance.ps1     # -> C:\ProgramData\NRG\device-compliance.json
 ```
 
-35 checks: encryption and boot integrity, malware defence, network exposure,
+35 checks: encryption and boot integrity, malware defense, network exposure,
 accounts, patch state, session lock, legacy surface, audit policy.
 
 **Run it elevated.** Nine checks need administrative rights; run without and they
@@ -162,8 +162,8 @@ because that is how the work actually splits:
 - **Schedule** — licensed, but somebody will feel it. Needs a window, a message
   to users, or a discovery pass first.
 
-Licence-blocked controls are listed separately and get **no projected number** —
-buying a licence changes the denominator and a licensed-but-unconfigured control
+License-blocked controls are listed separately and get **no projected number** —
+buying a license changes the denominator and a licensed-but-unconfigured control
 is still a gap, so a figure there would be a guess dressed as arithmetic.
 
 The projection is not an estimate. Closing a gap adds one to the numerator,
@@ -214,7 +214,7 @@ nothing open.
 
 Produces two documents:
 
-- **`nist-device-guide.md/.html`** — 31 NIST controls organised by control, with
+- **`nist-device-guide.md/.html`** — 31 NIST controls organized by control, with
   98 implementation options and the evidence to keep. The auditor's lens.
 - **`nist-device-guide-baseline.md/.html`** — the same material as a build
   standard, 27 requirements across procure → provision → harden → in-service →
@@ -270,7 +270,7 @@ docs/            this file, and the policy docs
 | `nist-800-171-r2.json` | The 110 CMMC L2 requirements and their 800-171A objectives |
 | `operational-impact.json` | What enabling each control does to the business |
 | `ssp/<client>.psd1` | Your answers for the 69 requirements no scan reaches |
-| `branding.psd1` | Company name, colours, rates |
+| `branding.psd1` | Company name, colors, rates |
 
 ---
 

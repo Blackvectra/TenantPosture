@@ -51,7 +51,7 @@ function Invoke-NRGCollectPowerPlatform {
             # BAP-API fallback path below cannot retrieve these, so the
             # evaluator must not read absence as "creation is unrestricted".
             TenantGovernance = $null
-            # Environments initialises to @(), so an empty list cannot be told
+            # Environments initializes to @(), so an empty list cannot be told
             # apart from a query that failed — and zero environments is a
             # legitimate compliant answer, which is exactly what made the
             # confusion dangerous. Tracked explicitly.

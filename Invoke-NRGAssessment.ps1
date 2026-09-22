@@ -910,7 +910,7 @@ if (-not $JsonOnly) {
     }
 
     # System Security Plan (NIST SP 800-171 Rev 2 / CMMC Level 2). Same shape as
-    # the NIST matrix above: its own switch so a defence-contractor client can
+    # the NIST matrix above: its own switch so a defense-contractor client can
     # be served without every other sidecar, and implied by -AllFiles.
     if (($SSP -or $AllFiles) -and (Get-Command Publish-NRGSSP -ErrorAction SilentlyContinue)) {
         $sspPath = Join-Path $OutputPath "$baseName-ssp-800-171.md"
@@ -955,7 +955,7 @@ if (-not $JsonOnly) {
         $planPath = Join-Path $OutputPath "$baseName-nist-improvement-plan.md"
         try {
             # Resolved here rather than inside the plan so a tenant whose SKU
-            # query failed is treated as "no licence data" — every gated
+            # query failed is treated as "no license data" — every gated
             # control lands in Buy first rather than being promised as a quick
             # win the tenant cannot actually action.
             $planLicense = if (Get-Command Get-NRGTenantLicenseProfile -ErrorAction SilentlyContinue) {

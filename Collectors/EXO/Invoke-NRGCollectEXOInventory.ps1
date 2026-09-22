@@ -582,7 +582,7 @@ function Invoke-NRGCollectEXOInventory {
                                 Notes      = [string](Get-NRGObjectField -Item $i -Key 'Notes')
                             } }
                         } catch {
-                            # One list type unavailable (licence/role) must not
+                            # One list type unavailable (license/role) must not
                             # lose the others; the section only fails if the
                             # cmdlet itself is unusable, handled by the outer catch.
                             Write-Verbose "TABL $t/$allow unavailable: $($_.Exception.Message)"

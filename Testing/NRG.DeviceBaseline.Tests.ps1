@@ -148,7 +148,7 @@ Describe 'Managed device baseline (build standard)' {
         }
 
         It 'marks the non-negotiable controls mandatory' {
-            # Encryption, EDR, patching, MDM enrolment and the CA enforcement
+            # Encryption, EDR, patching, MDM enrollment and the CA enforcement
             # that gives them teeth. If any of these become optional the
             # standard has quietly stopped being one.
             foreach ($id in 'DB-2.1', 'DB-2.3', 'DB-2.5', 'DB-3.2', 'DB-4.1', 'DB-4.3') {

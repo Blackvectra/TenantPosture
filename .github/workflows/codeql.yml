@@ -3,7 +3,7 @@
 # Scope: this is a PowerShell repo. CodeQL does NOT natively support
 # PowerShell (the supported set is c-cpp, csharp, go, java-kotlin,
 # javascript-typescript, python, ruby, rust, swift, actions). We therefore
-# scan only `actions` here, which analyses the GitHub-Actions workflow
+# scan only `actions` here, which analyzes the GitHub-Actions workflow
 # YAML for supply-chain weaknesses (untrusted command injection in
 # `run:` blocks, untrusted action versions, etc.).
 #
@@ -22,6 +22,14 @@ on:
     branches: [ "main" ]
   schedule:
     - cron: '23 13 * * 2'
+# Least-privilege default for GITHUB_TOKEN. Without this block the
+# token inherits the repository default, which can be far broader
+# than this workflow needs. The analyze job declares its own wider
+# set (security-events: write, packages: read, actions: read) and is
+# unaffected -- a job-level block replaces this default entirely.
+permissions:
+  contents: read
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
