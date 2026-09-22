@@ -19,7 +19,6 @@
     # NRG-Assessment.psm1. PowerShell intersects the two lists, so a function
     # missing here is silently dropped from the exported surface.
     FunctionsToExport = @(
-        # ── Lib ───────────────────────────────────────────────────────────────
         'Add-NRGFinding',
         'Get-NRGFindings',
         'Clear-NRGFindings',
@@ -38,11 +37,11 @@
         'Register-NRGTenantApp',
         'Get-NRGControlDefinitions',
         'Get-NRGControlById',
+        'Get-NRGFrameworkCitations',
+        'Get-NRGFrameworkDefinitions',
         'Get-NRGFindingRiskCost',
         'Get-NRGAggregateRisk',
         'Get-NRGRemediationRoadmap',
-        'Get-NRGFrameworkCitations',
-        'Get-NRGFrameworkDefinitions',
         'Set-NRGSensitiveFileAcl',
         'Set-NRGSensitiveFileContent',
         'Get-NRGTenantLicenseProfile',
@@ -93,9 +92,8 @@
         'Invoke-NRGEvaluatorSafe',
         'Resolve-NRGDns',
         'Get-NRGModuleHealth',
+        'Repair-NRGModuleHealth',
         'Get-NRGControlAutomationAudit',
-
-        # ── Collectors — AAD ──────────────────────────────────────────────────
         'Invoke-NRGCollectAADAuthPolicies',
         'Invoke-NRGCollectAADCAPolicies',
         'Invoke-NRGCollectAADUsers',
@@ -103,15 +101,11 @@
         'Invoke-NRGCollectAADPIM',
         'Invoke-NRGCollectAADIdentityGovernance',
         'Invoke-NRGCollectAADInventory',
-
-        # ── Collectors — EXO / Defender / DNS ─────────────────────────────────
         'Invoke-NRGCollectEXOMailboxConfig',
         'Invoke-NRGCollectEXOConnectionFilter',
         'Invoke-NRGCollectEXOInventory',
         'Invoke-NRGCollectDefender',
         'Invoke-NRGCollectDNSEmailRecords',
-
-        # ── Collectors — Phase 2+ ─────────────────────────────────────────────
         'Invoke-NRGCollectSharePoint',
         'Invoke-NRGCollectTeams',
         'Invoke-NRGCollectPurview',
@@ -120,8 +114,6 @@
         'Invoke-NRGCollectIntuneAppProtection',
         'Invoke-NRGCollectPowerPlatform',
         'Invoke-NRGCollectM365Copilot',
-
-        # ── Evaluators — AAD ──────────────────────────────────────────────────
         'Test-NRGControlAADLegacyAuth',
         'Test-NRGControlAADMFA',
         'Test-NRGControlAADPhishResistantMFA',
@@ -163,8 +155,6 @@
         'Test-NRGControlAADPrivilegedWorkstation',
         'Test-NRGControlAADTermsOfUse',
         'Test-NRGControlAADWorkloadIdentityCA',
-
-        # ── Evaluators — DNS ──────────────────────────────────────────────────
         'Test-NRGControlDNSSPF',
         'Test-NRGControlDNSDKIM',
         'Test-NRGControlDNSDMARC',
@@ -175,8 +165,6 @@
         'Test-NRGControlDNSCAA',
         'Test-NRGControlDNSTLSCertExpiry',
         'Test-NRGControlDNSCertTransparency',
-
-        # ── Evaluators — EXO ──────────────────────────────────────────────────
         'Test-NRGControlEXOMailboxHoldCoverage',
         'Test-NRGControlEXODeletedItemRetention',
         'Test-NRGControlSPODepartedUserRetention',
@@ -213,8 +201,6 @@
         'Test-NRGControlEXOInboxRulesForwarding',
         'Test-NRGControlEXOAuditDisabledMailboxes',
         'Test-NRGControlEXOSmtpAuthExceptions',
-
-        # ── Evaluators — Defender ─────────────────────────────────────────────
         'Test-NRGControlDefender',
         'Test-NRGControlDefenderPresetPolicies',
         'Test-NRGControlDefenderZAP',
@@ -233,8 +219,6 @@
         'Test-NRGControlDefenderEndpointDLP',
         'Test-NRGControlDefenderAttackSim',
         'Test-NRGControlDefenderSafeLinksOffice',
-
-        # ── Evaluators — SharePoint ───────────────────────────────────────────
         'Test-NRGControlSharePoint',
         'Test-NRGControlSPOOneDriveSync',
         'Test-NRGControlSPOLinkExpiration',
@@ -248,8 +232,6 @@
         'Test-NRGControlSPOSharingNotifications',
         'Test-NRGControlSPOVersionHistory',
         'Test-NRGControlSPOGuestExpiry',
-
-        # ── Evaluators — Teams ────────────────────────────────────────────────
         'Test-NRGControlTeams',
         'Test-NRGControlTeamsSkype',
         'Test-NRGControlTeamsUnverifiedApps',
@@ -267,8 +249,6 @@
         'Test-NRGControlTeamsAnonymousStart',
         'Test-NRGControlTeamsFederationAllowlist',
         'Test-NRGControlTeamsLiveEvents',
-
-        # ── Evaluators — Purview ──────────────────────────────────────────────
         'Test-NRGControlPurview',
         'Test-NRGControlPurviewAuditSearch',
         'Test-NRGControlPurviewCommCompliance',
@@ -284,8 +264,6 @@
         'Test-NRGControlPurviewAuditRetention',
         'Test-NRGControlPurviewLabelsPublished',
         'Test-NRGControlPurviewRecordsManagement',
-
-        # ── Evaluators — Intune ───────────────────────────────────────────────
         'Test-NRGControlIntune',
         'Test-NRGControlIntuneEDR',
         'Test-NRGControlIntuneASR',
@@ -299,14 +277,10 @@
         'Test-NRGControlIntuneWindowsHello',
         'Test-NRGControlIntuneUpdateCompliance',
         'Test-NRGControlIntuneMobilePIN',
-
-        # ── Evaluators — Power Platform ───────────────────────────────────────
         'Test-NRGControlPowerPlatform',
         'Test-NRGControlPPLConnectorClassification',
         'Test-NRGControlPPLAutomate',
         'Test-NRGControlPPLPowerApps',
-
-        # ── Evaluators — Inventory ────────────────────────────────────────────
         'Test-NRGControlInventoryMFAUsers',
         'Test-NRGControlInventoryStaleGuests',
         'Test-NRGControlInventoryStaleMembers',
@@ -316,15 +290,11 @@
         'Test-NRGControlInventoryMailboxAuditDisabled',
         'Test-NRGControlInventorySMTPAuthUsers',
         'Test-NRGControlInventorySecureScore',
-
-        # ── Evaluators — AI / Copilot ─────────────────────────────────────────
         'Test-NRGControlAICopilotSensitivityLabels',
         'Test-NRGControlAICopilotDLP',
         'Test-NRGControlAICopilotLicensedOnly',
         'Test-NRGControlAICopilotStudio',
         'Test-NRGControlAICopilotInteractionData',
-
-        # ── Publishers ────────────────────────────────────────────────────────
         'Publish-NRGAssessmentHTML',
         'Publish-NRGAssessmentSummary',
         'Publish-NRGRemediationPlaybook',
@@ -332,8 +302,6 @@
         'Publish-NRGComplianceMatrix',
         'Publish-NRGDeltaReport',
         'Publish-NRGMonthlyReport',
-
-        # ── v4.12.0 Email Incident Response (Email-IR/ subtree) ───────────────
         'Connect-NRGEmailServices',
         'Disconnect-NRGEmailServices',
         'Invoke-NRGEmailCollectMailbox',
