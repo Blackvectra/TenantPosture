@@ -31,7 +31,7 @@
 # and Get-NRGSSPPosture declare theirs this way.
 $script:NRGAppPermCatalog = $null
 
-# Risk catalogue loader. Cached module-scope like the other config loaders.
+# Risk catalog loader. Cached module-scope like the other config loaders.
 function Get-NRGAppPermissionRiskCatalog {
     [CmdletBinding()] param([string] $ConfigPath)
 
@@ -102,8 +102,8 @@ function Get-NRGAppPermissionContext {
     # produce.
     # NOTE the deviation from the usual replay rule. Elsewhere an ABSENT
     # SectionStatus counts as collected, so result JSON captured before that
-    # field existed keeps its old behaviour. This collector is new: no results
-    # file predates it, so there is no legacy behaviour to preserve, and
+    # field existed keeps its old behavior. This collector is new: no results
+    # file predates it, so there is no legacy behavior to preserve, and
     # "absent" can only mean the collector returned an envelope with Success
     # set and nothing inside it. Reading that as clean is a pure false pass —
     # and on a Critical tenant-takeover control it is the worst one available.
@@ -133,7 +133,7 @@ function Get-NRGAppPermissionContext {
     if ($null -eq $catalog) {
         Add-NRGFinding -ControlId $ControlId -State 'NotApplicable' -Category $Control.Category `
             -Title $Control.Title -Severity 'Informational' -FrameworkIds $Citations `
-            -Detail 'The application permission risk catalogue could not be loaded; not assessed.'
+            -Detail 'The application permission risk catalog could not be loaded; not assessed.'
         return $null
     }
 
@@ -173,7 +173,7 @@ function Get-NRGAppPermissionContext {
     }
 }
 
-# Turns a catalogue tier into a permission -> reason lookup.
+# Turns a catalog tier into a permission -> reason lookup.
 function Get-NRGAppPermissionTierMap {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [object] $Catalog, [Parameter(Mandatory)] [string] $Tier)
@@ -199,7 +199,7 @@ function Test-NRGControlAppPermTenantTakeover {
     $hits  = @($ctx.Scored | Where-Object { $tier1.ContainsKey($_.Permission) })
 
     $msNote = if ($ctx.FirstParty.Count -gt 0) {
-        " $($ctx.FirstParty.Count) grant(s) held by Microsoft first-party applications were reviewed and set aside as expected platform behaviour; they are excluded from this verdict."
+        " $($ctx.FirstParty.Count) grant(s) held by Microsoft first-party applications were reviewed and set aside as expected platform behavior; they are excluded from this verdict."
     } else { '' }
 
     if ($hits.Count -eq 0) {
@@ -263,14 +263,14 @@ function Test-NRGControlAppPermDataAccess {
     $ext   = @($hits | Where-Object { $_.Origin -eq 'External' -or $_.Origin -eq 'Unknown' })
 
     # Severity rises when the holder is an outside party: the same permission
-    # is a larger exposure when the organisation does not own the application.
+    # is a larger exposure when the organization does not own the application.
     $sev = if ($ext.Count -gt 0) { 'High' } else { 'Medium' }
 
     Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
         -Severity $sev -FrameworkIds $cit `
         -Detail ("$($apps.Count) application(s) hold $($hits.Count) tenant-wide data-access permission(s) — they can reach " +
                  'every user''s mail, files or chat with no signed-in user and no Conditional Access evaluation. ' +
-                 "$($ext.Count) of these grant(s) are held by applications this organisation does not own. Each grant should " +
+                 "$($ext.Count) of these grant(s) are held by applications this organization does not own. Each grant should " +
                  "name a business owner and a reason, or be revoked.$msNote") `
         -CurrentValue "$($apps.Count) application(s) with tenant-wide data access" `
         -RequiredValue 'Every application permission reviewed, owned and justified' `
