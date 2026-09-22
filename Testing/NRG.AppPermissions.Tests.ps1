@@ -189,7 +189,7 @@ return @{ value = @() }
         }
 
         It 'rates data access Medium when only the tenant''s own applications hold it' {
-            # Same permission, lower exposure: the organisation owns the app.
+            # Same permission, lower exposure: the organization owns the app.
             $o = Run 'Default'
             $o.T2.State    | Should -Be 'Gap'
             $o.T2.Severity | Should -Be 'Medium'
@@ -249,8 +249,8 @@ return @{ value = @() }
             ($o.T1.AffectedObjects -join ' ') | Should -Match 'ThirdParty Connect' -Because 'the takeover grant is only on page 2'
         }
 
-        It 'collects a permission the catalogue does not rate, but does not score it' {
-            # Absence from the catalogue is "unrated", not "safe".
+        It 'collects a permission the catalog does not rate, but does not score it' {
+            # Absence from the catalog is "unrated", not "safe".
             $o = Run 'Default'
             @($o.Raw.Data.Grants | Where-Object { $_.Permission -eq 'Printer.Read.All' }).Count | Should -Be 1
             ($o.T1.AffectedObjects -join ' ') | Should -Not -Match 'Printer.Read.All'
@@ -269,7 +269,7 @@ return @{ value = @() }
         }
     }
 
-    Context 'the risk catalogue' {
+    Context 'the risk catalog' {
 
         BeforeAll { $script:Cat = Get-NRGAppPermissionRiskCatalog }
 

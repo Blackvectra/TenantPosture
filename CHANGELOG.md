@@ -27,7 +27,7 @@ Accuracy + hardening pass (targeting v4.13.0):
   `Config/app-permissions-risk.json` holds the risk judgement as reviewable
   data in two tiers, each entry carrying the reason it is rated; a permission
   in neither tier is collected and reported but **not scored**, because absence
-  from the catalogue means unrated, never safe. Microsoft first-party apps
+  from the catalog means unrated, never safe. Microsoft first-party apps
   legitimately hold these, so they are excluded from the verdict and their
   count is stated in the finding — set aside, never silently dropped — while an
   app whose owner cannot be determined is scored rather than waved through.

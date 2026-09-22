@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "Application (app-only) permission risk catalogue.",
+    "Application (app-only) permission risk catalog.",
     "",
     "These are APPLICATION permissions, not delegated ones. An app holding one",
     "of these acts with no signed-in user: no MFA prompt, no Conditional Access",
@@ -16,7 +16,7 @@
     "",
     "A permission absent from both lists is reported in the inventory but is",
     "not scored. Absence from this file is not a judgement that the permission",
-    "is safe — it means this catalogue has not rated it."
+    "is safe — it means this catalog has not rated it."
   ],
   "resources": {
     "00000003-0000-0000-c000-000000000000": "Microsoft Graph",
@@ -55,11 +55,11 @@
     { "Permission": "User.Read.All", "Why": "Read every user profile in the directory." },
     { "Permission": "Group.ReadWrite.All", "Why": "Read and modify every group, including membership of groups used for access control." },
     { "Permission": "GroupMember.ReadWrite.All", "Why": "Modify membership of any group, including groups that grant access." },
-    { "Permission": "Directory.Read.All", "Why": "Read the entire directory — a complete reconnaissance view of the organisation." },
+    { "Permission": "Directory.Read.All", "Why": "Read the entire directory — a complete reconnaissance view of the organization." },
     { "Permission": "Chat.Read.All", "Why": "Read every Teams chat message in the tenant." },
     { "Permission": "ChannelMessage.Read.All", "Why": "Read every Teams channel message in the tenant." },
     { "Permission": "Calendars.ReadWrite", "Why": "Read and modify every user's calendar." },
-    { "Permission": "Organization.ReadWrite.All", "Why": "Modify organisation-level settings and branding." },
+    { "Permission": "Organization.ReadWrite.All", "Why": "Modify organization-level settings and branding." },
     { "Permission": "Device.ReadWrite.All", "Why": "Read and modify device records, which Conditional Access device filters rely on." }
   ]
 }
