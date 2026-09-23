@@ -34,6 +34,11 @@
 # Testability: pass -InstalledOverride @{ '<ModuleName>' = @(<objs with .Version
 #   and .ModuleBase>) } to evaluate synthetic install states without any modules
 #   present. Omit it to read the real machine via Get-Module -ListAvailable.
+#   When supplied, the override is authoritative for ALL THREE tracked modules,
+#   not just the ones named in it: a name the caller left out is "not
+#   installed", never a silent fallback to Get-Module for that one module —
+#   otherwise a test overriding only one carrier would have its result depend
+#   on whatever happens to be installed on the machine running it.
 
 function Get-NRGModuleHealth {
     [CmdletBinding()]
@@ -58,8 +63,17 @@ function Get-NRGModuleHealth {
 
     foreach ($s in $specs) {
         $found = @()
-        if ($InstalledOverride -and $InstalledOverride.ContainsKey($s.Name)) {
-            $found = @($InstalledOverride[$s.Name])
+        if ($InstalledOverride) {
+            # -InstalledOverride replaces the machine as the source of truth
+            # for THIS call. A module the caller did not name in it is "not
+            # installed", never a silent fallback to the real machine — a
+            # test that overrides only one carrier (e.g. MicrosoftTeams) but
+            # not Microsoft.Graph.Authentication would otherwise read the
+            # ACTUAL workstation's Graph install state, making the test's
+            # result depend on what happens to be on the machine running it.
+            if ($InstalledOverride.ContainsKey($s.Name)) {
+                $found = @($InstalledOverride[$s.Name])
+            }
         } elseif (Get-Command Get-Module -ErrorAction SilentlyContinue) {
             try { $found = @(Get-Module -ListAvailable -Name $s.Name -ErrorAction SilentlyContinue) } catch { $found = @() }
         }

@@ -48,12 +48,21 @@ function Invoke-NRGCollectIntuneAppProtection {
                 foreach ($p in @($page.value)) {
                     # Conditional-launch settings (INT-3.3): the MAM app-protection
                     # object carries these access-gating fields directly (no new
-                    # scope). Read via ?? so absent keys are $null (HashTable shape).
+                    # scope). managedAppPolicies is polymorphic — a row that is not
+                    # a managedAppProtection (e.g. targetedManagedAppConfiguration,
+                    # mdmWindowsInformationProtectionPolicy) simply lacks these keys,
+                    # so they are read through Get-NRGObjectField: a bare dot-read
+                    # throws on an absent hashtable key under StrictMode even with
+                    # a trailing '??' (see Invoke-NRGGraphRequest.ps1 header).
+                    $deviceComplianceRequired = [bool](Get-NRGObjectField -Item $p -Key 'deviceComplianceRequired' -Default $false)
+                    $minimumRequiredOsVersion = [string](Get-NRGObjectField -Item $p -Key 'minimumRequiredOsVersion' -Default '')
+                    $maximumPinRetries        = [int](Get-NRGObjectField -Item $p -Key 'maximumPinRetries' -Default 0)
+                    $periodOfflineBeforeWipe  = Get-NRGObjectField -Item $p -Key 'periodOfflineBeforeWipeIsEnforced' -Default $false
                     $condLaunch = @()
-                    if (($p.deviceComplianceRequired ?? $false) -eq $true)      { $condLaunch += 'DeviceComplianceRequired' }
-                    if ($p.minimumRequiredOsVersion)                            { $condLaunch += 'MinimumRequiredOsVersion' }
-                    if ([int]($p.maximumPinRetries ?? 0) -gt 0)                 { $condLaunch += 'MaximumPinRetries' }
-                    if ($p.periodOfflineBeforeWipeIsEnforced)                   { $condLaunch += 'PeriodOfflineBeforeWipe' }
+                    if ($deviceComplianceRequired -eq $true) { $condLaunch += 'DeviceComplianceRequired' }
+                    if ($minimumRequiredOsVersion)           { $condLaunch += 'MinimumRequiredOsVersion' }
+                    if ($maximumPinRetries -gt 0)             { $condLaunch += 'MaximumPinRetries' }
+                    if ($periodOfflineBeforeWipe)             { $condLaunch += 'PeriodOfflineBeforeWipe' }
                     $result.Data.AppProtectionPolicies += @{
                         Id          = $p.id
                         DisplayName = [string]$p.displayName
@@ -61,9 +70,9 @@ function Invoke-NRGCollectIntuneAppProtection {
                         Type        = [string]$p['@odata.type']
                         Version     = $p.version
                         # Fields backing the INT-3.3 conditional-launch evaluation.
-                        DeviceComplianceRequired  = [bool]($p.deviceComplianceRequired ?? $false)
-                        MinimumRequiredOsVersion  = [string]($p.minimumRequiredOsVersion ?? '')
-                        MaximumPinRetries         = [int]($p.maximumPinRetries ?? 0)
+                        DeviceComplianceRequired  = $deviceComplianceRequired
+                        MinimumRequiredOsVersion  = $minimumRequiredOsVersion
+                        MaximumPinRetries         = $maximumPinRetries
                         ConditionalLaunchSettings = @($condLaunch)
                     }
                 }

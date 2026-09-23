@@ -410,7 +410,8 @@ function Test-NRGEmailControl-PhishOrigin {
         }
 
         # +25 if domain mentions Microsoft branding without being legit MS
-        if (Test-NRGEmailMatchesMSImpersonation -Domain $senderDomain -DisplayName $m.FromName) {
+        $fromName = Get-NRGObjectField -Item $m -Key 'FromName' -Default $null
+        if (Test-NRGEmailMatchesMSImpersonation -Domain $senderDomain -DisplayName $fromName) {
             $score += 25
             $reasons += "Microsoft-impersonation pattern"
         }
@@ -446,16 +447,16 @@ function Test-NRGEmailControl-PhishOrigin {
         # +10 if attached to display-name spoofing (FromName has Microsoft but
         # FromAddress is external — caught by impersonation above too, but
         # account for the case where it's a different brand)
-        if ($m.FromName -and ($m.FromName -match '(?i)microsoft|docusign|adobe|dropbox|onedrive') -and
+        if ($fromName -and ($fromName -match '(?i)microsoft|docusign|adobe|dropbox|onedrive') -and
             $senderDomain -and -not (Test-NRGEmailIsLegitMSDomain $senderDomain)) {
             $score += 10
-            $reasons += "display-name brand spoof: '$($m.FromName)'"
+            $reasons += "display-name brand spoof: '$fromName'"
         }
 
         # If recovered from Deletions, that's a HUGE signal — attacker covered tracks
         $isRecovered = $false
         if ($recRaw -and $recRaw.Success -and $recRaw.Data.Messages) {
-            $recIds = @($recRaw.Data.Messages | Select-Object -ExpandProperty Id)
+            $recIds = @($recRaw.Data.Messages | ForEach-Object { Get-NRGObjectField -Item $_ -Key 'Id' -Default $null })
             if ($recIds -contains $m.Id) {
                 $score += 30
                 $isRecovered = $true
@@ -466,7 +467,7 @@ function Test-NRGEmailControl-PhishOrigin {
         [ordered]@{
             ReceivedDateTime = $m.ReceivedDateTime
             From             = $m.FromAddress
-            FromName         = $m.FromName
+            FromName         = $fromName
             Subject          = $subject
             Score            = $score
             Reasons          = $reasons
@@ -481,7 +482,7 @@ function Test-NRGEmailControl-PhishOrigin {
     # A bare external sender with no other signal scores exactly 30 — almost
     # all inbound mail is external, so a >= 30 threshold would flood the report
     # with every correspondent. > 30 keeps it to actual phish candidates.
-    $top = @($scored | Where-Object { $_.Score -gt 30 } | Sort-Object Score -Descending | Select-Object -First 5)
+    $top = @($scored | Where-Object { $_.Score -gt 30 } | Sort-Object { $_.Score } -Descending | Select-Object -First 5)
 
     if ($top.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `

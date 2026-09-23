@@ -69,11 +69,14 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
                         Platform    = [string]$p['@odata.type']
                         Description = [string]$p.description
                         Version     = $p.version
-                        # Pull through fields the evaluator looks at; not all platforms expose them
-                        BitLockerEnabled        = $p.bitLockerEnabled
-                        SecureBootEnabled       = $p.secureBootEnabled
-                        PasswordRequired        = $p.passwordRequired
-                        StorageRequireEncryption= $p.storageRequireEncryption
+                        # Pull through fields the evaluator looks at; not all platforms expose
+                        # them (deviceCompliancePolicies is polymorphic — a bare dot-read of a
+                        # Windows-only key throws under StrictMode on an iOS/Android/macOS row),
+                        # so read each through Get-NRGObjectField and default to $null.
+                        BitLockerEnabled        = Get-NRGObjectField -Item $p -Key 'bitLockerEnabled' -Default $null
+                        SecureBootEnabled       = Get-NRGObjectField -Item $p -Key 'secureBootEnabled' -Default $null
+                        PasswordRequired        = Get-NRGObjectField -Item $p -Key 'passwordRequired' -Default $null
+                        StorageRequireEncryption= Get-NRGObjectField -Item $p -Key 'storageRequireEncryption' -Default $null
                     }
                 }
                 $next = $page['@odata.nextLink']

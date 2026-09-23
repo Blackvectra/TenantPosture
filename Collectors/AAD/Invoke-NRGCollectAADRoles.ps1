@@ -55,17 +55,17 @@ function Invoke-NRGCollectAADRoles {
             'Conditional Access Administrator'
         )
 
-        # Get all role definitions (we need names to match)
+        # Get all role definitions (we need names to match). A tenant's
+        # built-in plus custom role definitions can exceed a single $top=200
+        # page; a role definition missing from a truncated result falls back
+        # to its GUID as the name below, is scored IsPriv=$false, and any
+        # assignment to it is silently excluded from PrivRoles /
+        # AllPrivilegedAssignments — a privileged-assignment undercount with
+        # no signal that anything was missed. Page through nextLink exactly
+        # as the role assignments query below already does.
         try {
-            $roleDefResp = Invoke-NRGGraphRequest -Method GET `
-                -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions?$select=id,displayName,isBuiltIn,isEnabled&$top=200' `
-                -ErrorAction Stop
-            # Shape-safe: a role definition missing any $select'd field (isBuiltIn,
-            # isEnabled) would otherwise throw and empty the whole map, so every
-            # assignment falls back to a GUID name and the GA-by-name filter finds
-            # nothing — another path to a false "0 Global Administrators".
-            $result.Data.RoleDefinitions = @($roleDefResp.value ?? @() | ForEach-Object {
-                $rd = $_
+            $mkRoleDef = {
+                param($rd)
                 $dn = [string](Get-NRGObjectField -Item $rd -Key 'displayName' -Default '')
                 @{
                     Id          = [string](Get-NRGObjectField -Item $rd -Key 'id' -Default '')
@@ -74,7 +74,35 @@ function Invoke-NRGCollectAADRoles {
                     IsEnabled   = [bool](Get-NRGObjectField -Item $rd -Key 'isEnabled' -Default $true)
                     IsPriv      = ($privRoleNames -contains $dn)
                 }
-            })
+            }
+
+            $roleDefResp = Invoke-NRGGraphRequest -Method GET `
+                -Uri 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions?$select=id,displayName,isBuiltIn,isEnabled&$top=200' `
+                -ErrorAction Stop
+            # Shape-safe: a role definition missing any $select'd field (isBuiltIn,
+            # isEnabled) would otherwise throw and empty the whole map, so every
+            # assignment falls back to a GUID name and the GA-by-name filter finds
+            # nothing — another path to a false "0 Global Administrators".
+            $roleDefs = [System.Collections.Generic.List[object]]::new()
+            foreach ($rd in @($roleDefResp.value ?? @())) { $roleDefs.Add((& $mkRoleDef $rd)) }
+
+            $rdNextLink  = $roleDefResp['@odata.nextLink']
+            $rdMaxPages  = 200
+            $rdPageCount = 0
+            while ($rdNextLink -and $rdPageCount -lt $rdMaxPages) {
+                $rdPageResp = Invoke-NRGGraphRequest -Method GET -Uri $rdNextLink -ErrorAction Stop
+                foreach ($rd in @($rdPageResp.value ?? @())) { $roleDefs.Add((& $mkRoleDef $rd)) }
+                $rdNextLink = $rdPageResp['@odata.nextLink']
+                $rdPageCount++
+            }
+            if ($rdPageCount -ge $rdMaxPages -and $rdNextLink) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'AAD-RoleDefinitions' `
+                        -Message "Pagination cap reached ($rdMaxPages pages). Possible nextLink loop or very large dataset; role definitions may be truncated."
+                }
+            }
+
+            $result.Data.RoleDefinitions = $roleDefs.ToArray()
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-RoleDefinitions' -Message $_.Exception.Message

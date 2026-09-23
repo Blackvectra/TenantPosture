@@ -166,7 +166,7 @@ if (-not $scriptDir) { $scriptDir = (Get-Location).Path }
 if (-not $OutputPath) {
     $OutputPath = Join-Path $scriptDir (Join-Path 'output' 'IR-Triage')
 }
-$null = New-Item -ItemType Directory -Force -LiteralPath $OutputPath -ErrorAction SilentlyContinue
+$null = [System.IO.Directory]::CreateDirectory($OutputPath)
 $resolvedOutput = [System.IO.Path]::GetFullPath($OutputPath)
 $null = $resolvedOutput
 

@@ -374,8 +374,11 @@ Describe 'System Security Plan (NIST SP 800-171 Rev 2)' {
         It 'states the evidenced / attested split on both surfaces' {
             $ev = $script:PostureMixed['Summary']['Evidenced']
             $at = $script:PostureMixed['Summary']['AttestationRequired']
-            $script:Md   | Should -BeLike "*$ev*"
-            $script:Md   | Should -BeLike "*$at*"
+            # Anchored to the sentence that actually carries the numbers, not
+            # a bare digit match — any requirement id, date or count sharing
+            # those digits would otherwise satisfy a "-BeLike *$ev*" check.
+            $script:Md   | Should -Match "observed \*\*$ev\*\* from the Microsoft 365 tenant" -Because 'the evidenced count must appear in its own sentence, not just anywhere in the document'
+            $script:Md   | Should -Match "remaining \*\*$at\*\* are policy" -Because 'the attestation-required count must appear in its own sentence, not just anywhere in the document'
             $script:Md   | Should -Match 'working System Security Plan, not a finished one'
             $script:Html | Should -Match 'working System Security Plan, not a finished one'
         }

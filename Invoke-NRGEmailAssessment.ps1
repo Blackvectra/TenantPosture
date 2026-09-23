@@ -132,7 +132,7 @@ if (-not $OutputPath) {
     $sanitizedUser = $UserPrincipalName -replace '[^a-zA-Z0-9._-]', '_'
     $OutputPath = Join-Path $scriptDir (Join-Path 'output' $sanitizedUser)
 }
-$null = New-Item -ItemType Directory -Force -LiteralPath $OutputPath -ErrorAction SilentlyContinue
+$null = [System.IO.Directory]::CreateDirectory($OutputPath)
 $resolvedOutput = [System.IO.Path]::GetFullPath($OutputPath)
 $null = $resolvedOutput
 

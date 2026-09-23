@@ -196,6 +196,19 @@ param(
 
     [switch] $WhatIfConnections,
 
+    # GDAP batch mode establishes ONE Graph/EXO/Teams/IPPS session meant to be
+    # reused across every client in Config/clients.json (see
+    # Connect-NRGServices.ps1's reuseGraphContext / reuseExoSession logic).
+    # This orchestrator's own finally block otherwise always calls
+    # Disconnect-NRGServices, tearing the shared session down after EVERY
+    # client — the next client's Connect-MgGraph then has to reconnect with
+    # no -TenantId and can silently land back in the operator's home tenant.
+    # Pass -KeepSession to skip the disconnect and leave the shared session
+    # intact for the next client. NOTE: Invoke-NRGBatchAssessment.ps1 does not
+    # pass this yet — wiring the batch runner to set it on every call but the
+    # last is a separate follow-up.
+    [switch] $KeepSession,
+
     # Launch the local web GUI instead of running a scan in the terminal.
     # The GUI is a local Pode-backed server (loopback only, never exposed
     # to the network) that lets the operator pick a tenant, trigger scans,
@@ -701,6 +714,12 @@ if (-not $skipCollection) {
                 $highSevEvaluators[$ctrl.EvaluatorFunction] = $true
             }
         }
+        # Test-NRGControlDevice owns the 35 DEV-* endpoint checks (3 Critical,
+        # 20 High) defined in Config/device-controls.json, NOT controls.json, so
+        # the loop above never sees it and -Quick silently dropped every
+        # endpoint finding even when -DeviceResults was supplied. Keep it in
+        # the Quick set explicitly.
+        $highSevEvaluators['Test-NRGControlDevice'] = $true
         $beforeCount = $evaluators.Count
         $evaluators  = @($evaluators | Where-Object { $highSevEvaluators.ContainsKey($_) })
         Write-Host "  [i] Quick mode: $($evaluators.Count) of $beforeCount evaluators (workloads with Critical+High only; lower-severity findings inside those workloads still surface)" -ForegroundColor Yellow
@@ -915,11 +934,19 @@ if (-not $JsonOnly) {
     if (($SSP -or $AllFiles) -and (Get-Command Publish-NRGSSP -ErrorAction SilentlyContinue)) {
         $sspPath = Join-Path $OutputPath "$baseName-ssp-800-171.md"
         try {
-            # The CONNECTED domain, not the -TenantDomain parameter: under GDAP
-            # the two differ, and looking the answers file up by the partner's
-            # domain would silently attach one client's narratives to another
-            # client's plan.
-            $sspClient = [string]$reportMetadata.TenantDomain
+            # Prefer the operator-supplied -TenantDomain when given. Under GDAP
+            # batch mode, $reportMetadata.TenantDomain is derived by
+            # Connect-NRGServices from the SIGNED-IN ACCOUNT's UPN, which is
+            # the MSP's own domain, not the client's — looking the answers
+            # file up by that value attaches the MSP's own SSP narratives to
+            # every client. -TenantDomain is the client the operator actually
+            # asked to assess and is unambiguous whenever it is supplied.
+            # NOTE: Invoke-NRGBatchAssessment.ps1 does not yet pass
+            # -TenantDomain through to this orchestrator for GDAP clients, so
+            # this alone does not close the gap in batch mode — that
+            # batch-runner wiring (and correcting how Connect-NRGServices
+            # derives TenantDomain) is a separate follow-up.
+            $sspClient = if ($TenantDomain) { $TenantDomain } else { [string]$reportMetadata.TenantDomain }
             $sspAnswerSet = if ($SSPAnswers) {
                 Get-NRGSSPAnswers -Path $SSPAnswers
             } else {
@@ -1175,7 +1202,9 @@ catch {
 }
 finally {
     # ── Disconnect on success or error ────────────────────────────────────────
-    if (-not $skipCollection) {
+    # -KeepSession (see param docs above) leaves a GDAP batch session intact
+    # for the next client instead of tearing it down after every run.
+    if (-not $skipCollection -and -not $KeepSession) {
         try { Disconnect-NRGServices } catch { }
     }
 }

@@ -127,9 +127,14 @@ function Invoke-NRGCollectPowerPlatform {
                 try {
                     $iso = Get-PowerAppTenantIsolationPolicy -ErrorAction Stop
                     if ($iso) {
+                        # .properties is a nested object on the returned
+                        # policy that is not guaranteed present on every
+                        # module version/tenant shape — a bare chained read
+                        # throws under StrictMode at the first absent
+                        # intermediate.
                         $result.Data.TenantIsolation = [ordered]@{
-                            IsDisabled = [bool]($iso.properties.isDisabled ?? $true)
-                            Rules      = @($iso.properties.rules ?? @())
+                            IsDisabled = [bool](Get-NRGNestedProperty -Object $iso -Path 'properties.isDisabled' -Default $true)
+                            Rules      = @(Get-NRGNestedProperty -Object $iso -Path 'properties.rules' -Default @())
                         }
                     }
                 } catch {

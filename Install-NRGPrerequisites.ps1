@@ -167,7 +167,11 @@ foreach ($spec in $moduleSpecs) {
             Write-Host "  [+] $name $current — OK (pinned)" -ForegroundColor Green
         }
     } else {
-        # Any version meeting minimum is fine
+        # Any version meeting minimum is fine -- but "fine" is about the version
+        # NUMBER only. This branch inspects the newest installed version alone,
+        # so a second, older copy sitting beside it passed as OK and was left in
+        # place. For a MSAL carrier that duplicate is the assembly conflict, and
+        # the preflight was sending operators here to fix exactly it.
         $min = [version]$spec.MinVersion
         if (-not $installed -or $installed.Version -lt $min -or $Force) {
             Write-Host "  [*] Installing $name (min $min)..." -ForegroundColor Yellow
@@ -182,6 +186,49 @@ foreach ($spec in $moduleSpecs) {
             Write-Host "  [+] $name $($installed.Version) — OK" -ForegroundColor Green
         }
     }
+}
+
+# ── Duplicate MSAL-carrier versions ──────────────────────────────────────────
+# The loop above reconciles version NUMBERS. It does not remove a second copy
+# living beside the one it approved, and that duplicate is what makes which
+# Microsoft.Identity.Client wins nondeterministic. Repair-NRGModuleHealth is the
+# one place that removes it, and it asks before it does.
+Write-Host ""
+Write-Host "[-] Checking for duplicate MSAL carrier versions..." -ForegroundColor Cyan
+try {
+    $repairLib = Join-Path $PSScriptRoot 'Lib/Repair-NRGModuleHealth.ps1'
+    $healthLib = Join-Path $PSScriptRoot 'Lib/Get-NRGModuleHealth.ps1'
+    if ((Test-Path -LiteralPath $repairLib) -and (Test-Path -LiteralPath $healthLib)) {
+        . $healthLib
+        . $repairLib
+        $plan = Repair-NRGModuleHealth -PlanOnly
+        if (@($plan.Planned).Count -eq 0) {
+            Write-Host "  [+] No duplicate versions of the MSAL carriers — OK" -ForegroundColor Green
+        } else {
+            foreach ($item in $plan.Planned) {
+                Write-Host ("  [!] {0}: remove {1}, keep {2}" -f $item.Name, $item.Version, $item.Keeping) -ForegroundColor Yellow
+            }
+            # -Force means the operator already opted into changes on this run.
+            # Without it, ask -- removing modules is not a side effect anyone
+            # should get by accident from a prerequisites check.
+            if ($Force) {
+                $result = Repair-NRGModuleHealth -Confirm:$false
+                foreach ($r in $result.Removed) {
+                    Write-Host ("  [+] Removed {0} {1}" -f $r.Name, $r.Version) -ForegroundColor Green
+                }
+                foreach ($f in $result.Failed) {
+                    Write-Host ("  [!] Could not remove {0} {1}: {2}" -f $f.Name, $f.Version, $f.Reason) -ForegroundColor Red
+                }
+                if ($result.RestartRequired) {
+                    Write-Host "  [!] MSAL is already loaded in THIS session — start a new PowerShell window before running an assessment." -ForegroundColor Yellow
+                }
+            } else {
+                Write-Host "      Run 'Repair-NRGModuleHealth' to remove them, or re-run this script with -Force." -ForegroundColor DarkYellow
+            }
+        }
+    }
+} catch {
+    Write-Host "  [!] Duplicate check skipped: $($_.Exception.Message)" -ForegroundColor DarkYellow
 }
 
 # ── SharePoint module (optional — only if not using Graph-only SharePoint collection) ─

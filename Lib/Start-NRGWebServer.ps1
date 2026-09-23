@@ -85,16 +85,35 @@ function Start-NRGWebServer {
     Write-Host ''
 
     # ── Pode server ───────────────────────────────────────────────────────
-    Start-PodeServer -Threads 4 -ScriptBlock {
-        param()
-
+    # $using: does NOT work anywhere below. Pode runs this block, and every
+    # route body, through Invoke-PodeScriptBlock in its own runspaces, and a
+    # Using variable is valid only with Invoke-Command / Start-Job /
+    # InlineScript. Pode fails the whole server start with "A Using variable
+    # cannot be retrieved", which is why -Web never came up. Two mechanisms
+    # replace it, because the two places need different ones:
+    #   - .GetNewClosure() carries $Port / $webRoot into the REGISTRATION-time
+    #     expressions in this block. Start-PodeServer has no -ArgumentList
+    #     (checked on 2.14.1), so a closure is the only way in.
+    #   - Pode state carries config into the route BODIES, which run later in
+    #     other runspaces that the closure does not reach.
+    $serverBlock = {
         # Loopback only. Binding to 127.0.0.1 (not 0.0.0.0) is load-bearing —
         # this server is for the local operator, never the network.
-        Add-PodeEndpoint -Address '127.0.0.1' -Port $using:Port -Protocol Http
+        Add-PodeEndpoint -Address '127.0.0.1' -Port $Port -Protocol Http
 
-        # Shared in-memory state — Pode's state machinery is synchronized across
-        # the worker runspaces, so the SSE-poll handler can read what the scan
-        # handler writes without locking ceremony in the route bodies.
+        # Config for the route bodies. Pode's state machinery is synchronized
+        # across the worker runspaces, so a route body reads this the same way
+        # the status handler reads what the scan handler writes.
+        Set-PodeState -Name 'cfg' -Value @{
+            WebRoot     = $webRoot
+            ClientsFile = $clientsFile
+            OutputRoot  = $outputRoot
+            ScriptDir   = $ScriptDir
+        } | Out-Null
+
+        # Shared in-memory state — same machinery, so the status-poll handler
+        # can read what the scan handler writes without locking ceremony in the
+        # route bodies.
         Set-PodeState -Name 'scans' -Value @{} | Out-Null
 
         # Security headers on every response. Same CSP family as the HTML
@@ -119,13 +138,13 @@ function Start-NRGWebServer {
         }
 
         # ── Static assets ────────────────────────────────────────────────
-        Add-PodeStaticRoute -Path '/static' -Source (Join-Path $using:webRoot 'static')
+        Add-PodeStaticRoute -Path '/static' -Source (Join-Path $webRoot 'static')
 
         # ── Routes ───────────────────────────────────────────────────────
 
         # Index — single-page UI shell.
         Add-PodeRoute -Method Get -Path '/' -ScriptBlock {
-            $indexPath = Join-Path $using:webRoot 'index.html'
+            $indexPath = Join-Path (Get-PodeState -Name 'cfg').WebRoot 'index.html'
             $html = Get-Content -LiteralPath $indexPath -Raw -Encoding utf8
             Write-PodeHtmlResponse -Value $html
         }
@@ -133,7 +152,7 @@ function Start-NRGWebServer {
         # GET /api/clients — list of clients from clients.json. Returns [] if
         # the file doesn't exist (operator can still trigger ad-hoc scans).
         Add-PodeRoute -Method Get -Path '/api/clients' -ScriptBlock {
-            $cf = $using:clientsFile
+            $cf = (Get-PodeState -Name 'cfg').ClientsFile
             if (-not (Test-Path -LiteralPath $cf)) {
                 Write-PodeJsonResponse -Value @()
                 return
@@ -144,7 +163,12 @@ function Start-NRGWebServer {
                 Write-PodeJsonResponse -Value @() -StatusCode 200
                 return
             }
-            $clients = @($raw) | Where-Object { $_.Active -ne $false } | ForEach-Object {
+            # clients.json is { "clients": [ ... ] }, not a bare array — the
+            # same shape Invoke-NRGBatchAssessment reads as $registry.clients.
+            # Enumerating $raw itself yielded ONE row built from the wrapper
+            # object, whose ClientName/TenantDomain do not exist, so the picker
+            # showed a single blank client and never the real list.
+            $clients = @($raw.clients) | Where-Object { $_.Active -ne $false } | ForEach-Object {
                 [ordered]@{
                     name          = [string]$_.ClientName
                     domain        = [string]$_.TenantDomain
@@ -153,14 +177,17 @@ function Start-NRGWebServer {
                     clientType    = [string]$_.ClientType
                 }
             }
-            Write-PodeJsonResponse -Value $clients
+            # @(...) or a pipeline that yields nothing assigns $null, which
+            # serializes as JSON null, and app.js calls .forEach on it outside
+            # its try — so a tenant list with no active rows killed the picker.
+            Write-PodeJsonResponse -Value @($clients)
         }
 
         # GET /api/runs — list of prior runs by scanning the output directory.
         # Each subfolder under output/ is one tenant; each *-results.json is
         # one run.
         Add-PodeRoute -Method Get -Path '/api/runs' -ScriptBlock {
-            $root = $using:outputRoot
+            $root = (Get-PodeState -Name 'cfg').OutputRoot
             if (-not (Test-Path -LiteralPath $root)) {
                 Write-PodeJsonResponse -Value @()
                 return
@@ -210,7 +237,7 @@ function Start-NRGWebServer {
                 Write-PodeTextResponse -Value 'Invalid path segment.'
                 return
             }
-            $htmlPath = Join-Path $using:outputRoot $tenant ($id + '-assessment.html')
+            $htmlPath = Join-Path (Get-PodeState -Name 'cfg').OutputRoot $tenant ($id + '-assessment.html')
             if (-not (Test-Path -LiteralPath $htmlPath)) {
                 Set-PodeResponseStatus -Code 404
                 Write-PodeTextResponse -Value 'Report not found.'
@@ -248,6 +275,15 @@ function Start-NRGWebServer {
                 lines      = New-Object System.Collections.ArrayList
                 percent    = 0
                 resultPath = $null
+                # Read unconditionally by the status response below but only
+                # assigned on completion. Pode's route runspaces do not inherit
+                # this function's StrictMode, so the missing key read as $null
+                # rather than throwing — declared here so the row's shape does
+                # not depend on that staying true.
+                runIdOnDisk = $null
+                # Entry-script exit code, captured off the pipeline marker
+                # object described below. $null until the marker arrives.
+                exitCode    = $null
             })
 
             # Stash on shared state so the status endpoint can find it.
@@ -255,17 +291,46 @@ function Start-NRGWebServer {
             $scans[$runId] = $stateRow
             Set-PodeState -Name 'scans' -Value $scans | Out-Null
 
+            # Per-domain output directory, matching the batch runner's layout
+            # (Invoke-NRGBatchAssessment writes to $clientOut = Join-Path
+            # $resolvedOutput $safeDir with safeDir = TenantDomain). Without
+            # -OutputPath the entry script defaults to a flat
+            # <ScriptDir>/output/, which /api/runs and the status lookup
+            # below never scan — a GUI scan's own report could never be
+            # found by the GUI that ran it.
+            $cfg = Get-PodeState -Name 'cfg'
+            $scanOutputPath = Join-Path $cfg.OutputRoot $domain
+
             # Launch the scan in a child job. The job re-imports the module
             # and runs the entry script in -NonInteractive mode is NOT used —
             # the operator must be able to complete interactive auth in the
             # child's auth-popup browser window.
             $jobScript = {
-                param($scriptDir, $domain)
+                param($scriptDir, $domain, $outputPath)
                 Set-Location $scriptDir
                 $entryScript = Join-Path $scriptDir 'Invoke-NRGAssessment.ps1'
-                & $entryScript -UserPrincipalName "scan@$domain" 2>&1
+                # Run the entry script as its own CHILD PROCESS rather than
+                # in-process via the call operator on the .ps1 file. Every
+                # exit path in Invoke-NRGAssessment.ps1 ends in an explicit
+                # `exit <code>` (0 success, 1 auth failure, 2 no findings, 3
+                # partial collection, 4 fatal), and `exit` inside a script
+                # invoked in THIS runspace terminates the whole job process
+                # before any code below it can run — Start-Job { exit 1 }
+                # lands on State=Completed with nothing after the exit ever
+                # executing, so a failed auth was reported to the frontend as
+                # a clean 100% run. Invoking the current pwsh executable
+                # ((Get-Process -Id $PID).Path — portable across OSes) with
+                # -File confines that exit to the nested process, so
+                # $LASTEXITCODE survives here to report on the pipeline.
+                $pwshPath = (Get-Process -Id $PID).Path
+                & $pwshPath -NoLogo -File $entryScript -UserPrincipalName "scan@$domain" -OutputPath $outputPath *>&1
+                # *>&1 above (not 2>&1) merges the information stream too —
+                # Write-Host output goes to the job's Information stream, not
+                # the output stream the status handler iterates, so 2>&1
+                # alone left the log always empty until the job ended.
+                [pscustomobject]@{ NRGScanExitCode = $LASTEXITCODE }
             }
-            $job = Start-Job -ScriptBlock $jobScript -ArgumentList $using:ScriptDir, $domain
+            $job = Start-Job -ScriptBlock $jobScript -ArgumentList $cfg.ScriptDir, $domain, $scanOutputPath
             $stateRow.jobId  = $job.Id
             $stateRow.status = 'running'
 
@@ -289,6 +354,15 @@ function Start-NRGWebServer {
                 $job = Get-Job -Id $row.jobId -ErrorAction SilentlyContinue
                 if ($job) {
                     foreach ($chunk in Receive-Job -Job $job -Keep -ErrorAction SilentlyContinue) {
+                        # The job's last pipeline object is a marker carrying
+                        # the entry script's real exit code (see jobScript in
+                        # the /api/scan handler) — capture it, don't log it as
+                        # a scan line. Property access on a plain string here
+                        # is safe: this runspace does not inherit StrictMode.
+                        if ($chunk -is [pscustomobject] -and $null -ne $chunk.NRGScanExitCode) {
+                            $row.exitCode = $chunk.NRGScanExitCode
+                            continue
+                        }
                         $line = [string]$chunk
                         if ($line) {
                             $null = $row.lines.Add($line)
@@ -303,17 +377,36 @@ function Start-NRGWebServer {
                     if ($job.State -in @('Completed', 'Failed', 'Stopped')) {
                         # Drain any remaining output.
                         foreach ($chunk in Receive-Job -Job $job -ErrorAction SilentlyContinue) {
+                            if ($chunk -is [pscustomobject] -and $null -ne $chunk.NRGScanExitCode) {
+                                $row.exitCode = $chunk.NRGScanExitCode
+                                continue
+                            }
                             $line = [string]$chunk
                             if ($line) { $null = $row.lines.Add($line) }
                         }
                         Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
-                        $row.status  = if ($job.State -eq 'Completed') { 'completed' } else { 'failed' }
+                        # State=Completed alone does not mean success — a
+                        # non-zero exit (auth failure, module-load failure)
+                        # also lands the job on Completed, so the exit-code
+                        # marker is authoritative when it arrived; its
+                        # absence (e.g. the child process was killed before
+                        # emitting it) is treated as failure, not success.
+                        $row.status  = if ($job.State -eq 'Completed' -and $row.exitCode -eq 0) { 'completed' } else { 'failed' }
                         $row.percent = if ($row.status -eq 'completed') { 100 } else { $row.percent }
                         # Look for the resulting -results.json the entry
-                        # script wrote so the UI can link straight to it.
-                        $tenantDir = Join-Path $using:outputRoot ($row.domain)
-                        if (Test-Path -LiteralPath $tenantDir) {
+                        # script wrote so the UI can link straight to it. Only
+                        # a file written AFTER this scan started qualifies —
+                        # otherwise a domain with a prior batch run hands the
+                        # frontend that OLD report as "just now" even when
+                        # this scan failed before writing anything.
+                        $tenantDir = Join-Path (Get-PodeState -Name 'cfg').OutputRoot ($row.domain)
+                        if ($row.status -eq 'completed' -and (Test-Path -LiteralPath $tenantDir)) {
+                            $startedAt = [datetime]::MinValue
+                            [void][datetime]::TryParse(
+                                $row.startedAt, [cultureinfo]::InvariantCulture,
+                                [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$startedAt)
                             $latest = Get-ChildItem -LiteralPath $tenantDir -Filter '*-results.json' -ErrorAction SilentlyContinue |
+                                      Where-Object { $_.LastWriteTime -gt $startedAt } |
                                       Sort-Object LastWriteTime -Descending | Select-Object -First 1
                             if ($latest) {
                                 $row.resultPath = $latest.Name
@@ -338,5 +431,7 @@ function Start-NRGWebServer {
                 resultId    = $row.runIdOnDisk
             }
         }
-    }
+    }.GetNewClosure()
+
+    Start-PodeServer -Threads 4 -ScriptBlock $serverBlock
 }

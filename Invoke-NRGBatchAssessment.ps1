@@ -294,6 +294,23 @@ foreach ($client in $clients) {
             # Run assessment — collectors + evaluators + publishers
             & $orchPath @params
 
+            # Exit-code spec (Invoke-NRGAssessment.ps1): 0 success, 1 auth
+            # failure, 2 no findings, 3 partial collection, 4 fatal error.
+            # `& $orchPath` returning normally says nothing about how the
+            # child script exited — without reading $LASTEXITCODE here a
+            # client whose assessment failed auth (or worse) was recorded as
+            # Success in the batch summary, and the post-run guardrail below
+            # would then read back a STALE results.json from a PRIOR run and
+            # report it "verified".
+            $exitCode = $LASTEXITCODE
+            switch ($exitCode) {
+                1 { $status = 'Failed';     $errMsg = 'Assessment exited 1 (auth failure).' }
+                2 { $status = 'NoFindings'; $errMsg = 'Assessment exited 2 (no findings).' }
+                3 { $status = 'Partial';    $errMsg = 'Assessment exited 3 (partial collection).' }
+                4 { $status = 'Fatal';      $errMsg = 'Assessment exited 4 (fatal error).' }
+                default { }
+            }
+
             # ── Post-run tenant guardrail (defense in depth) ─────────────────
             # The pre-run checks verify the Graph/EXO CONTEXT before collecting;
             # this verifies the RESULT after. Read back the report just written
@@ -301,8 +318,12 @@ foreach ($client in $clients) {
             # Catches any path where collection ran against the wrong tenant
             # (stale session, reuse gone wrong) before the operator ships the
             # report to the wrong client.
+            # -Filter LastWriteTime -gt $clientStart so a failed run (no new
+            # file written) cannot be "verified" against the PREVIOUS run's
+            # results.json still sitting in $clientOut.
             try {
                 $latestJson = Get-ChildItem -LiteralPath $clientOut -Filter '*-results.json' -ErrorAction SilentlyContinue |
+                    Where-Object { $_.LastWriteTime -gt $clientStart } |
                     Sort-Object LastWriteTime -Descending | Select-Object -First 1
                 if ($latestJson) {
                     $collected = Get-Content -LiteralPath $latestJson.FullName -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop

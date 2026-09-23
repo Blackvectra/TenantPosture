@@ -19,6 +19,16 @@ function Invoke-NRGCollectAADCAPolicies {
             Policies       = @()
             NamedLocations = @()
             AuthStrengths  = @()
+            # NamedLocations and AuthStrengths are independent sub-queries with
+            # their own try/catch below, and Success only tracks the primary
+            # Policies fetch. An empty NamedLocations is therefore ambiguous —
+            # "no named locations defined" vs. "the query throttled/failed" —
+            # and AAD-2.2 must not read the former from the latter. See
+            # Test-NRGSectionCollected.
+            SectionStatus  = @{
+                NamedLocations = 'NotRun'
+                AuthStrengths  = 'NotRun'
+            }
         }
     }
 
@@ -114,17 +124,29 @@ function Invoke-NRGCollectAADCAPolicies {
             $locResp = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/namedLocations?$top=100' `
                 -ErrorAction Stop
+            # Shape-safe projection. namedLocations is polymorphic: an
+            # ipNamedLocation row has no countriesAndRegions, and a
+            # countryNamedLocation row has no ipRanges/isTrusted. A bare dot
+            # read of the type-specific keys THROWS under StrictMode on the
+            # first row of the other subtype — aborting this whole
+            # ForEach-Object and leaving NamedLocations empty while Success
+            # (tracked only off the Policies fetch) stays $true, the root
+            # cause of a false AAD-2.2 "No named locations defined" on a
+            # tenant that has them. Get-NRGObjectField never throws on an
+            # absent key.
             $result.Data.NamedLocations = @($locResp.value ?? @() | ForEach-Object {
                 @{
-                    Id          = [string]$_.id
-                    DisplayName = [string]$_.displayName
-                    OdataType   = [string]($_['@odata.type'] ?? '')
-                    IsTrusted   = [bool]($_.isTrusted ?? $false)
-                    IpRanges    = @($_.ipRanges ?? @() | ForEach-Object { [string]($_.cidrAddress ?? '') })
-                    CountriesAndRegions = @($_.countriesAndRegions ?? @())
+                    Id          = [string](Get-NRGObjectField -Item $_ -Key 'id' -Default '')
+                    DisplayName = [string](Get-NRGObjectField -Item $_ -Key 'displayName' -Default '')
+                    OdataType   = [string](Get-NRGObjectField -Item $_ -Key '@odata.type' -Default '')
+                    IsTrusted   = [bool](Get-NRGObjectField -Item $_ -Key 'isTrusted' -Default $false)
+                    IpRanges    = @(Get-NRGObjectField -Item $_ -Key 'ipRanges' -Default @() | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'cidrAddress' -Default '') })
+                    CountriesAndRegions = @(Get-NRGObjectField -Item $_ -Key 'countriesAndRegions' -Default @())
                 }
             })
+            $result.Data.SectionStatus.NamedLocations = 'Collected'
         } catch {
+            $result.Data.SectionStatus.NamedLocations = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-NamedLocations' -Message $_.Exception.Message
             }
@@ -143,7 +165,9 @@ function Invoke-NRGCollectAADCAPolicies {
                     AllowedCombinations = @($_.allowedCombinations ?? @())
                 }
             })
+            $result.Data.SectionStatus.AuthStrengths = 'Collected'
         } catch {
+            $result.Data.SectionStatus.AuthStrengths = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-AuthStrengths' -Message $_.Exception.Message
             }
