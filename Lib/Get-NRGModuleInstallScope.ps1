@@ -25,7 +25,7 @@
 #
 # This function only DECIDES; it never installs, removes, or writes
 # anything. Callers still choose whether/how to print the OneDrive warning
-# and whether to actually pass -Scope $result.Scope to Install-PSResource.
+# and whether to actually pass -Scope $result.Scope to the module installer.
 #
 # Testability: pass -UserModulePathOverride / -IsElevatedOverride to drive
 # this deterministically in a test. Omitting either reads the real
