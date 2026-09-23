@@ -207,28 +207,35 @@ function Invoke-NRGCollectAADAuthPolicies {
                 -Uri 'https://graph.microsoft.com/v1.0/policies/crossTenantAccessPolicy/default' `
                 -ErrorAction Stop
             if ($ctap) {
+                # b2bCollaborationInbound/Outbound and b2bDirectConnectInbound
+                # are OPTIONAL nested objects on crossTenantAccessPolicy — a
+                # tenant that never customized them omits the block entirely
+                # rather than returning it empty, so a bare
+                # $ctap.b2bCollaborationInbound.applications.accessType throws
+                # under StrictMode at the first absent intermediate. Every
+                # nested read below goes through Get-NRGNestedProperty.
                 $result.Data.CrossTenantAccess = @{
-                    IsServiceDefault = [bool]($ctap.isServiceDefault ?? $true)
+                    IsServiceDefault = [bool](Get-NRGNestedProperty -Object $ctap -Path 'isServiceDefault' -Default $true)
                     InboundB2B  = @{
-                        ApplicationsAccessType  = [string]($ctap.b2bCollaborationInbound.applications.accessType ?? 'unknown')
-                        ApplicationsTargets     = @($ctap.b2bCollaborationInbound.applications.targets ?? @())
-                        UsersGroupsAccessType   = [string]($ctap.b2bCollaborationInbound.usersAndGroups.accessType ?? 'unknown')
-                        UsersGroupsTargets      = @($ctap.b2bCollaborationInbound.usersAndGroups.targets ?? @())
+                        ApplicationsAccessType  = [string](Get-NRGNestedProperty -Object $ctap -Path 'b2bCollaborationInbound.applications.accessType' -Default 'unknown')
+                        ApplicationsTargets     = @(Get-NRGNestedProperty -Object $ctap -Path 'b2bCollaborationInbound.applications.targets' -Default @())
+                        UsersGroupsAccessType   = [string](Get-NRGNestedProperty -Object $ctap -Path 'b2bCollaborationInbound.usersAndGroups.accessType' -Default 'unknown')
+                        UsersGroupsTargets      = @(Get-NRGNestedProperty -Object $ctap -Path 'b2bCollaborationInbound.usersAndGroups.targets' -Default @())
                     }
                     OutboundB2B = @{
-                        ApplicationsAccessType  = [string]($ctap.b2bCollaborationOutbound.applications.accessType ?? 'unknown')
-                        ApplicationsTargets     = @($ctap.b2bCollaborationOutbound.applications.targets ?? @())
-                        UsersGroupsAccessType   = [string]($ctap.b2bCollaborationOutbound.usersAndGroups.accessType ?? 'unknown')
-                        UsersGroupsTargets      = @($ctap.b2bCollaborationOutbound.usersAndGroups.targets ?? @())
+                        ApplicationsAccessType  = [string](Get-NRGNestedProperty -Object $ctap -Path 'b2bCollaborationOutbound.applications.accessType' -Default 'unknown')
+                        ApplicationsTargets     = @(Get-NRGNestedProperty -Object $ctap -Path 'b2bCollaborationOutbound.applications.targets' -Default @())
+                        UsersGroupsAccessType   = [string](Get-NRGNestedProperty -Object $ctap -Path 'b2bCollaborationOutbound.usersAndGroups.accessType' -Default 'unknown')
+                        UsersGroupsTargets      = @(Get-NRGNestedProperty -Object $ctap -Path 'b2bCollaborationOutbound.usersAndGroups.targets' -Default @())
                     }
                     B2BDirectConnectInbound = @{
-                        ApplicationsAccessType = [string]($ctap.b2bDirectConnectInbound.applications.accessType ?? 'unknown')
-                        UsersGroupsAccessType  = [string]($ctap.b2bDirectConnectInbound.usersAndGroups.accessType ?? 'unknown')
+                        ApplicationsAccessType = [string](Get-NRGNestedProperty -Object $ctap -Path 'b2bDirectConnectInbound.applications.accessType' -Default 'unknown')
+                        UsersGroupsAccessType  = [string](Get-NRGNestedProperty -Object $ctap -Path 'b2bDirectConnectInbound.usersAndGroups.accessType' -Default 'unknown')
                     }
                     InboundTrust = @{
-                        IsMfaAccepted               = [bool]($ctap.inboundTrust.isMfaAccepted ?? $false)
-                        IsCompliantDeviceAccepted   = [bool]($ctap.inboundTrust.isCompliantDeviceAccepted ?? $false)
-                        IsHybridAzureADJoinedDeviceAccepted = [bool]($ctap.inboundTrust.isHybridAzureADJoinedDeviceAccepted ?? $false)
+                        IsMfaAccepted               = [bool](Get-NRGNestedProperty -Object $ctap -Path 'inboundTrust.isMfaAccepted' -Default $false)
+                        IsCompliantDeviceAccepted   = [bool](Get-NRGNestedProperty -Object $ctap -Path 'inboundTrust.isCompliantDeviceAccepted' -Default $false)
+                        IsHybridAzureADJoinedDeviceAccepted = [bool](Get-NRGNestedProperty -Object $ctap -Path 'inboundTrust.isHybridAzureADJoinedDeviceAccepted' -Default $false)
                     }
                 }
             }

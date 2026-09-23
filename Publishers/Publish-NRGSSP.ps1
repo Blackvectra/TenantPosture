@@ -277,7 +277,20 @@ function Publish-NRGSSP {
                 'Not applicable' { 'declared not applicable' }
                 default          { 'not answered' }
             }
-            $null = $sb.AppendLine("**In place?** $(EscMd $r['Status']) — $srcNote. Confidence: $(EscMd $r['Confidence']).")
+            # An attested/inherited status is the client's claim, not the
+            # tool's. When the assessment's own evidence derived a different
+            # status, printing the tool's Confidence next to the attested
+            # claim reads as the tool having verified that claim — it did
+            # not. Say what the assessment actually found instead of letting
+            # Confidence imply agreement it never gave.
+            $attestedConflict = $r['StatusSource'] -in @('Attested', 'Inherited') -and
+                $r['DerivedStatus'] -ne $r['Status'] -and
+                $r['DerivedStatus'] -notin @('No automated evidence', 'Not assessed')
+            $confNote = if ($attestedConflict) { 'not applicable — see assessment finding below' } else { $r['Confidence'] }
+            $null = $sb.AppendLine("**In place?** $(EscMd $r['Status']) — $srcNote. Confidence: $(EscMd $confNote).")
+            if ($attestedConflict) {
+                $null = $sb.AppendLine("**Assessment found:** $(EscMd $r['DerivedStatus']). The automated evidence below disagrees with the status above — that status is the client's attestation, not something this assessment verified.")
+            }
             $null = $sb.AppendLine()
 
             if ($r['NotApplicableReason']) {
@@ -459,6 +472,16 @@ function Publish-NRGSSP {
                 'Not applicable' { 'declared not applicable' }
                 default          { 'not answered' }
             }
+            # Same conflict the Markdown render guards against: an attested
+            # status is the client's claim, and showing the tool's Confidence
+            # beside it reads as the tool having verified that claim.
+            $attestedConflict = $r['StatusSource'] -in @('Attested', 'Inherited') -and
+                $r['DerivedStatus'] -ne $r['Status'] -and
+                $r['DerivedStatus'] -notin @('No automated evidence', 'Not assessed')
+            $confDisplay = if ($attestedConflict) { 'not applicable' } else { $r['Confidence'] }
+            $conflictHtml = if ($attestedConflict) {
+                "<div class='note'>Assessment found: <strong>$(Esc $r['DerivedStatus'])</strong>. The automated evidence disagrees with the status above &mdash; that status is the client's attestation, not something this assessment verified.</div>"
+            } else { '' }
 
             $obj = ''
             foreach ($o in @($r['Objectives'])) {
@@ -548,10 +571,11 @@ function Publish-NRGSSP {
   <div class='req-hd'>
     <span class='rid2'>$(Esc $r['Id'])</span>
     <span class='pill $cls'>$(Esc $r['Status'])</span>
-    <span class='conf'>$(Esc $r['Confidence'])</span>
+    <span class='conf'>$(Esc $confDisplay)</span>
   </div>
   <div class='stmt'>$(Esc $r['Statement'])</div>
   <div class='src'>Status $srcNote.</div>
+  $conflictHtml
   $extra
   $narr
   $(if ($obj) { "<div class='blk'><div class='lbl'>Assessment objectives (SP 800-171A)</div><ul class='obj'>$obj</ul></div>" })

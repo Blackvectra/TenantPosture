@@ -164,9 +164,19 @@ function Invoke-NRGEmailCollectSignIns {
             $uri = if ($resp['@odata.nextLink']) { $resp['@odata.nextLink'] } else { $null }
             $pages++
         }
+        # A tenant with more at-risk users than the 3-page cap (600 users at
+        # $top=200) has its risky-user list silently truncated. Success stays
+        # $true because what WAS collected is real, but the triage ranking
+        # never sees the remainder unless this says so.
+        $truncated = [bool]$uri
+        if ($truncated) {
+            Register-NRGException -Source "$collectorId-RiskyUsers" `
+                -Message "Risky-user pagination cap reached (3 pages / $($risky.Count) users). Additional risky users exist beyond this collection."
+        }
         $riskyBag.Data = [ordered]@{
-            Count = $risky.Count
-            Users = @($risky)
+            Count     = $risky.Count
+            Users     = @($risky)
+            Truncated = $truncated
         }
         $riskyBag.Success = $true
     } catch {

@@ -274,11 +274,25 @@ function Get-NRGSSPPosture {
     }
 
     # ── Findings by control id ──────────────────────────────────────────────
+    # One finding per control is the norm, but the per-instance evaluators
+    # (DNS emits one finding per domain) can produce several for the same
+    # ControlId. WORST STATE WINS — the same rule Get-NRGAssessmentScope
+    # applies and for the same reason: a Gap on one domain must not be
+    # discarded just because a later domain came back Satisfied, or a
+    # requirement backed by that control derives 'Implemented' on a tenant
+    # that still has a live gap.
+    $stateRank = @{ 'Gap' = 3; 'Partial' = 2; 'Error' = 1; 'NotApplicable' = 1; 'Satisfied' = 0 }
     $byId = @{}
     foreach ($f in $Findings) {
         if ($null -eq $f) { continue }
         $cid = [string](Get-NRGObjectField -Item $f -Key 'ControlId' -Default '')
-        if ($cid) { $byId[$cid] = $f }
+        if (-not $cid) { continue }
+        if (-not $byId.ContainsKey($cid)) { $byId[$cid] = $f; continue }
+        $state     = [string](Get-NRGObjectField -Item $f          -Key 'State' -Default '')
+        $prevState = [string](Get-NRGObjectField -Item $byId[$cid] -Key 'State' -Default '')
+        $rank     = if ($stateRank.ContainsKey($state))     { $stateRank[$state] }     else { -1 }
+        $prevRank = if ($stateRank.ContainsKey($prevState)) { $stateRank[$prevState] } else { -1 }
+        if ($rank -gt $prevRank) { $byId[$cid] = $f }
     }
 
     # ── Client answers ──────────────────────────────────────────────────────
@@ -345,19 +359,27 @@ function Get-NRGSSPPosture {
             else                                 { 'Partial' }
 
         # Confidence — how much of the requirement the tool can actually see.
-        # Even 'Tool-verified' means "every mapped control passed", not "the
-        # requirement is fully satisfied"; Microsoft 365 observes the tenant
-        # slice of a requirement, never the whole of it.
+        # Even 'Tool-verified' means "every mapped control produced a real
+        # verdict, and it was Satisfied", not "the requirement is fully
+        # satisfied"; Microsoft 365 observes the tenant slice of a
+        # requirement, never the whole of it.
         #
         # 'No evidence collected' is checked BEFORE 'Partial evidence' and is
         # its own value. A requirement whose every mapped control was skipped
         # produced nothing at all, and calling that partial evidence overstates
         # it — there is no evidence to be partial about.
+        #
+        # $na counts alongside $notRun here, not just $notRun. NotApplicable is
+        # a control that produced no real verdict (unlicensed, uncollected,
+        # advisory) — the same "the tool did not actually check this" fact as
+        # NotRun, just spelled differently. A requirement with one Satisfied
+        # control and seven NotApplicable ones has evidence for one eighth of
+        # itself, not "every mapped control passed".
         $confidence =
-            if ($ctlIds.Count -eq 0)      { 'Attestation only' }
-            elseif ($assessed -eq 0)      { 'No evidence collected' }
-            elseif ($notRun -gt 0)        { 'Partial evidence' }
-            else                          { 'Tool-verified' }
+            if ($ctlIds.Count -eq 0)             { 'Attestation only' }
+            elseif ($assessed -eq 0)             { 'No evidence collected' }
+            elseif ($notRun -gt 0 -or $na -gt 0) { 'Partial evidence' }
+            else                                 { 'Tool-verified' }
 
         # Derived SSP status. Never 'Implemented' without evidence.
         $derived =

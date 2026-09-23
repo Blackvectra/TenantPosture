@@ -42,9 +42,20 @@ function Test-NRGControlAADMFA {
     # a crash.
     $users  = @()
     $mfaReg = @()
+    $mfaRegCollected = $false
     if ($userRaw -and $userRaw.Success) {
         $users  = @($userRaw.Data['Users'])
-        $mfaReg = @($userRaw.Data['MFARegistration'])
+        # AAD-Users publishes MFARegistration as a summary hashtable
+        # {TotalUsersWithMFA, TotalUsersWithoutMFA, RegistrationDetails}, NOT
+        # a list of per-user records. Reading it directly as a list (old:
+        # @($userRaw.Data['MFARegistration'])) put the summary hashtable
+        # itself into $mfaReg, and the Where-Object below then dot-read
+        # UserPrincipalName off that hashtable — which throws under
+        # StrictMode on every tenant where Security Defaults are off. Read
+        # the actual per-user list, and track whether the sub-query
+        # collected so an empty result isn't mistaken for 0% registered.
+        $mfaRegCollected = Test-NRGSectionCollected $userRaw 'MFARegistration'
+        $mfaReg = @(Get-NRGNestedProperty -Object $userRaw -Path 'Data.MFARegistration.RegistrationDetails' -Default @())
     }
 
     # Security Defaults satisfies AAD-1.2 by itself (MFA universally required).
@@ -68,6 +79,14 @@ function Test-NRGControlAADMFA {
         Add-NRGFinding -ControlId 'AAD-1.2' -State 'NotApplicable' `
             -Category 'Identity' -Title 'MFA Required for All Users' `
             -Detail 'No enabled member accounts found in tenant.'
+        return
+    }
+
+    if (-not $mfaRegCollected) {
+        Add-NRGFinding -ControlId 'AAD-1.2' -State 'NotApplicable' `
+            -Category 'Identity' -Title 'MFA Required for All Users' `
+            -Detail 'MFA registration details were not collected; cannot compute registration completeness for AAD-1.2.' `
+            -FrameworkIds @('IA-2(1)','IA-2(2)')
         return
     }
 

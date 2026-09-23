@@ -165,6 +165,14 @@ function Test-NRGControlTeamsSkype {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $tms 'FederationConfig')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'FederationConfig was not collected; not assessed.'
+        return
+    }
     $skype = Get-NRGNestedProperty -Object $tms -Path 'Data.FederationConfig.AllowPublicUsers' -Default $true
     if (-not $skype) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Contact from Skype consumer users is disabled.'
@@ -230,6 +238,14 @@ function Test-NRGControlTeamsEmailIntegration {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $tms = Get-NRGRawData -Key 'Teams'
     if (-not $tms -or -not $tms.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Teams data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $tms 'ClientConfiguration')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'ClientConfiguration was not collected; not assessed.'
+        return
+    }
     $emailInt = Get-NRGNestedProperty -Object $tms -Path 'Data.ClientConfiguration.AllowEmailIntoChannel' -Default $true
     if (-not $emailInt) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Email integration into Teams channels is disabled.'
@@ -253,7 +269,17 @@ function Test-NRGControlTeamsRecordingExternal {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'MeetingPolicy was not collected; not assessed.'
         return
     }
-    $allowExtRecord = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowCloudRecordingForCalls' -Default $true
+    # AllowCloudRecordingForCalls is not currently populated by the Teams
+    # collector's MeetingPolicy block — defaulting an absent field to $true
+    # scored every tenant Partial regardless of the real setting. Detect
+    # absence explicitly (Default $null) and report NotApplicable rather than
+    # fabricate a verdict from an insecure assumed default.
+    $allowExtRecordRaw = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowCloudRecordingForCalls' -Default $null
+    if ($null -eq $allowExtRecordRaw) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AllowCloudRecordingForCalls is not collected by the Teams collector; not assessed.'
+        return
+    }
+    $allowExtRecord = [bool]$allowExtRecordRaw
     if (-not $allowExtRecord) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'External participants cannot initiate cloud recordings.'
     } else {
@@ -276,7 +302,17 @@ function Test-NRGControlTeamsBroadChannel {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'MeetingPolicy was not collected; not assessed.'
         return
     }
-    $broadInvite = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowChannelMeetingScheduling' -Default $true
+    # AllowChannelMeetingScheduling is not currently populated by the Teams
+    # collector's MeetingPolicy block — defaulting an absent field to $true
+    # scored every tenant Partial regardless of the real setting. Detect
+    # absence explicitly and report NotApplicable rather than fabricate a
+    # verdict from an insecure assumed default.
+    $broadInviteRaw = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowChannelMeetingScheduling' -Default $null
+    if ($null -eq $broadInviteRaw) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AllowChannelMeetingScheduling is not collected by the Teams collector; not assessed.'
+        return
+    }
+    $broadInvite = [bool]$broadInviteRaw
     if (-not $broadInvite) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Broad channel meeting scheduling restricted.'
     } else {
@@ -341,7 +377,18 @@ function Test-NRGControlTeamsWatermarks {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'MeetingPolicy was not collected; not assessed.'
         return
     }
-    $watermark = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowWatermarkForScreenSharing' -Default $false
+    # AllowWatermarkForScreenSharing is not currently populated by the Teams
+    # collector's MeetingPolicy block — defaulting an absent field to $false
+    # scored every tenant Partial regardless of the real setting. Detect
+    # absence explicitly and report NotApplicable rather than fabricate a
+    # verdict from an assumed default.
+    $watermarkRaw = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowWatermarkForScreenSharing' -Default $null
+    if ($null -eq $watermarkRaw) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -FrameworkIds $cit -Detail 'AllowWatermarkForScreenSharing is not collected by the Teams collector; not assessed.'
+        return
+    }
+    $watermark = [bool]$watermarkRaw
     if ($watermark) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
@@ -401,7 +448,17 @@ function Test-NRGControlTeamsMeetingChat {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'MeetingPolicy was not collected; not assessed.'
         return
     }
-    $chatEnabled = [string](Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowMeetingChat' -Default 'Enabled')
+    # AllowMeetingChat is not currently populated by the Teams collector's
+    # MeetingPolicy block — defaulting an absent field to 'Enabled' scored
+    # every tenant Partial regardless of the real setting. Detect absence
+    # explicitly and report NotApplicable rather than fabricate a verdict.
+    $chatEnabledRaw = Get-NRGNestedProperty -Object $tms -Path 'Data.MeetingPolicy.AllowMeetingChat' -Default $null
+    if ($null -eq $chatEnabledRaw) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -FrameworkIds $cit -Detail 'AllowMeetingChat is not collected by the Teams collector; not assessed.'
+        return
+    }
+    $chatEnabled = [string]$chatEnabledRaw
     if ($chatEnabled -eq 'Disabled') {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `

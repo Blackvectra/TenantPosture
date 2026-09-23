@@ -245,10 +245,15 @@ function Test-NRGControlDefenderPresetPolicies {
     # v4.11.1: dropped unused $sl/$sa reads (left over from a refactor that
     # moved Safe Links / Safe Attachments to their own evaluators).
     $ap = $def.Data['AntiPhishing']
-    $presetActive = $false
-    if ($ap -and $ap.Available) {
-        $presetActive = @($ap.Policies | Where-Object { $_.Name -match 'Standard|Strict|Preset' }).Count -gt 0
+    if (-not $ap -or -not $ap.Available) {
+        # The collector always writes an AntiPhishing hashtable, even when
+        # Get-AntiPhishPolicy failed (Available=$false) — so the
+        # Test-NRGSectionCollected presence gate above is a no-op here.
+        # Available is the real "did the query succeed" signal.
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiPhishing was not collected; not assessed.'
+        return
     }
+    $presetActive = @($ap.Policies | Where-Object { $_.Name -match 'Standard|Strict|Preset' }).Count -gt 0
     if ($presetActive) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Standard or Strict preset security policy is active in this tenant.'
     } else {
@@ -675,8 +680,8 @@ function Test-NRGControlDefenderPriorityAccounts {
     # The Defender "Priority account" user tag has no supported read surface (no Graph
     # endpoint, no EXO cmdlet). Rather than fabricate a result, surface the closest
     # machine-readable proxy — named-user impersonation protection in anti-phishing —
-    # and direct the assessor to confirm the tag itself in the portal. Kept as an
-    # advisory (Partial), never a false Satisfied/Gap.
+    # and direct the assessor to confirm the tag itself in the portal. Advisory
+    # only: NotApplicable, never a false Satisfied/Gap/Partial.
     $ap = $def.Data['AntiPhishing']
     $proxyProtected = $false
     if ($ap -and $ap.Available) {
@@ -686,8 +691,8 @@ function Test-NRGControlDefenderPriorityAccounts {
         }).Count -gt 0
     }
     $proxyNote = if ($proxyProtected) { 'Related signal: named-user impersonation protection IS configured in anti-phishing (see EXO-5.2).' } else { 'Related signal: no named-user impersonation protection is configured (see EXO-5.2).' }
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual verification required)" -Severity 'Low' -FrameworkIds $cit `
-        -Detail "The Defender 'Priority account' user tag is not exposed by any supported Graph/EXO read API, so it cannot be assessed programmatically. Verify in Defender portal > Settings > Email & collaboration > User tags that executives and high-value mailboxes carry the Priority account tag. $proxyNote" `
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual verification required)" -Severity 'Low' -FrameworkIds $cit `
+        -Detail "This control requires manual verification — the Defender 'Priority account' user tag is not exposed by any supported Graph/EXO read API, so it cannot be assessed programmatically. Verify in Defender portal > Settings > Email & collaboration > User tags that executives and high-value mailboxes carry the Priority account tag. $proxyNote" `
         -Remediation $ctrl.Remediation
 }
 

@@ -241,6 +241,14 @@ function Test-NRGControlIntuneASR {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-EndpointSecurity'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune endpoint security data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $int 'ASRPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'ASRPolicies was not collected; not assessed.'
+        return
+    }
     $asrPolicies = @($int.Data['ASRPolicies'] ?? @())
     if ($asrPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($asrPolicies.Count) ASR rule policy(ies) deployed."
@@ -256,6 +264,14 @@ function Test-NRGControlIntuneFirewall {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-EndpointSecurity'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune endpoint security data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $int 'FirewallPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'FirewallPolicies was not collected; not assessed.'
+        return
+    }
     $fwPolicies = @($int.Data['FirewallPolicies'] ?? @())
     if ($fwPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($fwPolicies.Count) firewall policy(ies) deployed via Intune."
@@ -406,6 +422,14 @@ function Test-NRGControlIntuneWindowsLAPS {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $int = Get-NRGRawData -Key 'Intune-EndpointSecurity'
     if (-not $int -or -not $int.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune data not collected'; return }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $int 'LAPSPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'LAPSPolicies was not collected; not assessed.'
+        return
+    }
     $lapsPolicies = @($int.Data['LAPSPolicies'] ?? @())
     if ($lapsPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($lapsPolicies.Count) Windows LAPS policy(ies) deployed. Local administrator passwords are unique, rotated, and escrowed in Entra ID."

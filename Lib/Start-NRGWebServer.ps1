@@ -281,6 +281,9 @@ function Start-NRGWebServer {
                 # rather than throwing — declared here so the row's shape does
                 # not depend on that staying true.
                 runIdOnDisk = $null
+                # Entry-script exit code, captured off the pipeline marker
+                # object described below. $null until the marker arrives.
+                exitCode    = $null
             })
 
             # Stash on shared state so the status endpoint can find it.
@@ -288,17 +291,46 @@ function Start-NRGWebServer {
             $scans[$runId] = $stateRow
             Set-PodeState -Name 'scans' -Value $scans | Out-Null
 
+            # Per-domain output directory, matching the batch runner's layout
+            # (Invoke-NRGBatchAssessment writes to $clientOut = Join-Path
+            # $resolvedOutput $safeDir with safeDir = TenantDomain). Without
+            # -OutputPath the entry script defaults to a flat
+            # <ScriptDir>/output/, which /api/runs and the status lookup
+            # below never scan — a GUI scan's own report could never be
+            # found by the GUI that ran it.
+            $cfg = Get-PodeState -Name 'cfg'
+            $scanOutputPath = Join-Path $cfg.OutputRoot $domain
+
             # Launch the scan in a child job. The job re-imports the module
             # and runs the entry script in -NonInteractive mode is NOT used —
             # the operator must be able to complete interactive auth in the
             # child's auth-popup browser window.
             $jobScript = {
-                param($scriptDir, $domain)
+                param($scriptDir, $domain, $outputPath)
                 Set-Location $scriptDir
                 $entryScript = Join-Path $scriptDir 'Invoke-NRGAssessment.ps1'
-                & $entryScript -UserPrincipalName "scan@$domain" 2>&1
+                # Run the entry script as its own CHILD PROCESS rather than
+                # in-process via the call operator on the .ps1 file. Every
+                # exit path in Invoke-NRGAssessment.ps1 ends in an explicit
+                # `exit <code>` (0 success, 1 auth failure, 2 no findings, 3
+                # partial collection, 4 fatal), and `exit` inside a script
+                # invoked in THIS runspace terminates the whole job process
+                # before any code below it can run — Start-Job { exit 1 }
+                # lands on State=Completed with nothing after the exit ever
+                # executing, so a failed auth was reported to the frontend as
+                # a clean 100% run. Invoking the current pwsh executable
+                # ((Get-Process -Id $PID).Path — portable across OSes) with
+                # -File confines that exit to the nested process, so
+                # $LASTEXITCODE survives here to report on the pipeline.
+                $pwshPath = (Get-Process -Id $PID).Path
+                & $pwshPath -NoLogo -File $entryScript -UserPrincipalName "scan@$domain" -OutputPath $outputPath *>&1
+                # *>&1 above (not 2>&1) merges the information stream too —
+                # Write-Host output goes to the job's Information stream, not
+                # the output stream the status handler iterates, so 2>&1
+                # alone left the log always empty until the job ended.
+                [pscustomobject]@{ NRGScanExitCode = $LASTEXITCODE }
             }
-            $job = Start-Job -ScriptBlock $jobScript -ArgumentList (Get-PodeState -Name 'cfg').ScriptDir, $domain
+            $job = Start-Job -ScriptBlock $jobScript -ArgumentList $cfg.ScriptDir, $domain, $scanOutputPath
             $stateRow.jobId  = $job.Id
             $stateRow.status = 'running'
 
@@ -322,6 +354,15 @@ function Start-NRGWebServer {
                 $job = Get-Job -Id $row.jobId -ErrorAction SilentlyContinue
                 if ($job) {
                     foreach ($chunk in Receive-Job -Job $job -Keep -ErrorAction SilentlyContinue) {
+                        # The job's last pipeline object is a marker carrying
+                        # the entry script's real exit code (see jobScript in
+                        # the /api/scan handler) — capture it, don't log it as
+                        # a scan line. Property access on a plain string here
+                        # is safe: this runspace does not inherit StrictMode.
+                        if ($chunk -is [pscustomobject] -and $null -ne $chunk.NRGScanExitCode) {
+                            $row.exitCode = $chunk.NRGScanExitCode
+                            continue
+                        }
                         $line = [string]$chunk
                         if ($line) {
                             $null = $row.lines.Add($line)
@@ -336,17 +377,36 @@ function Start-NRGWebServer {
                     if ($job.State -in @('Completed', 'Failed', 'Stopped')) {
                         # Drain any remaining output.
                         foreach ($chunk in Receive-Job -Job $job -ErrorAction SilentlyContinue) {
+                            if ($chunk -is [pscustomobject] -and $null -ne $chunk.NRGScanExitCode) {
+                                $row.exitCode = $chunk.NRGScanExitCode
+                                continue
+                            }
                             $line = [string]$chunk
                             if ($line) { $null = $row.lines.Add($line) }
                         }
                         Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
-                        $row.status  = if ($job.State -eq 'Completed') { 'completed' } else { 'failed' }
+                        # State=Completed alone does not mean success — a
+                        # non-zero exit (auth failure, module-load failure)
+                        # also lands the job on Completed, so the exit-code
+                        # marker is authoritative when it arrived; its
+                        # absence (e.g. the child process was killed before
+                        # emitting it) is treated as failure, not success.
+                        $row.status  = if ($job.State -eq 'Completed' -and $row.exitCode -eq 0) { 'completed' } else { 'failed' }
                         $row.percent = if ($row.status -eq 'completed') { 100 } else { $row.percent }
                         # Look for the resulting -results.json the entry
-                        # script wrote so the UI can link straight to it.
+                        # script wrote so the UI can link straight to it. Only
+                        # a file written AFTER this scan started qualifies —
+                        # otherwise a domain with a prior batch run hands the
+                        # frontend that OLD report as "just now" even when
+                        # this scan failed before writing anything.
                         $tenantDir = Join-Path (Get-PodeState -Name 'cfg').OutputRoot ($row.domain)
-                        if (Test-Path -LiteralPath $tenantDir) {
+                        if ($row.status -eq 'completed' -and (Test-Path -LiteralPath $tenantDir)) {
+                            $startedAt = [datetime]::MinValue
+                            [void][datetime]::TryParse(
+                                $row.startedAt, [cultureinfo]::InvariantCulture,
+                                [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$startedAt)
                             $latest = Get-ChildItem -LiteralPath $tenantDir -Filter '*-results.json' -ErrorAction SilentlyContinue |
+                                      Where-Object { $_.LastWriteTime -gt $startedAt } |
                                       Sort-Object LastWriteTime -Descending | Select-Object -First 1
                             if ($latest) {
                                 $row.resultPath = $latest.Name

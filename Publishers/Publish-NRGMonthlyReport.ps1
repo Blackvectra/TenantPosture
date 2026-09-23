@@ -173,11 +173,13 @@ function Publish-NRGMonthlyReport {
                 throw "Prior-month JSON is missing required key '$req'. File: $PriorMonthPath"
             }
         }
-        # Strict integer check — a lenient -as [int] would accept $true (1)
-        # and "42.5" (42), both of which mean the file is not what it claims.
-        $priorScore = $null
-        try { $priorScore = [int]$prior['Score'] } catch {
-            throw "Prior-month JSON 'Score' must be an integer 0-100; got '$($prior['Score'])'. File: $PriorMonthPath"
+        # Strict integer-TYPE check — a lenient [int] cast (or -as [int])
+        # accepts $true (1) and "42.5" (42) without throwing, both of which
+        # mean the file is not what it claims. Assert the deserialized type
+        # itself before the range check.
+        $priorScore = $prior['Score']
+        if ($priorScore -isnot [int] -and $priorScore -isnot [long]) {
+            throw "Prior-month JSON 'Score' must be a JSON integer (not boolean/float/string); got [$($priorScore.GetType().Name)] '$priorScore'. File: $PriorMonthPath"
         }
         if ($priorScore -lt 0 -or $priorScore -gt 100) {
             throw "Prior-month JSON 'Score' must be between 0 and 100; got $priorScore. File: $PriorMonthPath"

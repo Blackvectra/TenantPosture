@@ -65,10 +65,26 @@ function Invoke-NRGCollectAADInventory {
 
         # Guest users + last sign-in
         try {
-            $guests = Invoke-NRGGraphRequest -Method GET `
-                -Uri "https://graph.microsoft.com/v1.0/users?`$select=id,displayName,userPrincipalName,accountEnabled,userType,createdDateTime,signInActivity&`$filter=userType eq 'Guest'&`$top=500" `
-                -ErrorAction Stop
-            $result.Data.GuestUsers = @($guests.value ?? @() | ForEach-Object {
+            # A single $top=500 page with no @odata.nextLink loop evaluated at
+            # most the first 500 guests on any larger tenant, with the section
+            # still marked Collected — silently truncated, not failed. Page
+            # through nextLink the same way AppCredentials does below.
+            $guestRows = @()
+            $next = "https://graph.microsoft.com/v1.0/users?`$select=id,displayName,userPrincipalName,accountEnabled,userType,createdDateTime,signInActivity&`$filter=userType eq 'Guest'&`$top=500"
+            $maxPages = 200; $pageCount = 0
+            while ($next -and $pageCount -lt $maxPages) {
+                $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                if ($page.value) { $guestRows += $page.value }
+                $next = $page['@odata.nextLink']
+                $pageCount++
+            }
+            if ($pageCount -ge $maxPages -and $next) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'AAD-GuestInventory' `
+                        -Message "Pagination cap reached ($maxPages pages); guest user list may be truncated."
+                }
+            }
+            $result.Data.GuestUsers = @($guestRows | ForEach-Object {
                 # Graph does NOT return signInActivity at all for a user who
                 # never signed in, or who last signed in before April 2020
                 # (documented on the user resource type). Under StrictMode the
@@ -104,10 +120,24 @@ function Invoke-NRGCollectAADInventory {
 
         # Stale member accounts (signInActivity requires AuditLog.Read.All)
         try {
-            $staleResp = Invoke-NRGGraphRequest -Method GET `
-                -Uri "https://graph.microsoft.com/v1.0/users?`$select=id,displayName,userPrincipalName,accountEnabled,signInActivity,assignedLicenses&`$filter=userType eq 'Member' and accountEnabled eq true&`$top=500" `
-                -ErrorAction Stop
-            $stale = @($staleResp.value ?? @() | Where-Object {
+            # Same truncation defect as GuestUsers above: page through
+            # @odata.nextLink instead of trusting a single $top=500 page.
+            $staleRows = @()
+            $next = "https://graph.microsoft.com/v1.0/users?`$select=id,displayName,userPrincipalName,accountEnabled,signInActivity,assignedLicenses&`$filter=userType eq 'Member' and accountEnabled eq true&`$top=500"
+            $maxPages = 200; $pageCount = 0
+            while ($next -and $pageCount -lt $maxPages) {
+                $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                if ($page.value) { $staleRows += $page.value }
+                $next = $page['@odata.nextLink']
+                $pageCount++
+            }
+            if ($pageCount -ge $maxPages -and $next) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'AAD-StaleAccounts' `
+                        -Message "Pagination cap reached ($maxPages pages); member account list may be truncated."
+                }
+            }
+            $stale = @($staleRows | Where-Object {
                 # Absent signInActivity means never signed in (see above), which
                 # is precisely the stale account we are looking for — not an error.
                 $lastSign = [string](Get-NRGNestedProperty -Object $_ -Path 'signInActivity.lastSignInDateTime' -Default '')
@@ -144,11 +174,28 @@ function Invoke-NRGCollectAADInventory {
 
         # AllPrincipals OAuth grants (app-level consent visible to all users)
         try {
-            $grants = Invoke-NRGGraphRequest -Method GET `
-                -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=consentType eq 'AllPrincipals'&`$top=200&`$expand=clientId" `
-                -ErrorAction Stop
-            if (@($grants.value ?? @()).Count -gt 0) {
-                $clientIds = @($grants.value | Select-Object -ExpandProperty clientId -Unique)
+            # oAuth2PermissionGrant has no navigation properties (clientId is a
+            # plain string per Microsoft Learn) — $expand=clientId is rejected
+            # by Graph's OData parser and fails the whole section on every run.
+            # Client display names are already resolved by the per-
+            # servicePrincipal lookups below, so no expand is needed.
+            $grants = @()
+            $next = "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=consentType eq 'AllPrincipals'&`$top=200"
+            $maxPages = 200; $pageCount = 0
+            while ($next -and $pageCount -lt $maxPages) {
+                $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                if ($page.value) { $grants += $page.value }
+                $next = $page['@odata.nextLink']
+                $pageCount++
+            }
+            if ($pageCount -ge $maxPages -and $next) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'AAD-OAuthGrants' `
+                        -Message "Pagination cap reached ($maxPages pages); OAuth grant list may be truncated."
+                }
+            }
+            if (@($grants).Count -gt 0) {
+                $clientIds = @($grants | Select-Object -ExpandProperty clientId -Unique)
                 $appNames  = @{}
                 foreach ($cid in ($clientIds | Select-Object -First 30)) {
                     try {
@@ -158,7 +205,7 @@ function Invoke-NRGCollectAADInventory {
                         $appNames[$cid] = [string]($sp.displayName ?? $cid)
                     } catch { $appNames[$cid] = $cid }
                 }
-                $result.Data.OAuthGrantedApps = @($grants.value ?? @() | ForEach-Object {
+                $result.Data.OAuthGrantedApps = @($grants | ForEach-Object {
                     @{
                         AppName     = $appNames[$_.clientId] ?? [string]$_.clientId
                         ClientId    = [string]$_.clientId

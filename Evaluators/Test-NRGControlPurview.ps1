@@ -335,7 +335,19 @@ function Test-NRGControlPurviewAuditPremium {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AuditConfig was not collected; not assessed.'
         return
     }
-    $premiumEnabled = [bool](Get-NRGNestedProperty -Object $pvw -Path 'Data.AuditConfig.AdvancedAuditEnabled' -Default $false)
+    # AdvancedAuditEnabled is not a key the collector populates — Get-AdminAuditLogConfig
+    # (Collectors/Purview/Invoke-NRGCollectPurview.ps1) only writes
+    # UnifiedAuditLogIngestionEnabled / AdminAuditLogEnabled / AdminAuditLogAgeLimit.
+    # Defaulting the read to $false made this control score Partial on every
+    # tenant regardless of real Audit Premium status. Default to $null instead
+    # so "never collected" is distinguishable from a real $false and reported
+    # honestly rather than as a confident, uncomputed verdict.
+    $premiumRaw = Get-NRGNestedProperty -Object $pvw -Path 'Data.AuditConfig.AdvancedAuditEnabled' -Default $null
+    if ($null -eq $premiumRaw) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Purview Audit (Premium) status is not collected by this tool; requires manual verification in the Purview compliance portal.'
+        return
+    }
+    $premiumEnabled = [bool]$premiumRaw
     if ($premiumEnabled) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Purview Audit (Premium) is enabled. High-value events including MailItemsAccessed and SearchQueryInitiated are captured.'
     } else {

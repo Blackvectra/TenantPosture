@@ -55,9 +55,15 @@ Describe 'No control claims compliance from a section that was never collected' 
         }
 
         $script:Controls = @((Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config/controls.json') -Raw -Encoding utf8 | ConvertFrom-Json).controls)
+        # An evaluator that throws against this fixture produces no finding at
+        # all and is silently absent from every assertion below - a swallowed
+        # catch would let that masquerade as "nothing to assess". Record it
+        # instead so the suite fails loudly on the mismatch.
+        $script:EvaluatorErrors = [System.Collections.Generic.List[string]]::new()
         foreach ($c in $script:Controls) {
             if (Get-Command $c.EvaluatorFunction -ErrorAction SilentlyContinue) {
-                try { & $c.EvaluatorFunction -ErrorAction SilentlyContinue *>$null } catch { }
+                try { & $c.EvaluatorFunction -ErrorAction SilentlyContinue *>$null }
+                catch { $script:EvaluatorErrors.Add("$($c.ControlId) ($($c.EvaluatorFunction)): $($_.Exception.Message)") }
             }
         }
         $script:Findings = @(Get-NRGFindings)
@@ -70,6 +76,19 @@ Describe 'No control claims compliance from a section that was never collected' 
     It 'seeded every collector key, so the fixture actually exercises the evaluators' {
         $script:Keys.Count  | Should -BeGreaterThan 15
         $script:Findings.Count | Should -BeGreaterThan 100
+    }
+
+    It 'runs every evaluator against the fixture without throwing' {
+        # A thrown exception produces no finding, so it is invisible to every
+        # other assertion in this Describe block - a swallowed throw would let
+        # an evaluator that never actually ran against this fixture pass as
+        # "claims nothing". Note this fixture's empty sections are Data = @{}
+        # (absent keys), not the pre-initialised @() shape real collectors
+        # leave behind, so an evaluator that throws here may still be honest
+        # against the real collector output; that fixture-realism gap is
+        # tracked separately and is not what this assertion checks.
+        $names = $script:EvaluatorErrors -join '; '
+        $script:EvaluatorErrors.Count | Should -Be 0 -Because "these evaluators threw instead of emitting a verdict: $names"
     }
 
     It 'has no control reporting Satisfied or Partial on empty-but-successful data' {
