@@ -93,6 +93,7 @@
         'Resolve-NRGDns',
         'Get-NRGModuleHealth',
         'Repair-NRGModuleHealth',
+        'Get-NRGModuleInstallScope',
         'Get-NRGControlAutomationAudit',
         'Invoke-NRGCollectAADAuthPolicies',
         'Invoke-NRGCollectAADCAPolicies',
