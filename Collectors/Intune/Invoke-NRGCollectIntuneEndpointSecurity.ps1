@@ -73,9 +73,13 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
             }
 
             foreach ($p in $all) {
-                $tplFamily = $null
-                if ($p.templateReference) { $tplFamily = [string]$p.templateReference.templateFamily }
-                $tplName = if ($p.templateReference) { [string]$p.templateReference.templateDisplayName } else { '' }
+                # templateReference is a $select'd field that can still come
+                # back entirely absent (legacy migrated policies) — a bare
+                # $p.templateReference read (even just to test truthiness)
+                # throws under StrictMode when the key itself is missing.
+                $tplRef    = Get-NRGNestedProperty -Object $p -Path 'templateReference' -Default $null
+                $tplFamily = if ($tplRef) { [string](Get-NRGNestedProperty -Object $tplRef -Path 'templateFamily' -Default '') } else { $null }
+                $tplName   = if ($tplRef) { [string](Get-NRGNestedProperty -Object $tplRef -Path 'templateDisplayName' -Default '') } else { '' }
                 $name    = [string]$p.name
 
                 # Map template family → bucket, with displayName fallback for tenants

@@ -194,6 +194,10 @@ function Get-NRGFrameworkCitations {
         foreach ($v in @($prop.Value)) {
             # Sanitize citation value — strip any chars that could escape into report output
             $safeVal = [string]$v -replace '[<>"''&]', ''
+            # Skip empty citations (e.g. "SCuBA": "" for controls with no ScubaGear mapping) —
+            # a bare "SCuBA:" token would otherwise satisfy Get-NRGCoverageScore's prefix match
+            # and pull unmapped controls into that framework's denominator.
+            if ([string]::IsNullOrWhiteSpace($safeVal)) { continue }
             $ids.Add("$($prop.Name):$safeVal")
         }
     }

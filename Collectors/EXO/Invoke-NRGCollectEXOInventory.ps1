@@ -92,6 +92,15 @@ function Invoke-NRGCollectEXOInventory {
         # ── Build the tenant's accepted-domain set up front ──────────────────
         # We use it to classify rule recipients as internal vs external.
         $acceptedDomains = @()
+        # Set when Get-AcceptedDomain itself failed (as opposed to legitimately
+        # returning no domains). $acceptedDomains staying @() gives the
+        # classifier no basis for a verdict — Get-NRGRecipientClass treats an
+        # empty accepted-domain set as "nothing is internal" and returns
+        # External for every recipient, so a throttled read here would score
+        # every internal forward and delegation as BEC exfiltration. The
+        # sections built from it below are marked 'Failed' rather than
+        # 'Collected' so evaluators do not trust that verdict.
+        $acceptedDomainsFailed = $false
         try {
             $acc = @(Get-AcceptedDomain -ErrorAction Stop)
             # Read the field before calling a method on it: a null DomainName
@@ -102,6 +111,7 @@ function Invoke-NRGCollectEXOInventory {
             } | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() })
             $result.Data.Stats.AcceptedDomainsKnown = $acceptedDomains.Count
         } catch {
+            $acceptedDomainsFailed = $true
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-Inventory-AcceptedDomains' -Message $_.Exception.Message
             }
@@ -181,7 +191,10 @@ function Invoke-NRGCollectEXOInventory {
                 }
             }
             $result.Data.ForwardingMailboxes = @($fwdRows)
-            $result.Data.SectionStatus.ForwardingMailboxes = 'Collected'
+            # Every row above was classified against $acceptedDomains; if that
+            # read failed, every classification is a false External and this
+            # section is not evidence, whatever the mailbox query itself did.
+            $result.Data.SectionStatus.ForwardingMailboxes = if ($acceptedDomainsFailed) { 'Failed' } else { 'Collected' }
         } catch {
             $result.Data.SectionStatus.ForwardingMailboxes = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
@@ -302,7 +315,9 @@ function Invoke-NRGCollectEXOInventory {
             $result.Data.InboxRulesForwarding = @($rulesFound)
             $result.Data.UnparseableRules     = @($unparseableList)
             $result.Data.Stats.UnparseableRuleWarnings = $unparseableList.Count
-            $result.Data.SectionStatus.InboxRulesForwarding = 'Collected'
+            # Same basis problem as ForwardingMailboxes above: every recipient
+            # here was run through the same accepted-domain classifier.
+            $result.Data.SectionStatus.InboxRulesForwarding = if ($acceptedDomainsFailed) { 'Failed' } else { 'Collected' }
         } catch {
             $result.Data.SectionStatus.InboxRulesForwarding = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
@@ -568,6 +583,12 @@ function Invoke-NRGCollectEXOInventory {
         try {
             $tabl = @()
             if (Get-Command Get-TenantAllowBlockListItems -ErrorAction SilentlyContinue) {
+                # Track how many of the six list-type/allow combinations actually
+                # succeeded. A per-combination failure used to be logged to
+                # -Verbose only and then ignored, so the section still reported
+                # 'Collected' with an empty Allow list even when every read
+                # failed — the exact condition DEF-5.1 scores as clean.
+                $tablFailures = 0
                 foreach ($t in @('Sender', 'Url', 'FileHash')) {
                     foreach ($allow in @($true, $false)) {
                         try {
@@ -585,12 +606,20 @@ function Invoke-NRGCollectEXOInventory {
                             # One list type unavailable (license/role) must not
                             # lose the others; the section only fails if the
                             # cmdlet itself is unusable, handled by the outer catch.
+                            $tablFailures++
                             Write-Verbose "TABL $t/$allow unavailable: $($_.Exception.Message)"
+                            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                                Register-NRGException -Source 'EXO-TenantAllowBlockList' -Message "[$t/$allow] $($_.Exception.Message)"
+                            }
                         }
                     }
                 }
                 $result.Data.TenantAllowBlockList = @($tabl)
-                $result.Data.SectionStatus.TenantAllowBlockList = 'Collected'
+                # Any failed read means the Allow list this section exists to
+                # surface for DEF-5.1 cannot be trusted as complete — an unread
+                # allow entry is indistinguishable from "no allow entries" once
+                # the list is treated as clean.
+                $result.Data.SectionStatus.TenantAllowBlockList = if ($tablFailures -eq 0) { 'Collected' } else { 'Failed' }
             }
         } catch {
             $result.Data.SectionStatus.TenantAllowBlockList = 'Failed'

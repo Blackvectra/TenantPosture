@@ -118,6 +118,11 @@ function Publish-NRGAssessmentHTML {
     $na   = $cov.NA
     $scrd = $cov.Scored
     $sc2  = $cov.Score
+    # DNS evaluators emit one finding per domain under the same ControlId, so
+    # $Findings.Count over-reports "controls assessed" on multi-domain
+    # tenants. The Executive Overview headline must count distinct
+    # ControlIds, matching the denominator the Scope tile already shows.
+    $distinctControlsAssessed = @($Findings | ForEach-Object { $_.ControlId } | Sort-Object -Unique).Count
     $pLbl = if ($sc2 -ge 85) {'Strong'} elseif ($sc2 -ge 65) {'Moderate'} elseif ($sc2 -ge 40) {'At Risk'} else {'Critical Risk'}
     $pCol = scoreColor $sc2
     $circ = 452.4
@@ -616,6 +621,11 @@ function Publish-NRGAssessmentHTML {
     # excluded from the denominator, so the number goes UP when the tool goes
     # blind. This section is the only place that says so.
     $scopeHtml = ''
+    # Initialized here (not only inside the branch below) so the headline
+    # calculation further down can safely test "$scope -and $scope.Available"
+    # under StrictMode even on the defensive path where Get-NRGAssessmentScope
+    # itself is unavailable.
+    $scope = $null
     if (Get-Command Get-NRGAssessmentScope -ErrorAction SilentlyContinue) {
         try {
             $scope = Get-NRGAssessmentScope -Findings $Findings -LicenseProfile $licProfile `
@@ -671,6 +681,25 @@ function Publish-NRGAssessmentHTML {
         }
     }
 
+    # Executive Overview headline numbers, deduplicated by ControlId so they
+    # stay internally consistent with $distinctControlsAssessed. $scrd/$na
+    # (from Get-NRGCoverageScore) are NOT reused here — those are raw
+    # per-finding counts that must stay as-is for the score-ring breakdown
+    # below (Gaps/Partial/Satisfied/N-A percentages), which has to match the
+    # tenant score's own arithmetic. Using them for the headline is what
+    # produced "83 controls assessed · 90 scored · 12 not applicable" on a
+    # multi-domain tenant, where scored+NA exceeded the assessed total they
+    # are supposed to be a subset of. $scope classifies every control in
+    # controls.json exactly once (worst-instance-wins across domains), so
+    # ScoredControls + (LicenceBlocked + CollectionIncomplete +
+    # NoProgrammaticCheck) sums to exactly $distinctControlsAssessed.
+    $hdrScored = $scrd
+    $hdrNA     = $na
+    if ($scope -and $scope.Available) {
+        $hdrScored = $scope.ScoredControls
+        $hdrNA     = $scope.LicenceBlocked.Count + $scope.CollectionIncomplete.Count + $scope.NoProgrammaticCheck.Count
+    }
+
     # ── License card HTML ────────────────────────────────────────────────────
     $licCard = ''
     if ($licGroups.Count -gt 0) {
@@ -692,7 +721,12 @@ function Publish-NRGAssessmentHTML {
     }
 
     # ── Priority actions HTML ────────────────────────────────────────────────
-    $topGaps = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -in @('Critical','High') } |
+    # $critHighGaps is the true Critical/High gap count; $topGaps is capped at
+    # 8 for display, so the header must cite $critHighGaps.Count, never
+    # $topGaps.Count, or gaps beyond the eighth are silently dropped with no
+    # indication a client is looking at a partial list.
+    $critHighGaps = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -in @('Critical','High') })
+    $topGaps = @($critHighGaps |
         Sort-Object @{Expression={ if($_.Severity -eq 'Critical'){0}else{1} }},ControlId | Select-Object -First 8)
     $actsHtml = ''
     $n = 1
@@ -1282,7 +1316,7 @@ th.nf-n{text-align:right}
 
 <!-- OVERVIEW -->
 <div class="card" id="exec">
-  <div class="card-hd"><div class="card-label">Executive Overview</div><div class="card-sub">$($Findings.Count) controls assessed &middot; $scrd scored &middot; $na not applicable</div></div>
+  <div class="card-hd"><div class="card-label">Executive Overview</div><div class="card-sub">$distinctControlsAssessed controls assessed &middot; $hdrScored scored &middot; $hdrNA not applicable</div></div>
   <div class="ex-dash">
     <div class="score-wrap br">
       <svg width="136" height="136" viewBox="0 0 160 160">
@@ -1344,7 +1378,7 @@ $licCard
 <!-- PRIORITY ACTIONS -->
 $(if($actsHtml){
 "<div class='card mt' id='actions'>
-  <div class='card-hd'><div><div class='card-label'>Priority Actions</div><div class='card-sub'>Critical and high-severity gaps requiring immediate attention</div></div><div style='font-size:.73rem;font-weight:700;color:var(--gap)'>$($topGaps.Count) items</div></div>
+  <div class='card-hd'><div><div class='card-label'>Priority Actions</div><div class='card-sub'>Critical and high-severity gaps requiring immediate attention</div></div><div style='font-size:.73rem;font-weight:700;color:var(--gap)'>$(if ($critHighGaps.Count -gt $topGaps.Count) { "showing $($topGaps.Count) of $($critHighGaps.Count) items" } else { "$($topGaps.Count) items" })</div></div>
   <div class='acts'>$actsHtml</div>
 </div>"
 })

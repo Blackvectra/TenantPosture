@@ -48,11 +48,13 @@ function Test-NRGControlPowerPlatform {
         elseif ($envCount -eq 0) {
             Add-NRGFinding -ControlId 'PPL-1.1' -State 'Satisfied' `
                 -Category 'Power Platform' -Title $c.Title -Severity 'Informational' `
-                -CurrentValue 'No Power Platform environments'
+                -CurrentValue 'No Power Platform environments' `
+                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PPL-1.1')
         } elseif ($envCount -le 10) {
             Add-NRGFinding -ControlId 'PPL-1.1' -State 'Satisfied' `
                 -Category 'Power Platform' -Title $c.Title -Severity 'Informational' `
-                -CurrentValue "$envCount environments — within governance baseline"
+                -CurrentValue "$envCount environments — within governance baseline" `
+                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PPL-1.1')
         } else {
             Add-NRGFinding -ControlId 'PPL-1.1' -State 'Partial' `
                 -Category 'Power Platform' -Title $c.Title -Severity 'Medium' `
@@ -76,7 +78,8 @@ function Test-NRGControlPowerPlatform {
             if ($count -gt 0) {
                 Add-NRGFinding -ControlId 'PPL-1.2' -State 'Satisfied' `
                     -Category 'Power Platform' -Title $c.Title -Severity 'Informational' `
-                    -CurrentValue "$count DLP policies active"
+                    -CurrentValue "$count DLP policies active" `
+                    -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PPL-1.2')
             } else {
                 Add-NRGFinding -ControlId 'PPL-1.2' -State 'Gap' `
                     -Category 'Power Platform' -Title $c.Title -Severity $c.Severity `
@@ -116,11 +119,13 @@ function Test-NRGControlPowerPlatform {
                     -Detail 'Standard environment creation is restricted to admins, but TRIAL environment creation is still open to non-admins. A trial environment is a fully functional environment outside the governance baseline, so this leaves the same gap by another route.' `
                     -CurrentValue 'Environment creation restricted; trial creation unrestricted' `
                     -RequiredValue 'Both standard and trial environment creation restricted to admins' `
-                    -Remediation $c.Remediation
+                    -Remediation $c.Remediation `
+                    -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PPL-1.3')
             } else {
                 Add-NRGFinding -ControlId 'PPL-1.3' -State 'Satisfied' `
                     -Category 'Power Platform' -Title $c.Title -Severity 'Informational' `
-                    -Detail 'Environment creation is restricted to tenant, Power Platform and Dynamics 365 admins.'
+                    -Detail 'Environment creation is restricted to tenant, Power Platform and Dynamics 365 admins.' `
+                    -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PPL-1.3')
             }
         }
         else {
@@ -129,7 +134,8 @@ function Test-NRGControlPowerPlatform {
                 -Detail 'Any licensed user can create Power Platform environments. Each new environment is a data boundary outside the tenant DLP baseline, created without review, and typically invisible to the security team until it already holds business data.' `
                 -CurrentValue 'Environment creation open to non-admin users' `
                 -RequiredValue 'Environment creation restricted to admins' `
-                -Remediation $c.Remediation
+                -Remediation $c.Remediation `
+                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PPL-1.3')
         }
     }
 }

@@ -141,6 +141,14 @@ function Test-NRGControlSPOOneDriveSync {
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $spo 'TenantSettings')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'TenantSettings was not collected; not assessed.'
+        return
+    }
     $syncDomain = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.AllowedDomainGuidsForSyncApp' -Default @()
     if (@($syncDomain).Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'OneDrive sync restricted to domain-joined devices or specific tenant GUIDs.'
@@ -179,20 +187,13 @@ function Test-NRGControlSPOAppsFromStore {
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    # Empty is not clean. The collector reported success, but this section
-    # may not have landed — a failed sub-query leaves it absent or empty,
-    # and reading that as compliance is a false pass on a control nobody
-    # checked. Not assessed is the only honest verdict.
-    if (-not (Test-NRGSectionCollected $spo 'TenantSettings')) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'TenantSettings was not collected; not assessed.'
-        return
-    }
-    $appsFromStore = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.AppsForSharePointEnabled' -Default $true
-    if (-not $appsFromStore) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Third-party app installation from the SharePoint store is disabled.'
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'Users can install apps from the SharePoint store. Review approved app catalog and disable if store apps are not needed.' -Remediation $ctrl.Remediation
-    }
+    # AppsForSharePointEnabled is not among the fields Invoke-NRGCollectSharePoint
+    # reads from /admin/sharepoint/settings or Get-SPOTenant — there is no
+    # collected value to score here, so the field defaulting to $true made
+    # every tenant read Partial regardless of the real setting. Advisory
+    # controls with no real check must emit NotApplicable, never Satisfied or
+    # Partial.
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title "$($ctrl.Title) (Not collected)" -FrameworkIds $cit -Detail 'App installation from the SharePoint store is not collected by this tool. Review in SharePoint Admin Center > Advanced > API access, or the app catalog settings.'
 }
 
 # ── SPO-2.4 Custom Script Disabled ───────────────────────────────────────────
@@ -308,15 +309,15 @@ function Test-NRGControlSPOReauth {
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
     }
-    # Empty is not clean. The collector reported success, but this section
-    # may not have landed — a failed sub-query leaves it absent or empty,
-    # and reading that as compliance is a false pass on a control nobody
-    # checked. Not assessed is the only honest verdict.
-    if (-not (Test-NRGSectionCollected $spo 'TenantSettings')) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'TenantSettings was not collected; not assessed.'
-        return
+    # EmailAttestationReAuthDays comes from Get-SPOTenant (TenantSettingsSPO),
+    # not the Graph TenantSettings block — Graph's /admin/sharepoint/settings
+    # never returns this field. Same source as SPO-2.6, which reads this exact
+    # value under the correct key.
+    $sp = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettingsSPO' -Default $null
+    if ($null -eq $sp) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph.'; return
     }
-    $reauthDays = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.EmailAttestationReAuthDays' -Default 0
+    $reauthDays = [int](Get-NRGObjectField -Item $sp -Key 'EmailAttestationReAuthDays' -Default 0)
     if ($reauthDays -gt 0 -and $reauthDays -le 30) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Reauthentication required every $reauthDays day(s) for sharing links."
     } else {
@@ -332,6 +333,14 @@ function Test-NRGControlSPODomainSync {
     $spo = Get-NRGRawData -Key 'SharePoint'
     if (-not $spo -or -not $spo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SharePoint data not collected'; return
+    }
+    # Empty is not clean. The collector reported success, but this section
+    # may not have landed — a failed sub-query leaves it absent or empty,
+    # and reading that as compliance is a false pass on a control nobody
+    # checked. Not assessed is the only honest verdict.
+    if (-not (Test-NRGSectionCollected $spo 'TenantSettings')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'TenantSettings was not collected; not assessed.'
+        return
     }
     $allowedGuids = @(Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.AllowedDomainGuidsForSyncApp' -Default @())
     if ($allowedGuids.Count -gt 0) {

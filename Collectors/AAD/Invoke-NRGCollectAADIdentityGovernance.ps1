@@ -26,6 +26,19 @@ function Invoke-NRGCollectAADIdentityGovernance {
             BreakGlassIndicators = @()
             PasswordProtection   = $null
             PIMRolePolicies      = @()
+            # Empty is not clean: each sub-query below is independently
+            # try/catch'd and Success stays $true regardless, so a failed
+            # query and "queried, found nothing" are otherwise indistinguishable.
+            # Downstream evaluators must consult this before trusting an
+            # empty/default section (Test-NRGSectionCollected).
+            SectionStatus = @{
+                SSPRPolicy           = 'NotRun'
+                ExternalCollab       = 'NotRun'
+                ConsentPolicy        = 'NotRun'
+                OAuthHighRiskGrants  = 'NotRun'
+                BreakGlassIndicators = 'NotRun'
+                PIMRolePolicies      = 'NotRun'
+            }
         }
     }
 
@@ -35,15 +48,21 @@ function Invoke-NRGCollectAADIdentityGovernance {
             $sspr = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy' `
                 -ErrorAction Stop
-            $regEnforcement = $sspr.registrationEnforcement
+            # registrationEnforcement (and its nested campaign block) is an
+            # OPTIONAL sub-object on authenticationMethodsPolicy, omitted
+            # entirely on a tenant that has never touched registration
+            # campaign settings — a bare chained read throws at the first
+            # absent intermediate under StrictMode.
             $result.Data.SSPRPolicy = @{
-                RegistrationEnforcementState = [string]($regEnforcement.authenticationMethodsRegistrationCampaign.state ?? 'unknown')
-                SnoozeDays                   = [int]($regEnforcement.authenticationMethodsRegistrationCampaign.snoozeDurationInDays ?? 0)
+                RegistrationEnforcementState = [string](Get-NRGNestedProperty -Object $sspr -Path 'registrationEnforcement.authenticationMethodsRegistrationCampaign.state' -Default 'unknown')
+                SnoozeDays                   = [int](Get-NRGNestedProperty -Object $sspr -Path 'registrationEnforcement.authenticationMethodsRegistrationCampaign.snoozeDurationInDays' -Default 0)
                 MethodsConfigured            = @($sspr.authenticationMethodConfigurations ?? @() | ForEach-Object {
                     @{ Id = [string]$_.id; State = [string]$_.state }
                 })
             }
+            $result.Data.SectionStatus.SSPRPolicy = 'Collected'
         } catch {
+            $result.Data.SectionStatus.SSPRPolicy = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-SSPR' -Message $_.Exception.Message
             }
@@ -54,19 +73,25 @@ function Invoke-NRGCollectAADIdentityGovernance {
             $extCollab = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/authorizationPolicy' `
                 -ErrorAction Stop
+            # defaultUserRolePermissions is an OPTIONAL nested object on
+            # authorizationPolicy — a tenant relying entirely on defaults can
+            # omit it, so a bare $extCollab.defaultUserRolePermissions.* read
+            # throws under StrictMode at the first absent intermediate.
             $result.Data.ExternalCollab = @{
                 AllowInvitesFrom             = [string]($extCollab.allowInvitesFrom ?? 'everyone')
                 AllowedToSignUpEmailBased    = [bool]($extCollab.allowedToSignUpEmailBasedSubscriptions ?? $true)
                 GuestUserRoleId              = [string]($extCollab.guestUserRoleId ?? '')
                 DefaultUserRolePermissions   = @{
-                    AllowedToCreateApps      = [bool]($extCollab.defaultUserRolePermissions.allowedToCreateApps ?? $true)
-                    AllowedToCreateGroups    = [bool]($extCollab.defaultUserRolePermissions.allowedToCreateGroups ?? $true)
-                    AllowedToCreateTenants   = [bool]($extCollab.defaultUserRolePermissions.allowedToCreateTenants ?? $true)
+                    AllowedToCreateApps      = [bool](Get-NRGNestedProperty -Object $extCollab -Path 'defaultUserRolePermissions.allowedToCreateApps' -Default $true)
+                    AllowedToCreateGroups    = [bool](Get-NRGNestedProperty -Object $extCollab -Path 'defaultUserRolePermissions.allowedToCreateGroups' -Default $true)
+                    AllowedToCreateTenants   = [bool](Get-NRGNestedProperty -Object $extCollab -Path 'defaultUserRolePermissions.allowedToCreateTenants' -Default $true)
                 }
                 PermissionGrantPolicies      = @($extCollab.permissionGrantPoliciesAssigned ?? @())
                 BlockMsolPowerShell          = $extCollab.blockMsolPowerShell
             }
+            $result.Data.SectionStatus.ExternalCollab = 'Collected'
         } catch {
+            $result.Data.SectionStatus.ExternalCollab = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-ExternalCollab' -Message $_.Exception.Message
             }
@@ -82,7 +107,9 @@ function Invoke-NRGCollectAADIdentityGovernance {
                 Version   = [int]($consentPol.version ?? 0)
                 Reviewers = @($consentPol.reviewers ?? @())
             }
+            $result.Data.SectionStatus.ConsentPolicy = 'Collected'
         } catch {
+            $result.Data.SectionStatus.ConsentPolicy = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-ConsentPolicy' -Message $_.Exception.Message
             }
@@ -101,7 +128,9 @@ function Invoke-NRGCollectAADIdentityGovernance {
                     Type       = [string]$_.consentType
                 }
             })
+            $result.Data.SectionStatus.OAuthHighRiskGrants = 'Collected'
         } catch {
+            $result.Data.SectionStatus.OAuthHighRiskGrants = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-OAuthGrants' -Message $_.Exception.Message
             }
@@ -219,7 +248,21 @@ function Invoke-NRGCollectAADIdentityGovernance {
                 }
             }
             $result.Data.BreakGlassIndicators = $breakGlass
+
+            # Section status reflects what CAExcluded actually means. Without
+            # role data there is no GA list to check at all — Failed, not an
+            # empty "clean" list. With roles but no CA data, every CAExcluded
+            # defaulted to $false above and cannot be trusted as "not
+            # excluded" — NotRun, since the exclusion check itself never ran.
+            if (-not ($rawRoles -and $rawRoles.Success)) {
+                $result.Data.SectionStatus.BreakGlassIndicators = 'Failed'
+            } elseif (-not ($caPolicies -and $caPolicies.Success)) {
+                $result.Data.SectionStatus.BreakGlassIndicators = 'NotRun'
+            } else {
+                $result.Data.SectionStatus.BreakGlassIndicators = 'Collected'
+            }
         } catch {
+            $result.Data.SectionStatus.BreakGlassIndicators = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-BreakGlass' -Message $_.Exception.Message
             }
@@ -227,25 +270,49 @@ function Invoke-NRGCollectAADIdentityGovernance {
 
         # PIM role management policy details (activation rules)
         try {
-            $pimPolicies = Invoke-NRGGraphRequest -Method GET `
-                -Uri 'https://graph.microsoft.com/v1.0/policies/roleManagementPolicies?$filter=scopeType eq ''DirectoryRole''&$expand=rules&$top=50' `
-                -ErrorAction Stop
+            # List roleManagementPolicies REQUIRES $filter on both scopeId and
+            # scopeType (Microsoft Learn) — scopeType alone is rejected by
+            # Graph, so every tenant's PIM policies previously came back empty.
+            $pimNext   = 'https://graph.microsoft.com/v1.0/policies/roleManagementPolicies?$filter=scopeId eq ''/'' and scopeType eq ''DirectoryRole''&$expand=rules&$top=50'
+            $pimRaw    = [System.Collections.Generic.List[object]]::new()
+            $pimPages  = 0
+            $maxPimPages = 20
+            while ($pimNext -and $pimPages -lt $maxPimPages) {
+                $pimResp = Invoke-NRGGraphRequest -Method GET -Uri $pimNext -ErrorAction Stop
+                foreach ($p in @($pimResp.value ?? @())) { $pimRaw.Add($p) }
+                $pimNext = [string](Get-NRGObjectField -Item $pimResp -Key '@odata.nextLink' -Default '')
+                $pimPages++
+            }
+            if ($pimPages -ge $maxPimPages -and $pimNext) {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'AAD-PIMPolicies' `
+                        -Message "Pagination cap reached ($maxPimPages pages); role management policy list may be truncated."
+                }
+            }
 
-            $result.Data.PIMRolePolicies = @($pimPolicies.value ?? @() | ForEach-Object {
+            $result.Data.PIMRolePolicies = @($pimRaw | ForEach-Object {
                 $policy = $_
-                # Extract key rules
-                $mfaRule           = @($policy.rules ?? @()) | Where-Object { $_['@odata.type'] -match 'authenticationContext' -or $_.id -eq 'Enablement_EndUser_Assignment' } | Select-Object -First 1
-                $justRule          = @($policy.rules ?? @()) | Where-Object { $_.id -eq 'Justification_EndUser_Assignment' } | Select-Object -First 1
-                $approvalRule      = @($policy.rules ?? @()) | Where-Object { $_['@odata.type'] -match 'approvalSetting' -or $_.id -eq 'Approval_EndUser_Assignment' } | Select-Object -First 1
-                $expiryRule        = @($policy.rules ?? @()) | Where-Object { $_.id -eq 'Expiration_EndUser_Assignment' } | Select-Object -First 1
+                # Extract key rules. Enablement_EndUser_Assignment is a
+                # unifiedRoleManagementPolicyEnablementRule — it carries an
+                # 'enabledRules' array (e.g. 'MultiFactorAuthentication',
+                # 'Justification'), not 'isEnabled'; reading isEnabled off it
+                # threw under StrictMode and emptied PIMRolePolicies on every
+                # tenant. Graph also never emits a rule id of
+                # 'Justification_EndUser_Assignment', so that lookup always
+                # missed — justification is read from enabledRules too.
+                $enablementRule  = @($policy.rules ?? @()) | Where-Object { $_.id -eq 'Enablement_EndUser_Assignment' } | Select-Object -First 1
+                $authContextRule = @($policy.rules ?? @()) | Where-Object { $_['@odata.type'] -match 'authenticationContext' } | Select-Object -First 1
+                $approvalRule    = @($policy.rules ?? @()) | Where-Object { $_['@odata.type'] -match 'approvalSetting' -or $_.id -eq 'Approval_EndUser_Assignment' } | Select-Object -First 1
+                $expiryRule      = @($policy.rules ?? @()) | Where-Object { $_.id -eq 'Expiration_EndUser_Assignment' } | Select-Object -First 1
+                $enabledRuleNames = @(Get-NRGObjectField -Item $enablementRule -Key 'enabledRules' -Default @())
 
                 @{
                     PolicyId              = [string]$policy.id
                     DisplayName           = [string]$policy.displayName
                     ScopeId               = [string]$policy.scopeId
-                    RequiresMFA           = if ($mfaRule) { [bool]($mfaRule.isEnabled ?? $false) } else { $null }
-                    RequiresJustification = if ($justRule) { [bool]($justRule.isEnabled ?? $false) } else { $null }
-                    RequiresApproval      = if ($approvalRule) { [bool]($approvalRule.setting.isApprovalRequired ?? $false) } else { $null }
+                    RequiresMFA           = if ($enablementRule) { [bool]($enabledRuleNames -contains 'MultiFactorAuthentication') } elseif ($authContextRule) { [bool](Get-NRGObjectField -Item $authContextRule -Key 'isEnabled' -Default $false) } else { $null }
+                    RequiresJustification = if ($enablementRule) { [bool]($enabledRuleNames -contains 'Justification') } else { $null }
+                    RequiresApproval      = if ($approvalRule) { [bool](Get-NRGNestedProperty -Object $approvalRule -Path 'setting.isApprovalRequired' -Default $false) } else { $null }
                     MaxDurationHours      = if ($expiryRule -and $expiryRule.maximumDuration) {
                         # Parse ISO 8601 duration e.g. PT8H
                         $dur = [string]$expiryRule.maximumDuration
@@ -253,8 +320,10 @@ function Invoke-NRGCollectAADIdentityGovernance {
                     } else { $null }
                 }
             })
+            $result.Data.SectionStatus.PIMRolePolicies = 'Collected'
         } catch {
             # PIM not licensed — non-fatal
+            $result.Data.SectionStatus.PIMRolePolicies = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-PIMPolicies' -Message $_.Exception.Message
             }

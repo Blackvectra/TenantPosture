@@ -76,17 +76,27 @@ function Invoke-NRGCollectAADPIM {
             while ($eligLink -and $pageCount -lt $maxPages) {
                 $resp = Invoke-NRGGraphRequest -Method GET -Uri $eligLink -ErrorAction Stop
                 foreach ($s in @($resp.value ?? @())) {
+                    # The expanded 'principal' is a directoryObject that may be a
+                    # user, GROUP, or SERVICE PRINCIPAL (group-based / workload PIM
+                    # eligibility). Groups/SPs have no userPrincipalName, so a bare
+                    # $s.principal.userPrincipalName THROWS on those rows and aborts
+                    # the whole enumeration. Same shape-safe read as AADRoles.ps1.
+                    $pr = Get-NRGObjectField -Item $s -Key 'principal' -Default @{}
                     $eligList.Add(@{
                         Id                 = [string]$s.id
                         RoleDefinitionId   = [string]$s.roleDefinitionId
-                        RoleDisplayName    = [string]($s.roleDefinition.displayName ?? '')
+                        # $expand=roleDefinition can come back absent (e.g. a
+                        # deleted or inaccessible role definition), and a bare
+                        # $s.roleDefinition.displayName throws at that point
+                        # under StrictMode.
+                        RoleDisplayName    = [string](Get-NRGNestedProperty -Object $s -Path 'roleDefinition.displayName' -Default '')
                         PrincipalId        = [string]$s.principalId
-                        PrincipalUPN       = [string]($s.principal.userPrincipalName ?? '')
-                        PrincipalType      = [string]($s.principal['@odata.type'] ?? '')
+                        PrincipalUPN       = [string](Get-NRGObjectField -Item $pr -Key 'userPrincipalName' -Default '')
+                        PrincipalType      = [string](Get-NRGObjectField -Item $pr -Key '@odata.type' -Default '')
                         Status             = [string]$s.status
                         MemberType         = [string]$s.memberType
-                        StartDateTime      = [string]($s.scheduleInfo.startDateTime ?? '')
-                        Expiration         = [string]($s.scheduleInfo.expiration.type ?? 'noExpiration')
+                        StartDateTime      = [string](Get-NRGNestedProperty -Object $s -Path 'scheduleInfo.startDateTime' -Default '')
+                        Expiration         = [string](Get-NRGNestedProperty -Object $s -Path 'scheduleInfo.expiration.type' -Default 'noExpiration')
                         DirectoryScopeId   = [string]$s.directoryScopeId
                     })
                 }
@@ -102,6 +112,7 @@ function Invoke-NRGCollectAADPIM {
             $result.Data.EligibleSchedules = $eligList.ToArray()
             $result.Data.SectionStatus.EligibleSchedules = 'Collected'
         } catch {
+            $result.Data.SectionStatus.EligibleSchedules = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-PIM-Eligible' -Message $_.Exception.Message
             }
@@ -118,18 +129,24 @@ function Invoke-NRGCollectAADPIM {
             while ($activeLink -and $pageCount2 -lt $maxPages) {
                 $resp = Invoke-NRGGraphRequest -Method GET -Uri $activeLink -ErrorAction Stop
                 foreach ($s in @($resp.value ?? @())) {
+                    # Same shape-safe principal read as the eligible-schedules block
+                    # above — the expanded principal may be a group or service
+                    # principal with no userPrincipalName.
+                    $pr = Get-NRGObjectField -Item $s -Key 'principal' -Default @{}
                     $activeList.Add(@{
                         Id               = [string]$s.id
                         RoleDefinitionId = [string]$s.roleDefinitionId
-                        RoleDisplayName  = [string]($s.roleDefinition.displayName ?? '')
+                        # See rationale above (eligible-schedules block) —
+                        # $expand=roleDefinition can come back absent.
+                        RoleDisplayName  = [string](Get-NRGNestedProperty -Object $s -Path 'roleDefinition.displayName' -Default '')
                         PrincipalId      = [string]$s.principalId
-                        PrincipalUPN     = [string]($s.principal.userPrincipalName ?? '')
-                        PrincipalType    = [string]($s.principal['@odata.type'] ?? '')
+                        PrincipalUPN     = [string](Get-NRGObjectField -Item $pr -Key 'userPrincipalName' -Default '')
+                        PrincipalType    = [string](Get-NRGObjectField -Item $pr -Key '@odata.type' -Default '')
                         AssignmentType   = [string]$s.assignmentType
                         MemberType       = [string]$s.memberType
                         Status           = [string]$s.status
-                        StartDateTime    = [string]($s.scheduleInfo.startDateTime ?? '')
-                        Expiration       = [string]($s.scheduleInfo.expiration.type ?? 'noExpiration')
+                        StartDateTime    = [string](Get-NRGNestedProperty -Object $s -Path 'scheduleInfo.startDateTime' -Default '')
+                        Expiration       = [string](Get-NRGNestedProperty -Object $s -Path 'scheduleInfo.expiration.type' -Default 'noExpiration')
                     })
                 }
                 $activeLink = $resp['@odata.nextLink']
@@ -144,6 +161,7 @@ function Invoke-NRGCollectAADPIM {
             $result.Data.ActiveSchedules = $activeList.ToArray()
             $result.Data.SectionStatus.ActiveSchedules = 'Collected'
         } catch {
+            $result.Data.SectionStatus.ActiveSchedules = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-PIM-Active' -Message $_.Exception.Message
             }
@@ -198,7 +216,7 @@ function Invoke-NRGCollectAADPIM {
                         TargetsRoles = [bool]($scopeQuery -match 'roleManagement/directory|roleAssignmentScheduleInstances|directoryRole')
                     })
                 }
-                $arLink = [string]($arResp.'@odata.nextLink' ?? '')
+                $arLink = [string](Get-NRGObjectField -Item $arResp -Key '@odata.nextLink' -Default '')
                 $arPages++
             }
             $result.Data.AccessReviews = @($arList)
@@ -210,8 +228,11 @@ function Invoke-NRGCollectAADPIM {
                     Register-NRGCoverage -Family 'AAD-AccessReviews' -Status 'NotCollected' `
                         -Note 'AccessReview.Read.All not consented (re-consent required for AAD-8.2)'
                 }
-            } elseif (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                Register-NRGException -Source 'AAD-AccessReviews' -Message $_.Exception.Message
+            } else {
+                $result.Data.SectionStatus.AccessReviews = 'Failed'
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'AAD-AccessReviews' -Message $_.Exception.Message
+                }
             }
         }
 

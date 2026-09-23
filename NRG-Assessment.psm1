@@ -182,6 +182,7 @@ $script:ExportedFunctions = @(
     'Invoke-NRGEvaluatorSafe',
     'Resolve-NRGDns',
     'Get-NRGModuleHealth',
+    'Repair-NRGModuleHealth',
     'Get-NRGControlAutomationAudit',
 
     # ── Collectors — AAD ──────────────────────────────────────────────────────

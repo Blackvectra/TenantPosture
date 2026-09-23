@@ -103,7 +103,7 @@ function Invoke-NRGCollectM365Copilot {
                 $result.Data.LicensedSkus += [ordered]@{
                     SkuId           = [string]$sku.skuId
                     SkuPartNumber   = $partNumber
-                    PrepaidUnits    = [int]($sku.prepaidUnits.enabled ?? 0)
+                    PrepaidUnits    = [int](Get-NRGNestedProperty -Object $sku -Path 'prepaidUnits.enabled' -Default 0)
                     ConsumedUnits   = [int]($sku.consumedUnits ?? 0)
                 }
             }

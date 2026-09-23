@@ -82,19 +82,60 @@ Describe 'External API shapes — omitted properties' {
 
     Context 'no collector reads a nested API property by bare dot-access' {
 
-        It 'nested $_.<a>.<b> access in Collectors goes through a helper' {
+        It 'nested <var>.<a>.<b> access in Collectors goes through a helper' {
             # Static guard. The behavioural tests above only cover the shapes we
             # already know are omitted; this catches the next one before a tenant
-            # does. $_.Exception.* is the PowerShell error record, not API data.
+            # does. <var>.Exception.* is a PowerShell error record, not API data.
+            # Matches any variable, not just $_ — a nested read through a named
+            # loop variable (e.g. $s.principal.userPrincipalName) is the exact
+            # shape this guard exists to forbid and must not be invisible to it.
+            #
+            # A line-based regex cannot tell a read of untrusted external API
+            # data apart from a read/write of the TOOL'S OWN, always-present
+            # internal state — e.g. $result.Data.Foo = ... (the collector's own
+            # accumulator, built entirely by its own code) or $aad.Data.Users
+            # (another collector's result, fetched via Get-NRGRawData, whose
+            # top-level CollectorId/CollectedAt/Success/Data shape is a fixed
+            # contract this tool guarantees, not an optional API property). A
+            # first pass that matched ANY variable without this distinction
+            # flagged 371 lines across 23 of 24 collector files, nearly all of
+            # them such false positives — turning a narrow, high-signal guard
+            # into one that fails almost everywhere, which is worse than the
+            # tautology it replaced. $SafeVars below are verified by hand
+            # (grep each one's assignment) to be either this tool's own
+            # accumulator/contract or a local .NET object (Stopwatch,
+            # X509Certificate2, IAsyncResult, a Get-Command result) — never
+            # data read from Graph/EXO/Power Platform. Anything else matching
+            # the pattern is a genuine candidate and must go through the helper.
+            $safeVars = @(
+                'result', 'results',        # every collector's own accumulator
+                'recentBag',                # Email-IR sign-in collector's own local bag
+                'd',                         # DNS collector's own per-domain accumulator
+                'aad', 'purview', 'exoData', 'exoRaw', 'rawRoles', 'caPolicies',
+                                             # another collector's result via Get-NRGRawData —
+                                             # this tool's own CollectorId/CollectedAt/Success/Data
+                                             # contract, not raw external API shape
+                'policy',                   # loop var over $caPolicies.Data.Policies — same
+                                             # internal contract, built entirely by AADCAPolicies.ps1
+                'sw', 'x509', 'iar', 'gcInboxRule'
+                                             # local .NET/reflection objects (Stopwatch,
+                                             # X509Certificate2, IAsyncResult, Get-Command), not API data
+            )
             $offenders = [System.Collections.Generic.List[string]]::new()
-            foreach ($f in Get-ChildItem (Join-Path $script:RepoRoot 'Collectors') -Filter '*.ps1' -Recurse) {
+            $scanPaths = @(
+                (Join-Path $script:RepoRoot 'Collectors'),
+                (Join-Path $script:RepoRoot 'Email-IR/Collectors')
+            ) | Where-Object { Test-Path -LiteralPath $_ }
+            foreach ($f in Get-ChildItem $scanPaths -Filter '*.ps1' -Recurse) {
                 $lines = Get-Content -LiteralPath $f.FullName
                 for ($i = 0; $i -lt $lines.Count; $i++) {
                     $line = $lines[$i]
                     if ($line -match '^\s*#') { continue }
                     if ($line -match 'Get-NRGNestedProperty|Get-NRGObjectField') { continue }
-                    if ($line -match '\$_\.Exception\.') { continue }
-                    if ($line -match '\$_\.[a-zA-Z]+\.[a-zA-Z]') {
+                    if ($line -match '\$[A-Za-z_]\w*\.Exception\.') { continue }
+                    if ($line -match '\.PSObject\.') { continue }
+                    if ($line -match '\$([A-Za-z_]\w*)\.([A-Za-z_]\w*)\.([A-Za-z_]\w*)') {
+                        if ($safeVars -contains $matches[1]) { continue }
                         $offenders.Add("$($f.Name):$($i + 1): $($line.Trim())")
                     }
                 }
@@ -102,7 +143,7 @@ Describe 'External API shapes — omitted properties' {
             $offenders -join "`n" | Should -BeNullOrEmpty -Because @'
 Microsoft APIs OMIT optional properties rather than returning null. Under
 StrictMode a nested read on an absent intermediate throws before ?? applies,
-failing the whole section. Use Get-NRGNestedProperty -Object $_ -Path 'a.b'.
+failing the whole section. Use Get-NRGNestedProperty -Object <var> -Path 'a.b'.
 '@
         }
     }

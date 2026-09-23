@@ -44,7 +44,8 @@ function Add-NRGFinding {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [ValidatePattern('^[A-Z]{2,4}-\d+\.\d+$')]
+        # v4.12.0: widened from {2,4} to {2,8} to accept the EMAIL- and SIGNIN- prefixes
+        [ValidatePattern('^[A-Z]{2,8}-\d+\.\d+$')]
         [string] $ControlId,
 
         [Parameter(Mandatory)]

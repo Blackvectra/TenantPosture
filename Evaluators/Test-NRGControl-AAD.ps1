@@ -43,6 +43,27 @@ function Test-NRGRoleSectionCollected {
     return ($status -eq 'Collected')
 }
 
+# Returns $true when every RoleAssignment's RoleDefinitionName resolved to a
+# human-readable name, $false if any degraded to the raw role-template GUID.
+#
+# Invoke-NRGCollectAADRoles builds $roleMap from a SEPARATE roleDefinitions
+# sub-query; when that query fails, the catch only registers an exception (no
+# SectionStatus flag for it), RoleDefinitionName falls back to the bare GUID
+# for every assignment, and IsPriv is computed against that GUID so it never
+# matches a role name — every name-based privileged-role filter then matches
+# nothing while RoleAssignments itself still reports 'Collected', because the
+# assignments read succeeded. The GUID-shaped name is the only evaluator-side
+# signal of that failure without a collector change.
+function Test-NRGRoleNamesResolved {
+    [CmdletBinding()]
+    param([AllowNull()] $Assignments)
+    $list = @($Assignments)
+    if ($list.Count -eq 0) { return $true }
+    $guidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    $unresolved = @($list | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'RoleDefinitionName') -match $guidPattern })
+    return ($unresolved.Count -eq 0)
+}
+
 function Get-SafeProp {
     param($obj, [string]$prop, $default = $null)
     if ($null -eq $obj) { return $default }
@@ -198,6 +219,15 @@ function Test-NRGControlAADNamedLocations {
     $ca  = Get-NRGRawData -Key 'AAD-CAPolicies'
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
+    }
+    # Empty is not clean. NamedLocations is an independent sub-query from the
+    # primary CA-policies fetch (which is all $ca.Success reflects) — a
+    # throttled or failed namedLocations call leaves the list empty while
+    # Success stays $true, and reading that as "no named locations defined"
+    # is a false Gap on a tenant that has them.
+    if (-not (Test-NRGSectionCollected $ca 'NamedLocations')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'NamedLocations was not collected; not assessed.'
+        return
     }
     $namedLocations   = @(Get-NRGNestedProperty -Object $ca -Path 'Data.NamedLocations' -Default @())
     $trustedLocations = @($namedLocations | Where-Object { $_.IsTrusted })
@@ -433,6 +463,14 @@ function Test-NRGControlAADSSPR {
     if (-not $auth -or -not $auth.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Auth policy data not collected'; return
     }
+    # Empty is not clean. AuthorizationPolicy is an independent sub-query from
+    # the collector's overall Success flag — a failed read leaves it $null
+    # while Success stays $true, and defaulting AllowedToUseSSPR to $false in
+    # that case reported "SSPR is disabled" on tenants where it is enabled.
+    if (-not (Test-NRGSectionCollected $auth 'AuthorizationPolicy')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AuthorizationPolicy was not collected; not assessed.'
+        return
+    }
     $sspr = [bool]((Get-SafeProp (Get-SafeProp $auth.Data 'AuthorizationPolicy') 'AllowedToUseSSPR') ?? $false)
     if ($sspr) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Self-service password reset is enabled for users.'
@@ -576,11 +614,15 @@ function Test-NRGControlAADPIMAlerts {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'PIM not available (requires Entra P2)'; return
     }
-    # PIM alerts are tenant-configured — check for data presence as proxy
-    # Full alert config requires GET /beta/privilegedAccess/aadRoles/alerts
-    Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-        -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
-        -Detail 'PIM is available. Verify alerts are configured in PIM > Alerts: Roles assigned outside PIM, Redundant roles, Stale assignments. Manual verification required.' `
+    # PIM alert configuration (Roles assigned outside PIM / Redundant roles /
+    # Stale assignments) requires GET /beta/privilegedAccess/aadRoles/alerts,
+    # which is not collected — this control has no programmatic check today.
+    # It must emit NotApplicable, never Partial: Partial is worth 0.5 toward
+    # the compliance score, so an unconditional Partial here handed every
+    # Entra P2 tenant free credit for a verdict the tool never computed.
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+        -Title "$($ctrl.Title) (Manual review required)" -Severity 'Medium' -FrameworkIds $cit `
+        -Detail 'This control requires manual verification — PIM alert configuration is not exposed to the APIs this assessment uses. Verify in PIM > Alerts: Roles assigned outside PIM, Redundant roles, Stale assignments.' `
         -Remediation $ctrl.Remediation
 }
 
@@ -764,6 +806,19 @@ function Test-NRGControlAADPrivCloudOnly {
             -Detail 'Role assignment enumeration did not complete (see Exceptions) — on-premises synced privileged accounts could not be assessed.'
         return
     }
+    # PrivRoles is derived from the same roleDefinitions lookup as AAD-11.2
+    # (IsPriv = privRoleNames -contains RoleDefinitionName) and carries no
+    # SectionStatus of its own — a failed lookup degrades every
+    # RoleDefinitionName to the raw GUID, IsPriv never matches, and PrivRoles
+    # empties silently regardless of what is actually assigned, so "no synced
+    # privileged accounts" was reported from role data that was never
+    # resolved. Check the raw RoleAssignments list, which still carries the
+    # (possibly-degraded) names, for that signature directly.
+    if (-not (Test-NRGRoleNamesResolved -Assignments $roles.Data['RoleAssignments'])) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Role definition names did not resolve (role-template lookup failed), so on-premises synced privileged accounts could not be reliably identified by role name. Not assessed.'
+        return
+    }
     if ($syncedPriv.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
@@ -885,6 +940,17 @@ function Test-NRGControlAADNoGuestInPrivRoles {
     if (@($roles.Data['RoleAssignments']).Count -eq 0 -and -not (Test-NRGRoleSectionCollected -Roles $roles -Section 'RoleAssignments')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
             -Detail 'Role assignment enumeration did not complete (see Exceptions) — guest privileged access could not be assessed.'
+        return
+    }
+    # The collector's roleDefinitions sub-query is independent of the
+    # assignments read above and has no SectionStatus of its own — a failed
+    # lookup degrades every RoleDefinitionName to the raw role-template GUID,
+    # so the name match above matches nothing and a guest Global Administrator
+    # reads as "no guest accounts hold privileged roles" (Satisfied). Detect
+    # that degradation directly rather than trust an empty $guestPriv.
+    if (-not (Test-NRGRoleNamesResolved -Assignments $roles.Data['RoleAssignments'])) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Role definition names did not resolve (role-template lookup failed), so guest privileged-role membership could not be reliably identified by role name. Not assessed.'
         return
     }
     if ($guestPriv.Count -eq 0) {

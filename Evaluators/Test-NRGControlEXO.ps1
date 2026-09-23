@@ -20,7 +20,8 @@ function Test-NRGControlEXOMailboxAudit {
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'EXO data not collected'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'EXO data not collected'
         return
     }
 
@@ -44,7 +45,8 @@ function Test-NRGControlEXOMailboxAudit {
             -Detail 'Mailbox audit logging enabled at organization level.'
     } else {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'Audit status could not be determined'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'Audit status could not be determined'
     }
 }
 
@@ -60,14 +62,16 @@ function Test-NRGControlEXOSmtpAuth {
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'EXO data not collected'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'EXO data not collected'
         return
     }
 
     $smtpAuth = $exoData.Data['SmtpAuthConfig']
     if (-not $smtpAuth) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'SMTP auth configuration not collected'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'SMTP auth configuration not collected'
         return
     }
 
@@ -106,7 +110,8 @@ function Test-NRGControlEXOAutoForward {
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'EXO data not collected'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'EXO data not collected'
         return
     }
 
@@ -157,14 +162,16 @@ function Test-NRGControlEXODKIM {
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'EXO data not collected'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'EXO data not collected'
         return
     }
 
     $dkimConfigs = @($exoData.Data['DkimSigningConfigs'] ?? @())
     if ($dkimConfigs.Count -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'No DKIM signing configuration found'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'No DKIM signing configuration found'
         return
     }
 
@@ -207,7 +214,8 @@ function Test-NRGControlEXOAntiPhish {
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'EXO data not collected'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'EXO data not collected'
         return
     }
 
@@ -216,7 +224,8 @@ function Test-NRGControlEXOAntiPhish {
 
     if (-not $defaultPolicy) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'No default anti-phishing policy found'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'No default anti-phishing policy found'
         return
     }
 
@@ -256,7 +265,8 @@ function Test-NRGControlEXOModernAuth {
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'EXO data not collected'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'EXO data not collected'
         return
     }
 
@@ -275,7 +285,8 @@ function Test-NRGControlEXOModernAuth {
             -Remediation $control.Remediation
     } else {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'Modern auth state could not be determined'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'Modern auth state could not be determined'
     }
 }
 
@@ -291,7 +302,8 @@ function Test-NRGControlEXOHonorDMARC {
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'EXO data not collected'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'EXO data not collected'
         return
     }
 
@@ -310,7 +322,8 @@ function Test-NRGControlEXOHonorDMARC {
             -Remediation $control.Remediation
     } else {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'No default anti-phishing policy found'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'No default anti-phishing policy found'
     }
 }
 
@@ -321,18 +334,20 @@ function Test-NRGControlEXOPop3 {
     $controlId = 'EXO-2.3'
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'EXO data not collected'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'EXO data not collected'
         return
     }
-    $citations = Get-NRGFrameworkCitations -ControlId $controlId
     $plans = @($exoData.Data['CASMailboxPlans'] ?? @())
     if ($plans.Count -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'CAS mailbox plan data not collected (Get-CASMailboxPlan needs EXO admin rights) — POP3 state not assessed.'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'CAS mailbox plan data not collected (Get-CASMailboxPlan needs EXO admin rights) — POP3 state not assessed.'
         return
     }
     $popOn = @($plans | Where-Object { (Get-NRGObjectField -Item $_ -Key 'PopEnabled') -eq $true })
@@ -359,18 +374,20 @@ function Test-NRGControlEXOImap {
     $controlId = 'EXO-2.4'
     $control   = Get-NRGControlById -ControlId $controlId
     if (-not $control) { return }
+    $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'EXO data not collected'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'EXO data not collected'
         return
     }
-    $citations = Get-NRGFrameworkCitations -ControlId $controlId
     $plans = @($exoData.Data['CASMailboxPlans'] ?? @())
     if ($plans.Count -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'CAS mailbox plan data not collected (Get-CASMailboxPlan needs EXO admin rights) — IMAP state not assessed.'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'CAS mailbox plan data not collected (Get-CASMailboxPlan needs EXO admin rights) — IMAP state not assessed.'
         return
     }
     $imapOn = @($plans | Where-Object { (Get-NRGObjectField -Item $_ -Key 'ImapEnabled') -eq $true })
@@ -402,7 +419,8 @@ function Test-NRGControlEXOCustomerLockbox {
     $exoData = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exoData -or -not $exoData.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'EXO data not collected'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'EXO data not collected'
         return
     }
 
@@ -413,7 +431,8 @@ function Test-NRGControlEXOCustomerLockbox {
     $orgConfig = $exoData.Data['OrganizationConfig']
     if (-not $orgConfig) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'Organization config not collected'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'Organization config not collected'
         return
     }
 
@@ -438,7 +457,8 @@ function Test-NRGControlEXOCustomerLockbox {
             -Remediation $control.Remediation
     } else {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'Customer Lockbox state not available — requires E5 or E5 Compliance license'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'Customer Lockbox state not available — requires E5 or E5 Compliance license'
     }
 }
 
@@ -464,7 +484,8 @@ function Test-NRGControlEXOSharedMailbox {
     $inv = Get-NRGRawData -Key 'EXO-Inventory'
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-            -Title $control.Title -Detail 'EXO inventory not collected'
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'EXO inventory not collected'
         return
     }
     # Empty is not clean. The collector reported success, but this section
@@ -472,7 +493,7 @@ function Test-NRGControlEXOSharedMailbox {
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-NRGSectionCollected $inv 'AllSharedMailboxes')) {
-        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category -Title $control.Title -Detail 'AllSharedMailboxes was not collected; not assessed.'
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category -Title $control.Title -FrameworkIds $citations -Detail 'AllSharedMailboxes was not collected; not assessed.'
         return
     }
 
@@ -480,6 +501,7 @@ function Test-NRGControlEXOSharedMailbox {
     if ($allShared.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'SharedMailboxes')) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title `
+            -FrameworkIds $citations `
             -Detail 'Shared mailbox enumeration did not complete (see Exceptions) — sign-in state could not be assessed.'
         return
     }
@@ -536,10 +558,10 @@ function Test-NRGControlEXOConnectionFilter {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $cf = Get-NRGRawData -Key 'EXO-ConnectionFilter'
     if (-not $cf -or -not $cf.Success) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Connection filter data not collected'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Connection filter data not collected'; return
     }
     $defaultCF = @($cf.Data['ConnectionFilter'] | Where-Object { $_.IsDefault }) | Select-Object -First 1
-    if (-not $defaultCF) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default connection filter found'; return }
+    if (-not $defaultCF) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'No default connection filter found'; return }
     $safeListEnabled = [bool]($defaultCF.EnableSafeList ?? $false)
     if (-not $safeListEnabled) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Microsoft safe list bypass is disabled on connection filter.'
@@ -555,10 +577,10 @@ function Test-NRGControlEXOOutboundLimits {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exo -or -not $exo.Success) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'EXO data not collected'; return
     }
     $defaultOutbound = @($exo.Data['OutboundSpamPolicies'] | Where-Object { $_.IsDefault }) | Select-Object -First 1
-    if (-not $defaultOutbound) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default outbound spam policy found'; return }
+    if (-not $defaultOutbound) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'No default outbound spam policy found'; return }
     # Discriminating signal: does the default outbound-spam policy notify an admin
     # when a user is detected sending spam (i.e. likely compromised)? CIS M365 and
     # Microsoft's MDO guidance recommend NotifyOutboundSpam = $true so a hijacked
@@ -585,17 +607,62 @@ function Test-NRGControlEXOAlertForwarding {
     [CmdletBinding()] param()
     $cid = 'EXO-3.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $cf = Get-NRGRawData -Key 'EXO-ConnectionFilter'
-    $alertPolicies = Get-NRGNestedProperty -Object $cf -Path 'Data.AlertPolicies' -Default $null
-    if (-not $cf -or -not $cf.Success -or -not $alertPolicies) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Alert policy data not collected'; return
+
+    # v4.13.1: scores Purview.ProtectionAlerts (Get-ProtectionAlert) policy
+    # configuration, not fired /security/alerts_v2 incidents — a live
+    # "Suspicious email forwarding" alert is evidence of an active BEC
+    # incident, not evidence that an alert policy exists, and no fired alert
+    # on a healthy tenant is not evidence one is missing. Mirrors EXO-3.4 /
+    # DEF-4.3, which read policy configuration for the same reason.
+    $pvw = Get-NRGRawData -Key 'Purview'
+    if (-not $pvw -or -not $pvw.Success) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Purview data not collected'
+        return
     }
-    $activeAlerts = Get-NRGNestedProperty -Object $alertPolicies -Path 'ActiveAlerts' -Default @()
-    $fwdAlerts = @($activeAlerts | Where-Object { $_.Title -match 'forward|redirect' })
-    if ($fwdAlerts.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Forwarding rule alert policy is active.'
+    $status = Get-NRGNestedProperty -Object $pvw -Path 'Data.SectionStatus.ProtectionAlerts' -Default $null
+    if ($status -ne 'Collected') {
+        $why = if ($status -eq 'Failed') { 'the Get-ProtectionAlert query failed (see Exceptions)' }
+               else { 'Get-ProtectionAlert was unavailable — this requires a Security & Compliance (IPPS) session' }
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Alert policy configuration could not be read: $why. Forwarding rule alerting was not assessed."
+        return
+    }
+
+    $policies = @($pvw.Data['ProtectionAlerts'] ?? @())
+    $pattern  = 'forward|redirect'
+    $matched  = @($policies | Where-Object {
+        (@([string]$_.Name, [string]$_.ThreatType, (@($_.Operation) -join ' ')) -join ' ') -match $pattern
+    })
+    $active = @($matched | Where-Object { -not $_.Disabled })
+
+    if ($active.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'No enabled alert policy was found covering new forwarding or redirect rule creation. A malicious forwarding rule is a common BEC persistence mechanism, and without this alert it can be created and go unseen until mail is already being exfiltrated. (Detection matches policy name, operation and threat type against forwarding/redirect wording, so a custom-named policy may exist and not be matched — verify in the portal before remediating.)' `
+            -CurrentValue "0 of $($policies.Count) alert policies match forwarding/redirect" `
+            -RequiredValue 'An enabled alert policy for new forwarding/redirect rule creation' `
+            -Remediation $ctrl.Remediation
+        return
+    }
+
+    $silent = @($active | Where-Object { @($_.NotifyUser).Count -eq 0 })
+    if ($silent.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "$($active.Count) enabled alert policy(ies) cover new forwarding/redirect rule creation, each with notification recipients."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No active alert for new forwarding/redirect rules detected. Verify alert policies are configured in Defender portal: Email forwarding activities.' -Remediation $ctrl.Remediation
+        $affected = @($silent | ForEach-Object {
+            [ordered]@{ DisplayName = [string]$_.Name; Severity = [string]$_.Severity; Recipients = 'none configured' }
+        })
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail "$($silent.Count) of $($active.Count) matching alert policy(ies) are enabled but notify nobody, so a new forwarding rule is recorded without anyone being told." `
+            -CurrentValue "$($silent.Count) matching policies with no recipients" `
+            -RequiredValue 'Forwarding/redirect rule alert enabled with notification recipients' `
+            -Remediation $ctrl.Remediation -AffectedObjects $affected
     }
 }
 
@@ -614,7 +681,8 @@ function Test-NRGControlEXOAlertVolume {
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'Purview data not collected'
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Purview data not collected'
         return
     }
     $status = Get-NRGNestedProperty -Object $pvw -Path 'Data.SectionStatus.ProtectionAlerts' -Default $null
@@ -622,7 +690,8 @@ function Test-NRGControlEXOAlertVolume {
         $why = if ($status -eq 'Failed') { 'the Get-ProtectionAlert query failed (see Exceptions)' }
                else { 'Get-ProtectionAlert was unavailable — this requires a Security & Compliance (IPPS) session' }
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail "Alert policy configuration could not be read: $why. Mail volume alerting was not assessed."
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Alert policy configuration could not be read: $why. Mail volume alerting was not assessed."
         return
     }
 
@@ -669,14 +738,14 @@ function Test-NRGControlEXOTransportAudit {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exo -or -not $exo.Success) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'EXO data not collected'; return
     }
     # Empty is not clean. The collector reported success, but this section
     # may not have landed — a failed sub-query leaves it absent or empty,
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-NRGSectionCollected $exo 'OrganizationConfig')) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'OrganizationConfig was not collected; not assessed.'
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'OrganizationConfig was not collected; not assessed.'
         return
     }
     $auditDisabled = Get-NRGNestedProperty -Object $exo -Path 'Data.OrganizationConfig.AuditDisabled' -Default $null
@@ -695,12 +764,14 @@ function Test-NRGControlEXOAuditAgeLimit {
     $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exo -or -not $exo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'EXO data not collected'; return
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'EXO data not collected'; return
     }
     $sample = Get-NRGNestedProperty -Object $exo -Path 'Data.MailboxAuditSummary.SampleMailboxAudit' -Default $null
     if (-not $sample) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'Sample mailbox audit data not collected'; return
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Sample mailbox audit data not collected'; return
     }
     $ageLimit = [string]($sample.AuditLogAgeLimit ?? '90.00:00:00')
     $days = 90
@@ -730,14 +801,15 @@ function Test-NRGControlEXOAdminAudit {
     $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exo -or -not $exo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'EXO data not collected'; return
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'EXO data not collected'; return
     }
     # Empty is not clean. The collector reported success, but this section
     # may not have landed — a failed sub-query leaves it absent or empty,
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-NRGSectionCollected $exo 'OrganizationConfig')) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'OrganizationConfig was not collected; not assessed.'
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'OrganizationConfig was not collected; not assessed.'
         return
     }
     $orgAudit = Get-NRGNestedProperty -Object $exo -Path 'Data.OrganizationConfig.AuditDisabled' -Default $null
@@ -761,7 +833,8 @@ function Test-NRGControlEXOSafeAttachmentsSPO {
     $def = Get-NRGRawData -Key 'Defender-Policies'
     if (-not $def -or -not $def.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'Defender data not collected'; return
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Defender data not collected'; return
     }
     $sa = $def.Data['SafeAttachments']
     if (-not $sa -or -not $sa.Available) {
@@ -778,10 +851,14 @@ function Test-NRGControlEXOSafeAttachmentsSPO {
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
             -Detail 'Safe Attachments active policies cover file scanning. Verify SharePoint/OneDrive/Teams file ATP is enabled in Defender portal > Global settings.'
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
-            -Detail 'Safe Attachments for SharePoint/OneDrive/Teams requires manual verification: Defender portal > Policies > Safe Attachments > Global settings > enable for SPO/OD/Teams.' `
-            -Remediation $ctrl.Remediation
+        # Advisory controls never claim compliance: whether SPO/OD/Teams file
+        # ATP is enabled globally is not exposed by any supported Graph/EXO
+        # read API, so absent an enabled active policy this cannot be scored
+        # — NotApplicable, never Partial (Partial is 0.5 credit toward the
+        # compliance score for a verdict the tool never computed).
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Safe Attachments for SharePoint/OneDrive/Teams requires manual verification: not exposed by any supported Graph/EXO read API. Check Defender portal > Policies > Safe Attachments > Global settings > enable for SPO/OD/Teams.'
     }
 }
 
@@ -793,13 +870,15 @@ function Test-NRGControlEXOAntiSpamInbound {
     $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exo -or -not $exo.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'EXO data not collected'; return
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'EXO data not collected'; return
     }
     $policies = @($exo.Data['AntiSpamPolicies'] ?? @())
     $default  = $policies | Where-Object { $_.IsDefault } | Select-Object -First 1
     if (-not $default) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'No default anti-spam policy found'; return
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'No default anti-spam policy found'; return
     }
     $gaps = @()
     if ($default.SpamAction     -ne 'MoveToJmf' -and $default.SpamAction -ne 'Quarantine') { $gaps += "SpamAction=$($default.SpamAction)" }
@@ -828,7 +907,7 @@ function Test-NRGControlEXOPerUserAudit {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exo -or -not $exo.Success) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'EXO data not collected'; return
     }
     # The authoritative signal is the org-wide master switch. Since 2019 Microsoft
     # enables mailbox audit by default for every mailbox; default audit ignores the
@@ -837,7 +916,7 @@ function Test-NRGControlEXOPerUserAudit {
     # org-wide default — that IS the real, assessable gap.
     $auditDisabled = Get-NRGNestedProperty -Object $exo -Path 'Data.OrganizationConfig.AuditDisabled' -Default $null
     if ($null -eq $auditDisabled) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Organization audit configuration not collected; not assessed.'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Organization audit configuration not collected; not assessed.'; return
     }
     $sampleAll = Get-NRGNestedProperty -Object $exo -Path 'Data.MailboxAuditSummary.SampleMailboxAudit.AllEnabled' -Default $null
     if (-not [bool]$auditDisabled) {
@@ -859,11 +938,11 @@ function Test-NRGControlEXOPriorityAccountProtection {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $def = Get-NRGRawData -Key 'Defender-Policies'
     if (-not $def -or -not $def.Success) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Defender data not collected'; return
     }
     $ap = $def.Data['AntiPhishing']
     if (-not $ap -or -not $ap.Available) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Anti-phishing (impersonation) policy not available — requires Defender for Office 365 Plan 1.'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Anti-phishing (impersonation) policy not available — requires Defender for Office 365 Plan 1.'; return
     }
     # Impersonation protection for named VIPs is EnableTargetedUserProtection with a
     # non-empty TargetedUsersToProtect list, taking action other than NoAction.
@@ -886,11 +965,11 @@ function Test-NRGControlEXOSafeSenderOverride {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
     if (-not $exo -or -not $exo.Success) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO data not collected'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'EXO data not collected'; return
     }
     $antiSpamPolicies = @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @())
     $defaultPolicy    = @($antiSpamPolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'IsDefault') }) | Select-Object -First 1
-    if (-not $defaultPolicy) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No default policy'; return }
+    if (-not $defaultPolicy) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'No default policy'; return }
     $allowedDomains  = Get-NRGObjectField -Item $defaultPolicy -Key 'AllowedSenderDomains' -Default @()
     $allowListBypass = $allowedDomains -and @($allowedDomains).Count -gt 0
     if (-not $allowListBypass) {
@@ -912,7 +991,8 @@ function Test-NRGControlEXOMailboxForwarding {
     $inv = Get-NRGRawData -Key 'EXO-Inventory'
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'EXO inventory data not collected'
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'EXO inventory data not collected'
         return
     }
     # Empty is not clean. The collector reported success, but this section
@@ -920,7 +1000,7 @@ function Test-NRGControlEXOMailboxForwarding {
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-NRGSectionCollected $inv 'ForwardingMailboxes')) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'ForwardingMailboxes was not collected; not assessed.'
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'ForwardingMailboxes was not collected; not assessed.'
         return
     }
 
@@ -938,6 +1018,7 @@ function Test-NRGControlEXOMailboxForwarding {
     if ($count -eq 0 -and $unresolved.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title `
+            -FrameworkIds $cit `
             -Detail "$($unresolved.Count) forwarding target(s) could not be resolved to an address and so could not be classified. Not assessed rather than reported clean."
         return
     }
@@ -978,7 +1059,8 @@ function Test-NRGControlEXOInboxRulesForwarding {
     $inv = Get-NRGRawData -Key 'EXO-Inventory'
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'EXO inventory data not collected'
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'EXO inventory data not collected'
         return
     }
     # Empty is not clean. The collector reported success, but this section
@@ -986,7 +1068,7 @@ function Test-NRGControlEXOInboxRulesForwarding {
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-NRGSectionCollected $inv 'InboxRulesForwarding')) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'InboxRulesForwarding was not collected; not assessed.'
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'InboxRulesForwarding was not collected; not assessed.'
         return
     }
 
@@ -1016,6 +1098,7 @@ function Test-NRGControlEXOInboxRulesForwarding {
     if ($count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'InboxRulesForwarding')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title `
+            -FrameworkIds $cit `
             -Detail 'Inbox rule sweep did not complete (see Exceptions) — forwarding rules could not be assessed. Re-run before treating this control as clean.'
         return
     }
@@ -1028,7 +1111,8 @@ function Test-NRGControlEXOInboxRulesForwarding {
             'A rule the tool could not read is not a rule that forwards nowhere — review these manually before treating this control as clean.'
         ) -join ' '
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail $detail
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail $detail
         return
     }
 
@@ -1069,7 +1153,8 @@ function Test-NRGControlEXOAuditDisabledMailboxes {
     $inv = Get-NRGRawData -Key 'EXO-Inventory'
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'EXO inventory data not collected'
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'EXO inventory data not collected'
         return
     }
     # Empty is not clean. The collector reported success, but this section
@@ -1077,7 +1162,7 @@ function Test-NRGControlEXOAuditDisabledMailboxes {
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-NRGSectionCollected $inv 'AuditDisabledMailboxes')) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AuditDisabledMailboxes was not collected; not assessed.'
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AuditDisabledMailboxes was not collected; not assessed.'
         return
     }
 
@@ -1120,7 +1205,8 @@ function Test-NRGControlEXOSmtpAuthExceptions {
     $inv = Get-NRGRawData -Key 'EXO-Inventory'
     if (-not $inv -or -not $inv.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'EXO inventory data not collected'
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'EXO inventory data not collected'
         return
     }
     # Empty is not clean. The collector reported success, but this section
@@ -1128,7 +1214,7 @@ function Test-NRGControlEXOSmtpAuthExceptions {
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-NRGSectionCollected $inv 'SmtpAuthEnabledPerUser')) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SmtpAuthEnabledPerUser was not collected; not assessed.'
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'SmtpAuthEnabledPerUser was not collected; not assessed.'
         return
     }
 
