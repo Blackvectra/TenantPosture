@@ -255,11 +255,10 @@ Describe 'NIST device and endpoint guide' {
 
             foreach ($it in @($script:Items | Where-Object { $_.Scope -eq 'Attested' })) {
                 $section = ($txt -split "### $([regex]::Escape($it.NistControl)) — ")[1]
-                if ($section) {
-                    $section = ($section -split '(?m)^### ')[0]
-                    $section | Should -Not -Match 'Assessment result' `
-                        -Because "$($it.NistControl) is attested and must carry no verdict"
-                }
+                $section | Should -Not -BeNullOrEmpty -Because "heading for $($it.NistControl) not found — the split pattern must match the publisher's actual heading format"
+                $section = ($section -split '(?m)^### ')[0]
+                $section | Should -Not -Match 'Assessment result' `
+                    -Because "$($it.NistControl) is attested and must carry no verdict"
             }
         }
     }

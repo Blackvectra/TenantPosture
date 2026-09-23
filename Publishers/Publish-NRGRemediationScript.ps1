@@ -36,14 +36,17 @@ function Publish-NRGRemediationScript {
         return ([string]$v) -replace "'", "''"
     }
 
-    # Escape a value for safe inclusion inside a single-line PowerShell comment
-    # in the GENERATED script. Strips CR/LF so a value containing a newline
-    # cannot terminate the comment and start a new code line. We also drop the
+    # Escape a value for safe inclusion inside a PowerShell comment in the
+    # GENERATED script — including the `<# ... #>` block-comment help header,
+    # where these values are actually used. Strips CR/LF so a value containing
+    # a newline cannot terminate a single-line comment and start a new code
+    # line, and also neutralizes `#>` so a value cannot terminate the block
+    # comment itself and have the remainder parsed as code. We also drop the
     # single quote to keep the value harmless if a future change moves the
     # value into a literal context.
     function EscPs1Comment([object]$v) {
         if ($null -eq $v) { return '' }
-        return ([string]$v) -replace '[\r\n]+', ' '
+        return ([string]$v) -replace '[\r\n]+', ' ' -replace '#>', '# >'
     }
 
     # Raw values

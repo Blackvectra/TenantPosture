@@ -33,11 +33,20 @@ function Invoke-NRGCollectPurview {
             # is the list of alerts that have triggered — a different question
             # from whether anyone is configured to be told when they do.
             ProtectionAlerts    = @()
-            # Per-section outcome: an empty ProtectionAlerts list means "no alert
-            # policies configured" only when the query actually ran. Without this
-            # the DEF-3.4 / DEF-4.3 evaluators cannot tell that apart from a
-            # missing IPPS session and would report a confident Gap either way.
-            SectionStatus       = @{ ProtectionAlerts = 'NotRun'; DLPRules = 'NotRun' }
+            # Per-section outcome: an empty list means "no alert policies
+            # configured" (or "no DLP policies", "no retention policies", etc.)
+            # only when the query actually ran. Without a status entry per
+            # section, a failed query and a genuinely empty tenant are
+            # indistinguishable and the evaluators would report a confident
+            # Gap/Partial either way — see CLAUDE.md "Empty is not clean".
+            SectionStatus       = @{
+                AuditConfig       = 'NotRun'
+                DLPPolicies       = 'NotRun'
+                DLPRules          = 'NotRun'
+                RetentionPolicies = 'NotRun'
+                SensitivityLabels = 'NotRun'
+                ProtectionAlerts  = 'NotRun'
+            }
         }
     }
 
@@ -54,7 +63,9 @@ function Invoke-NRGCollectPurview {
                     }
                     $result.Data.UnifiedAuditEnabled = [bool]$audit.UnifiedAuditLogIngestionEnabled
                 }
+                $result.Data.SectionStatus.AuditConfig = 'Collected'
             } catch {
+                $result.Data.SectionStatus.AuditConfig = 'Failed'
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     Register-NRGException -Source 'Purview-Audit' -Message $_.Exception.Message
                 }
@@ -75,7 +86,9 @@ function Invoke-NRGCollectPurview {
                         }
                     })
                 }
+                $result.Data.SectionStatus.DLPPolicies = 'Collected'
             } catch {
+                $result.Data.SectionStatus.DLPPolicies = 'Failed'
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     Register-NRGException -Source 'Purview-DLP' -Message $_.Exception.Message
                 }
@@ -127,7 +140,9 @@ function Invoke-NRGCollectPurview {
                         }
                     })
                 }
+                $result.Data.SectionStatus.RetentionPolicies = 'Collected'
             } catch {
+                $result.Data.SectionStatus.RetentionPolicies = 'Failed'
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     Register-NRGException -Source 'Purview-Retention' -Message $_.Exception.Message
                 }
@@ -147,7 +162,9 @@ function Invoke-NRGCollectPurview {
                         }
                     })
                 }
+                $result.Data.SectionStatus.SensitivityLabels = 'Collected'
             } catch {
+                $result.Data.SectionStatus.SensitivityLabels = 'Failed'
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     Register-NRGException -Source 'Purview-Labels' -Message $_.Exception.Message
                 }

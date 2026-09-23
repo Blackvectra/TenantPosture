@@ -30,6 +30,21 @@ function Invoke-NRGCollectEXOMailboxConfig {
             DkimSigningConfigs       = @()
             AntiPhishPolicies        = @()
             AntiSpamPolicies         = @()
+            # Each of these seven sections runs its own independent try/catch
+            # below so one query failing does not abort the rest, and Success
+            # is set $true for the whole collector regardless. That makes an
+            # empty list ambiguous ("queried, found nothing" vs. "the query
+            # failed") — SectionStatus is the explicit contract that tells
+            # Test-NRGSectionCollected which is which, per CLAUDE.md.
+            SectionStatus            = @{
+                OutboundSpamPolicies = 'NotRun'
+                CASMailboxPlans      = 'NotRun'
+                RemoteDomains        = 'NotRun'
+                AcceptedDomains      = 'NotRun'
+                DkimSigningConfigs   = 'NotRun'
+                AntiPhishPolicies    = 'NotRun'
+                AntiSpamPolicies     = 'NotRun'
+            }
         }
     }
 
@@ -68,7 +83,9 @@ function Invoke-NRGCollectEXOMailboxConfig {
                     RecipientLimitPerDay          = [int]($_.RecipientLimitPerDay -as [int])
                 }
             })
+            $result.Data.SectionStatus.OutboundSpamPolicies = 'Collected'
         } catch {
+            $result.Data.SectionStatus.OutboundSpamPolicies = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-OutboundSpam' -Message $_.Exception.Message
             }
@@ -88,7 +105,9 @@ function Invoke-NRGCollectEXOMailboxConfig {
                     ImapEnabled = if ($null -ne $_.ImapEnabled) { [bool]$_.ImapEnabled } else { $true }
                 }
             })
+            $result.Data.SectionStatus.CASMailboxPlans = 'Collected'
         } catch {
+            $result.Data.SectionStatus.CASMailboxPlans = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-CASMailboxPlans' -Message $_.Exception.Message
             }
@@ -105,7 +124,9 @@ function Invoke-NRGCollectEXOMailboxConfig {
                     IsDefault          = $_.DomainName -eq '*'
                 }
             })
+            $result.Data.SectionStatus.RemoteDomains = 'Collected'
         } catch {
+            $result.Data.SectionStatus.RemoteDomains = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-RemoteDomains' -Message $_.Exception.Message
             }
@@ -122,7 +143,9 @@ function Invoke-NRGCollectEXOMailboxConfig {
                     IsDefault    = [bool]$_.Default
                 }
             })
+            $result.Data.SectionStatus.AcceptedDomains = 'Collected'
         } catch {
+            $result.Data.SectionStatus.AcceptedDomains = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-AcceptedDomains' -Message $_.Exception.Message
             }
@@ -210,7 +233,9 @@ function Invoke-NRGCollectEXOMailboxConfig {
                     RotateOnDate    = [string]($_.RotateOnDate ?? '')
                 }
             })
+            $result.Data.SectionStatus.DkimSigningConfigs = 'Collected'
         } catch {
+            $result.Data.SectionStatus.DkimSigningConfigs = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-DKIM' -Message $_.Exception.Message
             }
@@ -234,7 +259,9 @@ function Invoke-NRGCollectEXOMailboxConfig {
                     TargetedDomainsToProtect         = @($_.TargetedDomainsToProtect ?? @())
                 }
             })
+            $result.Data.SectionStatus.AntiPhishPolicies = 'Collected'
         } catch {
+            $result.Data.SectionStatus.AntiPhishPolicies = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-AntiPhish' -Message $_.Exception.Message
             }
@@ -254,7 +281,9 @@ function Invoke-NRGCollectEXOMailboxConfig {
                     ZapEnabled          = [bool]$_.ZapEnabled
                 }
             })
+            $result.Data.SectionStatus.AntiSpamPolicies = 'Collected'
         } catch {
+            $result.Data.SectionStatus.AntiSpamPolicies = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-AntiSpam' -Message $_.Exception.Message
             }

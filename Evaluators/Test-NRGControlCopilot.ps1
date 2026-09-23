@@ -34,6 +34,18 @@ function script:Get-NRGCopilotRaw {
     return $raw
 }
 
+# Helper: was Purview raw data actually collected? PPL-3.2 (DLP) and PPL-3.5
+# (audit) have NO Graph fallback — Invoke-NRGCollectM365Copilot sources both
+# exclusively from the Purview/IPPS collector, and Purview is skipped by
+# default while the Copilot collector always runs. An empty DLP list or a
+# disabled audit flag with Purview absent means "not evaluated", not "no
+# coverage" — check the Purview raw data directly rather than scoring it.
+function script:Test-NRGCopilotPurviewCollected {
+    if (-not (Get-Command Get-NRGRawData -ErrorAction SilentlyContinue)) { return $false }
+    $purviewRaw = Get-NRGRawData -Key 'Purview'
+    return [bool]($purviewRaw -and $purviewRaw.Success)
+}
+
 # ── PPL-3.1  M365 Copilot Sensitivity Label Enforcement ──────────────────────
 function Test-NRGControlAICopilotSensitivityLabels {
     [CmdletBinding()] param()
@@ -137,6 +149,11 @@ function Test-NRGControlAICopilotDLP {
             -RequiredValue 'DLP policy with Locations explicitly including Microsoft 365 Copilot' `
             -Detail "DLP policies referencing Copilot were found ($($dlp.Count)) but the Copilot location is not in the confirmed workload set. Verify in Purview > DLP > Policy > Locations that Microsoft 365 Copilot is included." `
             -Remediation $ctrl.Remediation
+    } elseif (-not (Test-NRGCopilotPurviewCollected)) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' `
+            -Category $ctrl.Category -Title $ctrl.Title `
+            -FrameworkIds $cit `
+            -Detail "Copilot is licensed to $licensed user(s) but DLP coverage could not be evaluated — the Purview/IPPS session did not collect data (there is no Graph fallback for Copilot DLP policies). Run the assessment with Purview included to verify DLP coverage for Copilot interactions."
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' `
             -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity `
@@ -291,7 +308,12 @@ function Test-NRGControlAICopilotInteractionData {
     $audit = [bool]($d.AuditCopilotEnabled ?? $false)
     $retention = $d.CopilotInteractionRetention
 
-    if (-not $audit) {
+    if (-not $audit -and -not (Test-NRGCopilotPurviewCollected)) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' `
+            -Category $ctrl.Category -Title $ctrl.Title `
+            -FrameworkIds $cit `
+            -Detail "Copilot is licensed to $licensed user(s) but Unified Audit Log status for Copilot interactions could not be evaluated — the Purview/IPPS session did not collect data. Run the assessment with Purview included to verify Copilot audit logging."
+    } elseif (-not $audit) {
         Add-NRGFinding -ControlId $cid -State 'Gap' `
             -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity `
             -FrameworkIds $cit `

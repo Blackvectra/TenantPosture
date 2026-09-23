@@ -111,10 +111,30 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             $content | Should -Match '\$resolvedFile\.StartsWith\(\s*\$resolvedModule' -Because 'StartsWith-bound against the canonicalized module root (OWASP A01)'
         }
 
-        It 'HTML auto-open is bound-checked against output directory' {
-            $orchPath = Join-Path $script:RepoRoot 'Invoke-NRGAssessment.ps1'
-            $content  = Get-Content -LiteralPath $orchPath -Raw
-            $content | Should -Match 'StartsWith.*resolvedOutput|resolvedOutput.*StartsWith' -Because 'Auto-open must verify file is inside output dir'
+        It 'HTML auto-open is bound-checked against output directory' -Skip:(-not (Get-Command Open-NRGReport -ErrorAction SilentlyContinue)) {
+            # v4.11.2 audit fix (M-4), v4.11.3 review follow-up:
+            # The original test enforced the invariant via regex-on-source
+            # ('StartsWith.*resolvedOutput'), which silently passed because
+            # the orchestrator's DOCUMENTATION COMMENT contained those
+            # words — not any actual bounds-check code. v4.11.2 made the
+            # test Skip-gated until Open-NRGReport exists, but the body
+            # was a tautology ($true | Should -BeTrue) — meaning the test
+            # would still enforce nothing the moment the helper landed.
+            #
+            # v4.11.3 gives the body a real assertion: when Open-NRGReport
+            # is loaded, call it with a path explicitly OUTSIDE the
+            # operator's output directory and assert the helper throws.
+            # This makes path-traversal in any future auto-open implementation
+            # caught by CI rather than shipped silently.
+            $outRoot = Join-Path ([IO.Path]::GetTempPath()) ("nrg-bounds-" + [Guid]::NewGuid().ToString('N').Substring(0,8))
+            $null = [System.IO.Directory]::CreateDirectory($outRoot)
+            try {
+                $traversalPath = Join-Path $outRoot '..\..\etc\passwd'
+                { Open-NRGReport -Path $traversalPath -OutputRoot $outRoot } |
+                    Should -Throw -Because 'auto-open must refuse paths outside $resolvedOutput'
+            } finally {
+                Remove-Item -LiteralPath $outRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
         }
 
         It 'controls.json loader verifies file resolves inside module root' {
@@ -335,11 +355,31 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
 
         It 'Disconnect-NRGServices called inside finally block' {
             $orchPath = Join-Path $script:RepoRoot 'Invoke-NRGAssessment.ps1'
-            $content  = Get-Content -LiteralPath $orchPath -Raw
-            # Verify Disconnect is in the finally block, not just anywhere
-            $finallyIdx = $content.IndexOf('finally')
-            $disconnectIdx = $content.IndexOf('Disconnect-NRGServices')
-            $disconnectIdx | Should -BeGreaterThan $finallyIdx -Because 'Disconnect must be inside the finally block'
+            # AST-verified, not a text-index comparison: the first literal
+            # occurrence of the word "finally" in the file can be a COMMENT
+            # (e.g. "# ... wrap the entire run in try/finally so ...") that
+            # precedes the real `finally {` block, which would make the old
+            # $disconnectIdx -gt $finallyIdx check pass for ANY Disconnect
+            # call anywhere after that comment, inside the finally block or
+            # not. Parse the file and confirm the call is actually nested
+            # inside a TryStatementAst's Finally block.
+            $tokens = $null
+            $parseErrors = $null
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($orchPath, [ref]$tokens, [ref]$parseErrors)
+            $tryStatements = @($ast.FindAll({
+                param($node) $node -is [System.Management.Automation.Language.TryStatementAst]
+            }, $true))
+            $foundInFinally = $false
+            foreach ($try in $tryStatements) {
+                if ($null -eq $try.Finally) { continue }
+                $calls = @($try.Finally.FindAll({
+                    param($node)
+                    $node -is [System.Management.Automation.Language.CommandAst] -and
+                    $node.GetCommandName() -eq 'Disconnect-NRGServices'
+                }, $true))
+                if ($calls.Count -gt 0) { $foundInFinally = $true; break }
+            }
+            $foundInFinally | Should -BeTrue -Because 'Disconnect-NRGServices must be invoked inside an actual try/finally Finally block (AST-verified)'
         }
 
         It 'Connect-NRGServices uses process-scoped MSAL token cache' {

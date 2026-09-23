@@ -85,7 +85,18 @@ function Get-NRGAssessmentScope {
         # Without it the controls those evaluators own emit nothing and get
         # reported as a tool fault, which is a lie about a mode the operator
         # chose on purpose.
-        [switch] $QuickScan
+        [switch] $QuickScan,
+
+        # Optional: the EvaluatorFunction names actually executed this run
+        # (e.g. under -Quick, only Critical/High-owning evaluators run). When
+        # provided, a control with no finding is filed under NotEvaluatedThisMode
+        # ONLY if its own EvaluatorFunction was excluded from this set;
+        # otherwise it is filed under NoResult, because its evaluator DID run
+        # and a genuine bug in it must not hide behind the quick-scan
+        # explanation. When omitted, every no-finding control under -Quick is
+        # filed under NotEvaluatedThisMode as before (unknown execution set).
+        [AllowNull()]
+        [string[]] $ExecutedEvaluators
     )
 
     Set-StrictMode -Version Latest
@@ -174,6 +185,26 @@ function Get-NRGAssessmentScope {
         }
     }
 
+    # Coverage state, fetched early so the classifier can recognize a
+    # collector the operator deliberately disabled (-SkipDNS / -SkipTeams /
+    # etc.) and tell that apart from a collector that tried and failed. A
+    # deliberate skip is an operator choice, not a collection fault, so it
+    # must not read as "could not be assessed ... re-run once the cause is
+    # resolved" — Register-NRGCoverage -Status 'Skipped' is how the entry
+    # point records that choice for this classifier to see.
+    $cov = $Coverage
+    if ($null -eq $cov -and (Get-Command Get-NRGCoverage -ErrorAction SilentlyContinue)) {
+        try { $cov = Get-NRGCoverage } catch { $cov = $null }
+    }
+    $skippedCollectors = [System.Collections.Generic.HashSet[string]]::new()
+    if ($null -ne $cov) {
+        foreach ($k in @($cov.Keys)) {
+            $entry  = $cov[$k]
+            $status = [string](Get-NRGObjectField -Item $entry -Key 'Status' -Default '')
+            if ($status -eq 'Skipped') { $null = $skippedCollectors.Add([string]$k) }
+        }
+    }
+
     # Prose patterns, derived from what the evaluators ACTUALLY emit (every
     # evaluator was run against empty state and the distinct Detail strings
     # collected) rather than from what a classifier author imagines they say.
@@ -217,9 +248,17 @@ function Get-NRGAssessmentScope {
 
         if (-not $byId.ContainsKey($cid)) {
             $workload[$wl].Unscored++
-            if ($QuickScan) {
-                # -Quick drops whole evaluators on purpose. Calling that a tool
-                # fault would be a lie about a mode the operator chose.
+            $evalFn = [string](Get-NRGObjectField -Item $c -Key 'EvaluatorFunction' -Default '')
+            # -Quick drops whole evaluators on purpose — but only the ones it
+            # actually dropped. When we know which evaluators ran this pass,
+            # a control whose OWN evaluator ran and still emitted nothing is a
+            # tool fault, not a quick-scan omission; calling it the latter
+            # would hide a real bug behind a mode the operator chose on
+            # purpose. Without that knowledge, fall back to the old behavior.
+            $skippedThisMode = $QuickScan -and (
+                $null -eq $ExecutedEvaluators -or -not $evalFn -or ($ExecutedEvaluators -notcontains $evalFn)
+            )
+            if ($skippedThisMode) {
                 $row.Reason = 'Not evaluated: this run used quick-scan mode, which skips this control''s evaluator.'
                 $notThisMode.Add([pscustomobject]$row)
             } else {
@@ -270,14 +309,23 @@ function Get-NRGAssessmentScope {
         #    the collector reported failure. Same signal the evaluator gated
         #    on, so it cannot disagree with the finding. Only consulted when
         #    raw data is present in this run.
-        if ($haveRawData -and $row.Collector) {
-            $failedDep = $null
+        if ($row.Collector) {
+            $failedDep  = $null
+            $skippedDep = $null
             foreach ($depKey in @($row.Collector -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+                if ($skippedCollectors.Contains($depKey)) { $skippedDep = $depKey; break }
+                if (-not $haveRawData) { continue }
                 $entry = $null
                 try { $entry = $rd[$depKey] } catch { $entry = $null }
                 if ($null -eq $entry) { $failedDep = $depKey; break }
                 $ok = Get-NRGObjectField -Item $entry -Key 'Success' -Default $null
                 if ($null -ne $ok -and -not $ok) { $failedDep = $depKey; break }
+            }
+            if ($skippedDep) {
+                # An operator choice (-Skip flag), not a collection fault.
+                $row.Reason = "The '$skippedDep' collector was skipped for this run by operator choice (e.g. a -Skip flag), not a collection failure. $detail".Trim()
+                $notThisMode.Add([pscustomobject]$row)
+                continue
             }
             if ($failedDep) {
                 $row.Reason = "The '$failedDep' collector did not return data, so this control could not be assessed. $detail".Trim()
@@ -317,16 +365,16 @@ function Get-NRGAssessmentScope {
     }
 
     # ── Collector coverage that did not complete ─────────────────────────────
+    # $cov was already fetched above so the classifier could see 'Skipped'
+    # collectors. A deliberate skip is an operator choice, not an incomplete
+    # run, so it is excluded here too — it must not appear as a coverage
+    # issue alongside genuine failures.
     $covIssues = [System.Collections.Generic.List[object]]::new()
-    $cov = $Coverage
-    if ($null -eq $cov -and (Get-Command Get-NRGCoverage -ErrorAction SilentlyContinue)) {
-        try { $cov = Get-NRGCoverage } catch { $cov = $null }
-    }
     if ($null -ne $cov) {
         foreach ($k in @($cov.Keys | Sort-Object)) {
             $entry  = $cov[$k]
             $status = [string](Get-NRGObjectField -Item $entry -Key 'Status' -Default '')
-            if ($status -eq 'Collected' -or [string]::IsNullOrWhiteSpace($status)) { continue }
+            if ($status -eq 'Collected' -or $status -eq 'Skipped' -or [string]::IsNullOrWhiteSpace($status)) { continue }
             $covIssues.Add([pscustomobject][ordered]@{
                 Family = [string]$k
                 Status = $status

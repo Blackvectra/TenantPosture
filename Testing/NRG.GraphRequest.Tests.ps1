@@ -72,5 +72,16 @@ Describe 'Invoke-NRGGraphRequest' {
         It 'Rejects an unsupported HTTP method' {
             { Invoke-NRGGraphRequest -Method FROBNICATE -Uri 'https://x' } | Should -Throw
         }
+
+        It 'Rejects write verbs — the tool is read-only without exception' {
+            { Invoke-NRGGraphRequest -Method POST -Uri 'https://x' }   | Should -Throw
+            { Invoke-NRGGraphRequest -Method PUT -Uri 'https://x' }    | Should -Throw
+            { Invoke-NRGGraphRequest -Method PATCH -Uri 'https://x' }  | Should -Throw
+            { Invoke-NRGGraphRequest -Method DELETE -Uri 'https://x' } | Should -Throw
+        }
+
+        It 'Has no -Body parameter — a write verb has no way to carry a payload' {
+            (Get-Command Invoke-NRGGraphRequest).Parameters.ContainsKey('Body') | Should -BeFalse
+        }
     }
 }

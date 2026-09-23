@@ -101,16 +101,19 @@ function Invoke-NRGEmailCollectMailbox {
                 foreach ($mm in $urlMatches) { $urls += $mm.Value }
             }
             $recipients = @()
+            # emailAddress is an optional nested object on a recipient row —
+            # a bare $r.emailAddress.address chain throws under StrictMode at
+            # the first absent intermediate, which the truthy-guard here does
+            # not prevent (the guard's own dot-reads can throw first).
             foreach ($r in @($m.toRecipients) + @($m.ccRecipients) + @($m.bccRecipients)) {
-                if ($r -and $r.emailAddress -and $r.emailAddress.address) {
-                    $recipients += $r.emailAddress.address.ToLowerInvariant()
-                }
+                $addr = [string](Get-NRGNestedProperty -Object $r -Path 'emailAddress.address' -Default '')
+                if ($addr) { $recipients += $addr.ToLowerInvariant() }
             }
             [ordered]@{
                 Id              = $m.id
                 Subject         = [string]$m.subject
                 SentDateTime    = $m.sentDateTime
-                FromAddress     = if ($m.from -and $m.from.emailAddress) { $m.from.emailAddress.address } else { $null }
+                FromAddress     = Get-NRGNestedProperty -Object $m -Path 'from.emailAddress.address' -Default $null
                 Recipients      = $recipients
                 HasAttachments  = [bool]$m.hasAttachments
                 BodyURLs        = @($urls | Select-Object -Unique)
@@ -120,7 +123,7 @@ function Invoke-NRGEmailCollectMailbox {
         $sentOut.Data = [ordered]@{
             WindowDays = $WindowDays
             Cutoff     = $cutoff
-            Count      = $normalized.Count
+            Count      = @($normalized).Count
             Messages   = @($normalized)
         }
         $sentOut.Success = $true
@@ -152,12 +155,15 @@ function Invoke-NRGEmailCollectMailbox {
         }
         $normalized = foreach ($m in $inboxItems) {
             $urls = @()
-            if ($m.bodyPreview) {
-                $urlMatches = [regex]::Matches([string]$m.bodyPreview, 'https?://[^\s"''<>)]+')
+            $bodyPreview = [string](Get-NRGObjectField -Item $m -Key 'bodyPreview' -Default '')
+            if ($bodyPreview) {
+                $urlMatches = [regex]::Matches($bodyPreview, 'https?://[^\s"''<>)]+')
                 foreach ($mm in $urlMatches) { $urls += $mm.Value }
             }
-            $fromAddr = if ($m.from -and $m.from.emailAddress) { $m.from.emailAddress.address } else { $null }
-            $fromName = if ($m.from -and $m.from.emailAddress) { $m.from.emailAddress.name }    else { $null }
+            # from.emailAddress is an optional nested object — a bare chained
+            # read throws under StrictMode at the first absent intermediate.
+            $fromAddr = Get-NRGNestedProperty -Object $m -Path 'from.emailAddress.address' -Default $null
+            $fromName = Get-NRGNestedProperty -Object $m -Path 'from.emailAddress.name' -Default $null
             [ordered]@{
                 Id               = $m.id
                 Subject          = [string]$m.subject
@@ -165,13 +171,13 @@ function Invoke-NRGEmailCollectMailbox {
                 FromAddress      = $fromAddr
                 FromName         = $fromName
                 BodyURLs         = @($urls | Select-Object -Unique)
-                BodyPreviewLen   = if ($m.bodyPreview) { $m.bodyPreview.Length } else { 0 }
+                BodyPreviewLen   = $bodyPreview.Length
             }
         }
         $inboxOut.Data = [ordered]@{
             WindowDays = 30
             Cutoff     = $inboxCutoff
-            Count      = $normalized.Count
+            Count      = @($normalized).Count
             Messages   = @($normalized)
         }
         $inboxOut.Success = $true
@@ -216,11 +222,15 @@ function Invoke-NRGEmailCollectMailbox {
         if ($null -ne $recItems) {
             $normalized = foreach ($m in $recItems) {
                 $urls = @()
-                if ($m.bodyPreview) {
-                    $urlMatches = [regex]::Matches([string]$m.bodyPreview, 'https?://[^\s"''<>)]+')
+                $bodyPreview = [string](Get-NRGObjectField -Item $m -Key 'bodyPreview' -Default '')
+                if ($bodyPreview) {
+                    $urlMatches = [regex]::Matches($bodyPreview, 'https?://[^\s"''<>)]+')
                     foreach ($mm in $urlMatches) { $urls += $mm.Value }
                 }
-                $fromAddr = if ($m.from -and $m.from.emailAddress) { $m.from.emailAddress.address } else { $null }
+                # from.emailAddress is an optional nested object — a bare
+                # chained read throws under StrictMode at the first absent
+                # intermediate.
+                $fromAddr = Get-NRGNestedProperty -Object $m -Path 'from.emailAddress.address' -Default $null
                 [ordered]@{
                     Id               = $m.id
                     Subject          = [string]$m.subject
@@ -230,7 +240,7 @@ function Invoke-NRGEmailCollectMailbox {
                 }
             }
             $recOut.Data = [ordered]@{
-                Count    = $normalized.Count
+                Count    = @($normalized).Count
                 Messages = @($normalized)
             }
             $recOut.Success = $true
@@ -250,9 +260,12 @@ function Invoke-NRGEmailCollectMailbox {
     }
     try {
         $rules = Invoke-NRGGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/$userPrefix/mailFolders/Inbox/messageRules" -ErrorAction Stop
+        # Bracket/helper access, not dot-access with ?? — a hashtable's dot
+        # read of an absent key throws under StrictMode before ?? applies.
+        $ruleValues = @(Get-NRGObjectField -Item $rules -Key 'value' -Default @())
         $rulesOut.Data = [ordered]@{
-            Count = if ($rules.value) { $rules.value.Count } else { 0 }
-            Rules = @($rules.value)
+            Count = $ruleValues.Count
+            Rules = $ruleValues
         }
         $rulesOut.Success = $true
     } catch {

@@ -212,8 +212,16 @@ function Register-NRGTenantApp {
     # ── Idempotency guard: refuse if an app of this name already exists ──────
     # OData filter escape: a single apostrophe in the value (e.g. "O'Brien
     # Consulting") breaks the filter syntax. The convention is to double it.
+    #
+    # -ErrorAction Stop (not SilentlyContinue): a throttled or 403 duplicate
+    # check must abort the run, not be read as "no existing app" — otherwise a
+    # transient Graph error silently creates a second app registration.
     $escapedName = $DisplayName -replace "'", "''"
-    $existing = Get-MgApplication -Filter "displayName eq '$escapedName'" -ErrorAction SilentlyContinue
+    try {
+        $existing = Get-MgApplication -Filter "displayName eq '$escapedName'" -ErrorAction Stop
+    } catch {
+        throw "Could not verify whether an app named '$DisplayName' already exists (duplicate-check query failed): $($_.Exception.Message). Refusing to proceed without confirming no duplicate exists."
+    }
     if ($existing) {
         Write-Warning "An app named '$DisplayName' already exists (appId $($existing.AppId)). Refusing to create a duplicate. Delete it in Entra or use a different -DisplayName if you intend to re-onboard."
         return
@@ -227,10 +235,15 @@ function Register-NRGTenantApp {
     }
 
     Write-Host '  [*] Generating client-auth certificate...' -ForegroundColor Cyan
+    # NonExportable: only the public cert bytes ($cert.RawData, used below for
+    # the app's keyCredential) need to leave the store. An exportable private
+    # key lets anyone who can read the operator's CurrentUser store export a
+    # credential that authenticates app-only — no MFA, no Conditional Access —
+    # to every client tenant this cert was registered against.
     $cert = New-SelfSignedCertificate `
         -Subject "CN=$DisplayName" `
         -CertStoreLocation 'Cert:\CurrentUser\My' `
-        -KeyExportPolicy Exportable `
+        -KeyExportPolicy NonExportable `
         -KeySpec Signature `
         -KeyUsage DigitalSignature `
         -KeyAlgorithm RSA -KeyLength 2048 `
@@ -343,10 +356,21 @@ function Update-NRGClientRecord {
     )
     Set-StrictMode -Version Latest
 
+    # The shipped clients.json (and every other reader — Invoke-NRGBatchAssessment.ps1,
+    # Start-NRGWebServer.ps1) is a { "clients": [...] } wrapper object, not a
+    # bare array. Read through Get-NRGObjectField (never bare dot-access under
+    # StrictMode) and fall back to treating the parsed value itself as the
+    # list only for a legacy bare-array file.
     $clients = @()
     if (Test-Path -LiteralPath $ClientsFile) {
         try {
-            $clients = @(Get-Content -LiteralPath $ClientsFile -Raw -Encoding utf8 | ConvertFrom-Json)
+            $raw = Get-Content -LiteralPath $ClientsFile -Raw -Encoding utf8 | ConvertFrom-Json
+            $clientsProp = Get-NRGObjectField -Item $raw -Key 'clients' -Default $null
+            if ($null -ne $clientsProp) {
+                $clients = @($clientsProp)
+            } elseif ($null -ne $raw) {
+                $clients = @($raw)
+            }
         } catch {
             Write-Warning "clients.json could not be parsed; a new file will be written. ($($_.Exception.Message))"
             $clients = @()
@@ -379,7 +403,10 @@ function Update-NRGClientRecord {
         if ($dir -and -not (Test-Path -LiteralPath $dir)) {
             [void][System.IO.Directory]::CreateDirectory($dir)
         }
-        $clients | ConvertTo-Json -Depth 8 | Out-File -LiteralPath $ClientsFile -Encoding utf8
+        # Always write back the { "clients": [...] } wrapper shape — the shape
+        # every other reader in this codebase expects — even if the file that
+        # was read was the legacy bare-array form.
+        [ordered]@{ clients = $clients } | ConvertTo-Json -Depth 8 | Out-File -LiteralPath $ClientsFile -Encoding utf8
         Write-Host "  [+] Recorded onboarding in $ClientsFile" -ForegroundColor Green
         # clients.json now holds tenant ClientIds + cert thumbprints — restrict ACL.
         if (Get-Command Set-NRGSensitiveFileAcl -ErrorAction SilentlyContinue) {

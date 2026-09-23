@@ -175,6 +175,12 @@ function Repair-NRGModuleHealth {
         }
     }
 
+    # Applied must reflect whether a ShouldProcess call actually returned
+    # true, not merely that this branch was reached — under -WhatIf every
+    # ShouldProcess call in the loop above returns false, so the loop runs to
+    # completion having attempted nothing, and $removed/$failed both stay
+    # empty. A caller trusting a hardcoded $true here would believe a -WhatIf
+    # run had repaired the module when it removed zero files.
     [ordered]@{
         Planned         = @($plan)
         Removed         = @($removed)
@@ -182,6 +188,6 @@ function Repair-NRGModuleHealth {
         Notes           = @($notes)
         RestartRequired = $restartRequired
         LoadedMsal      = @($msalLoaded)
-        Applied         = $true
+        Applied         = (($removed.Count + $failed.Count) -gt 0)
     }
 }

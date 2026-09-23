@@ -72,9 +72,11 @@ Describe 'Repair-NRGModuleHealth — duplicate MSAL carrier removal' {
 
         It 'changes nothing under -WhatIf' {
             $calls = [System.Collections.Generic.List[string]]::new()
-            $null = Repair-NRGModuleHealth -InstalledOverride $script:RealWorld `
+            $r = Repair-NRGModuleHealth -InstalledOverride $script:RealWorld `
                 -RemoveAction { param($n, $v) $calls.Add("$n $v") } -WhatIf
             $calls.Count | Should -Be 0 -Because '-WhatIf must not uninstall anything'
+            $r.Applied | Should -BeFalse -Because 'a -WhatIf run removed nothing and must not report itself as applied'
+            @($r.Removed).Count | Should -Be 0
         }
 
         It 'removes exactly the planned version when confirmed' {

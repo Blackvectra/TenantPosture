@@ -2494,7 +2494,7 @@
       "Workload": "EXO",
       "Category": "Email",
       "Automated": true,
-      "CollectorDependency": "EXO-ConnectionFilter",
+      "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlEXOAlertForwarding",
       "Remediation": "Defender portal > Policies > Alert policies > Enable: Email forwarding activities.",
       "References": {

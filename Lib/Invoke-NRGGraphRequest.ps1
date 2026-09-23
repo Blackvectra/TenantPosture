@@ -12,9 +12,12 @@
 #          version. Newer SDK builds return PSCustomObject by default, on which
 #          a bare `$resp['@odata.nextLink']` (or `$resp.value`) THROWS under
 #          Set-StrictMode -Version Latest when the property is absent — which
-#          it is on any single-page (small-tenant) response. Hashtables return
-#          $null on absent keys instead, so the existing `?? $default` guards
-#          throughout the collectors behave as originally written.
+#          it is on any single-page (small-tenant) response. Hashtables only
+#          return $null on absent keys via INDEX access ($resp['key']) or
+#          Get-NRGObjectField; a bare dot-read ($resp.key) on a hashtable
+#          throws under StrictMode identically to a PSObject, so the existing
+#          `?? $default` guards throughout the collectors are StrictMode-safe
+#          only when they use index access, never dot-access.
 #
 #          Root-cause fix for a July-2026 client mass-false-gap run,
 #          where ~20 Graph collectors bailed with empty data and the evaluators
@@ -33,12 +36,8 @@ function Invoke-NRGGraphRequest {
         [string] $Uri,
 
         [Parameter(Position = 1)]
-        [ValidateSet('GET', 'POST', 'PUT', 'PATCH', 'DELETE')]
+        [ValidateSet('GET')]
         [string] $Method = 'GET',
-
-        [Parameter()]
-        [AllowNull()]
-        [object] $Body,
 
         [Parameter()]
         [AllowNull()]
@@ -61,7 +60,6 @@ function Invoke-NRGGraphRequest {
         Method     = $Method
         OutputType = $OutputType
     }
-    if ($PSBoundParameters.ContainsKey('Body'))    { $splat['Body']    = $Body }
     if ($PSBoundParameters.ContainsKey('Headers')) { $splat['Headers'] = $Headers }
 
     return Invoke-MgGraphRequest @splat

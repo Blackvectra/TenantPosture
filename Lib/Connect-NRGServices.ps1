@@ -70,6 +70,22 @@ function Connect-NRGServices {
         [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9-]*\.onmicrosoft\.com$')]
         [string] $OrganizationDomain,
 
+        # GDAP batch runner passes $client.DelegatedOrg so the interactive
+        # Purview/IPPS session lands on the CLIENT tenant instead of the
+        # signed-in operator's own organization (Connect-IPPSSession with no
+        # -DelegatedOrganization authenticates to the caller's own org).
+        [Parameter(ParameterSetName = 'Interactive')]
+        [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9-]*\.onmicrosoft\.com$')]
+        [string] $DelegatedOrganization,
+
+        # When supplied, a pre-existing Graph context / EXO session is only
+        # reused if it is actually connected to THIS tenant — otherwise a
+        # leftover session from an earlier task (or a different client in
+        # the same pwsh process) would silently assess the wrong tenant.
+        [Parameter(ParameterSetName = 'Interactive')]
+        [ValidatePattern('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')]
+        [string] $ExpectedTenantId,
+
         [switch] $SkipPurview,
         [switch] $SkipTeams,
         [switch] $SkipSharePoint
@@ -199,7 +215,12 @@ function Connect-NRGServices {
                 if ($existingCtx -and $existingCtx.Scopes) {
                     $coreNeeded = @('Directory.Read.All', 'Policy.Read.All', 'User.Read.All')
                     $haveCore = (@($coreNeeded | Where-Object { $existingCtx.Scopes -contains $_ }).Count -eq $coreNeeded.Count)
-                    if ($haveCore) { $reuseGraphContext = $true }
+                    # If the caller told us which tenant it needs, a context
+                    # for a DIFFERENT tenant is not eligible for reuse — fall
+                    # through to a fresh Connect-MgGraph below rather than
+                    # silently assessing whatever tenant was last connected.
+                    $tenantMatches = (-not $ExpectedTenantId) -or ("$($existingCtx.TenantId)" -eq $ExpectedTenantId)
+                    if ($haveCore -and $tenantMatches) { $reuseGraphContext = $true }
                 }
             } catch { $reuseGraphContext = $false }
         }
@@ -235,7 +256,9 @@ function Connect-NRGServices {
             } else {
                 # -ContextScope Process scopes MSAL token cache to this PS process —
                 # token does NOT persist to msal_token_cache.bin on disk.
-                Connect-MgGraph -Scopes $scopes -ContextScope Process -NoWelcome -ErrorAction Stop
+                $mgConnectParams = @{ Scopes = $scopes; ContextScope = 'Process'; NoWelcome = $true; ErrorAction = 'Stop' }
+                if ($ExpectedTenantId) { $mgConnectParams['TenantId'] = $ExpectedTenantId }
+                Connect-MgGraph @mgConnectParams
             }
         }
 
@@ -266,14 +289,45 @@ function Connect-NRGServices {
                 }
             }
 
-            $result['Graph']        = $true
+            $result['Graph']          = $true
             # Verify Organization.Read.All consent (needed for subscribedSkus)
             $ctx = Get-MgContext
             if ($ctx -and $ctx.Scopes -notcontains 'Organization.Read.All') {
                 Write-Host "  [!] Organization.Read.All not in token — SKU detection disabled. Run Disconnect-MgGraph then re-run to force re-consent." -ForegroundColor Yellow
             }
-            $result['TenantId']     = "$($ctx.TenantId)"
-            $result['TenantDomain'] = $accountDomain
+            $result['TenantId']       = "$($ctx.TenantId)"
+            $result['OperatorDomain'] = $accountDomain
+
+            # Resolve TenantDomain from the CONNECTED tenant, not the signed-in
+            # account's UPN. Under GDAP the operator authenticates as their own
+            # UPN (e.g. tech@nrgtechservices.com) against a client tenant via
+            # -TenantId, so $accountDomain above is the MSP's own domain —
+            # using it mislabels every client's report header, output
+            # filename and SSP answers lookup with the MSP's domain instead
+            # of the client's. Read /organization's verified domains and
+            # prefer isInitial (the domain the tenant was created with) then
+            # isDefault; fall back to the account/UPN domain only if Graph
+            # cannot answer (e.g. Organization.Read.All not yet consented).
+            $tenantDomain = $accountDomain
+            try {
+                if (Get-Command Invoke-NRGGraphRequest -ErrorAction SilentlyContinue) {
+                    $org = Invoke-NRGGraphRequest -Method GET `
+                        -Uri 'https://graph.microsoft.com/v1.0/organization?$select=verifiedDomains' -ErrorAction Stop
+                    $orgRows = @(Get-NRGNestedProperty -Object $org -Path 'value' -Default @())
+                    if ($orgRows.Count -gt 0) {
+                        $verifiedDomains = @(Get-NRGNestedProperty -Object $orgRows[0] -Path 'verifiedDomains' -Default @())
+                        $initialDomain = $verifiedDomains | Where-Object { (Get-NRGNestedProperty -Object $_ -Path 'isInitial' -Default $false) -eq $true } | Select-Object -First 1
+                        $defaultDomain = $verifiedDomains | Where-Object { (Get-NRGNestedProperty -Object $_ -Path 'isDefault' -Default $false) -eq $true } | Select-Object -First 1
+                        $preferredDomain = if ($initialDomain) { $initialDomain } elseif ($defaultDomain) { $defaultDomain } else { $null }
+                        $resolvedName = [string](Get-NRGNestedProperty -Object $preferredDomain -Path 'name' -Default '')
+                        if ($resolvedName) { $tenantDomain = $resolvedName }
+                    }
+                }
+            } catch {
+                Write-Verbose "Connect-NRGServices: could not resolve tenant domain from Graph /organization — using account UPN domain. $($_.Exception.Message)"
+            }
+            $result['TenantDomain'] = $tenantDomain
+
             $who = if ($isAppOnly) { "App $($AppId.Substring(0,8))... in tenant $($TenantId.Substring(0,8))..." } else { $ctx.Account }
             Write-Host "  [+] Graph - $who" -ForegroundColor Green
         }
@@ -308,7 +362,23 @@ function Connect-NRGServices {
                     Import-Module MicrosoftTeams -Force -ErrorAction SilentlyContinue
                 }
                 # Interactive browser MFA (matches ScubaGear); no device-code flow.
-                Connect-MicrosoftTeams -ErrorAction Stop | Out-Null
+                # Pass the already-verified Graph context tenant — under GDAP
+                # Connect-MicrosoftTeams with no -TenantId authenticates to
+                # the signed-in operator's own organization, not the client's.
+                $teamsParams = @{ ErrorAction = 'Stop' }
+                if ($result['TenantId']) { $teamsParams['TenantId'] = $result['TenantId'] }
+                Connect-MicrosoftTeams @teamsParams | Out-Null
+            }
+            # Verify the Teams session landed on the tenant Graph connected
+            # to. A mismatched or missing tenant hint can still silently
+            # authenticate to the operator's own organization, and every
+            # TMS-* control would then score that organization's policies
+            # as the client's.
+            if ($result['TenantId']) {
+                $csTenantId = "$((Get-CsTenant -ErrorAction Stop).TenantId)"
+                if ($csTenantId -ne $result['TenantId']) {
+                    throw "Teams session tenant ($csTenantId) does not match Graph tenant ($($result['TenantId']))."
+                }
             }
             $result['Teams'] = $true
             Write-Host "  [+] Teams connected" -ForegroundColor Green
@@ -337,6 +407,13 @@ function Connect-NRGServices {
         if (-not $isAppOnly -and (Get-Command Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
             try {
                 $exoConn = @(Get-ConnectionInformation -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Connected' })
+                # As with Graph above, a caller-supplied ExpectedTenantId
+                # narrows reuse to a session actually connected to that
+                # tenant — a leftover session for a different tenant must
+                # not be silently treated as this run's mailbox data.
+                if ($ExpectedTenantId) {
+                    $exoConn = @($exoConn | Where-Object { "$($_.TenantId)" -eq $ExpectedTenantId })
+                }
                 if ($exoConn.Count -gt 0) { $reuseExoSession = $true }
             } catch { $reuseExoSession = $false }
         }
@@ -392,8 +469,27 @@ function Connect-NRGServices {
                     ErrorAction = 'Stop'
                 }
                 if ($UserPrincipalName) { $ippsParams['UserPrincipalName'] = $UserPrincipalName }
+                # Without -DelegatedOrganization, Connect-IPPSSession maps the
+                # session to the SIGNED-IN account's own organization — under
+                # GDAP that is the MSP's tenant, not the client's, and every
+                # Purview/DLP control would then score the MSP's own
+                # configuration as the client's.
+                if ($DelegatedOrganization) { $ippsParams['DelegatedOrganization'] = $DelegatedOrganization }
 
                 Connect-IPPSSession @ippsParams | Out-Null
+
+                # Verify the IPPS session landed on the tenant Graph connected
+                # to. A missing/mismatched -DelegatedOrganization can still
+                # silently open the session against the operator's own org.
+                if ($result['TenantId'] -and (Get-Command Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+                    $ippsConn = @(Get-ConnectionInformation -ErrorAction SilentlyContinue |
+                        Where-Object { $_.ConnectionUri -match 'ps\.compliance' -and $_.State -eq 'Connected' })
+                    $ippsTenantId = if ($ippsConn.Count -gt 0) { "$($ippsConn[0].TenantId)" } else { $null }
+                    if ($ippsTenantId -and $ippsTenantId -ne $result['TenantId']) {
+                        throw "IPPS session tenant ($ippsTenantId) does not match Graph tenant ($($result['TenantId']))."
+                    }
+                }
+
                 $result['IPPSSession'] = $true
                 Write-Host "  [+] Purview / Compliance connected" -ForegroundColor Green
             }
