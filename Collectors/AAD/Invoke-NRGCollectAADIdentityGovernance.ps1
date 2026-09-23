@@ -86,7 +86,7 @@ function Invoke-NRGCollectAADIdentityGovernance {
                     AllowedToCreateGroups    = [bool](Get-NRGNestedProperty -Object $extCollab -Path 'defaultUserRolePermissions.allowedToCreateGroups' -Default $true)
                     AllowedToCreateTenants   = [bool](Get-NRGNestedProperty -Object $extCollab -Path 'defaultUserRolePermissions.allowedToCreateTenants' -Default $true)
                 }
-                PermissionGrantPolicies      = @($extCollab.permissionGrantPoliciesAssigned ?? @())
+                PermissionGrantPolicies      = @(Get-NRGObjectField -Item $extCollab -Key 'permissionGrantPoliciesAssigned' -Default @())
                 BlockMsolPowerShell          = $extCollab.blockMsolPowerShell
             }
             $result.Data.SectionStatus.ExternalCollab = 'Collected'

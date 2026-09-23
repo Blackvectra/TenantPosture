@@ -54,7 +54,7 @@ function Invoke-NRGCollectEXOMailboxConfig {
             $tc = Get-TransportConfig -ErrorAction Stop
             $result.Data.TransportConfig = @{
                 SmtpClientAuthenticationDisabled = if ($null -ne $tc.SmtpClientAuthenticationDisabled) { [bool]$tc.SmtpClientAuthenticationDisabled } else { $null }
-                AutoForwardEnabled               = if ($null -ne $tc.AutoForwardEnabled) { [bool]$tc.AutoForwardEnabled } else { $true }
+                AutoForwardEnabled               = [bool](Get-NRGObjectField -Item $tc -Key 'AutoForwardEnabled' -Default $true)
                 MaxRecipientEnvelopeLimit        = try {
                     $raw = [string]$tc.MaxRecipientEnvelopeLimit
                     if ($raw -match '^\d+$') { [int]$raw } else { $null }  # 'Unlimited' → $null
@@ -157,7 +157,7 @@ function Invoke-NRGCollectEXOMailboxConfig {
             $result.Data.OrganizationConfig = @{
                 AuditDisabled             = [bool]$org.AuditDisabled
                 OAuth2ClientProfileEnabled= [bool]$org.OAuth2ClientProfileEnabled
-                DefaultMinimumNumberOfDaysForDumpster = $org.DefaultMinimumNumberOfDaysForDumpster
+                DefaultMinimumNumberOfDaysForDumpster = Get-NRGObjectField -Item $org -Key 'DefaultMinimumNumberOfDaysForDumpster' -Default $null
                 Name                      = [string]$org.Name
             }
             $result.Data.MailboxAuditSummary.AuditDisabledOrg = [bool]$org.AuditDisabled
@@ -221,7 +221,7 @@ function Invoke-NRGCollectEXOMailboxConfig {
                     Domain          = [string]$_.Domain
                     Enabled         = [bool]$_.Enabled
                     Status          = [string]$_.Status
-                    KeySize         = $_.KeySize
+                    KeySize         = Get-NRGObjectField -Item $_ -Key 'KeySize' -Default $null
                     LastChecked     = [string]($_.LastChecked ?? '')
                     Selector1       = [string]($_.Selector1 ?? '')
                     Selector2       = [string]($_.Selector2 ?? '')
@@ -253,7 +253,7 @@ function Invoke-NRGCollectEXOMailboxConfig {
                     EnableOrganizationDomainsProtection = [bool]$_.EnableOrganizationDomainsProtection
                     EnableMailboxIntelligence        = [bool]$_.EnableMailboxIntelligence
                     EnableMailboxIntelligenceProtection = [bool]($_.EnableMailboxIntelligenceProtection ?? $false)
-                    EnableExternalSenderTag          = [bool]($_.EnableExternalSenderTag ?? $false)
+                    EnableExternalSenderTag          = [bool](Get-NRGObjectField -Item $_ -Key 'EnableExternalSenderTag' -Default $false)
                     HonorDmarcPolicy                 = [bool]($_.HonorDmarcPolicy ?? $false)
                     TargetedUsersToProtect           = @($_.TargetedUsersToProtect ?? @())
                     TargetedDomainsToProtect         = @($_.TargetedDomainsToProtect ?? @())
