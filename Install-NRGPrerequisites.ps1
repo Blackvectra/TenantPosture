@@ -81,26 +81,22 @@ Write-Host "[4/6] Checking PowerShell modules..." -ForegroundColor Cyan
 # at Exchange connect. Get-NRGModuleHealth already flags this at run time; there
 # is no point in this installer creating the condition it will later warn about.
 #
-# AllUsers ($env:ProgramFiles\PowerShell\Modules) is never redirected, so when
-# the user path is synced and the session is elevated we install there instead.
-$installScope = 'CurrentUser'
-$userModuleDir = ($env:PSModulePath -split [IO.Path]::PathSeparator |
-    Where-Object { $_ -like "$HOME*" } | Select-Object -First 1)
-$userPathIsSynced = [bool]($userModuleDir -match '(?i)\bOneDrive\b')
+# Get-NRGModuleInstallScope.ps1 makes this decision (AllUsers, which is never
+# OneDrive-redirected, when synced AND elevated; CurrentUser otherwise) so
+# Invoke-NRGAssessment.ps1's own "Install/fix modules now?" prompt reaches the
+# same conclusion — that prompt previously hardcoded CurrentUser with no
+# OneDrive check at all, silently recreating the exact condition this
+# installer exists to avoid.
+. (Join-Path $PSScriptRoot 'Lib/Get-NRGModuleInstallScope.ps1')
+$scopeInfo    = Get-NRGModuleInstallScope
+$installScope = $scopeInfo.Scope
 
-$isElevated = $false
-try {
-    $isElevated = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
-        ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-} catch { $isElevated = $false }
-
-if ($userPathIsSynced) {
+if ($scopeInfo.UserPathIsSynced) {
     Write-Host "  [!] Your PowerShell module folder is inside OneDrive:" -ForegroundColor Yellow
-    Write-Host "      $userModuleDir" -ForegroundColor DarkYellow
+    Write-Host "      $($scopeInfo.UserModuleDir)" -ForegroundColor DarkYellow
     Write-Host "      OneDrive locks and partially syncs module DLLs, which causes the" -ForegroundColor DarkYellow
     Write-Host "      'Could not load file or assembly Microsoft.Identity.Client' error." -ForegroundColor DarkYellow
-    if ($isElevated) {
-        $installScope = 'AllUsers'
+    if (-not $scopeInfo.StillSynced) {
         Write-Host "  [+] Elevated session detected — installing to AllUsers instead" -ForegroundColor Green
         Write-Host "      ($env:ProgramFiles\PowerShell\Modules is never OneDrive-synced)." -ForegroundColor DarkGray
     } else {
@@ -115,7 +111,7 @@ if ($userPathIsSynced) {
         Write-Host "           'Always keep on this device' (mitigates, does not remove the lock)." -ForegroundColor DarkYellow
     }
 } else {
-    Write-Host "  [+] Module path is not OneDrive-synced: $userModuleDir" -ForegroundColor Green
+    Write-Host "  [+] Module path is not OneDrive-synced: $($scopeInfo.UserModuleDir)" -ForegroundColor Green
 }
 Write-Host ""
 
