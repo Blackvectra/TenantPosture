@@ -447,6 +447,25 @@ if ($needsAction.Count -gt 0) {
     }
     $install = Read-Host "  Install/fix modules now? [Y/N]"
     if ($install -match '^[Yy]') {
+        # A fresh install previously always used -Scope CurrentUser, which is
+        # $HOME\Documents\PowerShell\Modules — the exact path OneDrive Known
+        # Folder Move silently redirects on many managed machines, an org
+        # policy the operator does not control. Answering Y here was the path
+        # most operators actually took, so it was recreating the MSAL
+        # assembly-conflict condition the rest of the tool warns about.
+        # Get-NRGModuleInstallScope picks AllUsers instead when the session
+        # is elevated; see Install-NRGPrerequisites.ps1 for the same decision.
+        $scopeInfo    = Get-NRGModuleInstallScope
+        $installScope = $scopeInfo.Scope
+        if ($scopeInfo.StillSynced) {
+            Write-Host "  [!] Your PowerShell module folder is inside OneDrive:" -ForegroundColor Yellow
+            Write-Host "      $($scopeInfo.UserModuleDir)" -ForegroundColor DarkYellow
+            Write-Host "      Installing here anyway — modules WILL land in OneDrive and may hit the" -ForegroundColor DarkYellow
+            Write-Host "      same assembly-conflict bug this prompt exists to fix. To avoid it, re-run" -ForegroundColor DarkYellow
+            Write-Host "      from an elevated window, or run .\Install-NRGPrerequisites.ps1 for full guidance." -ForegroundColor DarkYellow
+        } elseif ($scopeInfo.UserPathIsSynced) {
+            Write-Host "  [+] OneDrive-synced module path detected — installing to AllUsers instead ($env:ProgramFiles\PowerShell\Modules)." -ForegroundColor Green
+        }
         foreach ($n in $needsAction) {
             $name = $n.Spec.Name
             $targetVer = $n.Spec.PinVersion
@@ -471,10 +490,10 @@ if ($needsAction.Count -gt 0) {
                 }
                 if ($targetVer) {
                     Write-Host "  [*] Installing $name $targetVer..." -ForegroundColor Cyan
-                    Install-PSResource -Name $name -Version $targetVer -TrustRepository -Scope CurrentUser -Reinstall -ErrorAction Stop
+                    Install-PSResource -Name $name -Version $targetVer -TrustRepository -Scope $installScope -Reinstall -ErrorAction Stop
                 } else {
                     Write-Host "  [*] Installing $name (latest)..." -ForegroundColor Cyan
-                    Install-PSResource -Name $name -TrustRepository -Scope CurrentUser -ErrorAction Stop
+                    Install-PSResource -Name $name -TrustRepository -Scope $installScope -ErrorAction Stop
                 }
                 Write-Host "  [+] $name ready" -ForegroundColor Green
             } catch {
