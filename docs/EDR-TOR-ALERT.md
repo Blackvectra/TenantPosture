@@ -40,11 +40,17 @@ the removal — likely because no packaged release had been cut yet.
    # — or — replace the extracted folder with a fresh v4.13.0+ download
    ```
 
-2. **Confirm the installed copy is clean** — this must return nothing but
-   comment lines:
+2. **Confirm the installed copy is clean** — this must return nothing.
+   (`Select-String` has no `-Recurse` parameter — use `Get-ChildItem -Recurse`
+   piped into it. `Testing\` is excluded because
+   `NRG.NetworkEgress.Tests.ps1` — the guard that enforces this — legitimately
+   quotes the pattern it's checking for, in its own `It` description and its
+   `-imatch` line; that's the detector, not an offender.)
 
    ```powershell
-   Select-String -Path .\ -Recurse -Include *.ps1,*.psm1 -Pattern 'torproject|torbulkexitlist' |
+   Get-ChildItem -Recurse -Include *.ps1,*.psm1 |
+       Where-Object { $_.FullName -notmatch '\\Testing\\' } |
+       Select-String -Pattern 'torproject|torbulkexitlist' |
        Where-Object { $_.Line.TrimStart() -notlike '#*' }
    ```
 
