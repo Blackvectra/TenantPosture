@@ -173,6 +173,8 @@ $script:ExportedFunctions = @(
     'Get-NRGControlOperationalImpact', 'Publish-NRGSSP', 'Group-NRGSSPImpact', 'Get-NRGSSPImpactLabel',
     'Get-NRGSSPQuestionnaireItems', 'Publish-NRGSSPQuestionnaire',
     'ConvertTo-NRGSSPClientSlug', 'ConvertTo-NRGSSPAnswerPsd1', 'ConvertTo-NRGSSPPsd1String',
+    'Get-NRGManualReviewItems', 'Get-NRGManualReviewAnswers',
+    'ConvertTo-NRGManualReviewAnswerPsd1', 'Publish-NRGManualReviewQuestionnaire',
     'Get-NRGNISTImprovementPlan', 'Publish-NRGImprovementPlan',
     'Publish-NRGDeviceGuide',
     'Publish-NRGDeviceBaseline',
