@@ -109,7 +109,17 @@ function Publish-NRGComplianceMatrix {
                 Detail          = [string]$_.Detail
                 CurrentValue    = [string]($_.CurrentValue  ?? '')
                 RequiredValue   = [string]($_.RequiredValue ?? '')
-                Remediation     = [string]($ctrl.Remediation ?? $_.Remediation ?? '')
+                Remediation     = [string]$(
+                    # Get-NRGObjectField, not dot-access-then-??: $ctrl is the
+                    # controls.json definition and $_ is the finding — either can
+                    # be a replayed/deserialized object that predates this field,
+                    # and under StrictMode a missing member throws before ?? can
+                    # apply (the "XLSX publish failed: Remediation cannot be
+                    # found" warning on every run).
+                    $rem = Get-NRGObjectField -Item $ctrl -Key 'Remediation' -Default ''
+                    if (-not $rem) { $rem = Get-NRGObjectField -Item $_ -Key 'Remediation' -Default '' }
+                    $rem
+                )
                 BusinessRisk    = [string]($ctrl.BusinessRisk ?? '')
                 LicenseReq      = [string]($ctrl.LicenseRequirement ?? 'Included')
                 FrameworkIds    = @($_.FrameworkIds ?? @() | ForEach-Object { [string]$_ })
