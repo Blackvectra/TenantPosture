@@ -305,10 +305,16 @@ function Test-NRGControlAICopilotInteractionData {
         return
     }
 
-    $audit = [bool]($d.AuditCopilotEnabled ?? $false)
+    $auditRaw = Get-NRGObjectField -Item $d -Key 'AuditCopilotEnabled'
+    $audit = [bool]$auditRaw
     $retention = $d.CopilotInteractionRetention
 
-    if (-not $audit -and -not (Test-NRGCopilotPurviewCollected)) {
+    if ($null -eq $auditRaw -and (Test-NRGCopilotPurviewCollected)) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' `
+            -Category $ctrl.Category -Title $ctrl.Title `
+            -FrameworkIds $cit `
+            -Detail 'Unified Audit Log status could not be read from the Exchange Online session (Security & Compliance PowerShell always reports it as off), so Copilot interaction auditing is not assessed. Verify in Purview > Audit.'
+    } elseif (-not $audit -and -not (Test-NRGCopilotPurviewCollected)) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' `
             -Category $ctrl.Category -Title $ctrl.Title `
             -FrameworkIds $cit `

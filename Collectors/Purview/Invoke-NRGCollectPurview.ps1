@@ -52,16 +52,24 @@ function Invoke-NRGCollectPurview {
 
     try {
         # Audit configuration
-        if (Get-Command Get-AdminAuditLogConfig -ErrorAction SilentlyContinue) {
+        # Must run in the EXCHANGE ONLINE session: Microsoft documents
+        # UnifiedAuditLogIngestionEnabled as always False in Security &
+        # Compliance PowerShell, and an unqualified call here resolves to the
+        # Purview session (connected last). See Lib/Get-NRGExoCommand.ps1.
+        $auditCmd = Get-NRGExoCommand -Name 'Get-AdminAuditLogConfig' -Session ExchangeOnline
+        if ($auditCmd.Command) {
             try {
-                $audit = Get-AdminAuditLogConfig -ErrorAction Stop
+                $audit = & $auditCmd.Command -ErrorAction Stop
                 if ($audit) {
                     $result.Data.AuditConfig = @{
-                        UnifiedAuditLogIngestionEnabled = [bool]$audit.UnifiedAuditLogIngestionEnabled
-                        AdminAuditLogEnabled            = [bool]$audit.AdminAuditLogEnabled
-                        AdminAuditLogAgeLimit           = [string]$audit.AdminAuditLogAgeLimit
+                        UnifiedAuditLogIngestionEnabled = [bool](Get-NRGObjectField -Item $audit -Key 'UnifiedAuditLogIngestionEnabled' -Default $false)
+                        AdminAuditLogEnabled            = [bool](Get-NRGObjectField -Item $audit -Key 'AdminAuditLogEnabled' -Default $false)
+                        AdminAuditLogAgeLimit           = [string](Get-NRGObjectField -Item $audit -Key 'AdminAuditLogAgeLimit' -Default '')
+                        # ExchangeOnline / SecurityCompliance / Unknown. A False
+                        # read from anything but ExchangeOnline is not evidence.
+                        Source                          = $auditCmd.Source
                     }
-                    $result.Data.UnifiedAuditEnabled = [bool]$audit.UnifiedAuditLogIngestionEnabled
+                    $result.Data.UnifiedAuditEnabled = $result.Data.AuditConfig.UnifiedAuditLogIngestionEnabled
                 }
                 $result.Data.SectionStatus.AuditConfig = 'Collected'
             } catch {
