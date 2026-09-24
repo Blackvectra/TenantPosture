@@ -1,5 +1,33 @@
 # Changelog
 
+## v4.14.0 (2026-09-24)
+
+Closes the remaining known issues that could make a report look worse, or
+different, than the tenant actually is.
+
+- **GDAP batch mode (#79).** The batch runner passes each client's
+  `-TenantDomain` and `-KeepSession` to the assessment, so tenant pinning,
+  the Purview `-DelegatedOrganization` and the shared Graph session all apply
+  in batch mode. Per-client Graph switches request the full scope list, and
+  Teams is disconnected between clients.
+- **Third-party EDR (Cortex XDR).** `-ThirdPartyEDR` or `ThirdPartyEDR` in
+  clients.json reports the Microsoft Defender endpoint checks (INT-1.5,
+  INT-2.1, INT-2.2, DEV-2.x) as covered by that product (declared, not
+  verified) and leaves them out of the score instead of scoring them as gaps.
+  A Defender check that passed keeps its verdict. Works on `-FromResults`.
+- **Consent.** AAD-8.2, AAD-11.3 and DEF-4.6 now name the Graph permission
+  the tenant has not consented to. New `Grant-NRGGraphConsent.ps1` does the
+  one-time consent (sign-in only). App-only onboarding requests all three.
+- **Power Platform actually collects.** The admin module is Windows
+  PowerShell 5.1 only and the old fallback called a cmdlet that does not
+  exist, so PPL-* never collected. It now runs in a `powershell.exe` child
+  pinned to the Graph tenant, and says exactly why when it cannot.
+- **Conditional Access tiers** (AAD-10.4, 11.4, 11.7, 11.8, 11.9): None ->
+  Gap, Audit mode -> Partial, Enabled -> Satisfied.
+- **`-RegisterApp` moved out of the read-only module** to `Onboard/`; the
+  switch works as before. A test fails if any module-loaded file calls a
+  Graph write cmdlet.
+
 ## v4.13.0 (2026-09-24)
 
 Accuracy + hardening release. Every fix below was found by running the tool

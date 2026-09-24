@@ -149,7 +149,7 @@ $script:ExportedFunctions = @(
     'Set-NRGRawData', 'Get-NRGRawData',
     'Connect-NRGServices', 'Disconnect-NRGServices',
     'ConvertTo-NRGHtmlSafe', 'ConvertTo-NRGSafeUrl',
-    'Start-NRGWebServer', 'Register-NRGTenantApp',
+    'Start-NRGWebServer',
     'Get-NRGControlDefinitions', 'Get-NRGControlById',
     'Get-NRGFrameworkCitations', 'Get-NRGFrameworkDefinitions',
     'Get-NRGFindingRiskCost', 'Get-NRGAggregateRisk',

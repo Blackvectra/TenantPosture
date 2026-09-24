@@ -87,7 +87,7 @@ Describe 'Graph consent is named, never guessed' {
     }
 
     It 'app-only onboarding requests the three consent permissions' {
-        $reg = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib/Register-NRGTenantApp.ps1') -Raw
+        $reg = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Onboard/Register-NRGTenantApp.ps1') -Raw
         foreach ($s in 'IdentityRiskyServicePrincipal.Read.All', 'AttackSimulation.Read.All', 'AccessReview.Read.All') {
             $reg | Should -Match ([regex]::Escape("'$s'"))
         }

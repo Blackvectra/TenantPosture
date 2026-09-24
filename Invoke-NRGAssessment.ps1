@@ -399,6 +399,9 @@ if ($RegisterApp) {
     }
     $regParams = @{ TenantDomain = $TenantDomain }
     if ($GrantConsent) { $regParams['GrantConsent'] = $true }
+    # Onboarding writes to the tenant, so it is not in the read-only module:
+    # load it only for this path.
+    . (Join-Path $scriptDir 'Onboard' 'Register-NRGTenantApp.ps1')
     Register-NRGTenantApp @regParams
     try { Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null } catch { }
     exit 0
