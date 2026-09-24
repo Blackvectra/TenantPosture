@@ -102,6 +102,28 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
         }
     }
 
+    Context 'AAD-6.1 — User App Registration Disabled' {
+
+        # A missing value used to default to "users CAN register apps" (a High
+        # Gap). On a live tenant the setting lived only under AAD-AuthPolicies
+        # and read false, yet the control reported a Gap.
+        It 'Gap when users may register applications' {
+            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (NewRaw 'AAD' @{
+                ExternalCollab = @{ DefaultUserRolePermissions = @{ AllowedToCreateApps = $true } } })
+            (GetVerdict 'Test-NRGControlAADUserAppReg' 'AAD-6.1').State | Should -Be 'Gap'
+        }
+        It 'Satisfied from the authorization-policy copy when the governance copy is absent' {
+            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (NewRaw 'AAD' @{ })
+            Set-NRGRawData -Key 'AAD-AuthPolicies' -Data (NewRaw 'AAD' @{
+                AuthorizationPolicy = @{ DefaultUserRolePermissions = @{ AllowedToCreateApps = $false } } })
+            (GetVerdict 'Test-NRGControlAADUserAppReg' 'AAD-6.1').State | Should -Be 'Satisfied'
+        }
+        It 'NotApplicable, never Gap, when the setting was not collected at all' {
+            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (NewRaw 'AAD' @{ })
+            (GetVerdict 'Test-NRGControlAADUserAppReg' 'AAD-6.1').State | Should -Be 'NotApplicable'
+        }
+    }
+
     Context 'AAD-1.3 — Phishing-Resistant MFA for Admins' {
 
         It 'Satisfied when a role-targeted policy uses an Authentication Strength' {
