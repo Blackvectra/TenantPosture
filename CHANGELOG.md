@@ -20,8 +20,11 @@ different, than the tenant actually is.
   one-time consent (sign-in only). App-only onboarding requests all three.
 - **Power Platform actually collects.** The admin module is Windows
   PowerShell 5.1 only and the old fallback called a cmdlet that does not
-  exist, so PPL-* never collected. It now runs in a `powershell.exe` child
-  pinned to the Graph tenant, and says exactly why when it cannot.
+  exist, so PPL-* never collected. The collector now signs in to the Power
+  Platform admin API in-process (one extra browser sign-in, same flow as
+  Graph, no child process) and reads it over REST, pinned to the Graph
+  tenant, with per-section status. PPL-2.2 and PPL-2.3 no longer score
+  Partial from a setting that was never read.
 - **Conditional Access tiers** (AAD-10.4, 11.4, 11.7, 11.8, 11.9): None ->
   Gap, Audit mode -> Partial, Enabled -> Satisfied.
 - **`-RegisterApp` moved out of the read-only module** to `Onboard/`; the

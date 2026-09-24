@@ -72,7 +72,7 @@ function Test-NRGControlPowerPlatform {
         if (-not (Get-NRGObjectField -Item $d -Key 'DLPAvailable' -Default $false)) {
             Add-NRGFinding -ControlId 'PPL-1.2' -State 'NotApplicable' `
                 -Category 'Power Platform' -Title $c.Title `
-                -Detail 'Power Platform DLP data not available. Install Microsoft.PowerApps.Administration.PowerShell for full DLP assessment: Install-Module Microsoft.PowerApps.Administration.PowerShell -Scope CurrentUser -Force'
+                -Detail 'Power Platform DLP policies were not collected (see Exceptions); DLP not assessed.'
         } else {
             $count = @(Get-NRGObjectField -Item $d -Key 'DLPPolicies' -Default @()).Count
             if ($count -gt 0) {
@@ -91,11 +91,8 @@ function Test-NRGControlPowerPlatform {
     }
 
     # PPL-1.3 — Environment creation restricted to admins
-    # v4.13.0: implemented against Get-TenantSettings
-    # (powerPlatform.governance.disableEnvironmentCreationByNonAdminUsers),
-    # collected into PowerPlatform.TenantGovernance. Was a manual-review
-    # placeholder; the flag is documented and the admin module is already a
-    # dependency of this collector.
+    # Reads disableEnvironmentCreationByNonAdminUsers from the documented
+    # listtenantsettings admin API, collected into PowerPlatform.TenantGovernance.
     $c = Get-NRGControlById -ControlId 'PPL-1.3'
     if ($c) {
         $govStatus = Get-NRGNestedProperty -Object $raw -Path 'Data.SectionStatus.TenantGovernance' -Default $null
@@ -103,9 +100,9 @@ function Test-NRGControlPowerPlatform {
 
         if ($govStatus -ne 'Collected' -or $null -eq $restricted) {
             $why = if ($govStatus -eq 'Failed') {
-                'the Get-TenantSettings query failed (see Exceptions)'
+                'the tenant settings query failed (see Exceptions)'
             } else {
-                'Get-TenantSettings was unavailable — it needs the Microsoft.PowerApps.Administration.PowerShell module, which the BAP-API fallback path cannot substitute for'
+                'the Power Platform admin API was not reached (see Exceptions)'
             }
             Add-NRGFinding -ControlId 'PPL-1.3' -State 'NotApplicable' `
                 -Category 'Power Platform' -Title $c.Title `
@@ -191,7 +188,18 @@ function Test-NRGControlPPLAutomate {
             -Title $ctrl.Title -Detail 'TenantSettings was not collected; not assessed.'
         return
     }
-    $guestFlows     = Get-NRGNestedProperty -Object $ppl -Path 'Data.TenantSettings.DisableFlowsForGuestUsers' -Default $false
+    # Microsoft's tenant settings API documents no "disable flows for guest
+    # users" setting, so the collector cannot read one. Reading it with a
+    # $false default turned "not readable" into "guests can create flows"
+    # and scored Partial on every tenant. Only a value actually returned
+    # may score.
+    $guestFlows = Get-NRGNestedProperty -Object $ppl -Path 'Data.TenantSettings.DisableFlowsForGuestUsers' -Default $null
+    if ($null -eq $guestFlows) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Whether guest users can create Power Automate flows is not exposed by the Power Platform tenant settings API; requires manual verification in Power Platform admin center > Tenant settings.'
+        return
+    }
     $gaps = @()
     if (-not $guestFlows) { $gaps += 'Guest users can create flows' }
     if ($gaps.Count -eq 0) {
@@ -222,7 +230,16 @@ function Test-NRGControlPPLPowerApps {
             -Title $ctrl.Title -Detail 'TenantSettings was not collected; not assessed.'
         return
     }
-    $canvasAppsEnabled = -not (Get-NRGNestedProperty -Object $ppl -Path 'Data.TenantSettings.DisablePortalsCreationByNonAdminUsers' -Default $false)
+    # A $false default here scored "portals open to non-admins" (Partial)
+    # whenever the flag was simply not returned.
+    $portalsRestricted = Get-NRGNestedProperty -Object $ppl -Path 'Data.TenantSettings.DisablePortalsCreationByNonAdminUsers' -Default $null
+    if ($null -eq $portalsRestricted) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'The tenant settings response did not include the portal-creation setting; not assessed.'
+        return
+    }
+    $canvasAppsEnabled = -not [bool]$portalsRestricted
     if (-not $canvasAppsEnabled) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
