@@ -191,6 +191,7 @@ function Publish-NRGAssessmentSummary {
             $null = $sb.AppendLine("| Not evaluated — quick-scan mode | $($scope.NotEvaluatedThisMode.Count) |")
             $null = $sb.AppendLine("| Produced no result at all | $($scope.NoResult.Count) |")
             $null = $sb.AppendLine("| No automated test — manual review required | $($scope.NoProgrammaticCheck.Count) |")
+            $null = $sb.AppendLine("| Covered by a declared third-party EDR — not verified | $(@(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()).Count) |")
             $null = $sb.AppendLine("| Licence gated | $($scope.LicenceBlocked.Count) |")
             $null = $sb.AppendLine()
 
@@ -204,6 +205,7 @@ function Publish-NRGAssessmentSummary {
                 @{ Label = 'Not evaluated — quick-scan mode'; Items = $scope.NotEvaluatedThisMode }
                 @{ Label = 'Produced no result at all'; Items = $scope.NoResult }
                 @{ Label = 'No automated test — manual review required'; Items = $scope.NoProgrammaticCheck }
+                @{ Label = 'Covered by a declared third-party EDR — not verified'; Items = @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()) }
             )) {
                 $items = @($grp.Items)
                 if ($items.Count -eq 0) { continue }

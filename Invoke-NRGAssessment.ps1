@@ -57,6 +57,15 @@ param(
     [ValidatePattern('^$|^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$')]
     [string] $TenantDomain,
 
+    # The client's endpoint protection is a third-party EDR (e.g. 'Cortex XDR'),
+    # not Microsoft Defender. The Defender endpoint checks (INT-1.5, INT-2.1,
+    # INT-2.2, DEV-2.x) are then reported as covered by that product —
+    # declared, not verified — and excluded from the score instead of scoring
+    # as gaps. Also read from the client's ThirdPartyEDR field in
+    # Config/clients.json when -TenantDomain is given.
+    [ValidatePattern('^$|^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$')]
+    [string] $ThirdPartyEDR,
+
     # Cloud environment
     [ValidateSet('commercial','gcc','gcchigh','dod')]
     [string] $Environment = 'commercial',
@@ -426,6 +435,9 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
     if ($clientRec -and $clientRec.PSObject.Properties['DelegatedOrg'] -and "$($clientRec.DelegatedOrg)" -match '\.onmicrosoft\.com$') {
         $targetDelegatedOrg = [string]$clientRec.DelegatedOrg
     }
+    if (-not $ThirdPartyEDR -and $clientRec -and $clientRec.PSObject.Properties['ThirdPartyEDR'] -and "$($clientRec.ThirdPartyEDR)") {
+        $ThirdPartyEDR = [string]$clientRec.ThirdPartyEDR
+    }
     $rec = if ($clientRec -and $clientRec.PSObject.Properties['ClientId'] -and $clientRec.ClientId) { $clientRec } else { $null }
     if ($rec) {
         $AppId                 = [string]$rec.ClientId
@@ -603,6 +615,11 @@ if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
     if (-not $tenantTag) { $tenantTag = 'tenant' }
     $baseName = "$tenantTag-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
     Write-Host "  [+] Loaded $($findings.Count) findings" -ForegroundColor Green
+    if ($ThirdPartyEDR) {
+        $edrCount = Set-NRGThirdPartyEdr -Product $ThirdPartyEDR -Findings $findings
+        $reportMetadata['ThirdPartyEDR'] = $ThirdPartyEDR
+        Write-Host "  [i] $edrCount Defender endpoint check(s) reported as covered by $ThirdPartyEDR (declared, not verified; not scored)" -ForegroundColor DarkGray
+    }
     $skipCollection = $true
 } else {
     $skipCollection = $false
@@ -814,6 +831,11 @@ if (-not $skipCollection) {
         Invoke-NRGEvaluatorSafe -EvaluatorFunction $ev
     }
 
+    if ($ThirdPartyEDR) {
+        $edrCount = Set-NRGThirdPartyEdr -Product $ThirdPartyEDR
+        Write-Host "  [i] $edrCount Defender endpoint check(s) reported as covered by $ThirdPartyEDR (declared, not verified; not scored)" -ForegroundColor DarkGray
+    }
+
     $findings = Get-NRGFindings
     Write-Host "  [+] $($findings.Count) findings evaluated" -ForegroundColor Green
 
@@ -835,6 +857,7 @@ if (-not $skipCollection) {
         ToolVersion    = $NRGAssessmentVersion
         Brand          = $NRGBrand
         QuickScan      = [bool]$Quick
+        ThirdPartyEDR  = [string]$ThirdPartyEDR
     }
 }
 

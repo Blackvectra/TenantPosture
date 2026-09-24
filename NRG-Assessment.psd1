@@ -101,6 +101,7 @@
         'Invoke-NRGEvaluatorSafe',
         'Resolve-NRGDns',
         'Resolve-NRGTenantId',
+        'Set-NRGThirdPartyEdr',
         'Get-NRGModuleHealth',
         'Repair-NRGModuleHealth',
         'Get-NRGModuleInstallScope',

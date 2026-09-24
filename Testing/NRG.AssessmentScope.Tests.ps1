@@ -68,16 +68,19 @@ Describe 'Get-NRGAssessmentScope — what the assessment did not cover' {
                 $ids[5]  = @{ State = 'NotApplicable'; Detail = 'Teams data not collected; not assessed.' }
                 $ids[6]  = @{ State = 'NotApplicable'; Detail = 'Requires Defender for Office 365 Plan 1 — surfaced as a licensing upgrade opportunity.' }
                 $ids[7]  = @{ State = 'NotApplicable'; Detail = 'No programmatic check; manual review required.' }
+                $ids[8]  = @{ State = 'NotApplicable'; Detail = 'Third-party EDR declared: endpoint protection for this client is provided by Cortex XDR, as declared by the assessor.' }
             }
             $s = Get-NRGAssessmentScope -Findings (script:Build -SkipFirst 2 -Override $ov)
 
             $sum = $s.LicenceBlocked.Count + $s.CollectionIncomplete.Count +
-                   $s.NoProgrammaticCheck.Count + $s.NotEvaluatedThisMode.Count + $s.NoResult.Count
+                   $s.NoProgrammaticCheck.Count + $s.ThirdPartyAttested.Count +
+                   $s.NotEvaluatedThisMode.Count + $s.NoResult.Count
             $sum | Should -Be $s.UnscoredControls -Because 'a control that is unscored and in no bucket is invisible, which is the whole failure mode'
 
             # And no control appears in two buckets.
             $all = @($s.LicenceBlocked) + @($s.CollectionIncomplete) + @($s.NoProgrammaticCheck) +
-                   @($s.NotEvaluatedThisMode) + @($s.NoResult)
+                   @($s.ThirdPartyAttested) + @($s.NotEvaluatedThisMode) + @($s.NoResult)
+            @($s.ThirdPartyAttested | ForEach-Object { $_.ControlId }) | Should -Contain $ids[8]
             @($all | ForEach-Object { $_.ControlId } | Group-Object | Where-Object Count -gt 1) | Should -BeNullOrEmpty
         }
 

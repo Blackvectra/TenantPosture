@@ -63,6 +63,11 @@
         "SkipIntune": { "type": "boolean" },
         "SkipPowerPlatform": { "type": "boolean" },
         "SkipDNS": { "type": "boolean" },
+        "ThirdPartyEDR": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$",
+          "description": "Optional. The client's endpoint protection when it is not Microsoft Defender (e.g. \"Cortex XDR\"). The Defender endpoint checks are then reported as covered by it (declared, not verified) and not scored."
+        },
         "Notes": { "type": "string" },
         "Active": { "type": "boolean" }
       }

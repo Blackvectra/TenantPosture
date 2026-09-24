@@ -654,6 +654,7 @@ function Publish-NRGAssessmentHTML {
                 @{ Label = 'Controls not evaluated — quick-scan mode'; Items = $scope.NotEvaluatedThisMode }
                 @{ Label = 'Controls that produced no result at all'; Items = $scope.NoResult }
                 @{ Label = 'Controls with no automated test — manual review'; Items = $scope.NoProgrammaticCheck }
+                @{ Label = 'Defender endpoint checks covered by a declared third-party EDR — not verified'; Items = @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()) }
             )) {
                 $items = @($grp.Items)
                 if ($items.Count -eq 0) { continue }
@@ -692,12 +693,14 @@ function Publish-NRGAssessmentHTML {
     # are supposed to be a subset of. $scope classifies every control in
     # controls.json exactly once (worst-instance-wins across domains), so
     # ScoredControls + (LicenceBlocked + CollectionIncomplete +
-    # NoProgrammaticCheck) sums to exactly $distinctControlsAssessed.
+    # NoProgrammaticCheck + ThirdPartyAttested) sums to exactly
+    # $distinctControlsAssessed.
     $hdrScored = $scrd
     $hdrNA     = $na
     if ($scope -and $scope.Available) {
         $hdrScored = $scope.ScoredControls
-        $hdrNA     = $scope.LicenceBlocked.Count + $scope.CollectionIncomplete.Count + $scope.NoProgrammaticCheck.Count
+        $hdrNA     = $scope.LicenceBlocked.Count + $scope.CollectionIncomplete.Count + $scope.NoProgrammaticCheck.Count +
+                     @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()).Count
     }
 
     # ── License card HTML ────────────────────────────────────────────────────
