@@ -1,6 +1,6 @@
 @{
     # Module identity
-    ModuleVersion     = '4.12.1'
+    ModuleVersion     = '4.13.0'
     GUID              = 'f8dff693-11ac-495b-901a-290773371ef5'
     Author            = 'Matthew Levorson'
     CompanyName       = 'NRG Technology Services / NextLayerSec LLC'
