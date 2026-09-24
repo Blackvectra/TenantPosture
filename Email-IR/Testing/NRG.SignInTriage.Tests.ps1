@@ -10,6 +10,7 @@ Describe 'NRG Sign-In Triage — IoC evaluators against synthetic fixtures' {
     BeforeAll {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
         . (Join-Path $script:RepoRoot 'Lib' 'Add-NRGFinding.ps1')
+        . (Join-Path $script:RepoRoot 'Lib' 'Get-NRGObjectField.ps1')
         . (Join-Path $script:RepoRoot 'Email-IR' 'Evaluators' 'Test-NRGSignInControls.ps1')
 
         function script:NewBag([string]$cid, $data) {
@@ -162,6 +163,7 @@ Describe 'NRG Sign-In Triage — Geo-anomaly (SIGNIN-1.6)' {
     BeforeAll {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
         . (Join-Path $script:RepoRoot 'Lib' 'Add-NRGFinding.ps1')
+        . (Join-Path $script:RepoRoot 'Lib' 'Get-NRGObjectField.ps1')
         . (Join-Path $script:RepoRoot 'Email-IR' 'Evaluators' 'Test-NRGSignInControls.ps1')
         function script:NewBag($cid, $data) { [ordered]@{ CollectorId=$cid; CollectedAt=(Get-Date -Format 'o'); Success=$true; Data=$data } }
         function script:GeoEvents {

@@ -99,7 +99,9 @@ function Add-NRGFinding {
         CurrentValue  = $CurrentValue
         RequiredValue = $RequiredValue
         Remediation   = $Remediation
-        AffectedObjects = @($AffectedObjects)
+        # Drop nulls: an evaluator passing an empty result (often $null, via the
+        # if-block-yields-$null trap) stored [null], which counts as one item.
+        AffectedObjects = @($AffectedObjects | Where-Object { $null -ne $_ })
         Instance      = $Instance
         FrameworkIds  = $FrameworkIds
         Timestamp     = (Get-Date).ToString('o')
