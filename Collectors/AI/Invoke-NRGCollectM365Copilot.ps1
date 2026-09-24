@@ -325,7 +325,12 @@ function Invoke-NRGCollectM365Copilot {
         if ($purview -and $purview.Success) {
             $auditCfg = $purview.Data.AuditConfig
             if ($auditCfg) {
-                $result.Data.AuditCopilotEnabled = [bool]($auditCfg.UnifiedAuditLogIngestionEnabled ?? $false)
+                # A False read anywhere but the Exchange Online session is not
+                # evidence (Security & Compliance always reports False) — record
+                # it as unknown ($null) so PPL-3.5 does not score a false Gap.
+                $ualOn  = [bool](Get-NRGObjectField -Item $auditCfg -Key 'UnifiedAuditLogIngestionEnabled' -Default $false)
+                $ualSrc = [string](Get-NRGObjectField -Item $auditCfg -Key 'Source' -Default 'Unknown')
+                $result.Data.AuditCopilotEnabled = if ($ualOn) { $true } elseif ($ualSrc -eq 'ExchangeOnline') { $false } else { $null }
             }
 
             # Retention policies covering Copilot interactions
