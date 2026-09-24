@@ -152,24 +152,40 @@ function Invoke-NRGCollectAADCAPolicies {
             }
         }
 
-        # Authentication Strength Policies
+        # Authentication Strength Policies. No $top — the collection is always a
+        # handful of built-in policies plus whatever custom ones the tenant has
+        # defined, never large enough to need paging, and a live BadRequest was
+        # observed against this endpoint with $top=50 on it (root cause not yet
+        # confirmed against a live tenant; dropped as the safe simplification).
         try {
             $strengthResp = Invoke-NRGGraphRequest -Method GET `
-                -Uri 'https://graph.microsoft.com/v1.0/policies/authenticationStrengthPolicies?$top=50' `
+                -Uri 'https://graph.microsoft.com/v1.0/policies/authenticationStrengthPolicies' `
                 -ErrorAction Stop
-            $result.Data.AuthStrengths = @($strengthResp.value ?? @() | ForEach-Object {
+            # $strengthResp is a Hashtable (Invoke-NRGGraphRequest pins -OutputType
+            # HashTable) — a bare dot-read on an absent key throws under StrictMode
+            # identically to a PSObject; only index access / Get-NRGObjectField is safe.
+            $result.Data.AuthStrengths = @(Get-NRGObjectField -Item $strengthResp -Key 'value' -Default @() | ForEach-Object {
                 @{
-                    Id                  = [string]$_.id
-                    DisplayName         = [string]$_.displayName
-                    PolicyType          = [string]($_.policyType ?? '')
-                    AllowedCombinations = @($_.allowedCombinations ?? @())
+                    Id                  = [string](Get-NRGObjectField -Item $_ -Key 'id' -Default '')
+                    DisplayName         = [string](Get-NRGObjectField -Item $_ -Key 'displayName' -Default '')
+                    PolicyType          = [string](Get-NRGObjectField -Item $_ -Key 'policyType' -Default '')
+                    AllowedCombinations = @(Get-NRGObjectField -Item $_ -Key 'allowedCombinations' -Default @())
                 }
             })
             $result.Data.SectionStatus.AuthStrengths = 'Collected'
         } catch {
             $result.Data.SectionStatus.AuthStrengths = 'Failed'
+            # ErrorDetails.Message carries the actual Graph error body (a JSON
+            # object with a real reason) when present; $_.Exception.Message alone
+            # is just the generic "Response status code does not indicate success"
+            # text and gives no way to diagnose a BadRequest after the fact.
+            $detail = $_.Exception.Message
+            $errBody = [string](Get-NRGNestedProperty -Object $_ -Path 'ErrorDetails.Message' -Default '')
+            if ($errBody) {
+                $detail = "$detail | $errBody"
+            }
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                Register-NRGException -Source 'AAD-AuthStrengths' -Message $_.Exception.Message
+                Register-NRGException -Source 'AAD-AuthStrengths' -Message $detail
             }
         }
 
