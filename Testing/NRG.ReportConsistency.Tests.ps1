@@ -71,4 +71,26 @@ Describe 'Controls that report the same fact agree' {
             (Verdict 'EXO-6.2').State | Should -Be 'NotApplicable'
         }
     }
+
+    Context 'every finding is visible to the framework rollups' {
+
+        # NIST families / matrix, CMMC and the 800-171 SSP only see a finding
+        # through prefixed citations ("NIST:IA-2(1)"). Omitted or bare IDs hid
+        # AAD-1.2 (a Critical MFA Gap) and ten passing controls on a live tenant.
+        It 'fills citations from controls.json when an evaluator passes none' {
+            Clear-NRGState
+            Add-NRGFinding -ControlId 'INT-1.1' -State 'Satisfied' -Category 'Endpoint' -Title 't' -Severity 'High'
+            @((Get-NRGFindings)[0].FrameworkIds | Where-Object { $_ -like 'NIST:*' }).Count | Should -BeGreaterThan 0
+        }
+        It 'replaces bare, unprefixed IDs with the control''s citations' {
+            Clear-NRGState
+            Add-NRGFinding -ControlId 'AAD-1.2' -State 'Gap' -Category 'Identity' -Title 't' -Severity 'Critical' -FrameworkIds @('IA-2(1)','IA-2(2)')
+            @((Get-NRGFindings)[0].FrameworkIds | Where-Object { $_ -like 'NIST:*' }).Count | Should -BeGreaterThan 0
+        }
+        It 'keeps prefixed citations an evaluator did pass' {
+            Clear-NRGState
+            Add-NRGFinding -ControlId 'AAD-1.2' -State 'Gap' -Category 'Identity' -Title 't' -Severity 'Critical' -FrameworkIds @('NIST:IA-2')
+            (Get-NRGFindings)[0].FrameworkIds | Should -Be @('NIST:IA-2')
+        }
+    }
 }
