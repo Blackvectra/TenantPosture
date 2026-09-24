@@ -306,11 +306,18 @@ function Invoke-NRGCollectAADIdentityGovernance {
                 $expiryRule      = @($policy.rules ?? @()) | Where-Object { $_.id -eq 'Expiration_EndUser_Assignment' } | Select-Object -First 1
                 $enabledRuleNames = @(Get-NRGObjectField -Item $enablementRule -Key 'enabledRules' -Default @())
 
+                # PIM offers MFA on activation two ways — "Azure MFA" (an entry in
+                # the enablement rule's enabledRules) or a Conditional Access
+                # authentication context (its own rule, isEnabled). Either one
+                # satisfies the requirement; the enablement rule is always present,
+                # so checking the context rule only in its absence never ran.
+                $mfaViaEnablement = [bool]($enabledRuleNames -contains 'MultiFactorAuthentication')
+                $mfaViaAuthCtx    = [bool](Get-NRGObjectField -Item $authContextRule -Key 'isEnabled' -Default $false)
                 @{
                     PolicyId              = [string]$policy.id
                     DisplayName           = [string]$policy.displayName
                     ScopeId               = [string]$policy.scopeId
-                    RequiresMFA           = if ($enablementRule) { [bool]($enabledRuleNames -contains 'MultiFactorAuthentication') } elseif ($authContextRule) { [bool](Get-NRGObjectField -Item $authContextRule -Key 'isEnabled' -Default $false) } else { $null }
+                    RequiresMFA           = if ($enablementRule -or $authContextRule) { $mfaViaEnablement -or $mfaViaAuthCtx } else { $null }
                     RequiresJustification = if ($enablementRule) { [bool]($enabledRuleNames -contains 'Justification') } else { $null }
                     RequiresApproval      = if ($approvalRule) { [bool](Get-NRGNestedProperty -Object $approvalRule -Path 'setting.isApprovalRequired' -Default $false) } else { $null }
                     MaxDurationHours      = if ($expiryRule -and $expiryRule.maximumDuration) {
@@ -321,6 +328,37 @@ function Invoke-NRGCollectAADIdentityGovernance {
                 }
             })
             $result.Data.SectionStatus.PIMRolePolicies = 'Collected'
+
+            # Graph names every directory-role PIM policy "DirectoryRole"; which
+            # role a policy governs lives only in roleManagementPolicyAssignments.
+            # Without this map AAD-3.5 could never find the Global Administrator
+            # policy and AAD-3.3/3.4/3.6 weighed every role equally. Its own
+            # try/catch: a failure here leaves RoleDefinitionId absent and the
+            # evaluators fall back to all-policy scoring, saying so.
+            try {
+                $asgNext  = 'https://graph.microsoft.com/v1.0/policies/roleManagementPolicyAssignments?$filter=scopeId eq ''/'' and scopeType eq ''DirectoryRole'''
+                $policyToRole = @{}
+                $asgPages = 0
+                while ($asgNext -and $asgPages -lt 20) {
+                    $asgResp = Invoke-NRGGraphRequest -Method GET -Uri $asgNext -ErrorAction Stop
+                    foreach ($a in @(Get-NRGObjectField -Item $asgResp -Key 'value' -Default @())) {
+                        $pid_ = [string](Get-NRGObjectField -Item $a -Key 'policyId' -Default '')
+                        $rid  = [string](Get-NRGObjectField -Item $a -Key 'roleDefinitionId' -Default '')
+                        if ($pid_ -and $rid) { $policyToRole[$pid_] = $rid }
+                    }
+                    $asgNext = [string](Get-NRGObjectField -Item $asgResp -Key '@odata.nextLink' -Default '')
+                    $asgPages++
+                }
+                foreach ($row in @($result.Data.PIMRolePolicies)) {
+                    if ($policyToRole.ContainsKey($row.PolicyId)) { $row['RoleDefinitionId'] = $policyToRole[$row.PolicyId] }
+                }
+                $result.Data.SectionStatus.PIMPolicyAssignments = 'Collected'
+            } catch {
+                $result.Data.SectionStatus.PIMPolicyAssignments = 'Failed'
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'AAD-PIMPolicyAssignments' -Message $_.Exception.Message
+                }
+            }
         } catch {
             # PIM not licensed — non-fatal
             $result.Data.SectionStatus.PIMRolePolicies = 'Failed'
