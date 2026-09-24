@@ -86,13 +86,13 @@ function Publish-NRGEmailIncidentReport {
 
     # ── Header values (pre-compute then escape — avoids `& $hx (if ...)`
     #    which PS parses as command-style and fails) ─────────────────────────
-    $brand     = if ($Metadata.Brand)             { $Metadata.Brand } else { @{} }
-    $bnRaw     = if ($brand.CompanyName)          { $brand.CompanyName } else { 'NRG Technology Services' }
-    $upnRaw    = if ($Metadata.UserPrincipalName) { $Metadata.UserPrincipalName } else { 'unknown' }
-    $assRaw    = if ($Metadata.AssessmentDate)    { $Metadata.AssessmentDate    } else { Get-Date -Format 'MMMM dd, yyyy' }
-    $winRaw    = if ($Metadata.WindowDays)        { $Metadata.WindowDays } else { 7 }
-    $verRaw    = if ($Metadata.ToolVersion)       { $Metadata.ToolVersion } else { '' }
-    $tidRaw    = if ($Metadata.TenantId)          { $Metadata.TenantId } else { 'unknown' }
+    $brand     = $(Get-NRGObjectField -Item $Metadata -Key 'Brand' -Default $null); if (-not $brand) { $brand = @{} }
+    $bnRaw     = [string](Get-NRGObjectField -Item $brand -Key 'CompanyName' -Default ''); if (-not $bnRaw) { $bnRaw = 'NRG Technology Services' }
+    $upnRaw    = $(Get-NRGObjectField -Item $Metadata -Key 'UserPrincipalName' -Default $null); if (-not $upnRaw) { $upnRaw = 'unknown' }
+    $assRaw    = $(Get-NRGObjectField -Item $Metadata -Key 'AssessmentDate' -Default $null); if (-not $assRaw) { $assRaw = Get-Date -Format 'MMMM dd, yyyy' }
+    $winRaw    = $(Get-NRGObjectField -Item $Metadata -Key 'WindowDays' -Default $null); if (-not $winRaw) { $winRaw = 7 }
+    $verRaw    = $(Get-NRGObjectField -Item $Metadata -Key 'ToolVersion' -Default $null); if (-not $verRaw) { $verRaw = '' }
+    $tidRaw    = $(Get-NRGObjectField -Item $Metadata -Key 'TenantId' -Default $null); if (-not $tidRaw) { $tidRaw = 'unknown' }
 
     $brandName = & $hx $bnRaw
     $upn       = & $hx $upnRaw
@@ -121,7 +121,8 @@ function Publish-NRGEmailIncidentReport {
         $title  = & $hxRef ([string]$f.Title)
         $detail = & $hxRef ([string]$f.Detail)
         $detailHtml = $detail -replace "`n", '<br>'
-        $remed = if ($f.Remediation) { & $hxRef ([string]$f.Remediation) } else { $null }
+        $remTxt = [string](Get-NRGObjectField -Item $f -Key 'Remediation' -Default '')
+        $remed = if ($remTxt) { & $hxRef $remTxt } else { $null }
         $remedHtml = if ($remed) { "<div class=`"remed`"><b>Recommended action:</b> $remed</div>" } else { '' }
 
         # Affected-objects table (the EMAIL-2.1 recipient warn-list only —
@@ -130,7 +131,7 @@ function Publish-NRGEmailIncidentReport {
         # StrictMode-safe key check — direct $_.Recipient throws on objects
         # that don't carry it (e.g. EMAIL-1.1 InboxRule shape).
         $affHtml = ''
-        $aff = @($f.AffectedObjects | Where-Object { Test-NRGAffectedObjectHasKey $_ 'Recipient' })
+        $aff = @(@(Get-NRGObjectField -Item $f -Key 'AffectedObjects' -Default @()) | Where-Object { Test-NRGAffectedObjectHasKey $_ 'Recipient' })
         if ($aff.Count -gt 0) {
             $rows = foreach ($o in $aff) {
                 $recip = & $hxRef ([string]$o.Recipient)
@@ -207,7 +208,7 @@ function Publish-NRGEmailIncidentReport {
     # StrictMode-safe: direct $o.RuleType throws on objects that don't carry it
     # (e.g. EMAIL-2.1 Recipient shape that lives in the same Findings list).
     $flaggedRules = foreach ($f in $Findings) {
-        foreach ($o in @($f.AffectedObjects)) {
+        foreach ($o in @(Get-NRGObjectField -Item $f -Key 'AffectedObjects' -Default @())) {
             if ((Test-NRGAffectedObjectHasKey $o 'RuleType') -and $o.RuleType -eq 'InboxRule') { $o }
         }
     }
@@ -449,7 +450,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);line-height:1.5
         if ($s -match '^[=+\-@\t\r]') { "'" + $s } else { $s }
     }
     $allRecipients = foreach ($f in $Findings) {
-        foreach ($o in @($f.AffectedObjects)) {
+        foreach ($o in @(Get-NRGObjectField -Item $f -Key 'AffectedObjects' -Default @())) {
             # StrictMode-safe: direct $o.Recipient throws on EMAIL-1.1 InboxRule
             # shape (which has no Recipient property).
             if (Test-NRGAffectedObjectHasKey $o 'Recipient') {
@@ -506,7 +507,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);line-height:1.5
             foreach ($f in $items) {
                 $md += "### $(& $EscMd $f.ControlId): $(& $EscMd $f.Title)`n`n"
                 $md += "$(& $EscMd $f.Detail)`n`n"
-                if ($f.Remediation) { $md += "**Action:** $(& $EscMd $f.Remediation)`n`n" }
+                if ([string](Get-NRGObjectField -Item $f -Key 'Remediation' -Default '')) { $md += "**Action:** $(& $EscMd ([string](Get-NRGObjectField -Item $f -Key 'Remediation' -Default '')))`n`n" }
             }
         }
         $md += "## Containment & Recovery Runbook`n`n"

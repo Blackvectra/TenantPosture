@@ -185,6 +185,7 @@ $script:ExportedFunctions = @(
     'Invoke-NRGGraphRequest',
     'Invoke-NRGEvaluatorSafe',
     'Resolve-NRGDns',
+    'Resolve-NRGTenantId',
     'Get-NRGModuleHealth',
     'Repair-NRGModuleHealth',
     'Get-NRGModuleInstallScope',

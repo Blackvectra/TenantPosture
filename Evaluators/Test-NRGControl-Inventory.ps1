@@ -47,16 +47,40 @@ function Test-NRGControlInventoryMFAUsers {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'MFA registration details not available (requires Reports.Read.All)'; return
     }
 
-    $enabled   = @($regDetails | Where-Object { $_.IsEnabled -eq $true })
+    # Population = enabled MEMBER accounts, the same one AAD-1.2 uses. The
+    # registration report also lists guests and disabled accounts, and the
+    # collector marks every row enabled — on a live tenant that made this
+    # control say "185 users have no MFA" (mostly guests, who authenticate
+    # in their home tenant) while AAD-1.2 in the same report said 49.5% of
+    # 103 members. Fall back to the raw report only if the user list is absent.
+    $memberList = @(Get-NRGNestedProperty -Object $users -Path 'Data.Users' -Default @() | Where-Object {
+        (Get-NRGObjectField -Item $_ -Key 'AccountEnabled' -Default $false) -eq $true -and
+        [string](Get-NRGObjectField -Item $_ -Key 'UserType' -Default '') -eq 'Member'
+    })
+    if ($memberList.Count -gt 0) {
+        $byUpn = @{}
+        foreach ($r in $regDetails) { $u = [string](Get-NRGObjectField -Item $r -Key 'UserPrincipalName' -Default ''); if ($u) { $byUpn[$u.ToLowerInvariant()] = $r } }
+        $enabled = @($memberList | ForEach-Object {
+            $upn = [string](Get-NRGObjectField -Item $_ -Key 'UserPrincipalName' -Default '')
+            $rec = $byUpn[$upn.ToLowerInvariant()]
+            @{ UserPrincipalName = $upn
+               UserDisplayName   = [string](Get-NRGObjectField -Item $_ -Key 'DisplayName' -Default $upn)
+               # No registration record = no registered method (as AAD-1.2 treats it).
+               IsMfaRegistered   = [bool]($rec -and (Get-NRGObjectField -Item $rec -Key 'IsMfaRegistered' -Default $false)) }
+        })
+    } else {
+        $enabled = @($regDetails | Where-Object { $_.IsEnabled -eq $true })
+    }
+    $popLabel  = if ($memberList.Count -gt 0) { 'enabled member accounts (guests excluded)' } else { 'enabled users' }
     $withMFA   = @($enabled    | Where-Object { $_.IsMfaRegistered -eq $true })
     $noMFA     = @($enabled    | Where-Object { $_.IsMfaRegistered -eq $false })
     $total     = $enabled.Count
-    $pct       = if ($total -gt 0) { [int][Math]::Round($withMFA.Count * 100 / $total) } else { 0 }
+    $pct       = if ($total -gt 0) { [Math]::Round($withMFA.Count * 100 / $total, 1) } else { 0 }
 
     if ($noMFA.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "$($withMFA.Count) of $total enabled users ($pct%) have MFA registered. No gaps found."
+            -Detail "$($withMFA.Count) of $total $popLabel ($pct%) have MFA registered. No gaps found."
     } else {
         $objects = @($noMFA | Select-Object -First 100 | ForEach-Object {
             "$($_.UserDisplayName) ($($_.UserPrincipalName))"
@@ -64,7 +88,7 @@ function Test-NRGControlInventoryMFAUsers {
         $remaining = if ($noMFA.Count -gt 100) { " ($($noMFA.Count - 100) additional users in full results)" } else { '' }
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "$($withMFA.Count) of $total enabled users ($pct%) have MFA registered. The $($noMFA.Count) user(s) listed below have no MFA method — each is one stolen password away from a full mailbox compromise.$remaining" `
+            -Detail "$($withMFA.Count) of $total $popLabel ($pct%) have MFA registered. The $($noMFA.Count) user(s) listed below have no MFA method — each is one stolen password away from a full mailbox compromise.$remaining" `
             -CurrentValue "$($withMFA.Count)/$total users with MFA ($pct%)" `
             -RequiredValue '100% of enabled users registered for MFA' `
             -Remediation $ctrl.Remediation -AffectedObjects $objects
@@ -293,16 +317,31 @@ function Test-NRGControlInventorySharedMailboxSignIn {
             -Detail "$($shared.Count) shared mailbox(es) found, but AAD user data was not collected — sign-in state could not be determined."
         return
     }
+    # Join on the mailbox's UPN first — a shared mailbox's UPN routinely
+    # differs from its primary SMTP address, and joining on SMTP alone missed
+    # 6 of 18 sign-in-enabled mailboxes on a live tenant (EXO-2.6 in the same
+    # report found all 18). A mailbox that matches no account is UNKNOWN,
+    # never "blocked".
     $enabledShared = @()
-    if ($users -and $users.Success) {
-        $userIndex = @{}
-        foreach ($u in @($users.Data['Users'])) { $userIndex[$u.UserPrincipalName.ToLower()] = $u }
-        foreach ($mb in $shared) {
-            $smtp = [string]($mb.PrimarySmtp ?? '').ToLower()
-            if ($userIndex.ContainsKey($smtp) -and $userIndex[$smtp].AccountEnabled -eq $true) {
-                $enabledShared += $mb
-            }
+    $unmatched     = @()
+    $userIndex = @{}
+    foreach ($u in @($users.Data['Users'])) {
+        $k = [string](Get-NRGObjectField -Item $u -Key 'UserPrincipalName' -Default '')
+        if ($k) { $userIndex[$k.ToLowerInvariant()] = $u }
+    }
+    foreach ($mb in $shared) {
+        $acct = $null
+        foreach ($key in @((Get-NRGObjectField -Item $mb -Key 'UPN' -Default ''), (Get-NRGObjectField -Item $mb -Key 'PrimarySmtp' -Default ''))) {
+            $k = ([string]$key).ToLowerInvariant()
+            if ($k -and $userIndex.ContainsKey($k)) { $acct = $userIndex[$k]; break }
         }
+        if (-not $acct) { $unmatched += $mb }
+        elseif ((Get-NRGObjectField -Item $acct -Key 'AccountEnabled' -Default $false) -eq $true) { $enabledShared += $mb }
+    }
+    if ($enabledShared.Count -eq 0 -and $unmatched.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "$($unmatched.Count) of $($shared.Count) shared mailbox(es) could not be matched to an Entra account, so their sign-in state is unknown; not assessed."
+        return
     }
     if ($enabledShared.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($shared.Count) shared mailbox(es) found — all have interactive sign-in blocked. Access is via Outlook delegation only, as intended."

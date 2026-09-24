@@ -111,9 +111,15 @@ function Invoke-NRGCollectM365Copilot {
 
         $result.Data.CopilotLicensedUserCount = 0
         if ($result.Data.LicensedSkus.Count -gt 0) {
-            # Sum consumed units across Copilot SKUs as a first-order approximation
+            # Sum consumed units across Copilot SKUs as a first-order approximation.
+            # Measure-Object -Property reads members via the ETS/Get-Member adapter,
+            # which does not expose Hashtable/OrderedDictionary keys (unlike the
+            # PowerShell parser's own dot-access shortcut for hashtables) — piping
+            # -Property ConsumedUnits over these [ordered]@{} rows throws "Cannot
+            # process argument because the value of argument 'ConsumedUnits' is not
+            # valid." Project the values first, then sum.
             $result.Data.CopilotLicensedUserCount = (
-                $result.Data.LicensedSkus | Measure-Object -Property ConsumedUnits -Sum
+                $result.Data.LicensedSkus | ForEach-Object { [int]$_.ConsumedUnits } | Measure-Object -Sum
             ).Sum
         }
     } catch {
@@ -319,7 +325,12 @@ function Invoke-NRGCollectM365Copilot {
         if ($purview -and $purview.Success) {
             $auditCfg = $purview.Data.AuditConfig
             if ($auditCfg) {
-                $result.Data.AuditCopilotEnabled = [bool]($auditCfg.UnifiedAuditLogIngestionEnabled ?? $false)
+                # A False read anywhere but the Exchange Online session is not
+                # evidence (Security & Compliance always reports False) — record
+                # it as unknown ($null) so PPL-3.5 does not score a false Gap.
+                $ualOn  = [bool](Get-NRGObjectField -Item $auditCfg -Key 'UnifiedAuditLogIngestionEnabled' -Default $false)
+                $ualSrc = [string](Get-NRGObjectField -Item $auditCfg -Key 'Source' -Default 'Unknown')
+                $result.Data.AuditCopilotEnabled = if ($ualOn) { $true } elseif ($ualSrc -eq 'ExchangeOnline') { $false } else { $null }
             }
 
             # Retention policies covering Copilot interactions

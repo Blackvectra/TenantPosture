@@ -11,6 +11,7 @@ Describe 'NRG Email IR — domain + impersonation helpers' {
     BeforeAll {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
         . (Join-Path $script:RepoRoot 'Lib' 'Add-NRGFinding.ps1')
+        . (Join-Path $script:RepoRoot 'Lib' 'Get-NRGObjectField.ps1')
         . (Join-Path $script:RepoRoot 'Email-IR' 'Evaluators' 'Test-NRGEmailControls.ps1')
     }
 
@@ -67,6 +68,7 @@ Describe 'NRG Email IR — evaluators against synthetic fixtures' {
     BeforeAll {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
         . (Join-Path $script:RepoRoot 'Lib' 'Add-NRGFinding.ps1')
+        . (Join-Path $script:RepoRoot 'Lib' 'Get-NRGObjectField.ps1')
         . (Join-Path $script:RepoRoot 'Email-IR' 'Evaluators' 'Test-NRGEmailControls.ps1')
 
         # Helper: build a raw-data result matching the collector contract
@@ -271,6 +273,7 @@ Describe 'NRG Email IR — recipient warn-list (EMAIL-2.1 AffectedObjects)' {
     BeforeAll {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
         . (Join-Path $script:RepoRoot 'Lib' 'Add-NRGFinding.ps1')
+        . (Join-Path $script:RepoRoot 'Lib' 'Get-NRGObjectField.ps1')
         . (Join-Path $script:RepoRoot 'Email-IR' 'Evaluators' 'Test-NRGEmailControls.ps1')
         function script:NewBag($cid, $data) { [ordered]@{ CollectorId=$cid; CollectedAt=(Get-Date -Format 'o'); Success=$true; Data=$data } }
     }
@@ -309,6 +312,7 @@ Describe 'NRG Email IR — EMAIL-1.1 attaches flagged rules as InboxRule Affecte
     BeforeAll {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
         . (Join-Path $script:RepoRoot 'Lib' 'Add-NRGFinding.ps1')
+        . (Join-Path $script:RepoRoot 'Lib' 'Get-NRGObjectField.ps1')
         . (Join-Path $script:RepoRoot 'Email-IR' 'Evaluators' 'Test-NRGEmailControls.ps1')
         function script:NewBag($cid, $data) { [ordered]@{ CollectorId=$cid; CollectedAt=(Get-Date -Format 'o'); Success=$true; Data=$data } }
     }
@@ -343,6 +347,7 @@ Describe 'NRG Email IR — EMAIL-1.1 attaches flagged rules as InboxRule Affecte
 Describe 'NRG Email IR — Containment Runbook render (publisher)' {
     BeforeAll {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
+        . (Join-Path $script:RepoRoot 'Lib' 'Get-NRGObjectField.ps1')
         . (Join-Path $script:RepoRoot 'Email-IR' 'Publishers' 'Publish-NRGEmailIncidentReport.ps1')
         $script:OutDir = Join-Path ([System.IO.Path]::GetTempPath()) ("nls-rb-" + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $script:OutDir -Force | Out-Null
@@ -402,6 +407,7 @@ Describe 'NRG Email IR — EMAIL-4.1 OAuth consent grants' {
     BeforeAll {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
         . (Join-Path $script:RepoRoot 'Lib' 'Add-NRGFinding.ps1')
+        . (Join-Path $script:RepoRoot 'Lib' 'Get-NRGObjectField.ps1')
         . (Join-Path $script:RepoRoot 'Email-IR' 'Evaluators' 'Test-NRGEmailControls.ps1')
         function script:NewBag($cid, $data) { [ordered]@{ CollectorId=$cid; CollectedAt=(Get-Date -Format 'o'); Success=$true; Data=$data } }
     }
@@ -455,6 +461,7 @@ Describe 'NRG Email IR — EMAIL-4.2 auth methods' {
     BeforeAll {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
         . (Join-Path $script:RepoRoot 'Lib' 'Add-NRGFinding.ps1')
+        . (Join-Path $script:RepoRoot 'Lib' 'Get-NRGObjectField.ps1')
         . (Join-Path $script:RepoRoot 'Email-IR' 'Evaluators' 'Test-NRGEmailControls.ps1')
         function script:NewBag($cid, $data) { [ordered]@{ CollectorId=$cid; CollectedAt=(Get-Date -Format 'o'); Success=$true; Data=$data } }
     }
@@ -498,6 +505,7 @@ Describe 'NRG Email IR — EMAIL-4.2 auth methods' {
 Describe 'NRG Email IR — recipients.csv formula-injection guard' {
     BeforeAll {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
+        . (Join-Path $script:RepoRoot 'Lib' 'Get-NRGObjectField.ps1')
         . (Join-Path $script:RepoRoot 'Email-IR' 'Publishers' 'Publish-NRGEmailIncidentReport.ps1')
         $script:OutDir = Join-Path ([System.IO.Path]::GetTempPath()) ("nls-csv-" + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $script:OutDir -Force | Out-Null

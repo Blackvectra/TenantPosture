@@ -47,11 +47,35 @@ Describe 'No control claims compliance from a section that was never collected' 
             }
         }
 
+        # Build the fixture from the REAL collectors with every Graph call
+        # failing (issue #89): each collector leaves exactly the shape it leaves
+        # in production when its sub-queries fail - pre-initialised sections,
+        # SectionStatus = Failed - rather than a hand-made Data = @{} no
+        # collector ever produces (47 evaluators threw on that shape, which hid
+        # the two that genuinely mishandled the real one). EXO/Teams/SCC
+        # cmdlets are simply absent here, so their sub-queries fail the same
+        # way. Then force every envelope to Success = $true: the case this
+        # suite exists for is "collector completed, sections empty".
+        $mod = Get-Module 'NRG-Assessment'
+        & $mod { Set-Item -Path 'function:script:Invoke-NRGGraphRequest' -Value {
+            param([Parameter(ValueFromRemainingArguments)] $rest) throw 'Simulated: Graph 503 Service Unavailable' } }
         Clear-NRGState
+        $collectors = @(Get-Command -Module 'NRG-Assessment' -Name 'Invoke-NRGCollect*' | Where-Object {
+            -not ($_.Parameters.Values | Where-Object { $_.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } })
+        })
+        foreach ($c in $collectors) { try { & $c.Name *>$null } catch { } }
+        & $mod { Remove-Item -Path 'function:script:Invoke-NRGGraphRequest' -ErrorAction SilentlyContinue }
         foreach ($k in $script:Keys) {
-            Set-NRGRawData -Key $k -Data @{
-                CollectorId = $k; CollectedAt = (Get-Date); Success = $true; Data = @{}
-            }
+            $raw = Get-NRGRawData -Key $k
+            if (-not $raw) { $raw = @{ CollectorId = $k; CollectedAt = (Get-Date); Data = @{} } }
+            # Keep a collector's own Success = $false: collectors whose Success
+            # tracks their primary query (AAD-CAPolicies) report failure in
+            # production too, and overriding that would fabricate a "zero
+            # policies" tenant rather than a failed read. Everything else gets
+            # the completed-but-empty envelope this suite is about.
+            if ($raw -is [System.Collections.IDictionary] -and $raw.Contains('Success') -and $raw['Success'] -eq $false) { continue }
+            $raw['Success'] = $true
+            Set-NRGRawData -Key $k -Data $raw
         }
 
         $script:Controls = @((Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config/controls.json') -Raw -Encoding utf8 | ConvertFrom-Json).controls)

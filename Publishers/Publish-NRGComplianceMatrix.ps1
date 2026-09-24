@@ -107,8 +107,8 @@ function Publish-NRGComplianceMatrix {
                 State           = [string]$_.State
                 Severity        = [string]$_.Severity
                 Detail          = [string]$_.Detail
-                CurrentValue    = [string]($_.CurrentValue  ?? '')
-                RequiredValue   = [string]($_.RequiredValue ?? '')
+                CurrentValue    = [string](Get-NRGObjectField -Item $_ -Key 'CurrentValue'  -Default '')
+                RequiredValue   = [string](Get-NRGObjectField -Item $_ -Key 'RequiredValue' -Default '')
                 Remediation     = [string]$(
                     # Get-NRGObjectField, not dot-access-then-??: $ctrl is the
                     # controls.json definition and $_ is the finding — either can
@@ -120,9 +120,12 @@ function Publish-NRGComplianceMatrix {
                     if (-not $rem) { $rem = Get-NRGObjectField -Item $_ -Key 'Remediation' -Default '' }
                     $rem
                 )
-                BusinessRisk    = [string]($ctrl.BusinessRisk ?? '')
-                LicenseReq      = [string]($ctrl.LicenseRequirement ?? 'Included')
-                FrameworkIds    = @($_.FrameworkIds ?? @() | ForEach-Object { [string]$_ })
+                # $ctrl is $null for DEV-* endpoint findings (device-controls.json,
+                # not controls.json), and under StrictMode Latest a member read on
+                # $null throws before ?? applies — which aborted the whole XLSX.
+                BusinessRisk    = [string](Get-NRGObjectField -Item $ctrl -Key 'BusinessRisk' -Default '')
+                LicenseReq      = [string](Get-NRGObjectField -Item $ctrl -Key 'LicenseRequirement' -Default 'Included')
+                FrameworkIds    = @(Get-NRGObjectField -Item $_ -Key 'FrameworkIds' -Default @() | ForEach-Object { [string]$_ })
                 CIS             = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.CIS'      -Default '')
                 SCuBA           = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.SCuBA'    -Default '')
                 NIST            = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.NIST'     -Default '')
@@ -232,6 +235,17 @@ def nist_label(nid):
 
 meta     = d['Metadata']
 findings = d['Findings']
+# One verdict per control for every SCORE on this workbook (worst instance:
+# Gap > Error > Partial > Satisfied > NotApplicable), matching
+# Get-NRGCoverageScore. DNS emits one finding per domain; scoring each would
+# weight a DNS control once per domain. Row listings still use `findings`.
+_rank = {'Gap': 5, 'Error': 4, 'Partial': 3, 'Satisfied': 2, 'NotApplicable': 1}
+_worst = {}
+for _f in findings:
+    _c = _f.get('ControlId', '')
+    if _c not in _worst or _rank.get(_f['State'], 0) > _rank.get(_worst[_c]['State'], 0):
+        _worst[_c] = _f
+scoring = list(_worst.values())
 
 # ── Color palette ─────────────────────────────────────────────────────────────
 NAVY    = '0F2544'
@@ -331,16 +345,16 @@ s.font = Font(name='Arial', size=9, color='6B7280')
 s.alignment = Alignment(horizontal='center')
 
 # Score section
-total = len(findings)
-gaps  = sum(1 for f in findings if f['State']=='Gap')
-parts = sum(1 for f in findings if f['State']=='Partial')
-sats  = sum(1 for f in findings if f['State']=='Satisfied')
-nas   = sum(1 for f in findings if f['State']=='NotApplicable')
+total = len(scoring)
+gaps  = sum(1 for f in scoring if f['State']=='Gap')
+parts = sum(1 for f in scoring if f['State']=='Partial')
+sats  = sum(1 for f in scoring if f['State']=='Satisfied')
+nas   = sum(1 for f in scoring if f['State']=='NotApplicable')
 # Errors are scored as failures (they sit in the denominator), so the summary
 # MUST name them: without the row a reader adds Satisfied + Partial + Gaps,
 # comes up short of the stated Assessed count, and cannot tell whether the
 # missing rows were passes or failures.
-errs  = sum(1 for f in findings if f['State']=='Error')
+errs  = sum(1 for f in scoring if f['State']=='Error')
 scored = total - nas
 score  = round(100*(sats+0.5*parts)/scored) if scored else 0
 posture = 'Strong' if score>=85 else 'Moderate' if score>=65 else 'At Risk' if score>=40 else 'Critical Risk'
@@ -366,7 +380,7 @@ hdr(ws,10,1,'Gap Severity Breakdown',ORANGE,WHITE)
 sev_hdr = ['Critical','High','Medium','Low']
 for j,s2 in enumerate(sev_hdr,1):
     hdr(ws,11,j,s2,SEV_COLORS[s2],WHITE,size=9)
-    cnt = sum(1 for f in findings if f['State']=='Gap' and f['Severity']==s2)
+    cnt = sum(1 for f in scoring if f['State']=='Gap' and f['Severity']==s2)
     cell(ws,12,j,cnt,WHITE,SEV_COLORS[s2],True,align='center')
 
 # Workload scores
@@ -377,7 +391,7 @@ wl_names={'AAD':'Identity & Access','EXO':'Exchange Online','DNS':'DNS Email Aut
           'SPO':'SharePoint/OneDrive','TMS':'Microsoft Teams','INT':'Intune/Endpoint','PVW':'Purview/Compliance','PPL':'Power Platform'}
 from collections import defaultdict
 wl_groups = defaultdict(list)
-for f in findings:
+for f in scoring:
     wl = f['ControlId'].split('-')[0]
     wl_groups[wl].append(f)
 row=16
@@ -406,7 +420,7 @@ hdr(ws,row+2,1,'Framework',MGRAY,NAVY); hdr(ws,row+2,2,'Score',MGRAY,NAVY)
 hdr(ws,row+2,3,'Mapped Controls',MGRAY,NAVY); hdr(ws,row+2,4,'Reference',MGRAY,NAVY)
 row+=3
 for fw, fname in fws.items():
-    ff = [f for f in findings if any(fw in fid for fid in f['FrameworkIds'])]
+    ff = [f for f in scoring if any(fid.startswith(fw + ':') for fid in f['FrameworkIds'])]
     fd = [f for f in ff if f['State']!='NotApplicable']
     fs = sum(1 for f in fd if f['State']=='Satisfied')
     fp = sum(1 for f in fd if f['State']=='Partial')
@@ -569,7 +583,7 @@ NIST_REF_RE = re.compile(r'^([A-Z]{2})-(\d{1,3})(\(\d{1,3}\))?$')
 
 fam_findings = {}
 fam_refs     = {}
-for f in findings:
+for f in scoring:
     raw = f.get('NIST','') or ''
     fams_here, refs_here = set(), set()
     for tok in str(raw).split(','):

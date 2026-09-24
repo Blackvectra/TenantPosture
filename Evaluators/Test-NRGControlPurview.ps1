@@ -28,11 +28,30 @@ function Test-NRGControlPurview {
     # PVW-1.1 — Unified Audit Log ingestion
     $c = Get-NRGControlById -ControlId 'PVW-1.1'
     if ($c) {
-        if ($d.UnifiedAuditEnabled -eq $true) {
+        $ual       = Get-NRGObjectField -Item $d -Key 'UnifiedAuditEnabled'
+        $ualSource = [string](Get-NRGNestedProperty -Object $d -Path 'AuditConfig.Source' -Default 'Unknown')
+        if ($ual -eq $true) {
+            # True is authoritative from any session: Security & Compliance
+            # PowerShell can only ever report False.
             Add-NRGFinding -ControlId 'PVW-1.1' -State 'Satisfied' `
                 -Category 'Compliance' -Title $c.Title -Severity 'Informational' `
                 -CurrentValue 'Unified Audit Log: enabled' `
-                -RequiredValue 'UnifiedAuditLogIngestionEnabled = true'
+                -RequiredValue 'UnifiedAuditLogIngestionEnabled = true' `
+                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.1')
+        } elseif ($null -eq $ual -or -not (Test-NRGSectionCollected $raw 'AuditConfig')) {
+            Add-NRGFinding -ControlId 'PVW-1.1' -State 'NotApplicable' `
+                -Category 'Compliance' -Title $c.Title `
+                -Detail 'Audit configuration was not collected; Unified Audit Log status not assessed. Verify in Purview > Audit.' `
+                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.1')
+        } elseif ($ualSource -ne 'ExchangeOnline') {
+            # Microsoft: "the UnifiedAuditLogIngestionEnabled property is always
+            # False [in Security & Compliance PowerShell], even when auditing is
+            # turned on." A False from that session — or one we cannot place —
+            # is not evidence that auditing is off.
+            Add-NRGFinding -ControlId 'PVW-1.1' -State 'NotApplicable' `
+                -Category 'Compliance' -Title $c.Title `
+                -Detail "Unified Audit Log status could not be read from the Exchange Online session (source: $ualSource). Security & Compliance PowerShell always reports it as off, so no verdict is given. Verify with Get-AdminAuditLogConfig in Exchange Online PowerShell, or in Purview > Audit." `
+                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.1')
         } else {
             Add-NRGFinding -ControlId 'PVW-1.1' -State 'Gap' `
                 -Category 'Compliance' -Title $c.Title -Severity $c.Severity `
@@ -46,7 +65,12 @@ function Test-NRGControlPurview {
 
     # PVW-1.2 — DLP policies
     $c = Get-NRGControlById -ControlId 'PVW-1.2'
-    if ($c) {
+    if ($c -and -not (Test-NRGSectionCollected $raw 'DLPPolicies')) {
+        # The section was never read (IPPS not connected, or the role cannot
+        # run the cmdlet). An empty list here is not "none configured".
+        Add-NRGFinding -ControlId 'PVW-1.2' -State 'NotApplicable' -Category 'Compliance' -Title $c.Title `
+            -Detail 'DLP policies were not collected; not assessed.' -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.2')
+    } elseif ($c) {
         $count = @($d.DLPPolicies | Where-Object { $_.Enabled -eq $true }).Count
         $total = @($d.DLPPolicies).Count
         if ($count -gt 0) {
@@ -71,7 +95,12 @@ function Test-NRGControlPurview {
 
     # PVW-1.3 — Retention policies
     $c = Get-NRGControlById -ControlId 'PVW-1.3'
-    if ($c) {
+    if ($c -and -not (Test-NRGSectionCollected $raw 'RetentionPolicies')) {
+        # The section was never read (IPPS not connected, or the role cannot
+        # run the cmdlet). An empty list here is not "none configured".
+        Add-NRGFinding -ControlId 'PVW-1.3' -State 'NotApplicable' -Category 'Compliance' -Title $c.Title `
+            -Detail 'Retention policies were not collected; not assessed.' -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.3')
+    } elseif ($c) {
         $count = @($d.RetentionPolicies | Where-Object { $_.Enabled -eq $true }).Count
         if ($count -gt 0) {
             Add-NRGFinding -ControlId 'PVW-1.3' -State 'Satisfied' `
@@ -88,7 +117,12 @@ function Test-NRGControlPurview {
 
     # PVW-1.4 — Sensitivity labels
     $c = Get-NRGControlById -ControlId 'PVW-1.4'
-    if ($c) {
+    if ($c -and -not (Test-NRGSectionCollected $raw 'SensitivityLabels')) {
+        # The section was never read (IPPS not connected, or the role cannot
+        # run the cmdlet). An empty list here is not "none configured".
+        Add-NRGFinding -ControlId 'PVW-1.4' -State 'NotApplicable' -Category 'Compliance' -Title $c.Title `
+            -Detail 'Sensitivity labels were not collected; not assessed.' -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.4')
+    } elseif ($c) {
         $count = @($d.SensitivityLabels | Where-Object { $_.IsValid -eq $true }).Count
         if ($count -gt 0) {
             Add-NRGFinding -ControlId 'PVW-1.4' -State 'Satisfied' `

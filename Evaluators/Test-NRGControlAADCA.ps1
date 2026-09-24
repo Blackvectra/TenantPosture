@@ -24,7 +24,7 @@ function Test-NRGControlAADCA {
     $caRaw = Get-NRGRawData -Key 'AAD-CAPolicies'
 
     if (-not $caRaw -or -not $caRaw.Success) {
-        $detail = if ($caRaw) { "CA collector failed: $($caRaw.Exceptions -join '; ')" } else { 'AAD-CAPolicies collector did not run.' }
+        $detail = if ($caRaw) { "CA collector failed: $(@(Get-NRGObjectField -Item $caRaw -Key 'Exceptions' -Default @()) -join '; ')" } else { 'AAD-CAPolicies collector did not run.' }
         Add-NRGFinding -ControlId 'AAD-2.1' -State 'NotApplicable' `
             -Category 'Identity' -Title 'Conditional Access Policies Deployed' -Detail $detail
         return

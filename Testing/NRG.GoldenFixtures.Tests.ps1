@@ -102,6 +102,28 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
         }
     }
 
+    Context 'AAD-6.1 — User App Registration Disabled' {
+
+        # A missing value used to default to "users CAN register apps" (a High
+        # Gap). On a live tenant the setting lived only under AAD-AuthPolicies
+        # and read false, yet the control reported a Gap.
+        It 'Gap when users may register applications' {
+            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (NewRaw 'AAD' @{
+                ExternalCollab = @{ DefaultUserRolePermissions = @{ AllowedToCreateApps = $true } } })
+            (GetVerdict 'Test-NRGControlAADUserAppReg' 'AAD-6.1').State | Should -Be 'Gap'
+        }
+        It 'Satisfied from the authorization-policy copy when the governance copy is absent' {
+            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (NewRaw 'AAD' @{ })
+            Set-NRGRawData -Key 'AAD-AuthPolicies' -Data (NewRaw 'AAD' @{
+                AuthorizationPolicy = @{ DefaultUserRolePermissions = @{ AllowedToCreateApps = $false } } })
+            (GetVerdict 'Test-NRGControlAADUserAppReg' 'AAD-6.1').State | Should -Be 'Satisfied'
+        }
+        It 'NotApplicable, never Gap, when the setting was not collected at all' {
+            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (NewRaw 'AAD' @{ })
+            (GetVerdict 'Test-NRGControlAADUserAppReg' 'AAD-6.1').State | Should -Be 'NotApplicable'
+        }
+    }
+
     Context 'AAD-1.3 — Phishing-Resistant MFA for Admins' {
 
         It 'Satisfied when a role-targeted policy uses an Authentication Strength' {
@@ -128,6 +150,43 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
                 Policies = @( NewCaPolicy -DisplayName 'All users MFA' -State 'enabled' -BuiltInControls @('mfa') )
             })
             (GetVerdict 'Test-NRGControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Gap'
+        }
+
+        # Any authentication strength used to count as phishing-resistant. A
+        # live tenant's admin policy used a CUSTOM strength whose methods were
+        # never checked, and scored Satisfied on this Critical control.
+        It 'Partial, not Satisfied, for the built-in "Multifactor authentication" strength (allows SMS/voice)' {
+            Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{
+                Policies = @( NewCaPolicy -DisplayName 'Admins: MFA strength' -State 'enabled' `
+                                -IncludeRoles @('62e90394-69f5-4237-9190-012177145e10') `
+                                -AuthStrengthId '00000000-0000-0000-0000-000000000002' )
+            })
+            (GetVerdict 'Test-NRGControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Partial'
+        }
+
+        It 'judges a custom strength by every combination it allows' {
+            $mk = { param([string[]] $Combos)
+                $p = NewCaPolicy -DisplayName 'Admins: custom' -State 'enabled' `
+                        -IncludeRoles @('62e90394-69f5-4237-9190-012177145e10') -AuthStrengthId 'd6c840e6-b1ff-4cc2-8253-10409d809f22'
+                $p.GrantControls | Add-Member -NotePropertyName AuthStrengthName -NotePropertyValue 'Custom'
+                $p.GrantControls | Add-Member -NotePropertyName AuthStrengthCombinations -NotePropertyValue $Combos
+                $p }
+            Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{ Policies = @( & $mk @('fido2', 'windowsHelloForBusiness', 'x509CertificateMultiFactor') ) })
+            (GetVerdict 'Test-NRGControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Satisfied'
+
+            Clear-NRGState
+            Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{ Policies = @( & $mk @('fido2', 'password,sms') ) })
+            (GetVerdict 'Test-NRGControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Partial' `
+                -Because 'one SMS combination makes the whole strength relayable by AiTM phishing'
+        }
+
+        It 'NotApplicable, never Satisfied, when a custom strength''s methods are not visible' {
+            Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{
+                Policies = @( NewCaPolicy -DisplayName 'Admins: custom' -State 'enabled' `
+                                -IncludeRoles @('62e90394-69f5-4237-9190-012177145e10') `
+                                -AuthStrengthId 'd6c840e6-b1ff-4cc2-8253-10409d809f22' )
+            })
+            (GetVerdict 'Test-NRGControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'NotApplicable'
         }
     }
 

@@ -115,14 +115,33 @@ function Test-NRGControlEXOAutoForward {
         return
     }
 
-    $defaultPolicy = @($exoData.Data['OutboundSpamPolicies'] ?? @()) |
-        Where-Object { $_.IsDefault } | Select-Object -First 1
+    # Both halves must have been read. With either query failed, "no default
+    # policy found" fell through to the Gap branch - "External auto-forwarding
+    # is NOT blocked" from data that was never collected.
+    if (-not (Test-NRGSectionCollected $exoData 'OutboundSpamPolicies') -or
+        -not (Test-NRGSectionCollected $exoData 'RemoteDomains')) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'Outbound spam policies or remote domains were not collected; external auto-forwarding not assessed.'
+        return
+    }
 
-    $wildcardRemote = @($exoData.Data['RemoteDomains'] ?? @()) |
-        Where-Object { $_.IsDefault } | Select-Object -First 1
+    $defaultPolicy = @(Get-NRGObjectField -Item $exoData.Data -Key 'OutboundSpamPolicies' -Default @()) |
+        Where-Object { (Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false) -eq $true } | Select-Object -First 1
 
-    $policyBlocked  = $defaultPolicy -and $defaultPolicy.AutoForwardingMode -eq 'Off'
-    $remoteBlocked  = $wildcardRemote -and (-not $wildcardRemote.AutoForwardEnabled)
+    $wildcardRemote = @(Get-NRGObjectField -Item $exoData.Data -Key 'RemoteDomains' -Default @()) |
+        Where-Object { (Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false) -eq $true } | Select-Object -First 1
+
+    if (-not $defaultPolicy -or -not $wildcardRemote) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail 'The default outbound spam policy or default remote domain was not found in the collected data; external auto-forwarding not assessed.'
+        return
+    }
+
+    $fwdMode        = [string](Get-NRGObjectField -Item $defaultPolicy -Key 'AutoForwardingMode' -Default '')
+    $policyBlocked  = $fwdMode -eq 'Off'
+    $remoteBlocked  = -not [bool](Get-NRGObjectField -Item $wildcardRemote -Key 'AutoForwardEnabled' -Default $true)
 
     if ($policyBlocked -and $remoteBlocked) {
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
@@ -138,13 +157,13 @@ function Test-NRGControlEXOAutoForward {
         Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
             -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
             -Detail 'Remote domain wildcard blocks auto-forward, but outbound spam policy is not set to Off.' `
-            -CurrentValue "AutoForwardingMode = $($defaultPolicy.AutoForwardingMode ?? 'unknown')" `
+            -CurrentValue "AutoForwardingMode = $(if ($fwdMode) { $fwdMode } else { 'unknown' })" `
             -RequiredValue 'AutoForwardingMode = Off'
     } else {
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
             -Detail 'External auto-forwarding is NOT blocked. Users or compromised accounts can silently exfiltrate all email to external addresses.' `
-            -CurrentValue "AutoForwardingMode = $($defaultPolicy.AutoForwardingMode ?? 'Automatic')" `
+            -CurrentValue "AutoForwardingMode = $(if ($fwdMode) { $fwdMode } else { 'Automatic' })" `
             -RequiredValue 'AutoForwardingMode = Off in outbound spam policy AND Remote domain AutoForwardEnabled = $false' `
             -Remediation $control.Remediation
     }
@@ -560,9 +579,12 @@ function Test-NRGControlEXOConnectionFilter {
     if (-not $cf -or -not $cf.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Connection filter data not collected'; return
     }
-    $defaultCF = @($cf.Data['ConnectionFilter'] | Where-Object { $_.IsDefault }) | Select-Object -First 1
+    $defaultCF = @(@(Get-NRGObjectField -Item $cf.Data -Key 'ConnectionFilter' -Default @()) |
+        Where-Object { (Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false) -eq $true }) | Select-Object -First 1
     if (-not $defaultCF) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'No default connection filter found'; return }
-    $safeListEnabled = [bool]($defaultCF.EnableSafeList ?? $false)
+    $safeListRaw = Get-NRGObjectField -Item $defaultCF -Key 'EnableSafeList' -Default $null
+    if ($null -eq $safeListRaw) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'EnableSafeList was not collected on the default connection filter; not assessed.'; return }
+    $safeListEnabled = [bool]$safeListRaw
     if (-not $safeListEnabled) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Microsoft safe list bypass is disabled on connection filter.'
     } else {

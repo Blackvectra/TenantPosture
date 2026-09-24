@@ -81,7 +81,7 @@ function Get-NRGCoverageScore {
     $total = 0
     $sat = 0; $part = 0; $gap = 0; $na = 0; $err = 0; $unknown = 0
 
-    foreach ($f in $Findings) {
+    foreach ($f in (Get-NRGScoringFindings -Findings $Findings)) {
         if ($null -eq $f) { continue }
 
         if ($Workload) {
@@ -140,4 +140,29 @@ function Get-NRGCoverageScore {
         Scored    = $scored
         Score     = $score
     }
+}
+
+# One finding per control for SCORING. The DNS evaluators emit one finding per
+# domain under the same ControlId, so per-finding scoring weighted each DNS
+# control once per domain: the same configuration scored differently on a
+# tenant with more domains, and a one-domain Gap could be outvoted by another
+# domain's pass. Collapse instances to the WORST state (Gap > Error > Partial >
+# Satisfied > NotApplicable), as Get-NRGAssessmentScope already does, keeping
+# the worst instance's citations. Findings without a ControlId pass through.
+function Get-NRGScoringFindings {
+    [CmdletBinding()]
+    param([AllowNull()] [AllowEmptyCollection()] [object[]] $Findings)
+    $rank = @{ 'Gap' = 5; 'Error' = 4; 'Partial' = 3; 'Satisfied' = 2; 'NotApplicable' = 1 }
+    $byId  = [ordered]@{}
+    $loose = [System.Collections.Generic.List[object]]::new()
+    foreach ($f in @($Findings)) {
+        if ($null -eq $f) { continue }
+        $cid = [string](Get-NRGObjectField -Item $f -Key 'ControlId' -Default '')
+        if (-not $cid) { $loose.Add($f); continue }
+        if (-not $byId.Contains($cid)) { $byId[$cid] = $f; continue }
+        $new = [string](Get-NRGObjectField -Item $f -Key 'State' -Default '')
+        $old = [string](Get-NRGObjectField -Item $byId[$cid] -Key 'State' -Default '')
+        if (($rank[$new] ?? 0) -gt ($rank[$old] ?? 0)) { $byId[$cid] = $f }
+    }
+    return @(@($byId.Values) + @($loose))
 }

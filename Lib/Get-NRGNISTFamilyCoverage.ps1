@@ -156,7 +156,9 @@ function Get-NRGNISTFamilyCoverage {
     $famCtrl   = @{}
     $unmapped  = 0
 
-    foreach ($f in $Findings) {
+    # One verdict per tool control (worst instance), the same rule as
+    # Get-NRGCoverageScore, so per-domain DNS findings don't count per domain.
+    foreach ($f in (Get-NRGScoringFindings -Findings $Findings)) {
         if ($null -eq $f) { continue }
 
         # Wrap in @(): a PowerShell function returning an empty array yields
