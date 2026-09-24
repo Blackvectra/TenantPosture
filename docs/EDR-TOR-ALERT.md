@@ -64,14 +64,14 @@ if any non-comment source line references `torproject`/`torbulkexitlist`, and
 pins the full allowed-egress host list — a new outbound host is now a
 deliberate, reviewed change.
 
-## Tor detection still works
+## Tor detection
 
-Removing the fetch did **not** remove Tor-sign-in detection:
-
-- **Entra ID P2 tenants:** Microsoft Identity Protection labels Tor logins
-  server-side via `anonymizedIPAddress` in `riskEventTypes_v2`; the triage
-  scorer consumes this unchanged — no outbound needed.
-- **P1 / no-P2 tenants:** curate a local exit-node file (one IP per line,
-  `#` comments allowed) from any trusted internal source and pass
-  `-TorExitListPath`. `Test-NRGIPIsTorExit` reads it locally — no network call,
-  no EDR noise.
+Standalone Tor-exit detection (the live `check.torproject.org` fetch, and the
+local-exit-list-file workaround that briefly replaced it) has been removed
+from the tool entirely — no `-TorExitListPath`, no `Test-NRGIPIsTorExit`.
+Tor sign-ins are still caught for **Entra ID P2 tenants**: Microsoft Identity
+Protection labels them server-side via `anonymizedIPAddress` in
+`riskEventTypes_v2`, and the triage scorer (`SIGNIN-1.2`) consumes that
+signal unchanged — no outbound call, never did. P1 / no-P2 tenants have no
+Tor-specific signal from this tool; the `SIGNIN-1.5` IP threat-intel control
+(hosting/VPN ASN tagging via RDAP) still applies.

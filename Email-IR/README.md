@@ -63,19 +63,17 @@ issue the TAP yourself in the Admin Center.
 | `SIGNIN-1.2` | Anonymous-IP sign-in (TOR / anon-VPN, Microsoft-flagged) | 50 success / 15 failed |
 | `SIGNIN-1.3` | Impossible travel / unfamiliar features | 40 |
 | `SIGNIN-1.4` | Microsoft Identity Protection risky users (Entra ID P2) | high 50 / med 25 / low 10 |
-| `SIGNIN-1.5` | IP threat-intel enrichment — RDAP geolocation + ASN owner + Tor exit-node cross-check on every suspicious source IP. A successful sign-in from flagged infra (TOR_EXIT / HOSTING_ASN / KNOWN_VPN_ASN) | +30 |
+| `SIGNIN-1.5` | IP threat-intel enrichment — RDAP geolocation + ASN owner on every suspicious source IP. A successful sign-in from flagged infra (HOSTING_ASN / KNOWN_VPN_ASN) | +30 |
 | `SIGNIN-2.1` | Rank aggregator — produces the prioritized user list, highest IoC score first | — |
 
 `SIGNIN-1.5` is gated by `-EnableThreatIntel` (default **on**). It submits the
 flagged sign-in IPs to `rdap.org` for geolocation + ASN-owner enrichment —
 confirm the client's data-handling policy permits this, or pass
-`-EnableThreatIntel:$false` to skip the external calls. Tor-exit detection
-no longer fetches from `check.torproject.org` (Cortex XDR + other EDRs flag
-that hostname as suspicious infrastructure contact); pass an
-operator-curated local list via `-TorExitListPath` if you need standalone
-Tor flagging, or rely on Microsoft Identity Protection's
-`anonymizedIPAddress` risk-event type (Entra ID P2) which already covers
-Tor for those tenants. All users with a
+`-EnableThreatIntel:$false` to skip the external calls. Standalone Tor-exit
+detection has been removed entirely — no `check.torproject.org` fetch, no
+operator-curated local list. Tor sign-ins are still caught via Microsoft
+Identity Protection's `anonymizedIPAddress` risk-event type (Entra ID P2,
+scored under `SIGNIN-1.2`), which never depended on this file. All users with a
 non-zero IoC score appear in the triage report's ranked table (not just the
 deep-dived subset).
 
