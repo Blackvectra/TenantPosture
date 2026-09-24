@@ -739,8 +739,10 @@ function Test-NRGControlDefenderAttackSim {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
     }
     $sim = $def.Data['AttackSimulations']
-    if (-not $sim -or -not $sim.Available) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Attack Simulation Training data unavailable (requires AttackSimulation.Read.All consent + Defender for Office 365 P2; API is Global-cloud only); not assessed.'; return
+    if (-not $sim -or -not (Get-NRGObjectField -Item $sim -Key 'Available' -Default $false)) {
+        $why = if (Test-NRGGraphScopeMissing -Scope 'AttackSimulation.Read.All') { Get-NRGConsentMissingDetail -Scope 'AttackSimulation.Read.All' }
+               else { 'Attack Simulation Training data unavailable (requires AttackSimulation.Read.All consent + Defender for Office 365 P2; API is Global-cloud only); not assessed.' }
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail $why; return
     }
     $launched = [int](Get-NRGObjectField -Item $sim -Key 'LaunchedCount' -Default 0)
     $total    = [int](Get-NRGObjectField -Item $sim -Key 'Count' -Default 0)

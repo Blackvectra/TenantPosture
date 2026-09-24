@@ -229,13 +229,31 @@ try {
 
 # ── SharePoint module (optional — only if not using Graph-only SharePoint collection) ─
 Write-Host ""
-Write-Host "[5/6] Optional: SharePoint PowerShell..." -ForegroundColor Cyan
+Write-Host "[5/6] Optional: SharePoint and Power Platform PowerShell..." -ForegroundColor Cyan
 $spo = Get-Module -ListAvailable -Name 'Microsoft.Online.SharePoint.PowerShell' -ErrorAction SilentlyContinue |
     Sort-Object Version -Descending | Select-Object -First 1
 if ($spo) {
     Write-Host "  [+] SharePoint module $($spo.Version) — present" -ForegroundColor Green
 } else {
     Write-Host "  [-] SharePoint module not installed — assessment uses Graph API instead. OK." -ForegroundColor DarkGray
+}
+
+# Power Platform (PPL-*): Microsoft.PowerApps.Administration.PowerShell is a
+# Windows PowerShell 5.1 module (.NET Framework), so the assessment runs it in
+# a powershell.exe child process. It must be installed for WINDOWS PowerShell,
+# not for this pwsh. Checked, not installed here: CurrentUser scope for
+# Windows PowerShell is Documents\WindowsPowerShell, which OneDrive may sync.
+if ($IsWindows -and (Get-Command 'powershell.exe' -CommandType Application -ErrorAction SilentlyContinue)) {
+    $ppl = & powershell.exe -NoProfile -Command '[bool](Get-Module -ListAvailable -Name Microsoft.PowerApps.Administration.PowerShell)' 2>$null
+    if ("$ppl" -match 'True') {
+        Write-Host "  [+] Power Platform admin module (Windows PowerShell) — present" -ForegroundColor Green
+    } else {
+        Write-Host "  [-] Power Platform admin module not installed for Windows PowerShell — PPL controls will be 'not assessed'." -ForegroundColor Yellow
+        Write-Host "      To enable them, from a Windows PowerShell 5.1 prompt (not pwsh), run as administrator:" -ForegroundColor DarkGray
+        Write-Host "        Install-Module Microsoft.PowerApps.Administration.PowerShell -Scope AllUsers" -ForegroundColor DarkGray
+    }
+} else {
+    Write-Host "  [-] Power Platform controls need Windows PowerShell 5.1 (Windows only) — they will be 'not assessed' here." -ForegroundColor DarkGray
 }
 
 # ── Python + openpyxl for XLSX compliance matrix ─────────────────────────────

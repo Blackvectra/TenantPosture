@@ -160,6 +160,27 @@ if ($WhatIf) {
 # GDAP: authenticate against your own NRG tenant with the scopes needed
 # Partner Center GDAP relationships grant the delegated access — no per-client auth needed
 Write-Host '[-] Authenticating (one-time browser login)...' -ForegroundColor Cyan
+# Also used for every per-client context switch, so a re-auth there can
+# never yield a context missing the scopes the orchestrator needs.
+$batchScopes = @(
+    'User.Read.All','Group.Read.All','Directory.Read.All',
+    'Policy.Read.All','AuditLog.Read.All','Application.Read.All',
+    'RoleManagement.Read.All','SecurityEvents.Read.All',
+    'IdentityRiskyUser.Read.All','Reports.Read.All',
+    'Organization.Read.All','Sites.Read.All',
+    'DeviceManagementConfiguration.Read.All',
+    'DeviceManagementApps.Read.All',
+    'UserAuthenticationMethod.Read.All',
+    'SharePointTenantSettings.Read.All',
+    'DeviceManagementManagedDevices.Read.All',
+    'DeviceManagementServiceConfig.Read.All',
+    'Policy.Read.PermissionGrant',
+    'PrivilegedAccess.Read.AzureAD',
+    'TeamSettings.Read.All',
+    'IdentityRiskyServicePrincipal.Read.All',
+    'AttackSimulation.Read.All',
+    'AccessReview.Read.All'
+)
 try {
     # Request the SAME 24 scopes as Connect-NRGServices / CLAUDE.md. This one
     # login must cover everything the per-client orchestrator needs, because the
@@ -169,25 +190,7 @@ try {
     # (IdentityRiskyServicePrincipal / AttackSimulation) are requested here too so
     # AAD-11.3 / DEF-4.6 collect in batch wherever the client tenant has granted
     # them; where they haven't, those two controls simply report NotApplicable.
-    Connect-MgGraph -Scopes @(
-        'User.Read.All','Group.Read.All','Directory.Read.All',
-        'Policy.Read.All','AuditLog.Read.All','Application.Read.All',
-        'RoleManagement.Read.All','SecurityEvents.Read.All',
-        'IdentityRiskyUser.Read.All','Reports.Read.All',
-        'Organization.Read.All','Sites.Read.All',
-        'DeviceManagementConfiguration.Read.All',
-        'DeviceManagementApps.Read.All',
-        'UserAuthenticationMethod.Read.All',
-        'SharePointTenantSettings.Read.All',
-        'DeviceManagementManagedDevices.Read.All',
-        'DeviceManagementServiceConfig.Read.All',
-        'Policy.Read.PermissionGrant',
-        'PrivilegedAccess.Read.AzureAD',
-        'TeamSettings.Read.All',
-        'IdentityRiskyServicePrincipal.Read.All',
-        'AttackSimulation.Read.All',
-        'AccessReview.Read.All'
-    ) -ContextScope Process -NoWelcome -ErrorAction Stop
+    Connect-MgGraph -Scopes $batchScopes -ContextScope Process -NoWelcome -ErrorAction Stop
     Write-Host '  [+] Graph authenticated' -ForegroundColor Green
 } catch {
     Write-Host "  [!] Graph auth failed: $($_.Exception.Message)" -ForegroundColor Red
@@ -233,7 +236,7 @@ foreach ($client in $clients) {
         # Switch Graph context to this client tenant via GDAP
         # TenantId already validated as GUID above
         Write-Host "  [-] Switching Graph context → $($client.TenantId)..." -ForegroundColor DarkGray
-        Connect-MgGraph -TenantId $client.TenantId -ContextScope Process -NoWelcome -ErrorAction Stop
+        Connect-MgGraph -TenantId $client.TenantId -Scopes $batchScopes -ContextScope Process -NoWelcome -ErrorAction Stop
 
         # Verify Graph context actually switched to the expected tenant.
         # Connect-MgGraph can return success while leaving a cached context
@@ -277,7 +280,13 @@ foreach ($client in $clients) {
 
         if (-not $tenantMismatch) {
             # Build params
-            $params = @{ OutputPath = $clientOut }
+            # -TenantDomain pins the run to this client: the orchestrator looks
+            # up TenantId and DelegatedOrg in clients.json, refuses a Graph or
+            # Exchange session on any other tenant, and opens Security &
+            # Compliance (Purview) with -DelegatedOrganization. -KeepSession
+            # leaves the shared GDAP Graph session up for the next client;
+            # this loop tears down the per-client sessions itself.
+            $params = @{ OutputPath = $clientOut; TenantDomain = $client.TenantDomain; KeepSession = $true }
             if ($client.UserPrincipalName) { $params['UserPrincipalName'] = $client.UserPrincipalName }
             if ($client.SkipPurview)       { $params['SkipPurview']       = $true }
             if ($client.SkipTeams)         { $params['SkipTeams']         = $true }
@@ -350,8 +359,11 @@ foreach ($client in $clients) {
         $errMsg = $_.Exception.Message
         Write-Host "  [!] $errMsg" -ForegroundColor Red
     } finally {
-        # Always disconnect EXO before next client — ASVS V7.3.2
+        # Always disconnect the per-client sessions before the next client —
+        # ASVS V7.3.2. Disconnect-ExchangeOnline with no -ConnectionId closes
+        # every Exchange AND Security & Compliance session; Teams is separate.
         try { Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue } catch {}
+        try { if (Get-Command Disconnect-MicrosoftTeams -ErrorAction SilentlyContinue) { Disconnect-MicrosoftTeams -ErrorAction SilentlyContinue | Out-Null } } catch {}
     }
 
     $elapsed = [int](New-TimeSpan -Start $clientStart -End (Get-Date)).TotalMinutes

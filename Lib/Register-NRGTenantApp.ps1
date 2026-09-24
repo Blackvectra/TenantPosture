@@ -195,7 +195,13 @@ function Register-NRGTenantApp {
         'UserAuthenticationMethod.Read.All',
         'SharePointTenantSettings.Read.All',
         'PrivilegedAccess.Read.AzureAD',
-        'TeamSettings.Read.All'
+        'TeamSettings.Read.All',
+        'Policy.Read.PermissionGrant',
+        # Without these three, AAD-11.3 / DEF-4.6 / AAD-8.2 never assess in
+        # app-only mode.
+        'IdentityRiskyServicePrincipal.Read.All',
+        'AttackSimulation.Read.All',
+        'AccessReview.Read.All'
     )
 
     $resolved   = @()
