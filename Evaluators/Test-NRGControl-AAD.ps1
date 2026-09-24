@@ -71,6 +71,32 @@ function Test-NRGRoleNamesResolved {
     return ($unresolved.Count -eq 0)
 }
 
+# Is a CA grant's authentication strength phishing-resistant? $true / $false,
+# or $null when the allowed methods are not visible. Built-in strength IDs are
+# Microsoft constants (…0002 MFA, …0003 passwordless MFA, …0004 phishing-
+# resistant). A custom strength passes only if EVERY allowed combination is
+# made solely of FIDO2/passkey, Windows Hello for Business, or certificate MFA.
+function Test-NRGAuthStrengthPhishResistant {
+    [CmdletBinding()]
+    param([AllowNull()] $GrantControls)
+    $id = [string](Get-NRGObjectField -Item $GrantControls -Key 'AuthStrengthId' -Default '')
+    if (-not $id) { return $null }
+    switch ($id) {
+        '00000000-0000-0000-0000-000000000004' { return $true }
+        '00000000-0000-0000-0000-000000000002' { return $false }
+        '00000000-0000-0000-0000-000000000003' { return $false }
+    }
+    $combos = @(Get-NRGObjectField -Item $GrantControls -Key 'AuthStrengthCombinations' -Default @() | Where-Object { $_ })
+    if ($combos.Count -eq 0) { return $null }
+    $strong = @('fido2', 'windowsHelloForBusiness', 'x509CertificateMultiFactor')
+    foreach ($c in $combos) {
+        foreach ($factor in ([string]$c -split '\s*,\s*' | Where-Object { $_ })) {
+            if ($strong -notcontains $factor) { return $false }
+        }
+    }
+    return $true
+}
+
 # PIM policies scoped to PRIVILEGED directory roles, with role names attached.
 # Needs RoleDefinitionId on each policy (collector's policy-assignment map) and
 # the IsPriv role catalog from AAD-DirectoryRoles. When either is missing it
@@ -178,12 +204,18 @@ function Test-NRGControlAADPhishResistantMFA {
         return
     }
 
-    # Look for CA policy targeting roles AND using Authentication Strength (phishing-resistant)
-    $phishResistantPolicies = @($caData.Data['Policies'] | Where-Object {
+    # Any authentication strength used to count as phishing-resistant — but the
+    # built-in "Multifactor authentication" strength and custom strengths can
+    # allow SMS, voice or push. Classify each admin-role strength: $true /
+    # $false / $null (methods not visible). Only $true is a pass.
+    $roleStrengthPolicies = @($caData.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and
         @($_.Conditions.Users.IncludeRoles).Count -gt 0 -and
         (-not [string]::IsNullOrEmpty($_.GrantControls.AuthStrengthId))
     })
+    $phishResistantPolicies = @($roleStrengthPolicies | Where-Object { (Test-NRGAuthStrengthPhishResistant -GrantControls $_.GrantControls) -eq $true })
+    $weakStrengthPolicies   = @($roleStrengthPolicies | Where-Object { (Test-NRGAuthStrengthPhishResistant -GrantControls $_.GrantControls) -eq $false })
+    $unknownStrengthPolicies = @($roleStrengthPolicies | Where-Object { $null -eq (Test-NRGAuthStrengthPhishResistant -GrantControls $_.GrantControls) })
 
     # Also check for policies targeting roles with MFA (lower bar — Partial)
     $mfaForRolePolicies = @($caData.Data['Policies'] | Where-Object {
@@ -195,7 +227,20 @@ function Test-NRGControlAADPhishResistantMFA {
     if ($phishResistantPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
             -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
-            -Detail "Phishing-resistant MFA (Authentication Strength) required for admin roles by $($phishResistantPolicies.Count) CA policy(ies)."
+            -Detail "Phishing-resistant MFA (Authentication Strength) required for admin roles by $($phishResistantPolicies.Count) CA policy(ies): $(($phishResistantPolicies | ForEach-Object { $_.DisplayName }) -join ', ')."
+    } elseif ($unknownStrengthPolicies.Count -gt 0) {
+        # A strength is required, but which methods it allows could not be
+        # read, so phishing resistance is unverified in either direction.
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail "Admin roles require an authentication strength ($(($unknownStrengthPolicies | ForEach-Object { "$($_.DisplayName) [$(Get-NRGObjectField -Item $_.GrantControls -Key 'AuthStrengthName' -Default 'custom strength')]" }) -join ', ')), but its allowed methods could not be read, so whether it is phishing-resistant is not assessed. Verify in Entra > Protection > Authentication methods > Authentication strengths."
+    } elseif ($weakStrengthPolicies.Count -gt 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+            -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
+            -Detail "Admin roles require an authentication strength that is NOT phishing-resistant — it allows methods such as SMS, voice, or app push that AiTM phishing can relay: $(($weakStrengthPolicies | ForEach-Object { "$($_.DisplayName) [$(Get-NRGObjectField -Item $_.GrantControls -Key 'AuthStrengthName' -Default 'custom strength')]" }) -join ', ')." `
+            -CurrentValue 'Authentication strength for admins allows non-phishing-resistant methods' `
+            -RequiredValue 'Phishing-resistant MFA strength (FIDO2/passkey, Windows Hello for Business, certificate-based MFA) for admin roles' `
+            -Remediation $control.Remediation
     } elseif ($mfaForRolePolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
             -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `

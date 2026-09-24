@@ -96,6 +96,11 @@ function Invoke-NRGCollectAADCAPolicies {
                         CustomControls       = @(& $g 'grantControls.customAuthenticationFactors')
                         AuthStrengthId       = [string](& $g 'grantControls.authenticationStrength.id' '')
                         AuthStrengthName     = [string](& $g 'grantControls.authenticationStrength.displayName' '')
+                        # Returned inline on the CA policy — so AAD-1.3 can tell a
+                        # phishing-resistant strength from a custom one that allows
+                        # SMS/voice without depending on the separate
+                        # authenticationStrengthPolicies call (which can fail).
+                        AuthStrengthCombinations = @(& $g 'grantControls.authenticationStrength.allowedCombinations')
                     }
                     SessionControls  = @{
                         SignInFrequency  = if ($sif) {
