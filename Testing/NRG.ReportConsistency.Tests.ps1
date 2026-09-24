@@ -93,4 +93,22 @@ Describe 'Controls that report the same fact agree' {
             (Get-NRGFindings)[0].FrameworkIds | Should -Be @('NIST:IA-2')
         }
     }
+
+    Context 'a control scores once, however many domains it was checked on' {
+
+        # DNS emits one finding per domain. Scored per finding, a DNS control
+        # counted once per domain, and one domain's pass could outvote
+        # another's gap.
+        It 'collapses per-domain findings to the worst state before scoring' {
+            $f = @(
+                [pscustomobject]@{ ControlId = 'DNS-1.3'; State = 'Satisfied'; FrameworkIds = @('NIST:SI-8') }
+                [pscustomobject]@{ ControlId = 'DNS-1.3'; State = 'Gap';       FrameworkIds = @('NIST:SI-8') }
+                [pscustomobject]@{ ControlId = 'AAD-1.1'; State = 'Satisfied'; FrameworkIds = @('NIST:IA-2') }
+            )
+            $s = Get-NRGCoverageScore -Findings $f -ErrorHandling Gap
+            $s.Gap       | Should -Be 1
+            $s.Satisfied | Should -Be 1 -Because 'DNS-1.3 counts once, as its worst domain (Gap)'
+            $s.Score     | Should -Be 50
+        }
+    }
 }
