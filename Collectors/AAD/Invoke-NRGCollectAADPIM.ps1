@@ -24,7 +24,6 @@ function Invoke-NRGCollectAADPIM {
         Data     = @{
             EligibleSchedules = @()
             ActiveSchedules   = @()
-            RolePolicies      = @()
             AccessReviews     = @()
             # Every section above is pre-initialised to @() and every query below
             # has its own try/catch, so presence alone cannot distinguish "queried,
@@ -34,7 +33,6 @@ function Invoke-NRGCollectAADPIM {
             SectionStatus = @{
                 EligibleSchedules = 'NotRun'
                 ActiveSchedules   = 'NotRun'
-                RolePolicies      = 'NotRun'
                 AccessReviews     = 'NotRun'
             }
         }
@@ -167,29 +165,11 @@ function Invoke-NRGCollectAADPIM {
             }
         }
 
-        # PIM role management policies (activation settings per role)
-        try {
-            $policyResp = Invoke-NRGGraphRequest -Method GET `
-                -Uri 'https://graph.microsoft.com/v1.0/policies/roleManagementPolicies?$top=50&$filter=scopeType eq ''DirectoryRole''' `
-                -ErrorAction Stop
-            $result.Data.RolePolicies = @($policyResp.value ?? @() | ForEach-Object {
-                @{
-                    Id                  = [string]$_.id
-                    DisplayName         = [string]$_.displayName
-                    IsOrganizationDefault = [bool]($_.isOrganizationDefault ?? $false)
-                    LastModifiedDateTime  = [string]($_.lastModifiedDateTime ?? '')
-                    ScopeId             = [string]$_.scopeId
-                    ScopeType           = [string]$_.scopeType
-                    # Rules are complex nested objects — collect as raw for evaluator inspection
-                    Rules               = @($_.rules ?? @())
-                }
-            })
-            $result.Data.SectionStatus.RolePolicies = 'Collected'
-        } catch {
-            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                Register-NRGException -Source 'AAD-PIM-Policies' -Message $_.Exception.Message
-            }
-        }
+        # PIM role management policies are collected (correctly filtered, with
+        # rules expanded and mapped to roles) by Invoke-NRGCollectAADIdentityGovernance
+        # as PIMRolePolicies, which is what AAD-3.3..3.6 read. The copy that lived
+        # here sent a scopeType-only filter Graph rejects, so it logged an
+        # AAD-PIM-Policies BadRequest on every run for data nothing used.
 
         # Access review definitions for privileged roles (AAD-8.2). Requires the
         # AccessReview.Read.All scope — a re-consent scope. On 403 (scope not yet
