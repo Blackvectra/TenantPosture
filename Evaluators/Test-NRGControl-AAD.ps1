@@ -57,11 +57,53 @@ function Test-NRGRoleSectionCollected {
 function Test-NRGRoleNamesResolved {
     [CmdletBinding()]
     param([AllowNull()] $Assignments)
-    $list = @($Assignments)
+    # Service-principal rows are excluded: Microsoft first-party apps (e.g.
+    # "Microsoft Office 365 Portal") hold hidden internal roles that the
+    # roleDefinitions endpoint never lists, so their names never resolve even
+    # when the lookup worked. Both callers assess USER principals only, and a
+    # genuinely failed lookup degrades the user rows too, so it is still caught.
+    $list = @(@($Assignments) | Where-Object {
+        [string](Get-NRGObjectField -Item $_ -Key 'PrincipalType' -Default '') -notmatch 'servicePrincipal'
+    })
     if ($list.Count -eq 0) { return $true }
     $guidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
     $unresolved = @($list | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'RoleDefinitionName') -match $guidPattern })
     return ($unresolved.Count -eq 0)
+}
+
+# PIM policies scoped to PRIVILEGED directory roles, with role names attached.
+# Needs RoleDefinitionId on each policy (collector's policy-assignment map) and
+# the IsPriv role catalog from AAD-DirectoryRoles. When either is missing it
+# returns every policy with Scoped = $false, so callers can say what they scored.
+function Get-NRGPIMScopedPolicies {
+    [CmdletBinding()]
+    param([AllowNull()] $Policies)
+    $all = @($Policies)
+    $roles = Get-NRGRawData -Key 'AAD-DirectoryRoles'
+    $defs = @{}
+    foreach ($d in @(Get-NRGNestedProperty -Object $roles -Path 'Data.RoleDefinitions' -Default @())) {
+        $id = [string](Get-NRGObjectField -Item $d -Key 'Id' -Default '')
+        if ($id) { $defs[$id] = $d }
+    }
+    $mapped = @($all | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'RoleDefinitionId' -Default '') })
+    if ($mapped.Count -eq 0 -or $defs.Count -eq 0) {
+        return [pscustomobject]@{ Scoped = $false; Policies = $all }
+    }
+    $priv = foreach ($p in $mapped) {
+        $d = $defs[[string]$p.RoleDefinitionId]
+        if ($d -and (Get-NRGObjectField -Item $d -Key 'IsPriv' -Default $false) -eq $true) {
+            @{
+                PolicyId              = Get-NRGObjectField -Item $p -Key 'PolicyId'
+                RoleDefinitionId      = [string]$p.RoleDefinitionId
+                RoleName              = [string](Get-NRGObjectField -Item $d -Key 'DisplayName' -Default '')
+                RequiresMFA           = Get-NRGObjectField -Item $p -Key 'RequiresMFA'
+                RequiresJustification = Get-NRGObjectField -Item $p -Key 'RequiresJustification'
+                RequiresApproval      = Get-NRGObjectField -Item $p -Key 'RequiresApproval'
+                MaxDurationHours      = Get-NRGObjectField -Item $p -Key 'MaxDurationHours'
+            }
+        }
+    }
+    return [pscustomobject]@{ Scoped = $true; Policies = @($priv) }
 }
 
 function Get-SafeProp {
@@ -316,11 +358,18 @@ function Test-NRGControlAADPIMMFA {
     if (-not $gov -or -not $gov.Success -or @($gov.Data['PIMRolePolicies']).Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'PIM policy data not collected or PIM not licensed'; return
     }
-    $noMFA = @($gov.Data['PIMRolePolicies'] | Where-Object { $_.RequiresMFA -eq $false })
-    if ($noMFA.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All PIM role policies require MFA on activation.'
+    $sc = Get-NRGPIMScopedPolicies -Policies $gov.Data['PIMRolePolicies']
+    $scope = if ($sc.Scoped) { 'privileged-role' } else { 'PIM role' }
+    $note  = if ($sc.Scoped) { '' } else { ' (Policy-to-role mapping was unavailable, so every role was scored, not only privileged ones.)' }
+    $noMFA = @($sc.Policies | Where-Object { $_.RequiresMFA -eq $false })
+    $unknown = @($sc.Policies | Where-Object { $null -eq $_.RequiresMFA })
+    if ($noMFA.Count -gt 0) {
+        $names = if ($sc.Scoped) { ' Roles: ' + (($noMFA | ForEach-Object { $_.RoleName } | Sort-Object) -join ', ') + '.' } else { '' }
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($noMFA.Count) of $(@($sc.Policies).Count) $scope policy(ies) do not require MFA (or an authentication context) on activation.$names$note" -CurrentValue "$($noMFA.Count) without MFA on activation" -RequiredValue 'MFA or authentication context required on activation' -Remediation $ctrl.Remediation
+    } elseif (@($sc.Policies).Count -eq 0 -or $unknown.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "Activation MFA setting could not be read for $($unknown.Count) $scope policy(ies); not assessed."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($noMFA.Count) PIM role policy(ies) do not require MFA on activation." -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "All $(@($sc.Policies).Count) $scope policies require MFA (or an authentication context) on activation.$note"
     }
 }
 
@@ -333,11 +382,19 @@ function Test-NRGControlAADPIMJustification {
     if (-not $gov -or -not $gov.Success -or @($gov.Data['PIMRolePolicies']).Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'PIM policy data not collected'; return
     }
-    $noJust = @($gov.Data['PIMRolePolicies'] | Where-Object { $_.RequiresJustification -eq $false })
-    if ($noJust.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All PIM role policies require justification on activation.'
+    $sc = Get-NRGPIMScopedPolicies -Policies $gov.Data['PIMRolePolicies']
+    $scope = if ($sc.Scoped) { 'privileged-role' } else { 'PIM role' }
+    $note  = if ($sc.Scoped) { '' } else { ' (Policy-to-role mapping was unavailable, so every role was scored, not only privileged ones.)' }
+    $noJust = @($sc.Policies | Where-Object { $_.RequiresJustification -eq $false })
+    $unknown = @($sc.Policies | Where-Object { $null -eq $_.RequiresJustification })
+    if ($noJust.Count -gt 0) {
+        $names = if ($sc.Scoped) { ' Roles: ' + (($noJust | ForEach-Object { $_.RoleName } | Sort-Object) -join ', ') + '.' } else { '' }
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($noJust.Count) of $(@($sc.Policies).Count) $scope policy(ies) do not require justification — no audit trail for why privilege was elevated.$names$note" -Remediation $ctrl.Remediation
+    } elseif (@($sc.Policies).Count -eq 0 -or $unknown.Count -gt 0) {
+        # A $null RequiresJustification means the rule could not be read — never a pass.
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "Activation justification setting could not be read for $($unknown.Count) $scope policy(ies); not assessed."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($noJust.Count) PIM role policy(ies) do not require justification — no audit trail for why privilege was elevated." -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "All $(@($sc.Policies).Count) $scope policies require justification on activation.$note"
     }
 }
 
@@ -350,10 +407,19 @@ function Test-NRGControlAADPIMApproval {
     if (-not $gov -or -not $gov.Success -or @($gov.Data['PIMRolePolicies']).Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'PIM policy data not collected'; return
     }
-    # Focus on Global Administrator role policy specifically
-    $gaPolicy = @($gov.Data['PIMRolePolicies'] | Where-Object { $_.DisplayName -match 'Global' -or $_.ScopeId -match 'Global' }) | Select-Object -First 1
+    # Graph names every directory-role policy "DirectoryRole", so the GA policy
+    # is found by its role, via the collector's policy->role map. The Global
+    # Administrator built-in role template ID is a Microsoft constant, identical
+    # in every tenant.
+    $gaTemplateId = '62e90394-69f5-4237-9190-012177145e10'
+    $gaPolicy = @($gov.Data['PIMRolePolicies'] | Where-Object {
+        [string](Get-NRGObjectField -Item $_ -Key 'RoleDefinitionId' -Default '') -eq $gaTemplateId
+    }) | Select-Object -First 1
     if (-not $gaPolicy) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Global Administrator PIM policy not found in collected data'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Global Administrator PIM policy could not be identified (policy-to-role assignment data not collected); not assessed.'; return
+    }
+    if ($null -eq (Get-NRGObjectField -Item $gaPolicy -Key 'RequiresApproval')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Global Administrator PIM approval setting could not be read; not assessed.'; return
     }
     if ($gaPolicy.RequiresApproval -eq $true) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Global Administrator PIM activation requires approval.'
@@ -371,12 +437,18 @@ function Test-NRGControlAADPIMDuration {
     if (-not $gov -or -not $gov.Success -or @($gov.Data['PIMRolePolicies']).Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'PIM policy data not collected'; return
     }
-    $longDuration = @($gov.Data['PIMRolePolicies'] | Where-Object { $_.MaxDurationHours -gt 8 })
-    $unknownDuration = @($gov.Data['PIMRolePolicies'] | Where-Object { $null -eq $_.MaxDurationHours })
-    if ($longDuration.Count -eq 0 -and $unknownDuration.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All PIM role policies have max activation ≤8 hours.'
+    $sc = Get-NRGPIMScopedPolicies -Policies $gov.Data['PIMRolePolicies']
+    $scope = if ($sc.Scoped) { 'privileged-role' } else { 'PIM role' }
+    $note  = if ($sc.Scoped) { '' } else { ' (Policy-to-role mapping was unavailable, so every role was scored, not only privileged ones.)' }
+    $longDuration = @($sc.Policies | Where-Object { $null -ne $_.MaxDurationHours -and $_.MaxDurationHours -gt 8 })
+    $unknownDuration = @($sc.Policies | Where-Object { $null -eq $_.MaxDurationHours })
+    if ($longDuration.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail "$($longDuration.Count) $scope policy(ies) allow activation >8 hours. Shorter windows reduce blast radius.$note" -CurrentValue ">8h max duration" -RequiredValue '≤8 hours max duration'
+    } elseif (@($sc.Policies).Count -eq 0 -or $unknownDuration.Count -gt 0) {
+        # Previously scored Partial on an unreadable duration — a verdict the tool never computed.
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "Maximum activation duration could not be read for $($unknownDuration.Count) $scope policy(ies); not assessed."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail "$($longDuration.Count) role policy(ies) allow activation >8 hours. Shorter windows reduce blast radius." -CurrentValue ">8h max duration" -RequiredValue '≤8 hours max duration'
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "All $(@($sc.Policies).Count) $scope policies have max activation ≤8 hours.$note"
     }
 }
 
