@@ -626,9 +626,20 @@ function Test-NRGControlAADUserAppReg {
     if (-not $gov -or -not $gov.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Identity governance data not collected'; return
     }
-    $extCollab = Get-SafeProp $gov.Data 'ExternalCollab'
-    $defPerms  = Get-SafeProp $extCollab 'DefaultUserRolePermissions'
-    $canCreate = [bool]((Get-SafeProp $defPerms 'AllowedToCreateApps') ?? $true)
+    # The setting is collected in two places (identity governance and the
+    # AAD-AuthPolicies authorization policy). A missing value used to default
+    # to "users CAN register apps" and score a High Gap — on a live tenant
+    # whose raw data showed AllowedToCreateApps = false. Read either source;
+    # with neither, say so instead of guessing.
+    $canCreateRaw = Get-NRGNestedProperty -Object $gov -Path 'Data.ExternalCollab.DefaultUserRolePermissions.AllowedToCreateApps' -Default $null
+    if ($null -eq $canCreateRaw) {
+        $authPol = Get-NRGRawData -Key 'AAD-AuthPolicies'
+        $canCreateRaw = Get-NRGNestedProperty -Object $authPol -Path 'Data.AuthorizationPolicy.DefaultUserRolePermissions.AllowedToCreateApps' -Default $null
+    }
+    if ($null -eq $canCreateRaw) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'The user app-registration setting (defaultUserRolePermissions.allowedToCreateApps) was not collected; not assessed.'; return
+    }
+    $canCreate = [bool]$canCreateRaw
     if (-not $canCreate) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Users cannot register applications. Only admins can create app registrations.'
     } else {
