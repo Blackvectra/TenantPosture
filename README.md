@@ -526,7 +526,7 @@ GDAP relationships must be active in Partner Center before the batch runner can 
 
 **One-time per client tenant:** AAD-8.2, AAD-11.3 and DEF-4.6 need Graph permissions that each tenant must consent to. Until then they report exactly which one is missing. A Global Administrator runs `.\Grant-NRGGraphConsent.ps1 -TenantDomain client.com` once and accepts the prompt for the organization.
 
-**Power Platform (PPL-\*)** uses Microsoft's admin module, which runs only in Windows PowerShell 5.1. The assessment runs it in a `powershell.exe` child process, so install it from a Windows PowerShell prompt: `Install-Module Microsoft.PowerApps.Administration.PowerShell -Scope AllUsers`.
+**Power Platform (PPL-\*)** needs no module. The assessment signs in to the Power Platform admin API inside the same PowerShell session (one extra browser sign-in, usually completed automatically by your existing session) and reads it over REST. No child process is started. The account needs the Power Platform Administrator (or Global Administrator) role; app-only runs skip it.
 
 ---
 

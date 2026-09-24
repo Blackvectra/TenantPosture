@@ -1,49 +1,52 @@
 #Requires -Version 7.0
 #
-# Invoke-NRGCollectPowerPlatform.ps1  (v4.6.4)
+# Invoke-NRGCollectPowerPlatform.ps1  (v4.14.0)
 # NRG Technology Services / NextLayerSec LLC
 # Author: Matthew Levorson
 #
-# Purpose: Collect Power Platform environments, tenant isolation, and DLP policy
-# posture for assessment evaluation.
+# Purpose: Collect Power Platform environments, DLP policies, tenant isolation
+# and tenant settings for assessment evaluation.
 #
 # READ-ONLY. No tenant configuration is ever modified.
 #
 # Sets raw data key: 'PowerPlatform'
+# Network: login.microsoftonline.com (token), api.bap.microsoft.com (admin API)
 #
-# v4.6.4 EMERGENCY FIX (Critical #1): The previous implementation called
-# https://graph.microsoft.com/beta/admin/dynamics/environments which is NOT a
-# real Microsoft Graph endpoint — it always returned 404. As a result, every
-# PPL evaluator returned NotApplicable on every tenant. Power Platform
-# assessment had never produced real findings.
+# HOW IT READS POWER PLATFORM — IN PROCESS, NO CHILD PROCESS:
+#   Microsoft.PowerApps.Administration.PowerShell is .NET Framework / Windows
+#   PowerShell 5.x only (Microsoft Learn: "incompatible with PowerShell 6.0
+#   and later"), so it cannot load in this PowerShell 7 tool. Running it in a
+#   powershell.exe child process was tried and is not acceptable: the MSP
+#   workstations this runs on block child-process creation with an ASR rule.
+#   (An earlier fallback also called Get-MgGraphAccessToken, which is not a
+#   Microsoft Graph PowerShell cmdlet, so Power Platform never collected.)
 #
-# CORRECT SURFACES (in order of preference):
-#   (A) Microsoft.PowerApps.Administration.PowerShell cmdlets in THIS session
-#       (Get-AdminPowerAppEnvironment, Get-DlpPolicy,
-#       Get-PowerAppTenantIsolationPolicy, Get-TenantSettings). Microsoft
-#       documents the module as .NET Framework / Windows PowerShell 5.x only,
-#       so under PowerShell 7 this usually fails to import or to sign in.
-#   (B) The same module run in a Windows PowerShell 5.1 child process
-#       (Invoke-NRGPowerPlatformBridge) — Microsoft's supported host for it.
-#       Windows only; the module must be installed for Windows PowerShell
-#       (Install-Module Microsoft.PowerApps.Administration.PowerShell from a
-#       Windows PowerShell 5.1 prompt). Signs in with Add-PowerAppsAccount
-#       pinned to the Graph tenant, so it cannot read another tenant. Output
-#       comes back over stdout as JSON. The child's code is written to a
-#       temp .ps1 for the length of the call (code only, no tenant data).
-#   (C) Graceful degradation: if neither (A) nor (B) is feasible, mark
-#       Success=$false with the specific reason so the evaluator routes
-#       downstream findings to NotApplicable instead of Gap or Satisfied.
+#   Instead this collector signs in to the Power Platform admin API inside the
+#   current process with MSAL — the same library, and the same system-browser
+#   sign-in, that Connect-MgGraph already uses on every run — then calls the
+#   REST API directly:
+#     - Token: public client 1950a258-227b-4e31-a9cf-717495945fc2, the
+#       Microsoft first-party client the official admin module signs in with,
+#       authority pinned to the Graph tenant, audience
+#       https://service.powerapps.com/. The token is held in memory only.
+#     - Environments:    GET  .../Microsoft.BusinessAppPlatform/scopes/admin/environments   (documented)
+#     - Tenant settings: POST .../Microsoft.BusinessAppPlatform/listtenantsettings          (documented; a
+#                        read-only "list" action that Microsoft defines as POST with no body)
+#     - DLP policies:    GET  .../PowerPlatform.Governance/v2/policies                     (used by the admin module)
+#     - Tenant isolation:GET  .../PowerPlatform.Governance/v1/tenants/{id}/tenantIsolationPolicy (used by the admin module)
+#   Each section records its own SectionStatus; a failed section is Failed,
+#   never an empty "compliant" list.
 #
-#   The previous path (B) called Get-MgGraphAccessToken, which is not a
-#   Microsoft Graph PowerShell cmdlet, so it never ran.
-#
-# Tenant pinning: the child signs in with -TenantID = the Graph context
-#   tenant; with no Graph context the bridge does not run.
+# App-only (certificate) runs do not sign in to Power Platform: the
+# assessment app would need to be registered in Power Platform as well.
+# Those runs report the reason, and the PPL controls go NotApplicable.
 #
 # NIST SP 800-53: CM-7 (least functionality), AC-4 (information flow)
 # MITRE ATT&CK:   T1567 (Exfiltration over Web Service)
 #
+
+$script:NRGPowerPlatformClientId = '1950a258-227b-4e31-a9cf-717495945fc2'
+$script:NRGBapRoot               = 'https://api.bap.microsoft.com/providers'
 
 function Invoke-NRGCollectPowerPlatform {
     [CmdletBinding()] param()
@@ -58,251 +61,152 @@ function Invoke-NRGCollectPowerPlatform {
             DLPPolicies     = @()
             DLPAvailable    = $false
             # Tenant governance flags (PPL-1.3). $null means "not read" — the
-            # BAP-API fallback path below cannot retrieve these, so the
             # evaluator must not read absence as "creation is unrestricted".
             TenantGovernance = $null
-            # Environments initializes to @(), so an empty list cannot be told
-            # apart from a query that failed — and zero environments is a
-            # legitimate compliant answer, which is exactly what made the
-            # confusion dangerous. Tracked explicitly.
-            SectionStatus    = @{ TenantGovernance = 'NotRun'; Environments = 'NotRun' }
-            Source          = 'none'   # 'module' | 'bap-api' | 'none'
+            # PPL-2.2 / PPL-2.3. Only keys actually returned are set.
+            TenantSettings   = $null
+            # Empty lists cannot be told apart from failed queries without this.
+            SectionStatus    = [ordered]@{
+                Environments     = 'NotRun'
+                DLPPolicies      = 'NotRun'
+                TenantIsolation  = 'NotRun'
+                TenantSettings   = 'NotRun'
+                TenantGovernance = 'NotRun'
+            }
+            Source          = 'none'   # 'bap-api' | 'none'
         }
     }
-
-    $haveModule = [bool](Get-Module -ListAvailable -Name Microsoft.PowerApps.Administration.PowerShell -ErrorAction SilentlyContinue)
-
-    # ── Path A: Microsoft.PowerApps.Administration.PowerShell module ─────────
-    if ($haveModule) {
-        try {
-            Import-Module Microsoft.PowerApps.Administration.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
-            $result.Data.Source = 'module'
-
-            # Environments
-            if (Get-Command Get-AdminPowerAppEnvironment -ErrorAction SilentlyContinue) {
-                try {
-                    $envs = @(Get-AdminPowerAppEnvironment -ErrorAction Stop)
-                    $result.Data.SectionStatus.Environments = 'Collected'
-                    $result.Data.Environments = @($envs | ForEach-Object {
-                        [ordered]@{
-                            Id          = [string]$_.EnvironmentName
-                            DisplayName = [string]$_.DisplayName
-                            Type        = [string]$_.EnvironmentType
-                            Region      = [string]$_.Location
-                            State       = [string]$_.CommonDataServiceDatabaseProvisioningState
-                        }
-                    })
-                } catch {
-                    $msg = "Get-AdminPowerAppEnvironment failed: $($_.Exception.Message)"
-                    $result.Errors += $msg
-                    if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                        Register-NRGException -Source 'PPL-Environments' -Message $msg
-                    }
-                }
-            }
-
-            # DLP policies
-            if (Get-Command Get-DlpPolicy -ErrorAction SilentlyContinue) {
-                try {
-                    $dlp = @(Get-DlpPolicy -ErrorAction Stop)
-                    if ($dlp) {
-                        $result.Data.DLPPolicies = @($dlp | ForEach-Object {
-                            # PPL-2.1: capture connector classification so the
-                            # evaluator can confirm connectors are actually grouped.
-                            # Get-DlpPolicy classifications are Confidential (Business),
-                            # General (Non-Business), Blocked — match both naming
-                            # conventions to stay robust across module versions.
-                            $cg = @($_.connectorGroups)
-                            [ordered]@{
-                                PolicyName  = [string]$_.PolicyName
-                                DisplayName = [string]$_.DisplayName
-                                Type        = [string]$_.EnvironmentType
-                                BusinessConnectors = @($cg | Where-Object { "$($_.classification)" -match 'Confidential|Business' } | ForEach-Object { @($_.connectors) } | Where-Object { $_ })
-                                BlockedConnectors  = @($cg | Where-Object { "$($_.classification)" -match 'Blocked' } | ForEach-Object { @($_.connectors) } | Where-Object { $_ })
-                            }
-                        })
-                        $result.Data.DLPAvailable = $true
-                    }
-                } catch {
-                    $msg = "Get-DlpPolicy failed: $($_.Exception.Message)"
-                    $result.Errors += $msg
-                    if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                        Register-NRGException -Source 'PPL-DLP' -Message $msg
-                    }
-                }
-            }
-
-            # Tenant isolation
-            if (Get-Command Get-PowerAppTenantIsolationPolicy -ErrorAction SilentlyContinue) {
-                try {
-                    $iso = Get-PowerAppTenantIsolationPolicy -ErrorAction Stop
-                    if ($iso) {
-                        # .properties is a nested object on the returned
-                        # policy that is not guaranteed present on every
-                        # module version/tenant shape — a bare chained read
-                        # throws under StrictMode at the first absent
-                        # intermediate.
-                        $result.Data.TenantIsolation = [ordered]@{
-                            IsDisabled = [bool](Get-NRGNestedProperty -Object $iso -Path 'properties.isDisabled' -Default $true)
-                            Rules      = @(Get-NRGNestedProperty -Object $iso -Path 'properties.rules' -Default @())
-                        }
-                    }
-                } catch {
-                    $msg = "Get-PowerAppTenantIsolationPolicy failed: $($_.Exception.Message)"
-                    $result.Errors += $msg
-                }
-            }
-
-            # Tenant governance settings (PPL-1.3 environment creation).
-            # Get-TenantSettings returns a nested object; the governance flag
-            # documented by Microsoft is
-            # powerPlatform.governance.disableEnvironmentCreationByNonAdminUsers.
-            # Property casing has varied across module versions, so read it
-            # defensively rather than assuming one spelling, and record whether
-            # the call actually ran so the evaluator can tell "not restricted"
-            # apart from "never read".
-            if (Get-Command Get-TenantSettings -ErrorAction SilentlyContinue) {
-                try {
-                    $ts = Get-TenantSettings -ErrorAction Stop
-                    $gov = $null
-                    if ($ts) {
-                        $pp  = if ($ts.PSObject.Properties['powerPlatform']) { $ts.powerPlatform } else { $null }
-                        $gov = if ($pp -and $pp.PSObject.Properties['governance']) { $pp.governance } else { $null }
-                    }
-                    $flag = $null
-                    foreach ($name in @('disableEnvironmentCreationByNonAdminUsers',
-                                        'disableEnvironmentCreationByNonAdminusers')) {
-                        if ($gov -and $gov.PSObject.Properties[$name]) { $flag = [bool]$gov.$name; break }
-                        if ($null -eq $flag -and $ts -and $ts.PSObject.Properties[$name]) { $flag = [bool]$ts.$name; break }
-                    }
-                    $trial = $null
-                    foreach ($name in @('disableTrialEnvironmentCreationByNonAdminUsers',
-                                        'disableTrialEnvironmentCreationByNonAdminusers')) {
-                        if ($gov -and $gov.PSObject.Properties[$name]) { $trial = [bool]$gov.$name; break }
-                    }
-                    $result.Data.TenantGovernance = [ordered]@{
-                        EnvironmentCreationRestricted      = $flag
-                        TrialEnvironmentCreationRestricted = $trial
-                    }
-                    $result.Data.SectionStatus.TenantGovernance = 'Collected'
-                } catch {
-                    $result.Data.SectionStatus.TenantGovernance = 'Failed'
-                    $msg = "Get-TenantSettings failed: $($_.Exception.Message)"
-                    $result.Errors += $msg
-                    if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                        Register-NRGException -Source 'PPL-TenantSettings' -Message $msg
-                    }
-                }
-            }
-
-            $result.Success = ($result.Data.Environments.Count -gt 0 -or $result.Data.DLPPolicies.Count -gt 0 -or $null -ne $result.Data.TenantIsolation)
-        } catch {
-            $msg = "Microsoft.PowerApps.Administration.PowerShell import failed: $($_.Exception.Message)"
-            $result.Errors += $msg
-            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                Register-NRGException -Source 'PowerPlatform-Collector' -Message $msg
-            }
-        }
-    }
-
-    # ── Path B: Windows PowerShell 5.1 bridge ─────────────────────────────────
-    $bridgeWhy = $null
-    if (-not $result.Success) {
-        $tenantId = $null
-        try { $ctx = Get-MgContext -ErrorAction Stop; if ($ctx) { $tenantId = [string]$ctx.TenantId } } catch { $tenantId = $null }
-        if (-not $tenantId) {
-            $bridgeWhy = 'no Graph tenant context to pin the Power Platform sign-in to'
-        } else {
-            $bridge = $null
-            try { $bridge = Invoke-NRGPowerPlatformBridge -TenantId $tenantId } catch { $bridge = $null; $bridgeWhy = "Windows PowerShell bridge failed: $($_.Exception.Message)" }
-            if ($bridge) {
-                $state = [string](Get-NRGObjectField -Item $bridge -Key 'State' -Default '')
-                if ($state -eq 'NotWindows') {
-                    $bridgeWhy = 'the Power Platform admin module runs only in Windows PowerShell 5.1, which is not available on this platform'
-                } elseif ($state -eq 'NoModule') {
-                    $bridgeWhy = 'Microsoft.PowerApps.Administration.PowerShell is not installed for Windows PowerShell 5.1 (from a Windows PowerShell prompt: Install-Module Microsoft.PowerApps.Administration.PowerShell -Scope CurrentUser)'
-                } elseif ($state -eq 'SignInFailed') {
-                    $bridgeWhy = "Power Platform sign-in failed: $([string](Get-NRGObjectField -Item $bridge -Key 'Error' -Default ''))"
-                } elseif ($state -eq 'Ran') {
-                    $result.Data.Source = 'module-winps'
-                    foreach ($e in @(Get-NRGObjectField -Item $bridge -Key 'Errors' -Default @())) {
-                        if (-not $e) { continue }
-                        $result.Errors += "$e"
-                        if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                            Register-NRGException -Source 'PPL-WinPSBridge' -Message "$e"
-                        }
-                    }
-                    $envs = Get-NRGObjectField -Item $bridge -Key 'Environments' -Default $null
-                    if ($null -ne $envs) {
-                        $result.Data.SectionStatus.Environments = 'Collected'
-                        $result.Data.Environments = @(@($envs) | Where-Object { $_ } | ForEach-Object {
-                            [ordered]@{
-                                Id          = [string](Get-NRGObjectField -Item $_ -Key 'EnvironmentName' -Default '')
-                                DisplayName = [string](Get-NRGObjectField -Item $_ -Key 'DisplayName' -Default '')
-                                Type        = [string](Get-NRGObjectField -Item $_ -Key 'EnvironmentType' -Default '')
-                                Region      = [string](Get-NRGObjectField -Item $_ -Key 'Location' -Default '')
-                                State       = [string](Get-NRGObjectField -Item $_ -Key 'CommonDataServiceDatabaseProvisioningState' -Default '')
-                            }
-                        })
-                    }
-                    $dlp = @(Get-NRGObjectField -Item $bridge -Key 'DlpPolicies' -Default @()) | Where-Object { $_ }
-                    if (@($dlp).Count -gt 0) {
-                        $result.Data.DLPPolicies = @($dlp | ForEach-Object {
-                            $cg = @(Get-NRGObjectField -Item $_ -Key 'connectorGroups' -Default @())
-                            [ordered]@{
-                                PolicyName  = [string](Get-NRGObjectField -Item $_ -Key 'PolicyName' -Default '')
-                                DisplayName = [string](Get-NRGObjectField -Item $_ -Key 'DisplayName' -Default '')
-                                Type        = [string](Get-NRGObjectField -Item $_ -Key 'EnvironmentType' -Default '')
-                                BusinessConnectors = @($cg | Where-Object { "$(Get-NRGObjectField -Item $_ -Key 'classification' -Default '')" -match 'Confidential|Business' } | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'connectors' -Default @()) } | Where-Object { $_ })
-                                BlockedConnectors  = @($cg | Where-Object { "$(Get-NRGObjectField -Item $_ -Key 'classification' -Default '')" -match 'Blocked' } | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'connectors' -Default @()) } | Where-Object { $_ })
-                            }
-                        })
-                        $result.Data.DLPAvailable = $true
-                    }
-                    $iso = Get-NRGObjectField -Item $bridge -Key 'TenantIsolation' -Default $null
-                    if ($null -ne $iso) {
-                        $result.Data.TenantIsolation = [ordered]@{
-                            IsDisabled = [bool](Get-NRGNestedProperty -Object $iso -Path 'properties.isDisabled' -Default $true)
-                            Rules      = @(Get-NRGNestedProperty -Object $iso -Path 'properties.rules' -Default @())
-                        }
-                    }
-                    $ts = Get-NRGObjectField -Item $bridge -Key 'TenantSettings' -Default $null
-                    if ($null -ne $ts) {
-                        $gov = Get-NRGNestedProperty -Object $ts -Path 'powerPlatform.governance' -Default $null
-                        $flag = $null; $trial = $null
-                        foreach ($name in @('disableEnvironmentCreationByNonAdminUsers', 'disableEnvironmentCreationByNonAdminusers')) {
-                            $v = Get-NRGObjectField -Item $gov -Key $name -Default $null
-                            if ($null -ne $v) { $flag = [bool]$v; break }
-                        }
-                        foreach ($name in @('disableTrialEnvironmentCreationByNonAdminUsers', 'disableTrialEnvironmentCreationByNonAdminusers')) {
-                            $v = Get-NRGObjectField -Item $gov -Key $name -Default $null
-                            if ($null -ne $v) { $trial = [bool]$v; break }
-                        }
-                        $result.Data.TenantGovernance = [ordered]@{
-                            EnvironmentCreationRestricted      = $flag
-                            TrialEnvironmentCreationRestricted = $trial
-                        }
-                        $result.Data.SectionStatus.TenantGovernance = 'Collected'
-                    } elseif ([bool](Get-NRGObjectField -Item $bridge -Key 'TenantSettingsFailed' -Default $false)) {
-                        $result.Data.SectionStatus.TenantGovernance = 'Failed'
-                    }
-                    $result.Success = ($result.Data.Environments.Count -gt 0 -or $result.Data.DLPPolicies.Count -gt 0 -or $null -ne $result.Data.TenantIsolation)
-                    if (-not $result.Success) { $bridgeWhy = 'Windows PowerShell bridge ran but returned no Power Platform data (see Exceptions)' }
-                } elseif (-not $bridgeWhy) {
-                    $bridgeWhy = 'Windows PowerShell bridge returned an unreadable result'
-                }
-            } elseif (-not $bridgeWhy) {
-                $bridgeWhy = 'Windows PowerShell 5.1 (powershell.exe) was not found'
-            }
-        }
-    }
-
-    # ── Path C: graceful degradation ─────────────────────────────────────────
-    if (-not $result.Success) {
-        $why = "Power Platform not collected: $(if ($bridgeWhy) { $bridgeWhy } else { 'admin module unavailable' })"
-        $result.Errors += $why
+    $note = {
+        param([string] $Source, [string] $Msg)
+        $result.Errors += $Msg
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-            Register-NRGException -Source 'PowerPlatform-Collector' -Message $why
+            Register-NRGException -Source $Source -Message $Msg
+        }
+    }
+
+    # ── Tenant and sign-in ────────────────────────────────────────────────────
+    $tenantId = $null; $account = $null; $appOnly = $false
+    try {
+        $ctx = Get-MgContext -ErrorAction Stop
+        if ($ctx) {
+            $tenantId = [string](Get-NRGObjectField -Item $ctx -Key 'TenantId' -Default '')
+            $account  = [string](Get-NRGObjectField -Item $ctx -Key 'Account' -Default '')
+            $appOnly  = ([string](Get-NRGObjectField -Item $ctx -Key 'AuthType' -Default '')) -eq 'AppOnly'
+        }
+    } catch { $tenantId = $null }
+
+    $token = $null
+    if (-not $tenantId) {
+        & $note 'PowerPlatform-Collector' 'Power Platform not collected: no Graph tenant context to pin the Power Platform sign-in to.'
+    } elseif ($appOnly) {
+        & $note 'PowerPlatform-Collector' 'Power Platform not collected: app-only (certificate) runs do not sign in to Power Platform. Run interactively to assess PPL controls.'
+    } else {
+        try {
+            $token = Get-NRGPowerPlatformToken -TenantId $tenantId -LoginHint $account
+        } catch {
+            & $note 'PowerPlatform-SignIn' "Power Platform not collected: sign-in to the Power Platform admin API failed: $($_.Exception.Message)"
+        }
+    }
+
+    if ($token) {
+        $result.Data.Source = 'bap-api'
+
+        # Environments (documented)
+        try {
+            $rows = @(Invoke-NRGPowerPlatformApi -Token $token -Paged `
+                -Uri "$script:NRGBapRoot/Microsoft.BusinessAppPlatform/scopes/admin/environments?api-version=2020-10-01")
+            $result.Data.Environments = @($rows | Where-Object { $_ } | ForEach-Object {
+                [ordered]@{
+                    Id          = [string](Get-NRGObjectField -Item $_ -Key 'name' -Default '')
+                    DisplayName = [string](Get-NRGNestedProperty -Object $_ -Path 'properties.displayName' -Default '')
+                    Type        = [string](Get-NRGNestedProperty -Object $_ -Path 'properties.environmentSku' -Default '')
+                    Region      = [string](Get-NRGObjectField    -Item   $_ -Key  'location' -Default '')
+                    State       = [string](Get-NRGNestedProperty -Object $_ -Path 'properties.states.management.id' -Default '')
+                }
+            })
+            $result.Data.SectionStatus.Environments = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.Environments = 'Failed'
+            & $note 'PPL-Environments' "Power Platform environments query failed: $($_.Exception.Message)"
+        }
+
+        # DLP policies
+        try {
+            $rows = @(Invoke-NRGPowerPlatformApi -Token $token -Paged -Uri "$script:NRGBapRoot/PowerPlatform.Governance/v2/policies")
+            $result.Data.DLPPolicies = @($rows | Where-Object { $_ } | ForEach-Object {
+                $cg = @(Get-NRGObjectField -Item $_ -Key 'connectorGroups' -Default @())
+                [ordered]@{
+                    PolicyName  = [string](Get-NRGObjectField -Item $_ -Key 'name' -Default '')
+                    DisplayName = [string](Get-NRGObjectField -Item $_ -Key 'displayName' -Default '')
+                    Type        = [string](Get-NRGObjectField -Item $_ -Key 'environmentType' -Default '')
+                    # Classifications: Confidential (business), General
+                    # (non-business), Blocked.
+                    BusinessConnectors = @($cg | Where-Object { "$(Get-NRGObjectField -Item $_ -Key 'classification' -Default '')" -match 'Confidential|Business' } | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'connectors' -Default @()) } | Where-Object { $_ })
+                    BlockedConnectors  = @($cg | Where-Object { "$(Get-NRGObjectField -Item $_ -Key 'classification' -Default '')" -match 'Blocked' } | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'connectors' -Default @()) } | Where-Object { $_ })
+                }
+            })
+            # Collected with zero policies is a real answer (PPL-1.2 Gap).
+            $result.Data.DLPAvailable = $true
+            $result.Data.SectionStatus.DLPPolicies = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.DLPPolicies = 'Failed'
+            & $note 'PPL-DLP' "Power Platform DLP policy query failed: $($_.Exception.Message)"
+        }
+
+        # Tenant isolation
+        try {
+            $iso = Invoke-NRGPowerPlatformApi -Token $token -Uri "$script:NRGBapRoot/PowerPlatform.Governance/v1/tenants/$tenantId/tenantIsolationPolicy"
+            $result.Data.TenantIsolation = [ordered]@{
+                IsDisabled = [bool](Get-NRGNestedProperty -Object $iso -Path 'properties.isDisabled' -Default $true)
+                Rules      = @(Get-NRGNestedProperty -Object $iso -Path 'properties.allowedTenants' -Default @())
+            }
+            $result.Data.SectionStatus.TenantIsolation = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.TenantIsolation = 'Failed'
+            & $note 'PPL-TenantIsolation' "Power Platform tenant isolation query failed: $($_.Exception.Message)"
+        }
+
+        # Tenant settings (documented POST list action, no body)
+        try {
+            $ts = Invoke-NRGPowerPlatformApi -Token $token -Method POST `
+                -Uri "$script:NRGBapRoot/Microsoft.BusinessAppPlatform/listtenantsettings?api-version=2020-10-01"
+            # Property casing differs between Microsoft's own example and
+            # its definitions table (…NonAdminUsers vs …NonAdminusers); read
+            # both. Also accept the powerPlatform.governance location older
+            # payloads used.
+            $flag = {
+                param([string[]] $Names)
+                foreach ($n in $Names) {
+                    foreach ($p in @($n, "powerPlatform.governance.$n")) {
+                        $v = Get-NRGNestedProperty -Object $ts -Path $p -Default $null
+                        if ($null -ne $v) { return [bool]$v }
+                    }
+                }
+                return $null
+            }
+            $result.Data.TenantGovernance = [ordered]@{
+                EnvironmentCreationRestricted      = & $flag @('disableEnvironmentCreationByNonAdminUsers', 'disableEnvironmentCreationByNonAdminusers')
+                TrialEnvironmentCreationRestricted = & $flag @('disableTrialEnvironmentCreationByNonAdminUsers', 'disableTrialEnvironmentCreationByNonAdminusers')
+            }
+            $result.Data.SectionStatus.TenantGovernance = 'Collected'
+            # Only keys the API actually returned: an absent flag must reach
+            # the evaluator as "not read", never as its default.
+            $settings = [ordered]@{}
+            $portals = & $flag @('disablePortalsCreationByNonAdminUsers', 'disablePortalsCreationByNonAdminusers')
+            if ($null -ne $portals) { $settings['DisablePortalsCreationByNonAdminUsers'] = $portals }
+            $guestsMake = Get-NRGNestedProperty -Object $ts -Path 'powerPlatform.powerApps.enableGuestsToMake' -Default $null
+            if ($null -ne $guestsMake) { $settings['EnableGuestsToMakePowerApps'] = [bool]$guestsMake }
+            $result.Data.TenantSettings = $settings
+            $result.Data.SectionStatus.TenantSettings = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.TenantSettings   = 'Failed'
+            $result.Data.SectionStatus.TenantGovernance = 'Failed'
+            & $note 'PPL-TenantSettings' "Power Platform tenant settings query failed: $($_.Exception.Message)"
+        }
+
+        $result.Success = @($result.Data.SectionStatus.Values | Where-Object { $_ -eq 'Collected' }).Count -gt 0
+        if (-not $result.Success) {
+            & $note 'PowerPlatform-Collector' 'Power Platform not collected: signed in, but every admin API query failed (see the other PPL exceptions). The account may lack the Power Platform Administrator role in this tenant.'
         }
     }
 
@@ -311,9 +215,9 @@ function Invoke-NRGCollectPowerPlatform {
     }
     if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
         if ($result.Success) {
-            $note = "Source=$($result.Data.Source) Envs=$($result.Data.Environments.Count) DLP=$($result.Data.DLPPolicies.Count)"
+            $covNote = "Source=$($result.Data.Source) Envs=$($result.Data.Environments.Count) DLP=$($result.Data.DLPPolicies.Count)"
             $status = if ($result.Errors.Count -gt 0) { 'Partial' } else { 'Collected' }
-            Register-NRGCoverage -Family 'PowerPlatform' -Status $status -Note $note
+            Register-NRGCoverage -Family 'PowerPlatform' -Status $status -Note $covNote
         } else {
             Register-NRGCoverage -Family 'PowerPlatform' -Status 'Failed' -Note ($result.Errors -join '; ')
         }
@@ -321,50 +225,89 @@ function Invoke-NRGCollectPowerPlatform {
     return $result
 }
 
-# Runs the Power Platform admin module in Windows PowerShell 5.1 and returns
-# its output parsed from JSON, or $null when powershell.exe is not present.
-# The child prints exactly one line between the markers; anything else it
-# writes (banners, warnings) is ignored. Read-only: Get-* cmdlets only.
-function Invoke-NRGPowerPlatformBridge {
+# Interactive, in-process sign-in to the Power Platform admin API.
+# Uses the MSAL (Microsoft.Identity.Client) that Microsoft.Graph.Authentication
+# has already loaded for Connect-MgGraph, with the same system-browser flow
+# (no embedded web view, no device code, no child process). The token stays
+# in memory for the life of this call. The login hint and NoPrompt let an
+# existing browser session complete the sign-in without re-entering anything.
+function Get-NRGPowerPlatformToken {
     [CmdletBinding()]
-    param([Parameter(Mandatory)] [ValidatePattern('^[0-9a-fA-F-]{36}$')] [string] $TenantId)
-
-    if (-not $IsWindows) { return [pscustomobject]@{ State = 'NotWindows' } }
-    $exe = Get-Command 'powershell.exe' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $exe) { return $null }
-
-    $child = @'
-param([string] $TenantId)
-$ErrorActionPreference = 'Stop'
-$out = [ordered]@{ State = 'Ran'; Errors = @() }
-function Emit { param($o) Write-Output ('<<NRG-PPL>>' + ($o | ConvertTo-Json -Depth 10 -Compress) + '<<NRG-PPL>>') }
-if (-not (Get-Module -ListAvailable -Name Microsoft.PowerApps.Administration.PowerShell)) { Emit @{ State = 'NoModule' }; return }
-try {
-    Import-Module Microsoft.PowerApps.Administration.PowerShell -WarningAction SilentlyContinue
-    Add-PowerAppsAccount -Endpoint prod -TenantID $TenantId | Out-Null
-} catch { Emit @{ State = 'SignInFailed'; Error = "$($_.Exception.Message)" }; return }
-try { $out.Environments = @(Get-AdminPowerAppEnvironment | Select-Object EnvironmentName, DisplayName, EnvironmentType, Location, CommonDataServiceDatabaseProvisioningState) }
-catch { $out.Errors += "Get-AdminPowerAppEnvironment failed: $($_.Exception.Message)" }
-try { $out.DlpPolicies = @(Get-DlpPolicy | ForEach-Object { if ($_.PSObject.Properties['value']) { $_.value } else { $_ } } | Select-Object PolicyName, DisplayName, EnvironmentType, connectorGroups) }
-catch { $out.Errors += "Get-DlpPolicy failed: $($_.Exception.Message)" }
-try { $out.TenantIsolation = Get-PowerAppTenantIsolationPolicy -TenantId $TenantId }
-catch { $out.Errors += "Get-PowerAppTenantIsolationPolicy failed: $($_.Exception.Message)" }
-try { $out.TenantSettings = Get-TenantSettings }
-catch { $out.TenantSettingsFailed = $true; $out.Errors += "Get-TenantSettings failed: $($_.Exception.Message)" }
-Emit $out
-'@
-    # A plain script file, not -EncodedCommand: base64-encoded PowerShell is
-    # a stock EDR detection and this tool runs on MSP workstations under EDR.
-    # The file holds only the code above (no tenant data) and is deleted
-    # before this function returns.
-    $tmp = Join-Path ([IO.Path]::GetTempPath()) ("nrg-ppl-" + [guid]::NewGuid().ToString('N') + '.ps1')
-    try {
-        [IO.File]::WriteAllText($tmp, $child, [Text.Encoding]::ASCII)
-        $lines = @(& $exe.Source -NoProfile -ExecutionPolicy Bypass -File $tmp -TenantId $TenantId.ToLowerInvariant() 2>$null)
-    } finally {
-        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)] [ValidatePattern('^[0-9a-fA-F-]{36}$')] [string] $TenantId,
+        [string] $LoginHint,
+        [int] $TimeoutSeconds = 180
+    )
+    $builder = 'Microsoft.Identity.Client.PublicClientApplicationBuilder' -as [type]
+    if (-not $builder) {
+        # Graph loads its own MSAL into a private assembly load context that
+        # PowerShell cannot resolve types from. Exchange Online usually puts
+        # one in the shared context first; if not, load the copy that ships
+        # with Microsoft.Graph.Authentication (same files, no child process).
+        $graphMod = Get-Module Microsoft.Graph.Authentication | Select-Object -First 1
+        if (-not $graphMod) { $graphMod = Get-Module -ListAvailable Microsoft.Graph.Authentication | Sort-Object Version -Descending | Select-Object -First 1 }
+        if ($graphMod) {
+            $dep = Join-Path $graphMod.ModuleBase 'Dependencies'
+            foreach ($dll in @((Join-Path $dep 'Microsoft.IdentityModel.Abstractions.dll'), (Join-Path $dep 'Core' 'Microsoft.Identity.Client.dll'))) {
+                if (Test-Path -LiteralPath $dll) {
+                    try { Add-Type -LiteralPath $dll -ErrorAction Stop } catch { Write-Verbose "MSAL load: $dll — $($_.Exception.Message)" }
+                }
+            }
+            $builder = 'Microsoft.Identity.Client.PublicClientApplicationBuilder' -as [type]
+        }
     }
-    $text = ($lines | ForEach-Object { "$_" }) -join "`n"
-    if ($text -notmatch '<<NRG-PPL>>(.+?)<<NRG-PPL>>') { throw 'no result marker in Windows PowerShell output' }
-    return ($Matches[1] | ConvertFrom-Json -ErrorAction Stop)
+    $prompt = 'Microsoft.Identity.Client.Prompt' -as [type]
+    if (-not $builder -or -not $prompt) {
+        throw 'the Microsoft sign-in library (Microsoft.Identity.Client) could not be loaded from Microsoft.Graph.Authentication'
+    }
+    $b   = $builder::Create($script:NRGPowerPlatformClientId)
+    $b   = $b.WithAuthority("https://login.microsoftonline.com/$TenantId")
+    $b   = $b.WithRedirectUri('http://localhost')
+    $app = $b.Build()
+    $req = $app.AcquireTokenInteractive([string[]]@('https://service.powerapps.com//.default'))
+    $req = $req.WithUseEmbeddedWebView($false)
+    $req = $req.WithPrompt($prompt::NoPrompt)
+    if ($LoginHint) { $req = $req.WithLoginHint($LoginHint) }
+    $cts = [System.Threading.CancellationTokenSource]::new([TimeSpan]::FromSeconds($TimeoutSeconds))
+    try {
+        $res = $req.ExecuteAsync($cts.Token).GetAwaiter().GetResult()
+    } finally {
+        $cts.Dispose()
+    }
+    if (-not $res -or -not $res.AccessToken) { throw 'no access token returned' }
+    $tokTenant = [string](Get-NRGObjectField -Item $res -Key 'TenantId' -Default '')
+    if ($tokTenant -and $tokTenant -ne $TenantId) {
+        throw "signed in to tenant $tokTenant, not $TenantId"
+    }
+    return [string]$res.AccessToken
+}
+
+# One Power Platform admin API call. -Paged follows nextLink and returns the
+# concatenated 'value' rows; otherwise returns the response body.
+function Invoke-NRGPowerPlatformApi {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [ValidatePattern('^https://api\.bap\.microsoft\.com/')] [string] $Uri,
+        [Parameter(Mandatory)] [string] $Token,
+        [ValidateSet('GET', 'POST')] [string] $Method = 'GET',
+        [switch] $Paged
+    )
+    $headers = @{ Authorization = "Bearer $Token"; Accept = 'application/json' }
+    if (-not $Paged) {
+        return Invoke-RestMethod -Method $Method -Uri $Uri -Headers $headers -ContentType 'application/json' -TimeoutSec 60 -ErrorAction Stop
+    }
+    $rows = [System.Collections.Generic.List[object]]::new()
+    $next = $Uri; $pages = 0
+    while ($next -and $pages -lt 50) {
+        $resp = Invoke-RestMethod -Method $Method -Uri $next -Headers $headers -ContentType 'application/json' -TimeoutSec 60 -ErrorAction Stop
+        foreach ($r in @(Get-NRGObjectField -Item $resp -Key 'value' -Default @())) { if ($null -ne $r) { $rows.Add($r) } }
+        # Get-NRGObjectField, not Get-NRGNestedProperty: a dotted reader
+        # would split '@odata.nextLink' and silently stop after page one.
+        $link = [string](Get-NRGObjectField -Item $resp -Key 'nextLink' -Default '')
+        if (-not $link) { $link = [string](Get-NRGObjectField -Item $resp -Key '@odata.nextLink' -Default '') }
+        $next = if ($link -match '^https://api\.bap\.microsoft\.com/') { $link } else { $null }
+        $pages++
+    }
+    return $rows.ToArray()
 }

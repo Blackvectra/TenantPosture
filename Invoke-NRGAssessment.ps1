@@ -729,6 +729,9 @@ if (-not $skipCollection) {
         }
         if (-not $SkipPowerPlatform) {
             Write-Host "  [*] Power Platform: Environments, tenant isolation, DLP..."
+            if (-not ($AppId -and $TenantId -and $CertificateThumbprint)) {
+                Write-Host "      A browser sign-in to the Power Platform admin API may open (same account; usually completes on its own). Use -SkipPowerPlatform to skip." -ForegroundColor DarkGray
+            }
             Invoke-NRGCollector 'Invoke-NRGCollectPowerPlatform'
         }
     }
