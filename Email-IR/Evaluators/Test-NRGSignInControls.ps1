@@ -420,8 +420,8 @@ function Test-NRGSignInControl-GeoAnomaly {
 # user's IoC score so attacker infra rises in the ranking. Stores the
 # enrichment in IR-SignIn-IPIntel for the publisher to render.
 #
-# External calls: RDAP (rdap.org) + Tor Project bulk list. Degrades
-# gracefully when offline — emits NotApplicable rather than crashing.
+# External calls: RDAP (rdap.org) only. Degrades gracefully when offline
+# — emits NotApplicable rather than crashing.
 function Test-NRGSignInControl-IPIntel {
     [CmdletBinding()] param(
         # Cap the number of unique IPs enriched. RDAP is rate-limited and the
@@ -494,7 +494,7 @@ function Test-NRGSignInControl-IPIntel {
     if ($enriched.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
             -Title $title -Severity 'Medium' `
-            -Detail "Could not enrich any of the $($targets.Count) suspicious IP(s) — RDAP / Tor list may be unreachable from this host."
+            -Detail "Could not enrich any of the $($targets.Count) suspicious IP(s) — RDAP may be unreachable from this host."
         return
     }
 
@@ -511,8 +511,8 @@ function Test-NRGSignInControl-IPIntel {
     if ($flagged.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
             -Title $title -Severity 'High' -Detail $detail `
-            -CurrentValue "$($flagged.Count) of $($enriched.Count) IP(s) on Tor / hosting / VPN infra" `
-            -Remediation "IPs tagged TOR_EXIT, HOSTING_ASN, or KNOWN_VPN_ASN with a successful sign-in are near-certain attacker infrastructure. Block them at the Conditional Access boundary and prioritize the associated users for deep-dive."
+            -CurrentValue "$($flagged.Count) of $($enriched.Count) IP(s) on hosting / VPN infra" `
+            -Remediation "IPs tagged HOSTING_ASN or KNOWN_VPN_ASN with a successful sign-in are near-certain attacker infrastructure. Block them at the Conditional Access boundary and prioritize the associated users for deep-dive."
     } else {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'Medium' -Detail $detail `

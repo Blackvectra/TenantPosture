@@ -63,8 +63,10 @@ function Get-NRGSSPAnswers {
     } elseif ($ClientName) {
         # Slug the client name rather than trusting it as a filename: it comes
         # from clients.json and a tenant domain contains dots, which are fine,
-        # but a stray separator would escape the answers folder.
-        $slug = ($ClientName.ToLowerInvariant() -replace '[^a-z0-9._-]+', '-').Trim('-')
+        # but a stray separator would escape the answers folder. Shared with
+        # Import-NRGSSPQuestionnaire.ps1 via ConvertTo-NRGSSPClientSlug so both
+        # resolve the exact same file for the exact same client.
+        $slug = ConvertTo-NRGSSPClientSlug -ClientName $ClientName
         if (-not $slug) { return $empty }
         $resolved = Join-Path $moduleRoot 'Config' 'ssp' "$slug.psd1"
     } else {

@@ -232,7 +232,7 @@ function Invoke-NRGCollectAADInventory {
             if ($latest) {
                 $result.Data.SecureScore = @{
                     CurrentScore   = [double]($latest.currentScore ?? 0)
-                    MaxScore       = [double]($latest.maxScore ?? 0)
+                    MaxScore       = [double](Get-NRGObjectField -Item $latest -Key 'maxScore' -Default 0)
                     Percentage     = if ($latest.maxScore -gt 0) { [int](($latest.currentScore / $latest.maxScore) * 100) } else { 0 }
                     CreatedDate    = [string]($latest.createdDateTime ?? '')
                     # AAD-13.1: Microsoft's peer benchmark — averageComparativeScores
@@ -255,7 +255,7 @@ function Invoke-NRGCollectAADInventory {
                             # wrote $_.controlCategory (a STRING like 'Identity')
                             # cast to [double] — which always coerces to 0. The
                             # correct property on a controlScore is maxScore.
-                            MaxScore     = [double]($_.maxScore ?? 0)
+                            MaxScore     = [double](Get-NRGObjectField -Item $_ -Key 'maxScore' -Default 0)
                             ControlCategory = [string]($_.controlCategory ?? '')
                             Description  = [string]($_.description ?? '')
                         }
@@ -309,12 +309,18 @@ function Invoke-NRGCollectAADInventory {
                         if ($null -eq $c) { continue }
                         $endRaw = [string](Get-NRGObjectField -Item $c -Key 'endDateTime')
                         if (-not $endRaw) { continue }
-                        $end = $null
-                        if (-not [DateTime]::TryParse($endRaw, [ref]$end)) { continue }
+                        # credential endDateTime/startDateTime are ISO 8601 Graph
+                        # timestamps — parse with the 4-arg TryParse overload per
+                        # CLAUDE.md (InvariantCulture + RoundtripKind, never a bare
+                        # 2-arg [ref] call, which PowerShell's method binder cannot
+                        # resolve against DateTime.TryParse on this runtime and
+                        # throws "Cannot find an overload ... argument count: 2").
+                        $end = [datetime]::MinValue
+                        if (-not [DateTime]::TryParse($endRaw, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$end)) { continue }
                         $startRaw = [string](Get-NRGObjectField -Item $c -Key 'startDateTime')
-                        $start = $null
+                        $start = [datetime]::MinValue
                         $lifetimeDays = $null
-                        if ($startRaw -and [DateTime]::TryParse($startRaw, [ref]$start)) {
+                        if ($startRaw -and [DateTime]::TryParse($startRaw, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$start)) {
                             $lifetimeDays = [int]([Math]::Round(($end - $start).TotalDays))
                         }
                         @{
