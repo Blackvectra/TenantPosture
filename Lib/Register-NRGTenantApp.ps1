@@ -103,6 +103,15 @@ function Register-NRGTenantApp {
         throw 'Register-NRGTenantApp requires Windows: it uses New-SelfSignedCertificate and the Cert:\ provider, which only ship in PowerShell on Windows. Run this from a Windows workstation (or use -WhatIf to preview from any host).'
     }
 
+    # ── clients.json must be readable BEFORE any tenant write ────────────────
+    # The record is written after the app registration and service principal
+    # are created; a file that fails to parse at that point would strand an
+    # orphaned app in the customer tenant. Check it up front.
+    if (Test-Path -LiteralPath $ClientsFile) {
+        try { $null = Get-Content -LiteralPath $ClientsFile -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop }
+        catch { throw "clients.json ($ClientsFile) is not valid JSON; nothing was created in the tenant. Fix the file, then re-run. ($($_.Exception.Message))" }
+    }
+
     # ── Resolve display name from branding if not supplied ───────────────────
     if (-not $DisplayName) {
         $brandCo = if ($script:NRGBrand -and $script:NRGBrand['CompanyName']) { $script:NRGBrand['CompanyName'] } else { 'NRG' }
@@ -372,13 +381,14 @@ function Update-NRGClientRecord {
                 $clients = @($raw)
             }
         } catch {
-            Write-Warning "clients.json could not be parsed; a new file will be written. ($($_.Exception.Message))"
-            $clients = @()
+            # Never overwrite: a fresh file here would hold ONLY this tenant and
+            # silently drop every other client's record.
+            throw "clients.json could not be parsed, so it was left untouched: $($_.Exception.Message). Fix the file, then re-run."
         }
     }
 
     $now = (Get-Date).ToString('o')
-    $existing = $clients | Where-Object { $_.TenantDomain -eq $TenantDomain } | Select-Object -First 1
+    $existing = $clients | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'TenantDomain' -Default '') -eq $TenantDomain } | Select-Object -First 1
     if ($existing) {
         $existing | Add-Member -NotePropertyName ClientId       -NotePropertyValue $ClientId       -Force
         $existing | Add-Member -NotePropertyName TenantId       -NotePropertyValue $TenantId       -Force
