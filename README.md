@@ -210,7 +210,7 @@ so CLI and GUI workflows can be mixed freely.
 Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (322 exports, dependency declarations)
+NRG-Assessment.psd1               ← Module manifest (323 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -511,6 +511,7 @@ Edit `Config\clients.json` to add tenants:
   "SkipIntune":        false,
   "SkipPowerPlatform": true,
   "SkipDNS":           false,
+  "ThirdPartyEDR":     "Cortex XDR",
   "Notes":             "Business Standard tenant — Purview and Power Platform skipped.",
   "Active":            true
 }
@@ -520,6 +521,12 @@ Get TenantId from: **Entra ID > Overview > Tenant ID**
 Get DelegatedOrg from: **Partner Center > Customers > client > Domains** (find the `.onmicrosoft.com` domain)
 
 GDAP relationships must be active in Partner Center before the batch runner can access client tenants.
+
+`ThirdPartyEDR` is optional. Set it when the client's endpoint protection is not Microsoft Defender (the same as `-ThirdPartyEDR 'Cortex XDR'` on a single run, including a `-FromResults` republish). The Microsoft Defender endpoint checks (INT-1.5, INT-2.1, INT-2.2 and the DEV-2.x endpoint checks) are then reported as covered by that product, **declared, not verified**, and left out of the score instead of scoring as gaps. A Defender check that actually passed keeps its result.
+
+**One-time per client tenant:** AAD-8.2, AAD-11.3 and DEF-4.6 need Graph permissions that each tenant must consent to. Until then they report exactly which one is missing. A Global Administrator runs `.\Grant-NRGGraphConsent.ps1 -TenantDomain client.com` once and accepts the prompt for the organization.
+
+**Power Platform (PPL-\*)** uses Microsoft's admin module, which runs only in Windows PowerShell 5.1. The assessment runs it in a `powershell.exe` child process, so install it from a Windows PowerShell prompt: `Install-Module Microsoft.PowerApps.Administration.PowerShell -Scope AllUsers`.
 
 ---
 
@@ -548,4 +555,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.13.0 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 322 exported functions · full Pester suite (59 suites) gating CI*
+*NRG-Assessment v4.13.0 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 323 exported functions · full Pester suite (59 suites) gating CI*

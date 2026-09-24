@@ -1,0 +1,103 @@
+#Requires -Version 7.0
+#
+# NRG.ThirdPartyEdr.Tests.ps1
+# NRG Technology Services / NextLayerSec LLC
+# Author: Matthew Levorson
+#
+# A client protected by a third-party EDR (e.g. Cortex XDR) read as "no
+# antivirus policy, no EDR, no attack surface reduction" — a Gap on every
+# Microsoft Defender endpoint check — because Microsoft 365 cannot see the
+# third-party product. -ThirdPartyEDR / clients.json ThirdPartyEDR takes
+# those checks out of the score. The declaration is the assessor's, not
+# evidence, so these tests pin that it never becomes a pass.
+
+Describe 'Third-party EDR declaration' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        $script:Mod = Get-Module 'NRG-Assessment'
+        $script:Checks = @(& $script:Mod { Get-NRGDefenderEndpointCheckIds })
+
+        function script:Add-Finding([string]$Cid, [string]$State, [string]$Detail = 'Defender check result') {
+            Add-NRGFinding -ControlId $Cid -State $State -Category 'Endpoint' -Title "$Cid title" -Severity 'High' -Detail $Detail
+        }
+        function script:Get-One([string]$Cid) { @(Get-NRGFindings | Where-Object { $_.ControlId -eq $Cid })[0] }
+    }
+
+    BeforeEach { Clear-NRGState }
+
+    It 'takes a failed Defender check out of the score and says it is declared, not verified' {
+        Add-Finding 'INT-2.1' 'Gap' 'No EDR policy deployed.'
+        (Set-NRGThirdPartyEdr -Product 'Cortex XDR') | Should -Be 1
+        $f = Get-One 'INT-2.1'
+        $f.State        | Should -Be 'NotApplicable'
+        $f.Detail       | Should -Match '^Third-party EDR declared:'
+        $f.Detail       | Should -Match 'Cortex XDR'
+        $f.Detail       | Should -Match 'NOT verified'
+        $f.Detail       | Should -Match 'before the declaration: Gap — No EDR policy deployed\.'
+        $f.CurrentValue | Should -Be 'Covered by Cortex XDR (declared, not verified)'
+    }
+
+    It 'never turns a declaration into a pass, and keeps a real pass as evidence' {
+        Add-Finding 'INT-2.2' 'Satisfied' 'ASR rules in block mode.'
+        Add-Finding 'INT-1.5' 'Partial'
+        Add-Finding 'DEV-2.1' 'Error'
+        Set-NRGThirdPartyEdr -Product 'Cortex XDR' | Out-Null
+        (Get-One 'INT-2.2').State | Should -Be 'Satisfied' -Because 'Defender really is configured — that is evidence'
+        (Get-One 'INT-1.5').State | Should -Be 'NotApplicable'
+        (Get-One 'DEV-2.1').State | Should -Be 'NotApplicable'
+        @(Get-NRGFindings | Where-Object { $_.Detail -match '^Third-party EDR declared:' -and $_.State -ne 'NotApplicable' }) | Should -BeNullOrEmpty
+    }
+
+    It 'touches only the Defender endpoint checks' {
+        Add-Finding 'AAD-1.1' 'Gap'
+        Add-Finding 'DEF-1.1' 'Gap' -Detail 'Safe Attachments off.'
+        Set-NRGThirdPartyEdr -Product 'Cortex XDR' | Out-Null
+        (Get-One 'AAD-1.1').State | Should -Be 'Gap'
+        (Get-One 'DEF-1.1').State | Should -Be 'Gap' -Because 'Defender for Office 365 protects mail; an endpoint EDR does not replace it'
+    }
+
+    It 'excluded checks leave the score and never appear as a license upgrade' {
+        Add-Finding 'INT-2.1' 'Gap'
+        Add-Finding 'AAD-1.1' 'Satisfied'
+        $before = (Get-NRGCoverageScore -Findings @(Get-NRGFindings)).Score
+        Set-NRGThirdPartyEdr -Product 'Cortex XDR' | Out-Null
+        $after = (Get-NRGCoverageScore -Findings @(Get-NRGFindings)).Score
+        $after | Should -BeGreaterThan $before
+        (Get-One 'INT-2.1').Detail | Should -Not -Match 'upgrade opportunity'
+    }
+
+    It 'the scope section files them as declared third-party coverage, not as passes or advisory' {
+        Add-Finding 'INT-2.1' 'Gap'
+        Set-NRGThirdPartyEdr -Product 'Cortex XDR' | Out-Null
+        $s = Get-NRGAssessmentScope -Findings @(Get-NRGFindings)
+        @($s.ThirdPartyAttested | ForEach-Object { $_.ControlId }) | Should -Contain 'INT-2.1'
+        @($s.NoProgrammaticCheck | ForEach-Object { $_.ControlId }) | Should -Not -Contain 'INT-2.1'
+        ($s.Limitations -join ' ') | Should -Match 'declared, not verified'
+    }
+
+    It 'rewrites findings loaded by -FromResults (hashtables) as well' {
+        $loaded = @(@{ ControlId = 'INT-2.1'; State = 'Gap'; Detail = 'x'; Severity = 'High'; CurrentValue = ''; Remediation = '' })
+        (Set-NRGThirdPartyEdr -Product 'Cortex XDR' -Findings $loaded) | Should -Be 1
+        $loaded[0].State | Should -Be 'NotApplicable'
+    }
+
+    It 'every check it covers is a real control' {
+        $tenant = @((Get-Content (Join-Path $script:RepoRoot 'Config/controls.json') -Raw | ConvertFrom-Json).controls | ForEach-Object { $_.ControlId })
+        $devRaw = Get-Content (Join-Path $script:RepoRoot 'Config/device-controls.json') -Raw
+        foreach ($id in $script:Checks) {
+            (($tenant -contains $id) -or ($devRaw -match [regex]::Escape("`"$id`""))) | Should -BeTrue -Because "$id must exist"
+        }
+    }
+
+    It 'rejects a product name that could inject into the report' {
+        { Set-NRGThirdPartyEdr -Product '<script>alert(1)</script>' } | Should -Throw
+    }
+
+    It 'the entry point reads ThirdPartyEDR from clients.json and applies it after evaluation' {
+        $entry = Get-Content (Join-Path $script:RepoRoot 'Invoke-NRGAssessment.ps1') -Raw
+        $entry | Should -Match "PSObject\.Properties\['ThirdPartyEDR'\]"
+        $entry.LastIndexOf('Set-NRGThirdPartyEdr -Product $ThirdPartyEDR') | Should -BeGreaterThan $entry.IndexOf('Invoke-NRGEvaluatorSafe -EvaluatorFunction $ev')
+    }
+}
