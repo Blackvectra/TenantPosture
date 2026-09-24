@@ -33,6 +33,11 @@ function Get-NRGControlAutomationAudit {
     Set-StrictMode -Version Latest
 
     $AddFn = 'Add-NRGFinding'
+    # Verdict helpers: an evaluator that hands its -ControlId to one of these
+    # emits whatever -State literals the HELPER's own body emits. Derived from
+    # the helper's AST, never declared, so the helper cannot claim a verdict
+    # it does not produce.
+    $DelegateFns = @('Add-NRGCAPolicyTierFinding')
 
     # ── AST helpers ───────────────────────────────────────────────────────────
     $literalOf = {
@@ -59,6 +64,16 @@ function Get-NRGControlAutomationAudit {
         return $null
     }
 
+    # Literal -State values a verdict helper's own Add-NRGFinding calls emit.
+    $delegateStates = {
+        param([string]$fn)
+        $cmd = Get-Command $fn -ErrorAction SilentlyContinue
+        if (-not $cmd -or -not $cmd.ScriptBlock) { return @() }
+        @($cmd.ScriptBlock.Ast.FindAll({ param($n)
+                $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq $AddFn }, $true) |
+            ForEach-Object { & $literalOf (& $paramArg $_ 'State') } | Where-Object { $_ } | Sort-Object -Unique)
+    }
+
     # Per-evaluator analysis, cached (functions serve one or many controls).
     $fnCache = @{}
     $analyze = {
@@ -79,7 +94,7 @@ function Get-NRGControlAutomationAudit {
         }
 
         foreach ($call in $ast.FindAll({ param($n)
-                $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq $AddFn }, $true)) {
+                $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -in (@($AddFn) + $DelegateFns) }, $true)) {
             $cidAst = & $paramArg $call 'ControlId'
             $cid = & $literalOf $cidAst
             if (-not $cid -and $cidAst -is [System.Management.Automation.Language.VariableExpressionAst]) {
@@ -96,7 +111,10 @@ function Get-NRGControlAutomationAudit {
             $stateArg = & $paramArg $call 'State'
             $knownStates = @('Satisfied', 'Gap', 'Partial', 'NotApplicable', 'Error')
             $states = @()
-            if ($stateArg) {
+            if ($call.GetCommandName() -in $DelegateFns) {
+                $states = @(& $delegateStates $call.GetCommandName())
+            }
+            elseif ($stateArg) {
                 $lit = & $literalOf $stateArg
                 if ($lit) {
                     $states = @($lit)

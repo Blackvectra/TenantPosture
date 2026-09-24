@@ -20,6 +20,10 @@ Microsoft documentation; each ships with a test that fails on the old code.
 - Defender / DKIM / Copilot collector crashes, compliance-matrix XLSX, and a
   set of false passes/gaps on failed collections (EXO-1.3, EXO-3.1, EXO-8.x,
   PVW-1.x, AAD-6.1, AAD-2.1, AAD-3.1, DEF-2.1) fixed.
+- **Conditional Access "is there a policy" controls score in three tiers**
+  (AAD-10.4, 11.4, 11.7, 11.8, 11.9): None -> Gap, Audit mode (report-only)
+  -> Partial, Enabled -> Satisfied. Nothing configured used to earn half
+  credit.
 - `-RegisterApp` never overwrites an unreadable clients.json; Email-IR tests
   run in CI; standalone Tor-exit detection removed.
 

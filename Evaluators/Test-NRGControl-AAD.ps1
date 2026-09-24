@@ -71,6 +71,50 @@ function Test-NRGRoleNamesResolved {
     return ($unresolved.Count -eq 0)
 }
 
+# Three-tier verdict for "is there a Conditional Access policy doing X":
+#   enabled                              -> Satisfied  ('Enabled')
+#   only report-only (audit mode)        -> Partial    ('Audit mode (report-only)')
+#   none, or only disabled policies      -> Gap        ('None')
+# Report-only logs what the policy would do but blocks nothing, so it earns
+# half credit — it is real progress toward enforcement. Nothing configured
+# earns none: half credit for an absent control inflates the score.
+function Add-NRGCAPolicyTierFinding {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string]$ControlId,
+        [Parameter(Mandatory)] $Control,
+        [AllowNull()] $FrameworkIds,
+        [AllowNull()] $Policies,
+        [Parameter(Mandatory)] [scriptblock]$Match,
+        [Parameter(Mandatory)] [string]$What,
+        [Parameter(Mandatory)] [string]$EnabledDetail,
+        [Parameter(Mandatory)] [string]$MissingDetail,
+        [Parameter(Mandatory)] [string]$RequiredValue
+    )
+    $matched  = @(@($Policies) | Where-Object { $null -ne $_ } | Where-Object $Match)
+    $enabled  = @($matched | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'State') -eq 'enabled' })
+    $auditing = @($matched | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'State') -eq 'enabledForReportingButNotEnforced' })
+    $names    = { param($list) (@($list) | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'DisplayName') } | Select-Object -First 5) -join ', ' }
+    if ($enabled.Count -gt 0) {
+        Add-NRGFinding -ControlId $ControlId -State 'Satisfied' -Category $Control.Category -Title $Control.Title `
+            -Severity 'Informational' -FrameworkIds $FrameworkIds `
+            -Detail "Enabled: $EnabledDetail Policies: $(& $names $enabled)." `
+            -CurrentValue "Enabled ($($enabled.Count) policy(ies))" -RequiredValue $RequiredValue
+    } elseif ($auditing.Count -gt 0) {
+        Add-NRGFinding -ControlId $ControlId -State 'Partial' -Category $Control.Category -Title $Control.Title `
+            -Severity $Control.Severity -FrameworkIds $FrameworkIds `
+            -Detail "Audit mode: $What is configured only in report-only mode ($(& $names $auditing)). Sign-ins are logged against it but nothing is enforced. Review the report-only results, then switch the policy to On." `
+            -CurrentValue "Audit mode (report-only, $($auditing.Count) policy(ies))" -RequiredValue $RequiredValue `
+            -Remediation $Control.Remediation
+    } else {
+        Add-NRGFinding -ControlId $ControlId -State 'Gap' -Category $Control.Category -Title $Control.Title `
+            -Severity $Control.Severity -FrameworkIds $FrameworkIds `
+            -Detail "None: $MissingDetail" `
+            -CurrentValue 'None' -RequiredValue $RequiredValue `
+            -Remediation $Control.Remediation
+    }
+}
+
 # Is a CA grant's authentication strength phishing-resistant? $true / $false,
 # or $null when the allowed methods are not visible. Built-in strength IDs are
 # Microsoft constants (…0002 MFA, …0003 passwordless MFA, …0004 phishing-
@@ -1003,20 +1047,12 @@ function Test-NRGControlAADSignInFrequency {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    $freqPolicies = @($ca.Data['Policies'] | Where-Object {
-        $_.State -eq 'enabled' -and
-        (Get-NRGNestedProperty -Object $_ -Path 'SessionControls.SignInFrequency.IsEnabled') -eq $true
-    })
-    if ($freqPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "Sign-in frequency session control configured by $($freqPolicies.Count) CA policy(ies). Forces re-authentication periodically to limit stolen token lifetime."
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit `
-            -Detail 'No sign-in frequency session control configured. Stolen tokens remain valid for the default session lifetime (up to 90 days).' `
-            -Remediation $ctrl.Remediation
-    }
+    Add-NRGCAPolicyTierFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $ca.Data['Policies'] `
+        -Match { (Get-NRGNestedProperty -Object $_ -Path 'SessionControls.SignInFrequency.IsEnabled') -eq $true } `
+        -What 'A sign-in frequency session control' `
+        -EnabledDetail 'a sign-in frequency session control forces periodic re-authentication, limiting stolen token lifetime.' `
+        -MissingDetail 'no Conditional Access policy sets a sign-in frequency. Stolen tokens remain valid for the default session lifetime (up to 90 days).' `
+        -RequiredValue 'Enabled CA policy with a sign-in frequency session control'
 }
 
 # ── AAD-11.1 Device Code Authentication Flow Blocked ─────────────────────────
@@ -1129,16 +1165,13 @@ function Test-NRGControlAADTokenProtection {
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    $tokenPolicies = @($ca.Data['Policies'] | Where-Object {
-        $_.State -eq 'enabled' -and
-        ((Get-NRGNestedProperty -Object $_ -Path 'SessionControls.SignInFrequency.AuthenticationType') -eq 'primaryAndSecondaryAuthentication' -or
-         (Get-NRGNestedProperty -Object $_ -Path 'SessionControls.TokenProtection.IsEnabled') -eq $true)
-    })
-    if ($tokenPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Token protection (binding) CA policy active. Stolen tokens cannot be replayed from a different device.'
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No token protection (binding) CA policy detected. AiTM phishing attacks steal session tokens and replay them from attacker infrastructure. Token binding ties tokens to the originating device.' -Remediation $ctrl.Remediation
-    }
+    Add-NRGCAPolicyTierFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $ca.Data['Policies'] `
+        -Match { (Get-NRGNestedProperty -Object $_ -Path 'SessionControls.SignInFrequency.AuthenticationType') -eq 'primaryAndSecondaryAuthentication' -or
+                 (Get-NRGNestedProperty -Object $_ -Path 'SessionControls.TokenProtection.IsEnabled') -eq $true } `
+        -What 'Token protection (binding)' `
+        -EnabledDetail 'token protection binds session tokens to the originating device, so a stolen token cannot be replayed from attacker infrastructure.' `
+        -MissingDetail 'no token protection (binding) Conditional Access policy. AiTM phishing steals session tokens and replays them from attacker infrastructure; token binding ties tokens to the originating device.' `
+        -RequiredValue 'Enabled CA policy requiring token protection'
 }
 
 # ── AAD-11.5 Continuous Access Evaluation Enabled ────────────────────────────
@@ -1203,17 +1236,14 @@ function Test-NRGControlAADPrivilegedWorkstation {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
     # PAW is indicated by CA policies that scope privileged role activation/use to specific named device groups
-    $pawPolicies = @($ca.Data['Policies'] | Where-Object {
-        $_.State -eq 'enabled' -and
-        ($_.DisplayName -match 'PAW|Privileged Workstation|Admin Workstation' -or
-         ((Get-NRGNestedProperty -Object $_ -Path 'Conditions.Devices') -and
-          @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.IncludeRoles' -Default @()).Count -gt 0))
-    })
-    if ($pawPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Device-scoped CA policy for privileged roles detected: $($pawPolicies[0].DisplayName). Privileged access is restricted to specific managed devices."
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'No device-scoped CA policy for privileged role access detected. Admins can authenticate from any device. A dedicated privileged access workstation or compliant device requirement for admin roles reduces attack surface.' -Remediation $ctrl.Remediation
-    }
+    Add-NRGCAPolicyTierFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $ca.Data['Policies'] `
+        -Match { [string](Get-NRGObjectField -Item $_ -Key 'DisplayName') -match 'PAW|Privileged Workstation|Admin Workstation' -or
+                 ((Get-NRGNestedProperty -Object $_ -Path 'Conditions.Devices') -and
+                  @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.IncludeRoles' -Default @()).Count -gt 0) } `
+        -What 'A device-scoped policy for privileged roles' `
+        -EnabledDetail 'privileged role access is restricted to specific managed devices by a device-scoped CA policy.' `
+        -MissingDetail 'no device-scoped Conditional Access policy for privileged role access. Admins can authenticate from any device; a privileged access workstation or compliant-device requirement for admin roles reduces attack surface.' `
+        -RequiredValue 'Enabled CA policy restricting privileged roles to managed devices'
 }
 
 # ── AAD-11.8 Terms of Use for External Access ─────────────────────────────────
@@ -1225,15 +1255,12 @@ function Test-NRGControlAADTermsOfUse {
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    $touPolicies = @($ca.Data['Policies'] | Where-Object {
-        $_.State -eq 'enabled' -and
-        @(Get-NRGNestedProperty -Object $_ -Path 'GrantControls.TermsOfUse' -Default @()).Count -gt 0
-    })
-    if ($touPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Terms of use enforced via $($touPolicies.Count) CA policy(ies). Users must acknowledge acceptable use before accessing resources."
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'No Terms of Use CA policy detected. For organizations with guests or external contractors, ToU creates legal acknowledgment of acceptable use policies.' -Remediation $ctrl.Remediation
-    }
+    Add-NRGCAPolicyTierFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $ca.Data['Policies'] `
+        -Match { @(Get-NRGNestedProperty -Object $_ -Path 'GrantControls.TermsOfUse' -Default @()).Count -gt 0 } `
+        -What 'Terms of Use' `
+        -EnabledDetail 'users must acknowledge acceptable use before accessing resources.' `
+        -MissingDetail 'no Terms of Use Conditional Access policy. For organizations with guests or external contractors, Terms of Use create a legal acknowledgment of acceptable use.' `
+        -RequiredValue 'Enabled CA policy requiring Terms of Use acceptance'
 }
 
 # ── AAD-11.9 Workload Identity CA Policy ─────────────────────────────────────
@@ -1245,14 +1272,11 @@ function Test-NRGControlAADWorkloadIdentityCA {
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    $wliPolicies = @($ca.Data['Policies'] | Where-Object {
-        $_.State -eq 'enabled' -and
-        ((Get-NRGNestedProperty -Object $_ -Path 'Conditions.ClientApplications.IncludeServicePrincipals') -or
-         (Get-NRGNestedProperty -Object $_ -Path 'Conditions.ClientApplications.IncludeAllServicePrincipals'))
-    })
-    if ($wliPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($wliPolicies.Count) CA policy(ies) apply to workload identities (service principals). Application access is subject to conditional access controls."
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No CA policies applied to workload identities. Service principals and managed identities are not subject to any conditional access controls. Requires Entra ID P2 Workload Identities add-on.' -Remediation $ctrl.Remediation
-    }
+    Add-NRGCAPolicyTierFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $ca.Data['Policies'] `
+        -Match { (Get-NRGNestedProperty -Object $_ -Path 'Conditions.ClientApplications.IncludeServicePrincipals') -or
+                 (Get-NRGNestedProperty -Object $_ -Path 'Conditions.ClientApplications.IncludeAllServicePrincipals') } `
+        -What 'A workload identity policy' `
+        -EnabledDetail 'Conditional Access applies to workload identities (service principals), so application access is subject to CA controls.' `
+        -MissingDetail 'no Conditional Access policy applies to workload identities. Service principals and managed identities are not subject to any conditional access controls.' `
+        -RequiredValue 'Enabled CA policy scoped to workload identities'
 }
