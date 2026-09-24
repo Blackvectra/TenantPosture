@@ -56,7 +56,7 @@ function Invoke-NRGCollectSharePoint {
                     IsLegacyAuthProtocolsEnabled         = [bool]($settings.isLegacyAuthProtocolsEnabled ?? $false)
                     IsLoopEnabled                        = [bool]($settings.isLoopEnabled ?? $false)
                     IsMacSyncAppEnabled                  = [bool]($settings.isMacSyncAppEnabled ?? $false)
-                    IsRequireAcceptingUserToMatchInvitedUserEnabled = [bool]($settings.isRequireAcceptingUserToMatchInvitedUserEnabled ?? $false)
+                    IsRequireAcceptingUserToMatchInvitedUserEnabled = [bool](Get-NRGObjectField -Item $settings -Key 'isRequireAcceptingUserToMatchInvitedUserEnabled' -Default $false)
                     IsResharingByExternalUsersEnabled    = [bool]($settings.isResharingByExternalUsersEnabled ?? $false)
                     IsSharePointMobileNotificationEnabled = [bool]($settings.isSharePointMobileNotificationEnabled ?? $false)
                     IsSharePointNewsfeedEnabled          = [bool]($settings.isSharePointNewsfeedEnabled ?? $false)

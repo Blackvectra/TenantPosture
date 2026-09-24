@@ -36,7 +36,7 @@ function Invoke-NRGCollectDefender {
                         IsDefault        = [bool]$_.IsDefault
                         Enable           = [bool]($_.Enable ?? $false)
                         Action           = [string]($_.Action ?? 'Allow')
-                        ActionOnError    = [bool]($_.ActionOnError ?? $false)
+                        ActionOnError    = [bool](Get-NRGObjectField -Item $_ -Key 'ActionOnError' -Default $false)
                         Redirect         = [bool]($_.Redirect ?? $false)
                         RedirectAddress  = [string]($_.RedirectAddress ?? '')
                         OperationMode    = [string]($_.OperationMode ?? 'Delay')
@@ -73,7 +73,7 @@ function Invoke-NRGCollectDefender {
                 Policies               = @($slPolicies | ForEach-Object {
                     @{
                         Name                         = [string]$_.Name
-                        IsDefault                    = [bool]$_.IsDefault
+                        IsDefault                    = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
                         EnableSafeLinksForEmail      = [bool]($_.EnableSafeLinksForEmail ?? $false)
                         EnableSafeLinksForTeams      = [bool]($_.EnableSafeLinksForTeams ?? $false)
                         EnableSafeLinksForOffice     = [bool]($_.EnableSafeLinksForOffice ?? $false)
@@ -165,7 +165,7 @@ function Invoke-NRGCollectDefender {
                         IsDefault                = [bool]$_.IsDefault
                         EnableFileFilter         = [bool]($_.EnableFileFilter ?? $false)
                         FileTypes                = @($_.FileTypes ?? @())
-                        Action                   = [string]($_.Action ?? 'DeleteAttachmentAndUseDefaultAlertText')
+                        Action                   = [string](Get-NRGObjectField -Item $_ -Key 'Action' -Default 'DeleteAttachmentAndUseDefaultAlertText')
                         EnableInternalSenderAdminNotifications = [bool]($_.EnableInternalSenderAdminNotifications ?? $false)
                     }
                 })

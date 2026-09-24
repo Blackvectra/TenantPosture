@@ -339,7 +339,7 @@ function Invoke-NRGCollectEXOInventory {
                     PrimarySmtp          = [string]$_.PrimarySmtpAddress
                     Guid                 = [string]$_.Guid
                     UPN                  = [string]$_.UserPrincipalName
-                    ExternalEmailAddress = [string]$_.ExternalEmailAddress
+                    ExternalEmailAddress = [string](Get-NRGObjectField -Item $_ -Key 'ExternalEmailAddress' -Default '')
                 }
             })
 

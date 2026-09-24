@@ -186,6 +186,35 @@ param(
     })]
     [string] $SSPAnswers,
 
+    # Fillable client questionnaire (Markdown + HTML + best-effort PDF) for
+    # the SSP requirements this run could not evidence itself. NOT implied by
+    # -AllFiles: it is a document meant to go OUT to a client and be filled
+    # in and returned, not a routine run artifact regenerated on every
+    # assessment. See Import-NRGSSPQuestionnaire.ps1 for the return half.
+    [switch] $SSPQuestionnaire,
+
+    # Restrict the questionnaire to one 800-171 family (e.g. '3.9' for
+    # Personnel Security), so it can go to the person who actually owns that
+    # domain instead of everyone getting all 110 requirements at once.
+    [ValidateNotNullOrEmpty()]
+    [string] $SSPQuestionnaireFamily,
+
+    # Fillable client questionnaire for the controls.json controls this run
+    # could not evaluate on its own — Get-NRGAssessmentScope's
+    # NoProgrammaticCheck (no automated test exists) and CollectionIncomplete
+    # (data did not collect this run) buckets. The controls.json counterpart
+    # to -SSPQuestionnaire; a separate document because a controls.json
+    # ControlId and a NIST 800-171 requirement id are different catalogs.
+    # NOT implied by -AllFiles, for the same reason -SSPQuestionnaire isn't.
+    # See Import-NRGManualReviewQuestionnaire.ps1 for the return half.
+    [switch] $ManualReviewQuestionnaire,
+
+    # Restrict the manual-review questionnaire to one workload (e.g. 'SPO'),
+    # so it can go to the person who actually owns that workload instead of
+    # everyone getting every unassessed control across the tenant.
+    [ValidateNotNullOrEmpty()]
+    [string] $ManualReviewWorkload,
+
     # The NIST 800-53 Rev 5 improvement plan — what to do next, in what order,
     # and what it will cost. Ordered steps with the exact projected coverage
     # after each, the families each one moves, and what the change will break.
@@ -993,6 +1022,61 @@ if (-not $JsonOnly) {
                 Write-Host "      $openCount of 110 requirements still need a written answer — see 'Still to answer'." -ForegroundColor Yellow
             }
         } catch { Write-Warning "SSP publish failed: $($_.Exception.Message)" }
+    }
+
+    # SSP questionnaire — the manual-evidence half of the SSP, as a document a
+    # client fills in and sends back. Its own opt-in switch, deliberately NOT
+    # implied by -AllFiles: unlike the SSP itself, this is a document meant to
+    # leave the building, not a routine artifact to regenerate on every run.
+    if ($SSPQuestionnaire -and (Get-Command Publish-NRGSSPQuestionnaire -ErrorAction SilentlyContinue)) {
+        $sspqPath = Join-Path $OutputPath "$baseName-ssp-questionnaire.md"
+        try {
+            # Reuses the same posture/answers/client resolution as -SSP above
+            # when that switch was also passed this run; computed fresh
+            # otherwise so -SSPQuestionnaire works standalone.
+            $sspqClient = if ($TenantDomain) { $TenantDomain } else { [string]$reportMetadata.TenantDomain }
+            $sspqAnswerSet = if ($SSPAnswers) {
+                Get-NRGSSPAnswers -Path $SSPAnswers
+            } else {
+                Get-NRGSSPAnswers -ClientName $sspqClient
+            }
+            $sspqPosture = Get-NRGSSPPosture -Findings $findings -Answers $sspqAnswerSet
+            Publish-NRGSSPQuestionnaire -Posture $sspqPosture -Metadata $reportMetadata `
+                -OutputPath $sspqPath -ClientName $sspqClient -Family $SSPQuestionnaireFamily
+            Write-Host "  [+] SSP questionnaire (md): $sspqPath" -ForegroundColor Green
+            Set-NRGSensitiveFileAcl -Path $sspqPath -ErrorAction SilentlyContinue
+            foreach ($ext in @('.html', '.pdf', '.manifest.json')) {
+                $side = [System.IO.Path]::ChangeExtension($sspqPath, $ext)
+                if (Test-Path -LiteralPath $side) {
+                    Write-Host "  [+] SSP questionnaire ($($ext.TrimStart('.'))): $side" -ForegroundColor Green
+                    Set-NRGSensitiveFileAcl -Path $side -ErrorAction SilentlyContinue
+                }
+            }
+        } catch { Write-Warning "SSP questionnaire publish failed: $($_.Exception.Message)" }
+    }
+
+    # Manual-review questionnaire — the controls.json counterpart to the SSP
+    # questionnaire above, for the controls Get-NRGAssessmentScope classifies
+    # as NoProgrammaticCheck or CollectionIncomplete. Same opt-in shape, same
+    # reason it is not implied by -AllFiles.
+    if ($ManualReviewQuestionnaire -and (Get-Command Publish-NRGManualReviewQuestionnaire -ErrorAction SilentlyContinue)) {
+        $mrqPath = Join-Path $OutputPath "$baseName-manual-review.md"
+        try {
+            $mrqClient = if ($TenantDomain) { $TenantDomain } else { [string]$reportMetadata.TenantDomain }
+            $mrqAnswerSet = Get-NRGManualReviewAnswers -ClientName $mrqClient
+            $mrqScope = Get-NRGAssessmentScope -Findings $findings
+            Publish-NRGManualReviewQuestionnaire -Scope $mrqScope -Answers $mrqAnswerSet -Metadata $reportMetadata `
+                -OutputPath $mrqPath -ClientName $mrqClient -Workload $ManualReviewWorkload
+            Write-Host "  [+] Manual review questionnaire (md): $mrqPath" -ForegroundColor Green
+            Set-NRGSensitiveFileAcl -Path $mrqPath -ErrorAction SilentlyContinue
+            foreach ($ext in @('.html', '.pdf', '.manifest.json')) {
+                $side = [System.IO.Path]::ChangeExtension($mrqPath, $ext)
+                if (Test-Path -LiteralPath $side) {
+                    Write-Host "  [+] Manual review questionnaire ($($ext.TrimStart('.'))): $side" -ForegroundColor Green
+                    Set-NRGSensitiveFileAcl -Path $side -ErrorAction SilentlyContinue
+                }
+            }
+        } catch { Write-Warning "Manual review questionnaire publish failed: $($_.Exception.Message)" }
     }
 
     # NIST 800-53 improvement plan. Same shape as the two above: its own switch
