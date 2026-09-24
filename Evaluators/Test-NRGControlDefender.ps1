@@ -253,7 +253,15 @@ function Test-NRGControlDefenderPresetPolicies {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiPhishing was not collected; not assessed.'
         return
     }
-    $presetActive = @($ap.Policies | Where-Object { $_.Name -match 'Standard|Strict|Preset' }).Count -gt 0
+    # Every tenant has at least the built-in default anti-phishing policy, so a
+    # successful read that returned NONE is not "custom policies in use" (the
+    # Partial below) - it is a read that produced nothing. Not assessed.
+    $apPolicies = @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @() | Where-Object { $_ })
+    if ($apPolicies.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'No anti-phishing policies were returned (every tenant has at least the default policy); not assessed.'
+        return
+    }
+    $presetActive = @($apPolicies | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '') -match 'Standard|Strict|Preset' }).Count -gt 0
     if ($presetActive) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Standard or Strict preset security policy is active in this tenant.'
     } else {
