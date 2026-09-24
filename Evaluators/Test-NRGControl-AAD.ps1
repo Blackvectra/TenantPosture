@@ -813,9 +813,10 @@ function Test-NRGControlAADAccessReviews {
     # re-consented the collector can't read them — report NotApplicable, never a
     # false "no reviews" gap.
     if (-not $pim.AccessReviewsCollected) {
+        $why = if (Test-NRGGraphScopeMissing -Scope 'AccessReview.Read.All') { Get-NRGConsentMissingDetail -Scope 'AccessReview.Read.All' }
+               else { 'Access review data not collected — requires the AccessReview.Read.All scope (re-consent the enterprise app in each tenant). Verify manually in PIM > Microsoft Entra roles > Access reviews.' }
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title `
-            -Detail 'Access review data not collected — requires the AccessReview.Read.All scope (re-consent the enterprise app in each tenant). Verify manually in PIM > Microsoft Entra roles > Access reviews.'
+            -Title $ctrl.Title -FrameworkIds $cit -Detail $why
         return
     }
     $reviews = @($pim.Data['AccessReviews'] ?? @())
@@ -1137,7 +1138,9 @@ function Test-NRGControlAADRiskyServicePrincipals {
     # Premium so detections never run) — honest NotApplicable, not a false pass.
     $risky = Get-NRGNestedProperty -Object $auth -Path 'Data.RiskyServicePrincipals' -Default $null
     if ($null -eq $risky) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Risky workload-identity data unavailable (requires IdentityRiskyServicePrincipal.Read.All consent and Workload Identities Premium); not assessed.'; return
+        $why = if (Test-NRGGraphScopeMissing -Scope 'IdentityRiskyServicePrincipal.Read.All') { Get-NRGConsentMissingDetail -Scope 'IdentityRiskyServicePrincipal.Read.All' }
+               else { 'Risky workload-identity data unavailable (requires IdentityRiskyServicePrincipal.Read.All consent and Workload Identities Premium); not assessed.' }
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail $why; return
     }
     $risky = @($risky)
     # atRisk / confirmedCompromised are the states that demand action; remediated,

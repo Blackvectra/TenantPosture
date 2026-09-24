@@ -233,9 +233,9 @@ param(
     # client — the next client's Connect-MgGraph then has to reconnect with
     # no -TenantId and can silently land back in the operator's home tenant.
     # Pass -KeepSession to skip the disconnect and leave the shared session
-    # intact for the next client. NOTE: Invoke-NRGBatchAssessment.ps1 does not
-    # pass this yet — wiring the batch runner to set it on every call but the
-    # last is a separate follow-up.
+    # intact for the next client. Invoke-NRGBatchAssessment.ps1 passes it on
+    # every client and disconnects the per-client Exchange, Security &
+    # Compliance and Teams sessions itself; it closes Graph after the loop.
     [switch] $KeepSession,
 
     # Launch the local web GUI instead of running a scan in the terminal.
