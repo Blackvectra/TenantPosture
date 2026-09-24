@@ -60,7 +60,7 @@ Describe 'Network egress surface' {
                 }
             }
         }
-        $offenders -join "`n" | Should -BeNullOrEmpty -Because 'contacting Tor Project hosts trips malicious_tor_access on the operator/client endpoint — the local-file workaround (Test-NRGIPIsTorExit) replaced it'
+        $offenders -join "`n" | Should -BeNullOrEmpty -Because 'contacting Tor Project hosts trips malicious_tor_access on the operator/client endpoint — standalone Tor-exit detection was removed from the tool entirely rather than reworked around it'
     }
 
     It 'Every hard-coded https host in source is on the allow-list' {
