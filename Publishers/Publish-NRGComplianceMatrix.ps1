@@ -107,8 +107,8 @@ function Publish-NRGComplianceMatrix {
                 State           = [string]$_.State
                 Severity        = [string]$_.Severity
                 Detail          = [string]$_.Detail
-                CurrentValue    = [string]($_.CurrentValue  ?? '')
-                RequiredValue   = [string]($_.RequiredValue ?? '')
+                CurrentValue    = [string](Get-NRGObjectField -Item $_ -Key 'CurrentValue'  -Default '')
+                RequiredValue   = [string](Get-NRGObjectField -Item $_ -Key 'RequiredValue' -Default '')
                 Remediation     = [string]$(
                     # Get-NRGObjectField, not dot-access-then-??: $ctrl is the
                     # controls.json definition and $_ is the finding — either can
@@ -120,9 +120,12 @@ function Publish-NRGComplianceMatrix {
                     if (-not $rem) { $rem = Get-NRGObjectField -Item $_ -Key 'Remediation' -Default '' }
                     $rem
                 )
-                BusinessRisk    = [string]($ctrl.BusinessRisk ?? '')
-                LicenseReq      = [string]($ctrl.LicenseRequirement ?? 'Included')
-                FrameworkIds    = @($_.FrameworkIds ?? @() | ForEach-Object { [string]$_ })
+                # $ctrl is $null for DEV-* endpoint findings (device-controls.json,
+                # not controls.json), and under StrictMode Latest a member read on
+                # $null throws before ?? applies — which aborted the whole XLSX.
+                BusinessRisk    = [string](Get-NRGObjectField -Item $ctrl -Key 'BusinessRisk' -Default '')
+                LicenseReq      = [string](Get-NRGObjectField -Item $ctrl -Key 'LicenseRequirement' -Default 'Included')
+                FrameworkIds    = @(Get-NRGObjectField -Item $_ -Key 'FrameworkIds' -Default @() | ForEach-Object { [string]$_ })
                 CIS             = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.CIS'      -Default '')
                 SCuBA           = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.SCuBA'    -Default '')
                 NIST            = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.NIST'     -Default '')
