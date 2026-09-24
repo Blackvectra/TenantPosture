@@ -76,6 +76,19 @@ function Add-NRGFinding {
     )
 
     Initialize-NRGState
+    # Framework rollups (NIST families/matrix, CMMC, the 800-171 SSP) only see
+    # a finding through prefixed citations ("NIST:IA-2(1)"). An evaluator that
+    # omits -FrameworkIds, or passes bare IDs like 'IA-2(1)', made the finding
+    # invisible to every one of them — on a live tenant that hid AAD-1.2 (a
+    # Critical MFA Gap) and ten passing controls. Fall back to the control's
+    # own citations from controls.json whenever no prefixed citation was given.
+    $hasPrefixed = @($FrameworkIds | Where-Object { [string]$_ -match '^[A-Za-z0-9]+:' }).Count -gt 0
+    if (-not $hasPrefixed -and $ControlId -match '^[A-Z]{2,4}-\d{1,3}\.\d{1,3}$' -and
+        (Get-Command Get-NRGFrameworkCitations -ErrorAction SilentlyContinue)) {
+        $catalog = @(Get-NRGFrameworkCitations -ControlId $ControlId)
+        if ($catalog.Count -gt 0) { $FrameworkIds = $catalog }
+    }
+
     $finding = [PSCustomObject]@{
         ControlId     = $ControlId
         State         = $State
