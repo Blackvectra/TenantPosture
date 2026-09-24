@@ -33,13 +33,13 @@ function Invoke-NRGCollectDefender {
                 Policies               = @($saPolicies | ForEach-Object {
                     @{
                         Name             = [string]$_.Name
-                        IsDefault        = [bool]$_.IsDefault
-                        Enable           = [bool]($_.Enable ?? $false)
-                        Action           = [string]($_.Action ?? 'Allow')
+                        IsDefault        = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
+                        Enable           = [bool](Get-NRGObjectField -Item $_ -Key 'Enable' -Default $false)
+                        Action           = [string](Get-NRGObjectField -Item $_ -Key 'Action' -Default 'Allow')
                         ActionOnError    = [bool](Get-NRGObjectField -Item $_ -Key 'ActionOnError' -Default $false)
-                        Redirect         = [bool]($_.Redirect ?? $false)
-                        RedirectAddress  = [string]($_.RedirectAddress ?? '')
-                        OperationMode    = [string]($_.OperationMode ?? 'Delay')
+                        Redirect         = [bool](Get-NRGObjectField -Item $_ -Key 'Redirect' -Default $false)
+                        RedirectAddress  = [string](Get-NRGObjectField -Item $_ -Key 'RedirectAddress' -Default '')
+                        OperationMode    = [string](Get-NRGObjectField -Item $_ -Key 'OperationMode' -Default 'Delay')
                     }
                 })
                 Rules                  = @($saRules | ForEach-Object {
@@ -51,9 +51,9 @@ function Invoke-NRGCollectDefender {
                         RecipientDomainIs     = @($_.RecipientDomainIs ?? @())
                     }
                 })
-                EnabledNonDefaultCount = @($saPolicies | Where-Object { -not $_.IsDefault -and $_.Enable -eq $true }).Count
-                BlockActionCount       = @($saPolicies | Where-Object { $_.Action -eq 'Block' }).Count
-                AnyBlockEnabled        = @($saPolicies | Where-Object { $_.Action -eq 'Block' -and ($_.Enable ?? $false) }).Count -gt 0
+                EnabledNonDefaultCount = @($saPolicies | Where-Object { -not (Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false) -and (Get-NRGObjectField -Item $_ -Key 'Enable' -Default $false) -eq $true }).Count
+                BlockActionCount       = @($saPolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Action' -Default 'Allow') -eq 'Block' }).Count
+                AnyBlockEnabled        = @($saPolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Action' -Default 'Allow') -eq 'Block' -and (Get-NRGObjectField -Item $_ -Key 'Enable' -Default $false) }).Count -gt 0
             }
         } catch {
             $result.Data['SafeAttachments'] = @{ Available = $false; Error = $_.Exception.Message }
@@ -94,7 +94,7 @@ function Invoke-NRGCollectDefender {
                         RecipientDomainIs = @($_.RecipientDomainIs ?? @())
                     }
                 })
-                EnabledNonDefaultCount = @($slPolicies | Where-Object { -not $_.IsDefault -and $_.EnableSafeLinksForEmail }).Count
+                EnabledNonDefaultCount = @($slPolicies | Where-Object { -not (Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false) -and (Get-NRGObjectField -Item $_ -Key 'EnableSafeLinksForEmail' -Default $false) }).Count
             }
         } catch {
             $result.Data['SafeLinks'] = @{ Available = $false; Error = $_.Exception.Message }
@@ -114,7 +114,7 @@ function Invoke-NRGCollectDefender {
                 Policies  = @($apPolicies | ForEach-Object {
                     @{
                         Name                                     = [string]$_.Name
-                        IsDefault                                = [bool]$_.IsDefault
+                        IsDefault                                = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
                         Enabled                                  = [bool]($_.Enabled ?? $true)
                         EnableMailboxIntelligence                = [bool]($_.EnableMailboxIntelligence ?? $false)
                         EnableMailboxIntelligenceProtection      = [bool]($_.EnableMailboxIntelligenceProtection ?? $false)
@@ -162,7 +162,7 @@ function Invoke-NRGCollectDefender {
                 Policies  = @($mfPolicies | ForEach-Object {
                     @{
                         Name                     = [string]$_.Name
-                        IsDefault                = [bool]$_.IsDefault
+                        IsDefault                = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
                         EnableFileFilter         = [bool]($_.EnableFileFilter ?? $false)
                         FileTypes                = @($_.FileTypes ?? @())
                         Action                   = [string](Get-NRGObjectField -Item $_ -Key 'Action' -Default 'DeleteAttachmentAndUseDefaultAlertText')
