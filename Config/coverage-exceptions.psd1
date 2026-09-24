@@ -32,5 +32,6 @@
         # Verified per-site / deprecated — no tenant-level read signal:
         @{ ControlId = 'SPO-2.4'; Kind = 'Manual'; Reason = 'Custom-script (DenyAddAndCustomizePages) is a per-site-collection setting; Microsoft removed the tenant-level default, so it needs per-site enumeration, not a tenant read.' }
         @{ ControlId = 'SPO-3.1'; Kind = 'Manual'; Reason = 'Site collection administrators require per-site enumeration (Get-SPOUser / Get-SPOSite owners per site) — not a tenant-level signal.' }
+        @{ ControlId = 'SPO-2.3'; Kind = 'Manual'; Reason = 'The SharePoint Store app-acquisition setting is not among the fields Graph /admin/sharepoint/settings or Get-SPOTenant expose to this tool; the evaluator reports NotApplicable rather than guessing.' }
     )
 }

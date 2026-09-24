@@ -503,9 +503,10 @@ function Invoke-NRGCollectEXOInventory {
         # nothing about it looks like an inbox rule.
         try {
             $inb = @()
-            if (Get-Command Get-InboundConnector -ErrorAction SilentlyContinue) {
-                $inb = @(Get-InboundConnector -ErrorAction Stop)
-            }
+            # A missing cmdlet (EXO not connected, or the signed-in role cannot run it -
+            # Exchange RBAC hides such cmdlets) is a FAILED read, never "none exist".
+            if (-not (Get-Command Get-InboundConnector -ErrorAction SilentlyContinue)) { throw 'Get-InboundConnector is not available in this session.' }
+            $inb = @(Get-InboundConnector -ErrorAction Stop)
             $result.Data.InboundConnectors = @($inb | ForEach-Object {
                 @{
                     Name             = [string](Get-NRGObjectField -Item $_ -Key 'Name')
@@ -520,9 +521,10 @@ function Invoke-NRGCollectEXOInventory {
             })
 
             $outb = @()
-            if (Get-Command Get-OutboundConnector -ErrorAction SilentlyContinue) {
-                $outb = @(Get-OutboundConnector -ErrorAction Stop)
-            }
+            # A missing cmdlet (EXO not connected, or the signed-in role cannot run it -
+            # Exchange RBAC hides such cmdlets) is a FAILED read, never "none exist".
+            if (-not (Get-Command Get-OutboundConnector -ErrorAction SilentlyContinue)) { throw 'Get-OutboundConnector is not available in this session.' }
+            $outb = @(Get-OutboundConnector -ErrorAction Stop)
             $result.Data.OutboundConnectors = @($outb | ForEach-Object {
                 @{
                     Name          = [string](Get-NRGObjectField -Item $_ -Key 'Name')
@@ -551,9 +553,10 @@ function Invoke-NRGCollectEXOInventory {
         # EXO-7.1 never see it, because no mailbox is forwarding.
         try {
             $rules = @()
-            if (Get-Command Get-TransportRule -ErrorAction SilentlyContinue) {
-                $rules = @(Get-TransportRule -ErrorAction Stop)
-            }
+            # A missing cmdlet (EXO not connected, or the signed-in role cannot run it -
+            # Exchange RBAC hides such cmdlets) is a FAILED read, never "none exist".
+            if (-not (Get-Command Get-TransportRule -ErrorAction SilentlyContinue)) { throw 'Get-TransportRule is not available in this session.' }
+            $rules = @(Get-TransportRule -ErrorAction Stop)
             $result.Data.TransportRules = @($rules | ForEach-Object {
                 @{
                     Name         = [string](Get-NRGObjectField -Item $_ -Key 'Name')

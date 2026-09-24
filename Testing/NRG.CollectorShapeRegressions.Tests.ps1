@@ -35,6 +35,7 @@ Describe 'Collector shape regressions — live-tenant-confirmed omissions' {
         # Pester's Mock -ModuleName has nothing to shim over — Get-Command must
         # resolve the name before a mock can be attached. Stub them out first;
         # each Mock below then replaces the stub for the duration of its test.
+        $script:CreatedStubs = @()
         foreach ($cmd in @(
             'Get-SafeAttachmentPolicy', 'Get-SafeAttachmentRule',
             'Get-SafeLinksPolicy', 'Get-SafeLinksRule',
@@ -43,9 +44,17 @@ Describe 'Collector shape regressions — live-tenant-confirmed omissions' {
         )) {
             if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
                 Set-Item -Path "function:global:$cmd" -Value { @() }
+                $script:CreatedStubs += $cmd
             }
         }
         Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+    }
+
+    # The stubs are GLOBAL; left behind they make later suites see Exchange
+    # cmdlets that "succeed" with nothing (it made SectionHonesty fail when
+    # run after this file).
+    AfterAll {
+        foreach ($cmd in $script:CreatedStubs) { Remove-Item -Path "function:global:$cmd" -ErrorAction SilentlyContinue }
     }
 
     Context 'Invoke-NRGCollectDefender — Safe Attachments / Safe Links rows omitting fields' {
