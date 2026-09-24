@@ -1,8 +1,33 @@
 # Changelog
 
-## Unreleased
+## v4.13.0 (2026-09-24)
 
-Accuracy + hardening pass (targeting v4.13.0):
+Accuracy + hardening release. Every fix below was found by running the tool
+against a live tenant and checking verdicts against raw data, live DNS and
+Microsoft documentation; each ships with a test that fails on the old code.
+
+- **Scans are pinned to the requested tenant.** `-TenantDomain` and the Web
+  GUI resolve the target tenant and abort before collecting if the sign-in
+  lands anywhere else; Exchange gets `-DelegatedOrganization` for GDAP.
+- **No false "audit log disabled".** `Get-AdminAuditLogConfig` (and
+  `Get-Recipient`, `Get-TenantAllowBlockListItems`) now run in the Exchange
+  Online session; Security & Compliance always reports UAL as off.
+- **AAD-1.3** no longer counts any authentication strength as
+  phishing-resistant. **AAD-10.2 / AAD-11.2** assessed again. **PIM
+  (AAD-3.3-3.6)** scored per privileged role; GA approval assessable.
+- **Every finding reaches NIST/CMMC/SSP rollups**; controls score once, not
+  once per domain; MFA and shared-mailbox counts agree across controls.
+- Defender / DKIM / Copilot collector crashes, compliance-matrix XLSX, and a
+  set of false passes/gaps on failed collections (EXO-1.3, EXO-3.1, EXO-8.x,
+  PVW-1.x, AAD-6.1, AAD-2.1, AAD-3.1, DEF-2.1) fixed.
+- **Conditional Access "is there a policy" controls score in three tiers**
+  (AAD-10.4, 11.4, 11.7, 11.8, 11.9): None -> Gap, Audit mode (report-only)
+  -> Partial, Enabled -> Satisfied. Nothing configured used to earn half
+  credit.
+- `-RegisterApp` never overwrites an unreadable clients.json; Email-IR tests
+  run in CI; standalone Tor-exit detection removed.
+
+Earlier in this cycle:
 
 - **Application (app-only) permissions are now assessed — AAD-15.1 / AAD-15.2.**
   AAD-12.4 reads `oauth2PermissionGrants` with consentType `AllPrincipals`,

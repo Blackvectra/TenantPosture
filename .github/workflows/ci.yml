@@ -104,7 +104,8 @@ jobs:
           # 70-citation SCuBA mis-mapping shipped precisely because these
           # weren't enforced. ScubaGear runs its full unit suite in CI; so do we.
           $config = New-PesterConfiguration
-          $config.Run.Path = './Testing'
+          # Email-IR/Testing too: it held 6 failing tests that no merge ever saw.
+          $config.Run.Path = @('./Testing', './Email-IR/Testing')
           $config.Run.Exit = $true
           $config.Run.Throw = $false
           $config.Output.Verbosity = 'Diagnostic'

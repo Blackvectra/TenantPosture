@@ -399,26 +399,45 @@ if ($RegisterApp) {
 # app-only credentials, look up a previously-onboarded record in clients.json
 # and populate AppId / TenantId / CertificateThumbprint so the scan runs
 # app-only with zero typed GUIDs.
+$targetTenantId      = $null
+$targetDelegatedOrg  = $null
 if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint)) {
-    $clientsPath = Join-Path $scriptDir 'Config\clients.json'
+    $clientsPath = Join-Path $scriptDir 'Config' 'clients.json'
+    $clientRec = $null
     if (Test-Path -LiteralPath $clientsPath) {
         try {
-            $rec = @(Get-Content -LiteralPath $clientsPath -Raw -Encoding utf8 | ConvertFrom-Json) |
-                   Where-Object { $_.TenantDomain -eq $TenantDomain -and $_.PSObject.Properties['ClientId'] -and $_.ClientId } |
-                   Select-Object -First 1
-        } catch { $rec = $null }
-        if ($rec) {
-            $AppId                 = [string]$rec.ClientId
-            $TenantId              = [string]$rec.TenantId
-            $CertificateThumbprint = [string]$rec.CertThumbprint
-            if (-not $OrganizationDomain -and $rec.PSObject.Properties['TenantDomain']) {
-                $OrganizationDomain = [string]$rec.TenantDomain
-            }
-            Write-Host "  [+] Using app-only auth for $TenantDomain (ClientId $AppId)" -ForegroundColor Green
-        } else {
-            Write-Host "  [i] $TenantDomain is not onboarded for app-only auth. Falling back to interactive." -ForegroundColor DarkGray
-            Write-Host "      Onboard it once with:  .\Invoke-NRGAssessment.ps1 -RegisterApp -TenantDomain $TenantDomain" -ForegroundColor DarkGray
+            # clients.json is { "clients": [ ... ] } (what the batch runner
+            # and the GUI read); a bare array is accepted too. Reading the
+            # wrapper as the list meant this lookup could never match.
+            $rawClients = Get-Content -LiteralPath $clientsPath -Raw -Encoding utf8 | ConvertFrom-Json
+            $list = if ($rawClients.PSObject.Properties['clients']) { @($rawClients.clients) } else { @($rawClients) }
+            $clientRec = $list | Where-Object { $_.PSObject.Properties['TenantDomain'] -and $_.TenantDomain -eq $TenantDomain } |
+                         Select-Object -First 1
+        } catch { $clientRec = $null }
+    }
+    # The tenant this run must assess. Interactive sign-in otherwise lands on
+    # whatever tenant the account belongs to, and nothing checked that it was
+    # the one asked for.
+    if ($clientRec -and $clientRec.PSObject.Properties['TenantId'] -and "$($clientRec.TenantId)" -match '^[0-9a-fA-F-]{36}$') {
+        $targetTenantId = "$($clientRec.TenantId)".ToLowerInvariant()
+    } else {
+        $targetTenantId = Resolve-NRGTenantId -Domain $TenantDomain
+    }
+    if ($clientRec -and $clientRec.PSObject.Properties['DelegatedOrg'] -and "$($clientRec.DelegatedOrg)" -match '\.onmicrosoft\.com$') {
+        $targetDelegatedOrg = [string]$clientRec.DelegatedOrg
+    }
+    $rec = if ($clientRec -and $clientRec.PSObject.Properties['ClientId'] -and $clientRec.ClientId) { $clientRec } else { $null }
+    if ($rec) {
+        $AppId                 = [string]$rec.ClientId
+        $TenantId              = [string]$rec.TenantId
+        $CertificateThumbprint = [string]$rec.CertThumbprint
+        if (-not $OrganizationDomain -and $rec.PSObject.Properties['TenantDomain']) {
+            $OrganizationDomain = [string]$rec.TenantDomain
         }
+        Write-Host "  [+] Using app-only auth for $TenantDomain (ClientId $AppId)" -ForegroundColor Green
+    } else {
+        Write-Host "  [i] $TenantDomain is not onboarded for app-only auth. Falling back to interactive." -ForegroundColor DarkGray
+        Write-Host "      Onboard it once with:  .\Invoke-NRGAssessment.ps1 -RegisterApp -TenantDomain $TenantDomain" -ForegroundColor DarkGray
     }
 }
 
@@ -600,8 +619,10 @@ if (-not $skipCollection) {
         $connectParams['TenantId']               = $TenantId
         $connectParams['CertificateThumbprint']  = $CertificateThumbprint
         if ($OrganizationDomain) { $connectParams['OrganizationDomain'] = $OrganizationDomain }
-    } elseif ($UserPrincipalName) {
-        $connectParams['UserPrincipalName'] = $UserPrincipalName
+    } else {
+        if ($UserPrincipalName)  { $connectParams['UserPrincipalName']     = $UserPrincipalName }
+        if ($targetTenantId)     { $connectParams['ExpectedTenantId']      = $targetTenantId }
+        if ($targetDelegatedOrg) { $connectParams['DelegatedOrganization'] = $targetDelegatedOrg }
     }
     if ($SkipPurview) { $connectParams['SkipPurview'] = $true }
     if ($SkipTeams)   { $connectParams['SkipTeams']   = $true }
@@ -622,6 +643,22 @@ if (-not $skipCollection) {
         throw [System.InvalidOperationException]::new('Authentication failure: no Graph or EXO session available.')
     }
     if (-not $conn.ContainsKey('SharePoint')) { $conn['SharePoint'] = $false }
+
+    # Never write a report for a tenant other than the one requested.
+    if ($TenantDomain) {
+        $mismatch = $null
+        if ($targetTenantId -and $conn.TenantId -and "$($conn.TenantId)" -ne $targetTenantId) {
+            $mismatch = "connected tenant $($conn.TenantId) is not $TenantDomain ($targetTenantId)"
+        } elseif (-not $targetTenantId) {
+            $mismatch = "could not resolve a tenant ID for $TenantDomain, so the connected tenant cannot be confirmed"
+        }
+        if ($mismatch) {
+            Write-Host "  [!] Wrong tenant: $mismatch. Nothing was collected." -ForegroundColor Red
+            Write-Host "      Sign in with an account in $TenantDomain (or with GDAP access to it and its DelegatedOrg in clients.json)." -ForegroundColor Red
+            $script:NRGFatalExitCode = 1
+            throw [System.InvalidOperationException]::new("Tenant mismatch: $mismatch.")
+        }
+    }
 
     if ($WhatIfConnections) {
         Write-Host ""
@@ -790,7 +827,9 @@ if (-not $skipCollection) {
     $reportMetadata = @{
         TenantDomain   = $conn.TenantDomain
         TenantId       = $conn.TenantId
-        Operator       = $UserPrincipalName
+        # The account that actually signed in when no UPN was given (the GUI
+        # and -TenantDomain runs), so the report never names nobody.
+        Operator       = $(if ($UserPrincipalName) { $UserPrincipalName } elseif (Get-Command Get-MgContext -ErrorAction SilentlyContinue) { [string](Get-MgContext).Account } else { '' })
         AssessmentDate = (Get-Date).ToString('MMMM dd, yyyy')
         AssessmentTime = (Get-Date).ToString('o')
         ToolVersion    = $NRGAssessmentVersion

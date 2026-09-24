@@ -323,7 +323,12 @@ function Start-NRGWebServer {
                 # -File confines that exit to the nested process, so
                 # $LASTEXITCODE survives here to report on the pipeline.
                 $pwshPath = (Get-Process -Id $PID).Path
-                & $pwshPath -NoLogo -File $entryScript -UserPrincipalName "scan@$domain" -OutputPath $outputPath *>&1
+                # -TenantDomain, not a made-up "scan@<domain>" UPN: it pins the
+                # scan to the chosen tenant (clients.json TenantId/DelegatedOrg,
+                # else the domain's OpenID metadata) and aborts if the sign-in
+                # lands anywhere else. The fake UPN only pre-filled the sign-in
+                # prompt with an account that does not exist.
+                & $pwshPath -NoLogo -File $entryScript -TenantDomain $domain -OutputPath $outputPath *>&1
                 # *>&1 above (not 2>&1) merges the information stream too —
                 # Write-Host output goes to the job's Information stream, not
                 # the output stream the status handler iterates, so 2>&1

@@ -29,11 +29,16 @@ Describe 'AAD-8.2 Access Reviews control discriminates' {
         Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
         $script:Mod = Get-Module 'NRG-Assessment'
 
-        # Scenario knobs read by the mock below — set per test.
-        $script:PIMForbidden           = $false   # 403 on the P2-availability probe
-        $script:AccessReviewsForbidden = $false   # 403 on accessReviews/definitions (not re-consented)
-        $script:AccessReviewDefs       = @()      # raw accessReviewScheduleDefinition rows
-
+        # Scenario knobs read by the mock below — set per test via Set-AccessReviewScenario.
+        # They must be pushed into the MODULE's script scope (see below), not just
+        # set here: the mock function is itself injected into that scope
+        # (Set-Item -Path "function:script:$n"), so a bare `$script:X = ...` in
+        # THIS file's scope is invisible to it — under StrictMode, the mock's
+        # `if ($script:PIMForbidden)` read then throws "cannot be retrieved
+        # because it has not been set", which the collector's outer catch
+        # swallows, leaving PIMAvailable/AccessReviewsCollected both $false and
+        # every scenario collapsing to the same NotApplicable verdict. Matches
+        # the pattern NRG.AppPermissions.Tests.ps1 uses via `& $script:Mod { ... }`.
         & $script:Mod { param($n, $b) Set-Item -Path "function:script:$n" -Value ([scriptblock]::Create($b)) } 'Invoke-NRGGraphRequest' @'
 [CmdletBinding()]
 param([string] $Uri, [string] $Method = 'GET', $Body, $Headers, [string] $OutputType = 'HashTable')
@@ -59,9 +64,12 @@ return @{ value = @() }
                 [object[]] $Definitions = @()
             )
             Clear-NRGState
-            $script:PIMForbidden           = $PIMForbidden
-            $script:AccessReviewsForbidden = $AccessReviewsForbidden
-            $script:AccessReviewDefs       = $Definitions
+            & $script:Mod {
+                param($p, $a, $d)
+                $script:PIMForbidden           = $p
+                $script:AccessReviewsForbidden = $a
+                $script:AccessReviewDefs       = $d
+            } $PIMForbidden $AccessReviewsForbidden $Definitions
             $null = Invoke-NRGCollectAADPIM
         }
 

@@ -25,7 +25,7 @@ function Test-NRGControlAADPrivAccess {
     $roleRaw = Get-NRGRawData -Key 'AAD-DirectoryRoles'
 
     if (-not $roleRaw -or -not $roleRaw.Success) {
-        $detail = if ($roleRaw) { "Collector failed: $($roleRaw.Exceptions -join '; ')" } else { 'AAD-DirectoryRoles collector did not run.' }
+        $detail = if ($roleRaw) { "Collector failed: $(@(Get-NRGObjectField -Item $roleRaw -Key 'Exceptions' -Default @()) -join '; ')" } else { 'AAD-DirectoryRoles collector did not run.' }
         Add-NRGFinding -ControlId 'AAD-3.1' -State 'NotApplicable' `
             -Category 'Identity' -Title 'Global Administrator Count 2-8, Cloud-Only' -Detail $detail
         return

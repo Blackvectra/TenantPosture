@@ -143,10 +143,16 @@ function Invoke-NRGCollectEXOInventory {
         # Injected rather than called inline so the classifier is testable
         # without a live Exchange session — the absence of exactly that was
         # why the old parser shipped broken.
+        # Get-Recipient exists in the Security & Compliance session too; an
+        # unqualified call resolves there once Purview is connected, and legacy
+        # DNs stop resolving (2 unresolved rules without Purview, 13 with, on a
+        # live tenant). Pin it to the Exchange Online session.
+        $getRecipientCmd = (Get-NRGExoCommand -Name 'Get-Recipient' -Session ExchangeOnline).Command
         $recipientResolver = {
             param([string] $Lookup)
-            @(Get-Recipient -Identity $Lookup -ErrorAction Stop) | Select-Object -First 1
-        }
+            if (-not $getRecipientCmd) { return $null }
+            @(& $getRecipientCmd -Identity $Lookup -ErrorAction Stop) | Select-Object -First 1
+        }.GetNewClosure()
 
         $classifyRecipient = {
             param([string] $Recipient)
@@ -497,9 +503,10 @@ function Invoke-NRGCollectEXOInventory {
         # nothing about it looks like an inbox rule.
         try {
             $inb = @()
-            if (Get-Command Get-InboundConnector -ErrorAction SilentlyContinue) {
-                $inb = @(Get-InboundConnector -ErrorAction Stop)
-            }
+            # A missing cmdlet (EXO not connected, or the signed-in role cannot run it -
+            # Exchange RBAC hides such cmdlets) is a FAILED read, never "none exist".
+            if (-not (Get-Command Get-InboundConnector -ErrorAction SilentlyContinue)) { throw 'Get-InboundConnector is not available in this session.' }
+            $inb = @(Get-InboundConnector -ErrorAction Stop)
             $result.Data.InboundConnectors = @($inb | ForEach-Object {
                 @{
                     Name             = [string](Get-NRGObjectField -Item $_ -Key 'Name')
@@ -514,9 +521,10 @@ function Invoke-NRGCollectEXOInventory {
             })
 
             $outb = @()
-            if (Get-Command Get-OutboundConnector -ErrorAction SilentlyContinue) {
-                $outb = @(Get-OutboundConnector -ErrorAction Stop)
-            }
+            # A missing cmdlet (EXO not connected, or the signed-in role cannot run it -
+            # Exchange RBAC hides such cmdlets) is a FAILED read, never "none exist".
+            if (-not (Get-Command Get-OutboundConnector -ErrorAction SilentlyContinue)) { throw 'Get-OutboundConnector is not available in this session.' }
+            $outb = @(Get-OutboundConnector -ErrorAction Stop)
             $result.Data.OutboundConnectors = @($outb | ForEach-Object {
                 @{
                     Name          = [string](Get-NRGObjectField -Item $_ -Key 'Name')
@@ -545,9 +553,10 @@ function Invoke-NRGCollectEXOInventory {
         # EXO-7.1 never see it, because no mailbox is forwarding.
         try {
             $rules = @()
-            if (Get-Command Get-TransportRule -ErrorAction SilentlyContinue) {
-                $rules = @(Get-TransportRule -ErrorAction Stop)
-            }
+            # A missing cmdlet (EXO not connected, or the signed-in role cannot run it -
+            # Exchange RBAC hides such cmdlets) is a FAILED read, never "none exist".
+            if (-not (Get-Command Get-TransportRule -ErrorAction SilentlyContinue)) { throw 'Get-TransportRule is not available in this session.' }
+            $rules = @(Get-TransportRule -ErrorAction Stop)
             $result.Data.TransportRules = @($rules | ForEach-Object {
                 @{
                     Name         = [string](Get-NRGObjectField -Item $_ -Key 'Name')
@@ -582,7 +591,10 @@ function Invoke-NRGCollectEXOInventory {
         # outlive the incident.
         try {
             $tabl = @()
-            if (Get-Command Get-TenantAllowBlockListItems -ErrorAction SilentlyContinue) {
+            # Pinned to the Exchange Online session: the Security & Compliance
+            # copy fails "Value cannot be null. Parameter name: exchangeConfigUnit".
+            $tablCmd = (Get-NRGExoCommand -Name 'Get-TenantAllowBlockListItems' -Session ExchangeOnline).Command
+            if ($tablCmd) {
                 # Track how many of the six list-type/allow combinations actually
                 # succeeded. A per-combination failure used to be logged to
                 # -Verbose only and then ignored, so the section still reported
@@ -592,7 +604,7 @@ function Invoke-NRGCollectEXOInventory {
                 foreach ($t in @('Sender', 'Url', 'FileHash')) {
                     foreach ($allow in @($true, $false)) {
                         try {
-                            $items = @(Get-TenantAllowBlockListItems -ListType $t -Allow:$allow -ErrorAction Stop)
+                            $items = @(& $tablCmd -ListType $t -Allow:$allow -ErrorAction Stop)
                             foreach ($i in $items) { $tabl += @{
                                 ListType   = $t
                                 Action     = $(if ($allow) { 'Allow' } else { 'Block' })

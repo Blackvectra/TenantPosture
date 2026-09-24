@@ -263,6 +263,13 @@ function Connect-NRGServices {
         }
 
         $ctx = Get-MgContext -ErrorAction Stop
+        # A caller that names the tenant must get that tenant. Signing in with
+        # an account whose home tenant differs (an MSP operator without GDAP
+        # to this client, or a stale cached account) otherwise yields a Graph
+        # session for the WRONG tenant, and every collector would assess it.
+        if ($ctx -and $ExpectedTenantId -and "$($ctx.TenantId)" -ne $ExpectedTenantId) {
+            throw "Graph session is for tenant $($ctx.TenantId), not the requested tenant $ExpectedTenantId."
+        }
         if ($ctx) {
             if ($isAppOnly) {
                 $accountDomain = if ($OrganizationDomain) { $OrganizationDomain } else { $TenantId }
@@ -441,7 +448,19 @@ function Connect-NRGServices {
             # UseRPSSession paths worked around.
             $exoParams = @{ ShowBanner = $false; ErrorAction = 'Stop' }
             if ($UserPrincipalName) { $exoParams['UserPrincipalName'] = $UserPrincipalName }
+            # GDAP: without -DelegatedOrganization Exchange connects to the
+            # signed-in operator's OWN organization, not the client's.
+            if ($DelegatedOrganization) { $exoParams['DelegatedOrganization'] = $DelegatedOrganization }
             Connect-ExchangeOnline @exoParams | Out-Null
+            if ($ExpectedTenantId -and (Get-Command Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+                $exoNow = @(Get-ConnectionInformation -ErrorAction SilentlyContinue |
+                    Where-Object { $_.State -eq 'Connected' -and -not [bool](Get-NRGObjectField -Item $_ -Key 'IsEopSession' -Default $false) }) |
+                    Select-Object -Last 1
+                $exoTid = [string](Get-NRGObjectField -Item $exoNow -Key 'TenantID' -Default '')
+                if ($exoTid -and $exoTid -ne $ExpectedTenantId) {
+                    throw "Exchange Online session is for tenant $exoTid, not the requested tenant $ExpectedTenantId."
+                }
+            }
             $result['EXO'] = $true
             Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
         }
