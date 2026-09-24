@@ -219,7 +219,6 @@ Describe 'Get-NRGAssessmentScope — what the assessment did not cover' {
         }
 
         It 'still reports a licence block when the profile DOES carry SKU data' {
-            $ids  = @($script:Controls | ForEach-Object { $_.ControlId })
             $lic  = @($script:Controls | Where-Object { $_.LicenseRequirement -and $_.LicenseRequirement -notmatch '^Included' } | Select-Object -First 1)
             $lic.Count | Should -BeGreaterThan 0 -Because 'the fixture needs a licence-gated control to exist'
             $target = $lic[0].ControlId

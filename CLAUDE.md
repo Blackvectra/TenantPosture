@@ -2,7 +2,7 @@
 
 **Author:** NRG Technology Services — nrgtechservices.com
 **GitHub:** https://github.com/Blackvectra/NRG-Assessment-Tool
-**Version:** 4.13.0
+**Version:** 4.14.0
 **Language:** PowerShell 7.0+
 **Purpose:** Read-only Microsoft 365 security assessment framework for MSP multi-tenant environments.
 

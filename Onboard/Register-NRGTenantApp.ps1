@@ -41,6 +41,11 @@
 #   here and gated behind -RegisterApp + ShouldProcess. It never touches tenant
 #   security configuration.
 #
+# Not part of the module. This file writes to a tenant, so it lives in
+#   Onboard/ — a folder neither the module loader nor Apply-NRGBaseline loads —
+#   and Invoke-NRGAssessment.ps1 dot-sources it only when -RegisterApp is
+#   passed. The read-only module exports nothing that can create an app.
+#
 # Graph cmdlets used: Get-MgServicePrincipal, New-MgApplication,
 #   New-MgServicePrincipal, New-MgServicePrincipalAppRoleAssignment, Get-MgContext.
 
@@ -79,7 +84,7 @@ function Register-NRGTenantApp {
             if ($_ -match '\.\.[\\/]') { throw 'Path traversal not allowed in ClientsFile.' }
             return $true
         })]
-        [string] $ClientsFile = (Join-Path $script:NRGModuleRoot 'Config\clients.json')
+        [string] $ClientsFile = (Join-Path (Split-Path -Parent $PSScriptRoot) 'Config' 'clients.json')
     )
 
     Set-StrictMode -Version Latest
@@ -114,7 +119,13 @@ function Register-NRGTenantApp {
 
     # ── Resolve display name from branding if not supplied ───────────────────
     if (-not $DisplayName) {
-        $brandCo = if ($script:NRGBrand -and $script:NRGBrand['CompanyName']) { $script:NRGBrand['CompanyName'] } else { 'NRG' }
+        # Not in the module any more, so the module's $script:NRGBrand is not
+        # in scope here; read the branding file directly.
+        $brandCo = 'NRG'
+        $brandFile = Join-Path (Split-Path -Parent $PSScriptRoot) 'Config' 'branding.psd1'
+        if (Test-Path -LiteralPath $brandFile) {
+            try { $b = Import-PowerShellDataFile -LiteralPath $brandFile; if ($b['CompanyName']) { $brandCo = [string]$b['CompanyName'] } } catch { }
+        }
         $DisplayName = "$brandCo-Assessment-Scanner"
     }
 
