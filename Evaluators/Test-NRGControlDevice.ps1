@@ -154,6 +154,20 @@ function Test-NRGControlDevice {
         $rows = @()
         if ($byCheck.ContainsKey($cid)) { $rows = @($byCheck[$cid]) }
 
+        # Inventory checks (local administrators, OS build) record what is
+        # there; they judge nothing. Older endpoint results reported them as
+        # Pass, which gave every device a clean result for them.
+        if ([bool](Get-NRGObjectField -Item $c -Key 'Inventory' -Default $false)) {
+            $seen = @($rows | Where-Object { $_.Result -in @('Info','Pass','Fail') })
+            $inv  = @($seen | ForEach-Object { [ordered]@{ Hostname = $_.Hostname; Observed = $_.Observed } })
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' `
+                -Category 'Endpoint' -Title ([string]$c.Title) `
+                -Detail "Requires manual verification: this is an inventory of $($seen.Count) of $total device(s), not a pass or fail. Review each device's entry against what it should be." `
+                -CurrentValue "$($seen.Count) of $total device(s) recorded" `
+                -AffectedObjects $inv -FrameworkIds $cits
+            continue
+        }
+
         $pass        = @($rows | Where-Object { $_.Result -eq 'Pass' })
         $fail        = @($rows | Where-Object { $_.Result -eq 'Fail' })
         $na          = @($rows | Where-Object { $_.Result -eq 'NotApplicable' })

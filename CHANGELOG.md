@@ -145,6 +145,16 @@ different, than the tenant actually is.
   INT-1.5 no longer scores Partial from enrollment configurations. The
   collectors read every Graph field through the field helper — a missing
   `description` failed the whole compliance-policy section.
+- **Endpoint checks.** DEV-4.1 (local administrators) and DEV-5.1 (OS
+  build) are inventory and always reported Pass; they now report "requires
+  manual verification" with each device's entry, including from older
+  result files. Several result files for one device (an RMM share keeping a
+  file per run) are reduced to the latest, so a laptop fixed since March no
+  longer counts as failing. The firewall checks read the effective
+  (ActiveStore) configuration — the local store flagged an untouched
+  machine whose "NotConfigured" means Block — RDP / NLA read the Group
+  Policy value first, an absent NLA value is the Windows default (required),
+  and Windows LAPS with BackupDirectory 0 (disabled) is no longer a pass.
 - **AAD-12.3 / AAD-12.4.** Stale accounts are judged on the last
   successful sign-in (a password-spray attempt made a departed user look
   active; a token-refresh-only user looked stale) and accounts created in

@@ -328,7 +328,8 @@
       "Group": "Privilege",
       "Nist171": [
         "3.1.5"
-      ]
+      ],
+      "Inventory": true
     },
     {
       "ControlId": "DEV-4.2",
@@ -410,7 +411,8 @@
       "Group": "Patch state",
       "Nist171": [
         "3.4.1"
-      ]
+      ],
+      "Inventory": true
     },
     {
       "ControlId": "DEV-5.2",
