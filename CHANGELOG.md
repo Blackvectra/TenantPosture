@@ -78,6 +78,40 @@ different, than the tenant actually is.
   PPL-3.4 is manual review — publishing channels are not readable, and an
   app's publisher domain is not one. PVW-2.2 says when policies exist but
   are off; PVW-4.2 with no one-year policy is a Gap.
+- **Exchange controls read the setting they name.** EXO-3.5 and EXO-4.2
+  read the mailbox-audit switch; they now read Unified Audit Log ingestion
+  and `AdminAuditLogEnabled` (`Get-AdminAuditLogConfig`, pinned to the
+  Exchange Online session). EXO-4.1 no longer scores `AuditLogAgeLimit`,
+  which Microsoft says no longer governs retention (180 days by default,
+  one year for E5); it flags a custom audit retention policy that shortens
+  Exchange records instead. EXO-6.3 / EXO-7.3 flagged `AuditEnabled =
+  False`, which Exchange ignores while organization auditing is on; they now
+  read audit bypass associations, the setting that actually silences a
+  user. EXO-4.3 reads `EnableATPForSPOTeamsODB` rather than "a Safe
+  Attachments mail policy is on". EXO-3.2 accepts the default "User
+  restricted from sending email" alert policy. EXO-5.3 never collected the
+  allowed-sender lists, so it passed every tenant. EXO-1.3, 1.5, 1.7, 5.2
+  and 5.3 judge the policies in force; 'Automatic' forwarding is not
+  counted as blocked, and a remote-domain block alone is part-way because
+  it does not stop admin-set mailbox forwarding. EXO-5.2 does not count
+  users listed with action NoAction. EXO-1.4 treats a custom domain with no
+  DKIM configuration as unsigned and reads the documented key-size fields.
+  EXO-1.2 no longer reports SMTP AUTH enabled when `Get-TransportConfig` was
+  not read. EXO-6.4 / EXO-7.4 do not claim an org-level disable that is not
+  there, and report the full override count rather than the capped list.
+  EXO-9.1 counted the MRM "Default MRM Policy" (on every mailbox, holds
+  nothing) as a hold; it now reads organization-wide retention policies and
+  per-mailbox exclusions. EXO-8.1 recognizes `smtp:*;1` as unscoped;
+  EXO-8.2 does not give half credit for a recipient it could not resolve and
+  no longer crashes on a single-domain tenant; DEF-5.1 reads spoofed-sender
+  and IP allow entries and no longer crashes when it finds a never-expiring
+  allow. EXO-1.5 and EXO-4.3 now carry their Defender for Office 365 Plan 1
+  license requirement.
+- **AAD-12.3 / AAD-12.4.** Stale accounts are judged on the last
+  successful sign-in (a password-spray attempt made a departed user look
+  active; a token-refresh-only user looked stale) and accounts created in
+  the last 90 days are skipped. A tenant-wide grant of sign-in scopes only
+  (openid, profile, email, offline_access, User.Read) is not a finding.
 - **Identity verdicts corrected against Graph's documented shapes.**
   AAD-6.2 (Critical) read the user-consent setting from the wrong level of
   the authorization policy, so every tenant scored "consent restricted" —

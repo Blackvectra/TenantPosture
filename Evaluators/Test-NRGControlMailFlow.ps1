@@ -55,7 +55,10 @@ function Get-NRGAcceptedDomainSet {
             }
         }
     }
-    return $set
+    # The comma keeps the set whole: returned bare, a one-domain set unrolls
+    # to a lone string and every caller's .Count threw — EXO-8.2 crashed on
+    # every single-domain tenant.
+    return ,$set
 }
 
 function Test-NRGRecipientIsExternal {
@@ -119,7 +122,11 @@ function Test-NRGControlEXOMailFlowConnectors {
             $concerns.Add(@{ Connector = $name; Direction = 'Inbound'; Issue = 'Does not require TLS — mail accepted over cleartext.' })
         }
         $ips = @(Get-NRGObjectField -Item $c -Key 'SenderIPAddresses' -Default @())
-        $doms = @(Get-NRGObjectField -Item $c -Key 'SenderDomains' -Default @())
+        # SenderDomains is an address-space list rendered "smtp:*;1"
+        # (type:domain;cost); strip both ends before comparing, or "*" is
+        # never recognized.
+        $doms = @(@(Get-NRGObjectField -Item $c -Key 'SenderDomains' -Default @()) | ForEach-Object {
+            (([string]$_) -replace '^[A-Za-z]+:', '' -replace ';\d+$', '').Trim() } | Where-Object { $_ })
         if ($ips.Count -eq 0 -and ($doms -contains '*' -or $doms.Count -eq 0)) {
             $concerns.Add(@{ Connector = $name; Direction = 'Inbound'; Issue = 'Scoped to no sender IP range and no specific sender domain — accepts mail claiming any domain from anywhere.' })
         }
@@ -216,12 +223,13 @@ function Test-NRGControlEXOTransportRuleContents {
             -Detail "Enabled transport rules send mail outside the tenant: $((@($flagged | ForEach-Object { "$($_.Rule) -> $($_.Recipient) ($($_.Action))" }) | Select-Object -First 5) -join '; '). This is org-wide exfiltration at the transport layer — no mailbox carries a forwarding flag, so the per-mailbox forwarding controls cannot see it." `
             -Remediation $ctrl.Remediation -AffectedObjects $flagged.ToArray()
     } elseif ($unknown.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title `
-            -Severity 'Medium' -FrameworkIds $cit `
+        # A recipient we could not resolve is neither internal nor external:
+        # not assessed, never half credit.
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+            -FrameworkIds $cit `
             -CurrentValue "$($active.Count) enabled rules; $($unknown.Count) recipient(s) unresolvable" `
-            -RequiredValue 'Every transport-rule recipient resolvable and internal' `
-            -Detail "No transport rule redirects to a recognizably external address, but $($unknown.Count) recipient(s) are group or display names that cannot be resolved to a domain from tenant settings alone: $((@($unknown | ForEach-Object { "$($_.Rule) -> $($_.Recipient)" }) | Select-Object -First 5) -join '; '). Confirm each resolves internally." `
-            -Remediation $ctrl.Remediation -AffectedObjects $unknown.ToArray()
+            -Detail "Not assessed. No transport rule redirects to a recognizably external address, but $($unknown.Count) recipient(s) are group or display names that cannot be resolved to a domain from tenant settings alone: $((@($unknown | ForEach-Object { "$($_.Rule) -> $($_.Recipient)" }) | Select-Object -First 5) -join '; '). Confirm each resolves internally." `
+            -AffectedObjects $unknown.ToArray()
     } else {
         $note = if ($scl.Count -gt 0) { " Note: $($scl.Count) rule(s) set SCL -1, bypassing spam filtering — verify each is intentional and narrowly scoped." } else { '' }
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title `
@@ -271,8 +279,8 @@ function Test-NRGControlDefenderTenantAllowBlockList {
             -Severity $ctrl.Severity -FrameworkIds $cit `
             -CurrentValue "$($permanent.Count) never-expiring allow entr(ies) of $($allows.Count) total" `
             -RequiredValue 'Every allow entry time-boxed with a documented reason' `
-            -Detail "Never-expiring allow entries override filtering indefinitely: $((@($permanent | ForEach-Object { "$($_.ListType) $($_.Value)" }) | Select-Object -First 5) -join '; '). An allow added to unblock a sender during an incident outlives the incident, and mail from that sender is never filtered again." `
-            -Remediation $ctrl.Remediation -AffectedObjects $permanent.ToArray()
+            -Detail "Never-expiring allow entries override filtering indefinitely: $((@($permanent | ForEach-Object { "$([string](Get-NRGObjectField -Item $_ -Key 'ListType' -Default '')) $([string](Get-NRGObjectField -Item $_ -Key 'Value' -Default ''))" }) | Select-Object -First 5) -join '; '). Spoofed-sender allow entries never expire by design — confirm each still names a sending service you use. An allow added to unblock a sender during an incident outlives the incident, and mail from that sender is never filtered again." `
+            -Remediation $ctrl.Remediation -AffectedObjects $permanent
     } else {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity 'Informational' -FrameworkIds $cit `
