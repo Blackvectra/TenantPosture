@@ -53,7 +53,26 @@ function Test-NRGControlAADPrivAccess {
             -Detail 'Role assignment enumeration did not complete (see Exceptions) — Global Administrator count could not be determined.'
         return
     }
-    $globalAdmins   = @($allAssignments | Where-Object { (Get-NRGObjectField -Item $_ -Key 'RoleDefinitionId') -eq $GA_ROLE_ID })
+    # Everyone who can act as Global Administrator: permanent AND eligible
+    # (PIM), one row per principal. Counting permanent assignments only let a
+    # tenant with 20 eligible GAs pass "2-8 Global Administrators".
+    $pool = @($allAssignments) + @(Get-NRGNestedProperty -Object $roleRaw -Path 'Data.AllPrivilegedAssignments' -Default @())
+    $seenGa = [System.Collections.Generic.HashSet[string]]::new()
+    $globalAdmins   = @($pool | Where-Object {
+        (Get-NRGObjectField -Item $_ -Key 'RoleDefinitionId') -eq $GA_ROLE_ID -and
+        $seenGa.Add([string](Get-NRGObjectField -Item $_ -Key 'PrincipalId' -Default (Get-NRGObjectField -Item $_ -Key 'PrincipalUPN' -Default ([guid]::NewGuid().ToString()))))
+    })
+    # A role-assignable GROUP holding Global Administrator stands for all its
+    # members, whose number and sync state were never read — counting the group
+    # as one cloud-only admin is not an answer.
+    $gaGroups = @($globalAdmins | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'PrincipalType' -Default '') -match 'group' })
+    if ($gaGroups.Count -gt 0) {
+        Add-NRGFinding -ControlId 'AAD-3.1' -State 'NotApplicable' `
+            -Category 'Identity' -Title 'Global Administrator Count 2-8, Cloud-Only' `
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-3.1') `
+            -Detail "Global Administrator is assigned to $($gaGroups.Count) group(s) ($(($gaGroups | ForEach-Object { Get-NRGObjectField -Item $_ -Key 'PrincipalDisplayName' -Default '?' }) -join ', ')) whose members were not enumerated, so the number of Global Administrators and whether any is synced from on-premises could not be determined. Not assessed."
+        return
+    }
     $gaCount        = $globalAdmins.Count
     $syncedGAs      = @($globalAdmins | Where-Object { (Get-NRGObjectField -Item $_ -Key 'OnPremisesSyncEnabled') -eq $true })
 
@@ -64,9 +83,9 @@ function Test-NRGControlAADPrivAccess {
         Add-NRGFinding -ControlId 'AAD-3.1' -State 'Satisfied' `
             -Category 'Identity' -Title 'Global Administrator Count 2-8, Cloud-Only' `
             -Severity 'High' `
-            -CurrentValue "$gaCount permanent Global Administrator(s), all cloud-only." `
+            -CurrentValue "$gaCount Global Administrator(s) (permanent and eligible), all cloud-only." `
             -RequiredValue 'Between 2 and 8 permanent Global Administrators, all cloud-only (no on-prem sync)' `
-            -FrameworkIds @('AC-6','AC-6(5)')
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-3.1')
     }
     elseif ($gaCount -ge 2 -and $gaCount -le 8 -and $syncedGAs.Count -gt 0) {
         $syncedList = ($syncedGAs | Select-Object -ExpandProperty PrincipalUPN) -join ', '
@@ -77,7 +96,7 @@ function Test-NRGControlAADPrivAccess {
             -CurrentValue "$gaCount GA(s); $($syncedGAs.Count) synced from on-prem: $syncedList" `
             -RequiredValue 'All Global Administrators cloud-only (no on-prem sync)' `
             -Remediation 'Remove GA role from each synced account. Replace with dedicated cloud-only admin accounts (separate from daily-use accounts).' `
-            -FrameworkIds @('AC-6','AC-6(5)','IA-2(6)')
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-3.1')
     }
     elseif ($gaCount -lt 2) {
         Add-NRGFinding -ControlId 'AAD-3.1' -State 'Gap' `
@@ -87,7 +106,7 @@ function Test-NRGControlAADPrivAccess {
             -CurrentValue "Permanent Global Administrator count: $gaCount" `
             -RequiredValue 'Minimum 2 Global Administrator accounts for redundancy' `
             -Remediation 'Add a second GA account as dedicated break-glass: cloud-only, unlicensed, credentials sealed offline.' `
-            -FrameworkIds @('AC-6','AC-6(5)','CP-6')
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-3.1')
     }
     else {
         $gaList = ($globalAdmins | Select-Object -ExpandProperty PrincipalUPN) -join ', '
@@ -98,6 +117,6 @@ function Test-NRGControlAADPrivAccess {
             -CurrentValue "Permanent Global Administrator count: $gaCount. Accounts: $gaList" `
             -RequiredValue 'Maximum 8 permanent Global Administrator assignments' `
             -Remediation 'Reduce to 8 or fewer. Reassign excess to scoped roles (Exchange Admin, User Admin, Security Admin, etc.). Migrate remaining to PIM eligible where Entra ID P2 is licensed.' `
-            -FrameworkIds @('AC-6','AC-6(5)')
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-3.1')
     }
 }

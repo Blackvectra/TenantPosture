@@ -73,12 +73,33 @@ function Invoke-NRGCollectAADIdentityGovernance {
             $extCollab = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/authorizationPolicy' `
                 -ErrorAction Stop
+            # Graph returns permissionGrantPoliciesAssigned INSIDE
+            # defaultUserRolePermissions. Read at the top level it was always
+            # empty, so every tenant — including ones where users can consent
+            # to ANY app — scored "consent restricted" (AAD-6.2). Two
+            # statements, never an if-expression: an empty list (no user
+            # consent at all, the best setting) would unroll to $null.
+            # $null means "not returned", which is not "none".
+            # Read by key presence: the property helpers return an empty
+            # array as $null (pipeline unrolling), and empty is the answer
+            # that matters most here.
+            $permGrant = $null
+            foreach ($holder in @((Get-NRGNestedProperty -Object $extCollab -Path 'defaultUserRolePermissions' -Default $null), $extCollab)) {
+                if ($null -eq $holder) { continue }
+                if ($holder -is [System.Collections.IDictionary]) {
+                    if ($holder.Contains('permissionGrantPoliciesAssigned')) { $permGrant = [string[]]@($holder['permissionGrantPoliciesAssigned'] | Where-Object { $_ }); break }
+                } elseif ($holder.PSObject.Properties['permissionGrantPoliciesAssigned']) {
+                    $permGrant = [string[]]@($holder.permissionGrantPoliciesAssigned | Where-Object { $_ }); break
+                }
+            }
             # defaultUserRolePermissions is an OPTIONAL nested object on
             # authorizationPolicy — a tenant relying entirely on defaults can
             # omit it, so a bare $extCollab.defaultUserRolePermissions.* read
             # throws under StrictMode at the first absent intermediate.
             $result.Data.ExternalCollab = @{
-                AllowInvitesFrom             = [string]($extCollab.allowInvitesFrom ?? 'everyone')
+                # Not returned is unknown, never "everyone" (that default scored
+                # a Gap on tenants whose read simply lacked the field).
+                AllowInvitesFrom             = [string](Get-NRGObjectField -Item $extCollab -Key 'allowInvitesFrom' -Default '')
                 AllowedToSignUpEmailBased    = [bool]($extCollab.allowedToSignUpEmailBasedSubscriptions ?? $true)
                 GuestUserRoleId              = [string]($extCollab.guestUserRoleId ?? '')
                 DefaultUserRolePermissions   = @{
@@ -86,7 +107,7 @@ function Invoke-NRGCollectAADIdentityGovernance {
                     AllowedToCreateGroups    = [bool](Get-NRGNestedProperty -Object $extCollab -Path 'defaultUserRolePermissions.allowedToCreateGroups' -Default $true)
                     AllowedToCreateTenants   = [bool](Get-NRGNestedProperty -Object $extCollab -Path 'defaultUserRolePermissions.allowedToCreateTenants' -Default $true)
                 }
-                PermissionGrantPolicies      = @(Get-NRGObjectField -Item $extCollab -Key 'permissionGrantPoliciesAssigned' -Default @())
+                PermissionGrantPolicies      = $permGrant
                 BlockMsolPowerShell          = $extCollab.blockMsolPowerShell
             }
             $result.Data.SectionStatus.ExternalCollab = 'Collected'
@@ -183,9 +204,11 @@ function Invoke-NRGCollectAADIdentityGovernance {
                         $pageCount++
                     }
                 } catch {
-                    # Group may be deleted, hidden, or inaccessible — return
-                    # an empty set so the CA check just treats it as a
-                    # non-match. Logging happens once per failed group below.
+                    # An unreadable group is UNKNOWN membership, not "no
+                    # members": returning an empty set called every
+                    # group-excluded break-glass account "not excluded" and
+                    # scored AAD-7.2 a Gap. $null marks it unresolved.
+                    $members = $null
                     if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                         Register-NRGException -Source 'AAD-BreakGlass-GroupResolve' `
                             -Message "transitiveMembers for $groupId failed: $($_.Exception.Message)"
@@ -210,32 +233,38 @@ function Invoke-NRGCollectAADIdentityGovernance {
                     $_.PrincipalType -notmatch 'servicePrincipal'
                 })
 
+                # A break-glass account must be excluded from every enabled
+                # policy that would otherwise reach it — the all-users and
+                # Global Administrator policies. Excluded from ANY one policy
+                # used to count, so an admin excluded from a single pilot
+                # policy was reported as an emergency access path.
+                $gaRoleId = '62e90394-69f5-4237-9190-012177145e10'
+                $reaching = @()
+                if ($caPolicies -and $caPolicies.Success) {
+                    $reaching = @(@($caPolicies.Data.Policies) | Where-Object {
+                        $_.State -eq 'enabled' -and (
+                            @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.IncludeUsers' -Default @()) -contains 'All' -or
+                            @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.IncludeRoles' -Default @()) -contains $gaRoleId)
+                    })
+                }
                 foreach ($ga in $gaAccounts) {
                     $isExcluded = $false
                     if ($caPolicies -and $caPolicies.Success) {
-                        foreach ($policy in @($caPolicies.Data.Policies)) {
+                        $allExcluded = $true; $unknown = $false
+                        foreach ($policy in $reaching) {
                             $excludeUsers  = @($policy.Conditions.Users.ExcludeUsers  ?? @())
                             $excludeGroups = @($policy.Conditions.Users.ExcludeGroups ?? @())
-
-                            # Direct user-id exclusion: unchanged.
-                            if ($excludeUsers -contains $ga.PrincipalId) {
-                                $isExcluded = $true
-                                break
-                            }
-                            # Group exclusion: resolve membership and check.
+                            if ($excludeUsers -contains $ga.PrincipalId) { continue }
                             $matched = $false
                             foreach ($gid in $excludeGroups) {
                                 $members = & $resolveGroupMembers $gid
-                                if ($members -contains $ga.PrincipalId) {
-                                    $matched = $true
-                                    break
-                                }
+                                if ($null -eq $members) { $unknown = $true; continue }
+                                if ($members -contains $ga.PrincipalId) { $matched = $true; break }
                             }
-                            if ($matched) {
-                                $isExcluded = $true
-                                break
-                            }
+                            if (-not $matched) { $allExcluded = $false; break }
                         }
+                        # $null = could not tell (a group membership was unreadable).
+                        $isExcluded = if ($allExcluded -and $reaching.Count -gt 0) { $true } elseif ($unknown) { $null } else { $false }
                     }
                     $breakGlass += @{
                         PrincipalId  = [string]$ga.PrincipalId

@@ -45,7 +45,12 @@ function Invoke-NRGCollectAADCAPolicies {
         try {
             $response = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies?$top=250' `
+                -Headers @{ Prefer = 'include-unknown-enum-members' } `
                 -ErrorAction Stop
+            # Prefer header: 'riskRemediation' (require risk remediation, the
+            # control Microsoft's user-risk template uses) is an evolvable enum
+            # member. Without the header Graph returns it as
+            # 'unknownFutureValue', and AAD-1.5 could not see the policy.
             # Shape-safe projection. A CA policy's optional condition blocks
             # (platforms, locations, applications, grantControls, sessionControls)
             # are frequently ABSENT. A bare deep read like
@@ -88,6 +93,18 @@ function Invoke-NRGCollectAADCAPolicies {
                         Applications      = @{
                             Include = @(& $g 'conditions.applications.includeApplications')
                             Exclude = @(& $g 'conditions.applications.excludeApplications')
+                            UserActions = @(& $g 'conditions.applications.includeUserActions')
+                        }
+                        # Read by AAD-11.7 (device filter for admins) and
+                        # AAD-11.9 (workload identities); never projected before,
+                        # so both reported "None" on tenants that had them.
+                        Devices           = @{
+                            FilterMode = [string](& $g 'conditions.devices.deviceFilter.mode' '')
+                            FilterRule = [string](& $g 'conditions.devices.deviceFilter.rule' '')
+                        }
+                        ClientApplications = @{
+                            IncludeServicePrincipals = @(& $g 'conditions.clientApplications.includeServicePrincipals')
+                            ExcludeServicePrincipals = @(& $g 'conditions.clientApplications.excludeServicePrincipals')
                         }
                     }
                     GrantControls    = @{
@@ -101,6 +118,7 @@ function Invoke-NRGCollectAADCAPolicies {
                         # SMS/voice without depending on the separate
                         # authenticationStrengthPolicies call (which can fail).
                         AuthStrengthCombinations = @(& $g 'grantControls.authenticationStrength.allowedCombinations')
+                        TermsOfUse           = @(& $g 'grantControls.termsOfUse')
                     }
                     SessionControls  = @{
                         SignInFrequency  = if ($sif) {
@@ -109,8 +127,12 @@ function Invoke-NRGCollectAADCAPolicies {
                                 Value             = (& $g 'sessionControls.signInFrequency.value' $null)
                                 Type              = [string](& $g 'sessionControls.signInFrequency.type' '')
                                 FrequencyInterval = [string](& $g 'sessionControls.signInFrequency.frequencyInterval' '')
+                                AuthenticationType = [string](& $g 'sessionControls.signInFrequency.authenticationType' '')
                             }
                         } else { $null }
+                        ContinuousAccessEvaluation = [string](& $g 'sessionControls.continuousAccessEvaluation.mode' '')
+                        # Token protection lives only in the beta shape; filled below.
+                        SecureSignInSession = $null
                         PersistentBrowser = if ($pb) {
                             @{ IsEnabled = [bool](& $g 'sessionControls.persistentBrowser.isEnabled' $false); Mode = [string](& $g 'sessionControls.persistentBrowser.mode' '') }
                         } else { $null }
@@ -118,6 +140,33 @@ function Invoke-NRGCollectAADCAPolicies {
                 }
             })
             $policiesCollected = $true
+
+            # Token protection (sessionControls.secureSignInSession) is not in
+            # the v1.0 shape, so AAD-11.4 said "None" on every tenant. Read it
+            # from beta per policy; a failure leaves the section unread and the
+            # control reports not assessed instead of a gap.
+            $result.Data.SectionStatus['TokenProtection'] = 'NotRun'
+            try {
+                $beta = Invoke-NRGGraphRequest -Method GET `
+                    -Uri 'https://graph.microsoft.com/beta/identity/conditionalAccess/policies?$select=id,sessionControls&$top=250' `
+                    -ErrorAction Stop
+                $byId = @{}
+                foreach ($bp in @(Get-NRGObjectField -Item $beta -Key 'value' -Default @())) {
+                    $id  = [string](Get-NRGObjectField -Item $bp -Key 'id' -Default '')
+                    $ssi = Get-NRGNestedProperty -Object $bp -Path 'sessionControls.secureSignInSession.isEnabled' -Default $null
+                    if ($id) { $byId[$id] = $ssi }
+                }
+                foreach ($pol in $result.Data.Policies) {
+                    $polId = [string]$pol['Id']
+                    if ($byId.ContainsKey($polId) -and $null -ne $byId[$polId]) { $pol['SessionControls']['SecureSignInSession'] = [bool]$byId[$polId] }
+                }
+                $result.Data.SectionStatus['TokenProtection'] = 'Collected'
+            } catch {
+                $result.Data.SectionStatus['TokenProtection'] = 'Failed'
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'AAD-CAPolicies-TokenProtection' -Message $_.Exception.Message
+                }
+            }
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-CAPolicies' -Message $_.Exception.Message

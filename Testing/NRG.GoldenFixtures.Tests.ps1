@@ -54,14 +54,19 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
                 [string[]] $ClientAppTypes  = @('all'),
                 [string[]] $BuiltInControls = @(),
                 [string[]] $IncludeRoles    = @(),
-                [string]   $AuthStrengthId  = ''
+                [string]   $AuthStrengthId  = '',
+                # Graph always returns conditions.users and conditions.applications;
+                # a policy with no users condition does not exist. All users /
+                # All apps unless the policy targets roles.
+                [string[]] $IncludeUsers    = $(if ($IncludeRoles.Count -gt 0) { @() } else { @('All') })
             )
             [pscustomobject]@{
                 DisplayName = $DisplayName
                 State       = $State
                 Conditions  = [pscustomobject]@{
                     ClientAppTypes = $ClientAppTypes
-                    Users          = [pscustomobject]@{ IncludeRoles = $IncludeRoles }
+                    Users          = [pscustomobject]@{ IncludeUsers = $IncludeUsers; IncludeRoles = $IncludeRoles }
+                    Applications   = [pscustomobject]@{ Include = @('All') }
                 }
                 GrantControls = [pscustomobject]@{
                     BuiltInControls = $BuiltInControls
@@ -145,9 +150,16 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
                 -Because 'standard MFA for admins is real but insufficient — the verdict must distinguish it from both full compliance and no protection'
         }
 
-        It 'Gap when no policy targets privileged roles at all' {
+        It 'an all-users MFA policy covers admins (they are users) with standard MFA: Partial, not "no MFA"' {
             Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{
                 Policies = @( NewCaPolicy -DisplayName 'All users MFA' -State 'enabled' -BuiltInControls @('mfa') )
+            })
+            (GetVerdict 'Test-NRGControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Partial'
+        }
+
+        It 'Gap when no policy requires MFA of admins at all' {
+            Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{
+                Policies = @( NewCaPolicy -DisplayName 'Block legacy' -State 'enabled' -ClientAppTypes @('other') -BuiltInControls @('block') )
             })
             (GetVerdict 'Test-NRGControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Gap'
         }

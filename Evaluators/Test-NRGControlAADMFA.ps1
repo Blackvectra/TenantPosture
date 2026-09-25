@@ -76,7 +76,7 @@ function Test-NRGControlAADMFA {
             -Severity 'Critical' `
             -CurrentValue 'Security Defaults enabled — MFA enforced for all users' `
             -RequiredValue 'CA policy requiring MFA for All users on All cloud apps, or Security Defaults enabled' `
-            -FrameworkIds @('IA-2(1)','IA-2(2)')
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-1.2')
         return
     }
 
@@ -97,100 +97,90 @@ function Test-NRGControlAADMFA {
         Add-NRGFinding -ControlId 'AAD-1.2' -State 'NotApplicable' `
             -Category 'Identity' -Title 'MFA Required for All Users' `
             -Detail 'MFA registration details were not collected; cannot compute registration completeness for AAD-1.2.' `
-            -FrameworkIds @('IA-2(1)','IA-2(2)')
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-1.2')
         return
     }
 
-    $unregistered = @($enabledMembers | Where-Object {
+    # Entra Connect's directory-sync service account cannot register MFA and
+    # Microsoft says to exclude it from MFA policies; counting it made a fully
+    # enforced tenant read "below 100% — will lock out 1 user".
+    $isSyncAccount = { param($u) ([string]$u.UserPrincipalName -match '^Sync_') -and ([string](Get-NRGObjectField -Item $u -Key 'DisplayName' -Default '') -match 'Directory Synchronization') }
+    $population = @($enabledMembers | Where-Object { -not (& $isSyncAccount $_) })
+    $unregistered = @($population | Where-Object {
         $upn = $_.UserPrincipalName
         $rec = $mfaReg | Where-Object { $_.UserPrincipalName -eq $upn }
         (-not $rec) -or ($rec.IsMfaRegistered -eq $false)
     })
     $unregisteredCnt = $unregistered.Count
-    $registeredPct   = [math]::Round((($totalEnabled - $unregisteredCnt) / $totalEnabled) * 100, 1)
+    $totalEnabled    = $population.Count
+    $registeredPct   = if ($totalEnabled -gt 0) { [math]::Round((($totalEnabled - $unregisteredCnt) / $totalEnabled) * 100, 1) } else { 100 }
+    $sample = ($unregistered | Select-Object -First 5 | ForEach-Object { $_.UserPrincipalName }) -join ', '
 
+    # Enforcement decides the verdict; registration only qualifies it. MFA that
+    # is not REQUIRED is not configured — a Gap however many users registered
+    # (it scored Partial at 90%+ registration with no policy at all).
+    $caRaw  = Get-NRGRawData -Key 'AAD-CAPolicies'
+    $caRead = [bool]($caRaw -and $caRaw.Success)
+    $enforcing = @()
+    if ($caRead) {
+        # Enabled, All users, All cloud apps, and MFA REQUIRED (the mfa control
+        # or an authentication strength; with OR, only when every alternative
+        # is MFA).
+        $enforcing = @(@($caRaw.Data['Policies']) | Where-Object {
+            [string](Get-NRGObjectField -Item $_ -Key 'State' -Default '') -eq 'enabled' -and
+            (Test-NRGCAAllUsers $_) -and (Test-NRGCAAllApps $_) -and
+            (Test-NRGCAGrantRequires -Policy $_ -Any @('mfa','authStrength'))
+        })
+    }
+    $cit = Get-NRGFrameworkCitations -ControlId 'AAD-1.2'
+    $req = 'CA policy requiring MFA for All users on All cloud apps (or Security Defaults), with every user registered'
+
+    if (-not $caRead) {
+        Add-NRGFinding -ControlId 'AAD-1.2' -State 'NotApplicable' -Category 'Identity' -Title 'MFA Required for All Users' -FrameworkIds $cit `
+            -Detail "$registeredPct% of users are MFA-registered, but Conditional Access policies were not collected, so whether MFA is required could not be assessed. $secDefText"
+        return
+    }
+    # Part-way: MFA is asked for, but not of everyone on everything — report-
+    # only (Audit mode), scoped to some users/apps, or offered as one
+    # alternative beside a compliant device.
+    $partway = @()
+    if ($enforcing.Count -eq 0) {
+        $partway = @(@($caRaw.Data['Policies']) | Where-Object {
+            $st = [string](Get-NRGObjectField -Item $_ -Key 'State' -Default '')
+            $asks = @(Get-NRGNestedProperty -Object $_ -Path 'GrantControls.BuiltInControls' -Default @()) -contains 'mfa' -or
+                    [string](Get-NRGNestedProperty -Object $_ -Path 'GrantControls.AuthStrengthId' -Default '')
+            $st -in @('enabled','enabledForReportingButNotEnforced') -and $asks
+        })
+    }
+    if ($enforcing.Count -eq 0 -and $partway.Count -gt 0) {
+        $how = @($partway | ForEach-Object {
+            $why = if ([string]$_.State -ne 'enabled') { 'report-only (Audit mode)' }
+                   elseif (-not (Test-NRGCAAllUsers $_) -or -not (Test-NRGCAAllApps $_)) { 'not all users / all apps' }
+                   else { 'MFA is one alternative (OR)' }
+            "$($_.DisplayName) [$why]" })
+        Add-NRGFinding -ControlId 'AAD-1.2' -State 'Partial' -Category 'Identity' -Title 'MFA Required for All Users' -Severity 'Critical' -FrameworkIds $cit `
+            -Detail "MFA is requested but not required of all users on all apps: $($how -join '; '). $secDefText" `
+            -CurrentValue "MFA partly enforced; $registeredPct% registered" -RequiredValue $req -Remediation 'Enforce MFA (or an authentication strength) for All users on All cloud apps, with MFA required rather than one alternative.'
+        return
+    }
+    if ($enforcing.Count -eq 0) {
+        Add-NRGFinding -ControlId 'AAD-1.2' -State 'Gap' -Category 'Identity' -Title 'MFA Required for All Users' -Severity 'Critical' -FrameworkIds $cit `
+            -Detail "No Conditional Access policy requires MFA for all users on all cloud apps. $secDefText $registeredPct% of users have registered MFA, but registration alone does not require it at sign-in." `
+            -CurrentValue "No enforcing policy; $registeredPct% registered" -RequiredValue $req `
+            -Remediation 'Create a Conditional Access policy requiring MFA (or an authentication strength) for All users on All cloud apps, excluding only break-glass accounts. Stage it in report-only first.'
+        return
+    }
+    $names = ($enforcing | ForEach-Object { $_.DisplayName } | Select-Object -First 3) -join ', '
     if ($unregisteredCnt -eq 0) {
-        # Cross-reference: verify an MFA-enforcing CA policy exists.
-        # Registration alone does NOT prove enforcement — without this check,
-        # a tenant with 100% registration and zero enforcing policy was
-        # reported Satisfied (false pass). Ported from the NLS twin.
-        $caRaw = Get-NRGRawData -Key 'AAD-CAPolicies'
-        $caRead = [bool]($caRaw -and $caRaw.Success)
-        $hasMfaCaPolicy = $false
-        if ($caRead) {
-            $policies = @($caRaw.Data['Policies'])
-            # Enforcing = enabled, All users, All cloud apps, and MFA REQUIRED:
-            # the 'mfa' built-in control or any authentication strength (every
-            # strength is a set of multifactor combinations). Requiring MFA
-            # with authentication strengths used to be missed entirely. With
-            # the OR operator, MFA is required only when it is the sole control
-            # — "MFA or compliant device" lets a compliant device through
-            # without MFA.
-            $hasMfaCaPolicy = [bool](@($policies | Where-Object {
-                $p = $_
-                $builtIn  = @(Get-NRGNestedProperty -Object $p -Path 'GrantControls.BuiltInControls' -Default @())
-                $strength = [string](Get-NRGNestedProperty -Object $p -Path 'GrantControls.AuthStrengthId' -Default '')
-                $operator = [string](Get-NRGNestedProperty -Object $p -Path 'GrantControls.Operator' -Default '')
-                $controls = @($builtIn) + @(if ($strength) { 'authenticationStrength' })
-                $mfaGrant = ($builtIn -contains 'mfa') -or [bool]$strength
-                $required = $mfaGrant -and ($operator -ne 'OR' -or @($controls).Count -eq 1)
-                [string](Get-NRGObjectField -Item $p -Key 'State' -Default '') -eq 'enabled' -and
-                @(Get-NRGNestedProperty -Object $p -Path 'Conditions.Users.IncludeUsers' -Default @()) -contains 'All' -and
-                @(Get-NRGNestedProperty -Object $p -Path 'Conditions.Applications.Include' -Default @()) -contains 'All' -and
-                $required
-            }).Count -gt 0)
-        }
-
-        if (-not $caRead) {
-            # Registration is complete, but whether anything ENFORCES MFA was
-            # not read. Scoring that Partial would assert a missing policy.
-            Add-NRGFinding -ControlId 'AAD-1.2' -State 'NotApplicable' `
-                -Category 'Identity' -Title 'MFA Required for All Users' `
-                -Detail "100% MFA registered, but Conditional Access policies were not collected, so enforcement could not be assessed. $secDefText" `
-                -FrameworkIds @('IA-2(1)','IA-2(2)')
-            return
-        }
-
-        if (-not $hasMfaCaPolicy) {
-            # 100% registered but no enforcing policy — Partial, not Satisfied
-            Add-NRGFinding -ControlId 'AAD-1.2' -State 'Partial' `
-                -Category 'Identity' -Title 'MFA Required for All Users' `
-                -Severity 'Critical' `
-                -Detail '100% MFA registered but no CA policy found enforcing MFA for All Users / All Cloud Apps. Registration alone does not prove enforcement.' `
-                -CurrentValue "100% MFA registered ($totalEnabled/$totalEnabled enabled members). $secDefText No enforcing CA policy detected." `
-                -RequiredValue '100% MFA registration AND enforced CA policy (or Security Defaults)' `
-                -Remediation 'Create a Conditional Access policy requiring MFA for All users on All cloud apps. Registration alone is insufficient — a CA policy is required to enforce MFA at sign-in.' `
-                -FrameworkIds @('IA-2(1)','IA-2(2)')
-            return
-        }
-
-        Add-NRGFinding -ControlId 'AAD-1.2' -State 'Satisfied' `
-            -Category 'Identity' -Title 'MFA Required for All Users' `
-            -Severity 'Critical' `
-            -CurrentValue "100% MFA registered ($totalEnabled/$totalEnabled enabled members). $secDefText Enforcing CA policy found." `
-            -RequiredValue '100% MFA registration AND enforced CA policy (or Security Defaults)' `
-            -FrameworkIds @('IA-2(1)','IA-2(2)')
-    }
-    elseif ($registeredPct -ge 90) {
-        $sample = ($unregistered | Select-Object -First 5 | Select-Object -ExpandProperty UserPrincipalName) -join ', '
-        Add-NRGFinding -ControlId 'AAD-1.2' -State 'Partial' `
-            -Category 'Identity' -Title 'MFA Required for All Users' `
-            -Severity 'Critical' `
-            -Detail "MFA registration $registeredPct% — below 100%. Enforcing a CA MFA policy at this level will lock out $unregisteredCnt user(s)." `
-            -CurrentValue "$registeredPct% registered ($unregisteredCnt of $totalEnabled unregistered). Sample: $sample" `
-            -RequiredValue '100% MFA registration before universal CA enforcement' `
-            -Remediation 'Run an MFA Registration Campaign (Entra ID > Authentication methods > Registration campaign). Use Temporary Access Pass (TAP) for onboarding. Reach 100% before enforcing MFA CA policy.' `
-            -FrameworkIds @('IA-2(1)','IA-2(2)')
-    }
-    else {
-        $sample = ($unregistered | Select-Object -First 10 | Select-Object -ExpandProperty UserPrincipalName) -join ', '
-        Add-NRGFinding -ControlId 'AAD-1.2' -State 'Gap' `
-            -Category 'Identity' -Title 'MFA Required for All Users' `
-            -Severity 'Critical' `
-            -Detail "MFA registration critically low at $registeredPct%. Universal MFA cannot be enforced without locking users out." `
-            -CurrentValue "$registeredPct% registered ($unregisteredCnt of $totalEnabled unregistered). Sample: $sample" `
-            -RequiredValue '100% MFA registration AND enforced CA policy for All users / All cloud apps' `
-            -Remediation 'Enable Registration Campaign immediately. Issue Temporary Access Passes (TAPs) for bulk onboarding. Do not enforce universal MFA CA policy until registration exceeds 95%.' `
-            -FrameworkIds @('IA-2(1)','IA-2(2)')
+        Add-NRGFinding -ControlId 'AAD-1.2' -State 'Satisfied' -Category 'Identity' -Title 'MFA Required for All Users' -Severity 'Critical' -FrameworkIds $cit `
+            -CurrentValue "MFA required by: $names. 100% registered ($totalEnabled/$totalEnabled enabled members)." -RequiredValue $req
+    } else {
+        # Enforced, but unregistered users will be asked to register at their
+        # next sign-in — whoever holds the password then enrolls the second
+        # factor. Part-way, and not a lock-out.
+        Add-NRGFinding -ControlId 'AAD-1.2' -State 'Partial' -Category 'Identity' -Title 'MFA Required for All Users' -Severity 'Critical' -FrameworkIds $cit `
+            -Detail "MFA is required ($names), but $unregisteredCnt of $totalEnabled enabled member(s) have not registered a method. They will be asked to register at their next sign-in, so whoever holds their password can enroll the second factor — or they are excluded from the policy." `
+            -CurrentValue "$registeredPct% registered. Sample: $sample" -RequiredValue $req `
+            -Remediation 'Run an MFA registration campaign or issue Temporary Access Passes so every enabled user registers; check that unregistered accounts are not excluded from the MFA policy.'
     }
 }
