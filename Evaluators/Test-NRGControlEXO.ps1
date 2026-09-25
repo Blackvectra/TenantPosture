@@ -425,19 +425,36 @@ function Test-NRGControlEXOPop3 {
         return
     }
     $popOn = @($plans | Where-Object { (Get-NRGObjectField -Item $_ -Key 'PopEnabled') -eq $true })
-    if ($popOn.Count -eq 0) {
-        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
-            -Detail "POP3 is disabled on all $($plans.Count) CAS mailbox plan(s). New mailboxes cannot use the legacy POP3 basic-auth protocol." `
-            -CurrentValue 'POP3 disabled on all mailbox plans'
-    } else {
+    if ($popOn.Count -gt 0) {
         $names = @($popOn | ForEach-Object { Get-NRGObjectField -Item $_ -Key 'Name' })
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
-            -Detail "POP3 is enabled on $($popOn.Count) of $($plans.Count) CAS mailbox plan(s). POP3 is a legacy basic-auth protocol that bypasses modern-auth / MFA and is a common password-spray target." `
+            -Detail "POP3 is enabled on $($popOn.Count) of $($plans.Count) CAS mailbox plan(s), so new mailboxes get it. POP3 is a legacy basic-auth protocol that bypasses modern-auth / MFA and is a common password-spray target." `
             -CurrentValue "POP3 enabled on: $($names -join ', ')" `
-            -RequiredValue 'POP3 disabled on all mailbox plans' `
+            -RequiredValue 'POP3 disabled on all mailbox plans and mailboxes' `
             -Remediation $control.Remediation
+        return
+    }
+    # The plans set the default for NEW mailboxes only. Existing mailboxes
+    # keep whatever they had, so the plans alone cannot say POP3 is off.
+    $prot = if (Test-NRGSectionCollected $exoData 'CASMailboxProtocols') { Get-NRGObjectField -Item $exoData.Data -Key 'CASMailboxProtocols' -Default $null } else { $null }
+    $onCount = Get-NRGObjectField -Item $prot -Key 'PopEnabledCount' -Default $null
+    if ($null -eq $onCount) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category -Title $control.Title -FrameworkIds $citations `
+            -Detail "POP3 is off in every CAS mailbox plan (the default for new mailboxes), but existing mailboxes (Get-CASMailbox) were not read, so whether any still has POP3 on was not assessed."
+    } elseif ([int]$onCount -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail "POP3 is off in all $($plans.Count) CAS mailbox plan(s) and on none of the $([int](Get-NRGObjectField -Item $prot -Key 'Total' -Default 0)) existing mailboxes." `
+            -CurrentValue 'POP3 disabled on all mailbox plans and mailboxes'
+    } else {
+        $sample = @(Get-NRGObjectField -Item $prot -Key 'PopSample' -Default @())
+        Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+            -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
+            -Detail "POP3 is off for new mailboxes (every CAS mailbox plan), but $onCount existing mailbox(es) still have it on." `
+            -CurrentValue "$onCount mailbox(es) with POP3 enabled" -RequiredValue 'POP3 disabled on all mailbox plans and mailboxes' `
+            -Remediation "$($control.Remediation) Existing mailboxes: Get-CASMailbox -ResultSize Unlimited | Where-Object PopEnabled | Set-CASMailbox -PopEnabled `$false" `
+            -AffectedObjects $sample
     }
 }
 
@@ -461,23 +478,40 @@ function Test-NRGControlEXOImap {
     if ($plans.Count -eq 0) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -FrameworkIds $citations `
-            -Detail 'CAS mailbox plan data not collected (Get-CASMailboxPlan needs EXO admin rights) — IMAP state not assessed.'
+            -Detail 'CAS mailbox plan data not collected (Get-CASMailboxPlan needs EXO admin rights) — IMAP4 state not assessed.'
         return
     }
     $imapOn = @($plans | Where-Object { (Get-NRGObjectField -Item $_ -Key 'ImapEnabled') -eq $true })
-    if ($imapOn.Count -eq 0) {
-        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
-            -Detail "IMAP4 is disabled on all $($plans.Count) CAS mailbox plan(s). New mailboxes cannot use the legacy IMAP4 basic-auth protocol." `
-            -CurrentValue 'IMAP4 disabled on all mailbox plans'
-    } else {
+    if ($imapOn.Count -gt 0) {
         $names = @($imapOn | ForEach-Object { Get-NRGObjectField -Item $_ -Key 'Name' })
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
-            -Detail "IMAP4 is enabled on $($imapOn.Count) of $($plans.Count) CAS mailbox plan(s). IMAP4 is a legacy basic-auth protocol that bypasses modern-auth / MFA and is a common password-spray target." `
+            -Detail "IMAP4 is enabled on $($imapOn.Count) of $($plans.Count) CAS mailbox plan(s), so new mailboxes get it. IMAP4 is a legacy basic-auth protocol that bypasses modern-auth / MFA and is a common password-spray target." `
             -CurrentValue "IMAP4 enabled on: $($names -join ', ')" `
-            -RequiredValue 'IMAP4 disabled on all mailbox plans' `
+            -RequiredValue 'IMAP4 disabled on all mailbox plans and mailboxes' `
             -Remediation $control.Remediation
+        return
+    }
+    # The plans set the default for NEW mailboxes only. Existing mailboxes
+    # keep whatever they had, so the plans alone cannot say IMAP4 is off.
+    $prot = if (Test-NRGSectionCollected $exoData 'CASMailboxProtocols') { Get-NRGObjectField -Item $exoData.Data -Key 'CASMailboxProtocols' -Default $null } else { $null }
+    $onCount = Get-NRGObjectField -Item $prot -Key 'ImapEnabledCount' -Default $null
+    if ($null -eq $onCount) {
+        Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category -Title $control.Title -FrameworkIds $citations `
+            -Detail "IMAP4 is off in every CAS mailbox plan (the default for new mailboxes), but existing mailboxes (Get-CASMailbox) were not read, so whether any still has IMAP4 on was not assessed."
+    } elseif ([int]$onCount -eq 0) {
+        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+            -Detail "IMAP4 is off in all $($plans.Count) CAS mailbox plan(s) and on none of the $([int](Get-NRGObjectField -Item $prot -Key 'Total' -Default 0)) existing mailboxes." `
+            -CurrentValue 'IMAP4 disabled on all mailbox plans and mailboxes'
+    } else {
+        $sample = @(Get-NRGObjectField -Item $prot -Key 'ImapSample' -Default @())
+        Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+            -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
+            -Detail "IMAP4 is off for new mailboxes (every CAS mailbox plan), but $onCount existing mailbox(es) still have it on." `
+            -CurrentValue "$onCount mailbox(es) with IMAP4 enabled" -RequiredValue 'IMAP4 disabled on all mailbox plans and mailboxes' `
+            -Remediation "$($control.Remediation) Existing mailboxes: Get-CASMailbox -ResultSize Unlimited | Where-Object ImapEnabled | Set-CASMailbox -ImapEnabled `$false" `
+            -AffectedObjects $sample
     }
 }
 
@@ -1229,6 +1263,24 @@ function Test-NRGControlEXOInboxRulesForwarding {
     $allRules    = @($inv.Data['InboxRulesForwarding'] ?? @())
     $rules       = @($allRules | Where-Object { $_.IsExternal })
     $count       = $rules.Count
+    # A disabled rule forwards nothing now, but it is one click from
+    # forwarding and attackers stage rules disabled; named separately.
+    $disabledExt = @($rules | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Enabled' -Default $true) -eq $false })
+    $enabledExt  = $count - $disabledExt.Count
+
+    # The sweep is capped (InboxRuleScanLimit) and per-mailbox reads can
+    # fail. A clean result over part of the tenant is not a clean tenant.
+    $scanned  = [int](Get-NRGNestedProperty -Object $inv -Path 'Data.Stats.MailboxesScanned' -Default 0)
+    $capped   = (Get-NRGNestedProperty -Object $inv -Path 'Data.Stats.ScanLimitReached' -Default $false) -eq $true
+    $failedMb = [int](Get-NRGNestedProperty -Object $inv -Path 'Data.Stats.MailboxesRuleScanFailed' -Default 0)
+    $partialNote = ''
+    if ($capped)       { $partialNote += " Only the first $scanned mailboxes were swept (scan limit reached); the rest were not checked." }
+    if ($failedMb -gt 0) { $partialNote += " Inbox rules could not be read on $failedMb mailbox(es)." }
+    if ($count -eq 0 -and $partialNote) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Not assessed across the tenant: no externally forwarding rule was found in the mailboxes that were read.$partialNote Re-run with a higher -InboxRuleScanLimit (0 = all) before treating this control as clean."
+        return
+    }
 
     # Rules whose recipients could not be classified, and rules Exchange
     # itself could not interpret. Both are rules we did not read — not rules
@@ -1283,9 +1335,11 @@ function Test-NRGControlEXOInboxRulesForwarding {
     })
 
     $blindNote = if ($blindSpots -gt 0) { " A further $blindSpots rule(s) could not be read or classified and are not counted here." } else { '' }
+    $blindNote += $partialNote
+    if ($disabledExt.Count -gt 0) { $blindNote = " $($disabledExt.Count) of them are disabled — not forwarding now, but staged; confirm who created them.$blindNote" }
     Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
         -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-        -Detail "$count inbox rule(s) forward externally — attacker persistence (T1114.003) or insider data exfil.$blindNote" `
+        -Detail "$count inbox rule(s) forward externally ($enabledExt enabled) — attacker persistence (T1114.003) or insider data exfil.$blindNote" `
         -CurrentValue "$count inbox rule(s) forwarding externally" `
         -RequiredValue 'Zero inbox rules forwarding to external recipients' `
         -Remediation 'Find: foreach ($m in Get-Mailbox -ResultSize Unlimited) { Get-InboxRule -Mailbox $m.UserPrincipalName | Where-Object { $_.ForwardTo -or $_.RedirectTo -or $_.ForwardAsAttachmentTo } | Select-Object @{n=''Mailbox'';e={$m.UserPrincipalName}}, Name, ForwardTo, RedirectTo, ForwardAsAttachmentTo }. Disable: Disable-InboxRule -Mailbox <UPN> -Identity <RuleName>. Block at transport layer: Set-RemoteDomain Default -AutoForwardEnabled $false plus a mail flow rule rejecting auto-forwarded mail to external recipients.' `

@@ -151,6 +151,14 @@ different, than the tenant actually is.
   settings were not returned at all — half credit for data it never read — and
   is now not assessed. The DLP-coverage and retention-coverage controls no
   longer read an unread policy list as "none".
+- **EXO-7.2 partial sweeps; EXO-2.3 / 2.4 existing mailboxes.** The inbox
+  rule sweep stops at 2,000 mailboxes (`-InboxRuleScanLimit`) and recorded
+  that it did, but nothing read it: a larger tenant got "no inbox rules
+  forward externally" from a partial sweep. A clean result over part of the
+  tenant, or with unreadable mailboxes, is now not assessed; disabled
+  forwarding rules are named as disabled. POP / IMAP were judged on the CAS
+  mailbox plans, which only set the default for new mailboxes; existing
+  mailboxes are now counted too.
 - **Endpoint checks.** DEV-4.1 (local administrators) and DEV-5.1 (OS
   build) are inventory and always reported Pass; they now report "requires
   manual verification" with each device's entry, including from older
