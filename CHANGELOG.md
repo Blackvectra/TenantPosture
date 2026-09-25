@@ -145,6 +145,12 @@ different, than the tenant actually is.
   INT-1.5 no longer scores Partial from enrollment configurations. The
   collectors read every Graph field through the field helper — a missing
   `description` failed the whole compliance-policy section.
+- **Not configured is never half credit (sweep).** AAD-4.3 (guest role at
+  Microsoft's default) and AAD-11.5 (CAE strict mode off, the default) scored
+  Partial; they are Gaps. AAD-11.6 scored Partial when the cross-tenant
+  settings were not returned at all — half credit for data it never read — and
+  is now not assessed. The DLP-coverage and retention-coverage controls no
+  longer read an unread policy list as "none".
 - **Endpoint checks.** DEV-4.1 (local administrators) and DEV-5.1 (OS
   build) are inventory and always reported Pass; they now report "requires
   manual verification" with each device's entry, including from older

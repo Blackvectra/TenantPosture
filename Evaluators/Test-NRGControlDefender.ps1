@@ -510,6 +510,9 @@ function Test-NRGControlDefenderDLPWorkloads {
     if (-not $pvw -or -not $pvw.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview DLP data not collected'; return
     }
+    if (-not (Test-NRGSectionCollected $pvw 'DLPPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'DLP policies were not collected; not assessed.'; return
+    }
     $dlpPolicies = @($pvw.Data['DLPPolicies'] ?? @())
     if ($dlpPolicies.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No DLP policies configured. Sensitive data can be emailed, shared via Teams, or uploaded to SharePoint with no controls.' -Remediation $ctrl.Remediation; return

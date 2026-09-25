@@ -261,6 +261,9 @@ function Test-NRGControlPurviewRetention {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
+    if (-not (Test-NRGSectionCollected $pvw 'RetentionPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Retention policies were not collected; not assessed.'; return
+    }
     $retPolicies = @($pvw.Data['RetentionPolicies'] ?? @())
     $coveredWorkloads = @($retPolicies | ForEach-Object { $_.Workloads ?? @() } | Select-Object -Unique)
     $requiredWorkloads = @('Exchange','SharePoint','OneDriveForBusiness','Teams')
