@@ -174,7 +174,7 @@ function Get-NRGRemediationRoadmap {
             $licMet = $true
             if (-not [string]::IsNullOrEmpty($licReq) -and $licReq -notmatch '^Included') {
                 if ($canTestLicense) {
-                    $licMet = [bool](Test-NRGLicenseRequirementMet -LicenseRequirement $licReq -LicenseProfile $LicenseProfile)
+                    $licMet = [bool](Test-NRGLicenseRequirementMet -LicenseRequirement $licReq -LicenseProfile $LicenseProfile -ControlId ([string]$f.ControlId))
                 } else {
                     $licMet = $false
                 }

@@ -62,7 +62,7 @@ function Set-NRGLicenseGating {
         if (-not $ctrl) { continue }
         $req = [string](Get-NRGObjectField -Item $ctrl -Key 'LicenseRequirement' -Default '')
         if ([string]::IsNullOrWhiteSpace($req) -or $req -match '^Included') { continue }
-        if (Test-NRGLicenseRequirementMet -LicenseRequirement $req -LicenseProfile $prof) { continue }
+        if (Test-NRGLicenseRequirementMet -LicenseRequirement $req -LicenseProfile $prof -ControlId $cid) { continue }
 
         $before = [string](Get-NRGObjectField -Item $f -Key 'Detail' -Default '')
         $f.State        = 'NotApplicable'

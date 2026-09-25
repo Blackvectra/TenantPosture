@@ -115,4 +115,34 @@ Describe 'Purview Security & Compliance sections' {
             (Get-Verdict $p[0] $p[1]).State | Should -Be 'NotApplicable' -Because $p[1]
         }
     }
+
+    Context 'PVW-1.2 scores audit retention and PVW-1.3 scores DLP (they were swapped)' {
+        BeforeAll {
+            function script:Set-Pvw([hashtable] $Data) {
+                Clear-NRGState
+                $base = @{ UnifiedAuditEnabled = $true; AuditConfig = @{ Source = 'ExchangeOnline' }; DLPPolicies = @(); AuditRetentionPolicies = @()
+                           SectionStatus = @{ AuditConfig = 'Collected'; DLPPolicies = 'Collected'; AuditRetentionPolicies = 'Collected' } }
+                foreach ($k in $Data.Keys) { $base[$k] = $Data[$k] }
+                Set-NRGRawData -Key 'Purview' -Data ([ordered]@{ CollectorId = 'Purview'; CollectedAt = '2026-09-25T00:00:00Z'; Success = $true; Data = $base })
+                Test-NRGControlPurview | Out-Null
+            }
+            function script:St([string] $Cid) { (@(Get-NRGFindings | Where-Object ControlId -eq $Cid)[0]).State }
+        }
+        It 'PVW-1.2: audit on with default retention passes; a policy under 90 days is part-way; off is scored once under PVW-1.1' {
+            Set-Pvw @{};                                                        St 'PVW-1.2' | Should -Be 'Satisfied'
+            Set-Pvw @{ AuditRetentionPolicies = @(@{ Name = 'short'; RetentionDays = 30 }) }; St 'PVW-1.2' | Should -Be 'Partial'
+            Set-Pvw @{ UnifiedAuditEnabled = $false };                          St 'PVW-1.2' | Should -Be 'NotApplicable'
+            St 'PVW-1.1' | Should -Be 'Gap'
+        }
+        It 'PVW-1.2 does not pass when audit retention policies were not read' {
+            Set-Pvw @{ SectionStatus = @{ AuditConfig = 'Collected'; DLPPolicies = 'Collected'; AuditRetentionPolicies = 'Failed' } }
+            St 'PVW-1.2' | Should -Be 'NotApplicable'
+        }
+        It 'PVW-1.3: an enforced DLP policy passes, test mode is part-way, none is a Gap' {
+            Set-Pvw @{ DLPPolicies = @(@{ Name = 'PII'; Enabled = $true; Mode = 'Enable' }) };                   St 'PVW-1.3' | Should -Be 'Satisfied'
+            Set-Pvw @{ DLPPolicies = @(@{ Name = 'PII'; Enabled = $false; Mode = 'TestWithNotifications' }) };   St 'PVW-1.3' | Should -Be 'Partial'
+            Set-Pvw @{ DLPPolicies = @(@{ Name = 'PII'; Enabled = $false; Mode = 'Disable' }) };                 St 'PVW-1.3' | Should -Be 'Gap'
+            Set-Pvw @{};                                                                                           St 'PVW-1.3' | Should -Be 'Gap'
+        }
+    }
 }

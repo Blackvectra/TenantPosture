@@ -45,6 +45,28 @@ different, than the tenant actually is.
 - **`-RegisterApp` moved out of the read-only module** to `Onboard/`; the
   switch works as before. A test fails if any module-loaded file calls a
   Graph write cmdlet.
+- **License detection reads service plans, not product names.** Unlicensed
+  controls leave the score, so a detection miss hides a real gap. Checked
+  against Microsoft's licensing reference, the old detection never marked
+  EXO-9.1's requirement met on any tenant (the hold/retention control was
+  never scored); read Microsoft 365 E5 as lacking Defender for Endpoint
+  Plan 1; read Office 365 E3/E5 as holding Entra ID P1/P2 (they do not);
+  labeled Office 365 E5 "Microsoft 365 E5"; and let any one compliance plan
+  unlock every "E5 Compliance" control. `Config/license-service-plans.json`
+  now maps each requirement, and each control where features differ
+  (Customer Lockbox, Endpoint DLP, Audit Premium, ...), to the service plans
+  that deliver it. Requirements corrected from the Purview and Defender
+  service descriptions: audit retention (PVW-1.2), Copilot audit (PPL-3.5)
+  and consent alert policies (DEF-4.3) are in every plan; hold/retention
+  (EXO-9.1) is met by Exchange Online Archiving, which Business Premium
+  includes; EDR (INT-2.1) is met by Defender for Business. When licensing
+  was not read, the report says so instead of listing every gap as
+  license-blocked, and the upgrade pitch names the license actually missing.
+  The XLSX License Gaps sheet uses the same per-control test.
+- **PVW-1.2 and PVW-1.3 scored each other's subject.** PVW-1.2 ("audit log
+  retention of 90 days") scored DLP and PVW-1.3 ("DLP policy active")
+  scored retention policies. Each now scores its own; DLP in test mode is
+  Partial, none is a Gap.
 - **SharePoint controls score the setting they name.** SPO-1.2 ("default
   sharing link not Anyone") scored legacy authentication, SPO-1.3 scored
   the sync restriction, SPO-1.4 and SPO-1.5 scored other unrelated settings.

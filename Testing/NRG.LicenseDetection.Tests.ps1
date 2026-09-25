@@ -43,7 +43,7 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
     Context 'SPB (Microsoft 365 Business Premium) — the regressed case' {
 
         It 'Resolves Business Premium from SkuPartNumber = SPB' {
-            $skus = @(@{ SkuPartNumber = 'SPB'; ServicePlans = @('AAD_PREMIUM','INTUNE_A','ATP_ENTERPRISE','WIN_DEF_ATP') })
+            $skus = @(@{ SkuPartNumber = 'SPB'; ServicePlans = @('AAD_PREMIUM','INTUNE_A','ATP_ENTERPRISE','MDE_SMB','BPOS_S_DlpAddOn','RMS_S_PREMIUM','EXCHANGE_S_ARCHIVE_ADDON') })
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
             $p.HasBusinessPremium | Should -BeTrue
             $p.HasEntraP1         | Should -BeTrue
@@ -54,7 +54,7 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
         }
 
         It 'Suppresses every BP-gated LicenseRequirement string from controls.json' {
-            $skus = @(@{ SkuPartNumber = 'SPB'; ServicePlans = @('AAD_PREMIUM','INTUNE_A','ATP_ENTERPRISE') })
+            $skus = @(@{ SkuPartNumber = 'SPB'; ServicePlans = @('AAD_PREMIUM','INTUNE_A','ATP_ENTERPRISE','MDE_SMB','BPOS_S_DlpAddOn','RMS_S_PREMIUM','EXCHANGE_S_ARCHIVE_ADDON') })
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
             $expected = @(
                 'M365 Business Premium or Entra ID P1',
@@ -84,7 +84,7 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
             $skus = @(
                 @{ SkuPartNumber = 'Microsoft_365_Copilot';     ServicePlans = @('M365_COPILOT_BUSINESS_CHAT') }
                 @{ SkuPartNumber = 'FLOW_FREE';                 ServicePlans = @('EXCHANGE_S_FOUNDATION') }
-                @{ SkuPartNumber = 'SPB';                       ServicePlans = @('AAD_PREMIUM','INTUNE_A','ATP_ENTERPRISE','MFA_PREMIUM','WIN_DEF_ATP') }
+                @{ SkuPartNumber = 'SPB';                       ServicePlans = @('AAD_PREMIUM','INTUNE_A','ATP_ENTERPRISE','MFA_PREMIUM','MDE_SMB','BPOS_S_DlpAddOn','RMS_S_PREMIUM','EXCHANGE_S_ARCHIVE_ADDON') }
                 @{ SkuPartNumber = 'THREAT_INTELLIGENCE_DEPT';  ServicePlans = @('THREAT_INTELLIGENCE','ATP_ENTERPRISE','MTP') }
                 @{ SkuPartNumber = 'AAD_PREMIUM_P2';            ServicePlans = @('AAD_PREMIUM','AAD_PREMIUM_P2','MFA_PREMIUM') }
                 @{ SkuPartNumber = 'RMSBASIC';                  ServicePlans = @('RMS_S_BASIC') }
@@ -202,7 +202,7 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
 
             $bpReqs.Count | Should -BeGreaterThan 0
 
-            $p = Get-NRGTenantLicenseProfile -SubscribedSkus @(@{ SkuPartNumber = 'SPB'; ServicePlans = @('AAD_PREMIUM','INTUNE_A','ATP_ENTERPRISE','WIN_DEF_ATP') })
+            $p = Get-NRGTenantLicenseProfile -SubscribedSkus @(@{ SkuPartNumber = 'SPB'; ServicePlans = @('AAD_PREMIUM','INTUNE_A','ATP_ENTERPRISE','MDE_SMB','BPOS_S_DlpAddOn','RMS_S_PREMIUM','EXCHANGE_S_ARCHIVE_ADDON') })
 
             $missing = @()
             foreach ($req in $bpReqs) {
@@ -229,14 +229,16 @@ Describe 'NRG-Assessment License Detection — v4.6.2' {
         }
 
         It 'M365 E5 Compliance add-on — suppressed when E5 compliance service plan present' {
-            $skus = @(@{ SkuPartNumber = 'SPE_E5'; ServicePlans = @('EQUIVIO_ANALYTICS','RECORDS_MANAGEMENT') })
+            # The whole bundle (Microsoft's INFORMATION_PROTECTION_COMPLIANCE plan list, abridged to the features controls use):
+            # one compliance plan alone no longer unlocks every E5 Compliance control.
+            $skus = @(@{ SkuPartNumber = 'INFORMATION_PROTECTION_COMPLIANCE'; ServicePlans = @('COMMUNICATIONS_COMPLIANCE','INFORMATION_BARRIERS','INSIDER_RISK','MIP_S_CLP2','EQUIVIO_ANALYTICS','RECORDS_MANAGEMENT','LOCKBOX_ENTERPRISE','MICROSOFTENDPOINTDLP','M365_ADVANCED_AUDITING') })
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
             Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 E5 Compliance add-on' -LicenseProfile $p |
                 Should -BeTrue
         }
 
         It 'M365 E5 or E5 Compliance add-on — suppressed when E5 compliance present' {
-            $skus = @(@{ SkuPartNumber = 'ENTERPRISEPREMIUM'; ServicePlans = @('INSIDER_RISK_MANAGEMENT') })
+            $skus = @(@{ SkuPartNumber = 'SPE_E5'; ServicePlans = @('LOCKBOX_ENTERPRISE','MICROSOFTENDPOINTDLP','M365_ADVANCED_AUDITING','INSIDER_RISK_MANAGEMENT') })
             $p = Get-NRGTenantLicenseProfile -SubscribedSkus $skus
             Test-NRGLicenseRequirementMet -LicenseRequirement 'M365 E5 or E5 Compliance add-on' -LicenseProfile $p |
                 Should -BeTrue

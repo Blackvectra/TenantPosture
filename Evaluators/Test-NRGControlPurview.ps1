@@ -63,53 +63,77 @@ function Test-NRGControlPurview {
         }
     }
 
-    # PVW-1.2 — DLP policies
+    # PVW-1.2 — Audit log retention of at least 90 days.
+    # This block scored DLP and PVW-1.3 scored retention POLICIES (the data
+    # lifecycle question PVW-2.5 already asks), so neither control matched its
+    # own title. Audit (Standard) keeps records 180 days in every plan
+    # (Purview service description), so the only ways to fall short are an
+    # audit log that is off (PVW-1.1's finding, not double-counted here) or an
+    # audit retention policy that shortens retention below 90 days.
     $c = Get-NRGControlById -ControlId 'PVW-1.2'
-    if ($c -and -not (Test-NRGSectionCollected $raw 'DLPPolicies')) {
-        # The section was never read (IPPS not connected, or the role cannot
-        # run the cmdlet). An empty list here is not "none configured".
-        Add-NRGFinding -ControlId 'PVW-1.2' -State 'NotApplicable' -Category 'Compliance' -Title $c.Title `
-            -Detail 'DLP policies were not collected; not assessed.' -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.2')
-    } elseif ($c) {
-        $count = @($d.DLPPolicies | Where-Object { $_.Enabled -eq $true }).Count
-        $total = @($d.DLPPolicies).Count
-        if ($count -gt 0) {
-            Add-NRGFinding -ControlId 'PVW-1.2' -State 'Satisfied' `
-                -Category 'Compliance' -Title $c.Title -Severity 'Informational' `
-                -CurrentValue "$count of $total DLP policies enabled"
-        } elseif ($total -gt 0) {
-            Add-NRGFinding -ControlId 'PVW-1.2' -State 'Partial' `
-                -Category 'Compliance' -Title $c.Title -Severity 'Medium' `
-                -Detail "$total DLP policies exist but none are enabled (likely in audit/test mode)." `
-                -CurrentValue "0 of $total enabled" `
-                -Remediation $c.Remediation `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.2')
+    if ($c) {
+        $cit = Get-NRGFrameworkCitations -ControlId 'PVW-1.2'
+        $ual       = Get-NRGObjectField -Item $d -Key 'UnifiedAuditEnabled'
+        $ualSource = [string](Get-NRGNestedProperty -Object $d -Path 'AuditConfig.Source' -Default 'Unknown')
+        if ($ual -ne $true -and ($null -eq $ual -or $ualSource -ne 'ExchangeOnline' -or -not (Test-NRGSectionCollected $raw 'AuditConfig'))) {
+            Add-NRGFinding -ControlId 'PVW-1.2' -State 'NotApplicable' -Category 'Compliance' -Title $c.Title -FrameworkIds $cit `
+                -Detail 'Unified Audit Log status was not read, so audit retention was not assessed.'
+        } elseif ($ual -ne $true) {
+            Add-NRGFinding -ControlId 'PVW-1.2' -State 'NotApplicable' -Category 'Compliance' -Title $c.Title -FrameworkIds $cit `
+                -Detail 'The Unified Audit Log is off, so no audit records are retained at all. That is scored once, under PVW-1.1; turning it on gives 180-day retention by default.'
+        } elseif (-not (Test-NRGSectionCollected $raw 'AuditRetentionPolicies')) {
+            Add-NRGFinding -ControlId 'PVW-1.2' -State 'NotApplicable' -Category 'Compliance' -Title $c.Title -FrameworkIds $cit `
+                -Detail 'The audit log is on (180-day default retention), but audit retention policies were not collected, so a policy shortening retention below 90 days could not be ruled out. Check Purview > Audit > Audit retention policies.'
         } else {
-            Add-NRGFinding -ControlId 'PVW-1.2' -State 'Gap' `
-                -Category 'Compliance' -Title $c.Title -Severity $c.Severity `
-                -Detail 'No DLP policies configured. Sensitive information (SSN, credit card, financial data) is not monitored across email, SharePoint, OneDrive, or Teams.' `
-                -Remediation $c.Remediation `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.2')
+            $short = @(@(Get-NRGObjectField -Item $d -Key 'AuditRetentionPolicies' -Default @()) | Where-Object {
+                $days = Get-NRGObjectField -Item $_ -Key 'RetentionDays' -Default $null
+                $null -ne $days -and [int]$days -lt 90
+            })
+            if ($short.Count -gt 0) {
+                $names = ($short | ForEach-Object { "$(Get-NRGObjectField -Item $_ -Key 'Name' -Default '?') ($(Get-NRGObjectField -Item $_ -Key 'RetentionDays' -Default '?') days)" }) -join '; '
+                Add-NRGFinding -ControlId 'PVW-1.2' -State 'Partial' -Category 'Compliance' -Title $c.Title -Severity $c.Severity -FrameworkIds $cit `
+                    -Detail "The audit log is on, but $($short.Count) audit retention policy(ies) keep some records for less than 90 days: $names. Records those policies match are deleted before the 90-day minimum." `
+                    -CurrentValue "$($short.Count) policy(ies) under 90 days" -RequiredValue 'All audit records retained at least 90 days' -Remediation $c.Remediation
+            } else {
+                Add-NRGFinding -ControlId 'PVW-1.2' -State 'Satisfied' -Category 'Compliance' -Title $c.Title -Severity 'Informational' -FrameworkIds $cit `
+                    -CurrentValue 'Audit log on; no retention policy shorter than 90 days (default 180 days)'
+            }
         }
     }
 
-    # PVW-1.3 — Retention policies
+    # PVW-1.3 — DLP policy active for sensitive data
     $c = Get-NRGControlById -ControlId 'PVW-1.3'
-    if ($c -and -not (Test-NRGSectionCollected $raw 'RetentionPolicies')) {
+    if ($c -and -not (Test-NRGSectionCollected $raw 'DLPPolicies')) {
         # The section was never read (IPPS not connected, or the role cannot
         # run the cmdlet). An empty list here is not "none configured".
         Add-NRGFinding -ControlId 'PVW-1.3' -State 'NotApplicable' -Category 'Compliance' -Title $c.Title `
-            -Detail 'Retention policies were not collected; not assessed.' -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.3')
+            -Detail 'DLP policies were not collected; not assessed.' -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.3')
     } elseif ($c) {
-        $count = @($d.RetentionPolicies | Where-Object { $_.Enabled -eq $true }).Count
-        if ($count -gt 0) {
+        $all     = @($d.DLPPolicies)
+        $enabled = @($all | Where-Object { $_.Enabled -eq $true }).Count
+        $testing = @($all | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'Mode' -Default '') -like 'Test*' }).Count
+        if ($enabled -gt 0) {
             Add-NRGFinding -ControlId 'PVW-1.3' -State 'Satisfied' `
                 -Category 'Compliance' -Title $c.Title -Severity 'Informational' `
-                -CurrentValue "$count retention policies enabled"
+                -CurrentValue "$enabled of $($all.Count) DLP policies enforced" `
+                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.3')
+        } elseif ($testing -gt 0) {
+            # Simulation mode: detects and reports but does not block — genuinely part-way.
+            Add-NRGFinding -ControlId 'PVW-1.3' -State 'Partial' `
+                -Category 'Compliance' -Title $c.Title -Severity 'Medium' `
+                -Detail "$testing DLP policy(ies) are in test (simulation) mode and none is enforced: sensitive data is detected but not blocked." `
+                -CurrentValue "0 enforced, $testing in test mode" `
+                -Remediation $c.Remediation `
+                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.3')
         } else {
+            $detail = if ($all.Count -gt 0) {
+                "$($all.Count) DLP policy(ies) exist but all are turned off. Sensitive information (SSN, credit card, financial data) is not monitored."
+            } else {
+                'No DLP policies configured. Sensitive information (SSN, credit card, financial data) is not monitored across email, SharePoint, OneDrive, or Teams.'
+            }
             Add-NRGFinding -ControlId 'PVW-1.3' -State 'Gap' `
                 -Category 'Compliance' -Title $c.Title -Severity $c.Severity `
-                -Detail 'No active retention policies. Email and document retention is left to user discretion.' `
+                -Detail $detail -CurrentValue "0 of $($all.Count) enforced" `
                 -Remediation $c.Remediation `
                 -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.3')
         }
