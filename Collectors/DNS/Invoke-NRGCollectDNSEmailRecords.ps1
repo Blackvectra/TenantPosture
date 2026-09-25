@@ -296,7 +296,7 @@ function Invoke-NRGCollectDNSEmailRecords {
                     RotationStatus  = $null  # 'OK' | 'Due' | 'Overdue' | 'Unknown'
                 }
                 DMARC   = $null
-                MTASTS  = @{ DNSRecord = $null; Policy = $null; Mode = $null; PolicyFetchError = $null }
+                MTASTS  = @{ DNSRecord = $null; Policy = $null; Mode = $null; PolicyFetchError = $null; PolicyHostMissing = $false }
                 TLSRPT  = $null
                 DNSSEC  = $false
                 MX      = @()
@@ -532,6 +532,18 @@ function Invoke-NRGCollectDNSEmailRecords {
                 if ($mtaStsProbe.Refused) {
                     $d.Errors += "MTASTS.Policy: refused '$mtaStsHost' — $($mtaStsProbe.Reason)"
                     $d.MTASTS.PolicyFetchError = "refused '$mtaStsHost' — $($mtaStsProbe.Reason)"
+                    # A host that does not exist is a finding, not a fetch
+                    # failure: senders cannot retrieve the policy, so MTA-STS
+                    # is not in effect. Only an authoritative "no record" for
+                    # both A and AAAA says so; any lookup failure stays unknown.
+                    if ([string]$mtaStsProbe.Reason -like 'DNS resolution failed*') {
+                        $aOut = ''; $aWhy = ''; $aaaaOut = ''; $aaaaWhy = ''
+                        $a    = @(Resolve-NRGDns -Name $mtaStsHost -Type A    -Outcome ([ref]$aOut)    -Reason ([ref]$aWhy))
+                        $aaaa = @(Resolve-NRGDns -Name $mtaStsHost -Type AAAA -Outcome ([ref]$aaaaOut) -Reason ([ref]$aaaaWhy))
+                        if ($aOut -eq 'NoRecord' -and $aaaaOut -eq 'NoRecord' -and $a.Count -eq 0 -and $aaaa.Count -eq 0) {
+                            $d.MTASTS.PolicyHostMissing = $true
+                        }
+                    }
                 } else {
                     # DNS rebinding fix (v4.6.3 P2): Invoke-WebRequest would re-resolve
                     # the hostname; we cannot easily pin the resolved IP through it.

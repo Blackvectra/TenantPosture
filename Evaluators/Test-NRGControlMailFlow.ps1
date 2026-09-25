@@ -133,6 +133,7 @@ function Test-NRGControlEXOMailFlowConnectors {
     }
     foreach ($c in $enabledOut) {
         $name = [string](Get-NRGObjectField -Item $c -Key 'Name')
+        if (Get-NRGObjectField -Item $c -Key 'TestMode' -Default $false) { $name = "$name (test mode)" }
         $tls  = [string](Get-NRGObjectField -Item $c -Key 'TlsSettings')
         if (-not $tls -or $tls -eq 'None') {
             $concerns.Add(@{ Connector = $name; Direction = 'Outbound'; Issue = 'No TLS setting — organizational mail can leave in cleartext.' })

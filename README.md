@@ -555,4 +555,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.14.0 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 324 exported functions · full Pester suite (73 suites) gating CI*
+*NRG-Assessment v4.14.1 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 324 exported functions · full Pester suite (73 suites) gating CI*

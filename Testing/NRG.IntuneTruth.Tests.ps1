@@ -80,12 +80,14 @@ Describe 'Intune controls count what enforces something' {
     It 'INT-1.3 accepts "Require encryption of data storage"; INT-2.4 does not accept System Integrity Protection' {
         Run @{ 'deviceCompliancePolicies' = @(
             @{ '@odata.type' = '#microsoft.graph.windows10CompliancePolicy'; id = 'w'; displayName = 'Win'; storageRequireEncryption = $true; bitLockerEnabled = $false; assignments = $script:Assigned },
-            @{ '@odata.type' = '#microsoft.graph.macOSCompliancePolicy'; id = 'm'; displayName = 'Mac'; systemIntegrityProtectionEnabled = $true; storageRequireEncryption = $false; assignments = $script:Assigned }) }
+            @{ '@odata.type' = '#microsoft.graph.macOSCompliancePolicy'; id = 'm'; displayName = 'Mac'; systemIntegrityProtectionEnabled = $true; storageRequireEncryption = $false; assignments = $script:Assigned })
+               'managedDevices' = @(@{ id = 'mac1'; operatingSystem = 'macOS'; complianceState = 'compliant' }) }
         (Verdict 'Test-NRGControlIntune' 'INT-1.3').State | Should -Be 'Satisfied'
         (Verdict 'Test-NRGControlIntuneMacEncryption' 'INT-2.4').State | Should -Be 'Gap'
     }
     It 'INT-4.4 reads the iOS passcodeRequired (an iOS-only fleet failed)' {
-        Run @{ 'deviceCompliancePolicies' = @(@{ '@odata.type' = '#microsoft.graph.iosCompliancePolicy'; id = 'c1'; displayName = 'iOS'; passcodeRequired = $true; osMinimumVersion = '17.0'; assignments = $script:Assigned }) }
+        Run @{ 'deviceCompliancePolicies' = @(@{ '@odata.type' = '#microsoft.graph.iosCompliancePolicy'; id = 'c1'; displayName = 'iOS'; passcodeRequired = $true; osMinimumVersion = '17.0'; assignments = $script:Assigned })
+               'managedDevices' = @(@{ id = 'ip1'; operatingSystem = 'iOS'; complianceState = 'compliant' }) }
         (Verdict 'Test-NRGControlIntuneMobilePIN' 'INT-4.4').State | Should -Be 'Satisfied'
     }
     It 'INT-4.3 is not "OS-version compliant" when no policy sets a minimum OS version' {
@@ -96,6 +98,26 @@ Describe 'Intune controls count what enforces something' {
     It 'INT-3.3 does not count the default PIN-retry / offline-wipe limits as conditional launch' {
         Run @{ 'managedAppPolicies' = @(@{ '@odata.type' = '#microsoft.graph.iosManagedAppProtection'; id = 'p'; displayName = 'iOS MAM'; maximumPinRetries = 5; periodOfflineBeforeWipeIsEnforced = 'P90D'; isAssigned = $true }) }
         (Verdict 'Test-NRGControlIntuneConditionalLaunch' 'INT-3.3').State | Should -Be 'Gap'
+    }
+    It 'INT-3.1: the Windows Mobile block Intune ships in every tenant is not a restriction' {
+        # Live tenant, 2026-09-25: passed on "windowsMobile: platform blocked" alone.
+        $d = $script:Defaults.Clone(); $d[1] = $d[1].Clone()
+        $d[1].windowsMobileRestriction = @{ platformBlocked = $true; personalDeviceEnrollmentBlocked = $false }
+        Run @{ 'deviceEnrollmentConfigurations' = $d }
+        (Verdict 'Test-NRGControlIntuneEnrollmentRestrictions' 'INT-3.1').State | Should -Be 'Gap'
+    }
+    It 'INT-2.4 / INT-4.4 state the enrolled platforms instead of guessing, and a Mac with no policy is a Gap' {
+        # 37 Windows devices, no Macs, no phones; a Microsoft default Android
+        # policy whose assignment could not be read.
+        $win = @(1..3 | ForEach-Object { @{ id = "w$_"; operatingSystem = 'Windows'; complianceState = 'compliant' } })
+        Run @{ 'managedDevices' = $win
+               'deviceCompliancePolicies' = @(@{ '@odata.type' = '#microsoft.graph.androidCompliancePolicy'; id = 'a'; displayName = 'Default compliance policy for Android'; passwordRequired = $false }) }
+        $mac = Verdict 'Test-NRGControlIntuneMacEncryption' 'INT-2.4'
+        $mac.State  | Should -Be 'NotApplicable'
+        $mac.Detail | Should -Match 'No macOS devices are enrolled in Intune \(enrolled: 3 Windows\)'
+        (Verdict 'Test-NRGControlIntuneMobilePIN' 'INT-4.4').State | Should -Be 'NotApplicable' -Because 'no phone is enrolled, so a phone passcode setting governs nothing'
+        Run @{ 'managedDevices' = @($win + @{ id = 'm1'; operatingSystem = 'macOS'; complianceState = 'compliant' }) }
+        (Verdict 'Test-NRGControlIntuneMacEncryption' 'INT-2.4').State | Should -Be 'Gap'
     }
     It 'INT-1.5 does not give half credit for enrollment configurations every tenant has' {
         Run @{ 'deviceEnrollmentConfigurations' = $script:Defaults }

@@ -713,106 +713,142 @@ if (-not $skipCollection) {
     Write-Host ""
     Write-Host "[-] Running collectors..." -ForegroundColor Cyan
 
-    function Invoke-NRGCollector { param([string]$fn)
-        if (Get-Command $fn -ErrorAction SilentlyContinue) {
-            try { & $fn | Out-Null }
-            catch { Write-Warning "Collector $fn failed: $($_.Exception.Message.Split([char]10)[0])" }
+    # One aligned line per collector: [+] collected, [!] collected with issues
+    # logged, [x] failed, [-] not available in this tenant. The status comes
+    # from what the collector itself recorded (coverage and the Exceptions
+    # array), never from the fact that it returned. Third-party warnings are
+    # captured and printed under the line rather than breaking into it.
+    $script:NRGStepTally = [ordered]@{ Ok = 0; Issues = 0; Failed = 0; NotAvailable = 0 }
+    function Write-NRGCollectorGroup { param([string] $Name) Write-Host "  $Name" -ForegroundColor Cyan }
+    function Invoke-NRGCollectorStep {
+        param([string] $Label, [string[]] $Function, [hashtable] $Params = @{})
+        $fns = @($Function | Where-Object { Get-Command $_ -ErrorAction SilentlyContinue })
+        if ($fns.Count -eq 0) { return }
+        $covBefore = @{}
+        foreach ($kv in (Get-NRGCoverage).GetEnumerator()) { $covBefore[$kv.Key] = "$($kv.Value.Status)|$($kv.Value.Note)" }
+        $excBefore = @(Get-NRGExceptions).Count
+        $line = '  [*] {0,-50}' -f $Label
+        Write-Host $line -NoNewline -ForegroundColor DarkGray
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $threw = $null
+        $warn = [System.Collections.Generic.List[object]]::new()
+        foreach ($fn in $fns) {
+            try {
+                & $fn @Params -WarningAction SilentlyContinue -WarningVariable w | Out-Null
+                foreach ($x in @($w)) { $warn.Add($x) }
+            } catch { $threw = $_.Exception.Message.Split([char]10)[0].Trim() }
+        }
+        $sw.Stop()
+        $changed = @((Get-NRGCoverage).GetEnumerator() | Where-Object { $covBefore[$_.Key] -ne "$($_.Value.Status)|$($_.Value.Note)" })
+        $statuses = @($changed | ForEach-Object { $_.Value.Status })
+        $newExc = @(Get-NRGExceptions).Count - $excBefore
+
+        $failNote = @($changed | Where-Object { $_.Value.Status -eq 'Failed' } | ForEach-Object { $_.Value.Note } | Where-Object { $_ }) | Select-Object -First 1
+        $okNote   = (@($changed | Where-Object { $_.Value.Status -in 'Collected', 'Partial' } | ForEach-Object { $_.Value.Note } | Where-Object { $_ }) -join '; ')
+        $naNote   = @($changed | Where-Object { $_.Value.Status -eq 'NotCollected' } | ForEach-Object { $_.Value.Note } | Where-Object { $_ }) | Select-Object -First 1
+        $okCount  = @($statuses | Where-Object { $_ -in 'Collected', 'Partial' }).Count
+
+        if ($threw -or ('Failed' -in $statuses -and $okCount -eq 0)) {
+            $mark = '[x]'; $color = 'Red'; $script:NRGStepTally.Failed++
+            $detail = 'failed: ' + $(if ($threw) { $threw } elseif ($failNote) { $failNote } else { 'see Exceptions' })
+        } elseif ('Failed' -in $statuses -or 'Partial' -in $statuses -or $newExc -gt 0) {
+            $mark = '[!]'; $color = 'Yellow'; $script:NRGStepTally.Issues++
+            $detail = "$(if ($okNote) { "$okNote; " })$newExc issue(s) logged"
+        } elseif ($statuses.Count -gt 0 -and $okCount -eq 0 -and 'NotCollected' -in $statuses) {
+            $mark = '[-]'; $color = 'DarkGray'; $script:NRGStepTally.NotAvailable++
+            $detail = $(if ($naNote) { $naNote } else { 'not available' })
+        } else {
+            $mark = '[+]'; $color = 'Green'; $script:NRGStepTally.Ok++
+            $detail = $okNote
+        }
+        if ($detail.Length -gt 70) { $detail = $detail.Substring(0, 67) + '...' }
+        Write-Host ("`r  {0} {1,-50}{2,6:N1}s  {3}" -f $mark, $Label, $sw.Elapsed.TotalSeconds, $detail) -ForegroundColor $color
+        foreach ($x in ($warn | Select-Object -Unique)) {
+            $msg = "$x".Split([char]10)[0].Trim()
+            if ($msg.Length -gt 100) { $msg = $msg.Substring(0, 97) + '...' }
+            Write-Host "        warning: $msg" -ForegroundColor DarkYellow
         }
     }
 
     if ($conn.Graph) {
-        Write-Host "  [*] AAD: Auth + authorization policies..."
-        Invoke-NRGCollector 'Invoke-NRGCollectAADAuthPolicies'
-        Write-Host "  [*] AAD: Conditional Access policies..."
-        Invoke-NRGCollector 'Invoke-NRGCollectAADCAPolicies'
-        Write-Host "  [*] AAD: Users and MFA registration state..."
-        Invoke-NRGCollector 'Invoke-NRGCollectAADUsers'
-        Write-Host "  [*] AAD: Directory role assignments..."
-        Invoke-NRGCollector 'Invoke-NRGCollectAADRoles'
-        Write-Host "  [*] AAD: PIM eligible and active schedules..."
-        Invoke-NRGCollector 'Invoke-NRGCollectAADPIM'
-        Invoke-NRGCollector 'Invoke-NRGCollectAADIdentityGovernance'
-        Write-Host "  [*] AAD: Inventory (guests, stale, OAuth, Secure Score)..."
-        Invoke-NRGCollector 'Invoke-NRGCollectAADInventory'
-        Write-Host "  [*] AAD: Application (app-only) permission grants..."
-        Invoke-NRGCollector 'Invoke-NRGCollectAADAppPermissions'
+        Write-NRGCollectorGroup 'Identity (Entra ID)'
+        Invoke-NRGCollectorStep 'Auth and authorization policies'        'Invoke-NRGCollectAADAuthPolicies'
+        Invoke-NRGCollectorStep 'Conditional Access policies'            'Invoke-NRGCollectAADCAPolicies'
+        Invoke-NRGCollectorStep 'Users and MFA registration'             'Invoke-NRGCollectAADUsers'
+        Invoke-NRGCollectorStep 'Directory role assignments'             'Invoke-NRGCollectAADRoles'
+        Invoke-NRGCollectorStep 'PIM schedules and access reviews'       'Invoke-NRGCollectAADPIM', 'Invoke-NRGCollectAADIdentityGovernance'
+        Invoke-NRGCollectorStep 'Guests, stale accounts, OAuth, licenses' 'Invoke-NRGCollectAADInventory'
+        Invoke-NRGCollectorStep 'Application (app-only) permissions'     'Invoke-NRGCollectAADAppPermissions'
 
         if (-not $SkipSharePoint) {
-            Write-Host "  [*] SharePoint: Tenant settings via Graph..."
-            Invoke-NRGCollector 'Invoke-NRGCollectSharePoint'
+            Write-NRGCollectorGroup 'SharePoint and OneDrive'
+            Invoke-NRGCollectorStep 'Tenant sharing settings'            'Invoke-NRGCollectSharePoint'
         }
         if (-not $SkipIntune) {
-            Write-Host "  [*] Intune: Endpoint Security (LAPS / ASR / Firewall / EDR / AV)..."
-            Invoke-NRGCollector 'Invoke-NRGCollectIntuneEndpointSecurity'
-            Write-Host "  [*] Intune: Device Compliance, WHfB, Update Rings, Enrollment..."
-            Invoke-NRGCollector 'Invoke-NRGCollectIntuneDeviceCompliance'
-            Write-Host "  [*] Intune: App Protection (MAM) and App Configuration..."
-            Invoke-NRGCollector 'Invoke-NRGCollectIntuneAppProtection'
+            Write-NRGCollectorGroup 'Intune'
+            Invoke-NRGCollectorStep 'Endpoint security (LAPS, ASR, AV, EDR)' 'Invoke-NRGCollectIntuneEndpointSecurity'
+            Invoke-NRGCollectorStep 'Compliance, enrollment, WHfB, updates'  'Invoke-NRGCollectIntuneDeviceCompliance'
+            Invoke-NRGCollectorStep 'App protection and configuration'       'Invoke-NRGCollectIntuneAppProtection'
         }
         if (-not $SkipPowerPlatform) {
-            Write-Host "  [*] Power Platform: Environments, tenant isolation, DLP..."
+            Write-NRGCollectorGroup 'Power Platform'
             if (-not ($AppId -and $TenantId -and $CertificateThumbprint)) {
-                Write-Host "      A browser sign-in to the Power Platform admin API may open (same account; usually completes on its own). Use -SkipPowerPlatform to skip." -ForegroundColor DarkGray
+                Write-Host "      A browser sign-in may open (same account). Use -SkipPowerPlatform to skip." -ForegroundColor DarkGray
             }
-            Invoke-NRGCollector 'Invoke-NRGCollectPowerPlatform'
+            Invoke-NRGCollectorStep 'Environments, tenant isolation, DLP'    'Invoke-NRGCollectPowerPlatform'
         }
     }
 
     if ($conn.EXO) {
-        Write-Host "  [*] EXO: Mailbox configuration..."
-        Invoke-NRGCollector 'Invoke-NRGCollectEXOMailboxConfig'
-        Write-Host "  [*] EXO: Inventory (forwarding, shared, audit, SMTP AUTH)..."
-        Invoke-NRGCollector 'Invoke-NRGCollectEXOInventory'
-        Write-Host "  [*] Defender: Safe Attachments, Safe Links, Anti-phishing..."
-        Invoke-NRGCollector 'Invoke-NRGCollectDefender'
+        Write-NRGCollectorGroup 'Exchange Online and Defender'
+        Invoke-NRGCollectorStep 'Organization and transport settings'   'Invoke-NRGCollectEXOMailboxConfig', 'Invoke-NRGCollectEXOConnectionFilter'
+        Invoke-NRGCollectorStep 'Mailboxes: forwarding, audit, SMTP AUTH' 'Invoke-NRGCollectEXOInventory'
+        Invoke-NRGCollectorStep 'Defender for Office 365 policies'       'Invoke-NRGCollectDefender'
         if (-not $SkipDNS) {
-            Write-Host "  [*] DNS: SPF/DKIM/DMARC/MTA-STS for accepted domains..."
-            if ($DnsDomains) {
-                if (Get-Command Invoke-NRGCollectDNSEmailRecords -ErrorAction SilentlyContinue) {
-                    Invoke-NRGCollectDNSEmailRecords -Domains $DnsDomains | Out-Null
-                }
-            } else {
-                Invoke-NRGCollector 'Invoke-NRGCollectDNSEmailRecords'
-            }
+            Write-NRGCollectorGroup 'DNS'
+            $dnsParams = if ($DnsDomains) { @{ Domains = $DnsDomains } } else { @{} }
+            Invoke-NRGCollectorStep 'SPF, DKIM, DMARC, MTA-STS, DNSSEC, CAA' 'Invoke-NRGCollectDNSEmailRecords' -Params $dnsParams
         }
     }
 
     if ($conn.Teams -and -not $SkipTeams) {
-        Write-Host "  [*] Teams: Meeting, external access, client policies..."
-        Invoke-NRGCollector 'Invoke-NRGCollectTeams'
+        Write-NRGCollectorGroup 'Teams'
+        Invoke-NRGCollectorStep 'Meetings, external access, messaging'   'Invoke-NRGCollectTeams'
     }
 
     if ($conn.IPPSSession -and -not $SkipPurview) {
-        Write-Host "  [*] Purview: Audit, DLP, retention, sensitivity labels..."
-        Invoke-NRGCollector 'Invoke-NRGCollectPurview'
+        Write-NRGCollectorGroup 'Purview'
+        Invoke-NRGCollectorStep 'Audit, DLP, retention, labels'          'Invoke-NRGCollectPurview'
     }
 
     # Copilot collector runs after Purview so it can reuse label/DLP/audit raw data
     if ($conn.Graph) {
-        Write-Host "  [*] M365 Copilot: Licensing, label alignment, DLP coverage, Studio bots..."
-        Invoke-NRGCollector 'Invoke-NRGCollectM365Copilot'
+        Write-NRGCollectorGroup 'Microsoft 365 Copilot'
+        Invoke-NRGCollectorStep 'Licensing, labels, DLP, Copilot Studio' 'Invoke-NRGCollectM365Copilot'
     }
 
     # Endpoint compliance results. No connection required: the endpoints already
     # ran the collector and the RMM already gathered the output. This reads
     # files, nothing else.
     if ($DeviceResults) {
-        Write-Host "  [*] Endpoints: ingesting device compliance results..."
-        if (Get-Command Invoke-NRGCollectDeviceCompliance -ErrorAction SilentlyContinue) {
-            try {
-                Invoke-NRGCollectDeviceCompliance -ResultsPath $DeviceResults
-                $devRaw = Get-NRGRawData -Key 'Device-Compliance'
-                if ($devRaw -and $devRaw.Success) {
-                    $dc = [int]$devRaw.Data.DeviceCount
-                    $ne = $dc - [int]$devRaw.Data.ElevatedCount
-                    Write-Host "      $dc device result(s) ingested." -ForegroundColor Green
-                    if ($ne -gt 0) {
-                        Write-Warning "$ne device(s) ran without administrative rights — encryption, TPM, Secure Boot and audit-policy checks are unassessed on those, and are reported as such rather than as passes."
-                    }
-                }
-            } catch { Write-Warning "Device results ingestion failed: $($_.Exception.Message)" }
+        Write-NRGCollectorGroup 'Endpoints'
+        Invoke-NRGCollectorStep 'Device compliance results'              'Invoke-NRGCollectDeviceCompliance' -Params @{ ResultsPath = $DeviceResults }
+        $devRaw = Get-NRGRawData -Key 'Device-Compliance'
+        if ($devRaw -and $devRaw.Success) {
+            $ne = [int]$devRaw.Data.DeviceCount - [int]$devRaw.Data.ElevatedCount
+            if ($ne -gt 0) {
+                Write-Host "        $ne device(s) ran without administrative rights — encryption, TPM, Secure Boot and audit-policy checks are unassessed on those, not passed." -ForegroundColor DarkYellow
+            }
         }
     }
+
+    $t = $script:NRGStepTally
+    $tallyColor = if ($t.Failed -gt 0) { 'Red' } elseif ($t.Issues -gt 0) { 'Yellow' } else { 'Green' }
+    $tallyText = "$($t.Ok) collected, $($t.Issues) with issues, $($t.Failed) failed"
+    if ($t.NotAvailable -gt 0) { $tallyText += ", $($t.NotAvailable) not available" }
+    if ($t.Issues + $t.Failed -gt 0) { $tallyText += '. Details: Exceptions array in the results JSON' }
+    Write-Host ""
+    Write-Host "  $tallyText" -ForegroundColor $tallyColor
 
     # ── Run evaluators ───────────────────────────────────────────────────────
     Write-Host ""
@@ -912,6 +948,16 @@ try {
 # ── Publish reports ──────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "[-] Generating reports..." -ForegroundColor Cyan
+# One aligned line per file, named by its leaf; the folder is printed once.
+$script:NRGReportFolderShown = $false
+function Write-NRGReportFile {
+    param([string] $Label, [string] $Path)
+    if (-not $script:NRGReportFolderShown) {
+        Write-Host "  Folder: $(Split-Path -Path $Path -Parent)" -ForegroundColor DarkGray
+        $script:NRGReportFolderShown = $true
+    }
+    Write-Host ('  [+] {0,-34} {1}' -f $Label, (Split-Path -Path $Path -Leaf)) -ForegroundColor Green
+}
 
 $jsonPath = Join-Path $OutputPath "$baseName-results.json"
 # Capture the raw-data snapshot for drift detection on the NEXT run. The
@@ -936,8 +982,8 @@ $jsonPayload = @{
     Connections = $conn
 } | ConvertTo-Json -Depth 10
 Set-NRGSensitiveFileContent -Path $jsonPath -Content $jsonPayload
-Write-Host "  [+] JSON: $jsonPath" -ForegroundColor Green
-Write-Host "      Baseline contains sensitive tenant inventory (CA policies, admin assignments, OAuth apps) — file ACL restricted to current user + admins. Path: $jsonPath" -ForegroundColor Yellow
+Write-NRGReportFile 'JSON' $jsonPath
+Write-Host "      Holds sensitive tenant inventory (CA policies, admin assignments, OAuth apps); access restricted to you and administrators." -ForegroundColor Yellow
 
 if (-not $JsonOnly) {
     # ── Audit-finding fix (HIGH #2): every secondary report file gets the same
@@ -982,7 +1028,7 @@ if (-not $JsonOnly) {
             }
             if ($AllFiles) {
                 Set-NRGSensitiveFileAcl -Path $rsPath -ErrorAction SilentlyContinue
-                Write-Host "  [+] Remediation: $rsPath" -ForegroundColor Green
+                Write-NRGReportFile 'Remediation' $rsPath
             } else {
                 # Consolidated profile: the content is embedded in the HTML —
                 # don't leave the sidecar file (and don't leave tenant data on
@@ -998,7 +1044,7 @@ if (-not $JsonOnly) {
         try {
             $fwSelection = if ($Framework -eq 'All') { @('CIS','SCuBA','NIST','CMMC') } else { @($Framework) }
             Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath -Attachments $reportAttachments -Frameworks $fwSelection
-            Write-Host "  [+] HTML: $htmlPath" -ForegroundColor Green
+            Write-NRGReportFile 'HTML' $htmlPath
             Set-NRGSensitiveFileAcl -Path $htmlPath -ErrorAction SilentlyContinue
         } catch {
             $stack = $_.ScriptStackTrace
@@ -1018,7 +1064,7 @@ if (-not $JsonOnly) {
             $mdPath = Join-Path $OutputPath "$baseName-assessment.md"
             try {
                 Publish-NRGAssessmentSummary -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $mdPath
-                Write-Host "  [+] Markdown: $mdPath" -ForegroundColor Green
+                Write-NRGReportFile 'Markdown' $mdPath
                 Set-NRGSensitiveFileAcl -Path $mdPath -ErrorAction SilentlyContinue
             } catch { Write-Warning "Markdown publish failed: $($_.Exception.Message)" }
         }
@@ -1036,9 +1082,9 @@ if (-not $JsonOnly) {
                     -OutputPath $pbPath `
                     -ExecutivePath $execPath `
                     -HtmlOutputPath $pbHtmlPath
-                Write-Host "  [+] Playbook (md):   $pbPath" -ForegroundColor Green
-                Write-Host "  [+] Playbook (html): $pbHtmlPath" -ForegroundColor Green
-                Write-Host "  [+] Executive:       $execPath" -ForegroundColor Green
+                Write-NRGReportFile 'Playbook (md)' $pbPath
+                Write-NRGReportFile 'Playbook (html)' $pbHtmlPath
+                Write-NRGReportFile 'Executive' $execPath
                 Set-NRGSensitiveFileAcl -Path $pbPath     -ErrorAction SilentlyContinue
                 Set-NRGSensitiveFileAcl -Path $execPath   -ErrorAction SilentlyContinue
                 Set-NRGSensitiveFileAcl -Path $pbHtmlPath -ErrorAction SilentlyContinue
@@ -1050,7 +1096,7 @@ if (-not $JsonOnly) {
             $xlsxPath = Join-Path $OutputPath "$baseName-compliance-matrix.xlsx"
             try {
                 Publish-NRGComplianceMatrix -Metadata $reportMetadata -Findings $findings -OutputPath $xlsxPath
-                Write-Host "  [+] XLSX matrix: $xlsxPath" -ForegroundColor Green
+                Write-NRGReportFile 'XLSX matrix' $xlsxPath
                 Set-NRGSensitiveFileAcl -Path $xlsxPath -ErrorAction SilentlyContinue
             } catch { Write-Warning "XLSX publish failed: $($_.Exception.Message)" }
         }
@@ -1063,11 +1109,16 @@ if (-not $JsonOnly) {
         $nistPath = Join-Path $OutputPath "$baseName-nist-800-53-matrix.md"
         try {
             Publish-NRGNISTMatrix -Metadata $reportMetadata -Findings $findings -OutputPath $nistPath
-            Write-Host "  [+] NIST matrix (md): $nistPath" -ForegroundColor Green
+            Write-NRGReportFile 'NIST matrix (md)' $nistPath
             Set-NRGSensitiveFileAcl -Path $nistPath -ErrorAction SilentlyContinue
-            $nistXlsx = [System.IO.Path]::ChangeExtension($nistPath, '.xlsx')
-            if (Test-Path -LiteralPath $nistXlsx) {
-                Write-Host "  [+] NIST matrix (xlsx): $nistXlsx" -ForegroundColor Green
+            # The HTML and XLSX sidecars carry the same findings as the
+            # Markdown and get the same file restriction.
+            foreach ($ext in '.html', '.xlsx') {
+                $side = [System.IO.Path]::ChangeExtension($nistPath, $ext)
+                if (Test-Path -LiteralPath $side) {
+                    Write-NRGReportFile "NIST matrix ($($ext.TrimStart('.')))" $side
+                    Set-NRGSensitiveFileAcl -Path $side -ErrorAction SilentlyContinue
+                }
             }
         } catch { Write-Warning "NIST matrix publish failed: $($_.Exception.Message)" }
     }
@@ -1099,12 +1150,12 @@ if (-not $JsonOnly) {
             $sspPosture = Get-NRGSSPPosture -Findings $findings -Answers $sspAnswerSet
             Publish-NRGSSP -Posture $sspPosture -Metadata $reportMetadata -Answers $sspAnswerSet `
                 -OutputPath $sspPath -ClientName $sspClient
-            Write-Host "  [+] SSP (md): $sspPath" -ForegroundColor Green
+            Write-NRGReportFile 'SSP (md)' $sspPath
             Set-NRGSensitiveFileAcl -Path $sspPath -ErrorAction SilentlyContinue
             foreach ($ext in @('.html', '.xlsx')) {
                 $side = [System.IO.Path]::ChangeExtension($sspPath, $ext)
                 if (Test-Path -LiteralPath $side) {
-                    Write-Host "  [+] SSP ($($ext.TrimStart('.'))): $side" -ForegroundColor Green
+                    Write-NRGReportFile "SSP ($($ext.TrimStart('.')))" $side
                     Set-NRGSensitiveFileAcl -Path $side -ErrorAction SilentlyContinue
                 }
             }
@@ -1139,12 +1190,12 @@ if (-not $JsonOnly) {
             $sspqPosture = Get-NRGSSPPosture -Findings $findings -Answers $sspqAnswerSet
             Publish-NRGSSPQuestionnaire -Posture $sspqPosture -Metadata $reportMetadata `
                 -OutputPath $sspqPath -ClientName $sspqClient -Family $SSPQuestionnaireFamily
-            Write-Host "  [+] SSP questionnaire (md): $sspqPath" -ForegroundColor Green
+            Write-NRGReportFile 'SSP questionnaire (md)' $sspqPath
             Set-NRGSensitiveFileAcl -Path $sspqPath -ErrorAction SilentlyContinue
             foreach ($ext in @('.html', '.pdf', '.manifest.json')) {
                 $side = [System.IO.Path]::ChangeExtension($sspqPath, $ext)
                 if (Test-Path -LiteralPath $side) {
-                    Write-Host "  [+] SSP questionnaire ($($ext.TrimStart('.'))): $side" -ForegroundColor Green
+                    Write-NRGReportFile "SSP questionnaire ($($ext.TrimStart('.')))" $side
                     Set-NRGSensitiveFileAcl -Path $side -ErrorAction SilentlyContinue
                 }
             }
@@ -1163,12 +1214,12 @@ if (-not $JsonOnly) {
             $mrqScope = Get-NRGAssessmentScope -Findings $findings
             Publish-NRGManualReviewQuestionnaire -Scope $mrqScope -Answers $mrqAnswerSet -Metadata $reportMetadata `
                 -OutputPath $mrqPath -ClientName $mrqClient -Workload $ManualReviewWorkload
-            Write-Host "  [+] Manual review questionnaire (md): $mrqPath" -ForegroundColor Green
+            Write-NRGReportFile 'Manual review questionnaire (md)' $mrqPath
             Set-NRGSensitiveFileAcl -Path $mrqPath -ErrorAction SilentlyContinue
             foreach ($ext in @('.html', '.pdf', '.manifest.json')) {
                 $side = [System.IO.Path]::ChangeExtension($mrqPath, $ext)
                 if (Test-Path -LiteralPath $side) {
-                    Write-Host "  [+] Manual review questionnaire ($($ext.TrimStart('.'))): $side" -ForegroundColor Green
+                    Write-NRGReportFile "Manual review questionnaire ($($ext.TrimStart('.')))" $side
                     Set-NRGSensitiveFileAcl -Path $side -ErrorAction SilentlyContinue
                 }
             }
@@ -1192,11 +1243,11 @@ if (-not $JsonOnly) {
             if ($plan['Available']) {
                 Publish-NRGImprovementPlan -Plan $plan -Metadata $reportMetadata `
                     -OutputPath $planPath -ClientName ([string]$reportMetadata.TenantDomain)
-                Write-Host "  [+] NIST improvement plan (md): $planPath" -ForegroundColor Green
+                Write-NRGReportFile 'NIST improvement plan (md)' $planPath
                 Set-NRGSensitiveFileAcl -Path $planPath -ErrorAction SilentlyContinue
                 $planHtml = [System.IO.Path]::ChangeExtension($planPath, '.html')
                 if (Test-Path -LiteralPath $planHtml) {
-                    Write-Host "  [+] NIST improvement plan (html): $planHtml" -ForegroundColor Green
+                    Write-NRGReportFile 'NIST improvement plan (html)' $planHtml
                     Set-NRGSensitiveFileAcl -Path $planHtml -ErrorAction SilentlyContinue
                 }
                 Write-Host "      NIST coverage $($plan['Baseline']['Score'])% -> $($plan['Projected']['Score'])% across $($plan['Projected']['StepCount']) steps." -ForegroundColor Cyan
@@ -1212,7 +1263,7 @@ if (-not $JsonOnly) {
         try {
             Publish-NRGDeltaReport -CurrentFindings $findings -CurrentRawData $rawDataSnapshot -BaselineResultsPath $BaselineResults `
                 -Metadata $reportMetadata -OutputPath $deltaPath
-            Write-Host "  [+] Delta: $deltaPath" -ForegroundColor Green
+            Write-NRGReportFile 'Delta' $deltaPath
             Set-NRGSensitiveFileAcl -Path $deltaPath -ErrorAction SilentlyContinue
         } catch { Write-Warning "Delta publish failed: $($_.Exception.Message)" }
     }
@@ -1279,7 +1330,10 @@ $s = if ($reportMetadata.Contains('Maturity') -and $reportMetadata['Maturity']) 
 # evaluators actually emitted this run rather than guessing at "total controls
 # defined in controls.json" which can drift from baseline coverage.
 $footerVer    = if ($NRGAssessmentVersion)   { $NRGAssessmentVersion }   else { $script:NRGAssessmentVersion }
-$footerCount  = $findings.Count
+# Controls, not findings: DNS and the named-object checks report once per
+# domain or object, so the finding count (249 on a live tenant) is larger than
+# the per-control counts above (239), which never added up to "Total".
+$footerCount  = [int]$s.Satisfied + [int]$s.Partial + [int]$s.Gap + [int]$s.NA + [int]$s.Error
 
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
@@ -1292,7 +1346,8 @@ Write-Host "  Not Applicable $($s.NA)"                                         -
 if ($s.Error -gt 0) {
     Write-Host "  Error          $($s.Error) (collector failures — excluded from score)" -ForegroundColor Magenta
 }
-Write-Host "  Total          $($findings.Count)"                               -ForegroundColor White
+$perInstance = if ($findings.Count -ne $footerCount) { " ($($findings.Count) findings: some controls report once per domain or object)" } else { '' }
+Write-Host "  Total          $footerCount controls$perInstance"                -ForegroundColor White
 Write-Host "  Output         $OutputPath"                                      -ForegroundColor White
 if ($reportMetadata.Contains('Maturity') -and $reportMetadata['Maturity']) {
     $m = $reportMetadata['Maturity']

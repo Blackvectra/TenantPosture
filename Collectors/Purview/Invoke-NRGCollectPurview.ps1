@@ -242,7 +242,18 @@ function Invoke-NRGCollectPurview {
         $scc = {
             param([string] $Section, [string] $Cmdlet, [scriptblock] $Project)
             $cmd = Get-NRGExoCommand -Name $Cmdlet -Session SecurityCompliance
-            if (-not $cmd.Command -or $cmd.Source -eq 'ExchangeOnline') { return }
+            # Not resolvable in the Security & Compliance session is a failed
+            # section, logged by name. Returning silently left it NotRun, and
+            # six controls reported "not collected" with nothing in Exceptions
+            # to say why.
+            if (-not $cmd.Command -or $cmd.Source -eq 'ExchangeOnline') {
+                $result.Data.SectionStatus[$Section] = 'Failed'
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    $why = if (-not $cmd.Command) { 'is not available' } else { 'resolved only to the Exchange Online session' }
+                    Register-NRGException -Source "Purview-$Section" -Message "$Cmdlet $why in the Security & Compliance session, so $Section was not collected."
+                }
+                return
+            }
             try {
                 $rows = @(& $cmd.Command -ErrorAction Stop)
                 & $Project $rows

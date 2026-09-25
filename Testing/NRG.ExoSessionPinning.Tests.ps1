@@ -54,6 +54,21 @@ Describe 'Get-NRGExoCommand pins a cmdlet to the requested session' {
         (& $r.Command).UnifiedAuditLogIngestionEnabled | Should -BeTrue
     }
 
+    It 'recognizes the Security & Compliance session by name and endpoint when IsEopSession is not returned' {
+        # Live tenant, 2026-09-25: the module reported no IsEopSession, the
+        # Purview session was read as Exchange Online, and six Purview-only
+        # sections were skipped.
+        $exoNoFlag = [pscustomobject]@{ State = 'Connected'; Name = 'ExchangeOnline_1'; ConnectionUri = 'https://outlook.office365.com'; ModuleName = $script:ExoConn.ModuleName }
+        $sccNoFlag = [pscustomobject]@{ State = 'Connected'; Name = 'ExchangeOnlineProtection_2'; ConnectionUri = 'https://nam12b.ps.compliance.protection.outlook.com'; ModuleName = $script:SccConn.ModuleName }
+        Set-Connections @($exoNoFlag, $sccNoFlag)
+        $scc = & $script:Mod { Get-NRGExoCommand -Name 'Get-AdminAuditLogConfig' -Session SecurityCompliance }
+        $scc.Source | Should -Be 'SecurityCompliance'
+        (& $scc.Command).UnifiedAuditLogIngestionEnabled | Should -BeFalse
+        $exo = & $script:Mod { Get-NRGExoCommand -Name 'Get-AdminAuditLogConfig' -Session ExchangeOnline }
+        $exo.Source | Should -Be 'ExchangeOnline'
+        (& $exo.Command).UnifiedAuditLogIngestionEnabled | Should -BeTrue
+    }
+
     It 'labels the source Unknown when both are connected but the Exchange module cannot be found' {
         Set-Connections @(
             [pscustomobject]@{ State = 'Connected'; IsEopSession = $false; ModuleName = 'C:\Temp\tmpEXO_missing' },

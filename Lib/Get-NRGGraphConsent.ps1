@@ -57,7 +57,7 @@ function Set-NRGGraphConsentState {
             MissingScopes = $missing
         }
     })
-    return , $missing
+    return $missing
 }
 
 function Test-NRGGraphScopeMissing {

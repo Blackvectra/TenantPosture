@@ -83,9 +83,13 @@ Describe 'Purview Security & Compliance sections' {
         (Get-Verdict 'Test-NRGControlPurviewLabelsPublished' 'PVW-4.3').State | Should -Be 'NotApplicable'
     }
 
-    It 'a cmdlet that resolves only in the Exchange session is not run' {
+    It 'a cmdlet that resolves only in the Exchange session is not run, and says so' {
+        # Live tenant, 2026-09-25: six sections were skipped this way and left
+        # 'NotRun' with nothing in Exceptions, so six controls read "not
+        # collected" with no reason anywhere in the results.
         $r = Invoke-Purview @{ 'Get-SupervisoryReviewPolicyV2' = { @([pscustomobject]@{ Name = 'x' }) } } -Source 'ExchangeOnline'
-        $r.Data.SectionStatus.CommCompliancePolicies | Should -Be 'NotRun'
+        $r.Data.SectionStatus.CommCompliancePolicies | Should -Be 'Failed'
+        @(Get-NRGExceptions | Where-Object { $_.Source -eq 'Purview-CommCompliancePolicies' }).Count | Should -BeGreaterThan 0
     }
 
     It 'PVW-4.3: labels plus a publishing policy is Satisfied; labels with none published is Partial' {

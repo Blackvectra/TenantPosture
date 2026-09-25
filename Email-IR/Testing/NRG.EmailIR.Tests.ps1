@@ -100,7 +100,7 @@ Describe 'NRG Email IR — evaluators against synthetic fixtures' {
                     conditions = @{}
                 })
             })
-            Test-NRGEmailControl-InboxRules
+            Test-NRGEmailControlInboxRules
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-1.1')
             $f.Count        | Should -Be 1
             $f[0].State     | Should -Be 'Gap'
@@ -121,7 +121,7 @@ Describe 'NRG Email IR — evaluators against synthetic fixtures' {
                     conditions = @{ subjectContains = @('newsletter') }
                 })
             })
-            Test-NRGEmailControl-InboxRules
+            Test-NRGEmailControlInboxRules
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-1.1')
             # Move-to-folder with conditions IS still flagged (covers-tracks
             # pattern), but no forward-external. The current detector flags
@@ -156,7 +156,7 @@ Describe 'NRG Email IR — evaluators against synthetic fixtures' {
                 Messages   = $msgs
             })
 
-            Test-NRGEmailControl-OutboundActivity
+            Test-NRGEmailControlOutboundActivity
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-2.1')
             $f.Count        | Should -Be 1
             $f[0].State     | Should -Be 'Gap'
@@ -177,7 +177,7 @@ Describe 'NRG Email IR — evaluators against synthetic fixtures' {
                     [ordered]@{ Id='m2'; Subject='lunch?';            SentDateTime=(Get-Date).ToString('o'); FromAddress='alice@corp.com'; Recipients=@('carol@corp.com'); BodyURLs=@() }
                 )
             })
-            Test-NRGEmailControl-OutboundActivity
+            Test-NRGEmailControlOutboundActivity
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-2.1')
             $f[0].State | Should -Be 'Satisfied'
         }
@@ -217,7 +217,7 @@ Describe 'NRG Email IR — evaluators against synthetic fixtures' {
                 Messages = @()
             })
 
-            Test-NRGEmailControl-PhishOrigin
+            Test-NRGEmailControlPhishOrigin
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-3.1')
             $f.Count | Should -Be 1
             $f[0].State | Should -Be 'Gap'
@@ -250,7 +250,7 @@ Describe 'NRG Email IR — evaluators against synthetic fixtures' {
                 Count    = 1
                 Messages = @($b)
             })
-            Test-NRGEmailControl-PhishOrigin
+            Test-NRGEmailControlPhishOrigin
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-3.1')
             $f[0].Detail | Should -Match 'RECOVERED from Deletions'
             # otherbad.com (the recovered one) should appear first
@@ -262,7 +262,7 @@ Describe 'NRG Email IR — evaluators against synthetic fixtures' {
 
     Context 'Defensive — collectors did not run' {
         It 'Returns NotApplicable when raw data missing' {
-            Test-NRGEmailControl-InboxRules
+            Test-NRGEmailControlInboxRules
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-1.1')
             $f[0].State | Should -Be 'NotApplicable'
         }
@@ -287,7 +287,7 @@ Describe 'NRG Email IR — recipient warn-list (EMAIL-2.1 AffectedObjects)' {
             [ordered]@{ Id='m2'; Subject='Updated invoice - process payment'; SentDateTime=$base.ToString('o'); FromAddress='alice@corp.com'; Recipients=@('ap@vendor.com','carol@corp.com'); HasAttachments=$true; BodyURLs=@() }
         )
         Set-NRGRawData -Key 'IR-MailboxSentItems' -Data (NewBag 's' @{ WindowDays=7; Cutoff=$base.AddDays(-7).ToString('o'); Count=$msgs.Count; Messages=$msgs })
-        Test-NRGEmailControl-OutboundActivity
+        Test-NRGEmailControlOutboundActivity
         $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-2.1')
         $f[0].State    | Should -Be 'Gap'
         $f[0].Severity | Should -Be 'Critical'
@@ -301,7 +301,7 @@ Describe 'NRG Email IR — recipient warn-list (EMAIL-2.1 AffectedObjects)' {
         $base=(Get-Date).ToUniversalTime()
         Set-NRGRawData -Key 'IR-MailboxProfile' -Data (NewBag 'p' @{ UserPrincipalName='alice@corp.com' })
         Set-NRGRawData -Key 'IR-MailboxSentItems' -Data (NewBag 's' @{ WindowDays=7; Cutoff=$base.AddDays(-7).ToString('o'); Count=1; Messages=@([ordered]@{ Id='m'; Subject='Re: lunch'; SentDateTime=$base.ToString('o'); FromAddress='alice@corp.com'; Recipients=@('bob@corp.com'); HasAttachments=$false; BodyURLs=@() }) })
-        Test-NRGEmailControl-OutboundActivity
+        Test-NRGEmailControlOutboundActivity
         $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-2.1')
         $f[0].State | Should -Be 'Satisfied'
         @($f[0].AffectedObjects).Count | Should -Be 0
@@ -332,7 +332,7 @@ Describe 'NRG Email IR — EMAIL-1.1 attaches flagged rules as InboxRule Affecte
                 conditions = @{}
             })
         })
-        Test-NRGEmailControl-InboxRules
+        Test-NRGEmailControlInboxRules
         $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-1.1')
         $aff = @($f[0].AffectedObjects)
         $aff.Count            | Should -Be 1
@@ -421,7 +421,7 @@ Describe 'NRG Email IR — EMAIL-4.1 OAuth consent grants' {
                 [ordered]@{ GrantId='g2'; ClientSpId='sp-ok';   App=[ordered]@{ DisplayName='Teams';           AppId='a2'; PublisherName='Microsoft' }; ConsentType='Principal'; Scope='User.Read' }
             )
         })
-        Test-NRGEmailControl-OAuthConsents
+        Test-NRGEmailControlOAuthConsents
         $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.1')
         $f.Count       | Should -Be 1
         $f[0].State    | Should -Be 'Gap'
@@ -437,7 +437,7 @@ Describe 'NRG Email IR — EMAIL-4.1 OAuth consent grants' {
             Count = 1
             Grants = @([ordered]@{ GrantId='g1'; ClientSpId='sp1'; App=[ordered]@{ DisplayName='CRM Sync'; AppId='a1'; PublisherName='Vendor Inc' }; ConsentType='Principal'; Scope='Mail.Read offline_access' })
         })
-        Test-NRGEmailControl-OAuthConsents
+        Test-NRGEmailControlOAuthConsents
         $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.1')
         $f[0].State | Should -Be 'Partial'
         $f[0].Detail | Should -Match 'CRM Sync'
@@ -448,11 +448,11 @@ Describe 'NRG Email IR — EMAIL-4.1 OAuth consent grants' {
             Count = 1
             Grants = @([ordered]@{ GrantId='g1'; ClientSpId='sp1'; App=[ordered]@{ DisplayName='Teams'; AppId='a1'; PublisherName='Microsoft' }; ConsentType='Principal'; Scope='User.Read openid profile' })
         })
-        Test-NRGEmailControl-OAuthConsents
+        Test-NRGEmailControlOAuthConsents
         @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.1')[0].State | Should -Be 'Satisfied'
 
         Clear-NRGState
-        Test-NRGEmailControl-OAuthConsents
+        Test-NRGEmailControlOAuthConsents
         @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.1')[0].State | Should -Be 'NotApplicable'
     }
 }
@@ -476,7 +476,7 @@ Describe 'NRG Email IR — EMAIL-4.2 auth methods' {
                 [ordered]@{ Id='m3'; MethodType='microsoftAuthenticatorAuthenticationMethod'; Display='Pixel 9';       CreatedDateTime=(Get-Date).AddDays(-2).ToString('o') }
             )
         })
-        Test-NRGEmailControl-AuthMethods
+        Test-NRGEmailControlAuthMethods
         $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.2')
         $f[0].State  | Should -Be 'Gap'
         $f[0].Detail | Should -Match '2 phone methods'
@@ -489,7 +489,7 @@ Describe 'NRG Email IR — EMAIL-4.2 auth methods' {
             Count = 1
             Methods = @([ordered]@{ Id='m1'; MethodType='microsoftAuthenticatorAuthenticationMethod'; Display='iPhone 15'; CreatedDateTime=(Get-Date).AddDays(-300).ToString('o') })
         })
-        Test-NRGEmailControl-AuthMethods
+        Test-NRGEmailControlAuthMethods
         $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.2')
         $f[0].State  | Should -Be 'Satisfied'
         $f[0].Detail | Should -Match 'iPhone 15'
@@ -497,7 +497,7 @@ Describe 'NRG Email IR — EMAIL-4.2 auth methods' {
 
     It 'Zero methods is Partial (no MFA at all warrants follow-up)' {
         Set-NRGRawData -Key 'IR-UserAuthMethods' -Data (NewBag 'm' @{ Count=0; Methods=@() })
-        Test-NRGEmailControl-AuthMethods
+        Test-NRGEmailControlAuthMethods
         @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.2')[0].State | Should -Be 'Partial'
     }
 }

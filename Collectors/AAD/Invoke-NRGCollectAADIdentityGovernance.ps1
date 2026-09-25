@@ -302,7 +302,11 @@ function Invoke-NRGCollectAADIdentityGovernance {
             # List roleManagementPolicies REQUIRES $filter on both scopeId and
             # scopeType (Microsoft Learn) — scopeType alone is rejected by
             # Graph, so every tenant's PIM policies previously came back empty.
-            $pimNext   = 'https://graph.microsoft.com/v1.0/policies/roleManagementPolicies?$filter=scopeId eq ''/'' and scopeType eq ''DirectoryRole''&$expand=rules&$top=50'
+            # No $top: the endpoint does not document it, and with $top=50 Graph
+            # returned 50 policies and no nextLink, so a tenant's ~130 role
+            # policies were cut to 50 and the Global Administrator policy was
+            # missing (AAD-3.5 not assessed; AAD-3.3/3.4/3.6 judged 4 roles).
+            $pimNext   = 'https://graph.microsoft.com/v1.0/policies/roleManagementPolicies?$filter=scopeId eq ''/'' and scopeType eq ''DirectoryRole''&$expand=rules'
             $pimRaw    = [System.Collections.Generic.List[object]]::new()
             $pimPages  = 0
             $maxPimPages = 20
@@ -319,8 +323,8 @@ function Invoke-NRGCollectAADIdentityGovernance {
                 }
             }
 
-            $result.Data.PIMRolePolicies = @($pimRaw | ForEach-Object {
-                $policy = $_
+            $projectPolicy = {
+                param($policy)
                 # Extract key rules. Enablement_EndUser_Assignment is a
                 # unifiedRoleManagementPolicyEnablementRule — it carries an
                 # 'enabledRules' array (e.g. 'MultiFactorAuthentication',
@@ -355,7 +359,8 @@ function Invoke-NRGCollectAADIdentityGovernance {
                         if ($dur -match 'PT(\d+)H') { [int]$matches[1] } else { $null }
                     } else { $null }
                 }
-            })
+            }
+            $result.Data.PIMRolePolicies = @($pimRaw | ForEach-Object { & $projectPolicy $_ })
             $result.Data.SectionStatus.PIMRolePolicies = 'Collected'
 
             # Graph names every directory-role PIM policy "DirectoryRole"; which
@@ -378,6 +383,23 @@ function Invoke-NRGCollectAADIdentityGovernance {
                     $asgNext = [string](Get-NRGObjectField -Item $asgResp -Key '@odata.nextLink' -Default '')
                     $asgPages++
                 }
+                # Any assigned policy the list did not return is read by ID,
+                # so a short list never leaves a role unassessed.
+                $have = [System.Collections.Generic.HashSet[string]]::new([string[]]@($result.Data.PIMRolePolicies | ForEach-Object { [string]$_.PolicyId }))
+                $missingIds = @($policyToRole.Keys | Where-Object { -not $have.Contains($_) })
+                $extra = [System.Collections.Generic.List[object]]::new()
+                foreach ($mid in ($missingIds | Select-Object -First 300)) {
+                    try {
+                        $one = Invoke-NRGGraphRequest -Method GET -ErrorAction Stop `
+                            -Uri "https://graph.microsoft.com/v1.0/policies/roleManagementPolicies/$([uri]::EscapeDataString($mid))?`$expand=rules"
+                        $extra.Add((& $projectPolicy $one))
+                    } catch {
+                        if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                            Register-NRGException -Source 'AAD-PIMPolicies' -Message "Role management policy $mid could not be read: $($_.Exception.Message)"
+                        }
+                    }
+                }
+                if ($extra.Count -gt 0) { $result.Data.PIMRolePolicies = @($result.Data.PIMRolePolicies) + @($extra) }
                 foreach ($row in @($result.Data.PIMRolePolicies)) {
                     if ($policyToRole.ContainsKey($row.PolicyId)) { $row['RoleDefinitionId'] = $policyToRole[$row.PolicyId] }
                 }

@@ -77,7 +77,7 @@ Describe 'Email-IR mailbox collector counts (issue #91)' {
 
     It 'EMAIL-3.1 runs on the collector''s real recovered-message shape and flags the recovered phish' {
         Invoke-Collect -Sent @()
-        { Test-NRGEmailControl-PhishOrigin } | Should -Not -Throw
+        { Test-NRGEmailControlPhishOrigin } | Should -Not -Throw
         $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-3.1')
         $f.Count | Should -BeGreaterThan 0
         ($f.Detail -join ' ') | Should -Match 'RECOVERED from Deletions'

@@ -113,7 +113,7 @@ function Test-NRGEmailMatchesMSImpersonation {
 # ─────────────────────────────────────────────────────────────────────────────
 # EMAIL-1.1 — Inbox rules with persistence / cover-tracks signatures
 # ─────────────────────────────────────────────────────────────────────────────
-function Test-NRGEmailControl-InboxRules {
+function Test-NRGEmailControlInboxRules {
     [CmdletBinding()] param()
     $cid = 'EMAIL-1.1'
     $title = 'Suspicious inbox rules (BEC persistence / cover-tracks)'
@@ -206,7 +206,7 @@ function Test-NRGEmailControl-InboxRules {
 # ─────────────────────────────────────────────────────────────────────────────
 # EMAIL-1.2 — Mailbox forwarding (server-side, separate from inbox rules)
 # ─────────────────────────────────────────────────────────────────────────────
-function Test-NRGEmailControl-Forwarding {
+function Test-NRGEmailControlForwarding {
     [CmdletBinding()] param()
     $cid = 'EMAIL-1.2'
     $title = 'Mailbox server-side forwarding'
@@ -215,7 +215,7 @@ function Test-NRGEmailControl-Forwarding {
     # The Graph mailboxSettings endpoint doesn't expose the forwarding
     # SMTP address directly under delegated scope (it's typically EXO-only
     # via Set-Mailbox -ForwardingSmtpAddress). What we CAN check via Graph
-    # is whether ANY rule forwards externally — which Test-NRGEmailControl-InboxRules
+    # is whether ANY rule forwards externally — which Test-NRGEmailControlInboxRules
     # already does. Here we just note the gap.
     $settingsRaw = Get-NRGRawData -Key 'IR-MailboxForwarding'
     if (-not $settingsRaw -or -not $settingsRaw.Success) {
@@ -233,7 +233,7 @@ function Test-NRGEmailControl-Forwarding {
 # ─────────────────────────────────────────────────────────────────────────────
 # EMAIL-2.1 — Outbound activity scan (what did the attacker send?)
 # ─────────────────────────────────────────────────────────────────────────────
-function Test-NRGEmailControl-OutboundActivity {
+function Test-NRGEmailControlOutboundActivity {
     [CmdletBinding()] param()
     $cid = 'EMAIL-2.1'
     $title = 'Outbound activity from compromised account'
@@ -361,7 +361,7 @@ function Test-NRGEmailControl-OutboundActivity {
 # ─────────────────────────────────────────────────────────────────────────────
 # EMAIL-3.1 — Most-likely original phishing email
 # ─────────────────────────────────────────────────────────────────────────────
-function Test-NRGEmailControl-PhishOrigin {
+function Test-NRGEmailControlPhishOrigin {
     [CmdletBinding()] param()
     $cid = 'EMAIL-3.1'
     $title = 'Most-likely original phishing email'
@@ -512,7 +512,7 @@ function Test-NRGEmailControl-PhishOrigin {
 # ─────────────────────────────────────────────────────────────────────────────
 # EMAIL-3.2 — Threat-intel enrichment on top sender domains
 # ─────────────────────────────────────────────────────────────────────────────
-function Test-NRGEmailControl-ThreatIntel {
+function Test-NRGEmailControlThreatIntel {
     [CmdletBinding()] param()
     $cid = 'EMAIL-3.2'
     $title = 'Threat-intel enrichment on top sender / URL domains'
@@ -583,7 +583,7 @@ function Test-NRGEmailControl-ThreatIntel {
 # ("illicit consent grant"). That access token pipeline keeps working after
 # the password is reset and MFA is re-enrolled — only revoking the grant
 # kills it. Flag any grant carrying a mail/file-write or send scope.
-function Test-NRGEmailControl-OAuthConsents {
+function Test-NRGEmailControlOAuthConsents {
     [CmdletBinding()] param()
     $cid = 'EMAIL-4.1'
     $title = 'OAuth consent grants on the account'
@@ -664,7 +664,7 @@ function Test-NRGEmailControl-OAuthConsents {
 # they can satisfy MFA on re-auth. Surface every registered method so the
 # operator can verify each one with the user on the containment call —
 # this feeds Containment Runbook step 2 (delete unrecognized methods).
-function Test-NRGEmailControl-AuthMethods {
+function Test-NRGEmailControlAuthMethods {
     [CmdletBinding()] param()
     $cid = 'EMAIL-4.2'
     $title = 'Registered MFA / authentication methods'

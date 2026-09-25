@@ -102,4 +102,12 @@ Describe 'Export List Sync — NRG-Assessment.psd1 vs NRG-Assessment.psm1' {
         $claims.Count | Should -BeGreaterThan 0
         foreach ($c in $claims) { $c | Should -Be $script:Psm1Functions.Count }
     }
+
+    It 'exports only Verb-Noun names, so importing the module prints no restricted-character warning' {
+        # A second hyphen (Test-NRGEmailControl-AuthMethods) made every import
+        # print "Some imported command names contain one or more of the
+        # following restricted characters" at the top of each run.
+        $bad = @($script:Psm1Functions | Where-Object { $_ -notmatch '^[A-Za-z]+-[A-Za-z0-9]+$' })
+        $bad | Should -BeNullOrEmpty -Because "not Verb-Noun: $($bad -join ', ')"
+    }
 }

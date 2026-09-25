@@ -20,6 +20,20 @@
 # MITRE ATT&CK:   T1078, T1110, T1621
 #
 
+
+# Entra Connect's directory-sync service account (Sync_<server>_<id>,
+# "On-Premises Directory Synchronization Service Account"). Microsoft says to
+# exclude it from MFA and it cannot register a method. One definition so
+# AAD-1.2 and AAD-12.1 count the same population.
+function Test-NRGDirectorySyncAccount {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)] [AllowNull()] $User)
+    if ($null -eq $User) { return $false }
+    return ([string](Get-NRGObjectField -Item $User -Key 'UserPrincipalName' -Default '') -match '^Sync_') -and
+           ([string](Get-NRGObjectField -Item $User -Key 'DisplayName' -Default '') -match 'Directory Synchronization')
+}
+
 function Test-NRGControlAADMFA {
     [CmdletBinding()] param()
 
@@ -104,8 +118,9 @@ function Test-NRGControlAADMFA {
     # Entra Connect's directory-sync service account cannot register MFA and
     # Microsoft says to exclude it from MFA policies; counting it made a fully
     # enforced tenant read "below 100% — will lock out 1 user".
-    $isSyncAccount = { param($u) ([string]$u.UserPrincipalName -match '^Sync_') -and ([string](Get-NRGObjectField -Item $u -Key 'DisplayName' -Default '') -match 'Directory Synchronization') }
-    $population = @($enabledMembers | Where-Object { -not (& $isSyncAccount $_) })
+    $population = @($enabledMembers | Where-Object { -not (Test-NRGDirectorySyncAccount $_) })
+    $syncExcluded = $enabledMembers.Count - $population.Count
+    $syncNote = if ($syncExcluded -gt 0) { " ($syncExcluded Entra Connect sync service account(s) excluded; they cannot register MFA.)" } else { '' }
     $unregistered = @($population | Where-Object {
         $upn = $_.UserPrincipalName
         $rec = $mfaReg | Where-Object { $_.UserPrincipalName -eq $upn }
@@ -179,7 +194,7 @@ function Test-NRGControlAADMFA {
         # next sign-in — whoever holds the password then enrolls the second
         # factor. Part-way, and not a lock-out.
         Add-NRGFinding -ControlId 'AAD-1.2' -State 'Partial' -Category 'Identity' -Title 'MFA Required for All Users' -Severity 'Critical' -FrameworkIds $cit `
-            -Detail "MFA is required ($names), but $unregisteredCnt of $totalEnabled enabled member(s) have not registered a method. They will be asked to register at their next sign-in, so whoever holds their password can enroll the second factor — or they are excluded from the policy." `
+            -Detail "MFA is required ($names), but $unregisteredCnt of $totalEnabled enabled member(s) have not registered a method. They will be asked to register at their next sign-in, so whoever holds their password can enroll the second factor — or they are excluded from the policy.$syncNote" `
             -CurrentValue "$registeredPct% registered. Sample: $sample" -RequiredValue $req `
             -Remediation 'Run an MFA registration campaign or issue Temporary Access Passes so every enabled user registers; check that unregistered accounts are not excluded from the MFA policy.'
     }
