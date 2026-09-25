@@ -19,10 +19,10 @@ Describe 'Update-NRGClientRecord' {
         . (Join-Path $script:RepoRoot 'Onboard' 'Register-NRGTenantApp.ps1')
         $script:Tmp = Join-Path ([IO.Path]::GetTempPath()) ("nrg-cr-" + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $script:Tmp -Force | Out-Null
-        function Invoke-Upsert([string]$File, [string]$Domain) {
+        function Invoke-Upsert([string]$File, [string]$Domain, [string]$Org = '') {
             Update-NRGClientRecord -ClientsFile $File -TenantDomain $Domain `
                 -ClientId '22222222-2222-2222-2222-222222222222' -TenantId '33333333-3333-3333-3333-333333333333' `
-                -CertThumbprint ('A' * 40) -Confirm:$false 3>$null
+                -CertThumbprint ('A' * 40) -DelegatedOrg $Org -Confirm:$false 3>$null
         }
     }
     AfterAll { Remove-Item -LiteralPath $script:Tmp -Recurse -Force -ErrorAction SilentlyContinue }
@@ -33,6 +33,31 @@ Describe 'Update-NRGClientRecord' {
         Invoke-Upsert $f 'new.com'
         $after = Get-Content -LiteralPath $f -Raw | ConvertFrom-Json
         @($after.clients).TenantDomain | Should -Be @('a.com', 'b.com', 'new.com')
+    }
+
+    It 'a NEW client record carries every field the batch runner and schema require' {
+        # A -RegisterApp record used to hold only the app fields; the batch
+        # runner validates DelegatedOrg on every client before auth and so
+        # refused to run for ANY client once one such record existed.
+        $f = Join-Path $script:Tmp 'new.json'
+        '{ "clients": [] }' | Set-Content -LiteralPath $f -Encoding utf8
+        Invoke-Upsert $f 'new.com' 'newco.onmicrosoft.com'
+        $raw = Get-Content -LiteralPath $f -Raw
+        $rec = @(($raw | ConvertFrom-Json).clients)[0]
+        foreach ($k in 'ClientName','TenantDomain','TenantId','DelegatedOrg','DnsDomains','SkipPurview','SkipTeams',
+                       'SkipSharePoint','SkipIntune','SkipPowerPlatform','SkipDNS','Notes','Active') {
+            $rec.PSObject.Properties[$k] | Should -Not -BeNullOrEmpty -Because "$k is required"
+        }
+        $rec.DelegatedOrg | Should -Be 'newco.onmicrosoft.com'
+        $errs = $null
+        Test-Json -Json $raw -SchemaFile (Join-Path $script:RepoRoot 'Config/schema/clients.schema.json') -ErrorVariable errs -ErrorAction SilentlyContinue |
+            Should -BeTrue -Because "schema errors: $($errs -join '; ')"
+    }
+
+    It 'the batch runner reports a record missing DelegatedOrg instead of crashing on it' {
+        $batch = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Invoke-NRGBatchAssessment.ps1') -Raw
+        $batch | Should -Match "PSObject\.Properties\['DelegatedOrg'\]"
+        $batch | Should -Not -Match '\$c\.DelegatedOrg -notmatch'
     }
 
     It 'refuses to overwrite a clients.json it cannot parse' {

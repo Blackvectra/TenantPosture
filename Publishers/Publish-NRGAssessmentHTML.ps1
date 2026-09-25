@@ -640,12 +640,12 @@ function Publish-NRGAssessmentHTML {
                 "<div class='scope-tile'><div class='scope-n'>$($scope.ScoredControls)</div><div class='scope-l'>Controls scored</div></div>"
                 "<div class='scope-tile$(if($blindCount -gt 0){' warn'})'><div class='scope-n$(if($blindCount -gt 0){' warn'})'>$blindCount</div><div class='scope-l'>Could not be assessed</div></div>"
                 "<div class='scope-tile'><div class='scope-n'>$($scope.NoProgrammaticCheck.Count)</div><div class='scope-l'>Manual review required</div></div>"
-                "<div class='scope-tile'><div class='scope-n'>$($scope.LicenceBlocked.Count)</div><div class='scope-l'>Licence gated</div></div>"
+                "<div class='scope-tile'><div class='scope-n'>$($scope.LicenceBlocked.Count)</div><div class='scope-l'>License gated</div></div>"
             ) -join ''
 
             $limRows = ($scope.Limitations | ForEach-Object { "<li>$(hx $_)</li>" }) -join ''
 
-            # The itemised lists are collapsed: the counts and the plain-language
+            # The itemized lists are collapsed: the counts and the plain-language
             # limitations are what a client reads; the control ids are what the
             # engineer re-running the assessment needs.
             $detBlocks = ''

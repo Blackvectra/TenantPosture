@@ -344,7 +344,7 @@ function Get-NRGAssessmentScope {
             }
         }
 
-        # 3. Licence gated — POSITIVE evidence only. Either the evaluator said
+        # 3. License gated — POSITIVE evidence only. Either the evaluator said
         #    so explicitly, or we hold real SKU data and it says the tenant
         #    lacks the licence. "No SKU data" is not evidence of anything.
         $isLicence = $false
@@ -414,7 +414,7 @@ function Get-NRGAssessmentScope {
         $limitations.Add("$($thirdParty.Count) Microsoft Defender endpoint check(s) were not scored because the assessor declared a third-party EDR provides endpoint protection for this client. Microsoft 365 cannot see that product, so this coverage is declared, not verified; confirm it in that product's console.")
     }
     if ($licenceBlocked.Count -gt 0) {
-        $limitations.Add("$($licenceBlocked.Count) control(s) require licensing this tenant does not hold. They are excluded from the score rather than counted against it, and are itemised under licensing.")
+        $limitations.Add("$($licenceBlocked.Count) control(s) require licensing this tenant does not hold. They are excluded from the score rather than counted against it, and are itemized under licensing.")
     }
     if ($errored.Count -gt 0) {
         $limitations.Add("$($errored.Count) control(s) raised an error during evaluation and are counted as gaps. Their true state is unknown.")

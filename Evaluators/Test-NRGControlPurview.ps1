@@ -420,7 +420,19 @@ function Test-NRGControlPurviewLabelsPublished {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview label data not collected'; return }
+    # Empty is not clean: a failed Get-Label left an empty list and this
+    # reported "No sensitivity labels configured" (Gap). And LabelPolicies was
+    # never collected at all, so any tenant WITH labels read "labels defined
+    # but none published" (Partial) — a statement nothing had checked.
+    if (-not (Test-NRGSectionCollected $pvw 'SensitivityLabels')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'SensitivityLabels was not collected; not assessed.'
+        return
+    }
     $labels        = @($pvw.Data['SensitivityLabels'] ?? @())
+    if ($labels.Count -gt 0 -and -not (Test-NRGSectionCollected $pvw 'LabelPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "$($labels.Count) sensitivity label(s) defined, but label publishing policies were not collected; whether they are published was not assessed."
+        return
+    }
     $labelPolicies = @($pvw.Data['LabelPolicies'] ?? @())
     if ($labels.Count -gt 0 -and $labelPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($labels.Count) sensitivity label(s) defined, $($labelPolicies.Count) label policy(ies) published to users."

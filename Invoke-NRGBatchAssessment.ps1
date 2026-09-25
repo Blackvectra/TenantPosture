@@ -130,12 +130,18 @@ if ($clients.Count -eq 0) {
 $GUID_PATTERN = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 $FQDN_PATTERN = '^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
 foreach ($c in $clients) {
-    if ($c.TenantId -notmatch $GUID_PATTERN) {
-        Write-Host "[!] $($c.ClientName): TenantId '$($c.TenantId)' is not a valid GUID. Update clients.json." -ForegroundColor Red
+    # PSObject.Properties, not $c.DelegatedOrg: under StrictMode reading a
+    # field a record lacks THROWS, which crashed the batch with a bare
+    # PropertyNotFound instead of this message.
+    $cName = if ($c.PSObject.Properties['ClientName']) { $c.ClientName } else { '(unnamed client)' }
+    $cTid  = if ($c.PSObject.Properties['TenantId'])     { [string]$c.TenantId }     else { '' }
+    $cOrg  = if ($c.PSObject.Properties['DelegatedOrg']) { [string]$c.DelegatedOrg } else { '' }
+    if ($cTid -notmatch $GUID_PATTERN) {
+        Write-Host "[!] ${cName}: TenantId '$cTid' is not a valid GUID. Update clients.json." -ForegroundColor Red
         exit 1
     }
-    if ($c.DelegatedOrg -notmatch $FQDN_PATTERN) {
-        Write-Host "[!] $($c.ClientName): DelegatedOrg '$($c.DelegatedOrg)' is not a valid FQDN. Update clients.json." -ForegroundColor Red
+    if ($cOrg -notmatch $FQDN_PATTERN) {
+        Write-Host "[!] ${cName}: DelegatedOrg '$cOrg' is missing or not a valid FQDN. Set it to the tenant's .onmicrosoft.com domain in clients.json." -ForegroundColor Red
         exit 1
     }
 }

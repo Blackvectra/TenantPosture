@@ -184,7 +184,7 @@
       "Effort": "Policy change",
       "Summary": "Copilot's behavior or availability changes for some users.",
       "Users": "Either lose access, or find Copilot declines to surface content it previously would have. Both read as 'Copilot is broken' unless explained.",
-      "Admins": "Set expectations first. Copilot honours the permissions and labels that already exist, so restricting it usually exposes over-permissioned content rather than creating a new problem.",
+      "Admins": "Set expectations first. Copilot honors the permissions and labels that already exist, so restricting it usually exposes over-permissioned content rather than creating a new problem.",
       "Watchouts": "Over-shared SharePoint content is what Copilot makes visible. The right fix is the permissions, not the Copilot setting — restricting Copilot hides the symptom and leaves the exposure.",
       "Reversible": "Yes."
     },

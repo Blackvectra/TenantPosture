@@ -13,7 +13,8 @@
 #
 # Reads from module state:
 #   Get-NRGRawData -Key 'AAD-Users'         (Invoke-NRGCollectAADUsers)
-#   Get-NRGRawData -Key 'AAD-AuthPolicies'  (Invoke-NRGCollectAADAuthPolicies)
+#   Get-NRGRawData -Key 'AAD-AuthPolicies'  (Invoke-NRGCollectAADAuthPolicies) — Data.SecurityDefaults
+#   Get-NRGRawData -Key 'AAD-CAPolicies'    (Invoke-NRGCollectAADCAPolicies)   — MFA enforcement
 #
 # NIST SP 800-53: IA-2(1), IA-2(2)
 # MITRE ATT&CK:   T1078, T1110, T1621
@@ -34,7 +35,17 @@ function Test-NRGControlAADMFA {
         return
     }
 
-    $secDefEnabled = if ($userRaw -and $userRaw.Success) { $userRaw.Data['SecurityDefaultsEnabled'] } else { $null }
+    # Security defaults are collected by AAD-AuthPolicies (Data.SecurityDefaults
+    # .IsEnabled), not AAD-Users. Reading AAD-Users.Data.SecurityDefaultsEnabled
+    # — a key no collector writes — made this always $null: a tenant enforcing
+    # MFA through security defaults was scored on registration instead, and the
+    # finding printed "Security Defaults: disabled" without having read it.
+    # $null means "not read", never "disabled".
+    $secDefEnabled = $null
+    if ($authRaw -and $authRaw.Success) {
+        $secDefEnabled = Get-NRGNestedProperty -Object $authRaw -Path 'Data.SecurityDefaults.IsEnabled' -Default $null
+    }
+    $secDefText = if ($secDefEnabled -eq $false) { 'Security Defaults: disabled.' } else { 'Security Defaults: not read.' }
     # Two statements. An if-block yielding an empty array assigns $null, and
     # BOTH branches can yield empty here — a tenant with no users collected
     # hits it through the true branch, not just the false one. Nothing
@@ -104,14 +115,40 @@ function Test-NRGControlAADMFA {
         # a tenant with 100% registration and zero enforcing policy was
         # reported Satisfied (false pass). Ported from the NLS twin.
         $caRaw = Get-NRGRawData -Key 'AAD-CAPolicies'
+        $caRead = [bool]($caRaw -and $caRaw.Success)
         $hasMfaCaPolicy = $false
-        if ($caRaw -and $caRaw.Success) {
+        if ($caRead) {
             $policies = @($caRaw.Data['Policies'])
-            $hasMfaCaPolicy = $policies | Where-Object {
-                $_.State -eq 'enabled' -and
-                $_.Conditions.Users.IncludeUsers -contains 'All' -and
-                $_.GrantControls.BuiltInControls -contains 'mfa'
-            } | Select-Object -First 1
+            # Enforcing = enabled, All users, All cloud apps, and MFA REQUIRED:
+            # the 'mfa' built-in control or any authentication strength (every
+            # strength is a set of multifactor combinations). Requiring MFA
+            # with authentication strengths used to be missed entirely. With
+            # the OR operator, MFA is required only when it is the sole control
+            # — "MFA or compliant device" lets a compliant device through
+            # without MFA.
+            $hasMfaCaPolicy = [bool](@($policies | Where-Object {
+                $p = $_
+                $builtIn  = @(Get-NRGNestedProperty -Object $p -Path 'GrantControls.BuiltInControls' -Default @())
+                $strength = [string](Get-NRGNestedProperty -Object $p -Path 'GrantControls.AuthStrengthId' -Default '')
+                $operator = [string](Get-NRGNestedProperty -Object $p -Path 'GrantControls.Operator' -Default '')
+                $controls = @($builtIn) + @(if ($strength) { 'authenticationStrength' })
+                $mfaGrant = ($builtIn -contains 'mfa') -or [bool]$strength
+                $required = $mfaGrant -and ($operator -ne 'OR' -or @($controls).Count -eq 1)
+                [string](Get-NRGObjectField -Item $p -Key 'State' -Default '') -eq 'enabled' -and
+                @(Get-NRGNestedProperty -Object $p -Path 'Conditions.Users.IncludeUsers' -Default @()) -contains 'All' -and
+                @(Get-NRGNestedProperty -Object $p -Path 'Conditions.Applications.Include' -Default @()) -contains 'All' -and
+                $required
+            }).Count -gt 0)
+        }
+
+        if (-not $caRead) {
+            # Registration is complete, but whether anything ENFORCES MFA was
+            # not read. Scoring that Partial would assert a missing policy.
+            Add-NRGFinding -ControlId 'AAD-1.2' -State 'NotApplicable' `
+                -Category 'Identity' -Title 'MFA Required for All Users' `
+                -Detail "100% MFA registered, but Conditional Access policies were not collected, so enforcement could not be assessed. $secDefText" `
+                -FrameworkIds @('IA-2(1)','IA-2(2)')
+            return
         }
 
         if (-not $hasMfaCaPolicy) {
@@ -120,7 +157,7 @@ function Test-NRGControlAADMFA {
                 -Category 'Identity' -Title 'MFA Required for All Users' `
                 -Severity 'Critical' `
                 -Detail '100% MFA registered but no CA policy found enforcing MFA for All Users / All Cloud Apps. Registration alone does not prove enforcement.' `
-                -CurrentValue "100% MFA registered ($totalEnabled/$totalEnabled enabled members). Security Defaults: disabled. No enforcing CA policy detected." `
+                -CurrentValue "100% MFA registered ($totalEnabled/$totalEnabled enabled members). $secDefText No enforcing CA policy detected." `
                 -RequiredValue '100% MFA registration AND enforced CA policy (or Security Defaults)' `
                 -Remediation 'Create a Conditional Access policy requiring MFA for All users on All cloud apps. Registration alone is insufficient — a CA policy is required to enforce MFA at sign-in.' `
                 -FrameworkIds @('IA-2(1)','IA-2(2)')
@@ -130,7 +167,7 @@ function Test-NRGControlAADMFA {
         Add-NRGFinding -ControlId 'AAD-1.2' -State 'Satisfied' `
             -Category 'Identity' -Title 'MFA Required for All Users' `
             -Severity 'Critical' `
-            -CurrentValue "100% MFA registered ($totalEnabled/$totalEnabled enabled members). Security Defaults: disabled. Enforcing CA policy found." `
+            -CurrentValue "100% MFA registered ($totalEnabled/$totalEnabled enabled members). $secDefText Enforcing CA policy found." `
             -RequiredValue '100% MFA registration AND enforced CA policy (or Security Defaults)' `
             -FrameworkIds @('IA-2(1)','IA-2(2)')
     }
