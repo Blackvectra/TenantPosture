@@ -135,7 +135,11 @@ Describe 'Power Platform admin API collector' {
             $r.Data.SectionStatus.Environments | Should -Be 'Failed'
             $r.Data.SectionStatus.DLPPolicies  | Should -Be 'Collected'
             ($r.Errors -join ' ') | Should -Match 'environments query failed: 403'
-            (Get-Verdict 'Test-NRGControlPowerPlatform' 'PPL-1.1').State | Should -Be 'NotApplicable' -Because 'a failed list is not zero environments'
+        }
+
+        It 'PPL-1.1 scores tenant isolation, and a failed isolation read is not assessed' {
+            $null = Invoke-Collector @{ Fail = @('tenantIsolationPolicy') }
+            (Get-Verdict 'Test-NRGControlPowerPlatform' 'PPL-1.1').State | Should -Be 'NotApplicable' -Because 'a failed read is not "isolation off"'
         }
 
         It 'every section failing is a failure that suggests the missing admin role' {

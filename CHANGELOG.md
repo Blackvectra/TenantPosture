@@ -45,6 +45,39 @@ different, than the tenant actually is.
 - **`-RegisterApp` moved out of the read-only module** to `Onboard/`; the
   switch works as before. A test fails if any module-loaded file calls a
   Graph write cmdlet.
+- **Defender judges the policies actually in force.** Exchange Online
+  applies a custom policy whose rule is enabled, else an enabled preset,
+  else the default / Built-in protection policy. The tool read the default
+  policy only (or "any" policy): the Built-in protection Safe Links policy
+  (click-through allowed, internal senders off, URL rewrite off) was called
+  hardened; a custom policy turned off but applied by an enabled rule was
+  ignored; and a preset covering everyone left the default's weaker values
+  reported as the tenant's. Verdicts now cover every policy that can apply
+  (Partial when some recipients are protected and some are not, naming
+  which), and the default drops out only when an enabled rule provably
+  covers every accepted domain. DEF-2.1 needs an enabled preset RULE (a
+  custom policy named "Standard users" passed); DEF-2.2 reads
+  SpamZapEnabled / PhishZapEnabled (the deprecated ZapEnabled was absent
+  and failed the anti-spam section); DEF-2.4 no longer claims users cannot
+  release quarantined phishing (Microsoft's default lets them); DEF-4.6
+  does not count a scheduled simulation; DEF-4.7 no longer errors; a Safe
+  Links / Safe Attachments read that failed is "not collected", not an
+  Error scored as a failure, and not "not licensed" when licensing was not
+  read.
+- **Purview, Power Platform, Copilot.** PPL-1.1 ("Tenant Isolation
+  Enabled") scored the number of environments and passed tenants with
+  isolation off. PVW-2.1 read the admin audit log (always on in Exchange
+  Online) instead of the Unified Audit Log. PVW-3.4 counted DLP policies
+  instead of rules using sensitive information types. PVW-1.4 counted
+  defined labels instead of published ones. PPL-3.1/3.2/3.5 no longer
+  score gaps from Purview sections that did not run; simulation-only
+  auto-labeling is not enforcement; the Copilot DLP location (Workload
+  "Applications") is recognized; "AI" no longer matches "Email" in policy
+  names; Copilot licensing is detected by service plan (the "M365_Copilot"
+  SKU was missed) with every page of users read and guests excluded.
+  PPL-3.4 is manual review — publishing channels are not readable, and an
+  app's publisher domain is not one. PVW-2.2 says when policies exist but
+  are off; PVW-4.2 with no one-year policy is a Gap.
 - **Identity verdicts corrected against Graph's documented shapes.**
   AAD-6.2 (Critical) read the user-consent setting from the wrong level of
   the authorization policy, so every tenant scored "consent restricted" —
