@@ -15,6 +15,30 @@
 #                 T1190 (Exploit Public-Facing App), T1190
 #
 
+# Bucket for an endpoint security policy, from its template name first
+# (templateReference.templateDisplayName), then the policy name for policies
+# with no template reference. $null for anything that is not one of the five
+# policy kinds the controls score.
+function Get-NRGIntuneEndpointBucket {
+    [CmdletBinding()]
+    param([string] $TemplateName, [string] $Family, [string] $PolicyName)
+    if ($TemplateName) {
+        if ($TemplateName -match 'LAPS|Local admin password')                   { return 'LAPS' }
+        if ($TemplateName -match '^Attack Surface Reduction Rules|ASR Rules')   { return 'ASR' }
+        if ($TemplateName -match 'Firewall' -and $TemplateName -notmatch 'Rules') { return 'Firewall' }
+        if ($TemplateName -match 'Endpoint Detection')                          { return 'EDR' }
+        if ($TemplateName -match '^(Microsoft )?Defender Antivirus$|^Microsoft Defender Antivirus$|^Antivirus$') { return 'Antivirus' }
+        return $null
+    }
+    if ($Family -eq 'endpointSecurityEndpointDetectionAndResponse') { return 'EDR' }
+    if ($PolicyName -match 'LAPS|Local admin password')                         { return 'LAPS' }
+    if ($PolicyName -match 'Attack Surface Reduction|\bASR\b')                { return 'ASR' }
+    if ($PolicyName -match 'Firewall' -and $PolicyName -notmatch 'Rules')       { return 'Firewall' }
+    if ($PolicyName -match 'Endpoint Detection|\bEDR\b')                      { return 'EDR' }
+    if ($PolicyName -match 'Antivirus' -and $PolicyName -notmatch 'exclusion')  { return 'Antivirus' }
+    return $null
+}
+
 function Invoke-NRGCollectIntuneEndpointSecurity {
     [CmdletBinding()] param()
     $result = @{
@@ -53,7 +77,7 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
         # tags the policy type. Beta is used because templateReference is more reliable
         # there for endpoint-security families.
         try {
-            $uri  = 'https://graph.microsoft.com/beta/deviceManagement/configurationPolicies?$select=id,name,description,platforms,templateReference,createdDateTime,lastModifiedDateTime'
+            $uri  = 'https://graph.microsoft.com/beta/deviceManagement/configurationPolicies?$select=id,name,description,platforms,templateReference,createdDateTime,lastModifiedDateTime&$expand=assignments'
             $next = $uri
             $all  = @()
             # Pagination cap (v4.6.3 P2): see Intune-DeviceCompliance / AADRoles.
@@ -80,46 +104,30 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
                 $tplRef    = Get-NRGNestedProperty -Object $p -Path 'templateReference' -Default $null
                 $tplFamily = if ($tplRef) { [string](Get-NRGNestedProperty -Object $tplRef -Path 'templateFamily' -Default '') } else { $null }
                 $tplName   = if ($tplRef) { [string](Get-NRGNestedProperty -Object $tplRef -Path 'templateDisplayName' -Default '') } else { '' }
-                $name    = [string]$p.name
+                $name    = [string](Get-NRGObjectField -Item $p -Key 'name' -Default '')
 
-                # Map template family → bucket, with displayName fallback for tenants
-                # whose templateReference is unpopulated on legacy migrated policies.
-                $bucket = $null
-                if ($tplFamily -and $familyMap.ContainsKey($tplFamily)) {
-                    $bucket = $familyMap[$tplFamily]
-                } elseif ($tplName -match 'LAPS|Local admin password') {
-                    $bucket = 'LAPS'
-                } elseif ($tplName -match 'Attack Surface|ASR') {
-                    $bucket = 'ASR'
-                } elseif ($tplName -match 'Firewall') {
-                    $bucket = 'Firewall'
-                } elseif ($tplName -match 'Endpoint Detection|EDR') {
-                    $bucket = 'EDR'
-                } elseif ($tplName -match 'Antivirus|Microsoft Defender') {
-                    $bucket = 'Antivirus'
-                } elseif ($name -match 'LAPS') {
-                    $bucket = 'LAPS'
-                } elseif ($name -match 'ASR|Attack Surface') {
-                    $bucket = 'ASR'
-                } elseif ($name -match 'Firewall') {
-                    $bucket = 'Firewall'
-                } elseif ($name -match 'EDR|Endpoint Detection') {
-                    $bucket = 'EDR'
-                } elseif ($name -match 'Antivirus|AV\b|Defender Antivirus') {
-                    $bucket = 'Antivirus'
-                }
+                # A template FAMILY holds several templates: account protection
+                # is LAPS, Account protection (Credential Guard, WHfB) and more;
+                # attack surface reduction is ASR Rules, Device Control, App
+                # Control, Exploit Protection and Web Protection; antivirus
+                # includes exclusions and the Security Experience. Bucketing by
+                # family counted a USB-block policy as ASR rules and Credential
+                # Guard as LAPS, so the specific template name decides.
+                $bucket = Get-NRGIntuneEndpointBucket -TemplateName $tplName -Family $tplFamily -PolicyName $name
+                $asg = Get-NRGObjectField -Item $p -Key 'assignments' -Default $null
 
                 $entry = @{
-                    Id                  = $p.id
+                    Id                  = (Get-NRGObjectField -Item $p -Key 'id' -Default $null)
                     DisplayName         = $name
-                    Description         = [string]$p.description
-                    Platforms           = [string]$p.platforms
+                    Description         = [string](Get-NRGObjectField -Item $p -Key 'description' -Default '')
+                    Platforms           = [string](Get-NRGObjectField -Item $p -Key 'platforms' -Default '')
                     TemplateFamily      = $tplFamily
                     TemplateDisplayName = $tplName
                     TemplateType        = $bucket
                     Source              = 'configurationPolicies'
-                    CreatedDateTime     = $p.createdDateTime
-                    LastModifiedDateTime= $p.lastModifiedDateTime
+                    IsAssigned          = $(if ($null -ne $asg) { @($asg | Where-Object { $_ }).Count -gt 0 } else { $null })
+                    CreatedDateTime     = (Get-NRGObjectField -Item $p -Key 'createdDateTime' -Default $null)
+                    LastModifiedDateTime= (Get-NRGObjectField -Item $p -Key 'lastModifiedDateTime' -Default $null)
                 }
 
                 $result.Data.EndpointSecurityPolicies += $entry
@@ -161,22 +169,17 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
                 }
             }
             foreach ($i in $intentAll) {
-                $tplName = [string]$i.displayName
-                $bucket = $null
-                if     ($tplName -match 'LAPS|Local admin password') { $bucket = 'LAPS' }
-                elseif ($tplName -match 'Attack Surface|ASR')         { $bucket = 'ASR' }
-                elseif ($tplName -match 'Firewall')                   { $bucket = 'Firewall' }
-                elseif ($tplName -match 'Endpoint Detection|EDR')     { $bucket = 'EDR' }
-                elseif ($tplName -match 'Antivirus|Microsoft Defender'){$bucket = 'Antivirus' }
+                $tplName = [string](Get-NRGObjectField -Item $i -Key 'displayName' -Default '')
+                $bucket = Get-NRGIntuneEndpointBucket -TemplateName '' -Family '' -PolicyName $tplName
 
                 if (-not $bucket) { continue }  # not an endpoint security intent we track
 
                 $entry = @{
-                    Id                  = $i.id
+                    Id                  = (Get-NRGObjectField -Item $i -Key 'id' -Default $null)
                     DisplayName         = $tplName
-                    Description         = [string]$i.description
-                    TemplateId          = [string]$i.templateId
-                    IsAssigned          = [bool]$i.isAssigned
+                    Description         = [string](Get-NRGObjectField -Item $i -Key 'description' -Default '')
+                    TemplateId          = [string](Get-NRGObjectField -Item $i -Key 'templateId' -Default '')
+                    IsAssigned          = Get-NRGObjectField -Item $i -Key 'isAssigned' -Default $null
                     TemplateType        = $bucket
                     Source              = 'intents'
                 }

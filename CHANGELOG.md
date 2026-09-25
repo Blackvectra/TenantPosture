@@ -127,6 +127,24 @@ different, than the tenant actually is.
   the DLP list was not read. The collector records per-section status and no
   longer defaults an unreturned federation setting to "disabled"; TMS-3.1
   carries its Teams Premium license requirement.
+- **Intune controls count what enforces something.** Policies must be
+  assigned (an unassigned draft passed INT-1.1, 2.1–2.5 and 4.1). Endpoint
+  security templates are bucketed by template, not family: Credential Guard
+  passed as LAPS and a USB-block Device Control policy as ASR rules. INT-1.2
+  ("non-compliant devices blocked via CA") passed on any configuration
+  profile, a Wi-Fi profile included; it now reads Conditional Access for a
+  compliant-device requirement. INT-1.4 counted app CONFIGURATION policies
+  as app protection. INT-3.1 and INT-4.2 passed on the enrollment
+  configurations every tenant has by default; they now read what the
+  restrictions block and the Windows Hello state. INT-4.3 reported overall
+  compliance as "OS-version compliant" with no minimum OS rule anywhere.
+  INT-3.3 counted the default PIN-retry and offline-wipe limits as
+  conditional launch; it now needs a minimum OS version. INT-1.3 accepts
+  "Require encryption of data storage"; INT-2.4 no longer accepts System
+  Integrity Protection as FileVault; INT-4.4 reads iOS `passcodeRequired`.
+  INT-1.5 no longer scores Partial from enrollment configurations. The
+  collectors read every Graph field through the field helper — a missing
+  `description` failed the whole compliance-policy section.
 - **AAD-12.3 / AAD-12.4.** Stale accounts are judged on the last
   successful sign-in (a password-spray attempt made a departed user look
   active; a token-refresh-only user looked stale) and accounts created in
