@@ -107,8 +107,8 @@ function Test-NRGControlPurview {
                 -Category 'Compliance' -Title $c.Title -Severity 'Informational' `
                 -CurrentValue "$count retention policies enabled"
         } else {
-            Add-NRGFinding -ControlId 'PVW-1.3' -State 'Partial' `
-                -Category 'Compliance' -Title $c.Title -Severity 'Low' `
+            Add-NRGFinding -ControlId 'PVW-1.3' -State 'Gap' `
+                -Category 'Compliance' -Title $c.Title -Severity $c.Severity `
                 -Detail 'No active retention policies. Email and document retention is left to user discretion.' `
                 -Remediation $c.Remediation `
                 -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.3')
@@ -129,8 +129,8 @@ function Test-NRGControlPurview {
                 -Category 'Compliance' -Title $c.Title -Severity 'Informational' `
                 -CurrentValue "$count sensitivity labels published"
         } else {
-            Add-NRGFinding -ControlId 'PVW-1.4' -State 'Partial' `
-                -Category 'Compliance' -Title $c.Title -Severity 'Low' `
+            Add-NRGFinding -ControlId 'PVW-1.4' -State 'Gap' `
+                -Category 'Compliance' -Title $c.Title -Severity $c.Severity `
                 -Detail 'No sensitivity labels published. Users cannot classify documents or emails by sensitivity.' `
                 -Remediation $c.Remediation `
                 -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.4')
@@ -177,11 +177,12 @@ function Test-NRGControlPurviewCommCompliance {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CommCompliancePolicies was not collected; not assessed.'
         return
     }
-    $policies = @($pvw.Data['CommCompliancePolicies'] ?? @())
+    # A policy explicitly Enabled = $false is not active; unknown counts.
+    $policies = @(@($pvw.Data['CommCompliancePolicies'] ?? @()) | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Enabled' -Default $null) -ne $false })
     if ($policies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($policies.Count) communication compliance policy(ies) active."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'No communication compliance policies configured. Required for regulatory environments (finance, healthcare, government). Requires E5 Compliance.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No communication compliance policies configured. Required for regulatory environments (finance, healthcare, government). Requires E5 Compliance.' -Remediation $ctrl.Remediation
     }
 }
 
@@ -213,22 +214,14 @@ function Test-NRGControlPurviewInsiderRisk {
     [CmdletBinding()] param()
     $cid = 'PVW-2.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview'
-    if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
-    # Empty is not clean. The collector reported success, but this section
-    # may not have landed — a failed sub-query leaves it absent or empty,
-    # and reading that as compliance is a false pass on a control nobody
-    # checked. Not assessed is the only honest verdict.
-    if (-not (Test-NRGSectionCollected $pvw 'InsiderRiskPolicies')) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'InsiderRiskPolicies was not collected; not assessed.'
-        return
-    }
-    $irPolicies = @($pvw.Data['InsiderRiskPolicies'] ?? @())
-    if ($irPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($irPolicies.Count) insider risk management policy(ies) active."
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'No insider risk management policies configured. Data theft by departing employees and policy violations go undetected. Requires E5 Compliance.' -Remediation $ctrl.Remediation
-    }
+    # Insider Risk Management policies are not exposed through the Security &
+    # Compliance PowerShell or Graph surfaces this assessment reads. This used
+    # to report "InsiderRiskPolicies was not collected" — a collection
+    # failure that no re-run could ever fix. Say what it actually is.
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+        -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit `
+        -Detail 'This control requires manual verification — Insider Risk Management policies are not exposed to the APIs this assessment uses. Review them in the Microsoft Purview portal > Insider Risk Management > Policies.' `
+        -Remediation $ctrl.Remediation
 }
 
 # ── PVW-2.5 Retention Policy Covers Key Workloads ────────────────────────────
@@ -266,11 +259,18 @@ function Test-NRGControlPurviewAutoLabel {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AutoLabelPolicies was not collected; not assessed.'
         return
     }
+    # Mode: Enable (labels content) / TestWith[out]Notifications (simulation:
+    # labels nothing) / Disable. Enabled -> Satisfied; simulation only ->
+    # Partial, like a report-only CA policy; nothing -> Gap.
     $autoLabels = @($pvw.Data['AutoLabelPolicies'] ?? @())
-    if ($autoLabels.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($autoLabels.Count) auto-labeling policy(ies) active. Sensitive content labeled without user action."
+    $active     = @($autoLabels | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'Mode' -Default '') -eq 'Enable' })
+    $simulating = @($autoLabels | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'Mode' -Default '') -like 'Test*' })
+    if ($active.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($active.Count) auto-labeling policy(ies) enforcing. Sensitive content labeled without user action."
+    } elseif ($simulating.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($simulating.Count) auto-labeling policy(ies) in simulation mode only — nothing is labeled until the policy is turned on." -Remediation $ctrl.Remediation
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'No auto-labeling policies configured. Sensitive data classification depends entirely on user action.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No auto-labeling policy is turned on. Sensitive data classification depends entirely on user action.' -Remediation $ctrl.Remediation
     }
 }
 
@@ -295,29 +295,14 @@ function Test-NRGControlPurviewEDiscovery {
     [CmdletBinding()] param()
     $cid = 'PVW-3.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
-    $pvw = Get-NRGRawData -Key 'Purview'
-    if (-not $pvw -or -not $pvw.Success) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'Purview data not collected'; return
-    }
-    $cases = Get-NRGNestedProperty -Object $pvw -Path 'Data.EDiscoveryCases' -Default $null
-    if ($null -eq $cases) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -FrameworkIds $cit `
-            -Detail 'eDiscovery case inventory not collected (IPPSSession not connected or Get-ComplianceCase unavailable). Verify manually via compliance.microsoft.com > eDiscovery.'
-        return
-    }
-    $caseCount = @($cases).Count
-    if ($caseCount -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "$caseCount eDiscovery case(s) configured — case management capability is in use. Verify eDiscovery roles are assigned to appropriate compliance personnel."
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit `
-            -Detail 'No eDiscovery cases configured. Legal hold and investigation workflows have never been exercised — confirm the workflow is documented and that compliance personnel hold the eDiscovery Manager / Administrator role.' `
-            -Remediation $ctrl.Remediation
-    }
+    # eDiscovery READINESS (roles assigned, a documented legal-hold workflow)
+    # is not measurable from the tenant: a count of cases only says whether
+    # there has been litigation. The old detail blamed "IPPSSession not
+    # connected" even when it was.
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+        -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit `
+        -Detail 'This control requires manual verification — confirm compliance staff hold the eDiscovery Manager / Administrator role and that the legal-hold workflow is documented. Case counts do not measure readiness.' `
+        -Remediation $ctrl.Remediation
 }
 
 # ── PVW-3.3 Microsoft Purview Compliance Score Reviewed ──────────────────────
@@ -409,7 +394,7 @@ function Test-NRGControlPurviewAuditRetention {
     if ($longTerm.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($longTerm.Count) audit log retention policy(ies) extending logs ≥365 days."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No audit log retention policy extending beyond the platform default was found. Audit (Standard) retains 180 days. Breaches discovered weeks or months later cannot be investigated. Requires Audit Premium or custom retention policy.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No audit log retention policy keeps records for a year or more. The default policy applies: 180 days with Audit (Standard); with Audit (Premium), Exchange, SharePoint and Entra records are kept one year and everything else 180 days. Breaches discovered later than that cannot be investigated.' -Remediation $ctrl.Remediation
     }
 }
 
@@ -463,6 +448,6 @@ function Test-NRGControlPurviewRecordsManagement {
     if ($recordLabels.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($recordLabels.Count) records management label(s) configured. Immutable records can be declared for regulatory or legal requirements."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'No records management labels configured. For regulated environments (government, healthcare, finance) immutable record declarations may be required.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No records management labels configured. For regulated environments (government, healthcare, finance) immutable record declarations may be required.' -Remediation $ctrl.Remediation
     }
 }

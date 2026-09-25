@@ -187,6 +187,7 @@ $script:ExportedFunctions = @(
     'Resolve-NRGDns',
     'Resolve-NRGTenantId',
     'Set-NRGThirdPartyEdr',
+    'Set-NRGLicenseGating',
     'Get-NRGModuleHealth',
     'Repair-NRGModuleHealth',
     'Get-NRGModuleInstallScope',

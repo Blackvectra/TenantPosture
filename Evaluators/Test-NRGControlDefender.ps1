@@ -725,7 +725,7 @@ function Test-NRGControlDefenderEndpointDLP {
     if ($endpointDLP.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($endpointDLP.Count) Endpoint DLP policy(ies) active. Sensitive data actions on endpoints (copy to USB, print, upload) are monitored or blocked."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No Endpoint DLP policies detected. Users can copy sensitive files to USB drives, personal cloud storage, or print them without policy controls. Requires Defender for Endpoint + E5 Compliance or Microsoft 365 E5.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No Endpoint DLP policies detected. Users can copy sensitive files to USB drives, personal cloud storage, or print them without policy controls. Requires Defender for Endpoint + E5 Compliance or Microsoft 365 E5.' -Remediation $ctrl.Remediation
     }
 }
 

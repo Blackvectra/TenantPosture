@@ -97,8 +97,8 @@ function Test-NRGControlIntune {
                 -Category 'Endpoint' -Title $c.Title -Severity 'Informational' `
                 -CurrentValue "$count configuration profiles deployed"
         } else {
-            Add-NRGFinding -ControlId 'INT-1.2' -State 'Partial' `
-                -Category 'Endpoint' -Title $c.Title -Severity 'Medium' `
+            Add-NRGFinding -ControlId 'INT-1.2' -State 'Gap' `
+                -Category 'Endpoint' -Title $c.Title -Severity $c.Severity `
                 -Detail 'No device configuration profiles deployed. Devices are not receiving baseline security configuration.' `
                 -Remediation $c.Remediation `
                 -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'INT-1.2')
@@ -205,33 +205,20 @@ function Test-NRGControlIntuneEDR {
         return
     }
 
-    # No Intune-managed MDE onboarding policy. This does NOT mean endpoints are
-    # unprotected: a third-party EDR (Cortex XDR, CrowdStrike, SentinelOne,
-    # Webroot, etc.) runs its own agent that Intune cannot see, so asserting a
-    # confident Critical "no EDR" gap here is a false positive for any MSP that
-    # standardizes on a non-Microsoft stack. Two honest outcomes:
-    #   1) The operator declared a third-party EDR in Config/branding.psd1
-    #      (EdrStack) — record it as Satisfied-by-declaration and point the
-    #      assessor at that vendor's console for agent-health verification.
-    #   2) Nothing declared — emit a manual-verification advisory (Partial),
-    #      never a confident gap, since we cannot see a third-party agent.
-    $edrStack = if ($script:NRGBrand -is [System.Collections.IDictionary]) {
-        [string]$script:NRGBrand['EdrStack']
-    } else { '' }
-
-    if (-not [string]::IsNullOrWhiteSpace($edrStack)) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "No Microsoft Defender for Endpoint onboarding policy is deployed via Intune, but a third-party EDR is declared for this environment: $edrStack. Third-party EDR agents are not visible to Intune. Confirm agent coverage and health in the $edrStack console." `
-            -CurrentValue "Third-party EDR: $edrStack" -RequiredValue 'Managed EDR agent on every endpoint'
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-            -Title "$($ctrl.Title) (Manual verification required)" -Severity 'Medium' -FrameworkIds $cit `
-            -Detail 'No Microsoft Defender for Endpoint onboarding policy is deployed via Intune. This is expected when endpoints run a third-party EDR (Cortex XDR, CrowdStrike, SentinelOne, Webroot, etc.), which Intune cannot see. Manually confirm every endpoint runs a managed EDR agent. If Microsoft Defender for Endpoint is the intended EDR, deploy an onboarding policy via Intune > Endpoint security > Endpoint detection and response.' `
-            -CurrentValue 'No Intune-managed MDE onboarding; third-party EDR not visible to Intune' `
-            -RequiredValue 'Managed EDR agent on every endpoint (Microsoft or third-party)' `
-            -Remediation $ctrl.Remediation
-    }
+    # No Intune-managed Defender for Endpoint onboarding policy. A client on a
+    # third-party EDR (Cortex XDR, CrowdStrike, SentinelOne, ...) is declared
+    # per client with -ThirdPartyEDR / clients.json ThirdPartyEDR, or MSP-wide
+    # with EdrStack in Config/branding.psd1; Set-NRGThirdPartyEdr then takes
+    # this check out of the score as "declared, not verified". It used to be
+    # scored Satisfied straight from the branding declaration — a pass on a
+    # claim nothing verified — and Partial (half credit) for a manual review
+    # when nothing was declared.
+    Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+        -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+        -Detail 'No Microsoft Defender for Endpoint onboarding policy is deployed via Intune. If this client runs a third-party EDR instead (Cortex XDR, CrowdStrike, SentinelOne, ...), declare it with -ThirdPartyEDR or ThirdPartyEDR in clients.json: the check is then reported as covered by that product (declared, not verified) and not scored.' `
+        -CurrentValue 'No Intune-managed Defender for Endpoint onboarding policy' `
+        -RequiredValue 'EDR onboarding deployed to every managed endpoint' `
+        -Remediation $ctrl.Remediation
 }
 
 # ── INT-2.2 Attack Surface Reduction Rules Enabled ───────────────────────────
@@ -319,7 +306,7 @@ function Test-NRGControlIntuneWindowsUpdate {
     if ($winUpdatePolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($winUpdatePolicies.Count) Windows Update compliance policy(ies) deployed."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No Windows Update for Business policy found in Intune. Endpoints may not receive security updates on a managed schedule. Verify via Windows Update rings.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No Windows Update for Business policy found in Intune. Endpoints may not receive security updates on a managed schedule. Verify via Windows Update rings.' -Remediation $ctrl.Remediation
     }
 }
 
@@ -378,8 +365,8 @@ function Test-NRGControlIntuneAppConfig {
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
             -Detail "$($appConfig.Count) app configuration policy(ies) deployed."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit `
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
             -Detail 'No app configuration policies found. Managed apps may use default settings without security baseline configuration.' `
             -Remediation $ctrl.Remediation
     }

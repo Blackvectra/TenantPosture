@@ -12,11 +12,13 @@
 
     LogoUrl        = ''
 
-    # Optional: declare a third-party EDR standardized across this environment
-    # (e.g. 'Cortex XDR', 'CrowdStrike Falcon', 'SentinelOne'). When set, the
-    # INT-2.1 EDR control acknowledges the third-party agent — which Intune
-    # cannot see — instead of raising a false "no EDR" gap. Leave '' if
-    # Microsoft Defender for Endpoint (onboarded via Intune) is the EDR.
+    # Optional: the third-party EDR standardized across your clients (e.g.
+    # 'Cortex XDR', 'CrowdStrike Falcon', 'SentinelOne'). It is the default
+    # for every client that does not set ThirdPartyEDR in clients.json or pass
+    # -ThirdPartyEDR. The Microsoft Defender endpoint checks (INT-1.5, INT-2.1,
+    # INT-2.2, DEV-2.x) are then reported as covered by that product —
+    # declared, not verified — and left out of the score. Leave '' if
+    # Microsoft Defender for Endpoint is the EDR.
     EdrStack       = ''
 
     HourlyRate     = 185
