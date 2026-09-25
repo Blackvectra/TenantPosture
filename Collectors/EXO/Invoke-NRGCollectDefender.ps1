@@ -113,6 +113,23 @@ function Invoke-NRGCollectDefender {
             }
         }
 
+        # ── Safe Attachments for SharePoint / OneDrive / Teams (EXO-4.3) ──
+        # A tenant-wide switch on Get-AtpPolicyForO365, independent of every
+        # Safe Attachments mail policy.
+        try {
+            $atpO365 = @(Get-AtpPolicyForO365 -ErrorAction Stop) | Select-Object -First 1
+            $result.Data['AtpPolicyForO365'] = @{
+                Available               = $true
+                EnableATPForSPOTeamsODB = Get-NRGObjectField -Item $atpO365 -Key 'EnableATPForSPOTeamsODB' -Default $null
+                EnableSafeDocs          = Get-NRGObjectField -Item $atpO365 -Key 'EnableSafeDocs' -Default $null
+            }
+        } catch {
+            $result.Data['AtpPolicyForO365'] = @{ Available = $false; Error = $_.Exception.Message }
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'Defender-AtpPolicyForO365' -Message $_.Exception.Message
+            }
+        }
+
         # ── Anti-Phishing (Defender layer) ────────────────────────────────
         # SI-4: Impersonation and spoof detection
         try {

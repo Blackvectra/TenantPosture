@@ -327,7 +327,7 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
 
     Context 'EXO-1.3 — External Auto-Forwarding Blocked (the classic BEC exfil path)' {
 
-        It 'Satisfied only when BOTH the spam policy and remote domain block forwarding' {
+        It 'Satisfied when the spam policy and the remote domain both block forwarding' {
             Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
                 OutboundSpamPolicies = @( [pscustomobject]@{ IsDefault = $true; AutoForwardingMode = 'Off' } )
                 RemoteDomains        = @( [pscustomobject]@{ IsDefault = $true; AutoForwardEnabled = $false } )
@@ -335,13 +335,23 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
             (GetVerdict 'Test-NRGControlEXOAutoForward' 'EXO-1.3').State | Should -Be 'Satisfied'
         }
 
-        It 'Partial when the spam policy blocks but the remote-domain wildcard still allows forwarding' {
+        It 'Satisfied when the spam policy is Off even though the remote-domain wildcard allows forwarding' {
+            # Microsoft: when one control blocks and the other allows, the
+            # block wins — and Off blocks admin mailbox forwarding too.
             Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
                 OutboundSpamPolicies = @( [pscustomobject]@{ IsDefault = $true; AutoForwardingMode = 'Off' } )
                 RemoteDomains        = @( [pscustomobject]@{ IsDefault = $true; AutoForwardEnabled = $true } )
             })
+            (GetVerdict 'Test-NRGControlEXOAutoForward' 'EXO-1.3').State | Should -Be 'Satisfied'
+        }
+
+        It 'Partial when only the remote domain blocks: admin-set mailbox forwarding still leaves' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OutboundSpamPolicies = @( [pscustomobject]@{ IsDefault = $true; AutoForwardingMode = 'On' } )
+                RemoteDomains        = @( [pscustomobject]@{ IsDefault = $true; AutoForwardEnabled = $false } )
+            })
             (GetVerdict 'Test-NRGControlEXOAutoForward' 'EXO-1.3').State | Should -Be 'Partial' `
-                -Because 'half-blocked forwarding still leaks mail — reporting this as Satisfied would be a false assurance in a BEC scenario'
+                -Because 'remote domains do not govern forwarding an administrator sets on a mailbox'
         }
 
         It 'Gap when neither control blocks external forwarding' {
@@ -593,7 +603,9 @@ Describe 'Failed collection is never reported as compliance (EXO inventory)' {
     $cases = @(
         @{ Control = 'EXO-6.1'; Evaluator = 'Test-NRGControlInventoryExternalForwarding'; Key = 'ForwardingMailboxes';    Section = 'ForwardingMailboxes' }
         @{ Control = 'EXO-6.2'; Evaluator = 'Test-NRGControlInventorySharedMailboxSignIn'; Key = 'AllSharedMailboxes';    Section = 'SharedMailboxes' }
-        @{ Control = 'EXO-6.3'; Evaluator = 'Test-NRGControlInventoryMailboxAuditDisabled'; Key = 'AuditDisabledMailboxes'; Section = 'AuditDisabledMailboxes' }
+        # EXO-6.3 reads audit BYPASS associations: Exchange ignores a mailbox's
+        # AuditEnabled flag while organization auditing is on.
+        @{ Control = 'EXO-6.3'; Evaluator = 'Test-NRGControlInventoryMailboxAuditDisabled'; Key = 'AuditBypassAccounts';    Section = 'AuditBypassAccounts' }
         @{ Control = 'EXO-6.4'; Evaluator = 'Test-NRGControlInventorySMTPAuthUsers';        Key = 'SmtpAuthEnabledPerUser'; Section = 'SmtpAuthEnabledPerUser' }
     )
 
@@ -607,6 +619,11 @@ Describe 'Failed collection is never reported as compliance (EXO inventory)' {
     }
 
     It '<Control> still reports Satisfied when the section COLLECTED and found nothing' -TestCases $cases {
+        # The organization settings these controls are qualified by: mailbox
+        # auditing on, SMTP AUTH disabled org-wide.
+        Set-NRGRawData -Key 'EXO-MailboxConfig' -Data ([ordered]@{ CollectorId = 'EXO-MailboxConfig'; Success = $true; Data = @{
+            OrganizationConfig = @{ AuditDisabled = $false }; TransportConfig = @{ SmtpClientAuthenticationDisabled = $true }
+            SectionStatus = @{ OrganizationConfig = 'Collected'; TransportConfig = 'Collected' } } })
         Set-NRGRawData -Key 'EXO-Inventory' -Data (NewInv @{
             $Key          = @()
             SectionStatus = @{ $Section = 'Collected' }
