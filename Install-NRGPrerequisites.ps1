@@ -238,6 +238,10 @@ if ($spo) {
     Write-Host "  [-] SharePoint module not installed — assessment uses Graph API instead. OK." -ForegroundColor DarkGray
 }
 
+# Power Platform (PPL-*) needs no module: the assessment signs in to the
+# Power Platform admin API in-process and calls its REST endpoints.
+Write-Host "  [+] Power Platform — no module needed (in-process sign-in to the admin API)" -ForegroundColor Green
+
 # ── Python + openpyxl for XLSX compliance matrix ─────────────────────────────
 Write-Host ""
 Write-Host "[6/6] Optional: Python + openpyxl (for XLSX compliance matrix)..." -ForegroundColor Cyan

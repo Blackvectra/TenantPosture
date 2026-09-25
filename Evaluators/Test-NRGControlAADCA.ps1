@@ -37,22 +37,20 @@ function Test-NRGControlAADCA {
     #   (1) Block legacy authentication
     #   (2) Require MFA for all users / all cloud apps
     #   (3) Phishing-resistant MFA / MFA for admin roles
+    # Same readings as AAD-1.1 / 1.2 / 1.3: legacy block for ALL users on the
+    # 'other' client type; MFA (or an authentication strength) for all users
+    # and all apps; MFA for admins, which an all-users policy also provides.
     $blockLegacy = @($enabled | Where-Object {
-        ($_.Conditions.ClientAppTypes -contains 'other' -or
-         $_.Conditions.ClientAppTypes -contains 'exchangeActiveSync') -and
-        $_.GrantControls.BuiltInControls -contains 'block'
+        @($_.Conditions.ClientAppTypes) -contains 'other' -and (Test-NRGCAAllUsers $_) -and (Test-NRGCAGrantRequires -Policy $_ -Any @('block'))
     }).Count -gt 0
 
     $mfaAllUsers = @($enabled | Where-Object {
-        @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.IncludeUsers' -Default @()) -contains 'All' -and
-        @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Applications.IncludeApplications' -Default @()) -contains 'All' -and
-        @(Get-NRGNestedProperty -Object $_ -Path 'GrantControls.BuiltInControls' -Default @()) -contains 'mfa'
+        (Test-NRGCAAllUsers $_) -and (Test-NRGCAAllApps $_) -and (Test-NRGCAGrantRequires -Policy $_ -Any @('mfa','authStrength'))
     }).Count -gt 0
 
-    $mfaAdmins = @($enabled | Where-Object {
-        $_.Conditions.Users.IncludeRoles -and
-        $_.GrantControls.BuiltInControls -contains 'mfa'
-    }).Count -gt 0
+    $mfaAdmins = $mfaAllUsers -or (@($enabled | Where-Object {
+        @($_.Conditions.Users.IncludeRoles).Count -gt 0 -and (Test-NRGCAGrantRequires -Policy $_ -Any @('mfa','authStrength'))
+    }).Count -gt 0)
 
     $tracks = @()
     if ($blockLegacy) { $tracks += 'block-legacy-auth' }
@@ -68,7 +66,7 @@ function Test-NRGControlAADCA {
             -CurrentValue '0 enabled CA policies' `
             -RequiredValue 'At least 3 enabled CA policies covering (1) block legacy auth, (2) MFA all users, (3) MFA / phishing-resistant MFA for admin roles' `
             -Remediation 'Deploy at minimum: (1) block legacy auth, (2) require MFA all users, (3) phishing-resistant MFA for admin roles. Stage each in report-only mode first.' `
-            -FrameworkIds @('AC-17','IA-2')
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-2.1')
     }
     elseif ($covered -ge 3) {
         Add-NRGFinding -ControlId 'AAD-2.1' -State 'Satisfied' `
@@ -76,17 +74,20 @@ function Test-NRGControlAADCA {
             -Severity 'High' `
             -CurrentValue "$($enabled.Count) enabled CA policies. Coverage tracks satisfied: $($tracks -join ', ')." `
             -RequiredValue 'At least 3 enabled CA policies covering legacy-auth block, MFA all users, and admin MFA' `
-            -FrameworkIds @('AC-17','IA-2')
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-2.1')
     }
     else {
         $missing = @('block-legacy-auth','mfa-all-users','mfa-admin-roles') | Where-Object { $_ -notin $tracks }
-        Add-NRGFinding -ControlId 'AAD-2.1' -State 'Partial' `
+        # Policies that cover none of the baseline tracks are not part of the
+        # baseline: that is a Gap, not half credit.
+        $state = if ($covered -eq 0) { 'Gap' } else { 'Partial' }
+        Add-NRGFinding -ControlId 'AAD-2.1' -State $state `
             -Category 'Identity' -Title 'Conditional Access Policies Deployed' `
             -Severity 'High' `
             -Detail "CA policies are deployed but baseline coverage is incomplete. Missing track(s): $($missing -join ', '). See AAD-1.1, AAD-1.2 and AAD-1.3 for per-track detail." `
             -CurrentValue "$($enabled.Count) enabled CA policies. Coverage tracks satisfied: $($tracks -join ', ')." `
             -RequiredValue 'Coverage on all three tracks: block-legacy-auth, mfa-all-users, mfa-admin-roles' `
             -Remediation 'Add CA policies to close missing tracks. Verify MFA registration (>= 95%) before enforcing universal MFA.' `
-            -FrameworkIds @('AC-17','IA-2')
+            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-2.1')
     }
 }

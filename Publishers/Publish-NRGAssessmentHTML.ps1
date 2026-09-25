@@ -127,10 +127,13 @@ function Publish-NRGAssessmentHTML {
     $pCol = scoreColor $sc2
     $circ = 452.4
     $off  = [Math]::Round($circ * (1 - $sc2 / 100), 2)
-    $crit = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'Critical' }).Count
-    $high = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'High' }).Count
-    $med  = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'Medium' }).Count
-    $low  = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'Low' }).Count
+    # Per CONTROL, like the Gaps count beside them: per-finding counts put
+    # "2 High / 6 Medium / 6 Low" next to "Gaps 6" on a multi-domain tenant.
+    $gapControls = @(Get-NRGScoringFindings -Findings $Findings | Where-Object { $_.State -eq 'Gap' })
+    $crit = @($gapControls | Where-Object { $_.Severity -eq 'Critical' }).Count
+    $high = @($gapControls | Where-Object { $_.Severity -eq 'High' }).Count
+    $med  = @($gapControls | Where-Object { $_.Severity -eq 'Medium' }).Count
+    $low  = @($gapControls | Where-Object { $_.Severity -eq 'Low' }).Count
 
     # ── Control definitions ───────────────────────────────────────────────────
     $cdefs = @{}
@@ -189,17 +192,18 @@ function Publish-NRGAssessmentHTML {
     # elsewhere in this file. Falls back to $false when the helper is not
     # available (e.g. unit-test load of just the publisher).
     $hasBusinessPremium = if ($licProfile) { $licProfile.HasBusinessPremium } else { $false }
-    $hasEntraP2         = if ($licProfile) { $licProfile.HasEntraP2 }         else { $false }
-    # NB: assign the HashSet DIRECTLY, never as the output of an if-block. An
-    # if/else expression ENUMERATES an IEnumerable result — an empty HashSet
-    # would yield $null (then .Contains() below throws) and a non-empty one
-    # would collapse to a plain case-sensitive string[]. Direct assignment
-    # preserves the real OrdinalIgnoreCase HashSet.
-    $suppressedLicReqs = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    if ($licProfile -and $licProfile.SuppressedLicenseRequirements) {
-        $suppressedLicReqs = $licProfile.SuppressedLicenseRequirements
-    }
     $tierLabel          = if ($licProfile) { $licProfile.TierLabel } else { 'Unknown' }
+    # Licensing actually read? Without SKU data nothing can be called license
+    # blocked: every gap stays scored (Set-NRGLicenseGating moves nothing), so
+    # listing them as "blocked" and pitching an upgrade would be invented.
+    $licKnown = [bool](Get-NRGObjectField -Item $licProfile -Key 'HasLicenseData' -Default $false)
+    # Per-control answer (several controls share a requirement string but need
+    # different service plans) — the same test Set-NRGLicenseGating applies.
+    $licNotHeld = {
+        param($ctrl, [string] $cid)
+        return [bool]($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included' -and
+            -not (Test-NRGLicenseRequirementMet -LicenseRequirement $ctrl.LicenseRequirement -LicenseProfile $licProfile -ControlId $cid))
+    }
 
     # ── License groups (only show what the tenant actually needs) ─────────────
     $licGroups = @{}
@@ -213,9 +217,8 @@ function Publish-NRGAssessmentHTML {
     # never mis-counted as license gaps.
     foreach ($f in ($Findings | Where-Object { $_.State -eq 'Gap' -or ($_.State -eq 'NotApplicable' -and $_.Detail -match 'upgrade opportunity') })) {
         $ctrl = $cdefs[$f.ControlId]
-        if ($ctrl -and $ctrl.LicenseRequirement -and
-            $ctrl.LicenseRequirement -notmatch '^Included' -and
-            -not $suppressedLicReqs.Contains($ctrl.LicenseRequirement)) {
+        if (-not $licKnown -and $f.State -eq 'Gap') { continue }
+        if (& $licNotHeld $ctrl $f.ControlId) {
             $lic = $ctrl.LicenseRequirement
             if (-not $licGroups.ContainsKey($lic)) { $licGroups[$lic] = 0 }
             $licGroups[$lic]++
@@ -237,7 +240,15 @@ function Publish-NRGAssessmentHTML {
         "No critical gaps. Assessment identified <strong style='color:#ea580c'>$high high-severity</strong> gaps to address in the near term."
     } elseif ($gap -gt 0) {
         "No critical or high-severity gaps. <strong>$gap medium/low severity</strong> items to resolve."
-    } else { 'All assessed controls are satisfied. No gaps identified.' }
+    } elseif ($part -gt 0 -or $cov.Error -gt 0) {
+        # No Gap does not mean clean: Partial is half-configured and Error is
+        # a control whose state is unknown and scored as a failure. This line
+        # said "all satisfied" on a report scoring 12/100.
+        $bits = @()
+        if ($part -gt 0)      { $bits += "<strong>$part partially configured</strong>" }
+        if ($cov.Error -gt 0) { $bits += "<strong>$($cov.Error) that could not be evaluated</strong> (counted as failures until re-run)" }
+        "No open gaps, but $($bits -join ' and ') control(s) remain."
+    } else { 'Every scored control is satisfied. Controls that were not scored are listed under Assessment Scope.' }
 
     # ── Connections ───────────────────────────────────────────────────────────
     $svcMap = @{Graph='Microsoft Graph';EXO='Exchange Online';IPPSSession='Purview/Compliance';Teams='Microsoft Teams';SharePoint='SharePoint Online'}
@@ -412,7 +423,7 @@ function Publish-NRGAssessmentHTML {
         # Show N/A when no controls scored (all NotApplicable) instead of 0/100
         $wlScored = $wlScores[$wl].Scored
         $wlNaOnly = ($wlScored -eq 0)
-        $gapTxt = if ($gps -gt 0) { "<div class='wl-gap'>$gps gap$(if($gps -ne 1){'s'})</div>" } elseif ($wlNaOnly) { "<div class='wl-na'>— Not assessed</div>" } else { "<div class='wl-ok'>&#10003; Clean</div>" }
+        $gapTxt = if ($gps -gt 0) { "<div class='wl-gap'>$gps gap$(if($gps -ne 1){'s'})</div>" } elseif ($wlNaOnly) { "<div class='wl-na'>— Not assessed</div>" } elseif ($ws3 -lt 100) { "<div class='wl-na'>No gaps; partial or error items</div>" } else { "<div class='wl-ok'>&#10003; Clean</div>" }
         $wlGrid += @"
 <div class='wl-card'>
   <svg width='54' height='54' viewBox='0 0 36 36'>
@@ -522,7 +533,7 @@ function Publish-NRGAssessmentHTML {
       <tbody>$nistRows</tbody>
     </table>
   </div>
-  <div class="nf-note">A control mapped to more than one family is counted in each &mdash; family rows do not sum to the assessment total. Met + Partial + Gap + Error + N/A sums to Assessed on every row. <strong>N/A</strong> and <strong>Error</strong> are both excluded from the coverage percentage &mdash; N/A means this tool could not assess the control (missing license, data not collected) and Error means the evaluator threw before reaching a verdict. Neither is a control the tenant passed. A family showing &mdash; had no assessable control at all.</div>
+  <div class="nf-note">A control mapped to more than one family is counted in each &mdash; family rows do not sum to the assessment total. Met + Partial + Gap + Error + N/A sums to Assessed on every row. <strong>N/A</strong> is excluded from the coverage percentage &mdash; this tool could not assess the control (missing license, data not collected). <strong>Error</strong> means the evaluator threw before reaching a verdict; it is counted as a failure in the percentage until re-run. Neither is a control the tenant passed. A family showing &mdash; had no assessable control at all.</div>
 </div>
 "@
     }
@@ -640,12 +651,13 @@ function Publish-NRGAssessmentHTML {
                 "<div class='scope-tile'><div class='scope-n'>$($scope.ScoredControls)</div><div class='scope-l'>Controls scored</div></div>"
                 "<div class='scope-tile$(if($blindCount -gt 0){' warn'})'><div class='scope-n$(if($blindCount -gt 0){' warn'})'>$blindCount</div><div class='scope-l'>Could not be assessed</div></div>"
                 "<div class='scope-tile'><div class='scope-n'>$($scope.NoProgrammaticCheck.Count)</div><div class='scope-l'>Manual review required</div></div>"
-                "<div class='scope-tile'><div class='scope-n'>$($scope.LicenceBlocked.Count)</div><div class='scope-l'>Licence gated</div></div>"
+                "<div class='scope-tile'><div class='scope-n'>$($scope.LicenceBlocked.Count)</div><div class='scope-l'>License gated</div></div>"
+                "<div class='scope-tile'><div class='scope-n'>$(@(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()).Count)</div><div class='scope-l'>Not applicable here</div></div>"
             ) -join ''
 
             $limRows = ($scope.Limitations | ForEach-Object { "<li>$(hx $_)</li>" }) -join ''
 
-            # The itemised lists are collapsed: the counts and the plain-language
+            # The itemized lists are collapsed: the counts and the plain-language
             # limitations are what a client reads; the control ids are what the
             # engineer re-running the assessment needs.
             $detBlocks = ''
@@ -654,6 +666,8 @@ function Publish-NRGAssessmentHTML {
                 @{ Label = 'Controls not evaluated — quick-scan mode'; Items = $scope.NotEvaluatedThisMode }
                 @{ Label = 'Controls that produced no result at all'; Items = $scope.NoResult }
                 @{ Label = 'Controls with no automated test — manual review'; Items = $scope.NoProgrammaticCheck }
+                @{ Label = 'Defender endpoint checks covered by a declared third-party EDR — not verified'; Items = @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()) }
+                @{ Label = 'Checked and not applicable to this tenant — reason stated in each finding'; Items = @(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()) }
             )) {
                 $items = @($grp.Items)
                 if ($items.Count -eq 0) { continue }
@@ -692,17 +706,52 @@ function Publish-NRGAssessmentHTML {
     # are supposed to be a subset of. $scope classifies every control in
     # controls.json exactly once (worst-instance-wins across domains), so
     # ScoredControls + (LicenceBlocked + CollectionIncomplete +
-    # NoProgrammaticCheck) sums to exactly $distinctControlsAssessed.
+    # NoProgrammaticCheck + ThirdPartyAttested) sums to exactly
+    # $distinctControlsAssessed.
     $hdrScored = $scrd
     $hdrNA     = $na
     if ($scope -and $scope.Available) {
         $hdrScored = $scope.ScoredControls
-        $hdrNA     = $scope.LicenceBlocked.Count + $scope.CollectionIncomplete.Count + $scope.NoProgrammaticCheck.Count
+        $hdrNA     = $scope.LicenceBlocked.Count + $scope.CollectionIncomplete.Count + $scope.NoProgrammaticCheck.Count +
+                     @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()).Count +
+                     @(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()).Count
+        # "Controls assessed" is the tenant controls that produced a finding
+        # (scored + not scored). It counted distinct ControlIds across ALL
+        # findings, including the 35 endpoint checks that report "no endpoint
+        # results supplied" on every run without -DeviceResults, so the
+        # header read "37 controls assessed · 2 scored · 0 not applicable".
+        $distinctControlsAssessed = $hdrScored + $hdrNA
     }
+    # Endpoint (DEV-*) checks are not tenant controls; they get their own count.
+    $devIds    = @($Findings | Where-Object { [string]$_.ControlId -like 'DEV-*' } | ForEach-Object { [string]$_.ControlId } | Sort-Object -Unique)
+    $devScored = @(Get-NRGScoringFindings -Findings @($Findings | Where-Object { [string]$_.ControlId -like 'DEV-*' }) |
+                   Where-Object { $_.State -in @('Satisfied','Partial','Gap','Error') }).Count
+    $devNote   = if ($devIds.Count -gt 0) { " &middot; endpoint checks: $devScored of $($devIds.Count) scored" } else { '' }
 
     # ── License card HTML ────────────────────────────────────────────────────
+    # The pitch names the license the tenant is actually missing: an E5
+    # tenant was told Business Premium "resolves the majority of these gaps".
+    $unmetReqs = @($licGroups.Keys)
+    $licAlert = if (@($unmetReqs | Where-Object { $_ -match '^(M365 Business Premium|Defender for Office 365 Plan 1)' }).Count -gt 0 -and -not $hasBusinessPremium) {
+        "<div class='lic-alert'><span class='lic-ico'>&#9888;</span><div>Most of these require <strong>Microsoft 365 Business Premium</strong> (or the equivalent Entra ID P1, Intune and Defender for Office 365 add-ons) — including Safe Attachments, Safe Links, Conditional Access and Intune endpoint management. Contact NRG for a licensing proposal.</div></div>"
+    } elseif (@($unmetReqs | Where-Object { $_ -match 'Entra ID P2' }).Count -gt 0) {
+        "<div class='lic-alert'><span class='lic-ico'>&#9432;</span><div>Some of these require <strong>Microsoft Entra ID P2</strong> — including Identity Protection risk-based policies and PIM governance. Contact NRG for a licensing proposal.</div></div>"
+    } else {
+        "<div class='lic-alert'><span class='lic-ico'>&#9432;</span><div>The following controls require licensing beyond the tenant's current subscriptions. Contact NRG for a licensing assessment.</div></div>"
+    }
     $licCard = ''
-    if ($licGroups.Count -gt 0) {
+    if (-not $licKnown) {
+        $licCard = @"
+<div class='card mt' id='licensing'>
+  <div class='card-hd'>
+    <div><div class='card-label'>License Gap Analysis</div><div class='card-sub'>Tenant licensing was not read</div></div>
+  </div>
+  <div class='lic-body'>
+    <div class='lic-alert'><span class='lic-ico'>&#9432;</span><div>The tenant's subscriptions (SubscribedSkus) were not collected, so no control is reported as license-blocked and every gap is scored. Confirm licensing before quoting an upgrade.</div></div>
+  </div>
+</div>
+"@
+    } elseif ($licGroups.Count -gt 0) {
         $licRows = ($licGroups.GetEnumerator() | Sort-Object Name | ForEach-Object {
             "<div class='lic-row'><div class='lic-tier'>$(hx $_.Key)</div><div class='lic-cnt'>$($_.Value) control$(if($_.Value -ne 1){'s'}) blocked</div></div>"
         }) -join ''
@@ -713,7 +762,7 @@ function Publish-NRGAssessmentHTML {
     <div class='lic-badge'>$totalBlocked blocked</div>
   </div>
   <div class='lic-body'>
-    $(if (-not $hasBusinessPremium) { "<div class='lic-alert'><span class='lic-ico'>&#9888;</span><div>Upgrading to <strong>Microsoft 365 Business Premium</strong> resolves the majority of these gaps — including Safe Attachments, Safe Links, Conditional Access with device compliance, and Intune endpoint management. These are the controls most directly blocking ransomware and BEC attacks. Contact NRG for a licensing proposal.</div></div>" } elseif (-not $hasEntraP2) { "<div class='lic-alert'><span class='lic-ico'>&#9432;</span><div>The remaining license-gated controls require <strong>Microsoft Entra ID P2</strong> or <strong>Entra Suite</strong> — including Identity Protection risk-based CA policies and PIM governance features. Contact NRG for a licensing proposal.</div></div>" } else { "<div class='lic-alert'><span class='lic-ico'>&#9432;</span><div>The following controls require additional licensing beyond your current subscriptions. Contact NRG for a licensing assessment.</div></div>" })
+    $licAlert
     <div class='lic-rows'>$licRows</div>
   </div>
 </div>
@@ -737,9 +786,7 @@ function Publish-NRGAssessmentHTML {
         # Suppress the "Requires:" badge when the tenant already holds the
         # license. v4.6.1 always emitted this badge — see comment by
         # $licProfile above.
-        $lic = if ($ctrl -and $ctrl.LicenseRequirement -and
-                   $ctrl.LicenseRequirement -notmatch '^Included' -and
-                   -not $suppressedLicReqs.Contains($ctrl.LicenseRequirement)) {
+        $lic = if ($licKnown -and (& $licNotHeld $ctrl $g.ControlId)) {
             "<div class='act-lic'>&#128273; Requires: $(hx $ctrl.LicenseRequirement)</div>"
         } else { '' }
         $cls   = if ($g.Severity -eq 'Critical') { 'ac' } else { 'ah' }
@@ -783,9 +830,7 @@ function Publish-NRGAssessmentHTML {
             $cv2   = hx $f.CurrentValue
             $rv2   = hx $f.RequiredValue
             # Suppress per-finding "Requires:" tag when license already held.
-            $lic2 = if ($ctrl2 -and $ctrl2.LicenseRequirement -and
-                        $ctrl2.LicenseRequirement -notmatch '^Included' -and
-                        -not $suppressedLicReqs.Contains($ctrl2.LicenseRequirement)) {
+            $lic2 = if ($licKnown -and (& $licNotHeld $ctrl2 $f.ControlId)) {
                 "<div class='ex-lic'>&#128273; $(hx $ctrl2.LicenseRequirement)</div>"
             } else { '' }
             $fwTags2 = ''
@@ -1316,7 +1361,7 @@ th.nf-n{text-align:right}
 
 <!-- OVERVIEW -->
 <div class="card" id="exec">
-  <div class="card-hd"><div class="card-label">Executive Overview</div><div class="card-sub">$distinctControlsAssessed controls assessed &middot; $hdrScored scored &middot; $hdrNA not applicable</div></div>
+  <div class="card-hd"><div class="card-label">Executive Overview</div><div class="card-sub">$distinctControlsAssessed controls assessed &middot; $hdrScored scored &middot; $hdrNA not scored$devNote</div></div>
   <div class="ex-dash">
     <div class="score-wrap br">
       <svg width="136" height="136" viewBox="0 0 160 160">
@@ -1335,6 +1380,7 @@ th.nf-n{text-align:right}
       <div class="sr sg"><span class="sr-l">Gaps</span><div class="sr-t"><div class="sr-f" style="width:$(pct $gap $scrd)%"></div></div><span class="sr-n">$gap</span></div>
       <div class="sr sw"><span class="sr-l">Partial</span><div class="sr-t"><div class="sr-f" style="width:$(pct $part $scrd)%"></div></div><span class="sr-n">$part</span></div>
       <div class="sr sp"><span class="sr-l">Satisfied</span><div class="sr-t"><div class="sr-f" style="width:$(pct $sat $scrd)%"></div></div><span class="sr-n">$sat</span></div>
+      $(if ($cov.Error -gt 0) { "<div class='sr sg'><span class='sr-l'>Error</span><div class='sr-t'><div class='sr-f' style='width:$(pct $cov.Error $scrd)%'></div></div><span class='sr-n'>$($cov.Error)</span></div>" })
       <div class="sr sna"><span class="sr-l">N/A</span><div class="sr-t"><div class="sr-f" style="width:$(pct $na $Findings.Count)%"></div></div><span class="sr-n">$na</span></div>
       <div class="narr">$narr
         <div class="sev-pills">

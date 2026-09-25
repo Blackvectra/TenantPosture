@@ -176,7 +176,7 @@
       "Effort": "Discovery first",
       "Summary": "Existing flows and apps that cross the new boundary stop running, usually without telling their owner.",
       "Users": "Makers lose self-service creation. Flows that combine a business connector with a personal or social one fail on their next run.",
-      "Admins": "Inventory existing flows and apps against the intended policy before applying it. The Power Platform admin centre will show which would be affected — read it first.",
+      "Admins": "Inventory existing flows and apps against the intended policy before applying it. The Power Platform admin center will show which would be affected — read it first.",
       "Watchouts": "A broken flow fails quietly and its owner may have left the organization. Business processes silently stop; the discovery is a missing approval three weeks later.",
       "Reversible": "Yes, and flows resume, but any run that was skipped is not replayed."
     },
@@ -184,7 +184,7 @@
       "Effort": "Policy change",
       "Summary": "Copilot's behavior or availability changes for some users.",
       "Users": "Either lose access, or find Copilot declines to surface content it previously would have. Both read as 'Copilot is broken' unless explained.",
-      "Admins": "Set expectations first. Copilot honours the permissions and labels that already exist, so restricting it usually exposes over-permissioned content rather than creating a new problem.",
+      "Admins": "Set expectations first. Copilot honors the permissions and labels that already exist, so restricting it usually exposes over-permissioned content rather than creating a new problem.",
       "Watchouts": "Over-shared SharePoint content is what Copilot makes visible. The right fix is the permissions, not the Copilot setting — restricting Copilot hides the symptom and leaves the exposure.",
       "Reversible": "Yes."
     },

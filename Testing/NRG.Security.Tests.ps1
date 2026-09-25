@@ -450,11 +450,19 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             # only. TLS on loopback adds no security (the data never leaves
             # the kernel's loopback interface) and would require a self-
             # signed cert with all the trust-store ceremony that implies.
+            #
+            # The Power Platform collector's MSAL sign-in uses the loopback
+            # redirect URI http://localhost (RFC 8252 native-app flow — the
+            # browser hands the code back to this machine only). That one
+            # line is exempt, not the file.
             $allowlist = @('Sign-Release.ps1', 'Start-NRGWebServer.ps1')
             $offenders = @()
             foreach ($file in $script:PsFiles) {
                 if ($file.Name -in $allowlist) { continue }
                 $hits = Select-String -Path $file.FullName -Pattern 'http://' -ErrorAction SilentlyContinue
+                if ($file.Name -eq 'Invoke-NRGCollectPowerPlatform.ps1') {
+                    $hits = @($hits | Where-Object { $_.Line -notmatch "WithRedirectUri\('http://localhost'\)" })
+                }
                 $offenders += $hits
             }
             $offenders | Should -BeNullOrEmpty -Because 'All connections must use HTTPS (OWASP A09)'

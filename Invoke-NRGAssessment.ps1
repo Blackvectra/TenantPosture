@@ -57,6 +57,15 @@ param(
     [ValidatePattern('^$|^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$')]
     [string] $TenantDomain,
 
+    # The client's endpoint protection is a third-party EDR (e.g. 'Cortex XDR'),
+    # not Microsoft Defender. The Defender endpoint checks (INT-1.5, INT-2.1,
+    # INT-2.2, DEV-2.x) are then reported as covered by that product —
+    # declared, not verified — and excluded from the score instead of scoring
+    # as gaps. Also read from the client's ThirdPartyEDR field in
+    # Config/clients.json when -TenantDomain is given.
+    [ValidatePattern('^$|^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$')]
+    [string] $ThirdPartyEDR,
+
     # Cloud environment
     [ValidateSet('commercial','gcc','gcchigh','dod')]
     [string] $Environment = 'commercial',
@@ -233,9 +242,9 @@ param(
     # client — the next client's Connect-MgGraph then has to reconnect with
     # no -TenantId and can silently land back in the operator's home tenant.
     # Pass -KeepSession to skip the disconnect and leave the shared session
-    # intact for the next client. NOTE: Invoke-NRGBatchAssessment.ps1 does not
-    # pass this yet — wiring the batch runner to set it on every call but the
-    # last is a separate follow-up.
+    # intact for the next client. Invoke-NRGBatchAssessment.ps1 passes it on
+    # every client and disconnects the per-client Exchange, Security &
+    # Compliance and Teams sessions itself; it closes Graph after the loop.
     [switch] $KeepSession,
 
     # Launch the local web GUI instead of running a scan in the terminal.
@@ -390,6 +399,9 @@ if ($RegisterApp) {
     }
     $regParams = @{ TenantDomain = $TenantDomain }
     if ($GrantConsent) { $regParams['GrantConsent'] = $true }
+    # Onboarding writes to the tenant, so it is not in the read-only module:
+    # load it only for this path.
+    . (Join-Path $scriptDir 'Onboard' 'Register-NRGTenantApp.ps1')
     Register-NRGTenantApp @regParams
     try { Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null } catch { }
     exit 0
@@ -426,6 +438,9 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
     if ($clientRec -and $clientRec.PSObject.Properties['DelegatedOrg'] -and "$($clientRec.DelegatedOrg)" -match '\.onmicrosoft\.com$') {
         $targetDelegatedOrg = [string]$clientRec.DelegatedOrg
     }
+    if (-not $ThirdPartyEDR -and $clientRec -and $clientRec.PSObject.Properties['ThirdPartyEDR'] -and "$($clientRec.ThirdPartyEDR)") {
+        $ThirdPartyEDR = [string]$clientRec.ThirdPartyEDR
+    }
     $rec = if ($clientRec -and $clientRec.PSObject.Properties['ClientId'] -and $clientRec.ClientId) { $clientRec } else { $null }
     if ($rec) {
         $AppId                 = [string]$rec.ClientId
@@ -438,6 +453,22 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
     } else {
         Write-Host "  [i] $TenantDomain is not onboarded for app-only auth. Falling back to interactive." -ForegroundColor DarkGray
         Write-Host "      Onboard it once with:  .\Invoke-NRGAssessment.ps1 -RegisterApp -TenantDomain $TenantDomain" -ForegroundColor DarkGray
+    }
+}
+
+# MSP-wide default: EdrStack in Config/branding.psd1 declares the third-party
+# EDR every client runs unless -ThirdPartyEDR or the client's clients.json
+# ThirdPartyEDR says otherwise. Declared, never verified: the Defender
+# endpoint checks go out of the score, they are not passed.
+if (-not $ThirdPartyEDR) {
+    $brandFile = Join-Path $scriptDir 'Config' 'branding.psd1'
+    if (Test-Path -LiteralPath $brandFile) {
+        try {
+            $brandData = Import-PowerShellDataFile -LiteralPath $brandFile
+            $edr = if ($brandData.ContainsKey('EdrStack')) { "$($brandData['EdrStack'])".Trim() } else { '' }
+            if ($edr -match '^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$') { $ThirdPartyEDR = $edr }
+            elseif ($edr) { Write-Warning "Ignoring EdrStack '$edr' in branding.psd1: use a plain product name such as 'Cortex XDR'." }
+        } catch { Write-Verbose "branding.psd1 EdrStack not read: $($_.Exception.Message)" }
     }
 }
 
@@ -603,6 +634,17 @@ if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
     if (-not $tenantTag) { $tenantTag = 'tenant' }
     $baseName = "$tenantTag-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
     Write-Host "  [+] Loaded $($findings.Count) findings" -ForegroundColor Green
+    if ($ThirdPartyEDR) {
+        $edrCount = Set-NRGThirdPartyEdr -Product $ThirdPartyEDR -Findings $findings
+        $reportMetadata['ThirdPartyEDR'] = $ThirdPartyEDR
+        Write-Host "  [i] $edrCount Defender endpoint check(s) reported as covered by $ThirdPartyEDR (declared, not verified; not scored)" -ForegroundColor DarkGray
+    }
+    # Same rule on republish (the license profile comes from the restored
+    # AAD-Inventory raw data; without it nothing is moved).
+    $licGated = Set-NRGLicenseGating -Findings $findings
+    if ($licGated -gt 0) {
+        Write-Host "  [i] $licGated control(s) need a license this tenant does not hold — listed as upgrade opportunities, not scored" -ForegroundColor DarkGray
+    }
     $skipCollection = $true
 } else {
     $skipCollection = $false
@@ -709,6 +751,9 @@ if (-not $skipCollection) {
         }
         if (-not $SkipPowerPlatform) {
             Write-Host "  [*] Power Platform: Environments, tenant isolation, DLP..."
+            if (-not ($AppId -and $TenantId -and $CertificateThumbprint)) {
+                Write-Host "      A browser sign-in to the Power Platform admin API may open (same account; usually completes on its own). Use -SkipPowerPlatform to skip." -ForegroundColor DarkGray
+            }
             Invoke-NRGCollector 'Invoke-NRGCollectPowerPlatform'
         }
     }
@@ -814,6 +859,17 @@ if (-not $skipCollection) {
         Invoke-NRGEvaluatorSafe -EvaluatorFunction $ev
     }
 
+    if ($ThirdPartyEDR) {
+        $edrCount = Set-NRGThirdPartyEdr -Product $ThirdPartyEDR
+        Write-Host "  [i] $edrCount Defender endpoint check(s) reported as covered by $ThirdPartyEDR (declared, not verified; not scored)" -ForegroundColor DarkGray
+    }
+    # After the EDR declaration, so a Cortex client is not pitched Defender
+    # for Endpoint licenses for checks it does not need.
+    $licGated = Set-NRGLicenseGating
+    if ($licGated -gt 0) {
+        Write-Host "  [i] $licGated control(s) need a license this tenant does not hold — listed as upgrade opportunities, not scored" -ForegroundColor DarkGray
+    }
+
     $findings = Get-NRGFindings
     Write-Host "  [+] $($findings.Count) findings evaluated" -ForegroundColor Green
 
@@ -835,6 +891,7 @@ if (-not $skipCollection) {
         ToolVersion    = $NRGAssessmentVersion
         Brand          = $NRGBrand
         QuickScan      = [bool]$Quick
+        ThirdPartyEDR  = [string]$ThirdPartyEDR
     }
 }
 

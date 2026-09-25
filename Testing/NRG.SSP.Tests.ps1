@@ -231,6 +231,26 @@ Describe 'System Security Plan (NIST SP 800-171 Rev 2)' {
             $r['InheritedFrom'] | Should -Not -BeNullOrEmpty
         }
 
+        It 'never derives Implemented when any mapped control produced no verdict (N/A, declared EDR, not licensed)' {
+            # 3.5.3 maps to 15 controls. One passing and the rest NotApplicable
+            # ("data not collected") was reported Implemented — a false line in
+            # a document the client signs.
+            $target = @($script:PostureAllPass['Requirements'] | Where-Object { $_['MappedControls'] -ge 2 })[0]
+            $ids = @($target['Evidence'] | ForEach-Object { [string]$_['ControlId'] })
+            $f = @(@{ ControlId = $ids[0]; State = 'Satisfied'; Title = 'ok' }) +
+                 @($ids | Select-Object -Skip 1 | ForEach-Object { @{ ControlId = $_; State = 'NotApplicable'; Title = 'x'; Detail = 'Third-party EDR declared: not verified.' } })
+            $r = @((Get-NRGSSPPosture -Findings $f)['Requirements'] | Where-Object { $_['Id'] -eq $target['Id'] })[0]
+            $r['Status']     | Should -Not -Be 'Implemented'
+            $r['Confidence'] | Should -Be 'Partial evidence'
+            @($r['Evidence'] | Where-Object { $_['State'] -eq 'NotApplicable' })[0]['Detail'] | Should -Match 'Third-party EDR declared'
+        }
+
+        It 'keeps an attested status out of the tool-verified count even when its evidence is clean' {
+            $target = @($script:PostureAllPass['Requirements'] | Where-Object { $_['Confidence'] -eq 'Tool-verified' })[0]
+            $p = Get-NRGSSPPosture -Findings $script:AllPass -Answers @{ Requirements = @{ $target['Id'] = @{ Status = 'Not implemented' } } }
+            $p['Summary']['ToolVerified'] | Should -Be ($script:PostureAllPass['Summary']['ToolVerified'] - 1)
+        }
+
         It 'derives nothing at all from an answers file that supplies only a narrative' {
             $p = Get-NRGSSPPosture -Findings @() -Answers @{
                 Requirements = @{ '3.7.1' = @{ Narrative = 'We do maintenance.' } }

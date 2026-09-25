@@ -149,10 +149,22 @@ function Get-NRGCoverageScore {
 # domain's pass. Collapse instances to the WORST state (Gap > Error > Partial >
 # Satisfied > NotApplicable), as Get-NRGAssessmentScope already does, keeping
 # the worst instance's citations. Findings without a ControlId pass through.
+function Get-NRGStateSeverityRank {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param()
+    return @{ 'Gap' = 5; 'Error' = 4; 'Partial' = 3; 'NotApplicable' = 2; 'Satisfied' = 1 }
+}
+
 function Get-NRGScoringFindings {
     [CmdletBinding()]
     param([AllowNull()] [AllowEmptyCollection()] [object[]] $Findings)
-    $rank = @{ 'Gap' = 5; 'Error' = 4; 'Partial' = 3; 'Satisfied' = 2; 'NotApplicable' = 1 }
+    # ONE worst-state order, shared by the score, the scope section and the
+    # SSP (they used three, so a control passing on one domain and unread on
+    # another scored as a pass while the scope section called it "not
+    # assessed"). Known shortfalls first; then unknown; a pass only when
+    # every instance passed.
+    $rank = Get-NRGStateSeverityRank
     $byId  = [ordered]@{}
     $loose = [System.Collections.Generic.List[object]]::new()
     foreach ($f in @($Findings)) {

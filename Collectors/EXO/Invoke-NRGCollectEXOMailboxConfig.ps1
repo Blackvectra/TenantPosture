@@ -30,6 +30,9 @@ function Invoke-NRGCollectEXOMailboxConfig {
             DkimSigningConfigs       = @()
             AntiPhishPolicies        = @()
             AntiSpamPolicies         = @()
+            OutboundSpamRules        = $null
+            AdminAuditLogConfig      = $null
+            ExternalInOutlook        = $null
             # Each of these seven sections runs its own independent try/catch
             # below so one query failing does not abort the rest, and Success
             # is set $true for the whole collector regardless. That makes an
@@ -44,6 +47,12 @@ function Invoke-NRGCollectEXOMailboxConfig {
                 DkimSigningConfigs   = 'NotRun'
                 AntiPhishPolicies    = 'NotRun'
                 AntiSpamPolicies     = 'NotRun'
+                TransportConfig      = 'NotRun'
+                OrganizationConfig   = 'NotRun'
+                SmtpAuthConfig       = 'NotRun'
+                CASMailboxProtocols  = 'NotRun'
+                AdminAuditLogConfig  = 'NotRun'
+                ExternalInOutlook    = 'NotRun'
             }
         }
     }
@@ -60,7 +69,9 @@ function Invoke-NRGCollectEXOMailboxConfig {
                     if ($raw -match '^\d+$') { [int]$raw } else { $null }  # 'Unlimited' → $null
                 } catch { $null }
             }
+            $result.Data.SectionStatus.TransportConfig = 'Collected'
         } catch {
+            $result.Data.SectionStatus.TransportConfig = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-TransportConfig' -Message $_.Exception.Message
             }
@@ -72,17 +83,37 @@ function Invoke-NRGCollectEXOMailboxConfig {
             $result.Data.OutboundSpamPolicies = @($policies | ForEach-Object {
                 @{
                     Name                          = [string]$_.Name
-                    IsDefault                     = [bool]$_.IsDefault
-                    AutoForwardingMode            = [string]$_.AutoForwardingMode
+                    IsDefault                     = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
+                    RecommendedPolicyType         = [string](Get-NRGObjectField -Item $_ -Key 'RecommendedPolicyType' -Default '')
+                    AutoForwardingMode            = [string](Get-NRGObjectField -Item $_ -Key 'AutoForwardingMode' -Default '')
                     Enabled                       = [bool]$_.Enabled
                     # EXO-3.2: admin notification on outbound spam (CIS/MDO recommend $true)
-                    NotifyOutboundSpam            = if ($null -ne $_.NotifyOutboundSpam) { [bool]$_.NotifyOutboundSpam } else { $false }
+                    NotifyOutboundSpam            = [bool](Get-NRGObjectField -Item $_ -Key 'NotifyOutboundSpam' -Default $false)
+                    NotifyOutboundSpamRecipients  = @(Get-NRGObjectField -Item $_ -Key 'NotifyOutboundSpamRecipients' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
                     ActionWhenThresholdReached    = [string]$_.ActionWhenThresholdReached
                     RecipientLimitExternalPerHour = [int]($_.RecipientLimitExternalPerHour -as [int])
                     RecipientLimitInternalPerHour = [int]($_.RecipientLimitInternalPerHour -as [int])
                     RecipientLimitPerDay          = [int]($_.RecipientLimitPerDay -as [int])
                 }
             })
+            # Which custom outbound policies actually apply: a custom policy
+            # only governs the senders its enabled rule scopes, and an "On"
+            # forwarding policy with an enabled rule overrides the default's
+            # "Off" for those senders. $null = rules not read.
+            try {
+                $result.Data.OutboundSpamRules = @(@(Get-HostedOutboundSpamFilterRule -ErrorAction Stop) | ForEach-Object {
+                    @{
+                        Name  = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '')
+                        HostedOutboundSpamFilterPolicy = [string](Get-NRGObjectField -Item $_ -Key 'HostedOutboundSpamFilterPolicy' -Default '')
+                        State = [string](Get-NRGObjectField -Item $_ -Key 'State' -Default '')
+                    }
+                })
+            } catch {
+                $result.Data.OutboundSpamRules = $null
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'EXO-OutboundSpamRules' -Message $_.Exception.Message
+                }
+            }
             $result.Data.SectionStatus.OutboundSpamPolicies = 'Collected'
         } catch {
             $result.Data.SectionStatus.OutboundSpamPolicies = 'Failed'
@@ -154,14 +185,20 @@ function Invoke-NRGCollectEXOMailboxConfig {
         # Organization Config (mailbox audit, modern auth)
         try {
             $org = Get-OrganizationConfig -ErrorAction Stop
+            # CustomerLockBoxEnabled is on Get-OrganizationConfig for every
+            # tenant; $null only when the property was not returned.
+            $lockbox = Get-NRGObjectField -Item $org -Key 'CustomerLockBoxEnabled' -Default $null
             $result.Data.OrganizationConfig = @{
-                AuditDisabled             = [bool]$org.AuditDisabled
-                OAuth2ClientProfileEnabled= [bool]$org.OAuth2ClientProfileEnabled
+                AuditDisabled             = [bool](Get-NRGObjectField -Item $org -Key 'AuditDisabled' -Default $false)
+                OAuth2ClientProfileEnabled= [bool](Get-NRGObjectField -Item $org -Key 'OAuth2ClientProfileEnabled' -Default $false)
                 DefaultMinimumNumberOfDaysForDumpster = Get-NRGObjectField -Item $org -Key 'DefaultMinimumNumberOfDaysForDumpster' -Default $null
-                Name                      = [string]$org.Name
+                CustomerLockBoxEnabled    = $(if ($null -ne $lockbox) { [bool]$lockbox } else { $null })
+                Name                      = [string](Get-NRGObjectField -Item $org -Key 'Name' -Default '')
             }
-            $result.Data.MailboxAuditSummary.AuditDisabledOrg = [bool]$org.AuditDisabled
+            $result.Data.MailboxAuditSummary.AuditDisabledOrg = $result.Data.OrganizationConfig.AuditDisabled
+            $result.Data.SectionStatus.OrganizationConfig = 'Collected'
         } catch {
+            $result.Data.SectionStatus.OrganizationConfig = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-OrgConfig' -Message $_.Exception.Message
             }
@@ -174,14 +211,18 @@ function Invoke-NRGCollectEXOMailboxConfig {
             $mailboxes = @(Get-Mailbox -RecipientTypeDetails UserMailbox -ResultSize 10 -WarningAction SilentlyContinue -ErrorAction Stop)
             if ($mailboxes.Count -gt 0) {
                 $sample = $mailboxes[0]
+                # AuditLogAgeLimit per sampled mailbox: EXO-4.1 judges the
+                # shortest, not whichever mailbox happened to come first.
+                $ages = @($mailboxes | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'AuditLogAgeLimit' -Default '') } | Where-Object { $_ })
                 $result.Data.MailboxAuditSummary.SampleMailboxAudit = @{
-                    AuditEnabled      = [bool]$sample.AuditEnabled
-                    AuditLogAgeLimit  = [string]$sample.AuditLogAgeLimit
-                    AuditDelegate     = @($sample.AuditDelegate ?? @())
-                    AuditOwner        = @($sample.AuditOwner ?? @())
-                    AuditAdmin        = @($sample.AuditAdmin ?? @())
+                    AuditEnabled      = [bool](Get-NRGObjectField -Item $sample -Key 'AuditEnabled' -Default $false)
+                    AuditLogAgeLimit  = [string](Get-NRGObjectField -Item $sample -Key 'AuditLogAgeLimit' -Default '')
+                    AuditLogAgeLimits = $ages
+                    AuditDelegate     = @(Get-NRGObjectField -Item $sample -Key 'AuditDelegate' -Default @())
+                    AuditOwner        = @(Get-NRGObjectField -Item $sample -Key 'AuditOwner' -Default @())
+                    AuditAdmin        = @(Get-NRGObjectField -Item $sample -Key 'AuditAdmin' -Default @())
                     SampleCount       = $mailboxes.Count
-                    AllEnabled        = (@($mailboxes | Where-Object { -not $_.AuditEnabled }).Count -eq 0)
+                    AllEnabled        = (@($mailboxes | Where-Object { -not (Get-NRGObjectField -Item $_ -Key 'AuditEnabled' -Default $false) }).Count -eq 0)
                 }
             }
         } catch {
@@ -197,7 +238,25 @@ function Invoke-NRGCollectEXOMailboxConfig {
         # crash under Set-StrictMode -Version Latest. Read TransportConfig
         # via a local guard variable.
         try {
-            $smtpEnabled = @(Get-CASMailbox -ResultSize Unlimited -ErrorAction Stop | Where-Object { $_.SmtpClientAuthenticationDisabled -eq $false })
+            # CASMailbox carries no UserPrincipalName (reading it threw under
+            # StrictMode and discarded the section); identify by
+            # PrimarySmtpAddress, then Name.
+            $cas = @(Get-CASMailbox -ResultSize Unlimited -ErrorAction Stop)
+            $smtpEnabled = @($cas | Where-Object { (Get-NRGObjectField -Item $_ -Key 'SmtpClientAuthenticationDisabled' -Default $null) -eq $false })
+            # POP / IMAP on EXISTING mailboxes (EXO-2.3 / 2.4). The CAS
+            # mailbox PLANS only set the default for new mailboxes; a mailbox
+            # created before the plan changed keeps POP / IMAP on.
+            $casId = { param($m) $i = [string](Get-NRGObjectField -Item $m -Key 'PrimarySmtpAddress' -Default ''); if (-not $i) { $i = [string](Get-NRGObjectField -Item $m -Key 'Name' -Default '') }; $i }
+            $popOn  = @($cas | Where-Object { (Get-NRGObjectField -Item $_ -Key 'PopEnabled'  -Default $null) -eq $true })
+            $imapOn = @($cas | Where-Object { (Get-NRGObjectField -Item $_ -Key 'ImapEnabled' -Default $null) -eq $true })
+            $result.Data.CASMailboxProtocols = @{
+                Total            = $cas.Count
+                PopEnabledCount  = $popOn.Count
+                ImapEnabledCount = $imapOn.Count
+                PopSample        = @($popOn  | Select-Object -First 25 | ForEach-Object { & $casId $_ })
+                ImapSample       = @($imapOn | Select-Object -First 25 | ForEach-Object { & $casId $_ })
+            }
+            $result.Data.SectionStatus.CASMailboxProtocols = 'Collected'
             $transportConfig = $result.Data.TransportConfig
             $tenantSmtpDisabled = if ($transportConfig) {
                 $transportConfig.SmtpClientAuthenticationDisabled
@@ -205,9 +264,15 @@ function Invoke-NRGCollectEXOMailboxConfig {
             $result.Data.SmtpAuthConfig = @{
                 TenantDisabled        = $tenantSmtpDisabled
                 PerMailboxEnabledCount= $smtpEnabled.Count
-                SampleEnabled         = @($smtpEnabled | Select-Object -First 5 | ForEach-Object { [string]$_.UserPrincipalName })
+                SampleEnabled         = @($smtpEnabled | Select-Object -First 5 | ForEach-Object {
+                    $id = [string](Get-NRGObjectField -Item $_ -Key 'PrimarySmtpAddress' -Default '')
+                    if (-not $id) { $id = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '') }
+                    $id })
             }
+            $result.Data.SectionStatus.SmtpAuthConfig = 'Collected'
         } catch {
+            $result.Data.SectionStatus.SmtpAuthConfig = 'Failed'
+            $result.Data.SectionStatus.CASMailboxProtocols = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-SmtpAuth' -Message $_.Exception.Message
             }
@@ -222,6 +287,9 @@ function Invoke-NRGCollectEXOMailboxConfig {
                     Enabled         = [bool](Get-NRGObjectField -Item $_ -Key 'Enabled' -Default $false)
                     Status          = [string](Get-NRGObjectField -Item $_ -Key 'Status' -Default '')
                     KeySize         = Get-NRGObjectField -Item $_ -Key 'KeySize' -Default $null
+                    # The documented properties; KeySize is not one of them.
+                    Selector1KeySize = Get-NRGObjectField -Item $_ -Key 'Selector1KeySize' -Default $null
+                    Selector2KeySize = Get-NRGObjectField -Item $_ -Key 'Selector2KeySize' -Default $null
                     LastChecked     = [string](Get-NRGObjectField -Item $_ -Key 'LastChecked' -Default '')
                     Selector1       = [string](Get-NRGObjectField -Item $_ -Key 'Selector1' -Default '')
                     Selector2       = [string](Get-NRGObjectField -Item $_ -Key 'Selector2' -Default '')
@@ -270,22 +338,90 @@ function Invoke-NRGCollectEXOMailboxConfig {
         # Anti-spam / inbound policies
         try {
             $spamPolicies = @(Get-HostedContentFilterPolicy -ErrorAction Stop)
+            # Every field through Get-NRGObjectField: ZapEnabled is deprecated
+            # (SpamZapEnabled / PhishZapEnabled replace it) and absent from
+            # current output, and a bare read threw under StrictMode and failed
+            # the whole anti-spam section.
             $result.Data.AntiSpamPolicies = @($spamPolicies | ForEach-Object {
                 @{
                     Name                = [string]$_.Name
-                    IsDefault           = [bool]$_.IsDefault
-                    HighConfidenceSpamAction = [string]$_.HighConfidenceSpamAction
-                    SpamAction          = [string]$_.SpamAction
-                    PhishSpamAction     = [string]$_.PhishSpamAction
-                    BulkThreshold       = $_.BulkThreshold
-                    ZapEnabled          = [bool]$_.ZapEnabled
+                    IsDefault           = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
+                    RecommendedPolicyType = [string](Get-NRGObjectField -Item $_ -Key 'RecommendedPolicyType' -Default '')
+                    HighConfidenceSpamAction = [string](Get-NRGObjectField -Item $_ -Key 'HighConfidenceSpamAction' -Default '')
+                    SpamAction          = [string](Get-NRGObjectField -Item $_ -Key 'SpamAction' -Default '')
+                    PhishSpamAction     = [string](Get-NRGObjectField -Item $_ -Key 'PhishSpamAction' -Default '')
+                    HighConfidencePhishAction = [string](Get-NRGObjectField -Item $_ -Key 'HighConfidencePhishAction' -Default '')
+                    PhishQuarantineTag  = [string](Get-NRGObjectField -Item $_ -Key 'PhishQuarantineTag' -Default '')
+                    BulkThreshold       = (Get-NRGObjectField -Item $_ -Key 'BulkThreshold' -Default $null)
+                    SpamZapEnabled      = (Get-NRGObjectField -Item $_ -Key 'SpamZapEnabled' -Default $null)
+                    PhishZapEnabled     = (Get-NRGObjectField -Item $_ -Key 'PhishZapEnabled' -Default $null)
+                    ZapEnabled          = (Get-NRGObjectField -Item $_ -Key 'ZapEnabled' -Default $null)
+                    AllowedSenderDomains = @(Get-NRGObjectField -Item $_ -Key 'AllowedSenderDomains' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
+                    AllowedSenders      = @(Get-NRGObjectField -Item $_ -Key 'AllowedSenders' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
                 }
             })
+            # Which custom policies are actually applied (an enabled rule).
+            $result.Data.AntiSpamRules = @()
+            try {
+                $result.Data.AntiSpamRules = @(@(Get-HostedContentFilterRule -ErrorAction Stop) | ForEach-Object {
+                    @{
+                        Name = [string]$_.Name
+                        HostedContentFilterPolicy = [string](Get-NRGObjectField -Item $_ -Key 'HostedContentFilterPolicy' -Default '')
+                        State = [string](Get-NRGObjectField -Item $_ -Key 'State' -Default '')
+                        RecipientDomainIs = @(Get-NRGObjectField -Item $_ -Key 'RecipientDomainIs' -Default @())
+                        SentTo = @(Get-NRGObjectField -Item $_ -Key 'SentTo' -Default @())
+                        SentToMemberOf = @(Get-NRGObjectField -Item $_ -Key 'SentToMemberOf' -Default @())
+                        HasExceptions = [bool]@(@(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentTo' -Default @()) + @(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentToMemberOf' -Default @()) + @(Get-NRGObjectField -Item $_ -Key 'ExceptIfRecipientDomainIs' -Default @()) | Where-Object { $_ }).Count
+                    }
+                })
+            } catch {
+                $result.Data.AntiSpamRules = $null
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'EXO-AntiSpamRules' -Message $_.Exception.Message
+                }
+            }
             $result.Data.SectionStatus.AntiSpamPolicies = 'Collected'
         } catch {
             $result.Data.SectionStatus.AntiSpamPolicies = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-AntiSpam' -Message $_.Exception.Message
+            }
+        }
+
+        # Admin audit log (EXO-4.2) and Unified Audit Log ingestion (EXO-3.5).
+        # Read from the Exchange Online session: Security & Compliance
+        # PowerShell always reports UnifiedAuditLogIngestionEnabled as False.
+        # The cmdlet exists in both sessions, so it is pinned to Exchange
+        # Online (Lib/Get-NRGExoCommand.ps1); a value read from anywhere else
+        # is not recorded.
+        try {
+            $auditCmd = Get-NRGExoCommand -Name 'Get-AdminAuditLogConfig' -Session ExchangeOnline
+            if (-not $auditCmd.Command) { throw 'Get-AdminAuditLogConfig is not available from the Exchange Online session.' }
+            $aal = & $auditCmd.Command -ErrorAction Stop
+            $fromExo = [string]$auditCmd.Source -eq 'ExchangeOnline'
+            $result.Data.AdminAuditLogConfig = @{
+                AdminAuditLogEnabled            = Get-NRGObjectField -Item $aal -Key 'AdminAuditLogEnabled' -Default $null
+                UnifiedAuditLogIngestionEnabled = $(if ($fromExo) { Get-NRGObjectField -Item $aal -Key 'UnifiedAuditLogIngestionEnabled' -Default $null } else { $null })
+                Source                          = [string]$auditCmd.Source
+            }
+            $result.Data.SectionStatus.AdminAuditLogConfig = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.AdminAuditLogConfig = 'Failed'
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'EXO-AdminAuditLogConfig' -Message $_.Exception.Message
+            }
+        }
+
+        # External sender tag (EXO-1.5). The anti-phish EnableExternalSenderTag
+        # property does not exist; the Outlook "External" tag is this setting.
+        try {
+            $ext = @(Get-ExternalInOutlook -ErrorAction Stop) | Select-Object -First 1
+            $result.Data.ExternalInOutlook = @{ Enabled = Get-NRGObjectField -Item $ext -Key 'Enabled' -Default $null }
+            $result.Data.SectionStatus.ExternalInOutlook = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.ExternalInOutlook = 'Failed'
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'EXO-ExternalInOutlook' -Message $_.Exception.Message
             }
         }
 

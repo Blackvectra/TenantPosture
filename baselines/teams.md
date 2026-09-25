@@ -147,7 +147,7 @@ Set-CsTeamsMeetingPolicy -AllowExternalParticipantGiveRequestControl $false
 
 **Severity:** Low  |  **Category:** Collaboration  |  **Automated:** Yes
 
-**License required:** Included (M365 Business Standard+)
+**License required:** M365 Business Premium or E3+
 
 **Description:**
 Meeting recordings are stored in SharePoint/OneDrive with organization retention policies applied.
@@ -461,7 +461,7 @@ Set-CsTeamsMeetingPolicy -AllowPSTNUsersToBypassLobby $false
 
 **Severity:** Low  |  **Category:** Collaboration  |  **Automated:** Yes
 
-**License required:** Included (M365 Business Standard+)
+**License required:** Teams Premium (add-on)
 
 **Description:**
 Content watermarking is enabled for Teams meetings to deter and trace content leaks.
@@ -677,20 +677,20 @@ Teams Admin Center > External access > Allow only specific external domains. Add
 
 ---
 
-### TMS-4.4 — Live Events Cannot Broadcast to Anonymous Internet Users
+### TMS-4.4 — Teams Events Cannot Be Attended by Anonymous Internet Users
 
 **Severity:** Medium  |  **Category:** Collaboration  |  **Automated:** Yes
 
 **License required:** Included (all plans)
 
 **Description:**
-Teams Live Events are not configured to allow public anonymous streaming to unauthenticated internet users.
+Teams town halls and webinars (which replaced live events, retired by Microsoft on June 30, 2026) are restricted to the organization and its guests, not open to anonymous internet attendees.
 
 **Business risk:**
 Live events with anonymous broadcast enabled allow any internet user to view internal organizational meetings, presentations, and discussions without authentication.
 
 **Remediation:**
-Set-CsTeamsMeetingBroadcastPolicy -Identity Global -BroadcastAttendeeVisibilityMode EveryoneInCompany (or -AllowBroadcastScheduling $false to disable live events entirely).
+Set-CsTeamsEventsPolicy -Identity Global -EventAccessType EveryoneInCompanyExcludingGuests -TownhallEventAttendeeAccess EveryoneInOrganizationAndGuests (or -AllowWebinars Disabled / -AllowTownhalls Disabled). Grant a separate policy to the few organizers who genuinely run public events.
 
 **Framework mappings:**
 

@@ -1,0 +1,341 @@
+{
+  "_comment": [
+    "Which Microsoft service plans satisfy each controls.json LicenseRequirement.",
+    "Source: Microsoft's 'Product names and service plan identifiers for licensing' reference (CSV) and the Microsoft Purview / Defender service descriptions.",
+    "A rule is a list of groups; every group must be satisfied, and a group is satisfied by ANY one of its plans (AND of ORs).",
+    "Plans are matched against Graph /subscribedSkus servicePlans with provisioningStatus 'Success', case-insensitively.",
+    "'controls' overrides 'requirements' for one control: several controls share a requirement string but need different features (Customer Lockbox and Endpoint DLP are both 'M365 E5 or E5 Compliance add-on').",
+    "Why this matters: Set-NRGLicenseGating takes a control out of the score when its requirement is NOT met, so a rule that misses a plan the tenant holds hides a real gap. Match the plan that delivers the feature, never the product name.",
+    "The two 'E5 Compliance' requirement strings are the whole bundle (every feature their controls use); each control's own rule in 'controls' is what gating and the report use."
+  ],
+  "requirements": {
+    "M365 Business Premium or Entra ID P1": [
+      [
+        "AAD_PREMIUM",
+        "AAD_PREMIUM_P2"
+      ]
+    ],
+    "M365 Business Premium or Entra ID P1 + Intune": [
+      [
+        "AAD_PREMIUM",
+        "AAD_PREMIUM_P2"
+      ],
+      [
+        "INTUNE_A",
+        "INTUNE_A_GOV",
+        "INTUNE_A_VL",
+        "INTUNE_EDU",
+        "INTUNE_SMBIZ"
+      ]
+    ],
+    "M365 Business Premium or Intune Plan 1": [
+      [
+        "INTUNE_A",
+        "INTUNE_A_GOV",
+        "INTUNE_A_VL",
+        "INTUNE_EDU",
+        "INTUNE_SMBIZ"
+      ]
+    ],
+    "Entra ID P2": [
+      [
+        "AAD_PREMIUM_P2"
+      ]
+    ],
+    "Entra ID P2 + Workload Identities add-on": [
+      [
+        "AAD_PREMIUM_P2"
+      ],
+      [
+        "AAD_WRKLDID_P2"
+      ]
+    ],
+    "Entra Workload Identities Premium (add-on)": [
+      [
+        "AAD_WRKLDID_P2"
+      ]
+    ],
+    "Exchange Online Plan 2 or Exchange Online Archiving (M365 Business Premium, E3, E5)": [
+      [
+        "EXCHANGE_S_ENTERPRISE",
+        "EXCHANGE_S_ENTERPRISE_GOV",
+        "EXCHANGE_S_ARCHIVE_ADDON"
+      ]
+    ],
+    "M365 Business Premium or E3+": [
+      [
+        "BPOS_S_DlpAddOn",
+        "EXCHANGE_S_ENTERPRISE",
+        "EXCHANGE_S_ENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE",
+        "SHAREPOINTENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE_EDU"
+      ]
+    ],
+    "M365 Business Premium or E3+ (Copilot requires M365 Copilot add-on)": [
+      [
+        "RMS_S_PREMIUM",
+        "RMS_S_PREMIUM_GOV",
+        "RMS_S_PREMIUM2",
+        "RMS_S_PREMIUM2_GOV",
+        "MIP_S_CLP1",
+        "MIP_S_CLP2"
+      ]
+    ],
+    "Defender for Office 365 Plan 1 (M365 Business Premium)": [
+      [
+        "ATP_ENTERPRISE",
+        "ATP_ENTERPRISE_GOV",
+        "THREAT_INTELLIGENCE",
+        "THREAT_INTELLIGENCE_GOV"
+      ]
+    ],
+    "Defender for Office 365 Plan 2 (M365 E5 or add-on)": [
+      [
+        "THREAT_INTELLIGENCE",
+        "THREAT_INTELLIGENCE_GOV"
+      ]
+    ],
+    "Microsoft Defender for Cloud Apps (M365 E5 or add-on)": [
+      [
+        "ADALLOM_S_STANDALONE",
+        "ADALLOM_S_STANDALONE_DOD"
+      ]
+    ],
+    "Microsoft Defender for Endpoint Plan 1+": [
+      [
+        "MDE_LITE",
+        "MDE_SMB",
+        "WINDEFATP"
+      ]
+    ],
+    "Microsoft Defender for Endpoint Plan 2 or Defender for Business (M365 Business Premium)": [
+      [
+        "WINDEFATP",
+        "MDE_SMB"
+      ]
+    ],
+    "Microsoft Sentinel (add-on) or Defender XDR": [
+      [
+        "MTP"
+      ]
+    ],
+    "M365 Copilot add-on license": [
+      [
+        "M365_COPILOT_APPS",
+        "M365_COPILOT_BUSINESS_CHAT",
+        "M365_COPILOT_TEAMS",
+        "M365_COPILOT_SHAREPOINT"
+      ]
+    ],
+    "Power Platform + Copilot Studio license": [
+      [
+        "VIRTUAL_AGENT_BASE_MESSAGES",
+        "CDS_VIRTUAL_AGENT_USL",
+        "COPILOT_STUDIO_IN_COPILOT_FOR_M365",
+        "POWERAPPS_PER_USER",
+        "POWER_VIRTUAL_AGENTS_O365_P1",
+        "POWER_VIRTUAL_AGENTS_O365_P2",
+        "POWER_VIRTUAL_AGENTS_O365_P3"
+      ]
+    ],
+    "M365 E5 Compliance add-on": [
+      [
+        "COMMUNICATIONS_COMPLIANCE",
+        "MICROSOFT_COMMUNICATION_COMPLIANCE"
+      ],
+      [
+        "INFORMATION_BARRIERS"
+      ],
+      [
+        "INSIDER_RISK",
+        "INSIDER_RISK_MANAGEMENT"
+      ],
+      [
+        "MIP_S_CLP2",
+        "RMS_S_PREMIUM2",
+        "RMS_S_PREMIUM2_GOV"
+      ]
+    ],
+    "M365 E5 or E5 Compliance add-on": [
+      [
+        "LOCKBOX_ENTERPRISE",
+        "LOCKBOX_ENTERPRISE_GOV",
+        "CustomerLockboxA_Enterprise"
+      ],
+      [
+        "MICROSOFTENDPOINTDLP"
+      ],
+      [
+        "M365_ADVANCED_AUDITING"
+      ]
+    ],
+    "Teams Premium (add-on)": [
+      [
+        "TEAMSPRO_PROTECTION"
+      ]
+    ]
+  },
+  "controls": {
+    "_comment": "Per-control rules. DLP: Business Premium's DLP plan or Exchange/SharePoint Plan 2. Labels: AIP P1/P2 or Information Protection for Office 365. Retention: Exchange Plan 2 / Exchange Online Archiving / SharePoint Plan 2 (Purview service description, 'Licensing for retention policies').",
+    "DEF-4.1": [
+      [
+        "BPOS_S_DlpAddOn",
+        "EXCHANGE_S_ENTERPRISE",
+        "EXCHANGE_S_ENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE",
+        "SHAREPOINTENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE_EDU"
+      ]
+    ],
+    "DEF-4.2": [
+      [
+        "BPOS_S_DlpAddOn",
+        "EXCHANGE_S_ENTERPRISE",
+        "EXCHANGE_S_ENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE",
+        "SHAREPOINTENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE_EDU"
+      ]
+    ],
+    "PVW-1.3": [
+      [
+        "BPOS_S_DlpAddOn",
+        "EXCHANGE_S_ENTERPRISE",
+        "EXCHANGE_S_ENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE",
+        "SHAREPOINTENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE_EDU"
+      ]
+    ],
+    "PVW-3.4": [
+      [
+        "BPOS_S_DlpAddOn",
+        "EXCHANGE_S_ENTERPRISE",
+        "EXCHANGE_S_ENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE",
+        "SHAREPOINTENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE_EDU"
+      ]
+    ],
+    "PVW-1.4": [
+      [
+        "RMS_S_PREMIUM",
+        "RMS_S_PREMIUM_GOV",
+        "RMS_S_PREMIUM2",
+        "RMS_S_PREMIUM2_GOV",
+        "MIP_S_CLP1",
+        "MIP_S_CLP2"
+      ]
+    ],
+    "PVW-4.3": [
+      [
+        "RMS_S_PREMIUM",
+        "RMS_S_PREMIUM_GOV",
+        "RMS_S_PREMIUM2",
+        "RMS_S_PREMIUM2_GOV",
+        "MIP_S_CLP1",
+        "MIP_S_CLP2"
+      ]
+    ],
+    "PVW-2.5": [
+      [
+        "EXCHANGE_S_ENTERPRISE",
+        "EXCHANGE_S_ENTERPRISE_GOV",
+        "EXCHANGE_S_ARCHIVE_ADDON",
+        "SHAREPOINTENTERPRISE",
+        "SHAREPOINTENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE_EDU",
+        "INFO_GOVERNANCE",
+        "RECORDS_MANAGEMENT"
+      ]
+    ],
+    "PVW-4.4": [
+      [
+        "EXCHANGE_S_ENTERPRISE",
+        "EXCHANGE_S_ENTERPRISE_GOV",
+        "EXCHANGE_S_ARCHIVE_ADDON",
+        "SHAREPOINTENTERPRISE",
+        "SHAREPOINTENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE_EDU",
+        "INFO_GOVERNANCE",
+        "RECORDS_MANAGEMENT"
+      ]
+    ],
+    "PVW-3.2": [
+      [
+        "EXCHANGE_S_ENTERPRISE",
+        "EXCHANGE_S_ENTERPRISE_GOV",
+        "EXCHANGE_S_ARCHIVE_ADDON",
+        "SHAREPOINTENTERPRISE",
+        "SHAREPOINTENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE_EDU"
+      ]
+    ],
+    "PVW-2.2": [
+      [
+        "COMMUNICATIONS_COMPLIANCE",
+        "MICROSOFT_COMMUNICATION_COMPLIANCE"
+      ]
+    ],
+    "PVW-2.3": [
+      [
+        "INFORMATION_BARRIERS"
+      ]
+    ],
+    "PVW-2.4": [
+      [
+        "INSIDER_RISK",
+        "INSIDER_RISK_MANAGEMENT"
+      ]
+    ],
+    "PVW-2.6": [
+      [
+        "MIP_S_CLP2",
+        "RMS_S_PREMIUM2",
+        "RMS_S_PREMIUM2_GOV"
+      ]
+    ],
+    "PPL-3.2": [
+      [
+        "MIP_S_CLP2",
+        "RMS_S_PREMIUM2",
+        "RMS_S_PREMIUM2_GOV"
+      ]
+    ],
+    "EXO-2.5": [
+      [
+        "LOCKBOX_ENTERPRISE",
+        "LOCKBOX_ENTERPRISE_GOV",
+        "CustomerLockboxA_Enterprise"
+      ]
+    ],
+    "DEF-4.5": [
+      [
+        "MICROSOFTENDPOINTDLP"
+      ]
+    ],
+    "PVW-4.1": [
+      [
+        "M365_ADVANCED_AUDITING"
+      ]
+    ],
+    "PVW-4.2": [
+      [
+        "M365_ADVANCED_AUDITING"
+      ]
+    ],
+    "TMS-1.5": [
+      [
+        "EXCHANGE_S_ENTERPRISE",
+        "EXCHANGE_S_ENTERPRISE_GOV",
+        "EXCHANGE_S_ARCHIVE_ADDON",
+        "SHAREPOINTENTERPRISE",
+        "SHAREPOINTENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE_EDU",
+        "INFO_GOVERNANCE",
+        "RECORDS_MANAGEMENT"
+      ]
+    ]
+  }
+}

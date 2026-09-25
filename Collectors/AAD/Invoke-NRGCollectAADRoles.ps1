@@ -54,6 +54,30 @@ function Invoke-NRGCollectAADRoles {
             'Azure AD Joined Device Local Administrator', 'Intune Administrator',
             'Conditional Access Administrator'
         )
+        # Built-in role TEMPLATE ids (Microsoft Entra built-in roles reference;
+        # a built-in role's roleDefinitionId equals its template id in every
+        # tenant). With the roleDefinitions read failed, names fell back to the
+        # GUID, every assignment scored IsPriv=$false, and AAD-3.2 reported
+        # "No permanent privileged role assignments" beside a permanent GA.
+        $privRoleTemplates = @{
+            '62e90394-69f5-4237-9190-012177145e10' = 'Global Administrator'
+            'e8611ab8-c189-46e8-94e1-60213ab1f814' = 'Privileged Role Administrator'
+            '194ae4cb-b126-40b2-bd5b-6091b380977d' = 'Security Administrator'
+            '29232cdf-9323-42fd-ade2-1d097af3e4de' = 'Exchange Administrator'
+            'f28a1f50-f6e7-4571-818b-6a12f2af6b6c' = 'SharePoint Administrator'
+            'fe930be7-5e62-47db-91af-98c3a49a38b1' = 'User Administrator'
+            '9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3' = 'Application Administrator'
+            '158c047a-c907-4556-b7ef-446551a6b5f7' = 'Cloud Application Administrator'
+            'c4e39bd9-1100-46d3-8c65-fb160da0071f' = 'Authentication Administrator'
+            '7be44c8a-adaf-4e2a-84d6-ab2649e08a13' = 'Privileged Authentication Administrator'
+            '729827e3-9c14-49f7-bb1b-9608f156bbb8' = 'Helpdesk Administrator'
+            '17315797-102d-40b4-93e0-432062caca18' = 'Compliance Administrator'
+            'b0f54661-2d74-4c50-afa3-1ec803f12efe' = 'Billing Administrator'
+            '69091246-20e8-4a56-aa4d-066075b2a7a8' = 'Teams Administrator'
+            '9f06204d-73c1-4d4c-880a-6edb90606fd8' = 'Azure AD Joined Device Local Administrator'
+            '3a2c62db-5318-420d-8d74-23affee5d9d5' = 'Intune Administrator'
+            'b1be1c3e-b65d-4f19-8427-f6fa0d97feb9' = 'Conditional Access Administrator'
+        }
 
         # Get all role definitions (we need names to match). A tenant's
         # built-in plus custom role definitions can exceed a single $top=200
@@ -143,7 +167,7 @@ function Invoke-NRGCollectAADRoles {
             $mkAssignment = {
                 param($a)
                 $pr = Get-NRGObjectField -Item $a -Key 'principal' -Default @{}
-                $roleName = $roleMap[(Get-NRGObjectField -Item $a -Key 'roleDefinitionId')] ?? (Get-NRGObjectField -Item $a -Key 'roleDefinitionId' -Default '')
+                $roleName = $roleMap[(Get-NRGObjectField -Item $a -Key 'roleDefinitionId')] ?? $privRoleTemplates[[string](Get-NRGObjectField -Item $a -Key 'roleDefinitionId' -Default '')] ?? (Get-NRGObjectField -Item $a -Key 'roleDefinitionId' -Default '')
                 @{
                     Id                   = [string](Get-NRGObjectField -Item $a -Key 'id' -Default '')
                     RoleDefinitionId     = [string](Get-NRGObjectField -Item $a -Key 'roleDefinitionId' -Default '')
@@ -215,7 +239,7 @@ function Invoke-NRGCollectAADRoles {
             $mkEligible = {
                 param($e)
                 $pr = Get-NRGObjectField -Item $e -Key 'principal' -Default @{}
-                $roleName = $roleMap[(Get-NRGObjectField -Item $e -Key 'roleDefinitionId')] ?? (Get-NRGObjectField -Item $e -Key 'roleDefinitionId' -Default '')
+                $roleName = $roleMap[(Get-NRGObjectField -Item $e -Key 'roleDefinitionId')] ?? $privRoleTemplates[[string](Get-NRGObjectField -Item $e -Key 'roleDefinitionId' -Default '')] ?? (Get-NRGObjectField -Item $e -Key 'roleDefinitionId' -Default '')
                 @{
                     Id                   = [string](Get-NRGObjectField -Item $e -Key 'id' -Default '')
                     RoleDefinitionId     = [string](Get-NRGObjectField -Item $e -Key 'roleDefinitionId' -Default '')

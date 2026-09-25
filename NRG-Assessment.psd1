@@ -1,6 +1,6 @@
 @{
     # Module identity
-    ModuleVersion     = '4.13.0'
+    ModuleVersion     = '4.14.0'
     GUID              = 'f8dff693-11ac-495b-901a-290773371ef5'
     Author            = 'Matthew Levorson'
     CompanyName       = 'NRG Technology Services / NextLayerSec LLC'
@@ -34,7 +34,6 @@
         'ConvertTo-NRGHtmlSafe',
         'ConvertTo-NRGSafeUrl',
         'Start-NRGWebServer',
-        'Register-NRGTenantApp',
         'Get-NRGControlDefinitions',
         'Get-NRGControlById',
         'Get-NRGFrameworkCitations',
@@ -101,6 +100,8 @@
         'Invoke-NRGEvaluatorSafe',
         'Resolve-NRGDns',
         'Resolve-NRGTenantId',
+        'Set-NRGThirdPartyEdr',
+        'Set-NRGLicenseGating',
         'Get-NRGModuleHealth',
         'Repair-NRGModuleHealth',
         'Get-NRGModuleInstallScope',
@@ -260,6 +261,7 @@
         'Test-NRGControlTeamsAnonymousStart',
         'Test-NRGControlTeamsFederationAllowlist',
         'Test-NRGControlTeamsLiveEvents',
+        'Test-NRGControlTeamsRecordingRetention',
         'Test-NRGControlPurview',
         'Test-NRGControlPurviewAuditSearch',
         'Test-NRGControlPurviewCommCompliance',

@@ -99,7 +99,11 @@ function Get-NRGNISTImprovementPlan {
         Available = $false
     }
 
-    $live = @($Findings | Where-Object { $null -ne $_ })
+    # One finding per control (worst instance), exactly what the score counts.
+    # Per-domain DNS findings were each planned as a separate fix, so three
+    # domains missing MTA-STS projected 3 points for 1 point of real movement
+    # and the plan promised coverage above 100%.
+    $live = @(Get-NRGScoringFindings -Findings @($Findings | Where-Object { $null -ne $_ }))
     if ($live.Count -eq 0) { return $empty }
 
     # ── Baseline, from the same helper every other score uses ────────────────
@@ -144,7 +148,7 @@ function Get-NRGNISTImprovementPlan {
         if ($licReq) {
             if (Get-Command Test-NRGLicenseRequirementMet -ErrorAction SilentlyContinue) {
                 try {
-                    $licensed = [bool](Test-NRGLicenseRequirementMet -LicenseRequirement $licReq -LicenseProfile $LicenseProfile)
+                    $licensed = [bool](Test-NRGLicenseRequirementMet -LicenseRequirement $licReq -LicenseProfile $LicenseProfile -ControlId $cid)
                 } catch { $licensed = $false }
             } else {
                 $licensed = $false

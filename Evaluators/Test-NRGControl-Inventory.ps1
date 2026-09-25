@@ -115,7 +115,7 @@ function Test-NRGControlInventoryStaleGuests {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$allGuests guest account(s) found — all have signed in within the past 90 days. No stale guest access detected."
     } else {
         $objects = @($staleGuests | Sort-Object DaysSinceSignIn -Descending | Select-Object -First 50 | ForEach-Object {
-            $days = if ($_.DaysSinceSignIn -eq 9999) { "Never signed in" } else { "$($_.DaysSinceSignIn) days ago" }
+            $days = if ($_.DaysSinceSignIn -eq 9999) { "Never signed in" } else { "$($_.DaysSinceSignIn) days since $([string](Get-NRGObjectField -Item $_ -Key 'LastSignInBasis' -Default 'last sign-in'))" }
             "$($_.DisplayName) ($($_.UPN)) — Last sign-in: $days"
         })
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
@@ -149,14 +149,14 @@ function Test-NRGControlInventoryStaleMembers {
         return
     }
     if ($stale.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All licensed member accounts have been active within the past 90 days. No dormant employee accounts detected.'
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Every licensed member account older than 90 days has signed in successfully within the past 90 days. No dormant employee accounts detected.'
     } else {
         $objects = @($stale | Sort-Object DaysSinceSignIn -Descending | Select-Object -First 50 | ForEach-Object {
-            $days = if ($_.DaysSinceSignIn -eq 9999) { "Never signed in" } else { "$($_.DaysSinceSignIn) days ago" }
+            $days = if ($_.DaysSinceSignIn -eq 9999) { "Never signed in" } else { "$($_.DaysSinceSignIn) days since $([string](Get-NRGObjectField -Item $_ -Key 'LastSignInBasis' -Default 'last sign-in'))" }
             "$($_.DisplayName) ($($_.UPN)) — $days"
         })
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "$($stale.Count) licensed member account(s) have not signed in for 90+ days. These accounts are likely departed employees whose accounts were not offboarded — each is a dormant attack surface with an active license." `
+            -Detail "$($stale.Count) licensed member account(s) older than 90 days have not successfully signed in for 90+ days. These accounts are likely departed employees whose accounts were not offboarded — each is a dormant attack surface with an active license." `
             -CurrentValue "$($stale.Count) stale licensed accounts" -RequiredValue 'All accounts active or offboarded' `
             -Remediation $ctrl.Remediation -AffectedObjects $objects
     }
@@ -188,30 +188,36 @@ function Test-NRGControlInventoryOAuthApps {
     if ($apps.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No tenant-wide (AllPrincipals) OAuth consent grants found. Third-party app access is properly scoped to consenting individuals only.'
     } else {
-        # Flag apps with sensitive scopes
-        $sensitive = @('Mail.Read','Mail.ReadWrite','Mail.Send','Files.Read.All','Files.ReadWrite.All',
-                       'User.Read.All','Directory.Read.All','Calendars.Read','offline_access')
-        $highRisk = @($apps | Where-Object {
-            $scope = [string]($_.Scope ?? '')
-            $sensitive | Where-Object { $scope -match $_ }
-        })
-        # v4.6.4 FIX: the prior `$highRisk | Where-Object { $_.AppName -eq $_.AppName }`
-        # was a self-comparison (always-true) — every app got the [HIGH RISK SCOPE]
-        # label whenever any high-risk app existed. Build a lookup set keyed on
-        # AppName so we test "is THIS app (outer) in the high-risk list?" correctly.
-        $highRiskNames = @{}
-        foreach ($hr in $highRisk) {
-            if ($hr -and $hr.AppName) { $highRiskNames[[string]$hr.AppName] = $true }
+        # Scopes that only sign the user in (OpenID Connect plus reading the
+        # signed-in user's own profile) are what every "Sign in with
+        # Microsoft" app needs; granting them tenant-wide exposes nobody's
+        # data. offline_access keeps the token refreshable and grants no data.
+        $signInOnly = @('openid','profile','email','offline_access','User.Read')
+        $sensitive  = @('Mail.Read','Mail.ReadBasic','Mail.ReadWrite','Mail.Send','Mail.Read.Shared','Mail.ReadWrite.Shared','Mail.Send.Shared',
+                        'Files.Read','Files.ReadWrite','Files.Read.All','Files.ReadWrite.All','Sites.Read.All','Sites.ReadWrite.All','Sites.FullControl.All',
+                        'User.Read.All','User.ReadWrite.All','Directory.Read.All','Directory.ReadWrite.All','Directory.AccessAsUser.All',
+                        'Calendars.Read','Calendars.ReadWrite','Contacts.Read','Contacts.ReadWrite','Notes.Read.All','Notes.ReadWrite.All',
+                        'Chat.Read','Chat.ReadWrite','ChannelMessage.Read.All','EWS.AccessAsUser.All','full_access_as_user',
+                        'RoleManagement.ReadWrite.Directory','Application.ReadWrite.All','AppRoleAssignment.ReadWrite.All')
+        $tokens = { param($a) @(([string](Get-NRGObjectField -Item $a -Key 'Scope' -Default '')) -split '\s+' | Where-Object { $_ }) }
+        $name   = { param($a) $n = [string](Get-NRGObjectField -Item $a -Key 'AppName' -Default ''); if ($n) { $n } else { [string](Get-NRGObjectField -Item $a -Key 'ClientId' -Default '?') } }
+        $dataApps = @($apps | Where-Object { @(& $tokens $_ | Where-Object { $_ -notin $signInOnly }).Count -gt 0 })
+        if ($dataApps.Count -eq 0) {
+            Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+                -Detail "$($apps.Count) tenant-wide consent grant(s) exist, and each carries only sign-in permissions ($($signInOnly -join ', ')), which read nothing beyond the signed-in user's own basic profile: $((@($apps | ForEach-Object { & $name $_ } | Sort-Object -Unique)) -join ', ')."
+            return
         }
-        $objects = @($apps | Select-Object -First 30 | ForEach-Object {
-            $appName   = [string]$_.AppName
-            $riskLabel = if ($highRiskNames.ContainsKey($appName)) { ' [HIGH RISK SCOPE]' } else { '' }
-            "$appName$riskLabel — Scopes: $($_.Scope -replace ' ',' | ')"
+        $highRisk = @($dataApps | Where-Object { @(& $tokens $_ | Where-Object { $_ -in $sensitive }).Count -gt 0 })
+        $objects = @($dataApps | Select-Object -First 30 | ForEach-Object {
+            $risky = @(& $tokens $_ | Where-Object { $_ -in $sensitive })
+            $riskLabel = if ($risky.Count) { ' [HIGH RISK SCOPE]' } else { '' }
+            "$(& $name $_)$riskLabel — Scopes: $((& $tokens $_) -join ' | ')"
         })
         $sev = if ($highRisk.Count -gt 0) { 'High' } else { 'Medium' }
+        $signInNote = if ($apps.Count -gt $dataApps.Count) { " A further $($apps.Count - $dataApps.Count) grant(s) carry sign-in permissions only and are not counted." } else { '' }
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $sev -FrameworkIds $cit `
-            -Detail "$($apps.Count) application(s) have been granted OAuth permissions across ALL users in this tenant. $($highRisk.Count) have sensitive scopes (Mail, Files, Directory access). Each of these apps can access data for every user — if any app is compromised or malicious, the impact is tenant-wide." `
-            -CurrentValue "$($apps.Count) apps with AllPrincipals consent" -RequiredValue 'All tenant-wide grants reviewed and justified' `
+            -Detail "$($dataApps.Count) application(s) have been granted data permissions across ALL users in this tenant; $($highRisk.Count) include sensitive scopes (mail, files, directory, chat). Each can act on data for every user — if the app or its publisher is compromised, the impact is tenant-wide.$signInNote" `
+            -CurrentValue "$($dataApps.Count) apps with tenant-wide data consent" -RequiredValue 'All tenant-wide grants reviewed and justified' `
             -Remediation $ctrl.Remediation -AffectedObjects $objects
     }
 }
@@ -361,30 +367,18 @@ function Test-NRGControlInventoryMailboxAuditDisabled {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $inv = Get-NRGRawData -Key 'EXO-Inventory'
     if (-not $inv -or -not $inv.Success) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'EXO inventory not collected'; return
     }
-    # Empty is not clean. The collector reported success, but this section
-    # may not have landed — a failed sub-query leaves it absent or empty,
-    # and reading that as compliance is a false pass on a control nobody
-    # checked. Not assessed is the only honest verdict.
-    if (-not (Test-NRGSectionCollected $inv 'AuditDisabledMailboxes')) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AuditDisabledMailboxes was not collected; not assessed.'
-        return
-    }
-    $noAudit = @($inv.Data['AuditDisabledMailboxes'] ?? @())
-    if ($noAudit.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'AuditDisabledMailboxes')) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
-            -Detail 'Mailbox audit enumeration did not complete (see Exceptions) — audit coverage could not be assessed.'
-        return
-    }
-    if ($noAudit.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'All mailboxes have audit logging enabled. Mailbox access, inbox rules, and delegation changes are being recorded.'
-    } else {
-        $objects = @($noAudit | ForEach-Object { "$($_.DisplayName) ($($_.UPN)) [$($_.MailboxType)]" })
+    $st = Get-NRGMailboxAuditBypassState -Inventory $inv
+    if ($st.Kind -eq 'Bypass') {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "$($noAudit.Count) mailbox(es) have audit logging explicitly disabled. A BEC incident affecting these accounts cannot be investigated — there is no record of what email was read, what rules were created, or who accessed the mailbox." `
-            -CurrentValue "$($noAudit.Count) mailboxes unaudited" -RequiredValue 'Zero mailboxes with AuditEnabled = $false' `
-            -Remediation $ctrl.Remediation -AffectedObjects $objects
+            -Detail "$($st.Names.Count) account(s) have a mailbox audit bypass: nothing they do in any mailbox — their own, a shared mailbox, or one they administer — is recorded. A BEC incident involving these accounts cannot be investigated." `
+            -CurrentValue "$($st.Names.Count) account(s) with AuditBypassEnabled = True" -RequiredValue 'No mailbox audit bypass associations' `
+            -Remediation 'For each account: Set-MailboxAuditBypassAssociation -Identity <account> -AuditBypassEnabled $false. Bypass is only appropriate for high-volume service accounts whose actions are logged elsewhere.' -AffectedObjects $st.Names
+    } elseif ($st.Kind -eq 'Clean') {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail $st.Detail
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail $st.Detail
     }
 }
 
@@ -395,29 +389,27 @@ function Test-NRGControlInventorySMTPAuthUsers {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $inv = Get-NRGRawData -Key 'EXO-Inventory'
     if (-not $inv -or -not $inv.Success) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'EXO inventory not collected'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'EXO inventory not collected'; return
     }
-    # Empty is not clean. The collector reported success, but this section
-    # may not have landed — a failed sub-query leaves it absent or empty,
-    # and reading that as compliance is a false pass on a control nobody
-    # checked. Not assessed is the only honest verdict.
     if (-not (Test-NRGSectionCollected $inv 'SmtpAuthEnabledPerUser')) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'SmtpAuthEnabledPerUser was not collected; not assessed.'
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'SmtpAuthEnabledPerUser was not collected; not assessed.'
         return
     }
-    $smtp = @($inv.Data['SmtpAuthEnabledPerUser'] ?? @())
-    if ($smtp.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'SmtpAuthEnabledPerUser')) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
-            -Detail 'Per-user SMTP AUTH enumeration did not complete (see Exceptions) — legacy authentication overrides could not be assessed.'
+    $st = Get-NRGSmtpAuthOverrideState -Inventory $inv
+    if ($st.OrgDisabled -eq $false) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'SMTP AUTH is enabled for the whole organization, so every mailbox can use it whether or not it has a per-user override. Scored under EXO-1.2.'
         return
     }
-    if ($smtp.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No per-user SMTP AUTH overrides. The org-level SMTP AUTH disable is enforced across all users — legacy client authentication is blocked.'
+    $orgNote = if ($st.OrgDisabled -eq $true) { 'The organization-level SMTP AUTH disable applies to every other mailbox.' } else { 'The organization-level SMTP AUTH setting was not read.' }
+    if ($st.Count -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "No mailbox re-enables SMTP AUTH individually. $orgNote"
     } else {
-        $objects = @($smtp | ForEach-Object { "$($_.DisplayName) ($($_.UPN))" })
+        $objects = @($st.List | ForEach-Object { "$([string](Get-NRGObjectField -Item $_ -Key 'DisplayName' -Default '')) ($([string](Get-NRGObjectField -Item $_ -Key 'UPN' -Default '')))" })
+        $capNote = if ($st.Count -gt $objects.Count) { " The first $($objects.Count) are listed." } else { '' }
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "$($smtp.Count) user(s) have SMTP AUTH individually re-enabled, bypassing the org-level disable. These users can authenticate via legacy SMTP, which does not support MFA and is a known credential stuffing target." `
-            -CurrentValue "$($smtp.Count) users with SMTP AUTH enabled" -RequiredValue 'Zero per-user SMTP AUTH overrides' `
+            -Detail "$($st.Count) mailbox(es) have SMTP AUTH individually re-enabled. $orgNote These accounts can submit mail over SMTP AUTH, a password-spray target that bypasses MFA wherever basic authentication is still accepted.$capNote" `
+            -CurrentValue "$($st.Count) users with SMTP AUTH enabled" -RequiredValue 'Zero per-user SMTP AUTH overrides' `
             -Remediation $ctrl.Remediation -AffectedObjects $objects
     }
 }
@@ -477,4 +469,50 @@ function Test-NRGControlInventorySecureScore {
             -Detail "Microsoft Secure Score: $cur / $max ($pct%) — $posture. Microsoft's own assessment of your tenant configuration across identity, data, apps, and devices (peer benchmark unavailable in this run). Score as of $($ss.CreatedDate)." `
             -CurrentValue "Score: $cur/$max ($pct%)" -RequiredValue 'Target: 70%+ (Strong posture)' -Remediation $ctrl.Remediation
     }
+}
+
+# Shared reading for EXO-6.3 / EXO-7.3. With mailbox auditing on by default,
+# Exchange IGNORES a mailbox's AuditEnabled = False and Get-Mailbox reports
+# True regardless (Microsoft, "Manage mailbox auditing"), so the old
+# AuditEnabled -eq $false sweep could neither find a gap nor prove its
+# absence. Per-user audit is switched off only by an audit bypass
+# association; org-wide, by OrganizationConfig.AuditDisabled (EXO-5.1).
+function Get-NRGMailboxAuditBypassState {
+    [CmdletBinding()] param([Parameter(Mandatory)] $Inventory)
+    $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    $orgOff = $null
+    if ($exo -and $exo.Success -and (Test-NRGSectionCollected $exo 'OrganizationConfig')) {
+        $orgOff = Get-NRGNestedProperty -Object $exo -Path 'Data.OrganizationConfig.AuditDisabled' -Default $null
+    }
+    if ($orgOff -eq $true) {
+        return @{ Kind = 'OrgOff'; Names = @(); Detail = 'Mailbox auditing is turned off for the whole organization (AuditDisabled = True), so no mailbox is audited and per-user settings are ignored. Scored under EXO-5.1.' }
+    }
+    $status = Get-NRGNestedProperty -Object $Inventory -Path 'Data.SectionStatus.AuditBypassAccounts' -Default $null
+    if ($status -ne 'Collected') {
+        return @{ Kind = 'NotRead'; Names = @(); Detail = 'Mailbox audit bypass associations (Get-MailboxAuditBypassAssociation) were not read, so whether any account is exempt from mailbox auditing was not assessed. (A mailbox''s AuditEnabled flag is ignored while organization auditing is on and cannot answer this.)' }
+    }
+    $names = @(@(Get-NRGObjectField -Item $Inventory.Data -Key 'AuditBypassAccounts' -Default @()) | ForEach-Object {
+        $n = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '')
+        if (-not $n) { $n = [string](Get-NRGObjectField -Item $_ -Key 'Identity' -Default '') }
+        $n } | Where-Object { $_ })
+    if ($names.Count -gt 0) { return @{ Kind = 'Bypass'; Names = $names; Detail = '' } }
+    if ($null -eq $orgOff) {
+        return @{ Kind = 'OrgUnknown'; Names = @(); Detail = 'No account has a mailbox audit bypass, but whether mailbox auditing is on for the organization (Get-OrganizationConfig AuditDisabled) was not read; not assessed.' }
+    }
+    return @{ Kind = 'Clean'; Names = @(); Detail = 'Mailbox auditing is on for the organization and no account has an audit bypass association, so every mailbox action is recorded. (Per-mailbox AuditEnabled flags are ignored by Exchange while organization auditing is on.)' }
+}
+
+# Shared reading for EXO-6.4 / EXO-7.4: per-user SMTP AUTH overrides only
+# mean something while the organization disables SMTP AUTH.
+function Get-NRGSmtpAuthOverrideState {
+    [CmdletBinding()] param([Parameter(Mandatory)] $Inventory)
+    $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    $orgDisabled = $null
+    if ($exo -and $exo.Success) {
+        $orgDisabled = Get-NRGNestedProperty -Object $exo -Path 'Data.TransportConfig.SmtpClientAuthenticationDisabled' -Default $null
+    }
+    $list  = @(Get-NRGObjectField -Item $Inventory.Data -Key 'SmtpAuthEnabledPerUser' -Default @())
+    # The list is capped at 100 names; the count is the full total.
+    $count = [int](Get-NRGObjectField -Item $Inventory.Data -Key 'SmtpAuthEnabledPerUserCount' -Default $list.Count)
+    return @{ OrgDisabled = $orgDisabled; List = $list; Count = $count }
 }

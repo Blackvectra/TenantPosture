@@ -54,14 +54,19 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
                 [string[]] $ClientAppTypes  = @('all'),
                 [string[]] $BuiltInControls = @(),
                 [string[]] $IncludeRoles    = @(),
-                [string]   $AuthStrengthId  = ''
+                [string]   $AuthStrengthId  = '',
+                # Graph always returns conditions.users and conditions.applications;
+                # a policy with no users condition does not exist. All users /
+                # All apps unless the policy targets roles.
+                [string[]] $IncludeUsers    = $(if ($IncludeRoles.Count -gt 0) { @() } else { @('All') })
             )
             [pscustomobject]@{
                 DisplayName = $DisplayName
                 State       = $State
                 Conditions  = [pscustomobject]@{
                     ClientAppTypes = $ClientAppTypes
-                    Users          = [pscustomobject]@{ IncludeRoles = $IncludeRoles }
+                    Users          = [pscustomobject]@{ IncludeUsers = $IncludeUsers; IncludeRoles = $IncludeRoles }
+                    Applications   = [pscustomobject]@{ Include = @('All') }
                 }
                 GrantControls = [pscustomobject]@{
                     BuiltInControls = $BuiltInControls
@@ -145,9 +150,16 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
                 -Because 'standard MFA for admins is real but insufficient — the verdict must distinguish it from both full compliance and no protection'
         }
 
-        It 'Gap when no policy targets privileged roles at all' {
+        It 'an all-users MFA policy covers admins (they are users) with standard MFA: Partial, not "no MFA"' {
             Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{
                 Policies = @( NewCaPolicy -DisplayName 'All users MFA' -State 'enabled' -BuiltInControls @('mfa') )
+            })
+            (GetVerdict 'Test-NRGControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Partial'
+        }
+
+        It 'Gap when no policy requires MFA of admins at all' {
+            Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{
+                Policies = @( NewCaPolicy -DisplayName 'Block legacy' -State 'enabled' -ClientAppTypes @('other') -BuiltInControls @('block') )
             })
             (GetVerdict 'Test-NRGControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Gap'
         }
@@ -315,7 +327,7 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
 
     Context 'EXO-1.3 — External Auto-Forwarding Blocked (the classic BEC exfil path)' {
 
-        It 'Satisfied only when BOTH the spam policy and remote domain block forwarding' {
+        It 'Satisfied when the spam policy and the remote domain both block forwarding' {
             Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
                 OutboundSpamPolicies = @( [pscustomobject]@{ IsDefault = $true; AutoForwardingMode = 'Off' } )
                 RemoteDomains        = @( [pscustomobject]@{ IsDefault = $true; AutoForwardEnabled = $false } )
@@ -323,13 +335,23 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
             (GetVerdict 'Test-NRGControlEXOAutoForward' 'EXO-1.3').State | Should -Be 'Satisfied'
         }
 
-        It 'Partial when the spam policy blocks but the remote-domain wildcard still allows forwarding' {
+        It 'Satisfied when the spam policy is Off even though the remote-domain wildcard allows forwarding' {
+            # Microsoft: when one control blocks and the other allows, the
+            # block wins — and Off blocks admin mailbox forwarding too.
             Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
                 OutboundSpamPolicies = @( [pscustomobject]@{ IsDefault = $true; AutoForwardingMode = 'Off' } )
                 RemoteDomains        = @( [pscustomobject]@{ IsDefault = $true; AutoForwardEnabled = $true } )
             })
+            (GetVerdict 'Test-NRGControlEXOAutoForward' 'EXO-1.3').State | Should -Be 'Satisfied'
+        }
+
+        It 'Partial when only the remote domain blocks: admin-set mailbox forwarding still leaves' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OutboundSpamPolicies = @( [pscustomobject]@{ IsDefault = $true; AutoForwardingMode = 'On' } )
+                RemoteDomains        = @( [pscustomobject]@{ IsDefault = $true; AutoForwardEnabled = $false } )
+            })
             (GetVerdict 'Test-NRGControlEXOAutoForward' 'EXO-1.3').State | Should -Be 'Partial' `
-                -Because 'half-blocked forwarding still leaks mail — reporting this as Satisfied would be a false assurance in a BEC scenario'
+                -Because 'remote domains do not govern forwarding an administrator sets on a mailbox'
         }
 
         It 'Gap when neither control blocks external forwarding' {
@@ -581,7 +603,9 @@ Describe 'Failed collection is never reported as compliance (EXO inventory)' {
     $cases = @(
         @{ Control = 'EXO-6.1'; Evaluator = 'Test-NRGControlInventoryExternalForwarding'; Key = 'ForwardingMailboxes';    Section = 'ForwardingMailboxes' }
         @{ Control = 'EXO-6.2'; Evaluator = 'Test-NRGControlInventorySharedMailboxSignIn'; Key = 'AllSharedMailboxes';    Section = 'SharedMailboxes' }
-        @{ Control = 'EXO-6.3'; Evaluator = 'Test-NRGControlInventoryMailboxAuditDisabled'; Key = 'AuditDisabledMailboxes'; Section = 'AuditDisabledMailboxes' }
+        # EXO-6.3 reads audit BYPASS associations: Exchange ignores a mailbox's
+        # AuditEnabled flag while organization auditing is on.
+        @{ Control = 'EXO-6.3'; Evaluator = 'Test-NRGControlInventoryMailboxAuditDisabled'; Key = 'AuditBypassAccounts';    Section = 'AuditBypassAccounts' }
         @{ Control = 'EXO-6.4'; Evaluator = 'Test-NRGControlInventorySMTPAuthUsers';        Key = 'SmtpAuthEnabledPerUser'; Section = 'SmtpAuthEnabledPerUser' }
     )
 
@@ -595,6 +619,11 @@ Describe 'Failed collection is never reported as compliance (EXO inventory)' {
     }
 
     It '<Control> still reports Satisfied when the section COLLECTED and found nothing' -TestCases $cases {
+        # The organization settings these controls are qualified by: mailbox
+        # auditing on, SMTP AUTH disabled org-wide.
+        Set-NRGRawData -Key 'EXO-MailboxConfig' -Data ([ordered]@{ CollectorId = 'EXO-MailboxConfig'; Success = $true; Data = @{
+            OrganizationConfig = @{ AuditDisabled = $false }; TransportConfig = @{ SmtpClientAuthenticationDisabled = $true }
+            SectionStatus = @{ OrganizationConfig = 'Collected'; TransportConfig = 'Collected' } } })
         Set-NRGRawData -Key 'EXO-Inventory' -Data (NewInv @{
             $Key          = @()
             SectionStatus = @{ $Section = 'Collected' }
@@ -692,14 +721,14 @@ Describe 'Newly implemented controls — EXO-3.4, TMS-3.4, SPO-2.5, PPL-1.3' {
             $v = V 'Test-NRGControlSPO3PStorage' 'SPO-2.5'
             $v.State | Should -Be 'Gap'
             $v.CurrentValue | Should -Match 'Dropbox'
-            $v.CurrentValue | Should -Match 'GoogleDrive'
+            $v.CurrentValue | Should -Match 'Google Drive'
         }
         It 'states which surface it actually verified' {
             Set-NRGRawData -Key 'Teams' -Data (Raw 'Teams' @{
                 ClientConfiguration=@{ AllowDropBox=$false; AllowBox=$false
                                        AllowGoogleDrive=$false; AllowShareFile=$false } })
-            (V 'Test-NRGControlSPO3PStorage' 'SPO-2.5').Detail | Should -Match 'admin centre' `
-                -Because 'the control cannot read the admin-centre toggle, so the finding must say what it did and did not verify'
+            (V 'Test-NRGControlSPO3PStorage' 'SPO-2.5').Detail | Should -Match 'admin center' `
+                -Because 'the control cannot read the admin-center toggle, so the finding must say what it did and did not verify'
         }
         It 'NotApplicable when Teams client configuration was not collected' {
             Set-NRGRawData -Key 'Teams' -Data (Raw 'Teams' @{})

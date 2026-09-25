@@ -62,7 +62,7 @@ If 90 days elapse from triage without a fix, we will publish the advisory with t
 - The HTML/Markdown/XLSX/JSON report artifacts (XSS, injection, sensitive-data leakage in output)
 - The control definition pipeline (`Config/controls.json`, schema validation, framework citations)
 - The local web GUI (`Lib/Start-NRGWebServer.ps1`, `Web/`) — loopback-only by design
-- The tenant onboarding helper (`Lib/Register-NRGTenantApp.ps1`)
+- The tenant onboarding helper (`Onboard/Register-NRGTenantApp.ps1`, outside the module)
 - CI/CD workflows (`.github/workflows/`)
 - Sample reports, sample data, documentation that could mislead operators
 - Supply-chain integrity (Authenticode signing, SBOM, dependency pinning)

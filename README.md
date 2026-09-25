@@ -210,7 +210,7 @@ so CLI and GUI workflows can be mixed freely.
 Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (322 exports, dependency declarations)
+NRG-Assessment.psd1               ← Module manifest (324 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -252,7 +252,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          57 Pester suites — the FULL suite gates every PR
+Testing/                          73 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -485,7 +485,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **57 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **73 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -511,6 +511,7 @@ Edit `Config\clients.json` to add tenants:
   "SkipIntune":        false,
   "SkipPowerPlatform": true,
   "SkipDNS":           false,
+  "ThirdPartyEDR":     "Cortex XDR",
   "Notes":             "Business Standard tenant — Purview and Power Platform skipped.",
   "Active":            true
 }
@@ -521,6 +522,12 @@ Get DelegatedOrg from: **Partner Center > Customers > client > Domains** (find t
 
 GDAP relationships must be active in Partner Center before the batch runner can access client tenants.
 
+`ThirdPartyEDR` is optional. Set it when the client's endpoint protection is not Microsoft Defender (the same as `-ThirdPartyEDR 'Cortex XDR'` on a single run, including a `-FromResults` republish). The Microsoft Defender endpoint checks (INT-1.5, INT-2.1, INT-2.2 and the DEV-2.x endpoint checks) are then reported as covered by that product, **declared, not verified**, and left out of the score instead of scoring as gaps. A Defender check that actually passed keeps its result.
+
+**One-time per client tenant:** AAD-8.2, AAD-11.3 and DEF-4.6 need Graph permissions that each tenant must consent to. Until then they report exactly which one is missing. A Global Administrator runs `.\Grant-NRGGraphConsent.ps1 -TenantDomain client.com` once and accepts the prompt for the organization.
+
+**Power Platform (PPL-\*)** needs no module. The assessment signs in to the Power Platform admin API inside the same PowerShell session (one extra browser sign-in, usually completed automatically by your existing session) and reads it over REST. No child process is started. The account needs the Power Platform Administrator (or Global Administrator) role; app-only runs skip it.
+
 ---
 
 ## CI/CD
@@ -529,7 +536,7 @@ Six GitHub Actions workflows cover the repository. All run automatically on push
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (57 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (73 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -548,4 +555,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.13.0 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 322 exported functions · full Pester suite (57 suites) gating CI*
+*NRG-Assessment v4.14.0 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 324 exported functions · full Pester suite (73 suites) gating CI*

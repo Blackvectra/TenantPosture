@@ -68,16 +68,19 @@ Describe 'Get-NRGAssessmentScope — what the assessment did not cover' {
                 $ids[5]  = @{ State = 'NotApplicable'; Detail = 'Teams data not collected; not assessed.' }
                 $ids[6]  = @{ State = 'NotApplicable'; Detail = 'Requires Defender for Office 365 Plan 1 — surfaced as a licensing upgrade opportunity.' }
                 $ids[7]  = @{ State = 'NotApplicable'; Detail = 'No programmatic check; manual review required.' }
+                $ids[8]  = @{ State = 'NotApplicable'; Detail = 'Third-party EDR declared: endpoint protection for this client is provided by Cortex XDR, as declared by the assessor.' }
             }
             $s = Get-NRGAssessmentScope -Findings (script:Build -SkipFirst 2 -Override $ov)
 
             $sum = $s.LicenceBlocked.Count + $s.CollectionIncomplete.Count +
-                   $s.NoProgrammaticCheck.Count + $s.NotEvaluatedThisMode.Count + $s.NoResult.Count
+                   $s.NoProgrammaticCheck.Count + $s.ThirdPartyAttested.Count +
+                   $s.NotEvaluatedThisMode.Count + $s.NoResult.Count + $s.NotApplicableToTenant.Count
             $sum | Should -Be $s.UnscoredControls -Because 'a control that is unscored and in no bucket is invisible, which is the whole failure mode'
 
             # And no control appears in two buckets.
             $all = @($s.LicenceBlocked) + @($s.CollectionIncomplete) + @($s.NoProgrammaticCheck) +
-                   @($s.NotEvaluatedThisMode) + @($s.NoResult)
+                   @($s.ThirdPartyAttested) + @($s.NotEvaluatedThisMode) + @($s.NoResult) + @($s.NotApplicableToTenant)
+            @($s.ThirdPartyAttested | ForEach-Object { $_.ControlId }) | Should -Contain $ids[8]
             @($all | ForEach-Object { $_.ControlId } | Group-Object | Where-Object Count -gt 1) | Should -BeNullOrEmpty
         }
 
@@ -178,14 +181,19 @@ Describe 'Get-NRGAssessmentScope — what the assessment did not cover' {
             # NOT as licence gated, and NOT as "no automated test" for a
             # control that simply had no data.
             $script:RealScope.LicenceBlocked.Count | Should -Be 0 -Because 'no SKU data was available, so nothing can be called licence gated'
-            ($script:RealScope.CollectionIncomplete.Count + $script:RealScope.NoProgrammaticCheck.Count) |
+            # TMS-2.1 (Skype interop, retired by Microsoft) and TMS-2.5
+            # (enforced by the platform) state why they do not apply without
+            # reading any data; they are the only controls that may land in
+            # NotApplicableToTenant from empty state.
+            @($script:RealScope.NotApplicableToTenant | ForEach-Object { $_.ControlId } | Sort-Object) | Should -Be @('TMS-2.1','TMS-2.5')
+            ($script:RealScope.CollectionIncomplete.Count + $script:RealScope.NoProgrammaticCheck.Count + $script:RealScope.NotApplicableToTenant.Count) |
                 Should -Be $script:Total
         }
 
         It 'routes the overwhelming majority to the collection bucket, not to manual review' {
             # The three genuinely advisory controls say "requires manual
             # verification"; everything else lost its data.
-            $script:RealScope.NoProgrammaticCheck.Count | Should -BeLessOrEqual 6
+            $script:RealScope.NoProgrammaticCheck.Count | Should -BeLessOrEqual 7
             $script:RealScope.CollectionIncomplete.Count | Should -BeGreaterThan 190
         }
 
@@ -216,7 +224,6 @@ Describe 'Get-NRGAssessmentScope — what the assessment did not cover' {
         }
 
         It 'still reports a licence block when the profile DOES carry SKU data' {
-            $ids  = @($script:Controls | ForEach-Object { $_.ControlId })
             $lic  = @($script:Controls | Where-Object { $_.LicenseRequirement -and $_.LicenseRequirement -notmatch '^Included' } | Select-Object -First 1)
             $lic.Count | Should -BeGreaterThan 0 -Because 'the fixture needs a licence-gated control to exist'
             $target = $lic[0].ControlId

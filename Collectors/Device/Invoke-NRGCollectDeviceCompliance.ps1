@@ -114,6 +114,23 @@ function Invoke-NRGCollectDeviceCompliance {
             }
         }
 
+        # One result per device: the RMM share accumulates a file per run, and
+        # counting March's "BitLocker off" beside September's "on" reported a
+        # fixed laptop as failing and inflated the device count. The latest
+        # CollectedAt per hostname wins; older files are counted, not scored.
+        $latest = [ordered]@{}
+        foreach ($d in $devices) {
+            $key = ([string]$d.Hostname).ToUpperInvariant()
+            $ts = [datetime]::MinValue
+            $null = [datetime]::TryParse([string]$d.CollectedAt, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$ts)
+            $d['CollectedAtUtc'] = $ts.ToUniversalTime()
+            if (-not $latest.Contains($key) -or $latest[$key]['CollectedAtUtc'] -lt $d['CollectedAtUtc']) { $latest[$key] = $d }
+        }
+        $superseded = $devices.Count - $latest.Count
+        $devices = [System.Collections.Generic.List[object]]::new()
+        foreach ($v in $latest.Values) { $d2 = $v; $d2.Remove('CollectedAtUtc'); $devices.Add($d2) }
+        $result.Data.SupersededFiles = $superseded
+
         $result.Data.Devices       = $devices.ToArray()
         $result.Data.DeviceCount   = $devices.Count
         $result.Data.ElevatedCount = @($devices | Where-Object { $_.Elevated }).Count

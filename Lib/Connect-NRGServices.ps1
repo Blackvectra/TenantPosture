@@ -47,6 +47,43 @@
 # not vulnerable.
 #
 
+# The delegated Microsoft Graph scopes the assessment requests (24). One list,
+# used by Connect-NRGServices and Grant-NRGGraphConsent.ps1; the batch runner
+# carries a copy (it signs in before the module loads) that
+# NRG.TenantPinning.Tests.ps1 pins to this one.
+function Get-NRGGraphScopeList {
+    [CmdletBinding()] param()
+    $scopes = @(
+        'User.Read.All','Group.Read.All','Directory.Read.All',
+        'Policy.Read.All','AuditLog.Read.All','Application.Read.All',
+        'RoleManagement.Read.All','SecurityEvents.Read.All',
+        'IdentityRiskyUser.Read.All','Reports.Read.All',
+        'Organization.Read.All','Sites.Read.All',
+        'DeviceManagementConfiguration.Read.All',
+        'DeviceManagementApps.Read.All',
+        'UserAuthenticationMethod.Read.All',
+        # ── v4.6.4 added (6) ─────────────────────────────────────────
+        'SharePointTenantSettings.Read.All',
+        'DeviceManagementManagedDevices.Read.All',
+        'DeviceManagementServiceConfig.Read.All',
+        'Policy.Read.PermissionGrant',
+        'PrivilegedAccess.Read.AzureAD',
+        'TeamSettings.Read.All',
+        # ── require client re-consent ────────────────────────────────
+        #   IdentityRiskyServicePrincipal.Read.All → AAD-11.3 (risky
+        #     workload identities; needs Entra ID P2 + Workload IDs add-on)
+        #   AttackSimulation.Read.All → DEF-4.6 (attack-sim training;
+        #     Global cloud only, needs Defender for Office 365 P2)
+        #   AccessReview.Read.All → AAD-8.2 (access reviews for privileged
+        #     roles; needs Entra ID P2). Until re-consented the collector
+        #     gets 403 and AAD-8.2 reports NotApplicable.
+        'IdentityRiskyServicePrincipal.Read.All',
+        'AttackSimulation.Read.All',
+        'AccessReview.Read.All'
+    )
+    return $scopes
+}
+
 function Connect-NRGServices {
     [CmdletBinding(DefaultParameterSetName = 'Interactive')]
     param(
@@ -167,34 +204,7 @@ function Connect-NRGServices {
         #   - PIM read on PIM-managed tenants (PrivilegedAccess.Read.AzureAD)
         #   - Teams settings (TeamSettings.Read.All; previously relied on
         #     module-side Connect-MicrosoftTeams permissions)
-        $scopes = @(
-            'User.Read.All','Group.Read.All','Directory.Read.All',
-            'Policy.Read.All','AuditLog.Read.All','Application.Read.All',
-            'RoleManagement.Read.All','SecurityEvents.Read.All',
-            'IdentityRiskyUser.Read.All','Reports.Read.All',
-            'Organization.Read.All','Sites.Read.All',
-            'DeviceManagementConfiguration.Read.All',
-            'DeviceManagementApps.Read.All',
-            'UserAuthenticationMethod.Read.All',
-            # ── v4.6.4 added (6) ─────────────────────────────────────────
-            'SharePointTenantSettings.Read.All',
-            'DeviceManagementManagedDevices.Read.All',
-            'DeviceManagementServiceConfig.Read.All',
-            'Policy.Read.PermissionGrant',
-            'PrivilegedAccess.Read.AzureAD',
-            'TeamSettings.Read.All',
-            # ── require client re-consent ────────────────────────────────
-            #   IdentityRiskyServicePrincipal.Read.All → AAD-11.3 (risky
-            #     workload identities; needs Entra ID P2 + Workload IDs add-on)
-            #   AttackSimulation.Read.All → DEF-4.6 (attack-sim training;
-            #     Global cloud only, needs Defender for Office 365 P2)
-            #   AccessReview.Read.All → AAD-8.2 (access reviews for privileged
-            #     roles; needs Entra ID P2). Until re-consented the collector
-            #     gets 403 and AAD-8.2 reports NotApplicable.
-            'IdentityRiskyServicePrincipal.Read.All',
-            'AttackSimulation.Read.All',
-            'AccessReview.Read.All'
-        )
+        $scopes = Get-NRGGraphScopeList
 
         # ── Reuse an existing Graph context if the caller already established one ──
         # The GDAP batch runner (Invoke-NRGBatchAssessment) connects to each client
@@ -304,6 +314,26 @@ function Connect-NRGServices {
             }
             $result['TenantId']       = "$($ctx.TenantId)"
             $result['OperatorDomain'] = $accountDomain
+
+            # Record what the token was actually granted, so the controls
+            # whose permission this tenant never consented to say so by name.
+            try {
+                $consentMode = if ($isAppOnly) { 'AppOnly' } else { 'Delegated' }
+                $missingScopes = @(Set-NRGGraphConsentState -Mode $consentMode -GrantedScopes @($ctx.Scopes) -RequestedScopes $scopes)
+                $result['MissingScopes'] = $missingScopes
+                if ($missingScopes.Count -gt 0) {
+                    Write-Host "  [!] Graph permissions not granted in this tenant: $($missingScopes -join ', ')" -ForegroundColor Yellow
+                    $consentScopes = @(Get-NRGConsentScopeMap)
+                    $blocked = @($consentScopes | Where-Object { $_.Scope -in $missingScopes } | ForEach-Object { $_.ControlId })
+                    if ($blocked.Count -gt 0) {
+                        Write-Host "      Not assessed until consented: $($blocked -join ', ')" -ForegroundColor Yellow
+                    }
+                    $fixHint = if ($isAppOnly) { 'Entra admin center > App registrations > the NRG assessment app > API permissions: add these Microsoft Graph application permissions, then Grant admin consent' } else { '.\Grant-NRGGraphConsent.ps1 -TenantDomain <tenant> (Global Administrator, once)' }
+                    Write-Host "      Fix: $fixHint" -ForegroundColor DarkGray
+                }
+            } catch {
+                Write-Verbose "Connect-NRGServices: could not record granted Graph scopes. $($_.Exception.Message)"
+            }
 
             # Resolve TenantDomain from the CONNECTED tenant, not the signed-in
             # account's UPN. Under GDAP the operator authenticates as their own

@@ -123,7 +123,7 @@ function Invoke-NRGCollectAADInventory {
             # Same truncation defect as GuestUsers above: page through
             # @odata.nextLink instead of trusting a single $top=500 page.
             $staleRows = @()
-            $next = "https://graph.microsoft.com/v1.0/users?`$select=id,displayName,userPrincipalName,accountEnabled,signInActivity,assignedLicenses&`$filter=userType eq 'Member' and accountEnabled eq true&`$top=500"
+            $next = "https://graph.microsoft.com/v1.0/users?`$select=id,displayName,userPrincipalName,accountEnabled,createdDateTime,signInActivity,assignedLicenses&`$filter=userType eq 'Member' and accountEnabled eq true&`$top=500"
             $maxPages = 200; $pageCount = 0
             while ($next -and $pageCount -lt $maxPages) {
                 $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
@@ -137,30 +137,37 @@ function Invoke-NRGCollectAADInventory {
                         -Message "Pagination cap reached ($maxPages pages); member account list may be truncated."
                 }
             }
-            $stale = @($staleRows | Where-Object {
-                # Absent signInActivity means never signed in (see above), which
-                # is precisely the stale account we are looking for — not an error.
-                $lastSign = [string](Get-NRGNestedProperty -Object $_ -Path 'signInActivity.lastSignInDateTime' -Default '')
-                if (-not $lastSign) { return $true }  # never signed in
-                $parsed = [datetime]::MinValue
-                if (-not [datetime]::TryParse($lastSign, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsed)) { return $true }
-                ([datetime]::UtcNow - $parsed.ToUniversalTime()).TotalDays -gt 90
-            } | ForEach-Object {
-                $rawSign  = [string](Get-NRGNestedProperty -Object $_ -Path 'signInActivity.lastSignInDateTime' -Default '')
-                $lastSign = if ($rawSign) { $rawSign } else { 'Never' }
-                $days     = 9999
-                if ($rawSign) {
-                    $parsed = [datetime]::MinValue
-                    if ([datetime]::TryParse($rawSign, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsed)) {
-                        $days = [int]([datetime]::UtcNow - $parsed.ToUniversalTime()).TotalDays
-                    }
+            # Last ACTIVITY, not last attempt: lastSignInDateTime records the
+            # last interactive attempt, successful or not, so a departed user
+            # being password-sprayed looked active, while a user who only
+            # refreshes tokens (Outlook, Teams) looked stale. Graph's
+            # lastSuccessfulSignInDateTime covers both kinds of successful
+            # sign-in; records that predate it fall back to the later of the
+            # interactive and non-interactive timestamps. Accounts created in
+            # the last 90 days are not stale for never having signed in.
+            $parseUtc = { param($v)
+                $p = [datetime]::MinValue
+                if ($v -and [datetime]::TryParse([string]$v, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$p)) { $p.ToUniversalTime() } else { $null } }
+            $now = [datetime]::UtcNow
+            $stale = @(foreach ($u in $staleRows) {
+                $success = & $parseUtc (Get-NRGNestedProperty -Object $u -Path 'signInActivity.lastSuccessfulSignInDateTime' -Default '')
+                $basis = 'last successful sign-in'
+                $last = $success
+                if (-not $last) {
+                    $cands = @((& $parseUtc (Get-NRGNestedProperty -Object $u -Path 'signInActivity.lastSignInDateTime' -Default '')),
+                               (& $parseUtc (Get-NRGNestedProperty -Object $u -Path 'signInActivity.lastNonInteractiveSignInDateTime' -Default '')) | Where-Object { $_ })
+                    if ($cands.Count) { $last = ($cands | Measure-Object -Maximum).Maximum; $basis = 'last sign-in attempt' }
                 }
+                $created = & $parseUtc (Get-NRGObjectField -Item $u -Key 'createdDateTime' -Default '')
+                if ($created -and ($now - $created).TotalDays -le 90) { continue }
+                if ($last -and ($now - $last).TotalDays -le 90) { continue }
                 @{
-                    DisplayName     = [string]$_.displayName
-                    UPN             = [string]$_.userPrincipalName
-                    LastSignIn      = $lastSign
-                    DaysSinceSignIn = $days
-                    HasLicense      = (@($_.assignedLicenses ?? @()).Count -gt 0)
+                    DisplayName     = [string](Get-NRGObjectField -Item $u -Key 'displayName' -Default '')
+                    UPN             = [string](Get-NRGObjectField -Item $u -Key 'userPrincipalName' -Default '')
+                    LastSignIn      = $(if ($last) { $last.ToString('o') } else { 'Never' })
+                    LastSignInBasis = $basis
+                    DaysSinceSignIn = $(if ($last) { [int]($now - $last).TotalDays } else { 9999 })
+                    HasLicense      = (@(Get-NRGObjectField -Item $u -Key 'assignedLicenses' -Default @()).Count -gt 0)
                 }
             })
             $result.Data.StaleMembers = $stale
