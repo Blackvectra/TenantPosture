@@ -40,6 +40,15 @@ function script:Get-NRGCopilotRaw {
 # default while the Copilot collector always runs. An empty DLP list or a
 # disabled audit flag with Purview absent means "not evaluated", not "no
 # coverage" — check the Purview raw data directly rather than scoring it.
+# A Purview SECTION was read (not merely the collector ran): an empty list
+# from a section that never ran is not "none configured".
+function script:Test-NRGCopilotPurviewSection {
+    param([string] $Section)
+    if (-not (Get-Command Get-NRGRawData -ErrorAction SilentlyContinue)) { return $false }
+    $p = Get-NRGRawData -Key 'Purview'
+    return [bool]($p -and $p.Success -and (Test-NRGSectionCollected $p $Section))
+}
+
 function script:Test-NRGCopilotPurviewCollected {
     if (-not (Get-Command Get-NRGRawData -ErrorAction SilentlyContinue)) { return $false }
     $purviewRaw = Get-NRGRawData -Key 'Purview'
@@ -72,6 +81,13 @@ function Test-NRGControlAICopilotSensitivityLabels {
         return
     }
 
+    # Labels were read from Purview (section collected) or the Graph fallback;
+    # otherwise "no sensitivity labels" is unknown, not a Gap.
+    if (-not (Test-NRGCopilotPurviewSection 'SensitivityLabels') -and (Get-NRGObjectField -Item $d -Key 'LabelsRead' -Default $false) -ne $true) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Copilot is licensed to $licensed user(s), but sensitivity labels were not collected (Purview section not read and the Graph fallback failed); not assessed."
+        return
+    }
     $labelsEnabled  = [bool]($d.SensitivityLabelsEnabled ?? $false)
     $labelCount     = [int]($d.SensitivityLabelCount ?? 0)
     $autoLabel      = [bool]($d.AutoLabelPoliciesEnabled ?? $false)
@@ -130,9 +146,11 @@ function Test-NRGControlAICopilotDLP {
 
     $dlp = @($d.CopilotDLPPolicies ?? @())
     $locs = @($d.CopilotDLPLocations ?? @())
+    # The Microsoft 365 Copilot DLP location reports as Workload 'Applications'.
     $copilotInLocs = ($locs -contains 'Copilot') -or
                      ($locs -contains 'M365Copilot') -or
-                     ($locs -contains 'CopilotExperiences')
+                     ($locs -contains 'CopilotExperiences') -or
+                     ($locs -contains 'Applications')
 
     if ($dlp.Count -gt 0 -and $copilotInLocs) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' `
@@ -149,7 +167,7 @@ function Test-NRGControlAICopilotDLP {
             -RequiredValue 'DLP policy with Locations explicitly including Microsoft 365 Copilot' `
             -Detail "DLP policies referencing Copilot were found ($($dlp.Count)) but the Copilot location is not in the confirmed workload set. Verify in Purview > DLP > Policy > Locations that Microsoft 365 Copilot is included." `
             -Remediation $ctrl.Remediation
-    } elseif (-not (Test-NRGCopilotPurviewCollected)) {
+    } elseif (-not (Test-NRGCopilotPurviewSection 'DLPPolicies')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' `
             -Category $ctrl.Category -Title $ctrl.Title `
             -FrameworkIds $cit `
@@ -247,36 +265,16 @@ function Test-NRGControlAICopilotStudio {
         return
     }
 
-    $d = $raw.Data
-    $bots = @($d.CopilotStudioBots ?? @())
-    $extPub = [bool]($d.ExternalPublishingEnabled ?? $false)
-
-    if ($bots.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' `
-            -Category $ctrl.Category -Title $ctrl.Title `
-            -Detail 'No Copilot Studio bots detected via Graph application enumeration. Power Platform admin APIs may not be accessible to the assessment principal; verify manually in Power Platform Admin Center > Copilot Studio if bots are present.'
-        return
-    }
-
-    if ($extPub) {
-        $externalBots = @($bots | Where-Object {
-            $_.PublisherDomain -and $_.PublisherDomain -notmatch 'onmicrosoft\.com$'
-        })
-        Add-NRGFinding -ControlId $cid -State 'Gap' `
-            -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity `
-            -FrameworkIds $cit `
-            -CurrentValue "$($externalBots.Count) of $($bots.Count) bot(s) appear to allow external publishing" `
-            -RequiredValue 'All Copilot Studio bots internal-only; external publishing disabled by tenant policy' `
-            -Detail "External publishing is enabled at the tenant level for Copilot Studio, and $($externalBots.Count) of $($bots.Count) detected agent(s) carry a non-tenant publisher domain. External publishing means anyone on the internet can interact with the agent. In most environments this indicates unintended exposure of an agent connected to SharePoint, Microsoft Graph, or a third-party service." `
-            -Remediation $ctrl.Remediation
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' `
-            -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' `
-            -FrameworkIds $cit `
-            -CurrentValue "$($bots.Count) Copilot Studio bot(s) detected, all internal-only" `
-            -RequiredValue 'Internal-only Copilot Studio publishing' `
-            -Detail "$($bots.Count) Copilot Studio bot(s) detected. No external publisher domains observed in the Graph applications inventory."
-    }
+    # Whether an agent is published to external channels (a public website,
+    # other tenants) is a Copilot Studio / Power Platform setting that Graph
+    # does not expose. The old verdict inferred it from an app registration's
+    # publisherDomain — which is simply the tenant's verified domain — and
+    # called an agent on contoso.com "externally published". Nothing readable
+    # here answers the question either way.
+    $bots = @(Get-NRGObjectField -Item $raw.Data -Key 'CopilotStudioBots' -Default @())
+    $seen = if ($bots.Count -gt 0) { " $($bots.Count) Copilot Studio app registration(s) were found: $((@($bots) | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '?') } | Select-Object -First 5) -join ', ')." } else { '' }
+    Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual review required)" -FrameworkIds $cit `
+        -Detail "This control requires manual verification — Copilot Studio agent publishing channels are not exposed by a supported read API.$seen Check Power Platform admin center > Copilot Studio (and the Copilot Studio authentication / channel settings of each agent) that no agent is published without authentication."
 }
 
 # ── PPL-3.5  Copilot Interaction Audit Logging Active ─────────────────────────
@@ -327,6 +325,11 @@ function Test-NRGControlAICopilotInteractionData {
             -RequiredValue 'Unified Audit Log enabled; Copilot prompts and responses recorded' `
             -Detail 'Copilot prompts and responses are not being captured. An insider using Copilot to extract sensitive data leaves no audit trail — compliance investigations involving Copilot usage cannot be reconstructed.' `
             -Remediation $ctrl.Remediation
+    } elseif (($null -eq $retention -or [string]$retention -eq '') -and -not (Test-NRGCopilotPurviewSection 'RetentionPolicies')) {
+        # Audit is on, but retention policies were not read: whether one
+        # covers Copilot is unknown, not "none".
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Unified audit logging is on, but Purview retention policies were not collected, so whether Copilot interactions are retained beyond the default was not assessed.'
     } elseif ($null -eq $retention -or [string]$retention -eq '') {
         Add-NRGFinding -ControlId $cid -State 'Partial' `
             -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' `

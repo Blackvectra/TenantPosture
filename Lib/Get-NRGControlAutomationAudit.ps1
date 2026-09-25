@@ -37,7 +37,7 @@ function Get-NRGControlAutomationAudit {
     # emits whatever -State literals the HELPER's own body emits. Derived from
     # the helper's AST, never declared, so the helper cannot claim a verdict
     # it does not produce.
-    $DelegateFns = @('Add-NRGCAPolicyTierFinding')
+    $DelegateFns = @('Add-NRGCAPolicyTierFinding', 'Add-NRGPolicySetFinding', 'Add-NRGDefenderUnavailableFinding')
 
     # ── AST helpers ───────────────────────────────────────────────────────────
     $literalOf = {

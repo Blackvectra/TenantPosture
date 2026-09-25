@@ -25,44 +25,25 @@ function Test-NRGControlPowerPlatform {
 
     $d = $raw.Data
 
-    # PPL-1.1 — Environment count
+    # PPL-1.1 — Tenant isolation. This block scored the ENVIRONMENT COUNT
+    # ("1 environments — within governance baseline") and passed tenants with
+    # isolation switched off, while the control's title, remediation and
+    # citations (incl. CMMC 3.13.1 in the SSP) are about tenant isolation.
     $c = Get-NRGControlById -ControlId 'PPL-1.1'
     if ($c) {
-        # Read through Get-NRGObjectField, not dot-access: Set-StrictMode
-        # -Version Latest is active module-wide, so a Data block missing this
-        # key THROWS rather than yielding $null. The live collector always
-        # sets it, but replayed result JSON written before a key existed does
-        # not — and a throw here aborts every remaining PPL control in this
-        # function, including PPL-1.3.
-        $envCount = @(Get-NRGObjectField -Item $d -Key 'Environments' -Default @()).Count
-        # Empty is not clean. Zero environments is a legitimate, compliant
-        # answer AND what a failed environment query looks like, and the two
-        # were indistinguishable — a throttled query reported "No Power
-        # Platform environments — Satisfied". Only the section status can tell
-        # them apart.
-        if (-not (Test-NRGSectionCollected $raw 'Environments')) {
-            Add-NRGFinding -ControlId 'PPL-1.1' -State 'NotApplicable' `
-                -Category 'Power Platform' -Title $c.Title `
-                -Detail 'Environment list was not collected; environment count not assessed.'
-        }
-        elseif ($envCount -eq 0) {
-            Add-NRGFinding -ControlId 'PPL-1.1' -State 'Satisfied' `
-                -Category 'Power Platform' -Title $c.Title -Severity 'Informational' `
-                -CurrentValue 'No Power Platform environments' `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PPL-1.1')
-        } elseif ($envCount -le 10) {
-            Add-NRGFinding -ControlId 'PPL-1.1' -State 'Satisfied' `
-                -Category 'Power Platform' -Title $c.Title -Severity 'Informational' `
-                -CurrentValue "$envCount environments — within governance baseline" `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PPL-1.1')
+        $cit = Get-NRGFrameworkCitations -ControlId 'PPL-1.1'
+        $iso = Get-NRGObjectField -Item $d -Key 'TenantIsolation' -Default $null
+        if (-not (Test-NRGSectionCollected $raw 'TenantIsolation') -or $null -eq $iso) {
+            Add-NRGFinding -ControlId 'PPL-1.1' -State 'NotApplicable' -Category 'Power Platform' -Title $c.Title -FrameworkIds $cit `
+                -Detail 'TenantIsolation was not collected; tenant isolation not assessed.'
+        } elseif ((Get-NRGObjectField -Item $iso -Key 'IsDisabled' -Default $true) -eq $false) {
+            $allowed = @(Get-NRGObjectField -Item $iso -Key 'Rules' -Default @()).Count
+            Add-NRGFinding -ControlId 'PPL-1.1' -State 'Satisfied' -Category 'Power Platform' -Title $c.Title -Severity 'Informational' -FrameworkIds $cit `
+                -Detail "Power Platform tenant isolation is on: connections to and from other tenants are blocked except $allowed allow-listed tenant rule(s)." -CurrentValue "Isolation on; $allowed allowed tenant rule(s)"
         } else {
-            Add-NRGFinding -ControlId 'PPL-1.1' -State 'Partial' `
-                -Category 'Power Platform' -Title $c.Title -Severity 'Medium' `
-                -Detail "$envCount environments exist. Review for unused or trial environments that may host shadow IT data flows." `
-                -CurrentValue "$envCount environments" `
-                -RequiredValue 'Documented inventory; remove unused environments' `
-                -Remediation $c.Remediation `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PPL-1.1')
+            Add-NRGFinding -ControlId 'PPL-1.1' -State 'Gap' -Category 'Power Platform' -Title $c.Title -Severity $c.Severity -FrameworkIds $cit `
+                -Detail 'Power Platform tenant isolation is off: flows and apps can connect to other tenants with any account, a data-exfiltration path outside Microsoft 365 DLP.' `
+                -CurrentValue 'Tenant isolation off' -RequiredValue 'Tenant isolation on, with an explicit allow list' -Remediation $c.Remediation
         }
     }
 
@@ -149,6 +130,11 @@ function Test-NRGControlPPLConnectorClassification {
     }
     # Invoke-NRGCollectPowerPlatform now stores per-policy connector
     # classification (Business/Blocked connectors) from Get-DlpPolicy.
+    # A failed DLP read is not "no DLP policies configured".
+    if (-not (Get-NRGObjectField -Item $ppl.Data -Key 'DLPAvailable' -Default $true) -or -not (Test-NRGSectionCollected $ppl 'DLPPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Power Platform DLP policies were not collected; connector classification not assessed.'
+        return
+    }
     $policies      = @($ppl.Data['DLPPolicies'] ?? @())
     $businessConns = @($policies | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'BusinessConnectors' -Default @()).Count } | Measure-Object -Sum).Sum
     $blockedConns  = @($policies | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'BlockedConnectors'  -Default @()).Count } | Measure-Object -Sum).Sum

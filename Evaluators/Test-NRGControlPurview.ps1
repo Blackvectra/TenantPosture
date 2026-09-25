@@ -139,25 +139,26 @@ function Test-NRGControlPurview {
         }
     }
 
-    # PVW-1.4 — Sensitivity labels
+    # PVW-1.4 — Sensitivity labels PUBLISHED: a label policy must publish them
+    # to users. Counting defined labels passed tenants whose labels nobody can
+    # apply (PVW-4.3 reported the same data Partial "none published").
     $c = Get-NRGControlById -ControlId 'PVW-1.4'
-    if ($c -and -not (Test-NRGSectionCollected $raw 'SensitivityLabels')) {
-        # The section was never read (IPPS not connected, or the role cannot
-        # run the cmdlet). An empty list here is not "none configured".
-        Add-NRGFinding -ControlId 'PVW-1.4' -State 'NotApplicable' -Category 'Compliance' -Title $c.Title `
-            -Detail 'Sensitivity labels were not collected; not assessed.' -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.4')
-    } elseif ($c) {
-        $count = @($d.SensitivityLabels | Where-Object { $_.IsValid -eq $true }).Count
-        if ($count -gt 0) {
-            Add-NRGFinding -ControlId 'PVW-1.4' -State 'Satisfied' `
-                -Category 'Compliance' -Title $c.Title -Severity 'Informational' `
-                -CurrentValue "$count sensitivity labels published"
+    if ($c) {
+        $cit14 = Get-NRGFrameworkCitations -ControlId 'PVW-1.4'
+        if (-not (Test-NRGSectionCollected $raw 'LabelPolicies') -or -not (Test-NRGSectionCollected $raw 'SensitivityLabels')) {
+            Add-NRGFinding -ControlId 'PVW-1.4' -State 'NotApplicable' -Category 'Compliance' -Title $c.Title -FrameworkIds $cit14 `
+                -Detail 'Sensitivity labels or label policies were not collected; not assessed.'
         } else {
-            Add-NRGFinding -ControlId 'PVW-1.4' -State 'Gap' `
-                -Category 'Compliance' -Title $c.Title -Severity $c.Severity `
-                -Detail 'No sensitivity labels published. Users cannot classify documents or emails by sensitivity.' `
-                -Remediation $c.Remediation `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.4')
+            $labels   = @($d.SensitivityLabels | Where-Object { $_ })
+            $policies = @(Get-NRGObjectField -Item $d -Key 'LabelPolicies' -Default @() | Where-Object { $_ })
+            if ($labels.Count -gt 0 -and $policies.Count -gt 0) {
+                Add-NRGFinding -ControlId 'PVW-1.4' -State 'Satisfied' -Category 'Compliance' -Title $c.Title -Severity 'Informational' -FrameworkIds $cit14 `
+                    -CurrentValue "$($labels.Count) label(s), $($policies.Count) publishing policy(ies)"
+            } else {
+                $what = if ($labels.Count -gt 0) { "$($labels.Count) sensitivity label(s) are defined but no label policy publishes them, so users cannot apply them." } else { 'No sensitivity labels are defined or published. Users cannot classify documents or emails by sensitivity.' }
+                Add-NRGFinding -ControlId 'PVW-1.4' -State 'Gap' -Category 'Compliance' -Title $c.Title -Severity $c.Severity -FrameworkIds $cit14 `
+                    -Detail $what -Remediation $c.Remediation
+            }
         }
     }
 }
@@ -173,16 +174,19 @@ function Test-NRGControlPurviewAuditSearch {
     $cid = 'PVW-2.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
-    if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
-    $adminEnabled = Get-NRGNestedProperty -Object $pvw -Path 'Data.AuditConfig.AdminAuditLogEnabled' -Default $null
-    if ($null -eq $adminEnabled) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AdminAuditLogEnabled property unavailable (Get-AdminAuditLogConfig not reachable — typically IPPSSession not connected).'
-        return
-    }
-    if ($adminEnabled) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Admin audit log is enabled — cmdlet invocations against EXO are recorded for incident response review.'
+    if (-not $pvw -or -not $pvw.Success) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Purview data not collected'; return }
+    # Audit log SEARCH has records only when Unified Audit Log ingestion is
+    # on — the control's description and remediation are exactly that. It
+    # read AdminAuditLogEnabled instead, which Exchange Online always reports
+    # True, so it passed beside a PVW-1.1 "UAL disabled" Gap.
+    $ual = Get-NRGNestedProperty -Object $pvw -Path 'Data.UnifiedAuditEnabled' -Default $null
+    $src = [string](Get-NRGNestedProperty -Object $pvw -Path 'Data.AuditConfig.Source' -Default 'Unknown')
+    if ($ual -eq $true) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Unified Audit Log ingestion is on, so the audit log is searchable.' -CurrentValue 'UnifiedAuditLogIngestionEnabled = true'
+    } elseif ($null -eq $ual -or $src -ne 'ExchangeOnline' -or -not (Test-NRGSectionCollected $pvw 'AuditConfig')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Unified Audit Log status was not read from the Exchange Online session; audit search not assessed.'
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Admin audit logging is disabled — administrative cmdlet history is not retained. This is distinct from UAL ingestion (PVW-1.1) and covers EXO management plane activity specifically.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Unified Audit Log ingestion is off, so audit log search returns nothing for user and admin activity.' -CurrentValue 'UnifiedAuditLogIngestionEnabled = false' -RequiredValue 'UnifiedAuditLogIngestionEnabled = true' -Remediation $ctrl.Remediation
     }
 }
 
@@ -202,11 +206,13 @@ function Test-NRGControlPurviewCommCompliance {
         return
     }
     # A policy explicitly Enabled = $false is not active; unknown counts.
-    $policies = @(@($pvw.Data['CommCompliancePolicies'] ?? @()) | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Enabled' -Default $null) -ne $false })
+    $all = @($pvw.Data['CommCompliancePolicies'] ?? @())
+    $policies = @($all | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Enabled' -Default $null) -ne $false })
     if ($policies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($policies.Count) communication compliance policy(ies) active."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No communication compliance policies configured. Required for regulatory environments (finance, healthcare, government). Requires E5 Compliance.' -Remediation $ctrl.Remediation
+        $what = if ($all.Count -gt 0) { "$($all.Count) communication compliance policy(ies) exist but all are turned off." } else { 'No communication compliance policies configured.' }
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$what Required for regulatory environments (finance, healthcare, government)." -Remediation $ctrl.Remediation
     }
 }
 
@@ -347,19 +353,21 @@ function Test-NRGControlPurviewSensitiveInfoTypes {
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $pvw = Get-NRGRawData -Key 'Purview'
     if (-not $pvw -or -not $pvw.Success) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'Purview label data not collected'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Purview data not collected'; return
     }
-    $dlpPolicies = @($pvw.Data['DLPPolicies'] ?? @())
-    if ($dlpPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "$($dlpPolicies.Count) DLP policy(ies) using sensitive information types for detection."
+    # Sensitive information types live on the DLP RULES. Counting POLICIES
+    # ("2 DLP policies using sensitive information types") passed tenants whose
+    # rules use none, while DEF-4.2 read the rules and reported the Gap.
+    if ((Get-NRGNestedProperty -Object $pvw -Path 'Data.SectionStatus.DLPRules' -Default $null) -ne 'Collected') {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'DLPRules was not collected; sensitive information type use not assessed.'
+        return
+    }
+    $active = @(@($pvw.Data['DLPRules'] ?? @()) | Where-Object { -not (Get-NRGObjectField -Item $_ -Key 'Disabled' -Default $false) })
+    $withSit = @($active | Where-Object { @(Get-NRGObjectField -Item $_ -Key 'SensitiveInfoTypes' -Default @()).Count -gt 0 })
+    if ($withSit.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($withSit.Count) enabled DLP rule(s) detect sensitive information types." -CurrentValue "$($withSit.Count) of $($active.Count) enabled rules use SITs"
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail 'No DLP policies using sensitive information types detected. Sensitive data (SSN, PII, credit cards) is not being classified or protected.' `
-            -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "No enabled DLP rule matches on a sensitive information type ($($active.Count) enabled rule(s)). Regulated data (SSN, card numbers, health data) is not being detected." -CurrentValue "0 of $($active.Count) enabled rules use SITs" -RequiredValue 'Enabled DLP rules matching sensitive information types' -Remediation $ctrl.Remediation
     }
 }
 
@@ -418,7 +426,9 @@ function Test-NRGControlPurviewAuditRetention {
     if ($longTerm.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($longTerm.Count) audit log retention policy(ies) extending logs ≥365 days."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'No audit log retention policy keeps records for a year or more. The default policy applies: 180 days with Audit (Standard); with Audit (Premium), Exchange, SharePoint and Entra records are kept one year and everything else 180 days. Breaches discovered later than that cannot be investigated.' -Remediation $ctrl.Remediation
+        # Not configured is a Gap (the default retention is what the control
+        # asks to extend), not half credit.
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No audit log retention policy keeps records for a year or more. The default policy applies: 180 days with Audit (Standard); with Audit (Premium), Exchange, SharePoint and Entra records are kept one year and everything else 180 days. Breaches discovered later than that cannot be investigated.' -Remediation $ctrl.Remediation
     }
 }
 

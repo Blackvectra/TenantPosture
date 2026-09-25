@@ -270,17 +270,46 @@ function Invoke-NRGCollectEXOMailboxConfig {
         # Anti-spam / inbound policies
         try {
             $spamPolicies = @(Get-HostedContentFilterPolicy -ErrorAction Stop)
+            # Every field through Get-NRGObjectField: ZapEnabled is deprecated
+            # (SpamZapEnabled / PhishZapEnabled replace it) and absent from
+            # current output, and a bare read threw under StrictMode and failed
+            # the whole anti-spam section.
             $result.Data.AntiSpamPolicies = @($spamPolicies | ForEach-Object {
                 @{
                     Name                = [string]$_.Name
-                    IsDefault           = [bool]$_.IsDefault
-                    HighConfidenceSpamAction = [string]$_.HighConfidenceSpamAction
-                    SpamAction          = [string]$_.SpamAction
-                    PhishSpamAction     = [string]$_.PhishSpamAction
-                    BulkThreshold       = $_.BulkThreshold
-                    ZapEnabled          = [bool]$_.ZapEnabled
+                    IsDefault           = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
+                    RecommendedPolicyType = [string](Get-NRGObjectField -Item $_ -Key 'RecommendedPolicyType' -Default '')
+                    HighConfidenceSpamAction = [string](Get-NRGObjectField -Item $_ -Key 'HighConfidenceSpamAction' -Default '')
+                    SpamAction          = [string](Get-NRGObjectField -Item $_ -Key 'SpamAction' -Default '')
+                    PhishSpamAction     = [string](Get-NRGObjectField -Item $_ -Key 'PhishSpamAction' -Default '')
+                    HighConfidencePhishAction = [string](Get-NRGObjectField -Item $_ -Key 'HighConfidencePhishAction' -Default '')
+                    PhishQuarantineTag  = [string](Get-NRGObjectField -Item $_ -Key 'PhishQuarantineTag' -Default '')
+                    BulkThreshold       = (Get-NRGObjectField -Item $_ -Key 'BulkThreshold' -Default $null)
+                    SpamZapEnabled      = (Get-NRGObjectField -Item $_ -Key 'SpamZapEnabled' -Default $null)
+                    PhishZapEnabled     = (Get-NRGObjectField -Item $_ -Key 'PhishZapEnabled' -Default $null)
+                    ZapEnabled          = (Get-NRGObjectField -Item $_ -Key 'ZapEnabled' -Default $null)
                 }
             })
+            # Which custom policies are actually applied (an enabled rule).
+            $result.Data.AntiSpamRules = @()
+            try {
+                $result.Data.AntiSpamRules = @(@(Get-HostedContentFilterRule -ErrorAction Stop) | ForEach-Object {
+                    @{
+                        Name = [string]$_.Name
+                        HostedContentFilterPolicy = [string](Get-NRGObjectField -Item $_ -Key 'HostedContentFilterPolicy' -Default '')
+                        State = [string](Get-NRGObjectField -Item $_ -Key 'State' -Default '')
+                        RecipientDomainIs = @(Get-NRGObjectField -Item $_ -Key 'RecipientDomainIs' -Default @())
+                        SentTo = @(Get-NRGObjectField -Item $_ -Key 'SentTo' -Default @())
+                        SentToMemberOf = @(Get-NRGObjectField -Item $_ -Key 'SentToMemberOf' -Default @())
+                        HasExceptions = [bool]@(@(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentTo' -Default @()) + @(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentToMemberOf' -Default @()) + @(Get-NRGObjectField -Item $_ -Key 'ExceptIfRecipientDomainIs' -Default @()) | Where-Object { $_ }).Count
+                    }
+                })
+            } catch {
+                $result.Data.AntiSpamRules = $null
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'EXO-AntiSpamRules' -Message $_.Exception.Message
+                }
+            }
             $result.Data.SectionStatus.AntiSpamPolicies = 'Collected'
         } catch {
             $result.Data.SectionStatus.AntiSpamPolicies = 'Failed'
