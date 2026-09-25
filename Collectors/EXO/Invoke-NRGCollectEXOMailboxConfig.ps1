@@ -50,6 +50,7 @@ function Invoke-NRGCollectEXOMailboxConfig {
                 TransportConfig      = 'NotRun'
                 OrganizationConfig   = 'NotRun'
                 SmtpAuthConfig       = 'NotRun'
+                CASMailboxProtocols  = 'NotRun'
                 AdminAuditLogConfig  = 'NotRun'
                 ExternalInOutlook    = 'NotRun'
             }
@@ -240,7 +241,22 @@ function Invoke-NRGCollectEXOMailboxConfig {
             # CASMailbox carries no UserPrincipalName (reading it threw under
             # StrictMode and discarded the section); identify by
             # PrimarySmtpAddress, then Name.
-            $smtpEnabled = @(Get-CASMailbox -ResultSize Unlimited -ErrorAction Stop | Where-Object { (Get-NRGObjectField -Item $_ -Key 'SmtpClientAuthenticationDisabled' -Default $null) -eq $false })
+            $cas = @(Get-CASMailbox -ResultSize Unlimited -ErrorAction Stop)
+            $smtpEnabled = @($cas | Where-Object { (Get-NRGObjectField -Item $_ -Key 'SmtpClientAuthenticationDisabled' -Default $null) -eq $false })
+            # POP / IMAP on EXISTING mailboxes (EXO-2.3 / 2.4). The CAS
+            # mailbox PLANS only set the default for new mailboxes; a mailbox
+            # created before the plan changed keeps POP / IMAP on.
+            $casId = { param($m) $i = [string](Get-NRGObjectField -Item $m -Key 'PrimarySmtpAddress' -Default ''); if (-not $i) { $i = [string](Get-NRGObjectField -Item $m -Key 'Name' -Default '') }; $i }
+            $popOn  = @($cas | Where-Object { (Get-NRGObjectField -Item $_ -Key 'PopEnabled'  -Default $null) -eq $true })
+            $imapOn = @($cas | Where-Object { (Get-NRGObjectField -Item $_ -Key 'ImapEnabled' -Default $null) -eq $true })
+            $result.Data.CASMailboxProtocols = @{
+                Total            = $cas.Count
+                PopEnabledCount  = $popOn.Count
+                ImapEnabledCount = $imapOn.Count
+                PopSample        = @($popOn  | Select-Object -First 25 | ForEach-Object { & $casId $_ })
+                ImapSample       = @($imapOn | Select-Object -First 25 | ForEach-Object { & $casId $_ })
+            }
+            $result.Data.SectionStatus.CASMailboxProtocols = 'Collected'
             $transportConfig = $result.Data.TransportConfig
             $tenantSmtpDisabled = if ($transportConfig) {
                 $transportConfig.SmtpClientAuthenticationDisabled
@@ -256,6 +272,7 @@ function Invoke-NRGCollectEXOMailboxConfig {
             $result.Data.SectionStatus.SmtpAuthConfig = 'Collected'
         } catch {
             $result.Data.SectionStatus.SmtpAuthConfig = 'Failed'
+            $result.Data.SectionStatus.CASMailboxProtocols = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'EXO-SmtpAuth' -Message $_.Exception.Message
             }

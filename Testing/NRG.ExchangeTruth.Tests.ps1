@@ -325,4 +325,28 @@ return @{ value = @() }
             } finally { Remove 'Invoke-NRGGraphRequest' }
         }
     }
+
+    Context 'Sweep coverage and existing mailboxes' {
+        It 'EXO-7.2 is not "clean" when the inbox-rule sweep stopped at the scan limit' {
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (Raw @{ InboxRulesForwarding = @(); UnparseableRules = @()
+                Stats = @{ MailboxesScanned = 2000; ScanLimitReached = $true; MailboxesRuleScanFailed = 0 }
+                SectionStatus = @{ InboxRulesForwarding = 'Collected' } })
+            $f = Verdict 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2'
+            $f.State | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'first 2000 mailboxes'
+        }
+        It 'EXO-7.2 names disabled forwarding rules as disabled rather than active' {
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (Raw @{ UnparseableRules = @(); Stats = @{ MailboxesScanned = 5 }
+                InboxRulesForwarding = @(@{ Mailbox = 'a@contoso.com'; RuleName = 'x'; Enabled = $false; IsExternal = $true; ExternalRecipients = @('e@evil.tld') })
+                SectionStatus = @{ InboxRulesForwarding = 'Collected' } })
+            (Verdict 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2').Detail | Should -Match '0 enabled.*disabled'
+        }
+        It 'EXO-2.3 is not satisfied by the mailbox plans while existing mailboxes still have POP on' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (Raw @{ CASMailboxPlans = @(@{ Name = 'Plan'; PopEnabled = $false; ImapEnabled = $false })
+                CASMailboxProtocols = @{ Total = 10; PopEnabledCount = 3; ImapEnabledCount = 0; PopSample = @('a@contoso.com'); ImapSample = @() }
+                SectionStatus = @{ CASMailboxPlans = 'Collected'; CASMailboxProtocols = 'Collected' } })
+            (Verdict 'Test-NRGControlEXOPop3' 'EXO-2.3').State | Should -Be 'Partial'
+            (Verdict 'Test-NRGControlEXOImap' 'EXO-2.4').State | Should -Be 'Satisfied'
+        }
+    }
 }
