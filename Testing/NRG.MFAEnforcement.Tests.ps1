@@ -62,15 +62,16 @@ Describe 'AAD-1.2 MFA enforcement' {
         Set-SecDefaults $null
         Set-NRGRawData -Key 'AAD-CAPolicies' -Data (Bag @{ Policies = @() })
         $f = Get-Verdict
-        $f.CurrentValue | Should -Not -Match 'Security Defaults: disabled'
-        $f.CurrentValue | Should -Match 'Security Defaults: not read'
+        $f.Detail | Should -Not -Match 'Security Defaults: disabled'
+        $f.Detail | Should -Match 'Security Defaults: not read'
+        $f.State  | Should -Be 'Gap' -Because 'no policy requires MFA: not configured, not half credit'
     }
 
     It 'says disabled only when it was read as disabled' {
         Set-Users -Registered 2
         Set-SecDefaults $false
         Set-NRGRawData -Key 'AAD-CAPolicies' -Data (Bag @{ Policies = @() })
-        (Get-Verdict).CurrentValue | Should -Match 'Security Defaults: disabled'
+        (Get-Verdict).Detail | Should -Match 'Security Defaults: disabled'
     }
 
     It 'an authentication-strength grant for All users / All apps counts as enforcing MFA' {

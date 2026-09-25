@@ -28,6 +28,9 @@
         @{ ControlId = 'DEF-4.4'; Kind = 'Manual'; Reason = 'The Priority account user tag is not exposed by any supported Graph/EXO read API.' }
         @{ ControlId = 'AAD-8.1'; Kind = 'Manual'; Reason = 'PIM alert configuration is not reliably readable across tenant PIM tiers.' }
         @{ ControlId = 'PVW-3.1'; Kind = 'Manual'; Reason = 'SIEM/audit export configuration has no supported read API.' }
+        @{ ControlId = 'AAD-5.1'; Kind = 'Manual'; Reason = 'The user SSPR setting (None/Selected/All) has no supported Graph read; authorizationPolicy.allowedToUseSSPR is the ADMINISTRATOR setting.' }
+        @{ ControlId = 'AAD-5.2'; Kind = 'Manual'; Reason = 'The number of methods required to reset a password lives in the legacy SSPR policy, which has no supported read API.' }
+        @{ ControlId = 'AAD-10.3'; Kind = 'Manual'; Reason = 'Break-glass sign-in alerting is configured in Sentinel / Defender XDR / Azure Monitor, which the assessment does not read.' }
         @{ ControlId = 'PVW-3.3'; Kind = 'Manual'; Reason = 'Purview Compliance Manager score has no supported programmatic read API.' }
         @{ ControlId = 'PVW-2.4'; Kind = 'Manual'; Reason = 'Insider Risk Management policies are not exposed through the Security & Compliance PowerShell or Graph surfaces this tool reads.' }
         @{ ControlId = 'PVW-3.2'; Kind = 'Manual'; Reason = 'eDiscovery readiness (roles assigned, a documented legal-hold workflow) is not measurable from the tenant; a case count only says whether there has been litigation.' }

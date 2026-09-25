@@ -45,6 +45,37 @@ different, than the tenant actually is.
 - **`-RegisterApp` moved out of the read-only module** to `Onboard/`; the
   switch works as before. A test fails if any module-loaded file calls a
   Graph write cmdlet.
+- **Identity verdicts corrected against Graph's documented shapes.**
+  AAD-6.2 (Critical) read the user-consent setting from the wrong level of
+  the authorization policy, so every tenant scored "consent restricted" —
+  including tenants where users can consent to any app. Conditional Access:
+  a pilot-group or Exchange-ActiveSync-only legacy block no longer passes
+  AAD-1.1; an all-users MFA policy covers admins (AAD-1.3); blocking and
+  risk-remediation policies count for AAD-1.4/1.5 (the collector now sends
+  the Prefer header that reveals riskRemediation); "compliant OR MFA" does
+  not enforce a device (AAD-2.3); a device-code policy must block
+  (AAD-11.1); AAD-11.7 is judged on configuration, not a policy name
+  containing "PAW"; a risk-only "every time" re-prompt is not a periodic
+  sign-in frequency (AAD-10.4); token protection (beta shape), CAE strict
+  mode, terms of use, device filters and workload-identity conditions are
+  now collected, so AAD-11.4/11.5/11.7/11.8/11.9 can pass. AAD-1.2: MFA not
+  required is a Gap however many users registered; partly required is
+  Partial; the Entra Connect sync account is left out of the registration
+  count. Roles: activated PIM and CA-excluded break-glass accounts are not
+  standing access (AAD-3.2); eligible guests and synced accounts count
+  (AAD-11.2, AAD-10.2, AAD-3.1); Global Administrator held by a group is
+  reported as not assessed; built-in roles are recognized by template id
+  when the role-definition read fails. Break-glass exclusion must cover
+  every all-users / admin policy, and an unreadable exclusion group is
+  unknown, not "not excluded". AAD-4.1/6.3/7.2 no longer score from failed
+  reads; AAD-4.3 distinguishes the default guest role from Restricted
+  Guest; number matching reads the setting's state (AAD-9.1); Authenticator
+  phone sign-in counts as passwordless (AAD-9.2); a role access review
+  created in the tutorial shape is recognized (AAD-8.2). AAD-5.1, AAD-5.2
+  and AAD-10.3 now say plainly they need manual review — the data they read
+  answered a different question. AAD-1.2 and AAD-3.1 carried bare NIST ids,
+  so they were missing from the NIST family view and the SSP; they now
+  carry their full citations.
 - **The SSP no longer reports a requirement "Implemented" it did not
   check.** A requirement was derived Implemented when no mapped control had
   a Gap, even if most of them were NotApplicable (not collected, not
