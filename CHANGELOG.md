@@ -45,6 +45,24 @@ different, than the tenant actually is.
 - **`-RegisterApp` moved out of the read-only module** to `Onboard/`; the
   switch works as before. A test fails if any module-loaded file calls a
   Graph write cmdlet.
+- **DNS-2.1 .. 2.4 never read the collector's data.** The collector writes
+  each domain as an ordered dictionary; those four evaluators only accepted
+  a plain hashtable, so on every live run DNS-2.2 said "No CAA record" for a
+  domain whose CAA had just been read, and DNS-2.1/2.3/2.4 never reached a
+  verdict. A new test runs the real collector into the evaluators.
+- **DNS records are read the way the RFCs define them.** Two SPF records,
+  more than 10 lookup terms, and `+all`/bare `all` are failures (the last
+  authorizes every sender, and scored half credit); `redirect=` is followed;
+  no `all` is neutral, a Gap. Two DMARC records apply no policy; `p = reject`
+  with spaces is reject (was read as p=none); `v=DMARC1` is case-exact;
+  `p=quarantine` meets "Quarantine or Reject"; `sp=none` is Partial. A
+  subdomain inherits its organizational domain's DMARC, its signed parent
+  zone's DNSSEC and its parent's CAA, instead of false gaps. CAA with only
+  `iodef` restricts nothing (Gap), only `issuewild` restricts wildcards
+  (Partial). DKIM with only selector2 is Partial, not "no DKIM". An MTA-STS
+  policy file that could not be fetched is not assessed rather than scored.
+  Zero certificates in CT logs is not a gap; Google Trust Services and
+  other common public CAs are no longer flagged as possible mis-issuance.
 - **License detection reads service plans, not product names.** Unlicensed
   controls leave the score, so a detection miss hides a real gap. Checked
   against Microsoft's licensing reference, the old detection never marked
