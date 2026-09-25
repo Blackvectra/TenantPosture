@@ -180,9 +180,17 @@ function Get-NRGAssessmentScope {
     # licence gated.
     $haveSkuData = $false
     if ($null -ne $LicenseProfile) {
-        $sup = Get-NRGObjectField -Item $LicenseProfile -Key 'SuppressedLicenseRequirements' -Default $null
-        if ($null -ne $sup) {
-            try { $haveSkuData = (@($sup).Count -gt 0) } catch { $haveSkuData = $false }
+        # HasLicenseData when present: a Business Basic tenant has SKU data
+        # yet satisfies no requirement, so an empty suppression set does not
+        # mean "no data". Older profiles lack the flag; fall back to the set.
+        $flag = Get-NRGObjectField -Item $LicenseProfile -Key 'HasLicenseData' -Default $null
+        if ($null -ne $flag) {
+            $haveSkuData = [bool]$flag
+        } else {
+            $sup = Get-NRGObjectField -Item $LicenseProfile -Key 'SuppressedLicenseRequirements' -Default $null
+            if ($null -ne $sup) {
+                try { $haveSkuData = (@($sup).Count -gt 0) } catch { $haveSkuData = $false }
+            }
         }
     }
 
@@ -353,7 +361,7 @@ function Get-NRGAssessmentScope {
         } elseif ($haveSkuData -and $row.Licence -and $row.Licence -notmatch '^Included' -and
                   (Get-Command Test-NRGLicenseRequirementMet -ErrorAction SilentlyContinue)) {
             try {
-                $isLicence = -not (Test-NRGLicenseRequirementMet -LicenseRequirement $row.Licence -LicenseProfile $LicenseProfile)
+                $isLicence = -not (Test-NRGLicenseRequirementMet -LicenseRequirement $row.Licence -LicenseProfile $LicenseProfile -ControlId $row.ControlId)
             } catch {
                 $isLicence = $false
             }

@@ -266,9 +266,7 @@ function Publish-NRGRemediationScript {
         # top of the publisher and threaded through here.
         $licHeld = $false
         if ($ctrl -and $ctrl.LicenseRequirement) {
-            $licHeld = if ($licenseProfile -and $licenseProfile.SuppressedLicenseRequirements) {
-                [bool]$licenseProfile.SuppressedLicenseRequirements.Contains($ctrl.LicenseRequirement)
-            } else { $false }
+            $licHeld = [bool](Test-NRGLicenseRequirementMet -LicenseRequirement $ctrl.LicenseRequirement -LicenseProfile $licenseProfile -ControlId $f.ControlId)
         }
         $licReq = if ($ctrl -and $ctrl.LicenseRequirement -and
                       $ctrl.LicenseRequirement -notmatch '^Included' -and

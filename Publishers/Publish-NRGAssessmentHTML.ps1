@@ -189,17 +189,18 @@ function Publish-NRGAssessmentHTML {
     # elsewhere in this file. Falls back to $false when the helper is not
     # available (e.g. unit-test load of just the publisher).
     $hasBusinessPremium = if ($licProfile) { $licProfile.HasBusinessPremium } else { $false }
-    $hasEntraP2         = if ($licProfile) { $licProfile.HasEntraP2 }         else { $false }
-    # NB: assign the HashSet DIRECTLY, never as the output of an if-block. An
-    # if/else expression ENUMERATES an IEnumerable result — an empty HashSet
-    # would yield $null (then .Contains() below throws) and a non-empty one
-    # would collapse to a plain case-sensitive string[]. Direct assignment
-    # preserves the real OrdinalIgnoreCase HashSet.
-    $suppressedLicReqs = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    if ($licProfile -and $licProfile.SuppressedLicenseRequirements) {
-        $suppressedLicReqs = $licProfile.SuppressedLicenseRequirements
-    }
     $tierLabel          = if ($licProfile) { $licProfile.TierLabel } else { 'Unknown' }
+    # Licensing actually read? Without SKU data nothing can be called license
+    # blocked: every gap stays scored (Set-NRGLicenseGating moves nothing), so
+    # listing them as "blocked" and pitching an upgrade would be invented.
+    $licKnown = [bool](Get-NRGObjectField -Item $licProfile -Key 'HasLicenseData' -Default $false)
+    # Per-control answer (several controls share a requirement string but need
+    # different service plans) — the same test Set-NRGLicenseGating applies.
+    $licNotHeld = {
+        param($ctrl, [string] $cid)
+        return [bool]($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included' -and
+            -not (Test-NRGLicenseRequirementMet -LicenseRequirement $ctrl.LicenseRequirement -LicenseProfile $licProfile -ControlId $cid))
+    }
 
     # ── License groups (only show what the tenant actually needs) ─────────────
     $licGroups = @{}
@@ -213,9 +214,8 @@ function Publish-NRGAssessmentHTML {
     # never mis-counted as license gaps.
     foreach ($f in ($Findings | Where-Object { $_.State -eq 'Gap' -or ($_.State -eq 'NotApplicable' -and $_.Detail -match 'upgrade opportunity') })) {
         $ctrl = $cdefs[$f.ControlId]
-        if ($ctrl -and $ctrl.LicenseRequirement -and
-            $ctrl.LicenseRequirement -notmatch '^Included' -and
-            -not $suppressedLicReqs.Contains($ctrl.LicenseRequirement)) {
+        if (-not $licKnown -and $f.State -eq 'Gap') { continue }
+        if (& $licNotHeld $ctrl $f.ControlId) {
             $lic = $ctrl.LicenseRequirement
             if (-not $licGroups.ContainsKey($lic)) { $licGroups[$lic] = 0 }
             $licGroups[$lic]++
@@ -704,8 +704,29 @@ function Publish-NRGAssessmentHTML {
     }
 
     # ── License card HTML ────────────────────────────────────────────────────
+    # The pitch names the license the tenant is actually missing: an E5
+    # tenant was told Business Premium "resolves the majority of these gaps".
+    $unmetReqs = @($licGroups.Keys)
+    $licAlert = if (@($unmetReqs | Where-Object { $_ -match '^(M365 Business Premium|Defender for Office 365 Plan 1)' }).Count -gt 0 -and -not $hasBusinessPremium) {
+        "<div class='lic-alert'><span class='lic-ico'>&#9888;</span><div>Most of these require <strong>Microsoft 365 Business Premium</strong> (or the equivalent Entra ID P1, Intune and Defender for Office 365 add-ons) — including Safe Attachments, Safe Links, Conditional Access and Intune endpoint management. Contact NRG for a licensing proposal.</div></div>"
+    } elseif (@($unmetReqs | Where-Object { $_ -match 'Entra ID P2' }).Count -gt 0) {
+        "<div class='lic-alert'><span class='lic-ico'>&#9432;</span><div>Some of these require <strong>Microsoft Entra ID P2</strong> — including Identity Protection risk-based policies and PIM governance. Contact NRG for a licensing proposal.</div></div>"
+    } else {
+        "<div class='lic-alert'><span class='lic-ico'>&#9432;</span><div>The following controls require licensing beyond the tenant's current subscriptions. Contact NRG for a licensing assessment.</div></div>"
+    }
     $licCard = ''
-    if ($licGroups.Count -gt 0) {
+    if (-not $licKnown) {
+        $licCard = @"
+<div class='card mt' id='licensing'>
+  <div class='card-hd'>
+    <div><div class='card-label'>License Gap Analysis</div><div class='card-sub'>Tenant licensing was not read</div></div>
+  </div>
+  <div class='lic-body'>
+    <div class='lic-alert'><span class='lic-ico'>&#9432;</span><div>The tenant's subscriptions (SubscribedSkus) were not collected, so no control is reported as license-blocked and every gap is scored. Confirm licensing before quoting an upgrade.</div></div>
+  </div>
+</div>
+"@
+    } elseif ($licGroups.Count -gt 0) {
         $licRows = ($licGroups.GetEnumerator() | Sort-Object Name | ForEach-Object {
             "<div class='lic-row'><div class='lic-tier'>$(hx $_.Key)</div><div class='lic-cnt'>$($_.Value) control$(if($_.Value -ne 1){'s'}) blocked</div></div>"
         }) -join ''
@@ -716,7 +737,7 @@ function Publish-NRGAssessmentHTML {
     <div class='lic-badge'>$totalBlocked blocked</div>
   </div>
   <div class='lic-body'>
-    $(if (-not $hasBusinessPremium) { "<div class='lic-alert'><span class='lic-ico'>&#9888;</span><div>Upgrading to <strong>Microsoft 365 Business Premium</strong> resolves the majority of these gaps — including Safe Attachments, Safe Links, Conditional Access with device compliance, and Intune endpoint management. These are the controls most directly blocking ransomware and BEC attacks. Contact NRG for a licensing proposal.</div></div>" } elseif (-not $hasEntraP2) { "<div class='lic-alert'><span class='lic-ico'>&#9432;</span><div>The remaining license-gated controls require <strong>Microsoft Entra ID P2</strong> or <strong>Entra Suite</strong> — including Identity Protection risk-based CA policies and PIM governance features. Contact NRG for a licensing proposal.</div></div>" } else { "<div class='lic-alert'><span class='lic-ico'>&#9432;</span><div>The following controls require additional licensing beyond your current subscriptions. Contact NRG for a licensing assessment.</div></div>" })
+    $licAlert
     <div class='lic-rows'>$licRows</div>
   </div>
 </div>
@@ -740,9 +761,7 @@ function Publish-NRGAssessmentHTML {
         # Suppress the "Requires:" badge when the tenant already holds the
         # license. v4.6.1 always emitted this badge — see comment by
         # $licProfile above.
-        $lic = if ($ctrl -and $ctrl.LicenseRequirement -and
-                   $ctrl.LicenseRequirement -notmatch '^Included' -and
-                   -not $suppressedLicReqs.Contains($ctrl.LicenseRequirement)) {
+        $lic = if ($licKnown -and (& $licNotHeld $ctrl $g.ControlId)) {
             "<div class='act-lic'>&#128273; Requires: $(hx $ctrl.LicenseRequirement)</div>"
         } else { '' }
         $cls   = if ($g.Severity -eq 'Critical') { 'ac' } else { 'ah' }
@@ -786,9 +805,7 @@ function Publish-NRGAssessmentHTML {
             $cv2   = hx $f.CurrentValue
             $rv2   = hx $f.RequiredValue
             # Suppress per-finding "Requires:" tag when license already held.
-            $lic2 = if ($ctrl2 -and $ctrl2.LicenseRequirement -and
-                        $ctrl2.LicenseRequirement -notmatch '^Included' -and
-                        -not $suppressedLicReqs.Contains($ctrl2.LicenseRequirement)) {
+            $lic2 = if ($licKnown -and (& $licNotHeld $ctrl2 $f.ControlId)) {
                 "<div class='ex-lic'>&#128273; $(hx $ctrl2.LicenseRequirement)</div>"
             } else { '' }
             $fwTags2 = ''

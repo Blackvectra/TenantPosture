@@ -67,13 +67,8 @@ function Publish-NRGRemediationPlaybook {
         try { Get-NRGTenantLicenseProfile } catch { $null }
     } else { $null }
     $licHeld = {
-        param($req)
-        if ([string]::IsNullOrEmpty($req)) { return $true }
-        if ($req -match '^Included') { return $true }
-        if ($null -ne $licProfile -and $licProfile.SuppressedLicenseRequirements) {
-            return [bool]$licProfile.SuppressedLicenseRequirements.Contains($req)
-        }
-        return $false
+        param($req, $cid)
+        return [bool](Test-NRGLicenseRequirementMet -LicenseRequirement $req -LicenseProfile $licProfile -ControlId $cid)
     }
 
     # Gap findings only, sorted by severity priority
@@ -146,7 +141,7 @@ function Publish-NRGRemediationPlaybook {
         $c = $controls[$_.ControlId]
         $c -and $c.LicenseRequirement -and
         $c.LicenseRequirement -notmatch '^Included' -and
-        -not (& $licHeld $c.LicenseRequirement)
+        -not (& $licHeld $c.LicenseRequirement $_.ControlId)
     })
     if ($upgradeNeeded.Count -gt 0) {
         $licenseGroups = $upgradeNeeded | ForEach-Object {
@@ -175,9 +170,7 @@ function Publish-NRGRemediationPlaybook {
         # do not have" — on a BP tenant it must not show for BP-gated controls.
         $needsLicUpgrade = $false
         if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') {
-            $needsLicUpgrade = -not ($licenseProfile -and
-                                     $licenseProfile.SuppressedLicenseRequirements -and
-                                     $licenseProfile.SuppressedLicenseRequirements.Contains($ctrl.LicenseRequirement))
+            $needsLicUpgrade = -not (Test-NRGLicenseRequirementMet -LicenseRequirement $ctrl.LicenseRequirement -LicenseProfile $licenseProfile -ControlId $f.ControlId)
         }
         $licFlag = if ($needsLicUpgrade) { ' 🔑' } else { '' }
         $licNote = if ($needsLicUpgrade) { "  > **Requires:** $(EscMd $ctrl.LicenseRequirement)  " } else { '' }
@@ -502,7 +495,7 @@ function Publish-NRGRemediationPlaybook {
             $sevClass = ([string]$f.Severity).ToLower()
             $needsLic = $false
             if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') {
-                $needsLic = -not ($licenseProfile -and $licenseProfile.SuppressedLicenseRequirements -and $licenseProfile.SuppressedLicenseRequirements.Contains($ctrl.LicenseRequirement))
+                $needsLic = -not (Test-NRGLicenseRequirementMet -LicenseRequirement $ctrl.LicenseRequirement -LicenseProfile $licenseProfile -ControlId $f.ControlId)
             }
             $bizRisk = if ($ctrl -and $ctrl.BusinessRisk) { $ctrl.BusinessRisk } elseif ($f.Detail) { $f.Detail } else { '' }
             $remedy  = if ($ctrl -and $ctrl.Remediation) { $ctrl.Remediation } elseif ($f.Remediation) { $f.Remediation } else { '' }
