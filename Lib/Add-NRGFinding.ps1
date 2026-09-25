@@ -89,6 +89,13 @@ function Add-NRGFinding {
         if ($catalog.Count -gt 0) { $FrameworkIds = $catalog }
     }
 
+    # A verdict with no stated reason is not evidence. Several evaluators put
+    # the observed value in CurrentValue only, and the report printed a bare
+    # "Satisfied" with nothing under it; the observed value is the reason.
+    if ([string]::IsNullOrWhiteSpace($Detail) -and -not [string]::IsNullOrWhiteSpace($CurrentValue)) {
+        $Detail = $CurrentValue.TrimEnd('.') + '.'
+    }
+
     $finding = [PSCustomObject]@{
         ControlId     = $ControlId
         State         = $State

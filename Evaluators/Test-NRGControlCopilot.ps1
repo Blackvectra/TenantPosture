@@ -220,12 +220,14 @@ function Test-NRGControlAICopilotLicensedOnly {
         $ratio = if ($total -gt 0) { [double]$licensed / [double]$total } else { 0.0 }
 
         if ($licensed -eq 0) {
-            Add-NRGFinding -ControlId $cid -State 'Satisfied' `
+            # Nothing licensed is nothing to restrict — not applicable, like
+            # PPL-3.1/3.2/3.5. It is not a pass, and "no user can invoke
+            # Copilot" was false: Microsoft 365 Copilot Chat needs no license.
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' `
                 -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' `
                 -FrameworkIds $cit `
                 -CurrentValue "0 of $total users licensed" `
-                -RequiredValue 'Copilot license assigned only to approved users' `
-                -Detail 'No users currently have a Copilot license. Platform-enforced licensing means no user can invoke Copilot.'
+                -Detail "No Microsoft 365 Copilot licenses are assigned (0 of $total users), so there is no licensed Copilot access to restrict. Microsoft 365 Copilot Chat is available to users without this license and is not governed by it."
         } elseif ($ratio -ge 0.95) {
             Add-NRGFinding -ControlId $cid -State 'Partial' `
                 -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' `

@@ -1,5 +1,61 @@
 # Changelog
 
+## v4.14.1 (2026-09-25)
+
+Fixes from the first live run of v4.14.0. Every item below produced a wrong
+verdict, a verdict with no reason, or a console line that said nothing.
+
+- **Six Purview sections never ran, silently.** Audit retention policies,
+  label policies, auto-labeling, retention labels, communication compliance
+  and information barriers (PVW-1.2, 1.4, 2.2, 2.3, 2.6, 4.2, 4.3, 4.4) read
+  "not collected" with nothing in Exceptions. The module did not return
+  `IsEopSession`, so the Purview session was taken for Exchange Online and
+  its commands skipped. The session is now recognized by name
+  (`ExchangeOnlineProtection_N`) and endpoint too, and a command that cannot
+  be resolved marks its section Failed and logs why.
+- **EXO-3.1 could never be assessed.** Its collector existed but the entry
+  point never ran it. It runs now, and a test fails if any control depends on
+  data no collector the entry point runs produces.
+- **PIM role policies were cut to 50.** `$top=50` returned 50 of the tenant's
+  role policies and no next page, so the Global Administrator policy was
+  missing (AAD-3.5 not assessed) and AAD-3.3/3.4/3.6 judged 4 privileged
+  roles. `$top` is gone and any policy the list misses is read by ID. GA
+  activation without approval is now a Gap, not Partial.
+- **AAD-13.1 compared against a "5% average".** Microsoft's peer average is
+  on a 0-100 scale and was divided by the tenant's maximum points, so any
+  tenant above 5% passed. It is read as a percentage.
+- **INT-3.1 passed on the Windows Mobile block** Intune ships in every tenant.
+  That block no longer counts as a restriction.
+- **INT-2.4 / INT-4.4 read the enrolled devices.** With no Macs or phones
+  enrolled they say so and are not applicable (INT-4.4 had scored a Gap from
+  a default Android policy); a Mac or phone enrolled with no policy is a Gap.
+- **MTA-STS (DNS-1.4).** A published `_mta-sts` record whose `mta-sts.`
+  host does not exist (authoritative no A/AAAA) is a Gap: senders cannot
+  fetch the policy. A failed lookup stays not assessed.
+- **Exchange test-mode connectors** are now collected
+  (`-IncludeTestModeConnectors`) and reviewed under EXO-8.1, which also
+  removes the Exchange warning from the console.
+- **Wording that was not true:** EXO-2.3/2.4 said POP3/IMAP use basic auth
+  and bypass MFA (Exchange Online retired that in October 2022); EXO-9.2
+  called deleted mail unrecoverable on mailboxes that are under a hold;
+  PPL-3.3 passed with "no user can invoke Copilot" when nobody is licensed
+  (now not applicable; Copilot Chat needs no license); AAD-1.4/1.5/10.1 ended
+  "Otherwise this is expected".
+- **AAD-12.1 and AAD-1.2 count the same people.** The Entra Connect sync
+  account is excluded from both, and each says so.
+- **No verdict without a reason.** Seven controls printed a bare Satisfied;
+  a finding with no Detail now carries its observed value.
+- **Console.** Collectors print one aligned line each, grouped by workload,
+  with status, time and what was found, and a summary line; the
+  restricted-character warning at module load is gone (14 Email-IR function
+  names had a second hyphen and were renamed, e.g.
+  `Test-NRGEmailControlAuthMethods`); the Graph WAM notice is one line; the
+  missing-permission line printed `System.Object[]` and now names the
+  permissions and the controls they block; report files are listed by name
+  under the output folder; the footer counts controls and says when there are
+  more findings than controls. The NIST matrix HTML is now listed and
+  access-restricted like every other output.
+
 ## v4.14.0 (2026-09-24)
 
 Closes the remaining known issues that could make a report look worse, or

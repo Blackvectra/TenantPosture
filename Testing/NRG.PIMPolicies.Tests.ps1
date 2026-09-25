@@ -33,7 +33,12 @@ Describe 'PIM policy scoping (AAD-3.3 .. AAD-3.6)' {
         & $script:Mod { param($n, $b) Set-Item -Path "function:script:$n" -Value ([scriptblock]::Create($b)) } 'Invoke-NRGGraphRequest' @'
 [CmdletBinding()]
 param([string] $Uri, [string] $Method = 'GET', $Body, $Headers, [string] $OutputType = 'HashTable')
-if ($Uri -like '*policies/roleManagementPolicies?*')      { return @{ value = @($script:PimPolicies) } }
+if ($Uri -match 'policies/roleManagementPolicies\?')     { $script:PimListUri = $Uri; return @{ value = @($script:PimPolicies) } }
+if ($Uri -match 'policies/roleManagementPolicies/') {
+    $id = [uri]::UnescapeDataString(($Uri -split 'roleManagementPolicies/')[1].Split('?')[0])
+    if ($script:PimById -and $script:PimById.ContainsKey($id)) { return $script:PimById[$id] }
+    throw 'Graph 404 NotFound'
+}
 if ($Uri -like '*policies/roleManagementPolicyAssignments*') {
     if ($script:AssignmentsFail) { throw 'Graph 400 BadRequest' }
     return @{ value = @($script:PimAssignments) }
@@ -56,9 +61,9 @@ return @{ value = @() }
         }
 
         function Set-Scenario {
-            param([object[]]$Policies, [object[]]$Assignments = @(), [bool]$AssignmentsFail = $false)
+            param([object[]]$Policies, [object[]]$Assignments = @(), [bool]$AssignmentsFail = $false, [hashtable]$ById = @{})
             Clear-NRGState
-            & $script:Mod { param($p, $a, $f) $script:PimPolicies = $p; $script:PimAssignments = $a; $script:AssignmentsFail = $f } $Policies $Assignments $AssignmentsFail
+            & $script:Mod { param($p, $a, $f, $b) $script:PimPolicies = $p; $script:PimAssignments = $a; $script:AssignmentsFail = $f; $script:PimById = $b } $Policies $Assignments $AssignmentsFail $ById
             # Role catalog as AAD-DirectoryRoles publishes it (IsPriv drives scoping).
             Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data @{ Success = $true; Data = @{ RoleDefinitions = @(
                 @{ Id = $script:GA;  DisplayName = 'Global Administrator';   IsPriv = $true;  IsBuiltIn = $true; IsEnabled = $true }
@@ -104,9 +109,22 @@ return @{ value = @() }
         Set-Scenario -Policies @((New-Policy 'p-ga' -Approval $false), (New-Policy 'p-hd' -Approval $true)) `
                      -Assignments @((Asg 'p-ga' $script:GA), (Asg 'p-hd' $script:HD))
         Test-NRGControlAADPIMApproval
-        (Verdict 'AAD-3.5').State | Should -Be 'Partial'
+        (Verdict 'AAD-3.5').State | Should -Be 'Gap' -Because 'approval not required is the setting not configured, never half credit'
 
         Set-Scenario -Policies @((New-Policy 'p-ga' -Approval $true)) -Assignments @((Asg 'p-ga' $script:GA))
+        Test-NRGControlAADPIMApproval
+        (Verdict 'AAD-3.5').State | Should -Be 'Satisfied'
+    }
+
+    It 'reads a policy the list did not return by its ID, and never asks the list for $top' {
+        # Live tenant, 2026-09-25: $top=50 returned 50 of ~130 role policies and
+        # no nextLink, so the Global Administrator policy was never seen.
+        Set-Scenario -Policies @((New-Policy 'p-hd' -Approval $true)) `
+                     -Assignments @((Asg 'p-ga' $script:GA), (Asg 'p-hd' $script:HD)) `
+                     -ById @{ 'p-ga' = (New-Policy 'p-ga' -Approval $true) }
+        (& $script:Mod { $script:PimListUri }) | Should -Not -Match '\$top'
+        $gov = Get-NRGRawData -Key 'AAD-IdentityGovernance'
+        @($gov.Data.PIMRolePolicies).Count | Should -Be 2
         Test-NRGControlAADPIMApproval
         (Verdict 'AAD-3.5').State | Should -Be 'Satisfied'
     }

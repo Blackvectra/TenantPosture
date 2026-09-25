@@ -45,6 +45,27 @@ Describe 'AAD-13.1 Secure Score control discriminates on the peer benchmark' {
         State | Should -Be 'Gap'
     }
 
+    It 'reads the peer average as a percentage, not points (live shape: max 1165, AllTenants 53.99)' {
+        # The fixtures above use MaxScore = 100, where points and percent are
+        # the same number, which hid the bug: dividing 53.99 by 1165 printed a
+        # "5% average" and passed a tenant sitting at 40%.
+        Set-SS -SecureScore @{
+            CurrentScore = 466; MaxScore = 1165; Percentage = 40; CreatedDate = '2026-09-25'
+            AverageComparativeScores = @(@{ Basis = 'AllTenants'; AverageScore = 53.99 })
+        }
+        Test-NRGControlInventorySecureScore
+        State | Should -Be 'Gap'
+        Clear-NRGState
+        Set-SS -SecureScore @{
+            CurrentScore = 807; MaxScore = 1165; Percentage = 69; CreatedDate = '2026-09-25'
+            AverageComparativeScores = @(@{ Basis = 'AllTenants'; AverageScore = 53.99 })
+        }
+        Test-NRGControlInventorySecureScore
+        $f = Get-NRGFindings | Where-Object { $_.ControlId -eq 'AAD-13.1' } | Select-Object -First 1
+        $f.State  | Should -Be 'Satisfied'
+        $f.Detail | Should -Match '54% average'
+    }
+
     It 'falls back to the absolute band when NO benchmark is returned' {
         # No AverageComparativeScores -> 75% -> Satisfied on the >=70 band
         Set-SS -SecureScore @{ CurrentScore = 75; MaxScore = 100; Percentage = 75; CreatedDate = '2026-07-10'; AverageComparativeScores = @() }

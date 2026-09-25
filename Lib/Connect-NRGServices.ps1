@@ -266,7 +266,10 @@ function Connect-NRGServices {
             } else {
                 # -ContextScope Process scopes MSAL token cache to this PS process —
                 # token does NOT persist to msal_token_cache.bin on disk.
-                $mgConnectParams = @{ Scopes = $scopes; ContextScope = 'Process'; NoWelcome = $true; ErrorAction = 'Stop' }
+                # WarningAction: the SDK's multi-line WAM notice is replaced by
+                # the one-line hint below. WAM itself stays on.
+                Write-Host "      Sign-in window may open behind this one." -ForegroundColor DarkGray
+                $mgConnectParams = @{ Scopes = $scopes; ContextScope = 'Process'; NoWelcome = $true; ErrorAction = 'Stop'; WarningAction = 'SilentlyContinue' }
                 if ($ExpectedTenantId) { $mgConnectParams['TenantId'] = $ExpectedTenantId }
                 Connect-MgGraph @mgConnectParams
             }
@@ -315,6 +318,7 @@ function Connect-NRGServices {
             $result['TenantId']       = "$($ctx.TenantId)"
             $result['OperatorDomain'] = $accountDomain
 
+            $consentNotice = [System.Collections.Generic.List[object]]::new()
             # Record what the token was actually granted, so the controls
             # whose permission this tenant never consented to say so by name.
             try {
@@ -322,14 +326,16 @@ function Connect-NRGServices {
                 $missingScopes = @(Set-NRGGraphConsentState -Mode $consentMode -GrantedScopes @($ctx.Scopes) -RequestedScopes $scopes)
                 $result['MissingScopes'] = $missingScopes
                 if ($missingScopes.Count -gt 0) {
-                    Write-Host "  [!] Graph permissions not granted in this tenant: $($missingScopes -join ', ')" -ForegroundColor Yellow
+                    # Printed after the '[+] Graph' line below, so the notice
+                    # reads as a note on the connection rather than before it.
+                    $consentNotice.Add(@("  [!] Graph permissions not granted in this tenant: $($missingScopes -join ', ')", 'Yellow'))
                     $consentScopes = @(Get-NRGConsentScopeMap)
                     $blocked = @($consentScopes | Where-Object { $_.Scope -in $missingScopes } | ForEach-Object { $_.ControlId })
                     if ($blocked.Count -gt 0) {
-                        Write-Host "      Not assessed until consented: $($blocked -join ', ')" -ForegroundColor Yellow
+                        $consentNotice.Add(@("      Not assessed until consented: $($blocked -join ', ')", 'Yellow'))
                     }
                     $fixHint = if ($isAppOnly) { 'Entra admin center > App registrations > the NRG assessment app > API permissions: add these Microsoft Graph application permissions, then Grant admin consent' } else { '.\Grant-NRGGraphConsent.ps1 -TenantDomain <tenant> (Global Administrator, once)' }
-                    Write-Host "      Fix: $fixHint" -ForegroundColor DarkGray
+                    $consentNotice.Add(@("      Fix: $fixHint", 'DarkGray'))
                 }
             } catch {
                 Write-Verbose "Connect-NRGServices: could not record granted Graph scopes. $($_.Exception.Message)"
@@ -367,6 +373,7 @@ function Connect-NRGServices {
 
             $who = if ($isAppOnly) { "App $($AppId.Substring(0,8))... in tenant $($TenantId.Substring(0,8))..." } else { $ctx.Account }
             Write-Host "  [+] Graph - $who" -ForegroundColor Green
+            foreach ($n in $consentNotice) { Write-Host $n[0] -ForegroundColor $n[1] }
         }
     } catch {
         Write-Host "  [!] Graph: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -484,7 +491,7 @@ function Connect-NRGServices {
             Connect-ExchangeOnline @exoParams | Out-Null
             if ($ExpectedTenantId -and (Get-Command Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
                 $exoNow = @(Get-ConnectionInformation -ErrorAction SilentlyContinue |
-                    Where-Object { $_.State -eq 'Connected' -and -not [bool](Get-NRGObjectField -Item $_ -Key 'IsEopSession' -Default $false) }) |
+                    Where-Object { $_.State -eq 'Connected' -and -not (Test-NRGEopConnection -Connection $_) }) |
                     Select-Object -Last 1
                 $exoTid = [string](Get-NRGObjectField -Item $exoNow -Key 'TenantID' -Default '')
                 if ($exoTid -and $exoTid -ne $ExpectedTenantId) {

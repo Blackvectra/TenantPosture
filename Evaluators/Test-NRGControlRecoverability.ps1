@@ -139,11 +139,23 @@ function Test-NRGControlEXODeletedItemRetention {
     }
 
     $sample = @(Get-NRGObjectField -Item $rec -Key 'ShortRetentionSample' -Default @())
+    # A hold keeps purged items in Recoverable Items for the hold's duration,
+    # whatever this window says. Saying the mail is "unrecoverable" on a tenant
+    # whose every mailbox is held (EXO-9.1) was false.
+    $withoutHold  = [int](Get-NRGObjectField -Item $rec -Key 'WithoutHold' -Default -1)
+    $holdsKnown   = $withoutHold -ge 0 -and (Get-NRGObjectField -Item $rec -Key 'OrgHoldsRead' -Default $true) -ne $false
+    $consequence = if ($holdsKnown -and $withoutHold -eq 0) {
+        "Every mailbox is also under a hold (EXO-9.1), so items purged after the window are kept in Recoverable Items for the hold's duration and remain reachable through eDiscovery. What the short window costs is self-service recovery: after $min days neither the user nor a mailbox administrator can restore a deleted item without an eDiscovery search."
+    } elseif ($holdsKnown) {
+        "$withoutHold mailbox(es) have no hold, and on those, mail deleted (including by an attacker covering their tracks) is unrecoverable once the window closes. Business email compromise is routinely discovered later than that. 30 days is the maximum without a hold."
+    } else {
+        "Unless a hold covers the mailbox, mail deleted (including by an attacker covering their tracks) is unrecoverable once the window closes, and business email compromise is routinely discovered later than that. 30 days is the maximum without a hold."
+    }
     Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
         -Severity $ctrl.Severity -FrameworkIds $cit `
         -CurrentValue "$short of $total mailboxes retain deleted items for under 30 days (lowest: $min)" `
         -RequiredValue 'RetainDeletedItemsFor = 30 on every mailbox' `
-        -Detail "$short mailbox(es) keep deleted items for fewer than 30 days, the lowest being $min. Business email compromise and ransomware are routinely discovered later than that, and mail an attacker deleted to cover their tracks is unrecoverable once the window closes — including the evidence of what they did. 30 days is the maximum without a hold." `
+        -Detail "$short mailbox(es) keep deleted items for fewer than 30 days, the lowest being $min. $consequence" `
         -Remediation $ctrl.Remediation -AffectedObjects $sample
 }
 

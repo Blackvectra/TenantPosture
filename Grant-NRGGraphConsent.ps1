@@ -61,8 +61,9 @@ if (-not $tenantId) {
 Write-Host "[-] Signing in to $TenantDomain ($tenantId)." -ForegroundColor Cyan
 Write-Host '    Sign in as a Global Administrator. On the consent prompt, tick' -ForegroundColor DarkGray
 Write-Host '    "Consent on behalf of your organization", then Accept.' -ForegroundColor DarkGray
+Write-Host '    The sign-in window may open behind this one.' -ForegroundColor DarkGray
 try {
-    Connect-MgGraph -TenantId $tenantId -Scopes $scopes -ContextScope Process -NoWelcome -ErrorAction Stop
+    Connect-MgGraph -TenantId $tenantId -Scopes $scopes -ContextScope Process -NoWelcome -WarningAction SilentlyContinue -ErrorAction Stop
 } catch {
     Write-Host "[!] Sign-in failed: $($_.Exception.Message)" -ForegroundColor Red
     exit 1

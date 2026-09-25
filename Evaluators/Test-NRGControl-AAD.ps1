@@ -375,7 +375,7 @@ function Test-NRGControlAADSignInRisk {
     if ($riskPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Sign-in risk CA policy active: $($riskPolicies[0].DisplayName)"
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No sign-in risk CA policy configured. This control requires Entra ID P2 (not included in Business Premium / P1). If you have P2 licensing, create a CA policy with Sign-in risk condition. Otherwise this is expected.' -CurrentValue 'No sign-in risk policy' -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No enabled Conditional Access policy uses the sign-in risk condition, so a sign-in Identity Protection rates risky (password spray, anonymous IP, token replay) is let through without a challenge. (Sign-in risk policies need Entra ID P2; on a tenant without it this control is not scored.)' -CurrentValue 'No sign-in risk policy' -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
     }
 }
 
@@ -398,7 +398,7 @@ function Test-NRGControlAADUserRisk {
     if ($riskPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "User risk CA policy active: $($riskPolicies[0].DisplayName)"
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No CA policy responds to elevated user risk. Compromised accounts are not automatically challenged. Requires Entra ID P2.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No enabled Conditional Access policy uses the user risk condition, so an account Identity Protection rates as likely compromised is not forced to change its password or blocked. (User risk policies need Entra ID P2; on a tenant without it this control is not scored.)' -Remediation $ctrl.Remediation
     }
 }
 
@@ -604,7 +604,8 @@ function Test-NRGControlAADPIMApproval {
     if ($gaPolicy.RequiresApproval -eq $true) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Global Administrator PIM activation requires approval.'
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'GA PIM activation does not require approval — any eligible user can self-activate. Consider requiring approval for highest-privilege role.' -Remediation $ctrl.Remediation
+        # Approval off is the setting not configured: a Gap, not half credit.
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Global Administrator PIM activation does not require approval, so any user eligible for Global Administrator can activate it alone.' -CurrentValue 'Approval not required' -RequiredValue 'Approval required to activate Global Administrator' -Remediation $ctrl.Remediation
     }
 }
 
@@ -1102,7 +1103,7 @@ function Test-NRGControlAADIdentityProtection {
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail 'No automated response to user risk signals. Compromised accounts detected by Identity Protection are not automatically remediated. Requires Entra P2.' `
+            -Detail 'No automated response to user risk: accounts Identity Protection detects as compromised are not remediated until someone acts on the alert. (Needs Entra ID P2; on a tenant without it this control is not scored.)' `
             -Remediation $ctrl.Remediation
     }
 }

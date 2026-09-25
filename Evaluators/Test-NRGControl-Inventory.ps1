@@ -53,10 +53,14 @@ function Test-NRGControlInventoryMFAUsers {
     # control say "185 users have no MFA" (mostly guests, who authenticate
     # in their home tenant) while AAD-1.2 in the same report said 49.5% of
     # 103 members. Fall back to the raw report only if the user list is absent.
-    $memberList = @(Get-NRGNestedProperty -Object $users -Path 'Data.Users' -Default @() | Where-Object {
+    $memberAll = @(Get-NRGNestedProperty -Object $users -Path 'Data.Users' -Default @() | Where-Object {
         (Get-NRGObjectField -Item $_ -Key 'AccountEnabled' -Default $false) -eq $true -and
         [string](Get-NRGObjectField -Item $_ -Key 'UserType' -Default '') -eq 'Member'
     })
+    # The directory-sync service account is left out here as in AAD-1.2, or the
+    # two controls report different populations for the same tenant.
+    $memberList = @($memberAll | Where-Object { -not (Test-NRGDirectorySyncAccount $_) })
+    $syncNote = if ($memberAll.Count -gt $memberList.Count) { " ($($memberAll.Count - $memberList.Count) Entra Connect sync service account(s) excluded; they cannot register MFA.)" } else { '' }
     if ($memberList.Count -gt 0) {
         $byUpn = @{}
         foreach ($r in $regDetails) { $u = [string](Get-NRGObjectField -Item $r -Key 'UserPrincipalName' -Default ''); if ($u) { $byUpn[$u.ToLowerInvariant()] = $r } }
@@ -80,7 +84,7 @@ function Test-NRGControlInventoryMFAUsers {
     if ($noMFA.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "$($withMFA.Count) of $total $popLabel ($pct%) have MFA registered. No gaps found."
+            -Detail "$($withMFA.Count) of $total $popLabel ($pct%) have MFA registered.$syncNote"
     } else {
         $objects = @($noMFA | Select-Object -First 100 | ForEach-Object {
             "$($_.UserDisplayName) ($($_.UserPrincipalName))"
@@ -88,7 +92,7 @@ function Test-NRGControlInventoryMFAUsers {
         $remaining = if ($noMFA.Count -gt 100) { " ($($noMFA.Count - 100) additional users in full results)" } else { '' }
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "$($withMFA.Count) of $total $popLabel ($pct%) have MFA registered. The $($noMFA.Count) user(s) listed below have no MFA method — each is one stolen password away from a full mailbox compromise.$remaining" `
+            -Detail "$($withMFA.Count) of $total $popLabel ($pct%) have MFA registered. The $($noMFA.Count) user(s) listed below have no MFA method — each is one stolen password away from a full mailbox compromise.$remaining$syncNote" `
             -CurrentValue "$($withMFA.Count)/$total users with MFA ($pct%)" `
             -RequiredValue '100% of enabled users registered for MFA' `
             -Remediation $ctrl.Remediation -AffectedObjects $objects
@@ -445,7 +449,11 @@ function Test-NRGControlInventorySecureScore {
 
     if ($null -ne $benchScore -and $max -gt 0 -and $benchScore -gt 0) {
         # Benchmark available — judge against Microsoft's peer average.
-        $benchPct = [int](($benchScore / $max) * 100)
+        # averageScore arrives on a 0-100 scale (a live tenant scoring 807 of
+        # 1165 reported 53.99 for AllTenants). Dividing it by the tenant's
+        # maxScore printed "the 5% average for all Microsoft 365 tenants".
+        # A value above 100 can only be points, and is converted.
+        $benchPct = if ($benchScore -le 100) { [int][math]::Round($benchScore) } else { [int](($benchScore / $max) * 100) }
         $basisLabel = switch ($benchBasis) { 'AllTenants' {'all Microsoft 365 tenants'} 'TotalSeats' {'tenants of similar size'} default {'tenants in your industry'} }
         if ($pct -ge $benchPct) {
             Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title `

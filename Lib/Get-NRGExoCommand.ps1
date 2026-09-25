@@ -30,6 +30,21 @@
 # be pinned down while BOTH are connected — callers must not treat a value
 # from an Unknown source as authoritative.
 
+# Whether a Get-ConnectionInformation row is a Security & Compliance session.
+# IsEopSession says so directly, but not every module version returns it; the
+# connection name (ExchangeOnlineProtection_N) and endpoint
+# (*.compliance.protection.outlook.com) identify it too. Reading only
+# IsEopSession with a $false default filed the Purview session as Exchange
+# Online, so every Security & Compliance-only section was skipped.
+function Test-NRGEopConnection {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)] $Connection)
+    if ([bool](Get-NRGObjectField -Item $Connection -Key 'IsEopSession' -Default $false)) { return $true }
+    if ([string](Get-NRGObjectField -Item $Connection -Key 'Name' -Default '') -like 'ExchangeOnlineProtection*') { return $true }
+    return ([string](Get-NRGObjectField -Item $Connection -Key 'ConnectionUri' -Default '') -match '\.compliance\.protection\.outlook\.(com|us|cn)|ps\.compliance\.')
+}
+
 function Get-NRGExoCommand {
     [CmdletBinding()]
     [OutputType([pscustomobject])]
@@ -48,7 +63,7 @@ function Get-NRGExoCommand {
         } catch { $conns = @() }
     }
 
-    foreach ($c in @($conns | Where-Object { [bool](Get-NRGObjectField -Item $_ -Key 'IsEopSession' -Default $false) -eq $wantEop })) {
+    foreach ($c in @($conns | Where-Object { (Test-NRGEopConnection -Connection $_) -eq $wantEop })) {
         $modPath = [string](Get-NRGObjectField -Item $c -Key 'ModuleName' -Default '')
         if (-not $modPath) { continue }
         $leaf = @($modPath -split '[\\/]' | Where-Object { $_ })[-1]
@@ -69,7 +84,7 @@ function Get-NRGExoCommand {
     # Fallback: plain resolution. Its source is only knowable when a single
     # kind of session is connected.
     $cmd = Get-Command -Name $Name -ErrorAction SilentlyContinue | Select-Object -First 1
-    $kinds = @($conns | ForEach-Object { [bool](Get-NRGObjectField -Item $_ -Key 'IsEopSession' -Default $false) } | Sort-Object -Unique)
+    $kinds = @($conns | ForEach-Object { Test-NRGEopConnection -Connection $_ } | Sort-Object -Unique)
     $source = if ($kinds.Count -eq 1) { if ($kinds[0]) { 'SecurityCompliance' } else { 'ExchangeOnline' } } else { 'Unknown' }
     return [pscustomobject]@{ Command = $cmd; Source = $source }
 }

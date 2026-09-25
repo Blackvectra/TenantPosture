@@ -1,6 +1,6 @@
 @{
     # Module identity
-    ModuleVersion     = '4.14.0'
+    ModuleVersion     = '4.14.1'
     GUID              = 'f8dff693-11ac-495b-901a-290773371ef5'
     Author            = 'Matthew Levorson'
     CompanyName       = 'NRG Technology Services / NextLayerSec LLC'
@@ -321,28 +321,28 @@
         'Get-NRGEmailDomainFromAddress',
         'Test-NRGEmailIsLegitMSDomain',
         'Test-NRGEmailMatchesMSImpersonation',
-        'Test-NRGEmailControl-InboxRules',
-        'Test-NRGEmailControl-Forwarding',
-        'Test-NRGEmailControl-OutboundActivity',
-        'Test-NRGEmailControl-PhishOrigin',
-        'Test-NRGEmailControl-ThreatIntel',
+        'Test-NRGEmailControlInboxRules',
+        'Test-NRGEmailControlForwarding',
+        'Test-NRGEmailControlOutboundActivity',
+        'Test-NRGEmailControlPhishOrigin',
+        'Test-NRGEmailControlThreatIntel',
         'Publish-NRGEmailIncidentReport',
         'Connect-NRGEmailAdminServices',
         'Disconnect-NRGEmailAdminServices',
         'Invoke-NRGEmailCollectSignIns',
         'Clear-NRGSignInTriageState',
-        'Test-NRGSignInControl-FailedToSuccess',
-        'Test-NRGSignInControl-AnonymousIp',
-        'Test-NRGSignInControl-ImpossibleTravel',
-        'Test-NRGSignInControl-RiskyUsers',
-        'Test-NRGSignInControl-GeoAnomaly',
-        'Test-NRGSignInControl-RankUsers',
-        'Test-NRGSignInControl-IPIntel',
+        'Test-NRGSignInControlFailedToSuccess',
+        'Test-NRGSignInControlAnonymousIp',
+        'Test-NRGSignInControlImpossibleTravel',
+        'Test-NRGSignInControlRiskyUsers',
+        'Test-NRGSignInControlGeoAnomaly',
+        'Test-NRGSignInControlRankUsers',
+        'Test-NRGSignInControlIPIntel',
         'Publish-NRGSignInTriageReport',
         'Get-NRGIPSignInIntel',
         'Invoke-NRGEmailCollectUserSecurity',
-        'Test-NRGEmailControl-OAuthConsents',
-        'Test-NRGEmailControl-AuthMethods'
+        'Test-NRGEmailControlOAuthConsents',
+        'Test-NRGEmailControlAuthMethods'
     )
 
     VariablesToExport = @('NRGAssessmentVersion', 'NRGBrand')

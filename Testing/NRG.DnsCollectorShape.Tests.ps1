@@ -22,6 +22,7 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
         $script:Orig = & $script:Mod { @{ Resolve = ${function:Resolve-NRGDns}; Probe = ${function:Test-NRGSafeProbeTarget} } }
 
         & $script:Mod {
+            $script:T_ProbeReason = $null
             Set-Item -Path 'function:script:Resolve-NRGDns' -Value {
                 [CmdletBinding()]
                 param([string] $Name, [string] $Type, [int] $TimeoutSeconds = 6, [ref] $Outcome, [ref] $Reason)
@@ -30,7 +31,9 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
                 if ($null -ne $Outcome) { $Outcome.Value = $e.Outcome }
                 return @($e.Records)
             }
-            Set-Item -Path 'function:script:Test-NRGSafeProbeTarget' -Value { param([string] $HostName) @{ Refused = $true; Reason = 'no network in tests' } }
+            Set-Item -Path 'function:script:Test-NRGSafeProbeTarget' -Value { param([string] $HostName)
+                $why = if ($script:T_ProbeReason) { $script:T_ProbeReason } else { 'no network in tests' }
+                @{ Refused = $true; Reason = $why } }
             Set-Item -Path 'function:script:Invoke-WebRequest' -Value { throw 'no network in tests' }
         }
 
@@ -120,6 +123,19 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
         }
         It 'MTA-STS: a policy file that could not be fetched is not assessed, not a scored mode' {
             (Run @{ '_mta-sts.shape.test|TXT' = & $A @('v=STSv1; id=20260101') } 'Test-NRGControlDNSMTASTS' 'DNS-1.4').State | Should -Be 'NotApplicable'
+        }
+        It 'MTA-STS: a policy host that does not exist is a Gap; one that could not be looked up is not assessed' {
+            # Live tenant, 2026-09-25: "_mta-sts" TXT published on both domains,
+            # mta-sts.<domain> did not resolve, reported as "not assessed".
+            & $script:Mod { $script:T_ProbeReason = 'DNS resolution failed: No such host is known.' }
+            try {
+                $txt = @{ '_mta-sts.shape.test|TXT' = & $A @('v=STSv1; id=20260101') }
+                $f = Run $txt 'Test-NRGControlDNSMTASTS' 'DNS-1.4'
+                $f.State  | Should -Be 'Gap'
+                $f.Detail | Should -Match 'does not exist in DNS'
+                $txt['mta-sts.shape.test|A'] = @{ Outcome = 'LookupFailed'; Records = @() }
+                (Run $txt 'Test-NRGControlDNSMTASTS' 'DNS-1.4').State | Should -Be 'NotApplicable' -Because 'a failed lookup is not an absent host'
+            } finally { & $script:Mod { $script:T_ProbeReason = $null } }
         }
         It 'CT: a domain with no logged certificates is not a gap' {
             $d = Collect @{}
