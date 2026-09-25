@@ -705,12 +705,13 @@ function Test-NRGControlAADGuestPermissions {
     # bf6b3c49-c849-4f4c-b32d-... = Member user role (too permissive)
     # The control asks for the RESTRICTED Guest User role (2af84b1e). The
     # default Guest User role (10dae51f) is limited but still lets guests
-    # enumerate groups and members, so it is part-way, not a pass.
+    # enumerate groups and members. It is Microsoft's default — nothing was
+    # configured — so it is a Gap (the not-configured rule), not half credit.
     $guestRoleId = [string]((Get-SafeProp (Get-SafeProp $gov.Data 'ExternalCollab') 'GuestUserRoleId') ?? '')
     if ($guestRoleId -eq '2af84b1e-32c8-42b7-82bc-daa82404023b') {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Guests have the Restricted Guest User role: they can read only their own directory objects.'
     } elseif ($guestRoleId -eq '10dae51f-b6af-4016-8d66-8c2a99b929b3') {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Guests have the default Guest User role (limited access): they can still read the membership of groups they belong to. The Restricted Guest User role limits them to their own objects.' -CurrentValue 'Guest User (limited access, default)' -RequiredValue 'Restricted Guest User role' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Guests have the default Guest User role (limited access): they can still read the membership of groups they belong to. The Restricted Guest User role limits them to their own objects.' -CurrentValue 'Guest User (limited access, default)' -RequiredValue 'Restricted Guest User role' -Remediation $ctrl.Remediation
     } elseif ([string]::IsNullOrEmpty($guestRoleId)) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Guest role ID not available in collected data'
     } else {
@@ -1368,7 +1369,7 @@ function Test-NRGControlAADContinuousAccess {
     if ($caePolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Continuous Access Evaluation strict mode enforced via CA policy. Session revocation propagates in near-real-time.'
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail 'CAE strict mode not enforced. CAE is active by default but strict mode ensures immediate session revocation when IP or risk changes — consider enforcing for sensitive workloads.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'CAE strict mode not enforced (the default; not configured). CAE is active by default but strict mode ensures immediate session revocation when IP or risk changes — consider enforcing for sensitive workloads.' -Remediation $ctrl.Remediation
     }
 }
 
@@ -1391,7 +1392,9 @@ function Test-NRGControlAADCrossTenantAccess {
     }
     $xtap = Get-NRGNestedProperty -Object $auth -Path 'Data.CrossTenantAccess'
     if (-not $xtap) {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Cross-tenant access policy data not available. Verify in Entra ID > External Identities > Cross-tenant access settings that inbound defaults do not trust MFA or device compliance from unknown tenants.' -Remediation $ctrl.Remediation; return
+        # No data is not half credit.
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'The cross-tenant access default policy was not returned; not assessed. Verify in Entra ID > External Identities > Cross-tenant access settings that inbound defaults do not trust MFA or device compliance from other tenants.'
+        return
     }
     $trustsMFA    = [bool](Get-NRGNestedProperty -Object $xtap -Path 'InboundTrust.IsMfaAccepted' -Default $false)
     $trustsDevice = [bool](Get-NRGNestedProperty -Object $xtap -Path 'InboundTrust.IsCompliantDeviceAccepted' -Default $false)

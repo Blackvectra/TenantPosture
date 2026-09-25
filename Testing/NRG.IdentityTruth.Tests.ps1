@@ -164,3 +164,28 @@ Describe 'Identity controls report what the tenant is configured to do' {
         @($hits | ForEach-Object { "$($_.Filename):$($_.LineNumber)" }) | Should -BeNullOrEmpty
     }
 }
+
+Describe 'Not configured is a Gap, not half credit; no data is not a verdict' {
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        function script:V { param([string] $Fn, [string] $Cid) & $Fn | Out-Null; @(Get-NRGFindings | Where-Object { $_.ControlId -eq $Cid })[0] }
+    }
+    BeforeEach { Clear-NRGState }
+    AfterAll   { Clear-NRGState }
+
+    It 'the default Guest User role (Microsoft''s default, nothing configured) is a Gap, not Partial' {
+        Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data @{ Success = $true; Data = @{ ExternalCollab = @{ GuestUserRoleId = '10dae51f-b6af-4016-8d66-8c2a99b929b3' } } }
+        (V 'Test-NRGControlAADGuestPermissions' 'AAD-4.3').State | Should -Be 'Gap'
+    }
+    It 'CAE strict mode not enforced (the default) is a Gap, not Partial' {
+        Set-NRGRawData -Key 'AAD-CAPolicies' -Data @{ Success = $true; Data = @{ Policies = @() } }
+        (V 'Test-NRGControlAADContinuousAccess' 'AAD-11.5').State | Should -Be 'Gap'
+    }
+    It 'cross-tenant access settings that were not returned are not assessed (was: Partial, half credit for no data)' {
+        Set-NRGRawData -Key 'AAD-AuthPolicies' -Data @{ Success = $true; Data = @{ CrossTenantAccess = $null; SectionStatus = @{ CrossTenantAccess = 'Collected' } } }
+        $f = @(& { Test-NRGControlAADCrossTenantAccess | Out-Null; Get-NRGFindings | Where-Object { $_.ControlId -eq 'AAD-11.6' } })
+        $f.Count | Should -Be 1
+        $f[0].State | Should -Be 'NotApplicable'
+    }
+}
