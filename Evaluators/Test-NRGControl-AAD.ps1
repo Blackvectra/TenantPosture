@@ -434,7 +434,7 @@ function Test-NRGControlAADNoPermanentAdmins {
     } elseif ($eligibleCount -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "No permanent privileged role assignments. $eligibleCount eligible (PIM) assignment(s) configured."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'PIM available but no eligible schedules configured. Consider migrating permanent admins to PIM.'
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'PIM is available but no eligible (just-in-time) role assignments are configured. Privileged roles are not managed through PIM.' -Remediation $ctrl.Remediation
     }
 }
 

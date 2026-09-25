@@ -456,6 +456,22 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
     }
 }
 
+# MSP-wide default: EdrStack in Config/branding.psd1 declares the third-party
+# EDR every client runs unless -ThirdPartyEDR or the client's clients.json
+# ThirdPartyEDR says otherwise. Declared, never verified: the Defender
+# endpoint checks go out of the score, they are not passed.
+if (-not $ThirdPartyEDR) {
+    $brandFile = Join-Path $scriptDir 'Config' 'branding.psd1'
+    if (Test-Path -LiteralPath $brandFile) {
+        try {
+            $brandData = Import-PowerShellDataFile -LiteralPath $brandFile
+            $edr = if ($brandData.ContainsKey('EdrStack')) { "$($brandData['EdrStack'])".Trim() } else { '' }
+            if ($edr -match '^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$') { $ThirdPartyEDR = $edr }
+            elseif ($edr) { Write-Warning "Ignoring EdrStack '$edr' in branding.psd1: use a plain product name such as 'Cortex XDR'." }
+        } catch { Write-Verbose "branding.psd1 EdrStack not read: $($_.Exception.Message)" }
+    }
+}
+
 # CWE-665 — full state reset between runs. Clear-NRGFindings only resets the
 # findings list; raw collected data, coverage, and exceptions persist in module
 # scope. Two back-to-back single-tenant runs in the same pwsh session would
@@ -622,6 +638,12 @@ if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
         $edrCount = Set-NRGThirdPartyEdr -Product $ThirdPartyEDR -Findings $findings
         $reportMetadata['ThirdPartyEDR'] = $ThirdPartyEDR
         Write-Host "  [i] $edrCount Defender endpoint check(s) reported as covered by $ThirdPartyEDR (declared, not verified; not scored)" -ForegroundColor DarkGray
+    }
+    # Same rule on republish (the license profile comes from the restored
+    # AAD-Inventory raw data; without it nothing is moved).
+    $licGated = Set-NRGLicenseGating -Findings $findings
+    if ($licGated -gt 0) {
+        Write-Host "  [i] $licGated control(s) need a license this tenant does not hold — listed as upgrade opportunities, not scored" -ForegroundColor DarkGray
     }
     $skipCollection = $true
 } else {
@@ -840,6 +862,12 @@ if (-not $skipCollection) {
     if ($ThirdPartyEDR) {
         $edrCount = Set-NRGThirdPartyEdr -Product $ThirdPartyEDR
         Write-Host "  [i] $edrCount Defender endpoint check(s) reported as covered by $ThirdPartyEDR (declared, not verified; not scored)" -ForegroundColor DarkGray
+    }
+    # After the EDR declaration, so a Cortex client is not pitched Defender
+    # for Endpoint licenses for checks it does not need.
+    $licGated = Set-NRGLicenseGating
+    if ($licGated -gt 0) {
+        Write-Host "  [i] $licGated control(s) need a license this tenant does not hold — listed as upgrade opportunities, not scored" -ForegroundColor DarkGray
     }
 
     $findings = Get-NRGFindings

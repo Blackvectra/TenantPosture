@@ -106,7 +106,10 @@ function Invoke-NRGCollectPurview {
                             Name       = $_.Name
                             Enabled    = ($_.Mode -eq 'Enable')
                             Mode       = [string]$_.Mode
-                            Workloads  = if ($_.Workload) { ($_.Workload -split ',') } else { @() }
+                            # Microsoft returns 'Exchange, SharePoint, EndpointDevices' — comma AND
+                            # space. Untrimmed, ' EndpointDevices' never matched: DEF-4.5 said
+                            # 'No Endpoint DLP' and PVW-2.5 called covered workloads missing.
+                            Workloads  = @(if ($_.Workload) { @(([string]$_.Workload) -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) })
                         }
                     })
                 }
@@ -160,7 +163,7 @@ function Invoke-NRGCollectPurview {
                         @{
                             Name      = $_.Name
                             Enabled   = [bool]$_.Enabled
-                            Workloads = if ($_.Workload) { ($_.Workload -split ',') } else { @() }
+                            Workloads = @(if ($_.Workload) { @(([string]$_.Workload) -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) })
                         }
                     })
                 }

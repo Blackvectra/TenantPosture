@@ -33,7 +33,16 @@
 #
 # SKU reference (canonical skuPartNumber values, not display names):
 #   SPB                     Microsoft 365 Business Premium
-#   O365_BUSINESS_PREMIUM   Office 365 Business Premium (legacy alias)
+#   O365_BUSINESS_PREMIUM   Microsoft 365 Business STANDARD (despite the name —
+#                           Microsoft's licensing reference; no Entra P1, Intune
+#                           or Defender plans). It was matched as Business
+#                           Premium, so every Business Standard tenant was
+#                           labeled Business Premium and scored as licensed for
+#                           P1 / Intune / Defender controls it cannot configure.
+#   O365_BUSINESS_ESSENTIALS  Microsoft 365 Business Basic
+#   O365_BUSINESS / SMB_BUSINESS  Microsoft 365 Apps for business
+#   Office_365_w/o_Teams_Bundle_Business_Premium, Microsoft_365_Business_Premium_(no Teams)
+#                           Business Premium without Teams (EEA / global)
 #   M365_BUSINESS_PREMIUM   Defensive alias for forward compatibility
 #   AAD_PREMIUM             Entra ID P1 standalone (also a service plan name)
 #   AAD_PREMIUM_P2          Entra ID P2 standalone (also a service plan name)
@@ -100,7 +109,11 @@ function Get-NRGTenantLicenseProfile {
     # in an obscure future SKU, anchoring eliminates that class of false
     # positive at zero cost.
 
-    $hasBusinessPremium = [bool]($partNumbers -match '^(SPB|O365_BUSINESS_PREMIUM|M365_BUSINESS_PREMIUM)$')
+    $hasBusinessPremium = [bool]($partNumbers -match '^(SPB|M365_BUSINESS_PREMIUM|Office_365_w/o_Teams_Bundle_Business_Premium)$') -or
+                          [bool]($partNumbers -match '^Microsoft_365_\s*Business_\s*Premium')
+    # Enterprise E3 / E5 (Microsoft 365 or Office 365), including government
+    # variants (…_GOV, …_USGOV_*): satisfies "M365 Business Premium or E3+".
+    $hasE3Plus = [bool]($partNumbers -match '^(SPE_E3|SPE_E5|ENTERPRISEPACK|ENTERPRISEPREMIUM|M365_G3|M365_G5)')
 
     $hasEntraP1 = $hasBusinessPremium -or
                   [bool]($partNumbers -match '^(AAD_PREMIUM|EMS|EMSPREMIUM|SPE_E3|SPE_E5|ENTERPRISEPACK|ENTERPRISEPREMIUM|Microsoft_Entra_Suite)$') -or
@@ -133,8 +146,11 @@ function Get-NRGTenantLicenseProfile {
     # ── Headline tier label for report header ───────────────────────────────
     $tierLabel = if ($partNumbers -match '^(SPE_E5|ENTERPRISEPREMIUM)$') { 'Microsoft 365 E5' }
                  elseif ($partNumbers -match '^SPE_E3$')                  { 'Microsoft 365 E3' }
+                 elseif ($partNumbers -match '^ENTERPRISEPACK')           { 'Office 365 E3' }
                  elseif ($hasBusinessPremium)                             { 'Microsoft 365 Business Premium' }
-                 elseif ($partNumbers -match '^(O365_BUSINESS_ESSENTIALS|O365_BUSINESS|O365_BUSINESS_STANDARD)$') { 'Microsoft 365 Business Standard' }
+                 elseif ($partNumbers -match '^O365_BUSINESS_PREMIUM$')   { 'Microsoft 365 Business Standard' }
+                 elseif ($partNumbers -match '^O365_BUSINESS_ESSENTIALS$') { 'Microsoft 365 Business Basic' }
+                 elseif ($partNumbers -match '^(O365_BUSINESS|SMB_BUSINESS)$') { 'Microsoft 365 Apps for business' }
                  elseif ($partNumbers -match '^EXCHANGESTANDARD$')        { 'Exchange Online Plan 1' }
                  else                                                     { 'Microsoft 365 Basic / Other' }
 
@@ -163,6 +179,12 @@ function Get-NRGTenantLicenseProfile {
             'M365 Business Premium or Entra ID P1 + Intune',
             'M365 Business Premium or Intune Plan 1',
             'Microsoft Defender for Endpoint Plan 1+'
+        ) | ForEach-Object { $null = $suppressedLicReqs.Add($_) }
+    }
+    if ($hasE3Plus) {
+        @(
+            'M365 Business Premium or E3+',
+            'M365 Business Premium or E3+ (Copilot requires M365 Copilot add-on)'
         ) | ForEach-Object { $null = $suppressedLicReqs.Add($_) }
     }
     if ($hasEntraP1 -and -not $hasBusinessPremium) {

@@ -27,6 +27,21 @@ different, than the tenant actually is.
   Partial from a setting that was never read.
 - **Conditional Access tiers** (AAD-10.4, 11.4, 11.7, 11.8, 11.9): None ->
   Gap, Audit mode -> Partial, Enabled -> Satisfied.
+- **Not configured is a Gap; unlicensed is not scored.** Controls that
+  scored Partial (half credit) when nothing was configured now score Gap
+  when the tenant holds the license, and are moved out of the score as an
+  upgrade opportunity when it does not (Set-NRGLicenseGating). The license
+  profile no longer reads Microsoft 365 Business Standard
+  (O365_BUSINESS_PREMIUM) as Business Premium, and E3 tenants now satisfy
+  "Business Premium or E3+".
+- **False verdicts found by an evaluator-vs-collector audit:** AAD-1.2 read
+  security defaults from a key nothing writes and printed "disabled"
+  unread, and missed MFA required through authentication strengths;
+  PVW-4.3 said "labels defined but none published" from a list never
+  collected; DEF-4.5 / PVW-2.5 missed workloads because 'A, B' was split on
+  the comma without trimming; INT-2.1 passed on an unverified branding
+  declaration. Six Purview controls that could never produce a verdict now
+  collect their data; PVW-2.4 / PVW-3.2 say plainly they need manual review.
 - **`-RegisterApp` moved out of the read-only module** to `Onboard/`; the
   switch works as before. A test fails if any module-loaded file calls a
   Graph write cmdlet.
