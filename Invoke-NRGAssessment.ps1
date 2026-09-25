@@ -218,8 +218,9 @@ param(
 
     # Fillable client questionnaire for the controls.json controls this run
     # could not evaluate on its own — Get-NRGAssessmentScope's
-    # NoProgrammaticCheck (no automated test exists) and CollectionIncomplete
-    # (data did not collect this run) buckets. The controls.json counterpart
+    # NoProgrammaticCheck (no automated test exists, or the check could not
+    # reach a verdict) and CollectionIncomplete (data did not collect this
+    # run) buckets. The controls.json counterpart
     # to -SSPQuestionnaire; a separate document because a controls.json
     # ControlId and a NIST 800-171 requirement id are different catalogs.
     # NOT implied by -AllFiles, for the same reason -SSPQuestionnaire isn't.

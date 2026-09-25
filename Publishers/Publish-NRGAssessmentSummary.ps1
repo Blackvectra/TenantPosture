@@ -193,7 +193,7 @@ function Publish-NRGAssessmentSummary {
             $null = $sb.AppendLine("| Could not be assessed — data did not collect | $($scope.CollectionIncomplete.Count) |")
             $null = $sb.AppendLine("| Not evaluated — quick-scan mode | $($scope.NotEvaluatedThisMode.Count) |")
             $null = $sb.AppendLine("| Produced no result at all | $($scope.NoResult.Count) |")
-            $null = $sb.AppendLine("| No automated test — manual review required | $($scope.NoProgrammaticCheck.Count) |")
+            $null = $sb.AppendLine("| Manual review required (no automated test, or no automated verdict) | $($scope.NoProgrammaticCheck.Count) |")
             $null = $sb.AppendLine("| Covered by a declared third-party EDR — not verified | $(@(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()).Count) |")
             $null = $sb.AppendLine("| Checked, not applicable to this tenant (reason stated) | $(@(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()).Count) |")
             $null = $sb.AppendLine("| License gated | $($scope.LicenceBlocked.Count) |")
@@ -208,7 +208,7 @@ function Publish-NRGAssessmentSummary {
                 @{ Label = 'Could not be assessed — data did not collect'; Items = $scope.CollectionIncomplete }
                 @{ Label = 'Not evaluated — quick-scan mode'; Items = $scope.NotEvaluatedThisMode }
                 @{ Label = 'Produced no result at all'; Items = $scope.NoResult }
-                @{ Label = 'No automated test — manual review required'; Items = $scope.NoProgrammaticCheck }
+                @{ Label = 'Manual review required — no automated test, or no automated verdict'; Items = $scope.NoProgrammaticCheck }
                 @{ Label = 'Covered by a declared third-party EDR — not verified'; Items = @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()) }
                 @{ Label = 'Checked, not applicable to this tenant'; Items = @(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()) }
             )) {

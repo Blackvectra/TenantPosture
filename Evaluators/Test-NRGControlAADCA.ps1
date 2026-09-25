@@ -12,7 +12,8 @@
 # matches the EvaluatorFunction field declared in controls.json for AAD-2.1.
 #
 # Reads from module state:
-#   Get-NRGRawData -Key 'AAD-CAPolicies'  (Invoke-NRGCollectAADAuthPolicies)
+#   Get-NRGRawData -Key 'AAD-CAPolicies'  (Invoke-NRGCollectAADCAPolicies)
+#   Security Defaults via Get-NRGSecurityDefaultsState (AAD-AuthPolicies)
 #
 # NIST SP 800-53: AC-17, IA-2
 # MITRE ATT&CK:   T1078, T1110
@@ -20,6 +21,23 @@
 
 function Test-NRGControlAADCA {
     [CmdletBinding()] param()
+
+    $cit = Get-NRGFrameworkCitations -ControlId 'AAD-2.1'
+    $sd  = Get-NRGSecurityDefaultsState
+
+    # While Security Defaults is enabled no CA policy can be turned on, so
+    # this control's requirement cannot be met and the answer is already
+    # known: a Gap, stating what Security Defaults does provide rather than
+    # "password-only". Runs before the CA gate, since CA data cannot change it.
+    if ($sd -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId 'AAD-2.1' -Category 'Identity' -Title 'Conditional Access Policies Deployed' -FrameworkIds $cit `
+            -State 'Gap' -Severity 'High' `
+            -Detail 'Conditional Access is not in use. Security Defaults covers part of the baseline this control tracks: legacy authentication is blocked (AAD-1.1), every user must register for MFA and is prompted when Microsoft decides it is necessary (AAD-1.2), and 16 administrator roles must complete MFA at every sign-in, with no requirement that the method be phishing-resistant (AAD-1.3). Security Defaults cannot be scoped, cannot exclude emergency access accounts, has no report-only mode, and offers none of the Conditional Access conditions and controls (device compliance, locations, risk, session controls).' `
+            -CurrentValue 'Security Defaults enabled; 0 Conditional Access policies in force' `
+            -RequiredValue 'At least 3 enabled CA policies covering (1) block legacy auth, (2) MFA all users, (3) MFA / phishing-resistant MFA for admin roles' `
+            -Remediation 'Deploy at minimum: (1) block legacy auth, (2) require MFA all users, (3) phishing-resistant MFA for admin roles.' -NeedsConditionalAccess
+        return
+    }
 
     $caRaw = Get-NRGRawData -Key 'AAD-CAPolicies'
 
@@ -62,11 +80,11 @@ function Test-NRGControlAADCA {
         Add-NRGFinding -ControlId 'AAD-2.1' -State 'Gap' `
             -Category 'Identity' -Title 'Conditional Access Policies Deployed' `
             -Severity 'High' `
-            -Detail 'No enabled Conditional Access policies found. Tenant relies on Security Defaults or password-only access control.' `
+            -Detail $(if ($sd -eq $false) { 'No enabled Conditional Access policies found, and Security Defaults is disabled.' } else { 'No enabled Conditional Access policies found. Security Defaults: not read.' }) `
             -CurrentValue '0 enabled CA policies' `
             -RequiredValue 'At least 3 enabled CA policies covering (1) block legacy auth, (2) MFA all users, (3) MFA / phishing-resistant MFA for admin roles' `
             -Remediation 'Deploy at minimum: (1) block legacy auth, (2) require MFA all users, (3) phishing-resistant MFA for admin roles. Stage each in report-only mode first.' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-2.1')
+            -FrameworkIds $cit
     }
     elseif ($covered -ge 3) {
         Add-NRGFinding -ControlId 'AAD-2.1' -State 'Satisfied' `
@@ -74,7 +92,7 @@ function Test-NRGControlAADCA {
             -Severity 'High' `
             -CurrentValue "$($enabled.Count) enabled CA policies. Coverage tracks satisfied: $($tracks -join ', ')." `
             -RequiredValue 'At least 3 enabled CA policies covering legacy-auth block, MFA all users, and admin MFA' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-2.1')
+            -FrameworkIds $cit
     }
     else {
         $missing = @('block-legacy-auth','mfa-all-users','mfa-admin-roles') | Where-Object { $_ -notin $tracks }
@@ -88,6 +106,6 @@ function Test-NRGControlAADCA {
             -CurrentValue "$($enabled.Count) enabled CA policies. Coverage tracks satisfied: $($tracks -join ', ')." `
             -RequiredValue 'Coverage on all three tracks: block-legacy-auth, mfa-all-users, mfa-admin-roles' `
             -Remediation 'Add CA policies to close missing tracks. Verify MFA registration (>= 95%) before enforcing universal MFA.' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-2.1')
+            -FrameworkIds $cit
     }
 }

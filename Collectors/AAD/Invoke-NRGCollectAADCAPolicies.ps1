@@ -5,6 +5,8 @@
 # READ-ONLY.
 #
 # Required Graph scopes: Policy.Read.All
+# Sets: AAD-CAPolicies
+# Consumes: AAD-AuthPolicies (Security Defaults, for the coverage note only)
 #
 # NIST SP 800-53: AC-17 (remote access), IA-2 (MFA)
 # MITRE ATT&CK:   T1078.004 (Cloud Accounts), T1110 (Brute Force)
@@ -247,9 +249,21 @@ function Invoke-NRGCollectAADCAPolicies {
         # failed policies fetch -> Success=$false -> evaluators route CA controls
         # to NotApplicable ("couldn't assess"), never to a false Gap.
         $result.Success = $policiesCollected
+        # While Security Defaults is on, CA policies can be created but not
+        # turned on, so the console line says so instead of reading as an
+        # unprotected tenant. The AuthPolicies step runs just before this one;
+        # a state that was not read ($null) leaves the notes as they were.
+        # Data is unchanged: AAD-AuthPolicies stays the single source of truth.
+        $sd = if (Get-Command Get-NRGSecurityDefaultsState -ErrorAction SilentlyContinue) { Get-NRGSecurityDefaultsState } else { $null }
         if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
             if ($policiesCollected) {
-                Register-NRGCoverage -Family 'AAD-CAPolicies' -Status 'Collected'
+                if ($sd -eq $true) {
+                    Register-NRGCoverage -Family 'AAD-CAPolicies' -Status 'Collected' -Note "Security Defaults on: CA policies cannot be turned on ($(@($result.Data.Policies).Count) found)"
+                } else {
+                    Register-NRGCoverage -Family 'AAD-CAPolicies' -Status 'Collected'
+                }
+            } elseif ($sd -eq $true) {
+                Register-NRGCoverage -Family 'AAD-CAPolicies' -Status 'Failed' -Note 'CA read failed; Security Defaults is on (see Exceptions)'
             } else {
                 Register-NRGCoverage -Family 'AAD-CAPolicies' -Status 'Failed' -Note 'CA policies fetch/parse failed — see exceptions'
             }

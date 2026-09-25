@@ -311,9 +311,18 @@ function Test-NRGLicenseRequirementMet {
         # different features (Customer Lockbox and Endpoint DLP are both
         # "M365 E5 or E5 Compliance add-on"); with the ControlId, the
         # control's own service-plan rule decides when plan data exists.
-        [Parameter()] [AllowNull()] [AllowEmptyString()] [string] $ControlId
+        [Parameter()] [AllowNull()] [AllowEmptyString()] [string] $ControlId,
+        # Optional. The finding being judged. Security Defaults needs no
+        # license, so a Security Defaults finding whose remaining fix needs
+        # none (AAD-1.1 / AAD-11.1, an AAD-1.2 registration shortfall; see
+        # Test-NRGSecurityDefaultsLicenseFree) is met whatever the SKU data
+        # says, although the requirement string names the Conditional Access
+        # route.
+        [Parameter()] [AllowNull()] [object] $Finding
     )
 
+    if ($null -ne $Finding -and (Get-Command Test-NRGSecurityDefaultsLicenseFree -ErrorAction SilentlyContinue) -and
+        (Test-NRGSecurityDefaultsLicenseFree -Finding $Finding)) { return $true }
     if ([string]::IsNullOrEmpty($LicenseRequirement)) { return $true }
     if ($LicenseRequirement -match '^Included') { return $true }
     if ($null -eq $LicenseProfile) { return $false }

@@ -2,6 +2,7 @@
 #
 # Test-NRGControlSharePoint.ps1
 # Evaluates SharePoint Online controls. Reads: Get-NRGRawData -Key 'SharePoint'
+# (SPO-1.5 also reads Security Defaults via Get-NRGSecurityDefaultsState.)
 #
 # Controls: SPO-1.1 through SPO-3.4 (17 controls).
 #   Config/controls.json is authoritative — each control's EvaluatorFunction
@@ -156,14 +157,39 @@ function Test-NRGControlSharePoint {
     if ($c) {
         $cit = Get-NRGFrameworkCitations -ControlId 'SPO-1.5'
         $cap15 = [string](Get-NRGObjectField -Item $shell -Key 'ConditionalAccessPolicy' -Default '')
+        # Microsoft: "Blocking or limiting access on unmanaged devices relies
+        # on Microsoft Entra Conditional Access policies"
+        # (learn.microsoft.com/sharepoint/control-access-from-unmanaged-devices),
+        # and no CA policy can be turned on while Security Defaults is enabled.
+        # So beside Security Defaults a restricting value is not credited, and
+        # the remediation says Conditional Access comes first.
+        $sd15 = (Get-NRGSecurityDefaultsState) -eq $true
+        $restricting15 = $cap15 -in @('AllowLimitedAccess','BlockAccess','AuthenticationContext')
         if ($null -eq $shell -or -not $cap15) {
             Add-NRGFinding -ControlId 'SPO-1.5' -State 'NotApplicable' -Category 'SharePoint' -Title $c.Title -FrameworkIds $cit -Detail $noShell
+        } elseif ($sd15 -and ($restricting15 -or $cap15 -eq 'AllowFullAccess')) {
+            # The generic remediation (Set-SPOTenant ... AllowLimitedAccess)
+            # is already done when the value restricts, and would not close
+            # this Gap, so that case names the step that would.
+            $sdDetail = if ($restricting15) {
+                "SharePoint's unmanaged-device setting is $cap15, but Microsoft documents that blocking or limiting access from unmanaged devices relies on Microsoft Entra Conditional Access policies, and none can be in force here, so the setting is not credited."
+            } else {
+                'Unmanaged devices get full access to SharePoint and OneDrive, including download and sync. Restricting them relies on Microsoft Entra Conditional Access policies.'
+            }
+            $sdFix = if ($restricting15) {
+                "The SharePoint setting is already $cap15 and needs no change. What it relies on is a Microsoft Entra Conditional Access policy (the SharePoint admin center creates one when the setting is saved there); once Security Defaults is off, confirm that policy exists and is On."
+            } else { $c.Remediation }
+            Add-NRGSecurityDefaultsFinding -ControlId 'SPO-1.5' -Category 'SharePoint' -Title $c.Title -FrameworkIds $cit -State 'Gap' -Severity $c.Severity `
+                -Detail $sdDetail `
+                -CurrentValue "ConditionalAccessPolicy = $cap15; Security Defaults enabled (no Conditional Access policy in force)" `
+                -RequiredValue 'AllowLimitedAccess (browser-only) or BlockAccess, enforced by an enabled Conditional Access policy' `
+                -Remediation $sdFix -NeedsConditionalAccess
         } elseif ($cap15 -eq 'AllowFullAccess') {
             Add-NRGFinding -ControlId 'SPO-1.5' -State 'Gap' -Category 'SharePoint' -Title $c.Title -Severity $c.Severity `
                 -Detail 'Unmanaged devices get full access to SharePoint and OneDrive, including download and sync.' `
                 -CurrentValue 'ConditionalAccessPolicy = AllowFullAccess' -RequiredValue 'AllowLimitedAccess (browser-only) or BlockAccess' `
                 -Remediation $c.Remediation -FrameworkIds $cit
-        } elseif ($cap15 -in @('AllowLimitedAccess','BlockAccess','AuthenticationContext')) {
+        } elseif ($restricting15) {
             Add-NRGFinding -ControlId 'SPO-1.5' -State 'Satisfied' -Category 'SharePoint' -Title $c.Title -Severity 'Informational' `
                 -CurrentValue "ConditionalAccessPolicy = $cap15" -FrameworkIds $cit
         } else {

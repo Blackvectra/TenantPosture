@@ -11,6 +11,8 @@
 #   Enabled                                 -> Satisfied
 # These used to score Partial — half credit — when NOTHING was configured,
 # which raised the compliance score for a control the tenant does not have.
+# With Security Defaults enabled no CA policy can be turned on, so each is a
+# Gap naming Security Defaults, whatever report-only policy exists.
 
 Describe 'CA policy tiers — None / Audit mode / Enabled' {
 
@@ -92,5 +94,26 @@ Describe 'CA policy tiers — None / Audit mode / Enabled' {
         Clear-NRGState
         & $Fn | Out-Null
         @(Get-NRGFindings | Where-Object { $_.ControlId -eq $Cid })[0].State | Should -Be 'NotApplicable'
+    }
+
+    # While Security Defaults is enabled a CA policy can be created but not
+    # turned on, so a report-only policy is not part-way to enforcement: its
+    # next step is blocked. It used to earn Partial and the advice "switch the
+    # policy to On", which cannot be done with Security Defaults on.
+    It '<Cid>: Security Defaults on is a Gap naming Security Defaults, never "switch the policy to On", even beside a report-only policy' -TestCases $cases {
+        $null = Invoke-Case $Fn $Cid @(New-Matching $Cid 'enabledForReportingButNotEnforced')
+        Clear-NRGFindings
+        Set-NRGRawData -Key 'AAD-AuthPolicies' -Data ([ordered]@{
+            CollectorId = 'AAD'; CollectedAt = '2026-09-25T00:00:00Z'; Success = $true
+            Data = @{ SecurityDefaults = @{ IsEnabled = $true } }
+        })
+        & $Fn | Out-Null
+        $f = @(Get-NRGFindings | Where-Object { $_.ControlId -eq $Cid })[0]
+        $f.State       | Should -Be 'Gap'
+        $f.Detail      | Should -Match 'Security Defaults is enabled'
+        $f.Detail      | Should -Match "$([regex]::Escape($Cid)) policy \[report-only\]"
+        $f.Detail      | Should -Not -Match 'switch the policy to On'
+        $f.Remediation | Should -Match 'turn off Security Defaults'
+        (@($f.FrameworkIds) -join ' ') | Should -Match 'NIST:'
     }
 }

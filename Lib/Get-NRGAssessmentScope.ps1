@@ -43,7 +43,9 @@
 #                           dangerous one: the control COULD have been
 #                           assessed and was not, and the reader cannot tell
 #                           from the score.
-#   NoProgrammaticCheck   — advisory control with no automated test. Honest by
+#   NoProgrammaticCheck   — advisory control with no automated test, or one
+#                           whose check ran and declared it needs manual
+#                           verification. Honest by
 #                           design (see "advisory controls never claim
 #                           compliance"), but it must be visible, not implied.
 #   NoResult              — the control is in controls.json and NOTHING was
@@ -333,10 +335,27 @@ function Get-NRGAssessmentScope {
         #    the collector reported failure. Same signal the evaluator gated
         #    on, so it cannot disagree with the finding. Only consulted when
         #    raw data is present in this run.
+        #
+        #    Security Defaults. A finding the evaluator reached because
+        #    Security Defaults is on did not gate on the Conditional Access
+        #    read (no CA policy can be on beside it), so a failed
+        #    AAD-CAPolicies read is not its reason and naming it would
+        #    contradict the finding's own detail (license gating's wrapper
+        #    included); its remaining dependencies still count, and the
+        #    license and prose steps classify it. A
+        #    finding that says the Security Defaults state was not read is
+        #    positive evidence of a collection gap (a re-run can read it), so
+        #    it is filed there before the license step can call it gated.
+        if ($detail.StartsWith($script:NRGSecurityDefaultsUnreadPrefix, [System.StringComparison]::Ordinal)) {
+            $collectionGap.Add([pscustomobject]$row)
+            continue
+        }
+        $sdVerdict = [bool](Test-NRGSecurityDefaultsVerdictDetail -Detail $detail)
         if ($row.Collector) {
             $failedDep  = $null
             $skippedDep = $null
             foreach ($depKey in @($row.Collector -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+                if ($sdVerdict -and $depKey -eq 'AAD-CAPolicies') { continue }
                 if ($skippedCollectors.Contains($depKey)) { $skippedDep = $depKey; break }
                 if (-not $haveRawData) { continue }
                 $entry = $null
@@ -361,13 +380,16 @@ function Get-NRGAssessmentScope {
         # 3. License gated — POSITIVE evidence only. Either the evaluator said
         #    so explicitly, or we hold real SKU data and it says the tenant
         #    lacks the licence. "No SKU data" is not evidence of anything.
+        #    A Security Defaults AAD-1.2 finding whose remaining fix needs no
+        #    license (Test-NRGSecurityDefaultsLicenseFree) is not license
+        #    gated, so its "registration not collected" is a collection gap.
         $isLicence = $false
         if ($detail -match 'upgrade opportunity') {
             $isLicence = $true
         } elseif ($haveSkuData -and $row.Licence -and $row.Licence -notmatch '^Included' -and
                   (Get-Command Test-NRGLicenseRequirementMet -ErrorAction SilentlyContinue)) {
             try {
-                $isLicence = -not (Test-NRGLicenseRequirementMet -LicenseRequirement $row.Licence -LicenseProfile $LicenseProfile -ControlId $row.ControlId)
+                $isLicence = -not (Test-NRGLicenseRequirementMet -LicenseRequirement $row.Licence -LicenseProfile $LicenseProfile -ControlId $row.ControlId -Finding $f)
             } catch {
                 $isLicence = $false
             }
@@ -426,7 +448,12 @@ function Get-NRGAssessmentScope {
         $limitations.Add("$($noResult.Count) control(s) produced no result at all this run and do not appear elsewhere in this report. Treat this as a tool fault to investigate, not as a tenant finding.")
     }
     if ($advisory.Count -gt 0) {
-        $limitations.Add("$($advisory.Count) control(s) have no automated test and were not scored. They require manual review; nothing in this report asserts whether they are met.")
+        # Two kinds land here: controls with no automated test, and controls
+        # whose automated check ran but could not decide (e.g. AAD-7.2 beside
+        # Security Defaults, which offers no exclusion to recognize emergency
+        # access accounts by). "No automated test" alone is false for the
+        # second kind.
+        $limitations.Add("$($advisory.Count) control(s) have no automated test, or their automated check ran but could not reach a verdict, and were not scored. They require manual review; nothing in this report asserts whether they are met.")
     }
     if ($notForTenant.Count -gt 0) {
         $limitations.Add("$($notForTenant.Count) control(s) were checked and do not apply to this tenant as configured (for example, a feature that is turned off or not in use). Each finding states the reason. They are not scored; confirm the reason still holds before relying on it.")
