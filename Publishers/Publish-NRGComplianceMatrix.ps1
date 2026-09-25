@@ -141,7 +141,16 @@ function Publish-NRGComplianceMatrix {
                 FrameworkIds    = @(Get-NRGObjectField -Item $_ -Key 'FrameworkIds' -Default @() | ForEach-Object { [string]$_ })
                 CIS             = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.CIS'      -Default '')
                 SCuBA           = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.SCuBA'    -Default '')
-                NIST            = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.NIST'     -Default '')
+                # The finding's own citations first (what the HTML family
+                # rollup and the NIST matrix read); controls.json as fallback.
+                # Endpoint DEV-* checks have no controls.json row, so reading
+                # only controls.json dropped their verdicts from this sheet's
+                # family rollup (SC: 10 assessed here, 12 in the HTML).
+                NIST            = [string]$(
+                    $fromFinding = @(Get-NRGNISTControlIdsFromFinding -Finding $_)
+                    if ($fromFinding.Count -gt 0) { $fromFinding -join ', ' }
+                    else { [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.NIST' -Default '') }
+                )
                 CMMC            = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.CMMC'     -Default '')
                 ISO27001        = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.ISO27001' -Default '')
                 SOC2            = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.SOC2'     -Default '')
