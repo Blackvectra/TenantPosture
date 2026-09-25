@@ -273,7 +273,7 @@ function Test-NRGControlSPO3PStorage {
 
     # v4.13.0: implemented, and RE-SCOPED to what is actually readable.
     #
-    # The control previously claimed to check the admin-centre "third-party
+    # The control previously claimed to check the admin-center "third-party
     # storage services" toggle, but no Get-SPOTenant property exposes it, which
     # is why it sat as a manual-review placeholder. The connectors that ARE
     # readable are the Teams client third-party storage providers
@@ -298,20 +298,20 @@ function Test-NRGControlSPO3PStorage {
         return
     }
 
-    $providers = [ordered]@{
-        Dropbox     = [bool](Get-NRGObjectField -Item $client -Key 'AllowDropBox'     -Default $false)
-        Box         = [bool](Get-NRGObjectField -Item $client -Key 'AllowBox'         -Default $false)
-        GoogleDrive = [bool](Get-NRGObjectField -Item $client -Key 'AllowGoogleDrive' -Default $false)
-        ShareFile   = [bool](Get-NRGObjectField -Item $client -Key 'AllowShareFile'   -Default $false)
+    $st = Get-NRGTeamsStorageProviderState -ClientConfiguration $client
+    if ($st.Unread.Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "The Teams client configuration did not report $($st.Unread -join ', '), so third-party storage connector state was not assessed."
+        return
     }
-    $enabled = @($providers.Keys | Where-Object { $providers[$_] })
+    $enabled = @($st.Enabled)
 
-    $portalNote = 'Scope note: this verifies the Teams client third-party storage connectors (Get-CsTeamsClientConfiguration). The Microsoft 365 admin centre "Third-party storage services" toggle is not exposed to PowerShell and is a separate manual check.'
+    $portalNote = 'Scope note: this verifies the Teams client third-party storage connectors (Get-CsTeamsClientConfiguration). The Microsoft 365 admin center "Third-party storage services" toggle is not exposed to PowerShell and is a separate manual check.'
 
     if ($enabled.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "No third-party cloud storage providers are enabled in the Teams client (Dropbox, Box, Google Drive, ShareFile all off). $portalNote"
+            -Detail "No third-party cloud storage providers are enabled in the Teams client ($($st.Checked -join ', ') all off).$($st.Note) $portalNote"
     } else {
         $affected = @($enabled | ForEach-Object { [ordered]@{ DisplayName = $_; Status = 'Enabled' } })
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `

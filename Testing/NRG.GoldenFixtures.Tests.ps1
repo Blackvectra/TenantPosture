@@ -721,14 +721,14 @@ Describe 'Newly implemented controls — EXO-3.4, TMS-3.4, SPO-2.5, PPL-1.3' {
             $v = V 'Test-NRGControlSPO3PStorage' 'SPO-2.5'
             $v.State | Should -Be 'Gap'
             $v.CurrentValue | Should -Match 'Dropbox'
-            $v.CurrentValue | Should -Match 'GoogleDrive'
+            $v.CurrentValue | Should -Match 'Google Drive'
         }
         It 'states which surface it actually verified' {
             Set-NRGRawData -Key 'Teams' -Data (Raw 'Teams' @{
                 ClientConfiguration=@{ AllowDropBox=$false; AllowBox=$false
                                        AllowGoogleDrive=$false; AllowShareFile=$false } })
-            (V 'Test-NRGControlSPO3PStorage' 'SPO-2.5').Detail | Should -Match 'admin centre' `
-                -Because 'the control cannot read the admin-centre toggle, so the finding must say what it did and did not verify'
+            (V 'Test-NRGControlSPO3PStorage' 'SPO-2.5').Detail | Should -Match 'admin center' `
+                -Because 'the control cannot read the admin-center toggle, so the finding must say what it did and did not verify'
         }
         It 'NotApplicable when Teams client configuration was not collected' {
             Set-NRGRawData -Key 'Teams' -Data (Raw 'Teams' @{})

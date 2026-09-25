@@ -13,159 +13,158 @@
 
 function Invoke-NRGCollectTeams {
     [CmdletBinding()] param()
+    # Every section runs its own try/catch, so an empty or absent section is
+    # ambiguous without SectionStatus (CLAUDE.md, "Empty is not clean").
+    # Every property is read through Get-NRGObjectField with a $null default:
+    # Get-Cs* objects vary by module version, and defaulting an absent
+    # property to the SECURE value (as AllowPublicUsers / AllowFederatedUsers
+    # did) turned "not returned" into a pass.
     $result = @{
         Success = $false
         Data    = @{
-            FederationConfig    = $null
+            FederationConfig     = $null
             ExternalAccessPolicy = $null
-            MeetingPolicy       = $null
-            ClientConfiguration = $null
-            GuestMeetingPolicy  = $null
-            BroadcastPolicy     = $null
+            MeetingPolicy        = $null
+            MeetingConfiguration = $null
+            ClientConfiguration  = $null
+            GuestMeetingPolicy   = $null
+            BroadcastPolicy      = $null
+            EventsPolicy         = $null
+            SectionStatus        = @{
+                FederationConfig     = 'NotRun'
+                ExternalAccessPolicy = 'NotRun'
+                MeetingPolicy        = 'NotRun'
+                MeetingConfiguration = 'NotRun'
+                ClientConfiguration  = 'NotRun'
+                GuestMeetingPolicy   = 'NotRun'
+                BroadcastPolicy      = 'NotRun'
+                EventsPolicy         = 'NotRun'
+            }
+        }
+    }
+    $f = { param($o, $k) Get-NRGObjectField -Item $o -Key $k -Default $null }
+    $b = { param($o, $k) $v = Get-NRGObjectField -Item $o -Key $k -Default $null; if ($null -eq $v) { $null } else { [bool]$v } }
+    # Runs one Get-Cs* read into its section. A cmdlet the session does not
+    # expose is a failed read, never "none configured".
+    $section = {
+        param([string] $Name, [string] $Cmd, [hashtable] $CmdArgs, [scriptblock] $Shape)
+        try {
+            if (-not (Get-Command $Cmd -ErrorAction SilentlyContinue)) { throw "$Cmd is not available in this session." }
+            $o = @(& $Cmd @CmdArgs -ErrorAction Stop) | Select-Object -First 1
+            if ($null -eq $o) { throw "$Cmd returned nothing." }
+            $result.Data[$Name] = & $Shape $o
+            $result.Data.SectionStatus[$Name] = 'Collected'
+        } catch {
+            $result.Data.SectionStatus[$Name] = 'Failed'
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source "Teams-$Name" -Message $_.Exception.Message
+            }
         }
     }
 
     try {
-        # Federation / external access
-        if (Get-Command Get-CsTenantFederationConfiguration -ErrorAction SilentlyContinue) {
-            try {
-                $fed = Get-CsTenantFederationConfiguration -ErrorAction Stop
-                if ($fed) {
-                    # Get-Cs* objects vary by MicrosoftTeams module version and can
-                    # arrive remoting-deserialized without every property — bare
-                    # $fed.Prop then THROWS under StrictMode. Read via the shape-
-                    # agnostic helper so one absent property doesn't nuke the whole
-                    # FederationConfig block. (Same StrictMode class as the Graph
-                    # shape fix, but Cs cmdlets bypass Invoke-NRGGraphRequest.)
-                    # AllowedDomains is either an AllowAllKnownDomains marker or a
-                    # list whose items expose .AllowedDomain (Blocked items expose
-                    # .Domain). Enumerate the container and null-filter so an empty
-                    # or marker container yields an empty array (Count 0), never a
-                    # phantom @($null) — @($null).Count is 1, which TMS-1.1 would
-                    # misread as "federation restricted to 1 domain" on an OPEN
-                    # (wide-open) federation tenant: a false Satisfied.
-                    $allowedRaw = Get-NRGObjectField -Item $fed -Key 'AllowedDomains'
-                    $blockedRaw = Get-NRGObjectField -Item $fed -Key 'BlockedDomains'
-                    $allowedList = @(foreach ($x in @($allowedRaw)) { Get-NRGObjectField -Item $x -Key 'AllowedDomain' }) | Where-Object { $_ }
-                    $blockedList = @(foreach ($x in @($blockedRaw)) { Get-NRGObjectField -Item $x -Key 'Domain' }) | Where-Object { $_ }
-                    $result.Data.FederationConfig = [ordered]@{
-                        AllowFederatedUsers              = [bool](Get-NRGObjectField -Item $fed -Key 'AllowFederatedUsers' -Default $false)
-                        AllowPublicUsers                 = [bool](Get-NRGObjectField -Item $fed -Key 'AllowPublicUsers' -Default $false)
-                        AllowTeamsConsumer               = [bool](Get-NRGObjectField -Item $fed -Key 'AllowTeamsConsumer' -Default $false)
-                        AllowTeamsConsumerInbound        = [bool](Get-NRGObjectField -Item $fed -Key 'AllowTeamsConsumerInbound' -Default $false)
-                        TreatDiscoveredPartnersAsUnverified = [bool](Get-NRGObjectField -Item $fed -Key 'TreatDiscoveredPartnersAsUnverified' -Default $false)
-                        AllowedDomains                   = @($allowedList)
-                        BlockedDomains                   = @($blockedList)
-                    }
-                }
-            } catch {
-                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                    Register-NRGException -Source 'Teams-Federation' -Message $_.Exception.Message
-                }
+        # Federation / external access. AllowedDomains is either an
+        # AllowAllKnownDomains marker or a list whose items expose
+        # .AllowedDomain (blocked items expose .Domain); null-filter so an
+        # open (marker) tenant yields an empty list, never @($null) — Count 1
+        # would read as "restricted to 1 domain".
+        & $section 'FederationConfig' 'Get-CsTenantFederationConfiguration' @{} {
+            param($fed)
+            $allowedList = @(foreach ($x in @(& $f $fed 'AllowedDomains')) { Get-NRGObjectField -Item $x -Key 'AllowedDomain' } ) | Where-Object { $_ }
+            $blockedList = @(foreach ($x in @(& $f $fed 'BlockedDomains')) { Get-NRGObjectField -Item $x -Key 'Domain' } ) | Where-Object { $_ }
+            [ordered]@{
+                AllowFederatedUsers                 = & $b $fed 'AllowFederatedUsers'
+                AllowPublicUsers                    = & $b $fed 'AllowPublicUsers'
+                AllowTeamsConsumer                  = & $b $fed 'AllowTeamsConsumer'
+                AllowTeamsConsumerInbound           = & $b $fed 'AllowTeamsConsumerInbound'
+                TreatDiscoveredPartnersAsUnverified = & $b $fed 'TreatDiscoveredPartnersAsUnverified'
+                AllowedDomains                      = @($allowedList)
+                BlockedDomains                      = @($blockedList)
             }
         }
 
-        # External access policy (global)
-        if (Get-Command Get-CsExternalAccessPolicy -ErrorAction SilentlyContinue) {
-            try {
-                $ext = Get-CsExternalAccessPolicy -Identity Global -ErrorAction Stop
-                if ($ext) {
-                    # Shape-agnostic reads — see FederationConfig note above.
-                    $result.Data.ExternalAccessPolicy = @{
-                        Identity                  = [string](Get-NRGObjectField -Item $ext -Key 'Identity' -Default '')
-                        EnableFederationAccess    = [bool](Get-NRGObjectField -Item $ext -Key 'EnableFederationAccess' -Default $false)
-                        EnablePublicCloudAccess   = [bool](Get-NRGObjectField -Item $ext -Key 'EnablePublicCloudAccess' -Default $false)
-                        EnableTeamsConsumerAccess = [bool](Get-NRGObjectField -Item $ext -Key 'EnableTeamsConsumerAccess' -Default $false)
-                        EnableTeamsConsumerInbound = [bool](Get-NRGObjectField -Item $ext -Key 'EnableTeamsConsumerInbound' -Default $false)
-                    }
-                }
-            } catch {
-                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                    Register-NRGException -Source 'Teams-ExternalAccess' -Message $_.Exception.Message
-                }
+        & $section 'ExternalAccessPolicy' 'Get-CsExternalAccessPolicy' @{ Identity = 'Global' } {
+            param($ext)
+            @{
+                Identity                   = [string](& $f $ext 'Identity')
+                EnableFederationAccess     = & $b $ext 'EnableFederationAccess'
+                EnablePublicCloudAccess    = & $b $ext 'EnablePublicCloudAccess'
+                EnableTeamsConsumerAccess  = & $b $ext 'EnableTeamsConsumerAccess'
+                EnableTeamsConsumerInbound = & $b $ext 'EnableTeamsConsumerInbound'
             }
         }
 
-        # Global meeting policy
-        if (Get-Command Get-CsTeamsMeetingPolicy -ErrorAction SilentlyContinue) {
-            try {
-                $meet = Get-CsTeamsMeetingPolicy -Identity Global -ErrorAction Stop
-                if ($meet) {
-                    $result.Data.MeetingPolicy = @{
-                        AllowAnonymousUsersToJoinMeeting = [bool]$meet.AllowAnonymousUsersToJoinMeeting
-                        AllowAnonymousUsersToStartMeeting = [bool]$meet.AllowAnonymousUsersToStartMeeting
-                        AutoAdmittedUsers                = [string]$meet.AutoAdmittedUsers
-                        AllowExternalParticipantGiveRequestControl = [bool]$meet.AllowExternalParticipantGiveRequestControl
-                        AllowCloudRecording              = [bool]$meet.AllowCloudRecording
-                        # TMS-2.8 (PSTN lobby bypass) + TMS-4.1 (recording expiry).
-                        # Field is NewMeetingRecordingExpirationDays (Get-CsTeamsMeetingPolicy).
-                        AllowPSTNUsersToBypassLobby      = [bool]$meet.AllowPSTNUsersToBypassLobby
-                        NewMeetingRecordingExpirationDays = [int]($meet.NewMeetingRecordingExpirationDays ?? -1)
-                    }
-                }
-            } catch {
-                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                    Register-NRGException -Source 'Teams-MeetingPolicy' -Message $_.Exception.Message
-                }
+        # Global meeting policy. Every field any TMS control reads is here —
+        # four controls read fields this block never wrote and could only
+        # ever report "not assessed".
+        & $section 'MeetingPolicy' 'Get-CsTeamsMeetingPolicy' @{ Identity = 'Global' } {
+            param($meet)
+            $exp = & $f $meet 'NewMeetingRecordingExpirationDays'
+            @{
+                AllowAnonymousUsersToJoinMeeting           = & $b $meet 'AllowAnonymousUsersToJoinMeeting'
+                AllowAnonymousUsersToStartMeeting          = & $b $meet 'AllowAnonymousUsersToStartMeeting'
+                AutoAdmittedUsers                          = [string](& $f $meet 'AutoAdmittedUsers')
+                AllowExternalParticipantGiveRequestControl = & $b $meet 'AllowExternalParticipantGiveRequestControl'
+                AllowCloudRecording                        = & $b $meet 'AllowCloudRecording'
+                AllowPSTNUsersToBypassLobby                = & $b $meet 'AllowPSTNUsersToBypassLobby'
+                NewMeetingRecordingExpirationDays          = $(if ($null -ne $exp -and "$exp" -match '^-?\d+$') { [int]"$exp" } else { $null })
+                AllowChannelMeetingScheduling              = & $b $meet 'AllowChannelMeetingScheduling'
+                AllowWatermarkForScreenSharing             = & $b $meet 'AllowWatermarkForScreenSharing'
+                AllowWatermarkForCameraVideo               = & $b $meet 'AllowWatermarkForCameraVideo'
+                # Meeting chat is MeetingChatEnabledType (Enabled / Disabled /
+                # EnabledExceptAnonymous / EnabledInMeetingOnlyForAllExceptAnonymous);
+                # the name TMS-3.3 read, AllowMeetingChat, is not a property.
+                MeetingChatEnabledType                     = [string](& $f $meet 'MeetingChatEnabledType')
             }
         }
 
-        # Global meeting broadcast (live events) policy — TMS-4.4.
-        # BroadcastAttendeeVisibilityMode 'Everyone' lets anonymous internet
-        # users watch live events; AllowBroadcastScheduling $false disables
-        # live events entirely. Both come from Get-CsTeamsMeetingBroadcastPolicy.
-        if (Get-Command Get-CsTeamsMeetingBroadcastPolicy -ErrorAction SilentlyContinue) {
-            try {
-                $bcast = Get-CsTeamsMeetingBroadcastPolicy -Identity Global -ErrorAction Stop
-                if ($bcast) {
-                    # Shape-agnostic reads — see FederationConfig note above.
-                    $result.Data.BroadcastPolicy = [ordered]@{
-                        AllowBroadcastScheduling        = [bool](Get-NRGObjectField -Item $bcast -Key 'AllowBroadcastScheduling' -Default $false)
-                        BroadcastAttendeeVisibilityMode = [string](Get-NRGObjectField -Item $bcast -Key 'BroadcastAttendeeVisibilityMode' -Default '')
-                    }
-                }
-            } catch {
-                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                    Register-NRGException -Source 'Teams-BroadcastPolicy' -Message $_.Exception.Message
-                }
+        # Organization-wide meeting settings: DisableAnonymousJoin blocks
+        # anonymous join for every meeting whatever the meeting policy says.
+        & $section 'MeetingConfiguration' 'Get-CsTeamsMeetingConfiguration' @{} {
+            param($mc)
+            @{ DisableAnonymousJoin = & $b $mc 'DisableAnonymousJoin' }
+        }
+
+        & $section 'BroadcastPolicy' 'Get-CsTeamsMeetingBroadcastPolicy' @{ Identity = 'Global' } {
+            param($bcast)
+            [ordered]@{
+                AllowBroadcastScheduling        = & $b $bcast 'AllowBroadcastScheduling'
+                BroadcastAttendeeVisibilityMode = [string](& $f $bcast 'BroadcastAttendeeVisibilityMode')
             }
         }
 
-        # Client configuration
-        if (Get-Command Get-CsTeamsClientConfiguration -ErrorAction SilentlyContinue) {
-            try {
-                $client = Get-CsTeamsClientConfiguration -ErrorAction Stop
-                if ($client) {
-                    $result.Data.ClientConfiguration = @{
-                        AllowEmailIntoChannel = [bool]$client.AllowEmailIntoChannel
-                        AllowDropBox          = [bool]$client.AllowDropBox
-                        AllowBox              = [bool]$client.AllowBox
-                        AllowGoogleDrive      = [bool]$client.AllowGoogleDrive
-                        AllowShareFile        = [bool]$client.AllowShareFile
-                    }
-                }
-            } catch {
-                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                    Register-NRGException -Source 'Teams-Client' -Message $_.Exception.Message
-                }
+        # Teams events (webinars, town halls) replaced live events, which
+        # Microsoft retired on June 30, 2026. Both attendee settings default
+        # to Everyone — public, anonymous attendance.
+        & $section 'EventsPolicy' 'Get-CsTeamsEventsPolicy' @{ Identity = 'Global' } {
+            param($ev)
+            [ordered]@{
+                AllowWebinars               = [string](& $f $ev 'AllowWebinars')
+                EventAccessType             = [string](& $f $ev 'EventAccessType')
+                AllowTownhalls              = [string](& $f $ev 'AllowTownhalls')
+                TownhallEventAttendeeAccess = [string](& $f $ev 'TownhallEventAttendeeAccess')
             }
         }
 
-        # Guest meeting policy
-        if (Get-Command Get-CsTeamsGuestMeetingConfiguration -ErrorAction SilentlyContinue) {
-            try {
-                $guest = Get-CsTeamsGuestMeetingConfiguration -ErrorAction Stop
-                if ($guest) {
-                    $result.Data.GuestMeetingPolicy = @{
-                        AllowIPVideo  = [bool]$guest.AllowIPVideo
-                        AllowMeetNow  = [bool]$guest.AllowMeetNow
-                        ScreenSharingMode = [string]$guest.ScreenSharingMode
-                    }
-                }
-            } catch {
-                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                    Register-NRGException -Source 'Teams-GuestPolicy' -Message $_.Exception.Message
-                }
+        & $section 'ClientConfiguration' 'Get-CsTeamsClientConfiguration' @{} {
+            param($client)
+            @{
+                AllowEmailIntoChannel = & $b $client 'AllowEmailIntoChannel'
+                AllowDropBox          = & $b $client 'AllowDropBox'
+                AllowBox              = & $b $client 'AllowBox'
+                AllowGoogleDrive      = & $b $client 'AllowGoogleDrive'
+                AllowShareFile        = & $b $client 'AllowShareFile'
+                AllowEgnyte           = & $b $client 'AllowEgnyte'
+                AllowGuestUser        = & $b $client 'AllowGuestUser'
+            }
+        }
+
+        & $section 'GuestMeetingPolicy' 'Get-CsTeamsGuestMeetingConfiguration' @{} {
+            param($guest)
+            @{
+                AllowIPVideo      = & $b $guest 'AllowIPVideo'
+                AllowMeetNow      = & $b $guest 'AllowMeetNow'
+                ScreenSharingMode = [string](& $f $guest 'ScreenSharingMode')
             }
         }
 

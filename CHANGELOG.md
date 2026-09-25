@@ -107,6 +107,26 @@ different, than the tenant actually is.
   and IP allow entries and no longer crashes when it finds a never-expiring
   allow. EXO-1.5 and EXO-4.3 now carry their Defender for Office 365 Plan 1
   license requirement.
+- **Teams controls score the setting they name.** TMS-1.4 scored the lobby
+  and TMS-1.6 the screen-control setting; TMS-1.4 now reads
+  `AllowExternalParticipantGiveRequestControl`, TMS-1.6 reads Teams guest
+  access plus who may invite guests, and TMS-1.5 (a duplicate of TMS-2.3)
+  reads whether retention covers the OneDrive / SharePoint locations holding
+  recordings. TMS-3.2 passed lobby settings that admit guests, invitees or
+  every federated organization. TMS-1.3 honors the org-wide
+  `DisableAnonymousJoin` and the lobby. TMS-2.6, 3.1 and 3.3 read fields the
+  collector never wrote (3.3 read a property that does not exist; the
+  setting is `MeetingChatEnabledType`) and could never reach a verdict.
+  TMS-2.7 called an allowlist Partial while TMS-1.1 / 4.3 called it
+  Satisfied; all three now agree, with blocklist mode Partial. TMS-2.3 and
+  SPO-2.5 include Egnyte. TMS-4.4 reads the events policy (town halls and
+  webinars, both public by default) — Microsoft retired live events on June
+  30, 2026. TMS-2.1 is reported retired (Skype consumer interop ended May 5,
+  2025), TMS-2.5 as platform-enforced (external participants cannot record),
+  TMS-2.2 as manual review. TMS-3.4 no longer reports "no DLP policies" when
+  the DLP list was not read. The collector records per-section status and no
+  longer defaults an unreturned federation setting to "disabled"; TMS-3.1
+  carries its Teams Premium license requirement.
 - **AAD-12.3 / AAD-12.4.** Stale accounts are judged on the last
   successful sign-in (a password-spray attempt made a departed user look
   active; a token-refresh-only user looked stale) and accounts created in

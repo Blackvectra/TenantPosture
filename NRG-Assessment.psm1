@@ -294,7 +294,7 @@ $script:ExportedFunctions = @(
     'Test-NRGControlTeamsWatermarks', 'Test-NRGControlTeamsAutoAdmit',
     'Test-NRGControlTeamsMeetingChat', 'Test-NRGControlTeamsChatCopy',
     'Test-NRGControlTeamsMeetingRecordingScope', 'Test-NRGControlTeamsAnonymousStart',
-    'Test-NRGControlTeamsFederationAllowlist', 'Test-NRGControlTeamsLiveEvents',
+    'Test-NRGControlTeamsFederationAllowlist', 'Test-NRGControlTeamsLiveEvents', 'Test-NRGControlTeamsRecordingRetention',
 
     # ── Evaluators — Purview ──────────────────────────────────────────────────
     'Test-NRGControlPurview',
