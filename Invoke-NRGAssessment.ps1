@@ -73,6 +73,14 @@ param(
     # Skip switches
     [switch] $SkipPurview,
     [switch] $IncludePurview,   # Include Purview/IPPSSession (skipped by default — EOM v3.4 WAM crash)
+    # Read the SharePoint tenant settings Graph does not expose (SPO-1.2, 1.4,
+    # 1.5, 2.2, 2.6, 2.7, 3.2, 3.3, 3.4) through the SharePoint Online
+    # Management Shell. In PowerShell 7 that module runs in a Windows
+    # PowerShell CHILD PROCESS (Microsoft's documented -UseWindowsPowerShell),
+    # which an Attack Surface Reduction rule blocking process creation will
+    # stop; off by default, and a blocked start leaves those controls not
+    # assessed with the reason logged. One extra sign-in.
+    [switch] $IncludeSharePointShell,
     [switch] $SkipTeams,
     [switch] $SkipSharePoint,
     [switch] $SkipIntune,
@@ -668,7 +676,9 @@ if (-not $skipCollection) {
     }
     if ($SkipPurview) { $connectParams['SkipPurview'] = $true }
     if ($SkipTeams)   { $connectParams['SkipTeams']   = $true }
-    $connectParams['SkipSharePoint'] = $true  # SharePoint via Graph
+    # SharePoint tenant settings come from Graph; the Management Shell (a
+    # child process in PowerShell 7) only when asked for.
+    if (-not $IncludeSharePointShell -or $SkipSharePoint) { $connectParams['SkipSharePoint'] = $true }
 
     $rawConn = @(Connect-NRGServices @connectParams)
     $conn = $rawConn | Where-Object { $_ -is [hashtable] } | Select-Object -Last 1
@@ -1337,7 +1347,7 @@ $footerCount  = [int]$s.Satisfied + [int]$s.Partial + [int]$s.Gap + [int]$s.NA +
 
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host " Assessment Complete (v$footerVer / $footerCount controls)"      -ForegroundColor Cyan
+Write-Host " Assessment Complete (v$footerVer)"                                  -ForegroundColor Cyan
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host "  Satisfied      $($s.Satisfied)"                                  -ForegroundColor Green
 Write-Host "  Partial        $($s.Partial)"                                    -ForegroundColor Yellow
@@ -1346,8 +1356,14 @@ Write-Host "  Not Applicable $($s.NA)"                                         -
 if ($s.Error -gt 0) {
     Write-Host "  Error          $($s.Error) (collector failures — excluded from score)" -ForegroundColor Magenta
 }
-$perInstance = if ($findings.Count -ne $footerCount) { " ($($findings.Count) findings: some controls report once per domain or object)" } else { '' }
-Write-Host "  Total          $footerCount controls$perInstance"                -ForegroundColor White
+# Controls that read the same setting count once (Config/control-links.json),
+# so the scored total can be below the number of distinct controls reported.
+$distinctControls = @($findings | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'ControlId' -Default '') } | Where-Object { $_ } | Sort-Object -Unique).Count
+$notes = @()
+if ($distinctControls -gt $footerCount) { $notes += "$distinctControls controls reported; controls that read the same setting count once" }
+if ($findings.Count -gt $distinctControls) { $notes += "$($findings.Count) findings: some controls report once per domain or object" }
+$perInstance = if ($notes.Count -gt 0) { " ($($notes -join '; '))" } else { '' }
+Write-Host "  Total          $footerCount scored$perInstance"                  -ForegroundColor White
 Write-Host "  Output         $OutputPath"                                      -ForegroundColor White
 if ($reportMetadata.Contains('Maturity') -and $reportMetadata['Maturity']) {
     $m = $reportMetadata['Maturity']

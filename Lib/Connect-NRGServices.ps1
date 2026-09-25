@@ -578,7 +578,24 @@ function Connect-NRGServices {
                 if (-not $spoAvail) {
                     Write-Host "      Note: Microsoft.Online.SharePoint.PowerShell not installed. Skipping (Graph-only SPO). Install-Module Microsoft.Online.SharePoint.PowerShell -Scope CurrentUser -Force" -ForegroundColor DarkYellow
                 } else {
-                    Import-Module Microsoft.Online.SharePoint.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
+                    # PowerShell 7 can load this module only through Windows
+                    # PowerShell compatibility (Microsoft: "you must import the
+                    # SharePoint module using the -UseWindowsPowerShell
+                    # parameter"), which starts powershell.exe as a child
+                    # process. The caller opted in (-IncludeSharePointShell);
+                    # an ASR rule that blocks the process fails here, and the
+                    # SharePoint controls that need it stay not assessed.
+                    if ($PSVersionTable.PSEdition -eq 'Core') {
+                        $spoMod = @(Get-Module -ListAvailable -Name Microsoft.Online.SharePoint.PowerShell -ErrorAction SilentlyContinue | Sort-Object Version -Descending)[0]
+                        $spoTarget = if ($spoMod -and $spoMod.Path) { $spoMod.Path } else { 'Microsoft.Online.SharePoint.PowerShell' }
+                        try {
+                            Import-Module $spoTarget -UseWindowsPowerShell -ErrorAction Stop -WarningAction SilentlyContinue 3>$null | Out-Null
+                        } catch {
+                            throw "Windows PowerShell could not be started for the SharePoint Online Management Shell (an Attack Surface Reduction rule that blocks process creation will do this): $($_.Exception.Message)"
+                        }
+                    } else {
+                        Import-Module Microsoft.Online.SharePoint.PowerShell -ErrorAction Stop -WarningAction SilentlyContinue
+                    }
                     # Derive the admin URL from the Graph root site host:
                     # https://contoso.sharepoint.com → https://contoso-admin.sharepoint.com
                     # (also correct for gov: contoso.sharepoint.us → contoso-admin.sharepoint.us).
