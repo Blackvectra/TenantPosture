@@ -261,6 +261,7 @@
         'Test-NRGControlTeamsAnonymousStart',
         'Test-NRGControlTeamsFederationAllowlist',
         'Test-NRGControlTeamsLiveEvents',
+        'Test-NRGControlTeamsRecordingRetention',
         'Test-NRGControlPurview',
         'Test-NRGControlPurviewAuditSearch',
         'Test-NRGControlPurviewCommCompliance',

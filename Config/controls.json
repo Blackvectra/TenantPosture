@@ -1115,7 +1115,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeams",
-      "Remediation": "Set-CsTeamsMeetingPolicy -AllowExternalParticipantGiveRequestControl $false",
+      "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -AllowExternalParticipantGiveRequestControl $false",
       "References": {
         "CISControls": [
           "4.1"
@@ -1143,9 +1143,9 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeams",
-      "Remediation": "Ensure Purview retention policies cover SharePoint to capture Teams recording data.",
+      "CollectorDependency": "Purview",
+      "EvaluatorFunction": "Test-NRGControlTeamsRecordingRetention",
+      "Remediation": "Meeting recordings are saved to the organizer's OneDrive and channel meeting recordings to the team's SharePoint site. Apply a Purview retention policy covering both OneDrive accounts and SharePoint sites (Purview > Data lifecycle management > Retention policies) so recordings are retained per policy rather than deletable at will.",
       "References": {
         "CISControls": [
           "3.4"
@@ -1161,7 +1161,7 @@
         "PCIDSS": "Req 3.5.1",
         "ISO27001": "A.5.23, A.8.10"
       },
-      "LicenseRequirement": "Included (M365 Business Standard+)"
+      "LicenseRequirement": "M365 Business Premium or E3+"
     },
     {
       "ControlId": "TMS-1.6",
@@ -1174,7 +1174,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeams",
-      "Remediation": "Set-CsTeamsClientConfiguration -AllowGuestUser $false, or configure guest invitation permissions in Entra External Identities.",
+      "Remediation": "Either turn off Teams guest access (Set-CsTeamsClientConfiguration -Identity Global -AllowGuestUser $false) or limit who can invite guests to admins and the Guest Inviter role (Entra ID > External Identities > External collaboration settings > Guest invite settings).",
       "References": {
         "CISControls": [
           "4.8"
@@ -2823,7 +2823,7 @@
     {
       "ControlId": "TMS-2.1",
       "Title": "Skype Consumer Contact Disabled",
-      "Description": "Contact from Skype consumer users is disabled in Teams federation settings.",
+      "Description": "Contact from Skype consumer users is disabled. Microsoft ended Skype consumer interoperability with Teams on May 5, 2025, so the setting no longer has any effect; the control is reported as retired.",
       "BusinessRisk": "Skype consumer accounts are unverifiable and cannot be audited. They enable social engineering from identities outside any corporate identity provider.",
       "Severity": "Medium",
       "Workload": "TMS",
@@ -2891,7 +2891,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeams3PStorage",
-      "Remediation": "Set-CsTeamsClientConfiguration -AllowDropbox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false",
+      "Remediation": "Set-CsTeamsClientConfiguration -Identity Global -AllowDropBox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false -AllowEgnyte $false",
       "References": {
         "CISControls": [
           "4.8"
@@ -2922,7 +2922,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsEmailIntegration",
-      "Remediation": "Set-CsTeamsClientConfiguration -AllowEmailIntoChannels $false",
+      "Remediation": "Set-CsTeamsClientConfiguration -Identity Global -AllowEmailIntoChannel $false",
       "References": {
         "CISControls": [
           "4.8"
@@ -2944,7 +2944,7 @@
     {
       "ControlId": "TMS-2.5",
       "Title": "Cloud Recording Disabled for External Participants",
-      "Description": "External participants cannot initiate or control meeting cloud recordings.",
+      "Description": "External participants cannot initiate or control meeting cloud recordings. Microsoft enforces this in the platform: guests and external participants cannot start a meeting recording, so there is no tenant setting to score.",
       "BusinessRisk": "External participants recording meetings capture confidential discussions with no internal awareness or consent controls.",
       "Severity": "Low",
       "Workload": "TMS",
@@ -4018,7 +4018,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsWatermarks",
-      "Remediation": "Set-CsTeamsMeetingPolicy -AllowWatermarkForScreenSharing $true",
+      "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -AllowWatermarkForScreenSharing $true (and -AllowWatermarkForCameraVideo $true). Watermarks require Teams Premium for meeting organizers; enforce them for sensitive meetings with a sensitivity label or meeting template.",
       "References": {
         "CISControls": [
           "4.1"
@@ -4035,7 +4035,7 @@
         "PCIDSS": "Req 3.4",
         "ISO27001": "A.8.11"
       },
-      "LicenseRequirement": "Included (M365 Business Standard+)"
+      "LicenseRequirement": "Teams Premium (add-on)"
     },
     {
       "ControlId": "TMS-3.2",
@@ -4078,7 +4078,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsMeetingChat",
-      "Remediation": "Set-CsTeamsMeetingPolicy -AllowMeetingChat EnabledExceptAnonymous",
+      "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -MeetingChatEnabledType EnabledExceptAnonymous",
       "References": {
         "CISControls": [
           "4.1"
@@ -5100,8 +5100,8 @@
     },
     {
       "ControlId": "TMS-4.4",
-      "Title": "Live Events Cannot Broadcast to Anonymous Internet Users",
-      "Description": "Teams Live Events are not configured to allow public anonymous streaming to unauthenticated internet users.",
+      "Title": "Teams Events Cannot Be Attended by Anonymous Internet Users",
+      "Description": "Teams town halls and webinars (which replaced live events, retired by Microsoft on June 30, 2026) are restricted to the organization and its guests, not open to anonymous internet attendees.",
       "BusinessRisk": "Live events with anonymous broadcast enabled allow any internet user to view internal organizational meetings, presentations, and discussions without authentication.",
       "Severity": "Medium",
       "Workload": "TMS",
@@ -5109,7 +5109,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsLiveEvents",
-      "Remediation": "Set-CsTeamsMeetingBroadcastPolicy -Identity Global -BroadcastAttendeeVisibilityMode EveryoneInCompany (or -AllowBroadcastScheduling $false to disable live events entirely).",
+      "Remediation": "Set-CsTeamsEventsPolicy -Identity Global -EventAccessType EveryoneInCompanyExcludingGuests -TownhallEventAttendeeAccess EveryoneInOrganizationAndGuests (or -AllowWebinars Disabled / -AllowTownhalls Disabled). Grant a separate policy to the few organizers who genuinely run public events.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CISControls": [

@@ -181,14 +181,19 @@ Describe 'Get-NRGAssessmentScope — what the assessment did not cover' {
             # NOT as licence gated, and NOT as "no automated test" for a
             # control that simply had no data.
             $script:RealScope.LicenceBlocked.Count | Should -Be 0 -Because 'no SKU data was available, so nothing can be called licence gated'
-            ($script:RealScope.CollectionIncomplete.Count + $script:RealScope.NoProgrammaticCheck.Count) |
+            # TMS-2.1 (Skype interop, retired by Microsoft) and TMS-2.5
+            # (enforced by the platform) state why they do not apply without
+            # reading any data; they are the only controls that may land in
+            # NotApplicableToTenant from empty state.
+            @($script:RealScope.NotApplicableToTenant | ForEach-Object { $_.ControlId } | Sort-Object) | Should -Be @('TMS-2.1','TMS-2.5')
+            ($script:RealScope.CollectionIncomplete.Count + $script:RealScope.NoProgrammaticCheck.Count + $script:RealScope.NotApplicableToTenant.Count) |
                 Should -Be $script:Total
         }
 
         It 'routes the overwhelming majority to the collection bucket, not to manual review' {
             # The three genuinely advisory controls say "requires manual
             # verification"; everything else lost its data.
-            $script:RealScope.NoProgrammaticCheck.Count | Should -BeLessOrEqual 6
+            $script:RealScope.NoProgrammaticCheck.Count | Should -BeLessOrEqual 7
             $script:RealScope.CollectionIncomplete.Count | Should -BeGreaterThan 190
         }
 

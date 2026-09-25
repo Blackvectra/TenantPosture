@@ -169,6 +169,11 @@
       [
         "M365_ADVANCED_AUDITING"
       ]
+    ],
+    "Teams Premium (add-on)": [
+      [
+        "TEAMSPRO_PROTECTION"
+      ]
     ]
   },
   "controls": {
@@ -318,6 +323,18 @@
     "PVW-4.2": [
       [
         "M365_ADVANCED_AUDITING"
+      ]
+    ],
+    "TMS-1.5": [
+      [
+        "EXCHANGE_S_ENTERPRISE",
+        "EXCHANGE_S_ENTERPRISE_GOV",
+        "EXCHANGE_S_ARCHIVE_ADDON",
+        "SHAREPOINTENTERPRISE",
+        "SHAREPOINTENTERPRISE_GOV",
+        "SHAREPOINTENTERPRISE_EDU",
+        "INFO_GOVERNANCE",
+        "RECORDS_MANAGEMENT"
       ]
     ]
   }

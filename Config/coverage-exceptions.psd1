@@ -34,6 +34,9 @@
         @{ ControlId = 'AAD-10.3'; Kind = 'Manual'; Reason = 'Break-glass sign-in alerting is configured in Sentinel / Defender XDR / Azure Monitor, which the assessment does not read.' }
         @{ ControlId = 'PVW-3.3'; Kind = 'Manual'; Reason = 'Purview Compliance Manager score has no supported programmatic read API.' }
         @{ ControlId = 'PVW-2.4'; Kind = 'Manual'; Reason = 'Insider Risk Management policies are not exposed through the Security & Compliance PowerShell or Graph surfaces this tool reads.' }
+        @{ ControlId = 'TMS-2.1'; Kind = 'Manual'; Reason = 'Retired by Microsoft: Skype consumer interoperability with Teams ended May 5, 2025 and AllowPublicUsers no longer has any effect, so there is nothing to score.' }
+        @{ ControlId = 'TMS-2.5'; Kind = 'Manual'; Reason = 'Enforced by the platform: guests and external participants cannot start a Teams meeting recording and no tenant setting allows it, so there is nothing to score.' }
+        @{ ControlId = 'TMS-2.2'; Kind = 'Manual'; Reason = 'Teams app availability is managed per app (app-centric management) and in org-wide app settings, neither of which this tool reads.' }
         @{ ControlId = 'PVW-3.2'; Kind = 'Manual'; Reason = 'eDiscovery readiness (roles assigned, a documented legal-hold workflow) is not measurable from the tenant; a case count only says whether there has been litigation.' }
         # Verified per-site / deprecated — no tenant-level read signal:
         @{ ControlId = 'SPO-2.4'; Kind = 'Manual'; Reason = 'Custom-script (DenyAddAndCustomizePages) is a per-site-collection setting; Microsoft removed the tenant-level default, so it needs per-site enumeration, not a tenant read.' }
