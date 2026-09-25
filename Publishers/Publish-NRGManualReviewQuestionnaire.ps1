@@ -93,7 +93,7 @@ function Publish-NRGManualReviewQuestionnaire {
     if (-not $generatedAt) { $generatedAt = (Get-Date).ToString('yyyy-MM-dd') }
 
     $bucketLabel = @{
-        NoProgrammaticCheck  = 'No automated test exists'
+        NoProgrammaticCheck  = 'No automated test, or no automated verdict'
         CollectionIncomplete = 'Data could not be collected this run'
     }
 

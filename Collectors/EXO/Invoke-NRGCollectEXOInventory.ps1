@@ -576,7 +576,10 @@ function Invoke-NRGCollectEXOInventory {
             # A missing cmdlet (EXO not connected, or the signed-in role cannot run it -
             # Exchange RBAC hides such cmdlets) is a FAILED read, never "none exist".
             if (-not (Get-Command Get-OutboundConnector -ErrorAction SilentlyContinue)) { throw 'Get-OutboundConnector is not available in this session.' }
-            $outb = @(Get-OutboundConnector -ErrorAction Stop)
+            # Test-mode connectors are omitted unless asked for (Exchange warns
+            # "at least one test mode connector which is not included"), and a
+            # connector left out is a connector never reviewed.
+            $outb = @(Get-OutboundConnector -IncludeTestModeConnectors $true -ErrorAction Stop)
             $result.Data.OutboundConnectors = @($outb | ForEach-Object {
                 @{
                     Name          = [string](Get-NRGObjectField -Item $_ -Key 'Name')
@@ -586,6 +589,7 @@ function Invoke-NRGCollectEXOInventory {
                     RecipientDomains = @(Get-NRGObjectField -Item $_ -Key 'RecipientDomains' -Default @()) | ForEach-Object { [string]$_ }
                     TlsSettings   = [string](Get-NRGObjectField -Item $_ -Key 'TlsSettings')
                     IsTransportRuleScoped = [bool](Get-NRGObjectField -Item $_ -Key 'IsTransportRuleScoped' -Default $false)
+                    TestMode      = [bool](Get-NRGObjectField -Item $_ -Key 'TestMode' -Default $false)
                     WhenCreated   = [string](Get-NRGObjectField -Item $_ -Key 'WhenCreated')
                 }
             })

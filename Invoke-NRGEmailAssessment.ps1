@@ -224,14 +224,14 @@ try {
     Write-Host '[-] Running incident response evaluators...' -ForegroundColor Cyan
 
     $evaluators = @(
-        'Test-NRGEmailControl-InboxRules'
-        'Test-NRGEmailControl-Forwarding'
-        'Test-NRGEmailControl-OutboundActivity'
-        'Test-NRGEmailControl-PhishOrigin'
-        'Test-NRGEmailControl-OAuthConsents'
-        'Test-NRGEmailControl-AuthMethods'
+        'Test-NRGEmailControlInboxRules'
+        'Test-NRGEmailControlForwarding'
+        'Test-NRGEmailControlOutboundActivity'
+        'Test-NRGEmailControlPhishOrigin'
+        'Test-NRGEmailControlOAuthConsents'
+        'Test-NRGEmailControlAuthMethods'
     )
-    if ($EnableThreatIntel) { $evaluators += 'Test-NRGEmailControl-ThreatIntel' }
+    if ($EnableThreatIntel) { $evaluators += 'Test-NRGEmailControlThreatIntel' }
 
     foreach ($fn in $evaluators) {
         if (Get-Command $fn -ErrorAction SilentlyContinue) {

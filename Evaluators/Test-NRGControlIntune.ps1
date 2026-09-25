@@ -89,7 +89,16 @@ function Test-NRGControlIntune {
     # It read "any configuration profile exists" (a Wi-Fi profile passed). The
     # control is a CA policy requiring a compliant (or hybrid-joined) device.
     $c = Get-NRGControlById -ControlId 'INT-1.2'
-    if ($c) {
+    # While Security Defaults is enabled no CA policy can be turned on, and it
+    # has no device-compliance requirement of its own: a Gap, and a report-only
+    # compliant-device policy beside it earns nothing (same as AAD-2.3).
+    if ($c -and (Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId 'INT-1.2' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.2') -State 'Gap' -Severity $c.Severity `
+            -Detail 'No policy in force requires a compliant device: Security Defaults has no device-compliance requirement, so a device Intune marks non-compliant (or one never enrolled) still reaches Microsoft 365.' `
+            -CurrentValue 'Security Defaults enabled; no compliant-device requirement in force' `
+            -RequiredValue 'Enabled CA policy requiring a compliant device for all users on all cloud apps' `
+            -Remediation $c.Remediation -NeedsConditionalAccess
+    } elseif ($c) {
         $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
         if (-not $ca -or -not $ca.Success) {
             Add-NRGFinding -ControlId 'INT-1.2' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.2') -Detail 'Conditional Access policies were not collected; not assessed.'
@@ -184,6 +193,36 @@ function Test-NRGControlIntune {
 
 # Policies that are assigned to someone. IsAssigned $false is an unassigned
 # draft; $null (not reported, e.g. replayed older results) is kept.
+# Enrolled devices of a platform, from the managed-device inventory. $null
+# when the inventory was not read (unknown is not zero). Microsoft's
+# operatingSystem values: Windows, iOS, iPadOS, Android, AndroidEnterprise,
+# AndroidForWork, macOS.
+function Get-NRGEnrolledPlatformCount {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Raw, [Parameter(Mandatory)] [string] $Pattern)
+    if (-not (Test-NRGSectionCollected $Raw 'OSComplianceSummary')) { return $null }
+    $sum = Get-NRGObjectField -Item $Raw.Data -Key 'OSComplianceSummary' -Default $null
+    $by  = Get-NRGObjectField -Item $sum -Key 'ByPlatform' -Default $null
+    if ($null -eq $by) { return $null }
+    $names = if ($by -is [System.Collections.IDictionary]) { @($by.Keys) } else { @($by.PSObject.Properties.Name) }
+    $n = 0
+    foreach ($k in $names) { if ([string]$k -match $Pattern) { $n += [int](Get-NRGObjectField -Item $by -Key $k -Default 0) } }
+    return $n
+}
+
+# One line naming what IS enrolled, for a platform with none.
+function Get-NRGEnrolledPlatformSummary {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Raw)
+    $sum = Get-NRGObjectField -Item $Raw.Data -Key 'OSComplianceSummary' -Default $null
+    $by  = Get-NRGObjectField -Item $sum -Key 'ByPlatform' -Default $null
+    if ($null -eq $by) { return 'no managed devices' }
+    $names = if ($by -is [System.Collections.IDictionary]) { @($by.Keys) } else { @($by.PSObject.Properties.Name) }
+    $parts = @($names | Sort-Object | ForEach-Object { "$([int](Get-NRGObjectField -Item $by -Key $_ -Default 0)) $_" })
+    if ($parts.Count -eq 0) { return 'no managed devices' }
+    return ($parts -join ', ')
+}
+
 function Select-NRGAssignedPolicies {
     [CmdletBinding()]
     param([AllowNull()] [object[]] $Policies)
@@ -294,9 +333,22 @@ function Test-NRGControlIntuneMacEncryption {
     if (-not (Test-NRGSectionCollected $int 'CompliancePolicies')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'CompliancePolicies was not collected; not assessed.'; return
     }
+    $macDevices  = Get-NRGEnrolledPlatformCount -Raw $int -Pattern '^macOS'
     $macPolicies = @(Select-NRGAssignedPolicies @(@(Get-NRGObjectField -Item $int.Data -Key 'CompliancePolicies' -Default @()) | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Platform') -match 'macOS|Mac' }))
+    if ($macDevices -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "No macOS devices are enrolled in Intune (enrolled: $(Get-NRGEnrolledPlatformSummary -Raw $int)), so no Mac is governed by a compliance policy either way."
+        return
+    }
     if ($macPolicies.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No macOS compliance policies found — may not have managed macOS devices'
+        if ($macDevices -gt 0) {
+            Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+                -Detail "$macDevices macOS device(s) are enrolled, but no assigned macOS compliance policy requires FileVault. A lost or stolen Mac exposes whatever it holds." `
+                -CurrentValue "$macDevices Mac(s), no macOS compliance policy" -RequiredValue 'Assigned macOS compliance policy requiring FileVault (Require encryption of data storage)' -Remediation $ctrl.Remediation
+        } else {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+                -Detail 'No assigned macOS compliance policy, and the managed-device inventory was not read, so whether any Mac is enrolled is unknown. Not assessed.'
+        }
         return
     }
     # FileVault is storageRequireEncryption. System Integrity Protection, which
@@ -351,7 +403,11 @@ function Test-NRGControlIntuneEnrollmentRestrictions {
     if (@($platformRows | Where-Object { $null -eq (Get-NRGObjectField -Item $_ -Key 'Restrictions' -Default $null) }).Count -gt 0 -or $platformRows.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'The platform restriction settings were not collected; not assessed.'; return
     }
-    $blocks = @($platformRows | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'Restrictions' -Default @()) } | Where-Object { $_ -and ($_.PlatformBlocked -or $_.PersonalBlocked -or $_.OsMinimumVersion) })
+    # Windows Mobile is retired and Intune blocks it in the default
+    # configuration of every tenant, so that block restricts nothing anyone
+    # enrolls. A live tenant passed on "windowsMobile: platform blocked" alone.
+    $blocks = @($platformRows | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'Restrictions' -Default @()) } | Where-Object {
+        $_ -and [string]$_.Platform -ne 'windowsMobile' -and ($_.PlatformBlocked -or $_.PersonalBlocked -or $_.OsMinimumVersion) })
     if ($blocks.Count -gt 0) {
         $what = @($blocks | ForEach-Object { "$($_.Platform): $(@(if ($_.PlatformBlocked) { 'platform blocked' }; if ($_.PersonalBlocked) { 'personal devices blocked' }; if ($_.OsMinimumVersion) { "min OS $($_.OsMinimumVersion)" }) -join ', ')" })
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Enrollment is restricted: $($what -join '; ')."
@@ -522,9 +578,22 @@ function Test-NRGControlIntuneMobilePIN {
     if (-not $int -or -not $int.Success -or -not (Test-NRGSectionCollected $int 'CompliancePolicies')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'CompliancePolicies was not collected; not assessed.'; return
     }
+    $mobileDevices = Get-NRGEnrolledPlatformCount -Raw $int -Pattern '^(iOS|iPadOS|Android)'
+    if ($mobileDevices -eq 0) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "No iOS, iPadOS or Android devices are enrolled in Intune (enrolled: $(Get-NRGEnrolledPlatformSummary -Raw $int)), so a mobile compliance setting governs no device. Phones reaching company data without enrolling are covered by app protection (INT-1.4)."
+        return
+    }
     $mobile = @(Select-NRGAssignedPolicies @(@(Get-NRGObjectField -Item $int.Data -Key 'CompliancePolicies' -Default @()) | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Platform') -match 'ios|android' }))
     if ($mobile.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'No assigned iOS or Android compliance policy — there may be no managed mobile devices.'; return
+        if ($mobileDevices -gt 0) {
+            Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+                -Detail "$mobileDevices mobile device(s) are enrolled, but no assigned iOS or Android compliance policy requires a passcode." -Remediation $ctrl.Remediation
+        } else {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+                -Detail 'No assigned iOS or Android compliance policy, and the managed-device inventory was not read, so whether any mobile device is enrolled is unknown. Not assessed.'
+        }
+        return
     }
     # iOS names it passcodeRequired; Android passwordRequired. Reading only
     # passwordRequired failed every iOS-only fleet.

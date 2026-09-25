@@ -340,6 +340,16 @@ function Test-NRGControlDNSMTASTS {
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations `
                 -Detail "$domain MTA-STS in enforce mode — TLS required for all inbound SMTP."
+        } elseif (-not $d.MTASTS.Mode -and (Get-NRGObjectField -Item $d.MTASTS -Key 'PolicyHostMissing' -Default $false) -eq $true) {
+            # The TXT record is published but mta-sts.<domain> does not exist
+            # (authoritative no A / AAAA record), so no sender can fetch the
+            # policy and MTA-STS is not in effect.
+            Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity 'Medium' -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain publishes an MTA-STS record, but mta-sts.$domain does not exist in DNS, so no sending server can fetch the policy and MTA-STS is not in effect. Inbound TLS is not enforced." `
+                -CurrentValue "_mta-sts TXT published; mta-sts.$domain has no A/AAAA record" `
+                -RequiredValue "https://mta-sts.$domain/.well-known/mta-sts.txt serving mode: enforce" -Remediation $control.Remediation
         } elseif (-not $d.MTASTS.Mode -and (Get-NRGObjectField -Item $d.MTASTS -Key 'PolicyFetchError' -Default $null)) {
             # The DNS record exists but the policy file could not be read
             # (network, TLS or refused probe). That is not a mode — it is not

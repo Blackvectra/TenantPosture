@@ -218,7 +218,8 @@ Describe 'NIST 800-53 improvement plan' {
             # re-derives it the same way but independently, so a future
             # optimization to per-family arithmetic — which gets multi-family
             # controls wrong — fails here rather than in front of an auditor.
-            $fixed = @($script:AllSteps | ForEach-Object { [string]$_['ControlId'] })
+            # A step for a linked group fixes every control in it.
+            $fixed = @($script:AllSteps | ForEach-Object { [string]$_['ControlId']; @($_['LinkedControls']) })
             $after = foreach ($f in $script:Findings) {
                 if ([string]$f['ControlId'] -in $fixed) {
                     @{ ControlId = $f['ControlId']; State = 'Satisfied'; Title = $f['Title']

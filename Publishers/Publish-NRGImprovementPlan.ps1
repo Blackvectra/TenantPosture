@@ -39,6 +39,18 @@
 # Consumes: the plan only. No Graph, no EXO, no network.
 #
 
+
+# "EXO-6.3 + EXO-7.3" for a step that closes controls reading the same
+# setting (Config/control-links.json); the control ID alone otherwise.
+function Get-NRGPlanStepIds {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] $Step)
+    $ids = @([string](Get-NRGObjectField -Item $Step -Key 'ControlId' -Default '')) +
+           @(@(Get-NRGObjectField -Item $Step -Key 'LinkedControls' -Default @()) | ForEach-Object { [string]$_ } | Where-Object { $_ })
+    return (@($ids | Where-Object { $_ } | Select-Object -Unique) -join ' + ')
+}
+
 function Publish-NRGImprovementPlan {
     [CmdletBinding()]
     param(
@@ -128,7 +140,7 @@ function Publish-NRGImprovementPlan {
         $null = $sb.AppendLine('| # | Control | What to do | Returns | Coverage after | Effort |')
         $null = $sb.AppendLine('|---:|---|---|---:|---:|---|')
         foreach ($s in @($t['Steps'])) {
-            $null = $sb.AppendLine("| $($s['Rank']) | $(EscMd $s['ControlId']) | $(EscMd $s['Title']) | +$($s['ScoreLift']) | $($s['CumulativeScore'])% | $(EscMd $s['Effort']) |")
+            $null = $sb.AppendLine("| $($s['Rank']) | $(EscMd (Get-NRGPlanStepIds $s)) | $(EscMd $s['Title']) | +$($s['ScoreLift']) | $($s['CumulativeScore'])% | $(EscMd $s['Effort']) |")
         }
         $null = $sb.AppendLine()
     }
@@ -141,7 +153,7 @@ function Publish-NRGImprovementPlan {
 
         foreach ($t in $tracks) {
             foreach ($s in @($t['Steps'])) {
-                $null = $sb.AppendLine("### $($s['Rank']). $(EscMd $s['ControlId']) &mdash; $(EscMd $s['Title'])")
+                $null = $sb.AppendLine("### $($s['Rank']). $(EscMd (Get-NRGPlanStepIds $s)) &mdash; $(EscMd $s['Title'])")
                 $null = $sb.AppendLine()
                 $null = $sb.AppendLine("_$(EscMd $t['Name']) &middot; $(EscMd $s['Severity']) &middot; currently $(EscMd $s['State']) &middot; returns $($s['ScoreLift']) points, taking coverage to $($s['CumulativeScore'])%_")
                 $null = $sb.AppendLine()
@@ -227,7 +239,7 @@ function Publish-NRGImprovementPlan {
         $cls = if ($t['Name'] -eq 'Do now') { 'now' } else { 'sched' }
         $rows = ''
         foreach ($s in @($t['Steps'])) {
-            $rows += "<tr><td class='rk'>$($s['Rank'])</td><td class='cid'><a href='#s-$(Esc ($s['ControlId'] -replace '[^A-Za-z0-9]','-'))'>$(Esc $s['ControlId'])</a></td><td class='ttl'>$(Esc $s['Title'])</td><td class='lift'>+$($s['ScoreLift'])</td><td class='cum'>$($s['CumulativeScore'])%</td><td class='eff'>$(Esc $s['Effort'])</td></tr>"
+            $rows += "<tr><td class='rk'>$($s['Rank'])</td><td class='cid'><a href='#s-$(Esc ($s['ControlId'] -replace '[^A-Za-z0-9]','-'))'>$(Esc (Get-NRGPlanStepIds $s))</a></td><td class='ttl'>$(Esc $s['Title'])</td><td class='lift'>+$($s['ScoreLift'])</td><td class='cum'>$($s['CumulativeScore'])%</td><td class='eff'>$(Esc $s['Effort'])</td></tr>"
         }
         $trackHtml += @"
 <div class="card">
@@ -266,7 +278,7 @@ function Publish-NRGImprovementPlan {
 <div class='step' id='s-$(Esc ($s['ControlId'] -replace '[^A-Za-z0-9]','-'))'>
   <div class='step-hd'>
     <span class='srank'>$($s['Rank'])</span>
-    <span class='scid'>$(Esc $s['ControlId'])</span>
+    <span class='scid'>$(Esc (Get-NRGPlanStepIds $s))</span>
     <span class='stitle'>$(Esc $s['Title'])</span>
     <span class='tpill $cls'>$(Esc $t['Name'])</span>
   </div>

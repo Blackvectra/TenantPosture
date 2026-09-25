@@ -110,11 +110,19 @@ function Test-NRGControlPurview {
             -Detail 'DLP policies were not collected; not assessed.' -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.3')
     } elseif ($c) {
         $all     = @($d.DLPPolicies)
-        $enabled = @($all | Where-Object { $_.Enabled -eq $true }).Count
-        $testing = @($all | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'Mode' -Default '') -like 'Test*' }).Count
+        # Only Mode 'Enable' enforces; TestWith(out)Notifications detects and
+        # does not block. The collector sets Enabled from Mode -eq 'Enable';
+        # Mode is checked too so results from any other source read the same.
+        $modeOf  = { param($p) [string](Get-NRGObjectField -Item $p -Key 'Mode' -Default '') }
+        $testing = @($all | Where-Object { (& $modeOf $_) -like 'Test*' }).Count
+        $enforcedList = @($all | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Enabled' -Default $false) -eq $true -and ((& $modeOf $_) -eq 'Enable' -or -not (& $modeOf $_)) })
+        $enabled = $enforcedList.Count
         if ($enabled -gt 0) {
+            $rest = $all.Count - $enabled
+            $restNote = if ($rest -gt 0) { " The other $rest are in test mode or turned off." } else { '' }
             Add-NRGFinding -ControlId 'PVW-1.3' -State 'Satisfied' `
                 -Category 'Compliance' -Title $c.Title -Severity 'Informational' `
+                -Detail "$enabled of $($all.Count) DLP policies are enforced: $((@($enforcedList | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '') }) | Select-Object -First 5) -join ', ').$restNote" `
                 -CurrentValue "$enabled of $($all.Count) DLP policies enforced" `
                 -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PVW-1.3')
         } elseif ($testing -gt 0) {

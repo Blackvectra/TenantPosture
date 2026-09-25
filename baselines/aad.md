@@ -24,7 +24,7 @@ This file is generated from `Config/controls.json`, which is the single source o
 **License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
-A Conditional Access policy blocks legacy authentication protocols. Legacy auth bypasses MFA entirely.
+A Conditional Access policy blocks legacy authentication protocols for all users, or Security Defaults is enabled, which Microsoft documents blocks every authentication request made by an older protocol tenant-wide (including Exchange ActiveSync basic authentication). Legacy auth bypasses MFA entirely.
 
 **Business risk:**
 Any account using legacy auth can be compromised without MFA. Attackers actively spray legacy auth endpoints because MFA cannot intercept them.
@@ -56,13 +56,13 @@ Create a CA policy: All Users, Client apps = Other clients + Exchange ActiveSync
 **License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
-A Conditional Access policy or Security Defaults requires MFA for all users on every sign-in.
+A Conditional Access policy requires MFA for all users on all cloud apps at every sign-in, with every user registered. Security Defaults meets this only in part: it requires every user to register for MFA and the 16 administrator roles it names to complete MFA at every sign-in, but prompts other users for MFA only when Microsoft decides it is necessary.
 
 **Business risk:**
 Without MFA, a single stolen password enables full account takeover. Password spray, phishing, and credential stuffing all succeed.
 
 **Remediation:**
-CA policy: Users = All, Apps = All cloud apps, Grant = Require MFA. Or enable Security Defaults.
+CA policy: Users = All, Apps = All cloud apps, Grant = Require MFA. Without Microsoft Entra ID P1, enable Security Defaults, which meets this control in part (MFA at every sign-in for 16 administrator roles; other users when Microsoft decides).
 
 **Framework mappings:**
 
@@ -187,7 +187,7 @@ CA policy: Condition = User risk high, Grant = Require password change. Requires
 At minimum three enabled CA policies provide coverage for legacy auth block, MFA all users, and MFA for admins.
 
 **Business risk:**
-Without CA, access control is password-only. Security Defaults is a fallback — not a substitute for a mature CA posture.
+Without Conditional Access or Security Defaults, access control can be password-only (unless legacy per-user MFA is enforced). Security Defaults is a fallback — not a substitute for a mature CA posture.
 
 **Remediation:**
 Deploy at minimum: (1) block legacy auth, (2) require MFA all users, (3) phishing-resistant MFA for admin roles.
@@ -748,7 +748,7 @@ Entra ID > Security > Authentication methods > Password protection > Lockout thr
 **License required:** Included (all plans)
 
 **Description:**
-At least two cloud-only GA accounts are excluded from CA policies as emergency access accounts.
+At least two cloud-only accounts permanently assigned Global Administrator are kept as emergency access accounts, excluded from every Conditional Access policy that would otherwise reach them. While Security Defaults is enabled (it cannot exclude any account), they are confirmed to exist, with credentials held offline and an MFA method registered for each.
 
 **Business risk:**
 Without break-glass accounts, a CA policy misconfiguration can lock all admins out of the tenant permanently.
@@ -1032,7 +1032,7 @@ CA policy: Session controls > Sign-in frequency > set to 1 hour for privileged u
 **License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
-A Conditional Access policy blocks the device code authentication flow for all users.
+A Conditional Access policy blocks the device code authentication flow for all users, or Security Defaults is enabled, which Microsoft documents blocks authentication requests that use device code flow.
 
 **Business risk:**
 Device code phishing attacks send victims to a legitimate Microsoft URL where they enter an attacker-controlled code — no password required. The attack is especially effective against less technical users.

@@ -1,5 +1,135 @@
 # Changelog
 
+## v4.14.1 (2026-09-25)
+
+Fixes from the first live run of v4.14.0. Every item below produced a wrong
+verdict, a verdict with no reason, or a console line that said nothing.
+
+- **Six Purview sections never ran, silently.** Audit retention policies,
+  label policies, auto-labeling, retention labels, communication compliance
+  and information barriers (PVW-1.2, 1.4, 2.2, 2.3, 2.6, 4.2, 4.3, 4.4) read
+  "not collected" with nothing in Exceptions. The module did not return
+  `IsEopSession`, so the Purview session was taken for Exchange Online and
+  its commands skipped. The session is now recognized by name
+  (`ExchangeOnlineProtection_N`) and endpoint too, and a command that cannot
+  be resolved marks its section Failed and logs why.
+- **EXO-3.1 could never be assessed.** Its collector existed but the entry
+  point never ran it. It runs now, and a test fails if any control depends on
+  data no collector the entry point runs produces.
+- **PIM role policies were cut to 50.** `$top=50` returned 50 of the tenant's
+  role policies and no next page, so the Global Administrator policy was
+  missing (AAD-3.5 not assessed) and AAD-3.3/3.4/3.6 judged 4 privileged
+  roles. `$top` is gone and any policy the list misses is read by ID. GA
+  activation without approval is now a Gap, not Partial.
+- **AAD-13.1 compared against a "5% average".** Microsoft's peer average is
+  on a 0-100 scale and was divided by the tenant's maximum points, so any
+  tenant above 5% passed. It is read as a percentage.
+- **INT-3.1 passed on the Windows Mobile block** Intune ships in every tenant.
+  That block no longer counts as a restriction.
+- **INT-2.4 / INT-4.4 read the enrolled devices.** With no Macs or phones
+  enrolled they say so and are not applicable (INT-4.4 had scored a Gap from
+  a default Android policy); a Mac or phone enrolled with no policy is a Gap.
+- **MTA-STS (DNS-1.4).** A published `_mta-sts` record whose `mta-sts.`
+  host does not exist (authoritative no A/AAAA) is a Gap: senders cannot
+  fetch the policy. A failed lookup stays not assessed.
+- **Exchange test-mode connectors** are now collected
+  (`-IncludeTestModeConnectors`) and reviewed under EXO-8.1, which also
+  removes the Exchange warning from the console.
+- **Wording that was not true:** EXO-2.3/2.4 said POP3/IMAP use basic auth
+  and bypass MFA (Exchange Online retired that in October 2022); EXO-9.2
+  called deleted mail unrecoverable on mailboxes that are under a hold;
+  PPL-3.3 passed with "no user can invoke Copilot" when nobody is licensed
+  (now not applicable; Copilot Chat needs no license); AAD-1.4/1.5/10.1 ended
+  "Otherwise this is expected".
+- **AAD-12.1 and AAD-1.2 count the same people.** The Entra Connect sync
+  account is excluded from both, and each says so.
+- **No verdict without a reason.** Seven controls printed a bare Satisfied;
+  a finding with no Detail now carries its observed value.
+- **Console.** Collectors print one aligned line each, grouped by workload,
+  with status, time and what was found, and a summary line; the
+  restricted-character warning at module load is gone (14 Email-IR function
+  names had a second hyphen and were renamed, e.g.
+  `Test-NRGEmailControlAuthMethods`); the Graph WAM notice is one line; the
+  missing-permission line printed `System.Object[]` and now names the
+  permissions and the controls they block; report files are listed by name
+  under the output folder; the footer counts controls and says when there are
+  more findings than controls. The NIST matrix HTML is now listed and
+  access-restricted like every other output.
+- **Security Defaults is read by every Conditional Access control.** While
+  Security Defaults is on, Microsoft lets Conditional Access policies be
+  created but not turned on, so the CA list is empty or holds policies that
+  cannot take effect. Every CA control read that as an unprotected tenant, and
+  the break-glass check reported "no emergency access path". Now:
+  - AAD-1.1 (legacy authentication) and AAD-11.1 (device code flow) are
+    Satisfied through Security Defaults, which blocks both. Their definitions
+    now say Security Defaults meets them.
+  - AAD-1.3 is Partial: the 16 administrator roles Security Defaults names do
+    MFA at every sign-in, but Security Defaults does not require a
+    phishing-resistant method.
+  - AAD-1.2 is Partial, never Satisfied (v4.14.0 passed it whatever the
+    registration): only the 16 named administrator roles do MFA at every
+    sign-in, and other users are prompted when Microsoft decides it is
+    necessary, so crediting MFA on every access to a non-privileged account
+    (NIST IA-2(2), SCuBA MS.AAD.3.2v1, PCI 8.4) would claim more than
+    Security Defaults enforces. Its definition now says Security Defaults
+    meets it only in part. Security Defaults needs no license, so a
+    registration shortfall (fixed by registering users) is exempt from
+    license gating and scored as Partial; with every user registered, what
+    remains needs Conditional Access (Entra ID P1), so on a tenant without P1
+    that finding is not scored, like any unlicensed control. License gating,
+    the scope section, the roadmap, the improvement plan, the playbook, the
+    remediation script, the compliance matrix and the HTML report all pass
+    the finding to `Test-NRGLicenseRequirementMet -Finding`.
+  - AAD-1.2 needs the MFA registration report, which Microsoft documents as
+    requiring Microsoft Entra ID P1 or P2, so on a Security Defaults tenant
+    without either it is not assessed (it used to pass without reading
+    registration). The finding says so, and says re-running will not help
+    when Graph refused the report for that reason.
+  - AAD-1.4, 1.5, 2.1, 2.3, 10.1, 10.4, 11.4, 11.5, 11.7, 11.8, 11.9 and
+    INT-1.2 stay Gaps. Each now says Security Defaults is on, that no CA
+    policy can be enforced while it is, and how to move to Conditional Access
+    without a gap in protection. A report-only policy no longer earns half
+    credit or the advice "switch the policy to On". The risk findings
+    (AAD-1.4, 1.5, 10.1) say no Conditional Access risk policy can be in
+    force and that the legacy Identity Protection risk policies are not read.
+  - AAD-2.2 with no named locations is still a Gap; named locations that
+    exist no longer pass, because nothing can use them (not applicable).
+  - AAD-7.2 no longer reports a false missing-CA-exclusion Gap. It is a Gap
+    when the role data proves Microsoft's recommendation unmet (no, or only
+    one, permanent Global Administrator assignment on an account not marked
+    as synchronized from on-premises), and requires manual verification only
+    with two or more such accounts. AAD-3.2 no longer credits CA exclusions
+    while Security Defaults is on. Where the tool cannot tell, both say it
+    requires manual verification and reach the manual-review questionnaire;
+    AAD-7.2's definition (the question asked) says what to confirm while
+    Security Defaults is on.
+  - SPO-1.5 no longer passes for an unmanaged-device restriction beside
+    Security Defaults: Microsoft documents that the restriction relies on
+    Conditional Access policies, and none can be on. Its license requirement
+    is now Microsoft Entra ID P1 (Microsoft: those settings require Entra ID
+    P1 or P2), so on a tenant without P1 it is not scored. This also applies
+    with Security Defaults off: `AllowFullAccess` on a Business Standard
+    tenant was a scored Gap and is now not scored (upgrade opportunity).
+  - The HTML report (Priority Actions and each finding's "How to fix it") and
+    the remediation playbook show a Security Defaults finding's own
+    remediation (turn Security Defaults off and the replacement Conditional
+    Access policies on in one change; for AAD-1.2, a registration campaign)
+    instead of the control's generic text (for SPO-1.5, the `Set-SPOTenant`
+    change a tenant set to `AllowLimitedAccess` has already made). The
+    remediation script prints that order of operations first.
+  - The Assessment Scope section no longer names a failed Conditional Access
+    read as the reason a Security Defaults finding went unassessed, and its
+    manual-review line says those controls have no automated test *or* an
+    automated check that could not reach a verdict.
+
+  A Security Defaults state that was not read is never read as disabled.
+  Where the Conditional Access read shows no policy On (the only case in
+  which Security Defaults can be enabled), AAD-1.1, 1.2, 1.3 and 11.1 are not
+  assessed and are filed as a collection gap; with a policy On, the
+  Conditional Access verdict stands. A response without a boolean
+  `isEnabled` is recorded as not read. The Conditional Access console line
+  says "Security Defaults on".
+
 ## v4.14.0 (2026-09-24)
 
 Closes the remaining known issues that could make a report look worse, or

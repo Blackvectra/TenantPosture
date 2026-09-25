@@ -1,0 +1,15 @@
+{
+  "_comment": "Controls that read the SAME tenant setting. Each group is assessed and reported under every control ID (their framework citations differ), but counts ONCE in the score, the roadmap and the improvement plan: fixing the setting satisfies every control in the group, and a tenant is not docked twice for one setting. Primary is the ID the merged entry is reported under; it is the higher-severity control, or the policy control over its named-list companion. Only link controls whose evaluators read the same fields; NRG.ControlLinks.Tests.ps1 checks the IDs.",
+  "groups": [
+    { "Primary": "EXO-2.6", "Linked": ["EXO-6.2"], "Reason": "Both read whether shared mailboxes can sign in directly." },
+    { "Primary": "EXO-6.1", "Linked": ["EXO-7.1"], "Reason": "Both read mailbox forwarding to external addresses." },
+    { "Primary": "EXO-6.3", "Linked": ["EXO-7.3"], "Reason": "Both read the mailbox audit bypass associations under organization auditing." },
+    { "Primary": "EXO-1.1", "Linked": ["EXO-5.1"], "Reason": "Both read the organization mailbox-audit switch (AuditDisabled)." },
+    { "Primary": "TMS-2.3", "Linked": ["SPO-2.5"], "Reason": "Both read the third-party cloud storage providers enabled in the Teams client." },
+    { "Primary": "TMS-4.3", "Linked": ["TMS-1.1"], "Reason": "Both read the Teams federation allowlist." },
+    { "Primary": "AAD-2.3", "Linked": ["INT-1.2"], "Reason": "Both read whether a Conditional Access policy requires a compliant or hybrid-joined device." },
+    { "Primary": "PVW-1.1", "Linked": ["PVW-2.1"], "Reason": "Both read Unified Audit Log ingestion." },
+    { "Primary": "DEF-4.2", "Linked": ["PVW-3.4"], "Reason": "Both read whether enabled DLP rules match sensitive information types." },
+    { "Primary": "SPO-2.1", "Linked": ["SPO-2.8"], "Reason": "Both read the OneDrive sync restriction to domain-joined computers." }
+  ]
+}

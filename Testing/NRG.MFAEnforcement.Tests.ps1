@@ -14,6 +14,13 @@
 #     policy requiring MFA through an AUTHENTICATION STRENGTH read as "no
 #     enforcing CA policy" (Partial). It also accepted "MFA OR compliant
 #     device", which does not require MFA.
+#  3. With security defaults on it said "MFA enforced for all users" and passed
+#     whatever the registration. Security Defaults prompts ordinary users only
+#     when Microsoft decides it is necessary (only 16 administrator roles do
+#     MFA at every sign-in), so it is Partial even with every user registered,
+#     and an unregistered user is a Partial on either path.
+#  4. With security defaults NOT READ and no CA policy On it scored the CA
+#     path's Gap — treating an unread state as disabled. It is not assessed.
 
 Describe 'AAD-1.2 MFA enforcement' {
 
@@ -51,20 +58,71 @@ Describe 'AAD-1.2 MFA enforcement' {
 
     BeforeEach { Clear-NRGState }
 
-    It 'security defaults ON satisfies AAD-1.2 even with incomplete registration' {
+    # Security Defaults has had no registration grace period since July 29,
+    # 2024: an unregistered user is asked to register at the next sign-in, so
+    # whoever holds the password enrolls the second factor — the same exposure
+    # the Conditional Access path scores Partial. This test used to pin
+    # Satisfied here, which credited MFA the tenant's users had not set up.
+    It 'security defaults ON with incomplete registration is Partial, as on the Conditional Access path' {
         Set-Users -Registered 1
         Set-SecDefaults $true
-        (Get-Verdict).State | Should -Be 'Satisfied'
+        $f = Get-Verdict
+        $f.State  | Should -Be 'Partial'
+        $f.Detail | Should -Match 'whoever holds their password'
+        $f.Detail | Should -Match '^Security Defaults is enabled\.'
     }
 
-    It 'never claims "Security Defaults: disabled" when they were not read' {
+    # Microsoft: only the 16 named administrator roles do MFA "every time
+    # they sign in"; other users are prompted "whenever necessary. Microsoft
+    # decides when". A Satisfied here credited IA-2(2) / MS.AAD.3.2v1 / PCI
+    # 8.4 (MFA on access to non-privileged accounts), which Security Defaults
+    # does not enforce: MFA at every sign-in for some accounts but not all.
+    It 'security defaults ON with every user registered is Partial (every-sign-in MFA for the named admin roles only), never Satisfied' {
+        Set-Users -Registered 2
+        Set-SecDefaults $true
+        $f = Get-Verdict
+        $f.State        | Should -Be 'Partial'
+        $f.Detail       | Should -Match 'not at every sign-in'
+        $f.Detail       | Should -Match 'Only the 16 administrator roles'
+        $f.Detail       | Should -Not -Match 'enforced for all users'
+        $f.CurrentValue | Should -Match '100% registered'
+        $f.RequiredValue | Should -Not -Match 'or Security Defaults' -Because 'Security Defaults does not meet the requirement by itself'
+        $f.Remediation  | Should -Match 'turn off Security Defaults'
+        $f.Remediation  | Should -Not -Match 'Or enable Security Defaults'
+        (@($f.FrameworkIds) -join ' ') | Should -Match 'NIST:'
+    }
+
+    It 'security defaults ON with MFA registration not collected is not assessed, never Satisfied' {
+        $u = @(@{ UserPrincipalName = 'a@corp.example'; AccountEnabled = $true; UserType = 'Member' })
+        Set-NRGRawData -Key 'AAD-Users' -Data (Bag @{ Users = $u; MFARegistration = @{ RegistrationDetails = @() }; SectionStatus = @{ MFARegistration = 'Failed' } })
+        Set-SecDefaults $true
+        $f = Get-Verdict
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Match 'not collected'
+    }
+
+    # Microsoft: no CA policy can be turned on while Security Defaults is
+    # enabled. With the state unread and no policy On, it may be on (Partial)
+    # or off (Gap); scoring the Gap treated "not read" as "disabled".
+    It 'Security Defaults not read and no CA policy On is not assessed, never the Gap that assumes it is off' {
         Set-Users -Registered 2
         Set-SecDefaults $null
-        Set-NRGRawData -Key 'AAD-CAPolicies' -Data (Bag @{ Policies = @() })
+        Set-NRGRawData -Key 'AAD-CAPolicies' -Data (Bag @{ Policies = @((New-Ca -BuiltIn @('mfa') -State 'enabledForReportingButNotEnforced')) })
         $f = Get-Verdict
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Match '^Security Defaults state was not read\.'
         $f.Detail | Should -Not -Match 'Security Defaults: disabled'
-        $f.Detail | Should -Match 'Security Defaults: not read'
+        (@($f.FrameworkIds) -join ' ') | Should -Match 'NIST:'
+    }
+
+    It 'Security Defaults not read beside a CA policy that is On keeps the CA verdict (Security Defaults cannot be on), and never says "disabled"' {
+        Set-Users -Registered 2
+        Set-SecDefaults $null
+        Set-NRGRawData -Key 'AAD-CAPolicies' -Data (Bag @{ Policies = @((New-Ca -BuiltIn @('compliantDevice') -Operator 'AND')) })
+        $f = Get-Verdict
         $f.State  | Should -Be 'Gap' -Because 'no policy requires MFA: not configured, not half credit'
+        $f.Detail | Should -Match 'Security Defaults: not read'
+        $f.Detail | Should -Not -Match 'Security Defaults: disabled'
     }
 
     It 'says disabled only when it was read as disabled' {

@@ -401,6 +401,18 @@ function Test-NRGControlEXOHonorDMARC {
         -RequiredValue 'HonorDmarcPolicy = $true in every anti-phishing policy in force'
 }
 
+# " N of the M existing mailboxes have it on." when the per-mailbox read
+# ran; empty otherwise, never a guess.
+function Get-NRGProtocolExistingNote {
+    [CmdletBinding()]
+    param($ExoData, [string] $CountKey, [string] $Protocol)
+    if (-not (Test-NRGSectionCollected $ExoData 'CASMailboxProtocols')) { return '' }
+    $prot = Get-NRGObjectField -Item $ExoData.Data -Key 'CASMailboxProtocols' -Default $null
+    $on   = Get-NRGObjectField -Item $prot -Key $CountKey -Default $null
+    if ($null -eq $on) { return '' }
+    return " $([int]$on) of the $([int](Get-NRGObjectField -Item $prot -Key 'Total' -Default 0)) existing mailboxes have $Protocol on."
+}
+
 # ── EXO-2.3 POP3 Access Disabled ─────────────────────────────────────────────
 function Test-NRGControlEXOPop3 {
     [CmdletBinding()] param()
@@ -429,7 +441,7 @@ function Test-NRGControlEXOPop3 {
         $names = @($popOn | ForEach-Object { Get-NRGObjectField -Item $_ -Key 'Name' })
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
-            -Detail "POP3 is enabled on $($popOn.Count) of $($plans.Count) CAS mailbox plan(s), so new mailboxes get it. POP3 is a legacy basic-auth protocol that bypasses modern-auth / MFA and is a common password-spray target." `
+            -Detail "POP3 is enabled on $($popOn.Count) of $($plans.Count) CAS mailbox plan(s), so every new mailbox gets it.$(Get-NRGProtocolExistingNote -ExoData $exoData -CountKey 'PopEnabledCount' -Protocol 'POP3') Exchange Online stopped accepting basic authentication for POP3 in October 2022, so it now signs in with OAuth; what remains is a mail-download channel most organizations never use, through which any app a user authorizes can copy the whole mailbox. Turn it off where it is not needed." `
             -CurrentValue "POP3 enabled on: $($names -join ', ')" `
             -RequiredValue 'POP3 disabled on all mailbox plans and mailboxes' `
             -Remediation $control.Remediation
@@ -486,7 +498,7 @@ function Test-NRGControlEXOImap {
         $names = @($imapOn | ForEach-Object { Get-NRGObjectField -Item $_ -Key 'Name' })
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
-            -Detail "IMAP4 is enabled on $($imapOn.Count) of $($plans.Count) CAS mailbox plan(s), so new mailboxes get it. IMAP4 is a legacy basic-auth protocol that bypasses modern-auth / MFA and is a common password-spray target." `
+            -Detail "IMAP4 is enabled on $($imapOn.Count) of $($plans.Count) CAS mailbox plan(s), so every new mailbox gets it.$(Get-NRGProtocolExistingNote -ExoData $exoData -CountKey 'ImapEnabledCount' -Protocol 'IMAP4') Exchange Online stopped accepting basic authentication for IMAP4 in October 2022, so it now signs in with OAuth; what remains is a mail-download channel most organizations never use, through which any app a user authorizes can copy the whole mailbox. Turn it off where it is not needed." `
             -CurrentValue "IMAP4 enabled on: $($names -join ', ')" `
             -RequiredValue 'IMAP4 disabled on all mailbox plans and mailboxes' `
             -Remediation $control.Remediation

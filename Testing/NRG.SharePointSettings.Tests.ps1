@@ -103,4 +103,26 @@ Describe 'SharePoint settings are read for the control that names them' {
             $src | Should -Not -Match 'catch \{ \$retentionDays = 0 \}'
         }
     }
+
+    Context 'SharePoint Online Management Shell (opt-in child process)' {
+        It 'is off unless -IncludeSharePointShell is given, and is imported the way PowerShell 7 requires' {
+            # Microsoft: in PowerShell 7 the module "must" be imported with
+            # -UseWindowsPowerShell, which starts powershell.exe. MSP machines
+            # can block that with an ASR rule, so it is opt-in.
+            $entry = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Invoke-NRGAssessment.ps1') -Raw
+            $entry | Should -Match '\[switch\] \$IncludeSharePointShell'
+            $entry | Should -Match "if \(-not \`$IncludeSharePointShell -or \`$SkipSharePoint\) \{ \`$connectParams\['SkipSharePoint'\] = \`$true \}"
+            $connect = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib/Connect-NRGServices.ps1') -Raw
+            $connect | Should -Match "PSEdition -eq 'Core'"
+            $connect | Should -Match 'Import-Module \$spoTarget -UseWindowsPowerShell'
+        }
+        It 'a control that needs the shell says how to get it' {
+            Clear-NRGState
+            Set-NRGRawData -Key 'SharePoint' -Data @{ Success = $true; Data = @{ SectionStatus = @{ TenantSettings = 'Collected' }; TenantSettings = @{ SharingCapability = 'ExternalUserAndGuestSharing' } } }
+            Test-NRGControlSharePoint 3>$null | Out-Null
+            $f = @(Get-NRGFindings | Where-Object ControlId -eq 'SPO-1.4')[0]
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match '-IncludeSharePointShell'
+        }
+    }
 }

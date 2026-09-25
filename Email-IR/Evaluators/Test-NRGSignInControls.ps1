@@ -44,7 +44,7 @@ function script:Add-NRGSignInScore {
 # ─────────────────────────────────────────────────────────────────────────────
 # SIGNIN-1.1 — Failed→Success cluster (credential stuffing succeeded)
 # ─────────────────────────────────────────────────────────────────────────────
-function Test-NRGSignInControl-FailedToSuccess {
+function Test-NRGSignInControlFailedToSuccess {
     [CmdletBinding()] param()
     $cid   = 'SIGNIN-1.1'
     $title = 'Failed-then-success sign-in clusters (credential stuffing succeeded)'
@@ -127,7 +127,7 @@ function Test-NRGSignInControl-FailedToSuccess {
 # ─────────────────────────────────────────────────────────────────────────────
 # SIGNIN-1.2 — Anonymous-IP / TOR sign-ins
 # ─────────────────────────────────────────────────────────────────────────────
-function Test-NRGSignInControl-AnonymousIp {
+function Test-NRGSignInControlAnonymousIp {
     [CmdletBinding()] param()
     $cid   = 'SIGNIN-1.2'
     $title = 'Sign-ins from anonymous IP (TOR / anon-VPN)'
@@ -174,7 +174,7 @@ function Test-NRGSignInControl-AnonymousIp {
 # ─────────────────────────────────────────────────────────────────────────────
 # SIGNIN-1.3 — Impossible travel / unfamiliar-features sign-ins
 # ─────────────────────────────────────────────────────────────────────────────
-function Test-NRGSignInControl-ImpossibleTravel {
+function Test-NRGSignInControlImpossibleTravel {
     [CmdletBinding()] param()
     $cid   = 'SIGNIN-1.3'
     $title = 'Impossible travel or unfamiliar features (Microsoft IP heuristic)'
@@ -217,7 +217,7 @@ function Test-NRGSignInControl-ImpossibleTravel {
 # ─────────────────────────────────────────────────────────────────────────────
 # SIGNIN-1.4 — Identity Protection risky users (Microsoft ML)
 # ─────────────────────────────────────────────────────────────────────────────
-function Test-NRGSignInControl-RiskyUsers {
+function Test-NRGSignInControlRiskyUsers {
     [CmdletBinding()] param()
     $cid   = 'SIGNIN-1.4'
     $title = 'Microsoft Identity Protection risky users'
@@ -285,7 +285,7 @@ function Test-NRGSignInControl-RiskyUsers {
 #   out-of-home-STATE success: 35   (same country, wrong state)
 # Failed attempts from outside the home base are listed for context but not
 # scored, to keep the ranking focused on actual access.
-function Test-NRGSignInControl-GeoAnomaly {
+function Test-NRGSignInControlGeoAnomaly {
     [CmdletBinding()] param(
         # Explicit overrides. When omitted, HomeState is auto-detected as the
         # modal state of successful sign-ins; HomeCountry as the modal country.
@@ -422,7 +422,7 @@ function Test-NRGSignInControl-GeoAnomaly {
 #
 # External calls: RDAP (rdap.org) only. Degrades gracefully when offline
 # — emits NotApplicable rather than crashing.
-function Test-NRGSignInControl-IPIntel {
+function Test-NRGSignInControlIPIntel {
     [CmdletBinding()] param(
         # Cap the number of unique IPs enriched. RDAP is rate-limited and the
         # operator doesn't need 500 lookups — the suspicious set is small.
@@ -523,7 +523,7 @@ function Test-NRGSignInControl-IPIntel {
 # ─────────────────────────────────────────────────────────────────────────────
 # SIGNIN-RANK — Aggregate per-user scores and emit the prioritized list
 # ─────────────────────────────────────────────────────────────────────────────
-function Test-NRGSignInControl-RankUsers {
+function Test-NRGSignInControlRankUsers {
     [CmdletBinding()] param()
     $cid   = 'SIGNIN-2.1'
     $title = 'Ranked list of users for IR deep-dive'

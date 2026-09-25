@@ -102,6 +102,14 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
                 Policies = @( NewCaPolicy -DisplayName 'Block legacy (disabled)' -State 'disabled' `
                                 -ClientAppTypes @('other') -BuiltInControls @('block') )
             })
+            # With no policy On, Security Defaults may be enabled (Microsoft:
+            # policies can be created, not turned on, beside it), so the CA
+            # verdict needs it read as disabled; left unread the control is
+            # not assessed, and never compliant.
+            (GetVerdict 'Test-NRGControlAADLegacyAuth' 'AAD-1.1').State | Should -Be 'NotApplicable' `
+                -Because 'Security Defaults was not read and no Conditional Access policy is On'
+            Clear-NRGFindings
+            Set-NRGRawData -Key 'AAD-AuthPolicies' -Data (NewRaw 'AAD' @{ SecurityDefaults = @{ IsEnabled = $false } })
             (GetVerdict 'Test-NRGControlAADLegacyAuth' 'AAD-1.1').State | Should -Be 'Gap' `
                 -Because 'a policy that is not enabled provides no protection and must never read as compliant'
         }
