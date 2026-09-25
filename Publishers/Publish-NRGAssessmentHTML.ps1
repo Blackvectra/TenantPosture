@@ -127,10 +127,13 @@ function Publish-NRGAssessmentHTML {
     $pCol = scoreColor $sc2
     $circ = 452.4
     $off  = [Math]::Round($circ * (1 - $sc2 / 100), 2)
-    $crit = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'Critical' }).Count
-    $high = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'High' }).Count
-    $med  = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'Medium' }).Count
-    $low  = @($Findings | Where-Object { $_.State -eq 'Gap' -and $_.Severity -eq 'Low' }).Count
+    # Per CONTROL, like the Gaps count beside them: per-finding counts put
+    # "2 High / 6 Medium / 6 Low" next to "Gaps 6" on a multi-domain tenant.
+    $gapControls = @(Get-NRGScoringFindings -Findings $Findings | Where-Object { $_.State -eq 'Gap' })
+    $crit = @($gapControls | Where-Object { $_.Severity -eq 'Critical' }).Count
+    $high = @($gapControls | Where-Object { $_.Severity -eq 'High' }).Count
+    $med  = @($gapControls | Where-Object { $_.Severity -eq 'Medium' }).Count
+    $low  = @($gapControls | Where-Object { $_.Severity -eq 'Low' }).Count
 
     # ── Control definitions ───────────────────────────────────────────────────
     $cdefs = @{}
@@ -237,7 +240,15 @@ function Publish-NRGAssessmentHTML {
         "No critical gaps. Assessment identified <strong style='color:#ea580c'>$high high-severity</strong> gaps to address in the near term."
     } elseif ($gap -gt 0) {
         "No critical or high-severity gaps. <strong>$gap medium/low severity</strong> items to resolve."
-    } else { 'All assessed controls are satisfied. No gaps identified.' }
+    } elseif ($part -gt 0 -or $cov.Error -gt 0) {
+        # No Gap does not mean clean: Partial is half-configured and Error is
+        # a control whose state is unknown and scored as a failure. This line
+        # said "all satisfied" on a report scoring 12/100.
+        $bits = @()
+        if ($part -gt 0)      { $bits += "<strong>$part partially configured</strong>" }
+        if ($cov.Error -gt 0) { $bits += "<strong>$($cov.Error) that could not be evaluated</strong> (counted as failures until re-run)" }
+        "No open gaps, but $($bits -join ' and ') control(s) remain."
+    } else { 'Every scored control is satisfied. Controls that were not scored are listed under Assessment Scope.' }
 
     # ── Connections ───────────────────────────────────────────────────────────
     $svcMap = @{Graph='Microsoft Graph';EXO='Exchange Online';IPPSSession='Purview/Compliance';Teams='Microsoft Teams';SharePoint='SharePoint Online'}
@@ -412,7 +423,7 @@ function Publish-NRGAssessmentHTML {
         # Show N/A when no controls scored (all NotApplicable) instead of 0/100
         $wlScored = $wlScores[$wl].Scored
         $wlNaOnly = ($wlScored -eq 0)
-        $gapTxt = if ($gps -gt 0) { "<div class='wl-gap'>$gps gap$(if($gps -ne 1){'s'})</div>" } elseif ($wlNaOnly) { "<div class='wl-na'>— Not assessed</div>" } else { "<div class='wl-ok'>&#10003; Clean</div>" }
+        $gapTxt = if ($gps -gt 0) { "<div class='wl-gap'>$gps gap$(if($gps -ne 1){'s'})</div>" } elseif ($wlNaOnly) { "<div class='wl-na'>— Not assessed</div>" } elseif ($ws3 -lt 100) { "<div class='wl-na'>No gaps; partial or error items</div>" } else { "<div class='wl-ok'>&#10003; Clean</div>" }
         $wlGrid += @"
 <div class='wl-card'>
   <svg width='54' height='54' viewBox='0 0 36 36'>
@@ -522,7 +533,7 @@ function Publish-NRGAssessmentHTML {
       <tbody>$nistRows</tbody>
     </table>
   </div>
-  <div class="nf-note">A control mapped to more than one family is counted in each &mdash; family rows do not sum to the assessment total. Met + Partial + Gap + Error + N/A sums to Assessed on every row. <strong>N/A</strong> and <strong>Error</strong> are both excluded from the coverage percentage &mdash; N/A means this tool could not assess the control (missing license, data not collected) and Error means the evaluator threw before reaching a verdict. Neither is a control the tenant passed. A family showing &mdash; had no assessable control at all.</div>
+  <div class="nf-note">A control mapped to more than one family is counted in each &mdash; family rows do not sum to the assessment total. Met + Partial + Gap + Error + N/A sums to Assessed on every row. <strong>N/A</strong> is excluded from the coverage percentage &mdash; this tool could not assess the control (missing license, data not collected). <strong>Error</strong> means the evaluator threw before reaching a verdict; it is counted as a failure in the percentage until re-run. Neither is a control the tenant passed. A family showing &mdash; had no assessable control at all.</div>
 </div>
 "@
     }
@@ -641,6 +652,7 @@ function Publish-NRGAssessmentHTML {
                 "<div class='scope-tile$(if($blindCount -gt 0){' warn'})'><div class='scope-n$(if($blindCount -gt 0){' warn'})'>$blindCount</div><div class='scope-l'>Could not be assessed</div></div>"
                 "<div class='scope-tile'><div class='scope-n'>$($scope.NoProgrammaticCheck.Count)</div><div class='scope-l'>Manual review required</div></div>"
                 "<div class='scope-tile'><div class='scope-n'>$($scope.LicenceBlocked.Count)</div><div class='scope-l'>License gated</div></div>"
+                "<div class='scope-tile'><div class='scope-n'>$(@(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()).Count)</div><div class='scope-l'>Not applicable here</div></div>"
             ) -join ''
 
             $limRows = ($scope.Limitations | ForEach-Object { "<li>$(hx $_)</li>" }) -join ''
@@ -655,6 +667,7 @@ function Publish-NRGAssessmentHTML {
                 @{ Label = 'Controls that produced no result at all'; Items = $scope.NoResult }
                 @{ Label = 'Controls with no automated test — manual review'; Items = $scope.NoProgrammaticCheck }
                 @{ Label = 'Defender endpoint checks covered by a declared third-party EDR — not verified'; Items = @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()) }
+                @{ Label = 'Checked and not applicable to this tenant — reason stated in each finding'; Items = @(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()) }
             )) {
                 $items = @($grp.Items)
                 if ($items.Count -eq 0) { continue }
@@ -700,8 +713,20 @@ function Publish-NRGAssessmentHTML {
     if ($scope -and $scope.Available) {
         $hdrScored = $scope.ScoredControls
         $hdrNA     = $scope.LicenceBlocked.Count + $scope.CollectionIncomplete.Count + $scope.NoProgrammaticCheck.Count +
-                     @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()).Count
+                     @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()).Count +
+                     @(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()).Count
+        # "Controls assessed" is the tenant controls that produced a finding
+        # (scored + not scored). It counted distinct ControlIds across ALL
+        # findings, including the 35 endpoint checks that report "no endpoint
+        # results supplied" on every run without -DeviceResults, so the
+        # header read "37 controls assessed · 2 scored · 0 not applicable".
+        $distinctControlsAssessed = $hdrScored + $hdrNA
     }
+    # Endpoint (DEV-*) checks are not tenant controls; they get their own count.
+    $devIds    = @($Findings | Where-Object { [string]$_.ControlId -like 'DEV-*' } | ForEach-Object { [string]$_.ControlId } | Sort-Object -Unique)
+    $devScored = @(Get-NRGScoringFindings -Findings @($Findings | Where-Object { [string]$_.ControlId -like 'DEV-*' }) |
+                   Where-Object { $_.State -in @('Satisfied','Partial','Gap','Error') }).Count
+    $devNote   = if ($devIds.Count -gt 0) { " &middot; endpoint checks: $devScored of $($devIds.Count) scored" } else { '' }
 
     # ── License card HTML ────────────────────────────────────────────────────
     # The pitch names the license the tenant is actually missing: an E5
@@ -1336,7 +1361,7 @@ th.nf-n{text-align:right}
 
 <!-- OVERVIEW -->
 <div class="card" id="exec">
-  <div class="card-hd"><div class="card-label">Executive Overview</div><div class="card-sub">$distinctControlsAssessed controls assessed &middot; $hdrScored scored &middot; $hdrNA not applicable</div></div>
+  <div class="card-hd"><div class="card-label">Executive Overview</div><div class="card-sub">$distinctControlsAssessed controls assessed &middot; $hdrScored scored &middot; $hdrNA not scored$devNote</div></div>
   <div class="ex-dash">
     <div class="score-wrap br">
       <svg width="136" height="136" viewBox="0 0 160 160">
@@ -1355,6 +1380,7 @@ th.nf-n{text-align:right}
       <div class="sr sg"><span class="sr-l">Gaps</span><div class="sr-t"><div class="sr-f" style="width:$(pct $gap $scrd)%"></div></div><span class="sr-n">$gap</span></div>
       <div class="sr sw"><span class="sr-l">Partial</span><div class="sr-t"><div class="sr-f" style="width:$(pct $part $scrd)%"></div></div><span class="sr-n">$part</span></div>
       <div class="sr sp"><span class="sr-l">Satisfied</span><div class="sr-t"><div class="sr-f" style="width:$(pct $sat $scrd)%"></div></div><span class="sr-n">$sat</span></div>
+      $(if ($cov.Error -gt 0) { "<div class='sr sg'><span class='sr-l'>Error</span><div class='sr-t'><div class='sr-f' style='width:$(pct $cov.Error $scrd)%'></div></div><span class='sr-n'>$($cov.Error)</span></div>" })
       <div class="sr sna"><span class="sr-l">N/A</span><div class="sr-t"><div class="sr-f" style="width:$(pct $na $Findings.Count)%"></div></div><span class="sr-n">$na</span></div>
       <div class="narr">$narr
         <div class="sev-pills">

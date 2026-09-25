@@ -208,7 +208,7 @@ function Publish-NRGSSP {
     $null = $sb.AppendLine()
     $null = $sb.AppendLine("**$($needAnswer.Count) requirements are still unanswered.** They are listed at the end. Until each one carries a status and a narrative, this document is incomplete, and an assessor will read a blank as a gap.")
     $null = $sb.AppendLine()
-    $null = $sb.AppendLine("Even where the assessment reports a requirement met, that means every control this tool maps to it passed — not that the requirement is satisfied in full. Microsoft 365 observes the tenant slice of a requirement and nothing outside it. The **Confidence** column says which case each row is in.")
+    $null = $sb.AppendLine("Where the assessment reports a requirement implemented, every control this tool maps to it produced a verdict and passed — which is still not the requirement satisfied in full. Microsoft 365 observes the tenant slice of a requirement and nothing outside it. The **Confidence** column says which case each row is in.")
     $null = $sb.AppendLine()
 
     $null = $sb.AppendLine('### Where the plan stands')
@@ -332,8 +332,13 @@ function Publish-NRGSSP {
                     $null = $sb.AppendLine("| $(EscMd $e['ControlId']) | $(EscMd $e['Source']) | $(EscMd $e['State']) | $(EscMd $e['Title']) |")
                 }
                 $null = $sb.AppendLine()
-                if ($r['NotRun'] -gt 0) {
-                    $null = $sb.AppendLine("_$($r['NotRun']) of the $($ev.Count) mapped controls produced no result this run — a skipped workload, a missing license, or an evaluator that did not complete. Those are not passes and not failures; they are unknowns._")
+                $unscored = [int]$r['NotRun'] + [int](Get-NRGObjectField -Item $r -Key 'NA' -Default 0)
+                if ($unscored -gt 0) {
+                    $null = $sb.AppendLine("_$unscored of the $($ev.Count) mapped controls produced no verdict this run — not collected, not licensed, declared to a third-party product, or not programmatically checkable. Those are not passes and not failures; they are unknowns, so this requirement is not reported implemented on their account._")
+                    $null = $sb.AppendLine()
+                    foreach ($e in @($ev | Where-Object { $_['State'] -notin @('Satisfied','Partial','Gap') -and $_['Detail'] })) {
+                        $null = $sb.AppendLine("- $(EscMd $e['ControlId']): $(EscMd $e['Detail'])")
+                    }
                     $null = $sb.AppendLine()
                 }
             } else {
@@ -500,10 +505,12 @@ function Publish-NRGSSP {
                         'NotApplicable' { 'ev-na' }
                         default         { 'ev-nr' }
                     }
-                    $evRows += "<tr><td class='ec'>$(Esc $e['ControlId'])</td><td class='es'>$(Esc $e['Source'])</td><td><span class='ev $sc'>$(Esc $e['State'])</span></td><td class='et'>$(Esc $e['Title'])</td></tr>"
+                    $whyTxt = if ($e['State'] -notin @('Satisfied','Partial','Gap') -and (Get-NRGObjectField -Item $e -Key 'Detail' -Default '')) { "<div class='why'>$(Esc $e['Detail'])</div>" } else { '' }
+                    $evRows += "<tr><td class='ec'>$(Esc $e['ControlId'])</td><td class='es'>$(Esc $e['Source'])</td><td><span class='ev $sc'>$(Esc $e['State'])</span></td><td class='et'>$(Esc $e['Title'])$whyTxt</td></tr>"
                 }
-                $note = if ($r['NotRun'] -gt 0) {
-                    "<p class='note'>$($r['NotRun']) of the $($ev.Count) mapped controls produced no result this run &mdash; a skipped workload, a missing license, or an evaluator that did not complete. Those are not passes and not failures; they are unknowns.</p>"
+                $unscored = [int]$r['NotRun'] + [int](Get-NRGObjectField -Item $r -Key 'NA' -Default 0)
+                $note = if ($unscored -gt 0) {
+                    "<p class='note'>$unscored of the $($ev.Count) mapped controls produced no verdict this run &mdash; not collected, not licensed, declared to a third-party product, or not programmatically checkable. Those are not passes and not failures; they are unknowns, so this requirement is not reported implemented on their account.</p>"
                 } else { '' }
                 $evHtml = "<div class='blk'><div class='lbl'>Evidence from this assessment</div><table class='ev-t'><tbody>$evRows</tbody></table>$note</div>"
             } else {
@@ -712,6 +719,7 @@ tr.sh td{background:#0f2544;color:#fff;font-weight:800;font-size:.7rem;text-tran
 .ev-nr{background:#f1f5f9;color:#64748b}
 .none{color:#6b7280;font-size:.86rem;margin:0;line-height:1.65}
 .note{color:#92400e;background:#fffbeb;border-radius:7px;padding:8px 12px;font-size:.79rem;margin:9px 0 0;line-height:1.6}
+.why{color:#64748b;font-size:.74rem;margin-top:3px;line-height:1.5}
 .imp{background:#fdf4ff;border-left:3px solid #a855f7;border-radius:0 8px 8px 0;padding:11px 15px;margin-bottom:8px}
 .isum{font-weight:700;margin-bottom:6px;font-size:.9rem}
 .ifor{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600;font-size:.68rem;color:#7c3aed;letter-spacing:.02em}
@@ -745,7 +753,7 @@ footer{color:#6b7280;font-size:.78rem;line-height:1.6;padding:0 4px;max-width:90
     <h2>Read this first</h2>
     <p class="lede">This is a <strong>working System Security Plan, not a finished one</strong>. Of the $($sum['Total']) requirements in $(Esc $Posture['Baseline']), this assessment observed <strong>$($sum['Evidenced'])</strong> from the Microsoft 365 tenant and the endpoints. The remaining <strong>$($sum['AttestationRequired'])</strong> are policy, process, physical security and personnel &mdash; no scan reaches them, and they are answered by the organization, not by the tool.</p>
     <div class="warn"><strong>$($needAnswer.Count) requirements are still unanswered.</strong> They are listed at the end. Until each one carries a status and a narrative, this document is incomplete, and an assessor will read a blank as a gap.</div>
-    <p class="lede">Even where the assessment reports a requirement met, that means every control this tool maps to it passed &mdash; not that the requirement is satisfied in full. Microsoft 365 observes the tenant slice of a requirement and nothing outside it. The <em>Confidence</em> column says which case each row is in.</p>
+    <p class="lede">Where the assessment reports a requirement implemented, every control this tool maps to it produced a verdict and passed &mdash; which is still not the requirement satisfied in full. Microsoft 365 observes the tenant slice of a requirement and nothing outside it. The <em>Confidence</em> column says which case each row is in.</p>
     <div class="stats">
       <div class="stat"><b>$($sum['Implemented'])</b><span>Implemented</span></div>
       <div class="stat"><b>$($sum['PartiallyImplemented'])</b><span>Partial</span></div>

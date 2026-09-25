@@ -45,6 +45,29 @@ different, than the tenant actually is.
 - **`-RegisterApp` moved out of the read-only module** to `Onboard/`; the
   switch works as before. A test fails if any module-loaded file calls a
   Graph write cmdlet.
+- **The SSP no longer reports a requirement "Implemented" it did not
+  check.** A requirement was derived Implemented when no mapped control had
+  a Gap, even if most of them were NotApplicable (not collected, not
+  licensed, or covered by a declared third-party EDR): 3.5.3 (MFA) read
+  Implemented with one of fifteen controls actually passing. Implemented
+  now requires every mapped control to have passed; each unscored control
+  shows why. A client-attested status no longer counts as tool-verified.
+- **Numbers derived from findings agree with the score.** The remediation
+  roadmap and NIST improvement plan made every per-domain DNS finding its
+  own fix (projected NIST coverage above 100%); both now plan one step per
+  control. The score, the scope section and the SSP share one worst-state
+  order, so a control passing on one domain and unread on another is no
+  longer a pass in the ring and "not assessed" in the scope section. The
+  Executive Overview no longer counts the 35 endpoint checks as assessed
+  when no device results were supplied. Severity pills count controls, not
+  findings. The Markdown summary and HTML score column show Errors, and the
+  report no longer says Errors are excluded from coverage (they count as
+  failures) or that "all assessed controls are satisfied" beside Partial or
+  Error results. The XLSX NIST Families sheet includes endpoint verdicts.
+- **"No automated test" means that.** A NotApplicable the scope section
+  could not classify was reported as "no automated test — manual review",
+  including controls that ran and found the feature off. Those now sit in
+  their own "not applicable to this tenant" group with the reason stated.
 - **DNS-2.1 .. 2.4 never read the collector's data.** The collector writes
   each domain as an ordered dictionary; those four evaluators only accepted
   a plain hashtable, so on every live run DNS-2.2 said "No CAA record" for a

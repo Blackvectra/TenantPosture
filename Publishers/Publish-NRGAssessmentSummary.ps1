@@ -108,6 +108,9 @@ function Publish-NRGAssessmentSummary {
     $null = $sb.AppendLine("| ✅ Satisfied | $satisfied |")
     $null = $sb.AppendLine("| ⚠️ Partial | $partial |")
     $null = $sb.AppendLine("| ❌ Gap | $gap |")
+    # Without this row the table did not add up to its total, and a reader
+    # could not tell whether the missing rows were passes or failures.
+    $null = $sb.AppendLine("| ⛔ Error (not evaluated; counted as a failure) | $($cov.Error) |")
     $null = $sb.AppendLine("| — Not Applicable | $na |")
     $null = $sb.AppendLine("| **Total Controls** | **$total** |")
     $null = $sb.AppendLine()
@@ -192,6 +195,7 @@ function Publish-NRGAssessmentSummary {
             $null = $sb.AppendLine("| Produced no result at all | $($scope.NoResult.Count) |")
             $null = $sb.AppendLine("| No automated test — manual review required | $($scope.NoProgrammaticCheck.Count) |")
             $null = $sb.AppendLine("| Covered by a declared third-party EDR — not verified | $(@(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()).Count) |")
+            $null = $sb.AppendLine("| Checked, not applicable to this tenant (reason stated) | $(@(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()).Count) |")
             $null = $sb.AppendLine("| License gated | $($scope.LicenceBlocked.Count) |")
             $null = $sb.AppendLine()
 
@@ -206,6 +210,7 @@ function Publish-NRGAssessmentSummary {
                 @{ Label = 'Produced no result at all'; Items = $scope.NoResult }
                 @{ Label = 'No automated test — manual review required'; Items = $scope.NoProgrammaticCheck }
                 @{ Label = 'Covered by a declared third-party EDR — not verified'; Items = @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()) }
+                @{ Label = 'Checked, not applicable to this tenant'; Items = @(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()) }
             )) {
                 $items = @($grp.Items)
                 if ($items.Count -eq 0) { continue }

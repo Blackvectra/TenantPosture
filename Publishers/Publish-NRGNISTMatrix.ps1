@@ -171,7 +171,7 @@ function Publish-NRGNISTMatrix {
         $null = $sb.AppendLine("| $(EscMd $fam.Family) | $(EscMd $fam.Name) | $($fam.Assessed) | $($fam.Satisfied) | $($fam.Partial) | $($fam.Gap) | $($fam.Error) | $($fam.NA) | $covTxt |")
     }
     $null = $sb.AppendLine()
-    $null = $sb.AppendLine("_Met + Partial + Gap + Error + N/A equals Assessed for each row. **Error** means the evaluator threw rather than reaching a verdict; like N/A it is excluded from Coverage, and it is a defect to investigate, not a finding about the tenant._")
+    $null = $sb.AppendLine("_Met + Partial + Gap + Error + N/A equals Assessed for each row. **Error** means the evaluator threw rather than reaching a verdict; unlike N/A it is counted as a failure in Coverage until re-run, and it is a defect to investigate, not a finding about the tenant._")
     $null = $sb.AppendLine()
 
     # By control
