@@ -45,6 +45,16 @@ different, than the tenant actually is.
 - **`-RegisterApp` moved out of the read-only module** to `Onboard/`; the
   switch works as before. A test fails if any module-loaded file calls a
   Graph write cmdlet.
+- **SharePoint controls score the setting they name.** SPO-1.2 ("default
+  sharing link not Anyone") scored legacy authentication, SPO-1.3 scored
+  the sync restriction, SPO-1.4 and SPO-1.5 scored other unrelated settings.
+  Each now reads its own setting (default link type, legacy auth, guest
+  expiration, unmanaged-device access). Guest and link controls report
+  NotApplicable on a tenant with external sharing off instead of raising
+  gaps about links that cannot exist; the sync restriction needs its switch
+  on (a leftover domain list is not a restriction); reauthentication needs
+  email attestation on; a retention value that was not read is no longer
+  "0 days".
 
 ## v4.13.0 (2026-09-24)
 
