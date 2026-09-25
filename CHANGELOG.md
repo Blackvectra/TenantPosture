@@ -1,5 +1,47 @@
 # Changelog
 
+## v4.14.2 (2026-09-25)
+
+**Conditional Access: every policy's real state, and Microsoft's own
+recommended baseline.** Owner's ask: "does the report say what CA policies
+are enabled in audit mode and maybe provide CA that should be in place for
+future. I know you can add so many policies i could add one just for an app
+we use or linkedin for example." The HTML report and Markdown summary now
+carry a Conditional Access section:
+
+- **Every policy, with its true state** — On, Report-only (audit), Off, or
+  an unrecognized state (never read as Off), each with a plain-English
+  description of who it targets, what it targets, and what it requires.
+- **A recommended baseline** compared against 11 of Microsoft's own
+  documented Conditional Access policy templates (block legacy
+  authentication, MFA for all users, MFA for admins, phishing-resistant MFA
+  for admins, MFA for Azure management, block device code flow, risk-based
+  sign-in and user policies, device compliance, the compliant-or-MFA
+  alternative, no persistent browser session), each cited to its Microsoft
+  Learn page. Every row is Enforced, Partly in place, Covered by Security
+  Defaults, Needs a license, Not read, or Not in place — never a guess from
+  unread data.
+- **A policy scoped to specific apps, groups or users — the owner's own
+  LinkedIn example — is listed as custom and never judged** against a
+  template it was never meant to satisfy. Matching is conservative: a
+  template is only Enforced from a policy that is genuinely On, targets all
+  users (or, for the two admin templates, every role this tenant's own role
+  catalog marks privileged), and targets all resources with no exclusion; a
+  narrower, report-only, or weaker policy shows as Partly in place, never
+  Enforced.
+- New `Lib/Get-NRGConditionalAccessView.ps1` (`Config/conditional-access-baseline.json`
+  holds the template catalog). A view, like `Get-NRGAssessmentScope`: it
+  emits no findings and moves no score.
+- Two bugs caught while building this, both regression-tested: a policy
+  scoped to one app matched the "require MFA for admins" template, because
+  that template's eligibility check never looked at which resources the
+  policy targeted; and every baseline row read "needs a license" even when
+  a policy was actively enforcing it, because the license check ran before
+  the match check and treated "licensing was not read" as a confirmed
+  absence. A device-code or legacy-authentication policy that only requires
+  MFA (rather than blocking) is never credited as partial protection —
+  Microsoft documents that MFA does not stop either attack.
+
 ## v4.14.1 (2026-09-25)
 
 Fixes from the first live run of v4.14.0. Every item below produced a wrong

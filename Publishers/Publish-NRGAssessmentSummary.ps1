@@ -237,6 +237,52 @@ function Publish-NRGAssessmentSummary {
         }
     }
 
+    # ── Conditional Access: every policy's real state, and Microsoft's own
+    # recommended baseline. A view — no findings, no score change. Mirrors
+    # the HTML report's Conditional Access section.
+    if (Get-Command Get-NRGConditionalAccessView -ErrorAction SilentlyContinue) {
+        $caView = $null
+        try { $caView = Get-NRGConditionalAccessView -LicenseProfile $mdLicProfile } catch { $caView = $null }
+        if ($caView -and $caView.Available -and $caView.ReadStatus -eq 'Collected') {
+            $null = $sb.AppendLine("## Conditional Access")
+            $null = $sb.AppendLine()
+            $null = $sb.AppendLine("$($caView.Counts.Total) polic$(if ($caView.Counts.Total -eq 1) {'y'} else {'ies'}) &mdash; $($caView.Counts.On) On, $($caView.Counts.ReportOnly) Report-only (audit), $($caView.Counts.Off) Off.")
+            $null = $sb.AppendLine()
+            $null = $sb.AppendLine("| Policy | State | Description |")
+            $null = $sb.AppendLine("|--------|-------|-------------|")
+            foreach ($p in $caView.Policies) {
+                $null = $sb.AppendLine("| $(EscMd $p.DisplayName) | $(EscMd $p.StateLabel) | $(EscMd $p.Description) |")
+            }
+            $null = $sb.AppendLine()
+            $null = $sb.AppendLine("### Recommended Conditional Access Baseline")
+            $null = $sb.AppendLine()
+            $null = $sb.AppendLine("Advisory only &mdash; nothing here is scored. A policy scoped to specific apps, groups or users is never credited against a broad template it does not implement.")
+            if ($caView.SecurityDefaultsState -eq $true) {
+                $null = $sb.AppendLine()
+                $null = $sb.AppendLine("Security Defaults is enabled: Conditional Access policies can be created but not turned on, so most of this baseline reads *Not in place* until Security Defaults is replaced by Conditional Access.")
+            }
+            $null = $sb.AppendLine()
+            $null = $sb.AppendLine("| Template | Category | Status | Note |")
+            $null = $sb.AppendLine("|----------|----------|--------|------|")
+            foreach ($b in $caView.Baseline) {
+                $lbl = switch ($b.Status) {
+                    'Enforced'                  { 'Enforced' }
+                    'Similar'                    { 'Partly in place' }
+                    'CoveredBySecurityDefaults'  { 'Covered by Security Defaults' }
+                    'NotLicensed'                { 'Needs a license' }
+                    'NotRead'                    { 'Not read' }
+                    default                      { 'Not in place' }
+                }
+                $null = $sb.AppendLine("| [$(EscMd $b.Name)]($($b.SourceUrl)) | $(EscMd $b.Category) | $lbl | $(EscMd $b.Note) |")
+            }
+            $null = $sb.AppendLine()
+            if ($caView.Custom.Count -gt 0) {
+                $null = $sb.AppendLine("**$($caView.Custom.Count) custom polic$(if ($caView.Custom.Count -eq 1) {'y'} else {'ies'})** &mdash; scoped to specific apps, groups or users and matched to no baseline template above: $(EscMd (($caView.Custom | ForEach-Object { $_.DisplayName }) -join ', ')).")
+                $null = $sb.AppendLine()
+            }
+        }
+    }
+
     # Service connection status
     $null = $sb.AppendLine("## Service Coverage")
     $null = $sb.AppendLine()

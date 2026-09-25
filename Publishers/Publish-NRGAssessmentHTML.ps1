@@ -698,6 +698,78 @@ function Publish-NRGAssessmentHTML {
         }
     }
 
+    # ── Conditional Access: every policy's real state, and Microsoft's own
+    # recommended baseline. A VIEW (Lib/Get-NRGConditionalAccessView.ps1) —
+    # it emits no findings and moves no score. Owner's ask, 2026-09-25: show
+    # what is in audit (report-only) mode, and what CA "should be in place
+    # for future," without judging a policy scoped to one app (their own
+    # LinkedIn example) against a template it was never meant to satisfy.
+    $caHtml = ''
+    if (Get-Command Get-NRGConditionalAccessView -ErrorAction SilentlyContinue) {
+        $caView = $null
+        try { $caView = Get-NRGConditionalAccessView -LicenseProfile $licProfile } catch { Write-Verbose "Conditional Access view skipped: $($_.Exception.Message)" }
+        if ($caView -and $caView.Available -and $caView.ReadStatus -eq 'Collected') {
+            $stCls = @{ 'On' = 'pv-met'; 'Report-only (audit)' = 'pv-part'; 'Off' = 'pv-na' }
+            $polRows = ''
+            foreach ($p in $caView.Policies) {
+                $cls = if ($stCls.ContainsKey($p.StateLabel)) { $stCls[$p.StateLabel] } else { 'pv-gap' }
+                $tag = switch ($p.Classification) {
+                    'MatchesRecommendation'   { "<span class='pv-st pv-met'>Matches: $(hx (($p.MatchedTemplateIds) -join ', '))</span>" }
+                    'SimilarToRecommendation' { "<span class='pv-st pv-part'>Similar to: $(hx (($p.SimilarTemplateIds) -join ', '))</span>" }
+                    default                   { "<span class='pv-st pv-na'>Custom</span>" }
+                }
+                $polRows += "<div class='pv-item'><div class='pv-hd'><div class='pv-ttl'>$(hx $p.DisplayName)<div class='pv-scope'>$(hx $p.Description)</div></div><span class='pv-st $cls'>$(hx $p.StateLabel)</span></div><div class='pv-asp'>$tag</div></div>"
+            }
+            if (-not $polRows) { $polRows = "<div class='pv-item'><div class='pv-scope'>No Conditional Access policies exist in this tenant.</div></div>" }
+
+            $blCls = @{ 'Enforced' = 'pv-met'; 'Similar' = 'pv-part'; 'CoveredBySecurityDefaults' = 'pv-met'; 'NotLicensed' = 'pv-na'; 'NotRead' = 'pv-na'; 'Missing' = 'pv-gap' }
+            $blLabel = @{ 'Enforced' = 'Enforced'; 'Similar' = 'Partly in place'; 'CoveredBySecurityDefaults' = 'Covered by Security Defaults'; 'NotLicensed' = 'Needs a license'; 'NotRead' = 'Not read'; 'Missing' = 'Not in place' }
+            $blRows = ''
+            foreach ($b in $caView.Baseline) {
+                $cls = if ($blCls.ContainsKey($b.Status)) { $blCls[$b.Status] } else { 'pv-na' }
+                $lbl = if ($blLabel.ContainsKey($b.Status)) { $blLabel[$b.Status] } else { hx $b.Status }
+                # @() must wrap the WHOLE pipeline: Select-Object on an empty
+                # collection returns $null, not @(), and $null.Count throws
+                # under StrictMode (the "$rows = if (...)" trap's pipeline form).
+                $who = @(@($b.MatchingPolicyNames + $b.SimilarPolicyNames) | Select-Object -First 3)
+                $whoTxt = if ($who.Count -gt 0) { " &mdash; $(hx ($who -join ', '))" } else { '' }
+                $blRows += @"
+<div class='pv-item'>
+  <div class='pv-hd'>
+    <div class='pv-cid'>$(hx $b.Category)</div>
+    <div class='pv-ttl'><a href="$(ConvertTo-NRGSafeUrl $b.SourceUrl)" target="_blank" rel="noopener noreferrer">$(hx $b.Name)</a><div class='pv-scope'>$(hx $b.Summary)$whoTxt</div></div>
+    <span class='pv-st $cls'>$lbl</span>
+  </div>
+  $(if ($b.Note) { "<div class='pv-asp'>$(hx $b.Note)</div>" })
+</div>
+"@
+            }
+
+            $customNote = if ($caView.Custom.Count -gt 0) {
+                "<div class='pv-intro'><strong>$($caView.Custom.Count) custom polic$(if ($caView.Custom.Count -eq 1) {'y'} else {'ies'})</strong> — scoped to specific apps, groups or users and matched to no baseline template above. Listed for the record, not evaluated against a template they were never meant to satisfy: $(hx (($caView.Custom | ForEach-Object { $_.DisplayName }) -join ', ')).</div>"
+            } else { '' }
+
+            $caHtml = @"
+<div class="card mt" id="ca-policies">
+  <div class="card-hd">
+    <div><div class="card-label">Conditional Access Policies</div><div class="card-sub">$($caView.Counts.Total) polic$(if ($caView.Counts.Total -eq 1) {'y'} else {'ies'}) &mdash; $($caView.Counts.On) On &middot; $($caView.Counts.ReportOnly) Report-only (audit) &middot; $($caView.Counts.Off) Off</div></div>
+  </div>
+  $polRows
+</div>
+<div class="card mt" id="ca-baseline">
+  <div class="card-hd">
+    <div><div class="card-label">Recommended Conditional Access Baseline</div><div class="card-sub">Microsoft's own documented policy templates, compared against what this tenant has in force</div></div>
+  </div>
+  <div class="pv-intro">Advisory only &mdash; nothing here is scored. A policy scoped to specific apps, groups or users is never credited against a broad template it does not implement.$(if ($caView.SecurityDefaultsState -eq $true) { ' Security Defaults is enabled: Conditional Access policies can be created but not turned on, so most of this baseline reads Not in place until Security Defaults is replaced by Conditional Access.' })</div>
+  $blRows
+  $customNote
+</div>
+"@
+        } elseif ($caView -and $caView.Available -and $caView.ReadStatus -ne 'NotCollected') {
+            $caHtml = "<div class='card mt' id='ca-policies'><div class='card-hd'><div class='card-label'>Conditional Access Policies</div></div><div class='pv-intro'>Conditional Access policy data was not read this run (collector did not complete), so neither the policy list nor the recommended baseline could be built.</div></div>"
+        }
+    }
+
     # Executive Overview headline numbers, deduplicated by ControlId so they
     # stay internally consistent with $distinctControlsAssessed. $scrd/$na
     # (from Get-NRGCoverageScore) are NOT reused here — those are raw
@@ -1355,6 +1427,7 @@ th.nf-n{text-align:right}
     $(if($nistHtml){'<span class="nav-a" data-goto="nist-families">NIST 800-53</span>'})
     $(if($physHtml){'<span class="nav-a" data-goto="nist-physical">Physical &amp; Device</span>'})
     $(if($licGroups.Count -gt 0){'<span class="nav-a" data-goto="licensing">License Gaps</span>'})
+    $(if($caHtml){'<span class="nav-a" data-goto="ca-policies">Conditional Access</span>'})
     <span class="nav-a" data-goto="named">Named Findings</span>
     <span class="nav-a" data-goto="actions">Priority Actions</span>
     <span class="nav-a" data-goto="roadmap">Roadmap</span>
@@ -1409,6 +1482,8 @@ th.nf-n{text-align:right}
 </div>
 
 $scopeHtml
+
+$caHtml
 
 $riskHtml
 
