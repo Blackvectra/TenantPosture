@@ -39,6 +39,16 @@ function Invoke-NRGCollectPurview {
             # section, a failed query and a genuinely empty tenant are
             # indistinguishable and the evaluators would report a confident
             # Gap/Partial either way — see CLAUDE.md "Empty is not clean".
+            # Read by PVW-4.2 / 2.6 / 4.3 / 4.4 / 2.2 / 2.3. These evaluators
+            # existed before anything collected their data, so they could
+            # never produce a verdict (PVW-4.3 even scored a false Partial —
+            # "labels defined but none published" — from the missing list).
+            AuditRetentionPolicies  = @()
+            AutoLabelPolicies       = @()
+            LabelPolicies           = @()
+            RetentionLabels         = @()
+            CommCompliancePolicies  = @()
+            InformationBarriersMode = $null
             SectionStatus       = @{
                 AuditConfig       = 'NotRun'
                 DLPPolicies       = 'NotRun'
@@ -46,6 +56,12 @@ function Invoke-NRGCollectPurview {
                 RetentionPolicies = 'NotRun'
                 SensitivityLabels = 'NotRun'
                 ProtectionAlerts  = 'NotRun'
+                AuditRetentionPolicies  = 'NotRun'
+                AutoLabelPolicies       = 'NotRun'
+                LabelPolicies           = 'NotRun'
+                RetentionLabels         = 'NotRun'
+                CommCompliancePolicies  = 'NotRun'
+                InformationBarriersMode = 'NotRun'
             }
         }
     }
@@ -213,6 +229,100 @@ function Invoke-NRGCollectPurview {
                     Register-NRGException -Source 'Purview-ProtectionAlerts' -Message $_.Exception.Message
                 }
             }
+        }
+
+        # ── Security & Compliance sections added in v4.14.0 ──────────────────
+        # Each runs only when its cmdlet resolves to the Security & Compliance
+        # session (Get-SupervisoryReviewPolicyV2 also exists, non-functional,
+        # in Exchange Online), and records Collected / Failed on its own so a
+        # failed query is never read as "none configured".
+        $scc = {
+            param([string] $Section, [string] $Cmdlet, [scriptblock] $Project)
+            $cmd = Get-NRGExoCommand -Name $Cmdlet -Session SecurityCompliance
+            if (-not $cmd.Command -or $cmd.Source -eq 'ExchangeOnline') { return }
+            try {
+                $rows = @(& $cmd.Command -ErrorAction Stop)
+                & $Project $rows
+                $result.Data.SectionStatus[$Section] = 'Collected'
+            } catch {
+                $result.Data.SectionStatus[$Section] = 'Failed'
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source "Purview-$Section" -Message $_.Exception.Message
+                }
+            }
+        }
+
+        # Audit log retention policies (PVW-4.2). RetentionDuration is an enum
+        # (ThreeMonths/SixMonths/NineMonths/TwelveMonths/TenYears); anything
+        # else maps to $null days and never counts toward long-term retention.
+        # The default policy is not returned by this cmdlet (Microsoft docs).
+        & $scc 'AuditRetentionPolicies' 'Get-UnifiedAuditLogRetentionPolicy' {
+            param($rows)
+            $days = @{ ThreeMonths = 90; SixMonths = 180; NineMonths = 270; TwelveMonths = 365; TenYears = 3650 }
+            $result.Data.AuditRetentionPolicies = @($rows | Where-Object { $_ } | ForEach-Object {
+                $dur = [string](Get-NRGObjectField -Item $_ -Key 'RetentionDuration' -Default '')
+                @{
+                    Name              = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '')
+                    RetentionDuration = $dur
+                    RetentionDays     = $(if ($days.ContainsKey($dur)) { $days[$dur] } else { $null })
+                    RecordTypes       = @(Get-NRGObjectField -Item $_ -Key 'RecordTypes' -Default @())
+                }
+            })
+        }
+
+        # Auto-labeling policies (PVW-2.6). Mode: Enable / TestWithNotifications
+        # / TestWithoutNotifications / Disable / PendingDeletion.
+        & $scc 'AutoLabelPolicies' 'Get-AutoSensitivityLabelPolicy' {
+            param($rows)
+            $result.Data.AutoLabelPolicies = @($rows | Where-Object { $_ } | ForEach-Object {
+                @{
+                    Name = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '')
+                    Mode = [string](Get-NRGObjectField -Item $_ -Key 'Mode' -Default '')
+                }
+            })
+        }
+
+        # Sensitivity label publishing policies (PVW-4.3).
+        & $scc 'LabelPolicies' 'Get-LabelPolicy' {
+            param($rows)
+            $result.Data.LabelPolicies = @($rows | Where-Object { $_ } | ForEach-Object {
+                @{
+                    Name   = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '')
+                    Labels = @(Get-NRGObjectField -Item $_ -Key 'Labels' -Default @())
+                }
+            })
+        }
+
+        # Retention labels (PVW-4.4). IsRecordLabel marks a records label;
+        # Regulatory marks a regulatory record.
+        & $scc 'RetentionLabels' 'Get-ComplianceTag' {
+            param($rows)
+            $result.Data.RetentionLabels = @($rows | Where-Object { $_ } | ForEach-Object {
+                @{
+                    Name          = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '')
+                    IsRecordLabel = [bool](Get-NRGObjectField -Item $_ -Key 'IsRecordLabel' -Default $false)
+                    Regulatory    = [bool](Get-NRGObjectField -Item $_ -Key 'Regulatory' -Default $false)
+                }
+            })
+        }
+
+        # Communication compliance policies (PVW-2.2).
+        & $scc 'CommCompliancePolicies' 'Get-SupervisoryReviewPolicyV2' {
+            param($rows)
+            $result.Data.CommCompliancePolicies = @($rows | Where-Object { $_ } | ForEach-Object {
+                @{
+                    Name    = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '')
+                    Enabled = Get-NRGObjectField -Item $_ -Key 'Enabled' -Default $null
+                }
+            })
+        }
+
+        # Information barriers mode (PVW-2.3): Legacy / SingleSegment / MultiSegment.
+        & $scc 'InformationBarriersMode' 'Get-PolicyConfig' {
+            param($rows)
+            $mode = [string](Get-NRGObjectField -Item @($rows)[0] -Key 'InformationBarrierMode' -Default '')
+            if (-not $mode) { throw 'Get-PolicyConfig returned no InformationBarrierMode.' }
+            $result.Data.InformationBarriersMode = $mode
         }
 
         $result.Success = $true

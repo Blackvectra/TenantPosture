@@ -342,8 +342,21 @@ function Register-NRGTenantApp {
 
     # ── Update clients.json ──────────────────────────────────────────────────
     $tenantId = $ctx.TenantId
+    # The .onmicrosoft.com routing domain, for a NEW clients.json record: the
+    # batch runner validates DelegatedOrg on every client and refused to run
+    # at all when a -RegisterApp record lacked it. Read-only lookup on the
+    # tenant this function is already connected to; blank if it cannot be read.
+    $initialDomain = ''
+    try {
+        $org = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/organization?$select=verifiedDomains' -OutputType HashTable -ErrorAction Stop
+        $vd  = @(Get-NRGNestedProperty -Object (@(Get-NRGObjectField -Item $org -Key 'value' -Default @())[0]) -Path 'verifiedDomains' -Default @())
+        $initialDomain = [string](@($vd | Where-Object { (Get-NRGObjectField -Item $_ -Key 'isInitial' -Default $false) -eq $true } |
+            ForEach-Object { Get-NRGObjectField -Item $_ -Key 'name' -Default '' }) | Select-Object -First 1)
+    } catch {
+        Write-Warning "Could not read the tenant's .onmicrosoft.com domain; set DelegatedOrg for $TenantDomain in clients.json before a batch run. $($_.Exception.Message)"
+    }
     Update-NRGClientRecord -ClientsFile $ClientsFile -TenantDomain $TenantDomain `
-        -ClientId $app.AppId -TenantId $tenantId -CertThumbprint $cert.Thumbprint
+        -ClientId $app.AppId -TenantId $tenantId -CertThumbprint $cert.Thumbprint -DelegatedOrg $initialDomain
 
     # ── EXO note: app-only EXO needs one more manual step ────────────────────
     Write-Host '  [i] Exchange Online app-only access needs one manual step in the' -ForegroundColor DarkGray
@@ -378,7 +391,9 @@ function Update-NRGClientRecord {
         [Parameter(Mandatory)][string] $TenantDomain,
         [Parameter(Mandatory)][string] $ClientId,
         [Parameter(Mandatory)][string] $TenantId,
-        [Parameter(Mandatory)][string] $CertThumbprint
+        [Parameter(Mandatory)][string] $CertThumbprint,
+        # The tenant's .onmicrosoft.com domain, used only for a NEW record.
+        [string] $DelegatedOrg = ''
     )
     Set-StrictMode -Version Latest
 
@@ -391,9 +406,12 @@ function Update-NRGClientRecord {
     if (Test-Path -LiteralPath $ClientsFile) {
         try {
             $raw = Get-Content -LiteralPath $ClientsFile -Raw -Encoding utf8 | ConvertFrom-Json
-            $clientsProp = Get-NRGObjectField -Item $raw -Key 'clients' -Default $null
-            if ($null -ne $clientsProp) {
-                $clients = @($clientsProp)
+            # Test for the KEY, not its value: an empty list reads back as
+            # $null through a function return, and the old value test then
+            # treated the { "clients": [] } wrapper itself as a client record
+            # and wrote it back into the list.
+            if ($null -ne $raw -and $raw -isnot [array] -and $raw.PSObject.Properties['clients']) {
+                $clients = @($raw.clients | Where-Object { $null -ne $_ })
             } elseif ($null -ne $raw) {
                 $clients = @($raw)
             }
@@ -413,15 +431,28 @@ function Update-NRGClientRecord {
         $existing | Add-Member -NotePropertyName AuthMode       -NotePropertyValue 'AppOnly'        -Force
         $existing | Add-Member -NotePropertyName OnboardedAt    -NotePropertyValue $now            -Force
     } else {
+        # Every field the batch runner and clients.schema.json require, so a
+        # tenant onboarded here can be batch-assessed without hand edits. The
+        # Skip flags default to assessing everything; review them for the
+        # client's license tier.
         $clients += [pscustomobject][ordered]@{
-            ClientName     = $TenantDomain
-            TenantDomain   = $TenantDomain
-            TenantId       = $TenantId
-            ClientId       = $ClientId
-            CertThumbprint = $CertThumbprint
-            AuthMode       = 'AppOnly'
-            OnboardedAt    = $now
-            Active         = $true
+            ClientName        = $TenantDomain
+            TenantDomain      = $TenantDomain
+            TenantId          = $TenantId
+            DelegatedOrg      = $DelegatedOrg
+            DnsDomains        = @($TenantDomain)
+            SkipPurview       = $false
+            SkipTeams         = $false
+            SkipSharePoint    = $false
+            SkipIntune        = $false
+            SkipPowerPlatform = $false
+            SkipDNS           = $false
+            Notes             = 'Added by -RegisterApp. Review the Skip flags for this client''s license tier.'
+            Active            = $true
+            ClientId          = $ClientId
+            CertThumbprint    = $CertThumbprint
+            AuthMode          = 'AppOnly'
+            OnboardedAt       = $now
         }
     }
 

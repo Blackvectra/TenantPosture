@@ -182,7 +182,7 @@ function Publish-NRGAssessmentSummary {
         if ($scope -and $scope.Available) {
             $null = $sb.AppendLine("## Assessment Scope and Limitations")
             $null = $sb.AppendLine()
-            $null = $sb.AppendLine("**$($scope.ScoredControls) of $($scope.TotalControls) controls produced a scored verdict.** The remaining $($scope.UnscoredControls) are itemised below and are excluded from the compliance score — they are neither passes nor failures.")
+            $null = $sb.AppendLine("**$($scope.ScoredControls) of $($scope.TotalControls) controls produced a scored verdict.** The remaining $($scope.UnscoredControls) are itemized below and are excluded from the compliance score — they are neither passes nor failures.")
             $null = $sb.AppendLine()
             $null = $sb.AppendLine("| Outcome | Controls |")
             $null = $sb.AppendLine("|---------|----------|")
@@ -192,7 +192,7 @@ function Publish-NRGAssessmentSummary {
             $null = $sb.AppendLine("| Produced no result at all | $($scope.NoResult.Count) |")
             $null = $sb.AppendLine("| No automated test — manual review required | $($scope.NoProgrammaticCheck.Count) |")
             $null = $sb.AppendLine("| Covered by a declared third-party EDR — not verified | $(@(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()).Count) |")
-            $null = $sb.AppendLine("| Licence gated | $($scope.LicenceBlocked.Count) |")
+            $null = $sb.AppendLine("| License gated | $($scope.LicenceBlocked.Count) |")
             $null = $sb.AppendLine()
 
             foreach ($l in $scope.Limitations) {
