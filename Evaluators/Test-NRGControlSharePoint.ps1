@@ -76,7 +76,7 @@ function Test-NRGControlSharePoint {
     # the setting its own Remediation cmdlet sets.
     $cap = [string]$s.SharingCapability
     $shell = Get-NRGObjectField -Item $raw.Data -Key 'TenantSettingsSPO' -Default $null
-    $noShell = 'Requires the SharePoint Online Management Shell (Get-SPOTenant); not connected. Not exposed by Graph.'
+    $noShell = 'Requires the SharePoint Online Management Shell (Get-SPOTenant); not connected. Not exposed by Graph. Re-run with -IncludeSharePointShell to read it.'
 
     # SPO-1.2 — Default sharing link not "Anyone" (Set-SPOTenant -DefaultSharingLinkType)
     $c = Get-NRGControlById -ControlId 'SPO-1.2'
@@ -112,7 +112,11 @@ function Test-NRGControlSharePoint {
     $c = Get-NRGControlById -ControlId 'SPO-1.3'
     if ($c) {
         $cit = Get-NRGFrameworkCitations -ControlId 'SPO-1.3'
-        if ($s.IsLegacyAuthProtocolsEnabled -eq $false) {
+        $legacy = Get-NRGObjectField -Item $s -Key 'IsLegacyAuthProtocolsEnabled' -Default $null
+        if ($null -eq $legacy) {
+            Add-NRGFinding -ControlId 'SPO-1.3' -State 'NotApplicable' -Category 'SharePoint' -Title $c.Title -FrameworkIds $cit `
+                -Detail 'Graph did not return isLegacyAuthProtocolsEnabled, so whether SharePoint accepts legacy authentication was not assessed.'
+        } elseif ($legacy -eq $false) {
             Add-NRGFinding -ControlId 'SPO-1.3' -State 'Satisfied' -Category 'SharePoint' -Title $c.Title -Severity 'Informational' `
                 -CurrentValue 'Legacy authentication protocols: disabled' -FrameworkIds $cit
         } else {
@@ -190,6 +194,10 @@ function Test-NRGControlSPOOneDriveSync {
     # turns the feature off but KEEPS the domain GUIDs, so a leftover GUID list
     # read as "restricted" on a tenant where sync is open to any device.
     $restricted = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.IsUnmanagedSyncAppForTenantRestricted' -Default $null
+    if ($null -eq $restricted) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Graph did not return isUnmanagedSyncAppForTenantRestricted, so the OneDrive sync restriction was not assessed.'
+        return
+    }
     $syncDomain = @(Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.AllowedDomainGuidsForSyncApp' -Default @())
     if ($restricted -eq $true) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "OneDrive sync is restricted to computers joined to $($syncDomain.Count) allowed Active Directory domain(s)."
@@ -209,7 +217,7 @@ function Test-NRGControlSPOLinkExpiration {
     }
     $sp = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettingsSPO' -Default $null
     if ($null -eq $sp) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph.'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph. Re-run with -IncludeSharePointShell to read it.'; return
     }
     $cap = [string](Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.SharingCapability' -Default '')
     if ($cap -and $cap -ne 'externalUserAndGuestSharing') {
@@ -335,7 +343,7 @@ function Test-NRGControlSPOEmailAttestation {
     }
     $sp = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettingsSPO' -Default $null
     if ($null -eq $sp) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph.'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph. Re-run with -IncludeSharePointShell to read it.'; return
     }
     if ([string](Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.SharingCapability' -Default '') -eq 'disabled') {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'External sharing is disabled, so there are no external recipients to attest.'
@@ -365,7 +373,7 @@ function Test-NRGControlSPOReauth {
     # value under the correct key.
     $sp = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettingsSPO' -Default $null
     if ($null -eq $sp) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph.'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph. Re-run with -IncludeSharePointShell to read it.'; return
     }
     if ([string](Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.SharingCapability' -Default '') -eq 'disabled') {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'External sharing is disabled, so there are no sharing links to reauthenticate.'
@@ -407,6 +415,10 @@ function Test-NRGControlSPODomainSync {
     # can sync — it does not block syncing to another tenant. The flag decides:
     # a disabled restriction keeps its GUID list.
     $restricted   = Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.IsUnmanagedSyncAppForTenantRestricted' -Default $null
+    if ($null -eq $restricted) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Graph did not return isUnmanagedSyncAppForTenantRestricted, so the OneDrive sync restriction was not assessed.'
+        return
+    }
     $allowedGuids = @(Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.AllowedDomainGuidsForSyncApp' -Default @())
     if ($restricted -eq $true -and $allowedGuids.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "OneDrive sync is restricted to computers joined to $($allowedGuids.Count) allowed Active Directory domain(s)."
@@ -445,7 +457,7 @@ function Test-NRGControlSPOSharingNotifications {
     if ($null -eq $sp) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title `
-            -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph.'; return
+            -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph. Re-run with -IncludeSharePointShell to read it.'; return
     }
     $notify = [bool](Get-NRGObjectField -Item $sp -Key 'NotifyOwnersWhenItemsReshared' -Default $false)
     if ($notify) {
@@ -473,7 +485,7 @@ function Test-NRGControlSPOVersionHistory {
     $sp = $spo.Data['TenantSettingsSPO']
     if (-not $sp) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'SharePoint Management Shell (Get-SPOTenant) data not collected — version-history default not assessed. Requires a Connect-SPOService session.'
+            -Title $ctrl.Title -Detail 'SharePoint Management Shell (Get-SPOTenant) data not collected — version-history default not assessed. Requires a Connect-SPOService session (re-run with -IncludeSharePointShell).'
         return
     }
     $autoTrim  = (Get-NRGObjectField -Item $sp -Key 'EnableAutoExpirationVersionTrim') -eq $true
@@ -512,7 +524,7 @@ function Test-NRGControlSPOGuestExpiry {
     if ($null -eq $sp) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title `
-            -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph.'; return
+            -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph. Re-run with -IncludeSharePointShell to read it.'; return
     }
     if ([string](Get-NRGNestedProperty -Object $spo -Path 'Data.TenantSettings.SharingCapability' -Default '') -eq 'disabled') {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'External sharing is disabled, so there is no guest access to expire.'

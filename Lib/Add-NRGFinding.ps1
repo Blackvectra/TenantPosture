@@ -96,6 +96,13 @@ function Add-NRGFinding {
         $Detail = $CurrentValue.TrimEnd('.') + '.'
     }
 
+    # A control that shares its setting with others says so, and says it
+    # counts once (Config/control-links.json).
+    if (Get-Command Get-NRGControlLinkNote -ErrorAction SilentlyContinue) {
+        $linkNote = Get-NRGControlLinkNote -ControlId $ControlId
+        if ($linkNote -and $Detail -notlike "*$($linkNote.Trim())*") { $Detail = ($Detail.TrimEnd() + $linkNote).Trim() }
+    }
+
     $finding = [PSCustomObject]@{
         ControlId     = $ControlId
         State         = $State

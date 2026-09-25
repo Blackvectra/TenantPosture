@@ -168,6 +168,9 @@ function Get-NRGNISTImprovementPlan {
 
         $steps.Add([ordered]@{
             ControlId    = $cid
+            # Controls that read the same setting are one step: fixing the
+            # setting closes every one of them (Config/control-links.json).
+            LinkedControls = [string[]]@(@(Get-NRGObjectField -Item $f -Key 'LinkedControls' -Default @()) | Where-Object { $_ -and $_ -ne $cid })
             Title        = [string](Get-NRGObjectField -Item $f -Key 'Title' -Default '')
             State        = $state
             Severity     = [string](Get-NRGObjectField -Item $f -Key 'Severity' -Default '')
