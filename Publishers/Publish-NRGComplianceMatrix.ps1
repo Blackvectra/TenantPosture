@@ -83,6 +83,11 @@ function Publish-NRGComplianceMatrix {
     }
 
     # Build serializable data payload
+    $matrixLicProfile = $null
+    if (Get-Command Get-NRGTenantLicenseProfile -ErrorAction SilentlyContinue) {
+        try { $matrixLicProfile = Get-NRGTenantLicenseProfile } catch { $matrixLicProfile = $null }
+    }
+    $matrixLicKnown = [bool](Get-NRGObjectField -Item $matrixLicProfile -Key 'HasLicenseData' -Default $false)
     $payload = @{
         NistTitles = $nistTitles
         # Get-NRGObjectField, not dot-access-then-??: under StrictMode a missing
@@ -100,6 +105,7 @@ function Publish-NRGComplianceMatrix {
         }
         Findings = @($Findings | ForEach-Object {
             $ctrl = $cdefs[$_.ControlId]
+            $licReqStr = [string](Get-NRGObjectField -Item $ctrl -Key 'LicenseRequirement' -Default 'Included')
             @{
                 ControlId       = [string]$_.ControlId
                 Title           = [string]$_.Title
@@ -124,11 +130,27 @@ function Publish-NRGComplianceMatrix {
                 # not controls.json), and under StrictMode Latest a member read on
                 # $null throws before ?? applies — which aborted the whole XLSX.
                 BusinessRisk    = [string](Get-NRGObjectField -Item $ctrl -Key 'BusinessRisk' -Default '')
-                LicenseReq      = [string](Get-NRGObjectField -Item $ctrl -Key 'LicenseRequirement' -Default 'Included')
+                LicenseReq      = $licReqStr
+                # The License Gaps sheet lists only controls whose license the
+                # tenant does NOT hold, decided by the same per-control test the
+                # score uses. It listed every Gap with a non-"Included"
+                # requirement, so a Business Premium tenant was told it lacked
+                # Business Premium. Unknown licensing blocks nothing.
+                LicenseBlocked  = [bool]($matrixLicKnown -and $licReqStr -notmatch '^Included' -and
+                                   -not (Test-NRGLicenseRequirementMet -LicenseRequirement $licReqStr -LicenseProfile $matrixLicProfile -ControlId ([string]$_.ControlId)))
                 FrameworkIds    = @(Get-NRGObjectField -Item $_ -Key 'FrameworkIds' -Default @() | ForEach-Object { [string]$_ })
                 CIS             = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.CIS'      -Default '')
                 SCuBA           = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.SCuBA'    -Default '')
-                NIST            = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.NIST'     -Default '')
+                # The finding's own citations first (what the HTML family
+                # rollup and the NIST matrix read); controls.json as fallback.
+                # Endpoint DEV-* checks have no controls.json row, so reading
+                # only controls.json dropped their verdicts from this sheet's
+                # family rollup (SC: 10 assessed here, 12 in the HTML).
+                NIST            = [string]$(
+                    $fromFinding = @(Get-NRGNISTControlIdsFromFinding -Finding $_)
+                    if ($fromFinding.Count -gt 0) { $fromFinding -join ', ' }
+                    else { [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.NIST' -Default '') }
+                )
                 CMMC            = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.CMMC'     -Default '')
                 ISO27001        = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.ISO27001' -Default '')
                 SOC2            = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.SOC2'     -Default '')
@@ -624,7 +646,7 @@ if nist_fam_rows:
          ('Gap',8),('N/A',8),('Error',8),('Coverage',13),('800-53 Controls',88)])
 
 # License gaps sheet
-lic_rows = [map_row(f) for f in findings if f['State']=='Gap' and 'Included' not in f['LicenseReq']]
+lic_rows = [map_row(f) for f in findings if f['State'] in ('Gap','NotApplicable') and f.get('LicenseBlocked')]
 if lic_rows:
     build_findings_sheet(wb, 'License Gaps', lic_rows,
         [('Control ID',16),('Title',36),('State',12),('Severity',10),('License',32),('Remediation',40)])

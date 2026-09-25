@@ -25,44 +25,25 @@ function Test-NRGControlPowerPlatform {
 
     $d = $raw.Data
 
-    # PPL-1.1 — Environment count
+    # PPL-1.1 — Tenant isolation. This block scored the ENVIRONMENT COUNT
+    # ("1 environments — within governance baseline") and passed tenants with
+    # isolation switched off, while the control's title, remediation and
+    # citations (incl. CMMC 3.13.1 in the SSP) are about tenant isolation.
     $c = Get-NRGControlById -ControlId 'PPL-1.1'
     if ($c) {
-        # Read through Get-NRGObjectField, not dot-access: Set-StrictMode
-        # -Version Latest is active module-wide, so a Data block missing this
-        # key THROWS rather than yielding $null. The live collector always
-        # sets it, but replayed result JSON written before a key existed does
-        # not — and a throw here aborts every remaining PPL control in this
-        # function, including PPL-1.3.
-        $envCount = @(Get-NRGObjectField -Item $d -Key 'Environments' -Default @()).Count
-        # Empty is not clean. Zero environments is a legitimate, compliant
-        # answer AND what a failed environment query looks like, and the two
-        # were indistinguishable — a throttled query reported "No Power
-        # Platform environments — Satisfied". Only the section status can tell
-        # them apart.
-        if (-not (Test-NRGSectionCollected $raw 'Environments')) {
-            Add-NRGFinding -ControlId 'PPL-1.1' -State 'NotApplicable' `
-                -Category 'Power Platform' -Title $c.Title `
-                -Detail 'Environment list was not collected; environment count not assessed.'
-        }
-        elseif ($envCount -eq 0) {
-            Add-NRGFinding -ControlId 'PPL-1.1' -State 'Satisfied' `
-                -Category 'Power Platform' -Title $c.Title -Severity 'Informational' `
-                -CurrentValue 'No Power Platform environments' `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PPL-1.1')
-        } elseif ($envCount -le 10) {
-            Add-NRGFinding -ControlId 'PPL-1.1' -State 'Satisfied' `
-                -Category 'Power Platform' -Title $c.Title -Severity 'Informational' `
-                -CurrentValue "$envCount environments — within governance baseline" `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PPL-1.1')
+        $cit = Get-NRGFrameworkCitations -ControlId 'PPL-1.1'
+        $iso = Get-NRGObjectField -Item $d -Key 'TenantIsolation' -Default $null
+        if (-not (Test-NRGSectionCollected $raw 'TenantIsolation') -or $null -eq $iso) {
+            Add-NRGFinding -ControlId 'PPL-1.1' -State 'NotApplicable' -Category 'Power Platform' -Title $c.Title -FrameworkIds $cit `
+                -Detail 'TenantIsolation was not collected; tenant isolation not assessed.'
+        } elseif ((Get-NRGObjectField -Item $iso -Key 'IsDisabled' -Default $true) -eq $false) {
+            $allowed = @(Get-NRGObjectField -Item $iso -Key 'Rules' -Default @()).Count
+            Add-NRGFinding -ControlId 'PPL-1.1' -State 'Satisfied' -Category 'Power Platform' -Title $c.Title -Severity 'Informational' -FrameworkIds $cit `
+                -Detail "Power Platform tenant isolation is on: connections to and from other tenants are blocked except $allowed allow-listed tenant rule(s)." -CurrentValue "Isolation on; $allowed allowed tenant rule(s)"
         } else {
-            Add-NRGFinding -ControlId 'PPL-1.1' -State 'Partial' `
-                -Category 'Power Platform' -Title $c.Title -Severity 'Medium' `
-                -Detail "$envCount environments exist. Review for unused or trial environments that may host shadow IT data flows." `
-                -CurrentValue "$envCount environments" `
-                -RequiredValue 'Documented inventory; remove unused environments' `
-                -Remediation $c.Remediation `
-                -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'PPL-1.1')
+            Add-NRGFinding -ControlId 'PPL-1.1' -State 'Gap' -Category 'Power Platform' -Title $c.Title -Severity $c.Severity -FrameworkIds $cit `
+                -Detail 'Power Platform tenant isolation is off: flows and apps can connect to other tenants with any account, a data-exfiltration path outside Microsoft 365 DLP.' `
+                -CurrentValue 'Tenant isolation off' -RequiredValue 'Tenant isolation on, with an explicit allow list' -Remediation $c.Remediation
         }
     }
 
@@ -72,7 +53,7 @@ function Test-NRGControlPowerPlatform {
         if (-not (Get-NRGObjectField -Item $d -Key 'DLPAvailable' -Default $false)) {
             Add-NRGFinding -ControlId 'PPL-1.2' -State 'NotApplicable' `
                 -Category 'Power Platform' -Title $c.Title `
-                -Detail 'Power Platform DLP data not available. Install Microsoft.PowerApps.Administration.PowerShell for full DLP assessment: Install-Module Microsoft.PowerApps.Administration.PowerShell -Scope CurrentUser -Force'
+                -Detail 'Power Platform DLP policies were not collected (see Exceptions); DLP not assessed.'
         } else {
             $count = @(Get-NRGObjectField -Item $d -Key 'DLPPolicies' -Default @()).Count
             if ($count -gt 0) {
@@ -91,11 +72,8 @@ function Test-NRGControlPowerPlatform {
     }
 
     # PPL-1.3 — Environment creation restricted to admins
-    # v4.13.0: implemented against Get-TenantSettings
-    # (powerPlatform.governance.disableEnvironmentCreationByNonAdminUsers),
-    # collected into PowerPlatform.TenantGovernance. Was a manual-review
-    # placeholder; the flag is documented and the admin module is already a
-    # dependency of this collector.
+    # Reads disableEnvironmentCreationByNonAdminUsers from the documented
+    # listtenantsettings admin API, collected into PowerPlatform.TenantGovernance.
     $c = Get-NRGControlById -ControlId 'PPL-1.3'
     if ($c) {
         $govStatus = Get-NRGNestedProperty -Object $raw -Path 'Data.SectionStatus.TenantGovernance' -Default $null
@@ -103,9 +81,9 @@ function Test-NRGControlPowerPlatform {
 
         if ($govStatus -ne 'Collected' -or $null -eq $restricted) {
             $why = if ($govStatus -eq 'Failed') {
-                'the Get-TenantSettings query failed (see Exceptions)'
+                'the tenant settings query failed (see Exceptions)'
             } else {
-                'Get-TenantSettings was unavailable — it needs the Microsoft.PowerApps.Administration.PowerShell module, which the BAP-API fallback path cannot substitute for'
+                'the Power Platform admin API was not reached (see Exceptions)'
             }
             Add-NRGFinding -ControlId 'PPL-1.3' -State 'NotApplicable' `
                 -Category 'Power Platform' -Title $c.Title `
@@ -152,6 +130,11 @@ function Test-NRGControlPPLConnectorClassification {
     }
     # Invoke-NRGCollectPowerPlatform now stores per-policy connector
     # classification (Business/Blocked connectors) from Get-DlpPolicy.
+    # A failed DLP read is not "no DLP policies configured".
+    if (-not (Get-NRGObjectField -Item $ppl.Data -Key 'DLPAvailable' -Default $true) -or -not (Test-NRGSectionCollected $ppl 'DLPPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Power Platform DLP policies were not collected; connector classification not assessed.'
+        return
+    }
     $policies      = @($ppl.Data['DLPPolicies'] ?? @())
     $businessConns = @($policies | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'BusinessConnectors' -Default @()).Count } | Measure-Object -Sum).Sum
     $blockedConns  = @($policies | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'BlockedConnectors'  -Default @()).Count } | Measure-Object -Sum).Sum
@@ -191,7 +174,18 @@ function Test-NRGControlPPLAutomate {
             -Title $ctrl.Title -Detail 'TenantSettings was not collected; not assessed.'
         return
     }
-    $guestFlows     = Get-NRGNestedProperty -Object $ppl -Path 'Data.TenantSettings.DisableFlowsForGuestUsers' -Default $false
+    # Microsoft's tenant settings API documents no "disable flows for guest
+    # users" setting, so the collector cannot read one. Reading it with a
+    # $false default turned "not readable" into "guests can create flows"
+    # and scored Partial on every tenant. Only a value actually returned
+    # may score.
+    $guestFlows = Get-NRGNestedProperty -Object $ppl -Path 'Data.TenantSettings.DisableFlowsForGuestUsers' -Default $null
+    if ($null -eq $guestFlows) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Whether guest users can create Power Automate flows is not exposed by the Power Platform tenant settings API; requires manual verification in Power Platform admin center > Tenant settings.'
+        return
+    }
     $gaps = @()
     if (-not $guestFlows) { $gaps += 'Guest users can create flows' }
     if ($gaps.Count -eq 0) {
@@ -222,7 +216,16 @@ function Test-NRGControlPPLPowerApps {
             -Title $ctrl.Title -Detail 'TenantSettings was not collected; not assessed.'
         return
     }
-    $canvasAppsEnabled = -not (Get-NRGNestedProperty -Object $ppl -Path 'Data.TenantSettings.DisablePortalsCreationByNonAdminUsers' -Default $false)
+    # A $false default here scored "portals open to non-admins" (Partial)
+    # whenever the flag was simply not returned.
+    $portalsRestricted = Get-NRGNestedProperty -Object $ppl -Path 'Data.TenantSettings.DisablePortalsCreationByNonAdminUsers' -Default $null
+    if ($null -eq $portalsRestricted) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+            -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'The tenant settings response did not include the portal-creation setting; not assessed.'
+        return
+    }
+    $canvasAppsEnabled = -not [bool]$portalsRestricted
     if (-not $canvasAppsEnabled) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `

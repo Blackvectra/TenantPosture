@@ -1059,7 +1059,7 @@ Exchange admin center > Mail flow > Rules. Inspect every enabled rule for Redire
 
 **Severity:** High  |  **Category:** Email  |  **Automated:** Yes
 
-**License required:** Exchange Online Plan 2 or M365 E3
+**License required:** Exchange Online Plan 2 or Exchange Online Archiving (M365 Business Premium, E3, E5)
 
 **Description:**
 Every mailbox is covered by a litigation hold, an In-Place hold, or a retention policy, so content survives deletion of the item, the mailbox, or the account.

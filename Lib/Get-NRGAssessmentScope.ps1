@@ -111,6 +111,8 @@ function Get-NRGAssessmentScope {
         LicenceBlocked       = @()
         CollectionIncomplete = @()
         NoProgrammaticCheck  = @()
+        ThirdPartyAttested   = @()
+        NotApplicableToTenant = @()
         NotEvaluatedThisMode = @()
         NoResult             = @()
         Errors               = @()
@@ -136,7 +138,11 @@ function Get-NRGAssessmentScope {
     # WORST state wins for scope purposes: a control that reached a verdict on
     # one domain and not another has been partly assessed, and "partly" is the
     # honest answer, not "assessed".
-    $rank = @{ 'Satisfied' = 0; 'Partial' = 1; 'Gap' = 2; 'Error' = 3; 'NotApplicable' = 4 }
+    # The same order the score uses (Get-NRGStateSeverityRank). With
+    # NotApplicable ranked above Gap here and below Satisfied in the score, a
+    # control passing on one domain and unread on another was a pass in the
+    # score ring and "not assessed" in this section of the same report.
+    $rank = Get-NRGStateSeverityRank
     $byId = @{}
     foreach ($f in @($Findings)) {
         if ($null -eq $f) { continue }
@@ -179,9 +185,17 @@ function Get-NRGAssessmentScope {
     # licence gated.
     $haveSkuData = $false
     if ($null -ne $LicenseProfile) {
-        $sup = Get-NRGObjectField -Item $LicenseProfile -Key 'SuppressedLicenseRequirements' -Default $null
-        if ($null -ne $sup) {
-            try { $haveSkuData = (@($sup).Count -gt 0) } catch { $haveSkuData = $false }
+        # HasLicenseData when present: a Business Basic tenant has SKU data
+        # yet satisfies no requirement, so an empty suppression set does not
+        # mean "no data". Older profiles lack the flag; fall back to the set.
+        $flag = Get-NRGObjectField -Item $LicenseProfile -Key 'HasLicenseData' -Default $null
+        if ($null -ne $flag) {
+            $haveSkuData = [bool]$flag
+        } else {
+            $sup = Get-NRGObjectField -Item $LicenseProfile -Key 'SuppressedLicenseRequirements' -Default $null
+            if ($null -ne $sup) {
+                try { $haveSkuData = (@($sup).Count -gt 0) } catch { $haveSkuData = $false }
+            }
         }
     }
 
@@ -214,12 +228,14 @@ function Get-NRGAssessmentScope {
                     'produced data|not returned|not found in collected data|not available|' +
                     '403|Forbidden|consent'
     # An evaluator that declares itself advisory is authoritative about itself.
-    $advisoryRx   = 'requires manual verification'
+    $advisoryRx   = 'requires manual verification|manual review required|no programmatic check'
 
     # ── Classify every control in the catalogue ──────────────────────────────
     $licenceBlocked = [System.Collections.Generic.List[object]]::new()
     $collectionGap  = [System.Collections.Generic.List[object]]::new()
+    $thirdParty     = [System.Collections.Generic.List[object]]::new()
     $advisory       = [System.Collections.Generic.List[object]]::new()
+    $notForTenant   = [System.Collections.Generic.List[object]]::new()
     $notThisMode    = [System.Collections.Generic.List[object]]::new()
     $noResult       = [System.Collections.Generic.List[object]]::new()
     $errored        = [System.Collections.Generic.List[object]]::new()
@@ -297,6 +313,14 @@ function Get-NRGAssessmentScope {
 
         # ── Classification, strongest evidence first ─────────────────────────
 
+        # 0. The assessor declared a third-party tool covers this check
+        #    (Set-NRGThirdPartyEdr). Declared, not verified: its own bucket,
+        #    never mixed into "no automated test" or "could not collect".
+        if ($detail.StartsWith($script:NRGThirdPartyEdrMarker)) {
+            $thirdParty.Add([pscustomobject]$row)
+            continue
+        }
+
         # 1. The evaluator declares itself advisory. It is authoritative about
         #    whether it has a programmatic check, and that is true whether or
         #    not the collector ran.
@@ -334,7 +358,7 @@ function Get-NRGAssessmentScope {
             }
         }
 
-        # 3. Licence gated — POSITIVE evidence only. Either the evaluator said
+        # 3. License gated — POSITIVE evidence only. Either the evaluator said
         #    so explicitly, or we hold real SKU data and it says the tenant
         #    lacks the licence. "No SKU data" is not evidence of anything.
         $isLicence = $false
@@ -343,7 +367,7 @@ function Get-NRGAssessmentScope {
         } elseif ($haveSkuData -and $row.Licence -and $row.Licence -notmatch '^Included' -and
                   (Get-Command Test-NRGLicenseRequirementMet -ErrorAction SilentlyContinue)) {
             try {
-                $isLicence = -not (Test-NRGLicenseRequirementMet -LicenseRequirement $row.Licence -LicenseProfile $LicenseProfile)
+                $isLicence = -not (Test-NRGLicenseRequirementMet -LicenseRequirement $row.Licence -LicenseProfile $LicenseProfile -ControlId $row.ControlId)
             } catch {
                 $isLicence = $false
             }
@@ -361,7 +385,11 @@ function Get-NRGAssessmentScope {
             continue
         }
 
-        $advisory.Add([pscustomobject]$row)
+        # 5. Everything else: the evaluator reached a reasoned "does not apply"
+        #    (sharing is off, no Copilot licenses, no certificates issued). It
+        #    used to fall into "no automated test — manual review", which is
+        #    false for a control that ran its test. Its own detail says why.
+        $notForTenant.Add([pscustomobject]$row)
     }
 
     # ── Collector coverage that did not complete ─────────────────────────────
@@ -400,8 +428,19 @@ function Get-NRGAssessmentScope {
     if ($advisory.Count -gt 0) {
         $limitations.Add("$($advisory.Count) control(s) have no automated test and were not scored. They require manual review; nothing in this report asserts whether they are met.")
     }
+    if ($notForTenant.Count -gt 0) {
+        $limitations.Add("$($notForTenant.Count) control(s) were checked and do not apply to this tenant as configured (for example, a feature that is turned off or not in use). Each finding states the reason. They are not scored; confirm the reason still holds before relying on it.")
+    }
+    # The declaration also rewrites endpoint (DEV-*) checks, which are not in
+    # controls.json; count every declared finding so the sentence matches what
+    # Set-NRGThirdPartyEdr actually did (it said 3 while 8 were rewritten).
+    $declaredIds = @(@($Findings) | Where-Object { $null -ne $_ -and ([string](Get-NRGObjectField -Item $_ -Key 'Detail' -Default '')).StartsWith($script:NRGThirdPartyEdrMarker) } |
+        ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'ControlId' -Default '') } | Where-Object { $_ } | Sort-Object -Unique)
+    if ($declaredIds.Count -gt 0) {
+        $limitations.Add("$($declaredIds.Count) Microsoft Defender endpoint check(s) were not scored because the assessor declared a third-party EDR provides endpoint protection for this client. Microsoft 365 cannot see that product, so this coverage is declared, not verified; confirm it in that product's console.")
+    }
     if ($licenceBlocked.Count -gt 0) {
-        $limitations.Add("$($licenceBlocked.Count) control(s) require licensing this tenant does not hold. They are excluded from the score rather than counted against it, and are itemised under licensing.")
+        $limitations.Add("$($licenceBlocked.Count) control(s) require licensing this tenant does not hold. They are excluded from the score rather than counted against it, and are itemized under licensing.")
     }
     if ($errored.Count -gt 0) {
         $limitations.Add("$($errored.Count) control(s) raised an error during evaluation and are counted as gaps. Their true state is unknown.")
@@ -423,6 +462,8 @@ function Get-NRGAssessmentScope {
         LicenceBlocked       = @($licenceBlocked)
         CollectionIncomplete = @($collectionGap)
         NoProgrammaticCheck  = @($advisory)
+        ThirdPartyAttested   = @($thirdParty)
+        NotApplicableToTenant = @($notForTenant)
         NotEvaluatedThisMode = @($notThisMode)
         NoResult             = @($noResult)
         Errors               = @($errored)

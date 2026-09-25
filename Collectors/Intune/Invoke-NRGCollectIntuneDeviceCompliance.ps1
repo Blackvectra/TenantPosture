@@ -57,18 +57,20 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
         # v4.6.4 EMERGENCY FIX (Critical #3): added @odata.nextLink pagination.
         # Previously truncated to first 100 policies on enterprise tenants.
         try {
-            $next = 'https://graph.microsoft.com/v1.0/deviceManagement/deviceCompliancePolicies'
+            # $expand=assignments: an unassigned policy evaluates no device, so
+            # "a policy exists" is not "devices are held to it".
+            $next = 'https://graph.microsoft.com/v1.0/deviceManagement/deviceCompliancePolicies?$expand=assignments'
             $maxPages  = 200
             $pageCount = 0
             while ($next -and $pageCount -lt $maxPages) {
                 $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 foreach ($p in @($page.value)) {
                     $result.Data.CompliancePolicies += @{
-                        Id          = $p.id
-                        DisplayName = [string]$p.displayName
-                        Platform    = [string]$p['@odata.type']
-                        Description = [string]$p.description
-                        Version     = $p.version
+                        Id          = (Get-NRGObjectField -Item $p -Key 'id' -Default $null)
+                        DisplayName = [string](Get-NRGObjectField -Item $p -Key 'displayName' -Default '')
+                        Platform    = [string](Get-NRGObjectField -Item $p -Key '@odata.type' -Default '')
+                        Description = [string](Get-NRGObjectField -Item $p -Key 'description' -Default '')
+                        Version     = (Get-NRGObjectField -Item $p -Key 'version' -Default $null)
                         # Pull through fields the evaluator looks at; not all platforms expose
                         # them (deviceCompliancePolicies is polymorphic — a bare dot-read of a
                         # Windows-only key throws under StrictMode on an iOS/Android/macOS row),
@@ -77,6 +79,10 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
                         SecureBootEnabled       = Get-NRGObjectField -Item $p -Key 'secureBootEnabled' -Default $null
                         PasswordRequired        = Get-NRGObjectField -Item $p -Key 'passwordRequired' -Default $null
                         StorageRequireEncryption= Get-NRGObjectField -Item $p -Key 'storageRequireEncryption' -Default $null
+                        # iOS names the lock requirement passcodeRequired, not passwordRequired.
+                        PasscodeRequired        = Get-NRGObjectField -Item $p -Key 'passcodeRequired' -Default $null
+                        OsMinimumVersion        = [string](Get-NRGObjectField -Item $p -Key 'osMinimumVersion' -Default '')
+                        IsAssigned              = $(if ($null -ne (Get-NRGObjectField -Item $p -Key 'assignments' -Default $null)) { @(Get-NRGObjectField -Item $p -Key 'assignments' -Default @() | Where-Object { $_ }).Count -gt 0 } else { $null })
                     }
                 }
                 $next = $page['@odata.nextLink']
@@ -98,18 +104,20 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
         # ── Device configuration profiles (legacy + Update for Business) ─────
         # v4.6.4 EMERGENCY FIX (Critical #3): paginated.
         try {
-            $next = 'https://graph.microsoft.com/v1.0/deviceManagement/deviceConfigurations'
+            $next = 'https://graph.microsoft.com/v1.0/deviceManagement/deviceConfigurations?$expand=assignments'
             $maxPages  = 200
             $pageCount = 0
             while ($next -and $pageCount -lt $maxPages) {
                 $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 foreach ($p in @($page.value)) {
-                    $odata = [string]$p['@odata.type']
+                    $odata = [string](Get-NRGObjectField -Item $p -Key '@odata.type' -Default '')
+                    $asg = Get-NRGObjectField -Item $p -Key 'assignments' -Default $null
                     $entry = @{
-                        Id          = $p.id
-                        DisplayName = [string]$p.displayName
+                        Id          = (Get-NRGObjectField -Item $p -Key 'id' -Default $null)
+                        DisplayName = [string](Get-NRGObjectField -Item $p -Key 'displayName' -Default '')
                         Platform    = $odata
-                        Description = [string]$p.description
+                        Description = [string](Get-NRGObjectField -Item $p -Key 'description' -Default '')
+                        IsAssigned  = $(if ($null -ne $asg) { @($asg | Where-Object { $_ }).Count -gt 0 } else { $null })
                     }
                     $result.Data.ConfigurationProfiles += $entry
 
@@ -155,28 +163,44 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
                 }
             }
             foreach ($p in $enrollAll) {
-                $odata = [string]$p['@odata.type']
+                $odata = [string](Get-NRGObjectField -Item $p -Key '@odata.type' -Default '')
+                # The four configurations every tenant has (priority 0, id
+                # ending _Default...) are Microsoft's defaults — present on a
+                # tenant nobody configured. What a restriction does lives in
+                # its per-platform blocks.
+                $id = [string](Get-NRGObjectField -Item $p -Key 'id' -Default '')
+                $prio = Get-NRGObjectField -Item $p -Key 'priority' -Default $null
+                $blocks = @()
+                foreach ($plat in @('windows','windowsHome','windowsMobile','ios','android','androidForWork','mac','macOS')) {
+                    $r = Get-NRGObjectField -Item $p -Key "${plat}Restriction" -Default $null
+                    if ($r) { $blocks += @{ Platform = $plat; PlatformBlocked = [bool](Get-NRGObjectField -Item $r -Key 'platformBlocked' -Default $false); PersonalBlocked = [bool](Get-NRGObjectField -Item $r -Key 'personalDeviceEnrollmentBlocked' -Default $false); OsMinimumVersion = [string](Get-NRGObjectField -Item $r -Key 'osMinimumVersion' -Default '') } }
+                }
+                $single = Get-NRGObjectField -Item $p -Key 'platformRestriction' -Default $null
+                if ($single) { $blocks += @{ Platform = [string](Get-NRGObjectField -Item $p -Key 'platformType' -Default ''); PlatformBlocked = [bool](Get-NRGObjectField -Item $single -Key 'platformBlocked' -Default $false); PersonalBlocked = [bool](Get-NRGObjectField -Item $single -Key 'personalDeviceEnrollmentBlocked' -Default $false); OsMinimumVersion = [string](Get-NRGObjectField -Item $single -Key 'osMinimumVersion' -Default '') } }
                 $entry = @{
-                    Id          = $p.id
-                    DisplayName = [string]$p.displayName
+                    Id          = $id
+                    DisplayName = [string](Get-NRGObjectField -Item $p -Key 'displayName' -Default '')
                     Type        = $odata
-                    Priority    = $p.priority
+                    Priority    = $prio
+                    IsDefault   = ($id -match '_Default' -or "$prio" -eq '0')
+                    Limit       = Get-NRGObjectField -Item $p -Key 'limit' -Default $null
+                    Restrictions = @($blocks)
                 }
                 $result.Data.EnrollmentConfig += $entry
 
                 if ($odata -match 'WindowsHelloForBusinessConfiguration') {
                     $result.Data.WindowsHelloPolicies += @{
-                        Id                          = $p.id
-                        DisplayName                 = [string]$p.displayName
-                        State                       = [string]$p.state
-                        SecurityDeviceRequired      = $p.securityDeviceRequired
-                        UnlockWithBiometricsEnabled = $p.unlockWithBiometricsEnabled
-                        PinMinimumLength            = $p.pinMinimumLength
-                        PinMaximumLength            = $p.pinMaximumLength
-                        PinExpirationInDays         = $p.pinExpirationInDays
-                        PinPreviousBlockCount       = $p.pinPreviousBlockCount
-                        EnhancedBiometricsState     = [string]$p.enhancedBiometricsState
-                        Priority                    = $p.priority
+                        Id                          = $id
+                        DisplayName                 = [string](Get-NRGObjectField -Item $p -Key 'displayName' -Default '')
+                        State                       = [string](Get-NRGObjectField -Item $p -Key 'state' -Default '')
+                        SecurityDeviceRequired      = Get-NRGObjectField -Item $p -Key 'securityDeviceRequired' -Default $null
+                        UnlockWithBiometricsEnabled = Get-NRGObjectField -Item $p -Key 'unlockWithBiometricsEnabled' -Default $null
+                        PinMinimumLength            = Get-NRGObjectField -Item $p -Key 'pinMinimumLength' -Default $null
+                        PinMaximumLength            = Get-NRGObjectField -Item $p -Key 'pinMaximumLength' -Default $null
+                        PinExpirationInDays         = Get-NRGObjectField -Item $p -Key 'pinExpirationInDays' -Default $null
+                        PinPreviousBlockCount       = Get-NRGObjectField -Item $p -Key 'pinPreviousBlockCount' -Default $null
+                        EnhancedBiometricsState     = [string](Get-NRGObjectField -Item $p -Key 'enhancedBiometricsState' -Default '')
+                        Priority                    = $prio
                     }
                 } elseif ($odata -match 'Limit|PlatformRestriction|EnrollmentRestriction|DeviceEnrollmentConfiguration$') {
                     $result.Data.EnrollmentRestrictions += $entry
@@ -213,11 +237,14 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
                 }
             }
             $result.Data.OSComplianceSummary.TotalCount        = $devList.Count
-            $result.Data.OSComplianceSummary.CompliantCount    = @($devList | Where-Object { $_.complianceState -eq 'compliant' }).Count
-            $result.Data.OSComplianceSummary.NonCompliantCount = @($devList | Where-Object { $_.complianceState -ne 'compliant' }).Count
+            # complianceState is the device's OVERALL state against every rule
+            # of its compliance policies — not an OS-version verdict.
+            $result.Data.OSComplianceSummary.CompliantCount    = @($devList | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'complianceState' -Default '') -eq 'compliant' }).Count
+            $result.Data.OSComplianceSummary.NonCompliantCount = @($devList | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'complianceState' -Default '') -ne 'compliant' }).Count
             $byPlatform = @{}
             foreach ($d in $devList) {
-                $p = if ($d.operatingSystem) { [string]$d.operatingSystem } else { 'Unknown' }
+                $os = [string](Get-NRGObjectField -Item $d -Key 'operatingSystem' -Default '')
+                $p = if ($os) { $os } else { 'Unknown' }
                 if (-not $byPlatform.ContainsKey($p)) { $byPlatform[$p] = 0 }
                 $byPlatform[$p]++
             }

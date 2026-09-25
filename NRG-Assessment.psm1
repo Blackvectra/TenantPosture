@@ -149,7 +149,7 @@ $script:ExportedFunctions = @(
     'Set-NRGRawData', 'Get-NRGRawData',
     'Connect-NRGServices', 'Disconnect-NRGServices',
     'ConvertTo-NRGHtmlSafe', 'ConvertTo-NRGSafeUrl',
-    'Start-NRGWebServer', 'Register-NRGTenantApp',
+    'Start-NRGWebServer',
     'Get-NRGControlDefinitions', 'Get-NRGControlById',
     'Get-NRGFrameworkCitations', 'Get-NRGFrameworkDefinitions',
     'Get-NRGFindingRiskCost', 'Get-NRGAggregateRisk',
@@ -186,6 +186,8 @@ $script:ExportedFunctions = @(
     'Invoke-NRGEvaluatorSafe',
     'Resolve-NRGDns',
     'Resolve-NRGTenantId',
+    'Set-NRGThirdPartyEdr',
+    'Set-NRGLicenseGating',
     'Get-NRGModuleHealth',
     'Repair-NRGModuleHealth',
     'Get-NRGModuleInstallScope',
@@ -292,7 +294,7 @@ $script:ExportedFunctions = @(
     'Test-NRGControlTeamsWatermarks', 'Test-NRGControlTeamsAutoAdmit',
     'Test-NRGControlTeamsMeetingChat', 'Test-NRGControlTeamsChatCopy',
     'Test-NRGControlTeamsMeetingRecordingScope', 'Test-NRGControlTeamsAnonymousStart',
-    'Test-NRGControlTeamsFederationAllowlist', 'Test-NRGControlTeamsLiveEvents',
+    'Test-NRGControlTeamsFederationAllowlist', 'Test-NRGControlTeamsLiveEvents', 'Test-NRGControlTeamsRecordingRetention',
 
     # ── Evaluators — Purview ──────────────────────────────────────────────────
     'Test-NRGControlPurview',

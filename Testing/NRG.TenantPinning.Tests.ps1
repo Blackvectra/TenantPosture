@@ -77,3 +77,47 @@ Describe 'Entry points pin the scan to the requested tenant' {
         $script:Entry | Should -Match "PSObject\.Properties\['clients'\]"
     }
 }
+
+# Issue #79. The batch runner switched Graph to each client but ran the
+# assessment without naming the client, so tenant pinning never applied in
+# batch mode, Security & Compliance opened without -DelegatedOrganization, and
+# the assessment's own cleanup closed the shared Graph session after every
+# client (a fresh sign-in per client, reconnecting without the scopes).
+Describe 'GDAP batch runner pins every client' {
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        $script:BatchPath = Join-Path $script:RepoRoot 'Invoke-NRGBatchAssessment.ps1'
+        $script:Batch     = Get-Content -LiteralPath $script:BatchPath -Raw
+        $script:BatchAst  = [System.Management.Automation.Language.Parser]::ParseFile($script:BatchPath, [ref]$null, [ref]$null)
+
+        # String literals of the array assigned to $Name in a file's AST.
+        function script:Get-AssignedStrings([System.Management.Automation.Language.Ast]$Ast, [string]$Name) {
+            $a = $Ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+                    "$($n.Left)" -eq "`$$Name" }, $true) | Select-Object -First 1
+            @($a.Right.FindAll({ param($n) $n -is [System.Management.Automation.Language.StringConstantExpressionAst] }, $true).Value)
+        }
+    }
+
+    It 'passes the client TenantDomain and -KeepSession to the assessment' {
+        $script:Batch | Should -Match '\$params = @\{[^}]*TenantDomain = \$client\.TenantDomain'
+        $script:Batch | Should -Match '\$params = @\{[^}]*KeepSession = \$true'
+    }
+
+    It 'switches Graph to each client with the full scope list, not a bare -TenantId' {
+        $script:Batch | Should -Match 'Connect-MgGraph -TenantId \$client\.TenantId -Scopes \$batchScopes'
+    }
+
+    It 'requests exactly the scopes Connect-NRGServices requests' {
+        $svcAst = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $script:RepoRoot 'Lib/Connect-NRGServices.ps1'), [ref]$null, [ref]$null)
+        $batch = @(Get-AssignedStrings $script:BatchAst 'batchScopes' | Sort-Object)
+        $svc   = @(Get-AssignedStrings $svcAst 'scopes' | Sort-Object)
+        $batch.Count | Should -Be 24
+        ($batch -join ',') | Should -Be ($svc -join ',')
+    }
+
+    It 'closes the per-client Exchange, Security & Compliance and Teams sessions before the next client' {
+        $script:Batch | Should -Match 'Disconnect-ExchangeOnline -Confirm:\$false'
+        $script:Batch | Should -Match 'Disconnect-MicrosoftTeams'
+    }
+}

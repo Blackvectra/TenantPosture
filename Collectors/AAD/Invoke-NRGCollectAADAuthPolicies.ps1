@@ -41,6 +41,9 @@ function Invoke-NRGCollectAADAuthPolicies {
                     Id                            = [string]$amp.id
                     Description                   = [string]$amp.description
                     PolicyVersion                 = [string]$amp.policyVersion
+                    # preMigration / migrationInProgress: SSPR methods are still
+                    # governed by the legacy SSPR policy, not this one (AAD-5.2).
+                    PolicyMigrationState          = [string](Get-NRGObjectField -Item $amp -Key 'policyMigrationState' -Default '')
                     AuthenticationMethodConfigs   = @($amp.authenticationMethodConfigurations | ForEach-Object {
                         # featureSettings is absent on most method configs; a bare
                         # $_.featureSettings then throws and empties this whole list.
@@ -52,10 +55,16 @@ function Invoke-NRGCollectAADAuthPolicies {
                             OdataType = [string](Get-NRGObjectField -Item $cfg -Key '@odata.type' -Default '')
                             IncludeTargets = @(Get-NRGObjectField -Item $cfg -Key 'includeTargets' -Default @())
                             ExcludeTargets = @(Get-NRGObjectField -Item $cfg -Key 'excludeTargets' -Default @())
+                            # Microsoft Authenticator: 'any' or 'deviceBasedPush' allows
+                            # passwordless phone sign-in (AAD-9.2); 'push' does not.
+                            AuthenticationModes = @(@(Get-NRGObjectField -Item $cfg -Key 'includeTargets' -Default @()) | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'authenticationMode' -Default '') } | Where-Object { $_ })
                             FeatureSettings = if ($fs) {
                                 @{
-                                    NumberMatchingRequiredState    = [string](Get-NRGNestedProperty -Object $cfg -Path 'featureSettings.numberMatchingRequiredState' -Default '')
-                                    AdditionalContextFeatureState  = [string](Get-NRGNestedProperty -Object $cfg -Path 'featureSettings.additionalContextFeatureState' -Default '')
+                                    # Each feature setting is an OBJECT {state, includeTarget,
+                                    # excludeTarget}; stringifying it stored
+                                    # "System.Collections.Hashtable" and AAD-9.1 scored a Gap.
+                                    NumberMatchingRequiredState    = [string](Get-NRGNestedProperty -Object $cfg -Path 'featureSettings.numberMatchingRequiredState.state' -Default '')
+                                    AdditionalContextFeatureState  = [string](Get-NRGNestedProperty -Object $cfg -Path 'featureSettings.displayAppInformationRequiredState.state' -Default '')
                                 }
                             } else { $null }
                         }
@@ -81,6 +90,25 @@ function Invoke-NRGCollectAADAuthPolicies {
             $authPol = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/authorizationPolicy' `
                 -ErrorAction Stop
+            # Graph returns permissionGrantPoliciesAssigned INSIDE
+            # defaultUserRolePermissions. Read at the top level it was always
+            # empty, so every tenant — including ones where users can consent
+            # to ANY app — scored "consent restricted" (AAD-6.2). Two
+            # statements, never an if-expression: an empty list (no user
+            # consent at all, the best setting) would unroll to $null.
+            # $null means "not returned", which is not "none".
+            # Read by key presence: the property helpers return an empty
+            # array as $null (pipeline unrolling), and empty is the answer
+            # that matters most here.
+            $permGrant = $null
+            foreach ($holder in @((Get-NRGNestedProperty -Object $authPol -Path 'defaultUserRolePermissions' -Default $null), $authPol)) {
+                if ($null -eq $holder) { continue }
+                if ($holder -is [System.Collections.IDictionary]) {
+                    if ($holder.Contains('permissionGrantPoliciesAssigned')) { $permGrant = [string[]]@($holder['permissionGrantPoliciesAssigned'] | Where-Object { $_ }); break }
+                } elseif ($holder.PSObject.Properties['permissionGrantPoliciesAssigned']) {
+                    $permGrant = [string[]]@($holder.permissionGrantPoliciesAssigned | Where-Object { $_ }); break
+                }
+            }
             if ($authPol) {
                 $result.Data.AuthorizationPolicy = @{
                     Id                           = [string](Get-NRGObjectField -Item $authPol -Key 'id' -Default '')
@@ -95,7 +123,7 @@ function Invoke-NRGCollectAADAuthPolicies {
                         AllowedToReadBitlockerKeys = [bool](Get-NRGNestedProperty -Object $authPol -Path 'defaultUserRolePermissions.allowedToReadBitlockerKeysForOwnedDevice' -Default $true)
                     }
                     GuestUserRoleId              = [string](Get-NRGObjectField -Item $authPol -Key 'guestUserRoleId' -Default '')
-                    PermissionGrantPoliciesAssigned = @(Get-NRGObjectField -Item $authPol -Key 'permissionGrantPoliciesAssigned' -Default @())
+                    PermissionGrantPoliciesAssigned = $permGrant
                 }
             }
         } catch {

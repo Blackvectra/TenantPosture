@@ -1,5 +1,284 @@
 # Changelog
 
+## v4.14.0 (2026-09-24)
+
+Closes the remaining known issues that could make a report look worse, or
+different, than the tenant actually is.
+
+- **GDAP batch mode (#79).** The batch runner passes each client's
+  `-TenantDomain` and `-KeepSession` to the assessment, so tenant pinning,
+  the Purview `-DelegatedOrganization` and the shared Graph session all apply
+  in batch mode. Per-client Graph switches request the full scope list, and
+  Teams is disconnected between clients.
+- **Third-party EDR (Cortex XDR).** `-ThirdPartyEDR` or `ThirdPartyEDR` in
+  clients.json reports the Microsoft Defender endpoint checks (INT-1.5,
+  INT-2.1, INT-2.2, DEV-2.x) as covered by that product (declared, not
+  verified) and leaves them out of the score instead of scoring them as gaps.
+  A Defender check that passed keeps its verdict. Works on `-FromResults`.
+- **Consent.** AAD-8.2, AAD-11.3 and DEF-4.6 now name the Graph permission
+  the tenant has not consented to. New `Grant-NRGGraphConsent.ps1` does the
+  one-time consent (sign-in only). App-only onboarding requests all three.
+- **Power Platform actually collects.** The admin module is Windows
+  PowerShell 5.1 only and the old fallback called a cmdlet that does not
+  exist, so PPL-* never collected. The collector now signs in to the Power
+  Platform admin API in-process (one extra browser sign-in, same flow as
+  Graph, no child process) and reads it over REST, pinned to the Graph
+  tenant, with per-section status. PPL-2.2 and PPL-2.3 no longer score
+  Partial from a setting that was never read.
+- **Conditional Access tiers** (AAD-10.4, 11.4, 11.7, 11.8, 11.9): None ->
+  Gap, Audit mode -> Partial, Enabled -> Satisfied.
+- **Not configured is a Gap; unlicensed is not scored.** Controls that
+  scored Partial (half credit) when nothing was configured now score Gap
+  when the tenant holds the license, and are moved out of the score as an
+  upgrade opportunity when it does not (Set-NRGLicenseGating). The license
+  profile no longer reads Microsoft 365 Business Standard
+  (O365_BUSINESS_PREMIUM) as Business Premium, and E3 tenants now satisfy
+  "Business Premium or E3+".
+- **False verdicts found by an evaluator-vs-collector audit:** AAD-1.2 read
+  security defaults from a key nothing writes and printed "disabled"
+  unread, and missed MFA required through authentication strengths;
+  PVW-4.3 said "labels defined but none published" from a list never
+  collected; DEF-4.5 / PVW-2.5 missed workloads because 'A, B' was split on
+  the comma without trimming; INT-2.1 passed on an unverified branding
+  declaration. Six Purview controls that could never produce a verdict now
+  collect their data; PVW-2.4 / PVW-3.2 say plainly they need manual review.
+- **`-RegisterApp` moved out of the read-only module** to `Onboard/`; the
+  switch works as before. A test fails if any module-loaded file calls a
+  Graph write cmdlet.
+- **Defender judges the policies actually in force.** Exchange Online
+  applies a custom policy whose rule is enabled, else an enabled preset,
+  else the default / Built-in protection policy. The tool read the default
+  policy only (or "any" policy): the Built-in protection Safe Links policy
+  (click-through allowed, internal senders off, URL rewrite off) was called
+  hardened; a custom policy turned off but applied by an enabled rule was
+  ignored; and a preset covering everyone left the default's weaker values
+  reported as the tenant's. Verdicts now cover every policy that can apply
+  (Partial when some recipients are protected and some are not, naming
+  which), and the default drops out only when an enabled rule provably
+  covers every accepted domain. DEF-2.1 needs an enabled preset RULE (a
+  custom policy named "Standard users" passed); DEF-2.2 reads
+  SpamZapEnabled / PhishZapEnabled (the deprecated ZapEnabled was absent
+  and failed the anti-spam section); DEF-2.4 no longer claims users cannot
+  release quarantined phishing (Microsoft's default lets them); DEF-4.6
+  does not count a scheduled simulation; DEF-4.7 no longer errors; a Safe
+  Links / Safe Attachments read that failed is "not collected", not an
+  Error scored as a failure, and not "not licensed" when licensing was not
+  read.
+- **Purview, Power Platform, Copilot.** PPL-1.1 ("Tenant Isolation
+  Enabled") scored the number of environments and passed tenants with
+  isolation off. PVW-2.1 read the admin audit log (always on in Exchange
+  Online) instead of the Unified Audit Log. PVW-3.4 counted DLP policies
+  instead of rules using sensitive information types. PVW-1.4 counted
+  defined labels instead of published ones. PPL-3.1/3.2/3.5 no longer
+  score gaps from Purview sections that did not run; simulation-only
+  auto-labeling is not enforcement; the Copilot DLP location (Workload
+  "Applications") is recognized; "AI" no longer matches "Email" in policy
+  names; Copilot licensing is detected by service plan (the "M365_Copilot"
+  SKU was missed) with every page of users read and guests excluded.
+  PPL-3.4 is manual review — publishing channels are not readable, and an
+  app's publisher domain is not one. PVW-2.2 says when policies exist but
+  are off; PVW-4.2 with no one-year policy is a Gap.
+- **Exchange controls read the setting they name.** EXO-3.5 and EXO-4.2
+  read the mailbox-audit switch; they now read Unified Audit Log ingestion
+  and `AdminAuditLogEnabled` (`Get-AdminAuditLogConfig`, pinned to the
+  Exchange Online session). EXO-4.1 no longer scores `AuditLogAgeLimit`,
+  which Microsoft says no longer governs retention (180 days by default,
+  one year for E5); it flags a custom audit retention policy that shortens
+  Exchange records instead. EXO-6.3 / EXO-7.3 flagged `AuditEnabled =
+  False`, which Exchange ignores while organization auditing is on; they now
+  read audit bypass associations, the setting that actually silences a
+  user. EXO-4.3 reads `EnableATPForSPOTeamsODB` rather than "a Safe
+  Attachments mail policy is on". EXO-3.2 accepts the default "User
+  restricted from sending email" alert policy. EXO-5.3 never collected the
+  allowed-sender lists, so it passed every tenant. EXO-1.3, 1.5, 1.7, 5.2
+  and 5.3 judge the policies in force; 'Automatic' forwarding is not
+  counted as blocked, and a remote-domain block alone is part-way because
+  it does not stop admin-set mailbox forwarding. EXO-5.2 does not count
+  users listed with action NoAction. EXO-1.4 treats a custom domain with no
+  DKIM configuration as unsigned and reads the documented key-size fields.
+  EXO-1.2 no longer reports SMTP AUTH enabled when `Get-TransportConfig` was
+  not read. EXO-6.4 / EXO-7.4 do not claim an org-level disable that is not
+  there, and report the full override count rather than the capped list.
+  EXO-9.1 counted the MRM "Default MRM Policy" (on every mailbox, holds
+  nothing) as a hold; it now reads organization-wide retention policies and
+  per-mailbox exclusions. EXO-8.1 recognizes `smtp:*;1` as unscoped;
+  EXO-8.2 does not give half credit for a recipient it could not resolve and
+  no longer crashes on a single-domain tenant; DEF-5.1 reads spoofed-sender
+  and IP allow entries and no longer crashes when it finds a never-expiring
+  allow. EXO-1.5 and EXO-4.3 now carry their Defender for Office 365 Plan 1
+  license requirement.
+- **Teams controls score the setting they name.** TMS-1.4 scored the lobby
+  and TMS-1.6 the screen-control setting; TMS-1.4 now reads
+  `AllowExternalParticipantGiveRequestControl`, TMS-1.6 reads Teams guest
+  access plus who may invite guests, and TMS-1.5 (a duplicate of TMS-2.3)
+  reads whether retention covers the OneDrive / SharePoint locations holding
+  recordings. TMS-3.2 passed lobby settings that admit guests, invitees or
+  every federated organization. TMS-1.3 honors the org-wide
+  `DisableAnonymousJoin` and the lobby. TMS-2.6, 3.1 and 3.3 read fields the
+  collector never wrote (3.3 read a property that does not exist; the
+  setting is `MeetingChatEnabledType`) and could never reach a verdict.
+  TMS-2.7 called an allowlist Partial while TMS-1.1 / 4.3 called it
+  Satisfied; all three now agree, with blocklist mode Partial. TMS-2.3 and
+  SPO-2.5 include Egnyte. TMS-4.4 reads the events policy (town halls and
+  webinars, both public by default) — Microsoft retired live events on June
+  30, 2026. TMS-2.1 is reported retired (Skype consumer interop ended May 5,
+  2025), TMS-2.5 as platform-enforced (external participants cannot record),
+  TMS-2.2 as manual review. TMS-3.4 no longer reports "no DLP policies" when
+  the DLP list was not read. The collector records per-section status and no
+  longer defaults an unreturned federation setting to "disabled"; TMS-3.1
+  carries its Teams Premium license requirement.
+- **Intune controls count what enforces something.** Policies must be
+  assigned (an unassigned draft passed INT-1.1, 2.1–2.5 and 4.1). Endpoint
+  security templates are bucketed by template, not family: Credential Guard
+  passed as LAPS and a USB-block Device Control policy as ASR rules. INT-1.2
+  ("non-compliant devices blocked via CA") passed on any configuration
+  profile, a Wi-Fi profile included; it now reads Conditional Access for a
+  compliant-device requirement. INT-1.4 counted app CONFIGURATION policies
+  as app protection. INT-3.1 and INT-4.2 passed on the enrollment
+  configurations every tenant has by default; they now read what the
+  restrictions block and the Windows Hello state. INT-4.3 reported overall
+  compliance as "OS-version compliant" with no minimum OS rule anywhere.
+  INT-3.3 counted the default PIN-retry and offline-wipe limits as
+  conditional launch; it now needs a minimum OS version. INT-1.3 accepts
+  "Require encryption of data storage"; INT-2.4 no longer accepts System
+  Integrity Protection as FileVault; INT-4.4 reads iOS `passcodeRequired`.
+  INT-1.5 no longer scores Partial from enrollment configurations. The
+  collectors read every Graph field through the field helper — a missing
+  `description` failed the whole compliance-policy section.
+- **Not configured is never half credit (sweep).** AAD-4.3 (guest role at
+  Microsoft's default) and AAD-11.5 (CAE strict mode off, the default) scored
+  Partial; they are Gaps. AAD-11.6 scored Partial when the cross-tenant
+  settings were not returned at all — half credit for data it never read — and
+  is now not assessed. The DLP-coverage and retention-coverage controls no
+  longer read an unread policy list as "none".
+- **EXO-7.2 partial sweeps; EXO-2.3 / 2.4 existing mailboxes.** The inbox
+  rule sweep stops at 2,000 mailboxes (`-InboxRuleScanLimit`) and recorded
+  that it did, but nothing read it: a larger tenant got "no inbox rules
+  forward externally" from a partial sweep. A clean result over part of the
+  tenant, or with unreadable mailboxes, is now not assessed; disabled
+  forwarding rules are named as disabled. POP / IMAP were judged on the CAS
+  mailbox plans, which only set the default for new mailboxes; existing
+  mailboxes are now counted too.
+- **Endpoint checks.** DEV-4.1 (local administrators) and DEV-5.1 (OS
+  build) are inventory and always reported Pass; they now report "requires
+  manual verification" with each device's entry, including from older
+  result files. Several result files for one device (an RMM share keeping a
+  file per run) are reduced to the latest, so a laptop fixed since March no
+  longer counts as failing. The firewall checks read the effective
+  (ActiveStore) configuration — the local store flagged an untouched
+  machine whose "NotConfigured" means Block — RDP / NLA read the Group
+  Policy value first, an absent NLA value is the Windows default (required),
+  and Windows LAPS with BackupDirectory 0 (disabled) is no longer a pass.
+- **AAD-12.3 / AAD-12.4.** Stale accounts are judged on the last
+  successful sign-in (a password-spray attempt made a departed user look
+  active; a token-refresh-only user looked stale) and accounts created in
+  the last 90 days are skipped. A tenant-wide grant of sign-in scopes only
+  (openid, profile, email, offline_access, User.Read) is not a finding.
+- **Identity verdicts corrected against Graph's documented shapes.**
+  AAD-6.2 (Critical) read the user-consent setting from the wrong level of
+  the authorization policy, so every tenant scored "consent restricted" —
+  including tenants where users can consent to any app. Conditional Access:
+  a pilot-group or Exchange-ActiveSync-only legacy block no longer passes
+  AAD-1.1; an all-users MFA policy covers admins (AAD-1.3); blocking and
+  risk-remediation policies count for AAD-1.4/1.5 (the collector now sends
+  the Prefer header that reveals riskRemediation); "compliant OR MFA" does
+  not enforce a device (AAD-2.3); a device-code policy must block
+  (AAD-11.1); AAD-11.7 is judged on configuration, not a policy name
+  containing "PAW"; a risk-only "every time" re-prompt is not a periodic
+  sign-in frequency (AAD-10.4); token protection (beta shape), CAE strict
+  mode, terms of use, device filters and workload-identity conditions are
+  now collected, so AAD-11.4/11.5/11.7/11.8/11.9 can pass. AAD-1.2: MFA not
+  required is a Gap however many users registered; partly required is
+  Partial; the Entra Connect sync account is left out of the registration
+  count. Roles: activated PIM and CA-excluded break-glass accounts are not
+  standing access (AAD-3.2); eligible guests and synced accounts count
+  (AAD-11.2, AAD-10.2, AAD-3.1); Global Administrator held by a group is
+  reported as not assessed; built-in roles are recognized by template id
+  when the role-definition read fails. Break-glass exclusion must cover
+  every all-users / admin policy, and an unreadable exclusion group is
+  unknown, not "not excluded". AAD-4.1/6.3/7.2 no longer score from failed
+  reads; AAD-4.3 distinguishes the default guest role from Restricted
+  Guest; number matching reads the setting's state (AAD-9.1); Authenticator
+  phone sign-in counts as passwordless (AAD-9.2); a role access review
+  created in the tutorial shape is recognized (AAD-8.2). AAD-5.1, AAD-5.2
+  and AAD-10.3 now say plainly they need manual review — the data they read
+  answered a different question. AAD-1.2 and AAD-3.1 carried bare NIST ids,
+  so they were missing from the NIST family view and the SSP; they now
+  carry their full citations.
+- **The SSP no longer reports a requirement "Implemented" it did not
+  check.** A requirement was derived Implemented when no mapped control had
+  a Gap, even if most of them were NotApplicable (not collected, not
+  licensed, or covered by a declared third-party EDR): 3.5.3 (MFA) read
+  Implemented with one of fifteen controls actually passing. Implemented
+  now requires every mapped control to have passed; each unscored control
+  shows why. A client-attested status no longer counts as tool-verified.
+- **Numbers derived from findings agree with the score.** The remediation
+  roadmap and NIST improvement plan made every per-domain DNS finding its
+  own fix (projected NIST coverage above 100%); both now plan one step per
+  control. The score, the scope section and the SSP share one worst-state
+  order, so a control passing on one domain and unread on another is no
+  longer a pass in the ring and "not assessed" in the scope section. The
+  Executive Overview no longer counts the 35 endpoint checks as assessed
+  when no device results were supplied. Severity pills count controls, not
+  findings. The Markdown summary and HTML score column show Errors, and the
+  report no longer says Errors are excluded from coverage (they count as
+  failures) or that "all assessed controls are satisfied" beside Partial or
+  Error results. The XLSX NIST Families sheet includes endpoint verdicts.
+- **"No automated test" means that.** A NotApplicable the scope section
+  could not classify was reported as "no automated test — manual review",
+  including controls that ran and found the feature off. Those now sit in
+  their own "not applicable to this tenant" group with the reason stated.
+- **DNS-2.1 .. 2.4 never read the collector's data.** The collector writes
+  each domain as an ordered dictionary; those four evaluators only accepted
+  a plain hashtable, so on every live run DNS-2.2 said "No CAA record" for a
+  domain whose CAA had just been read, and DNS-2.1/2.3/2.4 never reached a
+  verdict. A new test runs the real collector into the evaluators.
+- **DNS records are read the way the RFCs define them.** Two SPF records,
+  more than 10 lookup terms, and `+all`/bare `all` are failures (the last
+  authorizes every sender, and scored half credit); `redirect=` is followed;
+  no `all` is neutral, a Gap. Two DMARC records apply no policy; `p = reject`
+  with spaces is reject (was read as p=none); `v=DMARC1` is case-exact;
+  `p=quarantine` meets "Quarantine or Reject"; `sp=none` is Partial. A
+  subdomain inherits its organizational domain's DMARC, its signed parent
+  zone's DNSSEC and its parent's CAA, instead of false gaps. CAA with only
+  `iodef` restricts nothing (Gap), only `issuewild` restricts wildcards
+  (Partial). DKIM with only selector2 is Partial, not "no DKIM". An MTA-STS
+  policy file that could not be fetched is not assessed rather than scored.
+  Zero certificates in CT logs is not a gap; Google Trust Services and
+  other common public CAs are no longer flagged as possible mis-issuance.
+- **License detection reads service plans, not product names.** Unlicensed
+  controls leave the score, so a detection miss hides a real gap. Checked
+  against Microsoft's licensing reference, the old detection never marked
+  EXO-9.1's requirement met on any tenant (the hold/retention control was
+  never scored); read Microsoft 365 E5 as lacking Defender for Endpoint
+  Plan 1; read Office 365 E3/E5 as holding Entra ID P1/P2 (they do not);
+  labeled Office 365 E5 "Microsoft 365 E5"; and let any one compliance plan
+  unlock every "E5 Compliance" control. `Config/license-service-plans.json`
+  now maps each requirement, and each control where features differ
+  (Customer Lockbox, Endpoint DLP, Audit Premium, ...), to the service plans
+  that deliver it. Requirements corrected from the Purview and Defender
+  service descriptions: audit retention (PVW-1.2), Copilot audit (PPL-3.5)
+  and consent alert policies (DEF-4.3) are in every plan; hold/retention
+  (EXO-9.1) is met by Exchange Online Archiving, which Business Premium
+  includes; EDR (INT-2.1) is met by Defender for Business. When licensing
+  was not read, the report says so instead of listing every gap as
+  license-blocked, and the upgrade pitch names the license actually missing.
+  The XLSX License Gaps sheet uses the same per-control test.
+- **PVW-1.2 and PVW-1.3 scored each other's subject.** PVW-1.2 ("audit log
+  retention of 90 days") scored DLP and PVW-1.3 ("DLP policy active")
+  scored retention policies. Each now scores its own; DLP in test mode is
+  Partial, none is a Gap.
+- **SharePoint controls score the setting they name.** SPO-1.2 ("default
+  sharing link not Anyone") scored legacy authentication, SPO-1.3 scored
+  the sync restriction, SPO-1.4 and SPO-1.5 scored other unrelated settings.
+  Each now reads its own setting (default link type, legacy auth, guest
+  expiration, unmanaged-device access). Guest and link controls report
+  NotApplicable on a tenant with external sharing off instead of raising
+  gaps about links that cannot exist; the sync restriction needs its switch
+  on (a leftover domain list is not a restriction); reauthentication needs
+  email attestation on; a retention value that was not read is no longer
+  "0 days".
+
 ## v4.13.0 (2026-09-24)
 
 Accuracy + hardening release. Every fix below was found by running the tool

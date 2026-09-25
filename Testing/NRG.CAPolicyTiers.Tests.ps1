@@ -23,7 +23,7 @@ Describe 'CA policy tiers — None / Audit mode / Enabled' {
             Clear-NRGState
             Set-NRGRawData -Key 'AAD-CAPolicies' -Data ([ordered]@{
                 CollectorId = 'AAD'; CollectedAt = '2026-09-24T00:00:00Z'; Success = $true
-                Data = @{ Policies = @($Policies) }
+                Data = @{ Policies = @($Policies); SectionStatus = @{ TokenProtection = 'Collected' } }
             })
             & $Evaluator | Out-Null
             @(Get-NRGFindings | Where-Object { $_.ControlId -eq $ControlId })[0]
@@ -39,9 +39,12 @@ Describe 'CA policy tiers — None / Audit mode / Enabled' {
                 SessionControls = @{}
             }
             switch ($ControlId) {
-                'AAD-10.4' { $p.SessionControls = @{ SignInFrequency = @{ IsEnabled = $true } } }
-                'AAD-11.4' { $p.SessionControls = @{ TokenProtection = @{ IsEnabled = $true } } }
-                'AAD-11.7' { $p.DisplayName = 'Admins - PAW only' }
+                'AAD-10.4' { $p.SessionControls = @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'timeBased'; Value = 12; Type = 'hours' } } }
+                # Token protection is sessionControls.secureSignInSession (beta),
+                # stored as SecureSignInSession by the collector.
+                'AAD-11.4' { $p.SessionControls = @{ SecureSignInSession = $true } }
+                # Matched on configuration, never on the policy's NAME.
+                'AAD-11.7' { $p.Conditions = @{ Users = @{ IncludeRoles = @('62e90394-69f5-4237-9190-012177145e10') }; Devices = @{ FilterMode = 'include'; FilterRule = 'device.extensionAttribute1 -eq "PAW"' }; ClientApplications = @{} } }
                 'AAD-11.8' { $p.GrantControls = @{ BuiltInControls = @(); TermsOfUse = @('tou-1') } }
                 'AAD-11.9' { $p.Conditions = @{ Users = @{ IncludeRoles = @() }; ClientApplications = @{ IncludeServicePrincipals = @('sp-1') } } }
             }

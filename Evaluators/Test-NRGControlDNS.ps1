@@ -89,38 +89,87 @@ function Test-NRGControlDNSSPF {
         if (Add-NRGDnsLookupFailedFinding -Control $control -ControlId $controlId -Citations $citations `
                 -Domain $domain -DomainEntry $d -Record 'SPF' -Label 'SPF') { continue }
 
+        $spfCount = [int](Get-NRGObjectField -Item $d -Key 'SPFRecordCount' -Default 1)
+        $redirect = Get-NRGObjectField -Item $d -Key 'SPFRedirect' -Default $null
+        $common   = @{ Category = $control.Category; Title = "$($control.Title): $domain"; Instance = $domain; FrameworkIds = $citations }
+
         if (-not $d.SPF) {
-            Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
-                -FrameworkIds $citations `
+            Add-NRGFinding -ControlId $controlId @common -State 'Gap' -Severity $control.Severity `
                 -Detail "Domain '$domain' has no SPF record. Anyone can send email claiming to be from this domain." `
                 -CurrentValue 'No SPF record' -RequiredValue "v=spf1 include:spf.protection.outlook.com -all" `
                 -Remediation $control.Remediation
-        } elseif ($d.SPF -match '\-all\s*$') {
-            Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
-                -FrameworkIds $citations `
-                -Detail "$domain SPF with hard fail (-all) configured." `
-                -CurrentValue $d.SPF
-        } elseif ($d.SPF -match '~all\s*$') {
-            Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Severity 'Low' -Instance $domain `
-                -FrameworkIds $citations `
-                -Detail "$domain SPF uses soft fail (~all). Acceptable for compatibility, but -all provides stronger protection." `
-                -CurrentValue $d.SPF -RequiredValue 'SPF ending in -all'
-        } elseif ($d.SPF -match '\?all\s*$') {
-            Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Severity 'High' -Instance $domain `
-                -FrameworkIds $citations `
-                -Detail "$domain SPF uses neutral (?all) — provides no spam protection. Change to -all." `
-                -CurrentValue $d.SPF -RequiredValue 'SPF ending in -all' `
-                -Remediation $control.Remediation
-        } else {
-            Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Severity 'Medium' -Instance $domain `
-                -FrameworkIds $citations `
-                -Detail "$domain SPF record present but does not end with -all, ~all, or ?all — likely misconfigured." `
-                -CurrentValue $d.SPF -RequiredValue 'SPF ending in -all'
+            continue
+        }
+        if ($spfCount -gt 1) {
+            # RFC 7208 §4.5: more than one v=spf1 record is a permerror — SPF
+            # fails for every message, whatever each record says.
+            Add-NRGFinding -ControlId $controlId @common -State 'Gap' -Severity 'High' `
+                -Detail "$domain publishes $spfCount SPF records. More than one is a permanent error (RFC 7208 §4.5): receivers treat SPF as failed for all mail. Merge them into one record." `
+                -CurrentValue "$spfCount v=spf1 records" -RequiredValue 'Exactly one SPF record ending in -all' -Remediation $control.Remediation
+            continue
+        }
+
+        # Top-level DNS-lookup terms (RFC 7208 §4.6.4 limit is 10, counted
+        # recursively; only this record's own terms are counted here, so
+        # more than 10 is certain, 10 or fewer is not proof).
+        $terms   = @(([string]$d.SPF) -split '\s+' | Where-Object { $_ })
+        $lookups = @($terms | Where-Object { $_ -match '^[+\-~?]?(include:|a$|a:|a/|mx$|mx:|mx/|ptr|exists:)' -or $_ -match '^redirect=' }).Count
+        if ($lookups -gt 10) {
+            Add-NRGFinding -ControlId $controlId @common -State 'Gap' -Severity 'High' `
+                -Detail "$domain SPF has $lookups DNS-lookup terms in its own record; the limit is 10 (RFC 7208 §4.6.4), so SPF evaluation ends in a permanent error and fails." `
+                -CurrentValue $d.SPF -RequiredValue 'At most 10 DNS lookups including nested includes' -Remediation $control.Remediation
+            continue
+        }
+
+        $record = [string]$d.SPF
+        $via    = ''
+        $allTerm = @($terms | Where-Object { $_ -match '^[+\-~?]?all$' }) | Select-Object -First 1
+        if (-not $allTerm -and $redirect) {
+            $rRec = Get-NRGObjectField -Item $redirect -Key 'Record' -Default $null
+            $rOut = [string](Get-NRGObjectField -Item $redirect -Key 'Outcome' -Default 'LookupFailed')
+            $rTgt = [string](Get-NRGObjectField -Item $redirect -Key 'Target' -Default '?')
+            if (-not $rRec) {
+                if ($rOut -eq 'NoRecord') {
+                    Add-NRGFinding -ControlId $controlId @common -State 'Gap' -Severity 'High' `
+                        -Detail "$domain SPF redirects to $rTgt, which publishes no single SPF record — a permanent error (RFC 7208 §6.1)." `
+                        -CurrentValue $record -RequiredValue 'redirect= target with one valid SPF record' -Remediation $control.Remediation
+                } else {
+                    Add-NRGFinding -ControlId $controlId @common -State 'NotApplicable' -Severity 'Informational' `
+                        -Detail "$domain SPF redirects to $rTgt, and that record could not be read, so the policy was not assessed." `
+                        -CurrentValue $record
+                }
+                continue
+            }
+            $allTerm = @(([string]$rRec) -split '\s+' | Where-Object { $_ -match '^[+\-~?]?all$' }) | Select-Object -First 1
+            $via = " (via redirect to $rTgt)"
+        }
+
+        $qualifier = if ($allTerm) { if ($allTerm -match '^([+\-~?])') { $Matches[1] } else { '+' } } else { $null }
+        switch ($qualifier) {
+            '-' {
+                Add-NRGFinding -ControlId $controlId @common -State 'Satisfied' -Severity 'Informational' `
+                    -Detail "$domain SPF with hard fail (-all) configured$via." -CurrentValue $record
+            }
+            '~' {
+                Add-NRGFinding -ControlId $controlId @common -State 'Partial' -Severity 'Low' `
+                    -Detail "$domain SPF uses soft fail (~all)$via. Acceptable for compatibility, but -all provides stronger protection." `
+                    -CurrentValue $record -RequiredValue 'SPF ending in -all'
+            }
+            '+' {
+                # "+all" (or a bare "all") AUTHORIZES every sender on the
+                # internet — worse than having no SPF at all.
+                Add-NRGFinding -ControlId $controlId @common -State 'Gap' -Severity 'High' `
+                    -Detail "$domain SPF ends in '$allTerm'$via, which authorizes EVERY server on the internet to send as this domain. Change to -all." `
+                    -CurrentValue $record -RequiredValue 'SPF ending in -all' -Remediation $control.Remediation
+            }
+            default {
+                # '?all', or no 'all' and no redirect: both evaluate to neutral
+                # (RFC 7208 §4.7), which gives no protection.
+                $what = if ($qualifier -eq '?') { "uses neutral (?all)$via" } else { "has no 'all' mechanism and no redirect, so unlisted senders evaluate to neutral" }
+                Add-NRGFinding -ControlId $controlId @common -State 'Gap' -Severity 'High' `
+                    -Detail "$domain SPF $what — provides no spoofing protection. End the record with -all." `
+                    -CurrentValue $record -RequiredValue 'SPF ending in -all' -Remediation $control.Remediation
+            }
         }
     }
 }
@@ -158,11 +207,12 @@ function Test-NRGControlDNSDKIM {
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations `
                 -Detail "$domain DKIM configured with both selector1 and selector2."
-        } elseif ($hasSelector1 -or $hasCustom) {
+        } elseif ($hasSelector1 -or $hasSelector2 -or $hasCustom) {
+            $which = if ($hasSelector1) { 'selector1 is published, selector2 is not' } elseif ($hasSelector2) { 'selector2 is published, selector1 is not' } else { 'only a custom selector is published' }
             Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Low' -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$domain DKIM partially configured (selector1 present, selector2 missing or custom)." `
+                -Detail "$domain DKIM partially configured: $which. Microsoft 365 needs both CNAMEs to rotate keys." `
                 -CurrentValue 'Partial DKIM' -RequiredValue 'Both selector1 and selector2 configured'
         } else {
             Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
@@ -199,48 +249,57 @@ function Test-NRGControlDNSDMARC {
         if (Add-NRGDnsLookupFailedFinding -Control $control -ControlId $controlId -Citations $citations `
                 -Domain $domain -DomainEntry $d -Record 'DMARC' -Label 'DMARC') { continue }
 
+        $common   = @{ Category = $control.Category; Title = "$($control.Title): $domain"; Instance = $domain; FrameworkIds = $citations }
+        $count    = [int](Get-NRGObjectField -Item $d -Key 'DMARCRecordCount' -Default 1)
+        $from     = Get-NRGObjectField -Item $d -Key 'DMARCInheritedFrom' -Default $null
+        $origin   = if ($from) { " (no record of its own; the organizational domain $from's policy applies)" } else { '' }
+
         if (-not $d.DMARC) {
-            Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
-                -FrameworkIds $citations `
+            Add-NRGFinding -ControlId $controlId @common -State 'Gap' -Severity $control.Severity `
                 -Detail "$domain has no DMARC record. Without DMARC, domain spoofing is possible even with SPF and DKIM." `
                 -CurrentValue 'No DMARC record' -RequiredValue 'v=DMARC1; p=reject; rua=mailto:dmarc@domain' `
                 -Remediation $control.Remediation
-        } else {
-            $policy = $d.DMARCPolicy ?? 'none'
-            $pct    = $d.DMARCPct ?? 100
+            continue
+        }
+        if ($count -gt 1) {
+            Add-NRGFinding -ControlId $controlId @common -State 'Gap' -Severity $control.Severity `
+                -Detail "$domain publishes $count DMARC records$origin. With more than one, receivers apply no DMARC policy at all (RFC 7489 §6.6.3). Keep one." `
+                -CurrentValue "$count v=DMARC1 records" -RequiredValue 'Exactly one DMARC record' -Remediation $control.Remediation
+            continue
+        }
 
-            switch ($policy) {
-                'reject' {
-                    $state    = if ($pct -eq 100) { 'Satisfied' } else { 'Partial' }
-                    $severity = if ($pct -eq 100) { 'Informational' } else { 'Low' }
-                    $detail   = if ($pct -eq 100) { "$domain DMARC p=reject (100%). Full spoofing protection." } else { "$domain DMARC p=reject but pct=$pct — not fully enforced. Set pct=100." }
-                    Add-NRGFinding -ControlId $controlId -State $state -Category $control.Category `
-                        -Title "$($control.Title): $domain" -Severity $severity -Instance $domain `
-                        -FrameworkIds $citations -Detail $detail -CurrentValue $d.DMARC
-                }
-                'quarantine' {
-                    Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
-                        -Title "$($control.Title): $domain" -Severity 'Medium' -Instance $domain `
-                        -FrameworkIds $citations `
-                        -Detail "$domain DMARC p=quarantine. Spoofed email goes to spam, not rejected. Advance to p=reject." `
-                        -CurrentValue $d.DMARC -RequiredValue 'p=reject'
-                }
-                'none' {
-                    Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
-                        -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
-                        -FrameworkIds $citations `
-                        -Detail "$domain DMARC p=none — reporting only, NO protection. This is not a security control." `
-                        -CurrentValue $d.DMARC -RequiredValue 'p=quarantine or p=reject' `
-                        -Remediation $control.Remediation
-                }
-                default {
-                    Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
-                        -Title "$($control.Title): $domain" -Severity 'High' -Instance $domain `
-                        -FrameworkIds $citations `
-                        -Detail "$domain DMARC record present but policy is unrecognized: '$policy'" `
+        $policy = [string](Get-NRGObjectField -Item $d -Key 'DMARCPolicy' -Default 'none')
+        $pct    = [int](Get-NRGObjectField -Item $d -Key 'DMARCPct' -Default 100)
+        $sp     = [string](Get-NRGObjectField -Item $d -Key 'DMARCSubPolicy' -Default '')
+
+        switch ($policy) {
+            { $_ -in @('reject','quarantine') } {
+                $action = if ($policy -eq 'reject') { 'rejected' } else { 'sent to quarantine' }
+                if ($pct -lt 100) {
+                    Add-NRGFinding -ControlId $controlId @common -State 'Partial' -Severity 'Low' `
+                        -Detail "$domain DMARC p=$policy but pct=${pct}${origin}: only $pct% of failing mail is $action. Set pct=100." `
+                        -CurrentValue $d.DMARC -RequiredValue "p=$policy with pct=100"
+                } elseif (-not $from -and $sp -eq 'none') {
+                    Add-NRGFinding -ControlId $controlId @common -State 'Partial' -Severity 'Medium' `
+                        -Detail "$domain DMARC p=$policy, but sp=none leaves every subdomain unprotected: mail spoofing a subdomain is delivered." `
+                        -CurrentValue $d.DMARC -RequiredValue 'sp=quarantine or sp=reject (or omit sp)'
+                } else {
+                    $advice = if ($policy -eq 'quarantine') { ' p=reject is stronger: quarantined mail still reaches the user''s junk folder.' } else { '' }
+                    Add-NRGFinding -ControlId $controlId @common -State 'Satisfied' -Severity 'Informational' `
+                        -Detail "$domain DMARC p=$policy (100%)$origin. Spoofed mail failing authentication is $action.$advice" `
                         -CurrentValue $d.DMARC
                 }
+            }
+            'none' {
+                Add-NRGFinding -ControlId $controlId @common -State 'Gap' -Severity $control.Severity `
+                    -Detail "$domain DMARC p=none$origin — reporting only, NO protection. This is not a security control." `
+                    -CurrentValue $d.DMARC -RequiredValue 'p=quarantine or p=reject' `
+                    -Remediation $control.Remediation
+            }
+            default {
+                Add-NRGFinding -ControlId $controlId @common -State 'Gap' -Severity 'High' `
+                    -Detail "$domain DMARC record present but policy is unrecognized: '$policy'$origin" `
+                    -CurrentValue $d.DMARC
             }
         }
     }
@@ -281,6 +340,14 @@ function Test-NRGControlDNSMTASTS {
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations `
                 -Detail "$domain MTA-STS in enforce mode — TLS required for all inbound SMTP."
+        } elseif (-not $d.MTASTS.Mode -and (Get-NRGObjectField -Item $d.MTASTS -Key 'PolicyFetchError' -Default $null)) {
+            # The DNS record exists but the policy file could not be read
+            # (network, TLS or refused probe). That is not a mode — it is not
+            # assessed.
+            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "$domain publishes an MTA-STS record, but the policy file could not be fetched ($($d.MTASTS.PolicyFetchError)), so the mode was not assessed. Check https://mta-sts.$domain/.well-known/mta-sts.txt."
         } elseif ($d.MTASTS.Mode -eq 'testing') {
             Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Low' -Instance $domain `
@@ -288,11 +355,13 @@ function Test-NRGControlDNSMTASTS {
                 -Detail "$domain MTA-STS in testing mode — reporting only, no enforcement. Advance to enforce after monitoring." `
                 -CurrentValue 'mode: testing' -RequiredValue 'mode: enforce'
         } else {
-            Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+            # mode: none (policy withdrawn) or a policy file with no valid
+            # mode — either way senders do not enforce TLS: not configured.
+            Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Medium' -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$domain MTA-STS record present but policy mode is '$($d.MTASTS.Mode ?? 'unknown')'" `
-                -CurrentValue "mode: $($d.MTASTS.Mode ?? 'unknown')" -RequiredValue 'mode: enforce'
+                -Detail "$domain MTA-STS record present but the policy mode is '$($d.MTASTS.Mode ?? 'unknown')', which enforces nothing." `
+                -CurrentValue "mode: $($d.MTASTS.Mode ?? 'unknown')" -RequiredValue 'mode: enforce' -Remediation $control.Remediation
         }
     }
 }
@@ -364,7 +433,7 @@ function Test-NRGControlDNSDNSSEC {
         if ($d.DNSSEC -eq $true) {
             Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
-                -FrameworkIds $citations -Detail "$domain DNSSEC enabled (DS record found at parent zone)."
+                -FrameworkIds $citations -Detail $(if (Get-NRGObjectField -Item $d -Key 'DNSSECInheritedFrom' -Default $null) { "$domain is signed as part of the DNSSEC-signed zone $($d.DNSSECInheritedFrom) (it is not a separately delegated zone)." } else { "$domain DNSSEC enabled (DS record found at parent zone)." })
         } else {
             Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Low' -Instance $domain `
@@ -405,10 +474,10 @@ function Test-NRGControlDNSDkimRotation {
 
         # Defensive: DKIM block may be missing on older collector data
         $age = $null
-        if ($d.PSObject.Properties['DKIM'] -or ($d -is [hashtable] -and $d.ContainsKey('DKIM'))) {
+        if ($d.PSObject.Properties['DKIM'] -or ($d -is [System.Collections.IDictionary] -and $d.Contains('DKIM'))) {
             $dkim = $d.DKIM
             if ($dkim) {
-                if ($dkim -is [hashtable] -and $dkim.ContainsKey('KeyAgeDays')) {
+                if ($dkim -is [System.Collections.IDictionary] -and $dkim.Contains('KeyAgeDays')) {
                     $age = $dkim['KeyAgeDays']
                 } elseif ($dkim.PSObject.Properties['KeyAgeDays']) {
                     $age = $dkim.KeyAgeDays
@@ -475,7 +544,7 @@ function Test-NRGControlDNSCAA {
         $d = $dnsDomainMap[$domain]
 
         $caa = $null
-        if ($d -is [hashtable] -and $d.ContainsKey('CAA')) { $caa = $d['CAA'] }
+        if ($d -is [System.Collections.IDictionary] -and $d.Contains('CAA')) { $caa = $d['CAA'] }
         elseif ($d.PSObject.Properties['CAA'])             { $caa = $d.CAA }
 
         if (Add-NRGDnsLookupFailedFinding -Control $control -ControlId $controlId -Citations $citations `
@@ -492,31 +561,40 @@ function Test-NRGControlDNSCAA {
             continue
         }
 
-        $issuance = @($caa.IssuanceAllowed ?? @())
-        $wildcard = @($caa.WildcardAllowed ?? @())
+        $issuance = @(@(Get-NRGObjectField -Item $caa -Key 'IssuanceAllowed' -Default @()) | ForEach-Object { ([string]$_).Trim() })
+        $wildcard = @(@(Get-NRGObjectField -Item $caa -Key 'WildcardAllowed' -Default @()) | ForEach-Object { ([string]$_).Trim() })
+        $from     = Get-NRGObjectField -Item $caa -Key 'InheritedFrom' -Default $null
+        $origin   = if ($from) { " (inherited from $from, RFC 8659 §3)" } else { '' }
+        $current  = "issue: [" + ($issuance -join ',') + "], issuewild: [" + ($wildcard -join ',') + "]$origin"
+        $common   = @{ Category = $control.Category; Title = "$($control.Title): $domain"; Instance = $domain; FrameworkIds = $citations }
 
-        # Treat ";" as RFC 8659 deny-all. If issuance is empty, or all entries are
-        # the literal deny token, and no wildcard override is present, it is a
-        # deny-all configuration — usually a misconfig, occasionally intentional.
-        $issuanceTrim = @($issuance | ForEach-Object { ([string]$_).Trim() })
-        $allDenyIssue = ($issuanceTrim.Count -eq 0) -or
-                        (-not ($issuanceTrim | Where-Object { $_ -and $_ -ne ';' }))
-        $hasWildcardOverride = ($wildcard.Count -gt 0)
+        # RFC 8659 §4.2/§4.3: ordinary certificates are governed ONLY by
+        # 'issue'; 'issuewild' governs wildcards; a set with no 'issue' tag
+        # (only iodef, or only issuewild) does not restrict ordinary issuance.
+        if ($issuance.Count -eq 0) {
+            if ($wildcard.Count -gt 0) {
+                Add-NRGFinding -ControlId $controlId @common -State 'Partial' -Severity 'Medium' `
+                    -Detail "$domain CAA restricts only WILDCARD certificates$origin (issuewild, no issue tag): any CA may still issue ordinary certificates for this domain." `
+                    -CurrentValue $current -RequiredValue 'An issue= record naming approved CA(s)' -Remediation $control.Remediation
+            } else {
+                Add-NRGFinding -ControlId $controlId @common -State 'Gap' -Severity $control.Severity `
+                    -Detail "$domain has a CAA record$origin with no issue or issuewild tag (for example iodef only), which does not restrict issuance (RFC 8659 §4.2): any publicly trusted CA may issue." `
+                    -CurrentValue $current -RequiredValue 'CAA issue record naming approved CA(s)' -Remediation $control.Remediation
+            }
+            continue
+        }
 
-        if ($allDenyIssue -and -not $hasWildcardOverride) {
-            Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
-                -FrameworkIds $citations `
-                -Detail "$domain CAA is deny-all (no 'issue' or 'issuewild' values present) and no wildcard exception is set. Cert renewal from the org's actual CA will fail. Verify this is intentional." `
-                -CurrentValue ("issue: [" + ($issuanceTrim -join ',') + "], issuewild: [" + (($wildcard -join ',')) + "]") `
-                -RequiredValue 'At least one approved CA listed in issue= or issuewild='
+        $allowed = @($issuance + $wildcard | Where-Object { $_ -and $_ -ne ';' } | Sort-Object -Unique)
+        if ($allowed.Count -eq 0) {
+            # issue ";" with no CA anywhere: nothing can be issued. Restrictive,
+            # but a domain that serves any certificate will fail renewal.
+            Add-NRGFinding -ControlId $controlId @common -State 'Partial' -Severity $control.Severity `
+                -Detail "$domain CAA forbids issuance by every CA$origin (issue "";""). No certificate for this domain can be issued or renewed. Verify this is intentional." `
+                -CurrentValue $current -RequiredValue 'At least one approved CA listed in issue='
         } else {
-            $allowedList = @($issuance + $wildcard | Where-Object { $_ -and $_ -ne ';' } | Sort-Object -Unique)
-            Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
-                -FrameworkIds $citations `
-                -Detail "$domain has a restrictive CAA allowlist ($($allowedList.Count) CA entry/entries) — RFC 8659 compliant." `
-                -CurrentValue ('Allowed CAs: ' + ($allowedList -join ', '))
+            Add-NRGFinding -ControlId $controlId @common -State 'Satisfied' -Severity 'Informational' `
+                -Detail "$domain has a restrictive CAA allowlist$origin ($($allowed.Count) CA entry/entries) — RFC 8659 compliant." `
+                -CurrentValue ('Allowed CAs: ' + ($allowed -join ', ') + $origin)
         }
     }
 }
@@ -546,7 +624,7 @@ function Test-NRGControlDNSTLSCertExpiry {
         $d = $dnsDomainMap[$domain]
 
         $tls = $null
-        if ($d -is [hashtable] -and $d.ContainsKey('TLSCerts')) { $tls = $d['TLSCerts'] }
+        if ($d -is [System.Collections.IDictionary] -and $d.Contains('TLSCerts')) { $tls = $d['TLSCerts'] }
         elseif ($d.PSObject.Properties['TLSCerts'])             { $tls = $d.TLSCerts }
 
         # Pull collector-side per-domain errors (TimeBudget, refused SSRF
@@ -554,7 +632,7 @@ function Test-NRGControlDNSTLSCertExpiry {
         # exists. Differentiates "domain has no HTTPS endpoint" from "we
         # ran out of time budget before probing this domain".
         $domainErrs = @()
-        if ($d -is [hashtable] -and $d.ContainsKey('Errors')) { $domainErrs = @($d['Errors']) }
+        if ($d -is [System.Collections.IDictionary] -and $d.Contains('Errors')) { $domainErrs = @($d['Errors']) }
         elseif ($d.PSObject.Properties['Errors'])             { $domainErrs = @($d.Errors) }
         $budgetSkipped = @($domainErrs | Where-Object { $_ -like 'TimeBudget:*TLS probe*' -or $_ -like '*before TLS probe*' })
 
@@ -579,11 +657,11 @@ function Test-NRGControlDNSTLSCertExpiry {
         $errorCount   = 0
         $allErrors    = @()
 
-        $tlsKeys = if ($tls -is [hashtable]) { @($tls.Keys) }
+        $tlsKeys = if ($tls -is [System.Collections.IDictionary]) { @($tls.Keys) }
                    else { @($tls.PSObject.Properties.Name) }
 
         foreach ($role in $tlsKeys) {
-            $cert = if ($tls -is [hashtable]) { $tls[$role] } else { $tls.$role }
+            $cert = if ($tls -is [System.Collections.IDictionary]) { $tls[$role] } else { $tls.$role }
             if (-not $cert) { continue }
             $probedCount++
 
@@ -592,10 +670,10 @@ function Test-NRGControlDNSTLSCertExpiry {
             $certDays     = $null
             $certHost     = $null
 
-            if ($cert -is [hashtable]) {
-                if ($cert.ContainsKey('Error')) { $certError = $cert['Error']; $certHasError = [bool]$certError }
-                if ($cert.ContainsKey('DaysUntilExpiry')) { $certDays = $cert['DaysUntilExpiry'] }
-                if ($cert.ContainsKey('Hostname'))        { $certHost = $cert['Hostname'] }
+            if ($cert -is [System.Collections.IDictionary]) {
+                if ($cert.Contains('Error')) { $certError = $cert['Error']; $certHasError = [bool]$certError }
+                if ($cert.Contains('DaysUntilExpiry')) { $certDays = $cert['DaysUntilExpiry'] }
+                if ($cert.Contains('Hostname'))        { $certHost = $cert['Hostname'] }
             } else {
                 if ($cert.PSObject.Properties['Error'])           { $certError = $cert.Error; $certHasError = [bool]$certError }
                 if ($cert.PSObject.Properties['DaysUntilExpiry']) { $certDays = $cert.DaysUntilExpiry }
@@ -680,7 +758,11 @@ function Test-NRGControlDNSCertTransparency {
     $knownGoodCAs = @(
         'DigiCert', "Let's Encrypt", 'Lets Encrypt', 'Sectigo',
         'GlobalSign', 'GoDaddy', 'Starfield', 'Microsoft',
-        'Comodo', 'Amazon', 'Entrust', 'Buypass', 'IdenTrust'
+        'Comodo', 'Amazon', 'Entrust', 'Buypass', 'IdenTrust',
+        # Large public CAs that issue for common hosting (Google-fronted and
+        # Cloudflare sites use Google Trust Services); flagging them read a
+        # normal certificate as possible mis-issuance.
+        'Google Trust Services', 'ZeroSSL', 'SSL.com', 'Certum', 'Cloudflare', 'Actalis', 'HARICA'
     )
 
     $dnsData = Get-NRGRawData -Key 'DNS-EmailRecords'
@@ -696,14 +778,14 @@ function Test-NRGControlDNSCertTransparency {
         $d = $dnsDomainMap[$domain]
 
         $ct = $null
-        if ($d -is [hashtable] -and $d.ContainsKey('CTLog')) { $ct = $d['CTLog'] }
+        if ($d -is [System.Collections.IDictionary] -and $d.Contains('CTLog')) { $ct = $d['CTLog'] }
         elseif ($d.PSObject.Properties['CTLog'])             { $ct = $d.CTLog }
 
         # Pull collector-side per-domain errors so we can distinguish
         # "crt.sh actually returned zero certs" (genuine finding) from
         # "we skipped crt.sh because the time budget expired" (clarity).
         $domainErrs = @()
-        if ($d -is [hashtable] -and $d.ContainsKey('Errors')) { $domainErrs = @($d['Errors']) }
+        if ($d -is [System.Collections.IDictionary] -and $d.Contains('Errors')) { $domainErrs = @($d['Errors']) }
         elseif ($d.PSObject.Properties['Errors'])             { $domainErrs = @($d.Errors) }
         $ctSkipped = @($domainErrs | Where-Object { $_ -like '*crt.sh*' -or $_ -like '*after TLS probe*' })
 
@@ -723,10 +805,10 @@ function Test-NRGControlDNSCertTransparency {
         $queryError = $null
         $totalCerts = 0
         $issuers    = @()
-        if ($ct -is [hashtable]) {
-            if ($ct.ContainsKey('QueryError')) { $queryError = $ct['QueryError'] }
-            if ($ct.ContainsKey('TotalCerts')) { $totalCerts = [int]($ct['TotalCerts'] ?? 0) }
-            if ($ct.ContainsKey('Issuers'))    { $issuers    = @($ct['Issuers'] ?? @()) }
+        if ($ct -is [System.Collections.IDictionary]) {
+            if ($ct.Contains('QueryError')) { $queryError = $ct['QueryError'] }
+            if ($ct.Contains('TotalCerts')) { $totalCerts = [int]($ct['TotalCerts'] ?? 0) }
+            if ($ct.Contains('Issuers'))    { $issuers    = @($ct['Issuers'] ?? @()) }
         } else {
             if ($ct.PSObject.Properties['QueryError']) { $queryError = $ct.QueryError }
             if ($ct.PSObject.Properties['TotalCerts']) { $totalCerts = [int]($ct.TotalCerts ?? 0) }
@@ -764,13 +846,13 @@ function Test-NRGControlDNSCertTransparency {
                     -CurrentValue 'TotalCerts: 0 (collector truncated)'
                 continue
             }
-            Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
+            # No certificate has ever been logged for this name: there is
+            # nothing mis-issued to review. That is not a weakness to score.
+            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$domain has zero certs in CT logs — either the domain is unused for HTTPS, or CT monitoring is a blind spot for detecting mis-issuance against this domain." `
-                -CurrentValue 'TotalCerts: 0' `
-                -RequiredValue 'At least one cert in CT logs from an approved CA' `
-                -Remediation $control.Remediation
+                -Detail "$domain has no certificates in CT logs, so there is no issuance to review. Set up CT monitoring (e.g. a crt.sh or vendor alert) so a future mis-issued certificate is noticed." `
+                -CurrentValue 'TotalCerts: 0'
             continue
         }
 
@@ -798,7 +880,7 @@ function Test-NRGControlDNSCertTransparency {
             Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$domain CT logs include $($suspicious.Count) cert(s) from issuer(s) not on the known-good CA list. Investigate possible mis-issuance: $top" `
+                -Detail "$domain has certificates in CT logs from $($suspicious.Count) issuer(s) not on the known-good CA list. Confirm the organization requested them; otherwise investigate possible mis-issuance: $top" `
                 -CurrentValue "Suspicious issuers: $top" `
                 -RequiredValue 'All CT-log issuers match the org-approved CA allowlist' `
                 -Remediation $control.Remediation

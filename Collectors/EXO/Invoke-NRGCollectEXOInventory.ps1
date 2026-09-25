@@ -47,6 +47,8 @@ function Invoke-NRGCollectEXOInventory {
             AllSharedMailboxes     = @()
             AuditDisabledMailboxes = @()
             SmtpAuthEnabledPerUser = @()
+            SmtpAuthEnabledPerUserCount = 0
+            AuditBypassAccounts    = @()
             InboundConnectors      = @()
             OutboundConnectors     = @()
             TransportRules         = @()
@@ -80,6 +82,7 @@ function Invoke-NRGCollectEXOInventory {
                 SharedMailboxes        = 'NotRun'
                 AuditDisabledMailboxes = 'NotRun'
                 SmtpAuthEnabledPerUser = 'NotRun'
+                AuditBypassAccounts    = 'NotRun'
                 MailFlowConnectors     = 'NotRun'
                 TransportRules         = 'NotRun'
                 TenantAllowBlockList   = 'NotRun'
@@ -419,14 +422,42 @@ function Invoke-NRGCollectEXOInventory {
             }
         }
 
+        # ── Mailbox audit bypass (EXO-6.3, EXO-7.3) ──────────────────────────
+        # With mailbox auditing on by default, Exchange IGNORES a mailbox's
+        # AuditEnabled = False (Microsoft: "Manage mailbox auditing"). The only
+        # per-user way to stop mailbox actions being logged is an audit
+        # bypass association, which silences everything the account does in
+        # any mailbox. That is what these controls must read.
+        try {
+            $bypass = @(Get-MailboxAuditBypassAssociation -ResultSize Unlimited -ErrorAction Stop |
+                Where-Object { (Get-NRGObjectField -Item $_ -Key 'AuditBypassEnabled' -Default $false) -eq $true })
+            $result.Data.AuditBypassAccounts = @($bypass | ForEach-Object {
+                @{
+                    Name     = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '')
+                    Identity = [string](Get-NRGObjectField -Item $_ -Key 'Identity' -Default '')
+                }
+            })
+            $result.Data.SectionStatus.AuditBypassAccounts = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.AuditBypassAccounts = 'Failed'
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'EXO-AuditBypass' -Message $_.Exception.Message
+            }
+        }
+
         # ── Per-user SMTP AUTH overrides (bypass org-level disable) ──────────
         try {
             $smtpEnabled = @(Get-CASMailbox -ResultSize Unlimited -ErrorAction Stop |
-                Where-Object { $_.SmtpClientAuthenticationDisabled -eq $false })
+                Where-Object { (Get-NRGObjectField -Item $_ -Key 'SmtpClientAuthenticationDisabled' -Default $null) -eq $false })
+            # The named list is capped; the count is not. Reporting the capped
+            # list's length said "100 users" on a tenant with 250.
+            $result.Data.SmtpAuthEnabledPerUserCount = $smtpEnabled.Count
             $result.Data.SmtpAuthEnabledPerUser = @($smtpEnabled | Select-Object -First 100 | ForEach-Object {
+                $id = [string](Get-NRGObjectField -Item $_ -Key 'PrimarySmtpAddress' -Default '')
+                if (-not $id) { $id = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '') }
                 @{
-                    DisplayName = [string]$_.DisplayName
-                    UPN         = [string]$_.Name
+                    DisplayName = [string](Get-NRGObjectField -Item $_ -Key 'DisplayName' -Default '')
+                    UPN         = $id
                 }
             })
             $result.Data.SectionStatus.SmtpAuthEnabledPerUser = 'Collected'
@@ -456,14 +487,34 @@ function Invoke-NRGCollectEXOInventory {
         try {
             $mbx = @(Get-Mailbox -ResultSize Unlimited -ErrorAction Stop |
                      Where-Object { $_.RecipientTypeDetails -notin @('DiscoveryMailbox') })
+            # Organization-wide Purview retention policies are stamped on the
+            # ORGANIZATION's InPlaceHolds ("mbx<guid>:<n>"), not on each
+            # mailbox; a mailbox excluded from one carries "-mbx<guid>". The
+            # mailbox's RetentionPolicy is the MRM policy ("Default MRM
+            # Policy" on every mailbox) — it moves and deletes mail and holds
+            # nothing, so counting it made every mailbox look held.
+            $orgHolds = @()
+            $orgHoldsRead = $false
+            try {
+                $orgCfg = Get-OrganizationConfig -ErrorAction Stop
+                $orgHolds = @(@(Get-NRGObjectField -Item $orgCfg -Key 'InPlaceHolds' -Default @()) |
+                    ForEach-Object { ([string]$_ -split ':')[0] } | Where-Object { $_ -and -not $_.StartsWith('-') })
+                $orgHoldsRead = $true
+            } catch {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'EXO-OrgHolds' -Message $_.Exception.Message
+                }
+            }
             $noHold = @()
             $shortWindow = @()
             $windowDays = @()
             foreach ($m in $mbx) {
                 $lit   = [bool](Get-NRGObjectField -Item $m -Key 'LitigationHoldEnabled' -Default $false)
-                $inPl  = @(Get-NRGObjectField -Item $m -Key 'InPlaceHolds' -Default @())
-                $rpol  = [string](Get-NRGObjectField -Item $m -Key 'RetentionPolicy')
-                $held  = $lit -or ($inPl.Count -gt 0) -or [bool]$rpol
+                $inPl  = @(@(Get-NRGObjectField -Item $m -Key 'InPlaceHolds' -Default @()) | ForEach-Object { [string]$_ } | Where-Object { $_ })
+                $excluded = @($inPl | Where-Object { $_.StartsWith('-') } | ForEach-Object { ($_.Substring(1) -split ':')[0] })
+                $ownHold  = @($inPl | Where-Object { -not $_.StartsWith('-') }).Count -gt 0
+                $orgHold  = @($orgHolds | Where-Object { $_ -notin $excluded }).Count -gt 0
+                $held  = $lit -or $ownHold -or $orgHold
                 $upn   = [string](Get-NRGObjectField -Item $m -Key 'UserPrincipalName')
                 if (-not $held) { $noHold += @{ UPN = $upn; DisplayName = [string](Get-NRGObjectField -Item $m -Key 'DisplayName') } }
 
@@ -481,6 +532,7 @@ function Invoke-NRGCollectEXOInventory {
             }
             $result.Data.MailboxRecoverability = @{
                 TotalMailboxes      = $mbx.Count
+                OrgHoldsRead        = $orgHoldsRead
                 WithHold            = ($mbx.Count - $noHold.Count)
                 WithoutHold         = $noHold.Count
                 WithoutHoldSample   = @($noHold | Select-Object -First 100)
@@ -601,13 +653,17 @@ function Invoke-NRGCollectEXOInventory {
                 # 'Collected' with an empty Allow list even when every read
                 # failed — the exact condition DEF-5.1 scores as clean.
                 $tablFailures = 0
-                foreach ($t in @('Sender', 'Url', 'FileHash')) {
-                    foreach ($allow in @($true, $false)) {
+                # -Allow / -Block are switches; -Allow:$false does not mean
+                # "blocks only". IP (IPv6) entries are a list type of their own.
+                foreach ($t in @('Sender', 'Url', 'FileHash', 'IP')) {
+                    foreach ($mode in @('Allow', 'Block')) {
+                        $allow = $mode -eq 'Allow'
                         try {
-                            $items = @(& $tablCmd -ListType $t -Allow:$allow -ErrorAction Stop)
+                            $modeArg = @{ $mode = $true }
+                            $items = @(& $tablCmd -ListType $t @modeArg -ErrorAction Stop)
                             foreach ($i in $items) { $tabl += @{
                                 ListType   = $t
-                                Action     = $(if ($allow) { 'Allow' } else { 'Block' })
+                                Action     = $mode
                                 Value      = [string](Get-NRGObjectField -Item $i -Key 'Value')
                                 ExpirationDate = [string](Get-NRGObjectField -Item $i -Key 'ExpirationDate')
                                 # A never-expiring ALLOW is the durable one.
@@ -626,6 +682,29 @@ function Invoke-NRGCollectEXOInventory {
                         }
                     }
                 }
+                # Spoofed-sender entries live on their own cmdlet and an allow
+                # there never expires — the most durable bypass in the list.
+                $spoofCmd = (Get-NRGExoCommand -Name 'Get-TenantAllowBlockListSpoofItems' -Session ExchangeOnline).Command
+                if ($spoofCmd) {
+                    try {
+                        foreach ($i in @(& $spoofCmd -ErrorAction Stop)) {
+                            $act = [string](Get-NRGObjectField -Item $i -Key 'Action' -Default '')
+                            $tabl += @{
+                                ListType       = 'Spoof'
+                                Action         = $act
+                                Value          = "$([string](Get-NRGObjectField -Item $i -Key 'SpoofedUser' -Default '')) via $([string](Get-NRGObjectField -Item $i -Key 'SendingInfrastructure' -Default ''))"
+                                ExpirationDate = ''
+                                NoExpiration   = $true
+                                Notes          = [string](Get-NRGObjectField -Item $i -Key 'SpoofType' -Default '')
+                            }
+                        }
+                    } catch {
+                        $tablFailures++
+                        if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                            Register-NRGException -Source 'EXO-TenantAllowBlockList' -Message "[Spoof] $($_.Exception.Message)"
+                        }
+                    }
+                } else { $tablFailures++ }
                 $result.Data.TenantAllowBlockList = @($tabl)
                 # Any failed read means the Allow list this section exists to
                 # surface for DEF-5.1 cannot be trusted as complete — an unread

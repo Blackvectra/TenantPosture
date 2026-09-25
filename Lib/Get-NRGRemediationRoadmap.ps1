@@ -145,7 +145,12 @@ function Get-NRGRemediationRoadmap {
     $quick    = [System.Collections.Generic.List[object]]::new()
     $unlocks  = [System.Collections.Generic.List[object]]::new()
 
-    foreach ($f in $Findings) {
+    # One step per CONTROL, from the same worst-instance findings the score
+    # counts. Iterating raw findings made each per-domain DNS finding its own
+    # "fix" worth a full point: 12 steps projected +38 for a true +19, and a
+    # step's running score counted a domain fixed while the control's other
+    # domains still held it at Gap.
+    foreach ($f in @(Get-NRGScoringFindings -Findings $Findings)) {
         if ($null -eq $f) { continue }
         try {
             $state = [string](& $readField $f 'State')
@@ -174,7 +179,7 @@ function Get-NRGRemediationRoadmap {
             $licMet = $true
             if (-not [string]::IsNullOrEmpty($licReq) -and $licReq -notmatch '^Included') {
                 if ($canTestLicense) {
-                    $licMet = [bool](Test-NRGLicenseRequirementMet -LicenseRequirement $licReq -LicenseProfile $LicenseProfile)
+                    $licMet = [bool](Test-NRGLicenseRequirementMet -LicenseRequirement $licReq -LicenseProfile $LicenseProfile -ControlId ([string]$f.ControlId))
                 } else {
                     $licMet = $false
                 }

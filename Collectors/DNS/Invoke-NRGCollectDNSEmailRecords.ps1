@@ -280,6 +280,11 @@ function Invoke-NRGCollectDNSEmailRecords {
                     MX = 'LookupFailed'; CAA = 'LookupFailed'
                 }
                 SPF     = $null
+                SPFRecordCount   = 0
+                SPFRedirect      = $null
+                DMARCRecordCount = 0
+                DMARCInheritedFrom  = $null
+                DNSSECInheritedFrom = $null
                 DKIM    = @{
                     Selector1       = $null
                     Selector2       = $null
@@ -291,7 +296,7 @@ function Invoke-NRGCollectDNSEmailRecords {
                     RotationStatus  = $null  # 'OK' | 'Due' | 'Overdue' | 'Unknown'
                 }
                 DMARC   = $null
-                MTASTS  = @{ DNSRecord = $null; Policy = $null; Mode = $null }
+                MTASTS  = @{ DNSRecord = $null; Policy = $null; Mode = $null; PolicyFetchError = $null }
                 TLSRPT  = $null
                 DNSSEC  = $false
                 MX      = @()
@@ -322,10 +327,31 @@ function Invoke-NRGCollectDNSEmailRecords {
             # published record (both were real false-"no SPF" causes).
             try {
                 $spfOutcome = ''; $spfReason = ''
-                $spfRecord = @(Resolve-NRGDns -Name $domain -Type TXT -Outcome ([ref]$spfOutcome) -Reason ([ref]$spfReason)) |
-                    Where-Object { $_ -like 'v=spf1*' } | Select-Object -First 1
+                # Every v=spf1 record, not the first: two SPF records is a
+                # permerror (RFC 7208 §4.5) — SPF then fails for all mail —
+                # and reading only the first called that tenant "hard fail
+                # configured".
+                $spfAll = @(@(Resolve-NRGDns -Name $domain -Type TXT -Outcome ([ref]$spfOutcome) -Reason ([ref]$spfReason)) |
+                    Where-Object { [string]$_ -match '^v=spf1(\s|$)' })
                 & $recordLookup 'SPF' $spfOutcome $spfReason
-                if ($spfRecord) { $d.SPF = [string]$spfRecord }
+                $d.SPFRecordCount = $spfAll.Count
+                if ($spfAll.Count -gt 0) { $d.SPF = [string]$spfAll[0] }
+                # redirect= hands the policy to another domain's record; with
+                # no 'all' of its own the verdict is the target's.
+                if ($spfAll.Count -eq 1 -and $d.SPF -notmatch '(^|\s)[+\-~?]?all(\s|$)' -and $d.SPF -match '(^|\s)redirect=([^\s]+)') {
+                    $target = $Matches[2].TrimEnd('.')
+                    $d.SPFRedirect = [ordered]@{ Target = $target; Record = $null; Outcome = 'LookupFailed' }
+                    # Underscore labels are normal here (_spf.example.com), so the
+                    # hostname pattern used for tenant domains is too strict.
+                    if ($target.Length -le 253 -and $target -match '^[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,62})(?:\.[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,62}))+$') {
+                        $rOut = ''; $rWhy = ''
+                        $rRec = @(@(Resolve-NRGDns -Name $target -Type TXT -Outcome ([ref]$rOut) -Reason ([ref]$rWhy)) |
+                            Where-Object { [string]$_ -match '^v=spf1(\s|$)' })
+                        $d.SPFRedirect.Outcome = if ($rOut -in @('Answered','NoRecord')) { $rOut } else { 'LookupFailed' }
+                        if ($rRec.Count -eq 1) { $d.SPFRedirect.Record = [string]$rRec[0] }
+                        if ($d.SPFRedirect.Outcome -eq 'LookupFailed') { $d.Errors += "SPF redirect ${target}: lookup did not complete — $rWhy" }
+                    }
+                }
             } catch {
                 & $recordThrow 'SPF' $_.Exception.Message
             }
@@ -396,7 +422,7 @@ function Invoke-NRGCollectDNSEmailRecords {
                         Select-Object -First 1
                     if (-not $dkimVal) {
                         $dkimVal = @(Resolve-NRGDns -Name $dkimFqdn -Type TXT -Outcome ([ref]$txtOutcome) -Reason ([ref]$txtReason)) |
-                            Where-Object { $_ -like 'v=DKIM1*' -or $_ -like '*p=*' } | Select-Object -First 1
+                            Where-Object { [string]$_ -match '(^|;)\s*p=[A-Za-z0-9+/]' } | Select-Object -First 1
                     }
                     # A record from either lookup is an answer. Only two clean
                     # answers (Answered or NoRecord — a TXT answer with no
@@ -435,20 +461,50 @@ function Invoke-NRGCollectDNSEmailRecords {
             # DMARC
             try {
                 $dmarcOutcome = ''; $dmarcReason = ''
-                $dmarcMatch = @(Resolve-NRGDns -Name "_dmarc.$domain" -Type TXT -Outcome ([ref]$dmarcOutcome) -Reason ([ref]$dmarcReason)) |
-                    Where-Object { $_ -like 'v=DMARC1*' } | Select-Object -First 1
+                # "v=DMARC1" must match exactly, case included (RFC 7489 §6.3),
+                # and more than one record means no DMARC policy is applied at
+                # all (§6.6.3) — reading only the first called that "full
+                # spoofing protection".
+                $isDmarc = { param($r) [string]$r -cmatch '^v\s*=\s*DMARC1\s*(;|$)' }
+                $dmarcAll = @(@(Resolve-NRGDns -Name "_dmarc.$domain" -Type TXT -Outcome ([ref]$dmarcOutcome) -Reason ([ref]$dmarcReason)) |
+                    Where-Object { & $isDmarc $_ })
                 & $recordLookup 'DMARC' $dmarcOutcome $dmarcReason
-                if ($dmarcMatch) {
-                    $dmarcStr     = [string]$dmarcMatch
-                    $d.DMARC      = $dmarcStr
+                $d.DMARCRecordCount = $dmarcAll.Count
+                $dmarcStr = if ($dmarcAll.Count -gt 0) { [string]$dmarcAll[0] } else { $null }
 
-                    # Parse policy value — safe extraction, no eval
-                    $policyMatch = [regex]::Match($dmarcStr, '(?:^|;)\s*p=([^;]+)')
-                    $subPolicyMatch = [regex]::Match($dmarcStr, '(?:^|;)\s*sp=([^;]+)')
-                    $pctMatch    = [regex]::Match($dmarcStr, '(?:^|;)\s*pct=(\d+)')
-                    $d.DMARCPolicy       = if ($policyMatch.Success) { $policyMatch.Groups[1].Value.Trim() } else { 'none' }
-                    $d.DMARCSubPolicy    = if ($subPolicyMatch.Success) { $subPolicyMatch.Groups[1].Value.Trim() } else { $null }
-                    $d.DMARCPct          = if ($pctMatch.Success) { [int]$pctMatch.Groups[1].Value } else { 100 }
+                # No record on a subdomain: receivers apply the organizational
+                # domain's policy (its sp=, else p=) — §6.6.3. Walk up to the
+                # nearest published record; a failed lookup on the way leaves
+                # the result unknown rather than "no DMARC".
+                if ($dmarcAll.Count -eq 0 -and $d.LookupStatus['DMARC'] -eq 'NoRecord') {
+                    $labels = $domain.Split('.')
+                    for ($i = 1; $labels.Count - $i -ge 2; $i++) {
+                        $parent = ($labels[$i..($labels.Count - 1)]) -join '.'
+                        $pOut = ''; $pWhy = ''
+                        $pAll = @(@(Resolve-NRGDns -Name "_dmarc.$parent" -Type TXT -Outcome ([ref]$pOut) -Reason ([ref]$pWhy)) | Where-Object { & $isDmarc $_ })
+                        if ($pOut -notin @('Answered','NoRecord')) { & $recordLookup 'DMARC' 'LookupFailed' "organizational domain _dmarc.${parent}: $pWhy"; break }
+                        if ($pAll.Count -gt 0) {
+                            $d.DMARCInheritedFrom = $parent
+                            $d.DMARCRecordCount   = $pAll.Count
+                            $dmarcStr             = [string]$pAll[0]
+                            break
+                        }
+                    }
+                }
+
+                if ($dmarcStr) {
+                    $d.DMARC = $dmarcStr
+                    # Tag names and values are whitespace-tolerant ("p = reject"
+                    # is valid ABNF); the old '\s*p=' read it as p=none.
+                    $tag = { param($name) $m = [regex]::Match($dmarcStr, "(?:^|;)\s*$name\s*=\s*([^;\s]+)", 'IgnoreCase'); if ($m.Success) { $m.Groups[1].Value.Trim().ToLowerInvariant() } else { $null } }
+                    $p   = & $tag 'p'
+                    $sp  = & $tag 'sp'
+                    $pct = & $tag 'pct'
+                    $d.DMARCPolicy    = if ($p) { $p } else { 'none' }
+                    $d.DMARCSubPolicy = $sp
+                    $d.DMARCPct       = if ($pct -match '^\d+$') { [int]$pct } else { 100 }
+                    # An inherited record governs this domain through sp= when present.
+                    if ((Get-NRGObjectField -Item $d -Key 'DMARCInheritedFrom' -Default $null) -and $sp) { $d.DMARCPolicy = $sp }
                 }
             } catch {
                 & $recordThrow 'DMARC' $_.Exception.Message
@@ -475,6 +531,7 @@ function Invoke-NRGCollectDNSEmailRecords {
                 $mtaStsProbe = Test-NRGSafeProbeTarget -HostName $mtaStsHost
                 if ($mtaStsProbe.Refused) {
                     $d.Errors += "MTASTS.Policy: refused '$mtaStsHost' — $($mtaStsProbe.Reason)"
+                    $d.MTASTS.PolicyFetchError = "refused '$mtaStsHost' — $($mtaStsProbe.Reason)"
                 } else {
                     # DNS rebinding fix (v4.6.3 P2): Invoke-WebRequest would re-resolve
                     # the hostname; we cannot easily pin the resolved IP through it.
@@ -494,7 +551,12 @@ function Invoke-NRGCollectDNSEmailRecords {
 
                         $modeMatch = [regex]::Match($stsText, '^\s*mode:\s*(\S+)', [System.Text.RegularExpressions.RegexOptions]::Multiline)
                         $d.MTASTS.Mode = if ($modeMatch.Success) { $modeMatch.Groups[1].Value.Trim() } else { 'unknown' }
-                    } catch { }
+                    } catch {
+                        # Not silent: an unread policy file is "not assessed",
+                        # never a scored mode of "unknown".
+                        $d.MTASTS.PolicyFetchError = $_.Exception.Message
+                        $d.Errors += "MTASTS.Policy: fetch failed — $($_.Exception.Message)"
+                    }
                 }
             }
 
@@ -513,6 +575,30 @@ function Invoke-NRGCollectDNSEmailRecords {
                 $dsRecords = @(Resolve-NRGDns -Name $domain -Type DS -Outcome ([ref]$dsOutcome) -Reason ([ref]$dsReason))
                 & $recordLookup 'DNSSEC' $dsOutcome $dsReason
                 if ($dsRecords.Count -gt 0) { $d.DNSSEC = $true }
+                elseif ($d.LookupStatus['DNSSEC'] -eq 'NoRecord' -and $domain.Split('.').Count -gt 2) {
+                    # DS exists only at a zone cut. A subdomain that is NOT its
+                    # own zone (no NS records) is signed by its parent's key,
+                    # so "no DS here" is not "unsigned". Only a delegated
+                    # subdomain needs its own DS.
+                    $nsOut = ''; $nsWhy = ''
+                    $ns = @(Resolve-NRGDns -Name $domain -Type NS -Outcome ([ref]$nsOut) -Reason ([ref]$nsWhy))
+                    if ($nsOut -notin @('Answered','NoRecord')) {
+                        & $recordLookup 'DNSSEC' 'LookupFailed' "zone-cut (NS) check: $nsWhy"
+                    } elseif ($ns.Count -eq 0) {
+                        $labels = $domain.Split('.')
+                        for ($i = 1; $labels.Count - $i -ge 2; $i++) {
+                            $parent = ($labels[$i..($labels.Count - 1)]) -join '.'
+                            $pOut = ''; $pWhy = ''
+                            $pDs = @(Resolve-NRGDns -Name $parent -Type DS -Outcome ([ref]$pOut) -Reason ([ref]$pWhy))
+                            if ($pOut -notin @('Answered','NoRecord')) { & $recordLookup 'DNSSEC' 'LookupFailed' "parent zone ${parent} DS: $pWhy"; break }
+                            if ($pDs.Count -gt 0) { $d.DNSSEC = $true; $d.DNSSECInheritedFrom = $parent; break }
+                            # Stop at the parent that IS a zone: its DS answer is the zone's answer.
+                            $pnOut = ''; $pnWhy = ''
+                            $pNs = @(Resolve-NRGDns -Name $parent -Type NS -Outcome ([ref]$pnOut) -Reason ([ref]$pnWhy))
+                            if ($pNs.Count -gt 0) { break }
+                        }
+                    }
+                }
             } catch { & $recordThrow 'DNSSEC' $_.Exception.Message }
 
             # MX — DoH returns each answer as 'PREF exchange.' e.g. '10 host.'
@@ -538,13 +624,27 @@ function Invoke-NRGCollectDNSEmailRecords {
             # as 'FLAGS TAG "VALUE"', e.g. '0 issue "digicert.com"'.
             try {
                 $caaOutcome = ''; $caaReason = ''
-                $caaParsed = @(@(Resolve-NRGDns -Name $domain -Type CAA -Outcome ([ref]$caaOutcome) -Reason ([ref]$caaReason)) | ForEach-Object {
+                $parseCaa = { param($rows) @(@($rows) | ForEach-Object {
                     $m = [regex]::Match([string]$_, '^\s*(\d+)\s+(\w+)\s+"?([^"]*)"?\s*$')
                     if ($m.Success) {
-                        @{ Flags = [int]$m.Groups[1].Value; Tag = $m.Groups[2].Value; Value = $m.Groups[3].Value.Trim() }
+                        @{ Flags = [int]$m.Groups[1].Value; Tag = $m.Groups[2].Value.ToLowerInvariant(); Value = $m.Groups[3].Value.Trim() }
                     }
-                } | Where-Object { $_ })
+                } | Where-Object { $_ }) }
+                $caaParsed = @(& $parseCaa @(Resolve-NRGDns -Name $domain -Type CAA -Outcome ([ref]$caaOutcome) -Reason ([ref]$caaReason)))
                 & $recordLookup 'CAA' $caaOutcome $caaReason
+                # RFC 8659 §3: a CA climbs the tree — with no CAA at the name
+                # itself, the nearest ancestor's CAA set governs issuance. A
+                # subdomain of a CAA-protected domain is protected.
+                if ($caaParsed.Count -eq 0 -and $d.LookupStatus['CAA'] -eq 'NoRecord') {
+                    $labels = $domain.Split('.')
+                    for ($i = 1; $labels.Count - $i -ge 2; $i++) {
+                        $parent = ($labels[$i..($labels.Count - 1)]) -join '.'
+                        $pOut = ''; $pWhy = ''
+                        $pSet = @(& $parseCaa @(Resolve-NRGDns -Name $parent -Type CAA -Outcome ([ref]$pOut) -Reason ([ref]$pWhy)))
+                        if ($pOut -notin @('Answered','NoRecord')) { & $recordLookup 'CAA' 'LookupFailed' "parent ${parent}: $pWhy"; break }
+                        if ($pSet.Count -gt 0) { $caaParsed = $pSet; $d.CAA.InheritedFrom = $parent; break }
+                    }
+                }
                 if ($caaParsed.Count -gt 0) {
                     $d.CAA.Present = $true
                     $d.CAA.Records = $caaParsed

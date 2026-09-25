@@ -97,11 +97,15 @@ $script:Checks        = New-Object System.Collections.ArrayList
 #                 not installed. Never treat as either a pass or a failure.
 #   Error         the check threw. Same handling as NotAssessed, but it means a
 #                 defect in this script rather than a limitation of the host.
+#   Info          inventory, not a verdict: the check records what is there
+#                 (local administrators, OS build) for a person to review.
+#                 Never a pass — reporting these as Pass handed every device a
+#                 clean result for a check that judged nothing.
 
 function Add-Check {
     param(
         [Parameter(Mandatory = $true)]  [string] $Id,
-        [Parameter(Mandatory = $true)]  [ValidateSet('Pass','Fail','NotApplicable','NotAssessed','Error')] [string] $Result,
+        [Parameter(Mandatory = $true)]  [ValidateSet('Pass','Fail','NotApplicable','NotAssessed','Error','Info')] [string] $Result,
         [Parameter(Mandatory = $false)] [string] $Observed = '',
         [Parameter(Mandatory = $false)] [string] $Expected = '',
         [Parameter(Mandatory = $false)] [string] $Detail   = ''
@@ -429,9 +433,13 @@ try {
     # 3. Network exposure
     # ═════════════════════════════════════════════════════════════════════════
 
+    # -PolicyStore ActiveStore is the EFFECTIVE firewall configuration, with
+    # Group Policy and Intune applied. Without it the cmdlet reads the local
+    # persistent store, which a policy-managed machine overrides.
+    # NotConfigured means the Windows default: firewall on, inbound blocked.
     Invoke-Check -Id 'DEV-3.1' -Body {
-        $profiles = @(Get-NetFirewallProfile -ErrorAction Stop)
-        $off = @($profiles | Where-Object { -not $_.Enabled })
+        $profiles = @(Get-NetFirewallProfile -PolicyStore ActiveStore -ErrorAction Stop)
+        $off = @($profiles | Where-Object { [string]$_.Enabled -eq 'False' })
         if ($off.Count -eq 0) {
             Add-Check -Id 'DEV-3.1' -Result 'Pass' -Observed "All $($profiles.Count) profiles enabled"
         } else {
@@ -442,10 +450,10 @@ try {
     }
 
     Invoke-Check -Id 'DEV-3.2' -Body {
-        $profiles = @(Get-NetFirewallProfile -ErrorAction Stop)
-        $permissive = @($profiles | Where-Object { [string]$_.DefaultInboundAction -ne 'Block' })
+        $profiles = @(Get-NetFirewallProfile -PolicyStore ActiveStore -ErrorAction Stop)
+        $permissive = @($profiles | Where-Object { [string]$_.DefaultInboundAction -eq 'Allow' })
         if ($permissive.Count -eq 0) {
-            Add-Check -Id 'DEV-3.2' -Result 'Pass' -Observed 'Default inbound Block on all profiles'
+            Add-Check -Id 'DEV-3.2' -Result 'Pass' -Observed "Default inbound: $(($profiles | ForEach-Object { "$([string]$_.Name)=$([string]$_.DefaultInboundAction)" }) -join ', ') (NotConfigured is the Windows default, Block)"
         } else {
             Add-Check -Id 'DEV-3.2' -Result 'Fail' `
                 -Observed "Not blocking by default: $(($permissive | ForEach-Object { "$([string]$_.Name)=$([string]$_.DefaultInboundAction)" }) -join ', ')" `
@@ -490,14 +498,21 @@ try {
     }
 
     Invoke-Check -Id 'DEV-3.5' -Body {
-        $deny = Get-RegValue -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections'
+        # The Group Policy value overrides the local one; RDP enabled by policy
+        # with the local value still at 1 was reported as disabled.
+        $polKey = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services'
+        $deny = Get-RegValue -Path $polKey -Name 'fDenyTSConnections'
+        if ($null -eq $deny) { $deny = Get-RegValue -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' }
         if ($null -eq $deny -or [int]$deny -eq 1) {
             Add-Check -Id 'DEV-3.5' -Result 'NotApplicable' -Observed 'RDP disabled' `
                 -Detail 'Remote Desktop is not accepting connections, so network-level authentication does not apply.'
             return
         }
-        $nla = Get-RegValue -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication'
-        Add-Check -Id 'DEV-3.5' -Result $(if ($null -ne $nla -and [int]$nla -eq 1) { 'Pass' } else { 'Fail' }) `
+        $nla = Get-RegValue -Path $polKey -Name 'UserAuthentication'
+        if ($null -eq $nla) { $nla = Get-RegValue -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' }
+        # UserAuthentication absent in both places is the Windows default,
+        # which requires NLA; only an explicit 0 turns it off.
+        Add-Check -Id 'DEV-3.5' -Result $(if ($null -eq $nla -or [int]$nla -eq 1) { 'Pass' } else { 'Fail' }) `
             -Observed "RDP enabled; UserAuthentication(NLA)=$nla" `
             -Expected 'NLA required (1) when RDP is enabled' `
             -Detail 'Without NLA the logon screen is reachable before authentication, which is both a brute-force and a pre-auth exploit surface.'
@@ -516,7 +531,7 @@ try {
         $names = @($members | ForEach-Object { [string]$_.Name })
         # Reported, not judged: what counts as too many is a per-client decision.
         # The finding is the list; the tool decides what to do with it.
-        Add-Check -Id 'DEV-4.1' -Result 'Pass' `
+        Add-Check -Id 'DEV-4.1' -Result 'Info' `
             -Observed "$($names.Count) member(s): $($names -join ', ')" `
             -Expected 'Reviewed and minimal' `
             -Detail 'Inventory check. Review the list against who should hold local administrator rights on this machine.'
@@ -561,10 +576,13 @@ try {
         $modern = Get-RegValue -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\LAPS\State' -Name 'LastPasswordUpdateTime'
         $policy = Get-RegValue -Path 'HKLM:\SOFTWARE\Microsoft\Policies\LAPS' -Name 'BackupDirectory'
         $legacy = Get-RegValue -Path 'HKLM:\SOFTWARE\Policies\Microsoft Services\AdmPwd' -Name 'AdmPwdEnabled'
-        $present = ($null -ne $modern) -or ($null -ne $policy) -or ($null -ne $legacy -and [int]$legacy -eq 1)
+        # BackupDirectory 0 means Windows LAPS is DISABLED (1 = Entra ID,
+        # 2 = Active Directory); a policy that exists with 0 is not LAPS, and
+        # a last-rotation timestamp alone is history, not management.
+        $present = ($null -ne $policy -and [int]$policy -in @(1, 2)) -or ($null -ne $legacy -and [int]$legacy -eq 1)
         Add-Check -Id 'DEV-4.4' -Result $(if ($present) { 'Pass' } else { 'Fail' }) `
             -Observed "Windows LAPS state=$modern policy=$policy; legacy AdmPwdEnabled=$legacy" `
-            -Expected 'LAPS managing the local administrator password' `
+            -Expected 'Windows LAPS BackupDirectory 1 (Entra ID) or 2 (Active Directory), or legacy LAPS enabled' `
             -Detail 'A shared local admin password means one recovered credential unlocks every device that shares it.'
     }
 
@@ -592,7 +610,7 @@ try {
         $ubr = Get-RegValue -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name 'UBR'
         $dispVer = Get-RegValue -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name 'DisplayVersion'
         $build = $device.OSBuild
-        Add-Check -Id 'DEV-5.1' -Result 'Pass' `
+        Add-Check -Id 'DEV-5.1' -Result 'Info' `
             -Observed "$([string]$device.OSCaption) $dispVer build $build.$ubr" `
             -Expected 'A servicing branch still receiving security updates' `
             -Detail 'Inventory check. Whether this build is still supported is a lifecycle decision the assessment makes centrally, not something the endpoint can know.'

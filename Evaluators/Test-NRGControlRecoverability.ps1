@@ -54,11 +54,20 @@ function Test-NRGControlEXOMailboxHoldCoverage {
         return
     }
 
+    # Without the organization's hold list, a mailbox with no hold of its own
+    # may still be covered by an org-wide retention policy. Replayed JSON
+    # predating the field keeps its previous reading.
+    if ($none -gt 0 -and (Get-NRGObjectField -Item $rec -Key 'OrgHoldsRead' -Default $true) -eq $false) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "$none mailbox(es) carry no hold of their own, but the organization-wide retention policies (Get-OrganizationConfig InPlaceHolds) could not be read, so whether a tenant-wide policy covers them was not assessed."
+        return
+    }
+
     if ($none -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity 'Informational' -FrameworkIds $cit `
             -CurrentValue "All $total mailboxes covered by a hold or retention policy" `
-            -Detail "Every mailbox is covered by a litigation hold, an In-Place hold, or a retention policy, so content survives deletion of the item, the mailbox and the account."
+            -Detail "Every mailbox is covered by a litigation hold, a Purview retention policy or an eDiscovery hold (organization-wide policies applied unless the mailbox is excluded), so content survives deletion of the item, the mailbox and the account."
         return
     }
 

@@ -63,16 +63,21 @@ function Invoke-NRGCollectIntuneAppProtection {
                     if ($minimumRequiredOsVersion)           { $condLaunch += 'MinimumRequiredOsVersion' }
                     if ($maximumPinRetries -gt 0)             { $condLaunch += 'MaximumPinRetries' }
                     if ($periodOfflineBeforeWipe)             { $condLaunch += 'PeriodOfflineBeforeWipe' }
+                    # managedAppPolicies also returns app CONFIGURATION and WIP
+                    # policies; only *ManagedAppProtection types protect data.
+                    $ptype = [string](Get-NRGObjectField -Item $p -Key '@odata.type' -Default '')
+                    if ($ptype -notmatch 'ManagedAppProtection$') { continue }
                     $result.Data.AppProtectionPolicies += @{
-                        Id          = $p.id
-                        DisplayName = [string]$p.displayName
-                        Description = [string]$p.description
-                        Type        = [string]$p['@odata.type']
-                        Version     = $p.version
+                        Id          = (Get-NRGObjectField -Item $p -Key 'id' -Default $null)
+                        DisplayName = [string](Get-NRGObjectField -Item $p -Key 'displayName' -Default '')
+                        Description = [string](Get-NRGObjectField -Item $p -Key 'description' -Default '')
+                        Type        = [string](Get-NRGObjectField -Item $p -Key '@odata.type' -Default '')
+                        Version     = (Get-NRGObjectField -Item $p -Key 'version' -Default $null)
                         # Fields backing the INT-3.3 conditional-launch evaluation.
                         DeviceComplianceRequired  = $deviceComplianceRequired
                         MinimumRequiredOsVersion  = $minimumRequiredOsVersion
                         MaximumPinRetries         = $maximumPinRetries
+                        IsAssigned                = Get-NRGObjectField -Item $p -Key 'isAssigned' -Default $null
                         ConditionalLaunchSettings = @($condLaunch)
                     }
                 }
@@ -101,10 +106,10 @@ function Invoke-NRGCollectIntuneAppProtection {
                 $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 foreach ($p in @($page.value)) {
                     $result.Data.AppConfigPolicies += @{
-                        Id          = $p.id
-                        DisplayName = [string]$p.displayName
-                        Description = [string]$p.description
-                        Type        = [string]$p['@odata.type']
+                        Id          = (Get-NRGObjectField -Item $p -Key 'id' -Default $null)
+                        DisplayName = [string](Get-NRGObjectField -Item $p -Key 'displayName' -Default '')
+                        Description = [string](Get-NRGObjectField -Item $p -Key 'description' -Default '')
+                        Type        = [string](Get-NRGObjectField -Item $p -Key '@odata.type' -Default '')
                         Channel     = 'MDM'
                     }
                 }
@@ -133,10 +138,10 @@ function Invoke-NRGCollectIntuneAppProtection {
                 $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 foreach ($p in @($page.value)) {
                     $result.Data.AppConfigPolicies += @{
-                        Id          = $p.id
-                        DisplayName = [string]$p.displayName
-                        Description = [string]$p.description
-                        Type        = [string]$p['@odata.type']
+                        Id          = (Get-NRGObjectField -Item $p -Key 'id' -Default $null)
+                        DisplayName = [string](Get-NRGObjectField -Item $p -Key 'displayName' -Default '')
+                        Description = [string](Get-NRGObjectField -Item $p -Key 'description' -Default '')
+                        Type        = [string](Get-NRGObjectField -Item $p -Key '@odata.type' -Default '')
                         Channel     = 'MAM'
                     }
                 }

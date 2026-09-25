@@ -293,9 +293,9 @@
       "Workload": "EXO",
       "Category": "Email",
       "Automated": true,
-      "CollectorDependency": "EXO-MailboxConfig",
+      "CollectorDependency": "Defender-Policies",
       "EvaluatorFunction": "Test-NRGControlEXOAntiPhish",
-      "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -EnableTargetedUserProtection $true -EnableOrganizationDomainsProtection $true -EnableMailboxIntelligence $true",
+      "Remediation": "In every anti-phishing policy in force (Defender portal > Policies & rules > Threat policies > Anti-phishing), turn on \"Enable domains to protect\" including your own domains and \"Enable mailbox intelligence\" with \"Enable intelligence for impersonation protection\", and set each action to Quarantine or Move to Junk rather than Don't apply any action. Or: Set-AntiPhishPolicy -Identity <policy> -EnableOrganizationDomainsProtection $true -TargetedDomainProtectionAction Quarantine -EnableMailboxIntelligence $true -EnableMailboxIntelligenceProtection $true -MailboxIntelligenceProtectionAction MoveToJmf. The Standard or Strict preset security policy sets all of this.",
       "References": {
         "CISControls": [
           "9.7",
@@ -314,7 +314,7 @@
         "PCIDSS": "Req 5.4.1",
         "ISO27001": "A.8.7, A.8.23"
       },
-      "LicenseRequirement": "Included (M365 Business Standard+)"
+      "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)"
     },
     {
       "ControlId": "EXO-1.6",
@@ -355,7 +355,7 @@
       "Workload": "EXO",
       "Category": "Email",
       "Automated": true,
-      "CollectorDependency": "EXO-MailboxConfig",
+      "CollectorDependency": "Defender-Policies",
       "EvaluatorFunction": "Test-NRGControlEXOHonorDMARC",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -HonorDmarcPolicy $true",
       "References": {
@@ -1115,7 +1115,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeams",
-      "Remediation": "Set-CsTeamsMeetingPolicy -AllowExternalParticipantGiveRequestControl $false",
+      "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -AllowExternalParticipantGiveRequestControl $false",
       "References": {
         "CISControls": [
           "4.1"
@@ -1143,9 +1143,9 @@
       "Workload": "TMS",
       "Category": "Collaboration",
       "Automated": true,
-      "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeams",
-      "Remediation": "Ensure Purview retention policies cover SharePoint to capture Teams recording data.",
+      "CollectorDependency": "Purview",
+      "EvaluatorFunction": "Test-NRGControlTeamsRecordingRetention",
+      "Remediation": "Meeting recordings are saved to the organizer's OneDrive and channel meeting recordings to the team's SharePoint site. Apply a Purview retention policy covering both OneDrive accounts and SharePoint sites (Purview > Data lifecycle management > Retention policies) so recordings are retained per policy rather than deletable at will.",
       "References": {
         "CISControls": [
           "3.4"
@@ -1161,7 +1161,7 @@
         "PCIDSS": "Req 3.5.1",
         "ISO27001": "A.5.23, A.8.10"
       },
-      "LicenseRequirement": "Included (M365 Business Standard+)"
+      "LicenseRequirement": "M365 Business Premium or E3+"
     },
     {
       "ControlId": "TMS-1.6",
@@ -1174,7 +1174,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeams",
-      "Remediation": "Set-CsTeamsClientConfiguration -AllowGuestUser $false, or configure guest invitation permissions in Entra External Identities.",
+      "Remediation": "Either turn off Teams guest access (Set-CsTeamsClientConfiguration -Identity Global -AllowGuestUser $false) or limit who can invite guests to admins and the Guest Inviter role (Entra ID > External Identities > External collaboration settings > Guest invite settings).",
       "References": {
         "CISControls": [
           "4.8"
@@ -1234,7 +1234,7 @@
       "Automated": true,
       "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlPurview",
-      "Remediation": "Configure custom retention policies in Purview Compliance > Audit > Retention policies. E5 provides 1-year default.",
+      "Remediation": "Audit (Standard) keeps records for 180 days in every plan once the Unified Audit Log is on. Remove or lengthen any audit retention policy under 90 days (Purview > Audit > Audit retention policies). Audit (Premium, E5 or add-on) extends retention to one year.",
       "References": {
         "CISControls": [
           "8.10"
@@ -1251,7 +1251,7 @@
         "PCIDSS": "Req 10.5",
         "ISO27001": "A.8.15"
       },
-      "LicenseRequirement": "M365 Business Premium or E3+"
+      "LicenseRequirement": "Included (all plans)"
     },
     {
       "ControlId": "PVW-1.3",
@@ -2465,7 +2465,7 @@
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
       "EvaluatorFunction": "Test-NRGControlEXOOutboundLimits",
-      "Remediation": "Set-HostedOutboundSpamFilterPolicy: configure RecipientLimitInternalPerHour, RecipientLimitExternalPerHour, ActionWhenThresholdReached = Alert.",
+      "Remediation": "Keep the default alert policy \"User restricted from sending email\" enabled with an administrator recipient (Defender portal > Policies & rules > Alert policy), or set NotifyOutboundSpam $true with NotifyOutboundSpamRecipients on every outbound spam policy in force: Set-HostedOutboundSpamFilterPolicy -Identity <policy> -NotifyOutboundSpam $true -NotifyOutboundSpamRecipients <admin>.",
       "References": {
         "CISControls": [
           "9.7"
@@ -2558,7 +2558,7 @@
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
       "EvaluatorFunction": "Test-NRGControlEXOTransportAudit",
-      "Remediation": "Set-OrganizationConfig -AuditDisabled $false",
+      "Remediation": "Turn on audit log ingestion so Exchange admin actions, including transport rule changes, are recorded and searchable: Purview portal > Audit > Start recording user and admin activity, or in Exchange Online PowerShell Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true",
       "References": {
         "CISControls": [
           "8.2",
@@ -2823,7 +2823,7 @@
     {
       "ControlId": "TMS-2.1",
       "Title": "Skype Consumer Contact Disabled",
-      "Description": "Contact from Skype consumer users is disabled in Teams federation settings.",
+      "Description": "Contact from Skype consumer users is disabled. Microsoft ended Skype consumer interoperability with Teams on May 5, 2025, so the setting no longer has any effect; the control is reported as retired.",
       "BusinessRisk": "Skype consumer accounts are unverifiable and cannot be audited. They enable social engineering from identities outside any corporate identity provider.",
       "Severity": "Medium",
       "Workload": "TMS",
@@ -2891,7 +2891,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeams3PStorage",
-      "Remediation": "Set-CsTeamsClientConfiguration -AllowDropbox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false",
+      "Remediation": "Set-CsTeamsClientConfiguration -Identity Global -AllowDropBox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false -AllowEgnyte $false",
       "References": {
         "CISControls": [
           "4.8"
@@ -2922,7 +2922,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsEmailIntegration",
-      "Remediation": "Set-CsTeamsClientConfiguration -AllowEmailIntoChannels $false",
+      "Remediation": "Set-CsTeamsClientConfiguration -Identity Global -AllowEmailIntoChannel $false",
       "References": {
         "CISControls": [
           "4.8"
@@ -2944,7 +2944,7 @@
     {
       "ControlId": "TMS-2.5",
       "Title": "Cloud Recording Disabled for External Participants",
-      "Description": "External participants cannot initiate or control meeting cloud recordings.",
+      "Description": "External participants cannot initiate or control meeting cloud recordings. Microsoft enforces this in the platform: guests and external participants cannot start a meeting recording, so there is no tenant setting to score.",
       "BusinessRisk": "External participants recording meetings capture confidential discussions with no internal awareness or consent controls.",
       "Severity": "Low",
       "Workload": "TMS",
@@ -3272,7 +3272,7 @@
         "HIPAA": "§164.308(a)(5)(ii)(B), §164.308(a)(6)",
         "SOC2": "CC6.8, CC7.2, CC7.3"
       },
-      "LicenseRequirement": "Microsoft Defender for Endpoint Plan 2"
+      "LicenseRequirement": "Microsoft Defender for Endpoint Plan 2 or Defender for Business (M365 Business Premium)"
     },
     {
       "ControlId": "INT-2.2",
@@ -3651,7 +3651,7 @@
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
       "EvaluatorFunction": "Test-NRGControlEXOAuditAgeLimit",
-      "Remediation": "Get-Mailbox -ResultSize Unlimited | Set-Mailbox -AuditLogAgeLimit 180",
+      "Remediation": "Keep mailbox auditing (Set-OrganizationConfig -AuditDisabled $false) and audit log ingestion (Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true) on; records are then retained 180 days, or one year for E5 / Audit (Premium) users. Retention is managed in Purview > Audit > Audit retention policies — the per-mailbox AuditLogAgeLimit no longer applies.",
       "References": {
         "CISControls": [
           "8.10"
@@ -3712,7 +3712,7 @@
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
       "EvaluatorFunction": "Test-NRGControlEXOSafeAttachmentsSPO",
-      "Remediation": "Defender portal > Policies > Safe Attachments > Global settings > Enable Defender for Office 365 for SharePoint, OneDrive, and Teams.",
+      "Remediation": "Defender portal > Policies & rules > Threat policies > Safe Attachments > Global settings > turn on Defender for Office 365 for SharePoint, OneDrive, and Microsoft Teams. Or: Set-AtpPolicyForO365 -EnableATPForSPOTeamsODB $true",
       "References": {
         "CISControls": [
           "9.7",
@@ -3731,7 +3731,7 @@
         "PCIDSS": "Req 5.2",
         "ISO27001": "A.8.7"
       },
-      "LicenseRequirement": "Included (M365 Business Standard+)"
+      "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)"
     },
     {
       "ControlId": "EXO-4.4",
@@ -4018,7 +4018,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsWatermarks",
-      "Remediation": "Set-CsTeamsMeetingPolicy -AllowWatermarkForScreenSharing $true",
+      "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -AllowWatermarkForScreenSharing $true (and -AllowWatermarkForCameraVideo $true). Watermarks require Teams Premium for meeting organizers; enforce them for sensitive meetings with a sensitivity label or meeting template.",
       "References": {
         "CISControls": [
           "4.1"
@@ -4035,7 +4035,7 @@
         "PCIDSS": "Req 3.4",
         "ISO27001": "A.8.11"
       },
-      "LicenseRequirement": "Included (M365 Business Standard+)"
+      "LicenseRequirement": "Teams Premium (add-on)"
     },
     {
       "ControlId": "TMS-3.2",
@@ -4078,7 +4078,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsMeetingChat",
-      "Remediation": "Set-CsTeamsMeetingPolicy -AllowMeetingChat EnabledExceptAnonymous",
+      "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -MeetingChatEnabledType EnabledExceptAnonymous",
       "References": {
         "CISControls": [
           "4.1"
@@ -4772,8 +4772,8 @@
       "Automated": true,
       "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-NRGControlDefenderRiskyAppAlerts",
-      "Remediation": "Defender XDR > Cloud Apps > Policies > OAuth app policies. Create policy: App = apps with high privileges, consented by users. Requires Microsoft Defender for Cloud Apps.",
-      "LicenseRequirement": "Microsoft Defender for Cloud Apps (M365 E5 or add-on)",
+      "Remediation": "Defender portal > Email & collaboration > Policies & rules > Alert policy: create an alert policy on the consent and application-permission activities (for example \"Consent to application\", \"Add delegated permission grant\", \"Add app role assignment to service principal\") that notifies the security team. Single-event alert policies are available in every plan; Defender for Cloud Apps OAuth app policies add risk scoring but are a separate license and are not what this check reads.",
+      "LicenseRequirement": "Included (all plans)",
       "References": {
         "CISControls": [
           "13.1"
@@ -5100,8 +5100,8 @@
     },
     {
       "ControlId": "TMS-4.4",
-      "Title": "Live Events Cannot Broadcast to Anonymous Internet Users",
-      "Description": "Teams Live Events are not configured to allow public anonymous streaming to unauthenticated internet users.",
+      "Title": "Teams Events Cannot Be Attended by Anonymous Internet Users",
+      "Description": "Teams town halls and webinars (which replaced live events, retired by Microsoft on June 30, 2026) are restricted to the organization and its guests, not open to anonymous internet attendees.",
       "BusinessRisk": "Live events with anonymous broadcast enabled allow any internet user to view internal organizational meetings, presentations, and discussions without authentication.",
       "Severity": "Medium",
       "Workload": "TMS",
@@ -5109,7 +5109,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-NRGControlTeamsLiveEvents",
-      "Remediation": "Set-CsTeamsMeetingBroadcastPolicy -Identity Global -BroadcastAttendeeVisibilityMode EveryoneInCompany (or -AllowBroadcastScheduling $false to disable live events entirely).",
+      "Remediation": "Set-CsTeamsEventsPolicy -Identity Global -EventAccessType EveryoneInCompanyExcludingGuests -TownhallEventAttendeeAccess EveryoneInOrganizationAndGuests (or -AllowWebinars Disabled / -AllowTownhalls Disabled). Grant a separate policy to the few organizers who genuinely run public events.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CISControls": [
@@ -5507,7 +5507,7 @@
       "CollectorDependency": "M365Copilot",
       "EvaluatorFunction": "Test-NRGControlAICopilotInteractionData",
       "Remediation": "Ensure Unified Audit Log is enabled (Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true). Copilot interactions are searchable in Purview > Content explorer and Audit > Search.",
-      "LicenseRequirement": "M365 Business Premium or E3+",
+      "LicenseRequirement": "Included (all plans)",
       "References": {
         "CISControls": [
           "8.2",
@@ -5711,7 +5711,7 @@
     {
       "ControlId": "EXO-6.3",
       "Title": "Mailboxes with Audit Logging Disabled — Named List",
-      "Description": "Identifies mailboxes with AuditEnabled explicitly set to $false.",
+      "Description": "Identifies accounts exempt from mailbox auditing through an audit bypass association. While organization-wide mailbox auditing is on, Exchange ignores a mailbox's AuditEnabled flag, so a bypass association is the only per-user way auditing is switched off.",
       "BusinessRisk": "A compromised mailbox with audit disabled cannot be investigated. After a BEC incident, forensics cannot determine what emails were read, what rules were created, who accessed the mailbox, or when the compromise began.",
       "Severity": "High",
       "Workload": "EXO",
@@ -5719,7 +5719,7 @@
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
       "EvaluatorFunction": "Test-NRGControlInventoryMailboxAuditDisabled",
-      "Remediation": "Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false } | Set-Mailbox -AuditEnabled $true",
+      "Remediation": "Find accounts exempt from mailbox auditing: Get-MailboxAuditBypassAssociation -ResultSize Unlimited | Where-Object AuditBypassEnabled. Remove each exemption: Set-MailboxAuditBypassAssociation -Identity <account> -AuditBypassEnabled $false. Keep organization-wide mailbox auditing on (Set-OrganizationConfig -AuditDisabled $false); a mailbox's AuditEnabled flag is ignored while it is.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CISControls": [
@@ -5864,7 +5864,7 @@
     {
       "ControlId": "EXO-7.3",
       "Title": "No Mailboxes with Per-User Audit Explicitly Disabled",
-      "Description": "No mailboxes have AuditEnabled = $false set explicitly. As of January 2019, mailbox audit is on by default org-wide; explicit per-user disable is a deliberate override and almost always wrong.",
+      "Description": "No account is exempt from mailbox auditing. Mailbox audit has been on by default org-wide since 2019 and Exchange ignores a mailbox's AuditEnabled flag while it is; the per-user override that does switch auditing off is an audit bypass association, a deliberate exemption that is almost always wrong.",
       "BusinessRisk": "Mailboxes with audit explicitly disabled cannot be investigated after a compromise. Inbox-rule creation, mail access by delegates, and sent-item modification are not captured for the disabled mailbox — a deliberate or accidental blind spot that thwarts incident response.",
       "Severity": "Medium",
       "Workload": "EXO",
@@ -5872,7 +5872,7 @@
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
       "EvaluatorFunction": "Test-NRGControlEXOAuditDisabledMailboxes",
-      "Remediation": "Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false } | Set-Mailbox -AuditEnabled $true. For a single mailbox: Set-Mailbox -Identity <UPN> -AuditEnabled $true.",
+      "Remediation": "Find accounts exempt from mailbox auditing: Get-MailboxAuditBypassAssociation -ResultSize Unlimited | Where-Object AuditBypassEnabled. Remove each exemption: Set-MailboxAuditBypassAssociation -Identity <account> -AuditBypassEnabled $false. Keep organization-wide mailbox auditing on (Set-OrganizationConfig -AuditDisabled $false); a mailbox's AuditEnabled flag is ignored while it is.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CISControls": [
@@ -6146,7 +6146,7 @@
         "HIPAA": "§164.308(a)(7)(ii)(A)",
         "PCIDSS": "Req 10.5"
       },
-      "LicenseRequirement": "Exchange Online Plan 2 or M365 E3"
+      "LicenseRequirement": "Exchange Online Plan 2 or Exchange Online Archiving (M365 Business Premium, E3, E5)"
     },
     {
       "ControlId": "EXO-9.2",

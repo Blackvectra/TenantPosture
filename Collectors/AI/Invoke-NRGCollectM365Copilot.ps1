@@ -68,7 +68,7 @@ function Invoke-NRGCollectM365Copilot {
 
             # Interaction data retention
             CopilotInteractionRetention = $null
-            AuditCopilotEnabled         = $false
+            AuditCopilotEnabled         = $null   # unknown until the Exchange Online audit config is read
         }
     }
 
@@ -87,8 +87,16 @@ function Invoke-NRGCollectM365Copilot {
             $confersCopilot = $false
 
             # Match by skuPartNumber prefix (e.g., "Microsoft_365_Copilot")
-            if ($partNumber -match '^(Microsoft_365_Copilot|MICROSOFT_365_COPILOT|COPILOT)') {
+            # "M365_Copilot" is the documented part number of the current SKU
+            # (Microsoft's licensing reference); it was not matched, so a
+            # Copilot tenant read "no Copilot licenses" on every Copilot control.
+            if ($partNumber -match '^(Microsoft_365_Copilot|MICROSOFT_365_COPILOT|M365_Copilot|COPILOT)') {
                 $confersCopilot = $true
+            }
+            # Service-plan NAMES (M365_COPILOT_APPS, M365_COPILOT_BUSINESS_CHAT, ...)
+            # identify every Copilot SKU variant, including EDU and add-on bundles.
+            foreach ($plan in $servicePlans) {
+                if ([string](Get-NRGObjectField -Item $plan -Key 'servicePlanName' -Default '') -match '^M365_COPILOT_') { $confersCopilot = $true }
             }
             # Match by service plan ID — definitive
             foreach ($plan in $servicePlans) {
@@ -132,12 +140,23 @@ function Invoke-NRGCollectM365Copilot {
 
     # ── 2) User count + per-user license confirmation ────────────────────────
     try {
-        $users = Invoke-NRGGraphRequest -Method GET `
-            -Uri 'https://graph.microsoft.com/v1.0/users?$select=id,assignedLicenses&$top=999' `
-            -ErrorAction Stop
-
-        $uValues = @($users.value ?? @())
-        $result.Data.TotalUserCount = $uValues.Count
+        # Every page (a tenant over 999 users read only page 1, so 1,000
+        # licenses read as "999 of 999 — the entire tenant"), members only:
+        # guests cannot hold Copilot, so counting them made "every member
+        # licensed" read as a scoped assignment.
+        $uValues = [System.Collections.Generic.List[object]]::new()
+        $next = 'https://graph.microsoft.com/v1.0/users?$select=id,assignedLicenses,userType,accountEnabled&$top=999'
+        $pages = 0
+        while ($next -and $pages -lt 200) {
+            $users = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
+            foreach ($u in @(Get-NRGObjectField -Item $users -Key 'value' -Default @())) { $uValues.Add($u) }
+            $link = [string](Get-NRGObjectField -Item $users -Key '@odata.nextLink' -Default '')
+            # A nextLink identical to the page just read would loop forever.
+            $next = if ($link -and $link -ne $next) { $link } else { '' }
+            $pages++
+        }
+        $members = @($uValues | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'userType' -Default 'Member') -ne 'Guest' -and (Get-NRGObjectField -Item $_ -Key 'accountEnabled' -Default $true) -ne $false })
+        $result.Data.TotalUserCount = $members.Count
 
         # If subscribedSkus enumeration failed but per-user license data is available,
         # cross-check by counting users with a Copilot SKU assigned.
@@ -188,6 +207,7 @@ function Invoke-NRGCollectM365Copilot {
                     -Uri 'https://graph.microsoft.com/beta/informationProtection/policy/labels' `
                     -ErrorAction Stop
                 $lValues = @($sLabels.value ?? @())
+                $result.Data['LabelsRead'] = $true
                 $result.Data.SensitivityLabelCount = $lValues.Count
                 $result.Data.SensitivityLabelsEnabled = ($lValues.Count -gt 0)
             } catch {
@@ -204,7 +224,9 @@ function Invoke-NRGCollectM365Copilot {
             try {
                 $auto = @(Get-AutoSensitivityLabelPolicy -ErrorAction Stop)
                 $result.Data.AutoLabelPoliciesEnabled = (
-                    @($auto | Where-Object { $_.Mode -eq 'Enable' -or $_.Enabled -eq $true }).Count -gt 0
+                    # Simulation modes (TestWithNotifications / TestWithoutNotifications)
+                    # label nothing: only Mode 'Enable' is enforcement.
+                    @($auto | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'Mode' -Default '') -eq 'Enable' }).Count -gt 0
                 )
             } catch {
                 $result.Errors += "AutoLabelPolicy query failed: $($_.Exception.Message)"
@@ -226,10 +248,12 @@ function Invoke-NRGCollectM365Copilot {
             $dlp = @($purview.Data.DLPPolicies ?? @())
             foreach ($p in $dlp) {
                 $workloads = @($p.Workloads ?? @())
-                $nameMatchesCopilot = ([string]$p.Name) -match 'Copilot|AI'
+                # Whole word only: 'AI' matched "Mail", "Email", "Retain"...
+                $nameMatchesCopilot = ([string]$p.Name) -match '\bCopilot\b'
                 $workloadMatchesCopilot = ($workloads -contains 'Copilot') -or
                                           ($workloads -contains 'M365Copilot') -or
-                                          ($workloads -contains 'CopilotExperiences')
+                                          ($workloads -contains 'CopilotExperiences') -or
+                                          ($workloads -contains 'Applications')   # the Microsoft 365 Copilot location
 
                 if ($workloadMatchesCopilot -or $nameMatchesCopilot) {
                     $copilotDlpFromPurview += [ordered]@{
@@ -339,7 +363,7 @@ function Invoke-NRGCollectM365Copilot {
                 $wls = @($_.Workloads ?? @())
                 ($wls -contains 'Copilot') -or
                 ($wls -contains 'M365Copilot') -or
-                ([string]$_.Name -match 'Copilot|AI')
+                ([string]$_.Name -match '\bCopilot\b')
             })
             if ($copilotRet.Count -gt 0) {
                 $result.Data.CopilotInteractionRetention = 'policy-defined'

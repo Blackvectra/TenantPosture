@@ -281,7 +281,7 @@ function Get-NRGSSPPosture {
     # discarded just because a later domain came back Satisfied, or a
     # requirement backed by that control derives 'Implemented' on a tenant
     # that still has a live gap.
-    $stateRank = @{ 'Gap' = 3; 'Partial' = 2; 'Error' = 1; 'NotApplicable' = 1; 'Satisfied' = 0 }
+    $stateRank = Get-NRGStateSeverityRank
     $byId = @{}
     foreach ($f in $Findings) {
         if ($null -eq $f) { continue }
@@ -324,8 +324,10 @@ function Get-NRGSSPPosture {
         foreach ($cid in $ctlIds) {
             $m  = $meta[$cid]
             $st = 'NotRun'
+            $why = ''
             if ($byId.ContainsKey($cid)) {
-                $st = [string](Get-NRGObjectField -Item $byId[$cid] -Key 'State' -Default '')
+                $st  = [string](Get-NRGObjectField -Item $byId[$cid] -Key 'State'  -Default '')
+                $why = [string](Get-NRGObjectField -Item $byId[$cid] -Key 'Detail' -Default '')
             }
             switch ($st) {
                 'Satisfied'     { $sat++ }
@@ -343,6 +345,10 @@ function Get-NRGSSPPosture {
                 Title       = [string]$m['Title']
                 Severity    = [string]$m['Severity']
                 State       = $st
+                # Why a control produced no verdict (not licensed, declared
+                # third-party EDR, not collected). A bare "NotApplicable" next
+                # to an Implemented requirement read as a pass.
+                Detail      = $(if ($st -ne 'Satisfied') { $why } else { '' })
                 Remediation = [string]$m['Remediation']
                 Impact      = Get-NRGControlOperationalImpact -ControlId $cid -Catalog $impact
             })
@@ -350,13 +356,21 @@ function Get-NRGSSPPosture {
 
         # Evidence status — strictly what the assessment observed. 'None' is
         # its own value and never collapses into a pass.
+        #
+        # 'Met' requires EVERY mapped control to have passed. One Satisfied
+        # control beside NotApplicable / NotRun ones (a declared third-party
+        # EDR, an unlicensed feature, a collector that did not run) is
+        # 'Partly assessed' — the rest of the requirement was never checked,
+        # and in a document the client signs, "Implemented" for that is a
+        # false statement.
         $assessed = $sat + $part + $gap
         $evidenceStatus =
-            if ($ctlIds.Count -eq 0)             { 'None' }
-            elseif ($assessed -eq 0)             { 'Not assessed' }
-            elseif ($gap -eq 0 -and $part -eq 0) { 'Met' }
-            elseif ($sat -eq 0 -and $part -eq 0) { 'Gap' }
-            else                                 { 'Partial' }
+            if ($ctlIds.Count -eq 0)                                  { 'None' }
+            elseif ($assessed -eq 0)                                  { 'Not assessed' }
+            elseif ($gap -eq 0 -and $part -eq 0 -and ($na + $notRun) -gt 0) { 'Partly assessed' }
+            elseif ($gap -eq 0 -and $part -eq 0)                      { 'Met' }
+            elseif ($sat -eq 0 -and $part -eq 0)                      { 'Gap' }
+            else                                                      { 'Partial' }
 
         # Confidence — how much of the requirement the tool can actually see.
         # Even 'Tool-verified' means "every mapped control produced a real
@@ -385,6 +399,7 @@ function Get-NRGSSPPosture {
         $derived =
             switch ($evidenceStatus) {
                 'Met'          { 'Implemented' }
+                'Partly assessed' { 'Not assessed' }
                 'Partial'      { 'Partially implemented' }
                 'Gap'          { 'Not implemented' }
                 'Not assessed' { 'Not assessed' }
@@ -494,7 +509,9 @@ function Get-NRGSSPPosture {
         NotApplicable        = @($rows | Where-Object { $_['Status'] -eq 'Not applicable' }).Count
         Inherited            = @($rows | Where-Object { $_['StatusSource'] -eq 'Inherited' }).Count
         AttestedStatuses     = @($rows | Where-Object { $_['StatusSource'] -eq 'Attested' }).Count
-        ToolVerified         = @($rows | Where-Object { $_['Confidence'] -eq 'Tool-verified' }).Count
+        # Tool-verified STATUS: a row whose status the client asserted in the
+        # answers file is theirs, however clean its evidence.
+        ToolVerified         = @($rows | Where-Object { $_['Confidence'] -eq 'Tool-verified' -and $_['StatusSource'] -eq 'Assessment' }).Count
         PartialEvidence      = @($rows | Where-Object { $_['Confidence'] -eq 'Partial evidence' }).Count
         NoEvidenceCollected  = @($rows | Where-Object { $_['Confidence'] -eq 'No evidence collected' }).Count
         AttestationOnly      = @($rows | Where-Object { $_['Confidence'] -eq 'Attestation only' }).Count

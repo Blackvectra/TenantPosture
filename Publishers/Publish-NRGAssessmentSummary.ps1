@@ -108,6 +108,9 @@ function Publish-NRGAssessmentSummary {
     $null = $sb.AppendLine("| ✅ Satisfied | $satisfied |")
     $null = $sb.AppendLine("| ⚠️ Partial | $partial |")
     $null = $sb.AppendLine("| ❌ Gap | $gap |")
+    # Without this row the table did not add up to its total, and a reader
+    # could not tell whether the missing rows were passes or failures.
+    $null = $sb.AppendLine("| ⛔ Error (not evaluated; counted as a failure) | $($cov.Error) |")
     $null = $sb.AppendLine("| — Not Applicable | $na |")
     $null = $sb.AppendLine("| **Total Controls** | **$total** |")
     $null = $sb.AppendLine()
@@ -182,7 +185,7 @@ function Publish-NRGAssessmentSummary {
         if ($scope -and $scope.Available) {
             $null = $sb.AppendLine("## Assessment Scope and Limitations")
             $null = $sb.AppendLine()
-            $null = $sb.AppendLine("**$($scope.ScoredControls) of $($scope.TotalControls) controls produced a scored verdict.** The remaining $($scope.UnscoredControls) are itemised below and are excluded from the compliance score — they are neither passes nor failures.")
+            $null = $sb.AppendLine("**$($scope.ScoredControls) of $($scope.TotalControls) controls produced a scored verdict.** The remaining $($scope.UnscoredControls) are itemized below and are excluded from the compliance score — they are neither passes nor failures.")
             $null = $sb.AppendLine()
             $null = $sb.AppendLine("| Outcome | Controls |")
             $null = $sb.AppendLine("|---------|----------|")
@@ -191,7 +194,9 @@ function Publish-NRGAssessmentSummary {
             $null = $sb.AppendLine("| Not evaluated — quick-scan mode | $($scope.NotEvaluatedThisMode.Count) |")
             $null = $sb.AppendLine("| Produced no result at all | $($scope.NoResult.Count) |")
             $null = $sb.AppendLine("| No automated test — manual review required | $($scope.NoProgrammaticCheck.Count) |")
-            $null = $sb.AppendLine("| Licence gated | $($scope.LicenceBlocked.Count) |")
+            $null = $sb.AppendLine("| Covered by a declared third-party EDR — not verified | $(@(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()).Count) |")
+            $null = $sb.AppendLine("| Checked, not applicable to this tenant (reason stated) | $(@(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()).Count) |")
+            $null = $sb.AppendLine("| License gated | $($scope.LicenceBlocked.Count) |")
             $null = $sb.AppendLine()
 
             foreach ($l in $scope.Limitations) {
@@ -204,6 +209,8 @@ function Publish-NRGAssessmentSummary {
                 @{ Label = 'Not evaluated — quick-scan mode'; Items = $scope.NotEvaluatedThisMode }
                 @{ Label = 'Produced no result at all'; Items = $scope.NoResult }
                 @{ Label = 'No automated test — manual review required'; Items = $scope.NoProgrammaticCheck }
+                @{ Label = 'Covered by a declared third-party EDR — not verified'; Items = @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()) }
+                @{ Label = 'Checked, not applicable to this tenant'; Items = @(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()) }
             )) {
                 $items = @($grp.Items)
                 if ($items.Count -eq 0) { continue }

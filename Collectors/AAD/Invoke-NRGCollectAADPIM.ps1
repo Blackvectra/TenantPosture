@@ -183,6 +183,13 @@ function Invoke-NRGCollectAADPIM {
                 $arResp = Invoke-NRGGraphRequest -Method GET -Uri $arLink -ErrorAction Stop
                 foreach ($d in @($arResp.value ?? @())) {
                     $scopeQuery = [string](Get-NRGNestedProperty -Object $d -Path 'scope.query' -Default '')
+                    # A principalResourceMembershipsScope (the shape Microsoft's
+                    # Graph tutorial uses for role reviews) carries its target in
+                    # resourceScopes[].query, not scope.query, so a genuine role
+                    # review read as "none target privileged roles".
+                    $resQueries = @(@(Get-NRGNestedProperty -Object $d -Path 'scope.resourceScopes' -Default @()) | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'query' -Default '') })
+                    $enumQuery  = [string](Get-NRGNestedProperty -Object $d -Path 'instanceEnumerationScope.query' -Default '')
+                    $allQueries = (@($scopeQuery) + $resQueries + @($enumQuery) | Where-Object { $_ }) -join ' | '
                     $recurType  = [string](Get-NRGNestedProperty -Object $d -Path 'settings.recurrence.pattern.type' -Default 'noRecurrence')
                     $arList.Add(@{
                         Id           = [string]$d.id
@@ -193,7 +200,7 @@ function Invoke-NRGCollectAADPIM {
                         # A review targets privileged directory roles when its scope
                         # queries roleManagement/directory (the PIM role-assignment
                         # instances) rather than a group or app.
-                        TargetsRoles = [bool]($scopeQuery -match 'roleManagement/directory|roleAssignmentScheduleInstances|directoryRole')
+                        TargetsRoles = [bool]($allQueries -match 'roleManagement/directory|roleAssignmentScheduleInstances|roleEligibilitySchedule|directoryRole')
                     })
                 }
                 $arLink = [string](Get-NRGObjectField -Item $arResp -Key '@odata.nextLink' -Default '')

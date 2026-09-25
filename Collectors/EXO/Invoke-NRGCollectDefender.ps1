@@ -34,6 +34,8 @@ function Invoke-NRGCollectDefender {
                     @{
                         Name             = [string]$_.Name
                         IsDefault        = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
+                        IsBuiltInProtection = [bool](Get-NRGObjectField -Item $_ -Key 'IsBuiltInProtection' -Default ([string]$_.Name -eq 'Built-In Protection Policy'))
+                        RecommendedPolicyType = [string](Get-NRGObjectField -Item $_ -Key 'RecommendedPolicyType' -Default '')
                         Enable           = [bool](Get-NRGObjectField -Item $_ -Key 'Enable' -Default $false)
                         Action           = [string](Get-NRGObjectField -Item $_ -Key 'Action' -Default 'Allow')
                         ActionOnError    = [bool](Get-NRGObjectField -Item $_ -Key 'ActionOnError' -Default $false)
@@ -48,7 +50,10 @@ function Invoke-NRGCollectDefender {
                         SafeAttachmentPolicy  = [string]$_.SafeAttachmentPolicy
                         State                 = [string]$_.State
                         Priority              = $_.Priority
-                        RecipientDomainIs     = @($_.RecipientDomainIs ?? @())
+                        RecipientDomainIs     = @(Get-NRGObjectField -Item $_ -Key 'RecipientDomainIs' -Default @())
+                        SentTo            = @(Get-NRGObjectField -Item $_ -Key 'SentTo' -Default @())
+                        SentToMemberOf    = @(Get-NRGObjectField -Item $_ -Key 'SentToMemberOf' -Default @())
+                        HasExceptions     = [bool]@(@(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentTo' -Default @()) + @(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentToMemberOf' -Default @()) + @(Get-NRGObjectField -Item $_ -Key 'ExceptIfRecipientDomainIs' -Default @()) | Where-Object { $_ }).Count
                     }
                 })
                 EnabledNonDefaultCount = @($saPolicies | Where-Object { -not (Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false) -and (Get-NRGObjectField -Item $_ -Key 'Enable' -Default $false) -eq $true }).Count
@@ -74,15 +79,17 @@ function Invoke-NRGCollectDefender {
                     @{
                         Name                         = [string]$_.Name
                         IsDefault                    = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
-                        EnableSafeLinksForEmail      = [bool]($_.EnableSafeLinksForEmail ?? $false)
-                        EnableSafeLinksForTeams      = [bool]($_.EnableSafeLinksForTeams ?? $false)
-                        EnableSafeLinksForOffice     = [bool]($_.EnableSafeLinksForOffice ?? $false)
-                        ScanUrls                     = [bool]($_.ScanUrls ?? $false)
-                        EnableForInternalSenders     = [bool]($_.EnableForInternalSenders ?? $false)
-                        AllowClickThrough            = [bool]($_.AllowClickThrough ?? $true)
-                        TrackClicks                  = [bool]($_.TrackClicks ?? $false)
-                        DisableUrlRewrite            = [bool]($_.DisableUrlRewrite ?? $false)
-                        DeliverMessageAfterScan      = [bool]($_.DeliverMessageAfterScan ?? $false)
+                        IsBuiltInProtection = [bool](Get-NRGObjectField -Item $_ -Key 'IsBuiltInProtection' -Default ([string]$_.Name -eq 'Built-In Protection Policy'))
+                        RecommendedPolicyType = [string](Get-NRGObjectField -Item $_ -Key 'RecommendedPolicyType' -Default '')
+                        EnableSafeLinksForEmail      = [bool](Get-NRGObjectField -Item $_ -Key 'EnableSafeLinksForEmail' -Default $false)
+                        EnableSafeLinksForTeams      = [bool](Get-NRGObjectField -Item $_ -Key 'EnableSafeLinksForTeams' -Default $false)
+                        EnableSafeLinksForOffice     = [bool](Get-NRGObjectField -Item $_ -Key 'EnableSafeLinksForOffice' -Default $false)
+                        ScanUrls                     = [bool](Get-NRGObjectField -Item $_ -Key 'ScanUrls' -Default $false)
+                        EnableForInternalSenders     = [bool](Get-NRGObjectField -Item $_ -Key 'EnableForInternalSenders' -Default $false)
+                        AllowClickThrough            = [bool](Get-NRGObjectField -Item $_ -Key 'AllowClickThrough' -Default $true)
+                        TrackClicks                  = [bool](Get-NRGObjectField -Item $_ -Key 'TrackClicks' -Default $false)
+                        DisableUrlRewrite            = [bool](Get-NRGObjectField -Item $_ -Key 'DisableUrlRewrite' -Default $false)
+                        DeliverMessageAfterScan      = [bool](Get-NRGObjectField -Item $_ -Key 'DeliverMessageAfterScan' -Default $false)
                     }
                 })
                 Rules                  = @($slRules | ForEach-Object {
@@ -91,7 +98,10 @@ function Invoke-NRGCollectDefender {
                         SafeLinksPolicy   = [string]$_.SafeLinksPolicy
                         State             = [string]$_.State
                         Priority          = $_.Priority
-                        RecipientDomainIs = @($_.RecipientDomainIs ?? @())
+                        RecipientDomainIs = @(Get-NRGObjectField -Item $_ -Key 'RecipientDomainIs' -Default @())
+                        SentTo            = @(Get-NRGObjectField -Item $_ -Key 'SentTo' -Default @())
+                        SentToMemberOf    = @(Get-NRGObjectField -Item $_ -Key 'SentToMemberOf' -Default @())
+                        HasExceptions     = [bool]@(@(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentTo' -Default @()) + @(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentToMemberOf' -Default @()) + @(Get-NRGObjectField -Item $_ -Key 'ExceptIfRecipientDomainIs' -Default @()) | Where-Object { $_ }).Count
                     }
                 })
                 EnabledNonDefaultCount = @($slPolicies | Where-Object { -not (Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false) -and (Get-NRGObjectField -Item $_ -Key 'EnableSafeLinksForEmail' -Default $false) }).Count
@@ -100,6 +110,23 @@ function Invoke-NRGCollectDefender {
             $result.Data['SafeLinks'] = @{ Available = $false; Error = $_.Exception.Message }
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Defender-SafeLinks' -Message $_.Exception.Message
+            }
+        }
+
+        # ── Safe Attachments for SharePoint / OneDrive / Teams (EXO-4.3) ──
+        # A tenant-wide switch on Get-AtpPolicyForO365, independent of every
+        # Safe Attachments mail policy.
+        try {
+            $atpO365 = @(Get-AtpPolicyForO365 -ErrorAction Stop) | Select-Object -First 1
+            $result.Data['AtpPolicyForO365'] = @{
+                Available               = $true
+                EnableATPForSPOTeamsODB = Get-NRGObjectField -Item $atpO365 -Key 'EnableATPForSPOTeamsODB' -Default $null
+                EnableSafeDocs          = Get-NRGObjectField -Item $atpO365 -Key 'EnableSafeDocs' -Default $null
+            }
+        } catch {
+            $result.Data['AtpPolicyForO365'] = @{ Available = $false; Error = $_.Exception.Message }
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'Defender-AtpPolicyForO365' -Message $_.Exception.Message
             }
         }
 
@@ -115,6 +142,9 @@ function Invoke-NRGCollectDefender {
                     @{
                         Name                                     = [string]$_.Name
                         IsDefault                                = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
+                        IsBuiltInProtection = [bool](Get-NRGObjectField -Item $_ -Key 'IsBuiltInProtection' -Default ([string]$_.Name -eq 'Built-In Protection Policy'))
+                        RecommendedPolicyType = [string](Get-NRGObjectField -Item $_ -Key 'RecommendedPolicyType' -Default '')
+
                         Enabled                                  = [bool]($_.Enabled ?? $true)
                         EnableMailboxIntelligence                = [bool]($_.EnableMailboxIntelligence ?? $false)
                         EnableMailboxIntelligenceProtection      = [bool]($_.EnableMailboxIntelligenceProtection ?? $false)
@@ -143,6 +173,11 @@ function Invoke-NRGCollectDefender {
                         AntiPhishPolicy  = [string]$_.AntiPhishPolicy
                         State            = [string]$_.State
                         Priority         = $_.Priority
+                        RecipientDomainIs = @(Get-NRGObjectField -Item $_ -Key 'RecipientDomainIs' -Default @())
+                        SentTo            = @(Get-NRGObjectField -Item $_ -Key 'SentTo' -Default @())
+                        SentToMemberOf    = @(Get-NRGObjectField -Item $_ -Key 'SentToMemberOf' -Default @())
+                        HasExceptions     = [bool]@(@(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentTo' -Default @()) + @(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentToMemberOf' -Default @()) + @(Get-NRGObjectField -Item $_ -Key 'ExceptIfRecipientDomainIs' -Default @()) | Where-Object { $_ }).Count
+
                     }
                 })
             }
@@ -150,6 +185,31 @@ function Invoke-NRGCollectDefender {
             $result.Data['AntiPhishing'] = @{ Available = $false; Error = $_.Exception.Message }
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Defender-AntiPhishing' -Message $_.Exception.Message
+            }
+        }
+
+        # ── Preset security policy rules ──────────────────────────────────
+        # Standard / Strict presets are switched on and scoped by these rules
+        # (EOP = anti-spam/anti-phish/anti-malware, ATP = Safe Links /
+        # Safe Attachments). A preset POLICY object stays after the preset is
+        # turned off, so its presence says nothing; the rule State does.
+        $result.Data['PresetRules'] = @{ Available = $false; EOP = @(); ATP = @() }
+        try {
+            $mkPr = { param($r) @{
+                Name = [string](Get-NRGObjectField -Item $r -Key 'Name' -Default '')
+                State = [string](Get-NRGObjectField -Item $r -Key 'State' -Default '')
+                RecipientDomainIs = @(Get-NRGObjectField -Item $r -Key 'RecipientDomainIs' -Default @())
+                SentTo = @(Get-NRGObjectField -Item $r -Key 'SentTo' -Default @())
+                SentToMemberOf = @(Get-NRGObjectField -Item $r -Key 'SentToMemberOf' -Default @())
+                HasExceptions = [bool]@(@(Get-NRGObjectField -Item $r -Key 'ExceptIfSentTo' -Default @()) + @(Get-NRGObjectField -Item $r -Key 'ExceptIfSentToMemberOf' -Default @()) + @(Get-NRGObjectField -Item $r -Key 'ExceptIfRecipientDomainIs' -Default @()) | Where-Object { $_ }).Count } }
+            $eop = @(Get-EOPProtectionPolicyRule -ErrorAction Stop)
+            $atp = @()
+            if (Get-Command Get-ATPProtectionPolicyRule -ErrorAction SilentlyContinue) { $atp = @(Get-ATPProtectionPolicyRule -ErrorAction Stop) }
+            $result.Data['PresetRules'] = @{ Available = $true; EOP = @($eop | ForEach-Object { & $mkPr $_ }); ATP = @($atp | ForEach-Object { & $mkPr $_ }) }
+        } catch {
+            $result.Data['PresetRules'] = @{ Available = $false; EOP = @(); ATP = @(); Error = $_.Exception.Message }
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'Defender-PresetRules' -Message $_.Exception.Message
             }
         }
 
@@ -207,7 +267,9 @@ function Invoke-NRGCollectDefender {
                     Simulations = $sims
                     # A launched/completed campaign — anything past draft — proves a
                     # real training program, not just a saved draft.
-                    LaunchedCount = @($sims | Where-Object { $_.Status -in @('running','scheduled','succeeded','completed') }).Count
+                    # 'scheduled' has not run yet: nobody has been tested.
+                    LaunchedCount = @($sims | Where-Object { $_.Status -in @('running','succeeded','completed') }).Count
+                    ScheduledCount = @($sims | Where-Object { $_.Status -eq 'scheduled' }).Count
                 }
             } else {
                 $result.Data['AttackSimulations'] = @{ Available = $false; Error = 'Graph proxy unavailable' }
