@@ -1,0 +1,93 @@
+{
+  "_comment": "Recommended Conditional Access baseline, read by Lib/Get-NRGConditionalAccessView.ps1. ADVISORY ONLY: nothing here is scored and no finding is emitted from it — it is a view, like Get-NRGAssessmentScope. Every entry is one of Microsoft's own documented Conditional Access policy templates (https://learn.microsoft.com/entra/identity/conditional-access/concept-conditional-access-policy-common), fetched 2026-09-25. Matching logic lives in the Lib file, keyed on Id; this file holds only display metadata so a citation or a name can be corrected without touching code.",
+  "templates": [
+    {
+      "Id": "block-legacy-auth",
+      "Name": "Block legacy authentication",
+      "Category": "Secure foundation",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-block-legacy-authentication",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Summary": "Blocks sign-in attempts that use legacy authentication protocols (IMAP, POP3, older Office clients), which cannot be challenged for MFA. Microsoft: more than 99% of password-spray attacks use legacy authentication."
+    },
+    {
+      "Id": "mfa-all-users",
+      "Name": "Require multifactor authentication for all users",
+      "Category": "Secure foundation",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-mfa-strength",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Summary": "Requires every user to complete multifactor authentication."
+    },
+    {
+      "Id": "mfa-admins",
+      "Name": "Require multifactor authentication for admins",
+      "Category": "Secure foundation",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-old-require-mfa-admin",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Summary": "Requires multifactor authentication for the 14 highly privileged admin roles Microsoft names: Global Administrator, Application Administrator, Authentication Administrator, Billing Administrator, Cloud Application Administrator, Conditional Access Administrator, Exchange Administrator, Helpdesk Administrator, Password Administrator, Privileged Authentication Administrator, Privileged Role Administrator, Security Administrator, SharePoint Administrator, User Administrator."
+    },
+    {
+      "Id": "admin-phish-resistant-mfa",
+      "Name": "Require phishing-resistant multifactor authentication for administrators",
+      "Category": "Protect administrator",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-admin-phish-resistant-mfa",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Summary": "Requires the same privileged admin roles to authenticate with a phishing-resistant method (FIDO2 security key, Windows Hello for Business, or certificate-based authentication) rather than a method an attacker-in-the-middle can relay, such as SMS or a push notification."
+    },
+    {
+      "Id": "mfa-azure-mgmt",
+      "Name": "Require multifactor authentication for Azure management",
+      "Category": "Secure foundation",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-old-require-mfa-azure-mgmt",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Summary": "Requires multifactor authentication to reach the Azure portal, the Microsoft Entra admin center, Azure PowerShell or the Azure CLI (grouped by Microsoft under the Windows Azure Service Management API resource)."
+    },
+    {
+      "Id": "block-device-code",
+      "Name": "Block device code flow",
+      "Category": "Emerging threats",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/managed-policies#block-device-code-flow",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Summary": "Blocks the device code authentication flow, which legitimate use is rare (smart TVs, Teams Room devices, printers) but which attackers use in phishing campaigns that need no password."
+    },
+    {
+      "Id": "sign-in-risk",
+      "Name": "Require multifactor authentication for risky sign-ins",
+      "Category": "Zero Trust",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-risk-based-sign-in",
+      "LicenseRequirement": "Entra ID P2",
+      "Summary": "Challenges a sign-in Identity Protection scores as risky (password spray, anonymous IP, token replay) for MFA, or blocks it. Requires Microsoft Entra ID P2."
+    },
+    {
+      "Id": "user-risk",
+      "Name": "Require password change for high-risk users",
+      "Category": "Zero Trust",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-risk-based-user",
+      "LicenseRequirement": "Entra ID P2",
+      "Summary": "Forces a password change, remediation, or a block for an account Identity Protection scores as likely compromised. Requires Microsoft Entra ID P2."
+    },
+    {
+      "Id": "device-compliance-all-users",
+      "Name": "Require compliant device",
+      "Category": "Secure foundation",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-device-compliance",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1 + Intune",
+      "Summary": "Requires every user's device to be marked compliant by Intune (or Microsoft Entra hybrid joined) before it can reach corporate resources."
+    },
+    {
+      "Id": "compliant-hybrid-or-mfa-all-users",
+      "Name": "Require compliant or Microsoft Entra hybrid joined device or multifactor authentication for all users",
+      "Category": "Secure foundation",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-alt-all-users-compliant-hybrid-or-mfa",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Summary": "A lighter alternative to requiring device compliance outright: access is granted if the device is compliant or hybrid joined, OR the user completes MFA. Less protective than requiring the device outright (an unmanaged device still gets in with MFA alone), so it is never shown as Enforcing the stricter 'Require compliant device' template."
+    },
+    {
+      "Id": "persistent-browser",
+      "Name": "No persistent browser session",
+      "Category": "Remote work",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-persistent-browser",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Summary": "Signs users back out of a web browser session once it is closed, instead of keeping them signed in — relevant on shared or unmanaged devices."
+    }
+  ]
+}
