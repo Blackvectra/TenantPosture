@@ -148,7 +148,7 @@ function Get-NRGNISTImprovementPlan {
         if ($licReq) {
             if (Get-Command Test-NRGLicenseRequirementMet -ErrorAction SilentlyContinue) {
                 try {
-                    $licensed = [bool](Test-NRGLicenseRequirementMet -LicenseRequirement $licReq -LicenseProfile $LicenseProfile -ControlId $cid)
+                    $licensed = [bool](Test-NRGLicenseRequirementMet -LicenseRequirement $licReq -LicenseProfile $LicenseProfile -ControlId $cid -Finding $f)
                 } catch { $licensed = $false }
             } else {
                 $licensed = $false

@@ -137,7 +137,7 @@ function Publish-NRGComplianceMatrix {
                 # requirement, so a Business Premium tenant was told it lacked
                 # Business Premium. Unknown licensing blocks nothing.
                 LicenseBlocked  = [bool]($matrixLicKnown -and $licReqStr -notmatch '^Included' -and
-                                   -not (Test-NRGLicenseRequirementMet -LicenseRequirement $licReqStr -LicenseProfile $matrixLicProfile -ControlId ([string]$_.ControlId)))
+                                   -not (Test-NRGLicenseRequirementMet -LicenseRequirement $licReqStr -LicenseProfile $matrixLicProfile -ControlId ([string]$_.ControlId) -Finding $_))
                 FrameworkIds    = @(Get-NRGObjectField -Item $_ -Key 'FrameworkIds' -Default @() | ForEach-Object { [string]$_ })
                 CIS             = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.CIS'      -Default '')
                 SCuBA           = [string](Get-NRGNestedProperty -Object $ctrl -Path 'References.SCuBA'    -Default '')

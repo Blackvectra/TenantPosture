@@ -266,7 +266,7 @@ function Publish-NRGRemediationScript {
         # top of the publisher and threaded through here.
         $licHeld = $false
         if ($ctrl -and $ctrl.LicenseRequirement) {
-            $licHeld = [bool](Test-NRGLicenseRequirementMet -LicenseRequirement $ctrl.LicenseRequirement -LicenseProfile $licenseProfile -ControlId $f.ControlId)
+            $licHeld = [bool](Test-NRGLicenseRequirementMet -LicenseRequirement $ctrl.LicenseRequirement -LicenseProfile $licenseProfile -ControlId $f.ControlId -Finding $f)
         }
         $licReq = if ($ctrl -and $ctrl.LicenseRequirement -and
                       $ctrl.LicenseRequirement -notmatch '^Included' -and
@@ -296,6 +296,17 @@ function Publish-NRGRemediationScript {
         $lines += ""
 
         $lines += "if (`$Phase -in @('$phaseNum','all') -and `$Workload -in @('$workloadL','all')) {"
+
+        # Security Defaults. The control's remediation assumes Conditional
+        # Access can be turned on; beside Security Defaults it cannot, so the
+        # order of operations is printed first. The text is the module's own
+        # static constant, never finding or tenant text (see SECURITY above).
+        $sdDetail = [string](Get-NRGObjectField -Item $f -Key 'Detail' -Default '')
+        $sdPrefix = [string]$script:NRGSecurityDefaultsDetailPrefix
+        if ($sdPrefix -and $sdDetail.StartsWith($sdPrefix, [System.StringComparison]::Ordinal)) {
+            $sdNote = EscPs1Literal ('Security Defaults is enabled. ' + [string]$script:NRGSecurityDefaultsTransition)
+            $lines += "    Write-Host '     $sdNote' -ForegroundColor Yellow"
+        }
 
         if ($applyFn) {
             # Mapped to an Apply-* script — dispatch through the module.

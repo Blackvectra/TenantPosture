@@ -66,9 +66,11 @@ function Publish-NRGRemediationPlaybook {
     $licProfile = if (Get-Command Get-NRGTenantLicenseProfile -ErrorAction SilentlyContinue) {
         try { Get-NRGTenantLicenseProfile } catch { $null }
     } else { $null }
+    # The finding goes along: a Security Defaults verdict whose remaining fix
+    # needs no license (Test-NRGSecurityDefaultsLicenseFree) is not an upgrade.
     $licHeld = {
-        param($req, $cid)
-        return [bool](Test-NRGLicenseRequirementMet -LicenseRequirement $req -LicenseProfile $licProfile -ControlId $cid)
+        param($req, $cid, $finding)
+        return [bool](Test-NRGLicenseRequirementMet -LicenseRequirement $req -LicenseProfile $licProfile -ControlId $cid -Finding $finding)
     }
 
     # Gap findings only, sorted by severity priority
@@ -141,7 +143,7 @@ function Publish-NRGRemediationPlaybook {
         $c = $controls[$_.ControlId]
         $c -and $c.LicenseRequirement -and
         $c.LicenseRequirement -notmatch '^Included' -and
-        -not (& $licHeld $c.LicenseRequirement $_.ControlId)
+        -not (& $licHeld $c.LicenseRequirement $_.ControlId $_)
     })
     if ($upgradeNeeded.Count -gt 0) {
         $licenseGroups = $upgradeNeeded | ForEach-Object {
@@ -170,7 +172,7 @@ function Publish-NRGRemediationPlaybook {
         # do not have" — on a BP tenant it must not show for BP-gated controls.
         $needsLicUpgrade = $false
         if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') {
-            $needsLicUpgrade = -not (Test-NRGLicenseRequirementMet -LicenseRequirement $ctrl.LicenseRequirement -LicenseProfile $licenseProfile -ControlId $f.ControlId)
+            $needsLicUpgrade = -not (Test-NRGLicenseRequirementMet -LicenseRequirement $ctrl.LicenseRequirement -LicenseProfile $licenseProfile -ControlId $f.ControlId -Finding $f)
         }
         $licFlag = if ($needsLicUpgrade) { ' 🔑' } else { '' }
         $licNote = if ($needsLicUpgrade) { "  > **Requires:** $(EscMd $ctrl.LicenseRequirement)  " } else { '' }
@@ -184,8 +186,18 @@ function Publish-NRGRemediationPlaybook {
         if ($f.RequiredValue) { $lines.Add("**Required state:** ``$(EscMd $f.RequiredValue)``  ") }
         $lines.Add("")
 
-        # Remediation
-        $remedy = if ($ctrl -and $ctrl.Remediation) { $ctrl.Remediation } elseif ($f.Remediation) { $f.Remediation } else { '' }
+        # Remediation. The finding's own when it carries one for its state
+        # (Security Defaults: the move to Conditional Access), else the
+        # control's (Get-NRGFindingRemediation). The Security Defaults
+        # transition is prose, so it is written as a paragraph and only the
+        # control-specific step after it goes through the code-fence test.
+        $remedy = Get-NRGFindingRemediation -Finding $f -Control $ctrl
+        $sdLead = [string]$script:NRGSecurityDefaultsTransition
+        if ($remedy -and $sdLead -and $remedy.StartsWith($sdLead, [System.StringComparison]::Ordinal)) {
+            $lines.Add("**Before anything else:** $(EscMd $sdLead)  ")
+            $lines.Add("")
+            $remedy = ($remedy.Substring($sdLead.Length) -replace '^\s*For this control:\s*', '').Trim()
+        }
         if ($remedy) {
             $lines.Add("**Remediation:**  ")
             $lines.Add("")
@@ -495,10 +507,10 @@ function Publish-NRGRemediationPlaybook {
             $sevClass = ([string]$f.Severity).ToLower()
             $needsLic = $false
             if ($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included') {
-                $needsLic = -not (Test-NRGLicenseRequirementMet -LicenseRequirement $ctrl.LicenseRequirement -LicenseProfile $licenseProfile -ControlId $f.ControlId)
+                $needsLic = -not (Test-NRGLicenseRequirementMet -LicenseRequirement $ctrl.LicenseRequirement -LicenseProfile $licenseProfile -ControlId $f.ControlId -Finding $f)
             }
             $bizRisk = if ($ctrl -and $ctrl.BusinessRisk) { $ctrl.BusinessRisk } elseif ($f.Detail) { $f.Detail } else { '' }
-            $remedy  = if ($ctrl -and $ctrl.Remediation) { $ctrl.Remediation } elseif ($f.Remediation) { $f.Remediation } else { '' }
+            $remedy  = Get-NRGFindingRemediation -Finding $f -Control $ctrl
 
             $out = @()
             $out += "<div class=`"item $sevClass`" id=`"$(& $Esc $f.ControlId)`">"

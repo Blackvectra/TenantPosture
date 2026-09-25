@@ -13,7 +13,7 @@
 #
 # Reads from module state:
 #   Get-NRGRawData -Key 'AAD-Users'         (Invoke-NRGCollectAADUsers)
-#   Get-NRGRawData -Key 'AAD-AuthPolicies'  (Invoke-NRGCollectAADAuthPolicies) — Data.SecurityDefaults
+#   Get-NRGRawData -Key 'AAD-AuthPolicies'  (Invoke-NRGCollectAADAuthPolicies) — Security Defaults, via Get-NRGSecurityDefaultsState
 #   Get-NRGRawData -Key 'AAD-CAPolicies'    (Invoke-NRGCollectAADCAPolicies)   — MFA enforcement
 #
 # NIST SP 800-53: IA-2(1), IA-2(2)
@@ -49,16 +49,14 @@ function Test-NRGControlAADMFA {
         return
     }
 
-    # Security defaults are collected by AAD-AuthPolicies (Data.SecurityDefaults
-    # .IsEnabled), not AAD-Users. Reading AAD-Users.Data.SecurityDefaultsEnabled
-    # — a key no collector writes — made this always $null: a tenant enforcing
-    # MFA through security defaults was scored on registration instead, and the
-    # finding printed "Security Defaults: disabled" without having read it.
-    # $null means "not read", never "disabled".
-    $secDefEnabled = $null
-    if ($authRaw -and $authRaw.Success) {
-        $secDefEnabled = Get-NRGNestedProperty -Object $authRaw -Path 'Data.SecurityDefaults.IsEnabled' -Default $null
-    }
+    # Security defaults are collected by AAD-AuthPolicies, not AAD-Users.
+    # Reading AAD-Users.Data.SecurityDefaultsEnabled — a key no collector
+    # writes — made this always $null: a tenant enforcing MFA through security
+    # defaults was scored on registration instead, and the finding printed
+    # "Security Defaults: disabled" without having read it. The state is read
+    # in one place (Get-NRGSecurityDefaultsState); $null means "not read",
+    # never "disabled".
+    $secDefEnabled = Get-NRGSecurityDefaultsState -AuthPolicies $authRaw
     $secDefText = if ($secDefEnabled -eq $false) { 'Security Defaults: disabled.' } else { 'Security Defaults: not read.' }
     # Two statements. An if-block yielding an empty array assigns $null, and
     # BOTH branches can yield empty here — a tenant with no users collected
@@ -83,37 +81,10 @@ function Test-NRGControlAADMFA {
         $mfaReg = @(Get-NRGNestedProperty -Object $userRaw -Path 'Data.MFARegistration.RegistrationDetails' -Default @())
     }
 
-    # Security Defaults satisfies AAD-1.2 by itself (MFA universally required).
-    if ($secDefEnabled -eq $true) {
-        Add-NRGFinding -ControlId 'AAD-1.2' -State 'Satisfied' `
-            -Category 'Identity' -Title 'MFA Required for All Users' `
-            -Severity 'Critical' `
-            -CurrentValue 'Security Defaults enabled — MFA enforced for all users' `
-            -RequiredValue 'CA policy requiring MFA for All users on All cloud apps, or Security Defaults enabled' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-1.2')
-        return
-    }
-
-    # Compute MFA registration completeness as a proxy for AAD-1.2 readiness.
-    # Without CA-policy data here we cannot prove enforcement, but registration
-    # < 100% is a hard blocker on enforcing AAD-1.2 even when a CA policy exists.
+    # Compute MFA registration completeness. Without CA-policy data here we
+    # cannot prove enforcement, but registration < 100% is a hard blocker on
+    # enforcing AAD-1.2 even when a CA policy exists.
     $enabledMembers = @($users | Where-Object { $_.AccountEnabled -eq $true -and $_.UserType -eq 'Member' })
-    $totalEnabled   = $enabledMembers.Count
-
-    if ($totalEnabled -eq 0) {
-        Add-NRGFinding -ControlId 'AAD-1.2' -State 'NotApplicable' `
-            -Category 'Identity' -Title 'MFA Required for All Users' `
-            -Detail 'No enabled member accounts found in tenant.'
-        return
-    }
-
-    if (-not $mfaRegCollected) {
-        Add-NRGFinding -ControlId 'AAD-1.2' -State 'NotApplicable' `
-            -Category 'Identity' -Title 'MFA Required for All Users' `
-            -Detail 'MFA registration details were not collected; cannot compute registration completeness for AAD-1.2.' `
-            -FrameworkIds (Get-NRGFrameworkCitations -ControlId 'AAD-1.2')
-        return
-    }
 
     # Entra Connect's directory-sync service account cannot register MFA and
     # Microsoft says to exclude it from MFA policies; counting it made a fully
@@ -130,6 +101,73 @@ function Test-NRGControlAADMFA {
     $totalEnabled    = $population.Count
     $registeredPct   = if ($totalEnabled -gt 0) { [math]::Round((($totalEnabled - $unregisteredCnt) / $totalEnabled) * 100, 1) } else { 100 }
     $sample = ($unregistered | Select-Object -First 5 | ForEach-Object { $_.UserPrincipalName }) -join ', '
+    $cit = Get-NRGFrameworkCitations -ControlId 'AAD-1.2'
+    $req = 'CA policy requiring MFA for All users on All cloud apps at every sign-in, with every user registered'
+
+    # Security Defaults requires every user to register for MFA and prompts
+    # them when Microsoft decides it is necessary — not at every sign-in; only
+    # the 16 administrator roles it names do MFA every time, and an
+    # administrator cannot require more. That is MFA at every sign-in for some
+    # accounts but not all, so it is Partial even with every user registered:
+    # a Satisfied would credit IA-2(2), MS.AAD.3.2v1 and PCI 8.4 (MFA on
+    # access to non-privileged accounts) that Security Defaults does not
+    # enforce. Registration counts the same as on the CA path: since July 29,
+    # 2024 there is no grace period, so whoever holds an unregistered user's
+    # password enrolls the second factor. Registration that was not read is
+    # not a pass. Licensing (Test-NRGSecurityDefaultsLicenseFree): the
+    # shortfall is fixed by registering users, so it stays scored; with every
+    # user registered what remains needs Conditional Access (Entra ID P1), so
+    # license gating treats it like any other unlicensed control.
+    if ($secDefEnabled -eq $true) {
+        $sdCommon = @{ ControlId = 'AAD-1.2'; Category = 'Identity'; Title = 'MFA Required for All Users'; FrameworkIds = $cit }
+        if (-not $mfaRegCollected) {
+            # The registration report requires Microsoft Entra ID P1 or P2,
+            # which a Security Defaults tenant often lacks; when Graph refused
+            # it for that reason, re-running will not change the answer.
+            $why = if ([string](Get-NRGNestedProperty -Object $userRaw -Path 'Data.MFARegistrationFailure' -Default '') -eq 'PremiumLicenseRequired') {
+                'MFA registration details were not collected: Graph refused the registration report because this tenant has no Microsoft Entra ID P1 or P2 license, which Microsoft requires for that report, so whether every user has registered cannot be read by this tool on this tenant and was not assessed. Re-running will not change this; confirm each user''s registered methods on their Authentication methods page in the Microsoft Entra admin center.'
+            } else {
+                'MFA registration details were not collected (see Exceptions), so whether every user has registered was not assessed. Microsoft documents that the registration report requires Microsoft Entra ID P1 or P2.'
+            }
+            Add-NRGSecurityDefaultsFinding @sdCommon -State 'NotApplicable' -Detail $why
+            return
+        }
+        if ($population.Count -eq 0) {
+            Add-NRGFinding -ControlId 'AAD-1.2' -State 'NotApplicable' `
+                -Category 'Identity' -Title 'MFA Required for All Users' -FrameworkIds $cit `
+                -Detail $(if ($enabledMembers.Count -eq 0) { 'No enabled member accounts found in tenant.' } else { 'No enabled member accounts other than Entra Connect sync service accounts found in tenant.' })
+            return
+        }
+        $sdSync = if ($syncExcluded -gt 0) { " $syncExcluded Entra Connect sync service account(s) are not counted; Security Defaults excludes directory synchronization accounts from MFA." } else { '' }
+        $sdFrequency = 'Only the 16 administrator roles Security Defaults names must complete MFA at every sign-in; other users are prompted for MFA when Microsoft decides it is necessary (based on factors such as location, device, role and task), not at every sign-in, and an administrator cannot require more.'
+        if ($unregisteredCnt -eq 0) {
+            Add-NRGSecurityDefaultsFinding @sdCommon -State 'Partial' -Severity 'Critical' `
+                -Detail "Every user must register for MFA, and all $totalEnabled enabled member account(s) have registered.$sdSync $sdFrequency Legacy authentication, which cannot perform MFA, is blocked. MFA at every sign-in for all users requires a Conditional Access policy." `
+                -CurrentValue "Security Defaults enabled; 100% registered ($totalEnabled/$totalEnabled enabled members); MFA at every sign-in for the 16 named administrator roles only" -RequiredValue $req `
+                -Remediation 'Require MFA (or an authentication strength) for All users on All cloud apps with a Conditional Access policy, excluding only emergency access accounts.' -NeedsConditionalAccess
+        } else {
+            Add-NRGSecurityDefaultsFinding @sdCommon -State 'Partial' -Severity 'Critical' `
+                -Detail "Every user must register for MFA, but $unregisteredCnt of $totalEnabled enabled member account(s) $($script:NRGSecurityDefaultsShortfallMarker). Security Defaults has had no registration grace period since July 29, 2024, so they are asked to register at their next sign-in, and whoever holds their password can enroll the second factor.$sdSync $sdFrequency" `
+                -CurrentValue "Security Defaults enabled; $registeredPct% registered. Sample: $sample" -RequiredValue $req `
+                -Remediation 'Run an MFA registration campaign or issue Temporary Access Passes so every enabled user registers. Requiring MFA at every sign-in for all users then needs a Conditional Access policy (Microsoft Entra ID P1), and Security Defaults must be turned off before any Conditional Access policy can be turned on.'
+        }
+        return
+    }
+
+    if ($enabledMembers.Count -eq 0) {
+        Add-NRGFinding -ControlId 'AAD-1.2' -State 'NotApplicable' `
+            -Category 'Identity' -Title 'MFA Required for All Users' `
+            -Detail 'No enabled member accounts found in tenant.'
+        return
+    }
+
+    if (-not $mfaRegCollected) {
+        Add-NRGFinding -ControlId 'AAD-1.2' -State 'NotApplicable' `
+            -Category 'Identity' -Title 'MFA Required for All Users' `
+            -Detail 'MFA registration details were not collected; cannot compute registration completeness for AAD-1.2.' `
+            -FrameworkIds $cit
+        return
+    }
 
     # Enforcement decides the verdict; registration only qualifies it. MFA that
     # is not REQUIRED is not configured — a Gap however many users registered
@@ -147,12 +185,20 @@ function Test-NRGControlAADMFA {
             (Test-NRGCAGrantRequires -Policy $_ -Any @('mfa','authStrength'))
         })
     }
-    $cit = Get-NRGFrameworkCitations -ControlId 'AAD-1.2'
-    $req = 'CA policy requiring MFA for All users on All cloud apps (or Security Defaults), with every user registered'
-
     if (-not $caRead) {
         Add-NRGFinding -ControlId 'AAD-1.2' -State 'NotApplicable' -Category 'Identity' -Title 'MFA Required for All Users' -FrameworkIds $cit `
             -Detail "$registeredPct% of users are MFA-registered, but Conditional Access policies were not collected, so whether MFA is required could not be assessed. $secDefText"
+        return
+    }
+    # Security Defaults not read and no CA policy On: it may be on (then this
+    # is the Security Defaults verdict above) or off (then the Gap below).
+    # $null is never "disabled", so neither is asserted.
+    if (Test-NRGSecurityDefaultsUnresolved) {
+        Add-NRGSecurityDefaultsUnreadFinding -ControlId 'AAD-1.2' -Category 'Identity' -Title 'MFA Required for All Users' -FrameworkIds $cit `
+            -Question 'whether MFA is required' `
+            -IfOn 'every user must register for MFA, the 16 administrator roles it names must complete MFA at every sign-in, and other users are prompted when Microsoft decides it is necessary' `
+            -IfOff 'no Conditional Access policy requires MFA' `
+            -Extra "$registeredPct% of enabled member accounts have registered an MFA method.$syncNote"
         return
     }
     # Part-way: MFA is asked for, but not of everyone on everything — report-

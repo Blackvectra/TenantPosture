@@ -146,7 +146,7 @@ Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60
 
 **Severity:** Medium  |  **Category:** Collaboration  |  **Automated:** Yes
 
-**License required:** Included (M365 Business Standard+)
+**License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
 SharePoint access from unmanaged devices is limited to browser-only or blocked.

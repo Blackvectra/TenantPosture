@@ -134,6 +134,16 @@ function Invoke-NRGCollectAADUsers {
         } catch {
             # Reports.Read.All may not be consented — non-fatal, record exception
             $result.Data.SectionStatus.MFARegistration = 'Failed'
+            # Microsoft documents that this report requires Microsoft Entra ID
+            # P1 or P2 and refuses it on other tenants ("Neither tenant is B2C
+            # or tenant doesn't have premium license",
+            # Authentication_RequestFromNonPremiumTenantOrB2CTenant). Recorded
+            # so AAD-1.2 can say re-running will not help; any other failure
+            # leaves the field absent.
+            $regWhy = "$($_.Exception.Message) $([string](Get-NRGObjectField -Item $_.ErrorDetails -Key 'Message' -Default ''))"
+            if ($regWhy -match 'RequestFromNonPremiumTenant|premium license') {
+                $result.Data.MFARegistrationFailure = 'PremiumLicenseRequired'
+            }
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-MFARegistration' -Message $_.Exception.Message
             }

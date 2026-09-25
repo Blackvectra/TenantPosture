@@ -89,7 +89,16 @@ function Test-NRGControlIntune {
     # It read "any configuration profile exists" (a Wi-Fi profile passed). The
     # control is a CA policy requiring a compliant (or hybrid-joined) device.
     $c = Get-NRGControlById -ControlId 'INT-1.2'
-    if ($c) {
+    # While Security Defaults is enabled no CA policy can be turned on, and it
+    # has no device-compliance requirement of its own: a Gap, and a report-only
+    # compliant-device policy beside it earns nothing (same as AAD-2.3).
+    if ($c -and (Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId 'INT-1.2' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.2') -State 'Gap' -Severity $c.Severity `
+            -Detail 'No policy in force requires a compliant device: Security Defaults has no device-compliance requirement, so a device Intune marks non-compliant (or one never enrolled) still reaches Microsoft 365.' `
+            -CurrentValue 'Security Defaults enabled; no compliant-device requirement in force' `
+            -RequiredValue 'Enabled CA policy requiring a compliant device for all users on all cloud apps' `
+            -Remediation $c.Remediation -NeedsConditionalAccess
+    } elseif ($c) {
         $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
         if (-not $ca -or -not $ca.Success) {
             Add-NRGFinding -ControlId 'INT-1.2' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.2') -Detail 'Conditional Access policies were not collected; not assessed.'

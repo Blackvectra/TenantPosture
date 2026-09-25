@@ -198,11 +198,14 @@ function Publish-NRGAssessmentHTML {
     # listing them as "blocked" and pitching an upgrade would be invented.
     $licKnown = [bool](Get-NRGObjectField -Item $licProfile -Key 'HasLicenseData' -Default $false)
     # Per-control answer (several controls share a requirement string but need
-    # different service plans) — the same test Set-NRGLicenseGating applies.
+    # different service plans) — the same test Set-NRGLicenseGating applies,
+    # including the finding: a Security Defaults verdict whose remaining fix
+    # needs no license (Test-NRGSecurityDefaultsLicenseFree) must not carry a
+    # license tag that gating, the roadmap and the matrix all say it lacks.
     $licNotHeld = {
-        param($ctrl, [string] $cid)
+        param($ctrl, [string] $cid, $finding)
         return [bool]($ctrl -and $ctrl.LicenseRequirement -and $ctrl.LicenseRequirement -notmatch '^Included' -and
-            -not (Test-NRGLicenseRequirementMet -LicenseRequirement $ctrl.LicenseRequirement -LicenseProfile $licProfile -ControlId $cid))
+            -not (Test-NRGLicenseRequirementMet -LicenseRequirement $ctrl.LicenseRequirement -LicenseProfile $licProfile -ControlId $cid -Finding $finding))
     }
 
     # ── License groups (only show what the tenant actually needs) ─────────────
@@ -218,7 +221,7 @@ function Publish-NRGAssessmentHTML {
     foreach ($f in ($Findings | Where-Object { $_.State -eq 'Gap' -or ($_.State -eq 'NotApplicable' -and $_.Detail -match 'upgrade opportunity') })) {
         $ctrl = $cdefs[$f.ControlId]
         if (-not $licKnown -and $f.State -eq 'Gap') { continue }
-        if (& $licNotHeld $ctrl $f.ControlId) {
+        if (& $licNotHeld $ctrl $f.ControlId $f) {
             $lic = $ctrl.LicenseRequirement
             if (-not $licGroups.ContainsKey($lic)) { $licGroups[$lic] = 0 }
             $licGroups[$lic]++
@@ -665,7 +668,7 @@ function Publish-NRGAssessmentHTML {
                 @{ Label = 'Controls that could not be assessed — data did not collect'; Items = $scope.CollectionIncomplete }
                 @{ Label = 'Controls not evaluated — quick-scan mode'; Items = $scope.NotEvaluatedThisMode }
                 @{ Label = 'Controls that produced no result at all'; Items = $scope.NoResult }
-                @{ Label = 'Controls with no automated test — manual review'; Items = $scope.NoProgrammaticCheck }
+                @{ Label = 'Controls requiring manual review — no automated test, or no automated verdict'; Items = $scope.NoProgrammaticCheck }
                 @{ Label = 'Defender endpoint checks covered by a declared third-party EDR — not verified'; Items = @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()) }
                 @{ Label = 'Checked and not applicable to this tenant — reason stated in each finding'; Items = @(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()) }
             )) {
@@ -782,11 +785,14 @@ function Publish-NRGAssessmentHTML {
     foreach ($g in $topGaps) {
         $ctrl  = $cdefs[$g.ControlId]
         $bRisk = if ($ctrl -and $ctrl.BusinessRisk) { hx $ctrl.BusinessRisk } else { hx $g.Detail }
-        $rem   = if ($ctrl -and $ctrl.Remediation)  { hx $ctrl.Remediation  } else { hx $g.Remediation }
+        # The finding's own remediation when it carries one for its state
+        # (Security Defaults: the move to Conditional Access), else the
+        # control's (Get-NRGFindingRemediation).
+        $rem   = hx (Get-NRGFindingRemediation -Finding $g -Control $ctrl)
         # Suppress the "Requires:" badge when the tenant already holds the
         # license. v4.6.1 always emitted this badge — see comment by
         # $licProfile above.
-        $lic = if ($licKnown -and (& $licNotHeld $ctrl $g.ControlId)) {
+        $lic = if ($licKnown -and (& $licNotHeld $ctrl $g.ControlId $g)) {
             "<div class='act-lic'>&#128273; Requires: $(hx $ctrl.LicenseRequirement)</div>"
         } else { '' }
         $cls   = if ($g.Severity -eq 'Critical') { 'ac' } else { 'ah' }
@@ -825,12 +831,12 @@ function Publish-NRGAssessmentHTML {
             $t     = hx $f.Title
             $d     = hx $f.Detail
             $ctrl2 = $cdefs[$f.ControlId]
-            $rem2  = if ($ctrl2 -and $ctrl2.Remediation) { hx $ctrl2.Remediation } else { hx $f.Remediation }
+            $rem2  = hx (Get-NRGFindingRemediation -Finding $f -Control $ctrl2)
             $bRisk2= if ($ctrl2 -and $ctrl2.BusinessRisk) { hx $ctrl2.BusinessRisk } else { '' }
             $cv2   = hx $f.CurrentValue
             $rv2   = hx $f.RequiredValue
             # Suppress per-finding "Requires:" tag when license already held.
-            $lic2 = if ($licKnown -and (& $licNotHeld $ctrl2 $f.ControlId)) {
+            $lic2 = if ($licKnown -and (& $licNotHeld $ctrl2 $f.ControlId $f)) {
                 "<div class='ex-lic'>&#128273; $(hx $ctrl2.LicenseRequirement)</div>"
             } else { '' }
             $fwTags2 = ''

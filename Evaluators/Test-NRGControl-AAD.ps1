@@ -246,10 +246,32 @@ function Test-NRGControlAADLegacyAuth {
     if (-not $control) { return }
     $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
+    # Security Defaults blocks legacy authentication tenant-wide and cannot be
+    # scoped, which is exactly what this control requires. It runs before the
+    # CA gate: no CA policy can be turned on beside it, so CA data cannot
+    # change this verdict.
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId $controlId -Category $control.Category -Title $control.Title -FrameworkIds $citations `
+            -State 'Satisfied' -Severity 'Informational' `
+            -Detail 'Legacy authentication is blocked by Security Defaults: Microsoft documents that it blocks every authentication request made by an older protocol tenant-wide, including clients that do not use modern authentication, IMAP, SMTP and POP3, and Exchange ActiveSync basic authentication, and that it cannot be scoped or customized.' `
+            -CurrentValue 'Legacy authentication blocked for all users by Security Defaults' `
+            -RequiredValue 'Legacy authentication blocked for all users (Conditional Access policy blocking Other clients, or Security Defaults)'
+        return
+    }
+
     $caData = Get-NRGRawData -Key 'AAD-CAPolicies'
     if (-not $caData -or -not $caData.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'Conditional Access data not collected'
+        return
+    }
+    # Security Defaults not read and no CA policy On: it may be on (Satisfied)
+    # or off (the CA verdict below). An unread state is never "disabled".
+    if (Test-NRGSecurityDefaultsUnresolved) {
+        Add-NRGSecurityDefaultsUnreadFinding -ControlId $controlId -Category $control.Category -Title $control.Title -FrameworkIds $citations `
+            -Question 'whether legacy authentication is blocked' `
+            -IfOn 'it blocks every authentication request made by an older protocol tenant-wide' `
+            -IfOff 'no Conditional Access policy blocks it'
         return
     }
 
@@ -294,10 +316,34 @@ function Test-NRGControlAADPhishResistantMFA {
     if (-not $control) { return }
     $citations = Get-NRGFrameworkCitations -ControlId $controlId
 
+    # Security Defaults requires MFA of 16 administrator roles at every
+    # sign-in; it has them register Authenticator notifications (or use OATH
+    # TOTP codes) and requires no phishing-resistant method. Standard admin
+    # MFA scores Partial (Medium) on the CA path below, so it scores the same
+    # here — never the Critical "no MFA for admins" Gap.
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId $controlId -Category $control.Category -Title $control.Title -FrameworkIds $citations `
+            -State 'Partial' -Severity 'Medium' `
+            -Detail 'The 16 administrator roles Security Defaults names (among them Global Administrator, Privileged Role Administrator, Security Administrator, Exchange Administrator and SharePoint Administrator) must complete MFA at every sign-in. Security Defaults requires them to register for Microsoft Authenticator notifications (or use OATH TOTP codes) and does not require a phishing-resistant method: Microsoft''s phishing-resistant MFA strength allows only Windows Hello for Business or platform credential, FIDO2 security keys and certificate-based MFA. Requiring it for administrators is done with a Conditional Access authentication-strength policy.' `
+            -CurrentValue 'Security Defaults: MFA at every sign-in for 16 administrator roles; no phishing-resistant method required' `
+            -RequiredValue 'CA policy with Authentication Strength targeting admin roles' `
+            -Remediation $control.Remediation -NeedsConditionalAccess
+        return
+    }
+
     $caData = Get-NRGRawData -Key 'AAD-CAPolicies'
     if (-not $caData -or -not $caData.Success) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -Detail 'Conditional Access data not collected'
+        return
+    }
+    # Security Defaults not read and no CA policy On: it may be on (Partial,
+    # admin MFA at every sign-in) or off (the Critical Gap below).
+    if (Test-NRGSecurityDefaultsUnresolved) {
+        Add-NRGSecurityDefaultsUnreadFinding -ControlId $controlId -Category $control.Category -Title $control.Title -FrameworkIds $citations `
+            -Question 'whether administrators are required to complete MFA' `
+            -IfOn 'the 16 administrator roles it names must complete MFA at every sign-in, with no requirement that the method be phishing-resistant' `
+            -IfOff 'no Conditional Access policy requires MFA of administrators'
         return
     }
 
@@ -363,6 +409,13 @@ function Test-NRGControlAADSignInRisk {
     [CmdletBinding()] param()
     $cid = 'AAD-1.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Gap' -Severity $ctrl.Severity `
+            -Detail 'No Conditional Access sign-in risk policy can be in force while Security Defaults is enabled, and Security Defaults has no configurable sign-in risk policy of its own: it prompts registered users for MFA when Microsoft decides it is necessary. Conditional Access risk policies need Microsoft Entra ID P2. The legacy Identity Protection sign-in risk policy (retiring October 1, 2026) is not read by this tool.' `
+            -CurrentValue 'Security Defaults enabled; no Conditional Access sign-in risk policy in force' -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' `
+            -Remediation $ctrl.Remediation -NeedsConditionalAccess
+        return
+    }
     $ca  = Get-NRGRawData -Key 'AAD-CAPolicies'
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
@@ -384,6 +437,13 @@ function Test-NRGControlAADUserRisk {
     [CmdletBinding()] param()
     $cid = 'AAD-1.5'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Gap' -Severity $ctrl.Severity `
+            -Detail 'No Conditional Access user risk policy can be in force while Security Defaults is enabled, and Security Defaults has no configurable user risk policy of its own, so neither forces an account Identity Protection rates as likely compromised to change its password or blocks it. Conditional Access risk policies need Microsoft Entra ID P2. The legacy Identity Protection user risk policy (retiring October 1, 2026) is not read by this tool.' `
+            -CurrentValue 'Security Defaults enabled; no Conditional Access user risk policy in force' -RequiredValue 'CA policy: userRiskLevels = high + require password change or risk remediation' `
+            -Remediation $ctrl.Remediation -NeedsConditionalAccess
+        return
+    }
     $ca  = Get-NRGRawData -Key 'AAD-CAPolicies'
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
@@ -408,6 +468,34 @@ function Test-NRGControlAADNamedLocations {
     $cid = 'AAD-2.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $ca  = Get-NRGRawData -Key 'AAD-CAPolicies'
+    # Named locations are a Conditional Access condition, and beside Security
+    # Defaults no policy in force can use them. Licensed but not configured
+    # is still a Gap: none defined is the same Gap as with Security Defaults
+    # off (an unlicensed tenant is moved out of the score by license gating,
+    # not here). Locations that exist earn no credit, because nothing can use
+    # them until Security Defaults is off. Not read is not assessed.
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        $sdLoc = @{ ControlId = $cid; Category = $ctrl.Category; Title = $ctrl.Title; FrameworkIds = $cit; RequiredValue = 'At least one trusted IP range defined' }
+        if ((Get-NRGObjectField -Item $ca -Key 'Success' -Default $null) -ne $true -or -not (Test-NRGSectionCollected $ca 'NamedLocations')) {
+            Add-NRGSecurityDefaultsFinding @sdLoc -State 'NotApplicable' `
+                -Detail 'Named locations were not collected, so whether any are defined was not assessed.' `
+                -CurrentValue 'Security Defaults enabled; named locations: not read'
+            return
+        }
+        $locs = @(@(Get-NRGNestedProperty -Object $ca -Path 'Data.NamedLocations' -Default @()) | Where-Object { $null -ne $_ })
+        if ($locs.Count -eq 0) {
+            Add-NRGSecurityDefaultsFinding @sdLoc -State 'Gap' -Severity $ctrl.Severity `
+                -Detail 'No named locations are defined. Named locations are a Conditional Access condition, and Security Defaults has no location conditions an administrator can configure.' `
+                -CurrentValue 'Security Defaults enabled; named locations: 0 defined' `
+                -Remediation $ctrl.Remediation -NeedsConditionalAccess
+            return
+        }
+        $trusted = @($locs | Where-Object { (Get-NRGObjectField -Item $_ -Key 'IsTrusted' -Default $false) -eq $true }).Count
+        Add-NRGSecurityDefaultsFinding @sdLoc -State 'NotApplicable' `
+            -Detail "$($locs.Count) named location(s) are defined ($trusted marked trusted), but named locations are a Conditional Access condition and Security Defaults has no location conditions an administrator can configure, so no policy in force can use them and they earn no credit. The absence of Conditional Access is reported under AAD-2.1." `
+            -CurrentValue "Security Defaults enabled; named locations: $($locs.Count) defined ($trusted trusted)"
+        return
+    }
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
@@ -436,6 +524,13 @@ function Test-NRGControlAADDeviceComplianceCA {
     [CmdletBinding()] param()
     $cid = 'AAD-2.3'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Gap' -Severity $ctrl.Severity `
+            -Detail 'No policy in force requires a compliant or hybrid-joined device. Security Defaults has no device requirement: its MFA prompts do not require the device to be compliant, managed or hybrid-joined, so unmanaged devices can reach corporate resources.' `
+            -CurrentValue 'Security Defaults enabled; no compliant-device requirement in force' -RequiredValue 'Compliant or hybrid-joined device required by an enabled CA policy' `
+            -Remediation $ctrl.Remediation -NeedsConditionalAccess
+        return
+    }
     $ca  = Get-NRGRawData -Key 'AAD-CAPolicies'
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
@@ -494,11 +589,19 @@ function Test-NRGControlAADNoPermanentAdmins {
     # Break-glass accounts are permanent BY DESIGN (Microsoft: emergency access
     # accounts must not depend on PIM activation). Cloud-only Global Admins
     # excluded from Conditional Access are set aside and named in the detail.
+    # Not while Security Defaults is enabled: an administrator cannot exclude
+    # any account from it and no CA policy can be on beside it, so a CA
+    # exclusion (even a stale CAExcluded = $true) is never credited, and every
+    # verdict that depends on that goes through Add-NRGSecurityDefaultsFinding,
+    # which reports a CA read contradicting Security Defaults as not assessed.
+    $sdOn = (Get-NRGSecurityDefaultsState) -eq $true
     $bgIds = [System.Collections.Generic.HashSet[string]]::new()
-    $govBg = Get-NRGRawData -Key 'AAD-IdentityGovernance'
-    foreach ($b in @(Get-NRGNestedProperty -Object $govBg -Path 'Data.BreakGlassIndicators' -Default @())) {
-        if ((Get-NRGObjectField -Item $b -Key 'CAExcluded' -Default $false) -eq $true -and -not (Get-NRGObjectField -Item $b -Key 'Synced' -Default $false)) {
-            $null = $bgIds.Add([string](Get-NRGObjectField -Item $b -Key 'PrincipalId' -Default ''))
+    if (-not $sdOn) {
+        $govBg = Get-NRGRawData -Key 'AAD-IdentityGovernance'
+        foreach ($b in @(Get-NRGNestedProperty -Object $govBg -Path 'Data.BreakGlassIndicators' -Default @())) {
+            if ((Get-NRGObjectField -Item $b -Key 'CAExcluded' -Default $false) -eq $true -and -not (Get-NRGObjectField -Item $b -Key 'Synced' -Default $false)) {
+                $null = $bgIds.Add([string](Get-NRGObjectField -Item $b -Key 'PrincipalId' -Default ''))
+            }
         }
     }
     $pidOf = { param($a) [string](Get-NRGObjectField -Item $a -Key 'PrincipalId' -Default '') }
@@ -516,8 +619,53 @@ function Test-NRGControlAADNoPermanentAdmins {
     $eligibleCollected = Test-NRGSectionCollected $pim 'EligibleSchedules'
     $eligibleCount = @($pim.Data['EligibleSchedules']).Count
 
+    # Under Security Defaults the two cloud-only emergency access accounts
+    # Microsoft recommends keeping permanently assigned Global Administrator
+    # cannot be told apart from standing access (no exclusion exists to mark
+    # them). Only when what remains is exactly that shape — at most two
+    # cloud-only principals holding nothing but Global Administrator, beside
+    # real PIM adoption — does the verdict turn on that unknown. Every other
+    # shape is a Gap whatever those accounts are.
+    if ($sdOn -and $permanentPriv.Count -gt 0 -and $eligibleCollected -and $eligibleCount -gt 0) {
+        $keyOf = {
+            param($a)
+            foreach ($k in 'PrincipalId', 'PrincipalUPN', 'PrincipalDisplayName') {
+                $v = [string](Get-NRGObjectField -Item $a -Key $k -Default '')
+                if ($v) { return $v }
+            }
+            return ''
+        }
+        # OnPremisesSyncEnabled is $null for an account never synchronized
+        # (Graph's documented cloud-only value) and for one whose value was
+        # not read, so the prose says "not marked as synchronized" — what was
+        # read — never "cloud-only".
+        $nonGa  = @($permanentPriv | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'RoleDefinitionName' -Default '') -ne 'Global Administrator' })
+        $synced = @($permanentPriv | Where-Object { (Get-NRGObjectField -Item $_ -Key 'OnPremisesSyncEnabled' -Default $null) -eq $true })
+        $people = @($permanentPriv | ForEach-Object { & $keyOf $_ } | Sort-Object -Unique)
+        if ($nonGa.Count -eq 0 -and $synced.Count -eq 0 -and $people.Count -le 2) {
+            $gaNames = @($permanentPriv | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'PrincipalDisplayName' -Default '') } | Where-Object { $_ } | Sort-Object -Unique) -join ', '
+            # One account or two: the prose follows what was read.
+            $which = if ($people.Count -eq 1) { 'whether this account is one of' } else { 'whether these accounts are' }
+            $conv  = if ($people.Count -eq 1) { 'if it is, no standing privileged access exists outside it; if it is not, convert it to a PIM-eligible assignment' } else { 'if they are, no standing privileged access exists outside them; if they are not, convert them to PIM-eligible assignments' }
+            Add-NRGSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'NotApplicable' `
+                -Detail "$($permanentPriv.Count) permanent privileged assignment(s) remain on $($people.Count) account(s), all of them Global Administrator on accounts not marked as synchronized from on-premises, and $eligibleCount PIM-eligible assignment(s) are configured. An administrator cannot exclude any account from Security Defaults (its only exclusion is Microsoft's automatic one for directory synchronization accounts), so this control cannot tell $which the two cloud-only emergency access accounts Microsoft recommends keeping permanently assigned Global Administrator. That requires manual verification: $conv." `
+                -CurrentValue "Permanent Global Administrator (not marked as synchronized from on-premises): $gaNames" `
+                -RequiredValue 'All privileged roles via PIM eligible assignments only'
+            return
+        }
+    }
     if ($permanentPriv.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($permanentPriv.Count) permanent privileged role assignment(s) found. Admins should be eligible in PIM and activate only when needed.$bgNote" -CurrentValue "Permanent: $($permanentPriv.PrincipalDisplayName -join ', ')" -RequiredValue 'All privileged roles via PIM eligible assignments only' -Remediation $ctrl.Remediation
+        $g = @{ ControlId = $cid; Category = $ctrl.Category; Title = $ctrl.Title; FrameworkIds = $cit; Severity = $ctrl.Severity; Remediation = $ctrl.Remediation
+                CurrentValue = "Permanent: $($permanentPriv.PrincipalDisplayName -join ', ')"; RequiredValue = 'All privileged roles via PIM eligible assignments only' }
+        $gapText = "$($permanentPriv.Count) permanent privileged role assignment(s) found. Admins should be eligible in PIM and activate only when needed."
+        if ($sdOn) {
+            # Nothing was set aside because of Security Defaults, so the Gap
+            # says so through the one emitter (prefix, and a CA read that
+            # contradicts Security Defaults makes it not assessed).
+            Add-NRGSecurityDefaultsFinding @g -State 'Gap' -Detail ($gapText + $script:NRGSecurityDefaultsNoExclusionNote)
+        } else {
+            Add-NRGFinding @g -State 'Gap' -Detail "$gapText$bgNote"
+        }
     } elseif (-not $eligibleCollected) {
         # Roles are clean, but we cannot say whether PIM is in use.
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
@@ -883,6 +1031,71 @@ function Test-NRGControlAADBreakGlass {
     if (-not $gov -or -not $gov.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Identity governance data not collected'; return
     }
+    # Security Defaults cannot be scoped, so an administrator cannot exclude
+    # any account from it, and this control recognizes break-glass accounts
+    # only by CA exclusion — never credit for a stale CAExcluded, and never
+    # the "if CA policies break" Gap. What the role data CAN prove still
+    # decides: Microsoft recommends two cloud-only emergency access accounts
+    # PERMANENTLY assigned Global Administrator, so with fewer than two
+    # permanent Global Administrator assignments on accounts not marked as
+    # synchronized, the recommendation is provably unmet (a Gap). Only with
+    # two or more such candidates does the answer turn on which accounts they
+    # are, and the finding says that requires manual verification
+    # (Get-NRGAssessmentScope files it for manual review). Runs before the
+    # BreakGlassIndicators gate, which reads NotRun whenever the CA read
+    # failed.
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        $sdBg = @{ ControlId = $cid; Category = $ctrl.Category; Title = $ctrl.Title; FrameworkIds = $cit }
+        $noExclusion = "It cannot be scoped or customized (Microsoft: 'No customization (on or off)'), so an administrator cannot exclude any account from it (its only exclusion is Microsoft's automatic one for directory synchronization accounts), and this control recognizes emergency access (break-glass) accounts only by their exclusion from Conditional Access policies in force."
+        $verify = "confirm they exist, that their credentials are held offline, and that each has an MFA method registered, because Security Defaults requires Global Administrators to complete MFA at every sign-in"
+        if (-not (Test-NRGSectionCollected $gov 'BreakGlassIndicators')) {
+            Add-NRGSecurityDefaultsFinding @sdBg -State 'NotApplicable' `
+                -Detail "$noExclusion Microsoft recommends two cloud-only emergency access accounts permanently assigned Global Administrator; the Global Administrator list this check reads (BreakGlassIndicators) was not collected, so whether they exist was not assessed." `
+                -RequiredValue 'Two cloud-only emergency access Global Administrator accounts, permanently assigned (confirm manually while Security Defaults is on)'
+            return
+        }
+        $all = @(@(Get-NRGNestedProperty -Object $gov -Path 'Data.BreakGlassIndicators' -Default @()) | Where-Object { $null -ne $_ })
+        if ($all.Count -eq 0) {
+            Add-NRGSecurityDefaultsFinding @sdBg -State 'NotApplicable' -Detail 'No Global Administrator accounts were found to evaluate.'
+            return
+        }
+        # Synced is OnPremisesSyncEnabled -eq $true, so $null (Graph's
+        # never-synchronized value, or a value not read) is a candidate: the
+        # prose says "not marked as synchronized", what was read. Source is
+        # 'permanent' or 'eligible' (the collector defaults a missing one to
+        # 'permanent'); a PIM-eligible Global Administrator is not the
+        # permanently assigned account Microsoft recommends.
+        $seen = [System.Collections.Generic.HashSet[string]]::new()
+        $cand = @($all | Where-Object {
+            (Get-NRGObjectField -Item $_ -Key 'Synced' -Default $false) -ne $true -and
+            [string](Get-NRGObjectField -Item $_ -Key 'Source' -Default 'permanent') -eq 'permanent'
+        } | Where-Object {
+            $k = [string](Get-NRGObjectField -Item $_ -Key 'PrincipalId' -Default '')
+            if (-not $k) { $k = [string](Get-NRGObjectField -Item $_ -Key 'UPN' -Default ([guid]::NewGuid().ToString())) }
+            $seen.Add($k)
+        })
+        $syncedN   = @($all | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Synced' -Default $false) -eq $true }).Count
+        $eligibleN = @($all | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'Source' -Default 'permanent') -ne 'permanent' }).Count
+        $names = @($cand | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'DisplayName' -Default '') } | Where-Object { $_ }) -join ', '
+        $read  = "$($all.Count) Global Administrator assignment(s) were read ($syncedN on accounts marked as synchronized from on-premises, $eligibleN PIM-eligible)"
+        $current = "Permanent Global Administrator assignments on accounts not marked as synchronized from on-premises: $($cand.Count)$(if ($names) { " ($names)" })"
+        $required = 'Two cloud-only emergency access Global Administrator accounts, permanently assigned'
+        $bgFix = 'Keep two cloud-only emergency access accounts permanently assigned Global Administrator (create whichever are missing), with long random passwords held offline, and register an MFA method for each (Security Defaults requires Global Administrators to complete MFA at every sign-in). When Conditional Access replaces Security Defaults, exclude both from every policy that would otherwise reach them, and monitor their sign-ins.'
+        if ($cand.Count -eq 0) {
+            Add-NRGSecurityDefaultsFinding @sdBg -State 'Gap' -Severity $ctrl.Severity `
+                -Detail "$read, and none is a permanent assignment on an account not marked as synchronized from on-premises. Microsoft recommends two cloud-only emergency access accounts permanently assigned Global Administrator, so no emergency access account of the recommended kind exists." `
+                -CurrentValue $current -RequiredValue $required -Remediation $bgFix
+        } elseif ($cand.Count -eq 1) {
+            Add-NRGSecurityDefaultsFinding @sdBg -State 'Gap' -Severity $ctrl.Severity `
+                -Detail "$read, and only one is a permanent assignment on an account not marked as synchronized from on-premises. Microsoft recommends two cloud-only emergency access accounts permanently assigned Global Administrator, so the two-account recommendation is not met. Whether this one account is kept as an emergency access account could not be determined, because Security Defaults offers no exclusion to recognize it by." `
+                -CurrentValue $current -RequiredValue $required -Remediation $bgFix
+        } else {
+            Add-NRGSecurityDefaultsFinding @sdBg -State 'NotApplicable' `
+                -Detail "$noExclusion Microsoft recommends two cloud-only emergency access accounts permanently assigned Global Administrator. $($cand.Count) permanent Global Administrator assignment(s) are on accounts not marked as synchronized from on-premises; whether two of them are emergency access accounts requires manual verification: $verify." `
+                -CurrentValue $current -RequiredValue "$required (confirm manually while Security Defaults is on)"
+        }
+        return
+    }
     # Without the CA data the exclusion check never ran (NotRun): every
     # CAExcluded is a default $false, and reading that as "no break-glass
     # accounts" was a false Gap.
@@ -1087,6 +1300,13 @@ function Test-NRGControlAADIdentityProtection {
     [CmdletBinding()] param()
     $cid = 'AAD-10.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Gap' -Severity $ctrl.Severity `
+            -Detail 'No Conditional Access user risk policy can be turned on while Security Defaults is enabled, and Security Defaults has no configurable user risk policy of its own (Microsoft lists user and sign-in risk-based policies as what organizations with Microsoft Entra ID P2 add after moving to Conditional Access), so neither provides an automated response to user risk. The legacy Identity Protection user risk policy (retiring October 1, 2026) is not read by this tool.' `
+            -CurrentValue 'Security Defaults enabled; no Conditional Access user risk policy in force' -RequiredValue 'Enabled CA policy with a user risk condition' `
+            -Remediation $ctrl.Remediation -NeedsConditionalAccess
+        return
+    }
     $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
@@ -1193,6 +1413,13 @@ function Test-NRGControlAADSignInFrequency {
     [CmdletBinding()] param()
     $cid = 'AAD-10.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Gap' -Severity $ctrl.Severity `
+            -Detail 'No sign-in frequency session control is in force: session controls are a Conditional Access feature Security Defaults does not provide, so sign-in sessions follow the default rolling window of up to 90 days and a stolen token stays usable within it.' `
+            -CurrentValue 'Security Defaults enabled; no Conditional Access policy in force' -RequiredValue 'Enabled CA policy with a sign-in frequency session control' `
+            -Remediation $ctrl.Remediation -NeedsConditionalAccess
+        return
+    }
     $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
@@ -1217,6 +1444,12 @@ function Test-NRGControlAADDeviceCode {
     [CmdletBinding()] param()
     $cid = 'AAD-11.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Satisfied' -Severity 'Informational' `
+            -Detail 'Device code flow is blocked by Security Defaults. Microsoft documents: ''After security defaults are enabled in your tenant, authentication requests that use device code flow are blocked''; applications or devices that depend on it cannot complete sign-in while Security Defaults is enabled.' `
+            -CurrentValue 'Device code flow blocked by Security Defaults' -RequiredValue 'Device code flow blocked for all users (Conditional Access policy or Security Defaults)'
+        return
+    }
     # The signal IS collected: Invoke-NRGCollectAADCAPolicies stores each policy's
     # authentication-flow condition as Conditions.AuthFlows (the raw Graph
     # authenticationFlows object, which carries transferMethods). A CA policy that
@@ -1224,6 +1457,15 @@ function Test-NRGControlAADDeviceCode {
     $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Conditional Access policy data not collected'; return
+    }
+    # Security Defaults not read and no CA policy On: it may be on (Satisfied)
+    # or off (the Gap below). An unread state is never "disabled".
+    if (Test-NRGSecurityDefaultsUnresolved) {
+        Add-NRGSecurityDefaultsUnreadFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Question 'whether device code flow is blocked' `
+            -IfOn 'it blocks authentication requests that use device code flow' `
+            -IfOff 'no Conditional Access policy blocks it'
+        return
     }
     $caBlocks = @($ca.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and
@@ -1330,6 +1572,13 @@ function Test-NRGControlAADTokenProtection {
     [CmdletBinding()] param()
     $cid = 'AAD-11.4'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Gap' -Severity $ctrl.Severity `
+            -Detail 'No token protection (binding) is in force: it is a Conditional Access session control Security Defaults does not provide. AiTM phishing steals session tokens and replays them from attacker infrastructure; token binding ties tokens to the originating device.' `
+            -CurrentValue 'Security Defaults enabled; no Conditional Access policy in force' -RequiredValue 'Enabled CA policy requiring token protection' `
+            -Remediation $ctrl.Remediation -NeedsConditionalAccess
+        return
+    }
     $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
@@ -1355,6 +1604,13 @@ function Test-NRGControlAADContinuousAccess {
     [CmdletBinding()] param()
     $cid = 'AAD-11.5'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Gap' -Severity $ctrl.Severity `
+            -Detail 'Continuous access evaluation strict enforcement is not in force: it is a Conditional Access session control Security Defaults does not provide.' `
+            -CurrentValue 'Security Defaults enabled; no Conditional Access policy in force' -RequiredValue 'Enabled CA policy with continuous access evaluation strict enforcement' `
+            -Remediation $ctrl.Remediation -NeedsConditionalAccess
+        return
+    }
     $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
@@ -1412,6 +1668,13 @@ function Test-NRGControlAADPrivilegedWorkstation {
     [CmdletBinding()] param()
     $cid = 'AAD-11.7'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Gap' -Severity $ctrl.Severity `
+            -Detail 'No device-scoped policy for privileged roles is in force: Security Defaults requires 16 administrator roles to complete MFA at every sign-in but does not restrict the devices they sign in from.' `
+            -CurrentValue 'Security Defaults enabled; no Conditional Access policy in force' -RequiredValue 'Enabled CA policy restricting privileged roles to managed devices' `
+            -Remediation $ctrl.Remediation -NeedsConditionalAccess
+        return
+    }
     $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
@@ -1434,6 +1697,13 @@ function Test-NRGControlAADTermsOfUse {
     [CmdletBinding()] param()
     $cid = 'AAD-11.8'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Gap' -Severity $ctrl.Severity `
+            -Detail 'No Terms of Use acceptance is required: Terms of Use is a Conditional Access grant control Security Defaults does not provide.' `
+            -CurrentValue 'Security Defaults enabled; no Conditional Access policy in force' -RequiredValue 'Enabled CA policy requiring Terms of Use acceptance' `
+            -Remediation $ctrl.Remediation -NeedsConditionalAccess
+        return
+    }
     $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
@@ -1451,6 +1721,13 @@ function Test-NRGControlAADWorkloadIdentityCA {
     [CmdletBinding()] param()
     $cid = 'AAD-11.9'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        Add-NRGSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Gap' -Severity $ctrl.Severity `
+            -Detail 'No Conditional Access policy applies to workload identities: Security Defaults has no policy for service principals, and Conditional Access for workload identities also needs the Workload Identities Premium license.' `
+            -CurrentValue 'Security Defaults enabled; no Conditional Access policy in force' -RequiredValue 'Enabled CA policy scoped to workload identities' `
+            -Remediation $ctrl.Remediation -NeedsConditionalAccess
+        return
+    }
     $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
     if (-not $ca -or -not $ca.Success) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
