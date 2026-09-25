@@ -54,15 +54,6 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
         }
     }
 
-    # Template-family values from /deviceManagement/configurationPolicies.templateReference.
-    # Source: Intune docs ref-graph-api-csp-windows; values are stable strings.
-    $familyMap = @{
-        'endpointSecurityAccountProtection'           = 'LAPS'   # account protection (LAPS + Cred Guard live here)
-        'endpointSecurityAttackSurfaceReduction'      = 'ASR'
-        'endpointSecurityFirewall'                    = 'Firewall'
-        'endpointSecurityEndpointDetectionAndResponse'= 'EDR'
-        'endpointSecurityAntivirus'                   = 'Antivirus'
-    }
 
     # Empty is not clean: every section below initializes to @(), so an empty
     # list cannot be told apart from a query that failed. Both the settings-catalog and the legacy intents endpoint feed the same sections.
