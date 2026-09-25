@@ -46,10 +46,14 @@ function Invoke-NRGCollectSharePoint {
         try {
             $settings = Invoke-NRGGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/admin/sharepoint/settings' -ErrorAction Stop
             if ($settings) {
-                $retentionDays = 0
-                $retentionRaw = $settings.deletedUserPersonalSiteRetentionPeriodInDays
+                # $null when absent or unparseable — never 0, which read as
+                # "OneDrive destroyed after 0 days" (SPO-4.1 Gap) for a value
+                # nothing had returned.
+                $retentionDays = $null
+                $retentionRaw = Get-NRGObjectField -Item $settings -Key 'deletedUserPersonalSiteRetentionPeriodInDays' -Default $null
                 if ($null -ne $retentionRaw) {
-                    try { $retentionDays = [int]$retentionRaw } catch { $retentionDays = 0 }
+                    $parsed = 0
+                    if ([int]::TryParse([string]$retentionRaw, [ref]$parsed)) { $retentionDays = $parsed }
                 }
 
                 $result.Data.TenantSettings = @{
@@ -115,6 +119,10 @@ function Invoke-NRGCollectSharePoint {
                         ExternalUserExpireInDays          = [int]($t.ExternalUserExpireInDays ?? 0)             # SPO-3.4
                         # SPO-3.3: org-wide version-history default applied to NEW document
                         # libraries / OneDrive accounts. Field names per Get-SPOTenant docs.
+                        # SPO-1.2 / SPO-1.5. Read through Get-NRGObjectField: absent
+                        # means "not read" ($null), never a default verdict.
+                        DefaultSharingLinkType            = [string](Get-NRGObjectField -Item $t -Key 'DefaultSharingLinkType' -Default '')
+                        ConditionalAccessPolicy           = [string](Get-NRGObjectField -Item $t -Key 'ConditionalAccessPolicy' -Default '')
                         EnableAutoExpirationVersionTrim   = [bool]($t.EnableAutoExpirationVersionTrim ?? $false)
                         MajorVersionLimit                 = [int]($t.MajorVersionLimit ?? 0)
                         ExpireVersionsAfterDays           = [int]($t.ExpireVersionsAfterDays ?? 0)
