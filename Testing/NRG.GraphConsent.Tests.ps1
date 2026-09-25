@@ -86,6 +86,22 @@ Describe 'Graph consent is named, never guessed' {
         foreach ($m in $map) { $script:AllScopes | Should -Contain $m.Scope }
     }
 
+    It 'the missing list reaches the console as scope names, not "System.Object[]"' {
+        # Connect-NRGServices wraps the call in @(); a function that returned
+        # ,$missing handed it a one-element array holding the array, so the
+        # console printed System.Object[] and the blocked-control line (which
+        # matches scope names) never printed at all.
+        $granted = @($script:AllScopes | Where-Object { $_ -ne 'AccessReview.Read.All' -and $_ -ne 'AttackSimulation.Read.All' })
+        # Joined inside module scope, exactly as Connect-NRGServices does:
+        # returning the array out of the scriptblock would unroll it and hide the bug.
+        $line = & $script:Mod { param($g, $all)
+            $m = @(Set-NRGGraphConsentState -Mode Delegated -GrantedScopes $g -RequestedScopes $all)
+            "$($m.Count)|$(($m | Sort-Object) -join ', ')" } $granted $script:AllScopes
+        $line | Should -Be '2|AccessReview.Read.All, AttackSimulation.Read.All'
+        $connect = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib/Connect-NRGServices.ps1') -Raw
+        $connect | Should -Match '\$missingScopes = @\(Set-NRGGraphConsentState'
+    }
+
     It 'app-only onboarding requests the three consent permissions' {
         $reg = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Onboard/Register-NRGTenantApp.ps1') -Raw
         foreach ($s in 'IdentityRiskyServicePrincipal.Read.All', 'AttackSimulation.Read.All', 'AccessReview.Read.All') {

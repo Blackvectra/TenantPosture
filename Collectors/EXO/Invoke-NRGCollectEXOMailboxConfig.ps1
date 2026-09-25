@@ -448,38 +448,32 @@ function Invoke-NRGCollectEXOMailboxConfig {
 function Invoke-NRGCollectEXOConnectionFilter {
     [CmdletBinding()] param()
 
-    $result = @{ Success = $false; Data = @{} }
+    # EXO-3.1. The entry point never called this collector, so EXO-3.1
+    # reported "not collected" on every run.
+    $result = @{ CollectorId = 'EXO-ConnectionFilter'; CollectedAt = (Get-Date).ToString('o'); Success = $false; Data = @{} }
     try {
-        $cf = @(Get-HostedConnectionFilterPolicy -ErrorAction Stop)
+        $cmd = Get-NRGExoCommand -Name 'Get-HostedConnectionFilterPolicy'
+        if (-not $cmd.Command) { throw 'Get-HostedConnectionFilterPolicy is not available in the Exchange Online session.' }
+        $cf = @(& $cmd.Command -ErrorAction Stop)
         $result.Data['ConnectionFilter'] = @($cf | ForEach-Object {
             @{
-                Name            = [string]$_.Name
-                IsDefault       = [bool]$_.IsDefault
-                IPAllowList     = @($_.IPAllowList ?? @())
-                IPBlockList     = @($_.IPBlockList ?? @())
-                EnableSafeList  = [bool]($_.EnableSafeList ?? $false)
+                Name            = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '')
+                IsDefault       = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
+                IPAllowList     = @(@(Get-NRGObjectField -Item $_ -Key 'IPAllowList' -Default @()) | ForEach-Object { [string]$_ })
+                IPBlockList     = @(@(Get-NRGObjectField -Item $_ -Key 'IPBlockList' -Default @()) | ForEach-Object { [string]$_ })
+                EnableSafeList  = Get-NRGObjectField -Item $_ -Key 'EnableSafeList' -Default $null
             }
         })
-
-        # Alert policies for forwarding and unusual volume
-        try {
-            $alerts = Invoke-NRGGraphRequest -Method GET `
-                -Uri 'https://graph.microsoft.com/v1.0/security/alerts_v2?$filter=status ne ''resolved''&$top=50' `
-                -ErrorAction Stop
-            $result.Data['AlertPolicies'] = @{
-                ActiveAlerts = @($alerts.value ?? @() | ForEach-Object {
-                    @{ Id=[string]$_.id; Title=[string]$_.title; Severity=[string]$_.severity }
-                })
-            }
-        } catch { }
-
         $result.Success = $true
         if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
-            Register-NRGCoverage -Family 'EXO-ConnectionFilter' -Status 'Collected'
+            Register-NRGCoverage -Family 'EXO-ConnectionFilter' -Status 'Collected' -Note "$($cf.Count) connection filter policy(ies)"
         }
     } catch {
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
             Register-NRGException -Source 'EXO-ConnectionFilter' -Message $_.Exception.Message
+        }
+        if (Get-Command Register-NRGCoverage -ErrorAction SilentlyContinue) {
+            Register-NRGCoverage -Family 'EXO-ConnectionFilter' -Status 'Failed' -Note $_.Exception.Message
         }
     }
     if (Get-Command Set-NRGRawData -ErrorAction SilentlyContinue) {

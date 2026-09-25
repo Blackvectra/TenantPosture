@@ -62,7 +62,11 @@ function Set-NRGLicenseGating {
         if (-not $ctrl) { continue }
         $req = [string](Get-NRGObjectField -Item $ctrl -Key 'LicenseRequirement' -Default '')
         if ([string]::IsNullOrWhiteSpace($req) -or $req -match '^Included') { continue }
-        if (Test-NRGLicenseRequirementMet -LicenseRequirement $req -LicenseProfile $prof -ControlId $cid) { continue }
+        # -Finding: a Security Defaults verdict whose remaining fix needs no
+        # license (an AAD-1.2 registration shortfall) stays scored; with
+        # every user registered, what remains needs Conditional Access, so
+        # that finding is gated like any other (Test-NRGSecurityDefaultsLicenseFree).
+        if (Test-NRGLicenseRequirementMet -LicenseRequirement $req -LicenseProfile $prof -ControlId $cid -Finding $f) { continue }
 
         $before = [string](Get-NRGObjectField -Item $f -Key 'Detail' -Default '')
         $f.State        = 'NotApplicable'

@@ -349,4 +349,59 @@ return @{ value = @() }
             (Verdict 'Test-NRGControlEXOImap' 'EXO-2.4').State | Should -Be 'Satisfied'
         }
     }
+
+    Context 'Live-run corrections (2026-09-25)' {
+        It 'EXO-9.2 stays a Gap on a 14-day window but does not call held mail unrecoverable' {
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (Raw @{ SectionStatus = @{ MailboxRecoverability = 'Collected' }
+                MailboxRecoverability = @{ TotalMailboxes = 80; ShortRetentionCount = 80; MinRetentionDays = 14; WithoutHold = 0; OrgHoldsRead = $true; ShortRetentionSample = @() } })
+            $f = Verdict 'Test-NRGControlEXODeletedItemRetention' 'EXO-9.2'
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Not -Match 'unrecoverable'
+            $f.Detail | Should -Match 'under a hold'
+            Clear-NRGState
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (Raw @{ SectionStatus = @{ MailboxRecoverability = 'Collected' }
+                MailboxRecoverability = @{ TotalMailboxes = 80; ShortRetentionCount = 80; MinRetentionDays = 14; WithoutHold = 5; OrgHoldsRead = $true; ShortRetentionSample = @() } })
+            (Verdict 'Test-NRGControlEXODeletedItemRetention' 'EXO-9.2').Detail | Should -Match '5 mailbox\(es\) have no hold'
+        }
+        It 'EXO-2.3 no longer says POP3 uses basic auth or bypasses MFA (retired in Exchange Online, October 2022)' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (Raw @{ CASMailboxPlans = @(@{ Name = 'ExchangeOnlineEnterprise'; PopEnabled = $true; ImapEnabled = $true })
+                CASMailboxProtocols = @{ Total = 81; PopEnabledCount = 0; ImapEnabledCount = 0 }
+                SectionStatus = @{ CASMailboxProtocols = 'Collected' } })
+            $f = Verdict 'Test-NRGControlEXOPop3' 'EXO-2.3'
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Not -Match 'bypasses|basic-auth protocol'
+            $f.Detail | Should -Match '0 of the 81 existing mailboxes have POP3 on'
+        }
+        It 'EXO-3.1 is collected: the connection filter collector is run and reads EnableSafeList' {
+            Mock -ModuleName 'NRG-Assessment' Get-NRGExoCommand { [pscustomobject]@{ Command = $null; Source = 'ExchangeOnline' } }
+            Mock -ModuleName 'NRG-Assessment' Get-NRGExoCommand -ParameterFilter { $Name -eq 'Get-HostedConnectionFilterPolicy' } {
+                [pscustomobject]@{ Command = { [pscustomobject]@{ Name = 'Default'; IsDefault = $true; EnableSafeList = $false; IPAllowList = @() } }; Source = 'ExchangeOnline' } }
+            $r = Invoke-NRGCollectEXOConnectionFilter
+            $r.Success | Should -BeTrue
+            (Verdict 'Test-NRGControlEXOConnectionFilter' 'EXO-3.1').State | Should -Be 'Satisfied'
+        }
+        It 'PPL-3.3 with no Copilot licenses is not applicable, not a pass that claims nobody can use Copilot' {
+            Set-NRGRawData -Key 'M365Copilot' -Data (Raw @{ CopilotLicensedUserCount = 0; TotalUserCount = 124; LicensedSkus = @('SPB') })
+            $f = Verdict 'Test-NRGControlAICopilotLicensedOnly' 'PPL-3.3'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'Copilot Chat'
+        }
+        It 'AAD-12.1 counts the same members as AAD-1.2: the Entra Connect sync account is left out of both' {
+            # Live tenant: AAD-12.1 said 52 of 103 without MFA, AAD-1.2 said 48 of 99.
+            Set-NRGRawData -Key 'AAD-Users' -Data (Raw @{
+                Users = @(
+                    @{ UserPrincipalName = 'a@contoso.com'; DisplayName = 'A'; AccountEnabled = $true; UserType = 'Member' },
+                    @{ UserPrincipalName = 'b@contoso.com'; DisplayName = 'B'; AccountEnabled = $true; UserType = 'Member' },
+                    @{ UserPrincipalName = 'Sync_DC01_1a2b3c@contoso.onmicrosoft.com'; DisplayName = 'On-Premises Directory Synchronization Service Account'; AccountEnabled = $true; UserType = 'Member' })
+                MFARegistration = @{ RegistrationDetails = @(@{ UserPrincipalName = 'a@contoso.com'; IsMfaRegistered = $true; IsEnabled = $true }) } })
+            $f = Verdict 'Test-NRGControlInventoryMFAUsers' 'AAD-12.1'
+            $f.Detail | Should -Match '^1 of 2 enabled member accounts'
+            $f.Detail | Should -Match '1 Entra Connect sync service account\(s\) excluded'
+            @($f.AffectedObjects) | Should -Not -Match 'Sync_'
+        }
+        It 'a finding with no Detail carries its CurrentValue, so no verdict prints without a reason' {
+            Add-NRGFinding -ControlId 'TMS-1.4' -State 'Satisfied' -Category 'Teams' -Title 't' -CurrentValue 'External participants cannot give or request control'
+            @(Get-NRGFindings)[0].Detail | Should -Be 'External participants cannot give or request control.'
+        }
+    }
 }

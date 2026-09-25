@@ -6,7 +6,8 @@
 # Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC
 # Purpose: Turns the two dangerous buckets Get-NRGAssessmentScope.ps1 sorts
 #          controls.json controls into — NoProgrammaticCheck (no automated
-#          test exists) and CollectionIncomplete (the control could have been
+#          test exists, or the check ran and could not reach a verdict) and
+#          CollectionIncomplete (the control could have been
 #          assessed and was not) — into questionnaire items, the same way
 #          Get-NRGSSPQuestionnaireItems.ps1 does for the NIST 800-171
 #          requirements the tenant scan cannot reach.

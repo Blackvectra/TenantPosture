@@ -3,7 +3,7 @@
     {
       "ControlId": "AAD-1.1",
       "Title": "Legacy Authentication Blocked",
-      "Description": "A Conditional Access policy blocks legacy authentication protocols. Legacy auth bypasses MFA entirely.",
+      "Description": "A Conditional Access policy blocks legacy authentication protocols for all users, or Security Defaults is enabled, which Microsoft documents blocks every authentication request made by an older protocol tenant-wide (including Exchange ActiveSync basic authentication). Legacy auth bypasses MFA entirely.",
       "BusinessRisk": "Any account using legacy auth can be compromised without MFA. Attackers actively spray legacy auth endpoints because MFA cannot intercept them.",
       "Severity": "Critical",
       "Workload": "AAD",
@@ -35,7 +35,7 @@
     {
       "ControlId": "AAD-1.2",
       "Title": "MFA Required for All Users",
-      "Description": "A Conditional Access policy or Security Defaults requires MFA for all users on every sign-in.",
+      "Description": "A Conditional Access policy requires MFA for all users on all cloud apps at every sign-in, with every user registered. Security Defaults meets this only in part: it requires every user to register for MFA and the 16 administrator roles it names to complete MFA at every sign-in, but prompts other users for MFA only when Microsoft decides it is necessary.",
       "BusinessRisk": "Without MFA, a single stolen password enables full account takeover. Password spray, phishing, and credential stuffing all succeed.",
       "Severity": "Critical",
       "Workload": "AAD",
@@ -43,7 +43,7 @@
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies,AAD-AuthPolicies",
       "EvaluatorFunction": "Test-NRGControlAADMFA",
-      "Remediation": "CA policy: Users = All, Apps = All cloud apps, Grant = Require MFA. Or enable Security Defaults.",
+      "Remediation": "CA policy: Users = All, Apps = All cloud apps, Grant = Require MFA. Without Microsoft Entra ID P1, enable Security Defaults, which meets this control in part (MFA at every sign-in for 16 administrator roles; other users when Microsoft decides).",
       "References": {
         "CISControls": [
           "6.3",
@@ -100,7 +100,7 @@
       "ControlId": "AAD-2.1",
       "Title": "Conditional Access Policies Deployed",
       "Description": "At minimum three enabled CA policies provide coverage for legacy auth block, MFA all users, and MFA for admins.",
-      "BusinessRisk": "Without CA, access control is password-only. Security Defaults is a fallback — not a substitute for a mature CA posture.",
+      "BusinessRisk": "Without Conditional Access or Security Defaults, access control can be password-only (unless legacy per-user MFA is enforced). Security Defaults is a fallback — not a substitute for a mature CA posture.",
       "Severity": "High",
       "Workload": "AAD",
       "Category": "Identity",
@@ -1011,7 +1011,7 @@
         "PCIDSS": "Req 1.3",
         "ISO27001": "A.8.1"
       },
-      "LicenseRequirement": "Included (M365 Business Standard+)"
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1"
     },
     {
       "ControlId": "TMS-1.1",
@@ -2217,7 +2217,7 @@
     {
       "ControlId": "AAD-7.2",
       "Title": "Break-Glass Accounts Configured",
-      "Description": "At least two cloud-only GA accounts are excluded from CA policies as emergency access accounts.",
+      "Description": "At least two cloud-only accounts permanently assigned Global Administrator are kept as emergency access accounts, excluded from every Conditional Access policy that would otherwise reach them. While Security Defaults is enabled (it cannot exclude any account), they are confirmed to exist, with credentials held offline and an MFA method registered for each.",
       "BusinessRisk": "Without break-glass accounts, a CA policy misconfiguration can lock all admins out of the tenant permanently.",
       "Severity": "High",
       "Workload": "AAD",
@@ -4433,7 +4433,7 @@
     {
       "ControlId": "AAD-11.1",
       "Title": "Device Code Authentication Flow Blocked",
-      "Description": "A Conditional Access policy blocks the device code authentication flow for all users.",
+      "Description": "A Conditional Access policy blocks the device code authentication flow for all users, or Security Defaults is enabled, which Microsoft documents blocks authentication requests that use device code flow.",
       "BusinessRisk": "Device code phishing attacks send victims to a legitimate Microsoft URL where they enter an attacker-controlled code — no password required. The attack is especially effective against less technical users.",
       "Severity": "High",
       "Workload": "AAD",

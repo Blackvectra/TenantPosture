@@ -54,7 +54,7 @@ Describe 'NRG Sign-In Triage — IoC evaluators against synthetic fixtures' {
                 Events     = $events
             })
 
-            Test-NRGSignInControl-FailedToSuccess
+            Test-NRGSignInControlFailedToSuccess
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'SIGNIN-1.1')
             $f.Count        | Should -Be 1
             $f[0].State     | Should -Be 'Gap'
@@ -74,7 +74,7 @@ Describe 'NRG Sign-In Triage — IoC evaluators against synthetic fixtures' {
                 Count      = 1
                 Events     = $events
             })
-            Test-NRGSignInControl-FailedToSuccess
+            Test-NRGSignInControlFailedToSuccess
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'SIGNIN-1.1')
             $f[0].State | Should -Be 'Satisfied'
         }
@@ -88,7 +88,7 @@ Describe 'NRG Sign-In Triage — IoC evaluators against synthetic fixtures' {
             Set-NRGRawData -Key 'IR-SignIn-AnonIp' -Data (NewBag 'IR-SignIn-AnonIp' @{
                 Count = 1; Events = $events
             })
-            Test-NRGSignInControl-AnonymousIp
+            Test-NRGSignInControlAnonymousIp
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'SIGNIN-1.2')
             $f.Count       | Should -Be 1
             $f[0].State    | Should -Be 'Gap'
@@ -105,7 +105,7 @@ Describe 'NRG Sign-In Triage — IoC evaluators against synthetic fixtures' {
             Set-NRGRawData -Key 'IR-SignIn-RiskyUsers' -Data (NewBag 'IR-SignIn-RiskyUsers' @{
                 Count = 1; Users = $users
             })
-            Test-NRGSignInControl-RiskyUsers
+            Test-NRGSignInControlRiskyUsers
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'SIGNIN-1.4')
             $f[0].State    | Should -Be 'Gap'
             $f[0].Severity | Should -Be 'High'
@@ -128,20 +128,20 @@ Describe 'NRG Sign-In Triage — IoC evaluators against synthetic fixtures' {
             }
             $aliceEvents += @{ userPrincipalName='alice@corp.com'; createdDateTime=$base.ToString('o'); ipAddress='203.0.113.99'; status=@{errorCode=0} }
             Set-NRGRawData -Key 'IR-SignIn-Recent' -Data (NewBag 'r' @{ WindowDays=7; Cutoff=$base.AddDays(-7).ToString('o'); Count=$aliceEvents.Count; Events=$aliceEvents })
-            Test-NRGSignInControl-FailedToSuccess
+            Test-NRGSignInControlFailedToSuccess
 
             # bob — anon-IP success + risky user
             Set-NRGRawData -Key 'IR-SignIn-AnonIp' -Data (NewBag 'a' @{ Count=1; Events=@(
                 @{ userPrincipalName='bob@corp.com'; createdDateTime=$base.ToString('o'); ipAddress='185.220.101.1'; status=@{errorCode=0}; riskEventTypes_v2=@('anonymizedIPAddress') }
             ) })
-            Test-NRGSignInControl-AnonymousIp
+            Test-NRGSignInControlAnonymousIp
             Set-NRGRawData -Key 'IR-SignIn-RiskyUsers' -Data (NewBag 'ru' @{ Count=1; Users=@(
                 @{ userPrincipalName='bob@corp.com'; userDisplayName='Bob'; riskLevel='high'; riskState='atRisk'; riskLastUpdatedDateTime=$base.ToString('o') }
             ) })
-            Test-NRGSignInControl-RiskyUsers
+            Test-NRGSignInControlRiskyUsers
 
             # Rank
-            Test-NRGSignInControl-RankUsers
+            Test-NRGSignInControlRankUsers
             $rank = (Get-NRGRawData -Key 'IR-SignIn-Ranked').Data.Users
             $rank[0].UserPrincipalName | Should -Be 'bob@corp.com'
             $rank[0].Score            | Should -BeGreaterOrEqual 100
@@ -152,7 +152,7 @@ Describe 'NRG Sign-In Triage — IoC evaluators against synthetic fixtures' {
 
     Context 'Defensive — no data' {
         It 'NotApplicable when sign-in collection did not succeed' {
-            Test-NRGSignInControl-FailedToSuccess
+            Test-NRGSignInControlFailedToSuccess
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'SIGNIN-1.1')
             $f[0].State | Should -Be 'NotApplicable'
         }
@@ -180,7 +180,7 @@ Describe 'NRG Sign-In Triage — Geo-anomaly (SIGNIN-1.6)' {
     It 'Auto-detects the modal home state and flags out-of-state + foreign' {
         $ev = GeoEvents
         Set-NRGRawData -Key 'IR-SignIn-Recent' -Data (NewBag 'r' @{ WindowDays=7; Cutoff=(Get-Date).AddDays(-7).ToString('o'); Count=$ev.Count; Events=$ev })
-        Test-NRGSignInControl-GeoAnomaly
+        Test-NRGSignInControlGeoAnomaly
         $f = @(Get-NRGFindings | Where-Object ControlId -eq 'SIGNIN-1.6')
         $f[0].State    | Should -Be 'Gap'
         $f[0].Severity | Should -Be 'Critical'
@@ -194,8 +194,8 @@ Describe 'NRG Sign-In Triage — Geo-anomaly (SIGNIN-1.6)' {
         $ev = GeoEvents
         $ev += @{ userPrincipalName='carol@corp.com'; createdDateTime=$base.ToString('o'); ipAddress='5.5.5.5'; status=@{errorCode=50126}; location=@{city='Dallas';state='Texas';countryOrRegion='US'} }
         Set-NRGRawData -Key 'IR-SignIn-Recent' -Data (NewBag 'r' @{ WindowDays=7; Cutoff=$base.AddDays(-7).ToString('o'); Count=$ev.Count; Events=$ev })
-        Test-NRGSignInControl-GeoAnomaly
-        Test-NRGSignInControl-RankUsers
+        Test-NRGSignInControlGeoAnomaly
+        Test-NRGSignInControlRankUsers
         $rank = (Get-NRGRawData -Key 'IR-SignIn-Ranked').Data.Users
         $bob = ($rank | Where-Object UserPrincipalName -eq 'bob@corp.com').Score
         $alice = ($rank | Where-Object UserPrincipalName -eq 'alice@corp.com').Score
@@ -208,7 +208,7 @@ Describe 'NRG Sign-In Triage — Geo-anomaly (SIGNIN-1.6)' {
     It 'Honors -HomeState override' {
         $ev = GeoEvents
         Set-NRGRawData -Key 'IR-SignIn-Recent' -Data (NewBag 'r' @{ WindowDays=7; Cutoff=(Get-Date).AddDays(-7).ToString('o'); Count=$ev.Count; Events=$ev })
-        Test-NRGSignInControl-GeoAnomaly -HomeState 'Texas' -HomeCountry 'US'
+        Test-NRGSignInControlGeoAnomaly -HomeState 'Texas' -HomeCountry 'US'
         $f = @(Get-NRGFindings | Where-Object ControlId -eq 'SIGNIN-1.6')
         $f[0].Detail | Should -Match 'texas'
         $f[0].Detail | Should -Match 'North Dakota'   # ND users now the anomalies
@@ -216,7 +216,7 @@ Describe 'NRG Sign-In Triage — Geo-anomaly (SIGNIN-1.6)' {
 
     It 'NotApplicable when events carry no location' {
         Set-NRGRawData -Key 'IR-SignIn-Recent' -Data (NewBag 'r' @{ WindowDays=7; Cutoff=(Get-Date).AddDays(-7).ToString('o'); Count=1; Events=@(@{ userPrincipalName='x@corp.com'; createdDateTime=(Get-Date).ToString('o'); ipAddress='1.1.1.1'; status=@{errorCode=0} }) })
-        Test-NRGSignInControl-GeoAnomaly
+        Test-NRGSignInControlGeoAnomaly
         $f = @(Get-NRGFindings | Where-Object ControlId -eq 'SIGNIN-1.6')
         $f[0].State | Should -Be 'NotApplicable'
     }

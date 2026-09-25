@@ -89,6 +89,20 @@ function Add-NRGFinding {
         if ($catalog.Count -gt 0) { $FrameworkIds = $catalog }
     }
 
+    # A verdict with no stated reason is not evidence. Several evaluators put
+    # the observed value in CurrentValue only, and the report printed a bare
+    # "Satisfied" with nothing under it; the observed value is the reason.
+    if ([string]::IsNullOrWhiteSpace($Detail) -and -not [string]::IsNullOrWhiteSpace($CurrentValue)) {
+        $Detail = $CurrentValue.TrimEnd('.') + '.'
+    }
+
+    # A control that shares its setting with others says so, and says it
+    # counts once (Config/control-links.json).
+    if (Get-Command Get-NRGControlLinkNote -ErrorAction SilentlyContinue) {
+        $linkNote = Get-NRGControlLinkNote -ControlId $ControlId
+        if ($linkNote -and $Detail -notlike "*$($linkNote.Trim())*") { $Detail = ($Detail.TrimEnd() + $linkNote).Trim() }
+    }
+
     $finding = [PSCustomObject]@{
         ControlId     = $ControlId
         State         = $State

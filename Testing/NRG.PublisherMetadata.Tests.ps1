@@ -113,9 +113,16 @@ pattern aborts the publisher whenever the key is absent — which it is on the
             $script:Overall.Error | Should -BeGreaterThan 0 -Because 'a fixture with no errors cannot detect an omitted Error row'
         }
 
-        It 'the five states sum to the finding count' {
+        It 'the five states sum to the finding count, with linked controls counted once' {
+            # Controls that read the same setting (Config/control-links.json)
+            # are one scored entry; every other finding is counted exactly once.
+            $scored = @(& (Get-Module NRG-Assessment) { param($f) @(Get-NRGScoringFindings -Findings $f) } $script:Findings)
             ($script:Overall.Satisfied + $script:Overall.Partial + $script:Overall.Gap +
-             $script:Overall.Error + $script:Overall.NA) | Should -Be $script:Findings.Count
+             $script:Overall.Error + $script:Overall.NA) | Should -Be $scored.Count
+            $links = & (Get-Module NRG-Assessment) { Get-NRGControlLinkMap }
+            $partners = @($script:Findings | Where-Object { $links.ContainsKey($_.ControlId) -and $links[$_.ControlId].Primary -ne $_.ControlId }).Count
+            $partners | Should -BeGreaterThan 0 -Because 'the fixture must exercise linked controls'
+            $scored.Count | Should -Be ($script:Findings.Count - $partners)
         }
 
         It 'the NIST matrix Markdown summary names the Error count' {

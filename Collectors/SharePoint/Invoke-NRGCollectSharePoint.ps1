@@ -56,29 +56,34 @@ function Invoke-NRGCollectSharePoint {
                     if ([int]::TryParse([string]$retentionRaw, [ref]$parsed)) { $retentionDays = $parsed }
                 }
 
+                # A flag Graph did not return stays $null. A `?? $false`
+                # default read an absent isLegacyAuthProtocolsEnabled as
+                # "legacy auth disabled" (SPO-1.3 pass) and an absent
+                # isUnmanagedSyncAppForTenantRestricted as "not restricted".
+                $flag = { param([string] $k) $v = Get-NRGObjectField -Item $settings -Key $k -Default $null; if ($null -eq $v) { $null } else { [bool]$v } }
                 $result.Data.TenantSettings = @{
-                    IsLegacyAuthProtocolsEnabled         = [bool]($settings.isLegacyAuthProtocolsEnabled ?? $false)
-                    IsLoopEnabled                        = [bool]($settings.isLoopEnabled ?? $false)
-                    IsMacSyncAppEnabled                  = [bool]($settings.isMacSyncAppEnabled ?? $false)
-                    IsRequireAcceptingUserToMatchInvitedUserEnabled = [bool](Get-NRGObjectField -Item $settings -Key 'isRequireAcceptingUserToMatchInvitedUserEnabled' -Default $false)
-                    IsResharingByExternalUsersEnabled    = [bool]($settings.isResharingByExternalUsersEnabled ?? $false)
-                    IsSharePointMobileNotificationEnabled = [bool]($settings.isSharePointMobileNotificationEnabled ?? $false)
-                    IsSharePointNewsfeedEnabled          = [bool]($settings.isSharePointNewsfeedEnabled ?? $false)
-                    IsSiteCreationEnabled                = [bool]($settings.isSiteCreationEnabled ?? $false)
-                    IsSiteCreationUIEnabled              = [bool]($settings.isSiteCreationUIEnabled ?? $false)
-                    IsSitePagesCreationEnabled           = [bool]($settings.isSitePagesCreationEnabled ?? $false)
-                    IsSitesStorageLimitAutomatic         = [bool]($settings.isSitesStorageLimitAutomatic ?? $false)
-                    IsSyncButtonHiddenOnPersonalSite     = [bool]($settings.isSyncButtonHiddenOnPersonalSite ?? $false)
-                    IsUnmanagedSyncAppForTenantRestricted = [bool]($settings.isUnmanagedSyncAppForTenantRestricted ?? $false)
-                    SharingCapability                    = [string]($settings.sharingCapability ?? '')
-                    SharingDomainRestrictionMode         = [string]($settings.sharingDomainRestrictionMode ?? '')
-                    AllowedDomainGuidsForSyncApp         = @($settings.allowedDomainGuidsForSyncApp ?? @())
-                    AvailableManagedPathsForSiteCreation = @($settings.availableManagedPathsForSiteCreation ?? @())
+                    IsLegacyAuthProtocolsEnabled         = (& $flag 'isLegacyAuthProtocolsEnabled')
+                    IsLoopEnabled                        = (& $flag 'isLoopEnabled')
+                    IsMacSyncAppEnabled                  = (& $flag 'isMacSyncAppEnabled')
+                    IsRequireAcceptingUserToMatchInvitedUserEnabled = (& $flag 'isRequireAcceptingUserToMatchInvitedUserEnabled')
+                    IsResharingByExternalUsersEnabled    = (& $flag 'isResharingByExternalUsersEnabled')
+                    IsSharePointMobileNotificationEnabled = (& $flag 'isSharePointMobileNotificationEnabled')
+                    IsSharePointNewsfeedEnabled          = (& $flag 'isSharePointNewsfeedEnabled')
+                    IsSiteCreationEnabled                = (& $flag 'isSiteCreationEnabled')
+                    IsSiteCreationUIEnabled              = (& $flag 'isSiteCreationUIEnabled')
+                    IsSitePagesCreationEnabled           = (& $flag 'isSitePagesCreationEnabled')
+                    IsSitesStorageLimitAutomatic         = (& $flag 'isSitesStorageLimitAutomatic')
+                    IsSyncButtonHiddenOnPersonalSite     = (& $flag 'isSyncButtonHiddenOnPersonalSite')
+                    IsUnmanagedSyncAppForTenantRestricted = (& $flag 'isUnmanagedSyncAppForTenantRestricted')
+                    SharingCapability                    = [string](Get-NRGObjectField -Item $settings -Key 'sharingCapability' -Default '')
+                    SharingDomainRestrictionMode         = [string](Get-NRGObjectField -Item $settings -Key 'sharingDomainRestrictionMode' -Default '')
+                    AllowedDomainGuidsForSyncApp         = @(Get-NRGObjectField -Item $settings -Key 'allowedDomainGuidsForSyncApp' -Default @())
+                    AvailableManagedPathsForSiteCreation = @(Get-NRGObjectField -Item $settings -Key 'availableManagedPathsForSiteCreation' -Default @())
                     DeletedUserPersonalSiteRetentionPeriodInDays = $retentionDays
-                    SharingAllowedDomainList             = @($settings.sharingAllowedDomainList ?? @())
-                    SharingBlockedDomainList             = @($settings.sharingBlockedDomainList ?? @())
+                    SharingAllowedDomainList             = @(Get-NRGObjectField -Item $settings -Key 'sharingAllowedDomainList' -Default @())
+                    SharingBlockedDomainList             = @(Get-NRGObjectField -Item $settings -Key 'sharingBlockedDomainList' -Default @())
                 }
-                $result.Data.ExternalSharing = [string]($settings.sharingCapability ?? '')
+                $result.Data.ExternalSharing = [string](Get-NRGObjectField -Item $settings -Key 'sharingCapability' -Default '')
             }
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {

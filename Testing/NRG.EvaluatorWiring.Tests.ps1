@@ -58,4 +58,26 @@ Describe 'controls.json -> evaluator wiring' {
     It 'Sanity: at least 150 distinct evaluator functions are wired' {
         @($script:Controls.EvaluatorFunction | Sort-Object -Unique).Count | Should -BeGreaterThan 150
     }
+
+    It 'every CollectorDependency is set by a collector the entry point actually runs' {
+        # EXO-3.1 read EXO-ConnectionFilter, whose collector existed but was
+        # never called by Invoke-NRGAssessment.ps1, so the control reported
+        # "not collected" on every run and nothing flagged it.
+        $setBy = @{}
+        foreach ($f in Get-ChildItem (Join-Path $script:RepoRoot 'Collectors') -Filter '*.ps1' -File -Recurse) {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
+            foreach ($fn in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
+                foreach ($m in [regex]::Matches($fn.Extent.Text, "Set-NRGRawData\s+-Key\s+'([^']+)'")) {
+                    if (-not $setBy.ContainsKey($m.Groups[1].Value)) { $setBy[$m.Groups[1].Value] = [System.Collections.Generic.List[string]]::new() }
+                    $setBy[$m.Groups[1].Value].Add($fn.Name)
+                }
+            }
+        }
+        $entry = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Invoke-NRGAssessment.ps1') -Raw
+        $orphans = @(foreach ($key in @($script:Controls.CollectorDependency | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Sort-Object -Unique)) {
+            $fns = if ($setBy.ContainsKey($key)) { @($setBy[$key]) } else { @() }
+            if (-not @($fns | Where-Object { $entry -match "'$([regex]::Escape($_))'" })) { "$key (set by: $(if ($fns) { $fns -join ', ' } else { 'nothing' }))" }
+        })
+        $orphans | Should -BeNullOrEmpty -Because "no collector the entry point runs sets: $($orphans -join '; ')"
+    }
 }

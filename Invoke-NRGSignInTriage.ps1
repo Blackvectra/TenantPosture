@@ -259,12 +259,12 @@ try {
     # score bumps (successful sign-in from Tor/hosting/VPN infra) feed the
     # final ranking.
     $triageEvaluators = @(
-        'Test-NRGSignInControl-FailedToSuccess'
-        'Test-NRGSignInControl-AnonymousIp'
-        'Test-NRGSignInControl-ImpossibleTravel'
-        'Test-NRGSignInControl-RiskyUsers'
+        'Test-NRGSignInControlFailedToSuccess'
+        'Test-NRGSignInControlAnonymousIp'
+        'Test-NRGSignInControlImpossibleTravel'
+        'Test-NRGSignInControlRiskyUsers'
     )
-    if ($EnableThreatIntel) { $triageEvaluators += 'Test-NRGSignInControl-IPIntel' }
+    if ($EnableThreatIntel) { $triageEvaluators += 'Test-NRGSignInControlIPIntel' }
     foreach ($fn in $triageEvaluators) {
         if (Get-Command $fn -ErrorAction SilentlyContinue) {
             try {
@@ -279,22 +279,22 @@ try {
     # Geo-anomaly (out-of-home-state) runs with the operator's overrides — or
     # auto-detect when both omitted. Called explicitly because it takes
     # parameters. Runs before the rank aggregator so its score bumps count.
-    if (Get-Command Test-NRGSignInControl-GeoAnomaly -ErrorAction SilentlyContinue) {
+    if (Get-Command Test-NRGSignInControlGeoAnomaly -ErrorAction SilentlyContinue) {
         try {
-            Test-NRGSignInControl-GeoAnomaly -HomeState $HomeState -HomeCountry $HomeCountry
-            Write-Host "  [+] Test-NRGSignInControl-GeoAnomaly" -ForegroundColor Green
+            Test-NRGSignInControlGeoAnomaly -HomeState $HomeState -HomeCountry $HomeCountry
+            Write-Host "  [+] Test-NRGSignInControlGeoAnomaly" -ForegroundColor Green
         } catch {
-            Write-Warning "Test-NRGSignInControl-GeoAnomaly failed: $($_.Exception.Message)"
+            Write-Warning "Test-NRGSignInControlGeoAnomaly failed: $($_.Exception.Message)"
         }
     }
 
     # Rank aggregator runs last so every score (incl. geo + IP-intel bumps) is in.
-    if (Get-Command Test-NRGSignInControl-RankUsers -ErrorAction SilentlyContinue) {
+    if (Get-Command Test-NRGSignInControlRankUsers -ErrorAction SilentlyContinue) {
         try {
-            Test-NRGSignInControl-RankUsers
-            Write-Host "  [+] Test-NRGSignInControl-RankUsers" -ForegroundColor Green
+            Test-NRGSignInControlRankUsers
+            Write-Host "  [+] Test-NRGSignInControlRankUsers" -ForegroundColor Green
         } catch {
-            Write-Warning "Test-NRGSignInControl-RankUsers failed: $($_.Exception.Message)"
+            Write-Warning "Test-NRGSignInControlRankUsers failed: $($_.Exception.Message)"
         }
     }
 
@@ -333,7 +333,7 @@ try {
                 # survive password resets; attacker-added MFA methods survive
                 # session revocation).
                 try { Invoke-NRGEmailCollectUserSecurity -TargetUpn $upn } catch { Write-Warning "User-security collection for $upn failed: $($_.Exception.Message)" }
-                foreach ($fn in @('Test-NRGEmailControl-InboxRules','Test-NRGEmailControl-Forwarding','Test-NRGEmailControl-OutboundActivity','Test-NRGEmailControl-PhishOrigin','Test-NRGEmailControl-OAuthConsents','Test-NRGEmailControl-AuthMethods')) {
+                foreach ($fn in @('Test-NRGEmailControlInboxRules','Test-NRGEmailControlForwarding','Test-NRGEmailControlOutboundActivity','Test-NRGEmailControlPhishOrigin','Test-NRGEmailControlOAuthConsents','Test-NRGEmailControlAuthMethods')) {
                     try { & $fn } catch { Write-Warning "$fn for $upn failed: $($_.Exception.Message)" }
                 }
                 $divedUsers += $upn

@@ -137,9 +137,15 @@ function Invoke-NRGCollectAADAuthPolicies {
             $secDef = Invoke-NRGGraphRequest -Method GET `
                 -Uri 'https://graph.microsoft.com/v1.0/policies/identitySecurityDefaultsEnforcementPolicy' `
                 -ErrorAction Stop
+            # $null means "not read", never "disabled". A present isEnabled
+            # whose value is null used to cast to $false and read as
+            # "Security Defaults disabled". Get-NRGSecurityDefaultsState treats
+            # a non-boolean IsEnabled as not read.
             if ($secDef) {
-                $result.Data.SecurityDefaults = @{
-                    IsEnabled = [bool]$secDef.isEnabled
+                $on = Get-NRGObjectField -Item $secDef -Key 'isEnabled' -Default $null
+                $result.Data.SecurityDefaults = @{ IsEnabled = $(if ($on -is [bool]) { $on } else { $null }) }
+                if ($on -isnot [bool] -and (Get-Command Register-NRGException -ErrorAction SilentlyContinue)) {
+                    Register-NRGException -Source 'AAD-SecurityDefaults' -Message 'identitySecurityDefaultsEnforcementPolicy returned no boolean isEnabled; Security Defaults state not read.'
                 }
             }
         } catch {

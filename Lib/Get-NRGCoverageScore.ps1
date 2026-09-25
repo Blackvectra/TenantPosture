@@ -164,17 +164,49 @@ function Get-NRGScoringFindings {
     # another scored as a pass while the scope section called it "not
     # assessed"). Known shortfalls first; then unknown; a pass only when
     # every instance passed.
-    $rank = Get-NRGStateSeverityRank
+    #
+    # Controls that read the same setting (Config/control-links.json) are one
+    # entry: the worst state across the group, reported under the group's
+    # primary ID where states tie, carrying the UNION of the members'
+    # framework citations so no framework loses a row. Each member still has
+    # its own finding in the report; only the counting is shared.
+    $rank  = Get-NRGStateSeverityRank
+    $links = if (Get-Command Get-NRGControlLinkMap -ErrorAction SilentlyContinue) { Get-NRGControlLinkMap } else { @{} }
     $byId  = [ordered]@{}
+    $ids   = @{}
+    $cites = @{}
     $loose = [System.Collections.Generic.List[object]]::new()
     foreach ($f in @($Findings)) {
         if ($null -eq $f) { continue }
         $cid = [string](Get-NRGObjectField -Item $f -Key 'ControlId' -Default '')
         if (-not $cid) { $loose.Add($f); continue }
-        if (-not $byId.Contains($cid)) { $byId[$cid] = $f; continue }
+        $gid = if ($links.ContainsKey($cid)) { $links[$cid].Primary } else { $cid }
+        if (-not $ids.ContainsKey($gid)) { $ids[$gid] = [System.Collections.Generic.List[string]]::new(); $cites[$gid] = [System.Collections.Generic.List[string]]::new() }
+        if (-not $ids[$gid].Contains($cid)) { $ids[$gid].Add($cid) }
+        foreach ($c in @(Get-NRGObjectField -Item $f -Key 'FrameworkIds' -Default @())) {
+            if ($c -and -not $cites[$gid].Contains([string]$c)) { $cites[$gid].Add([string]$c) }
+        }
+        if (-not $byId.Contains($gid)) { $byId[$gid] = $f; continue }
         $new = [string](Get-NRGObjectField -Item $f -Key 'State' -Default '')
-        $old = [string](Get-NRGObjectField -Item $byId[$cid] -Key 'State' -Default '')
-        if (($rank[$new] ?? 0) -gt ($rank[$old] ?? 0)) { $byId[$cid] = $f }
+        $old = [string](Get-NRGObjectField -Item $byId[$gid] -Key 'State' -Default '')
+        $oldCid = [string](Get-NRGObjectField -Item $byId[$gid] -Key 'ControlId' -Default '')
+        if ((($rank[$new] ?? 0) -gt ($rank[$old] ?? 0)) -or
+            (($rank[$new] ?? 0) -eq ($rank[$old] ?? 0) -and $cid -eq $gid -and $oldCid -ne $gid)) { $byId[$gid] = $f }
     }
-    return @(@($byId.Values) + @($loose))
+    $out = foreach ($gid in @($byId.Keys)) {
+        $rep = $byId[$gid]
+        if ($ids[$gid].Count -le 1) { $rep; continue }
+        # A copy, so the member's own finding is untouched in the report.
+        $copy = if ($rep -is [System.Collections.IDictionary]) { $rep.Clone() } else { $rep.PSObject.Copy() }
+        $union = [string[]]@($cites[$gid])
+        $members = [string[]]@($ids[$gid])
+        if ($copy -is [System.Collections.IDictionary]) {
+            $copy['FrameworkIds'] = $union; $copy['LinkedControls'] = $members
+        } else {
+            $copy | Add-Member -NotePropertyName FrameworkIds -NotePropertyValue $union -Force
+            $copy | Add-Member -NotePropertyName LinkedControls -NotePropertyValue $members -Force
+        }
+        $copy
+    }
+    return @(@($out) + @($loose))
 }
