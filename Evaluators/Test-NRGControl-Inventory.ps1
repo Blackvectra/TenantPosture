@@ -431,6 +431,11 @@ function Test-NRGControlInventorySecureScore {
     $pct = [int](Get-NRGObjectField -Item $ss -Key 'Percentage' -Default 0)
     $cur = [int](Get-NRGObjectField -Item $ss -Key 'CurrentScore' -Default 0)
     $max = [int](Get-NRGObjectField -Item $ss -Key 'MaxScore' -Default 0)
+    # The collector writes Percentage 0 when there is no maximum, which would
+    # grade an unread score "0% - Critical".
+    if ($max -le 0) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Secure Score data not collected: Microsoft returned no maximum score, so no percentage can be computed.'; return
+    }
 
     # Prefer Microsoft's OWN peer benchmark (averageComparativeScores) over an
     # arbitrary percentage: are you at/above the average tenant of your size?
@@ -458,12 +463,12 @@ function Test-NRGControlInventorySecureScore {
         if ($pct -ge $benchPct) {
             Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title `
                 -Severity 'Informational' -FrameworkIds $cit `
-                -Detail "Microsoft Secure Score $cur / $max ($pct%) is at or above the $benchPct% average for $basisLabel. Configuration posture across identity, data, apps, and devices meets or beats the peer benchmark. Score as of $($ss.CreatedDate)." `
+                -Detail "Microsoft Secure Score $cur / $max ($pct%) is at or above the $benchPct% average for $basisLabel. Score as of $($ss.CreatedDate)." `
                 -CurrentValue "$pct% (peer average $benchPct%)"
         } else {
             Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
                 -Severity $ctrl.Severity -FrameworkIds $cit `
-                -Detail "Microsoft Secure Score $cur / $max ($pct%) is BELOW the $benchPct% average for $basisLabel. Microsoft's own assessment rates this tenant behind comparable organizations — work the ranked improvement actions to close the gap." `
+                -Detail "Microsoft Secure Score $cur / $max ($pct%) is BELOW the $benchPct% average for $basisLabel. Work the ranked improvement actions in the Microsoft Secure Score portal to close the gap." `
                 -CurrentValue "$pct% (peer average $benchPct%)" `
                 -RequiredValue "At or above the peer benchmark ($benchPct%)" `
                 -Remediation $ctrl.Remediation

@@ -1,5 +1,50 @@
 # Changelog
 
+## v4.14.3 (2026-09-26)
+
+v5.0 backlog sweep, collector-fields section: places where a collector
+recorded something Graph never said. Numbered after v4.14.2 (the Conditional
+Access view), which it does not touch.
+
+- **Directory-setting booleans read "False" as on.** Graph returns Password
+  Rule Settings values as strings, and `[bool]"False"` is `$true` in
+  PowerShell, so `EnableBannedPasswordCheck` and
+  `EnableBannedPasswordCheckOnPremises` were written to the results JSON as on
+  for a tenant that had turned them off. They are now read as True or False,
+  and anything else as not read. No scored control reads either field; AAD-7.1
+  scores the lockout threshold only.
+- **Paged collections were read from their first page only.** Conditional
+  Access policies, the beta token-protection read, named locations
+  (`$top=100`, while a tenant may hold 195), risky service principals and
+  attack simulations were each one request that ignored `@odata.nextLink`, so
+  anything past the first page was dropped and the rest reported as the whole
+  list. A trusted named location on page two made AAD-2.2 report none marked
+  as trusted, and a simulation history longer than one page could count no
+  launched campaign (DEF-4.6). New `Get-NRGGraphAllPages`
+  (`Lib/Invoke-NRGGraphRequest.ps1`) follows `@odata.nextLink` and throws,
+  leaving the section unread, when a response carries no `value` collection
+  or the page cap is reached, instead of returning a partial list.
+- **AAD-13.1 claimed a peer group it did not use.** Below the all-tenants
+  average, the finding said Microsoft "rates this tenant behind comparable
+  organizations". That average covers every Microsoft 365 tenant, so the
+  finding now names only the benchmark it compared against. A score with no
+  maximum was graded "0 / 0 (0%) — Critical"; it is now not assessed.
+- **AAD-7.1's not-collected message** said the read "requires beta endpoint
+  access"; the collector has read `/v1.0/groupSettings` since v4.6.4.
+
+Tests: `NRG.GraphRequest.Tests.ps1` pins the paging helper (every page,
+headers on every page, empty is empty, a malformed or capped read throws);
+`NRG.IdentityTruth.Tests.ps1` drives the real CA and password-rule collectors
+with a two-page named-location response and True, False and unreadable
+setting values; `NRG.SecureScore.Tests.ps1` pins the benchmark wording and
+the missing maximum. Each new bug test fails on the code before this change.
+
+Found and deferred: the SharePoint Management Shell block reads `Get-SPOTenant`
+by dot-access, so a module version lacking a newer property fails the whole
+block (honestly: the controls that need it report not assessed), and the SPO
+evaluators read a single missing shell value as `$false`. OAuth consent grants
+resolve names for the first 30 apps only, so later apps show as IDs.
+
 ## v4.14.1 (2026-09-25)
 
 Fixes from the first live run of v4.14.0. Every item below produced a wrong
