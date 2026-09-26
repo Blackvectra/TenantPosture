@@ -125,4 +125,60 @@ Describe 'SharePoint settings are read for the control that names them' {
             $f.Detail | Should -Match '-IncludeSharePointShell'
         }
     }
+
+    # A Get-SPOTenant property the installed module did not return is stored
+    # as $null. It used to be a dot-read that threw under StrictMode (losing
+    # every shell setting) and a ?? $false / ?? 0 default the evaluators scored.
+    Context 'a shell property that was not returned is not read, never $false or 0' {
+        It 'each shell control reports not assessed, naming the property, instead of scoring it' {
+            $full = @{ RequireAnonymousLinksExpireInDays = 30; EmailAttestationRequired = $true; EmailAttestationReAuthDays = 15
+                       NotifyOwnersWhenItemsReshared = $true; ExternalUserExpirationRequired = $true; ExternalUserExpireInDays = 60
+                       EnableAutoExpirationVersionTrim = $true; MajorVersionLimit = 500 }
+            foreach ($case in @(
+                    @{ Fn = 'Test-NRGControlSharePoint';             Cid = 'SPO-1.4'; Key = 'ExternalUserExpireInDays' },
+                    @{ Fn = 'Test-NRGControlSPOLinkExpiration';      Cid = 'SPO-2.2'; Key = 'RequireAnonymousLinksExpireInDays' },
+                    @{ Fn = 'Test-NRGControlSPOEmailAttestation';    Cid = 'SPO-2.6'; Key = 'EmailAttestationRequired' },
+                    @{ Fn = 'Test-NRGControlSPOReauth';              Cid = 'SPO-2.7'; Key = 'EmailAttestationReAuthDays' },
+                    @{ Fn = 'Test-NRGControlSPOSharingNotifications'; Cid = 'SPO-3.2'; Key = 'NotifyOwnersWhenItemsReshared' },
+                    @{ Fn = 'Test-NRGControlSPOGuestExpiry';         Cid = 'SPO-3.4'; Key = 'ExternalUserExpirationRequired' })) {
+                $shell = $full.Clone(); $shell[$case.Key] = $null
+                $f = Run $case.Fn $case.Cid @{} $shell
+                $f.State  | Should -Be 'NotApplicable' -Because "$($case.Cid) with $($case.Key) not returned"
+                $f.Detail | Should -Match ([regex]::Escape($case.Key))
+            }
+        }
+        It 'SPO-3.3: unread auto-trim is not "off"; a limit of 100 or more passes either way' {
+            (Run 'Test-NRGControlSPOVersionHistory' 'SPO-3.3' @{} @{ EnableAutoExpirationVersionTrim = $null; MajorVersionLimit = 50 }).State  | Should -Be 'NotApplicable'
+            (Run 'Test-NRGControlSPOVersionHistory' 'SPO-3.3' @{} @{ EnableAutoExpirationVersionTrim = $null; MajorVersionLimit = 500 }).State | Should -Be 'Satisfied'
+            (Run 'Test-NRGControlSPOVersionHistory' 'SPO-3.3' @{} @{ EnableAutoExpirationVersionTrim = $false; MajorVersionLimit = $null }).State | Should -Be 'NotApplicable'
+        }
+        It 'the collector keeps every property it can read when the module lacks a newer one' {
+            $mod = Get-Module 'NRG-Assessment'
+            $origGraph = & $mod { ${function:Invoke-NRGGraphRequest} }
+            & $mod {
+                Set-Item -Path 'function:script:Get-SPOTenant' -Value {
+                    # An older module: no EnableAutoExpirationVersionTrim at all.
+                    [pscustomobject]@{ RequireAnonymousLinksExpireInDays = 30; EmailAttestationRequired = $false; EmailAttestationReAuthDays = 30
+                                       NotifyOwnersWhenItemsReshared = $true; ExternalUserExpirationRequired = $true; ExternalUserExpireInDays = 60
+                                       DefaultSharingLinkType = 'Internal'; ConditionalAccessPolicy = 'AllowFullAccess'; MajorVersionLimit = 500; ExpireVersionsAfterDays = 0 }
+                }
+                Set-Item -Path 'function:script:Invoke-NRGGraphRequest' -Value { throw 'no Graph in this test' }
+            }
+            try {
+                Clear-NRGState
+                Invoke-NRGCollectSharePoint 3>$null | Out-Null
+                $sh = (Get-NRGRawData -Key 'SharePoint').Data.TenantSettingsSPO
+                $sh | Should -Not -BeNullOrEmpty -Because 'one missing property must not lose the whole block'
+                $sh['NotifyOwnersWhenItemsReshared'] | Should -BeExactly $true
+                $sh['EmailAttestationRequired']      | Should -BeExactly $false
+                $sh['MajorVersionLimit']             | Should -Be 500
+                $null -eq $sh['EnableAutoExpirationVersionTrim'] | Should -BeTrue -Because 'not returned is not read, never $false'
+            } finally {
+                & $mod { param($o)
+                    Remove-Item -Path 'function:script:Get-SPOTenant' -ErrorAction SilentlyContinue
+                    Set-Item -Path 'function:script:Invoke-NRGGraphRequest' -Value $o
+                } $origGraph
+            }
+        }
+    }
 }

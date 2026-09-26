@@ -9,6 +9,17 @@
 #   names the function in this file that scores it.
 #
 
+# The collector stores a Get-SPOTenant property the installed module did not
+# return as $null (not read). Returns the not-assessed detail when any of
+# $Keys is unread, else $null, so no evaluator scores unread as $false or 0.
+function Get-NRGSpoShellUnread {
+    [CmdletBinding()]
+    param([AllowNull()] $Shell, [Parameter(Mandatory)] [string[]] $Keys)
+    $missing = @($Keys | Where-Object { $null -eq (Get-NRGObjectField -Item $Shell -Key $_ -Default $null) })
+    if ($missing.Count -eq 0) { return $null }
+    "Get-SPOTenant did not return $($missing -join ', ') (the installed SharePoint Online Management Shell may predate it), so this setting was not assessed."
+}
+
 function Test-NRGControlSharePoint {
     [CmdletBinding()] param()
     $raw = Get-NRGRawData -Key 'SharePoint'
@@ -132,11 +143,14 @@ function Test-NRGControlSharePoint {
     $c = Get-NRGControlById -ControlId 'SPO-1.4'
     if ($c) {
         $cit = Get-NRGFrameworkCitations -ControlId 'SPO-1.4'
+        $unread14 = if ($null -ne $shell) { Get-NRGSpoShellUnread -Shell $shell -Keys 'ExternalUserExpirationRequired', 'ExternalUserExpireInDays' } else { $null }
         if ($cap -eq 'disabled') {
             Add-NRGFinding -ControlId 'SPO-1.4' -State 'NotApplicable' -Category 'SharePoint' -Title $c.Title -FrameworkIds $cit `
                 -Detail 'External sharing is disabled, so there is no guest access to expire.'
         } elseif ($null -eq $shell) {
             Add-NRGFinding -ControlId 'SPO-1.4' -State 'NotApplicable' -Category 'SharePoint' -Title $c.Title -FrameworkIds $cit -Detail $noShell
+        } elseif ($unread14) {
+            Add-NRGFinding -ControlId 'SPO-1.4' -State 'NotApplicable' -Category 'SharePoint' -Title $c.Title -FrameworkIds $cit -Detail $unread14
         } else {
             $required = [bool](Get-NRGObjectField -Item $shell -Key 'ExternalUserExpirationRequired' -Default $false)
             $expDays  = [int](Get-NRGObjectField -Item $shell -Key 'ExternalUserExpireInDays' -Default 0)
@@ -250,6 +264,8 @@ function Test-NRGControlSPOLinkExpiration {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "Anyone links are disabled tenant-wide (sharing capability '$cap'), so there are no Anyone links to expire."
         return
     }
+    $unread = Get-NRGSpoShellUnread -Shell $sp -Keys 'RequireAnonymousLinksExpireInDays'
+    if ($unread) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail $unread; return }
     $days = [int](Get-NRGObjectField -Item $sp -Key 'RequireAnonymousLinksExpireInDays' -Default -1)
     if ($days -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Anonymous ('Anyone') sharing links expire after $days day(s)."
@@ -375,6 +391,8 @@ function Test-NRGControlSPOEmailAttestation {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'External sharing is disabled, so there are no external recipients to attest.'
         return
     }
+    $unread = Get-NRGSpoShellUnread -Shell $sp -Keys 'EmailAttestationRequired', 'EmailAttestationReAuthDays'
+    if ($unread) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail $unread; return }
     $required = [bool](Get-NRGObjectField -Item $sp -Key 'EmailAttestationRequired' -Default $false)
     $reauth   = [int](Get-NRGObjectField -Item $sp -Key 'EmailAttestationReAuthDays' -Default 0)
     if ($required) {
@@ -408,6 +426,8 @@ function Test-NRGControlSPOReauth {
     # EmailAttestationReAuthDays applies ONLY when EmailAttestationRequired is
     # on (Set-SPOTenant docs); a leftover day count with attestation off used
     # to read as "Reauthentication required every N day(s)".
+    $unread = Get-NRGSpoShellUnread -Shell $sp -Keys 'EmailAttestationRequired', 'EmailAttestationReAuthDays'
+    if ($unread) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail $unread; return }
     $attest     = [bool](Get-NRGObjectField -Item $sp -Key 'EmailAttestationRequired' -Default $false)
     $reauthDays = [int](Get-NRGObjectField -Item $sp -Key 'EmailAttestationReAuthDays' -Default 0)
     if ($attest -and $reauthDays -gt 0 -and $reauthDays -le 30) {
@@ -485,6 +505,8 @@ function Test-NRGControlSPOSharingNotifications {
             -Title $ctrl.Title `
             -Detail 'Requires SharePoint Online Management Shell (Connect-SPOService); not connected. Not exposed by Graph. Re-run with -IncludeSharePointShell to read it.'; return
     }
+    $unread = Get-NRGSpoShellUnread -Shell $sp -Keys 'NotifyOwnersWhenItemsReshared'
+    if ($unread) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail $unread; return }
     $notify = [bool](Get-NRGObjectField -Item $sp -Key 'NotifyOwnersWhenItemsReshared' -Default $false)
     if ($notify) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Site owners are notified when their content is reshared — unexpected resharing is visible for review.'
@@ -514,8 +536,17 @@ function Test-NRGControlSPOVersionHistory {
             -Title $ctrl.Title -Detail 'SharePoint Management Shell (Get-SPOTenant) data not collected — version-history default not assessed. Requires a Connect-SPOService session (re-run with -IncludeSharePointShell).'
         return
     }
-    $autoTrim  = (Get-NRGObjectField -Item $sp -Key 'EnableAutoExpirationVersionTrim') -eq $true
-    $majorLimit = [int](Get-NRGObjectField -Item $sp -Key 'MajorVersionLimit' -Default 0)
+    $autoTrimRaw = Get-NRGObjectField -Item $sp -Key 'EnableAutoExpirationVersionTrim' -Default $null
+    $majorRaw    = Get-NRGObjectField -Item $sp -Key 'MajorVersionLimit' -Default $null
+    $autoTrim    = $autoTrimRaw -eq $true
+    $majorLimit  = [int]($majorRaw ?? 0)
+    # Unread is not "off" or 0: without the limit there is no count to judge,
+    # and with trimming unread a limit under 100 may not be what applies.
+    if (-not $autoTrim -and ($null -eq $majorRaw -or ($null -eq $autoTrimRaw -and $majorLimit -lt 100))) {
+        $unread = Get-NRGSpoShellUnread -Shell $sp -Keys 'EnableAutoExpirationVersionTrim', 'MajorVersionLimit'
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail $unread
+        return
+    }
     if ($autoTrim) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
@@ -556,6 +587,8 @@ function Test-NRGControlSPOGuestExpiry {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'External sharing is disabled, so there is no guest access to expire.'
         return
     }
+    $unread = Get-NRGSpoShellUnread -Shell $sp -Keys 'ExternalUserExpirationRequired', 'ExternalUserExpireInDays'
+    if ($unread) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail $unread; return }
     $required = [bool](Get-NRGObjectField -Item $sp -Key 'ExternalUserExpirationRequired' -Default $false)
     $expDays  = [int](Get-NRGObjectField -Item $sp -Key 'ExternalUserExpireInDays' -Default 0)
     if ($required -and $expDays -gt 0) {
