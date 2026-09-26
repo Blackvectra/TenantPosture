@@ -82,8 +82,21 @@ Describe 'Identity controls report what the tenant is configured to do' {
             Ca @(Pol -ClientApps @('other','exchangeActiveSync') -Grant @('block'));                           (V 'Test-NRGControlAADLegacyAuth' 'AAD-1.1').State | Should -Be 'Satisfied'
         }
         It 'AAD-1.4 / 1.5: blocking and risk-remediation responses count' {
-            Ca @(Pol -SignInRisk @('high') -Grant @('block'));             (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied'
+            Ca @(Pol -SignInRisk @('high', 'medium') -Grant @('block'));   (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied'
             Ca @(Pol -UserRisk @('high') -Grant @('riskRemediation'));     (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
+        }
+        # A policy applies only to the risk levels it selects. Microsoft's
+        # templates select High and Medium (sign-in) and High (user); a
+        # low-only policy used to score Satisfied on both controls.
+        It 'AAD-1.4 / 1.5: only the risk levels Microsoft''s templates select count' {
+            Ca @(Pol -SignInRisk @('low') -Grant @('mfa'));    (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Gap'
+            Ca @(Pol -SignInRisk @('high') -Grant @('mfa'));   (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Partial'
+            $f = V 'Test-NRGControlAADSignInRisk' 'AAD-1.4';   $f.Detail | Should -Match 'medium-risk sign-in is let through'
+            Ca @(Pol -SignInRisk @('medium') -Grant @('mfa')); (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Partial'
+            Ca @((Pol -SignInRisk @('high') -Grant @('block')), (Pol -SignInRisk @('medium') -Grant @('mfa')))
+            (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied' -Because 'levels combine across the enabled policies'
+            Ca @(Pol -UserRisk @('low', 'medium') -Grant @('passwordChange')); (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Gap'
+            Ca @(Pol -UserRisk @('medium', 'high') -Grant @('passwordChange')); (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
         }
         It 'AAD-2.3: "compliant OR MFA" does not enforce a device' {
             Ca @(Pol -Grant @('compliantDevice','domainJoinedDevice','mfa') -Op 'OR'); (V 'Test-NRGControlAADDeviceComplianceCA' 'AAD-2.3').State | Should -Be 'Partial'
