@@ -167,4 +167,26 @@ failing the whole section. Use Get-NRGNestedProperty -Object <var> -Path 'a.b'.
                 [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsed) | Should -BeFalse
         }
     }
+
+    # PowerShell allows '?' in a variable name, so "…/servicePrincipals/$cid?`$select=…"
+    # reads the unset variable $cid? (StrictMode throws) and never builds the
+    # URL: every consented app was reported by object ID. Write ${cid}?.
+    Context 'no variable name swallows a URL query mark' {
+        It 'no module file references a variable whose name contains "?" (other than the automatic $?)' {
+            $offenders = [System.Collections.Generic.List[string]]::new()
+            $files = Get-ChildItem -LiteralPath $script:RepoRoot -Recurse -Include '*.ps1', '*.psm1' -File |
+                Where-Object { $_.FullName -notmatch '[\\/](Testing|output|\.git)[\\/]' }
+            foreach ($f in $files) {
+                $tokens = $null; $errs = $null
+                $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$tokens, [ref]$errs)
+                foreach ($v in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.VariableExpressionAst] }, $true)) {
+                    $name = $v.VariablePath.UserPath
+                    if ($name -ne '?' -and $name.Contains('?')) {
+                        $offenders.Add("$($f.Name):$($v.Extent.StartLineNumber) `$$name")
+                    }
+                }
+            }
+            $offenders | Should -BeNullOrEmpty -Because 'write ${name}? when a URL query follows a variable'
+        }
+    }
 }

@@ -1153,6 +1153,23 @@ Describe 'Security Defaults: Conditional Access controls account for it' {
             Get-NRGNestedProperty -Object (Get-NRGRawData -Key 'AAD-CAPolicies') -Path 'Data.SectionStatus.NamedLocations' | Should -Be 'Failed'
         }
 
+        It 'the inventory collector names every consented app (the lookup URL read $cid? and failed for all of them; only 30 were tried)' {
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                if ($Uri -match 'oauth2PermissionGrants') {
+                    return @{ value = @(1..35 | ForEach-Object { @{ clientId = "sp-$_"; scope = 'User.Read'; resourceId = 'res-graph'; consentType = 'AllPrincipals' } }) }
+                }
+                if ($Uri -match '/servicePrincipals/(sp-\d+)\?') { return @{ displayName = "App $($Matches[1])" } }
+                return @{ value = @() }
+            }
+            Invoke-NRGCollectAADInventory 3>$null | Out-Null
+            $raw = Get-NRGRawData -Key 'AAD-Inventory'
+            Get-NRGNestedProperty -Object $raw -Path 'Data.SectionStatus.OAuthGrantedApps' | Should -Be 'Collected'
+            $apps = @($raw.Data.OAuthGrantedApps)
+            $apps.Count | Should -Be 35
+            @($apps | Where-Object { $_['AppName'] -eq $_['ClientId'] }).Count | Should -Be 0 -Because 'every app is looked up, and the lookup URL is built'
+        }
+
         It 'the password rule collector reads the string "False" as $false, not as enabled' {
             foreach ($case in @(@{ Raw = 'False'; Want = $false }, @{ Raw = 'True'; Want = $true }, @{ Raw = 'garbage'; Want = $null })) {
                 Clear-NRGState

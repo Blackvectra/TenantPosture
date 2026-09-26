@@ -2,9 +2,40 @@
 
 ## v4.14.3 (2026-09-26)
 
-v5.0 backlog sweep, collector-fields section: places where a collector
-recorded something Graph never said. Numbered after v4.14.2 (the Conditional
-Access view), which it does not touch.
+v5.0 backlog sweep: the collector-fields section (places where a collector
+recorded something Graph never said), the known issues it found, the owner's
+AAD-1.4 / 1.5 scoring decision, and a short mechanical sweep.
+
+- **Every consented app was reported by its object ID.** The name lookup built
+  its URL as `"…/servicePrincipals/$cid?`$select=…"`, and PowerShell allows
+  `?` in a variable name, so it read the unset variable `$cid?` (StrictMode
+  throws), the per-app `catch` fell back to the ID, and no app was ever named.
+  It also looked up only the first 30. The URL now uses `${cid}` and every
+  app is looked up. `NRG.ExternalShapes.Tests.ps1` fails on any variable name
+  containing `?` in a module file.
+- **AAD-1.4 and AAD-1.5 credited any risk level.** A Conditional Access risk
+  policy applies only to the levels it selects, and both controls accepted
+  any, so a low-only policy scored Satisfied. Owner's rule: sign-in risk is
+  Satisfied when the enabled policies together cover High and Medium
+  (Microsoft's template), Partial with one of the two, a Gap with neither;
+  user risk is Satisfied only with High ("require password change for
+  high-risk users").
+- **SharePoint shell settings.** `Get-SPOTenant` was read by dot-access, so a
+  module version without a newer property (`EnableAutoExpirationVersionTrim`)
+  threw and lost every shell setting, and a present-but-empty value defaulted
+  to `$false` / `0`, which SPO-1.4, 2.2, 2.6, 2.7, 3.2, 3.3 and 3.4 scored.
+  Each property is now read separately and stored as not read when absent;
+  those controls report the missing property as not assessed. SPO-3.3 still
+  passes a limit of 100 or more versions when trimming was not read.
+- **The OAuth consent grant list** logged its page cap and still reported the
+  truncated list as collected; it now reads through `Get-NRGGraphAllPages`.
+- **README.** 27 of `Invoke-NRGAssessment.ps1`'s 45 parameters
+  (`-IncludePurview`, `-IncludeSharePointShell`, the `-Skip*` switches,
+  `-JsonOnly`, app-only sign-in, …) appeared nowhere in it; it now has a
+  parameter table that `NRG.DocAccuracy.Tests.ps1` keeps equal to the real
+  parameter list. README and CLAUDE.md gave the output location as a
+  per-timestamp or per-tenant folder; files are written flat to `.\output\`
+  as `<tenant>-<yyyyMMdd-HHmmss>-…`.
 
 - **Directory-setting booleans read "False" as on.** Graph returns Password
   Rule Settings values as strings, and `[bool]"False"` is `$true` in
@@ -37,13 +68,15 @@ headers on every page, empty is empty, a malformed or capped read throws);
 `NRG.IdentityTruth.Tests.ps1` drives the real CA and password-rule collectors
 with a two-page named-location response and True, False and unreadable
 setting values; `NRG.SecureScore.Tests.ps1` pins the benchmark wording and
-the missing maximum. Each new bug test fails on the code before this change.
+the missing maximum; `NRG.SharePointSettings.Tests.ps1` drives the real
+SharePoint collector with an older `Get-SPOTenant` shape and each shell
+control with one property missing; `NRG.IdentityTruth.Tests.ps1` also pins the
+risk levels and the named consented apps. Each new bug test fails on the code
+before this change.
 
-Found and deferred: the SharePoint Management Shell block reads `Get-SPOTenant`
-by dot-access, so a module version lacking a newer property fails the whole
-block (honestly: the controls that need it report not assessed), and the SPO
-evaluators read a single missing shell value as `$false`. OAuth consent grants
-resolve names for the first 30 apps only, so later apps show as IDs.
+Swept and clean: no TODO/FIXME or known-issue marker describes a live
+problem, and no expandable string reads `"$obj.Member"` (which prints the
+object's type name) or `"$name:"` (a scope prefix).
 
 ## v4.14.2 (2026-09-25)
 
