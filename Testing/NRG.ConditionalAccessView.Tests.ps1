@@ -217,6 +217,10 @@ Describe 'Conditional Access view (inventory + recommended baseline)' {
             SetCA -Policies @((Pol -IncludeApps @('797f4846-ba00-4fd7-ba43-dac1f8f63013')))
             (Baseline (View) 'mfa-azure-mgmt').Status | Should -Be 'Enforced'
         }
+        It 'All resources EXCLUDING the Azure management resource is never credited for it' {
+            SetCA -Policies @((Pol -IncludeApps @('All') -ExcludeApps @('797f4846-ba00-4fd7-ba43-dac1f8f63013')))
+            (Baseline (View) 'mfa-azure-mgmt').Status | Should -Be 'Missing'
+        }
     }
 
     Context 'sign-in-risk / user-risk (Entra ID P2)' {
@@ -228,6 +232,20 @@ Describe 'Conditional Access view (inventory + recommended baseline)' {
         It 'userRiskLevels set with a passwordChange response -> Enforced' {
             SetCA -Policies @((Pol -UserRiskLevels @('high') -BuiltInControls @('passwordChange')))
             (Baseline (View) 'user-risk').Status | Should -Be 'Enforced'
+        }
+        It 'a user-risk policy without the High level never applies to high-risk users -> not credited' {
+            foreach ($lv in @(@('low'), @('medium'), @('low', 'medium'))) {
+                SetCA -Policies @((Pol -UserRiskLevels $lv -BuiltInControls @('passwordChange')))
+                (Baseline (View) 'user-risk').Status | Should -Be 'Missing' -Because "levels: $($lv -join ',')"
+            }
+        }
+        It 'sign-in risk: High and Medium is the template; one of them is part of it; Low alone is not an elevated-risk policy' {
+            SetCA -Policies @((Pol -SignInRiskLevels @('high')))
+            (Baseline (View) 'sign-in-risk').Status | Should -Be 'Similar'
+            SetCA -Policies @((Pol -SignInRiskLevels @('medium')))
+            (Baseline (View) 'sign-in-risk').Status | Should -Be 'Similar'
+            SetCA -Policies @((Pol -SignInRiskLevels @('low')))
+            (Baseline (View) 'sign-in-risk').Status | Should -Be 'Missing'
         }
     }
 
@@ -249,6 +267,10 @@ Describe 'Conditional Access view (inventory + recommended baseline)' {
         It 'PersistentBrowser enabled, mode never, all users/apps -> Enforced' {
             SetCA -Policies @((Pol -PersistentBrowser @{ IsEnabled = $true; Mode = 'never' }))
             (Baseline (View) 'persistent-browser').Status | Should -Be 'Enforced'
+        }
+        It 'scoped to one user, not All users -> Similar, never Enforced' {
+            SetCA -Policies @((Pol -IncludeUsers @('11111111-2222-3333-4444-555555555555') -PersistentBrowser @{ IsEnabled = $true; Mode = 'never' }))
+            (Baseline (View) 'persistent-browser').Status | Should -Be 'Similar'
         }
     }
 
@@ -299,9 +321,20 @@ Describe 'Conditional Access view (inventory + recommended baseline)' {
         It 'a license profile that positively lacks the requirement -> NotLicensed' {
             SetSD -IsEnabled $false
             SetCA -Policies @()
-            $fakeProfile = [pscustomobject]@{ SuppressedLicenseRequirements = [System.Collections.Generic.HashSet[string]]::new(); ServicePlans = @() }
-            $b = Baseline (View -LicenseProfile $fakeProfile) 'sign-in-risk'
+            # Business Standard: SKU data read, no Entra ID P2.
+            $bizStd = Get-NRGTenantLicenseProfile -SubscribedSkus @(@{ SkuPartNumber = 'O365_BUSINESS_PREMIUM'; ServicePlans = @('EXCHANGE_S_STANDARD', 'SHAREPOINTSTANDARD') })
+            $b = Baseline (View -LicenseProfile $bizStd) 'sign-in-risk'
             $b.Status | Should -Be 'NotLicensed'
+        }
+        It 'a profile object with no SKU data (HasLicenseData false) is unread licensing, never NotLicensed' {
+            SetSD -IsEnabled $false
+            SetCA -Policies @()
+            $noSku = Get-NRGTenantLicenseProfile -SubscribedSkus @()
+            $noSku | Should -Not -BeNullOrEmpty -Because 'the helper returns a profile object even when no SKU was read'
+            $noSku.HasLicenseData | Should -BeFalse
+            $b = Baseline (View -LicenseProfile $noSku) 'sign-in-risk'
+            $b.Status | Should -Be 'Missing'
+            $b.Note | Should -Match 'not read'
         }
     }
 

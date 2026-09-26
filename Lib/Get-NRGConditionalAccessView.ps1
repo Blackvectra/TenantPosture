@@ -259,8 +259,11 @@ function Test-NRGCATemplateMatch {
             # "All resources" template, so no allApps gate here: a policy
             # scoped to exactly this resource suite is the correct
             # implementation, not a narrower cousin of it.
+            $azureMgmt = '797f4846-ba00-4fd7-ba43-dac1f8f63013'
             $apps = @(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.Applications.Include' -Default @() | ForEach-Object { [string]$_ })
-            $targetsAzureMgmt = ($apps -contains 'All' -or $apps -contains '797f4846-ba00-4fd7-ba43-dac1f8f63013')
+            $excl = @(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.Applications.Exclude' -Default @() | ForEach-Object { [string]$_ })
+            # An exclusion of this resource means the policy never applies to it.
+            $targetsAzureMgmt = ($apps -contains 'All' -or $apps -contains $azureMgmt) -and $excl -notcontains $azureMgmt
             if (-not $targetsAzureMgmt) { return 'NoMatch' }
             $needsMfa = Test-NRGCAGrantRequires -Policy $Policy -Any @('mfa', 'authStrength')
             if (-not $needsMfa) { return 'NoMatch' }
@@ -282,17 +285,23 @@ function Test-NRGCATemplateMatch {
         }
         'sign-in-risk' {
             if (-not $allApps) { return 'NoMatch' }
-            $levels = @(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.SignInRiskLevels' -Default @() | Where-Object { $_ })
-            if ($levels.Count -eq 0) { return 'NoMatch' }
+            # Microsoft's template selects High and Medium. Risk levels are
+            # discrete, so a policy with neither never applies to an elevated
+            # sign-in; one with only one of them is part of the template.
+            $levels = @(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.SignInRiskLevels' -Default @() | ForEach-Object { [string]$_ })
+            $high = $levels -contains 'high'; $medium = $levels -contains 'medium'
+            if (-not ($high -or $medium)) { return 'NoMatch' }
             $responds = Test-NRGCAGrantRequires -Policy $Policy -Any @('mfa', 'authStrength', 'block')
             if (-not $responds) { return 'NoMatch' }
-            if ($isOn -and (Test-NRGCAAllUsers -Policy $Policy)) { return 'Enforced' }
+            if ($isOn -and $high -and $medium -and (Test-NRGCAAllUsers -Policy $Policy)) { return 'Enforced' }
             return 'Similar'
         }
         'user-risk' {
             if (-not $allApps) { return 'NoMatch' }
-            $levels = @(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.UserRiskLevels' -Default @() | Where-Object { $_ })
-            if ($levels.Count -eq 0) { return 'NoMatch' }
+            # "Require password change for high-risk users": a policy without
+            # High never applies to the users the template exists for.
+            $levels = @(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.UserRiskLevels' -Default @() | ForEach-Object { [string]$_ })
+            if ($levels -notcontains 'high') { return 'NoMatch' }
             $responds = Test-NRGCAGrantRequires -Policy $Policy -Any @('mfa', 'authStrength', 'passwordChange', 'riskRemediation', 'unknownFutureValue', 'block')
             if (-not $responds) { return 'NoMatch' }
             if ($isOn -and (Test-NRGCAAllUsers -Policy $Policy)) { return 'Enforced' }
@@ -323,7 +332,7 @@ function Test-NRGCATemplateMatch {
             $enabled = [bool](Get-NRGObjectField -Item $pb -Key 'IsEnabled' -Default $false)
             if (-not $enabled) { return 'NoMatch' }
             $mode = [string](Get-NRGObjectField -Item $pb -Key 'Mode' -Default '')
-            if ($isOn -and $mode -eq 'never') { return 'Enforced' }
+            if ($isOn -and $mode -eq 'never' -and (Test-NRGCAAllUsers -Policy $Policy)) { return 'Enforced' }
             return 'Similar'
         }
         default { return 'NoMatch' }
@@ -467,8 +476,10 @@ function Get-NRGConditionalAccessView {
         # rule): a null LicenseProfile makes Test-NRGLicenseRequirementMet
         # return $false, which is correct for "assume the gap needs a
         # license" but wrong for a firm "you are not licensed" claim, so it
-        # is worded as unread, not as a confirmed missing license.
-        $licKnown = ($null -ne $LicenseProfile)
+        # is worded as unread, not as a confirmed missing license. A profile
+        # object is not evidence either: Get-NRGTenantLicenseProfile returns
+        # one with HasLicenseData = $false when no SKU was read.
+        $licKnown = ($null -ne $LicenseProfile) -and ((Get-NRGObjectField -Item $LicenseProfile -Key 'HasLicenseData' -Default $false) -eq $true)
         $licMet = $true
         if ($licKnown -and (Get-Command Test-NRGLicenseRequirementMet -ErrorAction SilentlyContinue)) {
             try { $licMet = Test-NRGLicenseRequirementMet -LicenseRequirement ([string]$t.LicenseRequirement) -LicenseProfile $LicenseProfile } catch { $licMet = $true }

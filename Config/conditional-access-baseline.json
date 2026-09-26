@@ -55,7 +55,7 @@
       "Category": "Zero Trust",
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-risk-based-sign-in",
       "LicenseRequirement": "Entra ID P2",
-      "Summary": "Challenges a sign-in Identity Protection scores as risky (password spray, anonymous IP, token replay) for MFA, or blocks it. Requires Microsoft Entra ID P2."
+      "Summary": "Challenges a sign-in Identity Protection scores as medium or high risk (password spray, anonymous IP, token replay) for MFA, or blocks it. Microsoft selects both levels; a policy with only one covers part of the template. Requires Microsoft Entra ID P2."
     },
     {
       "Id": "user-risk",
@@ -63,7 +63,7 @@
       "Category": "Zero Trust",
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-risk-based-user",
       "LicenseRequirement": "Entra ID P2",
-      "Summary": "Forces a password change, remediation, or a block for an account Identity Protection scores as likely compromised. Requires Microsoft Entra ID P2."
+      "Summary": "Forces a password change, remediation, or a block for an account Identity Protection scores as high risk (likely compromised); a policy without the High level never applies to those accounts. Requires Microsoft Entra ID P2."
     },
     {
       "Id": "device-compliance-all-users",
