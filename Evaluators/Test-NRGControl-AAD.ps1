@@ -1004,14 +1004,14 @@ function Test-NRGControlAADAdminConsentWorkflow {
     }
 }
 
-# ── AAD-7.1 Password Protection Enabled ──────────────────────────────────────
+# ── AAD-7.1 Password Protection Lockout Configured ───────────────────────────
 function Test-NRGControlAADPasswordProtection {
     [CmdletBinding()] param()
     $cid = 'AAD-7.1'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-NRGFrameworkCitations -ControlId $cid
     $auth = Get-NRGRawData -Key 'AAD-AuthPolicies'
     if (-not $auth -or -not $auth.Success -or -not $auth.Data['PasswordProtection']) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Password protection data not collected (requires beta endpoint access)'; return
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Password protection data not collected (the Password Rule Settings read from /v1.0/groupSettings failed or did not run).'; return
     }
     $pp = $auth.Data['PasswordProtection']
     $lockout = [int]($pp.LockoutThreshold ?? 10)

@@ -1106,4 +1106,66 @@ Describe 'Security Defaults: Conditional Access controls account for it' {
             $f.Detail | Should -Match 'upgrade opportunity'
         }
     }
+
+    # The shapes Graph actually returns: a collection split across pages, and
+    # directory-setting values that are strings ("True"/"False").
+    Context 'collectors read the shape Graph returns' {
+        It 'the CA collector follows @odata.nextLink, so a trusted named location on page two is collected' {
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                if ($Uri -match 'namedLocations\?\$top=100$') {
+                    return @{ value = @(@{ id = 'loc1'; displayName = 'Branch countries'; '@odata.type' = '#microsoft.graph.countryNamedLocation'; countriesAndRegions = @('US') })
+                              '@odata.nextLink' = 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/namedLocations?$skiptoken=p2' }
+                }
+                if ($Uri -match 'namedLocations\?\$skiptoken=p2$') {
+                    return @{ value = @(@{ id = 'loc2'; displayName = 'HQ'; '@odata.type' = '#microsoft.graph.ipNamedLocation'; isTrusted = $true; ipRanges = @(@{ cidrAddress = '203.0.113.0/24' }) }) }
+                }
+                return @{ value = @() }
+            }
+            Invoke-NRGCollectAADCAPolicies 3>$null | Out-Null
+            $raw = Get-NRGRawData -Key 'AAD-CAPolicies'
+            Get-NRGNestedProperty -Object $raw -Path 'Data.SectionStatus.NamedLocations' | Should -Be 'Collected'
+            $locs = @($raw.Data.NamedLocations)
+            $locs.Count | Should -Be 2 -Because 'the first page held only one of the two'
+            @($locs | Where-Object { $_['IsTrusted'] -eq $true }).Count | Should -Be 1 -Because 'the trusted location was on page two'
+        }
+
+        It 'the CA collector marks named locations unread, never empty, when Graph returns no collection' {
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                if ($Uri -match 'namedLocations') { return @{ error = @{ code = 'Unexpected' } } }
+                return @{ value = @() }
+            }
+            Invoke-NRGCollectAADCAPolicies 3>$null | Out-Null
+            Get-NRGNestedProperty -Object (Get-NRGRawData -Key 'AAD-CAPolicies') -Path 'Data.SectionStatus.NamedLocations' | Should -Be 'Failed'
+        }
+
+        It 'the password rule collector reads the string "False" as $false, not as enabled' {
+            foreach ($case in @(@{ Raw = 'False'; Want = $false }, @{ Raw = 'True'; Want = $true }, @{ Raw = 'garbage'; Want = $null })) {
+                Clear-NRGState
+                $script:PwRaw = $case.Raw
+                & $script:Mod { param($r) $script:PwRaw = $r } $case.Raw
+                Set-Graph {
+                    param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                    if ($Uri -match 'groupSettings') {
+                        return @{ value = @(@{ templateId = '5cf42378-d67d-4f36-ba46-e8b86229381d'; values = @(
+                                    @{ name = 'LockoutThreshold'; value = '10' },
+                                    @{ name = 'EnableBannedPasswordCheck'; value = $script:PwRaw },
+                                    @{ name = 'EnableBannedPasswordCheckOnPremises'; value = $script:PwRaw }) }) }
+                    }
+                    return @{ value = @() }
+                }
+                Invoke-NRGCollectAADAuthPolicies 3>$null | Out-Null
+                $pp = (Get-NRGRawData -Key 'AAD-AuthPolicies').Data.PasswordProtection
+                $pp | Should -Not -BeNullOrEmpty -Because "the settings were returned ($($case.Raw))"
+                foreach ($k in 'EnableBannedPasswordCheck', 'EnableBannedPasswordCheckOnPremises') {
+                    if ($null -eq $case.Want) {
+                        ($null -eq $pp[$k]) | Should -BeTrue -Because "'$($case.Raw)' is neither True nor False, so it was not read"
+                    } else {
+                        $pp[$k] | Should -BeExactly $case.Want -Because "the setting value was the string '$($case.Raw)'"
+                    }
+                }
+            }
+        }
+    }
 }

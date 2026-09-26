@@ -2,7 +2,7 @@
 
 **Author:** NRG Technology Services — nrgtechservices.com
 **GitHub:** https://github.com/Blackvectra/NRG-Assessment-Tool
-**Version:** 4.14.1
+**Version:** 4.14.3
 **Language:** PowerShell 7.0+
 **Purpose:** Read-only Microsoft 365 security assessment framework for MSP multi-tenant environments.
 
@@ -121,6 +121,8 @@ Every evaluator must guard against missing data as its first action. If `Get-NRG
 **Tenant onboarding is outside the module.** `Onboard/Register-NRGTenantApp.ps1` creates an app registration, so it is loaded by neither the psm1 nor `Apply-NRGBaseline` (which only takes `Apply-NRG*.ps1`); `Invoke-NRGAssessment.ps1 -RegisterApp` dot-sources it on demand. `NRG.ClientRegistry.Tests.ps1` fails if any module-loaded file invokes a `New-/Update-/Remove-/Set-Mg*` cmdlet (parsed calls, so remediation text naming one is fine).
 
 **Read new fields through `Get-NRGObjectField`, including your own.** The StrictMode rule is not only about external cmdlet output: result JSON replayed from an earlier run does not carry fields added since, so dot-accessing a field you just introduced throws on every older results file.
+
+**Read a Graph collection with `Get-NRGGraphAllPages`, and never `[bool]` a string.** One `Invoke-NRGGraphRequest` on a collection returns its first page only, and a list read that way is reported as the whole list: named locations were read with `$top=100` while a tenant may hold 195, so a trusted location on page two made AAD-2.2 report none marked as trusted. `Get-NRGGraphAllPages` (`Lib/Invoke-NRGGraphRequest.ps1`) follows `@odata.nextLink` and throws, leaving the caller's section unread, on a response with no `value` collection or at the page cap; it reads `value` by index because `Get-NRGObjectField` returns an empty array as `$null`. Directory-setting values (`groupSettings`) are strings, and `[bool]"False"` is `$true`: parse `'True'`/`'False'` explicitly and treat anything else as not read. `NRG.GraphRequest.Tests.ps1` and `NRG.IdentityTruth.Tests.ps1` pin both.
 
 **Advisory controls never claim compliance.** A control with no programmatic check must emit `NotApplicable`, never `Satisfied` or `Partial`. `Partial` is worth 0.5 toward the compliance score, so an advisory control scored as `Partial` hands every tenant free credit for a verdict the tool never computed. Enforced statically by `NRG.EvaluatorHonesty.Tests.ps1`.
 
