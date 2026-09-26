@@ -41,6 +41,14 @@ carry a Conditional Access section:
   absence. A device-code or legacy-authentication policy that only requires
   MFA (rather than blocking) is never credited as partial protection —
   Microsoft documents that MFA does not stop either attack.
+- Review fixes: a policy on all resources that excludes the Azure
+  management resource is not credited for the Azure-management template; a
+  user-risk policy without the High level (Microsoft's template is "high-risk
+  users") and a sign-in risk policy with neither High nor Medium (the
+  template selects both) are not credited, and one with only one of the two
+  is partly in place; the persistent-browser template needs All users to be
+  in force; and a license profile object with no SKU data
+  (`HasLicenseData = $false`) is unread licensing, never "needs a license".
 
 ## v4.14.1 (2026-09-25)
 
