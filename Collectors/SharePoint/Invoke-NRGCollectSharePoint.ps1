@@ -115,22 +115,30 @@ function Invoke-NRGCollectSharePoint {
             try {
                 $t = Get-SPOTenant -ErrorAction Stop
                 if ($t) {
+                    # Every property through Get-NRGObjectField: under StrictMode a
+                    # dot-read of one the installed module lacks threw and lost the
+                    # whole block. A property not returned is $null (not read),
+                    # never $false or 0, which the evaluators would score.
+                    $shellBool = { param([string] $k) $v = Get-NRGObjectField -Item $t -Key $k -Default $null
+                        if ($v -is [bool]) { $v } else { switch ([string]$v) { 'True' { $true } 'False' { $false } default { $null } } } }
+                    $shellInt = { param([string] $k) $v = Get-NRGObjectField -Item $t -Key $k -Default $null
+                        $n = 0; if ($null -ne $v -and [int]::TryParse([string]$v, [ref]$n)) { $n } else { $null } }
                     $result.Data.TenantSettingsSPO = @{
-                        RequireAnonymousLinksExpireInDays = [int]($t.RequireAnonymousLinksExpireInDays ?? -1)   # SPO-2.2
-                        EmailAttestationRequired          = [bool]($t.EmailAttestationRequired ?? $false)       # SPO-2.6
-                        EmailAttestationReAuthDays        = [int]($t.EmailAttestationReAuthDays ?? 0)           # SPO-2.6
-                        NotifyOwnersWhenItemsReshared     = [bool]($t.NotifyOwnersWhenItemsReshared ?? $false)  # SPO-3.2
-                        ExternalUserExpirationRequired    = [bool]($t.ExternalUserExpirationRequired ?? $false) # SPO-3.4
-                        ExternalUserExpireInDays          = [int]($t.ExternalUserExpireInDays ?? 0)             # SPO-3.4
+                        RequireAnonymousLinksExpireInDays = (& $shellInt 'RequireAnonymousLinksExpireInDays')  # SPO-2.2
+                        EmailAttestationRequired          = (& $shellBool 'EmailAttestationRequired')          # SPO-2.6
+                        EmailAttestationReAuthDays        = (& $shellInt 'EmailAttestationReAuthDays')         # SPO-2.6
+                        NotifyOwnersWhenItemsReshared     = (& $shellBool 'NotifyOwnersWhenItemsReshared')     # SPO-3.2
+                        ExternalUserExpirationRequired    = (& $shellBool 'ExternalUserExpirationRequired')    # SPO-3.4
+                        ExternalUserExpireInDays          = (& $shellInt 'ExternalUserExpireInDays')           # SPO-3.4
                         # SPO-3.3: org-wide version-history default applied to NEW document
                         # libraries / OneDrive accounts. Field names per Get-SPOTenant docs.
                         # SPO-1.2 / SPO-1.5. Read through Get-NRGObjectField: absent
                         # means "not read" ($null), never a default verdict.
                         DefaultSharingLinkType            = [string](Get-NRGObjectField -Item $t -Key 'DefaultSharingLinkType' -Default '')
                         ConditionalAccessPolicy           = [string](Get-NRGObjectField -Item $t -Key 'ConditionalAccessPolicy' -Default '')
-                        EnableAutoExpirationVersionTrim   = [bool]($t.EnableAutoExpirationVersionTrim ?? $false)
-                        MajorVersionLimit                 = [int]($t.MajorVersionLimit ?? 0)
-                        ExpireVersionsAfterDays           = [int]($t.ExpireVersionsAfterDays ?? 0)
+                        EnableAutoExpirationVersionTrim   = (& $shellBool 'EnableAutoExpirationVersionTrim')
+                        MajorVersionLimit                 = (& $shellInt 'MajorVersionLimit')
+                        ExpireVersionsAfterDays           = (& $shellInt 'ExpireVersionsAfterDays')
                     }
                 }
             } catch {

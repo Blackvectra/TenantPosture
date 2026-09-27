@@ -154,4 +154,18 @@ Describe 'Documentation stays in sync with the source of truth' {
             }
         }
     }
+
+    # 27 of the entry point's parameters, -IncludePurview among them, were
+    # mentioned nowhere in the README.
+    Context 'Entry-point parameter reference' {
+        It 'the README parameter table lists every Invoke-NRGAssessment.ps1 parameter, and nothing that is not one' {
+            $m = [regex]::Match($script:Readme, '(?s)<!-- parameter-reference:start -->(.*?)<!-- parameter-reference:end -->')
+            $m.Success | Should -BeTrue -Because 'the README carries the parameter table between its markers'
+            $documented = @([regex]::Matches($m.Groups[1].Value, '`-([A-Za-z]+)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+            $common = @([System.Management.Automation.PSCmdlet]::CommonParameters) + @([System.Management.Automation.PSCmdlet]::OptionalCommonParameters)
+            $actual = @((Get-Command (Join-Path $script:RepoRoot 'Invoke-NRGAssessment.ps1')).Parameters.Keys | Where-Object { $_ -notin $common } | Sort-Object)
+            @($actual | Where-Object { $_ -notin $documented }) | Should -BeNullOrEmpty -Because 'every parameter is documented'
+            @($documented | Where-Object { $_ -notin $actual }) | Should -BeNullOrEmpty -Because 'the table names no parameter that does not exist'
+        }
+    }
 }

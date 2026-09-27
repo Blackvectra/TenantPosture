@@ -90,24 +90,22 @@ Describe 'Repair-NRGModuleHealth — duplicate MSAL carrier removal' {
     }
 
     Context 'it never removes every version' {
-        It 'keeps the newest when the recommended pin is not installed' {
-            # EXO recommends 3.2.0. If only 3.4.0 and 3.3.0 are present, naive
-            # "remove everything that is not the pin" would uninstall the module
-            # entirely and leave the operator unable to connect at all.
+        It 'keeps the newest ExchangeOnlineManagement and removes the older duplicate' {
+            # No version is pinned since the 3.7.2 floor: the newest survives.
             $state = @{
                 'ExchangeOnlineManagement' = @(
-                    (New-ModuleEntry -Version '3.4.0'),
-                    (New-ModuleEntry -Version '3.3.0')
+                    (New-ModuleEntry -Version '3.9.0'),
+                    (New-ModuleEntry -Version '3.7.2')
                 )
             }
             $r = Repair-NRGModuleHealth -PlanOnly -InstalledOverride $state
             $planned = @($r.Planned | Where-Object { $_.Name -eq 'ExchangeOnlineManagement' })
             @($planned).Count | Should -Be 1
-            $planned[0].Version | Should -Be '3.3.0'
-            ($r.Notes -join ' ') | Should -Match 'not installed'
+            $planned[0].Version | Should -Be '3.7.2'
+            $planned[0].Keeping | Should -Be '3.9.0'
         }
 
-        It 'keeps the pin when the pin IS installed' {
+        It 'never removes the old 3.2.0 pin in favor of nothing: the newest still survives' {
             $state = @{
                 'ExchangeOnlineManagement' = @(
                     (New-ModuleEntry -Version '3.4.0'),
@@ -116,8 +114,8 @@ Describe 'Repair-NRGModuleHealth — duplicate MSAL carrier removal' {
             }
             $r = Repair-NRGModuleHealth -PlanOnly -InstalledOverride $state
             $planned = @($r.Planned | Where-Object { $_.Name -eq 'ExchangeOnlineManagement' })
-            $planned[0].Version | Should -Be '3.4.0'
-            $planned[0].Keeping | Should -Be '3.2.0'
+            $planned[0].Version | Should -Be '3.2.0'
+            $planned[0].Keeping | Should -Be '3.4.0'
         }
 
         It 'always leaves at least one version of every module it touches' {

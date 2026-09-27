@@ -196,14 +196,18 @@ function Invoke-NRGCollectAADAuthPolicies {
                 foreach ($v in @($ppSetting.values ?? @())) {
                     $values[$v.name] = $v.value
                 }
+                # Setting values are strings ("True"/"False"), and [bool] of any
+                # non-empty string is $true, so a cast read "False" as enabled.
+                # Anything but a literal True/False is $null (not read).
+                $settingBool = { param($s) switch ([string]$s) { 'True' { $true } 'False' { $false } default { $null } } }
                 $result.Data.PasswordProtection = @{
                     Instantiated             = $true
                     TemplateId               = $PWD_RULE_TEMPLATE_ID
                     LockoutThreshold         = [int]($values['LockoutThreshold'] ?? 10)
                     LockoutDurationSeconds   = [int]($values['LockoutDurationInSeconds'] ?? 60)
-                    EnableBannedPasswordCheckOnPremises = [bool]($values['EnableBannedPasswordCheckOnPremises'] ?? $false)
+                    EnableBannedPasswordCheckOnPremises = (& $settingBool $values['EnableBannedPasswordCheckOnPremises'])
                     BannedPasswordCheckOnPremisesMode   = [string]($values['BannedPasswordCheckOnPremisesMode'] ?? 'Audit')
-                    EnableBannedPasswordCheck = [bool]($values['EnableBannedPasswordCheck'] ?? $false)
+                    EnableBannedPasswordCheck = (& $settingBool $values['EnableBannedPasswordCheck'])
                     BannedPasswordList       = [string]($values['BannedPasswordList'] ?? '')
                     BannedPasswordListPresent= (-not [string]::IsNullOrWhiteSpace($values['BannedPasswordList']))
                 }
@@ -285,23 +289,20 @@ function Invoke-NRGCollectAADAuthPolicies {
         # Absent either, this 403s / returns empty; caught so RiskyServicePrincipals
         # stays $null and the evaluator routes to NotApplicable, never a false pass.
         try {
-            $rsp = Invoke-NRGGraphRequest -Method GET `
-                -Uri 'https://graph.microsoft.com/v1.0/identityProtection/riskyServicePrincipals?$top=200' `
-                -ErrorAction Stop
-            if ($rsp -and $null -ne $rsp.value) {
-                $result.Data.RiskyServicePrincipals = @(@($rsp.value) | ForEach-Object {
-                    @{
-                        Id                   = [string]($_.id ?? '')
-                        AppId                = [string]($_.appId ?? '')
-                        DisplayName          = [string]($_.displayName ?? '')
-                        IsEnabled            = [bool]($_.isEnabled ?? $false)
-                        RiskLevel            = [string]($_.riskLevel ?? 'none')
-                        RiskState            = [string]($_.riskState ?? 'none')
-                        RiskDetail           = [string]($_.riskDetail ?? 'none')
-                        ServicePrincipalType = [string]($_.servicePrincipalType ?? '')
-                    }
-                })
-            }
+            $rspRows = @(Get-NRGGraphAllPages `
+                -Uri 'https://graph.microsoft.com/v1.0/identityProtection/riskyServicePrincipals?$top=200')
+            $result.Data.RiskyServicePrincipals = @($rspRows | ForEach-Object {
+                @{
+                    Id                   = [string]($_.id ?? '')
+                    AppId                = [string]($_.appId ?? '')
+                    DisplayName          = [string]($_.displayName ?? '')
+                    IsEnabled            = [bool]($_.isEnabled ?? $false)
+                    RiskLevel            = [string]($_.riskLevel ?? 'none')
+                    RiskState            = [string]($_.riskState ?? 'none')
+                    RiskDetail           = [string]($_.riskDetail ?? 'none')
+                    ServicePrincipalType = [string]($_.servicePrincipalType ?? '')
+                }
+            })
         } catch {
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'AAD-RiskyServicePrincipals' -Message $_.Exception.Message

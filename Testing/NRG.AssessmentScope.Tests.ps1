@@ -74,14 +74,38 @@ Describe 'Get-NRGAssessmentScope — what the assessment did not cover' {
 
             $sum = $s.LicenceBlocked.Count + $s.CollectionIncomplete.Count +
                    $s.NoProgrammaticCheck.Count + $s.ThirdPartyAttested.Count +
-                   $s.NotEvaluatedThisMode.Count + $s.NoResult.Count + $s.NotApplicableToTenant.Count
+                   $s.NotEvaluatedThisMode.Count + $s.NoResult.Count + $s.NotApplicableToTenant.Count +
+                   $s.SkippedByOperator.Count
             $sum | Should -Be $s.UnscoredControls -Because 'a control that is unscored and in no bucket is invisible, which is the whole failure mode'
 
             # And no control appears in two buckets.
             $all = @($s.LicenceBlocked) + @($s.CollectionIncomplete) + @($s.NoProgrammaticCheck) +
-                   @($s.ThirdPartyAttested) + @($s.NotEvaluatedThisMode) + @($s.NoResult) + @($s.NotApplicableToTenant)
+                   @($s.ThirdPartyAttested) + @($s.NotEvaluatedThisMode) + @($s.NoResult) + @($s.NotApplicableToTenant) +
+                   @($s.SkippedByOperator)
             @($s.ThirdPartyAttested | ForEach-Object { $_.ControlId }) | Should -Contain $ids[8]
             @($all | ForEach-Object { $_.ControlId } | Group-Object | Where-Object Count -gt 1) | Should -BeNullOrEmpty
+        }
+
+        It 'a workload the operator skipped (-SkipPurview) is "not assessed", never "data did not collect"' {
+            # Register-NRGCoverage -Status Skipped is how the entry point records
+            # a -Skip flag; it used to be rejected by the ValidateSet, so every
+            # skipped workload read as a collection failure ("re-run once the
+            # cause is resolved").
+            Clear-NRGState
+            Register-NRGCoverage -Family 'Purview' -Status 'Skipped' -Note 'Skipped for this run with -SkipPurview.'
+            $pvw = @($script:Controls | Where-Object { $_.CollectorDependency -eq 'Purview' } | ForEach-Object { $_.ControlId })
+            $pvw.Count | Should -BeGreaterThan 0
+            $ov = @{}
+            foreach ($id in $pvw) { $ov[$id] = @{ State = 'NotApplicable'; Detail = 'Purview data not collected; not assessed.' } }
+            $s = Get-NRGAssessmentScope -Findings (script:Build -Override $ov)
+            @($s.SkippedByOperator | ForEach-Object { $_.ControlId }) | Should -Be $pvw
+            @($s.CollectionIncomplete | Where-Object { $_.ControlId -in $pvw }) | Should -BeNullOrEmpty
+            @($s.NotEvaluatedThisMode | Where-Object { $_.ControlId -in $pvw }) | Should -BeNullOrEmpty
+            $s.SkippedByOperator[0].Reason | Should -Match '^Not assessed:'
+            @($s.Limitations | Where-Object { $_ -match 'skipped their workload' }).Count | Should -Be 1
+            @($s.Limitations | Where-Object { $_ -match 'did not collect' }).Count | Should -Be 0 -Because 'nothing failed to collect'
+            @($s.CoverageIssues | Where-Object { $_.Family -eq 'Purview' }) | Should -BeNullOrEmpty
+            Clear-NRGState
         }
 
         It 'reports a control that emitted NOTHING rather than dropping it' {

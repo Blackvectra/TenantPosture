@@ -206,7 +206,9 @@ function Register-NRGCoverage {
         [string] $Family,
 
         [Parameter(Mandatory)]
-        [ValidateSet('Collected','Partial','NotCollected','Failed')]
+        # 'Skipped' records an operator's -Skip flag, so the scope section can
+        # tell a workload left out on purpose from one that failed to collect.
+        [ValidateSet('Collected','Partial','NotCollected','Failed','Skipped')]
         [string] $Status,
 
         [string] $Note = ''
