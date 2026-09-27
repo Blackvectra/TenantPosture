@@ -22,6 +22,7 @@
 #          Root-cause fix for a July-2026 client mass-false-gap run,
 #          where ~20 Graph collectors bailed with empty data and the evaluators
 #          scored empty as "Gap" (e.g. reported 0 Global Admins when 4 existed).
+#          Get-NRGGraphAllPages reads a whole paged collection through it.
 #
 # Consumes: nothing (stateless).
 # Sets:     nothing.
@@ -63,4 +64,56 @@ function Invoke-NRGGraphRequest {
     if ($PSBoundParameters.ContainsKey('Headers')) { $splat['Headers'] = $Headers }
 
     return Invoke-MgGraphRequest @splat
+}
+
+# Returns every item of a Graph collection, following @odata.nextLink. A list
+# read from its first page alone is reported as a full enumeration, so this
+# throws instead of returning a partial list: when a response carries no
+# 'value' collection, or when the page cap is reached with pages still pending.
+# The caller's catch then marks its section unread.
+function Get-NRGGraphAllPages {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string] $Uri,
+
+        [Parameter()]
+        [AllowNull()]
+        [System.Collections.IDictionary] $Headers,
+
+        [Parameter()]
+        [ValidateRange(1, 1000)]
+        [int] $MaxPages = 100
+    )
+
+    Set-StrictMode -Version Latest
+    $ErrorActionPreference = 'Stop'
+
+    $items = [System.Collections.Generic.List[object]]::new()
+    $next  = $Uri
+    $pages = 0
+    while ($next) {
+        if ($pages -ge $MaxPages) {
+            throw "Graph paging stopped at the $MaxPages-page cap with pages still pending for $Uri; the list is incomplete."
+        }
+        $splat = @{ Uri = $next; Method = 'GET'; ErrorAction = 'Stop' }
+        if ($Headers) { $splat['Headers'] = $Headers }
+        $resp = Invoke-NRGGraphRequest @splat
+        # Read 'value' by index, not through Get-NRGObjectField: its return
+        # unrolls an empty array to $null, which would read as "absent".
+        $raw = $null
+        if ($resp -is [System.Collections.IDictionary]) {
+            if ($resp.Contains('value')) { $raw = $resp['value'] }
+        } elseif ($null -ne $resp -and $null -ne $resp.PSObject.Properties['value']) {
+            $raw = $resp.PSObject.Properties['value'].Value
+        }
+        if ($null -eq $raw) { throw "Graph returned no 'value' collection for $next." }
+        foreach ($v in @($raw)) { if ($null -ne $v) { $items.Add($v) } }
+        # Never Get-NRGNestedProperty here: it splits on '.' and reads
+        # '@odata' -> 'nextLink', so paging would stop after page one.
+        $next = [string](Get-NRGObjectField -Item $resp -Key '@odata.nextLink' -Default '')
+        $pages++
+    }
+    return $items.ToArray()
 }

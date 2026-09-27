@@ -186,28 +186,20 @@ function Invoke-NRGCollectAADInventory {
             # by Graph's OData parser and fails the whole section on every run.
             # Client display names are already resolved by the per-
             # servicePrincipal lookups below, so no expand is needed.
-            $grants = @()
-            $next = "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=consentType eq 'AllPrincipals'&`$top=200"
-            $maxPages = 200; $pageCount = 0
-            while ($next -and $pageCount -lt $maxPages) {
-                $page = Invoke-NRGGraphRequest -Method GET -Uri $next -ErrorAction Stop
-                if ($page.value) { $grants += $page.value }
-                $next = $page['@odata.nextLink']
-                $pageCount++
-            }
-            if ($pageCount -ge $maxPages -and $next) {
-                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                    Register-NRGException -Source 'AAD-OAuthGrants' `
-                        -Message "Pagination cap reached ($maxPages pages); OAuth grant list may be truncated."
-                }
-            }
-            if (@($grants).Count -gt 0) {
-                $clientIds = @($grants | Select-Object -ExpandProperty clientId -Unique)
+            # Paged by Get-NRGGraphAllPages: at the page cap it throws and the
+            # section reads Failed; this loop used to log the cap and report
+            # the truncated list as Collected.
+            $grants = @(Get-NRGGraphAllPages -MaxPages 200 `
+                -Uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=consentType eq 'AllPrincipals'&`$top=200")
+            if ($grants.Count -gt 0) {
+                $clientIds = @($grants | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'clientId' -Default '') } | Where-Object { $_ } | Sort-Object -Unique)
                 $appNames  = @{}
-                foreach ($cid in ($clientIds | Select-Object -First 30)) {
+                # Every client is looked up: a cap at the first 30 left the
+                # rest named in the report only by their object ID.
+                foreach ($cid in $clientIds) {
                     try {
                         $sp = Invoke-NRGGraphRequest -Method GET `
-                            -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/$cid?`$select=displayName,appId,publisherName" `
+                            -Uri "https://graph.microsoft.com/v1.0/servicePrincipals/${cid}?`$select=displayName,appId,publisherName" `
                             -ErrorAction Stop
                         $appNames[$cid] = [string]($sp.displayName ?? $cid)
                     } catch { $appNames[$cid] = $cid }

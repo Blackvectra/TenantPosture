@@ -66,11 +66,13 @@ This installs/pins required PowerShell modules (with EOM at the known-good 3.2.0
 ### Prerequisites
 
 ```powershell
-# Install required modules. Versions match the manifest's pinned ranges —
-# Graph.Authentication [2.20.0, <3.0) and ExchangeOnlineManagement [3.2.0, <4.0);
+# Install required modules. Versions match the manifest's ranges —
+# Graph.Authentication [2.20.0, <3.0) and ExchangeOnlineManagement [3.7.2, <4.0);
 # major-version bumps are adopted deliberately, never by surprise.
+# ExchangeOnlineManagement 3.7.2+ needs PowerShell 7.4; 3.10.0+ needs PowerShell 7.6
+# (Install-NRGPrerequisites.ps1 picks the newest your PowerShell supports).
 Install-PSResource -Name Microsoft.Graph.Authentication -Version '[2.20.0,2.99.99]' -TrustRepository
-Install-PSResource -Name ExchangeOnlineManagement       -Version '[3.2.0,3.99.99]'  -TrustRepository
+Install-PSResource -Name ExchangeOnlineManagement       -Version '[3.7.2,3.99.99]'  -TrustRepository
 Install-PSResource -Name MicrosoftTeams                 -TrustRepository   # optional — Teams collector
 Install-PSResource -Name Microsoft.Online.SharePoint.PowerShell -TrustRepository   # optional — SPO-2.x/3.x tenant controls
 Install-PSResource -Name Pester -Version '[5.5.0,5.99.99]' -TrustRepository        # tests only
@@ -86,7 +88,8 @@ cd NRG-Assessment-Tool
 # Run assessment
 .\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com
 
-# Output lands in .\output\<timestamp>\
+# Output lands in .\output\ as <tenant>-<yyyyMMdd-HHmmss>-assessment.html and
+# <tenant>-<yyyyMMdd-HHmmss>-results.json (<tenant> = first label of the tenant domain)
 ```
 
 ### Quick Triage, Delta, and CI Exit Codes
@@ -109,6 +112,44 @@ For automation pipelines and fast triage:
 ```
 
 Every run now classifies the tenant into a **Tenant Security Maturity Tier** (Initial / Developing / Defined / Managed / Optimizing) — the label appears in the console summary and is embedded in the JSON metadata for downstream dashboards.
+
+### Every `Invoke-NRGAssessment.ps1` parameter
+
+<!-- parameter-reference:start -->
+| Parameter | What it does |
+|---|---|
+| `-UserPrincipalName` | Admin account to sign in as. |
+| `-TenantDomain` | Tenant to assess. Pins the sign-in to it and reads the client's app ID, certificate and `ThirdPartyEDR` from `Config/clients.json`. Also the target of `-RegisterApp`. |
+| `-AppId`, `-TenantId`, `-CertificateThumbprint`, `-OrganizationDomain` | App-only certificate sign-in for unattended runs. `-OrganizationDomain` is the tenant domain Exchange Online needs; with `-TenantDomain` it is filled in from `clients.json`. |
+| `-RegisterApp` | One-time onboarding: registers a read-only enterprise app and certificate in the tenant so later runs can sign in app-only. Needs an account that can create app registrations. |
+| `-GrantConsent` | With `-RegisterApp`, grants admin consent immediately (Global Administrator). Without it you get a consent URL to hand to one. |
+| `-Environment` | Cloud: `commercial` (default), `gcc`, `gcchigh` or `dod`. |
+| `-SkipPurview` | Skips Purview (Security & Compliance), which is assessed by default; its controls report "not assessed". |
+| `-IncludePurview` | No longer needed: Purview is on by default. Kept so existing commands still run. |
+| `-IncludeSharePointShell` | Also reads the SharePoint settings Graph does not expose, through the SharePoint Online Management Shell in a Windows PowerShell child process. One extra sign-in; an Attack Surface Reduction rule that blocks process creation stops it, and those controls then report not assessed. |
+| `-SkipTeams`, `-SkipSharePoint`, `-SkipIntune`, `-SkipPowerPlatform`, `-SkipDNS` | Skip that workload; its controls report "not assessed" (neither a pass nor a failure), and the scope section says which flag skipped them. |
+| `-DnsDomains` | Domains for the email-authentication DNS checks. Default: the tenant's accepted (or verified) domains. |
+| `-DeviceResults` | Folder of endpoint results from `Device\Invoke-NRGDeviceCompliance.ps1`; adds the DEV-* controls. |
+| `-ThirdPartyEDR` | A non-Microsoft EDR such as `'Cortex XDR'`. The Defender endpoint checks report as covered by it (declared, not verified) and leave the score. |
+| `-Quick` | Critical and High controls only. |
+| `-OutputPath` | Output folder. Default `.\output`. |
+| `-AllFiles` | Every deliverable as its own file (Markdown summary, playbooks, XLSX matrix, remediation script, NIST matrix, SSP, improvement plan). The default is the HTML report plus the results JSON. |
+| `-JsonOnly` | The results JSON only. |
+| `-Framework` | Framework cards the report shows: `NIST` (default), `CIS`, `SCuBA`, `CMMC` or `All`. Presentation only; every framework is still scored. |
+| `-NISTMatrix` | Standalone NIST SP 800-53 Rev 5 matrix. |
+| `-SSP`, `-SSPAnswers` | NIST SP 800-171 Rev 2 System Security Plan. Answers come from `Config/ssp/<tenant-domain>.psd1` unless `-SSPAnswers` names a file. |
+| `-SSPQuestionnaire`, `-SSPQuestionnaireFamily` | Fillable client questionnaire for the SSP requirements the run could not evidence, optionally for one 800-171 family (for example `3.9`). Not included in `-AllFiles`. |
+| `-ManualReviewQuestionnaire`, `-ManualReviewWorkload` | Fillable questionnaire for the controls the run could not assess, optionally for one workload (for example `SPO`). Not included in `-AllFiles`. |
+| `-ImprovementPlan` | Ordered NIST SP 800-53 improvement plan with the projected coverage after each step. |
+| `-MonthlyReport`, `-MonthlyDeltaPath`, `-MonthlyPriorPath` | Monthly MSP report. Work state comes from the delta `.psd1`, the trend from last month's JSON. |
+| `-FromResults` | Republish every report from a saved results JSON, without signing in. |
+| `-BaselineResults` | Compare with a prior results JSON (delta report). |
+| `-FailOnCritical`, `-FailOnHigh`, `-FailOnScoreBelow` | Exit 10, 11 or 12 when the threshold is crossed; 0 (default) turns it off. |
+| `-NonInteractive` | Never prompts. Missing modules end the run with exit code 1 instead of an install prompt. |
+| `-WhatIfConnections` | Connects, prints the connection table, and stops before collecting anything. |
+| `-KeepSession` | Leaves the shared sign-in connected afterwards. The batch runner passes it. |
+| `-Web`, `-WebPort` | Opens the local web GUI instead of a terminal run (loopback only, port 8765 by default). |
+<!-- parameter-reference:end -->
 
 ### MSP Batch Run (GDAP)
 
@@ -252,7 +293,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          75 Pester suites — the FULL suite gates every PR
+Testing/                          76 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -485,7 +526,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **75 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **76 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -536,7 +577,7 @@ Six GitHub Actions workflows cover the repository. All run automatically on push
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (75 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (76 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -555,4 +596,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.14.2 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 324 exported functions · full Pester suite (75 suites) gating CI*
+*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 324 exported functions · full Pester suite (76 suites) gating CI*

@@ -82,8 +82,21 @@ Describe 'Identity controls report what the tenant is configured to do' {
             Ca @(Pol -ClientApps @('other','exchangeActiveSync') -Grant @('block'));                           (V 'Test-NRGControlAADLegacyAuth' 'AAD-1.1').State | Should -Be 'Satisfied'
         }
         It 'AAD-1.4 / 1.5: blocking and risk-remediation responses count' {
-            Ca @(Pol -SignInRisk @('high') -Grant @('block'));             (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied'
+            Ca @(Pol -SignInRisk @('high', 'medium') -Grant @('block'));   (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied'
             Ca @(Pol -UserRisk @('high') -Grant @('riskRemediation'));     (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
+        }
+        # A policy applies only to the risk levels it selects. Microsoft's
+        # templates select High and Medium (sign-in) and High (user); a
+        # low-only policy used to score Satisfied on both controls.
+        It 'AAD-1.4 / 1.5: only the risk levels Microsoft''s templates select count' {
+            Ca @(Pol -SignInRisk @('low') -Grant @('mfa'));    (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Gap'
+            Ca @(Pol -SignInRisk @('high') -Grant @('mfa'));   (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Partial'
+            $f = V 'Test-NRGControlAADSignInRisk' 'AAD-1.4';   $f.Detail | Should -Match 'medium-risk sign-in is let through'
+            Ca @(Pol -SignInRisk @('medium') -Grant @('mfa')); (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Partial'
+            Ca @((Pol -SignInRisk @('high') -Grant @('block')), (Pol -SignInRisk @('medium') -Grant @('mfa')))
+            (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied' -Because 'levels combine across the enabled policies'
+            Ca @(Pol -UserRisk @('low', 'medium') -Grant @('passwordChange')); (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Gap'
+            Ca @(Pol -UserRisk @('medium', 'high') -Grant @('passwordChange')); (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
         }
         It 'AAD-2.3: "compliant OR MFA" does not enforce a device' {
             Ca @(Pol -Grant @('compliantDevice','domainJoinedDevice','mfa') -Op 'OR'); (V 'Test-NRGControlAADDeviceComplianceCA' 'AAD-2.3').State | Should -Be 'Partial'
@@ -1104,6 +1117,85 @@ Describe 'Security Defaults: Conditional Access controls account for it' {
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'SPO-1.5')[0]
             $f.State  | Should -Be 'NotApplicable'
             $f.Detail | Should -Match 'upgrade opportunity'
+        }
+    }
+
+    # The shapes Graph actually returns: a collection split across pages, and
+    # directory-setting values that are strings ("True"/"False").
+    Context 'collectors read the shape Graph returns' {
+        It 'the CA collector follows @odata.nextLink, so a trusted named location on page two is collected' {
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                if ($Uri -match 'namedLocations\?\$top=100$') {
+                    return @{ value = @(@{ id = 'loc1'; displayName = 'Branch countries'; '@odata.type' = '#microsoft.graph.countryNamedLocation'; countriesAndRegions = @('US') })
+                              '@odata.nextLink' = 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/namedLocations?$skiptoken=p2' }
+                }
+                if ($Uri -match 'namedLocations\?\$skiptoken=p2$') {
+                    return @{ value = @(@{ id = 'loc2'; displayName = 'HQ'; '@odata.type' = '#microsoft.graph.ipNamedLocation'; isTrusted = $true; ipRanges = @(@{ cidrAddress = '203.0.113.0/24' }) }) }
+                }
+                return @{ value = @() }
+            }
+            Invoke-NRGCollectAADCAPolicies 3>$null | Out-Null
+            $raw = Get-NRGRawData -Key 'AAD-CAPolicies'
+            Get-NRGNestedProperty -Object $raw -Path 'Data.SectionStatus.NamedLocations' | Should -Be 'Collected'
+            $locs = @($raw.Data.NamedLocations)
+            $locs.Count | Should -Be 2 -Because 'the first page held only one of the two'
+            @($locs | Where-Object { $_['IsTrusted'] -eq $true }).Count | Should -Be 1 -Because 'the trusted location was on page two'
+        }
+
+        It 'the CA collector marks named locations unread, never empty, when Graph returns no collection' {
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                if ($Uri -match 'namedLocations') { return @{ error = @{ code = 'Unexpected' } } }
+                return @{ value = @() }
+            }
+            Invoke-NRGCollectAADCAPolicies 3>$null | Out-Null
+            Get-NRGNestedProperty -Object (Get-NRGRawData -Key 'AAD-CAPolicies') -Path 'Data.SectionStatus.NamedLocations' | Should -Be 'Failed'
+        }
+
+        It 'the inventory collector names every consented app (the lookup URL read $cid? and failed for all of them; only 30 were tried)' {
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                if ($Uri -match 'oauth2PermissionGrants') {
+                    return @{ value = @(1..35 | ForEach-Object { @{ clientId = "sp-$_"; scope = 'User.Read'; resourceId = 'res-graph'; consentType = 'AllPrincipals' } }) }
+                }
+                if ($Uri -match '/servicePrincipals/(sp-\d+)\?') { return @{ displayName = "App $($Matches[1])" } }
+                return @{ value = @() }
+            }
+            Invoke-NRGCollectAADInventory 3>$null | Out-Null
+            $raw = Get-NRGRawData -Key 'AAD-Inventory'
+            Get-NRGNestedProperty -Object $raw -Path 'Data.SectionStatus.OAuthGrantedApps' | Should -Be 'Collected'
+            $apps = @($raw.Data.OAuthGrantedApps)
+            $apps.Count | Should -Be 35
+            @($apps | Where-Object { $_['AppName'] -eq $_['ClientId'] }).Count | Should -Be 0 -Because 'every app is looked up, and the lookup URL is built'
+        }
+
+        It 'the password rule collector reads the string "False" as $false, not as enabled' {
+            foreach ($case in @(@{ Raw = 'False'; Want = $false }, @{ Raw = 'True'; Want = $true }, @{ Raw = 'garbage'; Want = $null })) {
+                Clear-NRGState
+                $script:PwRaw = $case.Raw
+                & $script:Mod { param($r) $script:PwRaw = $r } $case.Raw
+                Set-Graph {
+                    param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                    if ($Uri -match 'groupSettings') {
+                        return @{ value = @(@{ templateId = '5cf42378-d67d-4f36-ba46-e8b86229381d'; values = @(
+                                    @{ name = 'LockoutThreshold'; value = '10' },
+                                    @{ name = 'EnableBannedPasswordCheck'; value = $script:PwRaw },
+                                    @{ name = 'EnableBannedPasswordCheckOnPremises'; value = $script:PwRaw }) }) }
+                    }
+                    return @{ value = @() }
+                }
+                Invoke-NRGCollectAADAuthPolicies 3>$null | Out-Null
+                $pp = (Get-NRGRawData -Key 'AAD-AuthPolicies').Data.PasswordProtection
+                $pp | Should -Not -BeNullOrEmpty -Because "the settings were returned ($($case.Raw))"
+                foreach ($k in 'EnableBannedPasswordCheck', 'EnableBannedPasswordCheckOnPremises') {
+                    if ($null -eq $case.Want) {
+                        ($null -eq $pp[$k]) | Should -BeTrue -Because "'$($case.Raw)' is neither True nor False, so it was not read"
+                    } else {
+                        $pp[$k] | Should -BeExactly $case.Want -Because "the setting value was the string '$($case.Raw)'"
+                    }
+                }
+            }
         }
     }
 }

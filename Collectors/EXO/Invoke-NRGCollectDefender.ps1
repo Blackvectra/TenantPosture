@@ -246,21 +246,19 @@ function Invoke-NRGCollectDefender {
         # NotApplicable in those clouds, never a false Gap.
         try {
             if (Get-Command Invoke-NRGGraphRequest -ErrorAction SilentlyContinue) {
-                $simResp = Invoke-NRGGraphRequest -Method GET `
-                    -Uri 'https://graph.microsoft.com/v1.0/security/attackSimulation/simulations?$top=100' `
-                    -ErrorAction Stop
-                $sims = @()
-                if ($simResp -and $null -ne $simResp.value) {
-                    $sims = @(@($simResp.value) | ForEach-Object {
-                        @{
-                            DisplayName    = [string]($_.displayName ?? '')
-                            Status         = [string]($_.status ?? 'unknown')
-                            AttackType     = [string]($_.attackType ?? 'unknown')
-                            LaunchDateTime = [string]($_.launchDateTime ?? '')
-                            IsAutomated    = [bool]($_.isAutomated ?? $false)
-                        }
-                    })
-                }
+                # Paged: counting launched campaigns from the first 100 alone
+                # could report none launched on a tenant with a long history.
+                $simRows = @(Get-NRGGraphAllPages `
+                    -Uri 'https://graph.microsoft.com/v1.0/security/attackSimulation/simulations?$top=100')
+                $sims = @($simRows | ForEach-Object {
+                    @{
+                        DisplayName    = [string]($_.displayName ?? '')
+                        Status         = [string]($_.status ?? 'unknown')
+                        AttackType     = [string]($_.attackType ?? 'unknown')
+                        LaunchDateTime = [string]($_.launchDateTime ?? '')
+                        IsAutomated    = [bool]($_.isAutomated ?? $false)
+                    }
+                })
                 $result.Data['AttackSimulations'] = @{
                     Available = $true
                     Count     = $sims.Count

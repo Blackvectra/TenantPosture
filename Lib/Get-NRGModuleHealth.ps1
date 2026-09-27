@@ -49,13 +49,15 @@ function Get-NRGModuleHealth {
 
     Set-StrictMode -Version Latest
 
-    # Critical modules. EOM is pinned to a known-good line (3.4.0+ has a WAM
-    # broker crash from a background thread); the MSAL carriers are the two that
-    # bundle Microsoft.Identity.Client and therefore drive the assembly conflict.
+    # Critical modules. ExchangeOnlineManagement needs 3.7.2, which added
+    # -DisableWAM (the supported way around the WAM broker crash the old 3.2.0
+    # pin worked around); no version is pinned. The MSAL carriers are the two
+    # that bundle Microsoft.Identity.Client and therefore drive the assembly
+    # conflict.
     $specs = @(
-        @{ Name = 'Microsoft.Graph.Authentication'; Min = [version]'2.0.0'; Pin = $null;             MsalCarrier = $true  }
-        @{ Name = 'ExchangeOnlineManagement';       Min = [version]'3.0.0'; Pin = [version]'3.2.0';  MsalCarrier = $true  }
-        @{ Name = 'MicrosoftTeams';                 Min = [version]'5.0.0'; Pin = $null;             MsalCarrier = $false }
+        @{ Name = 'Microsoft.Graph.Authentication'; Min = [version]'2.0.0'; Pin = $null; MsalCarrier = $true  }
+        @{ Name = 'ExchangeOnlineManagement';       Min = [version]'3.7.2'; Pin = $null; MsalCarrier = $true  }
+        @{ Name = 'MicrosoftTeams';                 Min = [version]'5.0.0'; Pin = $null; MsalCarrier = $false }
     )
 
     $modules = [System.Collections.Generic.List[object]]::new()

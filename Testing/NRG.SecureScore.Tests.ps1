@@ -5,7 +5,8 @@
 # Proves AAD-13.1 (Microsoft Secure Score) discriminates against Microsoft's OWN
 # peer benchmark (averageComparativeScores) — at/above the peer average is
 # Satisfied, below is Gap — with a threshold fallback when no benchmark is
-# returned, and NotApplicable when Secure Score wasn't collected.
+# returned, and NotApplicable when Secure Score wasn't collected or carries no
+# maximum score.
 
 Describe 'AAD-13.1 Secure Score control discriminates on the peer benchmark' {
 
@@ -81,5 +82,27 @@ Describe 'AAD-13.1 Secure Score control discriminates on the peer benchmark' {
         Set-SS -SecureScore $null
         Test-NRGControlInventorySecureScore
         State | Should -Be 'NotApplicable'
+    }
+
+    It 'names the benchmark it compared against, never "comparable organizations" for the all-tenants average' {
+        # AllTenants is every Microsoft 365 tenant, not a peer group of similar ones.
+        Set-SS -SecureScore @{
+            CurrentScore = 30; MaxScore = 100; Percentage = 30; CreatedDate = '2026-07-10'
+            AverageComparativeScores = @(@{ Basis = 'AllTenants'; AverageScore = 45 })
+        }
+        Test-NRGControlInventorySecureScore
+        $f = Get-NRGFindings | Where-Object { $_.ControlId -eq 'AAD-13.1' } | Select-Object -First 1
+        $f.State  | Should -Be 'Gap'
+        $f.Detail | Should -Match 'average for all Microsoft 365 tenants'
+        $f.Detail | Should -Not -Match 'comparable'
+    }
+
+    It 'NotApplicable, never "0% - Critical", when Microsoft returned no maximum score' {
+        # The collector writes Percentage 0 when maxScore is absent or 0.
+        Set-SS -SecureScore @{ CurrentScore = 0; MaxScore = 0; Percentage = 0; CreatedDate = ''; AverageComparativeScores = @() }
+        Test-NRGControlInventorySecureScore
+        $f = Get-NRGFindings | Where-Object { $_.ControlId -eq 'AAD-13.1' } | Select-Object -First 1
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Not -Match 'Critical'
     }
 }

@@ -45,10 +45,9 @@ function Invoke-NRGCollectAADCAPolicies {
     try {
         # Conditional Access Policies
         try {
-            $response = Invoke-NRGGraphRequest -Method GET `
+            $policyRows = @(Get-NRGGraphAllPages `
                 -Uri 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies?$top=250' `
-                -Headers @{ Prefer = 'include-unknown-enum-members' } `
-                -ErrorAction Stop
+                -Headers @{ Prefer = 'include-unknown-enum-members' })
             # Prefer header: 'riskRemediation' (require risk remediation, the
             # control Microsoft's user-risk template uses) is an evolvable enum
             # member. Without the header Graph returns it as
@@ -63,7 +62,7 @@ function Invoke-NRGCollectAADCAPolicies {
             # Success stayed $true — the root cause of false "0 CA policies" +
             # every derived AAD gap. Get-NRGNestedProperty walks each hop with a
             # null guard and is safe on all supported versions.
-            $result.Data.Policies = @($response.value ?? @() | ForEach-Object {
+            $result.Data.Policies = @($policyRows | ForEach-Object {
                 $p = $_
                 $g = { param($path, $def = @()) Get-NRGNestedProperty -Object $p -Path $path -Default $def }
                 $sif = & $g 'sessionControls.signInFrequency' $null
@@ -149,11 +148,10 @@ function Invoke-NRGCollectAADCAPolicies {
             # control reports not assessed instead of a gap.
             $result.Data.SectionStatus['TokenProtection'] = 'NotRun'
             try {
-                $beta = Invoke-NRGGraphRequest -Method GET `
-                    -Uri 'https://graph.microsoft.com/beta/identity/conditionalAccess/policies?$select=id,sessionControls&$top=250' `
-                    -ErrorAction Stop
+                $betaRows = @(Get-NRGGraphAllPages `
+                    -Uri 'https://graph.microsoft.com/beta/identity/conditionalAccess/policies?$select=id,sessionControls&$top=250')
                 $byId = @{}
-                foreach ($bp in @(Get-NRGObjectField -Item $beta -Key 'value' -Default @())) {
+                foreach ($bp in $betaRows) {
                     $id  = [string](Get-NRGObjectField -Item $bp -Key 'id' -Default '')
                     $ssi = Get-NRGNestedProperty -Object $bp -Path 'sessionControls.secureSignInSession.isEnabled' -Default $null
                     if ($id) { $byId[$id] = $ssi }
@@ -177,9 +175,11 @@ function Invoke-NRGCollectAADCAPolicies {
 
         # Named Locations
         try {
-            $locResp = Invoke-NRGGraphRequest -Method GET `
-                -Uri 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/namedLocations?$top=100' `
-                -ErrorAction Stop
+            # Paged: a tenant may hold up to 195 named locations, and a single
+            # $top=100 read dropped the rest, so a trusted location on page two
+            # could make AAD-2.2 report none marked as trusted.
+            $locRows = @(Get-NRGGraphAllPages `
+                -Uri 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/namedLocations?$top=100')
             # Shape-safe projection. namedLocations is polymorphic: an
             # ipNamedLocation row has no countriesAndRegions, and a
             # countryNamedLocation row has no ipRanges/isTrusted. A bare dot
@@ -190,7 +190,7 @@ function Invoke-NRGCollectAADCAPolicies {
             # cause of a false AAD-2.2 "No named locations defined" on a
             # tenant that has them. Get-NRGObjectField never throws on an
             # absent key.
-            $result.Data.NamedLocations = @($locResp.value ?? @() | ForEach-Object {
+            $result.Data.NamedLocations = @($locRows | ForEach-Object {
                 @{
                     Id          = [string](Get-NRGObjectField -Item $_ -Key 'id' -Default '')
                     DisplayName = [string](Get-NRGObjectField -Item $_ -Key 'displayName' -Default '')

@@ -1,5 +1,101 @@
 # Changelog
 
+## v4.14.3 (2026-09-26)
+
+v5.0 backlog sweep: the collector-fields section (places where a collector
+recorded something Graph never said), the known issues it found, the owner's
+AAD-1.4 / 1.5 scoring decision, and a short mechanical sweep.
+
+- **Every consented app was reported by its object ID.** The name lookup built
+  its URL as `"…/servicePrincipals/$cid?`$select=…"`, and PowerShell allows
+  `?` in a variable name, so it read the unset variable `$cid?` (StrictMode
+  throws), the per-app `catch` fell back to the ID, and no app was ever named.
+  It also looked up only the first 30. The URL now uses `${cid}` and every
+  app is looked up. `NRG.ExternalShapes.Tests.ps1` fails on any variable name
+  containing `?` in a module file.
+- **AAD-1.4 and AAD-1.5 credited any risk level.** A Conditional Access risk
+  policy applies only to the levels it selects, and both controls accepted
+  any, so a low-only policy scored Satisfied. Owner's rule: sign-in risk is
+  Satisfied when the enabled policies together cover High and Medium
+  (Microsoft's template), Partial with one of the two, a Gap with neither;
+  user risk is Satisfied only with High ("require password change for
+  high-risk users").
+- **SharePoint shell settings.** `Get-SPOTenant` was read by dot-access, so a
+  module version without a newer property (`EnableAutoExpirationVersionTrim`)
+  threw and lost every shell setting, and a present-but-empty value defaulted
+  to `$false` / `0`, which SPO-1.4, 2.2, 2.6, 2.7, 3.2, 3.3 and 3.4 scored.
+  Each property is now read separately and stored as not read when absent;
+  those controls report the missing property as not assessed. SPO-3.3 still
+  passes a limit of 100 or more versions when trimming was not read.
+- **The OAuth consent grant list** logged its page cap and still reported the
+  truncated list as collected; it now reads through `Get-NRGGraphAllPages`.
+- **Purview is assessed by default.** It was skipped unless `-IncludePurview`
+  was given, because ExchangeOnlineManagement 3.4.0 (October 2023) crashed in
+  the WAM broker, and the batch runner never passed the switch, so every
+  batch run silently skipped all 18 Purview controls. Microsoft's module has
+  had a supported `-DisableWAM` switch since 3.7.2, which the Exchange and
+  Security & Compliance sign-ins now pass when the installed module has it
+  (the sign-in is not weaker: MSAL uses the system browser with the same MFA
+  and Conditional Access). The module floor is 3.7.2 with no pin, and
+  `Install-NRGPrerequisites.ps1` caps the version by the PowerShell in use
+  (3.5–3.9.x need 7.4, 3.10+ needs 7.6) instead of downgrading to 3.2.0.
+  `-IncludePurview` still parses and does nothing; `-SkipPurview` opts out.
+- **A skipped workload reads "not assessed".** `Register-NRGCoverage` rejected
+  the `Skipped` status the scope classifier looked for, and the entry point
+  never recorded a `-Skip` flag, so the controls of a workload the operator
+  skipped on purpose were reported as "could not be assessed — data did not
+  collect ... re-run once the cause is resolved". Each `-Skip*` flag is now
+  recorded, and those controls land in a new "Not assessed — workload skipped
+  by the operator" group in the HTML report and the Markdown summary.
+- **README.** 27 of `Invoke-NRGAssessment.ps1`'s 45 parameters
+  (`-IncludePurview`, `-IncludeSharePointShell`, the `-Skip*` switches,
+  `-JsonOnly`, app-only sign-in, …) appeared nowhere in it; it now has a
+  parameter table that `NRG.DocAccuracy.Tests.ps1` keeps equal to the real
+  parameter list. README and CLAUDE.md gave the output location as a
+  per-timestamp or per-tenant folder; files are written flat to `.\output\`
+  as `<tenant>-<yyyyMMdd-HHmmss>-…`.
+
+- **Directory-setting booleans read "False" as on.** Graph returns Password
+  Rule Settings values as strings, and `[bool]"False"` is `$true` in
+  PowerShell, so `EnableBannedPasswordCheck` and
+  `EnableBannedPasswordCheckOnPremises` were written to the results JSON as on
+  for a tenant that had turned them off. They are now read as True or False,
+  and anything else as not read. No scored control reads either field; AAD-7.1
+  scores the lockout threshold only.
+- **Paged collections were read from their first page only.** Conditional
+  Access policies, the beta token-protection read, named locations
+  (`$top=100`, while a tenant may hold 195), risky service principals and
+  attack simulations were each one request that ignored `@odata.nextLink`, so
+  anything past the first page was dropped and the rest reported as the whole
+  list. A trusted named location on page two made AAD-2.2 report none marked
+  as trusted, and a simulation history longer than one page could count no
+  launched campaign (DEF-4.6). New `Get-NRGGraphAllPages`
+  (`Lib/Invoke-NRGGraphRequest.ps1`) follows `@odata.nextLink` and throws,
+  leaving the section unread, when a response carries no `value` collection
+  or the page cap is reached, instead of returning a partial list.
+- **AAD-13.1 claimed a peer group it did not use.** Below the all-tenants
+  average, the finding said Microsoft "rates this tenant behind comparable
+  organizations". That average covers every Microsoft 365 tenant, so the
+  finding now names only the benchmark it compared against. A score with no
+  maximum was graded "0 / 0 (0%) — Critical"; it is now not assessed.
+- **AAD-7.1's not-collected message** said the read "requires beta endpoint
+  access"; the collector has read `/v1.0/groupSettings` since v4.6.4.
+
+Tests: `NRG.GraphRequest.Tests.ps1` pins the paging helper (every page,
+headers on every page, empty is empty, a malformed or capped read throws);
+`NRG.IdentityTruth.Tests.ps1` drives the real CA and password-rule collectors
+with a two-page named-location response and True, False and unreadable
+setting values; `NRG.SecureScore.Tests.ps1` pins the benchmark wording and
+the missing maximum; `NRG.SharePointSettings.Tests.ps1` drives the real
+SharePoint collector with an older `Get-SPOTenant` shape and each shell
+control with one property missing; `NRG.IdentityTruth.Tests.ps1` also pins the
+risk levels and the named consented apps. Each new bug test fails on the code
+before this change.
+
+Swept and clean: no TODO/FIXME or known-issue marker describes a live
+problem, and no expandable string reads `"$obj.Member"` (which prints the
+object's type name) or `"$name:"` (a scope prefix).
+
 ## v4.14.2 (2026-09-25)
 
 **Conditional Access: every policy's real state, and Microsoft's own
