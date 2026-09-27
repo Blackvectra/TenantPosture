@@ -352,9 +352,9 @@
     # Required modules — must be present before this module loads.
     # Audit fix (v4.6.x LOW): MicrosoftTeams added because Connect-NRGServices
     # imports it at runtime (Teams collector wraps Get-CsTenant / Get-CsTeams*),
-    # and ExchangeOnlineManagement is pinned to the same 3.2.0 floor that
-    # Install-NRGPrerequisites enforces (3.4.0+ has the WAM broker
-    # NullReferenceException that the prereq script downgrades around).
+    # and ExchangeOnlineManagement has the same 3.7.2 floor that
+    # Install-NRGPrerequisites enforces (3.7.2 added -DisableWAM, the supported
+    # way around the WAM broker crash the old 3.2.0 pin worked around).
     # RequiredModules is intentionally minimal. Graph + EXO are mandatory for
     # any assessment to function. MicrosoftTeams used to be listed here but
     # was demoted to a soft dependency: Connect-NRGServices imports it
@@ -373,7 +373,7 @@
     # Update-Module.
     RequiredModules = @(
         @{ ModuleName = 'Microsoft.Graph.Authentication'; ModuleVersion = '2.20.0'; MaximumVersion = '2.99.99' },
-        @{ ModuleName = 'ExchangeOnlineManagement';       ModuleVersion = '3.2.0';  MaximumVersion = '3.99.99' }
+        @{ ModuleName = 'ExchangeOnlineManagement';       ModuleVersion = '3.7.2';  MaximumVersion = '3.99.99' }
     )
 
     # Module metadata

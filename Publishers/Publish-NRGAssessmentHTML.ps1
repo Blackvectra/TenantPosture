@@ -667,6 +667,7 @@ function Publish-NRGAssessmentHTML {
             foreach ($grp in @(
                 @{ Label = 'Controls that could not be assessed — data did not collect'; Items = $scope.CollectionIncomplete }
                 @{ Label = 'Controls not evaluated — quick-scan mode'; Items = $scope.NotEvaluatedThisMode }
+                @{ Label = 'Controls not assessed — workload skipped by the operator (a -Skip flag)'; Items = @(Get-NRGObjectField -Item $scope -Key 'SkippedByOperator' -Default @()) }
                 @{ Label = 'Controls that produced no result at all'; Items = $scope.NoResult }
                 @{ Label = 'Controls requiring manual review — no automated test, or no automated verdict'; Items = $scope.NoProgrammaticCheck }
                 @{ Label = 'Defender endpoint checks covered by a declared third-party EDR — not verified'; Items = @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()) }
@@ -789,7 +790,8 @@ function Publish-NRGAssessmentHTML {
         $hdrScored = $scope.ScoredControls
         $hdrNA     = $scope.LicenceBlocked.Count + $scope.CollectionIncomplete.Count + $scope.NoProgrammaticCheck.Count +
                      @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()).Count +
-                     @(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()).Count
+                     @(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()).Count +
+                     @(Get-NRGObjectField -Item $scope -Key 'SkippedByOperator' -Default @()).Count
         # "Controls assessed" is the tenant controls that produced a finding
         # (scored + not scored). It counted distinct ControlIds across ALL
         # findings, including the 35 endpoint checks that report "no endpoint

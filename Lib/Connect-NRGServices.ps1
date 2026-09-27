@@ -155,6 +155,18 @@ function Connect-NRGServices {
     $env:MSAL_ALLOW_BROKER = '0'
     $env:MSAL_DISABLE_TOKENBROKER = '1'
 
+    # ExchangeOnlineManagement 3.7.2 added -DisableWAM, Microsoft's supported
+    # way to keep the Exchange and Security & Compliance sign-ins off the
+    # Windows broker. It is not a weaker sign-in: MSAL uses the system browser
+    # instead, with the same MFA and Conditional Access, and the token stays in
+    # the module's in-memory cache. Passed only when the installed module has
+    # the parameter, so an older module still connects.
+    $exoDisableWam = $false; $ippsDisableWam = $false
+    $exoCmd  = Get-Command Connect-ExchangeOnline -ErrorAction SilentlyContinue
+    $ippsCmd = Get-Command Connect-IPPSSession    -ErrorAction SilentlyContinue
+    if ($exoCmd)  { $exoDisableWam  = [bool]$exoCmd.Parameters.ContainsKey('DisableWAM') }
+    if ($ippsCmd) { $ippsDisableWam = [bool]$ippsCmd.Parameters.ContainsKey('DisableWAM') }
+
     # ── MSAL assembly-conflict preflight ──────────────────────────────────────
     # The #1 failure mode in M365 PowerShell tooling (ours AND CISA's ScubaGear)
     # is a Microsoft.Identity.Client version clash between the Graph and Exchange
@@ -474,8 +486,9 @@ function Connect-NRGServices {
             } else {
                 throw "App-only EXO requires the .onmicrosoft.com routing domain via -OrganizationDomain."
             }
-            Connect-ExchangeOnline -AppId $AppId -CertificateThumbprint $CertificateThumbprint `
-                                   -Organization $orgDomain -ShowBanner:$false -ErrorAction Stop | Out-Null
+            $exoAppParams = @{ AppId = $AppId; CertificateThumbprint = $CertificateThumbprint; Organization = $orgDomain; ShowBanner = $false; ErrorAction = 'Stop' }
+            if ($exoDisableWam) { $exoAppParams['DisableWAM'] = $true }
+            Connect-ExchangeOnline @exoAppParams | Out-Null
             $result['EXO'] = $true
             Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
         } else {
@@ -484,6 +497,7 @@ function Connect-NRGServices {
             # browser without the RuntimeBroker crash the old device-code /
             # UseRPSSession paths worked around.
             $exoParams = @{ ShowBanner = $false; ErrorAction = 'Stop' }
+            if ($exoDisableWam) { $exoParams['DisableWAM'] = $true }
             if ($UserPrincipalName) { $exoParams['UserPrincipalName'] = $UserPrincipalName }
             # GDAP: without -DelegatedOrganization Exchange connects to the
             # signed-in operator's OWN organization, not the client's.
@@ -524,6 +538,7 @@ function Connect-NRGServices {
                     ShowBanner  = $false
                     ErrorAction = 'Stop'
                 }
+                if ($ippsDisableWam) { $ippsParams['DisableWAM'] = $true }
                 if ($UserPrincipalName) { $ippsParams['UserPrincipalName'] = $UserPrincipalName }
                 # Without -DelegatedOrganization, Connect-IPPSSession maps the
                 # session to the SIGNED-IN account's own organization — under

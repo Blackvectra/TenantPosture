@@ -71,8 +71,12 @@ param(
     [string] $Environment = 'commercial',
 
     # Skip switches
+    # Purview (Security & Compliance) is assessed by default; -SkipPurview
+    # leaves it out and its controls report "not assessed". -IncludePurview
+    # is the old opt-in switch, kept so existing commands still run; it no
+    # longer changes anything.
     [switch] $SkipPurview,
-    [switch] $IncludePurview,   # Include Purview/IPPSSession (skipped by default — EOM v3.4 WAM crash)
+    [switch] $IncludePurview,
     # Read the SharePoint tenant settings Graph does not expose (SPO-1.2, 1.4,
     # 1.5, 2.2, 2.6, 2.7, 3.2, 3.3, 3.4) through the SharePoint Online
     # Management Shell. In PowerShell 7 that module runs in a Windows
@@ -316,10 +320,6 @@ $env:MSAL_ALLOW_BROKER        = '0'
 $env:MSAL_DISABLE_TOKENBROKER = '1'
 $env:MSAL_DISABLE_WAM         = '1'
 
-# Purview skipped by default — EOM v3.4 WAM broker crashes on background thread
-# Pass -IncludePurview to attempt it (works when running standalone PS7 window)
-if (-not $IncludePurview -and -not $SkipPurview) { $SkipPurview = $true }
-
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
 # ── Pre-banner version probe ─────────────────────────────────────────────────
@@ -496,12 +496,13 @@ Clear-NRGState
 try {
 
 # ── Module prerequisite check ─────────────────────────────────────────────────
-# EOM is pinned to 3.2.0 — 3.4.0+ has a WAM broker crash that kills the process
-# from a background .NET thread (uncatchable from PowerShell).
+# ExchangeOnlineManagement 3.7.2 added -DisableWAM, the supported way around
+# the WAM broker crash the old 3.2.0 pin worked around. Install-NRGPrerequisites
+# picks the newest version the installed PowerShell supports.
 $moduleSpecs = @(
-    @{ Name='Microsoft.Graph.Authentication'; MinVersion='2.0.0'; PinVersion=$null   }
-    @{ Name='ExchangeOnlineManagement';       MinVersion='3.0.0'; PinVersion='3.2.0' }
-    @{ Name='MicrosoftTeams';                 MinVersion='5.0.0'; PinVersion=$null   }
+    @{ Name='Microsoft.Graph.Authentication'; MinVersion='2.0.0'; PinVersion=$null }
+    @{ Name='ExchangeOnlineManagement';       MinVersion='3.7.2'; PinVersion=$null }
+    @{ Name='MicrosoftTeams';                 MinVersion='5.0.0'; PinVersion=$null }
 )
 $needsAction = @()
 foreach ($spec in $moduleSpecs) {
@@ -696,6 +697,23 @@ if (-not $skipCollection) {
         throw [System.InvalidOperationException]::new('Authentication failure: no Graph or EXO session available.')
     }
     if (-not $conn.ContainsKey('SharePoint')) { $conn['SharePoint'] = $false }
+
+    # A -Skip flag is an operator choice. Recording it lets the scope section
+    # file the workload's controls as "not assessed" instead of as data that
+    # failed to collect. The keys are the CollectorDependency values the
+    # skipped controls carry in controls.json.
+    $skipFlags = @(
+        @{ On = $SkipPurview;       Flag = '-SkipPurview';       Keys = @('Purview') }
+        @{ On = $SkipTeams;         Flag = '-SkipTeams';         Keys = @('Teams') }
+        @{ On = $SkipSharePoint;    Flag = '-SkipSharePoint';    Keys = @('SharePoint') }
+        @{ On = $SkipIntune;        Flag = '-SkipIntune';        Keys = @('Intune-EndpointSecurity', 'Intune-DeviceCompliance', 'Intune-AppProtection') }
+        @{ On = $SkipPowerPlatform; Flag = '-SkipPowerPlatform'; Keys = @('PowerPlatform') }
+        @{ On = $SkipDNS;           Flag = '-SkipDNS';           Keys = @('DNS-EmailRecords') }
+    )
+    foreach ($sf in $skipFlags) {
+        if (-not $sf.On) { continue }
+        foreach ($k in $sf.Keys) { Register-NRGCoverage -Family $k -Status 'Skipped' -Note "Skipped for this run with $($sf.Flag)." }
+    }
 
     # Never write a report for a tenant other than the one requested.
     if ($TenantDomain) {

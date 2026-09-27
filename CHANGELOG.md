@@ -29,6 +29,24 @@ AAD-1.4 / 1.5 scoring decision, and a short mechanical sweep.
   passes a limit of 100 or more versions when trimming was not read.
 - **The OAuth consent grant list** logged its page cap and still reported the
   truncated list as collected; it now reads through `Get-NRGGraphAllPages`.
+- **Purview is assessed by default.** It was skipped unless `-IncludePurview`
+  was given, because ExchangeOnlineManagement 3.4.0 (October 2023) crashed in
+  the WAM broker, and the batch runner never passed the switch, so every
+  batch run silently skipped all 18 Purview controls. Microsoft's module has
+  had a supported `-DisableWAM` switch since 3.7.2, which the Exchange and
+  Security & Compliance sign-ins now pass when the installed module has it
+  (the sign-in is not weaker: MSAL uses the system browser with the same MFA
+  and Conditional Access). The module floor is 3.7.2 with no pin, and
+  `Install-NRGPrerequisites.ps1` caps the version by the PowerShell in use
+  (3.5–3.9.x need 7.4, 3.10+ needs 7.6) instead of downgrading to 3.2.0.
+  `-IncludePurview` still parses and does nothing; `-SkipPurview` opts out.
+- **A skipped workload reads "not assessed".** `Register-NRGCoverage` rejected
+  the `Skipped` status the scope classifier looked for, and the entry point
+  never recorded a `-Skip` flag, so the controls of a workload the operator
+  skipped on purpose were reported as "could not be assessed — data did not
+  collect ... re-run once the cause is resolved". Each `-Skip*` flag is now
+  recorded, and those controls land in a new "Not assessed — workload skipped
+  by the operator" group in the HTML report and the Markdown summary.
 - **README.** 27 of `Invoke-NRGAssessment.ps1`'s 45 parameters
   (`-IncludePurview`, `-IncludeSharePointShell`, the `-Skip*` switches,
   `-JsonOnly`, app-only sign-in, …) appeared nowhere in it; it now has a
