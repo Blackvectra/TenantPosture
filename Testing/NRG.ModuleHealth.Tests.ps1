@@ -72,14 +72,19 @@ Describe 'Get-NRGModuleHealth' {
         $exo.Issues | Should -Contain 'missing'
     }
 
-    It 'flags below-min and off-pin versions' {
+    It 'flags below-min versions, and pins nothing (EOM 3.7.2 floor, no pin)' {
         $ov = @{
             'Microsoft.Graph.Authentication' = @( (M '1.9.0') )   # below min 2.0.0
-            'ExchangeOnlineManagement'       = @( (M '3.5.0') )   # off pin 3.2.0
+            'ExchangeOnlineManagement'       = @( (M '3.5.0') )   # below the 3.7.2 floor (no -DisableWAM yet)
         }
         $h = Get-NRGModuleHealth -InstalledOverride $ov
         ($h.Modules | Where-Object { $_.Name -eq 'Microsoft.Graph.Authentication' }).BelowMin | Should -BeTrue
-        ($h.Modules | Where-Object { $_.Name -eq 'ExchangeOnlineManagement' }).OffPin | Should -BeTrue
+        $exo = $h.Modules | Where-Object { $_.Name -eq 'ExchangeOnlineManagement' }
+        $exo.BelowMin | Should -BeTrue
+        $exo.OffPin   | Should -BeFalse -Because 'no version is pinned any more'
+        $exo.RecommendedVersion | Should -BeNullOrEmpty
+        $h2 = Get-NRGModuleHealth -InstalledOverride @{ 'ExchangeOnlineManagement' = @( (M '3.10.1') ) }
+        ($h2.Modules | Where-Object { $_.Name -eq 'ExchangeOnlineManagement' }).Issues | Should -Not -Contain 'off-pin'
     }
 
     It 'never throws when called with no override (reads the real machine)' {

@@ -116,6 +116,7 @@ function Get-NRGAssessmentScope {
         ThirdPartyAttested   = @()
         NotApplicableToTenant = @()
         NotEvaluatedThisMode = @()
+        SkippedByOperator    = @()
         NoResult             = @()
         Errors               = @()
         CoverageIssues       = @()
@@ -239,6 +240,7 @@ function Get-NRGAssessmentScope {
     $advisory       = [System.Collections.Generic.List[object]]::new()
     $notForTenant   = [System.Collections.Generic.List[object]]::new()
     $notThisMode    = [System.Collections.Generic.List[object]]::new()
+    $skippedByOp    = [System.Collections.Generic.List[object]]::new()
     $noResult       = [System.Collections.Generic.List[object]]::new()
     $errored        = [System.Collections.Generic.List[object]]::new()
     $workload       = [ordered]@{}
@@ -365,9 +367,11 @@ function Get-NRGAssessmentScope {
                 if ($null -ne $ok -and -not $ok) { $failedDep = $depKey; break }
             }
             if ($skippedDep) {
-                # An operator choice (-Skip flag), not a collection fault.
-                $row.Reason = "The '$skippedDep' collector was skipped for this run by operator choice (e.g. a -Skip flag), not a collection failure. $detail".Trim()
-                $notThisMode.Add([pscustomobject]$row)
+                # An operator choice (-Skip flag), not a collection fault and
+                # not a quick-scan omission: its own bucket, worded as not
+                # assessed.
+                $row.Reason = "Not assessed: the '$skippedDep' collector was skipped for this run by the operator (a -Skip flag). Neither a pass nor a failure. $detail".Trim()
+                $skippedByOp.Add([pscustomobject]$row)
                 continue
             }
             if ($failedDep) {
@@ -441,6 +445,9 @@ function Get-NRGAssessmentScope {
     if ($collectionGap.Count -gt 0) {
         $limitations.Add("$($collectionGap.Count) control(s) could not be assessed because the underlying data did not collect. These are NOT passes. Re-run once the cause is resolved before treating them as anything.")
     }
+    if ($skippedByOp.Count -gt 0) {
+        $limitations.Add("$($skippedByOp.Count) control(s) were not assessed because the operator skipped their workload for this run (a -Skip flag such as -SkipPurview). They are neither passes nor failures. Run without the flag to assess them.")
+    }
     if ($notThisMode.Count -gt 0) {
         $limitations.Add("$($notThisMode.Count) control(s) were not evaluated because this was a quick scan. They are neither passes nor failures. Run a full assessment to cover them.")
     }
@@ -492,6 +499,7 @@ function Get-NRGAssessmentScope {
         ThirdPartyAttested   = @($thirdParty)
         NotApplicableToTenant = @($notForTenant)
         NotEvaluatedThisMode = @($notThisMode)
+        SkippedByOperator    = @($skippedByOp)
         NoResult             = @($noResult)
         Errors               = @($errored)
         CoverageIssues       = @($covIssues)

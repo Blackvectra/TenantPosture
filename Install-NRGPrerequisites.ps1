@@ -70,7 +70,10 @@ Write-Host ""
 Write-Host "[4/6] Checking PowerShell modules..." -ForegroundColor Cyan
 
 # Specific version requirements:
-# - EOM pinned to 3.2.0 because 3.4.0 has the WAM broker NullReferenceException
+# - ExchangeOnlineManagement 3.7.2 or later: 3.7.2 added -DisableWAM, the
+#   supported way around the WAM broker crash the old 3.2.0 pin worked
+#   around. Microsoft's module notes: 3.5.0-3.9.x need PowerShell 7.4,
+#   3.10.0+ need PowerShell 7.6, so the ceiling follows the PowerShell in use.
 # - Graph.Authentication 2.x for modern MSAL flow
 # - Teams 5.x+ for device code auth
 # ── Module install scope: avoid OneDrive-synced paths ────────────────────────
@@ -115,10 +118,16 @@ if ($scopeInfo.UserPathIsSynced) {
 }
 Write-Host ""
 
+$psVer  = $PSVersionTable.PSVersion
+$exoMax = if ($psVer -ge [version]'7.6.0') { $null } elseif ($psVer -ge [version]'7.4.0') { '3.9.99' } else { '3.4.99' }
+if ($psVer -lt [version]'7.4.0') {
+    Write-Host "  [!] PowerShell $psVer: ExchangeOnlineManagement 3.7.2 or later needs PowerShell 7.4 or later." -ForegroundColor Red
+    Write-Host "      Upgrade PowerShell (winget install Microsoft.PowerShell), then re-run this script." -ForegroundColor Yellow
+}
 $moduleSpecs = @(
-    @{ Name='Microsoft.Graph.Authentication'; MinVersion='2.0.0';  PinVersion=$null   }
-    @{ Name='ExchangeOnlineManagement';       MinVersion='3.0.0';  PinVersion='3.2.0' }
-    @{ Name='MicrosoftTeams';                 MinVersion='5.0.0';  PinVersion=$null   }
+    @{ Name='Microsoft.Graph.Authentication'; MinVersion='2.0.0';  PinVersion=$null; MaxVersion=$null   }
+    @{ Name='ExchangeOnlineManagement';       MinVersion='3.7.2';  PinVersion=$null; MaxVersion=$exoMax }
+    @{ Name='MicrosoftTeams';                 MinVersion='5.0.0';  PinVersion=$null; MaxVersion=$null   }
 )
 
 foreach ($spec in $moduleSpecs) {
@@ -169,10 +178,19 @@ foreach ($spec in $moduleSpecs) {
         # place. For a MSAL carrier that duplicate is the assembly conflict, and
         # the preflight was sending operators here to fix exactly it.
         $min = [version]$spec.MinVersion
+        $max = $spec.MaxVersion
+        if ($max -and [version]$max -lt $min) {
+            Write-Host "  [!] $name $min or later cannot be installed on PowerShell $psVer; skipped." -ForegroundColor Red
+            continue
+        }
+        if ($installed -and $max -and $installed.Version -gt [version]$max) {
+            Write-Host "  [!] $name $($installed.Version) is newer than PowerShell $psVer supports (up to $max). Upgrade PowerShell, or install a version in [$min,$max]." -ForegroundColor Yellow
+        }
         if (-not $installed -or $installed.Version -lt $min -or $Force) {
-            Write-Host "  [*] Installing $name (min $min)..." -ForegroundColor Yellow
+            $range = if ($max) { "[$min,$max]" } else { "[$min,)" }
+            Write-Host "  [*] Installing $name $range..." -ForegroundColor Yellow
             try {
-                Install-PSResource -Name $name -TrustRepository -Scope $installScope -ErrorAction Stop
+                Install-PSResource -Name $name -Version $range -TrustRepository -Scope $installScope -ErrorAction Stop
                 $newest = Get-Module -ListAvailable -Name $name | Sort-Object Version -Descending | Select-Object -First 1
                 Write-Host "  [+] $name $($newest.Version) installed" -ForegroundColor Green
             } catch {

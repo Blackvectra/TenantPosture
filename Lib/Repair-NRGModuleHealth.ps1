@@ -20,7 +20,8 @@
 #   Get-NRGModuleHealth is deliberately inspect-only and stays that way. The
 #   preflight in Connect-NRGServices told operators to "run
 #   Install-NRGPrerequisites.ps1", but that script only reconciles versions for
-#   modules carrying a PinVersion -- ExchangeOnlineManagement alone.
+#   modules carrying a PinVersion (ExchangeOnlineManagement, until its 3.2.0
+#   pin was lifted for the 3.7.2 floor; nothing is pinned now).
 #   Microsoft.Graph.Authentication has no pin, so it took the "any version above
 #   the minimum is fine" branch, inspected only the NEWEST installed version,
 #   reported OK and left the duplicate in place. The detector was right, the
@@ -76,7 +77,7 @@ function Repair-NRGModuleHealth {
     # HasConflictRisk.
     $carriers = @{
         'Microsoft.Graph.Authentication' = $null        # keep newest
-        'ExchangeOnlineManagement'       = [version]'3.2.0'  # keep this pin
+        'ExchangeOnlineManagement'       = $null        # keep newest (no pin since the 3.7.2 floor)
     }
 
     $health = if ($PSBoundParameters.ContainsKey('InstalledOverride') -and $null -ne $InstalledOverride) {
