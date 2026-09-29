@@ -738,6 +738,20 @@ function Publish-NRGAssessmentHTML {
                 "<div class='scope-tile$(if($bs.EffectivenessIneffective -gt 0){' warn'})'><div class='scope-n$(if($bs.EffectivenessIneffective -gt 0){' warn'})'>$($bs.EffectivenessIneffective)</div><div class='scope-l'>Ineffective</div></div>"
                 "<div class='scope-tile'><div class='scope-n'>$($bs.EffectivenessUnknown)</div><div class='scope-l'>Effectiveness unknown</div></div>"
             ) -join ''
+            # Two coverage metrics from the reason contract (Get-NRGBaselineCoverage):
+            # kept apart from each other and from the score.
+            $evidHtml = ''; $effCovHtml = ''
+            $evc = Get-NRGObjectField -Item $bl -Key 'EvidenceCoverage' -Default $null
+            $efc = Get-NRGObjectField -Item $bl -Key 'EffectivenessCoverage' -Default $null
+            if ($null -ne $evc) {
+                $gapRows = (@($evc.Gaps.Keys) | ForEach-Object { "<tr><td><code>$(hx $_)</code></td><td>$($evc.Gaps[$_])</td></tr>" }) -join ''
+                $evidHtml = "<h4 style='margin:16px 0 6px'>Evidence coverage</h4>" +
+                            "<p class='scope-det'><strong>$($evc.Known) of $($evc.Applicable) applicable required controls have usable evidence ($($evc.Percent)%).</strong>$(if ($evc.LicenseBlocked -gt 0) { " $($evc.LicenseBlocked) license blocked, counted in the denominator and shown separately." })$(if ($evc.NotApplicable -gt 0) { " $($evc.NotApplicable) not applicable, outside the denominator." }) Not a score: a tenant failing every control has 100% evidence coverage.</p>" +
+                            $(if ($gapRows) { "<table class='ft' style='max-width:520px'><thead><tr><th>Evidence gaps</th><th>Controls</th></tr></thead><tbody>$gapRows</tbody></table>" } else { '' })
+            }
+            if ($null -ne $efc) {
+                $effCovHtml = "<p class='scope-det'><strong>Effectiveness coverage: $($efc.Known) of $($efc.Required) required controls have effectiveness evidence ($($efc.Percent)%).</strong> Configuration evidence never counts as effectiveness evidence; the tool can read effectiveness for $($efc.CapabilityCollected) of these today.</p>"
+            }
             $statusOrder = @{ 'Failed' = 0; 'NotVerified' = 1; 'ApprovedException' = 2; 'LicenseBlocked' = 3; 'NotApplicable' = 4; 'Satisfied' = 5 }
             $statusLabel = @{ 'Failed' = 'Failed'; 'NotVerified' = 'Not verified'; 'ApprovedException' = 'Approved exception'; 'LicenseBlocked' = 'License blocked'; 'NotApplicable' = 'Not applicable'; 'Satisfied' = 'Satisfied' }
             $rowsHtml = ($bl.Controls | Sort-Object { $statusOrder[[string]$_.BaselineStatus] }, RequiredTier, ControlId | ForEach-Object {
@@ -787,8 +801,10 @@ function Publish-NRGAssessmentHTML {
     <div class='scope-grid'>$tiles</div>
     <p class='scope-det'>Not verified means the run produced no usable evidence for the control (no result, a collector that did not complete, a skipped workload, a manual check, or evidence older than its freshness window). It is never counted as satisfied. $excNote</p>
     $causeHtml
+    $evidHtml
     <h4 style='margin:16px 0 6px'>Effectiveness visibility</h4>
     <div class='scope-grid'>$effTiles</div>
+    $effCovHtml
     <p class='scope-det'>Configuration says a control is set; effectiveness says it is working. The assessment can read effectiveness evidence for only a few controls today (endpoint results); everywhere else it is reported as unknown, not assumed.</p>
     $planHtml
 $regHtml

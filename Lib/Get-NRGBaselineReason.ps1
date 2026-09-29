@@ -205,3 +205,85 @@ function Resolve-NRGBaselineReason {
     }
     return & $out 'EvaluationError' $(if ($sentence) { $sentence } else { "Unrecognized observed state '$state'." })
 }
+
+function Get-NRGBaselineCoverage {
+    <#
+    .SYNOPSIS
+        Two coverage metrics over the compliance rows, derived from the reason
+        contract and kept strictly apart from the baseline score.
+    .DESCRIPTION
+        Evidence coverage answers: of the applicable required controls, how many
+        have current, usable evidence? Known = Satisfied + ControlFailed +
+        ThirdPartyHandled (attested by the assessor, usable, not verified).
+        Unknown = every code that means the evidence was not obtained
+        (CollectorUnavailable, EvidenceStale, EvidenceNotRead,
+        ManualVerificationRequired, SkippedByOperator,
+        OptionalCollectorRequired, EvaluationError). LicenseBlocked is in the
+        denominator and reported separately: the tool knows why it cannot
+        verify the control, and that is not evidence the requirement is met.
+        NotApplicable is outside the denominator: a control that does not
+        apply does not lower coverage. Known + Unknown + LicenseBlocked =
+        Applicable.
+
+        Effectiveness coverage answers: of the required controls, how many
+        have effectiveness evidence today? Known only where EffectivenessState
+        is Effective or Ineffective; Unknown stays unknown however perfect the
+        configuration evidence is.
+
+        Neither number is the baseline score, and a high evidence coverage
+        never implies the baseline is met: a tenant failing every control has
+        100% evidence coverage.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param([Parameter(Mandatory)] [AllowNull()] [AllowEmptyCollection()] [object[]] $Rows)
+    Set-StrictMode -Version Latest
+    $rows = @($Rows | Where-Object { $null -ne $_ })
+    $code = { param($r) [string](Get-NRGObjectField -Item $r -Key 'ReasonCode' -Default '') }
+    $knownCodes   = @('Satisfied', 'ControlFailed', 'ThirdPartyHandled')
+    $unknownCodes = @('CollectorUnavailable', 'EvidenceStale', 'EvidenceNotRead', 'ManualVerificationRequired', 'SkippedByOperator', 'OptionalCollectorRequired', 'EvaluationError', 'LicensingUnknown')
+    $na  = @($rows | Where-Object { (& $code $_) -eq 'NotApplicable' })
+    $lb  = @($rows | Where-Object { (& $code $_) -eq 'LicenseBlocked' })
+    $kn  = @($rows | Where-Object { (& $code $_) -in $knownCodes })
+    $unk = @($rows | Where-Object { (& $code $_) -in $unknownCodes })
+    $other = @($rows | Where-Object { (& $code $_) -notin ($knownCodes + $unknownCodes + @('NotApplicable', 'LicenseBlocked')) })
+    $applicable = $rows.Count - $na.Count
+    $gaps = [ordered]@{}
+    foreach ($c in (Get-NRGBaselineReasonCodes).Keys) {
+        if ($c -notin $unknownCodes) { continue }
+        $n = @($unk | Where-Object { (& $code $_) -eq $c }).Count
+        if ($n -gt 0) { $gaps[$c] = $n }
+    }
+    $evPct = if ($applicable -gt 0) { [math]::Round(100.0 * $kn.Count / $applicable, 1) } else { 0.0 }
+
+    $effState = { param($r) [string](Get-NRGObjectField -Item $r -Key 'EffectivenessState' -Default 'Unknown') }
+    $eff = @($rows | Where-Object { (& $effState $_) -eq 'Effective' })
+    $ineff = @($rows | Where-Object { (& $effState $_) -eq 'Ineffective' })
+    $effKnown = $eff.Count + $ineff.Count
+    $collectable = @($rows | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'EffectivenessCapability' -Default '') -eq 'Collected' }).Count
+    $effPct = if ($rows.Count -gt 0) { [math]::Round(100.0 * $effKnown / $rows.Count, 1) } else { 0.0 }
+
+    return [ordered]@{
+        Evidence = [ordered]@{
+            Required       = $rows.Count
+            Applicable     = $applicable
+            Known          = $kn.Count
+            Unknown        = $unk.Count + $other.Count
+            LicenseBlocked = $lb.Count
+            NotApplicable  = $na.Count
+            Percent        = $evPct
+            Gaps           = $gaps
+            Rule           = 'Known = Satisfied + ControlFailed + ThirdPartyHandled (attested, not verified). Unknown = evidence not obtained. LicenseBlocked is in the denominator and shown separately. NotApplicable is outside the denominator. Not a score: a tenant failing every control has 100% evidence coverage.'
+        }
+        Effectiveness = [ordered]@{
+            Required            = $rows.Count
+            Known               = $effKnown
+            Effective           = $eff.Count
+            Ineffective         = $ineff.Count
+            Unknown             = $rows.Count - $effKnown
+            CapabilityCollected = $collectable
+            Percent             = $effPct
+            Rule                = 'Known only where EffectivenessState is Effective or Ineffective. Configuration evidence never counts as effectiveness evidence.'
+        }
+    }
+}
