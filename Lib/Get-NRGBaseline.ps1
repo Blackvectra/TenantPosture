@@ -328,6 +328,16 @@ function Get-NRGBaselineCompliance {
         return $null
     }
     $upgradeMarker = if ((Get-Variable -Name NRGUpgradeMarker -Scope Script -ErrorAction SilentlyContinue) -and $script:NRGUpgradeMarker) { $script:NRGUpgradeMarker } else { 'licensing upgrade opportunity' }
+    $thirdPartyMarker = if ((Get-Variable -Name NRGThirdPartyEdrMarker -Scope Script -ErrorAction SilentlyContinue) -and $script:NRGThirdPartyEdrMarker) { $script:NRGThirdPartyEdrMarker } else { 'Third-party EDR declared:' }
+    # Optional collectors (opt-in, from Config/optional-collectors.json): an
+    # unread evidence a control attributes to one resolves
+    # OptionalCollectorRequired rather than EvidenceNotRead.
+    $optionalOf = @{}
+    if (Get-Command Get-NRGOptionalCollectorCatalog -ErrorAction SilentlyContinue) {
+        try {
+            foreach ($oc in (Get-NRGOptionalCollectorCatalog).Values) { foreach ($k in $oc.Controls.Keys) { if (-not $optionalOf.ContainsKey($k)) { $optionalOf[$k] = $oc } } }
+        } catch { Write-Verbose "Optional collector catalog unavailable: $($_.Exception.Message)" }
+    }
 
     $rows = [System.Collections.Generic.List[object]]::new()
     $observedById = @{}
@@ -356,11 +366,18 @@ function Get-NRGBaselineCompliance {
             # Why a NotVerified row is NotVerified, as one of a small fixed set,
             # so 27 unknowns read as an engineering list rather than a number.
             NotVerifiedCause        = ''
+            # The explanation contract: one stable code from
+            # Get-NRGBaselineReasonCodes and one short reason, resolved once by
+            # Resolve-NRGBaselineReason after the state is settled. Detail keeps
+            # the long prose the state was derived from.
+            ReasonCode              = ''
             Reason                  = ''
+            Detail                  = ''
             ExceptionSummary        = ''
             BaselineStatus          = ''
         }
 
+        $rowDetail = ''
         if (-not $ctrl.Automated) {
             $r.Reason = 'Not assessed by the tool: this requirement is verified manually and no collector reads its evidence yet.'
             $r.NotVerifiedCause = 'Manual control'
@@ -368,10 +385,12 @@ function Get-NRGBaselineCompliance {
             # ── Evidence timestamp and collector health from the raw data ──
             $evidenceTimes = [System.Collections.Generic.List[datetime]]::new()
             $collectorProblem = ''
+            $collectorSkipped = ''
             foreach ($key in @($ctrl.RawDataKeys)) {
                 $covEntry = if ($cov -is [System.Collections.IDictionary] -and $cov.Contains($key)) { $cov[$key] } else { $null }
                 $covStatus = if ($covEntry) { [string](Get-NRGObjectField -Item $covEntry -Key 'Status' -Default '') } else { '' }
-                if ($covStatus -in @('Failed', 'NotCollected', 'Skipped')) { $collectorProblem = "collector '$key' reported $covStatus"; continue }
+                if ($covStatus -eq 'Skipped') { $collectorSkipped = $key; $collectorProblem = "collector '$key' was skipped by the operator"; continue }
+                if ($covStatus -in @('Failed', 'NotCollected')) { $collectorProblem = "collector '$key' reported $covStatus"; continue }
                 if ($rawPopulated) {
                     $entry = if ($raw -is [System.Collections.IDictionary] -and $raw.Contains($key)) { $raw[$key] } else { $null }
                     if ($null -eq $entry) { $collectorProblem = "collector '$key' produced no data"; continue }
@@ -388,6 +407,7 @@ function Get-NRGBaselineCompliance {
             $f = if ($list.Count -gt 0) { & $worst $list } else { $null }
             $fState = if ($f) { [string](Get-NRGObjectField -Item $f -Key 'State' -Default '') } else { '' }
             $detail = if ($f) { [string](Get-NRGObjectField -Item $f -Key 'Detail' -Default '') } else { '' }
+            $rowDetail = $detail
             $r.ObservedFindingState = $fState
             if ($evidenceTimes.Count -eq 0 -and $f) {
                 $ts = & $parseTs (Get-NRGObjectField -Item $f -Key 'Timestamp' -Default $null)
@@ -403,7 +423,8 @@ function Get-NRGBaselineCompliance {
                 $r.ObservedState = 'NotVerified'
                 $r.Reason = if ($bucket) { $bucket.Reason } else { 'No finding was produced for this control in this run.' }
                 $b0 = if ($bucket) { $bucket.Bucket } else { '' }
-                $r.NotVerifiedCause = if ($collectorKey) { "Collector unavailable: $collectorKey" }
+                $r.NotVerifiedCause = if ($collectorSkipped) { 'Skipped by operator' }
+                                      elseif ($collectorKey) { "Collector unavailable: $collectorKey" }
                                       elseif ($b0 -eq 'SkippedByOperator') { 'Skipped by operator' }
                                       elseif ($b0 -eq 'NotEvaluatedThisMode') { 'Quick scan' }
                                       else { 'No result' }
@@ -411,7 +432,7 @@ function Get-NRGBaselineCompliance {
                 # A verdict cannot outlive the data it came from.
                 $r.ObservedState = 'NotVerified'
                 $r.Reason = "The $collectorProblem in this run, so the recorded verdict ($fState) is not evidence.$(if ($detail) { " $detail" })"
-                $r.NotVerifiedCause = "Collector unavailable: $collectorKey"
+                $r.NotVerifiedCause = if ($collectorSkipped) { 'Skipped by operator' } else { "Collector unavailable: $collectorKey" }
             } elseif ($fState -eq 'Satisfied') {
                 $r.ObservedState = 'Satisfied'; $r.Reason = $detail
             } elseif ($fState -in @('Gap', 'Partial')) {
@@ -463,6 +484,13 @@ function Get-NRGBaselineCompliance {
                 $r.EvidenceFreshness = 'None'
             }
         }
+
+        # ── The explanation contract, resolved once from the settled state ──
+        $optEntry = if ($optionalOf.ContainsKey($cid)) { $optionalOf[$cid] } else { $null }
+        $rr = Resolve-NRGBaselineReason -Row $r -Detail $rowDetail -OptionalCollector $optEntry -ThirdPartyMarker $thirdPartyMarker
+        $r.Detail     = [string]$r.Reason
+        $r.ReasonCode = [string]$rr.ReasonCode
+        $r.Reason     = [string]$rr.Reason
 
         # ── Disposition: an approved exception changes the disposition only ──
         if ($approvedExc.ContainsKey($cid)) {
@@ -532,6 +560,13 @@ function Get-NRGBaselineCompliance {
         Group-Object { if ($_.NotVerifiedCause) { $_.NotVerifiedCause } else { 'Unclassified' } } |
         Sort-Object -Property @{ Expression = 'Count'; Descending = $true }, @{ Expression = 'Name'; Descending = $false })
     foreach ($g in $causeGroups) { $byCause[[string]$g.Name] = [int]$g.Count }
+    # Every row by ReasonCode, in catalog precedence order: the same split a
+    # consumer gets by keying on the code.
+    $byReason = [ordered]@{}
+    foreach ($code in (Get-NRGBaselineReasonCodes).Keys) {
+        $n = @($rows | Where-Object { $_.ReasonCode -eq $code }).Count
+        if ($n -gt 0) { $byReason[$code] = $n }
+    }
     $byTier = [ordered]@{}
     foreach ($t in @($def.TierOrder)) {
         $tr = @($rows | Where-Object { $_.RequiredTier -eq $t })
@@ -546,6 +581,8 @@ function Get-NRGBaselineCompliance {
             ApprovedException = @($tr | Where-Object { $_.BaselineStatus -eq 'ApprovedException' }).Count
         }
     }
+    # Two coverage metrics from the reason contract, never a score.
+    $coverage = Get-NRGBaselineCoverage -Rows @($rows)
     $summary = [ordered]@{
         BaselineVersion        = $def.Version
         TargetTier             = $TargetTier
@@ -559,6 +596,7 @@ function Get-NRGBaselineCompliance {
         StaleEvidence          = @($rows | Where-Object { $_.EvidenceFreshness -eq 'Stale' }).Count
         NoEvidence             = @($rows | Where-Object { $_.EvidenceFreshness -eq 'None' }).Count
         NotVerifiedByCause     = $byCause
+        ByReasonCode           = $byReason
         EffectivenessEffective = @($rows | Where-Object { $_.EffectivenessState -eq 'Effective' }).Count
         EffectivenessIneffective = @($rows | Where-Object { $_.EffectivenessState -eq 'Ineffective' }).Count
         EffectivenessUnknown   = @($rows | Where-Object { $_.EffectivenessState -eq 'Unknown' }).Count
@@ -572,6 +610,9 @@ function Get-NRGBaselineCompliance {
         AsOf            = $AsOf.ToString('o')
         ExceptionsPath  = $(if ($exc -and $exc.Available) { $exc.Path } else { '' })
         Summary         = $summary
+        EvidenceCoverage      = $coverage.Evidence
+        EffectivenessCoverage = $coverage.Effectiveness
+        ReasonCodes     = @((Get-NRGBaselineReasonCodes).Values | ForEach-Object { [pscustomobject]$_ })
         Controls        = @($rows | ForEach-Object { [pscustomobject]$_ })
     }
 }
@@ -661,6 +702,7 @@ function Get-NRGBaselineRegressions {
             # going Satisfied -> NotVerified because one sign-in failed is a
             # sensor outage, not drift; the cause says which.
             CurrentCause = [string](Get-NRGObjectField -Item $c -Key 'NotVerifiedCause' -Default '')
+            CurrentReasonCode = [string](Get-NRGObjectField -Item $c -Key 'ReasonCode' -Default '')
             Kind         = $(if ($cur -eq 'Failed') { 'ConfigurationRegressed' } elseif ($cur -eq 'NotVerified') { 'EvidenceLost' } else { 'Other' })
             PriorRun     = [string]$PriorRunTime
             Detected     = $Detected.ToString('o')

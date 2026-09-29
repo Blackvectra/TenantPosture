@@ -1,0 +1,22 @@
+{
+  "purpose": "Collectors that are not part of the normal assessment run and must be enabled by the operator. The baseline plan reads this to say, before a run, which required controls will resolve NotVerified unless the collector is enabled. Each control names the condition under which the collector is needed, or an empty string when it is always needed.",
+  "collectors": {
+    "SharePointShell": {
+      "Name": "SharePoint Online Management Shell",
+      "Switch": "-IncludeSharePointShell",
+      "RawDataKey": "SharePoint",
+      "Note": "Get-SPOTenant runs through Windows PowerShell compatibility, a child process an ASR rule may block; that is why it is opt-in.",
+      "Controls": {
+        "SPO-1.2": "only when Anyone links are enabled tenant-wide (the default link type is read from the shell); with Anyone links off it is assessed from Graph",
+        "SPO-1.4": "only when external sharing is enabled (guest expiration is read from the shell)",
+        "SPO-1.5": "",
+        "SPO-2.2": "",
+        "SPO-2.6": "",
+        "SPO-2.7": "",
+        "SPO-3.2": "",
+        "SPO-3.3": "",
+        "SPO-3.4": ""
+      }
+    }
+  }
+}

@@ -462,6 +462,15 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
     if (-not $BaselineTier -and $clientRec -and $clientRec.PSObject.Properties['BaselineTier'] -and "$($clientRec.BaselineTier)" -in @('Minimum', 'Standard', 'Hardened')) {
         $BaselineTier = [string]$clientRec.BaselineTier
     }
+    # Opt-in collectors declared on the client record (Collectors block): an
+    # operator expectation that turns the collector on, never proof it works.
+    if ($clientRec -and (Get-Command Get-NRGClientCollectorFlags -ErrorAction SilentlyContinue)) {
+        $clientCollectors = Get-NRGClientCollectorFlags -ClientRecord $clientRec
+        if ($clientCollectors['SharePointShell'] -and -not $IncludeSharePointShell) {
+            $IncludeSharePointShell = $true
+            Write-Host "  [i] SharePoint Online Management Shell enabled from clients.json (Collectors.SharePointShell)." -ForegroundColor DarkGray
+        }
+    }
     $rec = if ($clientRec -and $clientRec.PSObject.Properties['ClientId'] -and $clientRec.ClientId) { $clientRec } else { $null }
     if ($rec) {
         $AppId                 = [string]$rec.ClientId
@@ -685,6 +694,35 @@ if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
 if (-not $skipCollection) {
     # ── Connect to services ──────────────────────────────────────────────────
     Write-Host ""
+    # ── NRG baseline plan: what this run is expected to verify, before it runs ──
+    # Predictive, never a verdict. Licensing is unknown here unless a prior
+    # results JSON (-BaselineResults) supplies the SKUs read on that run.
+    $baselinePlan = $null
+    if (Get-Command Get-NRGBaselinePlan -ErrorAction SilentlyContinue) {
+        try {
+            $planTier = if ($BaselineTier) { $BaselineTier } else { 'Standard' }
+            $planSkip = @(foreach ($sf in Get-NRGWorkloadSkipMap) { if ((Get-Variable -Name $sf.Flag -ValueOnly -ErrorAction SilentlyContinue)) { $sf.Keys } })
+            $planLic = $null; $planLicSrc = ''
+            if ($BaselineResults -and (Test-Path -LiteralPath $BaselineResults)) {
+                try {
+                    $planPrior = Get-Content -LiteralPath $BaselineResults -Raw -Encoding utf8 | ConvertFrom-Json -Depth 20
+                    $planSkus  = @(Get-NRGNestedProperty -Object $planPrior -Path 'RawData.AAD-Inventory.Data.SubscribedSkus' -Default @())
+                    if ($planSkus.Count -gt 0) {
+                        $planLic    = Get-NRGTenantLicenseProfile -SubscribedSkus $planSkus
+                        $planAt     = Get-NRGNestedProperty -Object $planPrior -Path 'Metadata.AssessmentTime' -Default '?'
+                        $planLicSrc = "prior run $(if ($planAt -is [datetime]) { $planAt.ToString('yyyy-MM-dd HH:mm', [cultureinfo]::InvariantCulture) } else { [string]$planAt })"
+                    }
+                } catch { Write-Verbose "Prior results could not supply licensing for the plan: $($_.Exception.Message)" }
+            }
+            $baselinePlan = Get-NRGBaselinePlan -TenantDomain $TenantDomain -TargetTier $planTier -ThirdPartyEDR $ThirdPartyEDR `
+                -IncludeSharePointShell:($IncludeSharePointShell -and -not $SkipSharePoint) -SkipCollectors $planSkip `
+                -LicenseProfile $planLic -LicenseSource $planLicSrc
+            $ps = $baselinePlan.Summary
+            Write-Host "[-] NRG baseline plan ($($ps.TargetTier)): $($ps.RequiredControls) required — expected $($ps.Automatic) automatic, $($ps.ThirdPartyHandled) third-party handled, $($ps.Manual) manual, $($ps.OptionalCollectorRequired) optional collector, $($ps.SkippedByOperator) skipped, $($ps.LicenseBlockedExpected) license blocked, $($ps.LicensingUnknown) licensing unknown until connection; potential not verified before run: $($ps.ExpectedNotVerified)" -ForegroundColor DarkGray
+            Write-Host ""
+        } catch { Write-Warning "Baseline plan unavailable: $($_.Exception.Message)" }
+    }
+
     Write-Host "[-] Connecting to M365 services..." -ForegroundColor Cyan
 
     $connectParams = @{}
@@ -1009,6 +1047,8 @@ try {
 # collector, or stale evidence resolves NotVerified, never Satisfied.
 $baselineCompliance  = $null
 $baselineRegressions = $null
+$baselinePlanComparison = $null
+if (-not (Get-Variable -Name baselinePlan -ErrorAction SilentlyContinue)) { $baselinePlan = $null }
 if (-not $BaselineTier) {
     $priorTier = [string](Get-NRGObjectField -Item $reportMetadata -Key 'TargetTier' -Default '')
     $BaselineTier = if ($skipCollection -and $priorTier -in @('Minimum', 'Standard', 'Hardened')) { $priorTier } else { 'Standard' }
@@ -1031,8 +1071,22 @@ if (Get-Command Get-NRGBaselineCompliance -ErrorAction SilentlyContinue) {
             } catch { Write-Warning "Prior results could not be read for baseline regressions: $($_.Exception.Message)" }
         }
         $baselineRegressions = Get-NRGBaselineRegressions -Current $baselineCompliance -Prior $priorBaseline -PriorRunTime $priorRunTime
+        if ($null -ne $baselinePlan -and (Get-Command Compare-NRGBaselinePlan -ErrorAction SilentlyContinue)) {
+            $baselinePlanComparison = Compare-NRGBaselinePlan -Plan $baselinePlan -Compliance $baselineCompliance
+        }
         $bs = $baselineCompliance.Summary
         Write-Host "  [i] NRG baseline v$($bs.BaselineVersion) ($($bs.TargetTier)): $($bs.RequiredControls) required — $($bs.Satisfied) satisfied, $($bs.Failed) failed, $($bs.NotVerified) not verified, $($bs.LicenseBlocked) license blocked, $($bs.ApprovedException) approved exception(s); effectiveness known for $($bs.EffectivenessEffective + $bs.EffectivenessIneffective) of $($bs.RequiredControls)" -ForegroundColor DarkGray
+        $evc = Get-NRGObjectField -Item $baselineCompliance -Key 'EvidenceCoverage' -Default $null
+        $efc = Get-NRGObjectField -Item $baselineCompliance -Key 'EffectivenessCoverage' -Default $null
+        if ($null -ne $evc -and $null -ne $efc) {
+            $gapText = (@($evc.Gaps.Keys | ForEach-Object { "$($evc.Gaps[$_]) $_" }) -join ', ')
+            Write-Host "  [i] Evidence coverage: $($evc.Known) of $($evc.Applicable) applicable controls ($($evc.Percent)%)$(if ($evc.LicenseBlocked -gt 0) { ", $($evc.LicenseBlocked) license blocked" })$(if ($gapText) { "; gaps: $gapText" }). Effectiveness coverage: $($efc.Known) of $($efc.Required) ($($efc.Percent)%). Neither is the baseline score." -ForegroundColor DarkGray
+        }
+        if ($null -ne $baselinePlanComparison -and $baselinePlanComparison.Available) {
+            $unexp = @($baselinePlanComparison.UnexpectedNotVerified)
+            Write-Host "  [i] Plan vs run: $($baselinePlanComparison.Note)" -ForegroundColor DarkGray
+            if ($unexp.Count -gt 0) { Write-Host "      Not expected: $(@($unexp | ForEach-Object { "$($_.ControlId) [$($_.Cause)]" }) -join ', ')" -ForegroundColor DarkYellow }
+        }
         if ($baselineRegressions.Available -and @($baselineRegressions.Regressions).Count -gt 0) {
             $regCfg  = @($baselineRegressions.Regressions | Where-Object { $_.Kind -eq 'ConfigurationRegressed' })
             $regLost = @($baselineRegressions.Regressions | Where-Object { $_.Kind -eq 'EvidenceLost' })
@@ -1086,6 +1140,8 @@ $jsonPayload = @{
     # effectiveness, plus the regressions against the prior run.
     BaselineCompliance  = $baselineCompliance
     BaselineRegressions = $baselineRegressions
+    BaselinePlan        = $baselinePlan
+    BaselinePlanComparison = $baselinePlanComparison
 } | ConvertTo-Json -Depth 12
 Set-NRGSensitiveFileContent -Path $jsonPath -Content $jsonPayload
 Write-NRGReportFile 'JSON' $jsonPath
@@ -1149,7 +1205,7 @@ if (-not $JsonOnly) {
         $htmlPath = Join-Path $OutputPath "$baseName-assessment.html"
         try {
             $fwSelection = if ($Framework -eq 'All') { @('CIS','SCuBA','NIST','CMMC') } else { @($Framework) }
-            Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath -Attachments $reportAttachments -Frameworks $fwSelection -BaselineRegressions $baselineRegressions
+            Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath -Attachments $reportAttachments -Frameworks $fwSelection -BaselineRegressions $baselineRegressions -BaselinePlanComparison $baselinePlanComparison
             Write-NRGReportFile 'HTML' $htmlPath
             Set-NRGSensitiveFileAcl -Path $htmlPath -ErrorAction SilentlyContinue
         } catch {
@@ -1169,7 +1225,7 @@ if (-not $JsonOnly) {
         if (Get-Command Publish-NRGAssessmentSummary -ErrorAction SilentlyContinue) {
             $mdPath = Join-Path $OutputPath "$baseName-assessment.md"
             try {
-                Publish-NRGAssessmentSummary -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $mdPath -BaselineRegressions $baselineRegressions
+                Publish-NRGAssessmentSummary -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $mdPath -BaselineRegressions $baselineRegressions -BaselinePlanComparison $baselinePlanComparison
                 Write-NRGReportFile 'Markdown' $mdPath
                 Set-NRGSensitiveFileAcl -Path $mdPath -ErrorAction SilentlyContinue
             } catch { Write-Warning "Markdown publish failed: $($_.Exception.Message)" }

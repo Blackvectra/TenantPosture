@@ -22,7 +22,9 @@ function Publish-NRGAssessmentSummary {
         [Parameter(Mandatory)] [object[]]   $Findings,
         [Parameter(Mandatory)] [hashtable]  $Connections,
         [Parameter(Mandatory)] [string]     $OutputPath,
-        [AllowNull()] [object] $BaselineRegressions = $null
+        [AllowNull()] [object] $BaselineRegressions = $null,
+        # The pre-run plan compared with this run (Compare-NRGBaselinePlan). Optional.
+        [AllowNull()] [object] $BaselinePlanComparison = $null
     )
 
     # Fail closed — require security helpers
@@ -276,6 +278,19 @@ function Publish-NRGAssessmentSummary {
                 foreach ($k in @($causes.Keys)) { $null = $sb.AppendLine("| $(EscMd $k) | $($causes[$k]) |") }
                 $null = $sb.AppendLine()
             }
+            $evc = Get-NRGObjectField -Item $bl -Key 'EvidenceCoverage' -Default $null
+            if ($null -ne $evc) {
+                $null = $sb.AppendLine("### Evidence coverage")
+                $null = $sb.AppendLine()
+                $null = $sb.AppendLine("**$($evc.Known) of $($evc.Applicable) applicable required controls have usable evidence ($($evc.Percent)%).**$(if ($evc.LicenseBlocked -gt 0) { " $($evc.LicenseBlocked) license blocked, counted in the denominator and shown separately." })$(if ($evc.NotApplicable -gt 0) { " $($evc.NotApplicable) not applicable, outside the denominator." }) Not a score: a tenant failing every control has 100% evidence coverage.")
+                $null = $sb.AppendLine()
+                if (@($evc.Gaps.Keys).Count -gt 0) {
+                    $null = $sb.AppendLine("| Evidence gaps | Controls |")
+                    $null = $sb.AppendLine("|---|---|")
+                    foreach ($k in @($evc.Gaps.Keys)) { $null = $sb.AppendLine("| ``$k`` | $($evc.Gaps[$k]) |") }
+                    $null = $sb.AppendLine()
+                }
+            }
             $null = $sb.AppendLine("### Effectiveness visibility")
             $null = $sb.AppendLine()
             $null = $sb.AppendLine("Configuration says a control is set; effectiveness says it is working. The assessment can read effectiveness evidence for only a few controls today; everywhere else it is reported as unknown, not assumed.")
@@ -287,6 +302,31 @@ function Publish-NRGAssessmentSummary {
             $null = $sb.AppendLine("| Ineffective | $($bs.EffectivenessIneffective) |")
             $null = $sb.AppendLine("| Unknown (evidence not collected) | $($bs.EffectivenessUnknown) |")
             $null = $sb.AppendLine()
+            $efc = Get-NRGObjectField -Item $bl -Key 'EffectivenessCoverage' -Default $null
+            if ($null -ne $efc) {
+                $null = $sb.AppendLine("**Effectiveness coverage: $($efc.Known) of $($efc.Required) required controls have effectiveness evidence ($($efc.Percent)%).** Configuration evidence never counts as effectiveness evidence; the tool can read effectiveness for $($efc.CapabilityCollected) of these today.")
+                $null = $sb.AppendLine()
+            }
+            if ($null -ne $BaselinePlanComparison -and [bool](Get-NRGObjectField -Item $BaselinePlanComparison -Key 'Available' -Default $false)) {
+                $pc = $BaselinePlanComparison
+                $null = $sb.AppendLine("### Expected before the run vs observed")
+                $null = $sb.AppendLine()
+                $null = $sb.AppendLine((EscMd ([string](Get-NRGObjectField -Item $pc -Key 'Note' -Default ''))))
+                $null = $sb.AppendLine()
+                $null = $sb.AppendLine("| Plan vs run | Controls |")
+                $null = $sb.AppendLine("|---|---|")
+                $null = $sb.AppendLine("| Not verified, expected before the run | $([int](Get-NRGObjectField -Item $pc -Key 'ExpectedNotVerified' -Default 0)) |")
+                $null = $sb.AppendLine("| Not verified, observed | $([int](Get-NRGObjectField -Item $pc -Key 'ObservedNotVerified' -Default 0)) |")
+                $null = $sb.AppendLine("| Licensing unknown before the run | $([int](Get-NRGObjectField -Item $pc -Key 'LicensingUnknownBeforeRun' -Default 0)) |")
+                $null = $sb.AppendLine()
+                $unexp = @(Get-NRGObjectField -Item $pc -Key 'UnexpectedNotVerified' -Default @())
+                if ($unexp.Count -gt 0) {
+                    $null = $sb.AppendLine("| Not expected | Cause | Plan said |")
+                    $null = $sb.AppendLine("|---|---|---|")
+                    foreach ($u in $unexp) { $null = $sb.AppendLine("| $($u.ControlId) | $(EscMd ([string]$u.Cause)) | $(EscMd ([string]$u.Expected)) |") }
+                    $null = $sb.AppendLine()
+                }
+            }
             if ($null -ne $BaselineRegressions) {
                 $regs = @(Get-NRGObjectField -Item $BaselineRegressions -Key 'Regressions' -Default @())
                 $note = [string](Get-NRGObjectField -Item $BaselineRegressions -Key 'Note' -Default '')
@@ -311,7 +351,7 @@ function Publish-NRGAssessmentSummary {
             $null = $sb.AppendLine("|---|---|---|---|---|---|---|---|---|")
             foreach ($c in ($bl.Controls | Sort-Object { $order[[string]$_.BaselineStatus] }, RequiredTier, ControlId)) {
                 $reason = if ([string]$c.BaselineStatus -eq 'ApprovedException') { "$($c.ExceptionSummary) Observed: $($c.ObservedState). $($c.Reason)" } else { [string]$c.Reason }
-                $null = $sb.AppendLine("| $(EscMd $c.ControlId) $(EscMd $c.Title) | $(EscMd $c.RequiredTier) | $(EscMd $c.Owner) | **$(EscMd $c.BaselineStatus)** | $(EscMd $c.ObservedState) | $(EscMd $c.EvidenceFreshness) | $(EscMd $c.EffectivenessState) | $(EscMd $c.DependencyState) | $(EscMd $reason) |")
+                $null = $sb.AppendLine("| $(EscMd $c.ControlId) $(EscMd $c.Title) | $(EscMd $c.RequiredTier) | $(EscMd $c.Owner) | **$(EscMd $c.BaselineStatus)** | $(EscMd $c.ObservedState) | $(EscMd $c.EvidenceFreshness) | $(EscMd $c.EffectivenessState) | $(EscMd $c.DependencyState) | ``$(EscMd ([string](Get-NRGObjectField -Item $c -Key 'ReasonCode' -Default '')))`` $(EscMd $reason) |")
             }
             $null = $sb.AppendLine()
         }
