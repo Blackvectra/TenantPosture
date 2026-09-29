@@ -37,6 +37,93 @@
   failing with "You must call the Connect-MicrosoftTeams cmdlet").
   `NRG.WorkloadSkip.Tests.ps1` pins the order.
 
+- **Per-client collector flags.** A `Collectors` block on a `clients.json`
+  record declares opt-in collectors for that client, keyed by the
+  optional-collector catalog id (`SharePointShell` today; the schema allows
+  exactly the catalog ids). `Get-NRGClientCollectorFlags` reads it; the
+  entry point turns the collector on by `-TenantDomain`, the batch runner
+  passes the switch explicitly, and the standalone plan reads it. A flag is
+  an operator expectation, never truth: it changes what the plan expects
+  and what the run attempts, and if the collector still fails the run
+  reports the failure and the plan comparison names the row. An unknown
+  key is warned about and ignored.
+
+- **Exception cmdlets: the right thing easier than hand-editing PSD1.**
+  `New-`, `Get-`, `Set-` and `Remove-NRGBaselineException`
+  (`Lib/Set-NRGBaselineException.ps1`) manage
+  `Config/baseline-exceptions/<tenant>.psd1` for one client. New refuses a
+  control that is not in the baseline (an assessment-only control needs no
+  exception), a review date that is not in the future, an expiry before the
+  review, and a second active exception for the same control; Set changes
+  only the fields given and re-validates the whole entry, re-dating the
+  approval when the approver changes; Remove drops every entry for the
+  control and keeps the file. Every save is atomic and verified: the
+  document is written beside the target, re-read with
+  `Import-PowerShellDataFile`, checked for the expected entry count, and
+  only then moved into place, so a failed save cannot corrupt the file.
+  An existing entry that is not in force is preserved as written and
+  reported, never silently approved or repaired. All three writers support
+  `-WhatIf` and `-Confirm` and return what changed (before/after counts or
+  entries, the fields changed). An exception changes the baseline
+  disposition only, never the observed state, and never `BaselineVersion`.
+
+- **Evidence coverage and effectiveness coverage, apart from each other
+  and from the score.** `Get-NRGBaselineCoverage` derives both from the
+  reason contract. Evidence coverage: of the applicable required controls
+  (NotApplicable outside the denominator), how many have usable evidence —
+  Satisfied, ControlFailed and ThirdPartyHandled (attested, not verified);
+  every code that means the evidence was not obtained is a gap, listed by
+  code; LicenseBlocked is in the denominator and shown separately, because
+  knowing why a control cannot be verified is not evidence the requirement
+  is met. Effectiveness coverage: of the required controls, how many have
+  an Effective or Ineffective reading; Unknown stays unknown however
+  perfect the configuration evidence is. Written to the results JSON as
+  `BaselineCompliance.EvidenceCoverage` and
+  `BaselineCompliance.EffectivenessCoverage`, printed on the console after
+  the baseline line, and rendered in both reports, each stating that it is
+  not the baseline score. Tests pin the arithmetic (Known + Unknown +
+  LicenseBlocked = Applicable) and both acceptance rules: a tenant failing
+  every control has 100% evidence coverage and 0 satisfied, and perfect
+  configuration evidence yields 0% effectiveness coverage while nothing
+  reads effectiveness.
+
+- **One explanation contract for every baseline row: `ReasonCode` +
+  `Reason`.** `Lib/Get-NRGBaselineReason.ps1` holds an ordered catalog of
+  stable codes (`ManualVerificationRequired`, `SkippedByOperator`,
+  `ThirdPartyHandled`, `OptionalCollectorRequired`, `LicenseBlocked`,
+  `LicensingUnknown`, `CollectorUnavailable`, `EvidenceStale`,
+  `EvidenceNotRead`, `EvaluationError`, `ControlFailed`, `Satisfied`,
+  `NotApplicable`, `Automatic`) and one resolver,
+  `Resolve-NRGBaselineReason`, that the compliance view calls once per row
+  after the state is settled. The precedence is deterministic: a skipped
+  collector never reads as license-blocked and a third-party declaration
+  never reads as manual. The plan rows, the plan-versus-run comparison, the
+  regression rows (`CurrentReasonCode`), the results JSON (with the catalog
+  as `BaselineCompliance.ReasonCodes` and a `ByReasonCode` summary) and both
+  reports carry the same pair, so a downstream consumer keys on the code
+  and never parses prose. The long prose a row was derived from is kept as
+  `Detail`. `NRG.BaselineReason.Tests.ps1` pins the catalog order, the
+  precedence cases, the plan and comparison codes, and both renderers.
+
+- **Baseline plan: what a run is expected to verify, before it runs
+  (`Get-NRGBaselinePlan`).** The front door for running the v1.0 standard
+  against another client without rethinking it each time. For the target
+  tier it says how many controls are required, which connections the run
+  needs, and how each required control is expected to resolve: automatic,
+  manual, third-party handled (attested, not verified), optional collector
+  required (the SharePoint shell, from `Config/optional-collectors.json`),
+  skipped by operator, license blocked (only when a license profile shows
+  it), or licensing unknown until connection — never guessed. The
+  standalone `Get-NRGBaselinePlan.ps1` connects to nothing and can take
+  licensing from a prior results JSON; `Invoke-NRGAssessment.ps1` prints
+  the plan before connecting, writes `BaselinePlan` to the results JSON,
+  and after the run writes `BaselinePlanComparison` (which NotVerified rows
+  were expected, which were not, with their cause) and renders it in the
+  baseline section. `BaselineVersion` stays 1.0; no tier, control or
+  standard changes. `NRG.BaselinePlan.Tests.ps1` pins the buckets, the
+  licensing honesty, the catalog against the evaluators, and the no-network
+  contract.
+
 - **NRG Security Baseline v1.0 locked.** Live validation on one tenant is
   complete (five runs, 2026-09-29): zero baseline-layer bug candidates, every
   not-verified row carrying its cause, and every genuine failure unchanged.

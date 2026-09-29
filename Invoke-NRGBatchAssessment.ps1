@@ -300,6 +300,8 @@ foreach ($client in $clients) {
             if ($client.SkipIntune)        { $params['SkipIntune']        = $true }
             if ($client.SkipPowerPlatform) { $params['SkipPowerPlatform'] = $true }
             if ($client.SkipDNS)           { $params['SkipDNS']           = $true }
+            # Opt-in collectors from the client's Collectors block (the entry point reads the same block by -TenantDomain; passing it here keeps the batch explicit).
+            if ($client.PSObject.Properties['Collectors'] -and $client.Collectors -and $client.Collectors.PSObject.Properties['SharePointShell'] -and [bool]$client.Collectors.SharePointShell) { $params['IncludeSharePointShell'] = $true }
             if ($JsonOnly)                 { $params['JsonOnly']           = $true }
             if ($AllFiles)                 { $params['AllFiles']           = $true }
             if ($client.DnsDomains -and @($client.DnsDomains).Count -gt 0) {

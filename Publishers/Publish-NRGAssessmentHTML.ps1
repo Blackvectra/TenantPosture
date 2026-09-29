@@ -46,7 +46,9 @@ function Publish-NRGAssessmentHTML {
 
         # Regressions against a prior run's baseline compliance (the entry
         # point computes them when -BaselineResults is given). Optional.
-        [AllowNull()] [object] $BaselineRegressions = $null
+        [AllowNull()] [object] $BaselineRegressions = $null,
+        # The pre-run plan compared with this run (Compare-NRGBaselinePlan). Optional.
+        [AllowNull()] [object] $BaselinePlanComparison = $null
     )
 
     if (-not (Get-Command ConvertTo-NRGHtmlSafe -ErrorAction SilentlyContinue)) {
@@ -736,13 +738,27 @@ function Publish-NRGAssessmentHTML {
                 "<div class='scope-tile$(if($bs.EffectivenessIneffective -gt 0){' warn'})'><div class='scope-n$(if($bs.EffectivenessIneffective -gt 0){' warn'})'>$($bs.EffectivenessIneffective)</div><div class='scope-l'>Ineffective</div></div>"
                 "<div class='scope-tile'><div class='scope-n'>$($bs.EffectivenessUnknown)</div><div class='scope-l'>Effectiveness unknown</div></div>"
             ) -join ''
+            # Two coverage metrics from the reason contract (Get-NRGBaselineCoverage):
+            # kept apart from each other and from the score.
+            $evidHtml = ''; $effCovHtml = ''
+            $evc = Get-NRGObjectField -Item $bl -Key 'EvidenceCoverage' -Default $null
+            $efc = Get-NRGObjectField -Item $bl -Key 'EffectivenessCoverage' -Default $null
+            if ($null -ne $evc) {
+                $gapRows = (@($evc.Gaps.Keys) | ForEach-Object { "<tr><td><code>$(hx $_)</code></td><td>$($evc.Gaps[$_])</td></tr>" }) -join ''
+                $evidHtml = "<h4 style='margin:16px 0 6px'>Evidence coverage</h4>" +
+                            "<p class='scope-det'><strong>$($evc.Known) of $($evc.Applicable) applicable required controls have usable evidence ($($evc.Percent)%).</strong>$(if ($evc.LicenseBlocked -gt 0) { " $($evc.LicenseBlocked) license blocked, counted in the denominator and shown separately." })$(if ($evc.NotApplicable -gt 0) { " $($evc.NotApplicable) not applicable, outside the denominator." }) Not a score: a tenant failing every control has 100% evidence coverage.</p>" +
+                            $(if ($gapRows) { "<table class='ft' style='max-width:520px'><thead><tr><th>Evidence gaps</th><th>Controls</th></tr></thead><tbody>$gapRows</tbody></table>" } else { '' })
+            }
+            if ($null -ne $efc) {
+                $effCovHtml = "<p class='scope-det'><strong>Effectiveness coverage: $($efc.Known) of $($efc.Required) required controls have effectiveness evidence ($($efc.Percent)%).</strong> Configuration evidence never counts as effectiveness evidence; the tool can read effectiveness for $($efc.CapabilityCollected) of these today.</p>"
+            }
             $statusOrder = @{ 'Failed' = 0; 'NotVerified' = 1; 'ApprovedException' = 2; 'LicenseBlocked' = 3; 'NotApplicable' = 4; 'Satisfied' = 5 }
             $statusLabel = @{ 'Failed' = 'Failed'; 'NotVerified' = 'Not verified'; 'ApprovedException' = 'Approved exception'; 'LicenseBlocked' = 'License blocked'; 'NotApplicable' = 'Not applicable'; 'Satisfied' = 'Satisfied' }
             $rowsHtml = ($bl.Controls | Sort-Object { $statusOrder[[string]$_.BaselineStatus] }, RequiredTier, ControlId | ForEach-Object {
                 $st = [string]$_.BaselineStatus
                 $reason = if ($st -eq 'ApprovedException') { "$($_.ExceptionSummary) Observed: $($_.ObservedState). $($_.Reason)" } else { [string]$_.Reason }
                 $fresh = switch ([string]$_.EvidenceFreshness) { 'Current' { 'current' } 'Stale' { 'STALE' } default { 'none' } }
-                "<tr><td><code>$(hx $_.ControlId)</code></td><td>$(hx $_.Title)</td><td>$(hx $_.RequiredTier)</td><td>$(hx $_.Owner)</td><td><strong>$(hx $statusLabel[$st])</strong></td><td>$(hx $_.ObservedState)</td><td>$(hx $fresh)</td><td>$(hx $_.EffectivenessState)</td><td>$(hx $_.DependencyState)</td><td>$(hx $reason)</td></tr>"
+                "<tr><td><code>$(hx $_.ControlId)</code></td><td>$(hx $_.Title)</td><td>$(hx $_.RequiredTier)</td><td>$(hx $_.Owner)</td><td><strong>$(hx $statusLabel[$st])</strong></td><td>$(hx $_.ObservedState)</td><td>$(hx $fresh)</td><td>$(hx $_.EffectivenessState)</td><td>$(hx $_.DependencyState)</td><td><code>$(hx ([string](Get-NRGObjectField -Item $_ -Key 'ReasonCode' -Default '')))</code> $(hx $reason)</td></tr>"
             }) -join ''
             $regHtml = ''
             if ($null -ne $BaselineRegressions) {
@@ -755,6 +771,17 @@ function Publish-NRGAssessmentHTML {
                 } elseif ($note) {
                     $regHtml = "<p class='scope-det'>$(hx $note)</p>"
                 }
+            }
+            # The pre-run plan beside what happened: which NotVerified rows were
+            # expected and which were not (a read that failed on the day).
+            $planHtml = ''
+            if ($null -ne $BaselinePlanComparison -and [bool](Get-NRGObjectField -Item $BaselinePlanComparison -Key 'Available' -Default $false)) {
+                $pc = $BaselinePlanComparison
+                $unexp = @(Get-NRGObjectField -Item $pc -Key 'UnexpectedNotVerified' -Default @())
+                $unexpRows = ($unexp | ForEach-Object { "<tr><td><code>$(hx $_.ControlId)</code></td><td>$(hx $_.Cause)</td><td>$(hx $_.Expected)</td></tr>" }) -join ''
+                $planHtml = "<h4 style='margin:16px 0 6px'>Expected before the run vs observed</h4><p class='scope-det'>$(hx ([string](Get-NRGObjectField -Item $pc -Key 'Note' -Default '')))</p>" +
+                            "<table class='ft' style='max-width:520px'><tbody><tr><td>Not verified, expected before the run</td><td>$([int](Get-NRGObjectField -Item $pc -Key 'ExpectedNotVerified' -Default 0))</td></tr><tr><td>Not verified, observed</td><td>$([int](Get-NRGObjectField -Item $pc -Key 'ObservedNotVerified' -Default 0))</td></tr><tr><td>Licensing unknown before the run</td><td>$([int](Get-NRGObjectField -Item $pc -Key 'LicensingUnknownBeforeRun' -Default 0))</td></tr></tbody></table>" +
+                            $(if ($unexp.Count -gt 0) { "<table class='ft'><thead><tr><th>Not expected</th><th>Cause</th><th>Plan said</th></tr></thead><tbody>$unexpRows</tbody></table>" } else { '' })
             }
             $causeHtml = ''
             $causes = Get-NRGObjectField -Item $bs -Key 'NotVerifiedByCause' -Default $null
@@ -774,10 +801,13 @@ function Publish-NRGAssessmentHTML {
     <div class='scope-grid'>$tiles</div>
     <p class='scope-det'>Not verified means the run produced no usable evidence for the control (no result, a collector that did not complete, a skipped workload, a manual check, or evidence older than its freshness window). It is never counted as satisfied. $excNote</p>
     $causeHtml
+    $evidHtml
     <h4 style='margin:16px 0 6px'>Effectiveness visibility</h4>
     <div class='scope-grid'>$effTiles</div>
+    $effCovHtml
     <p class='scope-det'>Configuration says a control is set; effectiveness says it is working. The assessment can read effectiveness evidence for only a few controls today (endpoint results); everywhere else it is reported as unknown, not assumed.</p>
-    $regHtml
+    $planHtml
+$regHtml
     <details class='scope-det'><summary>Every required control ($($bs.RequiredControls))</summary>
     <table class='ft'><thead><tr><th>Control</th><th>Title</th><th>Tier</th><th>Owner</th><th>Baseline</th><th>Observed</th><th>Evidence</th><th>Effectiveness</th><th>Dependencies</th><th>Reason</th></tr></thead><tbody>$rowsHtml</tbody></table>
     </details>
