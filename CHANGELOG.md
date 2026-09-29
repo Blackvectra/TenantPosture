@@ -20,6 +20,19 @@
   engineering list. Connection failures record their first stack frames in
   the Exceptions array. Partial stays Failed in the baseline by decision.
 
+- **Exchange and Purview never connected because Teams connected first.**
+  Root cause of the "Exchange/Purview connection" validation defect, found
+  on the first run from the MSI PowerShell build with ExchangeOnlineManagement
+  3.10.1: the MicrosoftTeams module loads its own `Microsoft.Identity.Client`
+  and `.Broker` assemblies into the default load context, and the Exchange
+  module then fails to load its own copy ("The located assembly's manifest
+  definition does not match the assembly reference", 0x80131040) on both
+  `Connect-ExchangeOnline` and `Connect-IPPSSession`. The run where Exchange
+  connected first had Exchange, Purview and Teams all connected.
+  `Connect-NRGServices` now connects Graph, Exchange, Purview, then Teams;
+  `NRG.WorkloadSkip.Tests.ps1` pins the order. Until the fix is in the
+  extracted copy, `-SkipTeams` gets Exchange and Purview connected.
+
 - **EXO-2.6 scored a failed section as a clean list (second live run,
   Exchange half).** `Get-Mailbox` omitted `LicenseReconciliationNeeded` on
   the live tenant, the shared-mailbox sign-in loop threw under StrictMode,

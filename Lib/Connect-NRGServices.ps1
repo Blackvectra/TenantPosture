@@ -29,8 +29,12 @@
 #   Orchestrator wraps the run in try/finally with Disconnect-NRGServices.
 #
 # CONNECTION ORDER (MSAL assembly conflict prevention):
-#   Graph -> Teams -> EXO -> IPPS. SharePoint deferred to orchestrator (PnP loads
-#   older Graph.Core that breaks Graph cmdlets).
+#   Graph -> EXO -> IPPS -> Teams. Teams LAST: the MicrosoftTeams module loads
+#   its own Microsoft.Identity.Client(.Broker) into the default load context,
+#   and ExchangeOnlineManagement 3.10 then cannot load its own (0x80131040), so
+#   Teams-before-Exchange lost Exchange and Purview on every live run. Graph
+#   resolves MSAL in its own load context and is unaffected. SharePoint shell
+#   stays after everything (PnP loads an older Graph.Core that breaks Graph).
 #
 # PnP MULTI-TENANT APP DELETED 2024-09-09:
 #   The shared PnP Management Shell Entra app (ClientID 31359c7f-bd7e-475c-86db-fdb8c937548e)
@@ -444,59 +448,7 @@ function Connect-NRGServices {
         }
     }
 
-    # ── 2. Microsoft Teams ────────────────────────────────────────────────────
-    if (-not $SkipTeams) {
-        Write-Host "  [*] Microsoft Teams..." -ForegroundColor Cyan
-        try {
-            # Check both installed and in-session (handles just-installed modules)
-            $teamsAvail = (Get-Module -ListAvailable -Name MicrosoftTeams -ErrorAction SilentlyContinue) -or
-                          (Get-Module -Name MicrosoftTeams -ErrorAction SilentlyContinue)
-            if (-not $teamsAvail) {
-                # Try importing directly — may have been installed this session
-                try { Import-Module MicrosoftTeams -Force -ErrorAction Stop -WarningAction SilentlyContinue }
-                catch { throw 'MicrosoftTeams module not installed. Run: Install-Module MicrosoftTeams -Scope CurrentUser -Force' }
-            }
-            Import-Module MicrosoftTeams -ErrorAction Stop -WarningAction SilentlyContinue
-
-            if ($isAppOnly) {
-                Connect-MicrosoftTeams -TenantId $TenantId -ApplicationId $AppId `
-                                       -CertificateThumbprint $CertificateThumbprint `
-                                       -ErrorAction Stop | Out-Null
-            } else {
-                # Import module explicitly in case it was just installed this session
-                if (-not (Get-Command Connect-MicrosoftTeams -ErrorAction SilentlyContinue)) {
-                    Import-Module MicrosoftTeams -Force -ErrorAction SilentlyContinue
-                }
-                # Interactive browser MFA (matches ScubaGear); no device-code flow.
-                # Pass the already-verified Graph context tenant — under GDAP
-                # Connect-MicrosoftTeams with no -TenantId authenticates to
-                # the signed-in operator's own organization, not the client's.
-                $teamsParams = @{ ErrorAction = 'Stop' }
-                if ($result['TenantId']) { $teamsParams['TenantId'] = $result['TenantId'] }
-                Connect-MicrosoftTeams @teamsParams | Out-Null
-            }
-            # Verify the Teams session landed on the tenant Graph connected
-            # to. A mismatched or missing tenant hint can still silently
-            # authenticate to the operator's own organization, and every
-            # TMS-* control would then score that organization's policies
-            # as the client's.
-            if ($result['TenantId']) {
-                $csTenantId = "$((Get-CsTenant -ErrorAction Stop).TenantId)"
-                if ($csTenantId -ne $result['TenantId']) {
-                    throw "Teams session tenant ($csTenantId) does not match Graph tenant ($($result['TenantId']))."
-                }
-            }
-            $result['Teams'] = $true
-            Write-Host "  [+] Teams connected" -ForegroundColor Green
-        } catch {
-            Write-Host "  [!] Teams: $($_.Exception.Message)" -ForegroundColor Yellow
-            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                Register-NRGException -Source 'Connect-Teams' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
-            }
-        }
-    }
-
-    # ── 3. Exchange Online ────────────────────────────────────────────────────
+    # ── 2. Exchange Online ────────────────────────────────────────────────────
     # ACCEPTED RESIDUAL RISK: the EXO V3 module dynamically downloads cmdlet code
     # from https://outlook.office365.com/AdminApi/.../EXOModuleFile?Version=... at
     # connection time and loads it into the session. Download is HTTPS and signed
@@ -574,7 +526,7 @@ function Connect-NRGServices {
         }
     }
 
-    # ── 4. Purview / Security & Compliance ───────────────────────────────────
+    # ── 3. Purview / Security & Compliance ───────────────────────────────────
     if (-not $SkipPurview) {
         Write-Host "  [*] Purview / Security and Compliance..." -ForegroundColor Cyan
         try {
@@ -622,6 +574,68 @@ function Connect-NRGServices {
             if ($ippsHint) { Write-Host "      $ippsHint" -ForegroundColor Yellow }
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Connect-IPPS' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
+            }
+        }
+    }
+
+    # ── 4. Microsoft Teams ────────────────────────────────────────────────────
+    # AFTER Exchange and Purview, deliberately. The MicrosoftTeams module
+    # ships its own Microsoft.Identity.Client / .Broker assemblies and loads
+    # them into the default load context; ExchangeOnlineManagement 3.10
+    # then fails to load its own copy ("The located assembly's manifest
+    # definition does not match the assembly reference", 0x80131040) and
+    # neither Exchange nor Purview ever connects. Live run 2026-09-29: with
+    # Teams first, Exchange and Purview failed on every attempt; with
+    # Exchange first (run 3), Exchange, Purview and Teams all connected.
+    # Graph is unaffected either way: it resolves MSAL inside its own
+    # assembly load context.
+    if (-not $SkipTeams) {
+        Write-Host "  [*] Microsoft Teams..." -ForegroundColor Cyan
+        try {
+            # Check both installed and in-session (handles just-installed modules)
+            $teamsAvail = (Get-Module -ListAvailable -Name MicrosoftTeams -ErrorAction SilentlyContinue) -or
+                          (Get-Module -Name MicrosoftTeams -ErrorAction SilentlyContinue)
+            if (-not $teamsAvail) {
+                # Try importing directly — may have been installed this session
+                try { Import-Module MicrosoftTeams -Force -ErrorAction Stop -WarningAction SilentlyContinue }
+                catch { throw 'MicrosoftTeams module not installed. Run: Install-Module MicrosoftTeams -Scope CurrentUser -Force' }
+            }
+            Import-Module MicrosoftTeams -ErrorAction Stop -WarningAction SilentlyContinue
+
+            if ($isAppOnly) {
+                Connect-MicrosoftTeams -TenantId $TenantId -ApplicationId $AppId `
+                                       -CertificateThumbprint $CertificateThumbprint `
+                                       -ErrorAction Stop | Out-Null
+            } else {
+                # Import module explicitly in case it was just installed this session
+                if (-not (Get-Command Connect-MicrosoftTeams -ErrorAction SilentlyContinue)) {
+                    Import-Module MicrosoftTeams -Force -ErrorAction SilentlyContinue
+                }
+                # Interactive browser MFA (matches ScubaGear); no device-code flow.
+                # Pass the already-verified Graph context tenant — under GDAP
+                # Connect-MicrosoftTeams with no -TenantId authenticates to
+                # the signed-in operator's own organization, not the client's.
+                $teamsParams = @{ ErrorAction = 'Stop' }
+                if ($result['TenantId']) { $teamsParams['TenantId'] = $result['TenantId'] }
+                Connect-MicrosoftTeams @teamsParams | Out-Null
+            }
+            # Verify the Teams session landed on the tenant Graph connected
+            # to. A mismatched or missing tenant hint can still silently
+            # authenticate to the operator's own organization, and every
+            # TMS-* control would then score that organization's policies
+            # as the client's.
+            if ($result['TenantId']) {
+                $csTenantId = "$((Get-CsTenant -ErrorAction Stop).TenantId)"
+                if ($csTenantId -ne $result['TenantId']) {
+                    throw "Teams session tenant ($csTenantId) does not match Graph tenant ($($result['TenantId']))."
+                }
+            }
+            $result['Teams'] = $true
+            Write-Host "  [+] Teams connected" -ForegroundColor Green
+        } catch {
+            Write-Host "  [!] Teams: $($_.Exception.Message)" -ForegroundColor Yellow
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'Connect-Teams' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
             }
         }
     }
