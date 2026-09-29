@@ -217,7 +217,7 @@ Produces two documents:
 - **`nist-device-guide.md/.html`** — 31 NIST controls organized by control, with
   98 implementation options and the evidence to keep. The auditor's lens.
 - **`nist-device-guide-baseline.md/.html`** — the same material as a build
-  standard, 27 requirements across procure → provision → harden → in-service →
+  standard, 29 requirements across procure → provision → harden → in-service →
   offboard. The technician's lens.
 
 `-ResultsPath <results.json>` annotates the guide with a prior run's verdicts.
@@ -264,7 +264,7 @@ docs/            this file, and the policy docs
 | `clients.json` | Your client list — TenantId, DelegatedOrg, skip flags |
 | `controls.json` | The 202 tenant controls and every framework citation |
 | `device-controls.json` | The 35 endpoint checks (`DEV-*`) |
-| `device-baseline.json` | The 27-item build standard |
+| `device-baseline.json` | The 29-item build standard |
 | `nist-physical.json` | The 31 physical / media / device controls |
 | `nist-800-53-catalog.json` | Official 800-53 Rev 5 titles |
 | `nist-800-171-r2.json` | The 110 CMMC L2 requirements and their 800-171A objectives |
