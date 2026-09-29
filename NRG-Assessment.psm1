@@ -192,7 +192,7 @@ $script:ExportedFunctions = @(
     'Get-NRGBaselineExceptions', 'Get-NRGBaselineCompliance', 'Get-NRGBaselineRegressions',
     'Get-NRGModuleHealth',
     'Repair-NRGModuleHealth',
-    'Get-NRGModuleInstallScope',
+    'Get-NRGModuleInstallScope', 'Get-NRGExoModuleFloor',
     'Get-NRGControlAutomationAudit',
 
     # ── Collectors — AAD ──────────────────────────────────────────────────────

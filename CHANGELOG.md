@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **The Exchange module floor follows the PowerShell version.** The first
+  live run of v4.14.3 found ExchangeOnlineManagement 3.9.2 installed beside
+  PowerShell 7.6.6: the installer accepted it because it checked only the
+  3.7.2 minimum, and `Connect-ExchangeOnline` then failed inside the module
+  ("You cannot call a method on a null-valued expression"). Microsoft's
+  support table pairs 3.10.0+ with 7.6 and 3.5.0–3.9.2 with 7.4/7.5.
+  `Get-NRGExoModuleFloor` now returns the range for the running PowerShell,
+  and the installer, the entry point's preflight and `Get-NRGModuleHealth`
+  read it; a version above the ceiling is warned about at preflight. The
+  Microsoft Store (MSIX) build of PowerShell is recognized by its
+  `WindowsApps` home and the MSI build recommended, because the Exchange
+  module failed to import from it on the same machine. The installer's
+  `$psVer:` parse error is fixed and every script is now parse-tested.
+
 - **NRG Security Baseline v1.0 — candidate controls for editorial review**
   (`docs/NRG-SECURITY-BASELINE-CANDIDATES.md`). The assessment measures
   posture against 204 controls; the baseline will say which of them NRG
