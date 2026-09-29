@@ -84,6 +84,32 @@ function Get-NRGGraphScopeList {
     return $scopes
 }
 
+# The first live run failed inside ExchangeOnlineManagement 3.9.2 on PowerShell
+# 7.6 with a bare "You cannot call a method on a null-valued expression" (its
+# psm1 lines 554 and 791). Microsoft pairs 3.10.0+ with 7.6, so the message was
+# a version mismatch wearing a null-reference costume. When the loaded module
+# is outside the range Get-NRGExoModuleFloor gives for this PowerShell, say so
+# beside the error instead of leaving the operator to guess.
+function Get-NRGExoConnectHint {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] [AllowEmptyString()] [string] $Message)
+    if (-not (Get-Command Get-NRGExoModuleFloor -ErrorAction SilentlyContinue)) { return '' }
+    $mod = Get-Module -Name ExchangeOnlineManagement -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
+    if (-not $mod) { $mod = Get-Module -ListAvailable -Name ExchangeOnlineManagement -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1 }
+    if (-not $mod) { return '' }
+    $floor  = Get-NRGExoModuleFloor
+    $v      = $mod.Version
+    $tooOld = $v -lt [version]$floor.Min
+    $tooNew = [bool]($floor.Max -and $v -gt [version]$floor.Max)
+    if (-not ($tooOld -or $tooNew)) { return '' }
+    $range = if ($floor.Max) { '[{0},{1}]' -f $floor.Min, $floor.Max } else { '[{0},)' -f $floor.Min }
+    $psv   = $PSVersionTable.PSVersion
+    return ('ExchangeOnlineManagement {0} is not supported on PowerShell {1} (Microsoft pairs this PowerShell with {2}). ' +
+            'Install a supported version: Install-PSResource -Name ExchangeOnlineManagement -Version ''{2}'' -Scope AllUsers -TrustRepository, ' +
+            'then remove the other version and open a new window.') -f $v, $psv, $range
+}
+
 # A connection failure recorded as a bare message ("You cannot call a method
 # on a null-valued expression") cannot be diagnosed from the results JSON: the
 # first live run of v4.14.3 produced exactly that for Exchange and Purview,
@@ -541,6 +567,8 @@ function Connect-NRGServices {
         }
     } catch {
         Write-Host "  [!] EXO: $($_.Exception.Message)" -ForegroundColor Yellow
+        $exoHint = Get-NRGExoConnectHint -Message $_.Exception.Message
+        if ($exoHint) { Write-Host "      $exoHint" -ForegroundColor Yellow }
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
             Register-NRGException -Source 'Connect-EXO' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
         }
@@ -590,6 +618,8 @@ function Connect-NRGServices {
             }
         } catch {
             Write-Host "  [!] Purview: $($_.Exception.Message)" -ForegroundColor Yellow
+            $ippsHint = Get-NRGExoConnectHint -Message $_.Exception.Message
+            if ($ippsHint) { Write-Host "      $ippsHint" -ForegroundColor Yellow }
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Connect-IPPS' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
             }

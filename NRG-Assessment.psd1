@@ -113,6 +113,7 @@
         'Get-NRGModuleInstallScope',
         'Get-NRGExoModuleFloor',
         'Get-NRGConnectErrorText',
+        'Get-NRGExoConnectHint',
         'Get-NRGControlAutomationAudit',
         'Invoke-NRGCollectAADAuthPolicies',
         'Invoke-NRGCollectAADCAPolicies',
