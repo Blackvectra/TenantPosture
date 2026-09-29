@@ -21,7 +21,8 @@ function Publish-NRGAssessmentSummary {
         [Parameter(Mandatory)] [hashtable]  $Metadata,
         [Parameter(Mandatory)] [object[]]   $Findings,
         [Parameter(Mandatory)] [hashtable]  $Connections,
-        [Parameter(Mandatory)] [string]     $OutputPath
+        [Parameter(Mandatory)] [string]     $OutputPath,
+        [AllowNull()] [object] $BaselineRegressions = $null
     )
 
     # Fail closed — require security helpers
@@ -236,6 +237,83 @@ function Publish-NRGAssessmentSummary {
                 }
                 $null = $sb.AppendLine()
             }
+        }
+    }
+
+    # ── NRG Security Baseline (desired state; a view, never a score) ─────────
+    if (Get-Command Get-NRGBaselineCompliance -ErrorAction SilentlyContinue) {
+        $bl = $null
+        try {
+            $blTier = [string](Get-NRGObjectField -Item $Metadata -Key 'TargetTier' -Default 'Standard')
+            if ($blTier -notin @('Minimum', 'Standard', 'Hardened')) { $blTier = 'Standard' }
+            $bl = Get-NRGBaselineCompliance -Findings $Findings -TargetTier $blTier -LicenseProfile $mdLicProfile `
+                    -TenantDomain ([string](Get-NRGObjectField -Item $Metadata -Key 'TenantDomain' -Default '')) `
+                    -QuickScan:([bool](Get-NRGObjectField -Item $Metadata -Key 'QuickScan' -Default $false))
+        } catch { Write-Verbose "NRG baseline section skipped: $($_.Exception.Message)" }
+        if ($bl -and $bl.Available) {
+            $bs = $bl.Summary
+            $null = $sb.AppendLine("## NRG Security Baseline v$($bs.BaselineVersion) — $($bs.TargetTier) tier")
+            $null = $sb.AppendLine()
+            $null = $sb.AppendLine("Is this tenant configured the way NRG requires a managed client to be? This is desired state, separate from the framework scores. **$($bs.Satisfied) of $($bs.RequiredControls) required controls are satisfied.** Not verified means the run produced no usable evidence (no result, a collector that did not complete, a skipped workload, a manual check, or evidence older than its freshness window); it is never counted as satisfied.")
+            $null = $sb.AppendLine()
+            $null = $sb.AppendLine("### Configuration compliance")
+            $null = $sb.AppendLine()
+            $null = $sb.AppendLine("| Baseline state | Controls |")
+            $null = $sb.AppendLine("|---|---|")
+            $null = $sb.AppendLine("| Required at $($bs.TargetTier) | $($bs.RequiredControls) |")
+            $null = $sb.AppendLine("| Satisfied | $($bs.Satisfied) |")
+            $null = $sb.AppendLine("| Failed | $($bs.Failed) |")
+            $null = $sb.AppendLine("| Not verified | $($bs.NotVerified) |")
+            $null = $sb.AppendLine("| License blocked | $($bs.LicenseBlocked) |")
+            $null = $sb.AppendLine("| Approved exceptions (observed state kept) | $($bs.ApprovedException) |")
+            $null = $sb.AppendLine("| Not applicable to this tenant | $($bs.NotApplicable) |")
+            $null = $sb.AppendLine("| Stale evidence (older than its freshness class) | $($bs.StaleEvidence) |")
+            $null = $sb.AppendLine()
+            $causes = Get-NRGObjectField -Item $bs -Key 'NotVerifiedByCause' -Default $null
+            if ($null -ne $causes -and @($causes.Keys).Count -gt 0) {
+                $null = $sb.AppendLine("| Not verified, by cause | Controls |")
+                $null = $sb.AppendLine("|---|---|")
+                foreach ($k in @($causes.Keys)) { $null = $sb.AppendLine("| $(EscMd $k) | $($causes[$k]) |") }
+                $null = $sb.AppendLine()
+            }
+            $null = $sb.AppendLine("### Effectiveness visibility")
+            $null = $sb.AppendLine()
+            $null = $sb.AppendLine("Configuration says a control is set; effectiveness says it is working. The assessment can read effectiveness evidence for only a few controls today; everywhere else it is reported as unknown, not assumed.")
+            $null = $sb.AppendLine()
+            $null = $sb.AppendLine("| Effectiveness | Controls |")
+            $null = $sb.AppendLine("|---|---|")
+            $null = $sb.AppendLine("| Known (effective or ineffective) | $([int]$bs.EffectivenessEffective + [int]$bs.EffectivenessIneffective) |")
+            $null = $sb.AppendLine("| Effective | $($bs.EffectivenessEffective) |")
+            $null = $sb.AppendLine("| Ineffective | $($bs.EffectivenessIneffective) |")
+            $null = $sb.AppendLine("| Unknown (evidence not collected) | $($bs.EffectivenessUnknown) |")
+            $null = $sb.AppendLine()
+            if ($null -ne $BaselineRegressions) {
+                $regs = @(Get-NRGObjectField -Item $BaselineRegressions -Key 'Regressions' -Default @())
+                $note = [string](Get-NRGObjectField -Item $BaselineRegressions -Key 'Note' -Default '')
+                $null = $sb.AppendLine("### Baseline regressions since the prior run ($($regs.Count))")
+                $null = $sb.AppendLine()
+                if ($note) { $null = $sb.AppendLine((EscMd $note)); $null = $sb.AppendLine() }
+                if ($regs.Count -gt 0) {
+                    $null = $sb.AppendLine("| Control | Tier | Previous | Current | Kind | Reason |")
+                    $null = $sb.AppendLine("|---|---|---|---|---|---|")
+                    foreach ($r in $regs) {
+                        $kind = [string](Get-NRGObjectField -Item $r -Key 'Kind' -Default ''); $cause = [string](Get-NRGObjectField -Item $r -Key 'CurrentCause' -Default '')
+                        $kindText = if ($kind -eq 'EvidenceLost') { "Evidence lost: $cause" } elseif ($kind -eq 'ConfigurationRegressed') { 'Configuration regressed' } else { $kind }
+                        $null = $sb.AppendLine("| $(EscMd $r.ControlId) $(EscMd $r.Title) | $(EscMd $r.RequiredTier) | $(EscMd $r.Previous) | **$(EscMd $r.Current)** | $(EscMd $kindText) | $(EscMd $r.Reason) |")
+                    }
+                    $null = $sb.AppendLine()
+                }
+            }
+            $order = @{ 'Failed' = 0; 'NotVerified' = 1; 'ApprovedException' = 2; 'LicenseBlocked' = 3; 'NotApplicable' = 4; 'Satisfied' = 5 }
+            $null = $sb.AppendLine("### Required controls")
+            $null = $sb.AppendLine()
+            $null = $sb.AppendLine("| Control | Tier | Owner | Baseline | Observed | Evidence | Effectiveness | Dependencies | Reason |")
+            $null = $sb.AppendLine("|---|---|---|---|---|---|---|---|---|")
+            foreach ($c in ($bl.Controls | Sort-Object { $order[[string]$_.BaselineStatus] }, RequiredTier, ControlId)) {
+                $reason = if ([string]$c.BaselineStatus -eq 'ApprovedException') { "$($c.ExceptionSummary) Observed: $($c.ObservedState). $($c.Reason)" } else { [string]$c.Reason }
+                $null = $sb.AppendLine("| $(EscMd $c.ControlId) $(EscMd $c.Title) | $(EscMd $c.RequiredTier) | $(EscMd $c.Owner) | **$(EscMd $c.BaselineStatus)** | $(EscMd $c.ObservedState) | $(EscMd $c.EvidenceFreshness) | $(EscMd $c.EffectivenessState) | $(EscMd $c.DependencyState) | $(EscMd $reason) |")
+            }
+            $null = $sb.AppendLine()
         }
     }
 

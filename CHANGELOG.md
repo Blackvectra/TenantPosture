@@ -1,5 +1,134 @@
 # Changelog
 
+## Unreleased
+
+- **Defects found by the first live baseline validation (NRGTS, 2026-09-29),
+  fixed without touching a single verdict.** DNS collection ran only inside
+  the Exchange branch of the entry point, so an Exchange connection failure
+  also removed the three DNS Minimum controls; the DNS collector already
+  falls back to Graph verifiedDomains, and the step now runs whenever Graph
+  or Exchange connected. "Was not read" is now a collection gap in the scope
+  classifier: SPO-1.2's "the default link type was not read" was filed as
+  not applicable to this tenant, which changes the denominator's meaning,
+  and the baseline inherited it. INT-2.2 no longer depends on INT-2.1 (ASR
+  is enforced by Defender Antivirus beside a third-party EDR; the edge read
+  as misleading on a Cortex tenant). Every NotVerified baseline row now
+  carries a cause (collector unavailable and which, skipped by operator,
+  quick scan, manual control, manual verification, evidence not read, stale
+  evidence, evaluator error, no result) and the summary, both reports and
+  the validation tool print the split, so "27 not verified" reads as an
+  engineering list. Connection failures record their first stack frames in
+  the Exceptions array. Partial stays Failed in the baseline by decision.
+
+- **Exchange and Purview never connected because Teams connected first.**
+  Root cause of the "Exchange/Purview connection" validation defect, found
+  on the first run from the MSI PowerShell build with ExchangeOnlineManagement
+  3.10.1. Both modules load `Microsoft.Identity.Client` and its Broker into
+  the default load context, and the runtime keeps one copy per name: a
+  later load binds to the loaded copy when it is the same or newer and
+  fails with 0x80131040 ("The located assembly's manifest definition does
+  not match the assembly reference") when it is older. MicrosoftTeams 8.0.0
+  carries MSAL 4.82.0 and ExchangeOnlineManagement 3.10.1 carries 4.83.1,
+  so with Teams first both `Connect-ExchangeOnline` and
+  `Connect-IPPSSession` failed before any prompt, every run.
+  `Connect-NRGServices` now connects Graph, Exchange, Purview, then Teams,
+  and proves the Teams session with `Get-CsTenant` before reporting it
+  connected (a Connect that returns cleanly can still leave every cmdlet
+  failing with "You must call the Connect-MicrosoftTeams cmdlet").
+  `NRG.WorkloadSkip.Tests.ps1` pins the order.
+
+- **NRG Security Baseline v1.0 locked.** Live validation on one tenant is
+  complete (five runs, 2026-09-29): zero baseline-layer bug candidates, every
+  not-verified row carrying its cause, and every genuine failure unchanged.
+  SPO-3.3 (OneDrive version history) moves from Standard to Assessment-only
+  for v1.0 because its read needs the SharePoint Management Shell
+  (`-IncludeSharePointShell`), which is not part of the normal Standard
+  run; its governance metadata is kept in the editorial document as the
+  promotion candidate for when shell collection is standard. Standard now
+  requires 50 controls (31 Minimum including the manual VM-VERIFY-01, 19
+  Standard). EXO-7.2 and VM-VERIFY-01 are unchanged.
+
+- **EXO-2.6 scored a failed section as a clean list (second live run,
+  Exchange half).** `Get-Mailbox` omitted `LicenseReconciliationNeeded` on
+  the live tenant, the shared-mailbox sign-in loop threw under StrictMode,
+  `SectionStatus.SharedMailboxes` read `Failed`, and the evaluator reported
+  "28 shared mailbox(es) found — none have direct sign-in enabled" because
+  it consulted the section status only when the mailbox list was empty. The
+  collector reads both license fields through `Get-NRGObjectField`, and
+  EXO-2.6 and EXO-6.2 now report not assessed whenever the section did not
+  complete, whatever the list holds. `NRG.ExchangeTruth.Tests.ps1` replays
+  the live shape. The validation tool notes every Satisfied row whose
+  collector reported a failed section, for the operator to confirm the
+  evaluator does not read it.
+
+- **The Exchange module floor follows the PowerShell version.** The first
+  live run of v4.14.3 found ExchangeOnlineManagement 3.9.2 installed beside
+  PowerShell 7.6.6: the installer accepted it because it checked only the
+  3.7.2 minimum, and `Connect-ExchangeOnline` then failed inside the module
+  ("You cannot call a method on a null-valued expression"). Microsoft's
+  support table pairs 3.10.0+ with 7.6 and 3.5.0–3.9.2 with 7.4/7.5.
+  `Get-NRGExoModuleFloor` now returns the range for the running PowerShell,
+  and the installer, the entry point's preflight and `Get-NRGModuleHealth`
+  read it; a version above the ceiling is warned about at preflight. The
+  Microsoft Store (MSIX) build of PowerShell is recognized by its
+  `WindowsApps` home and the MSI build recommended, because the Exchange
+  module failed to import from it on the same machine. The installer's
+  `$psVer:` parse error is fixed and every script is now parse-tested.
+
+- **NRG Security Baseline v1.0 — candidate controls for editorial review**
+  (`docs/NRG-SECURITY-BASELINE-CANDIDATES.md`). The assessment measures
+  posture against 204 controls; the baseline will say which of them NRG
+  requires of every managed client. This document is the editorial pass,
+  not configuration: every control with its severity, license requirement,
+  automation level, a proposed tier (Minimum / Standard / Hardened /
+  Assessment-only), the reason, why NRG owns it, and operational notes.
+  30 Minimum + 19 Standard + 18 Hardened nominated; 137 stay
+  assessment-only evidence. Tiers are layered (a Standard client satisfies
+  Minimum + Standard). Applicability is per client (licensing, third-party
+  EDR, a per-client exceptions file), never per control, and the future
+  compliance view keeps observed state, license constraint and exception
+  disposition separate. `Config/nrg-baseline.json` and
+  `Get-NRGBaselineCompliance` follow once v1.0 is locked. Second editorial
+  pass adds seven governance fields per tiered control: owner, evidence
+  source (derived from the collector), expected state, SLA class (a label;
+  the day counts live elsewhere), dependencies, an effectiveness check
+  tagged collected or not collected, and an evidence-freshness class. The
+  document keeps control requirement, observed evidence and effectiveness
+  evidence as three separate concepts, states the stateless results
+  contract, and ends with a mechanically generated contradictions section
+  (manual-only Minimum controls, inverted dependencies, and the 61 of 67
+  effectiveness checks that need telemetry the tool does not collect).
+- **NRG Security Baseline v1.0 is implemented as a desired-state layer**
+  (`Config/nrg-baseline.json`, `Lib/Get-NRGBaseline.ps1`, `-BaselineTier`).
+  A view over the findings: no new finding, no changed finding, no moved
+  framework score. Per required control the results JSON carries
+  ObservedState, Constraint, Disposition, EffectivenessState, dependency
+  state, evidence timestamp and freshness; a missing finding, a collector
+  that did not succeed, a skipped workload, a manual control or stale
+  evidence all resolve NotVerified, never Satisfied. Approved exceptions
+  live per client in `Config/baseline-exceptions/<tenant-domain>.psd1`
+  (review date required; expired ones are reported, not honored) and change
+  only the disposition. Effectiveness is Unknown wherever the assessment
+  does not read the evidence (61 of 67 controls today) and is read from
+  ingested endpoint results otherwise. `BaselineRegressions` compares with
+  `-BaselineResults` only under the same baseline version and tier. The
+  HTML and Markdown reports gain an NRG Security Baseline section with
+  configuration compliance and effectiveness visibility as separate
+  blocks. `NRG.Baseline.Tests.ps1` pins every invariant and the
+  document-to-config tier agreement.
+- **Device build standard v1.1: patch policy, delivery and effectiveness
+  are three requirements.** DB-4.2 is now the patch policy (within a
+  defined remediation window); DB-4.7 requires patch deployment to be
+  monitored and failures investigated; DB-4.8 requires remediation to be
+  verified against the current vulnerability state (Defender Vulnerability
+  Management), the standard's VM-VERIFY-01. The patching tool is evidence
+  of deployment, Defender is evidence of remediation, and they are not the
+  same thing. DB-4.8 ships with no `VerifiedBy` on purpose: the requirement
+  exists before the automation, and a Defender Vulnerability Management
+  collector can make it machine-verifiable later without changing it.
+  29 requirements, 25 mandatory. `RA-5 Vulnerability Monitoring and
+  Scanning` added to the 800-53 catalog for the citation.
+
 ## v4.14.3 (2026-09-26)
 
 v5.0 backlog sweep: the collector-fields section (places where a collector

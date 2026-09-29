@@ -29,8 +29,12 @@
 #   Orchestrator wraps the run in try/finally with Disconnect-NRGServices.
 #
 # CONNECTION ORDER (MSAL assembly conflict prevention):
-#   Graph -> Teams -> EXO -> IPPS. SharePoint deferred to orchestrator (PnP loads
-#   older Graph.Core that breaks Graph cmdlets).
+#   Graph -> EXO -> IPPS -> Teams. Teams LAST: the MicrosoftTeams module loads
+#   its own Microsoft.Identity.Client(.Broker) into the default load context,
+#   and ExchangeOnlineManagement 3.10 then cannot load its own (0x80131040), so
+#   Teams-before-Exchange lost Exchange and Purview on every live run. Graph
+#   resolves MSAL in its own load context and is unaffected. SharePoint shell
+#   stays after everything (PnP loads an older Graph.Core that breaks Graph).
 #
 # PnP MULTI-TENANT APP DELETED 2024-09-09:
 #   The shared PnP Management Shell Entra app (ClientID 31359c7f-bd7e-475c-86db-fdb8c937548e)
@@ -82,6 +86,52 @@ function Get-NRGGraphScopeList {
         'AccessReview.Read.All'
     )
     return $scopes
+}
+
+# The first live run failed inside ExchangeOnlineManagement 3.9.2 on PowerShell
+# 7.6 with a bare "You cannot call a method on a null-valued expression" (its
+# psm1 lines 554 and 791). Microsoft pairs 3.10.0+ with 7.6, so the message was
+# a version mismatch wearing a null-reference costume. When the loaded module
+# is outside the range Get-NRGExoModuleFloor gives for this PowerShell, say so
+# beside the error instead of leaving the operator to guess.
+function Get-NRGExoConnectHint {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] [AllowEmptyString()] [string] $Message)
+    if (-not (Get-Command Get-NRGExoModuleFloor -ErrorAction SilentlyContinue)) { return '' }
+    $mod = Get-Module -Name ExchangeOnlineManagement -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
+    if (-not $mod) { $mod = Get-Module -ListAvailable -Name ExchangeOnlineManagement -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1 }
+    if (-not $mod) { return '' }
+    $floor  = Get-NRGExoModuleFloor
+    $v      = $mod.Version
+    $tooOld = $v -lt [version]$floor.Min
+    $tooNew = [bool]($floor.Max -and $v -gt [version]$floor.Max)
+    if (-not ($tooOld -or $tooNew)) { return '' }
+    $range = if ($floor.Max) { '[{0},{1}]' -f $floor.Min, $floor.Max } else { '[{0},)' -f $floor.Min }
+    $psv   = $PSVersionTable.PSVersion
+    return ('ExchangeOnlineManagement {0} is not supported on PowerShell {1} (Microsoft pairs this PowerShell with {2}). ' +
+            'Install a supported version: Install-PSResource -Name ExchangeOnlineManagement -Version ''{2}'' -Scope AllUsers -TrustRepository, ' +
+            'then remove the other version and open a new window.') -f $v, $psv, $range
+}
+
+# A connection failure recorded as a bare message ("You cannot call a method
+# on a null-valued expression") cannot be diagnosed from the results JSON: the
+# first live run of v4.14.3 produced exactly that for Exchange and Purview,
+# with no way to tell whether the throw was in this file or inside the
+# ExchangeOnlineManagement module. Append the first stack frames.
+function Get-NRGConnectErrorText {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [System.Management.Automation.ErrorRecord] $ErrorRecord)
+    $msg = [string]$ErrorRecord.Exception.Message
+    $frames = @()
+    try {
+        $st = [string]$ErrorRecord.ScriptStackTrace
+        if ($st) { $frames = @($st -split "`r?`n" | Where-Object { $_ } | Select-Object -First 3) }
+    } catch { $frames = @() }
+    if ($frames.Count -gt 0) { $msg = "$msg [at: $($frames -join ' <- ')]" }
+    if ($msg.Length -gt 1900) { $msg = $msg.Substring(0, 1900) }
+    return $msg
 }
 
 function Connect-NRGServices {
@@ -164,8 +214,12 @@ function Connect-NRGServices {
     $exoDisableWam = $false; $ippsDisableWam = $false
     $exoCmd  = Get-Command Connect-ExchangeOnline -ErrorAction SilentlyContinue
     $ippsCmd = Get-Command Connect-IPPSSession    -ErrorAction SilentlyContinue
-    if ($exoCmd)  { $exoDisableWam  = [bool]$exoCmd.Parameters.ContainsKey('DisableWAM') }
-    if ($ippsCmd) { $ippsDisableWam = [bool]$ippsCmd.Parameters.ContainsKey('DisableWAM') }
+    # Parameters can be $null on a command stub whose module has not finished
+    # loading; read it through a null check so detection never throws.
+    $exoParamsMap  = if ($exoCmd)  { Get-NRGObjectField -Item $exoCmd  -Key 'Parameters' -Default $null } else { $null }
+    $ippsParamsMap = if ($ippsCmd) { Get-NRGObjectField -Item $ippsCmd -Key 'Parameters' -Default $null } else { $null }
+    if ($null -ne $exoParamsMap)  { $exoDisableWam  = [bool]$exoParamsMap.ContainsKey('DisableWAM') }
+    if ($null -ne $ippsParamsMap) { $ippsDisableWam = [bool]$ippsParamsMap.ContainsKey('DisableWAM') }
 
     # ── MSAL assembly-conflict preflight ──────────────────────────────────────
     # The #1 failure mode in M365 PowerShell tooling (ours AND CISA's ScubaGear)
@@ -390,63 +444,11 @@ function Connect-NRGServices {
     } catch {
         Write-Host "  [!] Graph: $($_.Exception.Message)" -ForegroundColor Yellow
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-            Register-NRGException -Source 'Connect-Graph' -Message $_.Exception.Message
+            Register-NRGException -Source 'Connect-Graph' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
         }
     }
 
-    # ── 2. Microsoft Teams ────────────────────────────────────────────────────
-    if (-not $SkipTeams) {
-        Write-Host "  [*] Microsoft Teams..." -ForegroundColor Cyan
-        try {
-            # Check both installed and in-session (handles just-installed modules)
-            $teamsAvail = (Get-Module -ListAvailable -Name MicrosoftTeams -ErrorAction SilentlyContinue) -or
-                          (Get-Module -Name MicrosoftTeams -ErrorAction SilentlyContinue)
-            if (-not $teamsAvail) {
-                # Try importing directly — may have been installed this session
-                try { Import-Module MicrosoftTeams -Force -ErrorAction Stop -WarningAction SilentlyContinue }
-                catch { throw 'MicrosoftTeams module not installed. Run: Install-Module MicrosoftTeams -Scope CurrentUser -Force' }
-            }
-            Import-Module MicrosoftTeams -ErrorAction Stop -WarningAction SilentlyContinue
-
-            if ($isAppOnly) {
-                Connect-MicrosoftTeams -TenantId $TenantId -ApplicationId $AppId `
-                                       -CertificateThumbprint $CertificateThumbprint `
-                                       -ErrorAction Stop | Out-Null
-            } else {
-                # Import module explicitly in case it was just installed this session
-                if (-not (Get-Command Connect-MicrosoftTeams -ErrorAction SilentlyContinue)) {
-                    Import-Module MicrosoftTeams -Force -ErrorAction SilentlyContinue
-                }
-                # Interactive browser MFA (matches ScubaGear); no device-code flow.
-                # Pass the already-verified Graph context tenant — under GDAP
-                # Connect-MicrosoftTeams with no -TenantId authenticates to
-                # the signed-in operator's own organization, not the client's.
-                $teamsParams = @{ ErrorAction = 'Stop' }
-                if ($result['TenantId']) { $teamsParams['TenantId'] = $result['TenantId'] }
-                Connect-MicrosoftTeams @teamsParams | Out-Null
-            }
-            # Verify the Teams session landed on the tenant Graph connected
-            # to. A mismatched or missing tenant hint can still silently
-            # authenticate to the operator's own organization, and every
-            # TMS-* control would then score that organization's policies
-            # as the client's.
-            if ($result['TenantId']) {
-                $csTenantId = "$((Get-CsTenant -ErrorAction Stop).TenantId)"
-                if ($csTenantId -ne $result['TenantId']) {
-                    throw "Teams session tenant ($csTenantId) does not match Graph tenant ($($result['TenantId']))."
-                }
-            }
-            $result['Teams'] = $true
-            Write-Host "  [+] Teams connected" -ForegroundColor Green
-        } catch {
-            Write-Host "  [!] Teams: $($_.Exception.Message)" -ForegroundColor Yellow
-            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                Register-NRGException -Source 'Connect-Teams' -Message $_.Exception.Message
-            }
-        }
-    }
-
-    # ── 3. Exchange Online ────────────────────────────────────────────────────
+    # ── 2. Exchange Online ────────────────────────────────────────────────────
     # ACCEPTED RESIDUAL RISK: the EXO V3 module dynamically downloads cmdlet code
     # from https://outlook.office365.com/AdminApi/.../EXOModuleFile?Version=... at
     # connection time and loads it into the session. Download is HTTPS and signed
@@ -517,12 +519,14 @@ function Connect-NRGServices {
         }
     } catch {
         Write-Host "  [!] EXO: $($_.Exception.Message)" -ForegroundColor Yellow
+        $exoHint = Get-NRGExoConnectHint -Message $_.Exception.Message
+        if ($exoHint) { Write-Host "      $exoHint" -ForegroundColor Yellow }
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-            Register-NRGException -Source 'Connect-EXO' -Message $_.Exception.Message
+            Register-NRGException -Source 'Connect-EXO' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
         }
     }
 
-    # ── 4. Purview / Security & Compliance ───────────────────────────────────
+    # ── 3. Purview / Security & Compliance ───────────────────────────────────
     if (-not $SkipPurview) {
         Write-Host "  [*] Purview / Security and Compliance..." -ForegroundColor Cyan
         try {
@@ -566,8 +570,76 @@ function Connect-NRGServices {
             }
         } catch {
             Write-Host "  [!] Purview: $($_.Exception.Message)" -ForegroundColor Yellow
+            $ippsHint = Get-NRGExoConnectHint -Message $_.Exception.Message
+            if ($ippsHint) { Write-Host "      $ippsHint" -ForegroundColor Yellow }
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                Register-NRGException -Source 'Connect-IPPS' -Message $_.Exception.Message
+                Register-NRGException -Source 'Connect-IPPS' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
+            }
+        }
+    }
+
+    # ── 4. Microsoft Teams ────────────────────────────────────────────────────
+    # AFTER Exchange and Purview, deliberately. Both modules ship
+    # Microsoft.Identity.Client and its Broker into the default load
+    # context, and the runtime keeps ONE copy per simple name: a later load
+    # binds to the already-loaded copy when that copy is the same or newer
+    # and fails with 0x80131040 ("The located assembly's manifest
+    # definition does not match the assembly reference") when it is older.
+    # MicrosoftTeams 8.0.0 carries MSAL 4.82.0; ExchangeOnlineManagement
+    # 3.10.1 carries 4.83.1. Teams first therefore left Exchange and Purview
+    # unable to connect on every live run (2026-09-29); Exchange first lets
+    # Teams bind to the newer copy. Graph is unaffected either way: it
+    # resolves MSAL inside its own assembly load context.
+    if (-not $SkipTeams) {
+        Write-Host "  [*] Microsoft Teams..." -ForegroundColor Cyan
+        try {
+            # Check both installed and in-session (handles just-installed modules)
+            $teamsAvail = (Get-Module -ListAvailable -Name MicrosoftTeams -ErrorAction SilentlyContinue) -or
+                          (Get-Module -Name MicrosoftTeams -ErrorAction SilentlyContinue)
+            if (-not $teamsAvail) {
+                # Try importing directly — may have been installed this session
+                try { Import-Module MicrosoftTeams -Force -ErrorAction Stop -WarningAction SilentlyContinue }
+                catch { throw 'MicrosoftTeams module not installed. Run: Install-Module MicrosoftTeams -Scope CurrentUser -Force' }
+            }
+            Import-Module MicrosoftTeams -ErrorAction Stop -WarningAction SilentlyContinue
+
+            if ($isAppOnly) {
+                Connect-MicrosoftTeams -TenantId $TenantId -ApplicationId $AppId `
+                                       -CertificateThumbprint $CertificateThumbprint `
+                                       -ErrorAction Stop | Out-Null
+            } else {
+                # Import module explicitly in case it was just installed this session
+                if (-not (Get-Command Connect-MicrosoftTeams -ErrorAction SilentlyContinue)) {
+                    Import-Module MicrosoftTeams -Force -ErrorAction SilentlyContinue
+                }
+                # Interactive browser MFA (matches ScubaGear); no device-code flow.
+                # Pass the already-verified Graph context tenant — under GDAP
+                # Connect-MicrosoftTeams with no -TenantId authenticates to
+                # the signed-in operator's own organization, not the client's.
+                $teamsParams = @{ ErrorAction = 'Stop' }
+                if ($result['TenantId']) { $teamsParams['TenantId'] = $result['TenantId'] }
+                Connect-MicrosoftTeams @teamsParams | Out-Null
+            }
+            # Prove the session works before reporting it: Connect can return
+            # cleanly and every cmdlet then fail with "You must call the
+            # Connect-MicrosoftTeams cmdlet" (the token provider found no
+            # usable token — seen on a live run where the check below was
+            # skipped because Graph had failed). Eight failed sections later
+            # is the wrong place to learn that. Then verify the session
+            # landed on the tenant Graph connected to: a mismatched or
+            # missing tenant hint can still silently authenticate to the
+            # operator's own organization, and every TMS-* control would
+            # then score that organization's policies as the client's.
+            $csTenantId = "$((Get-CsTenant -ErrorAction Stop).TenantId)"
+            if ($result['TenantId'] -and $csTenantId -ne $result['TenantId']) {
+                throw "Teams session tenant ($csTenantId) does not match Graph tenant ($($result['TenantId']))."
+            }
+            $result['Teams'] = $true
+            Write-Host "  [+] Teams connected" -ForegroundColor Green
+        } catch {
+            Write-Host "  [!] Teams: $($_.Exception.Message)" -ForegroundColor Yellow
+            if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                Register-NRGException -Source 'Connect-Teams' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
             }
         }
     }
@@ -638,7 +710,7 @@ function Connect-NRGServices {
         } catch {
             Write-Host "  [!] SharePoint: $($_.Exception.Message)" -ForegroundColor Yellow
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                Register-NRGException -Source 'Connect-SPO' -Message $_.Exception.Message
+                Register-NRGException -Source 'Connect-SPO' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
             }
         }
     }

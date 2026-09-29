@@ -1,10 +1,9 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "title": "Managed Device Baseline",
   "subtitle": "The standard every managed device meets, from purchase order to disposal.",
   "purpose": "A build and lifecycle standard, organized the way the work actually happens. The NIST device guide answers 'what does 800-53 require'; this answers 'what do I do to this laptop, and in what order'. Same underlying controls, technician's sequence instead of the auditor's.",
   "note": "Every item cites the 800-53 control it satisfies and, where the assessment can check it, the tool control that verifies it. Items marked Mandatory are the non-negotiable set — a device that misses one is not a managed device, it is an unmanaged device with an asset tag.",
-
   "stages": [
     {
       "Id": "procure",
@@ -15,40 +14,71 @@
           "Id": "DB-1.1",
           "Requirement": "Hardware supports TPM 2.0, Secure Boot and UEFI",
           "Mandatory": true,
-          "AppliesTo": ["Windows"],
+          "AppliesTo": [
+            "Windows"
+          ],
           "Why": "Without a TPM there is no hardware root of trust: BitLocker falls back to a password, Windows Hello cannot bind a credential to the device, and Device Health Attestation reports nothing at all.",
           "How": "Confirm on the quote before purchase. Verify after unboxing with tpm.msc or Get-Tpm, and confirm Secure Boot is enabled in firmware.",
-          "Nist": ["SC-28", "IA-5"],
+          "Nist": [
+            "SC-28",
+            "IA-5"
+          ],
           "VerifiedBy": []
         },
         {
           "Id": "DB-1.2",
           "Requirement": "Device is recorded in the asset register before it is issued",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
+          "AppliesTo": [
+            "Windows",
+            "macOS",
+            "iOS",
+            "Android"
+          ],
           "Why": "A device that was never recorded cannot be detected as missing. The gap between what was bought and what is enrolled is where devices quietly disappear.",
           "How": "Record serial, model, purchase date, assigned user and expected refresh date. Reconcile against the Intune device list on a fixed cadence.",
-          "Nist": ["CM-8", "PE-20"],
-          "VerifiedBy": ["INT-1.1"]
+          "Nist": [
+            "CM-8",
+            "PE-20"
+          ],
+          "VerifiedBy": [
+            "INT-1.1"
+          ]
         },
         {
           "Id": "DB-1.3",
           "Requirement": "Device is registered for zero-touch provisioning where the vendor supports it",
           "Mandatory": false,
-          "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
+          "AppliesTo": [
+            "Windows",
+            "macOS",
+            "iOS",
+            "Android"
+          ],
           "Why": "Autopilot / ADE enrollment cannot be skipped by the end user. Manual enrollment can, and the devices that skip it are invisible until something goes wrong on them.",
           "How": "Windows Autopilot via the hardware hash or vendor registration; Apple Business Manager for macOS and iOS; Android zero-touch or Knox.",
-          "Nist": ["CM-2", "IA-3"],
-          "VerifiedBy": ["INT-3.1"]
+          "Nist": [
+            "CM-2",
+            "IA-3"
+          ],
+          "VerifiedBy": [
+            "INT-3.1"
+          ]
         },
         {
           "Id": "DB-1.4",
           "Requirement": "Firmware and BIOS administration is password-protected",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS"],
+          "AppliesTo": [
+            "Windows",
+            "macOS"
+          ],
           "Why": "An unprotected firmware menu lets anyone with five minutes of physical access disable Secure Boot, change the boot order, and boot the machine from a USB stick — around every control above the firmware.",
           "How": "Set a BIOS/UEFI supervisor password as part of the build, managed centrally where the vendor supports it (Dell Command, HP Sure Admin, Lenovo Think BIOS).",
-          "Nist": ["CM-5", "PE-3"],
+          "Nist": [
+            "CM-5",
+            "PE-3"
+          ],
           "VerifiedBy": []
         }
       ]
@@ -62,61 +92,111 @@
           "Id": "DB-2.1",
           "Requirement": "Device is enrolled in Intune and has an Entra device identity",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
+          "AppliesTo": [
+            "Windows",
+            "macOS",
+            "iOS",
+            "Android"
+          ],
           "Why": "Without a device identity there is nothing for Conditional Access to evaluate, no target for policy, and no way to distinguish this machine from an unknown one.",
           "How": "Entra join (or hybrid join for domain-attached estates) plus automatic Intune enrollment. Confirm the device appears in both Entra and Intune before hand-over.",
-          "Nist": ["IA-3", "CM-8"],
-          "VerifiedBy": ["INT-1.2", "INT-3.1"]
+          "Nist": [
+            "IA-3",
+            "CM-8"
+          ],
+          "VerifiedBy": [
+            "INT-1.2",
+            "INT-3.1"
+          ]
         },
         {
           "Id": "DB-2.2",
           "Requirement": "Enrollment restrictions block platforms that cannot meet this baseline",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
+          "AppliesTo": [
+            "Windows",
+            "macOS",
+            "iOS",
+            "Android"
+          ],
           "Why": "A baseline that a device is allowed to enroll without meeting is a suggestion. Restrictions are what make it a standard.",
           "How": "Intune enrollment restrictions blocking personally-owned platforms and unsupported OS versions, with a documented exception path.",
-          "Nist": ["CM-7", "AC-3"],
-          "VerifiedBy": ["INT-3.1"]
+          "Nist": [
+            "CM-7",
+            "AC-3"
+          ],
+          "VerifiedBy": [
+            "INT-3.1"
+          ]
         },
         {
           "Id": "DB-2.3",
           "Requirement": "The local administrator password is unique per device and rotated automatically",
           "Mandatory": true,
-          "AppliesTo": ["Windows"],
+          "AppliesTo": [
+            "Windows"
+          ],
           "Why": "A shared local admin password means one recovered credential unlocks every device that shares it. This is the single most common way a single-machine compromise becomes an estate-wide one.",
           "How": "Windows LAPS deployed via Intune, escrowing per-device passwords to Entra ID with automatic rotation. Remove any pre-existing shared local account as part of the build.",
-          "Nist": ["AC-2", "IA-5", "AC-6"],
-          "VerifiedBy": ["INT-4.1"]
+          "Nist": [
+            "AC-2",
+            "IA-5",
+            "AC-6"
+          ],
+          "VerifiedBy": [
+            "INT-4.1"
+          ]
         },
         {
           "Id": "DB-2.4",
           "Requirement": "The day-to-day user account is not a local administrator",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS"],
+          "AppliesTo": [
+            "Windows",
+            "macOS"
+          ],
           "Why": "Most endpoint malware needs administrative rights to persist. Removing standing admin from daily accounts removes that step entirely.",
           "How": "Standard user by default, with an approved elevation path (Intune Endpoint Privilege Management or an equivalent) for the cases that genuinely need it.",
-          "Nist": ["AC-6", "AC-6(5)"],
+          "Nist": [
+            "AC-6",
+            "AC-6(5)"
+          ],
           "VerifiedBy": []
         },
         {
           "Id": "DB-2.5",
           "Requirement": "Full-disk encryption is on, with the recovery key escrowed",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS"],
+          "AppliesTo": [
+            "Windows",
+            "macOS"
+          ],
           "Why": "This is what turns a stolen laptop into a hardware loss instead of a reportable data breach. An unescrowed key turns a forgotten PIN into permanent data loss.",
           "How": "BitLocker with TPM + PIN, key escrowed to Entra ID (Windows). FileVault with key escrow via Intune (macOS). Confirm the key is visible in Entra before hand-over — an escrow that silently failed looks identical to one that worked.",
-          "Nist": ["SC-28"],
-          "VerifiedBy": ["INT-1.3", "INT-2.4"]
+          "Nist": [
+            "SC-28"
+          ],
+          "VerifiedBy": [
+            "INT-1.3",
+            "INT-2.4"
+          ]
         },
         {
           "Id": "DB-2.6",
           "Requirement": "Phishing-resistant or biometric sign-in is configured",
           "Mandatory": false,
-          "AppliesTo": ["Windows"],
+          "AppliesTo": [
+            "Windows"
+          ],
           "Why": "Replaces the password on the device with a credential bound to that device's TPM, which cannot be phished, replayed, or reused anywhere else.",
           "How": "Windows Hello for Business, or a FIDO2 security key where a shared or kiosk device makes Hello impractical.",
-          "Nist": ["IA-2(1)", "IA-5"],
-          "VerifiedBy": ["INT-4.2"]
+          "Nist": [
+            "IA-2(1)",
+            "IA-5"
+          ],
+          "VerifiedBy": [
+            "INT-4.2"
+          ]
         }
       ]
     },
@@ -129,71 +209,129 @@
           "Id": "DB-3.1",
           "Requirement": "A security configuration baseline is assigned",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS"],
+          "AppliesTo": [
+            "Windows",
+            "macOS"
+          ],
           "Why": "Per-device configuration drifts. A defined baseline makes drift visible and reversible instead of invisible and permanent.",
           "How": "Intune Security Baselines (Windows, Defender for Endpoint, Edge). Where local deviation is required, document the deviation and why.",
-          "Nist": ["CM-2", "CM-6"],
-          "VerifiedBy": ["INT-1.1"]
+          "Nist": [
+            "CM-2",
+            "CM-6"
+          ],
+          "VerifiedBy": [
+            "INT-1.1"
+          ]
         },
         {
           "Id": "DB-3.2",
           "Requirement": "Anti-malware and EDR are running, up to date, and tamper-protected",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS"],
+          "AppliesTo": [
+            "Windows",
+            "macOS"
+          ],
           "Why": "Signature scanning alone stops commodity malware. EDR telemetry is what lets anyone reconstruct what happened after a real intrusion.",
           "How": "Defender antivirus with real-time protection, cloud-delivered protection and tamper protection on, plus Defender for Endpoint onboarding. Where a third-party EDR is the standard, evidence coverage from that console and record it as the compensating control.",
-          "Nist": ["SI-3", "SI-4"],
-          "VerifiedBy": ["INT-1.5", "INT-2.1"]
+          "Nist": [
+            "SI-3",
+            "SI-4"
+          ],
+          "VerifiedBy": [
+            "INT-1.5",
+            "INT-2.1"
+          ]
         },
         {
           "Id": "DB-3.3",
           "Requirement": "Attack Surface Reduction rules are in Block mode",
           "Mandatory": true,
-          "AppliesTo": ["Windows"],
+          "AppliesTo": [
+            "Windows"
+          ],
           "Why": "ASR blocks the specific techniques that start most endpoint intrusions — Office spawning processes, obfuscated script execution, credential theft from LSASS — without needing to detect the malware itself.",
           "How": "Deploy the office-macro, script and credential-theft rule set in Block mode. Audit mode first for a fortnight if the estate has unknown line-of-business software, but Audit mode is not the destination.",
-          "Nist": ["CM-7", "SI-3"],
-          "VerifiedBy": ["INT-2.2"]
+          "Nist": [
+            "CM-7",
+            "SI-3"
+          ],
+          "VerifiedBy": [
+            "INT-2.2"
+          ]
         },
         {
           "Id": "DB-3.4",
           "Requirement": "The host firewall is enabled on all profiles",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS"],
+          "AppliesTo": [
+            "Windows",
+            "macOS"
+          ],
           "Why": "The host firewall is the control that still applies when the laptop is on a hotel or home network with no perimeter in front of it.",
           "How": "Intune firewall policy enabling all profiles with inbound blocked by default, exceptions documented.",
-          "Nist": ["SC-7"],
-          "VerifiedBy": ["INT-2.3"]
+          "Nist": [
+            "SC-7"
+          ],
+          "VerifiedBy": [
+            "INT-2.3"
+          ]
         },
         {
           "Id": "DB-3.5",
           "Requirement": "The screen locks automatically and requires re-authentication",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
+          "AppliesTo": [
+            "Windows",
+            "macOS",
+            "iOS",
+            "Android"
+          ],
           "Why": "Covers the unattended-desk case, which is the most common physical exposure in any office and the only one that happens daily.",
           "How": "Maximum inactivity timeout with credential re-entry (15 minutes typical for workstations, 5 for mobile). Enforced by compliance policy, not left to the user.",
-          "Nist": ["AC-11", "AC-12"],
-          "VerifiedBy": ["INT-4.4"]
+          "Nist": [
+            "AC-11",
+            "AC-12"
+          ],
+          "VerifiedBy": [
+            "INT-4.4"
+          ]
         },
         {
           "Id": "DB-3.6",
           "Requirement": "Removable storage is blocked or restricted to approved encrypted media",
           "Mandatory": false,
-          "AppliesTo": ["Windows"],
+          "AppliesTo": [
+            "Windows"
+          ],
           "Why": "USB is the exfiltration path that leaves no network trace and no audit log unless something is watching the endpoint itself.",
           "How": "Defender device control allowing approved encrypted drives by hardware ID, or Endpoint DLP auditing and blocking copies of sensitive content to removable media.",
-          "Nist": ["MP-7", "AC-4"],
-          "VerifiedBy": ["DEF-4.5"]
+          "Nist": [
+            "MP-7",
+            "AC-4"
+          ],
+          "VerifiedBy": [
+            "DEF-4.5"
+          ]
         },
         {
           "Id": "DB-3.7",
           "Requirement": "Corporate data on mobile devices is containerised",
           "Mandatory": true,
-          "AppliesTo": ["iOS", "Android"],
+          "AppliesTo": [
+            "iOS",
+            "Android"
+          ],
           "Why": "Personally-owned phones will hold corporate mail whether or not anyone planned for it. Containerisation governs the data without managing the personal device.",
           "How": "App Protection Policies (MAM) requiring a PIN, blocking save-as to personal storage, and enforcing selective wipe. Conditional launch to block jailbroken or rooted devices and those below a minimum patch level.",
-          "Nist": ["AC-19", "SC-28"],
-          "VerifiedBy": ["INT-1.4", "INT-3.3", "INT-3.2"]
+          "Nist": [
+            "AC-19",
+            "SC-28"
+          ],
+          "VerifiedBy": [
+            "INT-1.4",
+            "INT-3.3",
+            "INT-3.2"
+          ]
         }
       ]
     },
@@ -206,60 +344,146 @@
           "Id": "DB-4.1",
           "Requirement": "Operating system updates install within a defined window",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
+          "AppliesTo": [
+            "Windows",
+            "macOS",
+            "iOS",
+            "Android"
+          ],
           "Why": "Nearly all exploited endpoint vulnerabilities have a patch available at the time of exploitation. The window between release and installation is the actual exposure.",
           "How": "Update rings with a deferral period and an enforced deadline, plus a compliance policy setting a minimum OS version so an unpatched device loses access rather than quietly persisting.",
-          "Nist": ["SI-2"],
-          "VerifiedBy": ["INT-2.5", "INT-4.3"]
+          "Nist": [
+            "SI-2"
+          ],
+          "VerifiedBy": [
+            "INT-2.5",
+            "INT-4.3"
+          ]
         },
         {
           "Id": "DB-4.2",
-          "Requirement": "Third-party applications are patched too",
+          "Requirement": "Third-party applications are patched within the defined remediation window",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS"],
+          "AppliesTo": [
+            "Windows",
+            "macOS"
+          ],
           "Why": "Browsers, PDF readers, Java and conferencing clients are the most exploited software on any endpoint, and Windows Update does not touch them.",
-          "How": "RMM-driven third-party patching, or Intune Enterprise App Management where the catalog covers the estate. Whichever is used, someone must be able to answer 'what is unpatched right now'.",
-          "Nist": ["SI-2", "CM-8"],
+          "How": "RMM-driven third-party patching, or Intune Enterprise App Management where the catalog covers the estate, with a written remediation window per severity (for example 7 days for critical, 30 days for the rest). This item is the patch POLICY; DB-4.7 covers whether deployment is watched and DB-4.8 whether the vulnerability actually went away.",
+          "Nist": [
+            "SI-2",
+            "CM-8"
+          ],
           "VerifiedBy": []
         },
         {
           "Id": "DB-4.3",
           "Requirement": "Non-compliant devices actually lose access",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
+          "AppliesTo": [
+            "Windows",
+            "macOS",
+            "iOS",
+            "Android"
+          ],
           "Why": "Compliance state that carries no consequence is a report, not a control. This is the item that gives every control above it teeth.",
           "How": "Conditional Access requiring a compliant or Entra-joined device on the sessions that matter. Confirm the policy is enforced, not report-only — a report-only policy looks identical in the portal until you check the state.",
-          "Nist": ["AC-3", "IA-3"],
-          "VerifiedBy": ["INT-1.2"]
+          "Nist": [
+            "AC-3",
+            "IA-3"
+          ],
+          "VerifiedBy": [
+            "INT-1.2"
+          ]
         },
         {
           "Id": "DB-4.4",
           "Requirement": "Corporate data does not sync to unmanaged devices",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS"],
+          "AppliesTo": [
+            "Windows",
+            "macOS"
+          ],
           "Why": "An unrestricted sync client replicates an entire document library onto a personal machine that meets none of this baseline, and does it silently.",
           "How": "Restrict OneDrive sync to domain-joined or Entra-joined devices by tenant GUID, and use Conditional Access session controls to make unmanaged browsers read-only.",
-          "Nist": ["AC-19", "AC-20", "SC-28"],
-          "VerifiedBy": ["SPO-2.1"]
+          "Nist": [
+            "AC-19",
+            "AC-20",
+            "SC-28"
+          ],
+          "VerifiedBy": [
+            "SPO-2.1"
+          ]
         },
         {
           "Id": "DB-4.5",
           "Requirement": "Device inventory is reconciled on a fixed cadence",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
+          "AppliesTo": [
+            "Windows",
+            "macOS",
+            "iOS",
+            "Android"
+          ],
           "Why": "Devices that appear in one system and not another are the ones that go missing. Stale Intune records also hide genuinely absent hardware.",
           "How": "Reconcile Intune against the RMM and the asset register quarterly. Investigate anything that has not checked in for 30 days rather than deleting it.",
-          "Nist": ["CM-8", "PE-20"],
-          "VerifiedBy": ["INT-1.1"]
+          "Nist": [
+            "CM-8",
+            "PE-20"
+          ],
+          "VerifiedBy": [
+            "INT-1.1"
+          ]
         },
         {
           "Id": "DB-4.6",
           "Requirement": "Loss or theft has a reporting path with a target time",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
+          "AppliesTo": [
+            "Windows",
+            "macOS",
+            "iOS",
+            "Android"
+          ],
           "Why": "Encryption protects a lost device only until someone guesses the PIN. The response window is what limits that exposure, and staff will not report quickly if they do not know how.",
           "How": "A documented path staff actually know, a named person authorized to trigger the wipe, and a target reporting time. Test it once a year the way you would test a backup.",
-          "Nist": ["IR-4", "IR-6", "PE-20"],
+          "Nist": [
+            "IR-4",
+            "IR-6",
+            "PE-20"
+          ],
+          "VerifiedBy": []
+        },
+        {
+          "Id": "DB-4.7",
+          "Requirement": "Patch deployment is monitored and failures are investigated",
+          "Mandatory": true,
+          "AppliesTo": [
+            "Windows",
+            "macOS"
+          ],
+          "Why": "A patch job that fails, stalls on a pending reboot, or never reaches an offline device leaves the exposure in place while the console reports the deployment as done. Nobody notices unless someone is looking at the failures.",
+          "How": "The patching tool's failure and pending-reboot states are reviewed on a schedule, every failure gets a ticket, and a device that misses its window is escalated rather than retried silently. Someone must be able to answer 'which devices did not get last week's patches, and why'.",
+          "Nist": [
+            "SI-2",
+            "CM-8"
+          ],
+          "VerifiedBy": []
+        },
+        {
+          "Id": "DB-4.8",
+          "Requirement": "Vulnerability remediation is independently verified against the current vulnerability state (NRG standard VM-VERIFY-01)",
+          "Mandatory": true,
+          "AppliesTo": [
+            "Windows",
+            "macOS"
+          ],
+          "Why": "The patching tool is evidence of deployment; it is not evidence of remediation. A deployed update can leave the vulnerable component in place (pending reboot, superseded update, a second vulnerable copy), and only a source that observes the device's actual software state can say the CVE is gone.",
+          "How": "After deployment, confirm in Defender Vulnerability Management (or another approved vulnerability source) that the affected-device count for the CVE is zero, allowing for Microsoft's documented lag (software changes appear in roughly two hours, exposure score recalculates daily, a pending restart keeps the device exposed). For actively exploited vulnerabilities the ticket closes only when that count is zero or a documented exception with a compensating control and review date exists. Not yet checked by the assessment: it becomes machine-verifiable when a Defender Vulnerability Management collector is added, without changing this requirement.",
+          "Nist": [
+            "RA-5",
+            "SI-2"
+          ],
           "VerifiedBy": []
         }
       ]
@@ -273,40 +497,73 @@
           "Id": "DB-5.1",
           "Requirement": "Device return is part of the leaver checklist, alongside account disablement",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
+          "AppliesTo": [
+            "Windows",
+            "macOS",
+            "iOS",
+            "Android"
+          ],
           "Why": "Account disablement is automated and device return is not, so the two drift apart. Stale licensed accounts in the tenant are the visible symptom; the unreturned laptop is the part nobody sees.",
           "How": "One checklist covering account disablement, device return, badge return and key return, with completed instances retained. Reconcile returns against the asset register.",
-          "Nist": ["PS-4", "CM-8"],
-          "VerifiedBy": ["AAD-12.3"]
+          "Nist": [
+            "PS-4",
+            "CM-8"
+          ],
+          "VerifiedBy": [
+            "AAD-12.3"
+          ]
         },
         {
           "Id": "DB-5.2",
           "Requirement": "Returned devices are wiped before reissue",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
+          "AppliesTo": [
+            "Windows",
+            "macOS",
+            "iOS",
+            "Android"
+          ],
           "Why": "A device reissued without a wipe carries the previous user's cached credentials, tokens and local data to its next holder.",
           "How": "Intune retire or wipe, then a fresh provisioning run through stage 2. Retire removes company data; wipe returns the device to factory state — pick deliberately, and record which was used.",
-          "Nist": ["MP-6", "SC-28"],
+          "Nist": [
+            "MP-6",
+            "SC-28"
+          ],
           "VerifiedBy": []
         },
         {
           "Id": "DB-5.3",
           "Requirement": "Disposed devices are sanitized, with evidence retained",
           "Mandatory": true,
-          "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
+          "AppliesTo": [
+            "Windows",
+            "macOS",
+            "iOS",
+            "Android"
+          ],
           "Why": "This is the most commonly missing piece of evidence in an MSP-managed environment, because disposal usually happens outside the managed-service scope and nobody owns it.",
           "How": "Cryptographic erase on encrypted drives (destroy the key), or a certified disposal vendor issuing per-asset certificates of destruction. Retain certificates with the asset register. Note that a remote wipe is a request, not a guarantee, and does not substitute for sanitizing recovered hardware.",
-          "Nist": ["MP-6"],
+          "Nist": [
+            "MP-6"
+          ],
           "VerifiedBy": []
         },
         {
           "Id": "DB-5.4",
           "Requirement": "The device record is closed out, not just deleted",
           "Mandatory": false,
-          "AppliesTo": ["Windows", "macOS", "iOS", "Android"],
+          "AppliesTo": [
+            "Windows",
+            "macOS",
+            "iOS",
+            "Android"
+          ],
           "Why": "Deleting the record destroys the evidence that the device was disposed of properly. An auditor asking what happened to serial X needs an answer.",
           "How": "Mark the asset as disposed with the date, method and certificate reference. Remove the Entra and Intune objects only after that record exists.",
-          "Nist": ["CM-8", "AU-11"],
+          "Nist": [
+            "CM-8",
+            "AU-11"
+          ],
           "VerifiedBy": []
         }
       ]

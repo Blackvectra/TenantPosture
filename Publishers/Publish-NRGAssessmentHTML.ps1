@@ -42,7 +42,11 @@ function Publish-NRGAssessmentHTML {
         # them, this only decides what the report puts in front of the reader.
         # Narrowing the report never narrows the assessment.
         [ValidateNotNullOrEmpty()]
-        [string[]] $Frameworks = @('CIS','SCuBA','NIST','CMMC')
+        [string[]] $Frameworks = @('CIS','SCuBA','NIST','CMMC'),
+
+        # Regressions against a prior run's baseline compliance (the entry
+        # point computes them when -BaselineResults is given). Optional.
+        [AllowNull()] [object] $BaselineRegressions = $null
     )
 
     if (-not (Get-Command ConvertTo-NRGHtmlSafe -ErrorAction SilentlyContinue)) {
@@ -693,6 +697,90 @@ function Publish-NRGAssessmentHTML {
     <div class='scope-grid'>$tiles</div>
     <ul class='scope-lim'>$limRows</ul>
     $detBlocks
+  </div>
+</div>
+"@
+        }
+    }
+
+    # ── NRG Security Baseline: desired state, never a score ───────────────────
+    # A VIEW (Lib/Get-NRGBaseline.ps1). Configuration compliance and
+    # effectiveness are rendered as two separate blocks because they are two
+    # separate questions; a control the run could not verify is listed as
+    # such, never folded into "satisfied".
+    $baselineHtml = ''
+    if (Get-Command Get-NRGBaselineCompliance -ErrorAction SilentlyContinue) {
+        $bl = $null
+        try {
+            $blTier = [string](Get-NRGObjectField -Item $Metadata -Key 'TargetTier' -Default 'Standard')
+            if ($blTier -notin @('Minimum', 'Standard', 'Hardened')) { $blTier = 'Standard' }
+            $bl = Get-NRGBaselineCompliance -Findings $Findings -TargetTier $blTier -LicenseProfile $licProfile `
+                    -TenantDomain ([string](Get-NRGObjectField -Item $Metadata -Key 'TenantDomain' -Default '')) `
+                    -QuickScan:([bool](Get-NRGObjectField -Item $Metadata -Key 'QuickScan' -Default $false))
+        } catch { Write-Verbose "NRG baseline section skipped: $($_.Exception.Message)"; $bl = $null }
+        if ($bl -and $bl.Available) {
+            $bs = $bl.Summary
+            $known = [int]$bs.EffectivenessEffective + [int]$bs.EffectivenessIneffective
+            $tiles = @(
+                "<div class='scope-tile'><div class='scope-n'>$($bs.RequiredControls)</div><div class='scope-l'>Required at $(hx $bs.TargetTier)</div></div>"
+                "<div class='scope-tile'><div class='scope-n'>$($bs.Satisfied)</div><div class='scope-l'>Satisfied</div></div>"
+                "<div class='scope-tile$(if($bs.Failed -gt 0){' warn'})'><div class='scope-n$(if($bs.Failed -gt 0){' warn'})'>$($bs.Failed)</div><div class='scope-l'>Failed</div></div>"
+                "<div class='scope-tile$(if($bs.NotVerified -gt 0){' warn'})'><div class='scope-n$(if($bs.NotVerified -gt 0){' warn'})'>$($bs.NotVerified)</div><div class='scope-l'>Not verified</div></div>"
+                "<div class='scope-tile'><div class='scope-n'>$($bs.LicenseBlocked)</div><div class='scope-l'>License blocked</div></div>"
+                "<div class='scope-tile'><div class='scope-n'>$($bs.ApprovedException)</div><div class='scope-l'>Approved exceptions</div></div>"
+                "<div class='scope-tile'><div class='scope-n'>$($bs.NotApplicable)</div><div class='scope-l'>Not applicable here</div></div>"
+            ) -join ''
+            $effTiles = @(
+                "<div class='scope-tile'><div class='scope-n'>$known</div><div class='scope-l'>Effectiveness known</div></div>"
+                "<div class='scope-tile'><div class='scope-n'>$($bs.EffectivenessEffective)</div><div class='scope-l'>Effective</div></div>"
+                "<div class='scope-tile$(if($bs.EffectivenessIneffective -gt 0){' warn'})'><div class='scope-n$(if($bs.EffectivenessIneffective -gt 0){' warn'})'>$($bs.EffectivenessIneffective)</div><div class='scope-l'>Ineffective</div></div>"
+                "<div class='scope-tile'><div class='scope-n'>$($bs.EffectivenessUnknown)</div><div class='scope-l'>Effectiveness unknown</div></div>"
+            ) -join ''
+            $statusOrder = @{ 'Failed' = 0; 'NotVerified' = 1; 'ApprovedException' = 2; 'LicenseBlocked' = 3; 'NotApplicable' = 4; 'Satisfied' = 5 }
+            $statusLabel = @{ 'Failed' = 'Failed'; 'NotVerified' = 'Not verified'; 'ApprovedException' = 'Approved exception'; 'LicenseBlocked' = 'License blocked'; 'NotApplicable' = 'Not applicable'; 'Satisfied' = 'Satisfied' }
+            $rowsHtml = ($bl.Controls | Sort-Object { $statusOrder[[string]$_.BaselineStatus] }, RequiredTier, ControlId | ForEach-Object {
+                $st = [string]$_.BaselineStatus
+                $reason = if ($st -eq 'ApprovedException') { "$($_.ExceptionSummary) Observed: $($_.ObservedState). $($_.Reason)" } else { [string]$_.Reason }
+                $fresh = switch ([string]$_.EvidenceFreshness) { 'Current' { 'current' } 'Stale' { 'STALE' } default { 'none' } }
+                "<tr><td><code>$(hx $_.ControlId)</code></td><td>$(hx $_.Title)</td><td>$(hx $_.RequiredTier)</td><td>$(hx $_.Owner)</td><td><strong>$(hx $statusLabel[$st])</strong></td><td>$(hx $_.ObservedState)</td><td>$(hx $fresh)</td><td>$(hx $_.EffectivenessState)</td><td>$(hx $_.DependencyState)</td><td>$(hx $reason)</td></tr>"
+            }) -join ''
+            $regHtml = ''
+            if ($null -ne $BaselineRegressions) {
+                $regs = @(Get-NRGObjectField -Item $BaselineRegressions -Key 'Regressions' -Default @())
+                $note = [string](Get-NRGObjectField -Item $BaselineRegressions -Key 'Note' -Default '')
+                if (@(Get-NRGObjectField -Item $BaselineRegressions -Key 'Available' -Default $false)[0]) {
+                    $regRows = ($regs | ForEach-Object { $kind = [string](Get-NRGObjectField -Item $_ -Key 'Kind' -Default ''); $cause = [string](Get-NRGObjectField -Item $_ -Key 'CurrentCause' -Default ''); "<tr><td><code>$(hx $_.ControlId)</code></td><td>$(hx $_.Title)</td><td>$(hx $_.RequiredTier)</td><td>$(hx $_.Previous)</td><td><strong>$(hx $_.Current)</strong></td><td>$(hx $(if ($kind -eq 'EvidenceLost') { "Evidence lost: $cause" } elseif ($kind -eq 'ConfigurationRegressed') { 'Configuration regressed' } else { $kind }))</td><td>$(hx $_.Reason)</td></tr>" }) -join ''
+                    $regHtml = "<h4 style='margin:16px 0 6px'>Baseline regressions since the prior run ($($regs.Count))</h4><p class='scope-det'>$(hx $note)</p>" +
+                               $(if ($regs.Count -gt 0) { "<table class='ft'><thead><tr><th>Control</th><th>Title</th><th>Tier</th><th>Previous</th><th>Current</th><th>Kind</th><th>Reason</th></tr></thead><tbody>$regRows</tbody></table>" } else { '' })
+                } elseif ($note) {
+                    $regHtml = "<p class='scope-det'>$(hx $note)</p>"
+                }
+            }
+            $causeHtml = ''
+            $causes = Get-NRGObjectField -Item $bs -Key 'NotVerifiedByCause' -Default $null
+            if ($null -ne $causes -and @($causes.Keys).Count -gt 0) {
+                $causeRows = (@($causes.Keys) | ForEach-Object { "<tr><td>$(hx $_)</td><td>$($causes[$_])</td></tr>" }) -join ''
+                $causeHtml = "<table class='ft' style='max-width:520px'><thead><tr><th>Not verified, by cause</th><th>Controls</th></tr></thead><tbody>$causeRows</tbody></table>"
+            }
+            $excNote = if ($bl.ExceptionsPath) { "Approved exceptions read from $(hx (Split-Path -Leaf $bl.ExceptionsPath))." } else { 'No baseline exceptions file for this tenant.' }
+            $baselineHtml = @"
+<div class='card mt' id='nrg-baseline'>
+  <div class='card-hd'>
+    <div><div class='card-label'>NRG Security Baseline v$(hx $bs.BaselineVersion) — $(hx $bs.TargetTier) tier</div><div class='card-sub'>Is this tenant configured the way NRG requires a managed client to be? Desired state, separate from the framework scores above.</div></div>
+    <div class='lic-badge'>$($bs.Satisfied) of $($bs.RequiredControls) required controls satisfied</div>
+  </div>
+  <div class='scope-body'>
+    <h4 style='margin:0 0 6px'>Configuration compliance</h4>
+    <div class='scope-grid'>$tiles</div>
+    <p class='scope-det'>Not verified means the run produced no usable evidence for the control (no result, a collector that did not complete, a skipped workload, a manual check, or evidence older than its freshness window). It is never counted as satisfied. $excNote</p>
+    $causeHtml
+    <h4 style='margin:16px 0 6px'>Effectiveness visibility</h4>
+    <div class='scope-grid'>$effTiles</div>
+    <p class='scope-det'>Configuration says a control is set; effectiveness says it is working. The assessment can read effectiveness evidence for only a few controls today (endpoint results); everywhere else it is reported as unknown, not assumed.</p>
+    $regHtml
+    <details class='scope-det'><summary>Every required control ($($bs.RequiredControls))</summary>
+    <table class='ft'><thead><tr><th>Control</th><th>Title</th><th>Tier</th><th>Owner</th><th>Baseline</th><th>Observed</th><th>Evidence</th><th>Effectiveness</th><th>Dependencies</th><th>Reason</th></tr></thead><tbody>$rowsHtml</tbody></table>
+    </details>
   </div>
 </div>
 "@
@@ -1425,6 +1513,7 @@ th.nf-n{text-align:right}
   <div class="hdr-nav">
     <span class="nav-a" data-goto="exec">Overview</span>
     $(if($scopeHtml){'<span class="nav-a" data-goto="scope">Scope &amp; Limits</span>'})
+    $(if($baselineHtml){'<span class="nav-a" data-goto="nrg-baseline">NRG Baseline</span>'})
     <span class="nav-a" data-goto="fw-section">Frameworks</span>
     $(if($nistHtml){'<span class="nav-a" data-goto="nist-families">NIST 800-53</span>'})
     $(if($physHtml){'<span class="nav-a" data-goto="nist-physical">Physical &amp; Device</span>'})
@@ -1484,6 +1573,8 @@ th.nf-n{text-align:right}
 </div>
 
 $scopeHtml
+
+$baselineHtml
 
 $caHtml
 
