@@ -37,6 +37,17 @@
   failing with "You must call the Connect-MicrosoftTeams cmdlet").
   `NRG.WorkloadSkip.Tests.ps1` pins the order.
 
+- **NRG Security Baseline v1.0 locked.** Live validation on one tenant is
+  complete (five runs, 2026-09-29): zero baseline-layer bug candidates, every
+  not-verified row carrying its cause, and every genuine failure unchanged.
+  SPO-3.3 (OneDrive version history) moves from Standard to Assessment-only
+  for v1.0 because its read needs the SharePoint Management Shell
+  (`-IncludeSharePointShell`), which is not part of the normal Standard
+  run; its governance metadata is kept in the editorial document as the
+  promotion candidate for when shell collection is standard. Standard now
+  requires 50 controls (31 Minimum including the manual VM-VERIFY-01, 19
+  Standard). EXO-7.2 and VM-VERIFY-01 are unchanged.
+
 - **EXO-2.6 scored a failed section as a clean list (second live run,
   Exchange half).** `Get-Mailbox` omitted `LicenseReconciliationNeeded` on
   the live tenant, the shared-mailbox sign-in loop threw under StrictMode,
@@ -71,7 +82,7 @@
   not configuration: every control with its severity, license requirement,
   automation level, a proposed tier (Minimum / Standard / Hardened /
   Assessment-only), the reason, why NRG owns it, and operational notes.
-  30 Minimum + 20 Standard + 18 Hardened nominated; 136 stay
+  30 Minimum + 19 Standard + 18 Hardened nominated; 137 stay
   assessment-only evidence. Tiers are layered (a Standard client satisfies
   Minimum + Standard). Applicability is per client (licensing, third-party
   EDR, a per-client exceptions file), never per control, and the future
@@ -85,7 +96,7 @@
   document keeps control requirement, observed evidence and effectiveness
   evidence as three separate concepts, states the stateless results
   contract, and ends with a mechanically generated contradictions section
-  (manual-only Minimum controls, inverted dependencies, and the 62 of 68
+  (manual-only Minimum controls, inverted dependencies, and the 61 of 67
   effectiveness checks that need telemetry the tool does not collect).
 - **NRG Security Baseline v1.0 is implemented as a desired-state layer**
   (`Config/nrg-baseline.json`, `Lib/Get-NRGBaseline.ps1`, `-BaselineTier`).
@@ -98,7 +109,7 @@
   live per client in `Config/baseline-exceptions/<tenant-domain>.psd1`
   (review date required; expired ones are reported, not honored) and change
   only the disposition. Effectiveness is Unknown wherever the assessment
-  does not read the evidence (62 of 68 controls today) and is read from
+  does not read the evidence (61 of 67 controls today) and is read from
   ingested endpoint results otherwise. `BaselineRegressions` compares with
   `-BaselineResults` only under the same baseline version and tier. The
   HTML and Markdown reports gain an NRG Security Baseline section with

@@ -19,7 +19,7 @@ Add `-ThirdPartyEDR 'Cortex XDR'` (or the `ThirdPartyEDR` field in `clients.json
 The console prints one line, for example:
 
 ```
-[i] NRG baseline v1.0 (Standard): 51 required — 30 satisfied, 9 failed, 7 not verified, 3 license blocked, 2 approved exception(s); effectiveness known for 0 of 51
+[i] NRG baseline v1.0 (Standard): 50 required — 30 satisfied, 9 failed, 6 not verified, 3 license blocked, 2 approved exception(s); effectiveness known for 0 of 50
 ```
 
 ## 2. Validate mechanically

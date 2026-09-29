@@ -72,13 +72,13 @@ plus a `BaselineCompliance` summary (counts by observed state, constraint and di
 | Tier | Controls |
 |---|---|
 | Minimum | 30 |
-| Standard | 20 |
+| Standard | 19 |
 | Hardened | 18 |
-| Assessment-only | 136 |
-| Minimum + Standard | 50 |
+| Assessment-only | 137 |
+| Minimum + Standard | 49 |
 
 
-Effectiveness checks on the 68 tiered controls: **6 collected today**, **62 not collected** (capability gaps, listed in the contradictions section).
+Effectiveness checks on the 67 tiered controls: **6 collected today**, **61 not collected** (capability gaps, listed in the contradictions section).
 
 Domains: the six from the standard (Identity, Email, Endpoint, DNS, Logging & Audit, Vulnerability) plus **Collaboration & Data** for Teams, SharePoint, Purview and Power Platform, which the six do not cover. Logging & Audit gathers the audit and alerting controls from every workload. **Automated** is Fully (the evaluator reaches a verdict on its own), Partially (a verdict with a named manual step), or Manual (no supported read API; the 17 controls in `Config/coverage-exceptions.psd1`).
 
@@ -438,7 +438,7 @@ Each domain has two tables: the **tier table** (what and why) and the **governan
 | SPO-1.3 | SharePoint Legacy Authentication Blocked | High | Included (M365 Business Standard+) | Fully | **Minimum** | Legacy auth to SharePoint bypasses MFA the same way it does for mail. | Same reason as AAD-1.1. |  |
 | SPO-1.1 | External Sharing Restricted | High | Included (M365 Business Standard+) | Fully | **Standard** | Unrestricted external sharing is how a client's data ends up on the open internet. | NRG-managed tenants restrict sharing to existing or authenticated guests. | Anyone links are the specific thing to remove; SPO-1.2 covers the default link type. |
 | SPO-1.2 | Default Sharing Link Not Anonymous | Medium | Included (M365 Business Standard+) | Fully | **Standard** | An anonymous default link makes every share an anonymous share. | Same as SPO-1.1. |  |
-| SPO-3.3 | OneDrive Version History Enabled | High | Included (M365 Business Standard+) | Fully | **Standard** | Version history is the ransomware recovery mechanism for OneDrive. | Recovery is part of the managed service. | On by default; a false here is deliberate. |
+| SPO-3.3 | OneDrive Version History Enabled | High | Included (M365 Business Standard+) | Fully | **Assessment-only** | Version history is the ransomware recovery mechanism for OneDrive. | Recovery is part of the managed service. | On by default; a false here is deliberate. Assessment-only in v1.0 because the read needs the SharePoint Management Shell (`-IncludeSharePointShell`), which is not part of the normal Standard run; candidate for promotion to Standard once shell collection is standard. Governance row kept below. |
 | TMS-3.2 | Auto-Admit Only Authenticated Organization Users | High | Included (M365 Business Standard+) | Fully | **Standard** | The lobby is the only thing between an external caller and a meeting. | NRG-managed tenants keep externals in the lobby until admitted. | Only OrganizerOnly / EveryoneInCompanyExcludingGuests satisfy it. |
 | PVW-1.3 | DLP Policy Active for Sensitive Data | High | M365 Business Premium or E3+ | Fully | **Hardened** | DLP is the control for regulated data leaving the tenant. | Regulated clients. | Needs a sensitive-information-type design first; PVW-3.4 and DEF-4.1/4.2 are the same policy family. |
 | PVW-4.3 | Sensitivity Labels Defined and Published | High | M365 Business Premium or E3+ | Fully | **Hardened** | Sensitivity labels are the foundation for DLP, Copilot and sharing controls. | Regulated clients. | PVW-1.4 reads the same state and counts once. |
@@ -565,6 +565,8 @@ Each domain has two tables: the **tier table** (what and why) and the **governan
 | TMS-4.2 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
 | TMS-4.4 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
 
+SPO-3.3 is Assessment-only in v1.0; its governance row is kept as written so nothing is re-derived when it is promoted. Promotion condition: `-IncludeSharePointShell` collection becomes part of the normal Standard run.
+
 ## Vulnerability Management (endpoint build standard, not `controls.json`)
 
 The 204 tenant controls contain no vulnerability-management control, because Microsoft 365 does not expose vulnerability state through Microsoft Graph. The requirement therefore lives in the endpoint build standard (`Config/device-baseline.json`, v1.1), where the endpoint compliance scanner's `DEV-*` checks already provide the device-side evidence. Three distinct requirements, because most organizations implement only the first two:
@@ -601,7 +603,7 @@ These are generated mechanically from the tables above so the review can accept 
 
 **Controls whose prerequisite sits in a higher tier:** none
 
-**Effectiveness checks that depend on telemetry NRG does not collect today (62 of 68):** AAD-1.1 (Minimum), AAD-1.2 (Minimum), AAD-2.1 (Minimum), AAD-3.1 (Minimum), AAD-7.2 (Minimum), AAD-11.2 (Minimum), AAD-6.1 (Standard), AAD-11.1 (Standard), AAD-10.2 (Standard), AAD-2.3 (Standard), AAD-1.3 (Hardened), AAD-1.4 (Hardened), AAD-1.5 (Hardened), AAD-3.2 (Hardened), AAD-3.3 (Hardened), AAD-8.2 (Hardened), AAD-11.4 (Hardened), AAD-11.7 (Hardened), AAD-10.4 (Hardened), SPO-1.5 (Hardened), EXO-1.2 (Minimum), EXO-1.3 (Minimum), EXO-1.4 (Minimum), EXO-1.6 (Minimum), EXO-7.1 (Minimum), EXO-7.2 (Minimum), EXO-8.2 (Minimum), EXO-2.6 (Standard), EXO-5.3 (Standard), EXO-1.5 (Standard), DEF-1.1 (Standard), DEF-1.2 (Standard), DEF-1.3 (Minimum), DEF-2.2 (Minimum), DEF-2.3 (Minimum), DNS-1.1 (Minimum), DNS-1.2 (Minimum), DNS-1.3 (Minimum), DNS-1.4 (Hardened), EXO-1.1 (Minimum), EXO-4.2 (Minimum), PVW-1.1 (Minimum), PVW-1.2 (Standard), DEF-3.4 (Standard), DEF-4.3 (Standard), EXO-3.3 (Standard), PVW-4.1 (Hardened), PVW-4.2 (Hardened), INT-1.1 (Minimum), INT-1.3 (Minimum), INT-2.2 (Standard), INT-4.3 (Standard), INT-4.2 (Hardened), SPO-1.3 (Minimum), SPO-1.1 (Standard), SPO-1.2 (Standard), SPO-3.3 (Standard), TMS-3.2 (Standard), SPO-2.1 (Hardened), TMS-4.3 (Hardened), PVW-1.3 (Hardened), PVW-4.3 (Hardened)
+**Effectiveness checks that depend on telemetry NRG does not collect today (61 of 67):** AAD-1.1 (Minimum), AAD-1.2 (Minimum), AAD-2.1 (Minimum), AAD-3.1 (Minimum), AAD-7.2 (Minimum), AAD-11.2 (Minimum), AAD-6.1 (Standard), AAD-11.1 (Standard), AAD-10.2 (Standard), AAD-2.3 (Standard), AAD-1.3 (Hardened), AAD-1.4 (Hardened), AAD-1.5 (Hardened), AAD-3.2 (Hardened), AAD-3.3 (Hardened), AAD-8.2 (Hardened), AAD-11.4 (Hardened), AAD-11.7 (Hardened), AAD-10.4 (Hardened), SPO-1.5 (Hardened), EXO-1.2 (Minimum), EXO-1.3 (Minimum), EXO-1.4 (Minimum), EXO-1.6 (Minimum), EXO-7.1 (Minimum), EXO-7.2 (Minimum), EXO-8.2 (Minimum), EXO-2.6 (Standard), EXO-5.3 (Standard), EXO-1.5 (Standard), DEF-1.1 (Standard), DEF-1.2 (Standard), DEF-1.3 (Minimum), DEF-2.2 (Minimum), DEF-2.3 (Minimum), DNS-1.1 (Minimum), DNS-1.2 (Minimum), DNS-1.3 (Minimum), DNS-1.4 (Hardened), EXO-1.1 (Minimum), EXO-4.2 (Minimum), PVW-1.1 (Minimum), PVW-1.2 (Standard), DEF-3.4 (Standard), DEF-4.3 (Standard), EXO-3.3 (Standard), PVW-4.1 (Hardened), PVW-4.2 (Hardened), INT-1.1 (Minimum), INT-1.3 (Minimum), INT-2.2 (Standard), INT-4.3 (Standard), INT-4.2 (Hardened), SPO-1.3 (Minimum), SPO-1.1 (Standard), SPO-1.2 (Standard), TMS-3.2 (Standard), SPO-2.1 (Hardened), TMS-4.3 (Hardened), PVW-1.3 (Hardened), PVW-4.3 (Hardened)
 
 These are not wrong. They are the honest state: for every one of them the compliance view will report `Effective = Unknown` until a collector exists (sign-in logs, message trace, DMARC aggregate reports, Defender reports, Purview search). Marking them now is what stops the baseline from pretending.
 
@@ -609,7 +611,7 @@ These are not wrong. They are the honest state: for every one of them the compli
 
 ## How to review this document
 
-1. Change **Proposed tier** wherever you disagree. The 50 Minimum + Standard nominations are a starting point; the target is a set engineers genuinely operate, not the largest defensible list.
+1. Change **Proposed tier** wherever you disagree. The 49 Minimum + Standard nominations are a starting point; the target is a set engineers genuinely operate, not the largest defensible list.
 2. Every Minimum and Standard row must keep a one-sentence **Why NRG owns this** and an **Expected state** an engineer can test. If you cannot write one, the control is Assessment-only.
 3. Check the **SLA class** and **Freshness** against what NRG will actually staff. A Daily freshness class means the assessment (or a lighter collector) runs daily for that control.
 4. Add operational notes where a control regularly needs an exception (printers on SMTP AUTH, CLI tools on device code flow, partner federation) so the exceptions file has a vocabulary from day one.
