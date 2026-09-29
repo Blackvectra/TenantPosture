@@ -46,7 +46,9 @@ function Publish-NRGAssessmentHTML {
 
         # Regressions against a prior run's baseline compliance (the entry
         # point computes them when -BaselineResults is given). Optional.
-        [AllowNull()] [object] $BaselineRegressions = $null
+        [AllowNull()] [object] $BaselineRegressions = $null,
+        # The pre-run plan compared with this run (Compare-NRGBaselinePlan). Optional.
+        [AllowNull()] [object] $BaselinePlanComparison = $null
     )
 
     if (-not (Get-Command ConvertTo-NRGHtmlSafe -ErrorAction SilentlyContinue)) {
@@ -756,6 +758,17 @@ function Publish-NRGAssessmentHTML {
                     $regHtml = "<p class='scope-det'>$(hx $note)</p>"
                 }
             }
+            # The pre-run plan beside what happened: which NotVerified rows were
+            # expected and which were not (a read that failed on the day).
+            $planHtml = ''
+            if ($null -ne $BaselinePlanComparison -and [bool](Get-NRGObjectField -Item $BaselinePlanComparison -Key 'Available' -Default $false)) {
+                $pc = $BaselinePlanComparison
+                $unexp = @(Get-NRGObjectField -Item $pc -Key 'UnexpectedNotVerified' -Default @())
+                $unexpRows = ($unexp | ForEach-Object { "<tr><td><code>$(hx $_.ControlId)</code></td><td>$(hx $_.Cause)</td><td>$(hx $_.Expected)</td></tr>" }) -join ''
+                $planHtml = "<h4 style='margin:16px 0 6px'>Expected before the run vs observed</h4><p class='scope-det'>$(hx ([string](Get-NRGObjectField -Item $pc -Key 'Note' -Default '')))</p>" +
+                            "<table class='ft' style='max-width:520px'><tbody><tr><td>Not verified, expected before the run</td><td>$([int](Get-NRGObjectField -Item $pc -Key 'ExpectedNotVerified' -Default 0))</td></tr><tr><td>Not verified, observed</td><td>$([int](Get-NRGObjectField -Item $pc -Key 'ObservedNotVerified' -Default 0))</td></tr><tr><td>Licensing unknown before the run</td><td>$([int](Get-NRGObjectField -Item $pc -Key 'LicensingUnknownBeforeRun' -Default 0))</td></tr></tbody></table>" +
+                            $(if ($unexp.Count -gt 0) { "<table class='ft'><thead><tr><th>Not expected</th><th>Cause</th><th>Plan said</th></tr></thead><tbody>$unexpRows</tbody></table>" } else { '' })
+            }
             $causeHtml = ''
             $causes = Get-NRGObjectField -Item $bs -Key 'NotVerifiedByCause' -Default $null
             if ($null -ne $causes -and @($causes.Keys).Count -gt 0) {
@@ -777,7 +790,8 @@ function Publish-NRGAssessmentHTML {
     <h4 style='margin:16px 0 6px'>Effectiveness visibility</h4>
     <div class='scope-grid'>$effTiles</div>
     <p class='scope-det'>Configuration says a control is set; effectiveness says it is working. The assessment can read effectiveness evidence for only a few controls today (endpoint results); everywhere else it is reported as unknown, not assumed.</p>
-    $regHtml
+    $planHtml
+$regHtml
     <details class='scope-det'><summary>Every required control ($($bs.RequiredControls))</summary>
     <table class='ft'><thead><tr><th>Control</th><th>Title</th><th>Tier</th><th>Owner</th><th>Baseline</th><th>Observed</th><th>Evidence</th><th>Effectiveness</th><th>Dependencies</th><th>Reason</th></tr></thead><tbody>$rowsHtml</tbody></table>
     </details>
