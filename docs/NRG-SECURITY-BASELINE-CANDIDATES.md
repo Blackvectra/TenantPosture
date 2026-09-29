@@ -1,9 +1,9 @@
 # NRG Security Baseline v1.0 — Candidate Controls (editorial review)
 
 **Status:** DRAFT for editorial review. This document is not configuration. Nothing in the tool reads it.
-Once the tiers are settled, the decisions are encoded as `Config/nrg-baseline.json` and a `Get-NRGBaselineCompliance` view; until then this file is the only artifact.
+Once the tiers and governance fields are settled, the decisions are encoded as `Config/nrg-baseline.json` and a `Get-NRGBaselineCompliance` view; until then this file is the only artifact.
 
-**Source of truth for IDs, titles, severities and license requirements:** `Config/controls.json` (204 controls). This table was generated from it on 2026-09-29; edit the **Proposed tier**, **Reason**, **Why NRG owns this** and **Notes** columns, never the first five.
+**Source of truth for IDs, titles, severities and license requirements:** `Config/controls.json` (204 controls). The tables were generated from it on 2026-09-29. Edit the editorial columns (tier, reason, why NRG owns this, notes, and the governance fields), never the catalog columns.
 
 ## What the baseline is, and is not
 
@@ -24,19 +24,47 @@ A Standard client must satisfy Minimum + Standard. A Hardened client must satisf
 
 A control is Minimum only if all four hold: it is expected on nearly every applicable NRG-managed environment; it is reasonably deployable without a project; the assessment (or a named manual step) can verify it; and a deviation is important enough that it must be explained. Severity was a starting point, not the rule: several High controls are Assessment-only because they do not apply universally, and several Medium controls are Minimum because they are foundational (audit logging, DKIM records).
 
+## Three things that must not collapse into one field
+
+| Concept | Question it answers | Where it comes from |
+|---|---|---|
+| **Control requirement** | What does NRG require? | This document, then `nrg-baseline.json` (expected state, tier, owner, SLA class) |
+| **Observed evidence** | Is it configured that way right now? | The assessment finding (Satisfied / Failed / NotApplicable / NotVerified) with its evidence timestamp and source |
+| **Effectiveness evidence** | Is it actually working? | The effectiveness check named per control; today mostly telemetry the assessment does not collect, so its state is Unknown until a collector exists |
+
+`Configured = yes, Observed = yes, Effective = unknown` is a legitimate and common state and must be reported as exactly that. It is never rounded up to a pass.
+
+## Governance fields (added for the second editorial pass)
+
+| Field | Meaning | Values |
+|---|---|---|
+| **Owner** | The NRG discipline that owns the control and answers for drift | Identity, Email, Endpoint, DNS, Logging, Collaboration & Data (Vulnerability lives in the device build standard) |
+| **Evidence source** | The exact collector and API that proves the observed state | Derived from `CollectorDependency` |
+| **Expected state** | One sentence an engineer can test against | Editorial |
+| **SLA class** | A label only; the number of days per class lives in a separate policy table so NRG can change 7 to 10 without touching 50 controls | Immediate, Critical, High, Standard, Advisory |
+| **Depends on** | Controls or prerequisites without which this one is weak or meaningless | Control IDs |
+| **Effectiveness check** | What proves the control works, not merely that it is configured | Editorial, each tagged **collected** (the assessment or endpoint scanner reads it today) or **not collected** (a capability gap, stated, never pretended) |
+| **Evidence freshness class** | How old observed evidence may be before it becomes NotVerified | Realtime, Daily, Weekly, Monthly, PointInTime |
+
+Governance fields are filled for the tiered controls only. Assessment-only rows carry owner and evidence source (both derivable) and nothing else, because they are not requirements.
+
 ## Applicability is per client, not per control
 
-The baseline file will hold only control IDs and tiers. Whether a control applies to a given tenant comes from the tenant: license gating (`Config/license-service-plans.json` and the tenant's own SKUs), the third-party EDR declaration (`-ThirdPartyEDR`, `clients.json`), and a per-client exceptions file (control ID, reason, compensating control, approver, review date — an exception without a review date is not approved). The compliance view will keep three things separate rather than one status enum:
+The baseline file will hold only control IDs, tiers and the governance fields above. Whether a control applies to a given tenant comes from the tenant: license gating (`Config/license-service-plans.json` and the tenant's own SKUs), the third-party EDR declaration (`-ThirdPartyEDR`, `clients.json`), and a per-client exceptions file (control ID, reason, compensating control, approver, start date, review date, expiry — an exception past its review date is a finding again). The compliance view keeps three things separate rather than one status enum:
 
 - **Observed** (from the finding): Satisfied / Failed / NotApplicable / NotVerified
 - **Constraint** (from licensing): None / LicenseBlocked
 - **Disposition** (from the exceptions file): Normal / ApprovedException
 
-A control that produced no verdict this run is **NotVerified**, never Satisfied, whatever it was last month. The display status is derived from the three, and the precedence is to be stress-tested during implementation, not fixed here.
+A control that produced no verdict this run, or whose evidence is older than its freshness class allows, is **NotVerified**, never Satisfied, whatever it was last month. The display status is derived from the three, and the precedence is to be stress-tested during implementation, not fixed here.
 
 ## Results contract (for the implementation, not this review)
 
-`results.json` gains `BaselineVersion`, `TargetTier`, `BaselineCompliance` (counts by observed state, constraint and disposition, per tier) and `BaselineRegressions[]` (client, control, baseline tier, previous, current, detected, action). A prior run's baseline version is recorded so a drop between v1.0 and v1.1 can be read as "the standard changed", not "the client got worse".
+The assessment stays stateless. It emits facts; the PSA or a future operations layer owns ticket state, acknowledgment and remediation clocks. Per baseline control, `results.json` will carry:
+
+`ControlId`, `BaselineVersion`, `TargetTier`, `ObservedState`, `EvidenceTimestamp`, `EvidenceSource`, `EffectivenessState`, `RegressionFlag`, `ExceptionState`
+
+plus a `BaselineCompliance` summary (counts by observed state, constraint and disposition, per tier) and `BaselineRegressions[]` (client, control, baseline tier, previous, current, detected, action). A prior run's baseline version is recorded so a drop between v1.0 and v1.1 can be read as "the standard changed", not "the client got worse".
 
 ## Proposed counts
 
@@ -50,10 +78,16 @@ A control that produced no verdict this run is **NotVerified**, never Satisfied,
 | Minimum + Standard | 50 |
 
 
+Effectiveness checks on the 68 tiered controls: **6 collected today**, **62 not collected** (capability gaps, listed in the contradictions section).
+
 Domains: the six from the standard (Identity, Email, Endpoint, DNS, Logging & Audit, Vulnerability) plus **Collaboration & Data** for Teams, SharePoint, Purview and Power Platform, which the six do not cover. Logging & Audit gathers the audit and alerting controls from every workload. **Automated** is Fully (the evaluator reaches a verdict on its own), Partially (a verdict with a named manual step), or Manual (no supported read API; the 17 controls in `Config/coverage-exceptions.psd1`).
+
+Each domain has two tables: the **tier table** (what and why) and the **governance table** (owner, evidence, expected state, SLA class, dependencies, effectiveness, freshness). Rows are in the same order in both.
 
 
 ## Identity (47 controls)
+
+### Identity: tier
 
 | Control ID | Control title | Severity | License requirement | Automated | Proposed tier | Reason | Why NRG owns this | Notes |
 |---|---|---|---|---|---|---|---|---|
@@ -105,7 +139,61 @@ Domains: the six from the standard (Identity, Email, Endpoint, DNS, Logging & Au
 | AAD-9.1 | Authenticator Number Matching Enabled | High | Included (all plans) | Fully | **Assessment-only** | Useful identity evidence; not a universal NRG operating requirement in v1.0. | — |  |
 | AAD-9.2 | Passwordless Authentication Methods Available | Low | Included (all plans) | Fully | **Assessment-only** | Useful identity evidence; not a universal NRG operating requirement in v1.0. | — |  |
 
+### Identity: governance
+
+| Control ID | Owner | Evidence source | Expected state | SLA class | Depends on | Effectiveness check | Effectiveness capability | Freshness |
+|---|---|---|---|---|---|---|---|---|
+| AAD-1.1 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) | A Conditional Access policy blocks legacy authentication for all users on all apps (or Security Defaults is on where no P1 exists). | Critical | — | Sign-in logs show zero successful legacy-protocol sign-ins over the period. | not collected | Daily |
+| AAD-1.2 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies); Graph: authorization and authentication-method policies, Security Defaults (Invoke-NRGCollectAADAuthPolicies) | An enabled CA policy requires MFA (or an authentication strength) for all users on all cloud apps, and every enabled member has a registered method. | Critical | AAD-1.1 | Sign-in logs show interactive sign-ins completing MFA; no MFA-less success outside the break-glass pair. | not collected | Daily |
+| AAD-11.2 | Identity | Graph: directory role members (Invoke-NRGCollectAADRoles) | No guest account holds any privileged directory role. | Critical | — | Same as AAD-3.1. | not collected | Daily |
+| AAD-15.1 | Identity | Graph: appRoleAssignedTo on Graph, Exchange and SharePoint (Invoke-NRGCollectAADAppPermissions) | No application holds a tenant-takeover application permission other than documented Microsoft first-party apps. | Critical | — | App-role assignment delta between runs is empty or explained by a change ticket. | collected | Daily |
+| AAD-2.1 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) | At least one enabled Conditional Access policy exists and the NRG baseline policy set is deployed (report-only policies do not count). | High | — | Same as AAD-1.2 and AAD-2.3: sign-in logs show the policies applied, not just present. | not collected | Weekly |
+| AAD-3.1 | Identity | Graph: directory role members (Invoke-NRGCollectAADRoles) | Two to eight Global Administrators, all cloud-only, including the break-glass pair. | Critical | — | Audit logs show no role-assignment changes outside change tickets. | not collected | Weekly |
+| AAD-6.2 | Identity | Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance) | Users cannot consent to applications; consent goes through the admin consent workflow. | Critical | — | No new user-consented OAuth grants appear in the delegated-consent table since the last run (AAD-12.4 delta). | collected | Daily |
+| AAD-7.2 | Identity | Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance) | At least two cloud-only, CA-excluded emergency accounts exist, documented in the client record. | High | — | A quarterly test sign-in from each account succeeds and is logged (AAD-10.3, manual today). | not collected | Monthly |
+| AAD-10.2 | Identity | Graph: directory role members (Invoke-NRGCollectAADRoles) | Every privileged role holder is a dedicated cloud-only admin account, not a daily-use identity. | High | AAD-3.1 | Admin accounts have no mailbox or license beyond what admin work needs. | not collected | Weekly |
+| AAD-11.1 | Identity | Graph: authorization and authentication-method policies, Security Defaults (Invoke-NRGCollectAADAuthPolicies); Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) | A CA policy blocks the device code flow for all users. | High | AAD-2.1 | Sign-in logs show device-code sign-ins blocked, not merely challenged. | not collected | Weekly |
+| AAD-2.3 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) | An enabled CA policy requires a compliant device for all users on all cloud apps. | High | AAD-2.1, INT-1.1 | Sign-in logs show sign-ins from non-compliant devices blocked. | not collected | Weekly |
+| AAD-6.1 | Identity | Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance) | Users cannot register applications. | Standard | — | No new user-owned app registrations appear since the last run. | not collected | Weekly |
+| AAD-1.3 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) | An enabled CA policy requires a phishing-resistant authentication strength for every privileged role. | High | AAD-1.2 | Sign-in logs show admin sign-ins using FIDO2 or Windows Hello for Business only. | not collected | Weekly |
+| AAD-1.4 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) | An enabled CA policy responds to High and Medium sign-in risk. | Standard | AAD-2.1 | Identity Protection risk detections show remediation, not just detection. | not collected | Weekly |
+| AAD-1.5 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) | An enabled CA policy requires password change for High user risk. | Standard | AAD-2.1 | Risky users are remediated, not dismissed, within the SLA. | not collected | Weekly |
+| AAD-10.4 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) | Sign-in frequency is set to the NRG value for the client tier. | Standard | AAD-2.1 | Session durations in sign-in logs do not exceed the configured frequency. | not collected | Weekly |
+| AAD-11.4 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) | Token protection is enforced for Exchange and SharePoint on supported clients. | Standard | AAD-2.1 | Sign-in logs show sessions rejected on token replay. | not collected | Weekly |
+| AAD-11.7 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) | Privileged roles can sign in only from compliant or privileged-access devices. | Standard | AAD-2.3 | Admin sign-ins originate from managed devices only. | not collected | Weekly |
+| AAD-3.2 | Identity | Graph: PIM eligibility and assignment schedules, access reviews (Invoke-NRGCollectAADPIM); Graph: directory role members (Invoke-NRGCollectAADRoles) | No permanent privileged role assignments beyond the break-glass pair; admins are PIM-eligible. | High | AAD-7.2 | PIM activation history shows admins activating roles, not holding them. | not collected | Weekly |
+| AAD-3.3 | Identity | Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance) | Every privileged PIM role requires MFA on activation. | Standard | AAD-3.2 | PIM activation events show MFA satisfied. | not collected | Weekly |
+| AAD-8.2 | Identity | Graph: PIM eligibility and assignment schedules, access reviews (Invoke-NRGCollectAADPIM) | A recurring access review covers every privileged role. | Standard | AAD-3.2 | Reviews complete on schedule with decisions applied, not auto-approved. | not collected | Monthly |
+| AAD-10.1 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) |  |  |  |  |  |  |
+| AAD-11.3 | Identity | Graph: authorization and authentication-method policies, Security Defaults (Invoke-NRGCollectAADAuthPolicies) |  |  |  |  |  |  |
+| AAD-11.5 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) |  |  |  |  |  |  |
+| AAD-11.6 | Identity | Graph: authorization and authentication-method policies, Security Defaults (Invoke-NRGCollectAADAuthPolicies) |  |  |  |  |  |  |
+| AAD-11.8 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) |  |  |  |  |  |  |
+| AAD-11.9 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) |  |  |  |  |  |  |
+| AAD-12.1 | Identity | Graph: users and MFA registration report (Invoke-NRGCollectAADUsers) |  |  |  |  |  |  |
+| AAD-12.2 | Identity | Graph: guests, stale accounts, OAuth grants, subscribed SKUs (Invoke-NRGCollectAADInventory) |  |  |  |  |  |  |
+| AAD-12.3 | Identity | Graph: guests, stale accounts, OAuth grants, subscribed SKUs (Invoke-NRGCollectAADInventory) |  |  |  |  |  |  |
+| AAD-12.4 | Identity | Graph: guests, stale accounts, OAuth grants, subscribed SKUs (Invoke-NRGCollectAADInventory) |  |  |  |  |  |  |
+| AAD-13.1 | Identity | Graph: guests, stale accounts, OAuth grants, subscribed SKUs (Invoke-NRGCollectAADInventory) |  |  |  |  |  |  |
+| AAD-14.1 | Identity | Graph: guests, stale accounts, OAuth grants, subscribed SKUs (Invoke-NRGCollectAADInventory) |  |  |  |  |  |  |
+| AAD-15.2 | Identity | Graph: appRoleAssignedTo on Graph, Exchange and SharePoint (Invoke-NRGCollectAADAppPermissions) |  |  |  |  |  |  |
+| AAD-2.2 | Identity | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) |  |  |  |  |  |  |
+| AAD-3.4 | Identity | Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance) |  |  |  |  |  |  |
+| AAD-3.5 | Identity | Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance) |  |  |  |  |  |  |
+| AAD-3.6 | Identity | Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance) |  |  |  |  |  |  |
+| AAD-4.1 | Identity | Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance) |  |  |  |  |  |  |
+| AAD-4.2 | Identity | Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance) |  |  |  |  |  |  |
+| AAD-4.3 | Identity | Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance) |  |  |  |  |  |  |
+| AAD-5.1 | Identity | Graph: authorization and authentication-method policies, Security Defaults (Invoke-NRGCollectAADAuthPolicies) |  |  |  |  |  |  |
+| AAD-5.2 | Identity | Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance) |  |  |  |  |  |  |
+| AAD-6.3 | Identity | Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance) |  |  |  |  |  |  |
+| AAD-7.1 | Identity | Graph: authorization and authentication-method policies, Security Defaults (Invoke-NRGCollectAADAuthPolicies) |  |  |  |  |  |  |
+| AAD-9.1 | Identity | Graph: authorization and authentication-method policies, Security Defaults (Invoke-NRGCollectAADAuthPolicies) |  |  |  |  |  |  |
+| AAD-9.2 | Identity | Graph: authorization and authentication-method policies, Security Defaults (Invoke-NRGCollectAADAuthPolicies) |  |  |  |  |  |  |
+
 ## Email (48 controls)
+
+### Email: tier
 
 | Control ID | Control title | Severity | License requirement | Automated | Proposed tier | Reason | Why NRG owns this | Notes |
 |---|---|---|---|---|---|---|---|---|
@@ -158,7 +246,62 @@ Domains: the six from the standard (Identity, Email, Endpoint, DNS, Logging & Au
 | EXO-9.1 | Mailboxes Protected by Hold or Retention Policy | High | Exchange Online Plan 2 or Exchange Online Archiving (M365 Business Premium, E3, E5) | Fully | **Assessment-only** | Useful mail evidence; not a universal NRG operating requirement in v1.0. | — |  |
 | EXO-9.2 | Deleted Item Retention Window at Maximum | Medium | Included (all plans) | Fully | **Assessment-only** | Useful mail evidence; not a universal NRG operating requirement in v1.0. | — |  |
 
+### Email: governance
+
+| Control ID | Owner | Evidence source | Expected state | SLA class | Depends on | Effectiveness check | Effectiveness capability | Freshness |
+|---|---|---|---|---|---|---|---|---|
+| DEF-1.3 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) | Spoof intelligence is enabled in the in-force anti-phishing policy. | High | — | Spoof intelligence insight shows spoofed senders blocked. | not collected | Weekly |
+| DEF-2.2 | Email | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) | Zero-hour auto purge is enabled for phishing, malware and spam. | High | — | ZAP actions appear in the threat protection status report. | not collected | Weekly |
+| DEF-2.3 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) | The common attachments filter is enabled with the NRG blocked-type list. | High | — | Message trace shows blocked attachment types quarantined. | not collected | Weekly |
+| EXO-1.2 | Email | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) | SMTP AUTH is disabled tenant-wide; per-mailbox exceptions are documented (EXO-7.4). | Critical | — | Message trace shows no SMTP AUTH submissions outside the documented exceptions. | not collected | Daily |
+| EXO-1.3 | Email | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) | Outbound spam policy and remote domain block automatic external forwarding. | Critical | — | Message trace shows no auto-forwarded messages leaving the tenant. | not collected | Daily |
+| EXO-1.4 | Email | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) | DKIM signing is enabled for every accepted domain with rotated keys. | High | DNS-1.2 | DMARC aggregate reports show DKIM-aligned pass for outbound mail. | not collected | Weekly |
+| EXO-1.6 | Email | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) | Modern authentication is enabled and basic authentication is off for every protocol. | High | — | Sign-in logs show no basic-auth successes. | not collected | Weekly |
+| EXO-7.1 | Email | Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory) | No mailbox forwards to an external address (ForwardingSmtpAddress or ForwardingAddress) without a documented exception. | Critical | EXO-1.3 | Message trace shows no forwarded mail to external recipients. | not collected | Daily |
+| EXO-7.2 | Email | Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory) | No inbox rule forwards or redirects to an external recipient. | Critical | EXO-1.3 | Same as EXO-7.1; the forwarding-rule alert (EXO-3.3) fires on any new rule. | not collected | Daily |
+| EXO-8.2 | Email | Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory) | No transport rule redirects or blind-copies mail externally without a documented purpose. | Critical | — | Message trace shows no rule-redirected external mail. | not collected | Daily |
+| DEF-1.1 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) | Safe Attachments is enabled with Block action in the in-force policy for all recipients. | High | — | Threat Explorer shows detonation verdicts blocking attachments. | not collected | Weekly |
+| DEF-1.2 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) | Safe Links is enabled with click tracking and no user override in the in-force policy. | High | — | URL click reports show blocked clicks. | not collected | Weekly |
+| EXO-1.5 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) | Impersonation protection covers priority users and all accepted domains in the in-force anti-phishing policy. | High | DEF-1.3 | Threat Explorer shows impersonation detections being quarantined. | not collected | Weekly |
+| EXO-2.6 | Email | Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory) | Every shared mailbox has sign-in blocked. | High | — | No interactive sign-ins by shared mailbox accounts in sign-in logs. | not collected | Weekly |
+| EXO-5.3 | Email | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) | No allowed sender domains in any anti-spam policy. | High | — | Spoofed mail from those domains would be filtered; message trace shows no allow-listed bypasses. | not collected | Weekly |
+| DEF-1.4 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) |  |  |  |  |  |  |
+| DEF-1.5 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) |  |  |  |  |  |  |
+| DEF-1.6 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) |  |  |  |  |  |  |
+| DEF-2.1 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) |  |  |  |  |  |  |
+| DEF-2.4 | Email | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) |  |  |  |  |  |  |
+| DEF-2.5 | Email | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) |  |  |  |  |  |  |
+| DEF-2.6 | Email | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) |  |  |  |  |  |  |
+| DEF-3.1 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) |  |  |  |  |  |  |
+| DEF-3.2 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) |  |  |  |  |  |  |
+| DEF-3.3 | Email | Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) |  |  |  |  |  |  |
+| DEF-4.1 | Email | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| DEF-4.2 | Email | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| DEF-4.4 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) |  |  |  |  |  |  |
+| DEF-4.5 | Email | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| DEF-4.6 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) |  |  |  |  |  |  |
+| DEF-4.7 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) |  |  |  |  |  |  |
+| DEF-5.1 | Email | Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory) |  |  |  |  |  |  |
+| EXO-1.7 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) |  |  |  |  |  |  |
+| EXO-2.3 | Email | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) |  |  |  |  |  |  |
+| EXO-2.4 | Email | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) |  |  |  |  |  |  |
+| EXO-2.5 | Email | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) |  |  |  |  |  |  |
+| EXO-3.1 | Email | Exchange Online PowerShell: connection filter policy (Invoke-NRGCollectEXOConnectionFilter) |  |  |  |  |  |  |
+| EXO-3.2 | Email | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) |  |  |  |  |  |  |
+| EXO-4.3 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) |  |  |  |  |  |  |
+| EXO-4.4 | Email | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) |  |  |  |  |  |  |
+| EXO-5.2 | Email | Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender) |  |  |  |  |  |  |
+| EXO-6.1 | Email | Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory) |  |  |  |  |  |  |
+| EXO-6.2 | Email | Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory) |  |  |  |  |  |  |
+| EXO-6.4 | Email | Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory) |  |  |  |  |  |  |
+| EXO-7.4 | Email | Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory) |  |  |  |  |  |  |
+| EXO-8.1 | Email | Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory) |  |  |  |  |  |  |
+| EXO-9.1 | Email | Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory) |  |  |  |  |  |  |
+| EXO-9.2 | Email | Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory) |  |  |  |  |  |  |
+
 ## DNS (10 controls)
+
+### DNS: tier
 
 | Control ID | Control title | Severity | License requirement | Automated | Proposed tier | Reason | Why NRG owns this | Notes |
 |---|---|---|---|---|---|---|---|---|
@@ -173,7 +316,24 @@ Domains: the six from the standard (Identity, Email, Endpoint, DNS, Logging & Au
 | DNS-2.3 | TLS Certificate Expiry on Mail Hostnames | High | Included (M365 Business Standard+) | Fully | **Assessment-only** | Useful domain evidence; not a universal NRG operating requirement in v1.0. | — |  |
 | DNS-2.4 | Certificate Transparency Log Hygiene | Medium | Included (M365 Business Standard+) | Fully | **Assessment-only** | Useful domain evidence; not a universal NRG operating requirement in v1.0. | — |  |
 
+### DNS: governance
+
+| Control ID | Owner | Evidence source | Expected state | SLA class | Depends on | Effectiveness check | Effectiveness capability | Freshness |
+|---|---|---|---|---|---|---|---|---|
+| DNS-1.1 | DNS | DNS over HTTPS (Cloudflare, Google) with Resolve-DnsName fallback (Invoke-NRGCollectDNSEmailRecords) | Every managed domain publishes exactly one valid SPF record ending in -all or ~all. | High | — | DMARC aggregate reports show SPF pass for the expected senders. | not collected | Daily |
+| DNS-1.2 | DNS | DNS over HTTPS (Cloudflare, Google) with Resolve-DnsName fallback (Invoke-NRGCollectDNSEmailRecords) | Both Microsoft DKIM selector CNAMEs resolve for every accepted domain. | High | EXO-1.4 | Same as EXO-1.4. | not collected | Daily |
+| DNS-1.3 | DNS | DNS over HTTPS (Cloudflare, Google) with Resolve-DnsName fallback (Invoke-NRGCollectDNSEmailRecords) | Every managed domain publishes DMARC at p=quarantine or p=reject with the NRG reporting address (DMARCian). | Critical | DNS-1.1, DNS-1.2 | DMARC aggregate reports show aligned senders and no unexplained failure trend. | not collected | Daily |
+| DNS-1.4 | DNS | DNS over HTTPS (Cloudflare, Google) with Resolve-DnsName fallback (Invoke-NRGCollectDNSEmailRecords) | MTA-STS is published in enforce mode with a valid policy file. | Standard | — | TLS-RPT reports show no delivery failures. | not collected | Daily |
+| DNS-1.5 | DNS | DNS over HTTPS (Cloudflare, Google) with Resolve-DnsName fallback (Invoke-NRGCollectDNSEmailRecords) |  |  |  |  |  |  |
+| DNS-1.6 | DNS | DNS over HTTPS (Cloudflare, Google) with Resolve-DnsName fallback (Invoke-NRGCollectDNSEmailRecords) |  |  |  |  |  |  |
+| DNS-2.1 | DNS | DNS over HTTPS (Cloudflare, Google) with Resolve-DnsName fallback (Invoke-NRGCollectDNSEmailRecords) |  |  |  |  |  |  |
+| DNS-2.2 | DNS | DNS over HTTPS (Cloudflare, Google) with Resolve-DnsName fallback (Invoke-NRGCollectDNSEmailRecords) |  |  |  |  |  |  |
+| DNS-2.3 | DNS | DNS over HTTPS (Cloudflare, Google) with Resolve-DnsName fallback (Invoke-NRGCollectDNSEmailRecords) |  |  |  |  |  |  |
+| DNS-2.4 | DNS | DNS over HTTPS (Cloudflare, Google) with Resolve-DnsName fallback (Invoke-NRGCollectDNSEmailRecords) |  |  |  |  |  |  |
+
 ## Logging & Audit (20 controls)
+
+### Logging & Audit: tier
 
 | Control ID | Control title | Severity | License requirement | Automated | Proposed tier | Reason | Why NRG owns this | Notes |
 |---|---|---|---|---|---|---|---|---|
@@ -198,7 +358,34 @@ Domains: the six from the standard (Identity, Email, Endpoint, DNS, Logging & Au
 | PVW-2.1 | Purview Audit Log Search Enabled | High | Included (M365 Business Standard+) | Fully | **Assessment-only** | Useful compliance evidence; requirement depends on the client's regulatory scope. | — | Named-object or duplicate evidence for PVW-1.1; counts once via control links. |
 | PVW-3.1 | Audit Logs Exported to SIEM | Medium | Microsoft Sentinel (add-on) or Defender XDR | Manual | **Assessment-only** | Useful compliance evidence; requirement depends on the client's regulatory scope. | — | No automated check (Config/coverage-exceptions.psd1); reported as requires manual verification. |
 
+### Logging & Audit: governance
+
+| Control ID | Owner | Evidence source | Expected state | SLA class | Depends on | Effectiveness check | Effectiveness capability | Freshness |
+|---|---|---|---|---|---|---|---|---|
+| EXO-1.1 | Logging | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) | Organization-wide mailbox auditing is enabled and no mailbox is in the audit bypass list. | High | — | A test search returns MailItemsAccessed or similar events for a known mailbox. | not collected | Weekly |
+| EXO-4.2 | Logging | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) | Admin audit logging is enabled. | High | — | A test search returns the assessment sign-in itself as an admin audit event. | not collected | Weekly |
+| PVW-1.1 | Logging | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) | Unified audit log ingestion is enabled. | Critical | — | A test search of the unified audit log returns recent events. | not collected | Weekly |
+| DEF-3.4 | Logging | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) | Defender alert notifications are sent to the NRG monitoring address. | High | — | A test alert reaches the NRG queue. | not collected | Weekly |
+| DEF-4.3 | Logging | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) | The risky-OAuth-app alert policy is enabled and routed to NRG. | High | DEF-3.4 | A consent event produces an alert in the NRG queue. | not collected | Weekly |
+| EXO-3.3 | Logging | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) | The forwarding-rule alert policy is enabled and routed to NRG. | High | DEF-3.4, PVW-1.1 | A test inbox rule produces an alert in the NRG queue. | not collected | Weekly |
+| PVW-1.2 | Logging | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) | Audit log retention is at least 90 days (180 by default; one year on E5). | Standard | PVW-1.1 | Events older than 90 days are still searchable. | not collected | Monthly |
+| PVW-4.1 | Logging | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) | Audit (Premium) is enabled for E5-licensed users. | Standard | PVW-1.1 | MailItemsAccessed events appear for E5 mailboxes. | not collected | Monthly |
+| PVW-4.2 | Logging | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) | A retention policy keeps audit records for one year or more. | Standard | PVW-4.1 | Events older than 180 days are searchable. | not collected | Monthly |
+| AAD-10.3 | Logging | Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance) |  |  |  |  |  |  |
+| AAD-8.1 | Logging | Graph: PIM eligibility and assignment schedules, access reviews (Invoke-NRGCollectAADPIM) |  |  |  |  |  |  |
+| EXO-3.4 | Logging | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| EXO-3.5 | Logging | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) |  |  |  |  |  |  |
+| EXO-4.1 | Logging | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) |  |  |  |  |  |  |
+| EXO-5.1 | Logging | Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig) |  |  |  |  |  |  |
+| EXO-6.3 | Logging | Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory) |  |  |  |  |  |  |
+| EXO-7.3 | Logging | Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory) |  |  |  |  |  |  |
+| PPL-3.5 | Logging | Graph: Copilot licensing and settings (Invoke-NRGCollectM365Copilot) |  |  |  |  |  |  |
+| PVW-2.1 | Logging | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| PVW-3.1 | Logging | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+
 ## Endpoint (17 controls)
+
+### Endpoint: tier
 
 | Control ID | Control title | Severity | License requirement | Automated | Proposed tier | Reason | Why NRG owns this | Notes |
 |---|---|---|---|---|---|---|---|---|
@@ -220,7 +407,31 @@ Domains: the six from the standard (Identity, Email, Endpoint, DNS, Logging & Au
 | INT-3.3 | Conditional Launch Policies Configured | High | M365 Business Premium or Intune Plan 1 | Fully | **Assessment-only** | Useful endpoint evidence; not a universal NRG operating requirement in v1.0. | — |  |
 | INT-4.4 | Mobile Device Compliance Requires PIN or Biometric | High | M365 Business Premium or Intune Plan 1 | Fully | **Assessment-only** | Useful endpoint evidence; not a universal NRG operating requirement in v1.0. | — |  |
 
+### Endpoint: governance
+
+| Control ID | Owner | Evidence source | Expected state | SLA class | Depends on | Effectiveness check | Effectiveness capability | Freshness |
+|---|---|---|---|---|---|---|---|---|
+| INT-1.1 | Endpoint | Graph: Intune compliance policies, enrollment configuration, update rings, devices (Invoke-NRGCollectIntuneDeviceCompliance) | An assigned compliance policy exists per managed platform with a non-compliance action. | High | — | Device compliance report shows devices evaluated, not "not evaluated". | not collected | Weekly |
+| INT-1.3 | Endpoint | Graph: Intune compliance policies, enrollment configuration, update rings, devices (Invoke-NRGCollectIntuneDeviceCompliance) | An assigned policy requires BitLocker on Windows with recovery keys escrowed to Entra. | High | INT-1.1 | Encryption report shows every Windows device encrypted with a key in Entra. | not collected | Weekly |
+| INT-1.5 | Endpoint | Graph: Intune endpoint-security policies by template (Invoke-NRGCollectIntuneEndpointSecurity) | An assigned antivirus policy configures Defender Antivirus (real-time, cloud protection, PUA). | High | INT-1.1 | Defender for Endpoint shows AV signatures current and real-time protection on per device (DEV-2.x). | collected | Weekly |
+| INT-2.1 | Endpoint | Graph: Intune endpoint-security policies by template (Invoke-NRGCollectIntuneEndpointSecurity) | An assigned EDR policy onboards every managed Windows device to Defender for Endpoint (or the declared third-party EDR is confirmed in its console). | Critical | INT-1.1 | Every enrolled device appears as onboarded and active in the EDR console (DEV-2.1). | collected | Daily |
+| INT-2.5 | Endpoint | Graph: Intune compliance policies, enrollment configuration, update rings, devices (Invoke-NRGCollectIntuneDeviceCompliance) | Assigned update rings enforce a deadline and grace period on every Windows device. | High | INT-1.1 | Update compliance report shows devices within the deadline (DEV-4.1); DB-4.7 monitors failures. | collected | Weekly |
+| INT-2.2 | Endpoint | Graph: Intune endpoint-security policies by template (Invoke-NRGCollectIntuneEndpointSecurity) | An assigned ASR policy sets the NRG rule set to Block. | High | INT-2.1 | ASR report shows rules in block mode and detections occurring. | not collected | Weekly |
+| INT-4.1 | Endpoint | Graph: Intune endpoint-security policies by template (Invoke-NRGCollectIntuneEndpointSecurity) | An assigned Windows LAPS policy backs up the local admin password to Entra and rotates it. | High | INT-1.1 | Every Windows device has a current LAPS password in Entra (DEV-4.x). | collected | Weekly |
+| INT-4.3 | Endpoint | Graph: Intune compliance policies, enrollment configuration, update rings, devices (Invoke-NRGCollectIntuneDeviceCompliance) | Compliance policy requires the NRG minimum OS build per platform. | Standard | INT-2.5 | Device compliance report shows no devices below the minimum. | not collected | Weekly |
+| INT-4.2 | Endpoint | Graph: Intune compliance policies, enrollment configuration, update rings, devices (Invoke-NRGCollectIntuneDeviceCompliance) | Windows Hello for Business is enabled for enrolled Windows devices. | Standard | INT-1.1 | Sign-in logs show WHfB as the method for user sign-ins. | not collected | Weekly |
+| INT-1.2 | Endpoint | Graph: Intune compliance policies, enrollment configuration, update rings, devices (Invoke-NRGCollectIntuneDeviceCompliance); Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies) |  |  |  |  |  |  |
+| INT-1.4 | Endpoint | Graph: Intune app protection and configuration policies (Invoke-NRGCollectIntuneAppProtection) |  |  |  |  |  |  |
+| INT-2.3 | Endpoint | Graph: Intune endpoint-security policies by template (Invoke-NRGCollectIntuneEndpointSecurity) |  |  |  |  |  |  |
+| INT-2.4 | Endpoint | Graph: Intune compliance policies, enrollment configuration, update rings, devices (Invoke-NRGCollectIntuneDeviceCompliance) |  |  |  |  |  |  |
+| INT-3.1 | Endpoint | Graph: Intune compliance policies, enrollment configuration, update rings, devices (Invoke-NRGCollectIntuneDeviceCompliance) |  |  |  |  |  |  |
+| INT-3.2 | Endpoint | Graph: Intune app protection and configuration policies (Invoke-NRGCollectIntuneAppProtection) |  |  |  |  |  |  |
+| INT-3.3 | Endpoint | Graph: Intune app protection and configuration policies (Invoke-NRGCollectIntuneAppProtection) |  |  |  |  |  |  |
+| INT-4.4 | Endpoint | Graph: Intune compliance policies, enrollment configuration, update rings, devices (Invoke-NRGCollectIntuneDeviceCompliance) |  |  |  |  |  |  |
+
 ## Collaboration & Data (62 controls)
+
+### Collaboration & Data: tier
 
 | Control ID | Control title | Severity | License requirement | Automated | Proposed tier | Reason | Why NRG owns this | Notes |
 |---|---|---|---|---|---|---|---|---|
@@ -287,23 +498,120 @@ Domains: the six from the standard (Identity, Email, Endpoint, DNS, Logging & Au
 | TMS-4.2 | Anonymous Users Cannot Start Meetings | High | Included (all plans) | Fully | **Assessment-only** | Useful Teams evidence; business impact varies too much for a universal requirement. | — |  |
 | TMS-4.4 | Teams Events Cannot Be Attended by Anonymous Internet Users | Medium | Included (all plans) | Fully | **Assessment-only** | Useful Teams evidence; business impact varies too much for a universal requirement. | — |  |
 
+### Collaboration & Data: governance
+
+| Control ID | Owner | Evidence source | Expected state | SLA class | Depends on | Effectiveness check | Effectiveness capability | Freshness |
+|---|---|---|---|---|---|---|---|---|
+| SPO-1.3 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) | Legacy authentication to SharePoint is blocked. | High | — | No legacy-auth SharePoint sign-ins in sign-in logs. | not collected | Weekly |
+| SPO-1.1 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) | External sharing is limited to existing or authenticated guests; anyone links are off. | High | — | Sharing audit shows no anonymous links created. | not collected | Weekly |
+| SPO-1.2 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) | The default sharing link is not anonymous. | Standard | SPO-1.1 | Same as SPO-1.1. | not collected | Weekly |
+| SPO-3.3 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) | OneDrive version history is enabled with the default or higher version count. | Standard | — | A restore from version history succeeds in a recovery test. | not collected | Monthly |
+| TMS-3.2 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) | Meeting auto-admit is OrganizerOnly or EveryoneInCompanyExcludingGuests. | Standard | — | Meeting audit shows external participants admitted from the lobby, never auto-admitted. | not collected | Weekly |
+| PVW-1.3 | Collaboration & Data | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) | A DLP policy in enforce mode covers the client's sensitive information types across Exchange, SharePoint, OneDrive and Teams. | Standard | PVW-1.1 | DLP reports show matches and blocks, not only test-mode hits. | not collected | Weekly |
+| PVW-4.3 | Collaboration & Data | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) | Sensitivity labels are defined and published to all users. | Standard | — | Label usage reports show labels being applied. | not collected | Monthly |
+| SPO-1.5 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) | Unmanaged devices get browser-only, no-download access to SharePoint and OneDrive. | Standard | AAD-2.3 | No file downloads from unmanaged devices in the audit log. | not collected | Weekly |
+| SPO-2.1 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) | OneDrive sync is restricted to devices joined to the tenant domain. | Standard | INT-1.1 | No sync client sessions from unmanaged devices in the audit log. | not collected | Weekly |
+| TMS-4.3 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) | External federation is restricted to an allowlist of partner domains. | Standard | — | Chat audit shows no messages from unlisted domains. | not collected | Weekly |
+| PPL-1.1 | Collaboration & Data | Power Platform admin API over REST, in-process (Invoke-NRGCollectPowerPlatform) |  |  |  |  |  |  |
+| PPL-1.2 | Collaboration & Data | Power Platform admin API over REST, in-process (Invoke-NRGCollectPowerPlatform) |  |  |  |  |  |  |
+| PPL-1.3 | Collaboration & Data | Power Platform admin API over REST, in-process (Invoke-NRGCollectPowerPlatform) |  |  |  |  |  |  |
+| PPL-2.1 | Collaboration & Data | Power Platform admin API over REST, in-process (Invoke-NRGCollectPowerPlatform) |  |  |  |  |  |  |
+| PPL-2.2 | Collaboration & Data | Power Platform admin API over REST, in-process (Invoke-NRGCollectPowerPlatform) |  |  |  |  |  |  |
+| PPL-2.3 | Collaboration & Data | Power Platform admin API over REST, in-process (Invoke-NRGCollectPowerPlatform) |  |  |  |  |  |  |
+| PPL-3.1 | Collaboration & Data | Graph: Copilot licensing and settings (Invoke-NRGCollectM365Copilot) |  |  |  |  |  |  |
+| PPL-3.2 | Collaboration & Data | Graph: Copilot licensing and settings (Invoke-NRGCollectM365Copilot) |  |  |  |  |  |  |
+| PPL-3.3 | Collaboration & Data | Graph: Copilot licensing and settings (Invoke-NRGCollectM365Copilot) |  |  |  |  |  |  |
+| PPL-3.4 | Collaboration & Data | Graph: Copilot licensing and settings (Invoke-NRGCollectM365Copilot) |  |  |  |  |  |  |
+| PVW-1.4 | Collaboration & Data | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| PVW-2.2 | Collaboration & Data | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| PVW-2.3 | Collaboration & Data | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| PVW-2.4 | Collaboration & Data | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| PVW-2.5 | Collaboration & Data | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| PVW-2.6 | Collaboration & Data | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| PVW-3.2 | Collaboration & Data | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| PVW-3.3 | Collaboration & Data | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| PVW-3.4 | Collaboration & Data | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| PVW-4.4 | Collaboration & Data | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| SPO-1.4 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) |  |  |  |  |  |  |
+| SPO-2.2 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) |  |  |  |  |  |  |
+| SPO-2.3 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) |  |  |  |  |  |  |
+| SPO-2.4 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) |  |  |  |  |  |  |
+| SPO-2.5 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| SPO-2.6 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) |  |  |  |  |  |  |
+| SPO-2.7 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) |  |  |  |  |  |  |
+| SPO-2.8 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) |  |  |  |  |  |  |
+| SPO-3.1 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) |  |  |  |  |  |  |
+| SPO-3.2 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) |  |  |  |  |  |  |
+| SPO-3.4 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) |  |  |  |  |  |  |
+| SPO-4.1 | Collaboration & Data | Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint) |  |  |  |  |  |  |
+| TMS-1.1 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-1.2 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-1.3 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-1.4 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-1.5 | Collaboration & Data | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| TMS-1.6 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-2.1 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-2.2 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-2.3 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-2.4 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-2.5 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-2.6 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-2.7 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-2.8 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-3.1 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-3.3 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-3.4 | Collaboration & Data | Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview) |  |  |  |  |  |  |
+| TMS-4.1 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-4.2 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+| TMS-4.4 | Collaboration & Data | Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams) |  |  |  |  |  |  |
+
 ## Vulnerability Management (endpoint build standard, not `controls.json`)
 
 The 204 tenant controls contain no vulnerability-management control, because Microsoft 365 does not expose vulnerability state through Microsoft Graph. The requirement therefore lives in the endpoint build standard (`Config/device-baseline.json`, v1.1), where the endpoint compliance scanner's `DEV-*` checks already provide the device-side evidence. Three distinct requirements, because most organizations implement only the first two:
 
-| ID | Requirement | Tier | Automated | Why NRG owns this | Notes |
-|---|---|---|---|---|---|
-| DB-4.2 | Third-party applications are patched within the defined remediation window (patch **policy**) | **Minimum** | Manual | Browsers, PDF readers and conferencing clients are the most exploited software on any endpoint and Windows Update does not touch them. | RMM third-party patching or Intune Enterprise App Management. No tenant-side verifier yet. |
-| DB-4.7 | Patch deployment is monitored and failures are investigated (patch **delivery**) | **Minimum** | Manual | A failed or reboot-pending deployment leaves the exposure in place while the console says done. | Weekly review of failures and pending reboots; every failure a ticket. |
-| DB-4.8 | Vulnerability remediation is independently verified against the current vulnerability state (patch **effectiveness**; the standard's **VM-VERIFY-01**) | **Minimum** | Manual | The patching tool is evidence of deployment. Defender Vulnerability Management is evidence of remediation. They are not the same thing. | `VerifiedBy: []` on purpose: the standard exists before the automation. Becomes machine-verifiable when a Defender Vulnerability Management collector (Defender for Endpoint API, its own consent) is added, without changing the requirement. Allow for Microsoft's documented lag: software changes appear in about two hours, exposure score recalculates daily, a pending restart keeps a device exposed. For actively exploited (KEV) vulnerabilities the ticket closes only at affected-device count zero or with a documented exception, compensating control and review date. |
+| ID | Requirement | Tier | Owner | Automated | SLA class | Freshness | Why NRG owns this | Effectiveness check | Notes |
+|---|---|---|---|---|---|---|---|---|---|
+| DB-4.2 | Third-party applications are patched within the defined remediation window (patch **policy**) | **Minimum** | Vulnerability | Manual | High | Weekly | Browsers, PDF readers and conferencing clients are the most exploited software on any endpoint and Windows Update does not touch them. | RMM patch compliance report shows the estate inside the window (**not collected**). | RMM third-party patching or Intune Enterprise App Management. No tenant-side verifier yet. |
+| DB-4.7 | Patch deployment is monitored and failures are investigated (patch **delivery**) | **Minimum** | Vulnerability | Manual | High | Weekly | A failed or reboot-pending deployment leaves the exposure in place while the console says done. | Every failed or reboot-pending deployment has a ticket within the SLA (**not collected**). | Weekly review of failures and pending reboots; every failure a ticket. |
+| DB-4.8 | Vulnerability remediation is independently verified against the current vulnerability state (patch **effectiveness**; the standard's **VM-VERIFY-01**) | **Minimum** | Vulnerability | Manual | Immediate for KEV, Critical otherwise | Daily | The patching tool is evidence of deployment. Defender Vulnerability Management is evidence of remediation. They are not the same thing. | Defender Vulnerability Management affected-device count for the CVE is zero (**not collected**; needs a Defender for Endpoint API collector with its own consent). | `VerifiedBy: []` on purpose: the standard exists before the automation. Allow for Microsoft's documented lag: software changes appear in about two hours, exposure score recalculates daily, a pending restart keeps a device exposed. For actively exploited (KEV) vulnerabilities the ticket closes only at affected-device count zero or with a documented exception, compensating control and review date. |
 
 The device build standard's item IDs are pinned to the `DB-n.n` shape by `NRG.DeviceBaseline.Tests.ps1`, which is why the two new items are DB-4.7 and DB-4.8 rather than DB-4.2A and VM-VERIFY-01; VM-VERIFY-01 is the standard's name for DB-4.8 and will be the control ID in `nrg-baseline.json`'s vulnerability domain.
 
 The 35 `DEV-*` endpoint checks are not listed here: they are already governed by the device build standard's Mandatory flag (25 of 29 items), and a `DEV-*` check enters the NRG baseline through the DB item that names it in `VerifiedBy`.
 
+## Logging and observability: the composite control to add in v1.1
+
+The baseline should eventually say more than "logging enabled". The target statement is: **required telemetry exists, is retained for the NRG minimum, and is accessible during incident response.** That is a composite over existing controls, not a new evaluator:
+
+| Telemetry | Evidence today | Retention | Gap |
+|---|---|---|---|
+| Entra sign-in and audit logs | Not read by the assessment (the sign-in triage mode reads them on demand) | Set by license (Entra ID Free 7 days, P1/P2 30 days), not by configuration | The control can state the requirement; the tool can only confirm the license tier |
+| Unified audit log | PVW-1.1, PVW-1.2, PVW-4.1, PVW-4.2 | 180 days default, one year on E5 | Effectiveness (a test search returns events) not collected |
+| Exchange mailbox and admin audit | EXO-1.1, EXO-4.2, EXO-5.1 | Governed by Purview retention | Same |
+| Defender alerts | DEF-3.4, DEF-4.3, EXO-3.3 | Portal retention | Alert delivery to the NRG queue not collected |
+| Endpoint telemetry | INT-2.1, DEV-2.x | Defender for Endpoint retention | Device reporting health not collected |
+| Firewall events | Out of scope by decision (network equipment is not on the roadmap) | — | Answered in the SSP as inherited |
+
+## Contradictions to review before v1.0 is locked
+
+These are generated mechanically from the tables above so the review can accept or fix each one consciously.
+
+
+**Minimum controls whose evidence is manual-only:** none
+
+**Controls whose prerequisite sits in a higher tier:** none
+
+**Effectiveness checks that depend on telemetry NRG does not collect today (62 of 68):** AAD-1.1 (Minimum), AAD-1.2 (Minimum), AAD-2.1 (Minimum), AAD-3.1 (Minimum), AAD-7.2 (Minimum), AAD-11.2 (Minimum), AAD-6.1 (Standard), AAD-11.1 (Standard), AAD-10.2 (Standard), AAD-2.3 (Standard), AAD-1.3 (Hardened), AAD-1.4 (Hardened), AAD-1.5 (Hardened), AAD-3.2 (Hardened), AAD-3.3 (Hardened), AAD-8.2 (Hardened), AAD-11.4 (Hardened), AAD-11.7 (Hardened), AAD-10.4 (Hardened), SPO-1.5 (Hardened), EXO-1.2 (Minimum), EXO-1.3 (Minimum), EXO-1.4 (Minimum), EXO-1.6 (Minimum), EXO-7.1 (Minimum), EXO-7.2 (Minimum), EXO-8.2 (Minimum), EXO-2.6 (Standard), EXO-5.3 (Standard), EXO-1.5 (Standard), DEF-1.1 (Standard), DEF-1.2 (Standard), DEF-1.3 (Minimum), DEF-2.2 (Minimum), DEF-2.3 (Minimum), DNS-1.1 (Minimum), DNS-1.2 (Minimum), DNS-1.3 (Minimum), DNS-1.4 (Hardened), EXO-1.1 (Minimum), EXO-4.2 (Minimum), PVW-1.1 (Minimum), PVW-1.2 (Standard), DEF-3.4 (Standard), DEF-4.3 (Standard), EXO-3.3 (Standard), PVW-4.1 (Hardened), PVW-4.2 (Hardened), INT-1.1 (Minimum), INT-1.3 (Minimum), INT-2.2 (Standard), INT-4.3 (Standard), INT-4.2 (Hardened), SPO-1.3 (Minimum), SPO-1.1 (Standard), SPO-1.2 (Standard), SPO-3.3 (Standard), TMS-3.2 (Standard), SPO-2.1 (Hardened), TMS-4.3 (Hardened), PVW-1.3 (Hardened), PVW-4.3 (Hardened)
+
+These are not wrong. They are the honest state: for every one of them the compliance view will report `Effective = Unknown` until a collector exists (sign-in logs, message trace, DMARC aggregate reports, Defender reports, Purview search). Marking them now is what stops the baseline from pretending.
+
+**Effectiveness checks collected today (the endpoint scanner or a delta between runs):** AAD-6.2, AAD-15.1, INT-1.5, INT-2.1, INT-2.5, INT-4.1
+
 ## How to review this document
 
 1. Change **Proposed tier** wherever you disagree. The 50 Minimum + Standard nominations are a starting point; the target is a set engineers genuinely operate, not the largest defensible list.
-2. Every Minimum and Standard row must keep a one-sentence **Why NRG owns this**. If you cannot write one, the control is Assessment-only.
-3. Add operational notes where a control regularly needs an exception (printers on SMTP AUTH, CLI tools on device code flow, partner federation) so the exceptions file has a vocabulary from day one.
-4. Lock v1.0. Then, and only then, encode it as `Config/nrg-baseline.json` and build the view and its tests.
+2. Every Minimum and Standard row must keep a one-sentence **Why NRG owns this** and an **Expected state** an engineer can test. If you cannot write one, the control is Assessment-only.
+3. Check the **SLA class** and **Freshness** against what NRG will actually staff. A Daily freshness class means the assessment (or a lighter collector) runs daily for that control.
+4. Add operational notes where a control regularly needs an exception (printers on SMTP AUTH, CLI tools on device code flow, partner federation) so the exceptions file has a vocabulary from day one.
+5. Work the contradictions section: accept each manual-only Minimum consciously, fix any inverted dependency, and leave the not-collected effectiveness checks marked as such.
+6. Lock v1.0. Then, and only then, encode it as `Config/nrg-baseline.json` and build the view and its tests.

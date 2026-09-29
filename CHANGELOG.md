@@ -15,7 +15,16 @@
   EDR, a per-client exceptions file), never per control, and the future
   compliance view keeps observed state, license constraint and exception
   disposition separate. `Config/nrg-baseline.json` and
-  `Get-NRGBaselineCompliance` follow once v1.0 is locked.
+  `Get-NRGBaselineCompliance` follow once v1.0 is locked. Second editorial
+  pass adds seven governance fields per tiered control: owner, evidence
+  source (derived from the collector), expected state, SLA class (a label;
+  the day counts live elsewhere), dependencies, an effectiveness check
+  tagged collected or not collected, and an evidence-freshness class. The
+  document keeps control requirement, observed evidence and effectiveness
+  evidence as three separate concepts, states the stateless results
+  contract, and ends with a mechanically generated contradictions section
+  (manual-only Minimum controls, inverted dependencies, and the 62 of 68
+  effectiveness checks that need telemetry the tool does not collect).
 - **Device build standard v1.1: patch policy, delivery and effectiveness
   are three requirements.** DB-4.2 is now the patch policy (within a
   defined remediation window); DB-4.7 requires patch deployment to be
