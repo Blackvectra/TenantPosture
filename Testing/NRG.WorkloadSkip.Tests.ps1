@@ -143,3 +143,27 @@ Describe 'Exchange connection failures name a module/PowerShell mismatch when th
         $script:Connect | Should -Match 'Install-PSResource -Name ExchangeOnlineManagement'
     }
 }
+
+Describe 'Teams connects after Exchange and Purview (live run, 2026-09-29)' {
+    # With Teams first, MicrosoftTeams loaded its own MSAL broker assembly and
+    # ExchangeOnlineManagement 3.10.1 failed with "The located assembly's
+    # manifest definition does not match the assembly reference" on both the
+    # Exchange and the Purview connection, every run. Exchange first worked.
+    BeforeAll {
+        $root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        $script:ConnectSrc = Get-Content -LiteralPath (Join-Path $root 'Lib/Connect-NRGServices.ps1') -Raw
+    }
+    It 'invokes Connect-ExchangeOnline and Connect-IPPSSession before Connect-MicrosoftTeams' {
+        $teams = $script:ConnectSrc.IndexOf('Connect-MicrosoftTeams @teamsParams')
+        $exo   = $script:ConnectSrc.IndexOf('Connect-ExchangeOnline @exoParams')
+        $ipps  = $script:ConnectSrc.IndexOf('Connect-IPPSSession @ippsParams')
+        $teams | Should -BeGreaterThan 0
+        $exo   | Should -BeGreaterThan 0
+        $ipps  | Should -BeGreaterThan 0
+        $exo   | Should -BeLessThan $teams
+        $ipps  | Should -BeLessThan $teams
+    }
+    It 'documents the order in the file header' {
+        $script:ConnectSrc | Should -Match 'Graph -> EXO -> IPPS -> Teams'
+    }
+}
