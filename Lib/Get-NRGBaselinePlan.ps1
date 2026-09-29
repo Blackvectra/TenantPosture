@@ -79,6 +79,33 @@ function Get-NRGWorkloadSkipMap {
     )
 }
 
+function Get-NRGClientCollectorFlags {
+    <#
+    .SYNOPSIS
+        The opt-in collector flags a clients.json record declares, keyed by the
+        optional-collector catalog id (today: SharePointShell). Operator-declared
+        expectations, never truth: a flag turns the collector on for the run
+        and the plan; if the collector then fails, the run reports the failure.
+        Unknown keys are warned about and ignored.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param([AllowNull()] [object] $ClientRecord)
+    $out = [ordered]@{}
+    $catalog = Get-NRGOptionalCollectorCatalog
+    foreach ($id in $catalog.Keys) { $out[$id] = $false }
+    if ($null -eq $ClientRecord) { return $out }
+    $block = Get-NRGObjectField -Item $ClientRecord -Key 'Collectors' -Default $null
+    if ($null -eq $block) { return $out }
+    $names = if ($block -is [System.Collections.IDictionary]) { @($block.Keys) } else { @($block.PSObject.Properties | ForEach-Object { $_.Name }) }
+    foreach ($n in $names) {
+        $v = Get-NRGObjectField -Item $block -Key $n -Default $false
+        if ($catalog.Contains([string]$n)) { $out[[string]$n] = [bool]$v }
+        else { Write-Warning "clients.json Collectors.$n is not an optional collector this version knows (known: $($catalog.Keys -join ', ')); ignored." }
+    }
+    return $out
+}
+
 function Get-NRGCollectorService {
     <#
     .SYNOPSIS

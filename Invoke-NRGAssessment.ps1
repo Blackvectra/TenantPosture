@@ -462,6 +462,15 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
     if (-not $BaselineTier -and $clientRec -and $clientRec.PSObject.Properties['BaselineTier'] -and "$($clientRec.BaselineTier)" -in @('Minimum', 'Standard', 'Hardened')) {
         $BaselineTier = [string]$clientRec.BaselineTier
     }
+    # Opt-in collectors declared on the client record (Collectors block): an
+    # operator expectation that turns the collector on, never proof it works.
+    if ($clientRec -and (Get-Command Get-NRGClientCollectorFlags -ErrorAction SilentlyContinue)) {
+        $clientCollectors = Get-NRGClientCollectorFlags -ClientRecord $clientRec
+        if ($clientCollectors['SharePointShell'] -and -not $IncludeSharePointShell) {
+            $IncludeSharePointShell = $true
+            Write-Host "  [i] SharePoint Online Management Shell enabled from clients.json (Collectors.SharePointShell)." -ForegroundColor DarkGray
+        }
+    }
     $rec = if ($clientRec -and $clientRec.PSObject.Properties['ClientId'] -and $clientRec.ClientId) { $clientRec } else { $null }
     if ($rec) {
         $AppId                 = [string]$rec.ClientId

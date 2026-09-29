@@ -122,6 +122,17 @@
             "Hardened"
           ],
           "description": "NRG Security Baseline tier this client is held to. Optional; the assessment defaults to Standard."
+        },
+        "Collectors": {
+          "type": "object",
+          "description": "Opt-in collectors declared for this client (operator expectations, not proof). Keys are optional-collector catalog ids from Config/optional-collectors.json.",
+          "additionalProperties": false,
+          "properties": {
+            "SharePointShell": {
+              "type": "boolean",
+              "description": "Run the SharePoint Online Management Shell read (-IncludeSharePointShell) for this client."
+            }
+          }
         }
       }
     }

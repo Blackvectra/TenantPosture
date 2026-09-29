@@ -37,6 +37,17 @@
   failing with "You must call the Connect-MicrosoftTeams cmdlet").
   `NRG.WorkloadSkip.Tests.ps1` pins the order.
 
+- **Per-client collector flags.** A `Collectors` block on a `clients.json`
+  record declares opt-in collectors for that client, keyed by the
+  optional-collector catalog id (`SharePointShell` today; the schema allows
+  exactly the catalog ids). `Get-NRGClientCollectorFlags` reads it; the
+  entry point turns the collector on by `-TenantDomain`, the batch runner
+  passes the switch explicitly, and the standalone plan reads it. A flag is
+  an operator expectation, never truth: it changes what the plan expects
+  and what the run attempts, and if the collector still fails the run
+  reports the failure and the plan comparison names the row. An unknown
+  key is warned about and ignored.
+
 - **Exception cmdlets: the right thing easier than hand-editing PSD1.**
   `New-`, `Get-`, `Set-` and `Remove-NRGBaselineException`
   (`Lib/Set-NRGBaselineException.ps1`) manage

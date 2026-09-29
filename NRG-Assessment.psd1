@@ -113,6 +113,7 @@
         'Format-NRGBaselinePlanSummary',
         'Get-NRGWorkloadSkipMap',
         'Get-NRGOptionalCollectorCatalog',
+        'Get-NRGClientCollectorFlags',
         'Get-NRGBaselineReasonCodes',
         'Resolve-NRGBaselineReason',
         'ConvertTo-NRGBaselineReasonCode',
