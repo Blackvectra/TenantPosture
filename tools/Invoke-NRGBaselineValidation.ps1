@@ -61,6 +61,17 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Import-Module (Join-Path $repoRoot 'NRG-Assessment.psm1') -Force -WarningAction SilentlyContinue
 
+# Absolute paths from here on. The hardened file writer uses .NET, which
+# resolves a relative path against the PROCESS working directory
+# (C:\WINDOWS\system32 in an elevated window), not PowerShell's location; a
+# relative -ResultsPath therefore wrote the report into System32 and failed.
+$ResultsPath = (Resolve-Path -LiteralPath $ResultsPath).ProviderPath
+if ($OutputPath) {
+    $outDir = Split-Path -Parent $OutputPath
+    if ($outDir -and -not [System.IO.Path]::IsPathRooted($OutputPath)) { $OutputPath = Join-Path (Get-Location).ProviderPath $OutputPath }
+    elseif (-not $outDir) { $OutputPath = Join-Path (Get-Location).ProviderPath $OutputPath }
+}
+
 # ── Load and replay ───────────────────────────────────────────────────────────
 $json = Get-Content -LiteralPath $ResultsPath -Raw -Encoding utf8 | ConvertFrom-Json -Depth 20 -AsHashtable
 $meta = if ($json.Contains('Metadata') -and $json.Metadata) { [hashtable]$json.Metadata } else { @{} }
