@@ -579,16 +579,17 @@ function Connect-NRGServices {
     }
 
     # ── 4. Microsoft Teams ────────────────────────────────────────────────────
-    # AFTER Exchange and Purview, deliberately. The MicrosoftTeams module
-    # ships its own Microsoft.Identity.Client / .Broker assemblies and loads
-    # them into the default load context; ExchangeOnlineManagement 3.10
-    # then fails to load its own copy ("The located assembly's manifest
-    # definition does not match the assembly reference", 0x80131040) and
-    # neither Exchange nor Purview ever connects. Live run 2026-09-29: with
-    # Teams first, Exchange and Purview failed on every attempt; with
-    # Exchange first (run 3), Exchange, Purview and Teams all connected.
-    # Graph is unaffected either way: it resolves MSAL inside its own
-    # assembly load context.
+    # AFTER Exchange and Purview, deliberately. Both modules ship
+    # Microsoft.Identity.Client and its Broker into the default load
+    # context, and the runtime keeps ONE copy per simple name: a later load
+    # binds to the already-loaded copy when that copy is the same or newer
+    # and fails with 0x80131040 ("The located assembly's manifest
+    # definition does not match the assembly reference") when it is older.
+    # MicrosoftTeams 8.0.0 carries MSAL 4.82.0; ExchangeOnlineManagement
+    # 3.10.1 carries 4.83.1. Teams first therefore left Exchange and Purview
+    # unable to connect on every live run (2026-09-29); Exchange first lets
+    # Teams bind to the newer copy. Graph is unaffected either way: it
+    # resolves MSAL inside its own assembly load context.
     if (-not $SkipTeams) {
         Write-Host "  [*] Microsoft Teams..." -ForegroundColor Cyan
         try {
@@ -619,16 +620,19 @@ function Connect-NRGServices {
                 if ($result['TenantId']) { $teamsParams['TenantId'] = $result['TenantId'] }
                 Connect-MicrosoftTeams @teamsParams | Out-Null
             }
-            # Verify the Teams session landed on the tenant Graph connected
-            # to. A mismatched or missing tenant hint can still silently
-            # authenticate to the operator's own organization, and every
-            # TMS-* control would then score that organization's policies
-            # as the client's.
-            if ($result['TenantId']) {
-                $csTenantId = "$((Get-CsTenant -ErrorAction Stop).TenantId)"
-                if ($csTenantId -ne $result['TenantId']) {
-                    throw "Teams session tenant ($csTenantId) does not match Graph tenant ($($result['TenantId']))."
-                }
+            # Prove the session works before reporting it: Connect can return
+            # cleanly and every cmdlet then fail with "You must call the
+            # Connect-MicrosoftTeams cmdlet" (the token provider found no
+            # usable token — seen on a live run where the check below was
+            # skipped because Graph had failed). Eight failed sections later
+            # is the wrong place to learn that. Then verify the session
+            # landed on the tenant Graph connected to: a mismatched or
+            # missing tenant hint can still silently authenticate to the
+            # operator's own organization, and every TMS-* control would
+            # then score that organization's policies as the client's.
+            $csTenantId = "$((Get-CsTenant -ErrorAction Stop).TenantId)"
+            if ($result['TenantId'] -and $csTenantId -ne $result['TenantId']) {
+                throw "Teams session tenant ($csTenantId) does not match Graph tenant ($($result['TenantId']))."
             }
             $result['Teams'] = $true
             Write-Host "  [+] Teams connected" -ForegroundColor Green
