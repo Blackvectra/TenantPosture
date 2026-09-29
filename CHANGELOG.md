@@ -37,6 +37,25 @@
   failing with "You must call the Connect-MicrosoftTeams cmdlet").
   `NRG.WorkloadSkip.Tests.ps1` pins the order.
 
+- **Exception cmdlets: the right thing easier than hand-editing PSD1.**
+  `New-`, `Get-`, `Set-` and `Remove-NRGBaselineException`
+  (`Lib/Set-NRGBaselineException.ps1`) manage
+  `Config/baseline-exceptions/<tenant>.psd1` for one client. New refuses a
+  control that is not in the baseline (an assessment-only control needs no
+  exception), a review date that is not in the future, an expiry before the
+  review, and a second active exception for the same control; Set changes
+  only the fields given and re-validates the whole entry, re-dating the
+  approval when the approver changes; Remove drops every entry for the
+  control and keeps the file. Every save is atomic and verified: the
+  document is written beside the target, re-read with
+  `Import-PowerShellDataFile`, checked for the expected entry count, and
+  only then moved into place, so a failed save cannot corrupt the file.
+  An existing entry that is not in force is preserved as written and
+  reported, never silently approved or repaired. All three writers support
+  `-WhatIf` and `-Confirm` and return what changed (before/after counts or
+  entries, the fields changed). An exception changes the baseline
+  disposition only, never the observed state, and never `BaselineVersion`.
+
 - **Evidence coverage and effectiveness coverage, apart from each other
   and from the score.** `Get-NRGBaselineCoverage` derives both from the
   reason contract. Evidence coverage: of the applicable required controls

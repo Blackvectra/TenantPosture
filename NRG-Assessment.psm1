@@ -192,6 +192,7 @@ $script:ExportedFunctions = @(
     'Get-NRGBaselineExceptions', 'Get-NRGBaselineCompliance', 'Get-NRGBaselineRegressions',
     'Get-NRGBaselinePlan', 'Compare-NRGBaselinePlan', 'Format-NRGBaselinePlanSummary', 'Get-NRGWorkloadSkipMap', 'Get-NRGOptionalCollectorCatalog',
     'Get-NRGBaselineReasonCodes', 'Resolve-NRGBaselineReason', 'ConvertTo-NRGBaselineReasonCode', 'Get-NRGReasonSentence', 'Get-NRGBaselineCoverage',
+    'Get-NRGBaselineExceptionPath', 'Get-NRGBaselineException', 'New-NRGBaselineException', 'Set-NRGBaselineException', 'Remove-NRGBaselineException',
     'Get-NRGModuleHealth',
     'Repair-NRGModuleHealth',
     'Get-NRGModuleInstallScope', 'Get-NRGExoModuleFloor', 'Get-NRGConnectErrorText', 'Get-NRGExoConnectHint',
