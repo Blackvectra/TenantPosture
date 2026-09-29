@@ -22,7 +22,9 @@ function Publish-NRGAssessmentSummary {
         [Parameter(Mandatory)] [object[]]   $Findings,
         [Parameter(Mandatory)] [hashtable]  $Connections,
         [Parameter(Mandatory)] [string]     $OutputPath,
-        [AllowNull()] [object] $BaselineRegressions = $null
+        [AllowNull()] [object] $BaselineRegressions = $null,
+        # The pre-run plan compared with this run (Compare-NRGBaselinePlan). Optional.
+        [AllowNull()] [object] $BaselinePlanComparison = $null
     )
 
     # Fail closed — require security helpers
@@ -287,6 +289,26 @@ function Publish-NRGAssessmentSummary {
             $null = $sb.AppendLine("| Ineffective | $($bs.EffectivenessIneffective) |")
             $null = $sb.AppendLine("| Unknown (evidence not collected) | $($bs.EffectivenessUnknown) |")
             $null = $sb.AppendLine()
+            if ($null -ne $BaselinePlanComparison -and [bool](Get-NRGObjectField -Item $BaselinePlanComparison -Key 'Available' -Default $false)) {
+                $pc = $BaselinePlanComparison
+                $null = $sb.AppendLine("### Expected before the run vs observed")
+                $null = $sb.AppendLine()
+                $null = $sb.AppendLine((EscMd ([string](Get-NRGObjectField -Item $pc -Key 'Note' -Default ''))))
+                $null = $sb.AppendLine()
+                $null = $sb.AppendLine("| Plan vs run | Controls |")
+                $null = $sb.AppendLine("|---|---|")
+                $null = $sb.AppendLine("| Not verified, expected before the run | $([int](Get-NRGObjectField -Item $pc -Key 'ExpectedNotVerified' -Default 0)) |")
+                $null = $sb.AppendLine("| Not verified, observed | $([int](Get-NRGObjectField -Item $pc -Key 'ObservedNotVerified' -Default 0)) |")
+                $null = $sb.AppendLine("| Licensing unknown before the run | $([int](Get-NRGObjectField -Item $pc -Key 'LicensingUnknownBeforeRun' -Default 0)) |")
+                $null = $sb.AppendLine()
+                $unexp = @(Get-NRGObjectField -Item $pc -Key 'UnexpectedNotVerified' -Default @())
+                if ($unexp.Count -gt 0) {
+                    $null = $sb.AppendLine("| Not expected | Cause | Plan said |")
+                    $null = $sb.AppendLine("|---|---|---|")
+                    foreach ($u in $unexp) { $null = $sb.AppendLine("| $($u.ControlId) | $(EscMd ([string]$u.Cause)) | $(EscMd ([string]$u.Expected)) |") }
+                    $null = $sb.AppendLine()
+                }
+            }
             if ($null -ne $BaselineRegressions) {
                 $regs = @(Get-NRGObjectField -Item $BaselineRegressions -Key 'Regressions' -Default @())
                 $note = [string](Get-NRGObjectField -Item $BaselineRegressions -Key 'Note' -Default '')

@@ -37,6 +37,25 @@
   failing with "You must call the Connect-MicrosoftTeams cmdlet").
   `NRG.WorkloadSkip.Tests.ps1` pins the order.
 
+- **Baseline plan: what a run is expected to verify, before it runs
+  (`Get-NRGBaselinePlan`).** The front door for running the v1.0 standard
+  against another client without rethinking it each time. For the target
+  tier it says how many controls are required, which connections the run
+  needs, and how each required control is expected to resolve: automatic,
+  manual, third-party handled (attested, not verified), optional collector
+  required (the SharePoint shell, from `Config/optional-collectors.json`),
+  skipped by operator, license blocked (only when a license profile shows
+  it), or licensing unknown until connection — never guessed. The
+  standalone `Get-NRGBaselinePlan.ps1` connects to nothing and can take
+  licensing from a prior results JSON; `Invoke-NRGAssessment.ps1` prints
+  the plan before connecting, writes `BaselinePlan` to the results JSON,
+  and after the run writes `BaselinePlanComparison` (which NotVerified rows
+  were expected, which were not, with their cause) and renders it in the
+  baseline section. `BaselineVersion` stays 1.0; no tier, control or
+  standard changes. `NRG.BaselinePlan.Tests.ps1` pins the buckets, the
+  licensing honesty, the catalog against the evaluators, and the no-network
+  contract.
+
 - **NRG Security Baseline v1.0 locked.** Live validation on one tenant is
   complete (five runs, 2026-09-29): zero baseline-layer bug candidates, every
   not-verified row carrying its cause, and every genuine failure unchanged.
