@@ -188,9 +188,11 @@ $script:ExportedFunctions = @(
     'Resolve-NRGTenantId',
     'Set-NRGThirdPartyEdr',
     'Set-NRGLicenseGating',
+    'Get-NRGBaselineDefinition', 'Get-NRGBaselineRequiredControls', 'ConvertTo-NRGBaselineClientSlug',
+    'Get-NRGBaselineExceptions', 'Get-NRGBaselineCompliance', 'Get-NRGBaselineRegressions',
     'Get-NRGModuleHealth',
     'Repair-NRGModuleHealth',
-    'Get-NRGModuleInstallScope',
+    'Get-NRGModuleInstallScope', 'Get-NRGExoModuleFloor', 'Get-NRGConnectErrorText', 'Get-NRGExoConnectHint',
     'Get-NRGControlAutomationAudit',
 
     # ── Collectors — AAD ──────────────────────────────────────────────────────

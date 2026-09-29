@@ -618,11 +618,14 @@ function Test-NRGControlEXOSharedMailbox {
     }
 
     $allShared = @($inv.Data['AllSharedMailboxes'] ?? @())
-    if ($allShared.Count -eq 0 -and -not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'SharedMailboxes')) {
+    # The section status is authoritative whatever the list holds: on a live
+    # tenant the enumeration succeeded, the sign-in loop threw, SectionStatus
+    # read Failed, and the empty sign-in list was scored as "none enabled".
+    if (-not (Test-NRGInventorySectionCollected -Inventory $inv -Section 'SharedMailboxes')) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title `
             -FrameworkIds $citations `
-            -Detail 'Shared mailbox enumeration did not complete (see Exceptions) — sign-in state could not be assessed.'
+            -Detail "Shared mailbox sign-in state was not collected (the collector's SharedMailboxes section did not complete; see Exceptions) — not assessed.$(if ($allShared.Count -gt 0) { " $($allShared.Count) shared mailbox(es) were enumerated." })"
         return
     }
 
