@@ -1067,6 +1067,12 @@ if (Get-Command Get-NRGBaselineCompliance -ErrorAction SilentlyContinue) {
         }
         $bs = $baselineCompliance.Summary
         Write-Host "  [i] NRG baseline v$($bs.BaselineVersion) ($($bs.TargetTier)): $($bs.RequiredControls) required — $($bs.Satisfied) satisfied, $($bs.Failed) failed, $($bs.NotVerified) not verified, $($bs.LicenseBlocked) license blocked, $($bs.ApprovedException) approved exception(s); effectiveness known for $($bs.EffectivenessEffective + $bs.EffectivenessIneffective) of $($bs.RequiredControls)" -ForegroundColor DarkGray
+        $evc = Get-NRGObjectField -Item $baselineCompliance -Key 'EvidenceCoverage' -Default $null
+        $efc = Get-NRGObjectField -Item $baselineCompliance -Key 'EffectivenessCoverage' -Default $null
+        if ($null -ne $evc -and $null -ne $efc) {
+            $gapText = (@($evc.Gaps.Keys | ForEach-Object { "$($evc.Gaps[$_]) $_" }) -join ', ')
+            Write-Host "  [i] Evidence coverage: $($evc.Known) of $($evc.Applicable) applicable controls ($($evc.Percent)%)$(if ($evc.LicenseBlocked -gt 0) { ", $($evc.LicenseBlocked) license blocked" })$(if ($gapText) { "; gaps: $gapText" }). Effectiveness coverage: $($efc.Known) of $($efc.Required) ($($efc.Percent)%). Neither is the baseline score." -ForegroundColor DarkGray
+        }
         if ($null -ne $baselinePlanComparison -and $baselinePlanComparison.Available) {
             $unexp = @($baselinePlanComparison.UnexpectedNotVerified)
             Write-Host "  [i] Plan vs run: $($baselinePlanComparison.Note)" -ForegroundColor DarkGray

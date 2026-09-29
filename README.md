@@ -140,6 +140,7 @@ Every run now classifies the tenant into a **Tenant Security Maturity Tier** (In
 | `-BaselineTier` | NRG Security Baseline tier the client is held to: `Minimum`, `Standard` (default) or `Hardened`. Read from the client's `BaselineTier` in `clients.json` with `-TenantDomain`. A view over the findings: it changes no verdict and no framework score. |
 | `-BaselineResults` + plan | Before connecting, the entry point prints the NRG baseline plan: how each required control is expected to resolve (automatic, manual, third-party handled, optional collector, skipped, license blocked, or licensing unknown until connection). With `-BaselineResults`, licensing comes from that prior run. After the run the results JSON carries `BaselinePlan` and `BaselinePlanComparison`. Standalone, connecting to nothing: `.\Get-NRGBaselinePlan.ps1 -TenantDomain client.com -BaselineTier Standard [-ResultsPath prior.json]`. |
 | Reason contract | Every baseline row in the results JSON, the HTML and the Markdown carries `ReasonCode` (a stable code from an ordered catalog: `ManualVerificationRequired`, `SkippedByOperator`, `ThirdPartyHandled`, `OptionalCollectorRequired`, `LicenseBlocked`, `LicensingUnknown`, `CollectorUnavailable`, `EvidenceStale`, `EvidenceNotRead`, `EvaluationError`, `ControlFailed`, `Satisfied`, `NotApplicable`, `Automatic`) and a one-sentence `Reason`. The catalog itself is written as `BaselineCompliance.ReasonCodes`, so a consumer keys on the code and never parses prose. |
+| Coverage lines | Two metrics derived from the reason contract and kept apart from each other and from the score. Evidence coverage: of the applicable required controls (NotApplicable excluded), how many have usable evidence (Satisfied, ControlFailed, ThirdPartyHandled); LicenseBlocked is in the denominator and shown separately; the gaps are listed by code. Effectiveness coverage: how many required controls have an Effective or Ineffective reading; configuration evidence never counts. Written as `BaselineCompliance.EvidenceCoverage` and `BaselineCompliance.EffectivenessCoverage`, printed on the console and rendered in both reports. |
 | `-NISTMatrix` | Standalone NIST SP 800-53 Rev 5 matrix. |
 | `-SSP`, `-SSPAnswers` | NIST SP 800-171 Rev 2 System Security Plan. Answers come from `Config/ssp/<tenant-domain>.psd1` unless `-SSPAnswers` names a file. |
 | `-SSPQuestionnaire`, `-SSPQuestionnaireFamily` | Fillable client questionnaire for the SSP requirements the run could not evidence, optionally for one 800-171 family (for example `3.9`). Not included in `-AllFiles`. |
@@ -255,7 +256,7 @@ so CLI and GUI workflows can be mixed freely.
 Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (342 exports, dependency declarations)
+NRG-Assessment.psd1               ← Module manifest (343 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -600,4 +601,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 342 exported functions · full Pester suite (79 suites) gating CI*
+*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 343 exported functions · full Pester suite (79 suites) gating CI*

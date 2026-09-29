@@ -581,6 +581,8 @@ function Get-NRGBaselineCompliance {
             ApprovedException = @($tr | Where-Object { $_.BaselineStatus -eq 'ApprovedException' }).Count
         }
     }
+    # Two coverage metrics from the reason contract, never a score.
+    $coverage = Get-NRGBaselineCoverage -Rows @($rows)
     $summary = [ordered]@{
         BaselineVersion        = $def.Version
         TargetTier             = $TargetTier
@@ -608,6 +610,8 @@ function Get-NRGBaselineCompliance {
         AsOf            = $AsOf.ToString('o')
         ExceptionsPath  = $(if ($exc -and $exc.Available) { $exc.Path } else { '' })
         Summary         = $summary
+        EvidenceCoverage      = $coverage.Evidence
+        EffectivenessCoverage = $coverage.Effectiveness
         ReasonCodes     = @((Get-NRGBaselineReasonCodes).Values | ForEach-Object { [pscustomobject]$_ })
         Controls        = @($rows | ForEach-Object { [pscustomobject]$_ })
     }

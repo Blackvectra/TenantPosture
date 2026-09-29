@@ -278,6 +278,19 @@ function Publish-NRGAssessmentSummary {
                 foreach ($k in @($causes.Keys)) { $null = $sb.AppendLine("| $(EscMd $k) | $($causes[$k]) |") }
                 $null = $sb.AppendLine()
             }
+            $evc = Get-NRGObjectField -Item $bl -Key 'EvidenceCoverage' -Default $null
+            if ($null -ne $evc) {
+                $null = $sb.AppendLine("### Evidence coverage")
+                $null = $sb.AppendLine()
+                $null = $sb.AppendLine("**$($evc.Known) of $($evc.Applicable) applicable required controls have usable evidence ($($evc.Percent)%).**$(if ($evc.LicenseBlocked -gt 0) { " $($evc.LicenseBlocked) license blocked, counted in the denominator and shown separately." })$(if ($evc.NotApplicable -gt 0) { " $($evc.NotApplicable) not applicable, outside the denominator." }) Not a score: a tenant failing every control has 100% evidence coverage.")
+                $null = $sb.AppendLine()
+                if (@($evc.Gaps.Keys).Count -gt 0) {
+                    $null = $sb.AppendLine("| Evidence gaps | Controls |")
+                    $null = $sb.AppendLine("|---|---|")
+                    foreach ($k in @($evc.Gaps.Keys)) { $null = $sb.AppendLine("| ``$k`` | $($evc.Gaps[$k]) |") }
+                    $null = $sb.AppendLine()
+                }
+            }
             $null = $sb.AppendLine("### Effectiveness visibility")
             $null = $sb.AppendLine()
             $null = $sb.AppendLine("Configuration says a control is set; effectiveness says it is working. The assessment can read effectiveness evidence for only a few controls today; everywhere else it is reported as unknown, not assumed.")
@@ -289,6 +302,11 @@ function Publish-NRGAssessmentSummary {
             $null = $sb.AppendLine("| Ineffective | $($bs.EffectivenessIneffective) |")
             $null = $sb.AppendLine("| Unknown (evidence not collected) | $($bs.EffectivenessUnknown) |")
             $null = $sb.AppendLine()
+            $efc = Get-NRGObjectField -Item $bl -Key 'EffectivenessCoverage' -Default $null
+            if ($null -ne $efc) {
+                $null = $sb.AppendLine("**Effectiveness coverage: $($efc.Known) of $($efc.Required) required controls have effectiveness evidence ($($efc.Percent)%).** Configuration evidence never counts as effectiveness evidence; the tool can read effectiveness for $($efc.CapabilityCollected) of these today.")
+                $null = $sb.AppendLine()
+            }
             if ($null -ne $BaselinePlanComparison -and [bool](Get-NRGObjectField -Item $BaselinePlanComparison -Key 'Available' -Default $false)) {
                 $pc = $BaselinePlanComparison
                 $null = $sb.AppendLine("### Expected before the run vs observed")

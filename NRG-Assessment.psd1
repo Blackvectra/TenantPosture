@@ -117,6 +117,7 @@
         'Resolve-NRGBaselineReason',
         'ConvertTo-NRGBaselineReasonCode',
         'Get-NRGReasonSentence',
+        'Get-NRGBaselineCoverage',
         'Get-NRGModuleHealth',
         'Repair-NRGModuleHealth',
         'Get-NRGModuleInstallScope',

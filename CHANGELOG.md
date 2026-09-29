@@ -37,6 +37,26 @@
   failing with "You must call the Connect-MicrosoftTeams cmdlet").
   `NRG.WorkloadSkip.Tests.ps1` pins the order.
 
+- **Evidence coverage and effectiveness coverage, apart from each other
+  and from the score.** `Get-NRGBaselineCoverage` derives both from the
+  reason contract. Evidence coverage: of the applicable required controls
+  (NotApplicable outside the denominator), how many have usable evidence —
+  Satisfied, ControlFailed and ThirdPartyHandled (attested, not verified);
+  every code that means the evidence was not obtained is a gap, listed by
+  code; LicenseBlocked is in the denominator and shown separately, because
+  knowing why a control cannot be verified is not evidence the requirement
+  is met. Effectiveness coverage: of the required controls, how many have
+  an Effective or Ineffective reading; Unknown stays unknown however
+  perfect the configuration evidence is. Written to the results JSON as
+  `BaselineCompliance.EvidenceCoverage` and
+  `BaselineCompliance.EffectivenessCoverage`, printed on the console after
+  the baseline line, and rendered in both reports, each stating that it is
+  not the baseline score. Tests pin the arithmetic (Known + Unknown +
+  LicenseBlocked = Applicable) and both acceptance rules: a tenant failing
+  every control has 100% evidence coverage and 0 satisfied, and perfect
+  configuration evidence yields 0% effectiveness coverage while nothing
+  reads effectiveness.
+
 - **One explanation contract for every baseline row: `ReasonCode` +
   `Reason`.** `Lib/Get-NRGBaselineReason.ps1` holds an ordered catalog of
   stable codes (`ManualVerificationRequired`, `SkippedByOperator`,

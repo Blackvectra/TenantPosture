@@ -241,3 +241,88 @@ Describe 'Baseline reason contract — rendered' {
         $text | Should -Match '<code>ManualVerificationRequired</code> Verified manually'
     }
 }
+
+Describe 'Baseline coverage — evidence and effectiveness, apart from each other and from the score' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        Clear-NRGState
+        $script:Now = Get-Date
+        $script:Raw = { param([string] $Key, [bool] $Ok = $true) @{ CollectorId = $Key; CollectedAt = $script:Now.ToString('o'); Success = $Ok; Data = @{} } }
+        $script:AllRaw = @{}
+        foreach ($c in (Get-NRGBaselineDefinition -Force).Controls.Values) { foreach ($k in @($c.RawDataKeys)) { if ($k -and -not $script:AllRaw.ContainsKey($k)) { $script:AllRaw[$k] = & $script:Raw $k } } }
+        $script:Row = { param([string] $Code, [string] $Eff = 'Unknown', [string] $Cap = 'NotCollected') [ordered]@{ ControlId = "X-$Code"; ReasonCode = $Code; EffectivenessState = $Eff; EffectivenessCapability = $Cap } }
+    }
+    AfterAll { Clear-NRGState; Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue }
+    BeforeEach { Clear-NRGState }
+
+    It 'Known + Unknown + LicenseBlocked = Applicable, and NotApplicable sits outside the denominator' {
+        $rows = @((& $script:Row 'Satisfied'), (& $script:Row 'ControlFailed'), (& $script:Row 'ThirdPartyHandled'), (& $script:Row 'CollectorUnavailable'), (& $script:Row 'EvidenceNotRead'), (& $script:Row 'ManualVerificationRequired'), (& $script:Row 'LicenseBlocked'), (& $script:Row 'NotApplicable'))
+        $cov = Get-NRGBaselineCoverage -Rows $rows
+        $cov.Evidence.Required | Should -Be 8
+        $cov.Evidence.NotApplicable | Should -Be 1
+        $cov.Evidence.Applicable | Should -Be 7
+        $cov.Evidence.Known | Should -Be 3
+        $cov.Evidence.Unknown | Should -Be 3
+        $cov.Evidence.LicenseBlocked | Should -Be 1
+        ($cov.Evidence.Known + $cov.Evidence.Unknown + $cov.Evidence.LicenseBlocked) | Should -Be $cov.Evidence.Applicable
+        $cov.Evidence.Percent | Should -Be ([math]::Round(100.0 * 3 / 7, 1))
+        @($cov.Evidence.Gaps.Keys) | Should -Be @('ManualVerificationRequired', 'CollectorUnavailable', 'EvidenceNotRead')
+    }
+
+    It 'a tenant failing every control has 100% evidence coverage and 0 satisfied: coverage is not the score' {
+        foreach ($c in (Get-NRGBaselineDefinition).Controls.Values) {
+            if (-not $c.Automated) { continue }
+            Add-NRGFinding -ControlId $c.ControlId -State 'Gap' -Category 'Identity' -Title $c.Title -Severity 'High' -Detail 'Below the expected state.'
+        }
+        $comp = Get-NRGBaselineCompliance -Findings (Get-NRGFindings) -TargetTier Standard -RawData $script:AllRaw -Coverage @{}
+        $comp.Summary.Satisfied | Should -Be 0
+        $comp.EvidenceCoverage.Known | Should -Be ($comp.EvidenceCoverage.Applicable - 1) -Because 'only the manual control lacks evidence'
+        $comp.EvidenceCoverage.Gaps['ManualVerificationRequired'] | Should -Be 1
+        $comp.EvidenceCoverage.Percent | Should -BeGreaterThan 95
+    }
+
+    It 'perfect configuration evidence gives zero effectiveness coverage while nothing reads effectiveness' {
+        foreach ($c in (Get-NRGBaselineDefinition).Controls.Values) {
+            if (-not $c.Automated) { continue }
+            Add-NRGFinding -ControlId $c.ControlId -State 'Satisfied' -Category 'Identity' -Title $c.Title -Severity 'High' -Detail 'At the expected state.'
+        }
+        $comp = Get-NRGBaselineCompliance -Findings (Get-NRGFindings) -TargetTier Standard -RawData $script:AllRaw -Coverage @{}
+        $comp.EvidenceCoverage.Percent | Should -BeGreaterThan 95
+        $comp.EffectivenessCoverage.Known | Should -Be 0
+        $comp.EffectivenessCoverage.Percent | Should -Be 0
+        $comp.EffectivenessCoverage.Unknown | Should -Be $comp.EffectivenessCoverage.Required
+    }
+
+    It 'effectiveness is known only from Effective or Ineffective, never from configuration' {
+        $rows = @((& $script:Row 'Satisfied' 'Effective' 'Collected'), (& $script:Row 'Satisfied' 'Ineffective' 'Collected'), (& $script:Row 'Satisfied' 'Unknown' 'Collected'), (& $script:Row 'Satisfied' 'Unknown'))
+        $cov = Get-NRGBaselineCoverage -Rows $rows
+        $cov.Effectiveness.Known | Should -Be 2
+        $cov.Effectiveness.Effective | Should -Be 1
+        $cov.Effectiveness.Ineffective | Should -Be 1
+        $cov.Effectiveness.Unknown | Should -Be 2
+        $cov.Effectiveness.CapabilityCollected | Should -Be 3
+        $cov.Effectiveness.Percent | Should -Be 50
+    }
+
+    It 'both blocks render in the Markdown summary and the HTML report' {
+        Add-NRGFinding -ControlId 'AAD-1.2' -State 'Gap' -Category 'Identity' -Title 'MFA' -Severity 'Critical' -Detail 'No enforcing policy.' -FrameworkIds @('NIST:IA-2(1)')
+        $meta = @{ TenantDomain = 'contoso.onmicrosoft.com'; TenantId = '00000000-0000-0000-0000-000000000000'; Operator = 'a@b'; AssessmentDate = 'September 29, 2026'; AssessmentTime = '2026-09-29T00:00:00.0000000+00:00'; ToolVersion = '4.14.3'; QuickScan = $false; BaselineVersion = '1.0'; TargetTier = 'Standard' }
+        $conn = @{ Graph = $true; EXO = $false; Teams = $false; IPPSSession = $false; SharePoint = $false; TenantId = $meta.TenantId }
+        $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("nrg-cov-" + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $tmp -Force | Out-Null
+        try {
+            $md = Join-Path $tmp 's.md'; Publish-NRGAssessmentSummary -Metadata $meta -Findings @(Get-NRGFindings) -Connections $conn -OutputPath $md | Out-Null
+            $t = Get-Content -LiteralPath $md -Raw
+            $t | Should -Match '### Evidence coverage'
+            $t | Should -Match 'applicable required controls have usable evidence \(\d+(\.\d+)?%\)'
+            $t | Should -Match 'Effectiveness coverage: 0 of \d+ required controls have effectiveness evidence \(0%\)'
+            $t | Should -Match '\| Evidence gaps \| Controls \|'
+            $html = Join-Path $tmp 'r.html'; Publish-NRGAssessmentHTML -Metadata $meta -Findings @(Get-NRGFindings) -Connections $conn -OutputPath $html | Out-Null
+            $h = Get-Content -LiteralPath $html -Raw
+            $h | Should -Match 'Evidence coverage</h4>'
+            $h | Should -Match 'Effectiveness coverage: 0 of \d+ required controls'
+            $h | Should -Match '<th>Evidence gaps</th>'
+        } finally { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+}
