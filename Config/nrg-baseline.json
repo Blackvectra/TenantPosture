@@ -894,15 +894,13 @@
       "EvidenceSource": "Graph: Intune endpoint-security policies by template (Invoke-NRGCollectIntuneEndpointSecurity)",
       "ExpectedState": "An assigned ASR policy sets the NRG rule set to Block.",
       "SlaClass": "High",
-      "DependsOn": [
-        "INT-2.1"
-      ],
+      "DependsOn": [],
       "FreshnessClass": "Weekly",
       "EffectivenessCheck": "ASR report shows rules in block mode and detections occurring.",
       "EffectivenessCapability": "NotCollected",
       "Reason": "ASR rules block the Office-macro and script techniques ransomware starts with.",
       "WhyNrgOwnsThis": "Standard on every Defender for Endpoint client.",
-      "Notes": "Audit mode first; block mode is the requirement."
+      "Notes": "Audit mode first; block mode is the requirement. ASR rules are enforced by Defender Antivirus, which runs beside a third-party EDR, so this control does not depend on INT-2.1; the live validation showed that edge misleading on a Cortex tenant."
     },
     {
       "ControlId": "INT-4.1",

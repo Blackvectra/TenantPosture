@@ -855,11 +855,17 @@ if (-not $skipCollection) {
         Invoke-NRGCollectorStep 'Organization and transport settings'   'Invoke-NRGCollectEXOMailboxConfig', 'Invoke-NRGCollectEXOConnectionFilter'
         Invoke-NRGCollectorStep 'Mailboxes: forwarding, audit, SMTP AUTH' 'Invoke-NRGCollectEXOInventory'
         Invoke-NRGCollectorStep 'Defender for Office 365 policies'       'Invoke-NRGCollectDefender'
-        if (-not $SkipDNS) {
-            Write-NRGCollectorGroup 'DNS'
-            $dnsParams = if ($DnsDomains) { @{ Domains = $DnsDomains } } else { @{} }
-            Invoke-NRGCollectorStep 'SPF, DKIM, DMARC, MTA-STS, DNSSEC, CAA' 'Invoke-NRGCollectDNSEmailRecords' -Params $dnsParams
-        }
+    }
+
+    # DNS is public: it needs a domain list, not an Exchange session. The
+    # collector takes accepted domains from Exchange when they were collected
+    # and falls back to Graph verifiedDomains otherwise, so an Exchange
+    # connection failure must not take the DNS controls with it (it did on
+    # the first live run: three Minimum controls lost to a session error).
+    if (-not $SkipDNS -and ($conn.Graph -or $conn.EXO)) {
+        Write-NRGCollectorGroup 'DNS'
+        $dnsParams = if ($DnsDomains) { @{ Domains = $DnsDomains } } else { @{} }
+        Invoke-NRGCollectorStep 'SPF, DKIM, DMARC, MTA-STS, DNSSEC, CAA' 'Invoke-NRGCollectDNSEmailRecords' -Params $dnsParams
     }
 
     if ($conn.Teams -and -not $SkipTeams) {

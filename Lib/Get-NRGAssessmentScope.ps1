@@ -226,9 +226,15 @@ function Get-NRGAssessmentScope {
     # evaluator was run against empty state and the distinct Detail strings
     # collected) rather than from what a classifier author imagines they say.
     # This is the weakest signal and is consulted last.
+    # 'not read' joined the list after the first live baseline validation:
+    # SPO-1.2's "the default link type was not read. Requires the SharePoint
+    # Online Management Shell" matched nothing here and was filed as "not
+    # applicable to this tenant", which changes the denominator's meaning.
+    # Evidence that was not read is a collection gap.
     $collectionRx = 'not collected|was not collected|did not complete|did not run|not assessed|' +
                     'unavailable|could not be retrieved|could not be determined|no data returned|' +
                     'produced data|not returned|not found in collected data|not available|' +
+                    'was not read|not read\b|' +
                     '403|Forbidden|consent'
     # An evaluator that declares itself advisory is authoritative about itself.
     $advisoryRx   = 'requires manual verification|manual review required|no programmatic check'

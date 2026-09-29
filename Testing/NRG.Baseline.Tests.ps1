@@ -542,3 +542,53 @@ Describe 'NRG Security Baseline — report rendering' {
         $script:section | Should -Not -Match '<script'
     }
 }
+
+Describe 'NRG Security Baseline — defects found by the first live validation' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        $script:Entry = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Invoke-NRGAssessment.ps1') -Raw
+        $script:Def = Get-NRGBaselineDefinition -Force
+    }
+    AfterAll { Clear-NRGState; Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue }
+    BeforeEach { Clear-NRGState }
+
+    It 'DNS collection does not depend on the Exchange session (an Exchange failure took three Minimum controls with it)' {
+        $iExo = $script:Entry.IndexOf("if (`$conn.EXO) {")
+        $iDns = $script:Entry.IndexOf("Invoke-NRGCollectorStep 'SPF, DKIM, DMARC")
+        $iExoEnd = $script:Entry.IndexOf("`n    }", $iExo)
+        $iDns | Should -BeGreaterThan $iExoEnd -Because 'the DNS step must sit outside the Exchange branch'
+        $script:Entry | Should -Match 'if \(-not \$SkipDNS -and \(\$conn\.Graph -or \$conn\.EXO\)\)'
+    }
+
+    It '"was not read" is a collection gap in the scope classifier, never "not applicable to this tenant" (SPO-1.2)' {
+        Set-NRGRawData -Key 'SharePoint' -Data @{ CollectorId = 'x'; CollectedAt = (Get-Date).ToString('o'); Success = $true; Data = @{} }
+        Add-NRGFinding -ControlId 'SPO-1.2' -State 'NotApplicable' -Category 'SharePoint' -Title 'Default link' -Severity 'Medium' `
+            -Detail 'Anyone links are enabled tenant-wide; the default link type was not read. Requires the SharePoint Online Management Shell (re-run with -IncludeSharePointShell).'
+        $scope = Get-NRGAssessmentScope -Findings (Get-NRGFindings) -RawData (Get-NRGRawData) -Coverage @{}
+        @($scope.NotApplicableToTenant | ForEach-Object { $_.ControlId }) | Should -Not -Contain 'SPO-1.2'
+        @($scope.CollectionIncomplete | ForEach-Object { $_.ControlId }) | Should -Contain 'SPO-1.2'
+        $c = Get-NRGBaselineCompliance -Findings (Get-NRGFindings) -TargetTier Standard -Definition $script:Def -Exceptions ([ordered]@{ Available = $false; Path = ''; Entries = @(); Approved = @{}; Rejected = @() })
+        $row = @($c.Controls | Where-Object { $_.ControlId -eq 'SPO-1.2' })[0]
+        $row.ObservedState | Should -Be 'NotVerified'
+        $row.NotVerifiedCause | Should -Be 'Evidence not read'
+    }
+
+    It 'INT-2.2 no longer depends on INT-2.1 (ASR is enforced by Defender Antivirus beside a third-party EDR)' {
+        @($script:Def.Controls['INT-2.2'].DependsOn).Count | Should -Be 0
+    }
+
+    It 'splits NotVerified by cause so the number reads as an engineering list' {
+        # Exchange absent, Purview absent, one manual item, one quick-scan omission.
+        Set-NRGRawData -Key 'AAD-CAPolicies' -Data @{ CollectorId = 'x'; CollectedAt = (Get-Date).ToString('o'); Success = $true; Data = @{} }
+        Add-NRGFinding -ControlId 'EXO-1.3' -State 'NotApplicable' -Category 'Email' -Title 'x' -Severity 'High' -Detail 'EXO data not collected.'
+        $c = Get-NRGBaselineCompliance -Findings (Get-NRGFindings) -TargetTier Minimum -Definition $script:Def -Exceptions ([ordered]@{ Available = $false; Path = ''; Entries = @(); Approved = @{}; Rejected = @() })
+        $causes = $c.Summary.NotVerifiedByCause
+        $causes.Keys | Should -Contain 'Collector unavailable: EXO-MailboxConfig'
+        $causes.Keys | Should -Contain 'Manual control'
+        $causes['Manual control'] | Should -Be 1
+        ([int]($causes.Values | Measure-Object -Sum).Sum) | Should -Be $c.Summary.NotVerified -Because 'every NotVerified row has exactly one cause'
+        @($c.Controls | Where-Object { $_.ObservedState -eq 'NotVerified' -and -not $_.NotVerifiedCause }).Count | Should -Be 0
+    }
+}
