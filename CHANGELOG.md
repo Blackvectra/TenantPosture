@@ -25,6 +25,24 @@
   contract, and ends with a mechanically generated contradictions section
   (manual-only Minimum controls, inverted dependencies, and the 62 of 68
   effectiveness checks that need telemetry the tool does not collect).
+- **NRG Security Baseline v1.0 is implemented as a desired-state layer**
+  (`Config/nrg-baseline.json`, `Lib/Get-NRGBaseline.ps1`, `-BaselineTier`).
+  A view over the findings: no new finding, no changed finding, no moved
+  framework score. Per required control the results JSON carries
+  ObservedState, Constraint, Disposition, EffectivenessState, dependency
+  state, evidence timestamp and freshness; a missing finding, a collector
+  that did not succeed, a skipped workload, a manual control or stale
+  evidence all resolve NotVerified, never Satisfied. Approved exceptions
+  live per client in `Config/baseline-exceptions/<tenant-domain>.psd1`
+  (review date required; expired ones are reported, not honored) and change
+  only the disposition. Effectiveness is Unknown wherever the assessment
+  does not read the evidence (62 of 68 controls today) and is read from
+  ingested endpoint results otherwise. `BaselineRegressions` compares with
+  `-BaselineResults` only under the same baseline version and tier. The
+  HTML and Markdown reports gain an NRG Security Baseline section with
+  configuration compliance and effectiveness visibility as separate
+  blocks. `NRG.Baseline.Tests.ps1` pins every invariant and the
+  document-to-config tier agreement.
 - **Device build standard v1.1: patch policy, delivery and effectiveness
   are three requirements.** DB-4.2 is now the patch policy (within a
   defined remediation window); DB-4.7 requires patch deployment to be
