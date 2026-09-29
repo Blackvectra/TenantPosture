@@ -242,6 +242,14 @@ foreach ($k in @('RequiredControls', 'Satisfied', 'Failed', 'NotVerified', 'Lice
 $null = $sb.AppendLine("| Effectiveness known | $([int]$s.EffectivenessEffective + [int]$s.EffectivenessIneffective) |")
 $null = $sb.AppendLine("| Effectiveness unknown | $($s.EffectivenessUnknown) |")
 $null = $sb.AppendLine()
+$causes = Get-NRGObjectField -Item $s -Key 'NotVerifiedByCause' -Default $null
+if ($null -ne $causes -and @($causes.Keys).Count -gt 0) {
+    $null = $sb.AppendLine('Not verified, by cause (the engineering list behind the number):')
+    $null = $sb.AppendLine()
+    $null = $sb.AppendLine('| Cause | Controls |'); $null = $sb.AppendLine('|---|---|')
+    foreach ($k in @($causes.Keys)) { $null = $sb.AppendLine("| $(& $esc $k) | $($causes[$k]) |") }
+    $null = $sb.AppendLine()
+}
 $null = $sb.AppendLine("Presentation check: configuration satisfied is $($s.Satisfied) of $($s.RequiredControls); effectiveness is known for $([int]$s.EffectivenessEffective + [int]$s.EffectivenessIneffective) of $($s.RequiredControls). Confirm in the HTML that the two are shown as separate blocks and that nothing renders the first as an effectiveness figure.")
 $null = $sb.AppendLine()
 $null = $sb.AppendLine('## Classification')

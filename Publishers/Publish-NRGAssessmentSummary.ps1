@@ -269,6 +269,13 @@ function Publish-NRGAssessmentSummary {
             $null = $sb.AppendLine("| Not applicable to this tenant | $($bs.NotApplicable) |")
             $null = $sb.AppendLine("| Stale evidence (older than its freshness class) | $($bs.StaleEvidence) |")
             $null = $sb.AppendLine()
+            $causes = Get-NRGObjectField -Item $bs -Key 'NotVerifiedByCause' -Default $null
+            if ($null -ne $causes -and @($causes.Keys).Count -gt 0) {
+                $null = $sb.AppendLine("| Not verified, by cause | Controls |")
+                $null = $sb.AppendLine("|---|---|")
+                foreach ($k in @($causes.Keys)) { $null = $sb.AppendLine("| $(EscMd $k) | $($causes[$k]) |") }
+                $null = $sb.AppendLine()
+            }
             $null = $sb.AppendLine("### Effectiveness visibility")
             $null = $sb.AppendLine()
             $null = $sb.AppendLine("Configuration says a control is set; effectiveness says it is working. The assessment can read effectiveness evidence for only a few controls today; everywhere else it is reported as unknown, not assumed.")

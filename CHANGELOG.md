@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **Defects found by the first live baseline validation (NRGTS, 2026-09-29),
+  fixed without touching a single verdict.** DNS collection ran only inside
+  the Exchange branch of the entry point, so an Exchange connection failure
+  also removed the three DNS Minimum controls; the DNS collector already
+  falls back to Graph verifiedDomains, and the step now runs whenever Graph
+  or Exchange connected. "Was not read" is now a collection gap in the scope
+  classifier: SPO-1.2's "the default link type was not read" was filed as
+  not applicable to this tenant, which changes the denominator's meaning,
+  and the baseline inherited it. INT-2.2 no longer depends on INT-2.1 (ASR
+  is enforced by Defender Antivirus beside a third-party EDR; the edge read
+  as misleading on a Cortex tenant). Every NotVerified baseline row now
+  carries a cause (collector unavailable and which, skipped by operator,
+  quick scan, manual control, manual verification, evidence not read, stale
+  evidence, evaluator error, no result) and the summary, both reports and
+  the validation tool print the split, so "27 not verified" reads as an
+  engineering list. Connection failures record their first stack frames in
+  the Exceptions array. Partial stays Failed in the baseline by decision.
+
 - **The Exchange module floor follows the PowerShell version.** The first
   live run of v4.14.3 found ExchangeOnlineManagement 3.9.2 installed beside
   PowerShell 7.6.6: the installer accepted it because it checked only the

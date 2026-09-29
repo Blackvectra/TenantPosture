@@ -756,6 +756,12 @@ function Publish-NRGAssessmentHTML {
                     $regHtml = "<p class='scope-det'>$(hx $note)</p>"
                 }
             }
+            $causeHtml = ''
+            $causes = Get-NRGObjectField -Item $bs -Key 'NotVerifiedByCause' -Default $null
+            if ($null -ne $causes -and @($causes.Keys).Count -gt 0) {
+                $causeRows = (@($causes.Keys) | ForEach-Object { "<tr><td>$(hx $_)</td><td>$($causes[$_])</td></tr>" }) -join ''
+                $causeHtml = "<table class='ft' style='max-width:520px'><thead><tr><th>Not verified, by cause</th><th>Controls</th></tr></thead><tbody>$causeRows</tbody></table>"
+            }
             $excNote = if ($bl.ExceptionsPath) { "Approved exceptions read from $(hx (Split-Path -Leaf $bl.ExceptionsPath))." } else { 'No baseline exceptions file for this tenant.' }
             $baselineHtml = @"
 <div class='card mt' id='nrg-baseline'>
@@ -767,6 +773,7 @@ function Publish-NRGAssessmentHTML {
     <h4 style='margin:0 0 6px'>Configuration compliance</h4>
     <div class='scope-grid'>$tiles</div>
     <p class='scope-det'>Not verified means the run produced no usable evidence for the control (no result, a collector that did not complete, a skipped workload, a manual check, or evidence older than its freshness window). It is never counted as satisfied. $excNote</p>
+    $causeHtml
     <h4 style='margin:16px 0 6px'>Effectiveness visibility</h4>
     <div class='scope-grid'>$effTiles</div>
     <p class='scope-det'>Configuration says a control is set; effectiveness says it is working. The assessment can read effectiveness evidence for only a few controls today (endpoint results); everywhere else it is reported as unknown, not assumed.</p>

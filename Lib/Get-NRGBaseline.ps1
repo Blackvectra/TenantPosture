@@ -353,6 +353,9 @@ function Get-NRGBaselineCompliance {
             EvidenceTimestamp       = ''
             EvidenceFreshness       = 'None'
             FreshnessClass          = $ctrl.FreshnessClass
+            # Why a NotVerified row is NotVerified, as one of a small fixed set,
+            # so 27 unknowns read as an engineering list rather than a number.
+            NotVerifiedCause        = ''
             Reason                  = ''
             ExceptionSummary        = ''
             BaselineStatus          = ''
@@ -360,6 +363,7 @@ function Get-NRGBaselineCompliance {
 
         if (-not $ctrl.Automated) {
             $r.Reason = 'Not assessed by the tool: this requirement is verified manually and no collector reads its evidence yet.'
+            $r.NotVerifiedCause = 'Manual control'
         } else {
             # ── Evidence timestamp and collector health from the raw data ──
             $evidenceTimes = [System.Collections.Generic.List[datetime]]::new()
@@ -394,19 +398,27 @@ function Get-NRGBaselineCompliance {
 
             $bucket = if ($bucketOf.ContainsKey($cid)) { $bucketOf[$cid] } else { $null }
 
+            $collectorKey = if ($collectorProblem -match "collector '([^']+)'") { $Matches[1] } else { '' }
             if ($null -eq $f) {
                 $r.ObservedState = 'NotVerified'
                 $r.Reason = if ($bucket) { $bucket.Reason } else { 'No finding was produced for this control in this run.' }
+                $b0 = if ($bucket) { $bucket.Bucket } else { '' }
+                $r.NotVerifiedCause = if ($collectorKey) { "Collector unavailable: $collectorKey" }
+                                      elseif ($b0 -eq 'SkippedByOperator') { 'Skipped by operator' }
+                                      elseif ($b0 -eq 'NotEvaluatedThisMode') { 'Quick scan' }
+                                      else { 'No result' }
             } elseif ($collectorProblem) {
                 # A verdict cannot outlive the data it came from.
                 $r.ObservedState = 'NotVerified'
                 $r.Reason = "The $collectorProblem in this run, so the recorded verdict ($fState) is not evidence.$(if ($detail) { " $detail" })"
+                $r.NotVerifiedCause = "Collector unavailable: $collectorKey"
             } elseif ($fState -eq 'Satisfied') {
                 $r.ObservedState = 'Satisfied'; $r.Reason = $detail
             } elseif ($fState -in @('Gap', 'Partial')) {
                 $r.ObservedState = 'Failed'; $r.Reason = "$fState$(if ($detail) { ": $detail" })"
             } elseif ($fState -eq 'Error') {
                 $r.ObservedState = 'NotVerified'; $r.Reason = "The evaluator raised an error; the true state is unknown.$(if ($detail) { " $detail" })"
+                $r.NotVerifiedCause = 'Evaluator error'
             } else {
                 # NotApplicable: only the scope classifier's positive signals decide what kind.
                 $b = if ($bucket) { $bucket.Bucket } else { '' }
@@ -419,6 +431,11 @@ function Get-NRGBaselineCompliance {
                 } else {
                     $r.ObservedState = 'NotVerified'
                     $r.Reason = if ($bucket -and $bucket.Reason) { $bucket.Reason } elseif ($detail) { $detail } else { 'Reported not applicable without a reason the baseline can classify.' }
+                    $r.NotVerifiedCause = if ($b -eq 'SkippedByOperator') { 'Skipped by operator' }
+                                          elseif ($b -eq 'NoProgrammaticCheck' -or $detail -match 'requires manual verification|manual review required') { 'Manual verification' }
+                                          elseif ($detail -match 'was not read|not read\b') { 'Evidence not read' }
+                                          elseif ($b -eq 'CollectionIncomplete') { "Collector unavailable: $(@($ctrl.RawDataKeys)[0])" }
+                                          else { 'Unclassified' }
                 }
             }
 
@@ -431,6 +448,7 @@ function Get-NRGBaselineCompliance {
                     if ($r.ObservedState -in @('Satisfied', 'NotApplicable')) {
                         $r.ObservedState = 'NotVerified'
                         $r.Constraint = 'None'
+                        $r.NotVerifiedCause = 'Stale evidence'
                         $r.Reason = "Evidence is $([math]::Floor($age)) day(s) old; the $($ctrl.FreshnessClass) freshness class allows $window. A verdict that old is not evidence.$(if ($r.Reason) { " Last observed: $($r.Reason)" })"
                     }
                 } else {
@@ -503,6 +521,12 @@ function Get-NRGBaselineCompliance {
     }
 
     $count = { param([string] $status) @($rows | Where-Object { $_.BaselineStatus -eq $status }).Count }
+    # NotVerified split by cause, largest first: the engineering list behind the number.
+    $byCause = [ordered]@{}
+    $causeGroups = @($rows | Where-Object { $_.ObservedState -eq 'NotVerified' } |
+        Group-Object { if ($_.NotVerifiedCause) { $_.NotVerifiedCause } else { 'Unclassified' } } |
+        Sort-Object -Property @{ Expression = 'Count'; Descending = $true }, @{ Expression = 'Name'; Descending = $false })
+    foreach ($g in $causeGroups) { $byCause[[string]$g.Name] = [int]$g.Count }
     $byTier = [ordered]@{}
     foreach ($t in @($def.TierOrder)) {
         $tr = @($rows | Where-Object { $_.RequiredTier -eq $t })
@@ -529,6 +553,7 @@ function Get-NRGBaselineCompliance {
         ApprovedException      = (& $count 'ApprovedException')
         StaleEvidence          = @($rows | Where-Object { $_.EvidenceFreshness -eq 'Stale' }).Count
         NoEvidence             = @($rows | Where-Object { $_.EvidenceFreshness -eq 'None' }).Count
+        NotVerifiedByCause     = $byCause
         EffectivenessEffective = @($rows | Where-Object { $_.EffectivenessState -eq 'Effective' }).Count
         EffectivenessIneffective = @($rows | Where-Object { $_.EffectivenessState -eq 'Ineffective' }).Count
         EffectivenessUnknown   = @($rows | Where-Object { $_.EffectivenessState -eq 'Unknown' }).Count
