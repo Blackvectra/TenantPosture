@@ -353,3 +353,59 @@ Describe 'NRG baseline plan — catalog and entry point integrity' {
         $script:Entry | Should -Match '-BaselinePlanComparison \$baselinePlanComparison'
     }
 }
+
+Describe 'Per-client collector flags (clients.json Collectors block)' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        $script:Catalog = Get-NRGOptionalCollectorCatalog -Force
+        $script:Schema = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config/schema/clients.schema.json') -Raw | ConvertFrom-Json -Depth 20
+    }
+    AfterAll { Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue }
+
+    It 'a declared flag turns the collector on; absent, false and unknown keys do not' {
+        $on = Get-NRGClientCollectorFlags -ClientRecord ([pscustomobject]@{ TenantDomain = 'c.com'; Collectors = [pscustomobject]@{ SharePointShell = $true } })
+        $on['SharePointShell'] | Should -BeTrue
+        $off = Get-NRGClientCollectorFlags -ClientRecord ([pscustomobject]@{ TenantDomain = 'c.com'; Collectors = [pscustomobject]@{ SharePointShell = $false } })
+        $off['SharePointShell'] | Should -BeFalse
+        $none = Get-NRGClientCollectorFlags -ClientRecord ([pscustomobject]@{ TenantDomain = 'c.com' })
+        $none['SharePointShell'] | Should -BeFalse
+        (Get-NRGClientCollectorFlags -ClientRecord $null)['SharePointShell'] | Should -BeFalse
+        $unknown = Get-NRGClientCollectorFlags -ClientRecord ([pscustomobject]@{ Collectors = [pscustomobject]@{ DefenderVM = $true } }) 3> $null
+        $unknown.Contains('DefenderVM') | Should -BeFalse -Because 'a collector this version does not have cannot be declared into existence'
+        $unknown['SharePointShell'] | Should -BeFalse
+        (Get-NRGClientCollectorFlags -ClientRecord @{ Collectors = @{ SharePointShell = $true } })['SharePointShell'] | Should -BeTrue -Because 'hashtable records work too'
+    }
+
+    It 'the clients.json schema allows exactly the catalog ids under Collectors' {
+        $block = $script:Schema.definitions.client.properties.Collectors
+        $props = @($block.properties.PSObject.Properties | ForEach-Object { $_.Name })
+        $props | Should -Be @($script:Catalog.Keys)
+        $block.additionalProperties | Should -BeFalse
+    }
+
+    It 'a declared shell moves the plan from OptionalCollectorRequired to Automatic, and the run still reports a real failure' {
+        $flags = Get-NRGClientCollectorFlags -ClientRecord ([pscustomobject]@{ Collectors = [pscustomobject]@{ SharePointShell = $true } })
+        $p = Get-NRGBaselinePlan -TargetTier Standard -IncludeSharePointShell:$flags['SharePointShell']
+        $p.Summary.OptionalCollectorRequired | Should -Be 0
+        # The declaration is an expectation: with the shell "enabled" but its
+        # value unread on the day, the compliance view still says not verified.
+        Clear-NRGState
+        Add-NRGFinding -ControlId 'SPO-1.2' -State 'NotApplicable' -Category 'SharePoint' -Title 'Default link' -Detail 'Anyone links are enabled tenant-wide; the default link type was not read. Requires the SharePoint Online Management Shell (Get-SPOTenant); not connected. Re-run with -IncludeSharePointShell to read it.'
+        $raw = @{ 'SharePoint' = @{ CollectorId = 'SharePoint'; CollectedAt = (Get-Date).ToString('o'); Success = $true; Data = @{} } }
+        $c = Get-NRGBaselineCompliance -Findings (Get-NRGFindings) -TargetTier Standard -RawData $raw -Coverage @{}
+        $row = @($c.Controls | Where-Object { $_.ControlId -eq 'SPO-1.2' })[0]
+        $row.ObservedState | Should -Be 'NotVerified'
+        $row.ReasonCode | Should -Be 'OptionalCollectorRequired'
+        $cmp = Compare-NRGBaselinePlan -Plan $p -Compliance $c
+        @($cmp.UnexpectedNotVerified | ForEach-Object { $_.ControlId }) | Should -Contain 'SPO-1.2' -Because 'the plan expected it assessable and the run did not read it'
+        Clear-NRGState
+    }
+
+    It 'the entry point, the batch runner and the standalone plan all read the Collectors block' {
+        (Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Invoke-NRGAssessment.ps1') -Raw) | Should -Match 'Get-NRGClientCollectorFlags -ClientRecord \$clientRec'
+        (Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Invoke-NRGBatchAssessment.ps1') -Raw) | Should -Match "Collectors\.SharePointShell\) \{ \`$params\['IncludeSharePointShell'\] = \`$true \}"
+        (Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Get-NRGBaselinePlan.ps1') -Raw) | Should -Match 'Get-NRGClientCollectorFlags -ClientRecord \$clientRec'
+    }
+}

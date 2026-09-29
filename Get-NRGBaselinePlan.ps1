@@ -100,6 +100,8 @@ if ($clientRec) {
     foreach ($sf in Get-NRGWorkloadSkipMap) {
         if ([bool](Get-NRGObjectField -Item $clientRec -Key $sf.Flag -Default $false)) { Set-Variable -Name $sf.Flag -Value $true }
     }
+    $flags = Get-NRGClientCollectorFlags -ClientRecord $clientRec
+    if ($flags['SharePointShell']) { $IncludeSharePointShell = $true }
 }
 if (-not $BaselineTier) { $BaselineTier = 'Standard' }
 
