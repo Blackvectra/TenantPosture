@@ -126,3 +126,20 @@ Describe 'Purview by default, -DisableWAM, and honest -Skip flags' {
         }
     }
 }
+
+Describe 'Exchange connection failures name a module/PowerShell mismatch when that is the cause' {
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        $script:Connect = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib/Connect-NRGServices.ps1') -Raw
+    }
+    AfterAll { Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue }
+    It 'both the Exchange and the Purview catch blocks print the hint' {
+        ([regex]::Matches($script:Connect, 'Get-NRGExoConnectHint -Message')).Count | Should -Be 2
+    }
+    It 'the hint reads the floor from Get-NRGExoModuleFloor and names the install range' {
+        $script:Connect | Should -Match 'function Get-NRGExoConnectHint'
+        $script:Connect | Should -Match 'Get-NRGExoModuleFloor'
+        $script:Connect | Should -Match 'Install-PSResource -Name ExchangeOnlineManagement'
+    }
+}
