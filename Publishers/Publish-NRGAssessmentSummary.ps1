@@ -294,9 +294,13 @@ function Publish-NRGAssessmentSummary {
                 $null = $sb.AppendLine()
                 if ($note) { $null = $sb.AppendLine((EscMd $note)); $null = $sb.AppendLine() }
                 if ($regs.Count -gt 0) {
-                    $null = $sb.AppendLine("| Control | Tier | Previous | Current | Reason |")
-                    $null = $sb.AppendLine("|---|---|---|---|---|")
-                    foreach ($r in $regs) { $null = $sb.AppendLine("| $(EscMd $r.ControlId) $(EscMd $r.Title) | $(EscMd $r.RequiredTier) | $(EscMd $r.Previous) | **$(EscMd $r.Current)** | $(EscMd $r.Reason) |") }
+                    $null = $sb.AppendLine("| Control | Tier | Previous | Current | Kind | Reason |")
+                    $null = $sb.AppendLine("|---|---|---|---|---|---|")
+                    foreach ($r in $regs) {
+                        $kind = [string](Get-NRGObjectField -Item $r -Key 'Kind' -Default ''); $cause = [string](Get-NRGObjectField -Item $r -Key 'CurrentCause' -Default '')
+                        $kindText = if ($kind -eq 'EvidenceLost') { "Evidence lost: $cause" } elseif ($kind -eq 'ConfigurationRegressed') { 'Configuration regressed' } else { $kind }
+                        $null = $sb.AppendLine("| $(EscMd $r.ControlId) $(EscMd $r.Title) | $(EscMd $r.RequiredTier) | $(EscMd $r.Previous) | **$(EscMd $r.Current)** | $(EscMd $kindText) | $(EscMd $r.Reason) |")
+                    }
                     $null = $sb.AppendLine()
                 }
             }

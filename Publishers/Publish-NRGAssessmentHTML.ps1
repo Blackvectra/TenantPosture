@@ -749,9 +749,9 @@ function Publish-NRGAssessmentHTML {
                 $regs = @(Get-NRGObjectField -Item $BaselineRegressions -Key 'Regressions' -Default @())
                 $note = [string](Get-NRGObjectField -Item $BaselineRegressions -Key 'Note' -Default '')
                 if (@(Get-NRGObjectField -Item $BaselineRegressions -Key 'Available' -Default $false)[0]) {
-                    $regRows = ($regs | ForEach-Object { "<tr><td><code>$(hx $_.ControlId)</code></td><td>$(hx $_.Title)</td><td>$(hx $_.RequiredTier)</td><td>$(hx $_.Previous)</td><td><strong>$(hx $_.Current)</strong></td><td>$(hx $_.Reason)</td></tr>" }) -join ''
+                    $regRows = ($regs | ForEach-Object { $kind = [string](Get-NRGObjectField -Item $_ -Key 'Kind' -Default ''); $cause = [string](Get-NRGObjectField -Item $_ -Key 'CurrentCause' -Default ''); "<tr><td><code>$(hx $_.ControlId)</code></td><td>$(hx $_.Title)</td><td>$(hx $_.RequiredTier)</td><td>$(hx $_.Previous)</td><td><strong>$(hx $_.Current)</strong></td><td>$(hx $(if ($kind -eq 'EvidenceLost') { "Evidence lost: $cause" } elseif ($kind -eq 'ConfigurationRegressed') { 'Configuration regressed' } else { $kind }))</td><td>$(hx $_.Reason)</td></tr>" }) -join ''
                     $regHtml = "<h4 style='margin:16px 0 6px'>Baseline regressions since the prior run ($($regs.Count))</h4><p class='scope-det'>$(hx $note)</p>" +
-                               $(if ($regs.Count -gt 0) { "<table class='ft'><thead><tr><th>Control</th><th>Title</th><th>Tier</th><th>Previous</th><th>Current</th><th>Reason</th></tr></thead><tbody>$regRows</tbody></table>" } else { '' })
+                               $(if ($regs.Count -gt 0) { "<table class='ft'><thead><tr><th>Control</th><th>Title</th><th>Tier</th><th>Previous</th><th>Current</th><th>Kind</th><th>Reason</th></tr></thead><tbody>$regRows</tbody></table>" } else { '' })
                 } elseif ($note) {
                     $regHtml = "<p class='scope-det'>$(hx $note)</p>"
                 }
