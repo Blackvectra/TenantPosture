@@ -232,6 +232,7 @@ function Get-NRGBaselinePlan {
             Owner               = [string](Get-NRGObjectField -Item $c -Key 'Owner' -Default '')
             Expected            = $expected
             ExpectedNotVerified = ($expected -in @('Manual', 'SkippedByOperator', 'OptionalCollectorRequired'))
+            ReasonCode          = (ConvertTo-NRGBaselineReasonCode -Expected $expected)
             Reason              = $reason
             Collectors          = @($services)
             RawDataKeys         = @($keys)
@@ -295,6 +296,7 @@ function Get-NRGBaselinePlan {
         LicenseSource          = $licSrc
         AsOf                   = $AsOf.ToString('o')
         Summary                = $summary
+        ReasonCodes            = @((Get-NRGBaselineReasonCodes).Values | ForEach-Object { [pscustomobject]$_ })
         RequiredCollectors     = @($collectors)
         OptionalCollectors     = @($optional)
         Controls               = @($rows)
@@ -333,6 +335,7 @@ function Compare-NRGBaselinePlan {
         if ([bool](Get-NRGObjectField -Item $r -Key 'ExpectedNotVerified' -Default $false)) { $expectedNv[$cid] = $expectedOf[$cid] }
     }
     $observedNv = @{}
+    $observedReason = @{}
     $observedLb = 0
     $notInPlan = [System.Collections.Generic.List[string]]::new()
     foreach ($r in $compRows) {
@@ -343,12 +346,13 @@ function Compare-NRGBaselinePlan {
         if (-not $expectedOf.ContainsKey($cid)) { $notInPlan.Add($cid); continue }
         if ([string](Get-NRGObjectField -Item $r -Key 'ObservedState' -Default '') -eq 'NotVerified') {
             $observedNv[$cid] = [string](Get-NRGObjectField -Item $r -Key 'NotVerifiedCause' -Default '')
+            $observedReason[$cid] = @{ Code = [string](Get-NRGObjectField -Item $r -Key 'ReasonCode' -Default ''); Reason = [string](Get-NRGObjectField -Item $r -Key 'Reason' -Default '') }
         }
         if ([string](Get-NRGObjectField -Item $r -Key 'Constraint' -Default '') -eq 'LicenseBlocked') { $observedLb++ }
     }
     $unexpected = @(foreach ($cid in @($observedNv.Keys | Sort-Object)) {
         if (-not $expectedNv.ContainsKey($cid)) {
-            [ordered]@{ ControlId = $cid; Cause = $observedNv[$cid]; Expected = $(if ($expectedOf.ContainsKey($cid)) { $expectedOf[$cid] } else { '' }) }
+            [ordered]@{ ControlId = $cid; Cause = $observedNv[$cid]; ReasonCode = $observedReason[$cid].Code; Reason = $observedReason[$cid].Reason; Expected = $(if ($expectedOf.ContainsKey($cid)) { $expectedOf[$cid] } else { '' }) }
         }
     })
     $verifiedAnyway = @(foreach ($cid in @($expectedNv.Keys | Sort-Object)) {

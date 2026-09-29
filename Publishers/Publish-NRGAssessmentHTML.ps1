@@ -744,7 +744,7 @@ function Publish-NRGAssessmentHTML {
                 $st = [string]$_.BaselineStatus
                 $reason = if ($st -eq 'ApprovedException') { "$($_.ExceptionSummary) Observed: $($_.ObservedState). $($_.Reason)" } else { [string]$_.Reason }
                 $fresh = switch ([string]$_.EvidenceFreshness) { 'Current' { 'current' } 'Stale' { 'STALE' } default { 'none' } }
-                "<tr><td><code>$(hx $_.ControlId)</code></td><td>$(hx $_.Title)</td><td>$(hx $_.RequiredTier)</td><td>$(hx $_.Owner)</td><td><strong>$(hx $statusLabel[$st])</strong></td><td>$(hx $_.ObservedState)</td><td>$(hx $fresh)</td><td>$(hx $_.EffectivenessState)</td><td>$(hx $_.DependencyState)</td><td>$(hx $reason)</td></tr>"
+                "<tr><td><code>$(hx $_.ControlId)</code></td><td>$(hx $_.Title)</td><td>$(hx $_.RequiredTier)</td><td>$(hx $_.Owner)</td><td><strong>$(hx $statusLabel[$st])</strong></td><td>$(hx $_.ObservedState)</td><td>$(hx $fresh)</td><td>$(hx $_.EffectivenessState)</td><td>$(hx $_.DependencyState)</td><td><code>$(hx ([string](Get-NRGObjectField -Item $_ -Key 'ReasonCode' -Default '')))</code> $(hx $reason)</td></tr>"
             }) -join ''
             $regHtml = ''
             if ($null -ne $BaselineRegressions) {

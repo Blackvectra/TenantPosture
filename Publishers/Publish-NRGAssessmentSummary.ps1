@@ -333,7 +333,7 @@ function Publish-NRGAssessmentSummary {
             $null = $sb.AppendLine("|---|---|---|---|---|---|---|---|---|")
             foreach ($c in ($bl.Controls | Sort-Object { $order[[string]$_.BaselineStatus] }, RequiredTier, ControlId)) {
                 $reason = if ([string]$c.BaselineStatus -eq 'ApprovedException') { "$($c.ExceptionSummary) Observed: $($c.ObservedState). $($c.Reason)" } else { [string]$c.Reason }
-                $null = $sb.AppendLine("| $(EscMd $c.ControlId) $(EscMd $c.Title) | $(EscMd $c.RequiredTier) | $(EscMd $c.Owner) | **$(EscMd $c.BaselineStatus)** | $(EscMd $c.ObservedState) | $(EscMd $c.EvidenceFreshness) | $(EscMd $c.EffectivenessState) | $(EscMd $c.DependencyState) | $(EscMd $reason) |")
+                $null = $sb.AppendLine("| $(EscMd $c.ControlId) $(EscMd $c.Title) | $(EscMd $c.RequiredTier) | $(EscMd $c.Owner) | **$(EscMd $c.BaselineStatus)** | $(EscMd $c.ObservedState) | $(EscMd $c.EvidenceFreshness) | $(EscMd $c.EffectivenessState) | $(EscMd $c.DependencyState) | ``$(EscMd ([string](Get-NRGObjectField -Item $c -Key 'ReasonCode' -Default '')))`` $(EscMd $reason) |")
             }
             $null = $sb.AppendLine()
         }

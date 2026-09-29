@@ -37,6 +37,24 @@
   failing with "You must call the Connect-MicrosoftTeams cmdlet").
   `NRG.WorkloadSkip.Tests.ps1` pins the order.
 
+- **One explanation contract for every baseline row: `ReasonCode` +
+  `Reason`.** `Lib/Get-NRGBaselineReason.ps1` holds an ordered catalog of
+  stable codes (`ManualVerificationRequired`, `SkippedByOperator`,
+  `ThirdPartyHandled`, `OptionalCollectorRequired`, `LicenseBlocked`,
+  `LicensingUnknown`, `CollectorUnavailable`, `EvidenceStale`,
+  `EvidenceNotRead`, `EvaluationError`, `ControlFailed`, `Satisfied`,
+  `NotApplicable`, `Automatic`) and one resolver,
+  `Resolve-NRGBaselineReason`, that the compliance view calls once per row
+  after the state is settled. The precedence is deterministic: a skipped
+  collector never reads as license-blocked and a third-party declaration
+  never reads as manual. The plan rows, the plan-versus-run comparison, the
+  regression rows (`CurrentReasonCode`), the results JSON (with the catalog
+  as `BaselineCompliance.ReasonCodes` and a `ByReasonCode` summary) and both
+  reports carry the same pair, so a downstream consumer keys on the code
+  and never parses prose. The long prose a row was derived from is kept as
+  `Detail`. `NRG.BaselineReason.Tests.ps1` pins the catalog order, the
+  precedence cases, the plan and comparison codes, and both renderers.
+
 - **Baseline plan: what a run is expected to verify, before it runs
   (`Get-NRGBaselinePlan`).** The front door for running the v1.0 standard
   against another client without rethinking it each time. For the target
