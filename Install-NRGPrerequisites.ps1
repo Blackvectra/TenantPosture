@@ -121,7 +121,7 @@ Write-Host ""
 $psVer  = $PSVersionTable.PSVersion
 $exoMax = if ($psVer -ge [version]'7.6.0') { $null } elseif ($psVer -ge [version]'7.4.0') { '3.9.99' } else { '3.4.99' }
 if ($psVer -lt [version]'7.4.0') {
-    Write-Host "  [!] PowerShell $psVer: ExchangeOnlineManagement 3.7.2 or later needs PowerShell 7.4 or later." -ForegroundColor Red
+    Write-Host "  [!] PowerShell ${psVer}: ExchangeOnlineManagement 3.7.2 or later needs PowerShell 7.4 or later." -ForegroundColor Red
     Write-Host "      Upgrade PowerShell (winget install Microsoft.PowerShell), then re-run this script." -ForegroundColor Yellow
 }
 $moduleSpecs = @(

@@ -64,6 +64,33 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
 
     # ── OWASP A01 / ASVS V12.3.1 — Path Traversal ────────────────────────
 
+    Context 'A00 — Every script parses [Static]' {
+        # A parse error in an entry point or the installer is a hard failure on
+        # the operator's workstation and nothing else here catches it: the
+        # module tests import the module, and Install-NRGPrerequisites.ps1 is
+        # never imported. "$psVer:" inside a string reads as a scope qualifier
+        # and shipped as a parse error in the installer (v4.14.3).
+        It 'every .ps1 and .psm1 in the repo parses without errors' {
+            $bad = @(foreach ($f in $script:PsFiles) {
+                $t = $null; $e = $null
+                [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$t, [ref]$e)
+                if ($e -and $e.Count -gt 0) { "$($f.Name):$($e[0].Extent.StartLineNumber) $($e[0].Message)" }
+            })
+            $bad -join "`n" | Should -BeNullOrEmpty -Because 'a script that does not parse cannot run on the workstation'
+        }
+        It 'no double-quoted string interpolates a variable directly followed by a colon' {
+            $hits = @(foreach ($f in $script:PsFiles) {
+                $t = $null; $e = $null
+                $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$t, [ref]$e)
+                foreach ($str in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.ExpandableStringExpressionAst] }, $true)) {
+                    # Extent.Text keeps the source escapes, so a backtick-escaped "`:" does not match.
+                    if ($str.Extent.Text -match '\$[A-Za-z_][A-Za-z0-9_]*:(?![A-Za-z_])') { "$($f.Name):$($str.Extent.StartLineNumber)" }
+                }
+            })
+            $hits -join "`n" | Should -BeNullOrEmpty -Because 'write ${name}: — a bare $name: is a scope qualifier'
+        }
+    }
+
     Context 'A01 — Path Traversal Prevention [Static]' {
 
         It 'All file operations use -LiteralPath not -Path' {
