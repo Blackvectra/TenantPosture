@@ -12,6 +12,8 @@ From the workstation, ExchangeOnlineManagement 3.7.2 or later on PowerShell 7.4 
 .\Invoke-NRGAssessment.ps1 -TenantDomain <client-domain> -BaselineTier Standard -AllFiles
 ```
 
+Use the MSI build of PowerShell (`$PSHOME` is `C:\Program Files\PowerShell\7`; the Microsoft Store build cannot import the Exchange module), one assessment per window (assemblies stay loaded for the life of the process, so a second run in the same window inherits whatever the first loaded), and let the tool do every sign-in: connecting Exchange by hand first breaks Graph in that window.
+
 Add `-ThirdPartyEDR 'Cortex XDR'` (or the `ThirdPartyEDR` field in `clients.json`) where that is true, and `-DeviceResults <folder>` if endpoint results exist: those are the only effectiveness checks the tool can read today. If the client has a prior results JSON from this same version, add `-BaselineResults <prior.json>` so `BaselineRegressions` is exercised.
 
 The console prints one line, for example:
