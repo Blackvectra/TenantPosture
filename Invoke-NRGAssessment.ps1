@@ -181,6 +181,15 @@ param(
     [ValidateSet('NIST','CIS','SCuBA','CMMC','All')]
     [string] $Framework = 'NIST',
 
+    # The NRG Security Baseline tier this client is held to
+    # (Config/nrg-baseline.json). Tiers are cumulative: Standard requires
+    # Minimum + Standard, Hardened all three. Read from the client's
+    # BaselineTier in Config/clients.json when -TenantDomain is given, and
+    # from the prior run's metadata on -FromResults; Standard otherwise. A
+    # VIEW over the findings: it changes no verdict and no framework score.
+    [ValidateSet('', 'Minimum', 'Standard', 'Hardened')]
+    [string] $BaselineTier = '',
+
     # Standalone NIST SP 800-53 Rev 5 matrix (Markdown + XLSX), for clients
     # assessed against 800-53 who should not have to read their posture out of
     # a multi-framework report. Purely additive — every other framework the tool
@@ -449,6 +458,9 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
     }
     if (-not $ThirdPartyEDR -and $clientRec -and $clientRec.PSObject.Properties['ThirdPartyEDR'] -and "$($clientRec.ThirdPartyEDR)") {
         $ThirdPartyEDR = [string]$clientRec.ThirdPartyEDR
+    }
+    if (-not $BaselineTier -and $clientRec -and $clientRec.PSObject.Properties['BaselineTier'] -and "$($clientRec.BaselineTier)" -in @('Minimum', 'Standard', 'Hardened')) {
+        $BaselineTier = [string]$clientRec.BaselineTier
     }
     $rec = if ($clientRec -and $clientRec.PSObject.Properties['ClientId'] -and $clientRec.ClientId) { $clientRec } else { $null }
     if ($rec) {
@@ -974,6 +986,46 @@ try {
     $reportMetadata['MaturityError'] = $_.Exception.Message
 }
 
+# ── NRG Security Baseline: a desired-state view over the findings ─────────────
+# Resolved after every verdict-changing step (evaluation, third-party EDR,
+# license gating) so it reads the same findings the report does. It creates
+# no finding and moves no score; a control with no verdict, a failed
+# collector, or stale evidence resolves NotVerified, never Satisfied.
+$baselineCompliance  = $null
+$baselineRegressions = $null
+if (-not $BaselineTier) {
+    $priorTier = [string](Get-NRGObjectField -Item $reportMetadata -Key 'TargetTier' -Default '')
+    $BaselineTier = if ($skipCollection -and $priorTier -in @('Minimum', 'Standard', 'Hardened')) { $priorTier } else { 'Standard' }
+}
+if (Get-Command Get-NRGBaselineCompliance -ErrorAction SilentlyContinue) {
+    try {
+        $baselineCompliance = Get-NRGBaselineCompliance -Findings $findings -TargetTier $BaselineTier `
+            -TenantDomain ([string](Get-NRGObjectField -Item $reportMetadata -Key 'TenantDomain' -Default '')) `
+            -QuickScan:([bool](Get-NRGObjectField -Item $reportMetadata -Key 'QuickScan' -Default $false))
+        $reportMetadata['BaselineVersion'] = $baselineCompliance.BaselineVersion
+        $reportMetadata['TargetTier']      = $baselineCompliance.TargetTier
+        # Regressions against the prior run, only under a comparable baseline
+        # context; a version or tier change is stated, never read as decline.
+        $priorBaseline = $null; $priorRunTime = ''
+        if ($BaselineResults -and (Test-Path -LiteralPath $BaselineResults)) {
+            try {
+                $priorJson = Get-Content -LiteralPath $BaselineResults -Raw -Encoding utf8 | ConvertFrom-Json -Depth 20
+                $priorBaseline = Get-NRGObjectField -Item $priorJson -Key 'BaselineCompliance' -Default $null
+                $priorRunTime  = [string](Get-NRGNestedProperty -Object $priorJson -Path 'Metadata.AssessmentTime' -Default '')
+            } catch { Write-Warning "Prior results could not be read for baseline regressions: $($_.Exception.Message)" }
+        }
+        $baselineRegressions = Get-NRGBaselineRegressions -Current $baselineCompliance -Prior $priorBaseline -PriorRunTime $priorRunTime
+        $bs = $baselineCompliance.Summary
+        Write-Host "  [i] NRG baseline v$($bs.BaselineVersion) ($($bs.TargetTier)): $($bs.RequiredControls) required — $($bs.Satisfied) satisfied, $($bs.Failed) failed, $($bs.NotVerified) not verified, $($bs.LicenseBlocked) license blocked, $($bs.ApprovedException) approved exception(s); effectiveness known for $($bs.EffectivenessEffective + $bs.EffectivenessIneffective) of $($bs.RequiredControls)" -ForegroundColor DarkGray
+        if ($baselineRegressions.Available -and @($baselineRegressions.Regressions).Count -gt 0) {
+            Write-Host "  [!] $(@($baselineRegressions.Regressions).Count) NRG baseline regression(s) since the prior run: $(@($baselineRegressions.Regressions | ForEach-Object { $_.ControlId }) -join ', ')" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Warning "NRG baseline view failed: $($_.Exception.Message)"
+        $reportMetadata['BaselineError'] = $_.Exception.Message
+    }
+}
+
 # ── Publish reports ──────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "[-] Generating reports..." -ForegroundColor Cyan
@@ -1009,7 +1061,13 @@ $jsonPayload = @{
     Exceptions  = (Get-NRGExceptions)
     Coverage    = (Get-NRGCoverage)
     Connections = $conn
-} | ConvertTo-Json -Depth 10
+    # The NRG baseline is the integration contract for whatever consumes
+    # these results later: per required control the observed state,
+    # constraint, disposition, evidence timestamp and freshness, and
+    # effectiveness, plus the regressions against the prior run.
+    BaselineCompliance  = $baselineCompliance
+    BaselineRegressions = $baselineRegressions
+} | ConvertTo-Json -Depth 12
 Set-NRGSensitiveFileContent -Path $jsonPath -Content $jsonPayload
 Write-NRGReportFile 'JSON' $jsonPath
 Write-Host "      Holds sensitive tenant inventory (CA policies, admin assignments, OAuth apps); access restricted to you and administrators." -ForegroundColor Yellow
@@ -1072,7 +1130,7 @@ if (-not $JsonOnly) {
         $htmlPath = Join-Path $OutputPath "$baseName-assessment.html"
         try {
             $fwSelection = if ($Framework -eq 'All') { @('CIS','SCuBA','NIST','CMMC') } else { @($Framework) }
-            Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath -Attachments $reportAttachments -Frameworks $fwSelection
+            Publish-NRGAssessmentHTML -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $htmlPath -Attachments $reportAttachments -Frameworks $fwSelection -BaselineRegressions $baselineRegressions
             Write-NRGReportFile 'HTML' $htmlPath
             Set-NRGSensitiveFileAcl -Path $htmlPath -ErrorAction SilentlyContinue
         } catch {
@@ -1092,7 +1150,7 @@ if (-not $JsonOnly) {
         if (Get-Command Publish-NRGAssessmentSummary -ErrorAction SilentlyContinue) {
             $mdPath = Join-Path $OutputPath "$baseName-assessment.md"
             try {
-                Publish-NRGAssessmentSummary -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $mdPath
+                Publish-NRGAssessmentSummary -Metadata $reportMetadata -Findings $findings -Connections $conn -OutputPath $mdPath -BaselineRegressions $baselineRegressions
                 Write-NRGReportFile 'Markdown' $mdPath
                 Set-NRGSensitiveFileAcl -Path $mdPath -ErrorAction SilentlyContinue
             } catch { Write-Warning "Markdown publish failed: $($_.Exception.Message)" }
