@@ -112,6 +112,7 @@
         'Repair-NRGModuleHealth',
         'Get-NRGModuleInstallScope',
         'Get-NRGExoModuleFloor',
+        'Get-NRGConnectErrorText',
         'Get-NRGControlAutomationAudit',
         'Invoke-NRGCollectAADAuthPolicies',
         'Invoke-NRGCollectAADCAPolicies',
