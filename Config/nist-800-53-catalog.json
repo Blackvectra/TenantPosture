@@ -90,6 +90,7 @@
     "PE-18": "Location of System Components",
     "PE-20": "Asset Monitoring and Tracking",
     "PS-4": "Personnel Termination",
+    "RA-5": "Vulnerability Monitoring and Scanning",
     "SC-7": "Boundary Protection",
     "SC-8": "Transmission Confidentiality and Integrity",
     "SC-8(1)": "Transmission Confidentiality and Integrity | Cryptographic Protection",

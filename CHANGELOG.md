@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+- **NRG Security Baseline v1.0 — candidate controls for editorial review**
+  (`docs/NRG-SECURITY-BASELINE-CANDIDATES.md`). The assessment measures
+  posture against 204 controls; the baseline will say which of them NRG
+  requires of every managed client. This document is the editorial pass,
+  not configuration: every control with its severity, license requirement,
+  automation level, a proposed tier (Minimum / Standard / Hardened /
+  Assessment-only), the reason, why NRG owns it, and operational notes.
+  30 Minimum + 20 Standard + 18 Hardened nominated; 136 stay
+  assessment-only evidence. Tiers are layered (a Standard client satisfies
+  Minimum + Standard). Applicability is per client (licensing, third-party
+  EDR, a per-client exceptions file), never per control, and the future
+  compliance view keeps observed state, license constraint and exception
+  disposition separate. `Config/nrg-baseline.json` and
+  `Get-NRGBaselineCompliance` follow once v1.0 is locked.
+- **Device build standard v1.1: patch policy, delivery and effectiveness
+  are three requirements.** DB-4.2 is now the patch policy (within a
+  defined remediation window); DB-4.7 requires patch deployment to be
+  monitored and failures investigated; DB-4.8 requires remediation to be
+  verified against the current vulnerability state (Defender Vulnerability
+  Management), the standard's VM-VERIFY-01. The patching tool is evidence
+  of deployment, Defender is evidence of remediation, and they are not the
+  same thing. DB-4.8 ships with no `VerifiedBy` on purpose: the requirement
+  exists before the automation, and a Defender Vulnerability Management
+  collector can make it machine-verifiable later without changing it.
+  29 requirements, 25 mandatory. `RA-5 Vulnerability Monitoring and
+  Scanning` added to the 800-53 catalog for the citation.
+
 ## v4.14.3 (2026-09-26)
 
 v5.0 backlog sweep: the collector-fields section (places where a collector

@@ -485,7 +485,7 @@ The guide above is organized by 800-53 control. The **build standard** is the sa
 #   nist-device-guide-baseline.md / .html   build standard
 ```
 
-**27 requirements across 5 lifecycle stages, 23 of them mandatory** — procurement and intake, provisioning and enrollment, hardening, in service, offboarding and disposal. It leads with a printable checklist (one unchecked box per requirement) and puts the reasoning underneath, so the person doing the build gets the list and the person justifying an exception gets the argument.
+**29 requirements across 5 lifecycle stages, 25 of them mandatory** — procurement and intake, provisioning and enrollment, hardening, in service, offboarding and disposal. It leads with a printable checklist (one unchecked box per requirement) and puts the reasoning underneath, so the person doing the build gets the list and the person justifying an exception gets the argument.
 
 Every requirement states **why** it exists, **how** to do it, the 800-53 control it satisfies, and whether the assessment can verify it. That last part is the honest one: roughly a third of the standard is build-time work no tenant scan can confirm — BIOS passwords, firmware settings, certificates of destruction — and those rows say *"not checkable from the tenant"* rather than letting a reader assume the assessment covers everything listed.
 
