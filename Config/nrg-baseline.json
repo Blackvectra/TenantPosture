@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "title": "NRG Security Baseline",
-  "status": "Draft — encoded from docs/NRG-SECURITY-BASELINE-CANDIDATES.md; lock the document, then this file, before the first client is held to it.",
+  "status": "v1.0 — locked 2026-09-29 after live validation on one tenant (PR #104). Changes to tiers go through docs/NRG-SECURITY-BASELINE-CANDIDATES.md first; the test fails if the two differ.",
   "purpose": "The controls NRG requires of every managed client, by tier. A desired-state layer over the assessment: it reads findings and never changes them, creates none, and moves no framework score. Assessment-only controls are absent from this file on purpose; absence means not required.",
   "note": "Governance only. Nothing tenant-specific lives here: licensing comes from the tenant SKUs (license gating), the EDR from clients.json or -ThirdPartyEDR, skipped collectors from the assessment scope, and approved deviations from Config/baseline-exceptions/<tenant-domain>.psd1.",
   "tiers": {
@@ -1007,25 +1007,6 @@
       "EffectivenessCapability": "NotCollected",
       "Reason": "An anonymous default link makes every share an anonymous share.",
       "WhyNrgOwnsThis": "Same as SPO-1.1."
-    },
-    {
-      "ControlId": "SPO-3.3",
-      "Title": "OneDrive Version History Enabled",
-      "Tier": "Standard",
-      "Owner": "Collaboration & Data",
-      "RawDataKeys": [
-        "SharePoint"
-      ],
-      "EvidenceSource": "Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint)",
-      "ExpectedState": "OneDrive version history is enabled with the default or higher version count.",
-      "SlaClass": "Standard",
-      "DependsOn": [],
-      "FreshnessClass": "Monthly",
-      "EffectivenessCheck": "A restore from version history succeeds in a recovery test.",
-      "EffectivenessCapability": "NotCollected",
-      "Reason": "Version history is the ransomware recovery mechanism for OneDrive.",
-      "WhyNrgOwnsThis": "Recovery is part of the managed service.",
-      "Notes": "On by default; a false here is deliberate."
     },
     {
       "ControlId": "TMS-3.2",
