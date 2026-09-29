@@ -41,7 +41,7 @@ Describe 'Purview by default, -DisableWAM, and honest -Skip flags' {
 
     Context 'the Exchange sign-ins use the supported -DisableWAM switch' {
         It 'passes DisableWAM to Connect-ExchangeOnline (app-only and interactive) and Connect-IPPSSession when the module has it' {
-            $script:Connect | Should -Match "Parameters\.ContainsKey\('DisableWAM'\)"
+            $script:Connect | Should -Match "ContainsKey\('DisableWAM'\)"
             ([regex]::Matches($script:Connect, "\['DisableWAM'\]\s*=\s*\`$true")).Count | Should -Be 3 -Because 'app-only EXO, interactive EXO and IPPS each get it'
         }
     }

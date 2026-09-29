@@ -84,6 +84,26 @@ function Get-NRGGraphScopeList {
     return $scopes
 }
 
+# A connection failure recorded as a bare message ("You cannot call a method
+# on a null-valued expression") cannot be diagnosed from the results JSON: the
+# first live run of v4.14.3 produced exactly that for Exchange and Purview,
+# with no way to tell whether the throw was in this file or inside the
+# ExchangeOnlineManagement module. Append the first stack frames.
+function Get-NRGConnectErrorText {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [System.Management.Automation.ErrorRecord] $ErrorRecord)
+    $msg = [string]$ErrorRecord.Exception.Message
+    $frames = @()
+    try {
+        $st = [string]$ErrorRecord.ScriptStackTrace
+        if ($st) { $frames = @($st -split "`r?`n" | Where-Object { $_ } | Select-Object -First 3) }
+    } catch { $frames = @() }
+    if ($frames.Count -gt 0) { $msg = "$msg [at: $($frames -join ' <- ')]" }
+    if ($msg.Length -gt 1900) { $msg = $msg.Substring(0, 1900) }
+    return $msg
+}
+
 function Connect-NRGServices {
     [CmdletBinding(DefaultParameterSetName = 'Interactive')]
     param(
@@ -164,8 +184,12 @@ function Connect-NRGServices {
     $exoDisableWam = $false; $ippsDisableWam = $false
     $exoCmd  = Get-Command Connect-ExchangeOnline -ErrorAction SilentlyContinue
     $ippsCmd = Get-Command Connect-IPPSSession    -ErrorAction SilentlyContinue
-    if ($exoCmd)  { $exoDisableWam  = [bool]$exoCmd.Parameters.ContainsKey('DisableWAM') }
-    if ($ippsCmd) { $ippsDisableWam = [bool]$ippsCmd.Parameters.ContainsKey('DisableWAM') }
+    # Parameters can be $null on a command stub whose module has not finished
+    # loading; read it through a null check so detection never throws.
+    $exoParamsMap  = if ($exoCmd)  { Get-NRGObjectField -Item $exoCmd  -Key 'Parameters' -Default $null } else { $null }
+    $ippsParamsMap = if ($ippsCmd) { Get-NRGObjectField -Item $ippsCmd -Key 'Parameters' -Default $null } else { $null }
+    if ($null -ne $exoParamsMap)  { $exoDisableWam  = [bool]$exoParamsMap.ContainsKey('DisableWAM') }
+    if ($null -ne $ippsParamsMap) { $ippsDisableWam = [bool]$ippsParamsMap.ContainsKey('DisableWAM') }
 
     # ── MSAL assembly-conflict preflight ──────────────────────────────────────
     # The #1 failure mode in M365 PowerShell tooling (ours AND CISA's ScubaGear)
@@ -390,7 +414,7 @@ function Connect-NRGServices {
     } catch {
         Write-Host "  [!] Graph: $($_.Exception.Message)" -ForegroundColor Yellow
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-            Register-NRGException -Source 'Connect-Graph' -Message $_.Exception.Message
+            Register-NRGException -Source 'Connect-Graph' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
         }
     }
 
@@ -441,7 +465,7 @@ function Connect-NRGServices {
         } catch {
             Write-Host "  [!] Teams: $($_.Exception.Message)" -ForegroundColor Yellow
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                Register-NRGException -Source 'Connect-Teams' -Message $_.Exception.Message
+                Register-NRGException -Source 'Connect-Teams' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
             }
         }
     }
@@ -518,7 +542,7 @@ function Connect-NRGServices {
     } catch {
         Write-Host "  [!] EXO: $($_.Exception.Message)" -ForegroundColor Yellow
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-            Register-NRGException -Source 'Connect-EXO' -Message $_.Exception.Message
+            Register-NRGException -Source 'Connect-EXO' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
         }
     }
 
@@ -567,7 +591,7 @@ function Connect-NRGServices {
         } catch {
             Write-Host "  [!] Purview: $($_.Exception.Message)" -ForegroundColor Yellow
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                Register-NRGException -Source 'Connect-IPPS' -Message $_.Exception.Message
+                Register-NRGException -Source 'Connect-IPPS' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
             }
         }
     }
@@ -638,7 +662,7 @@ function Connect-NRGServices {
         } catch {
             Write-Host "  [!] SharePoint: $($_.Exception.Message)" -ForegroundColor Yellow
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                Register-NRGException -Source 'Connect-SPO' -Message $_.Exception.Message
+                Register-NRGException -Source 'Connect-SPO' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
             }
         }
     }
