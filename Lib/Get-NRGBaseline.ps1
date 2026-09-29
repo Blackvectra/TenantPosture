@@ -614,6 +614,8 @@ function Get-NRGBaselineRegressions {
         Note                   = ''
         Regressions            = @()
         Improvements           = @()
+        ConfigurationRegressed = 0
+        EvidenceLost           = 0
     }
     if ($null -eq $Current) { $result.Note = 'No current baseline compliance to compare.'; return $result }
     $result.CurrentBaselineVersion = [string](Get-NRGObjectField -Item $Current -Key 'BaselineVersion' -Default '')
@@ -655,6 +657,11 @@ function Get-NRGBaselineRegressions {
             SlaClass     = [string](Get-NRGObjectField -Item $c -Key 'SlaClass' -Default '')
             Previous     = $pri
             Current      = $cur
+            # Why the current state is NotVerified, when it is. Ten controls
+            # going Satisfied -> NotVerified because one sign-in failed is a
+            # sensor outage, not drift; the cause says which.
+            CurrentCause = [string](Get-NRGObjectField -Item $c -Key 'NotVerifiedCause' -Default '')
+            Kind         = $(if ($cur -eq 'Failed') { 'ConfigurationRegressed' } elseif ($cur -eq 'NotVerified') { 'EvidenceLost' } else { 'Other' })
             PriorRun     = [string]$PriorRunTime
             Detected     = $Detected.ToString('o')
             Reason       = [string](Get-NRGObjectField -Item $c -Key 'Reason' -Default '')
@@ -665,8 +672,10 @@ function Get-NRGBaselineRegressions {
     }
     $result.Regressions  = @($regs)
     $result.Improvements = @($imps)
+    $result.ConfigurationRegressed = @($regs | Where-Object { $_.Kind -eq 'ConfigurationRegressed' }).Count
+    $result.EvidenceLost           = @($regs | Where-Object { $_.Kind -eq 'EvidenceLost' }).Count
     if ($result.Comparable -and -not $result.Note) {
-        $result.Note = "$($regs.Count) baseline regression(s) against the prior run (same baseline v$($result.CurrentBaselineVersion), tier $($result.CurrentTargetTier))."
+        $result.Note = "$($regs.Count) baseline regression(s) against the prior run (same baseline v$($result.CurrentBaselineVersion), tier $($result.CurrentTargetTier)): $($result.ConfigurationRegressed) configuration regressed, $($result.EvidenceLost) evidence lost (a collector or sign-in did not complete this run; the configuration may be unchanged)."
     }
     return $result
 }

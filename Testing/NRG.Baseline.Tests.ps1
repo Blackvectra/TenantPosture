@@ -411,6 +411,17 @@ Describe 'NRG Security Baseline — compliance view honesty' {
             @($r.Regressions | ForEach-Object { $_.ControlId } | Sort-Object) | Should -Be @('AAD-1.1', 'AAD-1.2')
             @($r.Improvements | ForEach-Object { $_.ControlId }) | Should -Be @('AAD-1.4')
         }
+        It 'separates configuration regressions from evidence lost, and carries the cause' {
+            $prior = & $script:Comp '1.0' 'Standard' @{ 'AAD-1.1' = 'Satisfied'; 'AAD-1.2' = 'Satisfied' }
+            $cur   = & $script:Comp '1.0' 'Standard' @{ 'AAD-1.1' = 'Failed'; 'AAD-1.2' = 'NotVerified' }
+            foreach ($c in $cur.Controls) { if ($c.ControlId -eq 'AAD-1.2') { $c | Add-Member -NotePropertyName NotVerifiedCause -NotePropertyValue 'Collector unavailable: AAD-CAPolicies' } }
+            $r = Get-NRGBaselineRegressions -Current $cur -Prior $prior
+            $r.ConfigurationRegressed | Should -Be 1
+            $r.EvidenceLost | Should -Be 1
+            @($r.Regressions | Where-Object { $_.ControlId -eq 'AAD-1.2' })[0].Kind | Should -Be 'EvidenceLost'
+            @($r.Regressions | Where-Object { $_.ControlId -eq 'AAD-1.2' })[0].CurrentCause | Should -Be 'Collector unavailable: AAD-CAPolicies'
+            $r.Note | Should -Match '1 configuration regressed, 1 evidence lost'
+        }
         It 'a baseline version change is stated, not read as decline, and only shared controls are compared' {
             $prior = & $script:Comp '1.0' 'Standard' @{ 'AAD-1.1' = 'Satisfied' }
             $cur   = & $script:Comp '1.1' 'Standard' @{ 'AAD-1.1' = 'Failed'; 'AAD-1.2' = 'Failed' }

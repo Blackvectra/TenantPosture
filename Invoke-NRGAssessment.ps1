@@ -1034,7 +1034,10 @@ if (Get-Command Get-NRGBaselineCompliance -ErrorAction SilentlyContinue) {
         $bs = $baselineCompliance.Summary
         Write-Host "  [i] NRG baseline v$($bs.BaselineVersion) ($($bs.TargetTier)): $($bs.RequiredControls) required — $($bs.Satisfied) satisfied, $($bs.Failed) failed, $($bs.NotVerified) not verified, $($bs.LicenseBlocked) license blocked, $($bs.ApprovedException) approved exception(s); effectiveness known for $($bs.EffectivenessEffective + $bs.EffectivenessIneffective) of $($bs.RequiredControls)" -ForegroundColor DarkGray
         if ($baselineRegressions.Available -and @($baselineRegressions.Regressions).Count -gt 0) {
-            Write-Host "  [!] $(@($baselineRegressions.Regressions).Count) NRG baseline regression(s) since the prior run: $(@($baselineRegressions.Regressions | ForEach-Object { $_.ControlId }) -join ', ')" -ForegroundColor Yellow
+            $regCfg  = @($baselineRegressions.Regressions | Where-Object { $_.Kind -eq 'ConfigurationRegressed' })
+            $regLost = @($baselineRegressions.Regressions | Where-Object { $_.Kind -eq 'EvidenceLost' })
+            if ($regCfg.Count -gt 0)  { Write-Host "  [!] $($regCfg.Count) NRG baseline regression(s) since the prior run (configuration regressed): $(@($regCfg | ForEach-Object { $_.ControlId }) -join ', ')" -ForegroundColor Yellow }
+            if ($regLost.Count -gt 0) { Write-Host "  [!] $($regLost.Count) required control(s) were satisfied last run and could not be verified this run (evidence lost, not necessarily drift): $(@($regLost | ForEach-Object { "$($_.ControlId) [$($_.CurrentCause)]" }) -join ', ')" -ForegroundColor DarkYellow }
         }
     } catch {
         Write-Warning "NRG baseline view failed: $($_.Exception.Message)"
