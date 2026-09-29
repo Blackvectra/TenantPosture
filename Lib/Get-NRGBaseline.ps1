@@ -434,6 +434,11 @@ function Get-NRGBaselineCompliance {
                     $r.NotVerifiedCause = if ($b -eq 'SkippedByOperator') { 'Skipped by operator' }
                                           elseif ($b -eq 'NoProgrammaticCheck' -or $detail -match 'requires manual verification|manual review required') { 'Manual verification' }
                                           elseif ($detail -match 'was not read|not read\b') { 'Evidence not read' }
+                                          # The collector ran and succeeded, but the evaluator still had no
+                                          # evidence (a section or a second source, such as the SharePoint
+                                          # shell, did not produce it): that is unread evidence, not an
+                                          # unavailable collector.
+                                          elseif ($b -eq 'CollectionIncomplete' -and $evidenceTimes.Count -gt 0) { 'Evidence not read' }
                                           elseif ($b -eq 'CollectionIncomplete') { "Collector unavailable: $(@($ctrl.RawDataKeys)[0])" }
                                           else { 'Unclassified' }
                 }
