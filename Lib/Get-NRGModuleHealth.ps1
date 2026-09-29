@@ -54,9 +54,11 @@ function Get-NRGModuleHealth {
     # pin worked around); no version is pinned. The MSAL carriers are the two
     # that bundle Microsoft.Identity.Client and therefore drive the assembly
     # conflict.
+    $exoMin = [version]'3.7.2'
+    if (Get-Command Get-NRGExoModuleFloor -ErrorAction SilentlyContinue) { $exoMin = [version](Get-NRGExoModuleFloor).Min }
     $specs = @(
         @{ Name = 'Microsoft.Graph.Authentication'; Min = [version]'2.0.0'; Pin = $null; MsalCarrier = $true  }
-        @{ Name = 'ExchangeOnlineManagement';       Min = [version]'3.7.2'; Pin = $null; MsalCarrier = $true  }
+        @{ Name = 'ExchangeOnlineManagement';       Min = $exoMin;          Pin = $null; MsalCarrier = $true  }
         @{ Name = 'MicrosoftTeams';                 Min = [version]'5.0.0'; Pin = $null; MsalCarrier = $false }
     )
 

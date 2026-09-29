@@ -509,17 +509,27 @@ try {
 
 # ── Module prerequisite check ─────────────────────────────────────────────────
 # ExchangeOnlineManagement 3.7.2 added -DisableWAM, the supported way around
-# the WAM broker crash the old 3.2.0 pin worked around. Install-NRGPrerequisites
-# picks the newest version the installed PowerShell supports.
+# the WAM broker crash the old 3.2.0 pin worked around. The floor and ceiling
+# follow the PowerShell in use (Get-NRGExoModuleFloor: 3.10.0+ on 7.6, 3.7.2
+# to 3.9.x on 7.4/7.5) so the preflight, the installer and Get-NRGModuleHealth
+# agree; a version outside that range fails inside the module at connect time.
+$exoFloor = Get-NRGExoModuleFloor
+if (-not $exoFloor.Supported) { Write-Host "  [!] $($exoFloor.Reason)" -ForegroundColor Red }
+if ($exoFloor.StoreBuild) {
+    Write-Host "  [!] Microsoft Store build of PowerShell detected (`$PSHOME is under WindowsApps); the Exchange Online module has failed to import from it. Install the MSI build: winget install --id Microsoft.PowerShell --source winget" -ForegroundColor Yellow
+}
 $moduleSpecs = @(
-    @{ Name='Microsoft.Graph.Authentication'; MinVersion='2.0.0'; PinVersion=$null }
-    @{ Name='ExchangeOnlineManagement';       MinVersion='3.7.2'; PinVersion=$null }
-    @{ Name='MicrosoftTeams';                 MinVersion='5.0.0'; PinVersion=$null }
+    @{ Name='Microsoft.Graph.Authentication'; MinVersion='2.0.0';       PinVersion=$null; MaxVersion=$null }
+    @{ Name='ExchangeOnlineManagement';       MinVersion=$exoFloor.Min; PinVersion=$null; MaxVersion=$exoFloor.Max }
+    @{ Name='MicrosoftTeams';                 MinVersion='5.0.0';       PinVersion=$null; MaxVersion=$null }
 )
 $needsAction = @()
 foreach ($spec in $moduleSpecs) {
     $installed = Get-Module -ListAvailable -Name $spec.Name -ErrorAction SilentlyContinue |
         Sort-Object Version -Descending | Select-Object -First 1
+    if ($installed -and $spec.MaxVersion -and $installed.Version -gt [version]$spec.MaxVersion) {
+        Write-Host "  [!] $($spec.Name) $($installed.Version) is newer than PowerShell $($PSVersionTable.PSVersion) supports (up to $($spec.MaxVersion)); connecting will fail inside the module. Upgrade PowerShell or install a version in [$($spec.MinVersion),$($spec.MaxVersion)]." -ForegroundColor Yellow
+    }
     if (-not $installed) {
         $needsAction += @{ Spec=$spec; Action='install'; Current=$null }
     } elseif ($spec.PinVersion -and $installed.Version -ne [version]$spec.PinVersion) {

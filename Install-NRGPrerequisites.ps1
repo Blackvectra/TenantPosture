@@ -118,15 +118,19 @@ if ($scopeInfo.UserPathIsSynced) {
 }
 Write-Host ""
 
-$psVer  = $PSVersionTable.PSVersion
-$exoMax = if ($psVer -ge [version]'7.6.0') { $null } elseif ($psVer -ge [version]'7.4.0') { '3.9.99' } else { '3.4.99' }
-if ($psVer -lt [version]'7.4.0') {
-    Write-Host "  [!] PowerShell ${psVer}: ExchangeOnlineManagement 3.7.2 or later needs PowerShell 7.4 or later." -ForegroundColor Red
-    Write-Host "      Upgrade PowerShell (winget install Microsoft.PowerShell), then re-run this script." -ForegroundColor Yellow
+$psVer    = $PSVersionTable.PSVersion
+$exoFloor = Get-NRGExoModuleFloor
+if (-not $exoFloor.Supported) {
+    Write-Host "  [!] $($exoFloor.Reason)" -ForegroundColor Red
+}
+if ($exoFloor.StoreBuild) {
+    Write-Host "  [!] This is the Microsoft Store build of PowerShell (`$PSHOME is under WindowsApps)." -ForegroundColor Yellow
+    Write-Host "      The Exchange Online module has failed to import from it. Install the MSI build:" -ForegroundColor Yellow
+    Write-Host "      winget install --id Microsoft.PowerShell --source winget   (then use 'PowerShell 7 (x64)' from the Start menu)" -ForegroundColor DarkYellow
 }
 $moduleSpecs = @(
-    @{ Name='Microsoft.Graph.Authentication'; MinVersion='2.0.0';  PinVersion=$null; MaxVersion=$null   }
-    @{ Name='ExchangeOnlineManagement';       MinVersion='3.7.2';  PinVersion=$null; MaxVersion=$exoMax }
+    @{ Name='Microsoft.Graph.Authentication'; MinVersion='2.0.0';        PinVersion=$null; MaxVersion=$null          }
+    @{ Name='ExchangeOnlineManagement';       MinVersion=$exoFloor.Min;  PinVersion=$null; MaxVersion=$exoFloor.Max }
     @{ Name='MicrosoftTeams';                 MinVersion='5.0.0';  PinVersion=$null; MaxVersion=$null   }
 )
 
@@ -185,6 +189,9 @@ foreach ($spec in $moduleSpecs) {
         }
         if ($installed -and $max -and $installed.Version -gt [version]$max) {
             Write-Host "  [!] $name $($installed.Version) is newer than PowerShell $psVer supports (up to $max). Upgrade PowerShell, or install a version in [$min,$max]." -ForegroundColor Yellow
+        }
+        if ($installed -and $installed.Version -lt $min -and $name -eq 'ExchangeOnlineManagement') {
+            Write-Host "  [!] $name $($installed.Version) is below the floor for PowerShell $psVer ($min). $($exoFloor.Reason)" -ForegroundColor Yellow
         }
         if (-not $installed -or $installed.Version -lt $min -or $Force) {
             $range = if ($max) { "[$min,$max]" } else { "[$min,)" }

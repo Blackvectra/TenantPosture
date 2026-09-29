@@ -69,10 +69,11 @@ This installs/pins required PowerShell modules (with EOM at the known-good 3.2.0
 # Install required modules. Versions match the manifest's ranges —
 # Graph.Authentication [2.20.0, <3.0) and ExchangeOnlineManagement [3.7.2, <4.0);
 # major-version bumps are adopted deliberately, never by surprise.
-# ExchangeOnlineManagement 3.7.2+ needs PowerShell 7.4; 3.10.0+ needs PowerShell 7.6
+# ExchangeOnlineManagement: on PowerShell 7.4/7.5 install 3.7.2 to 3.9.x; on 7.6 or later install 3.10.0 or later
+# (Microsoft's support table). Use the MSI build of PowerShell, not the Microsoft Store one.
 # (Install-NRGPrerequisites.ps1 picks the newest your PowerShell supports).
 Install-PSResource -Name Microsoft.Graph.Authentication -Version '[2.20.0,2.99.99]' -TrustRepository
-Install-PSResource -Name ExchangeOnlineManagement       -Version '[3.7.2,3.99.99]'  -TrustRepository
+Install-PSResource -Name ExchangeOnlineManagement       -Version '[3.10.0,3.99.99]' -TrustRepository   # 7.6+; use '[3.7.2,3.9.99]' on 7.4/7.5
 Install-PSResource -Name MicrosoftTeams                 -TrustRepository   # optional — Teams collector
 Install-PSResource -Name Microsoft.Online.SharePoint.PowerShell -TrustRepository   # optional — SPO-2.x/3.x tenant controls
 Install-PSResource -Name Pester -Version '[5.5.0,5.99.99]' -TrustRepository        # tests only
@@ -252,7 +253,7 @@ so CLI and GUI workflows can be mixed freely.
 Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (330 exports, dependency declarations)
+NRG-Assessment.psd1               ← Module manifest (331 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -597,4 +598,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 330 exported functions · full Pester suite (77 suites) gating CI*
+*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 331 exported functions · full Pester suite (77 suites) gating CI*
