@@ -408,7 +408,7 @@ Describe 'NRG Security Baseline — compliance view honesty' {
             $cur   = & $script:Comp '1.0' 'Standard' @{ 'AAD-1.1' = 'Failed'; 'AAD-1.2' = 'NotVerified'; 'AAD-1.4' = 'Satisfied' }
             $r = Get-NRGBaselineRegressions -Current $cur -Prior $prior
             $r.Comparable | Should -BeTrue
-            @($r.Regressions | ForEach-Object { $_.ControlId }) | Should -Be @('AAD-1.1', 'AAD-1.2')
+            @($r.Regressions | ForEach-Object { $_.ControlId } | Sort-Object) | Should -Be @('AAD-1.1', 'AAD-1.2')
             @($r.Improvements | ForEach-Object { $_.ControlId }) | Should -Be @('AAD-1.4')
         }
         It 'a baseline version change is stated, not read as decline, and only shared controls are compared' {
@@ -467,5 +467,78 @@ Describe 'NRG Security Baseline — entry point and results contract' {
     }
     It 'the README parameter table documents -BaselineTier' {
         $script:Readme | Should -Match '`-BaselineTier`'
+    }
+}
+
+Describe 'NRG Security Baseline — report rendering' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        Clear-NRGState
+        # AAD-1.2 reads both collectors; without the second it is (correctly) not verified.
+        foreach ($k in @('AAD-CAPolicies', 'AAD-AuthPolicies')) { Set-NRGRawData -Key $k -Data @{ CollectorId = $k; CollectedAt = (Get-Date).ToString('o'); Success = $true; Data = @{} } }
+        Add-NRGFinding -ControlId 'AAD-1.1' -State 'Satisfied' -Category 'Identity' -Title 'Legacy Authentication Blocked' -Severity 'Critical' -Detail 'Blocked for all users.' -FrameworkIds @('NIST:IA-2')
+        Add-NRGFinding -ControlId 'AAD-1.2' -State 'Gap' -Category 'Identity' -Title 'MFA Required for All Users' -Severity 'Critical' -Detail 'No enforcing policy.' -FrameworkIds @('NIST:IA-2(1)')
+        $script:findings = Get-NRGFindings
+        $script:metadata = @{
+            TenantDomain = 'contoso.onmicrosoft.com'; TenantId = '00000000-0000-0000-0000-000000000000'
+            Operator = 'assessor@nrgtechservices.com'; AssessmentDate = 'September 29, 2026'
+            AssessmentTime = '2026-09-29T00:00:00.0000000+00:00'; ToolVersion = '4.14.3'; QuickScan = $false
+            BaselineVersion = '1.0'; TargetTier = 'Minimum'
+        }
+        $script:conn = @{ Graph = $true; EXO = $true; IPPSSession = $true; Teams = $true; SharePoint = $true }
+        $script:regs = [ordered]@{
+            Available = $true; Comparable = $false; BaselineVersionChanged = $true; TargetTierChanged = $false
+            PriorBaselineVersion = '0.9'; PriorTargetTier = 'Minimum'; CurrentBaselineVersion = '1.0'; CurrentTargetTier = 'Minimum'
+            Note = 'The baseline context changed (v0.9 Minimum -> v1.0 Minimum). A lower result does not mean the client got worse; only controls required in both runs at the same tier are compared.'
+            Regressions = @([pscustomobject]@{ ControlId = 'AAD-1.2'; Title = 'MFA Required for All Users'; RequiredTier = 'Minimum'; Previous = 'Satisfied'; Current = 'Failed'; Reason = 'Gap: No enforcing policy.' })
+            Improvements = @()
+        }
+        $script:tmp = Join-Path ([IO.Path]::GetTempPath()) ("nrg-baseline-render-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Item -ItemType Directory -Force -Path $script:tmp | Out-Null
+        $script:htmlPath = Join-Path $script:tmp 'report.html'
+        $script:mdPath   = Join-Path $script:tmp 'summary.md'
+        Publish-NRGAssessmentHTML -Metadata $script:metadata -Findings $script:findings -Connections $script:conn -OutputPath $script:htmlPath -BaselineRegressions $script:regs -ErrorAction Stop
+        Publish-NRGAssessmentSummary -Metadata $script:metadata -Findings $script:findings -Connections $script:conn -OutputPath $script:mdPath -BaselineRegressions $script:regs -ErrorAction Stop
+        $script:html = Get-Content -LiteralPath $script:htmlPath -Raw
+        $script:md   = Get-Content -LiteralPath $script:mdPath -Raw
+        $script:section = [regex]::Match($script:html, "(?s)<div class='card mt' id='nrg-baseline'>.*?</div>\s*</div>\s*</div>").Value
+    }
+    AfterAll {
+        if ($script:tmp -and (Test-Path -LiteralPath $script:tmp)) { Remove-Item -LiteralPath $script:tmp -Recurse -Force -ErrorAction SilentlyContinue }
+        Clear-NRGState; Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'renders the section in both reports with the version and tier from the metadata' {
+        $script:html | Should -Match "id='nrg-baseline'"
+        $script:html | Should -Match 'NRG Security Baseline v1\.0 — Minimum tier'
+        $script:md   | Should -Match '## NRG Security Baseline v1\.0 — Minimum tier'
+    }
+    It 'keeps configuration compliance and effectiveness visibility as separate blocks' {
+        $script:html | Should -Match 'Configuration compliance'
+        $script:html | Should -Match 'Effectiveness visibility'
+        $script:md   | Should -Match '### Configuration compliance'
+        $script:md   | Should -Match '### Effectiveness visibility'
+    }
+    It 'shows the failed control as Failed and the unassessed ones as not verified, never as satisfied' {
+        $script:md | Should -Match '\| AAD-1\.2 [^|]*\| Minimum \| Identity \| \*\*Failed\*\*'
+        $script:md | Should -Match '\| Satisfied \| 1 \|'
+        $script:md | Should -Match '\| Not verified \| \d+ \|'
+    }
+    It 'reports the effectiveness of every control here as unknown, not assumed' {
+        $script:md | Should -Match '\| Effective \| 0 \|'
+        $script:md | Should -Match '\| Unknown \(evidence not collected\) \| \d+ \|'
+    }
+    It 'renders the regression and the version-change note' {
+        $script:html | Should -Match 'Baseline regressions since the prior run \(1\)'
+        $script:html | Should -Match 'does not mean the client got worse'
+        $script:md   | Should -Match '### Baseline regressions since the prior run \(1\)'
+    }
+    It 'never says the tenant is compliant or secure' {
+        $script:section | Should -Not -Match '(?i)\bis compliant\b|\bfully compliant\b|\bsecure\b|\bno issues\b'
+    }
+    It 'escapes finding text in the section' {
+        $script:section | Should -Not -Match '<script'
     }
 }

@@ -601,8 +601,8 @@ function Get-NRGBaselineRegressions {
 
     $priorById = @{}
     foreach ($p in @(Get-NRGObjectField -Item $Prior -Key 'Controls' -Default @())) {
-        $pid = [string](Get-NRGObjectField -Item $p -Key 'ControlId' -Default '')
-        if ($pid) { $priorById[$pid] = $p }
+        $priorId = [string](Get-NRGObjectField -Item $p -Key 'ControlId' -Default '')
+        if ($priorId) { $priorById[$priorId] = $p }
     }
     $acceptable = @('Satisfied', 'ApprovedException')
     $bad = @('Failed', 'NotVerified')
