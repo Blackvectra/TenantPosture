@@ -384,7 +384,12 @@ function Invoke-NRGCollectEXOInventory {
                     }
                 } else {
                     # No AAD data — fall back to the per-mailbox heuristic
-                    if ($mbx.LicenseReconciliationNeeded -or $mbx.SkuAssigned) {
+                    # Get-Mailbox omitted LicenseReconciliationNeeded on a live tenant and
+                    # the dot-access threw under StrictMode, failing the whole section
+                    # (and EXO-2.6 then read the empty sign-in list as a pass).
+                    $licRecon = Get-NRGObjectField -Item $mbx -Key 'LicenseReconciliationNeeded' -Default $false
+                    $skuAsg   = Get-NRGObjectField -Item $mbx -Key 'SkuAssigned' -Default $false
+                    if ([bool]$licRecon -or [bool]$skuAsg) {
                         [ordered]@{
                             DisplayName = [string]$mbx.DisplayName
                             UPN         = $upn

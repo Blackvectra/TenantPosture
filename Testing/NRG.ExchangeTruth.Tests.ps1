@@ -405,3 +405,43 @@ return @{ value = @() }
         }
     }
 }
+
+Describe 'Shared mailbox sign-in: a failed section is never a clean list (live run, 2026-09-29)' {
+    # EXO-Inventory enumerated 28 shared mailboxes, then the sign-in loop threw
+    # (Get-Mailbox omitted LicenseReconciliationNeeded; StrictMode), so
+    # SectionStatus.SharedMailboxes read Failed and SharedMailboxSignIn stayed
+    # empty. EXO-2.6 scored the empty list as "none have sign-in enabled".
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        $script:Inv = {
+            param([string] $SectionState)
+            @{ CollectorId = 'EXO-Inventory'; CollectedAt = (Get-Date).ToString('o'); Success = $true
+               Data = @{
+                   SectionStatus = @{ SharedMailboxes = $SectionState; ForwardingMailboxes = 'Collected'; InboxRulesForwarding = 'Collected' }
+                   AllSharedMailboxes = @(@{ DisplayName = 'Shared A'; UPN = 'shared-a@contoso.com' }, @{ DisplayName = 'Shared B'; UPN = 'shared-b@contoso.com' })
+                   SharedMailboxSignIn = @()
+               } }
+        }
+        $script:Users = @{ CollectorId = 'AAD-Users'; CollectedAt = (Get-Date).ToString('o'); Success = $true; Data = @{ Users = @() } }
+    }
+    AfterAll { Clear-NRGState; Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue }
+    BeforeEach { Clear-NRGState }
+
+    It 'EXO-2.6 and EXO-6.2 are not assessed when the SharedMailboxes section failed, even with mailboxes enumerated' {
+        Set-NRGRawData -Key 'EXO-Inventory' -Data (& $script:Inv 'Failed')
+        Set-NRGRawData -Key 'AAD-Users' -Data $script:Users
+        Test-NRGControlEXOSharedMailbox
+        Test-NRGControlInventorySharedMailboxSignIn
+        foreach ($cid in 'EXO-2.6', 'EXO-6.2') {
+            $f = @(Get-NRGFindings | Where-Object { $_.ControlId -eq $cid })[0]
+            $f.State | Should -Be 'NotApplicable' -Because "$cid must not read an empty sign-in list as clean when the section failed"
+            $f.Detail | Should -Match 'not collected|did not complete'
+        }
+    }
+    It 'the collector reads LicenseReconciliationNeeded and SkuAssigned through Get-NRGObjectField' {
+        $src = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Collectors/EXO/Invoke-NRGCollectEXOInventory.ps1') -Raw
+        $src | Should -Not -Match '\$mbx\.LicenseReconciliationNeeded'
+        $src | Should -Not -Match '\$mbx\.SkuAssigned'
+    }
+}

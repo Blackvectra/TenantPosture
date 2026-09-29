@@ -151,6 +151,15 @@ foreach ($r in $asRun.Controls) {
         "$k=$(if ($null -eq $entry) { 'absent' } elseif ($null -eq $ok) { 'no Success field' } elseif ($ok) { 'ok' } else { 'FAILED' })$(if ($cv) { "/cov:$cv" })$(if ($at) { " @$at" })"
     })
     $anyCollectorFailed = @($collectors | Where-Object { $_ -match '=FAILED|=absent|cov:(Failed|Skipped|NotCollected)' }).Count -gt 0
+    # A collector can succeed overall while one of its sections failed; an
+    # evaluator that did not consult SectionStatus then scores an empty list
+    # as clean (EXO-2.6 on the first Exchange-connected run).
+    $failedSections = @(foreach ($k in $keys) {
+        $entry = if ($raw -is [System.Collections.IDictionary] -and $raw.Contains($k)) { $raw[$k] } else { $null }
+        $ss = if ($null -ne $entry) { Get-NRGNestedProperty -Object $entry -Path 'Data.SectionStatus' -Default $null } else { $null }
+        if ($ss -is [System.Collections.IDictionary]) { foreach ($name in @($ss.Keys)) { if ([string]$ss[$name] -eq 'Failed') { "$k/$name" } } }
+        elseif ($null -ne $ss) { foreach ($p in $ss.PSObject.Properties) { if ([string]$p.Value -eq 'Failed') { "$k/$($p.Name)" } } }
+    })
     $licStatus = if ($cid -eq 'VM-VERIFY-01') { 'n/a' } else { try { Get-NRGControlLicenseStatus -ControlId $cid } catch { 'n/a' } }
     $bucket = if ($bucketOf.ContainsKey($cid)) { $bucketOf[$cid] } else { '' }
     $group = if ($links.ContainsKey($cid)) { [string]$links[$cid].Primary } else { '' }
@@ -165,6 +174,10 @@ foreach ($r in $asRun.Controls) {
         $checks.Add('manual requirement; NotVerified until a Defender VM collector exists')
     } elseif ($st -eq 'Satisfied') {
         if ($anyCollectorFailed) { $class = 'ImplementationBugCandidate'; $checks.Add('Satisfied while a collector did not succeed') }
+        # Note only: most failed sections belong to other controls sharing the
+        # collector. The operator confirms the evaluator does not read the named
+        # section; a Satisfied that does is an implementation bug.
+        if ($failedSections.Count -gt 0) { $checks.Add("CHECK: a section of its collector failed ($($failedSections -join ', ')) — confirm the evaluator does not score from that section") }
         if ($fStates -notcontains 'Satisfied') { $class = 'ImplementationBugCandidate'; $checks.Add("Satisfied without a Satisfied finding ($($fStates -join ','))") }
         if ($fStates -contains 'Gap' -or $fStates -contains 'Partial') { $class = 'ImplementationBugCandidate'; $checks.Add('Satisfied while an instance finding is Gap/Partial') }
     } elseif ($st -eq 'Failed') {

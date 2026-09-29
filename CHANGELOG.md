@@ -20,6 +20,19 @@
   engineering list. Connection failures record their first stack frames in
   the Exceptions array. Partial stays Failed in the baseline by decision.
 
+- **EXO-2.6 scored a failed section as a clean list (second live run,
+  Exchange half).** `Get-Mailbox` omitted `LicenseReconciliationNeeded` on
+  the live tenant, the shared-mailbox sign-in loop threw under StrictMode,
+  `SectionStatus.SharedMailboxes` read `Failed`, and the evaluator reported
+  "28 shared mailbox(es) found — none have direct sign-in enabled" because
+  it consulted the section status only when the mailbox list was empty. The
+  collector reads both license fields through `Get-NRGObjectField`, and
+  EXO-2.6 and EXO-6.2 now report not assessed whenever the section did not
+  complete, whatever the list holds. `NRG.ExchangeTruth.Tests.ps1` replays
+  the live shape. The validation tool notes every Satisfied row whose
+  collector reported a failed section, for the operator to confirm the
+  evaluator does not read it.
+
 - **The Exchange module floor follows the PowerShell version.** The first
   live run of v4.14.3 found ExchangeOnlineManagement 3.9.2 installed beside
   PowerShell 7.6.6: the installer accepted it because it checked only the
