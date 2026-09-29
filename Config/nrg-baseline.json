@@ -1,0 +1,1441 @@
+{
+  "version": "1.0",
+  "title": "NRG Security Baseline",
+  "status": "Draft — encoded from docs/NRG-SECURITY-BASELINE-CANDIDATES.md; lock the document, then this file, before the first client is held to it.",
+  "purpose": "The controls NRG requires of every managed client, by tier. A desired-state layer over the assessment: it reads findings and never changes them, creates none, and moves no framework score. Assessment-only controls are absent from this file on purpose; absence means not required.",
+  "note": "Governance only. Nothing tenant-specific lives here: licensing comes from the tenant SKUs (license gating), the EDR from clients.json or -ThirdPartyEDR, skipped collectors from the assessment scope, and approved deviations from Config/baseline-exceptions/<tenant-domain>.psd1.",
+  "tiers": {
+    "Minimum": "Expected on every applicable NRG-managed environment; a deviation needs a written explanation.",
+    "Standard": "Normal NRG managed-security posture. Includes Minimum.",
+    "Hardened": "Elevated-risk or regulated environments. Includes Minimum and Standard."
+  },
+  "tierOrder": [
+    "Minimum",
+    "Standard",
+    "Hardened"
+  ],
+  "slaClasses": {
+    "Immediate": "Actively exploited; the day counts live in the operations policy, not here.",
+    "Critical": "",
+    "High": "",
+    "Standard": "",
+    "Advisory": ""
+  },
+  "freshnessWindowsDays": {
+    "Realtime": 1,
+    "Daily": 2,
+    "Weekly": 8,
+    "Monthly": 35,
+    "PointInTime": 400
+  },
+  "freshnessNote": "Evidence older than its class window is not evidence: the control resolves NotVerified. Windows carry one day of slack over the nominal cadence so a run that starts a few hours late does not flip every control.",
+  "effectivenessNote": "Configuration compliance and effectiveness are different questions. EffectivenessCapability says whether the assessment can read the effectiveness evidence today; where it cannot, EffectivenessState is Unknown and is reported as Unknown, never rounded to a pass.",
+  "controls": [
+    {
+      "ControlId": "AAD-1.1",
+      "Title": "Legacy Authentication Blocked",
+      "Tier": "Minimum",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies)",
+      "ExpectedState": "A Conditional Access policy blocks legacy authentication for all users on all apps (or Security Defaults is on where no P1 exists).",
+      "SlaClass": "Critical",
+      "DependsOn": [],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "Sign-in logs show zero successful legacy-protocol sign-ins over the period.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Legacy protocols bypass MFA entirely; every credential-spray campaign targets them.",
+      "WhyNrgOwnsThis": "Blocking legacy auth is the single cheapest control that closes the most incidents NRG responds to.",
+      "Notes": "Security Defaults satisfies it where the tenant has no Entra ID P1. Check for legacy clients (old Outlook, scanners doing SMTP) before enforcing."
+    },
+    {
+      "ControlId": "AAD-1.2",
+      "Title": "MFA Required for All Users",
+      "Tier": "Minimum",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-CAPolicies",
+        "AAD-AuthPolicies"
+      ],
+      "EvidenceSource": "Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies); Graph: authorization and authentication-method policies, Security Defaults (Invoke-NRGCollectAADAuthPolicies)",
+      "ExpectedState": "An enabled CA policy requires MFA (or an authentication strength) for all users on all cloud apps, and every enabled member has a registered method.",
+      "SlaClass": "Critical",
+      "DependsOn": [
+        "AAD-1.1"
+      ],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "Sign-in logs show interactive sign-ins completing MFA; no MFA-less success outside the break-glass pair.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Password-only sign-in is the root cause of nearly every BEC case.",
+      "WhyNrgOwnsThis": "NRG does not manage a tenant where a password alone reaches mail.",
+      "Notes": "Security Defaults counts only as Partial: registration is prompted, not enforced at every sign-in. Legacy-auth block (AAD-1.1) must come first or MFA is bypassable."
+    },
+    {
+      "ControlId": "AAD-11.2",
+      "Title": "No Guest Accounts in Highly Privileged Roles",
+      "Tier": "Minimum",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-DirectoryRoles"
+      ],
+      "EvidenceSource": "Graph: directory role members (Invoke-NRGCollectAADRoles)",
+      "ExpectedState": "No guest account holds any privileged directory role.",
+      "SlaClass": "Critical",
+      "DependsOn": [],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "Same as AAD-3.1.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "A guest in a privileged role is administered by someone else's tenant.",
+      "WhyNrgOwnsThis": "No external identity may hold a privileged role in a tenant NRG manages."
+    },
+    {
+      "ControlId": "AAD-15.1",
+      "Title": "No Application Holds Tenant-Takeover Permissions",
+      "Tier": "Minimum",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-AppPermissions"
+      ],
+      "EvidenceSource": "Graph: appRoleAssignedTo on Graph, Exchange and SharePoint (Invoke-NRGCollectAADAppPermissions)",
+      "ExpectedState": "No application holds a tenant-takeover application permission other than documented Microsoft first-party apps.",
+      "SlaClass": "Critical",
+      "DependsOn": [],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "App-role assignment delta between runs is empty or explained by a change ticket.",
+      "EffectivenessCapability": "Collected",
+      "EffectivenessEvidence": {
+        "Type": "RunDelta",
+        "Source": "AAD-15.2 named list between runs"
+      },
+      "Reason": "An application permission with no signed-in user bypasses MFA and Conditional Access entirely.",
+      "WhyNrgOwnsThis": "App-only tenant-takeover permissions are the modern persistence route and are invisible to the delegated-consent checks.",
+      "Notes": "Microsoft first-party apps are set aside in the verdict; every other holder must be known and documented."
+    },
+    {
+      "ControlId": "AAD-2.1",
+      "Title": "Conditional Access Policies Deployed",
+      "Tier": "Minimum",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies)",
+      "ExpectedState": "At least one enabled Conditional Access policy exists and the NRG baseline policy set is deployed (report-only policies do not count).",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Same as AAD-1.2 and AAD-2.3: sign-in logs show the policies applied, not just present.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "With P1 licensed, the CA policy set is the mechanism behind every other identity requirement.",
+      "WhyNrgOwnsThis": "NRG builds its identity posture on Conditional Access, so an empty policy set means nothing below is enforced.",
+      "Notes": "Where no P1 license exists, Security Defaults is the accepted substitute and this is license blocked, not failed."
+    },
+    {
+      "ControlId": "AAD-3.1",
+      "Title": "Global Administrator Count 2-8, Cloud-Only",
+      "Tier": "Minimum",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-DirectoryRoles"
+      ],
+      "EvidenceSource": "Graph: directory role members (Invoke-NRGCollectAADRoles)",
+      "ExpectedState": "Two to eight Global Administrators, all cloud-only, including the break-glass pair.",
+      "SlaClass": "Critical",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Audit logs show no role-assignment changes outside change tickets.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Too few GAs is a lockout risk; too many is an attack surface; synced GAs let an on-prem compromise take the tenant.",
+      "WhyNrgOwnsThis": "A bounded, cloud-only admin set is the first thing NRG checks in any takeover investigation.",
+      "Notes": "Cloud-only means no on-premises sync on the admin accounts; the break-glass pair counts toward the total."
+    },
+    {
+      "ControlId": "AAD-6.2",
+      "Title": "User Consent to Apps Restricted",
+      "Tier": "Minimum",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-IdentityGovernance"
+      ],
+      "EvidenceSource": "Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance)",
+      "ExpectedState": "Users cannot consent to applications; consent goes through the admin consent workflow.",
+      "SlaClass": "Critical",
+      "DependsOn": [],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "No new user-consented OAuth grants appear in the delegated-consent table since the last run (AAD-12.4 delta).",
+      "EffectivenessCapability": "Collected",
+      "EffectivenessEvidence": {
+        "Type": "RunDelta",
+        "Source": "AAD-12.4 named list between runs"
+      },
+      "Reason": "Illicit consent grants survive password resets and MFA re-enrollment.",
+      "WhyNrgOwnsThis": "Consent phishing is the persistence route NRG sees most after BEC; users must not be able to grant it.",
+      "Notes": "Pair with the admin consent workflow (AAD-6.3) so legitimate requests still have a path; otherwise engineers will loosen it."
+    },
+    {
+      "ControlId": "AAD-7.2",
+      "Title": "Break-Glass Accounts Configured",
+      "Tier": "Minimum",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-IdentityGovernance"
+      ],
+      "EvidenceSource": "Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance)",
+      "ExpectedState": "At least two cloud-only, CA-excluded emergency accounts exist, documented in the client record.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Monthly",
+      "EffectivenessCheck": "A quarterly test sign-in from each account succeeds and is logged (AAD-10.3, manual today).",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Without a documented break-glass pair, a CA misconfiguration or MFA outage locks NRG out of the tenant it manages.",
+      "WhyNrgOwnsThis": "NRG must always be able to get back in; this protects the client from NRG's own policies.",
+      "Notes": "Excluded from CA, monitored on sign-in (AAD-10.3 is the manual twin), FIDO2 or long random passwords in the vault. Two or more accounts need a human check that they are the right ones. Partially automated: the tool proves fewer than two break-glass accounts; two or more still needs a human to confirm they are the right accounts."
+    },
+    {
+      "ControlId": "DEF-1.3",
+      "Title": "Spoof Intelligence Enabled",
+      "Tier": "Minimum",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "Defender-Policies"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender)",
+      "ExpectedState": "Spoof intelligence is enabled in the in-force anti-phishing policy.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Spoof intelligence insight shows spoofed senders blocked.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Spoof intelligence is included in EOP and stops internal-domain spoofing.",
+      "WhyNrgOwnsThis": "Included in every plan; no reason for it to be off."
+    },
+    {
+      "ControlId": "DEF-2.2",
+      "Title": "Zero-Hour Auto Purge Enabled",
+      "Tier": "Minimum",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "EXO-MailboxConfig"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig)",
+      "ExpectedState": "Zero-hour auto purge is enabled for phishing, malware and spam.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "ZAP actions appear in the threat protection status report.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "ZAP removes mail already delivered once it is known bad.",
+      "WhyNrgOwnsThis": "Included in EOP; the control that limits the blast radius of a campaign."
+    },
+    {
+      "ControlId": "DEF-2.3",
+      "Title": "Anti-Malware Common Attachments Blocked",
+      "Tier": "Minimum",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "Defender-Policies"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender)",
+      "ExpectedState": "The common attachments filter is enabled with the NRG blocked-type list.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Message trace shows blocked attachment types quarantined.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Blocking executable attachment types is the cheapest malware control there is.",
+      "WhyNrgOwnsThis": "Included in EOP."
+    },
+    {
+      "ControlId": "DNS-1.1",
+      "Title": "SPF Record Published",
+      "Tier": "Minimum",
+      "Owner": "DNS",
+      "RawDataKeys": [
+        "DNS-EmailRecords"
+      ],
+      "EvidenceSource": "DNS over HTTPS (Cloudflare, Google) with Resolve-DnsName fallback (Invoke-NRGCollectDNSEmailRecords)",
+      "ExpectedState": "Every managed domain publishes exactly one valid SPF record ending in -all or ~all.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "DMARC aggregate reports show SPF pass for the expected senders.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "No SPF means anyone can send as the client.",
+      "WhyNrgOwnsThis": "Domain authentication is NRG's anti-spoofing baseline for every managed domain."
+    },
+    {
+      "ControlId": "DNS-1.2",
+      "Title": "DKIM Records Published",
+      "Tier": "Minimum",
+      "Owner": "DNS",
+      "RawDataKeys": [
+        "DNS-EmailRecords"
+      ],
+      "EvidenceSource": "DNS over HTTPS (Cloudflare, Google) with Resolve-DnsName fallback (Invoke-NRGCollectDNSEmailRecords)",
+      "ExpectedState": "Both Microsoft DKIM selector CNAMEs resolve for every accepted domain.",
+      "SlaClass": "High",
+      "DependsOn": [
+        "EXO-1.4"
+      ],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "Same as EXO-1.4.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "DKIM selectors must be published or EXO-1.4 signing does nothing.",
+      "WhyNrgOwnsThis": "Same as DNS-1.1.",
+      "Notes": "Checks the customer selector CNAMEs, not the rotating targets."
+    },
+    {
+      "ControlId": "DNS-1.3",
+      "Title": "DMARC Policy at Quarantine or Reject",
+      "Tier": "Minimum",
+      "Owner": "DNS",
+      "RawDataKeys": [
+        "DNS-EmailRecords"
+      ],
+      "EvidenceSource": "DNS over HTTPS (Cloudflare, Google) with Resolve-DnsName fallback (Invoke-NRGCollectDNSEmailRecords)",
+      "ExpectedState": "Every managed domain publishes DMARC at p=quarantine or p=reject with the NRG reporting address (DMARCian).",
+      "SlaClass": "Critical",
+      "DependsOn": [
+        "DNS-1.1",
+        "DNS-1.2"
+      ],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "DMARC aggregate reports show aligned senders and no unexplained failure trend.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "p=none reports spoofing and stops none of it.",
+      "WhyNrgOwnsThis": "Enforced DMARC is NRG's target state for every managed domain.",
+      "Notes": "A documented rollout window at p=none with reporting (DMARCian) is an accepted exception with a review date."
+    },
+    {
+      "ControlId": "EXO-1.1",
+      "Title": "Mailbox Audit Logging Enabled",
+      "Tier": "Minimum",
+      "Owner": "Logging",
+      "RawDataKeys": [
+        "EXO-MailboxConfig"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig)",
+      "ExpectedState": "Organization-wide mailbox auditing is enabled and no mailbox is in the audit bypass list.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "A test search returns MailItemsAccessed or similar events for a known mailbox.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Mailbox auditing is the evidence in every BEC investigation.",
+      "WhyNrgOwnsThis": "NRG cannot investigate what was not logged.",
+      "Notes": "On by default since 2019; a false here is deliberate and must be explained."
+    },
+    {
+      "ControlId": "EXO-1.2",
+      "Title": "SMTP Client Authentication Disabled",
+      "Tier": "Minimum",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "EXO-MailboxConfig"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig)",
+      "ExpectedState": "SMTP AUTH is disabled tenant-wide; per-mailbox exceptions are documented (EXO-7.4).",
+      "SlaClass": "Critical",
+      "DependsOn": [],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "Message trace shows no SMTP AUTH submissions outside the documented exceptions.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "SMTP AUTH is password-only and is the protocol credential sprays use to send from a compromised mailbox.",
+      "WhyNrgOwnsThis": "No tenant NRG manages leaves SMTP AUTH on tenant-wide.",
+      "Notes": "Multifunction printers and line-of-business apps need per-mailbox exceptions (EXO-7.4 lists them) or a relay connector."
+    },
+    {
+      "ControlId": "EXO-1.3",
+      "Title": "External Auto-Forwarding Blocked",
+      "Tier": "Minimum",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "EXO-MailboxConfig"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig)",
+      "ExpectedState": "Outbound spam policy and remote domain block automatic external forwarding.",
+      "SlaClass": "Critical",
+      "DependsOn": [],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "Message trace shows no auto-forwarded messages leaving the tenant.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Automatic external forwarding is the BEC exfiltration channel.",
+      "WhyNrgOwnsThis": "Every BEC case NRG has worked involved forwarding; blocking it tenant-wide is non-negotiable.",
+      "Notes": "Remote-domain block does not stop admin-set mailbox forwarding, which EXO-7.1 catches."
+    },
+    {
+      "ControlId": "EXO-1.4",
+      "Title": "DKIM Signing Enabled for All Domains",
+      "Tier": "Minimum",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "EXO-MailboxConfig"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig)",
+      "ExpectedState": "DKIM signing is enabled for every accepted domain with rotated keys.",
+      "SlaClass": "High",
+      "DependsOn": [
+        "DNS-1.2"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "DMARC aggregate reports show DKIM-aligned pass for outbound mail.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Unsigned mail is trivially spoofable and fails DMARC alignment.",
+      "WhyNrgOwnsThis": "Outbound authentication is NRG's deliverability and anti-spoof baseline.",
+      "Notes": "Pairs with DNS-1.2; both must be in place."
+    },
+    {
+      "ControlId": "EXO-1.6",
+      "Title": "Modern Authentication Enabled",
+      "Tier": "Minimum",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "EXO-MailboxConfig"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig)",
+      "ExpectedState": "Modern authentication is enabled and basic authentication is off for every protocol.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Sign-in logs show no basic-auth successes.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Basic authentication to Exchange has no MFA.",
+      "WhyNrgOwnsThis": "Modern auth is a precondition for MFA to mean anything on mail.",
+      "Notes": "Microsoft has retired basic auth; this should always pass and a failure is a red flag."
+    },
+    {
+      "ControlId": "EXO-4.2",
+      "Title": "Admin Audit Log Enabled",
+      "Tier": "Minimum",
+      "Owner": "Logging",
+      "RawDataKeys": [
+        "EXO-MailboxConfig"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig)",
+      "ExpectedState": "Admin audit logging is enabled.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "A test search returns the assessment sign-in itself as an admin audit event.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Admin audit logging records every configuration change, including an attacker's.",
+      "WhyNrgOwnsThis": "Same as EXO-1.1.",
+      "Notes": "Read through Get-AdminAuditLogConfig on the Exchange session."
+    },
+    {
+      "ControlId": "EXO-7.1",
+      "Title": "No Mailbox Forwarding to External Addresses",
+      "Tier": "Minimum",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "EXO-Inventory"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory)",
+      "ExpectedState": "No mailbox forwards to an external address (ForwardingSmtpAddress or ForwardingAddress) without a documented exception.",
+      "SlaClass": "Critical",
+      "DependsOn": [
+        "EXO-1.3"
+      ],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "Message trace shows no forwarded mail to external recipients.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "A forwarding address set by an admin or an attacker with admin bypasses the remote-domain block.",
+      "WhyNrgOwnsThis": "Zero external mailbox forwarding is the standard; every exception is named.",
+      "Notes": "Named-object check; exceptions documented per mailbox."
+    },
+    {
+      "ControlId": "EXO-7.2",
+      "Title": "No Inbox Rules Forwarding Externally",
+      "Tier": "Minimum",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "EXO-Inventory"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory)",
+      "ExpectedState": "No inbox rule forwards or redirects to an external recipient.",
+      "SlaClass": "Critical",
+      "DependsOn": [
+        "EXO-1.3"
+      ],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "Same as EXO-7.1; the forwarding-rule alert (EXO-3.3) fires on any new rule.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Inbox rules that forward externally are the most common BEC persistence artifact.",
+      "WhyNrgOwnsThis": "Same as EXO-7.1.",
+      "Notes": "Tri-state recipient classification; an unresolved recipient is reported, not assumed internal."
+    },
+    {
+      "ControlId": "EXO-8.2",
+      "Title": "No Transport Rule Redirects Mail Externally",
+      "Tier": "Minimum",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "EXO-Inventory"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory)",
+      "ExpectedState": "No transport rule redirects or blind-copies mail externally without a documented purpose.",
+      "SlaClass": "Critical",
+      "DependsOn": [],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "Message trace shows no rule-redirected external mail.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "A transport rule redirecting mail externally is a tenant-wide exfiltration channel and is rarely legitimate.",
+      "WhyNrgOwnsThis": "No external redirect rules without a documented purpose."
+    },
+    {
+      "ControlId": "INT-1.1",
+      "Title": "Device Compliance Policies Configured",
+      "Tier": "Minimum",
+      "Owner": "Endpoint",
+      "RawDataKeys": [
+        "Intune-DeviceCompliance"
+      ],
+      "EvidenceSource": "Graph: Intune compliance policies, enrollment configuration, update rings, devices (Invoke-NRGCollectIntuneDeviceCompliance)",
+      "ExpectedState": "An assigned compliance policy exists per managed platform with a non-compliance action.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Device compliance report shows devices evaluated, not \"not evaluated\".",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Compliance policies are the definition of a healthy device that everything else gates on.",
+      "WhyNrgOwnsThis": "Every Intune-licensed client gets a compliance policy set; DB-2.1 enrollment feeds it.",
+      "Notes": "License blocked without Intune, not failed."
+    },
+    {
+      "ControlId": "INT-1.3",
+      "Title": "BitLocker Encryption Required on Windows",
+      "Tier": "Minimum",
+      "Owner": "Endpoint",
+      "RawDataKeys": [
+        "Intune-DeviceCompliance"
+      ],
+      "EvidenceSource": "Graph: Intune compliance policies, enrollment configuration, update rings, devices (Invoke-NRGCollectIntuneDeviceCompliance)",
+      "ExpectedState": "An assigned policy requires BitLocker on Windows with recovery keys escrowed to Entra.",
+      "SlaClass": "High",
+      "DependsOn": [
+        "INT-1.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Encryption report shows every Windows device encrypted with a key in Entra.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Unencrypted laptops turn a theft into a breach notification.",
+      "WhyNrgOwnsThis": "Disk encryption is mandatory in the device build standard (DB-2.5)."
+    },
+    {
+      "ControlId": "INT-1.5",
+      "Title": "Antivirus Policy Deployed via Intune",
+      "Tier": "Minimum",
+      "Owner": "Endpoint",
+      "RawDataKeys": [
+        "Intune-EndpointSecurity"
+      ],
+      "EvidenceSource": "Graph: Intune endpoint-security policies by template (Invoke-NRGCollectIntuneEndpointSecurity)",
+      "ExpectedState": "An assigned antivirus policy configures Defender Antivirus (real-time, cloud protection, PUA).",
+      "SlaClass": "High",
+      "DependsOn": [
+        "INT-1.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Defender for Endpoint shows AV signatures current and real-time protection on per device (DEV-2.x).",
+      "EffectivenessCapability": "Collected",
+      "EffectivenessEvidence": {
+        "Type": "DeviceControls",
+        "Controls": [
+          "DEV-2.1",
+          "DEV-2.3",
+          "DEV-2.4"
+        ]
+      },
+      "Reason": "Antivirus policy is the minimum protection for every managed Windows device.",
+      "WhyNrgOwnsThis": "DB-3.2 in the device standard.",
+      "Notes": "Where a third-party EDR is declared, this is reported as covered by it, not passed."
+    },
+    {
+      "ControlId": "INT-2.1",
+      "Title": "Endpoint Detection and Response Policy Deployed",
+      "Tier": "Minimum",
+      "Owner": "Endpoint",
+      "RawDataKeys": [
+        "Intune-EndpointSecurity"
+      ],
+      "EvidenceSource": "Graph: Intune endpoint-security policies by template (Invoke-NRGCollectIntuneEndpointSecurity)",
+      "ExpectedState": "An assigned EDR policy onboards every managed Windows device to Defender for Endpoint (or the declared third-party EDR is confirmed in its console).",
+      "SlaClass": "Critical",
+      "DependsOn": [
+        "INT-1.1"
+      ],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "Every enrolled device appears as onboarded and active in the EDR console (DEV-2.1).",
+      "EffectivenessCapability": "Collected",
+      "EffectivenessEvidence": {
+        "Type": "DeviceControls",
+        "Controls": [
+          "DEV-2.8"
+        ]
+      },
+      "Reason": "EDR is the control that turns an infection into an alert instead of a ransomware event.",
+      "WhyNrgOwnsThis": "DB-3.2; NRG's stack is Defender for Endpoint or Cortex XDR.",
+      "Notes": "ThirdPartyEDR declares Cortex; the check leaves the score and is verified in the vendor console."
+    },
+    {
+      "ControlId": "INT-2.5",
+      "Title": "Windows Update Compliance Policy Deployed",
+      "Tier": "Minimum",
+      "Owner": "Endpoint",
+      "RawDataKeys": [
+        "Intune-DeviceCompliance"
+      ],
+      "EvidenceSource": "Graph: Intune compliance policies, enrollment configuration, update rings, devices (Invoke-NRGCollectIntuneDeviceCompliance)",
+      "ExpectedState": "Assigned update rings enforce a deadline and grace period on every Windows device.",
+      "SlaClass": "High",
+      "DependsOn": [
+        "INT-1.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Update compliance report shows devices within the deadline (DEV-4.1); DB-4.7 monitors failures.",
+      "EffectivenessCapability": "Collected",
+      "EffectivenessEvidence": {
+        "Type": "DeviceControls",
+        "Controls": [
+          "DEV-5.2",
+          "DEV-5.3"
+        ]
+      },
+      "Reason": "Patch deadlines are the exposure window (DB-4.1).",
+      "WhyNrgOwnsThis": "Update rings with an enforced deadline on every managed Windows device.",
+      "Notes": "DB-4.7 and DB-4.8 cover monitoring and verification of the same process."
+    },
+    {
+      "ControlId": "PVW-1.1",
+      "Title": "Unified Audit Log Enabled",
+      "Tier": "Minimum",
+      "Owner": "Logging",
+      "RawDataKeys": [
+        "Purview"
+      ],
+      "EvidenceSource": "Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview)",
+      "ExpectedState": "Unified audit log ingestion is enabled.",
+      "SlaClass": "Critical",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "A test search of the unified audit log returns recent events.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "The unified audit log is the single searchable record of tenant activity.",
+      "WhyNrgOwnsThis": "Same as EXO-1.1.",
+      "Notes": "PVW-2.1 (search enabled) reads the same switch and counts once."
+    },
+    {
+      "ControlId": "SPO-1.3",
+      "Title": "SharePoint Legacy Authentication Blocked",
+      "Tier": "Minimum",
+      "Owner": "Collaboration & Data",
+      "RawDataKeys": [
+        "SharePoint"
+      ],
+      "EvidenceSource": "Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint)",
+      "ExpectedState": "Legacy authentication to SharePoint is blocked.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "No legacy-auth SharePoint sign-ins in sign-in logs.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Legacy auth to SharePoint bypasses MFA the same way it does for mail.",
+      "WhyNrgOwnsThis": "Same reason as AAD-1.1."
+    },
+    {
+      "ControlId": "AAD-10.2",
+      "Title": "Privileged Accounts Use Dedicated Cloud-Only Accounts",
+      "Tier": "Standard",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-DirectoryRoles"
+      ],
+      "EvidenceSource": "Graph: directory role members (Invoke-NRGCollectAADRoles)",
+      "ExpectedState": "Every privileged role holder is a dedicated cloud-only admin account, not a daily-use identity.",
+      "SlaClass": "High",
+      "DependsOn": [
+        "AAD-3.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Admin accounts have no mailbox or license beyond what admin work needs.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Admins doing daily work on their admin identity expose the role to every phishing email they open.",
+      "WhyNrgOwnsThis": "Separate admin accounts are NRG's own operating practice; clients get the same standard."
+    },
+    {
+      "ControlId": "AAD-11.1",
+      "Title": "Device Code Authentication Flow Blocked",
+      "Tier": "Standard",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-AuthPolicies",
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Graph: authorization and authentication-method policies, Security Defaults (Invoke-NRGCollectAADAuthPolicies); Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies)",
+      "ExpectedState": "A CA policy blocks the device code flow for all users.",
+      "SlaClass": "High",
+      "DependsOn": [
+        "AAD-2.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Sign-in logs show device-code sign-ins blocked, not merely challenged.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Device code phishing relays the MFA prompt; only a block stops it.",
+      "WhyNrgOwnsThis": "Device code flow is an active phishing technique against MSP-managed tenants and has no business use for most clients.",
+      "Notes": "Blocks some legitimate CLI and TV-app sign-ins; document the exception where a client needs it."
+    },
+    {
+      "ControlId": "AAD-2.3",
+      "Title": "Device Compliance Enforced via CA",
+      "Tier": "Standard",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies)",
+      "ExpectedState": "An enabled CA policy requires a compliant device for all users on all cloud apps.",
+      "SlaClass": "High",
+      "DependsOn": [
+        "AAD-2.1",
+        "INT-1.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Sign-in logs show sign-ins from non-compliant devices blocked.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Compliant-device CA is what makes the endpoint baseline (DB-*) actually gate access.",
+      "WhyNrgOwnsThis": "Without it, an enrolled but non-compliant or unknown device reaches company data with a password and MFA alone.",
+      "Notes": "Requires INT-1.1 compliance policies first. INT-1.2 reads the same setting and counts once (control links)."
+    },
+    {
+      "ControlId": "AAD-6.1",
+      "Title": "User App Registration Disabled",
+      "Tier": "Standard",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-IdentityGovernance"
+      ],
+      "EvidenceSource": "Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance)",
+      "ExpectedState": "Users cannot register applications.",
+      "SlaClass": "Standard",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "No new user-owned app registrations appear since the last run.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Users registering their own apps is how consent phishing and shadow SaaS get a foothold.",
+      "WhyNrgOwnsThis": "NRG-managed tenants route app registration through an admin.",
+      "Notes": "Developer-heavy clients may need an exception with a named owner."
+    },
+    {
+      "ControlId": "DEF-1.1",
+      "Title": "Safe Attachments Enabled with Block Action",
+      "Tier": "Standard",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "Defender-Policies"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender)",
+      "ExpectedState": "Safe Attachments is enabled with Block action in the in-force policy for all recipients.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Threat Explorer shows detonation verdicts blocking attachments.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Attachment detonation is the primary malware control in mail.",
+      "WhyNrgOwnsThis": "Same as EXO-1.5.",
+      "Notes": "License blocked on EOP-only tenants."
+    },
+    {
+      "ControlId": "DEF-1.2",
+      "Title": "Safe Links Enabled and Hardened",
+      "Tier": "Standard",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "Defender-Policies"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender)",
+      "ExpectedState": "Safe Links is enabled with click tracking and no user override in the in-force policy.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "URL click reports show blocked clicks.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Time-of-click URL protection is the primary phishing control in mail.",
+      "WhyNrgOwnsThis": "Same as EXO-1.5.",
+      "Notes": "License blocked on EOP-only tenants."
+    },
+    {
+      "ControlId": "DEF-3.4",
+      "Title": "Defender Alert Email Notifications Configured",
+      "Tier": "Standard",
+      "Owner": "Logging",
+      "RawDataKeys": [
+        "Purview"
+      ],
+      "EvidenceSource": "Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview)",
+      "ExpectedState": "Defender alert notifications are sent to the NRG monitoring address.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "A test alert reaches the NRG queue.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Alerts nobody receives are not alerts.",
+      "WhyNrgOwnsThis": "Defender notifications must reach NRG's queue, not a client mailbox nobody reads.",
+      "Notes": "Point at the NRG monitoring address, not an individual."
+    },
+    {
+      "ControlId": "DEF-4.3",
+      "Title": "Risky OAuth Application Alerts Configured",
+      "Tier": "Standard",
+      "Owner": "Logging",
+      "RawDataKeys": [
+        "Purview"
+      ],
+      "EvidenceSource": "Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview)",
+      "ExpectedState": "The risky-OAuth-app alert policy is enabled and routed to NRG.",
+      "SlaClass": "High",
+      "DependsOn": [
+        "DEF-3.4"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "A consent event produces an alert in the NRG queue.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Risky OAuth app alerts are the early warning for consent phishing.",
+      "WhyNrgOwnsThis": "Same as DEF-3.4."
+    },
+    {
+      "ControlId": "EXO-1.5",
+      "Title": "Anti-Phishing Impersonation Protection Enabled",
+      "Tier": "Standard",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "Defender-Policies"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: Defender for Office 365 and EOP policies in force (Invoke-NRGCollectDefender)",
+      "ExpectedState": "Impersonation protection covers priority users and all accepted domains in the in-force anti-phishing policy.",
+      "SlaClass": "High",
+      "DependsOn": [
+        "DEF-1.3"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Threat Explorer shows impersonation detections being quarantined.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Impersonation protection catches the display-name and lookalike-domain phish that gets past DMARC.",
+      "WhyNrgOwnsThis": "Standard for every Defender for Office 365 P1 client (Business Premium includes it).",
+      "Notes": "License blocked on EOP-only tenants, not failed."
+    },
+    {
+      "ControlId": "EXO-2.6",
+      "Title": "Shared Mailboxes Block Direct Sign-In",
+      "Tier": "Standard",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "EXO-Inventory"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: mailboxes, inbox rules, connectors, transport rules (Invoke-NRGCollectEXOInventory)",
+      "ExpectedState": "Every shared mailbox has sign-in blocked.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "No interactive sign-ins by shared mailbox accounts in sign-in logs.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "A shared mailbox with sign-in enabled is an unmonitored account with no MFA and a known address.",
+      "WhyNrgOwnsThis": "Shared mailboxes exist for delegation, not sign-in.",
+      "Notes": "EXO-6.2 is the named-list twin."
+    },
+    {
+      "ControlId": "EXO-3.3",
+      "Title": "Alert Policy — Email Forwarding Rules",
+      "Tier": "Standard",
+      "Owner": "Logging",
+      "RawDataKeys": [
+        "Purview"
+      ],
+      "EvidenceSource": "Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview)",
+      "ExpectedState": "The forwarding-rule alert policy is enabled and routed to NRG.",
+      "SlaClass": "High",
+      "DependsOn": [
+        "DEF-3.4",
+        "PVW-1.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "A test inbox rule produces an alert in the NRG queue.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "The forwarding-rule alert policy is the fastest BEC detection Microsoft offers.",
+      "WhyNrgOwnsThis": "Same as DEF-3.4."
+    },
+    {
+      "ControlId": "EXO-5.3",
+      "Title": "No Allowed Sender Domains Bypassing Anti-Spam Filtering",
+      "Tier": "Standard",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "EXO-MailboxConfig"
+      ],
+      "EvidenceSource": "Exchange Online PowerShell: organization, transport and authentication configuration (Invoke-NRGCollectEXOMailboxConfig)",
+      "ExpectedState": "No allowed sender domains in any anti-spam policy.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Spoofed mail from those domains would be filtered; message trace shows no allow-listed bypasses.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "An allowed sender domain bypasses every filter for that domain and is the classic \"allow our partner\" mistake.",
+      "WhyNrgOwnsThis": "NRG does not run tenant-wide sender-domain allow lists."
+    },
+    {
+      "ControlId": "INT-2.2",
+      "Title": "Attack Surface Reduction Rules Enabled",
+      "Tier": "Standard",
+      "Owner": "Endpoint",
+      "RawDataKeys": [
+        "Intune-EndpointSecurity"
+      ],
+      "EvidenceSource": "Graph: Intune endpoint-security policies by template (Invoke-NRGCollectIntuneEndpointSecurity)",
+      "ExpectedState": "An assigned ASR policy sets the NRG rule set to Block.",
+      "SlaClass": "High",
+      "DependsOn": [
+        "INT-2.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "ASR report shows rules in block mode and detections occurring.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "ASR rules block the Office-macro and script techniques ransomware starts with.",
+      "WhyNrgOwnsThis": "Standard on every Defender for Endpoint client.",
+      "Notes": "Audit mode first; block mode is the requirement."
+    },
+    {
+      "ControlId": "INT-4.1",
+      "Title": "Windows LAPS Deployed via Intune",
+      "Tier": "Standard",
+      "Owner": "Endpoint",
+      "RawDataKeys": [
+        "Intune-EndpointSecurity"
+      ],
+      "EvidenceSource": "Graph: Intune endpoint-security policies by template (Invoke-NRGCollectIntuneEndpointSecurity)",
+      "ExpectedState": "An assigned Windows LAPS policy backs up the local admin password to Entra and rotates it.",
+      "SlaClass": "High",
+      "DependsOn": [
+        "INT-1.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Every Windows device has a current LAPS password in Entra (DEV-4.x).",
+      "EffectivenessCapability": "Collected",
+      "EffectivenessEvidence": {
+        "Type": "DeviceControls",
+        "Controls": [
+          "DEV-4.4"
+        ]
+      },
+      "Reason": "Shared local admin passwords are the lateral-movement path on every network.",
+      "WhyNrgOwnsThis": "LAPS is DB-2.3 in the device standard."
+    },
+    {
+      "ControlId": "INT-4.3",
+      "Title": "Device OS Version Compliance Enforced",
+      "Tier": "Standard",
+      "Owner": "Endpoint",
+      "RawDataKeys": [
+        "Intune-DeviceCompliance"
+      ],
+      "EvidenceSource": "Graph: Intune compliance policies, enrollment configuration, update rings, devices (Invoke-NRGCollectIntuneDeviceCompliance)",
+      "ExpectedState": "Compliance policy requires the NRG minimum OS build per platform.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "INT-2.5"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Device compliance report shows no devices below the minimum.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "An out-of-date OS is a device the compliance policy should be refusing.",
+      "WhyNrgOwnsThis": "Pairs with INT-2.5 so an unpatched device loses access rather than persisting."
+    },
+    {
+      "ControlId": "PVW-1.2",
+      "Title": "Audit Log Retention Minimum 90 Days",
+      "Tier": "Standard",
+      "Owner": "Logging",
+      "RawDataKeys": [
+        "Purview"
+      ],
+      "EvidenceSource": "Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview)",
+      "ExpectedState": "Audit log retention is at least 90 days (180 by default; one year on E5).",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "PVW-1.1"
+      ],
+      "FreshnessClass": "Monthly",
+      "EffectivenessCheck": "Events older than 90 days are still searchable.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "90 days is the minimum window in which a compromise is usually discovered.",
+      "WhyNrgOwnsThis": "NRG's investigation window.",
+      "Notes": "180 days is the default today; one year needs E5 (PVW-4.2, Hardened)."
+    },
+    {
+      "ControlId": "SPO-1.1",
+      "Title": "External Sharing Restricted",
+      "Tier": "Standard",
+      "Owner": "Collaboration & Data",
+      "RawDataKeys": [
+        "SharePoint"
+      ],
+      "EvidenceSource": "Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint)",
+      "ExpectedState": "External sharing is limited to existing or authenticated guests; anyone links are off.",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Sharing audit shows no anonymous links created.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Unrestricted external sharing is how a client's data ends up on the open internet.",
+      "WhyNrgOwnsThis": "NRG-managed tenants restrict sharing to existing or authenticated guests.",
+      "Notes": "Anyone links are the specific thing to remove; SPO-1.2 covers the default link type."
+    },
+    {
+      "ControlId": "SPO-1.2",
+      "Title": "Default Sharing Link Not Anonymous",
+      "Tier": "Standard",
+      "Owner": "Collaboration & Data",
+      "RawDataKeys": [
+        "SharePoint"
+      ],
+      "EvidenceSource": "Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint)",
+      "ExpectedState": "The default sharing link is not anonymous.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "SPO-1.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Same as SPO-1.1.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "An anonymous default link makes every share an anonymous share.",
+      "WhyNrgOwnsThis": "Same as SPO-1.1."
+    },
+    {
+      "ControlId": "SPO-3.3",
+      "Title": "OneDrive Version History Enabled",
+      "Tier": "Standard",
+      "Owner": "Collaboration & Data",
+      "RawDataKeys": [
+        "SharePoint"
+      ],
+      "EvidenceSource": "Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint)",
+      "ExpectedState": "OneDrive version history is enabled with the default or higher version count.",
+      "SlaClass": "Standard",
+      "DependsOn": [],
+      "FreshnessClass": "Monthly",
+      "EffectivenessCheck": "A restore from version history succeeds in a recovery test.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Version history is the ransomware recovery mechanism for OneDrive.",
+      "WhyNrgOwnsThis": "Recovery is part of the managed service.",
+      "Notes": "On by default; a false here is deliberate."
+    },
+    {
+      "ControlId": "TMS-3.2",
+      "Title": "Auto-Admit Only Authenticated Organization Users",
+      "Tier": "Standard",
+      "Owner": "Collaboration & Data",
+      "RawDataKeys": [
+        "Teams"
+      ],
+      "EvidenceSource": "Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams)",
+      "ExpectedState": "Meeting auto-admit is OrganizerOnly or EveryoneInCompanyExcludingGuests.",
+      "SlaClass": "Standard",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Meeting audit shows external participants admitted from the lobby, never auto-admitted.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "The lobby is the only thing between an external caller and a meeting.",
+      "WhyNrgOwnsThis": "NRG-managed tenants keep externals in the lobby until admitted.",
+      "Notes": "Only OrganizerOnly / EveryoneInCompanyExcludingGuests satisfy it."
+    },
+    {
+      "ControlId": "AAD-1.3",
+      "Title": "Phishing-Resistant MFA Required for Admins",
+      "Tier": "Hardened",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies)",
+      "ExpectedState": "An enabled CA policy requires a phishing-resistant authentication strength for every privileged role.",
+      "SlaClass": "High",
+      "DependsOn": [
+        "AAD-1.2"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Sign-in logs show admin sign-ins using FIDO2 or Windows Hello for Business only.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Push-based MFA on admin accounts is defeated by MFA fatigue and adversary-in-the-middle kits.",
+      "WhyNrgOwnsThis": "NRG requires phishing-resistant admin sign-in for regulated and high-value clients.",
+      "Notes": "Needs authentication strengths (P1) and FIDO2 keys or Windows Hello for Business for every admin."
+    },
+    {
+      "ControlId": "AAD-1.4",
+      "Title": "Sign-in Risk CA Policy",
+      "Tier": "Hardened",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies)",
+      "ExpectedState": "An enabled CA policy responds to High and Medium sign-in risk.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "AAD-2.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Identity Protection risk detections show remediation, not just detection.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Risk-based CA responds to a compromised session before a human sees the alert.",
+      "WhyNrgOwnsThis": "P2 clients should get automated response; P1 clients cannot and are license blocked.",
+      "Notes": "Requires Entra ID P2. High + Medium sign-in risk per Microsoft's template."
+    },
+    {
+      "ControlId": "AAD-1.5",
+      "Title": "User Risk CA Policy",
+      "Tier": "Hardened",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies)",
+      "ExpectedState": "An enabled CA policy requires password change for High user risk.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "AAD-2.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Risky users are remediated, not dismissed, within the SLA.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "A high-risk user must be forced to change password, not just flagged.",
+      "WhyNrgOwnsThis": "Same as AAD-1.4.",
+      "Notes": "Requires Entra ID P2."
+    },
+    {
+      "ControlId": "AAD-10.4",
+      "Title": "Sign-in Frequency Session Control Configured",
+      "Tier": "Hardened",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies)",
+      "ExpectedState": "Sign-in frequency is set to the NRG value for the client tier.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "AAD-2.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Session durations in sign-in logs do not exceed the configured frequency.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Long-lived sessions extend the value of a stolen token.",
+      "WhyNrgOwnsThis": "Sign-in frequency for elevated-risk clients.",
+      "Notes": "User friction; set per client."
+    },
+    {
+      "ControlId": "AAD-11.4",
+      "Title": "Token Protection (Session Binding) Enforced",
+      "Tier": "Hardened",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies)",
+      "ExpectedState": "Token protection is enforced for Exchange and SharePoint on supported clients.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "AAD-2.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Sign-in logs show sessions rejected on token replay.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Token theft is the post-MFA attack; binding sessions to the device defeats replay.",
+      "WhyNrgOwnsThis": "Elevated-risk clients get session binding where their clients support it.",
+      "Notes": "Windows-only and application-limited today; expect exceptions."
+    },
+    {
+      "ControlId": "AAD-11.7",
+      "Title": "Privileged Access Workstation or Device Scope for Admins",
+      "Tier": "Hardened",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Graph: Conditional Access policies (Invoke-NRGCollectAADCAPolicies)",
+      "ExpectedState": "Privileged roles can sign in only from compliant or privileged-access devices.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "AAD-2.3"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Admin sign-ins originate from managed devices only.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Admin sessions from an unmanaged device are the path from a home PC to a tenant.",
+      "WhyNrgOwnsThis": "Privileged access from managed devices only, for clients that can sustain it."
+    },
+    {
+      "ControlId": "AAD-3.2",
+      "Title": "No Permanent Admin Role Assignments",
+      "Tier": "Hardened",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-PIMSchedules",
+        "AAD-DirectoryRoles"
+      ],
+      "EvidenceSource": "Graph: PIM eligibility and assignment schedules, access reviews (Invoke-NRGCollectAADPIM); Graph: directory role members (Invoke-NRGCollectAADRoles)",
+      "ExpectedState": "No permanent privileged role assignments beyond the break-glass pair; admins are PIM-eligible.",
+      "SlaClass": "High",
+      "DependsOn": [
+        "AAD-7.2"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "PIM activation history shows admins activating roles, not holding them.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Standing admin rights are the target of every privilege-escalation path.",
+      "WhyNrgOwnsThis": "PIM eligible-only admin is NRG's target state where P2 exists.",
+      "Notes": "Requires Entra ID P2. The break-glass pair remains permanent by design. Partially automated: PIM eligibility is read; whether the remaining permanent GAs are the break-glass pair is confirmed by a person."
+    },
+    {
+      "ControlId": "AAD-3.3",
+      "Title": "PIM Requires MFA on Activation",
+      "Tier": "Hardened",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-IdentityGovernance"
+      ],
+      "EvidenceSource": "Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance)",
+      "ExpectedState": "Every privileged PIM role requires MFA on activation.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "AAD-3.2"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "PIM activation events show MFA satisfied.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Activation without MFA makes PIM a formality.",
+      "WhyNrgOwnsThis": "Same as AAD-3.2.",
+      "Notes": "Requires Entra ID P2."
+    },
+    {
+      "ControlId": "AAD-8.2",
+      "Title": "Access Reviews for Privileged Roles",
+      "Tier": "Hardened",
+      "Owner": "Identity",
+      "RawDataKeys": [
+        "AAD-PIMSchedules"
+      ],
+      "EvidenceSource": "Graph: PIM eligibility and assignment schedules, access reviews (Invoke-NRGCollectAADPIM)",
+      "ExpectedState": "A recurring access review covers every privileged role.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "AAD-3.2"
+      ],
+      "FreshnessClass": "Monthly",
+      "EffectivenessCheck": "Reviews complete on schedule with decisions applied, not auto-approved.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Privileged access that is never reviewed only grows.",
+      "WhyNrgOwnsThis": "Quarterly access reviews are part of NRG's regulated-client offering.",
+      "Notes": "Requires Entra ID P2 and the AccessReview.Read.All consent."
+    },
+    {
+      "ControlId": "DNS-1.4",
+      "Title": "MTA-STS Policy in Enforce Mode",
+      "Tier": "Hardened",
+      "Owner": "DNS",
+      "RawDataKeys": [
+        "DNS-EmailRecords"
+      ],
+      "EvidenceSource": "DNS over HTTPS (Cloudflare, Google) with Resolve-DnsName fallback (Invoke-NRGCollectDNSEmailRecords)",
+      "ExpectedState": "MTA-STS is published in enforce mode with a valid policy file.",
+      "SlaClass": "Standard",
+      "DependsOn": [],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "TLS-RPT reports show no delivery failures.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "MTA-STS stops downgrade attacks on inbound mail transport.",
+      "WhyNrgOwnsThis": "Regulated clients; operationally quiet once set."
+    },
+    {
+      "ControlId": "INT-4.2",
+      "Title": "Windows Hello for Business Deployed",
+      "Tier": "Hardened",
+      "Owner": "Endpoint",
+      "RawDataKeys": [
+        "Intune-DeviceCompliance"
+      ],
+      "EvidenceSource": "Graph: Intune compliance policies, enrollment configuration, update rings, devices (Invoke-NRGCollectIntuneDeviceCompliance)",
+      "ExpectedState": "Windows Hello for Business is enabled for enrolled Windows devices.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "INT-1.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Sign-in logs show WHfB as the method for user sign-ins.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Windows Hello for Business is the phishing-resistant credential for users, not just admins.",
+      "WhyNrgOwnsThis": "Elevated-risk clients.",
+      "Notes": "Hardware and rollout dependent."
+    },
+    {
+      "ControlId": "PVW-1.3",
+      "Title": "DLP Policy Active for Sensitive Data",
+      "Tier": "Hardened",
+      "Owner": "Collaboration & Data",
+      "RawDataKeys": [
+        "Purview"
+      ],
+      "EvidenceSource": "Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview)",
+      "ExpectedState": "A DLP policy in enforce mode covers the client's sensitive information types across Exchange, SharePoint, OneDrive and Teams.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "PVW-1.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "DLP reports show matches and blocks, not only test-mode hits.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "DLP is the control for regulated data leaving the tenant.",
+      "WhyNrgOwnsThis": "Regulated clients.",
+      "Notes": "Needs a sensitive-information-type design first; PVW-3.4 and DEF-4.1/4.2 are the same policy family."
+    },
+    {
+      "ControlId": "PVW-4.1",
+      "Title": "Microsoft Purview Audit (Premium) Enabled",
+      "Tier": "Hardened",
+      "Owner": "Logging",
+      "RawDataKeys": [
+        "Purview"
+      ],
+      "EvidenceSource": "Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview)",
+      "ExpectedState": "Audit (Premium) is enabled for E5-licensed users.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "PVW-1.1"
+      ],
+      "FreshnessClass": "Monthly",
+      "EffectivenessCheck": "MailItemsAccessed events appear for E5 mailboxes.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Audit (Premium) adds the MailItemsAccessed events that prove what an attacker read.",
+      "WhyNrgOwnsThis": "E5 clients get the full investigation record.",
+      "Notes": "Requires E5 or E5 Compliance."
+    },
+    {
+      "ControlId": "PVW-4.2",
+      "Title": "Audit Log Retention Policy Extends to 1 Year or More",
+      "Tier": "Hardened",
+      "Owner": "Logging",
+      "RawDataKeys": [
+        "Purview"
+      ],
+      "EvidenceSource": "Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview)",
+      "ExpectedState": "A retention policy keeps audit records for one year or more.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "PVW-4.1"
+      ],
+      "FreshnessClass": "Monthly",
+      "EffectivenessCheck": "Events older than 180 days are searchable.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "One-year retention covers the long-dwell compromise.",
+      "WhyNrgOwnsThis": "Same as PVW-4.1.",
+      "Notes": "Requires E5 or E5 Compliance."
+    },
+    {
+      "ControlId": "PVW-4.3",
+      "Title": "Sensitivity Labels Defined and Published",
+      "Tier": "Hardened",
+      "Owner": "Collaboration & Data",
+      "RawDataKeys": [
+        "Purview"
+      ],
+      "EvidenceSource": "Security & Compliance PowerShell: audit, retention, DLP, labels, alert policies (Invoke-NRGCollectPurview)",
+      "ExpectedState": "Sensitivity labels are defined and published to all users.",
+      "SlaClass": "Standard",
+      "DependsOn": [],
+      "FreshnessClass": "Monthly",
+      "EffectivenessCheck": "Label usage reports show labels being applied.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Sensitivity labels are the foundation for DLP, Copilot and sharing controls.",
+      "WhyNrgOwnsThis": "Regulated clients.",
+      "Notes": "PVW-1.4 reads the same state and counts once."
+    },
+    {
+      "ControlId": "SPO-1.5",
+      "Title": "Unmanaged Device Access Restricted",
+      "Tier": "Hardened",
+      "Owner": "Collaboration & Data",
+      "RawDataKeys": [
+        "SharePoint"
+      ],
+      "EvidenceSource": "Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint)",
+      "ExpectedState": "Unmanaged devices get browser-only, no-download access to SharePoint and OneDrive.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "AAD-2.3"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "No file downloads from unmanaged devices in the audit log.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Unmanaged devices downloading company files defeat every endpoint control.",
+      "WhyNrgOwnsThis": "Same goal as AAD-2.3, applied to SharePoint and OneDrive access.",
+      "Notes": "Relies on CA (Entra ID P1)."
+    },
+    {
+      "ControlId": "SPO-2.1",
+      "Title": "OneDrive Sync Client Restricted to Managed Devices",
+      "Tier": "Hardened",
+      "Owner": "Collaboration & Data",
+      "RawDataKeys": [
+        "SharePoint"
+      ],
+      "EvidenceSource": "Graph SharePoint tenant settings; SPO Management Shell when -IncludeSharePointShell (Invoke-NRGCollectSharePoint)",
+      "ExpectedState": "OneDrive sync is restricted to devices joined to the tenant domain.",
+      "SlaClass": "Standard",
+      "DependsOn": [
+        "INT-1.1"
+      ],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "No sync client sessions from unmanaged devices in the audit log.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Sync on unmanaged devices copies company data to home PCs.",
+      "WhyNrgOwnsThis": "Elevated-risk clients."
+    },
+    {
+      "ControlId": "TMS-4.3",
+      "Title": "Teams External Domain Federation Restricted to Allowlist",
+      "Tier": "Hardened",
+      "Owner": "Collaboration & Data",
+      "RawDataKeys": [
+        "Teams"
+      ],
+      "EvidenceSource": "Teams PowerShell: meeting, messaging and federation policies (Invoke-NRGCollectTeams)",
+      "ExpectedState": "External federation is restricted to an allowlist of partner domains.",
+      "SlaClass": "Standard",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "Chat audit shows no messages from unlisted domains.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Open federation lets any Teams tenant message users directly, the current phishing channel of choice.",
+      "WhyNrgOwnsThis": "Regulated clients run an allowlist.",
+      "Notes": "Business impact; needs a partner list."
+    },
+    {
+      "ControlId": "VM-VERIFY-01",
+      "Title": "Vulnerability remediation is independently verified against the current vulnerability state",
+      "Tier": "Minimum",
+      "Owner": "Vulnerability",
+      "RawDataKeys": [],
+      "EvidenceSource": "Manual: Defender Vulnerability Management console (no collector yet). Device build standard item DB-4.8.",
+      "ExpectedState": "For every remediated critical or high vulnerability, Defender Vulnerability Management shows an affected-device count of zero, allowing for its documented lag.",
+      "SlaClass": "Immediate",
+      "DependsOn": [],
+      "FreshnessClass": "Daily",
+      "EffectivenessCheck": "Defender Vulnerability Management affected-device count for the CVE is zero.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "The patching tool is evidence of deployment; only a source that observes the device can say the vulnerability is gone.",
+      "WhyNrgOwnsThis": "Verification before closure is the control that turns a patch ticket into a remediated vulnerability.",
+      "Notes": "Not a controls.json control and not assessed by the tool: it always resolves NotVerified until a Defender Vulnerability Management collector exists. That is the honest state, not a defect.",
+      "Automated": false,
+      "DeviceBaselineItem": "DB-4.8"
+    }
+  ]
+}
