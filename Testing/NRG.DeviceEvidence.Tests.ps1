@@ -25,13 +25,13 @@ Describe 'Endpoint evidence: coverage and freshness gate the Effective label' {
                         Checks = @([ordered]@{ Id = 'DEV-2.8'; Result = $Result; Observed = 'o'; Detail = '' }) }
         }
         $script:Load = {
-            param([object[]] $Devices, $WindowsFleet = $null)
+            param([object[]] $Devices, $WindowsFleet = $null, [string[]] $Names = $null)
             Clear-NRGState
             Set-NRGRawData -Key 'Device-Compliance' -Data @{ CollectorId = 'Device-Compliance'; CollectedAt = $script:Now.ToString('o'); Success = $true
                 Data = @{ Devices = @($Devices); DeviceCount = @($Devices).Count; SectionStatus = @{ DeviceResults = 'Collected' } } }
             if ($null -ne $WindowsFleet) {
                 Set-NRGRawData -Key 'Intune-DeviceCompliance' -Data @{ CollectorId = 'Intune-DeviceCompliance'; CollectedAt = $script:Now.ToString('o'); Success = $true
-                    Data = @{ SectionStatus = @{ OSComplianceSummary = 'Collected' }; OSComplianceSummary = @{ ByPlatform = @{ Windows = $WindowsFleet; iOS = 4 } } } }
+                    Data = @{ SectionStatus = @{ OSComplianceSummary = 'Collected' }; OSComplianceSummary = $(if ($null -ne $Names) { @{ ByPlatform = @{ Windows = $WindowsFleet; iOS = 4 }; WindowsDeviceNames = @($Names) } } else { @{ ByPlatform = @{ Windows = $WindowsFleet; iOS = 4 } } }) } }
             }
             Test-NRGControlDevice
             @(Get-NRGFindings | Where-Object { $_.ControlId -eq 'DEV-2.8' })[0]
@@ -72,7 +72,7 @@ Describe 'Endpoint evidence: coverage and freshness gate the Effective label' {
 
     Context 'coverage on every endpoint finding' {
         It 'complete only when every device gave a verdict, none is stale, and the fleet is the expected size' {
-            $f = & $script:Load @((& $script:Dev 'A'), (& $script:Dev 'B')) 2
+            $f = & $script:Load @((& $script:Dev 'A'), (& $script:Dev 'B')) 2 @('A','B')
             $f.Coverage.Complete | Should -BeTrue
             $f.Coverage.ExpectedFleet | Should -Be 2
             @($f.Coverage.Reasons).Count | Should -Be 0
@@ -88,6 +88,25 @@ Describe 'Endpoint evidence: coverage and freshness gate the Effective label' {
             $f.Coverage.NotAssessed | Should -Be 1
             $f.Coverage.Complete | Should -BeFalse
         }
+        It 'a current result for a machine Intune does not list cannot stand in for one it does: same count, not complete' {
+            $f = & $script:Load @((& $script:Dev 'A'), (& $script:Dev 'GONE')) 2 @('A','B')
+            $f.Coverage.Complete | Should -BeFalse
+            ($f.Coverage.Reasons -join ' ') | Should -Match '1 of 2 managed Windows devices have no current result \(B\)'
+        }
+        It 'names are matched by short host name, whatever the case or domain suffix' {
+            $f = & $script:Load @((& $script:Dev 'a.corp.local'), (& $script:Dev 'B')) 2 @('A','b.corp.local')
+            $f.Coverage.Complete | Should -BeTrue
+        }
+        It 'a stale result does not cover its machine' {
+            $f = & $script:Load @((& $script:Dev 'A'), (& $script:Dev 'B' 'Pass' 30)) 2 @('A','B')
+            $f.Coverage.Complete | Should -BeFalse
+            ($f.Coverage.Reasons -join ' ') | Should -Match 'no current result \(B\)'
+        }
+        It 'a matching count with no device names to match against is not complete' {
+            $f = & $script:Load @((& $script:Dev 'A'), (& $script:Dev 'B')) 2
+            $f.Coverage.Complete | Should -BeFalse
+            ($f.Coverage.Reasons -join ' ') | Should -Match 'not matched to the Intune inventory'
+        }
         It 'no Intune managed-device count means completeness cannot be shown' {
             $f = & $script:Load @((& $script:Dev 'A')) $null
             $f.Coverage.Complete | Should -BeFalse
@@ -97,7 +116,7 @@ Describe 'Endpoint evidence: coverage and freshness gate the Effective label' {
 
     Context 'the baseline label' {
         It 'complete and current: Effective' {
-            $f = & $script:Load @((& $script:Dev 'A'), (& $script:Dev 'B')) 2
+            $f = & $script:Load @((& $script:Dev 'A'), (& $script:Dev 'B')) 2 @('A','B')
             $row = & $script:Effectiveness $f
             $row.EffectivenessState | Should -Be 'Effective'
             $row.EffectivenessDetail | Should -Match 'current results'

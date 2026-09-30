@@ -143,10 +143,17 @@ function Test-NRGControlDevice {
         elseif (($now - $ts.ToUniversalTime()).TotalDays -gt $script:NRGDeviceResultMaxAgeDays) { $staleAge[$devHost] = [int][math]::Floor(($now - $ts.ToUniversalTime()).TotalDays) }
     }
     $staleCount = $staleAge.Count
+    # Devices with a current result, by short name, for matching to the inventory.
+    $currentHosts = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($d in $devices) {
+        $devHost = ([string](Get-NRGObjectField -Item $d -Key 'Hostname' -Default '')).ToUpperInvariant()
+        if ($devHost -and -not $staleAge.ContainsKey($devHost)) { [void]$currentHosts.Add($devHost.Split('.')[0]) }
+    }
 
     # The fleet the results should cover: the managed Windows devices Intune
     # reported, when it did. Without a reference, completeness cannot be shown.
     $expectedFleet = $null
+    $expectedNames = $null
     $intune = Get-NRGRawData -Key 'Intune-DeviceCompliance'
     if ($intune -and (Get-NRGObjectField -Item $intune -Key 'Success' -Default $false)) {
         $byPlat = Get-NRGNestedProperty -Object $intune -Path 'Data.OSComplianceSummary.ByPlatform' -Default $null
@@ -156,6 +163,11 @@ function Test-NRGControlDevice {
             $sum = 0
             foreach ($n in $names) { if ($n -match '^Windows') { $sum += [int](Get-NRGObjectField -Item $byPlat -Key $n -Default 0) } }
             $expectedFleet = $sum
+            # Identities, when the collector recorded them. A count cannot tell
+            # a current result for a removed machine from one for a managed
+            # machine that is missing, so completeness is judged by name.
+            $wn = Get-NRGNestedProperty -Object $intune -Path 'Data.OSComplianceSummary.WindowsDeviceNames' -Default $null
+            if ($null -ne $wn) { $expectedNames = @(@($wn) | Where-Object { $_ } | ForEach-Object { ([string]$_).Split('.')[0].ToUpperInvariant() }) }
         }
     }
     $covByCid = @{}
@@ -240,7 +252,17 @@ function Test-NRGControlDevice {
         if ($missing -gt 0)           { $reasons.Add("$missing device(s) reported no result for this check") }
         if ($staleCount -gt 0)        { $reasons.Add("$staleCount device(s) reported results older than $($script:NRGDeviceResultMaxAgeDays) days") }
         if ($null -eq $expectedFleet) { $reasons.Add('the expected fleet size is not known (no Intune managed-device count)') }
-        elseif ($total -lt $expectedFleet) { $reasons.Add("$total of $expectedFleet managed Windows devices reported") }
+        elseif ($null -eq $expectedNames) {
+            if ($total -lt $expectedFleet) { $reasons.Add("$total of $expectedFleet managed Windows devices reported") }
+            $reasons.Add('device names were not matched to the Intune inventory (count only)')
+        } else {
+            $unreported = @($expectedNames | Where-Object { -not $currentHosts.Contains($_) })
+            if ($unreported.Count -gt 0) {
+                $sample = (@($unreported | Sort-Object | Select-Object -First 5) -join ', ')
+                $more = if ($unreported.Count -gt 5) { " and $($unreported.Count - 5) more" } else { '' }
+                $reasons.Add("$($unreported.Count) of $($expectedNames.Count) managed Windows devices have no current result ($sample$more)")
+            }
+        }
         $covByCid[$cid] = [ordered]@{
             Devices       = $total
             Verdicts      = $verdicts

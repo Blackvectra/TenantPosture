@@ -252,7 +252,7 @@ try {
 
     # Name the mailbox these findings describe and what they rest on.
     $profileBag = Get-NRGRawData -Key 'IR-MailboxProfile'
-    $subjectUpn = if ($profileBag -and $profileBag.Success -and $profileBag.Data.UserPrincipalName) { [string]$profileBag.Data.UserPrincipalName } else { [string]$reportMetadata['ConnectedAdmin'] }
+    $subjectUpn = if ($profileBag -and $profileBag.Success -and $profileBag.Data.UserPrincipalName) { [string]$profileBag.Data.UserPrincipalName } else { [string]$UserPrincipalName }
     if ($subjectUpn) { $null = Set-NRGFindingSubject -Since $findingsBefore -Subject $subjectUpn -Evidence (Get-NRGDeepDiveEvidence) }
     $findings = @(Get-NRGFindings)
     $rawData  = Get-NRGRawData

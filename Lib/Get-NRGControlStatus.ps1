@@ -6,7 +6,8 @@
 # Purpose: Look up specific controls (from a ticket, a work order, a client
 #          request) in an assessment's findings and say, per control, whether
 #          the configuration is in place, open, partly in place, or was not
-#          assessed and why.
+#          assessed and why. An Error finding is Not assessed, never Open: a
+#          failed check has not shown the control is unconfigured.
 #
 #          A VIEW, like Get-NRGAssessmentScope: it emits no findings, moves no
 #          score and reads no tenant.
@@ -95,7 +96,7 @@ function Get-NRGControlStatus {
                 'Satisfied' { $status = 'In place';        $reason = 'The assessment found this configured.' }
                 'Gap'       { $status = 'Open';            $reason = 'The assessment found this not configured.' }
                 'Partial'   { $status = 'Partly in place'; $reason = 'Configured in part; the detail says what remains.' }
-                'Error'     { $status = 'Open';            $reason = 'The check errored; treat as not confirmed.' }
+                'Error'     { $status = 'Not assessed';    $reason = 'The check errored, so the assessment did not establish whether this is configured.' }
                 default {
                     $status = 'Not assessed'
                     $reason = if     ($detail -match 'upgrade opportunity')             { 'Not scored: the tenant is not licensed for it.' }

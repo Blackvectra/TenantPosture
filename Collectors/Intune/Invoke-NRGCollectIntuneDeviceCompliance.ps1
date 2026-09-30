@@ -217,7 +217,7 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
 
         # ── Managed devices → OS compliance summary ──────────────────────────
         try {
-            $next = 'https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$select=id,operatingSystem,complianceState'
+            $next = 'https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$select=id,deviceName,operatingSystem,complianceState'
             $devList = @()
             # Pagination cap (v4.6.3 P2): managed device count can run into
             # tens of thousands on large tenants. Cap at 200 pages (~200k
@@ -249,6 +249,11 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
                 $byPlatform[$p]++
             }
             $result.Data.OSComplianceSummary.ByPlatform = $byPlatform
+            # The Windows devices by name, so endpoint results can be matched to the
+            # managed inventory by identity, not by count alone.
+            $winNames = @($devList | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'operatingSystem' -Default '') -like 'Windows*' } |
+                ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'deviceName' -Default '') } | Where-Object { $_ })
+            $result.Data.OSComplianceSummary.WindowsDeviceNames = $winNames
         } catch {
             $result.Data.SectionStatus['OSComplianceSummary'] = 'Failed'
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {

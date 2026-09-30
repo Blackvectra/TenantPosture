@@ -228,3 +228,12 @@ Describe 'Deep-dive findings say whose mailbox they describe and what they rest 
         $mail | Should -Match 'Set-NRGFindingSubject'
     }
 }
+
+Describe 'Email assessment: findings stay attributed when the profile read fails' {
+    It 'falls back to the requested mailbox, never a metadata key the script does not set' {
+        $root = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
+        $text = Get-Content -LiteralPath (Join-Path $root 'Invoke-NRGEmailAssessment.ps1') -Raw
+        $text | Should -Not -Match 'ConnectedAdmin'
+        $text | Should -Match 'else \{ \[string\]\$UserPrincipalName \}'
+    }
+}

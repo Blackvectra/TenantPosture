@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Review fixes on the accuracy PR.** Endpoint completeness is now judged by
+  device identity, not count: the Intune collector records the managed Windows
+  device names, and a fleet is Complete only when every one has a current
+  result (a current result for a removed machine no longer stands in for a
+  missing one; without names it is never Complete). `Get-NRGControlStatus`
+  reports an `Error` finding as Not assessed, not Open. The email assessment's
+  attribution fallback uses the requested mailbox.
+
 - **`Get-NRGControlStatus.ps1`: check tickets against a results file.** Give it
   control IDs (`AAD-1.4`) and/or workload prefixes (`TMS`) and a results JSON;
   it says per control whether the configuration is In place, Open, Partly in

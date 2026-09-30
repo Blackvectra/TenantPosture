@@ -46,6 +46,11 @@ Describe 'Get-NRGControlStatus' {
         $r.Reason | Should -Match 'license'
     }
 
+    It 'reports an Error finding as Not assessed, never Open: a failed check has not shown the control is unconfigured' {
+        $f = @(@{ ControlId = 'TMS-1.1'; State = 'Error'; Detail = 'query failed' })
+        (& $script:Get 'TMS-1.1' $f)[0].Status | Should -Be 'Not assessed'
+    }
+
     It 'reports a control with no finding as No result, never a pass' {
         (& $script:Get 'TMS-1.10')[0].Status | Should -Be 'No result'
     }
