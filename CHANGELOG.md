@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **Fixes from the first live run of the updated collectors (NRGTS, 2026-09-30 17:47).** The
+  new evidence arrived: preset exclusion identities (the `careers@` group is excluded from both
+  presets), DLP `BlockAccess` (0 of 2 enforcing rules block), antivirus settings and malware
+  `ZapEnabled` (INT-1.5 and DEF-2.2 now reach a verdict from read values). It also showed two
+  detector defects, both fixed: (1) **a preset rule with no conditions and no exceptions applies
+  to everyone** (Microsoft: empty conditions mean no recipient restrictions), so DEF-2.1 no
+  longer reports the scope as unknown when the collector read the exception fields; it now
+  reports the excluded group as an exception. An older result without those fields still says
+  not established. (2) **DLP**: a workload named on a policy was taken as the workload covered,
+  although the policy may be scoped to a few mailboxes, sites or teams (ScubaGear said the
+  sensitive-information policy was not applied to Exchange, OneDrive, SharePoint or Teams); the
+  collector now stores each workload's location scope (`Get-NRGDlpLocationScope`) and DEF-4.1
+  requires whole-workload scope (All, no exclusions) and says so, or says it could not tell. The
+  HIPAA rule returned no sensitive information types because template rules nest them under
+  groups; `Get-NRGDlpSensitiveTypeNames` now reads flat and grouped shapes (the grouped shape
+  is unverified live until the next run).
+
 - **A multi-page report site, organized the way an assessor navigates, built from existing results.**
   `New-NRGReportSite.ps1 -ResultsPath <results.json> -OutputPath <folder> [-ScubaResultsPath
   ScubaResults.csv]` (connects to nothing) writes a landing page (tenant identity, run time, tool

@@ -110,6 +110,8 @@ function Invoke-NRGCollectPurview {
                             # space. Untrimmed, ' EndpointDevices' never matched: DEF-4.5 said
                             # 'No Endpoint DLP' and PVW-2.5 called covered workloads missing.
                             Workloads  = @(if ($_.Workload) { @(([string]$_.Workload) -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) })
+                            # Who each workload is scoped to (All, or named mailboxes/sites/teams) and what is excluded.
+                            Locations  = (Get-NRGDlpLocationScope -Policy $_)
                         }
                     })
                 }
@@ -131,13 +133,8 @@ function Invoke-NRGCollectPurview {
                     # ContentContainsSensitiveInformation is an array of hashtables,
                     # each naming one SIT. Read every field through Get-NRGObjectField:
                     # rule shape varies by workload and StrictMode is active.
-                    $sits = @(Get-NRGObjectField -Item $r -Key 'ContentContainsSensitiveInformation' -Default @())
-                    $sitNames = @($sits | ForEach-Object {
-                        $one = $_
-                        $n = Get-NRGObjectField -Item $one -Key 'name' -Default ''
-                        if (-not $n) { $n = Get-NRGObjectField -Item $one -Key 'Name' -Default '' }
-                        if ($n) { [string]$n }
-                    } | Where-Object { $_ })
+                    # Flat entries AND grouped conditions (template rules such as HIPAA nest the types).
+                    $sitNames = @(Get-NRGDlpSensitiveTypeNames -Conditions (Get-NRGObjectField -Item $r -Key 'ContentContainsSensitiveInformation' -Default @()))
                     @{
                         Name             = [string](Get-NRGObjectField -Item $r -Key 'Name'             -Default '')
                         ParentPolicyName = [string](Get-NRGObjectField -Item $r -Key 'ParentPolicyName' -Default '')

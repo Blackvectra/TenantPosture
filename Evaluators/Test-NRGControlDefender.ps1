@@ -280,7 +280,15 @@ function Test-NRGControlDefenderPresetPolicies {
                 @(Get-NRGObjectField -Item $_ -Key 'ExceptIfRecipientDomainIs' -Default @()).Count -eq 0) { "unnamed-exclusion:$($g.Name)" }
         } | Sort-Object -Unique)
         if ($scoped.Count -gt 0) { $scopeNotes += "$($g.Name) applies only to named recipients or groups" ; continue }
-        if ($doms.Count -eq 0) { $scopeUnknown += "$($g.Name): the rule returned no recipient scope (no domains, recipients or groups), so who it applies to is not established$(if (@($rules | Where-Object { (Get-NRGObjectField -Item $_ -Key 'HasExceptions' -Default $false) -eq $true }).Count -gt 0) { ', and it has recipient exclusions' + $(if ($ex.Count -gt 0 -and -not ($ex -like 'unnamed-exclusion:*')) { " ($($ex -join ', '))" } else { ' whose identities were not collected in this run' }) })"; continue }
+        # Microsoft documents that when a Standard or Strict preset rule's conditions and exceptions are
+        # all empty there are no recipient restrictions: it applies to everyone. That reading is only safe
+        # when the collector demonstrably read the exception fields (current results carry them); an older
+        # result lacking them cannot tell "empty" from "not read", so scope stays not established.
+        $shaped = @($rules | Where-Object {
+            $r0 = $_
+            if ($r0 -is [System.Collections.IDictionary]) { $r0.Contains('ExceptIfSentToMemberOf') } else { $null -ne $r0.PSObject.Properties['ExceptIfSentToMemberOf'] } }).Count -eq $rules.Count
+        if ($doms.Count -eq 0 -and $shaped) { $cands += [pscustomobject]@{ Name = $g.Name; Exclusions = $ex }; continue }
+        if ($doms.Count -eq 0) { $scopeUnknown += "$($g.Name): the rule returned no recipient scope and this result predates the exclusion fields, so who it applies to is not established"; continue }
         if ($accepted.Count -eq 0) { $scopeNotes += "$($g.Name): the accepted domains were not read, so whether it covers every domain is not established"; continue }
         if ($missingDoms.Count -gt 0) { $scopeNotes += "$($g.Name) does not include accepted domain(s): $($missingDoms -join ', ')"; continue }
         $cands += [pscustomobject]@{ Name = $g.Name; Exclusions = $ex }
@@ -667,15 +675,33 @@ function Test-NRGControlDefenderDLPWorkloads {
     $notEnforcing = @($dlpPolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Mode' -Default '') -ne 'Enable' })
     $covered  = @($enforcing | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'Workloads' -Default @()) } | Sort-Object -Unique)
     $missing  = @($required | Where-Object { $_ -notin $covered })
-    $verified = @(); $short = @()
+    # A workload named on a policy is not the workload covered: the policy may be scoped to a few
+    # mailboxes, sites or teams. Judge the scope per workload across enforcing policies.
+    $fullScope = @(); $partScope = [ordered]@{}; $scopeUnread = @()
+    foreach ($w in @($required | Where-Object { $_ -in $covered })) {
+        $isFull = $false; $named = @(); $unread = $false
+        foreach ($pol in @($enforcing | Where-Object { $w -in @(Get-NRGObjectField -Item $_ -Key 'Workloads' -Default @()) })) {
+            $loc = Get-NRGObjectField -Item (Get-NRGObjectField -Item $pol -Key 'Locations' -Default $null) -Key $w -Default $null
+            $inc = Get-NRGObjectField -Item $loc -Key 'Include' -Default $null
+            if ($null -eq $inc) { $unread = $true; continue }
+            $exc = @(Get-NRGObjectField -Item $loc -Key 'Exclude' -Default @())
+            if (@($inc) -contains 'All' -and $exc.Count -eq 0) { $isFull = $true }
+            else { $named += "$([string](Get-NRGObjectField -Item $pol -Key 'Name' -Default '?')): $(if (@($inc) -contains 'All') { 'all, except ' + ($exc -join ', ') } else { @($inc).Count.ToString() + ' named location(s)' })" }
+        }
+        if ($isFull) { $fullScope += $w } elseif ($named.Count -gt 0) { $partScope[$w] = $named } elseif ($unread) { $scopeUnread += $w }
+    }
+    $verified = @(); $short = @(); $unknownScope = @()
     if ($enforcing.Count -gt 0) { $verified += "$($enforcing.Count) enforcing DLP polic$(if ($enforcing.Count -eq 1) { 'y' } else { 'ies' }) (Mode Enable) cover: $(($required | Where-Object { $_ -in $covered }) -join ', ')$(if (-not ($required | Where-Object { $_ -in $covered })) { 'none of the required workloads' })." }
     if ($missing.Count -gt 0) { $short += "No enforcing policy covers: $($missing -join ', '). Data can leave those channels without policy enforcement." }
+    if ($partScope.Count -gt 0) { $short += "Covered only for part of the workload: $((@($partScope.Keys) | ForEach-Object { "$_ ($($partScope[$_] -join '; '))" }) -join '; ')." }
+    if ($fullScope.Count -gt 0) { $verified += "Whole-workload scope (All, no exclusions) confirmed for: $($fullScope -join ', ')." }
+    if ($scopeUnread.Count -gt 0) { $unknownScope += "whether the policies cover the whole workload or only named locations for: $($scopeUnread -join ', '), because the policy location scope was not returned in this result." }
     if ($notEnforcing.Count -gt 0) {
         $nm = ($notEnforcing | ForEach-Object { "$([string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '?')) [$([string](Get-NRGObjectField -Item $_ -Key 'Mode' -Default 'unknown mode'))]" }) -join '; '
         $verified += "Not counted (not enforcing): $nm."
     }
     if ($enforcing.Count -eq 0) { $short += 'No DLP policy is in enforcing mode (Enable).' }
-    Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished @() `
+    Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknownScope `
         -CurrentValue "Enforcing workloads: $(@($covered) -join ', ')" -RequiredValue 'Enforcing DLP policies covering Exchange, SharePoint, OneDrive and Teams'
 }
 

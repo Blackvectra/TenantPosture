@@ -202,10 +202,22 @@ Describe 'Coverage is judged on who is protected, not on which policies exist' {
             $v = & $script:V21
             $v.State | Should -Be 'NotApplicable'; $v.Detail | Should -Match 'membership was not resolved'
         }
-        It 'a preset that returns no recipient scope is not assumed to cover everyone' {
+        It 'a preset rule with no conditions and no exceptions applies to everyone (Microsoft: empty conditions = no restrictions)' {
             & $script:SetPreset (& $script:Rule 'Standard Preset Security Policy' @()) (& $script:Rule 'Strict Preset Security Policy' @())
             $v = & $script:V21
-            $v.State | Should -Be 'NotApplicable'; $v.Detail | Should -Match 'no recipient scope'; $v.Detail | Should -Match 'Verified: Preset security policy turned on'
+            $v.State | Should -Be 'Satisfied'; $v.Detail | Should -Match 'no recipient exclusions'
+        }
+        It 'the live shape: empty scope with the same group excluded from both presets is Partial, naming the group' {
+            & $script:SetPreset (& $script:Rule 'Standard Preset Security Policy' @() @('careers@contoso.example')) (& $script:Rule 'Strict Preset Security Policy' @() @('careers@contoso.example'))
+            $v = & $script:V21
+            $v.State | Should -Be 'Partial'; $v.Detail | Should -Match 'group:careers@contoso\.example'
+        }
+        It 'an older result without the exception fields cannot tell empty from not read: scope not established' {
+            $old = @{ Name = 'Standard Preset Security Policy'; State = 'Enabled'; RecipientDomainIs = @(); SentTo = @(); SentToMemberOf = @(); HasExceptions = $true }
+            $old2 = @{ Name = 'Strict Preset Security Policy'; State = 'Enabled'; RecipientDomainIs = @(); SentTo = @(); SentToMemberOf = @(); HasExceptions = $true }
+            & $script:SetPreset $old $old2
+            $v = & $script:V21
+            $v.State | Should -Be 'NotApplicable'; $v.Detail | Should -Match 'predates the exclusion fields'
         }
         It 'a preset limited to a named group does not cover the organization' {
             & $script:SetPreset (& $script:Rule 'Standard Preset Security Policy' @('contoso.example') @() @('PILOT')) (& $script:Rule 'Strict Preset Security Policy' @('contoso.example') @() @('PILOT'))
@@ -233,7 +245,7 @@ Describe 'Coverage is judged on who is protected, not on which policies exist' {
         It 'DEF-4.1: enforcing policies covering all four workloads are Satisfied, and the finding claims coverage only' {
             Clear-NRGState; & $script:Pvw @(@{ Name = 'All'; Mode = 'Enable'; Enabled = $true; Workloads = $script:AllWl }) @()
             $v = V 'Test-NRGControlDefenderDLPWorkloads' 'DEF-4.1'
-            $v.State | Should -Be 'Satisfied'; $v.Detail | Should -Not -Match 'block|sensitive'
+            $v.State | Should -Be 'NotApplicable' -Because 'the location scope was not returned, so whole-workload coverage is not proven'; $v.Detail | Should -Not -Match 'block|sensitive'
         }
         It 'DEF-4.2 / PVW-3.4: sensitive information types in a test-mode policy are reported, not credited' {
             Clear-NRGState
@@ -251,6 +263,35 @@ Describe 'Coverage is judged on who is protected, not on which policies exist' {
             Clear-NRGState
             & $script:Pvw @($script:Enf) @(@{ Name = 'r1'; ParentPolicyName = 'PII'; Disabled = $false; BlockAccess = $true; SensitiveInfoTypes = @('U.S. Social Security Number (SSN)') })
             (V 'Test-NRGControlDefenderDLPSITs' 'DEF-4.2').Detail | Should -Match '1 of 1 block access'
+        }
+        It 'sensitive information types are read from flat entries AND from grouped template conditions' {
+            (Get-NRGDlpSensitiveTypeNames -Conditions @(@{ name = 'Credit Card Number'; id = 'x'; mincount = 1 })) | Should -Be @('Credit Card Number')
+            $grouped = @(@{ operator = 'And'; groups = @(@{ name = 'Default'; operator = 'Or'; sensitivetypes = @(@{ name = 'U.S. Social Security Number (SSN)'; id = 'a'; mincount = 1 }, @{ name = 'ICD-10-CM'; id = 'b'; mincount = 1 }) }) })
+            @(Get-NRGDlpSensitiveTypeNames -Conditions $grouped) | Should -Contain 'U.S. Social Security Number (SSN)'
+            @(Get-NRGDlpSensitiveTypeNames -Conditions $grouped) | Should -Contain 'ICD-10-CM'
+            @(Get-NRGDlpSensitiveTypeNames -Conditions $grouped) | Should -Not -Contain 'Default' -Because 'a group name is not a sensitive information type'
+            @(Get-NRGDlpSensitiveTypeNames -Conditions $null).Count | Should -Be 0
+        }
+        It 'DLP location scope is read as All or named, with exclusions' {
+            $l = Get-NRGDlpLocationScope -Policy ([pscustomobject]@{ ExchangeLocation = @([pscustomobject]@{ Name = 'All' }); SharePointLocation = @('https://x/sites/a'); TeamsLocation = @([pscustomobject]@{ Name = 'All' }); TeamsLocationException = @('team1') })
+            $l.Exchange.Include | Should -Be @('All'); $l.SharePoint.Include | Should -Be @('https://x/sites/a')
+            $l.Teams.Exclude | Should -Be @('team1'); $null -eq $l.OneDriveForBusiness.Include | Should -BeTrue
+        }
+        It 'DEF-4.1: a policy scoped to named mailboxes is not whole-workload Exchange coverage' {
+            Clear-NRGState
+            $loc = { param($ex, $sp, $od, $tm) [ordered]@{ Exchange = @{ Include = $ex; Exclude = @() }; SharePoint = @{ Include = $sp; Exclude = @() }; OneDriveForBusiness = @{ Include = $od; Exclude = @() }; Teams = @{ Include = $tm; Exclude = @() } } }
+            & $script:Pvw @(@{ Name = 'All'; Mode = 'Enable'; Enabled = $true; Workloads = $script:AllWl; Locations = (& $loc @('mbx1', 'mbx2') @('All') @('All') @('All')) }) @()
+            $v = V 'Test-NRGControlDefenderDLPWorkloads' 'DEF-4.1'
+            $v.State | Should -Be 'Partial'; $v.Detail | Should -Match 'Exchange \(All: 2 named location'
+            Clear-NRGState
+            & $script:Pvw @(@{ Name = 'All'; Mode = 'Enable'; Enabled = $true; Workloads = $script:AllWl; Locations = (& $loc @('All') @('All') @('All') @('All')) }) @()
+            (V 'Test-NRGControlDefenderDLPWorkloads' 'DEF-4.1').State | Should -Be 'Satisfied'
+        }
+        It 'DEF-4.1: results without the location scope cannot prove whole-workload coverage (not assessed, verified parts kept)' {
+            Clear-NRGState
+            & $script:Pvw @(@{ Name = 'All'; Mode = 'Enable'; Enabled = $true; Workloads = $script:AllWl }) @()
+            $v = V 'Test-NRGControlDefenderDLPWorkloads' 'DEF-4.1'
+            $v.State | Should -Be 'NotApplicable'; $v.Detail | Should -Match 'location scope was not returned'
         }
         It 'a rule whose parent policy was not collected is not assumed to be enforcing' {
             Clear-NRGState

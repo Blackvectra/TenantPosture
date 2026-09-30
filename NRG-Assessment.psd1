@@ -120,6 +120,8 @@
         'Get-NRGCACoverageVerdict',
         'Get-NRGCAPrincipalExclusions',
         'Get-NRGDlpRuleStates',
+        'Get-NRGDlpSensitiveTypeNames',
+        'Get-NRGDlpLocationScope',
         'Get-NRGStandards',
         'Add-NRGExpectedStateFinding',
         'Get-NRGDmarcReportAddresses',
