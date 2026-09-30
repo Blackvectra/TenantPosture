@@ -62,3 +62,27 @@ INT-1.1, DEF-2.3. INT-1.5's and INT-2.2's Settings Catalog parsers have not been
 Keep local validation, CI and live validation separate. For each spot-check: the control, what NRG
 said, what the portal showed, and whether it is explained (time, scope, precedence, unapproved
 standard) or a defect. Then rerun and reassess.
+
+## 6. Comparison worksheet (one row per control, priority order)
+
+Connect each row in this chain: ticket, intended setting, fresh evidence, NRG verdict, independent
+result. Start with the controls this PR changed: Conditional Access scope and exclusions, preset
+coverage, and DLP enforcement mode.
+
+| Ticket | Control | Intended setting (who it covers) | Observed in the portal | NRG observed value | NRG verdict (verified / shortfall / not assessed) | Independent result (rule, strength) | Explained? | Defect? |
+|---|---|---|---|---|---|---|---|---|
+| | AAD-1.1 | Legacy authentication blocked for all users on all apps | | | | MS.AAD.1.1v1, SHALL | | |
+| | AAD-11.1 | Device code flow blocked for all users | | | | MS.AAD.3.9v1, SHOULD | | |
+| | AAD-1.2 / AAD-1.3 | MFA required for all users; phishing-resistant for admins | | | | MS.AAD.3.2v2, MS.AAD.3.6v1 | | |
+| | DEF-2.1 | Preset applies to everyone, exclusions named | | | | no 2.0 equivalent | | |
+| | DEF-4.1 / DEF-4.2 | DLP enforcing (Mode On) on Exchange, SharePoint, OneDrive, Teams; blocks named types | | | | MS.SECURITYSUITE.3.1v1, 3.2v1 | | |
+| | DNS-1.3 | DMARC per the NRG requirement | | | | MS.EXO.4.2v1, SHALL (reject) | | |
+
+"Explained" means the difference is collection time, scope, precedence, an unapproved NRG standard,
+or two standards judging the same configuration differently. "Defect" means none of those apply: keep
+the raw collector output and add a failing test before changing code.
+
+What the fresh run must also show, because fixtures cannot: the collectors returned the evidence the
+new checks need (preset exclusion identities, DLP rule `BlockAccess`, antivirus settings, malware
+`ZapEnabled`), and each report says what was and was not read. If a field is absent, the finding
+should say "not read"; an absent field that reads as a pass is a defect.
