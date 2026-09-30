@@ -108,6 +108,7 @@
         'Get-NRGBaselineExceptions',
         'Get-NRGBaselineCompliance',
         'Get-NRGBaselineRegressions',
+        'Get-NRGControlStatus',
         'Get-NRGBaselinePlan',
         'Compare-NRGBaselinePlan',
         'Format-NRGBaselinePlanSummary',

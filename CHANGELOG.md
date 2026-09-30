@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **`Get-NRGControlStatus.ps1`: check tickets against a results file.** Give it
+  control IDs (`AAD-1.4`) and/or workload prefixes (`TMS`) and a results JSON;
+  it says per control whether the configuration is In place, Open, Partly in
+  place, Not assessed (with the reason: unlicensed, third-party EDR, manual,
+  could not be read) or No result. Only Satisfied is "In place"; a control the
+  run could not assess is never reported as fixed. Reads the results file and
+  `Config/controls.json` only. `-ControlIdFile` and `-OutputPath` (CSV) are
+  supported. `Get-NRGControlStatus` is the exported function behind it.
+
 - **Detection accuracy: whose activity, what evidence, how complete.** From an
   independent source audit of `main`. (1) Both incident-response entry points
   called `Get-NRGRawData -AllKeys`, a parameter that does not exist, so each
