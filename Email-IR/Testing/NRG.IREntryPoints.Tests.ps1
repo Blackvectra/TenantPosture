@@ -92,7 +92,7 @@ function Invoke-MgGraphRequest {
             }
         }
         $script:Email = {
-            param($Routes, [string] $RepoRoot = $script:Root) & $script:Run 'Invoke-NRGEmailAssessment.ps1' "-UserPrincipalName 'alice@corp.example' -NonInteractive" $Routes 'alice@corp.example' $RepoRoot
+            param($Routes, [string] $RepoRoot = $script:Root, [string] $Extra = '') & $script:Run 'Invoke-NRGEmailAssessment.ps1' "-UserPrincipalName 'alice@corp.example' -NonInteractive $Extra" $Routes 'alice@corp.example' $RepoRoot
         }
         # A copy of the tool whose inbox-rule evaluator throws: black-box fault
         # injection for "a required evaluator failed", with no test hook in the
@@ -107,6 +107,17 @@ function Invoke-MgGraphRequest {
         $needle = "function Test-NRGEmailControlInboxRules {`n    [CmdletBinding()] param()"
         if (-not $src.Contains($needle)) { throw 'fault-injection anchor not found' }
         Set-Content -LiteralPath $ev -Encoding utf8 -Value ($src.Replace($needle, $needle + "`n    throw 'injected evaluator fault'"))
+        # A second copy where EVERY incident-response detector throws (later definitions
+        # in the same file replace the real ones), so a run ends with zero findings.
+        $script:FaultyAll = Join-Path $script:Tmp 'faulty-all-copy'
+        Copy-Item -LiteralPath $script:Faulty -Destination $script:FaultyAll -Recurse -Force
+        foreach ($rel in @(@('Email-IR', 'Evaluators', 'Test-NRGEmailControls.ps1'), @('Email-IR', 'Evaluators', 'Test-NRGSignInControls.ps1'))) {
+            $f = Join-Path $script:FaultyAll @rel
+            $text = Get-Content -LiteralPath $f -Raw
+            $names = [regex]::Matches($text, '(?m)^function (Test-NRG(?:EmailControl|SignInControl)\w+)') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+            $over = ($names | ForEach-Object { "`nfunction $_ { [CmdletBinding()] param([Parameter(ValueFromRemainingArguments)] `$Rest) throw 'injected evaluator fault' }" }) -join ''
+            Set-Content -LiteralPath $f -Encoding utf8 -Value ($text + "`n" + $over)
+        }
     }
     AfterAll { if ($script:Tmp -and (Test-Path -LiteralPath $script:Tmp)) { Remove-Item -LiteralPath $script:Tmp -Recurse -Force -ErrorAction SilentlyContinue } }
 
@@ -161,6 +172,30 @@ function Invoke-MgGraphRequest {
             $r = & $script:Email $routes
             @($r.Json.Metadata.EvaluatorFailures).Count | Should -Be 0 -Because ($r.Json.Metadata.EvaluatorFailures -join '; ')
             @($r.Json.Findings | Where-Object { $_.ControlId -eq 'EMAIL-1.1' })[0].State | Should -Be 'Gap'
+        }
+
+        It 'Critical indicators with incomplete evidence: the Critical stays, the incompleteness is stated beside it, and exit code 3 outranks nothing unless -FailOnCriticalIoC' {
+            $rule = @{ match = 'messageRules'; body = @{ value = @(@{ id = 'r1'; displayName = '.'; isEnabled = $true
+                actions = @{ forwardTo = @(@{ emailAddress = @{ address = 'attacker@evil.example' } }); delete = $true }; conditions = @{} }) } }
+            $routes = @(@{ match = 'SentItems/messages'; throw = 'Graph 403 Forbidden' }, $rule) + @(& $script:Benign)
+            $r = & $script:Email $routes
+            $r.Html | Should -Match 'CRITICAL INDICATORS'
+            foreach ($t in $r.Html, $r.Md) { $t | Should -Match 'also incomplete'; $t | Should -Match 'IR-MailboxSentItems' }
+            $r.Json.Metadata.CollectionComplete | Should -BeFalse
+            $r.ExitCode | Should -Be 3
+            $r2 = & $script:Email $routes $script:Root '-FailOnCriticalIoC'
+            $r2.ExitCode | Should -Be 10 -Because 'a Critical crosses the threshold when the operator asked for it; the report still says incomplete'
+            $r2.Html | Should -Match 'also incomplete'
+        }
+
+        It 'zero findings because every required detector failed is NOT CLEARED and exit 3, never "no findings" exit 2' {
+            $r = & $script:Email (& $script:Benign) $script:FaultyAll
+            @($r.Json.Findings).Count | Should -Be 0 -Because $r.Console
+            @($r.Json.Metadata.EvaluatorFailures).Count | Should -BeGreaterThan 3
+            $r.Json.Metadata.CollectionComplete | Should -BeFalse
+            $r.Html | Should -Match 'NOT CLEARED'
+            $r.Html | Should -Not -Match 'NO STRONG INDICATORS'
+            $r.ExitCode | Should -Be 3
         }
 
         It 'a hidden-name rule that forwards out is "critical indicators", never "likely compromised", with complete evidence' {
@@ -254,6 +289,24 @@ function Invoke-MgGraphRequest {
             ($dive.Failures -join ' ') | Should -Match 'Test-NRGEmailControlInboxRules'
             $r.Json.Metadata.CollectionComplete | Should -BeFalse
             ($r.Json.Metadata.CollectionGaps -join ' ') | Should -Match 'alice@corp.example'
+            # The console decision matches the recorded one: a dive whose detector failed is not "complete".
+            $r.Console | Should -Match 'Deep-dive incomplete \(.*Test-NRGEmailControlInboxRules.*\): alice@corp.example'
+            $r.Console | Should -Not -Match 'Deep-dive complete: alice@corp.example'
+            # Critical indicators plus incomplete evidence: both stay visible; the Critical sets exit 10.
+            $r.Html | Should -Match 'CRITICAL INDICATORS'
+            $r.Html | Should -Match 'also incomplete'
+            $r.Md   | Should -Match 'also incomplete'
+            $r.ExitCode | Should -Be 10
+        }
+
+        It 'zero findings because every detector failed is NOT CLEARED and exit 3, never "no findings" exit 2' {
+            $r = & $script:Run 'Invoke-NRGSignInTriage.ps1' "-NonInteractive -EnableThreatIntel:`$false -DeepDive 5 -MaxSignInEvents 100" @() 'admin@corp.example' $script:FaultyAll
+            @($r.Json.Findings).Count | Should -Be 0 -Because $r.Console
+            @($r.Json.Metadata.EvaluatorFailures).Count | Should -BeGreaterThan 3
+            $r.Json.Metadata.CollectionComplete | Should -BeFalse
+            $r.Html | Should -Match 'NOT CLEARED'
+            $r.Html | Should -Not -Match 'NO STRONG INDICATORS'
+            $r.ExitCode | Should -Be 3
         }
     }
 }

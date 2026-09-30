@@ -336,9 +336,16 @@ try {
         Write-Host ''
     }
 
-    if ($findings.Count -eq 0) {
+    # Exit-code precedence (highest first): 4 fatal error, 10 Critical indicator
+    # (only with -FailOnCriticalIoC), 3 evidence incomplete, a required check did
+    # not finish, or exceptions were recorded, 2 no findings, 0 complete. Incomplete
+    # outranks "no findings": a run whose detectors failed has no findings because
+    # nothing evaluated, not because nothing was wrong.
+    if (-not $reportMetadata['CollectionComplete']) {
+        $script:NRGEmailSuccessExitCode = 3
+    } elseif ($findings.Count -eq 0) {
         $script:NRGEmailSuccessExitCode = 2
-    } elseif (@(Get-NRGExceptions).Count -gt 0 -or -not $reportMetadata['CollectionComplete']) {
+    } elseif (@(Get-NRGExceptions).Count -gt 0) {
         $script:NRGEmailSuccessExitCode = 3
     } else {
         $script:NRGEmailSuccessExitCode = 0

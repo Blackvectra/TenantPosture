@@ -361,7 +361,11 @@ try {
                 foreach ($key in $deepDiveKeys) { $snapshot[$key] = Get-NRGRawData -Key $key }
                 $deepDives.Add([ordered]@{ UserPrincipalName = $upn; Score = $u.Score; Reasons = @($u.Reasons); Status = $(if ($evidence.Complete -and $diveFailures.Count -eq 0) { 'Completed' } else { 'Incomplete' }); Failures = @($diveFailures); Evidence = $evidence; RawData = $snapshot })
                 $divedUsers += $upn
-                Write-Host "  [+] Deep-dive $(if ($evidence.Complete) { 'complete' } else { "incomplete (missing: $($evidence.RequiredMissing -join ', '))" }): $upn" -ForegroundColor $(if ($evidence.Complete) { 'Green' } else { 'Yellow' })
+                # The same combined health decision as the recorded Status: a dive whose
+                # evidence was read but whose detectors did not finish is not complete.
+                $diveOk = ($evidence.Complete -and $diveFailures.Count -eq 0)
+                $diveWhy = @(@($evidence.RequiredMissing | ForEach-Object { "missing $_" }) + @($evidence.RequiredPartial | ForEach-Object { "partial $_" }) + @($diveFailures))
+                Write-Host "  [+] Deep-dive $(if ($diveOk) { 'complete' } else { "incomplete ($($diveWhy -join '; '))" }): $upn" -ForegroundColor $(if ($diveOk) { 'Green' } else { 'Yellow' })
             } catch {
                 Write-Warning "Deep-dive collection failed for ${upn}: $($_.Exception.Message)"
                 $deepDives.Add([ordered]@{ UserPrincipalName = $upn; Score = $u.Score; Reasons = @($u.Reasons); Status = 'Failed'; Error = $_.Exception.Message; Evidence = $null; RawData = $null })
@@ -436,6 +440,10 @@ try {
     Write-Host "  Critical IoCs      : $($crits.Count)" -ForegroundColor $(if ($crits.Count -gt 0) {'Red'} else {'Green'})
     Write-Host "  High IoCs          : $($highs.Count)" -ForegroundColor $(if ($highs.Count -gt 0) {'Yellow'} else {'Green'})
     Write-Host "  Users deep-dived   : $(@($reportMetadata['DeepDivedUsers']).Count)" -ForegroundColor White
+    if (-not $reportMetadata['CollectionComplete']) {
+        Write-Host '  NOT CLEARED: part of the evidence could not be read or checked:' -ForegroundColor Yellow
+        foreach ($g in @($reportMetadata['CollectionGaps'])) { Write-Host "    - $g" -ForegroundColor Yellow }
+    }
     Write-Host ''
     if ($crits.Count -gt 0) {
         Write-Host '  ╔══════════════════════════════════════════════════╗' -ForegroundColor Red
@@ -446,8 +454,13 @@ try {
         Write-Host ''
     }
 
-    if ($findings.Count -eq 0) { $script:NRGSITriageSuccessExitCode = 2 }
-    elseif (-not $reportMetadata['CollectionComplete']) { $script:NRGSITriageSuccessExitCode = 3 }
+    # Exit-code precedence (highest first): 4 fatal error, 10 Critical indicator,
+    # 3 evidence incomplete or a required check did not finish, 2 no findings,
+    # 0 complete. Incomplete outranks "no findings": a run whose detectors failed
+    # has no findings because nothing evaluated, not because nothing was wrong.
+    # A Critical still exits 10, and the report and console say NOT CLEARED too.
+    if (-not $reportMetadata['CollectionComplete']) { $script:NRGSITriageSuccessExitCode = 3 }
+    elseif ($findings.Count -eq 0) { $script:NRGSITriageSuccessExitCode = 2 }
     else { $script:NRGSITriageSuccessExitCode = 0 }
     if ($crits.Count -gt 0) { $script:NRGSITriageThresholdExitCode = 10 }
 } catch {

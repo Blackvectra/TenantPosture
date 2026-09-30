@@ -56,7 +56,9 @@ function Publish-NRGSignInTriageReport {
     $verdictColor = if ($byState.Critical.Count -gt 0) { 'red' }
                     elseif ($byState.High.Count -gt 0 -or -not $complete) { 'amber' }
                     else { 'grn' }
-    $verdictBasis = if ($byState.Critical.Count -gt 0) { 'Heuristic indicators, not a confirmed compromise. Verify each flagged account before acting.' }
+    $incompleteNote = if (-not $complete) { " The evidence is also incomplete, so more indicators may exist: $(@($gaps) -join '; ')." } else { '' }
+    $verdictBasis = if ($byState.Critical.Count -gt 0) { "Heuristic indicators, not a confirmed compromise. Verify each flagged account before acting.$incompleteNote" }
+                    elseif ($byState.High.Count -gt 0 -and -not $complete) { "Review the flagged findings.$incompleteNote" }
                     elseif (-not $complete) { "Not cleared: $($gaps -join '; ')." }
                     else { 'Describes the sign-in events read in the window, not the whole tenant.' }
     $verdictIco = if ($verdictColor -eq 'grn') { '&#10003;' } else { '&#9888;' }
