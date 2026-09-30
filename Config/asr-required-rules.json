@@ -1,0 +1,4 @@
+{
+  "_comment": "The Attack Surface Reduction rules NRG requires, every one in Block mode. SHIPS EMPTY ON PURPOSE: the tool does not invent NRG's standard. Add entries as { \"Id\": \"<rule key or a distinctive part of it, lower-case>\", \"Name\": \"<display name>\" }. The Id is matched against the rule key read from the Settings Catalog policy (the setting definition id after 'attacksurfacereductionrules_'). Until this list is approved, INT-2.2 reports the modes read and leaves the rule-set half not assessed.",
+  "Rules": []
+}

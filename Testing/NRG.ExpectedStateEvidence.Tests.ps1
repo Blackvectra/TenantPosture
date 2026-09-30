@@ -118,4 +118,64 @@ Describe 'Expected state: every mandatory component, each half kept visible' {
             (& $script:Verdict 'Test-NRGControlEXOMailboxAudit' 'EXO-1.1').State | Should -Be 'Gap'
         }
     }
+
+    Context 'INT-2.2 ASR: rule modes read, judged only against an approved list' {
+        BeforeAll {
+            $script:Settings = @(
+                @{ id = '0'; settingInstance = @{ '@odata.type' = '#microsoft.graph.deviceManagementConfigurationGroupSettingCollectionInstance'; settingDefinitionId = 'device_vendor_msft_policy_config_defender_attacksurfacereductionrules'
+                    groupSettingCollectionValue = @(@{ children = @(
+                        @{ settingDefinitionId = 'device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockcredentialstealing'; choiceSettingValue = @{ value = 'device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockcredentialstealing_block'; children = @() } }
+                        @{ settingDefinitionId = 'device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockofficemacros'; choiceSettingValue = @{ value = 'device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockofficemacros_audit'; children = @() } }
+                        @{ settingDefinitionId = 'device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockwebshells'; choiceSettingValue = @{ value = 'device_vendor_msft_policy_config_defender_attacksurfacereductionrules_blockwebshells_weird'; children = @() } }
+                        @{ settingDefinitionId = 'device_vendor_msft_policy_config_defender_unrelated'; choiceSettingValue = @{ value = 'device_vendor_msft_policy_config_defender_unrelated_block'; children = @() } }
+                    ) }) } })
+            $script:Es = { param($Status, $Modes) & $script:Raw 'Intune-EndpointSecurity' @{
+                SectionStatus = @{ ASRPolicies = 'Collected' }
+                ASRPolicies = @([pscustomobject]@{ DisplayName = 'ASR'; IsAssigned = $true; AsrSettingsStatus = $Status; AsrRuleModes = $Modes }) } }
+        }
+        It 'parses Block, Audit and Off generically, marks an unrecognized mode Unknown, and ignores non-ASR settings' {
+            $m = Get-NRGAsrRuleModes -Settings $script:Settings
+            $m['blockcredentialstealing'] | Should -Be 'Block'
+            $m['blockofficemacros'] | Should -Be 'Audit'
+            $m['blockwebshells'] | Should -Be 'Unknown:weird'
+            @($m.Keys) | Should -Not -Contain 'unrelated'
+        }
+        It 'no approved required list: modes are reported, the rule-set half stays not assessed, never Satisfied' {
+            Mock -ModuleName 'NRG-Assessment' Get-NRGAsrRequiredRules { @() }
+            Set-NRGRawData -Key 'Intune-EndpointSecurity' -Data (& $script:Es 'Read' ([ordered]@{ a = 'Block'; b = 'Audit' }))
+            $v = & $script:Verdict 'Test-NRGControlIntuneASR' 'INT-2.2'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match '1 in Audit, 1 in Block'
+            $v.Detail | Should -Match 'no required rule list is approved'
+        }
+        It 'settings that could not be read: not assessed, and never assumed Block' {
+            Mock -ModuleName 'NRG-Assessment' Get-NRGAsrRequiredRules { @([pscustomobject]@{ Id = 'a'; Name = 'Rule A' }) }
+            Set-NRGRawData -Key 'Intune-EndpointSecurity' -Data (& $script:Es 'Failed' $null)
+            $v = & $script:Verdict 'Test-NRGControlIntuneASR' 'INT-2.2'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match 'could not be read'
+        }
+        It 'approved list, every required rule in Block: Satisfied' {
+            Mock -ModuleName 'NRG-Assessment' Get-NRGAsrRequiredRules { @([pscustomobject]@{ Id = 'a'; Name = 'Rule A' }, [pscustomobject]@{ Id = 'b'; Name = 'Rule B' }) }
+            Set-NRGRawData -Key 'Intune-EndpointSecurity' -Data (& $script:Es 'Read' ([ordered]@{ rule_a = 'Block'; rule_b = 'Block' }))
+            (& $script:Verdict 'Test-NRGControlIntuneASR' 'INT-2.2').State | Should -Be 'Satisfied'
+        }
+        It 'approved list, some required rules not in Block: Partial, naming each rule and its mode' {
+            Mock -ModuleName 'NRG-Assessment' Get-NRGAsrRequiredRules { @([pscustomobject]@{ Id = 'a'; Name = 'Rule A' }, [pscustomobject]@{ Id = 'b'; Name = 'Rule B' }, [pscustomobject]@{ Id = 'c'; Name = 'Rule C' }) }
+            Set-NRGRawData -Key 'Intune-EndpointSecurity' -Data (& $script:Es 'Read' ([ordered]@{ rule_a = 'Block'; rule_b = 'Audit' }))
+            $v = & $script:Verdict 'Test-NRGControlIntuneASR' 'INT-2.2'
+            $v.State  | Should -Be 'Partial'
+            $v.Detail | Should -Match 'Rule B \(Audit\)'
+            $v.Detail | Should -Match 'Rule C \(NotConfigured\)'
+        }
+        It 'approved list, none in Block: Gap' {
+            Mock -ModuleName 'NRG-Assessment' Get-NRGAsrRequiredRules { @([pscustomobject]@{ Id = 'a'; Name = 'Rule A' }) }
+            Set-NRGRawData -Key 'Intune-EndpointSecurity' -Data (& $script:Es 'Read' ([ordered]@{ rule_a = 'Audit' }))
+            (& $script:Verdict 'Test-NRGControlIntuneASR' 'INT-2.2').State | Should -Be 'Gap'
+        }
+        It 'the shipped required-rule list is empty: the tool does not invent NRG''s standard' {
+            $j = Get-Content -LiteralPath (Join-Path $script:Root 'Config/asr-required-rules.json') -Raw | ConvertFrom-Json
+            @($j.Rules).Count | Should -Be 0
+        }
+    }
 }

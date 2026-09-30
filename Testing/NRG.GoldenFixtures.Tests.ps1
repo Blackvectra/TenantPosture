@@ -212,33 +212,74 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
 
     Context 'EXO-1.6 — Modern Authentication Enabled' {
 
-        It 'Satisfied when OAuth2 is on AND SMTP AUTH is disabled organization-wide (both components)' {
+        It 'Satisfied when OAuth2 is on, SMTP AUTH is disabled organization-wide and no mailbox overrides it' {
             Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
                 OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
                 TransportConfig    = [pscustomobject]@{ SmtpClientAuthenticationDisabled = $true }
+                SmtpAuthConfig     = @{ TenantDisabled = $true; PerMailboxEnabledCount = 0; SampleEnabled = @() }
+                SectionStatus      = @{ SmtpAuthConfig = 'Collected' }
             })
             (GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6').State | Should -Be 'Satisfied'
         }
 
-        It 'Partial when OAuth2 is on but SMTP AUTH is still enabled: the verified half is kept, the shortfall named' {
+        It 'an ENABLED mailbox override beside an organization-level disable is an exception: Partial when nothing blocks passwords' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
+                TransportConfig    = [pscustomobject]@{ SmtpClientAuthenticationDisabled = $true }
+                SmtpAuthConfig     = @{ TenantDisabled = $true; PerMailboxEnabledCount = 2; SampleEnabled = @('scanner@contoso.com', 'app@contoso.com') }
+                SectionStatus      = @{ SmtpAuthConfig = 'Collected' }
+            })
+            Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{ Policies = @( NewCaPolicy -DisplayName 'MFA' -State 'enabled' -ClientAppTypes @('browser') -BuiltInControls @('mfa') ) })
+            Set-NRGRawData -Key 'AAD-AuthPolicies' -Data (NewRaw 'AAD' @{ SecurityDefaults = @{ IsEnabled = $false } })
+            $v = GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6'
+            $v.State  | Should -Be 'Partial'
+            $v.Detail | Should -Match '2 mailbox\(es\) override it'
+            $v.Detail | Should -Match 'scanner@contoso.com'
+            $v.Detail | Should -Match 'Verified: modern authentication'
+        }
+
+        It 'SMTP AUTH enabled is OAuth-capable: with legacy authentication blocked tenant-wide, passwords are not allowed and the control is Satisfied' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
+                TransportConfig    = [pscustomobject]@{ SmtpClientAuthenticationDisabled = $false }
+            })
+            Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{
+                Policies = @( NewCaPolicy -DisplayName 'Block legacy auth' -State 'enabled' -ClientAppTypes @('other', 'exchangeActiveSync') -BuiltInControls @('block') ) })
+            $v = GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6'
+            $v.State  | Should -Be 'Satisfied'
+            $v.Detail | Should -Match 'password authentication to legacy protocols is blocked'
+        }
+
+        It 'SMTP AUTH enabled with no legacy-authentication block read as absent is Partial, with what was not read stated' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
+                TransportConfig    = [pscustomobject]@{ SmtpClientAuthenticationDisabled = $false }
+            })
+            Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{ Policies = @( NewCaPolicy -DisplayName 'MFA' -State 'enabled' -ClientAppTypes @('browser') -BuiltInControls @('mfa') ) })
+            Set-NRGRawData -Key 'AAD-AuthPolicies' -Data (NewRaw 'AAD' @{ SecurityDefaults = @{ IsEnabled = $false } })
+            $v = GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6'
+            $v.State  | Should -Be 'Partial'
+            $v.Detail | Should -Match 'Shortfall: SMTP AUTH is enabled for the organization'
+            $v.Detail | Should -Match 'authentication policies'
+        }
+
+        It 'SMTP AUTH enabled and the legacy-authentication evidence missing: not assessed, never a pass or a fail' {
             Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
                 OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
                 TransportConfig    = [pscustomobject]@{ SmtpClientAuthenticationDisabled = $false }
             })
             $v = GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6'
-            $v.State  | Should -Be 'Partial'
-            $v.Detail | Should -Match 'Verified: modern authentication'
-            $v.Detail | Should -Match 'Shortfall: SMTP AUTH'
-        }
-
-        It 'NotApplicable when OAuth2 is on but the SMTP AUTH setting was not read: OAuth alone does not satisfy the requirement' {
-            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
-                OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
-            })
-            $v = GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6'
             $v.State  | Should -Be 'NotApplicable'
             $v.Detail | Should -Match 'Verified: modern authentication'
-            $v.Detail | Should -Match 'not assessed'
+            $v.Detail | Should -Match 'Conditional Access data was not collected'
+        }
+
+        It 'organization disabled but the mailbox overrides not read: not assessed, never assumed clean' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
+                TransportConfig    = [pscustomobject]@{ SmtpClientAuthenticationDisabled = $true }
+            })
+            (GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6').State | Should -Be 'NotApplicable'
         }
 
         It 'Gap when modern auth is explicitly disabled (basic auth bypasses MFA)' {
@@ -1277,7 +1318,7 @@ Describe 'Golden fixtures — ransomware attack path' {
             $v = GetVerdict3 'Test-NRGControlIntuneASR' 'INT-2.2'
             $v.State  | Should -Be 'NotApplicable'
             $v.Detail | Should -Match 'Verified: 1 assigned Attack Surface Reduction'
-            $v.Detail | Should -Match 'Not assessed: which rules'
+            $v.Detail | Should -Match 'Not assessed: the rule settings of 1 of 1 assigned policy'
         }
 
         It 'Gap when no ASR policy exists (Office macro and credential-theft vectors open)' {

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **EXO-1.6 no longer equates SMTP AUTH with passwords; INT-2.2 reads ASR rule modes.**
+  SMTP AUTH carries OAuth as well as passwords and a mailbox can override an
+  organization-level disable, so EXO-1.6 now judges password availability from the
+  SMTP AUTH switch plus its per-mailbox overrides plus the tenant's legacy-authentication
+  block (`Get-NRGLegacyAuthBlockState`): Satisfied when the block is in place or SMTP is
+  closed with no override, Partial when SMTP is available and nothing blocks passwords
+  (authentication policies are not read, and it says so), not assessed when the evidence
+  is missing. INT-2.2's collector now reads each assigned ASR policy's rule modes
+  (Settings Catalog settings, parsed generically; an unrecognized mode is Unknown, never
+  Block) and judges them against `Config/asr-required-rules.json`, which ships empty until
+  an NRG required-rule list is approved; with no list the modes are reported and the
+  rule-set half stays not assessed. The settings shape is parsed from documented
+  Settings Catalog structure and is unverified against a live tenant.
+
 - **Baseline evidence checks now verify the whole expected state.** A control is
   Satisfied only when every mandatory component is supported; an established
   shortfall is Partial, a component that cannot be read is not assessed, and each

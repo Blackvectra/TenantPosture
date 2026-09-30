@@ -373,31 +373,62 @@ function Test-NRGControlEXOModernAuth {
     $modernAuth = Get-NRGNestedProperty -Object $exoData -Path 'Data.OrganizationConfig.OAuth2ClientProfileEnabled' -Default $null
 
     if ($modernAuth -eq $true) {
-        # Two components: modern authentication on (verified above) and password
-        # authentication off for the protocols where it can still be configured.
-        # Microsoft retired basic authentication for IMAP, POP, EWS, ActiveSync and
-        # the rest; SMTP client submission is the one organization-level switch
-        # that still decides whether a password can be used, so that is the
-        # component read here. OAuth being on does not establish it.
-        $smtpDisabled = Get-NRGNestedProperty -Object $exoData -Path 'Data.TransportConfig.SmtpClientAuthenticationDisabled' -Default $null
-        if ($null -eq $smtpDisabled) { $smtpDisabled = Get-NRGNestedProperty -Object $exoData -Path 'Data.SmtpAuthConfig.TenantDisabled' -Default $null }
-        if ($null -eq $smtpDisabled) {
-            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
-                -Title $control.Title -FrameworkIds $citations `
-                -Detail 'Verified: modern authentication (OAuth2) is enabled for Exchange Online. Not assessed: whether password authentication is off for every protocol, because the organization SMTP AUTH setting was not read.' `
-                -CurrentValue 'OAuth2 enabled; SMTP AUTH setting not read' `
-                -RequiredValue 'Modern authentication enabled and SMTP AUTH disabled organization-wide'
-        } elseif ($smtpDisabled -ne $true) {
-            Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
-                -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
-                -Detail 'Verified: modern authentication (OAuth2) is enabled for Exchange Online. Shortfall: SMTP AUTH is still enabled for the organization, so a password can still be used to submit mail (see EXO-1.2).' `
-                -CurrentValue 'OAuth2 enabled; SmtpClientAuthenticationDisabled = $false' `
-                -RequiredValue 'Modern authentication enabled and SMTP AUTH disabled organization-wide' `
-                -Remediation $control.Remediation
-        } else {
+        # Two components: modern authentication on (verified above) and PASSWORD
+        # ("Basic") authentication not available to legacy protocols. SMTP AUTH being
+        # enabled does not by itself mean passwords are accepted: SMTP AUTH also
+        # carries OAuth. So the second component is judged from what governs
+        # passwords: the SMTP AUTH switch AND its per-mailbox overrides (a mailbox
+        # setting can re-enable SMTP AUTH beside an organization-level disable) and
+        # the tenant's legacy-authentication block (Security Defaults or a
+        # Conditional Access policy blocking 'Other clients'). Missing evidence
+        # stays unknown.
+        $oauthText = 'modern authentication (OAuth2) is enabled for Exchange Online'
+        $smtpOrgDisabled = Get-NRGNestedProperty -Object $exoData -Path 'Data.TransportConfig.SmtpClientAuthenticationDisabled' -Default $null
+        if ($null -eq $smtpOrgDisabled) { $smtpOrgDisabled = Get-NRGNestedProperty -Object $exoData -Path 'Data.SmtpAuthConfig.TenantDisabled' -Default $null }
+        $overrides = $null; $overrideSample = @()
+        if (Test-NRGSectionCollected $exoData 'SmtpAuthConfig') {
+            $sa = Get-NRGObjectField -Item $exoData.Data -Key 'SmtpAuthConfig' -Default $null
+            if ($sa) {
+                $overrides = [int](Get-NRGObjectField -Item $sa -Key 'PerMailboxEnabledCount' -Default 0)
+                $overrideSample = @(Get-NRGObjectField -Item $sa -Key 'SampleEnabled' -Default @())
+            }
+        }
+        $legacyBlock = Get-NRGLegacyAuthBlockState
+
+        $smtpPath = if ($smtpOrgDisabled -eq $true -and $overrides -eq 0) { 'Closed' }
+                    elseif ($smtpOrgDisabled -eq $false -or ($null -ne $overrides -and $overrides -gt 0)) { 'Available' }
+                    else { 'Unknown' }
+        $smtpText = switch ($smtpPath) {
+            'Closed'    { 'SMTP AUTH is disabled for the organization and no mailbox overrides it' }
+            'Available' {
+                if ($smtpOrgDisabled -eq $false) { 'SMTP AUTH is enabled for the organization (it carries OAuth as well as passwords)' }
+                else { "SMTP AUTH is disabled for the organization but $overrides mailbox(es) override it$(if ($overrideSample.Count -gt 0) { ' (for example ' + (($overrideSample | Select-Object -First 3) -join ', ') + ')' })" }
+            }
+            default     { if ($smtpOrgDisabled -eq $true) { 'SMTP AUTH is disabled for the organization but the per-mailbox overrides were not read' } else { 'the SMTP AUTH setting was not read' } }
+        }
+        $reqText = 'Modern authentication enabled and password authentication not available to legacy protocols'
+
+        if ($legacyBlock.Kind -eq 'Blocked') {
             Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
                 -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
-                -Detail 'Modern authentication (OAuth2) is enabled for Exchange Online and SMTP AUTH is disabled organization-wide.'
+                -Detail "Modern authentication (OAuth2) is enabled for Exchange Online, and password authentication to legacy protocols is blocked: $($legacyBlock.Detail). ($smtpText; with the block in place that does not allow passwords.)"
+        } elseif ($smtpPath -eq 'Closed') {
+            Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+                -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+                -Detail "Modern authentication (OAuth2) is enabled for Exchange Online and $smtpText, so SMTP cannot be used with a password."
+        } elseif ($smtpPath -eq 'Available' -and $legacyBlock.Kind -in @('NotBlocked', 'PartlyBlocked')) {
+            Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+                -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
+                -Detail "Verified: $oauthText. Shortfall: $smtpText, and $($legacyBlock.Detail), so a password can still be used to submit mail for the accounts SMTP AUTH is available to. Not read: Exchange authentication policies, which could restrict it further." `
+                -CurrentValue "OAuth2 enabled; $smtpText; $($legacyBlock.Detail)" `
+                -RequiredValue $reqText `
+                -Remediation $control.Remediation
+        } else {
+            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+                -Title $control.Title -FrameworkIds $citations `
+                -Detail "Verified: $oauthText. Not assessed: whether password authentication is available to legacy protocols. $($smtpText.Substring(0,1).ToUpperInvariant() + $smtpText.Substring(1)), and $($legacyBlock.Detail)." `
+                -CurrentValue "OAuth2 enabled; password availability not established" `
+                -RequiredValue $reqText
         }
     } elseif ($modernAuth -eq $false) {
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `

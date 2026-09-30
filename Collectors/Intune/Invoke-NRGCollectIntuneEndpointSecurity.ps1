@@ -121,6 +121,29 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
                     LastModifiedDateTime= (Get-NRGObjectField -Item $p -Key 'lastModifiedDateTime' -Default $null)
                 }
 
+                # For an assigned ASR policy, read the rules it configures and each rule's
+                # mode: a policy existing does not show Block mode. A failed read is recorded
+                # on the entry, never guessed.
+                if ($bucket -eq 'ASR' -and $entry.IsAssigned -ne $false -and $entry.Id) {
+                    try {
+                        $sUri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$($entry.Id)/settings"
+                        $sAll = @(); $sPages = 0
+                        while ($sUri -and $sPages -lt 20) {
+                            $sPage = Invoke-NRGGraphRequest -Method GET -Uri $sUri -ErrorAction Stop
+                            if ($sPage.value) { $sAll += $sPage.value }
+                            $sUri = $sPage['@odata.nextLink']
+                            $sPages++
+                        }
+                        $entry.AsrRuleModes = Get-NRGAsrRuleModes -Settings $sAll
+                        $entry.AsrSettingsStatus = $(if ($sUri) { 'Partial' } else { 'Read' })
+                    } catch {
+                        $entry.AsrSettingsStatus = 'Failed'
+                        if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                            Register-NRGException -Source 'Intune-EndpointSecurity-AsrSettings' -Message $_.Exception.Message
+                        }
+                    }
+                }
+
                 $result.Data.EndpointSecurityPolicies += $entry
 
                 switch ($bucket) {

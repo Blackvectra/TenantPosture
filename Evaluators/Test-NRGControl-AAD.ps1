@@ -238,6 +238,45 @@ function Get-SafeProp {
 #
 
 # ── AAD-1.1 Legacy Authentication Block ──────────────────────────────────────
+function Get-NRGLegacyAuthBlockState {
+    <#
+    .SYNOPSIS
+        Whether password ("Basic") sign-in through legacy protocols is blocked
+        tenant-wide, read from Security Defaults and Conditional Access exactly as
+        AAD-1.1 judges it. Returns an [ordered] Kind and Detail:
+          Blocked         Security Defaults is on, or an enabled CA policy blocks
+                          the 'other' client-app type (IMAP, POP, SMTP AUTH and the
+                          rest) for all users
+          PartlyBlocked   a block exists only for some users or only in report-only
+          NotBlocked      the CA read succeeded and nothing blocks legacy clients
+          Unknown         CA data absent, or the Security Defaults state unresolved
+        Used by EXO-1.6, which must not infer "passwords are allowed" from SMTP AUTH
+        being enabled: SMTP AUTH also carries OAuth.
+    #>
+    [CmdletBinding()] param()
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        return [ordered]@{ Kind = 'Blocked'; Detail = 'Security Defaults is on and blocks legacy authentication tenant-wide' }
+    }
+    $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
+    if (-not $ca -or -not (Get-NRGObjectField -Item $ca -Key 'Success' -Default $false)) {
+        return [ordered]@{ Kind = 'Unknown'; Detail = 'Conditional Access data was not collected' }
+    }
+    if (Test-NRGSecurityDefaultsUnresolved) {
+        return [ordered]@{ Kind = 'Unknown'; Detail = 'the Security Defaults state was not read and no Conditional Access policy is On' }
+    }
+    $legacy = @($ca.Data['Policies'] | Where-Object {
+        @($_.Conditions.ClientAppTypes) -contains 'other' -and (Test-NRGCAGrantRequires -Policy $_ -Any @('block'))
+    })
+    $full = @($legacy | Where-Object { $_.State -eq 'enabled' -and (Test-NRGCAAllUsers $_) })
+    if ($full.Count -gt 0) {
+        return [ordered]@{ Kind = 'Blocked'; Detail = "Conditional Access blocks legacy authentication (Other clients) for all users: $((@($full | ForEach-Object { $_.DisplayName })) -join ', ')" }
+    }
+    if ($legacy.Count -gt 0) {
+        return [ordered]@{ Kind = 'PartlyBlocked'; Detail = 'a legacy-authentication block exists only for some users or only in report-only mode' }
+    }
+    return [ordered]@{ Kind = 'NotBlocked'; Detail = 'no Conditional Access policy blocks legacy authentication and Security Defaults is off' }
+}
+
 function Test-NRGControlAADLegacyAuth {
     [CmdletBinding()] param()
 

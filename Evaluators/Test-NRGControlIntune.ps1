@@ -294,14 +294,42 @@ function Test-NRGControlIntuneASR {
     }
     $st = Get-NRGIntuneBucketState -Raw $int -Section 'ASRPolicies'
     if ($st.Assigned.Count -gt 0) {
-        # The expected state is an ASR rule set in Block mode. A policy's existence is
-        # verified here; which rules it configures and whether each is Block, Audit,
-        # Warn or Off is NOT read (the collector stores the policy, not its settings),
-        # so the enforcement half is not assessed rather than credited.
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
-            -Detail "Verified: $($st.Assigned.Count) assigned Attack Surface Reduction Rules policy(ies).$($st.Note) Not assessed: which rules the policy configures and whether each is in Block rather than Audit mode; the rule settings are not read, so ASR enforcement is not established." `
-            -CurrentValue "$($st.Assigned.Count) assigned ASR policy(ies); rule set and modes not read" `
-            -RequiredValue 'The NRG ASR rule set assigned with every rule in Block mode'
+        # The expected state is the approved NRG ASR rule set, every rule in Block
+        # mode. The policy existing is verified; the rule modes come from the settings
+        # read (collector), and the REQUIRED list is an operator-approved file that
+        # ships empty. Nothing is inferred: an unread mode is unknown, never Block.
+        $asrPolicies = @($st.Assigned)
+        $read   = @($asrPolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'AsrSettingsStatus' -Default '') -eq 'Read' })
+        $modeMaps = @($read | ForEach-Object { Get-NRGObjectField -Item $_ -Key 'AsrRuleModes' -Default $null } | Where-Object { $null -ne $_ })
+        $allModes = @($modeMaps | ForEach-Object { @($_.Values) })
+        $modeSummary = if ($allModes.Count -gt 0) { ($allModes | Group-Object | Sort-Object Name | ForEach-Object { "$($_.Count) in $($_.Name)" }) -join ', ' } else { '' }
+        $required = @(Get-NRGAsrRequiredRules)
+        $verified = "Verified: $($st.Assigned.Count) assigned Attack Surface Reduction Rules policy(ies).$($st.Note)"
+        if ($read.Count -lt $asrPolicies.Count) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+                -Detail "$verified Not assessed: the rule settings of $($asrPolicies.Count - $read.Count) of $($asrPolicies.Count) assigned policy(ies) could not be read, so which rules are configured and in what mode is not established.$(if ($modeSummary) { " Read so far: $modeSummary." })" `
+                -CurrentValue "$($st.Assigned.Count) assigned ASR policy(ies); rule settings not fully read" `
+                -RequiredValue 'The approved NRG ASR rule set with every rule in Block mode'
+        } elseif ($required.Count -eq 0) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+                -Detail "$verified Rule modes read: $(if ($modeSummary) { $modeSummary } else { 'no ASR rule settings found in the assigned policies' }). Not assessed: whether the approved NRG rule set is in Block mode, because no required rule list is approved (Config/asr-required-rules.json is empty)." `
+                -CurrentValue "$($st.Assigned.Count) assigned ASR policy(ies); $(if ($modeSummary) { $modeSummary } else { 'no rule settings found' })" `
+                -RequiredValue 'The approved NRG ASR rule set with every rule in Block mode'
+        } else {
+            $judge = Test-NRGAsrRuleSet -RuleModeMaps $modeMaps -Required $required
+            if ($judge.NotBlock.Count -eq 0) {
+                Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+                    -Detail "All $($judge.Required) required ASR rule(s) are in Block mode in the assigned policy(ies).$($st.Note)"
+            } else {
+                $list = ($judge.NotBlock | ForEach-Object { "$($_.Name) ($($_.Mode))" }) -join '; '
+                $state = if ($judge.Blocking -gt 0) { 'Partial' } else { 'Gap' }
+                Add-NRGFinding -ControlId $cid -State $state -Category $ctrl.Category -Title $ctrl.Title -Severity $(if ($state -eq 'Gap') { $ctrl.Severity } else { 'Medium' }) -FrameworkIds $cit `
+                    -Detail "$verified Shortfall: $($judge.Required - $judge.Blocking) of $($judge.Required) required ASR rule(s) are not in Block mode: $list." `
+                    -CurrentValue "$($judge.Blocking) of $($judge.Required) required rules in Block mode" `
+                    -RequiredValue 'Every approved NRG ASR rule in Block mode' -Remediation $ctrl.Remediation `
+                    -AffectedObjects @($judge.NotBlock | ForEach-Object { [ordered]@{ Rule = $_.Name; Mode = $_.Mode } })
+            }
+        }
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "No assigned Attack Surface Reduction Rules policy in Intune (Device Control, Exploit Protection and other templates in the same family are not ASR rules).$($st.Note) ASR rules block commodity malware delivery such as Office macro abuse and credential theft." -Remediation $ctrl.Remediation
     }
