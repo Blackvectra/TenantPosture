@@ -209,10 +209,14 @@ function Invoke-NRGEmailCollectSignIns {
     # on. RiskyUsers needs Entra ID P2 and is reported, not required.
     $required = @($recentBag, $anonBag, $travelBag)
     $failed   = @($required | Where-Object { -not $_.Success } | ForEach-Object { $_.CollectorId })
-    $truncNote = if ($recentBag.Success -and $recentBag.Data.Truncated) { " Sign-in read stopped at $MaxEvents events; older events in the window were not read." } else { '' }
+    # The same helper the evaluators and reports use, so coverage and the
+    # conclusion cannot disagree about whether the reads were complete
+    # (anonymous-IP and travel truncation count, not only the recent read).
+    $completeness = Get-NRGSignInCollectionCompleteness
+    $truncNote = if (-not $completeness.Complete) { " Incomplete: $($completeness.Reasons -join '; ')." } else { '' }
     if ($failed.Count -eq $required.Count) {
         Register-NRGCoverage -Family 'Email-IR' -Status 'Failed' -Note "No sign-in read completed ($($failed -join ', '))."
-    } elseif ($failed.Count -gt 0 -or $truncNote) {
+    } elseif ($failed.Count -gt 0 -or -not $completeness.Complete) {
         Register-NRGCoverage -Family 'Email-IR' -Status 'Partial' -Note "Did not complete: $($failed -join ', ').$truncNote"
     } else {
         Register-NRGCoverage -Family 'Email-IR' -Status 'Collected'

@@ -229,7 +229,7 @@ $reportMetadata = [ordered]@{
     ThreatIntelEnabled = [bool]$EnableThreatIntel
     HomeState          = $HomeState
     HomeCountry        = $HomeCountry
-    ToolVersion       = $script:NRGAssessmentVersion
+    ToolVersion       = $(if (Get-Variable -Name NRGAssessmentVersion -ErrorAction SilentlyContinue) { [string]$NRGAssessmentVersion } else { 'unknown' })
     Brand             = $NRGBrand
 }
 
@@ -265,6 +265,10 @@ try {
         'Test-NRGSignInControlRiskyUsers'
     )
     if ($EnableThreatIntel) { $triageEvaluators += 'Test-NRGSignInControlIPIntel' }
+    # A detector that throws or is missing produced no verdict. It is recorded
+    # as an assessment-health gap, never only a warning, so a missing detector
+    # cannot look like a clean result.
+    $evaluatorFailures = [System.Collections.Generic.List[string]]::new()
     foreach ($fn in $triageEvaluators) {
         if (Get-Command $fn -ErrorAction SilentlyContinue) {
             try {
@@ -272,7 +276,10 @@ try {
                 Write-Host "  [+] $fn" -ForegroundColor Green
             } catch {
                 Write-Warning "$fn failed: $($_.Exception.Message)"
+                $evaluatorFailures.Add("$fn did not finish: $($_.Exception.Message)")
             }
+        } else {
+            $evaluatorFailures.Add("$fn was not available to run")
         }
     }
 
@@ -285,6 +292,7 @@ try {
             Write-Host "  [+] Test-NRGSignInControlGeoAnomaly" -ForegroundColor Green
         } catch {
             Write-Warning "Test-NRGSignInControlGeoAnomaly failed: $($_.Exception.Message)"
+            $evaluatorFailures.Add("Test-NRGSignInControlGeoAnomaly did not finish: $($_.Exception.Message)")
         }
     }
 
@@ -295,6 +303,7 @@ try {
             Write-Host "  [+] Test-NRGSignInControlRankUsers" -ForegroundColor Green
         } catch {
             Write-Warning "Test-NRGSignInControlRankUsers failed: $($_.Exception.Message)"
+            $evaluatorFailures.Add("Test-NRGSignInControlRankUsers did not finish: $($_.Exception.Message)")
         }
     }
 
@@ -331,15 +340,18 @@ try {
             foreach ($key in $deepDiveKeys) {
                 Set-NRGRawData -Key $key -Data @{ CollectorId=$key; Success=$false; Data=$null }
             }
+            # Steps of THIS dive that did not finish. A detector that threw produced
+            # no verdict for this user, so the dive is Incomplete, not clean.
+            $diveFailures = [System.Collections.Generic.List[string]]::new()
             try {
                 Invoke-NRGEmailCollectMailbox -WindowDays $WindowDays -TargetUpn $upn
                 # v4.12.1: OAuth consents + auth methods — the two persistence
                 # surfaces a mailbox read can't see (illicit consent grants
                 # survive password resets; attacker-added MFA methods survive
                 # session revocation).
-                try { Invoke-NRGEmailCollectUserSecurity -TargetUpn $upn } catch { Write-Warning "User-security collection for $upn failed: $($_.Exception.Message)" }
+                try { Invoke-NRGEmailCollectUserSecurity -TargetUpn $upn } catch { Write-Warning "User-security collection for $upn failed: $($_.Exception.Message)"; $diveFailures.Add("user-security collection did not finish: $($_.Exception.Message)") }
                 foreach ($fn in @('Test-NRGEmailControlInboxRules','Test-NRGEmailControlForwarding','Test-NRGEmailControlOutboundActivity','Test-NRGEmailControlPhishOrigin','Test-NRGEmailControlOAuthConsents','Test-NRGEmailControlAuthMethods')) {
-                    try { & $fn } catch { Write-Warning "$fn for $upn failed: $($_.Exception.Message)" }
+                    try { & $fn } catch { Write-Warning "$fn for $upn failed: $($_.Exception.Message)"; $diveFailures.Add("$fn did not finish: $($_.Exception.Message)") }
                 }
                 # Say whose these findings are and what they rest on, BEFORE the
                 # next user's dive replaces the raw data.
@@ -347,7 +359,7 @@ try {
                 $null = Set-NRGFindingSubject -Since $findingsBefore -Subject $upn -Evidence $evidence
                 $snapshot = [ordered]@{}
                 foreach ($key in $deepDiveKeys) { $snapshot[$key] = Get-NRGRawData -Key $key }
-                $deepDives.Add([ordered]@{ UserPrincipalName = $upn; Score = $u.Score; Reasons = @($u.Reasons); Status = $(if ($evidence.Complete) { 'Completed' } else { 'Incomplete' }); Evidence = $evidence; RawData = $snapshot })
+                $deepDives.Add([ordered]@{ UserPrincipalName = $upn; Score = $u.Score; Reasons = @($u.Reasons); Status = $(if ($evidence.Complete -and $diveFailures.Count -eq 0) { 'Completed' } else { 'Incomplete' }); Failures = @($diveFailures); Evidence = $evidence; RawData = $snapshot })
                 $divedUsers += $upn
                 Write-Host "  [+] Deep-dive $(if ($evidence.Complete) { 'complete' } else { "incomplete (missing: $($evidence.RequiredMissing -join ', '))" }): $upn" -ForegroundColor $(if ($evidence.Complete) { 'Green' } else { 'Yellow' })
             } catch {
@@ -367,10 +379,14 @@ try {
     $comp = Get-NRGSignInCollectionCompleteness
     $ddGaps = @()
     if ((Get-Variable -Name deepDives -ErrorAction SilentlyContinue) -and $deepDives) {
-        $ddGaps = @($deepDives | Where-Object { $_.Status -ne 'Completed' } | ForEach-Object { "deep-dive for $($_.UserPrincipalName) was $($_.Status.ToLowerInvariant())" })
+        $ddGaps = @($deepDives | Where-Object { $_.Status -ne 'Completed' } | ForEach-Object {
+            $fl = @(Get-NRGObjectField -Item $_ -Key 'Failures' -Default @())
+            "deep-dive for $($_.UserPrincipalName) was $($_.Status.ToLowerInvariant())$(if ($fl.Count -gt 0) { ': ' + ($fl -join '; ') })" })
     }
-    $reportMetadata['CollectionComplete'] = ([bool]$comp.Complete -and $ddGaps.Count -eq 0)
-    $reportMetadata['CollectionGaps']     = @(@($comp.Reasons) + $ddGaps)
+    $evalGaps = @(if ((Get-Variable -Name evaluatorFailures -ErrorAction SilentlyContinue) -and $evaluatorFailures) { $evaluatorFailures })
+    $reportMetadata['CollectionComplete'] = ([bool]$comp.Complete -and $ddGaps.Count -eq 0 -and $evalGaps.Count -eq 0)
+    $reportMetadata['CollectionGaps']     = @(@($comp.Reasons) + $ddGaps + $evalGaps)
+    $reportMetadata['EvaluatorFailures']  = @($evalGaps)
     $reportMetadata['EventsRead']         = [int]$comp.EventsRead
 
     # ── Publish ──────────────────────────────────────────────────────────────
@@ -423,7 +439,7 @@ try {
     Write-Host ''
     if ($crits.Count -gt 0) {
         Write-Host '  ╔══════════════════════════════════════════════════╗' -ForegroundColor Red
-        Write-Host '  ║   CRITICAL IoCs found — likely compromise.       ║' -ForegroundColor Red
+        Write-Host '  ║   CRITICAL indicators found — investigate.       ║' -ForegroundColor Red
         Write-Host '  ║   Review the triage report and take action       ║' -ForegroundColor Red
         Write-Host '  ║   on each flagged user immediately.              ║' -ForegroundColor Red
         Write-Host '  ╚══════════════════════════════════════════════════╝' -ForegroundColor Red
@@ -431,6 +447,7 @@ try {
     }
 
     if ($findings.Count -eq 0) { $script:NRGSITriageSuccessExitCode = 2 }
+    elseif (-not $reportMetadata['CollectionComplete']) { $script:NRGSITriageSuccessExitCode = 3 }
     else { $script:NRGSITriageSuccessExitCode = 0 }
     if ($crits.Count -gt 0) { $script:NRGSITriageThresholdExitCode = 10 }
 } catch {

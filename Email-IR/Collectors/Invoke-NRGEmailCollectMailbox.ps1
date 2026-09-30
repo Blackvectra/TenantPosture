@@ -304,14 +304,16 @@ function Invoke-NRGEmailCollectMailbox {
     try {
         $settings = Invoke-NRGGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/$userPrefix/mailboxSettings" -ErrorAction Stop
         $settingsOut.Data = [ordered]@{
-            DelegateMeetingMessageDeliveryOptions = $settings.delegateMeetingMessageDeliveryOptions
-            AutomaticRepliesSetting               = $settings.automaticRepliesSetting
+            DelegateMeetingMessageDeliveryOptions = Get-NRGObjectField -Item $settings -Key 'delegateMeetingMessageDeliveryOptions' -Default $null
+            AutomaticRepliesSetting               = Get-NRGObjectField -Item $settings -Key 'automaticRepliesSetting' -Default $null
             # Server-side forwarding lives in the Outlook setting object
             # which Graph exposes only partially via mailboxSettings; the
-            # forwarding rule itself comes through messageRules.
-            Language                              = $settings.language
-            TimeZone                              = $settings.timeZone
-            WorkingHours                          = $settings.workingHours
+            # forwarding rule itself comes through messageRules. Graph omits
+            # settings that are not set, so each is read through
+            # Get-NRGObjectField (a bare dot-read throws under StrictMode).
+            Language                              = Get-NRGObjectField -Item $settings -Key 'language' -Default $null
+            TimeZone                              = Get-NRGObjectField -Item $settings -Key 'timeZone' -Default $null
+            WorkingHours                          = Get-NRGObjectField -Item $settings -Key 'workingHours' -Default $null
         }
         $settingsOut.Success = $true
     } catch {

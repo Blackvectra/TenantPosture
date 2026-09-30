@@ -182,7 +182,7 @@ $reportMetadata = [ordered]@{
     UserPrincipalName = $UserPrincipalName
     WindowDays        = $WindowDays
     InboxWindowDays   = 30
-    ToolVersion       = $script:NRGAssessmentVersion
+    ToolVersion       = $(if (Get-Variable -Name NRGAssessmentVersion -ErrorAction SilentlyContinue) { [string]$NRGAssessmentVersion } else { 'unknown' })
     Brand             = $NRGBrand
     ThreatIntelEnabled = [bool]$EnableThreatIntel
 }
@@ -201,11 +201,16 @@ try {
     # ── Collect ──────────────────────────────────────────────────────────────
     Write-Host ''
     Write-Host '[-] Collecting mailbox data...' -ForegroundColor Cyan
+    # What stopped a required step. A throw here or in an evaluator is not just
+    # a warning: it decides whether the result may say "nothing found".
+    $healthGaps = [System.Collections.Generic.List[string]]::new()
+    $evaluatorFailures = [System.Collections.Generic.List[string]]::new()
     try {
         Invoke-NRGEmailCollectMailbox -WindowDays $WindowDays
         Write-Host '  [+] Mailbox data collected' -ForegroundColor Green
     } catch {
         Write-Warning "Mailbox collection failed: $($_.Exception.Message)"
+        $healthGaps.Add("mailbox collection stopped: $($_.Exception.Message)")
     }
     # v4.12.1: OAuth consents + auth methods. Under the delegated 3-scope
     # connection these Graph reads usually 403 — the collector fails soft
@@ -217,6 +222,7 @@ try {
         Write-Host '  [+] User-security data collected (OAuth grants + auth methods)' -ForegroundColor Green
     } catch {
         Write-Warning "User-security collection failed: $($_.Exception.Message)"
+        $healthGaps.Add("user-security collection stopped: $($_.Exception.Message)")
     }
 
     # ── Evaluate ─────────────────────────────────────────────────────────────
@@ -241,12 +247,14 @@ try {
                 Write-Host "  [+] $fn" -ForegroundColor Green
             } catch {
                 Write-Warning "$fn failed: $($_.Exception.Message)"
+                $evaluatorFailures.Add("$fn did not finish: $($_.Exception.Message)")
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     Register-NRGException -Source $fn -Message $_.Exception.Message
                 }
             }
         } else {
             Write-Warning "Evaluator $fn not exported"
+            $evaluatorFailures.Add("$fn was not available to run")
         }
     }
 
@@ -257,6 +265,18 @@ try {
     $findings = @(Get-NRGFindings)
     $rawData  = Get-NRGRawData
     $reportMetadata['FindingCount'] = $findings.Count
+
+    # Assessment health: collection AND evaluation. Successful collection is not
+    # enough: a required detector that threw produced no verdict, and its absence
+    # must not read as a clean one.
+    $evidence = Get-NRGDeepDiveEvidence
+    foreach ($m in @($evidence.RequiredMissing)) { $healthGaps.Add("required source $m was not read") }
+    foreach ($p in @($evidence.RequiredPartial)) { $healthGaps.Add("required source $p") }
+    foreach ($f in $evaluatorFailures) { $healthGaps.Add($f) }
+    $reportMetadata['CollectionComplete'] = ($healthGaps.Count -eq 0)
+    $reportMetadata['CollectionGaps']     = @($healthGaps)
+    $reportMetadata['EvaluatorFailures']  = @($evaluatorFailures)
+    $reportMetadata['Evidence']           = $evidence
 
     # ── Publish ──────────────────────────────────────────────────────────────
     Write-Host ''
@@ -302,10 +322,14 @@ try {
     Write-Host "  Critical IoCs      : $($crits.Count)" -ForegroundColor $(if ($crits.Count -gt 0) {'Red'} else {'Green'})
     Write-Host "  High IoCs          : $($highs.Count)" -ForegroundColor $(if ($highs.Count -gt 0) {'Yellow'} else {'Green'})
     Write-Host "  Output             : $OutputPath"   -ForegroundColor White
+    if (-not $reportMetadata['CollectionComplete']) {
+        Write-Host '  NOT CLEARED: part of the evidence could not be read or checked:' -ForegroundColor Yellow
+        foreach ($g in @($reportMetadata['CollectionGaps'])) { Write-Host "    - $g" -ForegroundColor Yellow }
+    }
     Write-Host ''
     if ($crits.Count -gt 0) {
         Write-Host '  ╔══════════════════════════════════════════════════╗' -ForegroundColor Red
-        Write-Host '  ║   CRITICAL IoCs found — likely compromise.       ║' -ForegroundColor Red
+        Write-Host '  ║   CRITICAL indicators found — investigate.       ║' -ForegroundColor Red
         Write-Host '  ║   Review the incident report and take action     ║' -ForegroundColor Red
         Write-Host '  ║   (revoke sessions, reset password, force MFA).  ║' -ForegroundColor Red
         Write-Host '  ╚══════════════════════════════════════════════════╝' -ForegroundColor Red
@@ -314,7 +338,7 @@ try {
 
     if ($findings.Count -eq 0) {
         $script:NRGEmailSuccessExitCode = 2
-    } elseif (@(Get-NRGExceptions).Count -gt 0) {
+    } elseif (@(Get-NRGExceptions).Count -gt 0 -or -not $reportMetadata['CollectionComplete']) {
         $script:NRGEmailSuccessExitCode = 3
     } else {
         $script:NRGEmailSuccessExitCode = 0

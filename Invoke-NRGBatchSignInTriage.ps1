@@ -19,7 +19,7 @@
     tenants typically SSO silently off the same MSAL session (GDAP).
 
     Per-client exit codes roll up into the batch summary:
-      0 = clean    2 = no findings    10 = CRITICAL IoCs (likely compromise)
+      0 = clean    2 = no findings    10 = CRITICAL indicators (investigate; heuristic, not a confirmed compromise)
 
     Output per client: output\<tenantdomain>\IR-Triage\<timestamp>-signin-triage.html + .md + .json
     Batch summary:     output\triage-summary-<timestamp>.md

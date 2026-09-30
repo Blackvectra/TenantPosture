@@ -45,8 +45,10 @@ function Publish-NRGSignInTriageReport {
     # heuristic, not proof. "No strong indicators" is only allowed when the reads
     # behind it completed; otherwise the tenant is NOT cleared.
     $complete = $true
-    if ($Metadata.ContainsKey('CollectionComplete')) { $complete = [bool]$Metadata['CollectionComplete'] }
-    $gaps = @(); if ($Metadata.ContainsKey('CollectionGaps')) { $gaps = @($Metadata['CollectionGaps']) }
+    # Get-NRGObjectField, not .ContainsKey: the entry point passes an [ordered] dictionary.
+    $cc = Get-NRGObjectField -Item $Metadata -Key 'CollectionComplete' -Default $null
+    if ($null -ne $cc) { $complete = [bool]$cc }
+    $gaps = @(Get-NRGObjectField -Item $Metadata -Key 'CollectionGaps' -Default @()) | Where-Object { $_ }
     $verdict = if ($byState.Critical.Count -gt 0) { 'CRITICAL INDICATORS — INVESTIGATE' }
                elseif ($byState.High.Count -gt 0) { 'SUSPECT ACTIVITY — REVIEW' }
                elseif (-not $complete) { 'NOT CLEARED — EVIDENCE INCOMPLETE' }

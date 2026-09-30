@@ -175,7 +175,12 @@ function Test-NRGEmailControlInboxRules {
     foreach ($r in $rules) {
         $reasons = @()
         $points  = 0
-        $name = [string]$r.displayName
+        # Graph omits properties that are not set, so a rule carries only the
+        # actions it has: every read goes through Get-NRGObjectField (a bare
+        # $r.actions.forwardAsAttachmentTo throws under StrictMode on a rule that
+        # only forwards, which failed this evaluator on real rules).
+        $name = [string](Get-NRGObjectField -Item $r -Key 'displayName' -Default '')
+        $actions = Get-NRGObjectField -Item $r -Key 'actions' -Default $null
         $enabledRaw = Get-NRGObjectField -Item $r -Key 'isEnabled' -Default $null
         $active = ($enabledRaw -ne $false)
 
@@ -184,13 +189,13 @@ function Test-NRGEmailControlInboxRules {
 
         $forwardTo = @()
         $destClass = 'None'
-        if ($r.actions) {
+        if ($actions) {
             foreach ($key in 'forwardTo','forwardAsAttachmentTo','redirectTo') {
-                if ($r.actions.$key) {
-                    foreach ($recip in $r.actions.$key) {
-                        if ($recip.emailAddress -and $recip.emailAddress.address) {
-                            $forwardTo += $recip.emailAddress.address
-                        }
+                $list = Get-NRGObjectField -Item $actions -Key $key -Default $null
+                if ($list) {
+                    foreach ($recip in @($list)) {
+                        $addr = [string](Get-NRGNestedProperty -Object $recip -Path 'emailAddress.address' -Default '')
+                        if ($addr) { $forwardTo += $addr }
                     }
                 }
             }
@@ -206,13 +211,15 @@ function Test-NRGEmailControlInboxRules {
                     default       { }   # same domain: internal forwarding, not an indicator by itself
                 }
             }
-            if ($r.actions.delete -eq $true)          { $reasons += 'deletes matching mail'; $points += 2 }
-            if ($r.actions.permanentDelete -eq $true) { $reasons += 'permanently deletes'; $points += 2 }
+            if ((Get-NRGObjectField -Item $actions -Key 'delete' -Default $false) -eq $true)          { $reasons += 'deletes matching mail'; $points += 2 }
+            if ((Get-NRGObjectField -Item $actions -Key 'permanentDelete' -Default $false) -eq $true) { $reasons += 'permanently deletes'; $points += 2 }
         }
 
         # Always-applies pattern (no filter conditions = applies to everything)
-        $noConditions = (-not $r.conditions -or
-                        ($r.conditions.PSObject.Properties.Count -eq 0 -and (-not ($r.conditions -is [hashtable]) -or $r.conditions.Count -eq 0)))
+        $cond = Get-NRGObjectField -Item $r -Key 'conditions' -Default $null
+        $noConditions = (-not $cond) -or
+                        (($cond -is [System.Collections.IDictionary]) -and $cond.Count -eq 0) -or
+                        (($cond -isnot [System.Collections.IDictionary]) -and @($cond.PSObject.Properties).Count -eq 0)
         if ($noConditions -and $forwardTo.Count -gt 0 -and $destClass -ne 'SameDomain') {
             $reasons += 'no filter conditions (applies to all mail)'; $points += 2
         }
@@ -225,7 +232,7 @@ function Test-NRGEmailControlInboxRules {
         $confidence = if ($points -ge 5) { 'High' } elseif ($points -ge 3) { 'Medium' } else { 'Low' }
         $iocRules += [ordered]@{
             Name        = $name
-            Id          = [string]$r.id
+            Id          = [string](Get-NRGObjectField -Item $r -Key 'id' -Default '')
             Enabled     = $enabledRaw
             Active      = $active
             Severity    = $severity

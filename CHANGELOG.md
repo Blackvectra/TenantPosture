@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- **Completeness contract for the incident-response entry points, proved by running them.**
+  `Email-IR/Testing/NRG.IREntryPoints.Tests.ps1` launches the real
+  `Invoke-NRGEmailAssessment.ps1` and `Invoke-NRGSignInTriage.ps1` in fresh child
+  processes against a stub Microsoft Graph module and asserts the verdict, the JSON
+  health block, the HTML and Markdown wording, report generation and the exit code
+  for complete benign evidence, a failed required read, a read that stopped at its
+  page cap, a required evaluator that throws (by fault injection into a copy of
+  the tool) and two flagged users. Running them found three defects the in-process
+  suite could not: both entry points threw right after the module loaded
+  (`$script:NRGAssessmentVersion` is not set in script scope; the module exports
+  `$NRGAssessmentVersion`), the inbox-rule evaluator threw on any real rule that
+  did not carry every action property (Graph omits unset ones), and the
+  mailbox-settings read threw on absent settings. Health now covers evaluation as
+  well as collection: a required evaluator that throws or is missing, or a dive
+  step that did not finish, is recorded (`EvaluatorFailures`, per-dive `Failures`),
+  makes the run NOT CLEARED and exits 3, in both entry points. The standalone
+  email report takes its verdict from health as well as severity, and no longer
+  says "LIKELY COMPROMISED" for a Critical (it is "CRITICAL INDICATORS —
+  INVESTIGATE", stated as heuristic). The sign-in collector's coverage record now
+  uses the same completeness helper as the report, so anonymous-IP truncation
+  cannot read "Collected" beside an incomplete conclusion. Known limitation kept
+  explicit: same-domain inbox-rule forwarding is judged against the mailbox's own
+  domain only, so forwarding between two domains of one organization can still be
+  flagged for review until accepted-domain evidence is read.
+
 - **Remaining incident-response audit findings (A03, A05, A06, A07, A10) and two review gaps.**
   A07: an IP lookup that failed or returned no owner is `Failed` / `NoOwnerData`,
   never a clean negative; SIGNIN-1.5 is not assessed when no lookup completed, is
