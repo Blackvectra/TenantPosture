@@ -98,9 +98,13 @@ function Invoke-NRGEmailCollectSignIns {
         # filter of the Recent bag if the server-side filter rejects.
         $filter = "createdDateTime ge $cutoff and riskEventTypes_v2/any(t:t eq 'anonymizedIPAddress')"
         $uri = "https://graph.microsoft.com/v1.0/auditLogs/signIns?`$top=1000&`$filter=$filter"
+        $anonTruncated = $false
+        $anonSource = 'server-side filter, first page (1000 events)'
         try {
             $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
             if ($resp.value) { $anonEvents = $resp.value }
+            # One page is read. A next link means more flagged events exist than were read.
+            $anonTruncated = [bool]($resp['@odata.nextLink'])
         } catch {
             # Server-side filter rejected; fall back to client-side over the
             # Recent bag we already collected.
@@ -109,11 +113,15 @@ function Invoke-NRGEmailCollectSignIns {
                     $_.riskEventTypes_v2 -contains 'anonymizedIPAddress' -or
                     $_.riskEventTypes    -contains 'anonymizedIPAddress'
                 }
+                $anonSource = 'client-side over the recent read'
+                $anonTruncated = [bool]$recentBag.Data.Truncated
             }
         }
         $anonBag.Data = [ordered]@{
-            Count  = @($anonEvents).Count
-            Events = @($anonEvents)
+            Count     = @($anonEvents).Count
+            Source    = $anonSource
+            Truncated = $anonTruncated
+            Events    = @($anonEvents)
         }
         $anonBag.Success = $true
     } catch {
@@ -145,8 +153,11 @@ function Invoke-NRGEmailCollectSignIns {
             })
         }
         $travelBag.Data = [ordered]@{
-            Count  = $travelEvents.Count
-            Events = @($travelEvents)
+            Count     = $travelEvents.Count
+            Source    = 'client-side over the recent read'
+            # Derived from the recent read, so it is only as complete as that read.
+            Truncated = [bool]($recentBag.Success -and $recentBag.Data.Truncated)
+            Events    = @($travelEvents)
         }
         $travelBag.Success = $true
     } catch {

@@ -399,6 +399,15 @@ return @{ value = @() }
             $f.Detail | Should -Match '1 Entra Connect sync service account\(s\) excluded'
             @($f.AffectedObjects) | Should -Not -Match 'Sync_'
         }
+        It 'AAD-12.1 describes a registration gap and does not assert that a stolen password compromises the mailbox' {
+            Set-NRGRawData -Key 'AAD-Users' -Data (Raw @{
+                Users = @(@{ UserPrincipalName = 'a@contoso.com'; DisplayName = 'A'; AccountEnabled = $true; UserType = 'Member' })
+                MFARegistration = @{ RegistrationDetails = @(@{ UserPrincipalName = 'a@contoso.com'; IsMfaRegistered = $false; IsEnabled = $true }) } })
+            $f = Verdict 'Test-NRGControlInventoryMFAUsers' 'AAD-12.1'
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'registration gap'
+            $f.Detail | Should -Not -Match 'stolen password away|full mailbox compromise|guaranteed'
+        }
         It 'a finding with no Detail carries its CurrentValue, so no verdict prints without a reason' {
             Add-NRGFinding -ControlId 'TMS-1.4' -State 'Satisfied' -Category 'Teams' -Title 't' -CurrentValue 'External participants cannot give or request control'
             @(Get-NRGFindings)[0].Detail | Should -Be 'External participants cannot give or request control.'

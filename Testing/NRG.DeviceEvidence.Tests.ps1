@@ -122,6 +122,24 @@ Describe 'Endpoint evidence: coverage and freshness gate the Effective label' {
             $f.Coverage.Complete | Should -BeFalse
             ($f.Coverage.Reasons -join ' ') | Should -Match 'account for 2 of 3'
         }
+        It 'a result dated 30 days in the future is not a current result: it cannot support Complete or Effective' {
+            $f = & $script:Load @((& $script:Dev 'A'), (& $script:Dev 'B' 'Pass' -30)) 2 @('A','B')
+            $f.Coverage.Complete | Should -BeFalse
+            $f.Coverage.Stale | Should -Be 1
+            ($f.Coverage.Reasons -join ' ') | Should -Match 'dated in the future'
+            $row = & $script:Effectiveness $f
+            $row.EffectivenessState | Should -Be 'Unknown'
+        }
+        It 'a result dated a few minutes ahead (clock skew) is still current' {
+            $f = & $script:Load @((& $script:Dev 'A'), (& $script:Dev 'B' 'Pass' -0.003)) 2 @('A','B')
+            $f.Coverage.Stale | Should -Be 0
+            $f.Coverage.Complete | Should -BeTrue
+        }
+        It 'a result dated hours ahead is beyond any clock-skew allowance' {
+            $f = & $script:Load @((& $script:Dev 'A'), (& $script:Dev 'B' 'Pass' -0.25)) 2 @('A','B')
+            $f.Coverage.Stale | Should -Be 1
+            $f.Coverage.Complete | Should -BeFalse
+        }
         It 'a matching count with no device names to match against is not complete' {
             $f = & $script:Load @((& $script:Dev 'A'), (& $script:Dev 'B')) 2
             $f.Coverage.Complete | Should -BeFalse

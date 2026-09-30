@@ -42,12 +42,12 @@ function script:Add-NRGSignInScore {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SIGNIN-1.1 — Failed→Success cluster (credential stuffing succeeded)
+# SIGNIN-1.1 — Failed→Success correlation (a possible password attack)
 # ─────────────────────────────────────────────────────────────────────────────
 function Test-NRGSignInControlFailedToSuccess {
     [CmdletBinding()] param()
     $cid   = 'SIGNIN-1.1'
-    $title = 'Failed-then-success sign-in clusters (credential stuffing succeeded)'
+    $title = 'Failed-then-success sign-in correlations (possible password attack)'
     $cat   = 'Email'
 
     $bag = Get-NRGRawData -Key 'IR-SignIn-Recent'
@@ -64,9 +64,15 @@ function Test-NRGSignInControlFailedToSuccess {
         return
     }
 
-    # Group by UPN and walk the timeline per user. A "cluster" is:
-    # >= 5 failures within a 30-minute window followed by a success from
-    # the same or related IP. We treat the success as the IoC.
+    # Group by UPN and walk the timeline per user. A "cluster" is: at least 5
+    # CREDENTIAL failures (wrong password, smart lockout) within a 30-minute
+    # window followed by a success for the same account. It is a suspicious
+    # CORRELATION, not proof the success was attacker-controlled: the source of
+    # the success is compared with the sources of the failures and the finding
+    # says how well they line up. Failures with no readable status, and failures
+    # of another kind (MFA required, blocked by policy, expired password), are
+    # not credential guesses and are not counted.
+    $credentialFailureCodes = @(50126, 50053)
     $clusters = @()
     $byUser = $events | Group-Object userPrincipalName
     foreach ($g in $byUser) {
@@ -75,9 +81,13 @@ function Test-NRGSignInControlFailedToSuccess {
         $userEvents = $g.Group | Sort-Object createdDateTime
         $failBuffer = [System.Collections.Generic.List[object]]::new()
         foreach ($e in $userEvents) {
-            $isSuccess = ($e.status -and $e.status.errorCode -eq 0)
-            $ts = try { [datetime]::Parse($e.createdDateTime, [Globalization.CultureInfo]::InvariantCulture) } catch { $null }
-            if (-not $ts) { continue }
+            $code = $null
+            $statusObj = Get-NRGObjectField -Item $e -Key 'status' -Default $null
+            if ($null -ne $statusObj) { $code = Get-NRGObjectField -Item $statusObj -Key 'errorCode' -Default $null }
+            if ($null -eq $code) { continue }   # status unknown: neither a failure nor a success
+            $isSuccess = ($code -eq 0)
+            $ts = [datetime]::MinValue
+            if (-not [datetime]::TryParse([string](Get-NRGObjectField -Item $e -Key 'createdDateTime' -Default ''), [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$ts)) { continue }
             # Drop failures older than 30 minutes from the buffer
             while ($failBuffer.Count -gt 0) {
                 $oldestTs = $failBuffer[0].Ts
@@ -86,20 +96,32 @@ function Test-NRGSignInControlFailedToSuccess {
                 } else { break }
             }
             if (-not $isSuccess) {
-                $failBuffer.Add(@{ Ts = $ts; Ip = $e.ipAddress })
+                if ($credentialFailureCodes -contains [int]$code) { $failBuffer.Add(@{ Ts = $ts; Ip = [string](Get-NRGObjectField -Item $e -Key 'ipAddress' -Default '') }) }
                 continue
             }
-            # Success — does the buffer have >= 5 fails?
+            # Success: does the buffer hold >= 5 credential failures?
             if ($failBuffer.Count -ge 5) {
+                $successIp = [string](Get-NRGObjectField -Item $e -Key 'ipAddress' -Default '')
+                $failIps   = @($failBuffer | ForEach-Object { $_.Ip } | Where-Object { $_ } | Select-Object -Unique)
+                $net24 = { param([string] $ip) if ($ip -match '^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$') { $Matches[1] } else { '' } }
+                $relation = if (-not $successIp -or $failIps.Count -eq 0) { 'Unknown' }
+                            elseif ($failIps -contains $successIp) { 'SameAddress' }
+                            elseif ((& $net24 $successIp) -and (@($failIps | Where-Object { (& $net24 $_) -eq (& $net24 $successIp) }).Count -gt 0)) { 'SameNetwork' }
+                            else { 'DifferentSource' }
+                $confidence = switch ($relation) { 'SameAddress' { 'High' } 'SameNetwork' { 'Medium' } default { 'Low' } }
+                $points = switch ($confidence) { 'High' { 60 } 'Medium' { 40 } default { 20 } }
                 $clusters += [ordered]@{
                     UserPrincipalName = $upn
-                    SuccessAt         = $e.createdDateTime
-                    SuccessIp         = $e.ipAddress
+                    SuccessAt         = [string](Get-NRGObjectField -Item $e -Key 'createdDateTime' -Default '')
+                    SuccessIp         = $successIp
                     FailureCount      = $failBuffer.Count
-                    FailureIps        = @($failBuffer | ForEach-Object { $_.Ip } | Select-Object -Unique)
+                    FailureIps        = $failIps
+                    SourceRelation    = $relation
+                    Confidence        = $confidence
+                    Distributed       = ($failIps.Count -ge 3)
                 }
-                Add-NRGSignInScore -UserPrincipalName $upn -Points 60 `
-                    -Reason "failed→success cluster ($($failBuffer.Count) fails before success)"
+                Add-NRGSignInScore -UserPrincipalName $upn -Points $points `
+                    -Reason "failed-then-success correlation ($($failBuffer.Count) credential failures, then a success; source relation: $relation, confidence $confidence)"
                 $failBuffer.Clear()
             } else {
                 # Reset on success (assume legit)
@@ -108,19 +130,35 @@ function Test-NRGSignInControlFailedToSuccess {
         }
     }
 
+    $completeness = Get-NRGSignInCollectionCompleteness -Keys 'IR-SignIn-Recent'
     if ($clusters.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
-            -Title $title -Severity 'High' `
-            -Detail "Reviewed $($events.Count) sign-in events across $($byUser.Count) users. No failed-then-success clusters detected (≥5 failures in 30 min followed by success)."
-    } else {
-        $detail = "FOUND $($clusters.Count) credential-stuffing cluster(s):`n"
-        foreach ($c in $clusters | Select-Object -First 10) {
-            $detail += "  - $($c.UserPrincipalName) — $($c.FailureCount) fails, then SUCCESS at $($c.SuccessAt) from $($c.SuccessIp)`n"
+        if ($completeness.Complete) {
+            Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
+                -Title $title -Severity 'High' `
+                -Detail "Reviewed $($events.Count) sign-in events across $($byUser.Count) users. No failed-then-success correlations detected (5 or more credential failures within 30 minutes followed by a success). This describes the events read, not the whole tenant."
+        } else {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+                -Title $title -Severity 'High' `
+                -Detail "Not cleared: no failed-then-success correlation was found in the $($events.Count) events read, but the sign-in reads were incomplete ($($completeness.Reasons -join '; ')), so this is not evidence that none occurred."
         }
+    } else {
+        $worst = if (@($clusters | Where-Object { $_.Confidence -eq 'High' }).Count -gt 0) { 'Critical' } elseif (@($clusters | Where-Object { $_.Confidence -eq 'Medium' }).Count -gt 0) { 'High' } else { 'Medium' }
+        $detail = "FOUND $($clusters.Count) failed-then-success correlation(s): 5 or more credential failures within 30 minutes, then a success for the same account. This is a suspicious pattern, not proof the success was attacker-controlled; confidence reflects how well the success source lines up with the failure sources.`n"
+        foreach ($c in $clusters | Select-Object -First 10) {
+            $rel = switch ($c.SourceRelation) {
+                'SameAddress'     { 'success came from an address that also failed' }
+                'SameNetwork'     { 'success came from the same /24 network as some failures' }
+                'DifferentSource' { 'success came from a different source than the failures (a distributed attack, or an unrelated legitimate sign-in)' }
+                default           { 'source addresses were not available to compare' }
+            }
+            $dist = if ($c.Distributed) { ' Failures came from 3 or more addresses.' } else { '' }
+            $detail += "  - $($c.UserPrincipalName): $($c.FailureCount) credential failures, then a success at $($c.SuccessAt) from $($c.SuccessIp); confidence $($c.Confidence); $rel.$dist`n"
+        }
+        if (-not $completeness.Complete) { $detail += "Note: the sign-in reads were incomplete ($($completeness.Reasons -join '; ')); more correlations may exist.`n" }
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
-            -Title $title -Severity 'Critical' -Detail $detail `
-            -CurrentValue "$($clusters.Count) cluster(s) across $(@($clusters | ForEach-Object { $_.UserPrincipalName } | Select-Object -Unique).Count) user(s)" `
-            -Remediation "Revoke active sessions for each flagged user. For deep-dive, issue a Temporary Access Pass (Entra > Users > Authentication methods > Add > Temporary Access Pass) and run Invoke-NRGEmailAssessment.ps1 as the user with the TAP. Cross-reference cluster IPs against tenant Conditional Access named locations to detect attacker infrastructure."
+            -Title $title -Severity $worst -Detail $detail `
+            -CurrentValue "$($clusters.Count) correlation(s) across $(@($clusters | ForEach-Object { $_.UserPrincipalName } | Select-Object -Unique).Count) user(s)" `
+            -Remediation "Review each flagged account with its owner and revoke active sessions where the sign-in is not theirs. For deep-dive, issue a Temporary Access Pass (Entra > Users > Authentication methods > Add > Temporary Access Pass) and run Invoke-NRGEmailAssessment.ps1 as the user with the TAP. Compare the success source with the account's usual locations and with tenant Conditional Access named locations before treating it as attacker infrastructure."
     }
 }
 
@@ -469,48 +507,56 @@ function Test-NRGSignInControlIPIntel {
 
     $targets = @($ipToUsers.Keys | Select-Object -First $MaxIPs)
     $enriched = @()
+    $failed   = 0
     $badInfra = 0
     foreach ($ip in $targets) {
         $intel = $null
-        try { $intel = Get-NRGIPSignInIntel -IPAddress $ip } catch { continue }
-        if (-not $intel) { continue }
+        try { $intel = Get-NRGIPSignInIntel -IPAddress $ip } catch { $failed++; continue }
+        if (-not $intel) { $failed++; continue }
         $enriched += $intel
+        if ((Get-NRGObjectField -Item $intel -Key 'LookupStatus' -Default '') -eq 'Failed') { $failed++; continue }
 
         # Bump score for flagged infra ONLY for the users whose own sign-in from
-        # it succeeded (a failed attempt from Tor is noise). Never for another
-        # user who merely appears on the same address.
+        # it succeeded (a failed attempt from Tor is noise), and only from a
+        # lookup that actually returned registrant data. Never for another user
+        # who merely appears on the same address.
         if ($ipToUsers[$ip].SuccessUsers.Count -gt 0 -and @($intel.Flags).Count -gt 0) {
             $badInfra++
             $flagStr = @($intel.Flags) -join '+'
             foreach ($u in $ipToUsers[$ip].SuccessUsers) {
                 Add-NRGSignInScore -UserPrincipalName $u -Points 30 `
-                    -Reason "successful sign-in from flagged infra $ip ($flagStr)"
+                    -Reason "successful sign-in from an address whose registrant name matches $flagStr ($ip): context, not proof of attacker infrastructure"
             }
         }
     }
+
+    $resolved = @($enriched | Where-Object { (Get-NRGObjectField -Item $_ -Key 'LookupStatus' -Default '') -eq 'Resolved' })
+    $noOwner  = @($enriched | Where-Object { (Get-NRGObjectField -Item $_ -Key 'LookupStatus' -Default '') -eq 'NoOwnerData' }).Count
+    $capNote  = if ($ipToUsers.Keys.Count -gt $targets.Count) { " Only the first $($targets.Count) of $($ipToUsers.Keys.Count) suspicious addresses were looked up." } else { '' }
+    $lookupNote = "Registrant data came back for $($resolved.Count) of $($targets.Count) address(es) looked up; $failed lookup(s) failed and $noOwner returned no owner.$capNote"
 
     # Stash enrichment for the publisher.
     Set-NRGRawData -Key 'IR-SignIn-IPIntel' -Data @{
         CollectorId = $cid
         CollectedAt = (Get-Date -Format 'o')
         Success     = $true
-        Data        = [ordered]@{ Count = $enriched.Count; Items = $enriched }
+        Data        = [ordered]@{ Count = $enriched.Count; Resolved = $resolved.Count; Failed = $failed; NoOwnerData = $noOwner; Requested = $targets.Count; Items = $enriched }
     }
 
-    if ($enriched.Count -eq 0) {
+    if ($resolved.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
             -Title $title -Severity 'Medium' `
-            -Detail "Could not enrich any of the $($targets.Count) suspicious IP(s) — RDAP may be unreachable from this host."
+            -Detail "Not assessed: no registrant lookup completed for the $($targets.Count) suspicious address(es), so nothing can be said about who holds them. RDAP may be unreachable from this host. $lookupNote"
         return
     }
 
-    $flagged = @($enriched | Where-Object { @($_.Flags).Count -gt 0 })
-    $detail = "Enriched $($enriched.Count) suspicious source IP(s):`n"
-    foreach ($i in ($enriched | Sort-Object { @($_.Flags).Count } -Descending | Select-Object -First 20)) {
+    $flagged = @($resolved | Where-Object { @($_.Flags).Count -gt 0 })
+    $detail = "$lookupNote`n"
+    foreach ($i in ($resolved | Sort-Object { @($_.Flags).Count } -Descending | Select-Object -First 20)) {
         $line = "  - $($i.IPAddress)"
         if ($i.Country)  { $line += " [$($i.Country)]" }
         if ($i.ASNOwner) { $line += " $($i.ASNOwner)" }
-        if (@($i.Flags).Count -gt 0) { $line += "  *** $(@($i.Flags) -join ', ') ***" }
+        if (@($i.Flags).Count -gt 0) { $line += "  *** registrant name matches: $(@($i.Flags) -join ', ') ***" }
         $who = $ipToUsers[[string]$i.IPAddress]
         if ($who) { $line += "  (users seen: $($who.Users.Count), with a successful sign-in: $($who.SuccessUsers.Count)$(if ($who.Users.Count -gt 1) { '; shared address' }))" }
         $detail += "$line`n"
@@ -519,12 +565,17 @@ function Test-NRGSignInControlIPIntel {
     if ($flagged.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
             -Title $title -Severity 'High' -Detail $detail `
-            -CurrentValue "$($flagged.Count) of $($enriched.Count) IP(s) on hosting / VPN infra" `
-            -Remediation "IPs tagged HOSTING_ASN or KNOWN_VPN_ASN with a successful sign-in are likely attacker infrastructure, but a shared address (a corporate VPN exit, an office NAT) is also possible: the detail shows how many users were seen from each and how many succeeded. Confirm with the users before blocking, then prioritize the users who succeeded for deep-dive."
-    } else {
+            -CurrentValue "$($flagged.Count) of $($resolved.Count) resolved IP(s) registered to a hosting or VPN provider name (context, not a malicious-IP verdict)" `
+            -Remediation "A registrant name that matches a hosting or VPN provider is context, not a reputation verdict: legitimate users also sign in through commercial VPNs and hosted desktops, and a shared address (a corporate VPN exit, an office NAT) is possible. The detail shows how many users were seen from each address and how many succeeded. Confirm with those users before blocking, then prioritize the users who succeeded for deep-dive."
+    } elseif ($resolved.Count -eq $ipToUsers.Keys.Count) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'Medium' -Detail $detail `
-            -CurrentValue "$($enriched.Count) IP(s) enriched, none on flagged infra"
+            -CurrentValue "$($resolved.Count) IP(s) resolved, none registered to a hosting or VPN provider name"
+    } else {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+            -Title $title -Severity 'Medium' `
+            -Detail "Not cleared: nothing among the addresses that resolved matched a hosting or VPN provider name, but not every suspicious address could be looked up, and an unresolved address is not a clean one. $detail" `
+            -CurrentValue "$($resolved.Count) of $($ipToUsers.Keys.Count) suspicious IP(s) resolved, none flagged"
     }
 }
 
@@ -541,10 +592,14 @@ function Get-NRGSignInCollectionCompleteness {
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
-    param()
+    param(
+        # The reads the conclusion rests on. A detector that reads only the
+        # recent-events bag is not made incomplete by a failed anon-IP read.
+        [string[]] $Keys = @('IR-SignIn-Recent', 'IR-SignIn-AnonIp', 'IR-SignIn-Travel')
+    )
     $reasons = [System.Collections.Generic.List[string]]::new()
     $events = 0; $window = 0
-    foreach ($k in 'IR-SignIn-Recent', 'IR-SignIn-AnonIp', 'IR-SignIn-Travel') {
+    foreach ($k in $Keys) {
         $bag = Get-NRGRawData -Key $k
         if (-not $bag -or -not (Get-NRGObjectField -Item $bag -Key 'Success' -Default $false)) { $reasons.Add("$k did not complete"); continue }
         if ($k -eq 'IR-SignIn-Recent') {
@@ -553,6 +608,9 @@ function Get-NRGSignInCollectionCompleteness {
             if ([bool](Get-NRGNestedProperty -Object $bag -Path 'Data.Truncated' -Default $false)) {
                 $reasons.Add("the sign-in read stopped at $events events, so older events in the $window-day window were not read")
             }
+        } elseif ([bool](Get-NRGNestedProperty -Object $bag -Path 'Data.Truncated' -Default $false)) {
+            # AnonIp reads one server page; Travel is derived from the recent read.
+            $reasons.Add("$k is partial: $(Get-NRGNestedProperty -Object $bag -Path 'Data.Source' -Default 'its source') did not cover every event in the window")
         }
     }
     return [ordered]@{ Complete = ($reasons.Count -eq 0); Reasons = @($reasons); EventsRead = $events; WindowDays = $window }

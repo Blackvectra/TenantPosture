@@ -50,7 +50,9 @@ function Invoke-NRGEmailCollectMailbox {
     # v4.12.0: pivot the URI prefix when running in admin -TargetUpn mode
     $userPrefix = if ($TargetUpn) { "users/$([uri]::EscapeDataString($TargetUpn))" } else { 'me' }
     $collectorId = 'IR-Mailbox'
-    Register-NRGCoverage -Family 'Email-IR' -Status 'Collected'
+    # Coverage is registered at the END from what completed (it was 'Collected'
+    # before any query ran). Its own family, so a mailbox read cannot overwrite
+    # the sign-in collector's status.
 
     # ── Profile ──────────────────────────────────────────────────────────────
     $profileBag = [ordered]@{
@@ -91,6 +93,8 @@ function Invoke-NRGEmailCollectMailbox {
             $uri = if ($resp['@odata.nextLink']) { $resp['@odata.nextLink'] } else { $null }
             $pages++
         }
+        # A next link still set means the cap stopped the read before the window ended.
+        $sentTruncated = [bool]$uri
 
         # Sanitize: extract URLs from bodyPreview (the first ~250 chars), don't
         # retain bodies. Subject and recipients stay (they're the IoCs).
@@ -120,11 +124,17 @@ function Invoke-NRGEmailCollectMailbox {
                 # Body itself NOT retained.
             }
         }
+        $sentDates = @($normalized | ForEach-Object { [string]$_.SentDateTime } | Where-Object { $_ } | Sort-Object)
         $sentOut.Data = [ordered]@{
-            WindowDays = $WindowDays
-            Cutoff     = $cutoff
-            Count      = @($normalized).Count
-            Messages   = @($normalized)
+            WindowDays       = $WindowDays
+            Cutoff           = $cutoff
+            Count            = @($normalized).Count
+            PagesRead        = $pages
+            PageCap          = $pageCap
+            Truncated        = $sentTruncated
+            EarliestObserved = $(if ($sentDates.Count -gt 0) { $sentDates[0] } else { $null })
+            LatestObserved   = $(if ($sentDates.Count -gt 0) { $sentDates[-1] } else { $null })
+            Messages         = @($normalized)
         }
         $sentOut.Success = $true
     } catch {
@@ -153,6 +163,7 @@ function Invoke-NRGEmailCollectMailbox {
             $uri = if ($resp['@odata.nextLink']) { $resp['@odata.nextLink'] } else { $null }
             $pages++
         }
+        $inboxTruncated = [bool]$uri
         $normalized = foreach ($m in $inboxItems) {
             $urls = @()
             $bodyPreview = [string](Get-NRGObjectField -Item $m -Key 'bodyPreview' -Default '')
@@ -174,11 +185,17 @@ function Invoke-NRGEmailCollectMailbox {
                 BodyPreviewLen   = $bodyPreview.Length
             }
         }
+        $inboxDates = @($normalized | ForEach-Object { [string]$_.ReceivedDateTime } | Where-Object { $_ } | Sort-Object)
         $inboxOut.Data = [ordered]@{
-            WindowDays = 30
-            Cutoff     = $inboxCutoff
-            Count      = @($normalized).Count
-            Messages   = @($normalized)
+            WindowDays       = 30
+            Cutoff           = $inboxCutoff
+            Count            = @($normalized).Count
+            PagesRead        = $pages
+            PageCap          = 5
+            Truncated        = $inboxTruncated
+            EarliestObserved = $(if ($inboxDates.Count -gt 0) { $inboxDates[0] } else { $null })
+            LatestObserved   = $(if ($inboxDates.Count -gt 0) { $inboxDates[-1] } else { $null })
+            Messages         = @($normalized)
         }
         $inboxOut.Success = $true
     } catch {
@@ -199,10 +216,12 @@ function Invoke-NRGEmailCollectMailbox {
         # mailFolders listing — we navigate to it by name via the
         # well-known childFolders path.
         $recItems = @()
+        $recTruncated = $false
         $recUri = "https://graph.microsoft.com/v1.0/$userPrefix/mailFolders/recoverableitemsdeletions/messages?`$top=200&`$select=id,subject,receivedDateTime,from,bodyPreview"
         try {
             $resp = Invoke-NRGGraphRequest -Method GET -Uri $recUri -ErrorAction Stop
             if ($resp.value) { $recItems = $resp.value }
+            $recTruncated = [bool]($resp['@odata.nextLink'])
         } catch {
             # Some tenant configurations + scopes return 404 for this path;
             # if so, skip silently — Recoverable Items not always accessible
@@ -240,8 +259,10 @@ function Invoke-NRGEmailCollectMailbox {
                 }
             }
             $recOut.Data = [ordered]@{
-                Count    = @($normalized).Count
-                Messages = @($normalized)
+                Count     = @($normalized).Count
+                Truncated = $recTruncated
+                Scope     = 'first page (200 items) of the Recoverable Items Deletions folder'
+                Messages  = @($normalized)
             }
             $recOut.Success = $true
             Set-NRGRawData -Key 'IR-MailboxRecoverable' -Data $recOut
@@ -297,4 +318,16 @@ function Invoke-NRGEmailCollectMailbox {
         Register-NRGException -Source "$collectorId-Forwarding" -Message $_.Exception.Message
     }
     Set-NRGRawData -Key 'IR-MailboxForwarding' -Data $settingsOut
+
+    # ── Coverage from what completed ─────────────────────────────────────────
+    $mbxRequired = @($profileBag, $sentOut, $inboxOut, $rulesOut)
+    $mbxFailed   = @($mbxRequired | Where-Object { -not $_.Success } | ForEach-Object { $_.CollectorId })
+    $mbxPartial  = @(@($sentOut, $inboxOut, $recOut) | Where-Object { $_.Success -and $_.Data -and [bool](Get-NRGObjectField -Item $_.Data -Key 'Truncated' -Default $false) } | ForEach-Object { $_.CollectorId })
+    if ($mbxFailed.Count -eq $mbxRequired.Count) {
+        Register-NRGCoverage -Family 'Email-IR-Mailbox' -Status 'Failed' -Note "No mailbox read completed ($($mbxFailed -join ', '))."
+    } elseif ($mbxFailed.Count -gt 0 -or $mbxPartial.Count -gt 0) {
+        Register-NRGCoverage -Family 'Email-IR-Mailbox' -Status 'Partial' -Note "Did not complete: $($mbxFailed -join ', '). Stopped at the page cap: $($mbxPartial -join ', ')."
+    } else {
+        Register-NRGCoverage -Family 'Email-IR-Mailbox' -Status 'Collected'
+    }
 }

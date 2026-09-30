@@ -92,6 +92,31 @@ function Test-NRGEmailIsLegitMSDomain {
     return $false
 }
 
+# Brands other than Microsoft are judged against THEIR OWN sending domains, not
+# Microsoft's: a genuine DocuSign or Adobe message is not a spoof because its
+# domain is not a Microsoft one.
+$script:NRGEmailBrandDomains = [ordered]@{
+    'docusign' = @('docusign.com', 'docusign.net')
+    'adobe'    = @('adobe.com', 'adobesign.com', 'echosign.com', 'adobe.io')
+    'dropbox'  = @('dropbox.com', 'dropboxmail.com')
+}
+
+function Get-NRGEmailBrandSpoof {
+    [CmdletBinding()]
+    param([string] $Domain, [string] $DisplayName)
+    if (-not $Domain -or -not $DisplayName) { return $null }
+    $d = $Domain.ToLowerInvariant()
+    foreach ($brand in $script:NRGEmailBrandDomains.Keys) {
+        if ($DisplayName -match "(?i)$brand") {
+            $legit = $false
+            foreach ($ld in $script:NRGEmailBrandDomains[$brand]) { if ($d -eq $ld -or $d.EndsWith(".$ld")) { $legit = $true } }
+            if (-not $legit) { return $brand }
+        }
+    }
+    if ($DisplayName -match '(?i)microsoft|onedrive' -and -not (Test-NRGEmailIsLegitMSDomain $d)) { return 'microsoft' }
+    return $null
+}
+
 function Test-NRGEmailMatchesMSImpersonation {
     [CmdletBinding()]
     param([string] $Domain, [string] $DisplayName)
@@ -127,16 +152,38 @@ function Test-NRGEmailControlInboxRules {
     }
 
     $rules = @($rulesRaw.Data.Rules)
+
+    # The domain the mailbox belongs to, when the profile was read: the only
+    # reference this mode has for "inside" versus "outside". It is NOT the full
+    # accepted-domain list, so a different domain may still be another domain of
+    # the same organization; the finding says so instead of calling it external.
+    $refDomain = ''
+    $profileRaw = Get-NRGRawData -Key 'IR-MailboxProfile'
+    if ($profileRaw -and (Get-NRGObjectField -Item $profileRaw -Key 'Success' -Default $false)) {
+        $pu = [string](Get-NRGNestedProperty -Object $profileRaw -Path 'Data.UserPrincipalName' -Default '')
+        if ($pu -match '@([^@\s]+)$') { $refDomain = $Matches[1].ToLowerInvariant() }
+    }
+
+    # Each rule is scored on what it DOES, not on which action keyword appears.
+    # A folder move alone is routine (every newsletter rule has one) and is
+    # never flagged; forwarding to the mailbox's own domain is not flagged; the
+    # combinations attackers use (hidden name, forward out, no filter, delete)
+    # are. A disabled rule cannot be acting now, so it is kept as historical
+    # evidence, never as current persistence.
     $iocRules = @()
+    $routine  = 0
     foreach ($r in $rules) {
         $reasons = @()
+        $points  = 0
         $name = [string]$r.displayName
+        $enabledRaw = Get-NRGObjectField -Item $r -Key 'isEnabled' -Default $null
+        $active = ($enabledRaw -ne $false)
 
         # Hidden-name pattern (attacker convention): single ".", "..", "/", "-"
-        if ($name -match '^[\.\-/_ ]{1,3}$') { $reasons += "hidden-name '$name'" }
+        if ($name -match '^[\.\-/_ ]{1,3}$') { $reasons += "hidden-name '$name'"; $points += 3 }
 
-        # Forwarding-to-external
         $forwardTo = @()
+        $destClass = 'None'
         if ($r.actions) {
             foreach ($key in 'forwardTo','forwardAsAttachmentTo','redirectTo') {
                 if ($r.actions.$key) {
@@ -148,39 +195,60 @@ function Test-NRGEmailControlInboxRules {
                 }
             }
             if ($forwardTo.Count -gt 0) {
-                $reasons += "forwards to: $($forwardTo -join ', ')"
+                $classes = foreach ($a in $forwardTo) {
+                    $dom = if (([string]$a) -match '@([^@\s]+)$') { $Matches[1].ToLowerInvariant() } else { '' }
+                    if (-not $dom -or -not $refDomain) { 'Unknown' } elseif ($dom -eq $refDomain) { 'SameDomain' } else { 'OtherDomain' }
+                }
+                $destClass = if ($classes -contains 'OtherDomain') { 'OtherDomain' } elseif ($classes -contains 'Unknown') { 'Unknown' } else { 'SameDomain' }
+                switch ($destClass) {
+                    'OtherDomain' { $reasons += "forwards to a different domain than the mailbox's ($($forwardTo -join ', ')); may be another domain of the same organization, verify"; $points += 3 }
+                    'Unknown'     { $reasons += "forwards to $($forwardTo -join ', '); the destination could not be compared with the mailbox's domain"; $points += 2 }
+                    default       { }   # same domain: internal forwarding, not an indicator by itself
+                }
             }
-            # Delete + Move-to-Deleted (cover tracks)
-            if ($r.actions.delete -eq $true) { $reasons += 'deletes matching mail' }
-            if ($r.actions.moveToFolder) { $reasons += "moves to folder '$($r.actions.moveToFolder)'" }
-            if ($r.actions.permanentDelete -eq $true) { $reasons += 'permanently deletes' }
+            if ($r.actions.delete -eq $true)          { $reasons += 'deletes matching mail'; $points += 2 }
+            if ($r.actions.permanentDelete -eq $true) { $reasons += 'permanently deletes'; $points += 2 }
         }
 
         # Always-applies pattern (no filter conditions = applies to everything)
         $noConditions = (-not $r.conditions -or
                         ($r.conditions.PSObject.Properties.Count -eq 0 -and (-not ($r.conditions -is [hashtable]) -or $r.conditions.Count -eq 0)))
-        if ($noConditions -and $forwardTo.Count -gt 0) {
-            $reasons += 'no filter conditions (applies to all mail)'
+        if ($noConditions -and $forwardTo.Count -gt 0 -and $destClass -ne 'SameDomain') {
+            $reasons += 'no filter conditions (applies to all mail)'; $points += 2
         }
 
-        if ($reasons.Count -gt 0) {
-            $iocRules += [ordered]@{
-                Name    = $name
-                Id      = [string]$r.id
-                Enabled = $r.isEnabled
-                Reasons = $reasons
-                ForwardTo = $forwardTo
-            }
+        # Thresholds: a single weak signal is not an indicator.
+        $minPoints = if ($active) { 2 } else { 3 }
+        if ($points -lt $minPoints) { $routine++; continue }
+
+        $severity = if (-not $active) { 'Medium' } elseif ($points -ge 5) { 'Critical' } elseif ($points -ge 3) { 'High' } else { 'Medium' }
+        $confidence = if ($points -ge 5) { 'High' } elseif ($points -ge 3) { 'Medium' } else { 'Low' }
+        $iocRules += [ordered]@{
+            Name        = $name
+            Id          = [string]$r.id
+            Enabled     = $enabledRaw
+            Active      = $active
+            Severity    = $severity
+            Confidence  = $confidence
+            Destination = $destClass
+            Reasons     = $reasons
+            ForwardTo   = $forwardTo
         }
     }
 
     if ($iocRules.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'High' `
-            -Detail ("Reviewed $($rules.Count) inbox rule(s). No persistence/cover-tracks indicators found.")
+            -Detail ("Reviewed $($rules.Count) inbox rule(s). None combined the actions attackers use for persistence or covering tracks ($routine rule(s) had only routine actions such as a folder move or internal forwarding). This describes the rules read, not other persistence mechanisms.")
     } else {
-        $detail = "FOUND $($iocRules.Count) suspicious rule(s).`n" + (
-            ($iocRules | ForEach-Object { "  - '$($_.Name)' [enabled=$($_.Enabled)]: $($_.Reasons -join '; ')" }) -join "`n"
+        $order = @{ 'Critical' = 3; 'High' = 2; 'Medium' = 1 }
+        $top = ($iocRules | Sort-Object { $order[$_.Severity] } -Descending | Select-Object -First 1).Severity
+        $activeCount = @($iocRules | Where-Object { $_.Active }).Count
+        $detail = "FOUND $($iocRules.Count) inbox rule(s) worth review ($activeCount enabled, $($iocRules.Count - $activeCount) disabled).`n" + (
+            ($iocRules | ForEach-Object {
+                $st = if ($_.Active) { if ($null -eq $_.Enabled) { 'enabled state not reported, treated as active' } else { 'enabled' } } else { 'DISABLED: historical, not acting now' }
+                "  - '$($_.Name)' [$st; $($_.Severity), confidence $($_.Confidence)]: $($_.Reasons -join '; ')"
+            }) -join "`n"
         )
         # Attach the flagged rules as structured AffectedObjects so the
         # containment runbook can name each one (and emit a precise delete
@@ -188,18 +256,21 @@ function Test-NRGEmailControlInboxRules {
         # runbook can distinguish them from EMAIL-2.1 recipient objects.
         $ruleObjects = foreach ($ir in $iocRules) {
             [pscustomobject]@{
-                RuleType = 'InboxRule'
-                Name     = $ir.Name
-                Id       = $ir.Id
-                Enabled  = $ir.Enabled
-                Reason   = ($ir.Reasons -join '; ')
+                RuleType    = 'InboxRule'
+                Name        = $ir.Name
+                Id          = $ir.Id
+                Enabled     = $ir.Enabled
+                Severity    = $ir.Severity
+                Confidence  = $ir.Confidence
+                Destination = $ir.Destination
+                Reason      = ($ir.Reasons -join '; ')
             }
         }
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
-            -Title $title -Severity 'Critical' `
+            -Title $title -Severity $top `
             -Detail $detail `
             -AffectedObjects @($ruleObjects) `
-            -Remediation "Delete each suspicious rule (named in the Containment Runbook). PowerShell: Get-MgUserMailFolderMessageRule -UserId <upn> -MailFolderId Inbox  then  Remove-MgUserMailFolderMessageRule -UserId <upn> -MailFolderId Inbox -MessageRuleId <id>"
+            -Remediation "Confirm each enabled rule with the mailbox owner, then delete the ones that are not theirs (named in the Containment Runbook). A disabled rule is not acting now: review it as evidence of earlier tampering and remove it, but it is not evidence of current persistence. PowerShell: Get-MgUserMailFolderMessageRule -UserId <upn> -MailFolderId Inbox  then  Remove-MgUserMailFolderMessageRule -UserId <upn> -MailFolderId Inbox -MessageRuleId <id>"
     }
 }
 
@@ -394,25 +465,30 @@ function Test-NRGEmailControlPhishOrigin {
         $score = 0
         $reasons = @()
         $senderDomain = Get-NRGEmailDomainFromAddress $m.FromAddress
+        $contentSignals = 0
+        $isInternal = $false
 
-        # +30 if external sender (any external is the prerequisite; internal
-        # phishes are out-of-scope for user-level IR)
+        # +30 if the sender is outside the mailbox's domain. A sender INSIDE it is
+        # not dropped: a compromised or spoofed internal account is a real
+        # phishing route. It gets no sender points and must earn its place on
+        # content alone (two or more content signals), and is marked lower
+        # confidence.
         if ($senderDomain -and $tenantDomain -and $senderDomain -ne $tenantDomain) {
             $score += 30
-            $reasons += "external sender ($senderDomain)"
+            $reasons += "sender outside the mailbox's domain ($senderDomain)"
         } elseif (-not $senderDomain) {
             # Couldn't parse — possibly a spoofed display name only
             $score += 20
             $reasons += 'unparseable sender'
         } else {
-            # Internal sender — skip
-            continue
+            $isInternal = $true
+            $reasons += "sender inside the mailbox's own domain ($senderDomain): a compromised or spoofed internal account is possible"
         }
 
         # +25 if domain mentions Microsoft branding without being legit MS
         $fromName = Get-NRGObjectField -Item $m -Key 'FromName' -Default $null
         if (Test-NRGEmailMatchesMSImpersonation -Domain $senderDomain -DisplayName $fromName) {
-            $score += 25
+            $score += 25; $contentSignals++
             $reasons += "Microsoft-impersonation pattern"
         }
 
@@ -420,7 +496,7 @@ function Test-NRGEmailControlPhishOrigin {
         $subject = [string]$m.Subject
         foreach ($pat in $script:NRGEmailUrgencyKeywords) {
             if ($subject -match "(?i)$pat") {
-                $score += 20
+                $score += 20; $contentSignals++
                 $reasons += "urgency keyword: $pat"
                 break
             }
@@ -440,31 +516,40 @@ function Test-NRGEmailControlPhishOrigin {
             } catch { }
         }
         if ($hasSuspiciousLoginUrl) {
-            $score += 20
-            $reasons += "non-MS URL with auth-flow keywords"
+            $score += 20; $contentSignals++
+            $reasons += "link in the message preview to a non-Microsoft host, with sign-in keywords"
         }
 
-        # +10 if attached to display-name spoofing (FromName has Microsoft but
-        # FromAddress is external — caught by impersonation above too, but
-        # account for the case where it's a different brand)
-        if ($fromName -and ($fromName -match '(?i)microsoft|docusign|adobe|dropbox|onedrive') -and
-            $senderDomain -and -not (Test-NRGEmailIsLegitMSDomain $senderDomain)) {
-            $score += 10
-            $reasons += "display-name brand spoof: '$fromName'"
+        # +10 when the display name claims a brand the sending domain does not
+        # belong to. Each brand is judged against its own domains.
+        $spoofBrand = Get-NRGEmailBrandSpoof -Domain $senderDomain -DisplayName $fromName
+        if ($spoofBrand) {
+            $score += 10; $contentSignals++
+            $reasons += "display name claims '$spoofBrand' but the sending domain is not one of its domains: '$fromName'"
         }
 
-        # If recovered from Deletions, that's a HUGE signal — attacker covered tracks
+        # Found in Recoverable Items: the message was deleted by someone, a user
+        # or rule or an attacker. Exchange does not say which, so this adds a
+        # small amount of rank and NEVER assigns the deletion to an actor. It
+        # cannot qualify a message on its own.
         $isRecovered = $false
         if ($recRaw -and $recRaw.Success -and $recRaw.Data.Messages) {
             $recIds = @($recRaw.Data.Messages | ForEach-Object { Get-NRGObjectField -Item $_ -Key 'Id' -Default $null })
             if ($recIds -contains $m.Id) {
-                $score += 30
+                $score += 15
                 $isRecovered = $true
-                $reasons += "RECOVERED from Deletions (attacker deleted)"
+                $reasons += "found in Recoverable Items (deleted; who deleted it is not known)"
             }
         }
 
+        # A lead needs at least one content signal (two for an internal sender);
+        # sender location, an unparseable address or a deletion alone do not
+        # make a phishing candidate.
+        $needed = if ($isInternal) { 2 } else { 1 }
+        if ($contentSignals -lt $needed) { continue }
+
         [ordered]@{
+            Internal         = $isInternal
             ReceivedDateTime = $m.ReceivedDateTime
             From             = $m.FromAddress
             FromName         = $fromName
@@ -482,18 +567,25 @@ function Test-NRGEmailControlPhishOrigin {
     # A bare external sender with no other signal scores exactly 30 — almost
     # all inbound mail is external, so a >= 30 threshold would flood the report
     # with every correspondent. > 30 keeps it to actual phish candidates.
-    $top = @($scored | Where-Object { $_.Score -gt 30 } | Sort-Object { $_.Score } -Descending | Select-Object -First 5)
+    $top = @($scored | Where-Object { $_.Score -gt 30 -or $_.Internal } | Sort-Object { $_.Score } -Descending | Select-Object -First 5)
+
+    # What was read, stated with every result: the folders, the window, whether
+    # the read was complete, and that links come from the message PREVIEW only.
+    $inboxTrunc = [bool](Get-NRGNestedProperty -Object $inboxRaw -Path 'Data.Truncated' -Default $false)
+    $recTrunc   = [bool](Get-NRGNestedProperty -Object $recRaw -Path 'Data.Truncated' -Default $false)
+    $inboxWin   = [int](Get-NRGNestedProperty -Object $inboxRaw -Path 'Data.WindowDays' -Default 30)
+    $scope = "Scope: Inbox messages from the last $inboxWin days$(if ($inboxTrunc) { ' (the read stopped at its page cap, so older messages in that window were not read)' }) and the first page of Recoverable Items Deletions$(if ($recTrunc) { ' (more items exist than were read)' }); $($candidates.Count) message(s) examined, $recoveredCount of them from Recoverable Items. Links were read from the message preview only (roughly the first 255 characters), so a link later in the body was not seen. Other folders, and mail the user already permanently deleted, are not covered."
 
     if ($top.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
             -Title $title -Severity 'Medium' `
-            -Detail ("Scanned $($candidates.Count) inbound messages (incl $recoveredCount recovered from Deletions). No high-confidence phish candidate found. Could indicate: phish predates 30-day window, attacker used credential stuffing not phish, or original phish has been permanently deleted from Recoverable Items.")
+            -Detail ("No lead looked like a phishing message within what was read. This is not evidence there was none: the phish may predate the window, arrive by another route (credential stuffing, a token theft), sit in a folder not read, or have been permanently deleted. $scope")
         return
     }
 
-    $detail = "TOP $($top.Count) PHISH CANDIDATES (highest score first):`n"
+    $detail = "TOP $($top.Count) LEADS (highest rank first; a rank orders messages for review, it is not a probability):`n"
     foreach ($t in $top) {
-        $detail += "`n  Score $($t.Score) | $($t.ReceivedDateTime)`n"
+        $detail += "`n  Rank score $($t.Score) | $($t.ReceivedDateTime)$(if ($t.Internal) { ' | lower confidence: sender inside the mailbox domain' })`n"
         $detail += "    From    : `"$($t.FromName)`" <$($t.From)>`n"
         $detail += "    Subject : $($t.Subject)`n"
         $detail += "    Why     : $($t.Reasons -join '; ')`n"
@@ -501,12 +593,12 @@ function Test-NRGEmailControlPhishOrigin {
             $detail += "    URLs    : $(($t.URLs | Select-Object -First 3) -join ', ')`n"
         }
     }
-    $detail += "`nThe top result is the most-likely original phish. Operator verifies by reviewing the message in Outlook."
+    $detail += "`nThese are investigative leads to review in Outlook, not a finding that any of them caused the compromise. $scope"
 
     Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
         -Title $title -Severity 'High' -Detail $detail `
-        -CurrentValue "Top candidate: $($top[0].Subject) (score $($top[0].Score))" `
-        -Remediation "Validate the top candidate is the actual phish. If so: 1) submit URL+sender to Microsoft Defender Submissions, 2) block the sender domain at the tenant boundary, 3) search-and-purge any other users who received the same phish (admin scope required)."
+        -CurrentValue "Top lead: $($top[0].Subject) (rank score $($top[0].Score))" `
+        -Remediation "Review the leads and confirm whether any is a real phish. If one is: 1) submit its URL and sender to Microsoft Defender Submissions, 2) block the sender domain at the tenant boundary, 3) search for and purge the same message for other users (admin scope required)."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

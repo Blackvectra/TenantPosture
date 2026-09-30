@@ -33,6 +33,9 @@ $script:NRGDeviceControls = $null
 # counted as not assessed (never a pass, never a failure), like a check the
 # collector could not run. Matches the baseline's 'Weekly' freshness window.
 $script:NRGDeviceResultMaxAgeDays = 8
+# A result dated later than now plus this is not a current result: a clock that
+# far ahead (or a doctored date) cannot be shown to describe the device today.
+$script:NRGDeviceResultClockSkewMinutes = 15
 
 function Get-NRGDeviceControlDefinitions {
     <#
@@ -140,6 +143,7 @@ function Test-NRGControlDevice {
         $ts = [datetime]::MinValue
         $ok = [datetime]::TryParse([string](Get-NRGObjectField -Item $d -Key 'CollectedAt' -Default ''), [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$ts)
         if (-not $ok) { $staleAge[$devHost] = -1 }
+        elseif (($ts.ToUniversalTime() - $now).TotalMinutes -gt $script:NRGDeviceResultClockSkewMinutes) { $staleAge[$devHost] = -2 }
         elseif (($now - $ts.ToUniversalTime()).TotalDays -gt $script:NRGDeviceResultMaxAgeDays) { $staleAge[$devHost] = [int][math]::Floor(($now - $ts.ToUniversalTime()).TotalDays) }
     }
     $staleCount = $staleAge.Count
@@ -242,7 +246,7 @@ function Test-NRGControlDevice {
             $blockedNote += '.'
         }
         if ($staleCount -gt 0) {
-            $blockedNote += " $staleCount device(s) reported results older than $($script:NRGDeviceResultMaxAgeDays) days (or with no readable date) and were not counted."
+            $blockedNote += " $staleCount device(s) reported results older than $($script:NRGDeviceResultMaxAgeDays) days, dated in the future, or with no readable date and were not counted."
         }
         if ($missing -gt 0) {
             $blockedNote += " $missing device(s) reported no result for this check — check the endpoint script version."
@@ -254,7 +258,7 @@ function Test-NRGControlDevice {
         $reasons = [System.Collections.Generic.List[string]]::new()
         if ($notAssessed.Count -gt 0) { $reasons.Add("$($notAssessed.Count) device(s) could not run this check") }
         if ($missing -gt 0)           { $reasons.Add("$missing device(s) reported no result for this check") }
-        if ($staleCount -gt 0)        { $reasons.Add("$staleCount device(s) reported results older than $($script:NRGDeviceResultMaxAgeDays) days") }
+        if ($staleCount -gt 0)        { $reasons.Add("$staleCount device(s) reported results older than $($script:NRGDeviceResultMaxAgeDays) days, dated in the future, or with no readable date") }
         if ($null -eq $expectedFleet) { $reasons.Add('the expected fleet size is not known (no Intune managed-device count)') }
         elseif ($null -eq $expectedNames) {
             if ($total -lt $expectedFleet) { $reasons.Add("$total of $expectedFleet managed Windows devices reported") }

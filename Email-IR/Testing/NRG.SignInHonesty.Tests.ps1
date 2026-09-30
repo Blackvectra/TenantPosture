@@ -237,3 +237,72 @@ Describe 'Email assessment: findings stay attributed when the profile read fails
         $text | Should -Match 'else \{ \[string\]\$UserPrincipalName \}'
     }
 }
+
+Describe 'Partial reads are carried through to the conclusion (A03)' {
+
+    BeforeAll {
+        $script:Root = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:Root 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        $script:Ok = { param([string] $Key, $Data) Set-NRGRawData -Key $Key -Data @{ CollectorId = $Key; CollectedAt = (Get-Date).ToString('o'); Success = $true; Data = $Data } }
+        $script:AllRequired = {
+            param($InboxTruncated = $false)
+            foreach ($k in 'IR-MailboxProfile', 'IR-MailboxSentItems', 'IR-MailboxRules') { & $script:Ok $k @{ Count = 0 } }
+            & $script:Ok 'IR-MailboxInbox' @{ Count = 10; Truncated = $InboxTruncated }
+        }
+    }
+    AfterAll { Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue }
+    BeforeEach { Clear-NRGState }
+
+    It 'a required mailbox source that stopped at its page cap makes the evidence incomplete, and names it' {
+        & $script:AllRequired $true
+        $e = Get-NRGDeepDiveEvidence
+        $e.Complete | Should -BeFalse
+        ($e.RequiredPartial -join ' ') | Should -Match 'IR-MailboxInbox'
+        ($e.SourcesPartial -join ' ') | Should -Match 'page cap'
+    }
+    It 'every required source read in full is complete' {
+        & $script:AllRequired $false
+        (Get-NRGDeepDiveEvidence).Complete | Should -BeTrue
+    }
+    It 'an optional source with a limitation is noted but does not make required evidence incomplete' {
+        & $script:AllRequired $false
+        & $script:Ok 'IR-MailboxRecoverable' @{ Count = 0; CollectionLimitation = 'Recoverable Items folder not accessible via delegated Graph in this tenant' }
+        $e = Get-NRGDeepDiveEvidence
+        ($e.SourcesPartial -join ' ') | Should -Match 'not accessible'
+        $e.Complete | Should -BeTrue
+    }
+    It 'a truncated anonymous-IP read makes sign-in completeness incomplete, with its source named' {
+        & $script:Ok 'IR-SignIn-Recent' @{ WindowDays = 7; Count = 10; Truncated = $false; Events = @() }
+        & $script:Ok 'IR-SignIn-AnonIp' @{ Count = 1000; Source = 'server-side filter, first page (1000 events)'; Truncated = $true; Events = @() }
+        & $script:Ok 'IR-SignIn-Travel' @{ Count = 0; Source = 'client-side over the recent read'; Truncated = $false; Events = @() }
+        $c = Get-NRGSignInCollectionCompleteness
+        $c.Complete | Should -BeFalse
+        ($c.Reasons -join ' ') | Should -Match 'IR-SignIn-AnonIp is partial'
+    }
+
+    Context 'collectors, with the Graph boundary mocked to keep returning a next link' {
+        It 'sent items stop at the cap and say so, instead of reporting a complete window' {
+            Mock -ModuleName 'NRG-Assessment' Invoke-NRGGraphRequest {
+                [ordered]@{ value = @(@{ id = 'm'; subject = 's'; sentDateTime = '2026-09-29T10:00:00Z'; toRecipients = @(); ccRecipients = @(); bccRecipients = @(); hasAttachments = $false; bodyPreview = '' }); '@odata.nextLink' = 'https://graph.microsoft.com/v1.0/next' }
+            }
+            Invoke-NRGEmailCollectMailbox -WindowDays 7
+            $bag = Get-NRGRawData -Key 'IR-MailboxSentItems'
+            $bag.Success | Should -BeTrue
+            $bag.Data.Truncated | Should -BeTrue
+            $bag.Data.PagesRead | Should -Be 5
+            $bag.Data.EarliestObserved | Should -Match '2026-09-29'
+            (Get-NRGDeepDiveEvidence).Complete | Should -BeFalse
+        }
+        It 'a sent-items read that ended with no next link is not marked truncated' {
+            Mock -ModuleName 'NRG-Assessment' Invoke-NRGGraphRequest { [ordered]@{ value = @() } }
+            Invoke-NRGEmailCollectMailbox -WindowDays 7
+            (Get-NRGRawData -Key 'IR-MailboxSentItems').Data.Truncated | Should -BeFalse
+        }
+        It 'mailbox coverage is registered from what completed, in its own family' {
+            Mock -ModuleName 'NRG-Assessment' Invoke-NRGGraphRequest { throw 'Graph unavailable' }
+            Invoke-NRGEmailCollectMailbox -WindowDays 7
+            $cov = Get-NRGCoverage
+            $cov['Email-IR-Mailbox'].Status | Should -Be 'Failed'
+        }
+    }
+}

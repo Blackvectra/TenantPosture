@@ -114,7 +114,9 @@ function Get-NRGIPGeolocation {
         $result.Error = $_.Exception.Message.Split([char]10)[0]
     }
 
-    $script:NRGIPCache[$cacheKey] = $result
+    # A failed lookup is not cached: a timeout must not become the permanent
+    # answer for this address for the rest of the process.
+    if (-not $result.Error) { $script:NRGIPCache[$cacheKey] = $result }
     return $result
 }
 
@@ -135,15 +137,26 @@ function Get-NRGIPSignInIntel {
     )
     Set-StrictMode -Version Latest
     $geo = Get-NRGIPGeolocation -IPAddress $IPAddress
+    $err = [string](Get-NRGObjectField -Item $geo -Key 'Error' -Default '')
+    # LookupStatus keeps three outcomes apart, because "nothing flagged" means
+    # different things for each: Resolved (registrant data came back and was
+    # judged), NoOwnerData (the lookup answered but named no owner, so nothing
+    # could be judged), Failed (the lookup did not complete). Only Resolved may
+    # support a negative.
+    $status = if ($err) { 'Failed' } elseif ($geo.ASNOwner) { 'Resolved' } else { 'NoOwnerData' }
+    # The flags come from pattern matches on the registrant NAME. They are
+    # context about who holds the address, not a verdict that it is hostile.
     [ordered]@{
-        IPAddress = $IPAddress
-        Country   = $geo.Country
-        ASNOwner  = $geo.ASNOwner
-        CIDR      = $geo.CIDR
-        Flags     = @(
-            if ($geo.ASNOwner -and ($geo.ASNOwner -match '(?i)hosting|datacenter|server|cloud|colo|VPS')) { 'HOSTING_ASN' }
-            if ($geo.ASNOwner -and ($geo.ASNOwner -match '(?i)NordVPN|Mullvad|Surfshark|ExpressVPN|ProtonVPN|PIA|Private Internet'))     { 'KNOWN_VPN_ASN' }
+        IPAddress    = $IPAddress
+        Country      = $geo.Country
+        ASNOwner     = $geo.ASNOwner
+        CIDR         = $geo.CIDR
+        LookupStatus = $status
+        Error        = $err
+        Flags        = @(
+            if ($status -eq 'Resolved' -and ($geo.ASNOwner -match '(?i)hosting|datacenter|server|cloud|colo|VPS')) { 'HOSTING_ASN' }
+            if ($status -eq 'Resolved' -and ($geo.ASNOwner -match '(?i)NordVPN|Mullvad|Surfshark|ExpressVPN|ProtonVPN|PIA|Private Internet'))     { 'KNOWN_VPN_ASN' }
         ) | Where-Object { $_ }
-        Source    = 'rdap.org'
+        Source       = 'rdap.org (registrant name match, not a reputation verdict)'
     }
 }

@@ -49,17 +49,31 @@ function Get-NRGDeepDiveEvidence {
     $keys = Get-NRGDeepDiveEvidenceKeys
     $read = [System.Collections.Generic.List[string]]::new()
     $missing = [System.Collections.Generic.List[string]]::new()
+    $partial = [System.Collections.Generic.List[string]]::new()
     foreach ($k in @($keys.Required) + @($keys.Optional)) {
         $bag = Get-NRGRawData -Key $k
         $ok = $bag -and [bool](Get-NRGObjectField -Item $bag -Key 'Success' -Default $false)
-        if ($ok) { $read.Add($k) } else { $missing.Add($k) }
+        if ($ok) {
+            $read.Add($k)
+            # A source that was read but only in part: the page cap stopped it
+            # (Truncated) or the collector recorded a limitation. It is read,
+            # not complete, and a "nothing found" over it is not a clean result.
+            if ([bool](Get-NRGNestedProperty -Object $bag -Path 'Data.Truncated' -Default $false)) {
+                $partial.Add("$k (stopped at its page cap; older items in the window were not read)")
+            }
+            $lim = [string](Get-NRGNestedProperty -Object $bag -Path 'Data.CollectionLimitation' -Default '')
+            if ($lim) { $partial.Add("$k ($lim)") }
+        } else { $missing.Add($k) }
     }
     $requiredMissing = @($keys.Required | Where-Object { $_ -in $missing })
+    $requiredPartial = @($partial | Where-Object { $p = $_; @($keys.Required | Where-Object { $p.StartsWith($_ + ' ') }).Count -gt 0 })
     return [ordered]@{
         SourcesRead     = @($read)
         SourcesMissing  = @($missing)
+        SourcesPartial  = @($partial)
         RequiredMissing = @($requiredMissing)
-        Complete        = ($requiredMissing.Count -eq 0)
+        RequiredPartial = @($requiredPartial)
+        Complete        = ($requiredMissing.Count -eq 0 -and $requiredPartial.Count -eq 0)
     }
 }
 

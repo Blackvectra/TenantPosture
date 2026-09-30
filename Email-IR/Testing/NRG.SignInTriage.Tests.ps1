@@ -44,7 +44,7 @@ Describe 'NRG Sign-In Triage — IoC evaluators against synthetic fixtures' {
             $events += @{
                 userPrincipalName = 'alice@corp.com'
                 createdDateTime   = $base.AddMinutes(-0.5).ToString('o')
-                ipAddress         = '203.0.113.99'
+                ipAddress         = '203.0.113.3'   # one of the addresses that failed
                 status            = @{ errorCode = 0 }
             }
             Set-NRGRawData -Key 'IR-SignIn-Recent' -Data (NewBag 'IR-SignIn-Recent' @{
@@ -60,7 +60,66 @@ Describe 'NRG Sign-In Triage — IoC evaluators against synthetic fixtures' {
             $f[0].State     | Should -Be 'Gap'
             $f[0].Severity  | Should -Be 'Critical'
             $f[0].Detail    | Should -Match 'alice@corp.com'
-            $f[0].Detail    | Should -Match '6 fails'
+            $f[0].Detail    | Should -Match '6 credential failures'
+            $f[0].Detail    | Should -Match 'confidence High'
+        }
+
+        Context 'the correlation is graded, not declared' {
+            BeforeAll {
+                function script:Seq($upn, $failIps, $failCode, $successIp, [bool] $withStatus = $true) {
+                    $base = (Get-Date).ToUniversalTime(); $ev = @(); $n = @($failIps).Count
+                    for ($i = 0; $i -lt $n; $i++) {
+                        $e = @{ userPrincipalName = $upn; createdDateTime = $base.AddMinutes(-($n - $i + 1)).ToString('o'); ipAddress = @($failIps)[$i] }
+                        if ($withStatus) { $e.status = @{ errorCode = $failCode } }
+                        $ev += $e
+                    }
+                    $s = @{ userPrincipalName = $upn; createdDateTime = $base.ToString('o'); ipAddress = $successIp }
+                    if ($withStatus) { $s.status = @{ errorCode = 0 } }
+                    $ev += $s
+                    Set-NRGRawData -Key 'IR-SignIn-Recent' -Data (NewBag 'IR-SignIn-Recent' @{ WindowDays = 7; Count = $ev.Count; Events = $ev })
+                    Test-NRGSignInControlFailedToSuccess
+                    @(Get-NRGFindings | Where-Object ControlId -eq 'SIGNIN-1.1')[0]
+                }
+            }
+            It 'failures from one place then a success from somewhere unrelated is Low confidence and says it may be a legitimate sign-in' {
+                $f = Seq 'a@corp.com' @('203.0.113.5','203.0.113.5','203.0.113.5','203.0.113.5','203.0.113.5') 50126 '198.51.100.44'
+                $f.State    | Should -Be 'Gap'
+                $f.Severity | Should -Be 'Medium'
+                $f.Detail   | Should -Match 'confidence Low'
+                $f.Detail   | Should -Match 'unrelated legitimate sign-in'
+                $script:NRGSignInUserScores['a@corp.com'].Points | Should -BeLessThan 60
+            }
+            It 'the success from an address that also failed is High confidence' {
+                $f = Seq 'a@corp.com' @('203.0.113.5','203.0.113.5','203.0.113.5','203.0.113.5','203.0.113.5') 50126 '203.0.113.5'
+                $f.Severity | Should -Be 'Critical'
+                $f.Detail   | Should -Match 'confidence High'
+            }
+            It 'the same /24 network is Medium confidence' {
+                $f = Seq 'a@corp.com' @('203.0.113.5','203.0.113.6','203.0.113.7','203.0.113.8','203.0.113.9') 50126 '203.0.113.200'
+                $f.Severity | Should -Be 'High'
+                $f.Detail   | Should -Match 'confidence Medium'
+            }
+            It 'a distributed pattern (failures from 3 or more addresses) is stated' {
+                $f = Seq 'a@corp.com' @('203.0.113.5','198.51.100.6','192.0.2.7','203.0.113.5','198.51.100.6') 50126 '192.0.2.7'
+                $f.Detail | Should -Match 'Failures came from 3 or more addresses'
+            }
+            It 'failures that are not credential guesses (MFA required) followed by a success are not a correlation' {
+                $f = Seq 'a@corp.com' @('203.0.113.5','203.0.113.5','203.0.113.5','203.0.113.5','203.0.113.5') 50074 '203.0.113.5'
+                $f.State | Should -Be 'Satisfied'
+            }
+            It 'events with no readable status are neither failures nor successes' {
+                $f = Seq 'a@corp.com' @('203.0.113.5','203.0.113.5','203.0.113.5','203.0.113.5','203.0.113.5') 50126 '203.0.113.5' $false
+                $f.State | Should -Be 'Satisfied'
+            }
+            It 'a clean result over a truncated read is not cleared' {
+                $base = (Get-Date).ToUniversalTime()
+                Set-NRGRawData -Key 'IR-SignIn-Recent' -Data (NewBag 'IR-SignIn-Recent' @{ WindowDays = 7; Count = 1; Truncated = $true; Events = @(
+                    @{ userPrincipalName = 'bob@corp.com'; createdDateTime = $base.ToString('o'); ipAddress = '198.51.100.1'; status = @{ errorCode = 0 } }) })
+                Test-NRGSignInControlFailedToSuccess
+                $f = @(Get-NRGFindings | Where-Object ControlId -eq 'SIGNIN-1.1')[0]
+                $f.State  | Should -Be 'NotApplicable'
+                $f.Detail | Should -Match 'Not cleared'
+            }
         }
 
         It 'Does not flag legitimate single login' {
@@ -126,7 +185,7 @@ Describe 'NRG Sign-In Triage — IoC evaluators against synthetic fixtures' {
             for ($i=6; $i -ge 1; $i--) {
                 $aliceEvents += @{ userPrincipalName='alice@corp.com'; createdDateTime=$base.AddMinutes(-$i).ToString('o'); ipAddress="203.0.113.$i"; status=@{errorCode=50126} }
             }
-            $aliceEvents += @{ userPrincipalName='alice@corp.com'; createdDateTime=$base.ToString('o'); ipAddress='203.0.113.99'; status=@{errorCode=0} }
+            $aliceEvents += @{ userPrincipalName='alice@corp.com'; createdDateTime=$base.ToString('o'); ipAddress='203.0.113.3'; status=@{errorCode=0} }
             Set-NRGRawData -Key 'IR-SignIn-Recent' -Data (NewBag 'r' @{ WindowDays=7; Cutoff=$base.AddDays(-7).ToString('o'); Count=$aliceEvents.Count; Events=$aliceEvents })
             Test-NRGSignInControlFailedToSuccess
 
@@ -229,7 +288,7 @@ Describe 'NRG Sign-In Triage — flagged-IP scoring attributes success per user 
         . (Join-Path $script:RepoRoot 'Lib' 'Get-NRGObjectField.ps1')
         . (Join-Path $script:RepoRoot 'Email-IR' 'Evaluators' 'Test-NRGSignInControls.ps1')
         # A stand-in for the RDAP lookup: every address is on hosting infrastructure.
-        function script:Get-NRGIPSignInIntel { param([string] $IPAddress) [pscustomobject]@{ IPAddress = $IPAddress; Country = 'US'; ASNOwner = 'HOSTCO'; Flags = @('HOSTING_ASN') } }
+        function script:Get-NRGIPSignInIntel { param([string] $IPAddress) [pscustomobject]@{ IPAddress = $IPAddress; Country = 'US'; ASNOwner = 'HOSTCO'; LookupStatus = 'Resolved'; Flags = @('HOSTING_ASN') } }
         function script:Bag([string]$key, $events) { [ordered]@{ CollectorId = $key; CollectedAt = (Get-Date -Format 'o'); Success = $true; Data = @{ Count = @($events).Count; Events = @($events) } } }
         function script:Ev([string]$upn, [string]$ip, [int]$err) { @{ userPrincipalName = $upn; ipAddress = $ip; createdDateTime = (Get-Date).ToString('o'); status = @{ errorCode = $err } } }
     }
@@ -268,5 +327,92 @@ Describe 'NRG Sign-In Triage — flagged-IP scoring attributes success per user 
         $f = @(Get-NRGFindings | Where-Object { $_.ControlId -eq 'SIGNIN-1.5' })[0]
         $f.Remediation | Should -Not -Match 'near-certain'
         $f.Remediation | Should -Match 'shared address'
+    }
+}
+
+Describe 'NRG Sign-In Triage — IP enrichment failure is never a clean negative (A07)' {
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
+        . (Join-Path $script:RepoRoot 'Lib' 'Add-NRGFinding.ps1')
+        . (Join-Path $script:RepoRoot 'Lib' 'Get-NRGObjectField.ps1')
+        . (Join-Path $script:RepoRoot 'Email-IR' 'Evaluators' 'Test-NRGSignInControls.ps1')
+        # Per-address outcomes for the stand-in lookup.
+        $global:NRGTestOutcome = @{}
+        function script:Get-NRGIPSignInIntel { param([string] $IPAddress)
+            $o = $global:NRGTestOutcome[$IPAddress]
+            if ($o -eq 'throw') { throw 'timeout' }
+            [ordered]@{ IPAddress = $IPAddress; Country = 'US'; ASNOwner = $(if ($o -in 'Resolved') { 'Example Telecom' } elseif ($o -eq 'Flagged') { 'HOSTCO Hosting' } else { $null })
+                        LookupStatus = $(if ($o -eq 'Flagged') { 'Resolved' } else { $o }); Flags = @($(if ($o -eq 'Flagged') { 'HOSTING_ASN' })) | Where-Object { $_ } }
+        }
+        function script:Bag([string]$key, $events) { [ordered]@{ CollectorId = $key; CollectedAt = (Get-Date -Format 'o'); Success = $true; Data = @{ Count = @($events).Count; Events = @($events) } } }
+        function script:Ev([string]$upn, [string]$ip, [int]$err) { @{ userPrincipalName = $upn; ipAddress = $ip; createdDateTime = (Get-Date).ToString('o'); status = @{ errorCode = $err } } }
+        function script:Run($events) {
+            Clear-NRGState; Clear-NRGSignInTriageState
+            Set-NRGRawData -Key 'IR-SignIn-AnonIp' -Data (Bag 'a' $events)
+            Set-NRGRawData -Key 'IR-SignIn-Travel' -Data (Bag 't' @())
+            Test-NRGSignInControlIPIntel
+            @(Get-NRGFindings | Where-Object { $_.ControlId -eq 'SIGNIN-1.5' })[0]
+        }
+    }
+
+    It 'every lookup failing is not assessed, never Satisfied' {
+        $global:NRGTestOutcome = @{ '203.0.113.1' = 'Failed'; '203.0.113.2' = 'throw' }
+        $f = Run @((Ev 'a@corp.com' '203.0.113.1' 0), (Ev 'b@corp.com' '203.0.113.2' 0))
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Match 'no registrant lookup completed'
+    }
+    It 'a lookup that answered but named no owner is not a successful negative' {
+        $global:NRGTestOutcome = @{ '203.0.113.1' = 'NoOwnerData' }
+        (Run @((Ev 'a@corp.com' '203.0.113.1' 0))).State | Should -Be 'NotApplicable'
+    }
+    It 'every address resolved and none flagged is Satisfied, and says how many resolved' {
+        $global:NRGTestOutcome = @{ '203.0.113.1' = 'Resolved' }
+        $f = Run @((Ev 'a@corp.com' '203.0.113.1' 0))
+        $f.State  | Should -Be 'Satisfied'
+        $f.Detail | Should -Match 'came back for 1 of 1'
+    }
+    It 'a flagged address is kept as a finding even when other lookups failed, and the failures are disclosed' {
+        $global:NRGTestOutcome = @{ '203.0.113.1' = 'Flagged'; '203.0.113.2' = 'Failed' }
+        $f = Run @((Ev 'a@corp.com' '203.0.113.1' 0), (Ev 'b@corp.com' '203.0.113.2' 0))
+        $f.State  | Should -Be 'Gap'
+        $f.Detail | Should -Match 'came back for 1 of 2 address\(es\) looked up; 1 lookup\(s\) failed'
+        $f.CurrentValue | Should -Match 'not a malicious-IP verdict|context'
+    }
+    It 'nothing flagged but some lookups failed is not cleared' {
+        $global:NRGTestOutcome = @{ '203.0.113.1' = 'Resolved'; '203.0.113.2' = 'Failed' }
+        $f = Run @((Ev 'a@corp.com' '203.0.113.1' 0), (Ev 'b@corp.com' '203.0.113.2' 0))
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Match 'Not cleared'
+    }
+    It 'a failed lookup contributes no score, even for a user who signed in successfully' {
+        $global:NRGTestOutcome = @{ '203.0.113.2' = 'Failed' }
+        $null = Run @((Ev 'b@corp.com' '203.0.113.2' 0))
+        $script:NRGSignInUserScores.Count | Should -Be 0
+    }
+}
+
+Describe 'Get-NRGIPSignInIntel — lookup health is carried, not dropped (A07)' {
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
+        . (Join-Path $script:RepoRoot 'Lib' 'Get-NRGObjectField.ps1')
+        . (Join-Path $script:RepoRoot 'Email-IR' 'Lib' 'Get-NRGIPThreatIntel.ps1')
+    }
+    It 'a geolocation error is Failed with no flags' {
+        Mock Get-NRGIPGeolocation { [ordered]@{ IPAddress = '198.51.100.7'; Country = $null; ASNOwner = $null; CIDR = $null; Error = 'timeout' } }
+        $r = Get-NRGIPSignInIntel -IPAddress '198.51.100.7'
+        $r.LookupStatus | Should -Be 'Failed'
+        $r.Error | Should -Be 'timeout'
+        @($r.Flags).Count | Should -Be 0
+    }
+    It 'an answer with no owner is NoOwnerData, not a resolved negative' {
+        Mock Get-NRGIPGeolocation { [ordered]@{ IPAddress = '198.51.100.7'; Country = 'US'; ASNOwner = $null; CIDR = $null; Error = $null } }
+        (Get-NRGIPSignInIntel -IPAddress '198.51.100.7').LookupStatus | Should -Be 'NoOwnerData'
+    }
+    It 'an owner whose name matches a hosting pattern is Resolved and flagged as context' {
+        Mock Get-NRGIPGeolocation { [ordered]@{ IPAddress = '198.51.100.7'; Country = 'US'; ASNOwner = 'Example Hosting LLC'; CIDR = $null; Error = $null } }
+        $r = Get-NRGIPSignInIntel -IPAddress '198.51.100.7'
+        $r.LookupStatus | Should -Be 'Resolved'
+        @($r.Flags) | Should -Contain 'HOSTING_ASN'
+        $r.Source | Should -Match 'not a reputation verdict'
     }
 }

@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **Remaining incident-response audit findings (A03, A05, A06, A07, A10) and two review gaps.**
+  A07: an IP lookup that failed or returned no owner is `Failed` / `NoOwnerData`,
+  never a clean negative; SIGNIN-1.5 is not assessed when no lookup completed, is
+  not cleared when some failed, says how many resolved, and describes a
+  registrant-name match as context, not a malicious-IP verdict; failed lookups
+  are no longer cached. A06: inbox rules are scored on what they do (hidden name,
+  forwarding to a different domain, no filter, delete), a folder move or
+  same-domain forward is routine, and a disabled rule is kept as historical
+  evidence (Medium), never current persistence. A05: failed-then-success counts
+  credential failures only (wrong password, smart lockout), ignores unknown
+  status, and grades confidence by how the success source lines up with the
+  failure sources (same address / same /24 / different source); it is called a
+  suspicious correlation, not a successful attack. A03: anonymous-IP, sent,
+  inbox, recoverable and consent reads record `Truncated` (next link or page cap
+  left) and the range observed; a required source that stopped at its cap makes
+  the deep-dive evidence incomplete, so the verdict is not cleared; mailbox and
+  user-security coverage is registered at the end from what completed. A10:
+  phishing candidates are leads, a deletion in Recoverable Items adds a little
+  rank and never names who deleted it and cannot qualify a message alone,
+  brands (DocuSign, Adobe, Dropbox) are judged against their own domains,
+  internal senders are kept as lower-confidence leads, and every result states
+  the folders, window, completeness and that links come from the preview only.
+  R1: AAD-12.1's finding no longer says "one stolen password away from a full
+  mailbox compromise". R2: a result dated beyond a 15-minute clock-skew allowance
+  in the future is not a current endpoint result. Not done: recent sign-ins are
+  not re-ordered newest-first (the Graph `$orderby` support was not verified),
+  and none of this has had a controlled live run.
+
 - **Second review pass.** Endpoint completeness now also requires a usable,
   unique identity for every managed Windows device: an unnamed device, two
   devices sharing a short host name, or two result files sharing one leave
