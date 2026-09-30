@@ -136,11 +136,11 @@ function Test-NRGControlDevice {
     $now = (Get-Date).ToUniversalTime()
     $staleAge = @{}
     foreach ($d in $devices) {
-        $host = ([string](Get-NRGObjectField -Item $d -Key 'Hostname' -Default '')).ToUpperInvariant()
+        $devHost = ([string](Get-NRGObjectField -Item $d -Key 'Hostname' -Default '')).ToUpperInvariant()
         $ts = [datetime]::MinValue
         $ok = [datetime]::TryParse([string](Get-NRGObjectField -Item $d -Key 'CollectedAt' -Default ''), [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$ts)
-        if (-not $ok) { $staleAge[$host] = -1 }
-        elseif (($now - $ts.ToUniversalTime()).TotalDays -gt $script:NRGDeviceResultMaxAgeDays) { $staleAge[$host] = [int][math]::Floor(($now - $ts.ToUniversalTime()).TotalDays) }
+        if (-not $ok) { $staleAge[$devHost] = -1 }
+        elseif (($now - $ts.ToUniversalTime()).TotalDays -gt $script:NRGDeviceResultMaxAgeDays) { $staleAge[$devHost] = [int][math]::Floor(($now - $ts.ToUniversalTime()).TotalDays) }
     }
     $staleCount = $staleAge.Count
 
