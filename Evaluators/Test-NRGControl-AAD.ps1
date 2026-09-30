@@ -267,12 +267,18 @@ function Get-NRGLegacyAuthBlockState {
     $legacy = @($ca.Data['Policies'] | Where-Object {
         @($_.Conditions.ClientAppTypes) -contains 'other' -and (Test-NRGCAGrantRequires -Policy $_ -Any @('block'))
     })
-    $full = @($legacy | Where-Object { $_.State -eq 'enabled' -and (Test-NRGCAAllUsers $_) -and (Test-NRGCAAllApps $_) })
-    if ($full.Count -gt 0) {
-        return [ordered]@{ Kind = 'Blocked'; Detail = "Conditional Access blocks legacy authentication (Other clients) for all users: $((@($full | ForEach-Object { $_.DisplayName })) -join ', ')" }
+    $cov = Get-NRGCAEffectiveCoverage -Policies @($legacy | Where-Object { $_.State -eq 'enabled' })
+    if ($cov.Kind -eq 'Full') {
+        return [ordered]@{ Kind = 'Blocked'; Detail = "Conditional Access blocks legacy authentication (Other clients) for all users on all applications: $($cov.FullNames -join ', ')" }
+    }
+    if ($cov.Kind -eq 'Exceptions') {
+        return [ordered]@{ Kind = 'PartlyBlocked'; Detail = "Conditional Access blocks legacy authentication but every qualifying policy excludes $($cov.Exceptions -join ', ')" }
+    }
+    if ($cov.Kind -eq 'Unproven') {
+        return [ordered]@{ Kind = 'PartlyBlocked'; Detail = 'Conditional Access blocks legacy authentication but each qualifying policy excludes different users or groups, so combined coverage is unproven' }
     }
     if ($legacy.Count -gt 0) {
-        return [ordered]@{ Kind = 'PartlyBlocked'; Detail = 'a legacy-authentication block exists only for some users or only in report-only mode' }
+        return [ordered]@{ Kind = 'PartlyBlocked'; Detail = 'a legacy-authentication block exists only for some users or applications, or only in report-only mode' }
     }
     return [ordered]@{ Kind = 'NotBlocked'; Detail = 'no Conditional Access policy blocks legacy authentication and Security Defaults is off' }
 }
@@ -321,23 +327,23 @@ function Test-NRGControlAADLegacyAuth {
     $legacy = @($caData.Data['Policies'] | Where-Object {
         @($_.Conditions.ClientAppTypes) -contains 'other' -and (Test-NRGCAGrantRequires -Policy $_ -Any @('block'))
     })
-    # A policy also has to apply to every application: one whose application scope is
-    # 'None' (or a single app) blocks nothing for the rest, though it is enabled, names
-    # all users and carries the block grant.
-    $full    = @($legacy | Where-Object { $_.State -eq 'enabled' -and (Test-NRGCAAllUsers $_) -and (Test-NRGCAAllApps $_) })
-    $scoped  = @($legacy | Where-Object { $_.State -eq 'enabled' -and -not ((Test-NRGCAAllUsers $_) -and (Test-NRGCAAllApps $_)) })
+    # Combined coverage (Get-NRGCAEffectiveCoverage): a policy must cover all users on all
+    # applications with no extra condition to count; user exclusions are judged across
+    # every qualifying policy, so one policy excluding a break-glass account is not a gap
+    # when another covers them, and is reported as an exception when none does.
+    $cov     = Get-NRGCAEffectiveCoverage -Policies @($legacy | Where-Object { $_.State -eq 'enabled' })
+    $scoped  = @($cov.Narrowed)
     $audit   = @($legacy | Where-Object { $_.State -eq 'enabledForReportingButNotEnforced' })
     $names   = { param($l) (@($l) | ForEach-Object { $_.DisplayName }) -join ', ' }
 
-    if ($full.Count -gt 0) {
-        $exNote = ''
-        $excl = @($full | Where-Object { @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.ExcludeUsers' -Default @()).Count -gt 0 -or @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.ExcludeGroups' -Default @()).Count -gt 0 })
-        if ($excl.Count -gt 0 -and $excl.Count -eq $full.Count) { $exNote = ' Every such policy excludes at least one user or group (for example a break-glass account); confirm each exclusion is intended.' }
-        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
-            -Detail "Legacy authentication (Other clients) is blocked for all users on all applications by: $(& $names $full).$exNote"
+    if ($cov.Kind -ne 'None') {
+        $cv = Get-NRGCACoverageVerdict -Coverage $cov -What 'Legacy authentication (Other clients) is blocked'
+        Add-NRGExpectedStateFinding -ControlId $controlId -Control $control -FrameworkIds $citations `
+            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished `
+            -CurrentValue "Legacy block: $($cov.Kind) coverage by $($cov.Names -join ', ')" `
+            -RequiredValue 'CA policy blocking Other clients for all users on all applications, or Security Defaults'
     } elseif ($scoped.Count -gt 0 -or $audit.Count -gt 0) {
-        $why = if ($scoped.Count -gt 0) { "blocked only for a subset of users, groups or applications ($(& $names $scoped)); everyone else can still use legacy protocols" } else { "configured only in report-only mode ($(& $names $audit)); nothing is blocked" }
+        $why = if ($scoped.Count -gt 0) { "blocked only for a subset of users, groups or applications, or under a narrowing condition ($(($scoped | ForEach-Object { "$($_.Name): $($_.Why)" }) -join '; ')); everyone else can still use legacy protocols" } else { "configured only in report-only mode ($(& $names $audit)); nothing is blocked" }
         Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
             -Detail "Legacy authentication is $why." `
@@ -416,9 +422,41 @@ function Test-NRGControlAADPhishResistantMFA {
     })
 
     if ($phishResistantPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
-            -Detail "Phishing-resistant MFA (Authentication Strength) required for admin roles by $($phishResistantPolicies.Count) CA policy(ies): $(($phishResistantPolicies | ForEach-Object { $_.DisplayName }) -join ', ')."
+        # Coverage of the administrator population, not just "a policy exists": an
+        # all-users policy covers admins; a role-scoped one must include every privileged
+        # role this tenant's own role catalog lists (never Microsoft's fixed list, which
+        # the tool cannot verify here); exclusions are judged across every qualifying policy.
+        $privIds = $null
+        $roleRaw = Get-NRGRawData -Key 'AAD-DirectoryRoles'
+        if ($roleRaw -and (Get-NRGObjectField -Item $roleRaw -Key 'Success' -Default $null) -eq $true) {
+            $defs = @(Get-NRGNestedProperty -Object $roleRaw -Path 'Data.RoleDefinitions' -Default @())
+            if ($defs.Count -gt 0) {
+                $privIds = @{}
+                foreach ($d in $defs) { if ((Get-NRGObjectField -Item $d -Key 'IsPriv' -Default $false) -eq $true) { $privIds[[string](Get-NRGObjectField -Item $d -Key 'Id' -Default '')] = $true } }
+            }
+        }
+        $cands = @(); $narrowed = @(); $roleUnverified = @()
+        foreach ($p in $phishResistantPolicies) {
+            $nm = [string]$p.DisplayName
+            $nar = @(Get-NRGCANarrowing -Policy $p | Where-Object { $_ -ne 'applies to only some users, groups or roles' })
+            if (-not (Test-NRGCAAllUsers $p)) {
+                $rc = Get-NRGCAAdminRoleCoverage -Policy $p -PrivRoleIds $privIds
+                if ($null -eq $rc) { $roleUnverified += $nm }
+                elseif ($rc.CoveredCount -lt $rc.TotalPriv) { $nar += "it covers $($rc.CoveredCount) of $($rc.TotalPriv) privileged roles" }
+            }
+            if ($nar.Count -gt 0) { $narrowed += [pscustomobject]@{ Name = $nm; Why = ($nar -join '; ') } }
+            else { $cands += [pscustomobject]@{ Name = $nm; Exclusions = @(Get-NRGCAPrincipalExclusions -Policy $p) } }
+        }
+        $cov = Get-NRGExclusionCoverage -Candidates $cands
+        $cov['Narrowed'] = @($narrowed)
+        $cv = Get-NRGCACoverageVerdict -Coverage $cov -What 'Phishing-resistant MFA (Authentication Strength) is required for admin roles'
+        if ($cov.Kind -ne 'None' -and $roleUnverified.Count -gt 0 -and @($cov.FullNames | Where-Object { $_ -notin $roleUnverified }).Count -eq 0) {
+            $cv.NotEstablished = @($cv.NotEstablished) + "whether $($roleUnverified -join ', ') covers every privileged role, because this tenant's role catalog was not read."
+        }
+        Add-NRGExpectedStateFinding -ControlId $controlId -Control $control -FrameworkIds $citations `
+            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished `
+            -CurrentValue "Phishing-resistant MFA for admins: $($cov.Kind) coverage" `
+            -RequiredValue 'CA policy with a phishing-resistant authentication strength covering every privileged role'
     } elseif ($unknownStrengthPolicies.Count -gt 0) {
         # A strength is required, but which methods it allows could not be
         # read, so phishing resistance is unverified in either direction.
@@ -1554,15 +1592,22 @@ function Test-NRGControlAADDeviceCode {
             -IfOff 'no Conditional Access policy blocks it'
         return
     }
-    $caBlocks = @($ca.Data['Policies'] | Where-Object {
+    $dcPolicies = @($ca.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and
         ((@($_.Conditions.AuthFlows) | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'transferMethods') }) -join ',') -match 'deviceCode' -and
         # A policy that scopes device code but only requires MFA still lets
         # the flow run — the phishing kits relay the MFA prompt too.
         (Test-NRGCAGrantRequires -Policy $_ -Any @('block'))
-    }).Count -gt 0
-    if ($caBlocks) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Device code authentication flow is blocked by a Conditional Access policy. Adversary-in-the-middle phishing via device code is prevented.'
+    })
+    # Combined coverage: all users, all applications, no extra condition; exclusions are
+    # judged across every qualifying policy (see Get-NRGCAEffectiveCoverage).
+    $cov = Get-NRGCAEffectiveCoverage -Policies $dcPolicies
+    if ($cov.Kind -ne 'None' -or @($cov.Narrowed).Count -gt 0) {
+        $cv = Get-NRGCACoverageVerdict -Coverage $cov -What 'The device code authentication flow is blocked'
+        Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
+            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished `
+            -CurrentValue "Device code flow block: $($cov.Kind) coverage$(if ($cov.Names.Count) { ' by ' + ($cov.Names -join ', ') })" `
+            -RequiredValue 'CA policy blocking the device code flow for all users on all applications (or Security Defaults)'
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Device code authentication flow is not blocked. Attackers use this flow in phishing campaigns where victims visit a URL and enter a code — no password required to compromise the account.' -CurrentValue 'No CA policy blocks deviceCodeFlow' -RequiredValue 'CA policy blocking deviceCodeFlow for all users' -Remediation $ctrl.Remediation
     }

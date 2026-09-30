@@ -198,9 +198,14 @@ function Invoke-NRGCollectDefender {
             $mkPr = { param($r) @{
                 Name = [string](Get-NRGObjectField -Item $r -Key 'Name' -Default '')
                 State = [string](Get-NRGObjectField -Item $r -Key 'State' -Default '')
-                RecipientDomainIs = @(Get-NRGObjectField -Item $r -Key 'RecipientDomainIs' -Default @())
-                SentTo = @(Get-NRGObjectField -Item $r -Key 'SentTo' -Default @())
-                SentToMemberOf = @(Get-NRGObjectField -Item $r -Key 'SentToMemberOf' -Default @())
+                RecipientDomainIs = @(@(Get-NRGObjectField -Item $r -Key 'RecipientDomainIs' -Default @()) | Where-Object { $_ })
+                SentTo = @(@(Get-NRGObjectField -Item $r -Key 'SentTo' -Default @()) | Where-Object { $_ })
+                SentToMemberOf = @(@(Get-NRGObjectField -Item $r -Key 'SentToMemberOf' -Default @()) | Where-Object { $_ })
+                # WHO the preset does not apply to: the exclusions, by identity, so a reader (and the
+                # coverage judgment) can see them instead of a bare HasExceptions flag.
+                ExceptIfSentTo = @(@(Get-NRGObjectField -Item $r -Key 'ExceptIfSentTo' -Default @()) | Where-Object { $_ } | ForEach-Object { [string]$_ })
+                ExceptIfSentToMemberOf = @(@(Get-NRGObjectField -Item $r -Key 'ExceptIfSentToMemberOf' -Default @()) | Where-Object { $_ } | ForEach-Object { [string]$_ })
+                ExceptIfRecipientDomainIs = @(@(Get-NRGObjectField -Item $r -Key 'ExceptIfRecipientDomainIs' -Default @()) | Where-Object { $_ } | ForEach-Object { [string]$_ })
                 HasExceptions = [bool]@(@(Get-NRGObjectField -Item $r -Key 'ExceptIfSentTo' -Default @()) + @(Get-NRGObjectField -Item $r -Key 'ExceptIfSentToMemberOf' -Default @()) + @(Get-NRGObjectField -Item $r -Key 'ExceptIfRecipientDomainIs' -Default @()) | Where-Object { $_ }).Count } }
             $eop = @(Get-EOPProtectionPolicyRule -ErrorAction Stop)
             $atp = @()

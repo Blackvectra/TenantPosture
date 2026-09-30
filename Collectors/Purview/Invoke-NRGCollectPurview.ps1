@@ -142,6 +142,8 @@ function Invoke-NRGCollectPurview {
                         Name             = [string](Get-NRGObjectField -Item $r -Key 'Name'             -Default '')
                         ParentPolicyName = [string](Get-NRGObjectField -Item $r -Key 'ParentPolicyName' -Default '')
                         Disabled         = [bool]  (Get-NRGObjectField -Item $r -Key 'Disabled'         -Default $false)
+                        # Enforcement: $null when the property is not returned (never assumed to block).
+                        BlockAccess      = $(if ($null -eq (Get-NRGObjectField -Item $r -Key 'BlockAccess' -Default $null)) { $null } else { [bool](Get-NRGObjectField -Item $r -Key 'BlockAccess' -Default $false) })
                         SensitiveInfoTypes = @($sitNames)
                     }
                 })

@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- **Coverage is judged on who is protected, not on which policies exist.** Found by running an
+  independent ScubaGear scan on the same tenant and replaying the current code against the stored
+  NRG results. Reproduced and fixed: (1) **Conditional Access exclusions were ignored**: AAD-1.1,
+  AAD-11.1, AAD-1.2 and AAD-1.3 passed a policy that excluded users, and AAD-11.1 passed
+  one scoped to some users, applications or conditions. They now judge combined coverage
+  (`Get-NRGExclusionCoverage` / `Get-NRGCAEffectiveCoverage`): a policy must cover all users and
+  all applications with no extra condition to count; an exclusion is not a gap when another
+  qualifying policy covers those users, is reported as an exception when the same principals are
+  excluded from every qualifying policy, and is unproven (not assessed) when different policies
+  exclude different groups whose membership is not resolved. AAD-1.3 also requires a role-scoped
+  policy to cover every privileged role in this tenant's own role catalog (not assessed when the
+  catalog was not read). MFA registration, MFA enforcement and phishing resistance stay three
+  separate judgments; phishing resistance comes from the strength's allowed methods, never from
+  a policy name. (2) **DEF-2.1 said "preset turned on" without asking who it covers**: it now
+  judges recipient scope, exclusions (the collector now stores their identities) and fallback
+  across Standard and Strict combined. (3) **DLP counted policies in test mode**: DEF-4.1, DEF-4.2
+  and PVW-3.4 credited workloads and sensitive information types from a policy in
+  `TestWithNotifications`; only enforcing policies (Mode Enable) count now, test-mode ones are
+  reported, and whether rules block is stated only as far as `BlockAccess` was read
+  (`Get-NRGDlpRuleStates`). `NRG.CoverageTruth.Tests.ps1` pins all of it with sanitized fixtures.
+  Observed configuration, baseline judgment and independent comparison are kept apart: the
+  verdict is NRG's baseline; an independent scan is evidence to challenge it, never a target.
+
 - **AAD-1.1 no longer credits a legacy-authentication block that applies to no application.**
   Found by comparing a ScubaGear 2.0.0 run with NRG on the same tenant: a policy with all
   users, the `other` client type and a block grant but an application scope of `None`

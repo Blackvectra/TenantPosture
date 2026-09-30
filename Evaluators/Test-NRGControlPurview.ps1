@@ -373,10 +373,16 @@ function Test-NRGControlPurviewSensitiveInfoTypes {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'DLPRules was not collected; sensitive information type use not assessed.'
         return
     }
-    $active = @(@($pvw.Data['DLPRules'] ?? @()) | Where-Object { -not (Get-NRGObjectField -Item $_ -Key 'Disabled' -Default $false) })
-    $withSit = @($active | Where-Object { @(Get-NRGObjectField -Item $_ -Key 'SensitiveInfoTypes' -Default @()).Count -gt 0 })
+    # Only enabled rules in an ENFORCING policy (Mode Enable) count; rules in a test-mode or disabled
+    # policy are reported but not credited (Get-NRGDlpRuleStates).
+    $states  = @(Get-NRGDlpRuleStates -Policies @($pvw.Data['DLPPolicies'] ?? @()) -Rules @($pvw.Data['DLPRules'] ?? @()))
+    $active  = @($states | Where-Object { $_.State -eq 'Enforcing' })
+    $testR   = @($states | Where-Object { $_.State -eq 'TestMode' })
+    $withSit = @($active | Where-Object { @($_.SITs).Count -gt 0 })
     if ($withSit.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($withSit.Count) enabled DLP rule(s) detect sensitive information types." -CurrentValue "$($withSit.Count) of $($active.Count) enabled rules use SITs"
+        $verified = @("$($withSit.Count) enabled rule(s) in enforcing DLP policies detect sensitive information types ($($withSit.Count) of $($active.Count) enforcing rules).")
+        if ($testR.Count -gt 0) { $verified += "Not counted (policy in test mode or off): $($testR.Count) rule(s) in $((@($testR | ForEach-Object { $_.Policy } | Sort-Object -Unique)) -join ', ')." }
+        Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -CurrentValue "$($withSit.Count) of $($active.Count) enforcing rules use SITs"
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "No enabled DLP rule matches on a sensitive information type ($($active.Count) enabled rule(s)). Regulated data (SSN, card numbers, health data) is not being detected." -CurrentValue "0 of $($active.Count) enabled rules use SITs" -RequiredValue 'Enabled DLP rules matching sensitive information types' -Remediation $ctrl.Remediation
     }

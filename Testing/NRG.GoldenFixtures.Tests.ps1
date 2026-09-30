@@ -140,6 +140,7 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
     Context 'AAD-1.3 — Phishing-Resistant MFA for Admins' {
 
         It 'Satisfied when a role-targeted policy uses an Authentication Strength' {
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw 'AAD' @{ RoleDefinitions = @(@{ Id = '62e90394-69f5-4237-9190-012177145e10'; DisplayName = 'Global Administrator'; IsPriv = $true }) })
             Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{
                 Policies = @( NewCaPolicy -DisplayName 'Admins: phish-resistant' -State 'enabled' `
                                 -IncludeRoles @('62e90394-69f5-4237-9190-012177145e10') `
@@ -185,6 +186,7 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
         }
 
         It 'judges a custom strength by every combination it allows' {
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw 'AAD' @{ RoleDefinitions = @(@{ Id = '62e90394-69f5-4237-9190-012177145e10'; DisplayName = 'Global Administrator'; IsPriv = $true }) })
             $mk = { param([string[]] $Combos)
                 $p = NewCaPolicy -DisplayName 'Admins: custom' -State 'enabled' `
                         -IncludeRoles @('62e90394-69f5-4237-9190-012177145e10') -AuthStrengthId 'd6c840e6-b1ff-4cc2-8253-10409d809f22'
@@ -468,6 +470,7 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
     Context 'Cross-cutting — a compliant tenant is never reported as vulnerable' {
 
         It 'the compliant fixtures above produce zero Gap findings for their controls' {
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw 'AAD' @{ RoleDefinitions = @(@{ Id = '62e90394-69f5-4237-9190-012177145e10'; DisplayName = 'Global Administrator'; IsPriv = $true }) })
             Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{
                 Policies = @(
                     (NewCaPolicy -DisplayName 'Block legacy' -State 'enabled' `

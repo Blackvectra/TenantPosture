@@ -66,6 +66,22 @@ Remaining limits inside these checks:
 - **DEF-2.2** reads malware ZAP from `Get-MalwareFilterPolicy`; results saved before this
   change carry no `ZapEnabled` and report malware ZAP as not assessed.
 
+## Coverage judgments (Conditional Access, Defender presets, DLP)
+
+- **Combined exclusion coverage.** A principal is unprotected only when it is excluded from
+  every qualifying policy. Group membership is **not resolved**, so two policies excluding
+  different groups are reported as unproven, not covered. Emergency-access accounts excluded
+  everywhere show as an exception; record an approved deviation if that is intended.
+- **Privileged roles** are the roles this tenant's own catalog marks privileged, not
+  Microsoft's fixed list.
+- **Preset recipient scope.** A preset rule that returns no recipient scope is not assumed to
+  cover everyone. Exclusion identities are stored by the current collector; older results keep
+  only a flag and say so.
+- **DLP.** Workload coverage, detection and enforcement are separate claims. Only enforcing
+  policies count; rule actions (`BlockAccess`) are reported only when read.
+- **Authentication policies and Conditional Access conditions** beyond applications, platforms,
+  locations, device filter and risk levels (for example session controls) are not modeled.
+
 ## Changed in this review
 
 These were narrower than their expected state and now verify the whole requirement or

@@ -65,7 +65,8 @@ Describe 'Defender, Purview and Power Platform verdicts' {
         It 'DEF-2.1 needs an ENABLED preset rule, not a policy named "Standard"' {
             Def @{ AntiPhishing = @{ Available = $true; Rules = @(); Policies = @(@{ Name = 'Standard users - anti-phish' }) } }
             (V 'Test-NRGControlDefenderPresetPolicies' 'DEF-2.1').State | Should -Be 'Gap'
-            Def @{ PresetRules = @{ Available = $true; ATP = @(); EOP = @(@{ Name = 'Standard Preset Security Policy'; State = 'Enabled' }) } }
+            Def @{ PresetRules = @{ Available = $true; ATP = @(); EOP = @(@{ Name = 'Standard Preset Security Policy'; State = 'Enabled'; RecipientDomainIs = @('contoso.com'); SentTo = @(); SentToMemberOf = @(); HasExceptions = $false }) } }
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (Bag @{ AcceptedDomains = @(@{ DomainName = 'contoso.com' }); SectionStatus = @{ AcceptedDomains = 'Collected' } })
             (V 'Test-NRGControlDefenderPresetPolicies' 'DEF-2.1').State | Should -Be 'Satisfied'
         }
         It 'DEF-4.7 reads EnableSafeLinksForOffice without throwing; DEF-4.6 does not count a scheduled simulation' {
