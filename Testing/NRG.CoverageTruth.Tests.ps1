@@ -100,6 +100,11 @@ Describe 'Coverage is judged on who is protected, not on which policies exist' {
             $v.Detail | Should -Match 'Verified: Legacy authentication \(Other clients\) is blocked by: only'
             $v.Detail | Should -Match "user:$($script:BG)"
         }
+        It 'AAD-1.1: an excluded account is named when the user list was collected, not only its id' {
+            Ca @(Pol -Name 'only' -ClientApps @('other') -Grant @('block') -ExUsers @('00000000-aaaa-bbbb-cccc-000000000001'))
+            Set-NRGRawData -Key 'AAD-Users' -Data (Bag @{ Users = @(@{ Id = '00000000-aaaa-bbbb-cccc-000000000001'; UserPrincipalName = 'svc-account@contoso.example'; DisplayName = 'Svc' }) })
+            (V 'Test-NRGControlAADLegacyAuth' 'AAD-1.1').Detail | Should -Match 'user:00000000-aaaa-bbbb-cccc-000000000001 \(svc-account@contoso\.example\)'
+        }
         It 'AAD-1.1: different exclusions in different policies are unproven (not assessed), not satisfied and not a gap' {
             Ca @((Pol -Name 'a' -ClientApps @('other') -Grant @('block') -ExGroups @('GROUP-A')), (Pol -Name 'b' -ClientApps @('other') -Grant @('block') -ExGroups @('GROUP-B')))
             $v = V 'Test-NRGControlAADLegacyAuth' 'AAD-1.1'

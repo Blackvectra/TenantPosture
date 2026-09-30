@@ -112,6 +112,28 @@ function Get-NRGCAEffectiveCoverage {
     return $cov
 }
 
+function Get-NRGCAPrincipalLabel {
+    <#
+    .SYNOPSIS
+        Adds the account name to a 'user:<id>' exclusion when the user list was collected, so a
+        finding names who is excluded, not just a GUID. Unresolvable ids stay as they are.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [string] $Principal)
+    if ($Principal -notmatch '^user:(.+)$') { return $Principal }
+    $id = $Matches[1]
+    $raw = Get-NRGRawData -Key 'AAD-Users'
+    if (-not $raw) { return $Principal }
+    foreach ($u in @(Get-NRGNestedProperty -Object $raw -Path 'Data.Users' -Default @())) {
+        if ([string](Get-NRGObjectField -Item $u -Key 'Id' -Default '') -eq $id) {
+            $upn = [string](Get-NRGObjectField -Item $u -Key 'UserPrincipalName' -Default '')
+            if ($upn) { return "$Principal ($upn)" }
+        }
+    }
+    return $Principal
+}
+
 function Get-NRGCACoverageVerdict {
     <#
     .SYNOPSIS
@@ -128,7 +150,7 @@ function Get-NRGCACoverageVerdict {
         }
         'Exceptions' {
             $v += "$What by: $names."
-            $s += "every qualifying policy excludes the same principal(s), so they are not covered: $($Coverage.Exceptions -join ', '). If these are emergency-access accounts, record them as an approved exception."
+            $s += "every qualifying policy excludes the same principal(s), so they are not covered: $((@($Coverage.Exceptions) | ForEach-Object { Get-NRGCAPrincipalLabel -Principal $_ }) -join ', '). If these are emergency-access accounts, record them as an approved exception."
         }
         'Unproven' {
             $v += "$What by: $names."
