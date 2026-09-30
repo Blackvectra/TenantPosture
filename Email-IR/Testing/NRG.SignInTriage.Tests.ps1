@@ -221,3 +221,52 @@ Describe 'NRG Sign-In Triage — Geo-anomaly (SIGNIN-1.6)' {
         $f[0].State | Should -Be 'NotApplicable'
     }
 }
+
+Describe 'NRG Sign-In Triage — flagged-IP scoring attributes success per user (SIGNIN-1.5)' {
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) } else { (Get-Location).Path }
+        . (Join-Path $script:RepoRoot 'Lib' 'Add-NRGFinding.ps1')
+        . (Join-Path $script:RepoRoot 'Lib' 'Get-NRGObjectField.ps1')
+        . (Join-Path $script:RepoRoot 'Email-IR' 'Evaluators' 'Test-NRGSignInControls.ps1')
+        # A stand-in for the RDAP lookup: every address is on hosting infrastructure.
+        function script:Get-NRGIPSignInIntel { param([string] $IPAddress) [pscustomobject]@{ IPAddress = $IPAddress; Country = 'US'; ASNOwner = 'HOSTCO'; Flags = @('HOSTING_ASN') } }
+        function script:Bag([string]$key, $events) { [ordered]@{ CollectorId = $key; CollectedAt = (Get-Date -Format 'o'); Success = $true; Data = @{ Count = @($events).Count; Events = @($events) } } }
+        function script:Ev([string]$upn, [string]$ip, [int]$err) { @{ userPrincipalName = $upn; ipAddress = $ip; createdDateTime = (Get-Date).ToString('o'); status = @{ errorCode = $err } } }
+    }
+    BeforeEach { Clear-NRGState; Clear-NRGSignInTriageState }
+
+    It 'a user who only FAILED from a flagged shared address is not scored for another user''s success' {
+        Set-NRGRawData -Key 'IR-SignIn-AnonIp' -Data (Bag 'a' @((Ev 'alice@corp.com' '203.0.113.9' 50126), (Ev 'bob@corp.com' '203.0.113.9' 0)))
+        Set-NRGRawData -Key 'IR-SignIn-Travel' -Data (Bag 't' @())
+        Test-NRGSignInControlIPIntel
+        $script:NRGSignInUserScores.ContainsKey('bob@corp.com')   | Should -BeTrue
+        $script:NRGSignInUserScores.ContainsKey('alice@corp.com') | Should -BeFalse -Because 'alice never signed in successfully from that address'
+        $script:NRGSignInUserScores['bob@corp.com'].Reasons[0] | Should -Match '203\.0\.113\.9'
+    }
+
+    It 'two users who both succeeded from the address are both scored' {
+        Set-NRGRawData -Key 'IR-SignIn-AnonIp' -Data (Bag 'a' @((Ev 'alice@corp.com' '203.0.113.9' 0), (Ev 'bob@corp.com' '203.0.113.9' 0)))
+        Set-NRGRawData -Key 'IR-SignIn-Travel' -Data (Bag 't' @())
+        Test-NRGSignInControlIPIntel
+        $script:NRGSignInUserScores.ContainsKey('alice@corp.com') | Should -BeTrue
+        $script:NRGSignInUserScores.ContainsKey('bob@corp.com')   | Should -BeTrue
+    }
+
+    It 'nobody succeeded: nobody is scored, and the finding says how many users were seen' {
+        Set-NRGRawData -Key 'IR-SignIn-AnonIp' -Data (Bag 'a' @((Ev 'alice@corp.com' '203.0.113.9' 50126), (Ev 'bob@corp.com' '203.0.113.9' 50126)))
+        Set-NRGRawData -Key 'IR-SignIn-Travel' -Data (Bag 't' @())
+        Test-NRGSignInControlIPIntel
+        $script:NRGSignInUserScores.Count | Should -Be 0
+        $f = @(Get-NRGFindings | Where-Object { $_.ControlId -eq 'SIGNIN-1.5' })[0]
+        $f.Detail | Should -Match 'users seen: 2, with a successful sign-in: 0; shared address'
+    }
+
+    It 'the remediation does not call a flagged address near-certain attacker infrastructure' {
+        Set-NRGRawData -Key 'IR-SignIn-AnonIp' -Data (Bag 'a' @((Ev 'bob@corp.com' '203.0.113.9' 0)))
+        Set-NRGRawData -Key 'IR-SignIn-Travel' -Data (Bag 't' @())
+        Test-NRGSignInControlIPIntel
+        $f = @(Get-NRGFindings | Where-Object { $_.ControlId -eq 'SIGNIN-1.5' })[0]
+        $f.Remediation | Should -Not -Match 'near-certain'
+        $f.Remediation | Should -Match 'shared address'
+    }
+}

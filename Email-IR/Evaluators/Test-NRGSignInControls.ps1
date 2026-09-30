@@ -440,7 +440,11 @@ function Test-NRGSignInControlIPIntel {
 
     # Gather suspicious IPs (+ the user that signed in from each) from the
     # anon-IP and travel bags. These are the events Microsoft already flagged.
-    $ipToUsers = @{}   # ip -> @{ Users=hashset; AnySuccess=bool }
+    # ip -> @{ Users = every user seen from it; SuccessUsers = only the users whose
+    # OWN sign-in from it succeeded }. Success is tracked per user: a shared
+    # address (office NAT, a VPN exit) must not make one user's success count
+    # against another user who only failed from it.
+    $ipToUsers = @{}
     foreach ($bagKey in 'IR-SignIn-AnonIp','IR-SignIn-Travel') {
         $bag = Get-NRGRawData -Key $bagKey
         if (-not $bag -or -not $bag.Success) { continue }
@@ -448,10 +452,12 @@ function Test-NRGSignInControlIPIntel {
             $ip = [string]$e.ipAddress
             if (-not $ip) { continue }
             if (-not $ipToUsers.ContainsKey($ip)) {
-                $ipToUsers[$ip] = @{ Users = [System.Collections.Generic.HashSet[string]]::new(); AnySuccess = $false }
+                $ipToUsers[$ip] = @{ Users = [System.Collections.Generic.HashSet[string]]::new(); SuccessUsers = [System.Collections.Generic.HashSet[string]]::new() }
             }
-            if ($e.userPrincipalName) { [void]$ipToUsers[$ip].Users.Add([string]$e.userPrincipalName) }
-            if ($e.status -and $e.status.errorCode -eq 0) { $ipToUsers[$ip].AnySuccess = $true }
+            if ($e.userPrincipalName) {
+                [void]$ipToUsers[$ip].Users.Add([string]$e.userPrincipalName)
+                if ($e.status -and $e.status.errorCode -eq 0) { [void]$ipToUsers[$ip].SuccessUsers.Add([string]$e.userPrincipalName) }
+            }
         }
     }
 
@@ -470,13 +476,13 @@ function Test-NRGSignInControlIPIntel {
         if (-not $intel) { continue }
         $enriched += $intel
 
-        # Bump score for confirmed-bad infra ONLY when the IP produced a
-        # successful sign-in (a failed attempt from Tor is noise; a success
-        # is compromise).
-        if ($ipToUsers[$ip].AnySuccess -and @($intel.Flags).Count -gt 0) {
+        # Bump score for flagged infra ONLY for the users whose own sign-in from
+        # it succeeded (a failed attempt from Tor is noise). Never for another
+        # user who merely appears on the same address.
+        if ($ipToUsers[$ip].SuccessUsers.Count -gt 0 -and @($intel.Flags).Count -gt 0) {
             $badInfra++
             $flagStr = @($intel.Flags) -join '+'
-            foreach ($u in $ipToUsers[$ip].Users) {
+            foreach ($u in $ipToUsers[$ip].SuccessUsers) {
                 Add-NRGSignInScore -UserPrincipalName $u -Points 30 `
                     -Reason "successful sign-in from flagged infra $ip ($flagStr)"
             }
@@ -505,6 +511,8 @@ function Test-NRGSignInControlIPIntel {
         if ($i.Country)  { $line += " [$($i.Country)]" }
         if ($i.ASNOwner) { $line += " $($i.ASNOwner)" }
         if (@($i.Flags).Count -gt 0) { $line += "  *** $(@($i.Flags) -join ', ') ***" }
+        $who = $ipToUsers[[string]$i.IPAddress]
+        if ($who) { $line += "  (users seen: $($who.Users.Count), with a successful sign-in: $($who.SuccessUsers.Count)$(if ($who.Users.Count -gt 1) { '; shared address' }))" }
         $detail += "$line`n"
     }
 
@@ -512,7 +520,7 @@ function Test-NRGSignInControlIPIntel {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
             -Title $title -Severity 'High' -Detail $detail `
             -CurrentValue "$($flagged.Count) of $($enriched.Count) IP(s) on hosting / VPN infra" `
-            -Remediation "IPs tagged HOSTING_ASN or KNOWN_VPN_ASN with a successful sign-in are near-certain attacker infrastructure. Block them at the Conditional Access boundary and prioritize the associated users for deep-dive."
+            -Remediation "IPs tagged HOSTING_ASN or KNOWN_VPN_ASN with a successful sign-in are likely attacker infrastructure, but a shared address (a corporate VPN exit, an office NAT) is also possible: the detail shows how many users were seen from each and how many succeeded. Confirm with the users before blocking, then prioritize the users who succeeded for deep-dive."
     } else {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'Medium' -Detail $detail `
