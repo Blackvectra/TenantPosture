@@ -40,7 +40,9 @@ function Invoke-NRGEmailCollectSignIns {
 
     $cutoff      = (Get-Date).ToUniversalTime().AddDays(-$WindowDays).ToString('o')
     $collectorId = 'IR-SignIn'
-    Register-NRGCoverage -Family 'Email-IR' -Status 'Collected'
+    # Coverage is registered at the END from what actually completed. It used to
+    # be 'Collected' here, before any query ran, so a run in which every Graph
+    # read failed still reported complete coverage.
 
     # ── Recent sign-ins ──────────────────────────────────────────────────────
     $recentBag = [ordered]@{
@@ -64,10 +66,15 @@ function Invoke-NRGEmailCollectSignIns {
         # Trim to cap (defensive — pages can return slightly over)
         if ($events.Count -gt $MaxEvents) { $events = $events[0..($MaxEvents - 1)] }
 
+        # More pages remained ($uri is still set) or the cap trimmed events: the
+        # window was NOT fully read, so "no indicators" cannot mean "none happened".
+        $wasTruncated = [bool]$uri -or ($events.Count -ge $MaxEvents)
         $recentBag.Data = [ordered]@{
             WindowDays = $WindowDays
             Cutoff     = $cutoff
             Count      = $events.Count
+            MaxEvents  = $MaxEvents
+            Truncated  = $wasTruncated
             Events     = @($events)
         }
         $recentBag.Success = $true
@@ -185,4 +192,18 @@ function Invoke-NRGEmailCollectSignIns {
         Register-NRGException -Source "$collectorId-RiskyUsers" -Message "Identity Protection not available (Entra ID P2 required?): $($_.Exception.Message)"
     }
     Set-NRGRawData -Key 'IR-SignIn-RiskyUsers' -Data $riskyBag
+
+    # ── Coverage from what completed ─────────────────────────────────────────
+    # Recent, AnonIp and Travel are the reads a "no indicators" conclusion rests
+    # on. RiskyUsers needs Entra ID P2 and is reported, not required.
+    $required = @($recentBag, $anonBag, $travelBag)
+    $failed   = @($required | Where-Object { -not $_.Success } | ForEach-Object { $_.CollectorId })
+    $truncNote = if ($recentBag.Success -and $recentBag.Data.Truncated) { " Sign-in read stopped at $MaxEvents events; older events in the window were not read." } else { '' }
+    if ($failed.Count -eq $required.Count) {
+        Register-NRGCoverage -Family 'Email-IR' -Status 'Failed' -Note "No sign-in read completed ($($failed -join ', '))."
+    } elseif ($failed.Count -gt 0 -or $truncNote) {
+        Register-NRGCoverage -Family 'Email-IR' -Status 'Partial' -Note "Did not complete: $($failed -join ', ').$truncNote"
+    } else {
+        Register-NRGCoverage -Family 'Email-IR' -Status 'Collected'
+    }
 }

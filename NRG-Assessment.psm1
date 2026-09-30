@@ -356,6 +356,7 @@ $script:ExportedFunctions = @(
     'Disconnect-NRGEmailAdminServices',
     'Invoke-NRGEmailCollectSignIns',
     'Clear-NRGSignInTriageState',
+    'Get-NRGSignInCollectionCompleteness',
     'Test-NRGSignInControlFailedToSuccess',
     'Test-NRGSignInControlAnonymousIp',
     'Test-NRGSignInControlImpossibleTravel',

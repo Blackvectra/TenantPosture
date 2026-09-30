@@ -347,6 +347,11 @@ try {
 
     $findings = @(Get-NRGFindings)
     $rawData  = Get-NRGRawData
+    # What the verdict may claim depends on what was actually read.
+    $comp = Get-NRGSignInCollectionCompleteness
+    $reportMetadata['CollectionComplete'] = [bool]$comp.Complete
+    $reportMetadata['CollectionGaps']     = @($comp.Reasons)
+    $reportMetadata['EventsRead']         = [int]$comp.EventsRead
 
     # ── Publish ──────────────────────────────────────────────────────────────
     Write-Host ''

@@ -521,6 +521,36 @@ function Test-NRGSignInControlIPIntel {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Completeness — what the "no indicators" conclusion actually rests on
+# ─────────────────────────────────────────────────────────────────────────────
+function Get-NRGSignInCollectionCompleteness {
+    <#
+    .SYNOPSIS
+        Says whether the sign-in reads behind a conclusion completed. Recent,
+        AnonIp and Travel are required; a Recent read that hit its event cap is
+        incomplete because older events in the window were not read. RiskyUsers
+        (Entra ID P2) is optional and only noted.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param()
+    $reasons = [System.Collections.Generic.List[string]]::new()
+    $events = 0; $window = 0
+    foreach ($k in 'IR-SignIn-Recent', 'IR-SignIn-AnonIp', 'IR-SignIn-Travel') {
+        $bag = Get-NRGRawData -Key $k
+        if (-not $bag -or -not (Get-NRGObjectField -Item $bag -Key 'Success' -Default $false)) { $reasons.Add("$k did not complete"); continue }
+        if ($k -eq 'IR-SignIn-Recent') {
+            $events = [int](Get-NRGNestedProperty -Object $bag -Path 'Data.Count' -Default 0)
+            $window = [int](Get-NRGNestedProperty -Object $bag -Path 'Data.WindowDays' -Default 0)
+            if ([bool](Get-NRGNestedProperty -Object $bag -Path 'Data.Truncated' -Default $false)) {
+                $reasons.Add("the sign-in read stopped at $events events, so older events in the $window-day window were not read")
+            }
+        }
+    }
+    return [ordered]@{ Complete = ($reasons.Count -eq 0); Reasons = @($reasons); EventsRead = $events; WindowDays = $window }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # SIGNIN-RANK — Aggregate per-user scores and emit the prioritized list
 # ─────────────────────────────────────────────────────────────────────────────
 function Test-NRGSignInControlRankUsers {
@@ -530,9 +560,18 @@ function Test-NRGSignInControlRankUsers {
     $cat   = 'Email'
 
     if ($script:NRGSignInUserScores.Count -eq 0) {
+        # A conclusion of "nothing found" needs the reads it rests on. Without them
+        # the honest answer is "not cleared", never "clean".
+        $comp = Get-NRGSignInCollectionCompleteness
+        if (-not $comp.Complete) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+                -Title $title -Severity 'High' `
+                -Detail "Not cleared: no user scored, but the evidence is incomplete ($($comp.Reasons -join '; ')). An absence of indicators here is not evidence that none occurred."
+            return
+        }
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'High' `
-            -Detail 'No users scored — no sign-in IoCs accumulated. Tenant looks clean for the window scanned.'
+            -Detail "No user scored: no sign-in indicators in the $($comp.EventsRead) sign-in events read over the last $($comp.WindowDays) days. This describes the events read, not the whole tenant."
         return
     }
 
