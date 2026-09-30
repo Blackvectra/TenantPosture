@@ -482,9 +482,31 @@ function Test-NRGControlDefenderAlertNotification {
     }
 
     if ($silent.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "All $($high.Count) enabled High/Critical alert policy(ies) have email recipients configured."
+        # Recipients exist. Whether they are the NRG monitoring address is a separate
+        # claim that needs an explicit configured list (Get-NRGMonitoringAddresses).
+        $routing = Get-NRGAlertRouting -Policies $high -Addresses (Get-NRGMonitoringAddresses)
+        if (-not $routing.Configured) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+                -Title $ctrl.Title -FrameworkIds $cit `
+                -Detail "Verified: all $($high.Count) enabled High/Critical alert policy(ies) have email recipients configured. Not assessed: whether any recipient is the NRG monitoring address, because no monitoring address is configured (-MonitoringAddress, MonitoringAddresses in clients.json, or MonitoringAddresses in branding.psd1)." `
+                -CurrentValue "$($high.Count) of $($high.Count) High/Critical policies have recipients; routing to NRG not checked" `
+                -RequiredValue 'Every enabled High/Critical alert policy notifies the NRG monitoring address'
+        } elseif ($routing.Unrouted.Count -eq 0) {
+            Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+                -Detail "All $($high.Count) enabled High/Critical alert policy(ies) notify a configured NRG monitoring address."
+        } else {
+            $affected = @($routing.Unrouted | ForEach-Object {
+                [ordered]@{ DisplayName = [string]$_.Name; Severity = [string]$_.Severity; Recipients = (@($_.NotifyUser) -join ', ') }
+            })
+            $st = if ($routing.Routed.Count -gt 0) { 'Partial' } else { 'Gap' }
+            Add-NRGFinding -ControlId $cid -State $st -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity $(if ($st -eq 'Gap') { $ctrl.Severity } else { 'Medium' }) -FrameworkIds $cit `
+                -Detail "Verified: all $($high.Count) enabled High/Critical alert policy(ies) have recipients. Shortfall: $($routing.Unrouted.Count) of $($high.Count) do not notify a configured NRG monitoring address, so those alerts go to people who may not be watching for them." `
+                -CurrentValue "$($routing.Routed.Count) of $($high.Count) policies notify the NRG monitoring address" `
+                -RequiredValue 'Every enabled High/Critical alert policy notifies the NRG monitoring address' `
+                -Remediation $ctrl.Remediation -AffectedObjects $affected
+        }
     } else {
         $affected = @($silent | ForEach-Object {
             [ordered]@{

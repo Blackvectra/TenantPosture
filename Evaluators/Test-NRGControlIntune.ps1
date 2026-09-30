@@ -294,7 +294,14 @@ function Test-NRGControlIntuneASR {
     }
     $st = Get-NRGIntuneBucketState -Raw $int -Section 'ASRPolicies'
     if ($st.Assigned.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($st.Assigned.Count) assigned Attack Surface Reduction Rules policy(ies).$($st.Note) (Whether each rule is in Block rather than Audit mode is not read.)"
+        # The expected state is an ASR rule set in Block mode. A policy's existence is
+        # verified here; which rules it configures and whether each is Block, Audit,
+        # Warn or Off is NOT read (the collector stores the policy, not its settings),
+        # so the enforcement half is not assessed rather than credited.
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Verified: $($st.Assigned.Count) assigned Attack Surface Reduction Rules policy(ies).$($st.Note) Not assessed: which rules the policy configures and whether each is in Block rather than Audit mode; the rule settings are not read, so ASR enforcement is not established." `
+            -CurrentValue "$($st.Assigned.Count) assigned ASR policy(ies); rule set and modes not read" `
+            -RequiredValue 'The NRG ASR rule set assigned with every rule in Block mode'
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "No assigned Attack Surface Reduction Rules policy in Intune (Device Control, Exploit Protection and other templates in the same family are not ASR rules).$($st.Note) ASR rules block commodity malware delivery such as Office macro abuse and credential theft." -Remediation $ctrl.Remediation
     }

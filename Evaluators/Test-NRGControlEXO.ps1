@@ -40,9 +40,31 @@ function Test-NRGControlEXOMailboxAudit {
             -Detail "Organization-level audit is enabled but some mailboxes have audit disabled (sample of $($sample.SampleCount) mailboxes)." `
             -CurrentValue 'Some mailboxes audit-disabled' -RequiredValue 'All mailboxes audit-enabled'
     } elseif ($orgDisabled -eq $false -or ($sample -and $sample.AllEnabled)) {
-        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
-            -Detail 'Mailbox audit logging enabled at organization level.'
+        # The expected state has two parts: the organization switch AND no mailbox in
+        # the audit bypass list. The switch is verified above; the bypass half comes
+        # from the inventory read (the same evidence EXO-6.3 scores), and each half
+        # stays visible whatever the other says.
+        $inv = Get-NRGRawData -Key 'EXO-Inventory'
+        $bypass = if ($inv -and (Get-NRGObjectField -Item $inv -Key 'Success' -Default $false)) { Get-NRGMailboxAuditBypassState -Inventory $inv } else { $null }
+        $switchText = 'the organization-level mailbox auditing switch is on'
+        if ($null -eq $bypass -or $bypass.Kind -notin @('Bypass', 'Clean')) {
+            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+                -Title $control.Title -FrameworkIds $citations `
+                -Detail "Verified: $switchText. Not assessed: whether any mailbox is in the audit bypass list, because the bypass associations could not be read." `
+                -CurrentValue 'Organization auditing on; bypass associations not read' `
+                -RequiredValue 'Organization auditing enabled and no mailbox in the audit bypass list'
+        } elseif ($bypass.Kind -eq 'Bypass') {
+            Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+                -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
+                -Detail "Verified: $switchText. Shortfall: $($bypass.Names.Count) account(s) are in the audit bypass list, so nothing they do in any mailbox is recorded." `
+                -CurrentValue "Organization auditing on; $($bypass.Names.Count) account(s) in audit bypass" `
+                -RequiredValue 'Organization auditing enabled and no mailbox in the audit bypass list' `
+                -Remediation $control.Remediation
+        } else {
+            Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+                -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+                -Detail "Mailbox audit logging is enabled at the organization level and no account is in the audit bypass list."
+        }
     } else {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -FrameworkIds $citations `
@@ -351,9 +373,32 @@ function Test-NRGControlEXOModernAuth {
     $modernAuth = Get-NRGNestedProperty -Object $exoData -Path 'Data.OrganizationConfig.OAuth2ClientProfileEnabled' -Default $null
 
     if ($modernAuth -eq $true) {
-        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
-            -Detail 'Modern authentication (OAuth2) is enabled for Exchange Online.'
+        # Two components: modern authentication on (verified above) and password
+        # authentication off for the protocols where it can still be configured.
+        # Microsoft retired basic authentication for IMAP, POP, EWS, ActiveSync and
+        # the rest; SMTP client submission is the one organization-level switch
+        # that still decides whether a password can be used, so that is the
+        # component read here. OAuth being on does not establish it.
+        $smtpDisabled = Get-NRGNestedProperty -Object $exoData -Path 'Data.TransportConfig.SmtpClientAuthenticationDisabled' -Default $null
+        if ($null -eq $smtpDisabled) { $smtpDisabled = Get-NRGNestedProperty -Object $exoData -Path 'Data.SmtpAuthConfig.TenantDisabled' -Default $null }
+        if ($null -eq $smtpDisabled) {
+            Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+                -Title $control.Title -FrameworkIds $citations `
+                -Detail 'Verified: modern authentication (OAuth2) is enabled for Exchange Online. Not assessed: whether password authentication is off for every protocol, because the organization SMTP AUTH setting was not read.' `
+                -CurrentValue 'OAuth2 enabled; SMTP AUTH setting not read' `
+                -RequiredValue 'Modern authentication enabled and SMTP AUTH disabled organization-wide'
+        } elseif ($smtpDisabled -ne $true) {
+            Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+                -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
+                -Detail 'Verified: modern authentication (OAuth2) is enabled for Exchange Online. Shortfall: SMTP AUTH is still enabled for the organization, so a password can still be used to submit mail (see EXO-1.2).' `
+                -CurrentValue 'OAuth2 enabled; SmtpClientAuthenticationDisabled = $false' `
+                -RequiredValue 'Modern authentication enabled and SMTP AUTH disabled organization-wide' `
+                -Remediation $control.Remediation
+        } else {
+            Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+                -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+                -Detail 'Modern authentication (OAuth2) is enabled for Exchange Online and SMTP AUTH is disabled organization-wide.'
+        }
     } elseif ($modernAuth -eq $false) {
         Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
@@ -801,9 +846,29 @@ function Test-NRGControlEXOAlertForwarding {
 
     $silent = @($active | Where-Object { @($_.NotifyUser).Count -eq 0 })
     if ($silent.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "$($active.Count) enabled alert policy(ies) cover new forwarding/redirect rule creation, each with notification recipients."
+        $routing = Get-NRGAlertRouting -Policies $active -Addresses (Get-NRGMonitoringAddresses)
+        if (-not $routing.Configured) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+                -Title $ctrl.Title -FrameworkIds $cit `
+                -Detail "Verified: $($active.Count) enabled alert policy(ies) cover new forwarding/redirect rule creation, each with notification recipients. Not assessed: whether they notify the NRG monitoring address, because no monitoring address is configured (-MonitoringAddress, MonitoringAddresses in clients.json, or MonitoringAddresses in branding.psd1)." `
+                -CurrentValue "$($active.Count) forwarding-rule policies enabled with recipients; routing to NRG not checked" `
+                -RequiredValue 'Forwarding/redirect rule alert enabled and routed to the NRG monitoring address'
+        } elseif ($routing.Unrouted.Count -eq 0) {
+            Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+                -Detail "$($active.Count) enabled alert policy(ies) cover new forwarding/redirect rule creation and notify a configured NRG monitoring address."
+        } else {
+            $affected = @($routing.Unrouted | ForEach-Object {
+                [ordered]@{ DisplayName = [string]$_.Name; Severity = [string]$_.Severity; Recipients = (@($_.NotifyUser) -join ', ') }
+            })
+            $st = if ($routing.Routed.Count -gt 0) { 'Partial' } else { 'Gap' }
+            Add-NRGFinding -ControlId $cid -State $st -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity $(if ($st -eq 'Gap') { $ctrl.Severity } else { 'Medium' }) -FrameworkIds $cit `
+                -Detail "Verified: $($active.Count) enabled alert policy(ies) cover new forwarding/redirect rule creation and have recipients. Shortfall: $($routing.Unrouted.Count) of $($active.Count) do not notify a configured NRG monitoring address." `
+                -CurrentValue "$($routing.Routed.Count) of $($active.Count) forwarding-rule policies notify the NRG monitoring address" `
+                -RequiredValue 'Forwarding/redirect rule alert enabled and routed to the NRG monitoring address' `
+                -Remediation $ctrl.Remediation -AffectedObjects $affected
+        }
     } else {
         $affected = @($silent | ForEach-Object {
             [ordered]@{ DisplayName = [string]$_.Name; Severity = [string]$_.Severity; Recipients = 'none configured' }

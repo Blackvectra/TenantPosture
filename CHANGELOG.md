@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- **Baseline evidence checks now verify the whole expected state.** A control is
+  Satisfied only when every mandatory component is supported; an established
+  shortfall is Partial, a component that cannot be read is not assessed, and each
+  verified half stays in the Detail. EXO-1.6: OAuth on AND SMTP AUTH disabled
+  organization-wide (OAuth alone is now Partial or not assessed). EXO-1.1: the
+  auditing switch AND no account in the audit bypass list (the EXO-6.3 evidence).
+  DEF-3.4 and EXO-3.3: recipients exist AND at least one is a configured NRG
+  monitoring address; the address list comes from `-MonitoringAddress`, the client's
+  `MonitoringAddresses` in `Config/clients.json`, or `MonitoringAddresses` in
+  `Config/branding.psd1` (entries are an address or `@domain`; none is hardcoded),
+  and with no list the routing half is reported as not assessed. INT-2.2: an
+  assigned ASR policy verifies existence only; the rule set and Block mode are not
+  read, so it reports not assessed instead of Satisfied (listed in
+  `Config/coverage-exceptions.psd1` as `ImplementationPending`). These lower the
+  Standard baseline's Satisfied count on the same tenant by design. The IR entry
+  points document exit-code precedence (4 fatal, 10 Critical, 3 incomplete,
+  2 no findings, 0 complete): incomplete now outranks "no findings", the triage
+  console's per-dive "complete" uses the same combined health decision as the JSON,
+  and a Critical beside incomplete evidence says both in the report.
+
 - **Completeness contract for the incident-response entry points, proved by running them.**
   `Email-IR/Testing/NRG.IREntryPoints.Tests.ps1` launches the real
   `Invoke-NRGEmailAssessment.ps1` and `Invoke-NRGSignInTriage.ps1` in fresh child

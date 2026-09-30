@@ -212,11 +212,33 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
 
     Context 'EXO-1.6 — Modern Authentication Enabled' {
 
-        It 'Satisfied when OAuth2ClientProfileEnabled is true' {
+        It 'Satisfied when OAuth2 is on AND SMTP AUTH is disabled organization-wide (both components)' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
+                TransportConfig    = [pscustomobject]@{ SmtpClientAuthenticationDisabled = $true }
+            })
+            (GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6').State | Should -Be 'Satisfied'
+        }
+
+        It 'Partial when OAuth2 is on but SMTP AUTH is still enabled: the verified half is kept, the shortfall named' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
+                TransportConfig    = [pscustomobject]@{ SmtpClientAuthenticationDisabled = $false }
+            })
+            $v = GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6'
+            $v.State  | Should -Be 'Partial'
+            $v.Detail | Should -Match 'Verified: modern authentication'
+            $v.Detail | Should -Match 'Shortfall: SMTP AUTH'
+        }
+
+        It 'NotApplicable when OAuth2 is on but the SMTP AUTH setting was not read: OAuth alone does not satisfy the requirement' {
             Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
                 OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
             })
-            (GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6').State | Should -Be 'Satisfied'
+            $v = GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match 'Verified: modern authentication'
+            $v.Detail | Should -Match 'not assessed'
         }
 
         It 'Gap when modern auth is explicitly disabled (basic auth bypasses MFA)' {
@@ -816,14 +838,39 @@ Describe 'DEF-3.4 / DEF-4.3 alert policy configuration — implemented' {
     Context 'DEF-3.4 — high severity alerts reach a human' {
 
         It 'no longer returns a permanent placeholder' {
+            $null = Set-NRGMonitoringAddresses -Addresses 'soc@contoso.com'
             Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @((Pol 'Malware campaign detected')))
             (AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4').State | Should -Not -Be 'NotApplicable'
         }
 
-        It 'Satisfied when every enabled High/Critical policy has recipients' {
+        It 'recipients exist but no monitoring address is configured: the recipients half is verified, routing to NRG is not assessed' {
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
+                (Pol 'Malware campaign detected'), (Pol 'Elevation of privilege' 'Critical')))
+            $v = AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match 'Verified: all 2 enabled High/Critical alert policy\(ies\) have email recipients'
+            $v.Detail | Should -Match 'Not assessed: whether any recipient is the NRG monitoring address'
+        }
+
+        It 'Satisfied when every enabled High/Critical policy notifies the configured monitoring address' {
+            $null = Set-NRGMonitoringAddresses -Addresses 'soc@contoso.com'
             Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
                 (Pol 'Malware campaign detected'), (Pol 'Elevation of privilege' 'Critical')))
             (AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4').State | Should -Be 'Satisfied'
+        }
+
+        It 'Partial when only some policies notify the monitoring address; Gap when none do' {
+            $null = Set-NRGMonitoringAddresses -Addresses '@contoso.com'
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
+                (Pol 'Malware campaign detected'), (Pol 'Elevation of privilege' 'Critical' $false @('someone@other.example'))))
+            $v = AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4'
+            $v.State  | Should -Be 'Partial'
+            $v.Detail | Should -Match 'Verified: all 2'
+            ($v.AffectedObjects | ConvertTo-Json -Depth 4) | Should -Match 'Elevation of privilege'
+            Clear-NRGState
+            $null = Set-NRGMonitoringAddresses -Addresses 'soc@contoso.com'
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @((Pol 'Malware campaign detected' 'High' $false @('someone@other.example'))))
+            (AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4').State | Should -Be 'Gap'
         }
 
         It 'Gap — naming the policy — when a High policy has no recipients' {
@@ -836,6 +883,7 @@ Describe 'DEF-3.4 / DEF-4.3 alert policy configuration — implemented' {
         }
 
         It 'ignores DISABLED policies when judging coverage' {
+            $null = Set-NRGMonitoringAddresses -Addresses 'soc@contoso.com'
             Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
                 (Pol 'Malware campaign detected'),
                 (Pol 'Retired policy' 'High' $true @())))
@@ -1222,11 +1270,14 @@ Describe 'Golden fixtures — ransomware attack path' {
 
     Context 'INT-2.2 — Attack Surface Reduction rules (endpoint execution)' {
 
-        It 'Satisfied when ASR policies are deployed' {
+        It 'an assigned ASR policy verifies existence only: enforcement (rules and Block mode) is not assessed, never Satisfied' {
             Set-NRGRawData -Key 'Intune-EndpointSecurity' -Data (NewRaw3 'INT' @{
                 ASRPolicies = @([pscustomobject]@{ DisplayName = 'ASR Baseline' })
             })
-            (GetVerdict3 'Test-NRGControlIntuneASR' 'INT-2.2').State | Should -Be 'Satisfied'
+            $v = GetVerdict3 'Test-NRGControlIntuneASR' 'INT-2.2'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match 'Verified: 1 assigned Attack Surface Reduction'
+            $v.Detail | Should -Match 'Not assessed: which rules'
         }
 
         It 'Gap when no ASR policy exists (Office macro and credential-theft vectors open)' {

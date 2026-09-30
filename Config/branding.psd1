@@ -21,6 +21,15 @@
     # Microsoft Defender for Endpoint is the EDR.
     EdrStack       = ''
 
+    # Optional: the NRG monitoring address(es) security alert policies should
+    # notify, for example @('alerts@your-domain.com') or a whole domain
+    # '@your-domain.com'. DEF-3.4 and EXO-3.3 compare every enabled alert
+    # policy's recipients with this list. Leave empty and those two controls
+    # report that routing to NRG was not assessed (recipients existing still is).
+    # Override per client with MonitoringAddresses in clients.json or per run
+    # with -MonitoringAddress.
+    MonitoringAddresses = @()
+
     HourlyRate     = 185
     AssessmentFee  = 2500
     RegulatedFee   = 3500

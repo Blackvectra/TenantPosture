@@ -66,6 +66,14 @@ param(
     [ValidatePattern('^$|^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$')]
     [string] $ThirdPartyEDR,
 
+    # The NRG monitoring address(es) alert policies should notify (an address,
+    # or @domain for a whole domain). DEF-3.4 and EXO-3.3 compare each enabled
+    # policy's recipients with this list; without one, "alerts reach NRG" is
+    # not assessed (the recipients-exist half still is). Also read from the
+    # client's MonitoringAddresses in Config/clients.json, then from
+    # MonitoringAddresses in Config/branding.psd1.
+    [string[]] $MonitoringAddress,
+
     # Cloud environment
     [ValidateSet('commercial','gcc','gcchigh','dod')]
     [string] $Environment = 'commercial',
@@ -459,6 +467,10 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
     if (-not $ThirdPartyEDR -and $clientRec -and $clientRec.PSObject.Properties['ThirdPartyEDR'] -and "$($clientRec.ThirdPartyEDR)") {
         $ThirdPartyEDR = [string]$clientRec.ThirdPartyEDR
     }
+    if (-not $MonitoringAddress -and $clientRec -and $clientRec.PSObject.Properties['MonitoringAddresses'] -and @($clientRec.MonitoringAddresses).Count -gt 0) {
+        $MonitoringAddress = @($clientRec.MonitoringAddresses | ForEach-Object { [string]$_ })
+        $monitoringSource = 'clients.json'
+    }
     if (-not $BaselineTier -and $clientRec -and $clientRec.PSObject.Properties['BaselineTier'] -and "$($clientRec.BaselineTier)" -in @('Minimum', 'Standard', 'Hardened')) {
         $BaselineTier = [string]$clientRec.BaselineTier
     }
@@ -511,6 +523,26 @@ if (-not $ThirdPartyEDR) {
 # Match the contract in CLAUDE.md ("Clear-NRGState must be called between batch
 # clients") and the batch orchestrator (Invoke-NRGBatchAssessment.ps1:216).
 Clear-NRGState
+
+# The monitoring-address list, recorded as raw data AFTER the state reset so the
+# alert-routing checks (DEF-3.4, EXO-3.3) can read it. Precedence: the parameter,
+# the client's clients.json entry (already folded into $MonitoringAddress above),
+# then the MSP-wide default in branding.psd1.
+if (-not (Get-Variable -Name monitoringSource -ErrorAction SilentlyContinue)) { $monitoringSource = '' }
+if ($MonitoringAddress -and -not $monitoringSource) { $monitoringSource = 'parameter' }
+if (-not $MonitoringAddress) {
+    $brandFileMon = Join-Path $scriptDir 'Config' 'branding.psd1'
+    if (Test-Path -LiteralPath $brandFileMon) {
+        try {
+            $brandMon = Import-PowerShellDataFile -LiteralPath $brandFileMon
+            if ($brandMon.ContainsKey('MonitoringAddresses') -and @($brandMon['MonitoringAddresses']).Count -gt 0) {
+                $MonitoringAddress = @($brandMon['MonitoringAddresses'] | ForEach-Object { [string]$_ })
+                $monitoringSource = 'branding.psd1'
+            }
+        } catch { Write-Verbose "branding.psd1 MonitoringAddresses not read: $($_.Exception.Message)" }
+    }
+}
+$monitoringSet = @(Set-NRGMonitoringAddresses -Addresses $MonitoringAddress -Source $monitoringSource)
 
 # OWASP ASVS V7.3.2 — wrap the entire run in try/finally so service sessions
 # always disconnect, even if a collector / evaluator / publisher throws.
