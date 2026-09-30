@@ -77,6 +77,10 @@ Describe 'ScubaGear citations match the recorded alignment' {
         $s = @(@($fw.frameworks ?? $fw.Frameworks ?? $fw) | Where-Object { $_.Id -eq 'SCuBA' })[0]
         $s.Version | Should -Be $script:Align.Source.ToolVersion
     }
+    It 'controls.json still conforms to its schema with the current ScubaGear rule ids (the schema pattern must know every product prefix)' {
+        $ok = Test-Json -Json (Get-Content (Join-Path $script:Root 'Config' 'controls.json') -Raw) -SchemaFile (Join-Path $script:Root 'Config' 'schema' 'controls.schema.json') -ErrorAction SilentlyContinue
+        $ok | Should -BeTrue
+    }
     It 'the alignment document exists and lists every relation group' {
         $d = Get-Content (Join-Path $script:Root 'docs' 'NRG-SCUBA-ALIGNMENT.md') -Raw
         foreach ($g in 'Equivalent', 'Partial', 'Manual', 'Unsupported') { $d | Should -Match $g }
