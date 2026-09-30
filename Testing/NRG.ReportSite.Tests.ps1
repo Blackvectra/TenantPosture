@@ -1,0 +1,143 @@
+#Requires -Version 7.0
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.0.0' }
+<#
+.SYNOPSIS
+    NRG.ReportSite.Tests.ps1 — NRG Technology Services / NextLayerSec LLC
+    Author: Matthew Levorson
+    Purpose: The multi-page report site (landing page, one page per workload, action-plan CSV) is
+             a VIEW over existing findings. These tests pin that it preserves every finding, verdict
+             and limitation; keeps requirement, observed configuration, NRG verdict and independent
+             comparison apart; keeps requirement strength (SHALL / SHOULD) apart from risk severity
+             and the Automated / Manual / Declaration badge apart from the verdict; keeps collection
+             failures, licensing limits, manual checks, operator declarations and unapproved NRG
+             standards distinct; escapes hostile tenant text; and changes no finding.
+    Data keys consumed: none. Graph scopes / cmdlets: none.
+#>
+
+Describe 'Report site preserves every finding, verdict and limitation' {
+
+    BeforeAll {
+        $script:Root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:Root 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        Clear-NRGState
+        $script:Hostile = '<script>alert(1)</script>"&'
+        $add = { param($id, $state, $detail, $extra = @{}) Add-NRGFinding -ControlId $id -State $state -Category 'Identity' -Title "Title $id" -Severity 'High' -Detail $detail -CurrentValue "observed-$id" -RequiredValue "required-$id" -Remediation "fix-$id" -FrameworkIds 'NIST:AC-2' @extra }
+        & $add 'AAD-1.1' 'Satisfied' 'Verified: blocked by policy X.'
+        & $add 'DNS-1.3' 'Satisfied' 'ndaco.org DMARC p=quarantine (100%).' @{ Instance = 'ndaco.org' }
+        & $add 'DNS-1.3' 'Partial'   'other.org DMARC p=quarantine but pct=50.' @{ Instance = 'other.org' }
+        & $add 'AAD-1.2' 'Gap'       "Shortfall: $($script:Hostile) excluded." @{ AffectedObjects = @([ordered]@{ UserPrincipalName = 'a@x.example'; Reason = 'none' }, 'plain-string-object') }
+        & $add 'AAD-11.3' 'NotApplicable' 'The risky service principal data was not collected; not assessed.'
+        & $add 'PPL-2.2' 'NotApplicable' 'This control requires manual verification.'
+        & $add 'DEF-2.3' 'NotApplicable' 'Verified: filter on. Not assessed: whether it blocks the list, because none is approved (Config/nrg-standards.json).'
+        & $add 'INT-1.5' 'NotApplicable' 'Third-party EDR declared: provided by Cortex XDR, as declared by the assessor; not verified.'
+        & $add 'PVW-4.1' 'NotApplicable' 'Needs E5. Not scored as a gap — surfaced as a licensing upgrade opportunity.'
+        & $add 'TMS-1.4' 'NotApplicable' 'Sharing is off, so this does not apply.'
+        & $add 'EXO-7.2' 'Gap' '=cmd|calc injection text'
+        $script:Findings = @(Get-NRGFindings)
+        $script:Before = ($script:Findings | ConvertTo-Json -Depth 8)
+
+        $script:Out = Join-Path ([IO.Path]::GetTempPath()) ("nrg-site-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        $scuba = Join-Path $script:Out 'in.csv'
+        New-Item -ItemType Directory -Force -Path $script:Out | Out-Null
+        Set-Content -LiteralPath $scuba -Value "Control ID,Requirement,Result,Criticality`nMS.EXO.4.2v1,DMARC,Fail,Shall`nMS.AAD.1.1v1,Legacy,Pass,Shall" -Encoding utf8
+        $meta = @{ TenantId = '00000000-0000-0000-0000-000000000000'; TenantDomain = 'contoso.example'; AssessmentTime = '2026-09-30T10:49:00-05:00'; AssessmentDate = '2026-09-30'; ToolVersion = '4.14.3'; Operator = 'Test' }
+        $script:Site = Join-Path $script:Out 'site'
+        $script:Result = Publish-NRGReportSite -Metadata $meta -Findings $script:Findings -OutputPath $script:Site -ScubaResultsPath $scuba
+        $script:Page = @{}
+        foreach ($f in Get-ChildItem -LiteralPath $script:Site -Filter '*.html') { $script:Page[$f.BaseName] = Get-Content -LiteralPath $f.FullName -Raw }
+        $script:Enc = { param($t) [System.Net.WebUtility]::HtmlEncode([string]$t) }
+    }
+    AfterAll { if ($script:Out) { Remove-Item -LiteralPath $script:Out -Recurse -Force -ErrorAction SilentlyContinue }; Clear-NRGState; Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue }
+
+    It 'writes a landing page, one page per workload and an action plan' {
+        $script:Page.Keys | Should -Contain 'index'
+        foreach ($w in 'AAD', 'DNS', 'PPL', 'DEF', 'INT', 'PVW', 'TMS', 'EXO') { $script:Page.Keys | Should -Contain $w }
+        Test-Path (Join-Path $script:Site 'ActionPlan.csv') | Should -BeTrue
+    }
+    It 'every finding, with its title, detail, observed and required values, is on its workload page' {
+        foreach ($f in $script:Findings) {
+            $pg = $script:Page[($f.ControlId -split '-')[0]]
+            foreach ($field in 'ControlId', 'Title', 'Detail', 'CurrentValue', 'RequiredValue') {
+                $pg | Should -Match ([regex]::Escape((& $script:Enc $f.$field))) -Because "$($f.ControlId) $field must be in the report"
+            }
+        }
+    }
+    It 'every per-domain instance is its own row' {
+        $script:Page['DNS'] | Should -Match 'ndaco\.org'; $script:Page['DNS'] | Should -Match 'other\.org'
+    }
+    It 'the verdict counts on the pages equal the finding states' {
+        $pills = @([regex]::Matches(($script:Page.GetEnumerator() | Where-Object { $_.Key -ne 'index' } | ForEach-Object { $_.Value }) -join '', "<span class='pill \w+'>([^<]+)</span>") | ForEach-Object { $_.Groups[1].Value })
+        @($pills | Where-Object { $_ -eq 'Satisfied' }).Count | Should -Be @($script:Findings | Where-Object State -eq 'Satisfied').Count
+        @($pills | Where-Object { $_ -eq 'Partial' }).Count   | Should -Be 1
+        @($pills | Where-Object { $_ -eq 'Gap' }).Count       | Should -Be 2
+        $pills.Count | Should -Be $script:Findings.Count
+    }
+    It 'collection failures, manual checks, declarations, licensing limits and unapproved standards are distinct' {
+        (Get-NRGFindingLimitKind -Finding ($script:Findings | Where-Object ControlId -eq 'AAD-11.3')) | Should -Be 'Collection'
+        (Get-NRGFindingLimitKind -Finding ($script:Findings | Where-Object ControlId -eq 'PPL-2.2'))  | Should -Be 'Manual'
+        (Get-NRGFindingLimitKind -Finding ($script:Findings | Where-Object ControlId -eq 'DEF-2.3'))  | Should -Be 'StandardNotApproved'
+        (Get-NRGFindingLimitKind -Finding ($script:Findings | Where-Object ControlId -eq 'INT-1.5'))  | Should -Be 'Declaration'
+        (Get-NRGFindingLimitKind -Finding ($script:Findings | Where-Object ControlId -eq 'PVW-4.1'))  | Should -Be 'Licensing'
+        (Get-NRGFindingLimitKind -Finding ($script:Findings | Where-Object ControlId -eq 'TMS-1.4'))  | Should -Be 'NotApplicable'
+        $script:Page['index'] | Should -Match '<b>1</b> Collection failures'
+        $script:Page['index'] | Should -Match '<b>1</b> Manual checks'
+        $script:Page['index'] | Should -Match '<b>1</b> Operator declarations'
+        $script:Page['index'] | Should -Match '<b>1</b> Licensing limits'
+        $script:Page['index'] | Should -Match '<b>1</b> NRG standards not approved'
+    }
+    It 'the Automated / Manual / Declaration badge is separate from the verdict' {
+        $script:Page['PPL'] | Should -Match "badge m'>Manual"
+        $script:Page['PPL'] | Should -Match "pill unk'>Not assessed"
+        $script:Page['INT'] | Should -Match "badge d'>Declaration"
+        $script:Page['INT'] | Should -Match 'Declared, not verified'
+        $script:Page['AAD'] | Should -Match "badge'>Automated"
+    }
+    It 'requirement strength (SHALL) is shown apart from risk severity and only where a rule is mapped' {
+        $script:Page['DNS'] | Should -Match "class='strength'>SHALL"
+        $script:Page['DNS'] | Should -Match '>High<'
+        $script:Page['TMS'] | Should -Match 'Sharing is off'
+    }
+    It 'requirement, observed configuration, NRG verdict and independent comparison are four separate things' {
+        $script:Page['DNS'] | Should -Match 'Required: required-DNS-1\.3'
+        $script:Page['DNS'] | Should -Match 'observed-DNS-1\.3'
+        $script:Page['DNS'] | Should -Match 'MS\.EXO\.4\.2v1'
+        $script:Page['DNS'] | Should -Match 'Independent scan: <b>Fail</b>'
+    }
+    It 'a difference from the independent scan is flagged as something to investigate, not as an error or a score' {
+        $script:Page['index'] | Should -Match 'Independent comparison'
+        $script:Page['index'] | Should -Match 'not a score to match'
+        $script:Page['index'] | Should -Match 'DNS-1\.3'
+    }
+    It 'tenant identity, run time, tool version and baseline versions are on the landing page' {
+        $script:Page['index'] | Should -Match 'contoso\.example'; $script:Page['index'] | Should -Match '00000000-0000-0000-0000-000000000000'
+        $script:Page['index'] | Should -Match 'NRG-Assessment 4\.14\.3'; $script:Page['index'] | Should -Match 'ScubaGear 2\.0\.0'
+    }
+    It 'evidence, exclusions and affected objects are expandable and include every object' {
+        $script:Page['AAD'] | Should -Match '<details><summary>Evidence</summary>'
+        $script:Page['AAD'] | Should -Match 'Affected objects \(2\)'
+        $script:Page['AAD'] | Should -Match 'a@x\.example'; $script:Page['AAD'] | Should -Match 'plain-string-object'
+    }
+    It 'hostile tenant text is escaped and the pages carry no script or external asset' {
+        foreach ($pg in $script:Page.Values) { $pg | Should -Not -Match '<script' ; $pg | Should -Not -Match 'https?://(?!www\.w3)' -Because 'self-contained: no external assets' }
+        $script:Page['AAD'] | Should -Match ([regex]::Escape('&lt;script&gt;alert(1)&lt;/script&gt;'))
+    }
+    It 'the action plan lists what needs action with owner, target date, status and evidence columns, and neutralizes formulas' {
+        $rows = @(Import-Csv -LiteralPath (Join-Path $script:Site 'ActionPlan.csv'))
+        foreach ($c in 'Owner', 'Target date', 'Resolution status', 'Evidence of resolution', 'Risk severity', 'Observed', 'Remediation') { $rows[0].PSObject.Properties.Name | Should -Contain $c }
+        @($rows | Where-Object 'Control ID' -eq 'AAD-1.2').Count | Should -Be 1
+        @($rows | Where-Object 'Control ID' -eq 'AAD-1.1').Count | Should -Be 0 -Because 'a satisfied control needs no action'
+        @($rows | Where-Object 'Control ID' -eq 'DEF-2.3')[0].'Action type' | Should -Be 'Approve the NRG standard'
+        @($rows | Where-Object 'Control ID' -eq 'PPL-2.2')[0].'Action type' | Should -Be 'Verify manually'
+        @($rows | Where-Object 'Control ID' -eq 'AAD-11.3')[0].'Action type' | Should -Be 'Re-collect and verify'
+        @($rows | Where-Object 'Control ID' -in @('INT-1.5', 'PVW-4.1', 'TMS-1.4')).Count | Should -Be 0 -Because 'declared, unlicensed and not-applicable items are not actions'
+        (@($rows | Where-Object 'Control ID' -eq 'EXO-7.2')[0].'Why (verified / shortfall / not assessed)') | Should -Match "^'="
+        $rows | ForEach-Object { $_.'Resolution status' | Should -Be 'Open'; $_.Owner | Should -BeNullOrEmpty }
+    }
+    It 'generating the site changes no finding' {
+        ($script:Findings | ConvertTo-Json -Depth 8) | Should -Be $script:Before
+        ((Get-NRGFindings) | ConvertTo-Json -Depth 8) | Should -Be $script:Before
+    }
+    It 'branding colors are restricted to #rrggbb before they reach CSS' {
+        $script:Page['index'] | Should -Match '--p:#[0-9a-fA-F]{6};--s:#[0-9a-fA-F]{6}'
+    }
+}

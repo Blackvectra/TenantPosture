@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **A multi-page report site, organized the way an assessor navigates, built from existing results.**
+  `New-NRGReportSite.ps1 -ResultsPath <results.json> -OutputPath <folder> [-ScubaResultsPath
+  ScubaResults.csv]` (connects to nothing) writes a landing page (tenant identity, run time, tool
+  and baseline versions, workload summaries with links, limitations kept distinct), one page per
+  workload grouped by security topic, and `ActionPlan.csv`. Each control row keeps requirement,
+  observed configuration, NRG verdict and the independent comparison apart; requirement strength
+  (SHALL/SHOULD, from the mapped ScubaGear rule) apart from risk severity; and the Automated /
+  Manual / Declaration badge apart from the verdict. Evidence, exclusions, affected objects and the
+  limitation (collection failure, licensing, manual check, operator declaration, unapproved NRG
+  standard) are expandable. A difference from the independent scan is listed as something to
+  investigate, never as a score. The action plan carries owner, target date, resolution status and
+  evidence columns (blank to fill) and neutralizes spreadsheet formulas. Self-contained (no script,
+  no external asset), NRG-branded, no finding changed. Verified on the real NRGTS results: all 249
+  findings, their text and verdict counts are present. `NRG.ReportSite.Tests.ps1` pins it.
+
 - **SCuBA citations re-checked against ScubaGear 2.0.0 and its official migration file.**
   14 of the rule ids NRG cited no longer existed in ScubaGear 2.0.0 (3 version renames, 11
   Defender-era ids that became `MS.SECURITYSUITE.*`). `Config/scuba-alignment.json` records, for
