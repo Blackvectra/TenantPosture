@@ -37,6 +37,9 @@ Describe 'Verdict and evidence limitation survive every output format' {
         New-Item -ItemType Directory -Force -Path $script:tmp | Out-Null
         $meta = @{ TenantId = '00000000-0000-0000-0000-000000000000'; TenantDomain = 'contoso.example'; TenantName = 'Contoso'; AssessmentTime = (Get-Date).ToString('o'); AssessmentDate = (Get-Date).ToString('yyyy-MM-dd'); Operator = 'Test Operator'; ToolVersion = $NRGAssessmentVersion; QuickScan = $false }
         $conn = @{ Graph = $true; EXO = $true; IPPSSession = $true; Teams = $false; SharePoint = $false }
+        $py0 = (Get-Command python3, python -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+        $script:HaveOpenpyxl = $false
+        if ($py0) { & $py0 -c 'import openpyxl' 2>$null; $script:HaveOpenpyxl = ($LASTEXITCODE -eq 0) }
         $script:Html = ''; $script:Md = ''; $script:Json = ''; $script:Xlsx = ''
         $script:Json = ($script:Findings | ConvertTo-Json -Depth 8)
         try { Publish-NRGAssessmentHTML -Metadata $meta -Findings $script:Findings -Connections $conn -OutputPath (Join-Path $script:tmp 'r.html') -ClientName 'Contoso' -ErrorAction Stop
@@ -74,6 +77,7 @@ Describe 'Verdict and evidence limitation survive every output format' {
         $script:Md | Should -Match 'whether the filter blocks the NRG'
     }
     It 'the XLSX workbook carries the shortfall and the not-assessed limitation' {
+        if (-not $script:HaveOpenpyxl) { Set-ItResult -Skipped -Because 'python with openpyxl is not available, so the workbook is not produced'; return }
         $script:XlsxErr | Should -BeNullOrEmpty
         $script:Xlsx | Should -Match 'Malware ZAP is off'
         $script:Xlsx | Should -Match 'whether the filter blocks the NRG'
