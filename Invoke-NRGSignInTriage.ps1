@@ -346,7 +346,7 @@ try {
     }
 
     $findings = @(Get-NRGFindings)
-    $rawData  = Get-NRGRawData -AllKeys
+    $rawData  = Get-NRGRawData
 
     # ── Publish ──────────────────────────────────────────────────────────────
     Write-Host ''

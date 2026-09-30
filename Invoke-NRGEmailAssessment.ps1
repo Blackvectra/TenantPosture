@@ -250,7 +250,7 @@ try {
     }
 
     $findings = @(Get-NRGFindings)
-    $rawData  = Get-NRGRawData -AllKeys
+    $rawData  = Get-NRGRawData
     $reportMetadata['FindingCount'] = $findings.Count
 
     # ── Publish ──────────────────────────────────────────────────────────────
