@@ -171,7 +171,7 @@ function Publish-NRGReportSite {
         if (-not (Get-Command $req -ErrorAction SilentlyContinue)) { throw "$req not loaded: refusing to generate the report site without it." }
     }
     if ($OutputPath -match '\.\.[\\/]') { throw 'Path traversal not allowed in OutputPath.' }
-    $null = New-Item -ItemType Directory -Force -Path $OutputPath
+    $null = [System.IO.Directory]::CreateDirectory($OutputPath)
     $hx = { param($v) ConvertTo-NRGHtmlSafe $v }
 
     $brand = @{ CompanyName = 'NRG Technology Services'; PrimaryColor = '#1a3a6b'; SecondaryColor = '#e87722'; AccentColor = '#4a7ba6'; Website = '' }
@@ -206,12 +206,17 @@ details{margin:2px 0}summary{cursor:pointer;color:var(--a);font-weight:600}.ev{p
 @media(max-width:700px){th:nth-child(n+5),td:nth-child(n+5){display:none}}
 "@
 
-    $tenant = & $hx $Metadata.TenantDomain
-    $runAt  = & $hx ($Metadata.AssessmentTime ?? $Metadata.AssessmentDate)
+    # Metadata may come from a replayed results file that lacks a key; read every key safely.
+    $mv = { param($k) [string](Get-NRGObjectField -Item $Metadata -Key $k -Default '') }
+    $tenant = & $hx (& $mv 'TenantDomain')
+    $runAtRaw = & $mv 'AssessmentTime'; if (-not $runAtRaw) { $runAtRaw = & $mv 'AssessmentDate' }
+    $runAt  = & $hx $runAtRaw
+    $toolVer = & $hx (& $mv 'ToolVersion')
+    $tenantId = & $hx (& $mv 'TenantId')
     $shell = {
         param($Title, $Body, $Active)
         $navLinks = "<a href='index.html'>Overview</a>" + ((@($rows | ForEach-Object { $_.Workload } | Sort-Object -Unique) | ForEach-Object { $n = $script:NRGSiteWorkloadNames[$_]; if ($n) { "<a href='$_.html'>$(& $hx $n)</a>" } }) -join '')
-        "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>$(& $hx $Title) - $(& $hx $brand.CompanyName)</title><style>$css</style></head><body><header><h1>$(& $hx $brand.CompanyName) &middot; Microsoft 365 security assessment</h1><div class='sub'>$tenant &middot; run $runAt &middot; NRG-Assessment $(& $hx $Metadata.ToolVersion)</div></header><nav>$navLinks</nav><main>$Body</main></body></html>"
+        "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>$(& $hx $Title) - $(& $hx $brand.CompanyName)</title><style>$css</style></head><body><header><h1>$(& $hx $brand.CompanyName) &middot; Microsoft 365 security assessment</h1><div class='sub'>$tenant &middot; run $runAt &middot; NRG-Assessment $toolVer</div></header><nav>$navLinks</nav><main>$Body</main></body></html>"
     }
 
     # ── Per-workload pages ────────────────────────────────────────────────────
@@ -268,7 +273,7 @@ details{margin:2px 0}summary{cursor:pointer;color:var(--a);font-weight:600}.ev{p
     $blText = if ($bl -and (Get-NRGObjectField -Item $bl -Key 'Available' -Default $false)) { "NRG Security Baseline $(& $hx (Get-NRGObjectField -Item $bl -Key 'BaselineVersion' -Default '')), target tier $(& $hx (Get-NRGObjectField -Item $bl -Key 'TargetTier' -Default ''))" } else { 'NRG Security Baseline: not resolved for this run' }
     $al = Get-NRGScubaAlignment
     $alText = if ($al.Available) { "Independent baseline mapping: $(& $hx $al.Source.Tool) $(& $hx $al.Source.ToolVersion), checked $(& $hx $al.Source.CheckedOn)" } else { 'Independent baseline mapping: not available' }
-    $landing = "<h2>Tenant and run</h2><div class='card'><table><tbody><tr><th style='width:220px'>Tenant</th><td>$tenant</td></tr><tr><th>Tenant ID</th><td>$(& $hx $Metadata.TenantId)</td></tr><tr><th>Run time</th><td>$runAt</td></tr><tr><th>Tool version</th><td>NRG-Assessment $(& $hx $Metadata.ToolVersion)</td></tr><tr><th>Baseline versions</th><td>$blText<br>$alText$(if ($scuba) { '<br>Independent scan results supplied: shown beside each mapped control' })</td></tr></tbody></table></div>"
+    $landing = "<h2>Tenant and run</h2><div class='card'><table><tbody><tr><th style='width:220px'>Tenant</th><td>$tenant</td></tr><tr><th>Tenant ID</th><td>$tenantId</td></tr><tr><th>Run time</th><td>$runAt</td></tr><tr><th>Tool version</th><td>NRG-Assessment $toolVer</td></tr><tr><th>Baseline versions</th><td>$blText<br>$alText$(if ($scuba) { '<br>Independent scan results supplied: shown beside each mapped control' })</td></tr></tbody></table></div>"
     $landing += "<h2>Summary</h2><div class='grid'><div class='stat'><b>$($tot.Satisfied)</b>Satisfied</div><div class='stat'><b>$($tot.Partial)</b>Partial</div><div class='stat'><b>$($tot.Gap)</b>Gap</div><div class='stat'><b>$($tot.NotAssessed)</b>Not assessed</div><div class='stat'><b>$($tot.Other)</b>Not scored (licensing, declared, not applicable)</div></div><p class='note'>These are counts of findings, not a compliance percentage. Not assessed means the tool could not establish the answer (evidence not read, a manual check, or an NRG standard that is not approved); it is neither a pass nor a failure.</p>"
     $landing += "<h2>Workloads</h2><table><thead><tr><th>Workload</th><th>Satisfied</th><th>Partial</th><th>Gap</th><th>Not assessed</th><th>Not scored</th></tr></thead><tbody>"
     foreach ($wl in $counts.Keys) { $c = $counts[$wl]; $landing += "<tr><td><a href='$wl.html'><b>$(& $hx $c.Name)</b></a> <span class='mut'>($($c.Total) findings)</span></td><td>$($c.Satisfied)</td><td>$($c.Partial)</td><td>$($c.Gap)</td><td>$($c.NotAssessed)</td><td>$($c.Other)</td></tr>" }
