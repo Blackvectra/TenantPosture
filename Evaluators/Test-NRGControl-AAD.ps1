@@ -267,7 +267,7 @@ function Get-NRGLegacyAuthBlockState {
     $legacy = @($ca.Data['Policies'] | Where-Object {
         @($_.Conditions.ClientAppTypes) -contains 'other' -and (Test-NRGCAGrantRequires -Policy $_ -Any @('block'))
     })
-    $full = @($legacy | Where-Object { $_.State -eq 'enabled' -and (Test-NRGCAAllUsers $_) })
+    $full = @($legacy | Where-Object { $_.State -eq 'enabled' -and (Test-NRGCAAllUsers $_) -and (Test-NRGCAAllApps $_) })
     if ($full.Count -gt 0) {
         return [ordered]@{ Kind = 'Blocked'; Detail = "Conditional Access blocks legacy authentication (Other clients) for all users: $((@($full | ForEach-Object { $_.DisplayName })) -join ', ')" }
     }
@@ -321,17 +321,23 @@ function Test-NRGControlAADLegacyAuth {
     $legacy = @($caData.Data['Policies'] | Where-Object {
         @($_.Conditions.ClientAppTypes) -contains 'other' -and (Test-NRGCAGrantRequires -Policy $_ -Any @('block'))
     })
-    $full    = @($legacy | Where-Object { $_.State -eq 'enabled' -and (Test-NRGCAAllUsers $_) })
-    $scoped  = @($legacy | Where-Object { $_.State -eq 'enabled' -and -not (Test-NRGCAAllUsers $_) })
+    # A policy also has to apply to every application: one whose application scope is
+    # 'None' (or a single app) blocks nothing for the rest, though it is enabled, names
+    # all users and carries the block grant.
+    $full    = @($legacy | Where-Object { $_.State -eq 'enabled' -and (Test-NRGCAAllUsers $_) -and (Test-NRGCAAllApps $_) })
+    $scoped  = @($legacy | Where-Object { $_.State -eq 'enabled' -and -not ((Test-NRGCAAllUsers $_) -and (Test-NRGCAAllApps $_)) })
     $audit   = @($legacy | Where-Object { $_.State -eq 'enabledForReportingButNotEnforced' })
     $names   = { param($l) (@($l) | ForEach-Object { $_.DisplayName }) -join ', ' }
 
     if ($full.Count -gt 0) {
+        $exNote = ''
+        $excl = @($full | Where-Object { @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.ExcludeUsers' -Default @()).Count -gt 0 -or @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.ExcludeGroups' -Default @()).Count -gt 0 })
+        if ($excl.Count -gt 0 -and $excl.Count -eq $full.Count) { $exNote = ' Every such policy excludes at least one user or group (for example a break-glass account); confirm each exclusion is intended.' }
         Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
             -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
-            -Detail "Legacy authentication (Other clients) is blocked for all users by: $(& $names $full)."
+            -Detail "Legacy authentication (Other clients) is blocked for all users on all applications by: $(& $names $full).$exNote"
     } elseif ($scoped.Count -gt 0 -or $audit.Count -gt 0) {
-        $why = if ($scoped.Count -gt 0) { "blocked only for a subset of users/groups ($(& $names $scoped)); everyone else can still use legacy protocols" } else { "configured only in report-only mode ($(& $names $audit)); nothing is blocked" }
+        $why = if ($scoped.Count -gt 0) { "blocked only for a subset of users, groups or applications ($(& $names $scoped)); everyone else can still use legacy protocols" } else { "configured only in report-only mode ($(& $names $audit)); nothing is blocked" }
         Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
             -Detail "Legacy authentication is $why." `

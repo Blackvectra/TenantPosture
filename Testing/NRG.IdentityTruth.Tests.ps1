@@ -86,6 +86,14 @@ Describe 'Identity controls report what the tenant is configured to do' {
             Ca @(Pol -ClientApps @('exchangeActiveSync') -Grant @('block'));                                   (V 'Test-NRGControlAADLegacyAuth' 'AAD-1.1').State | Should -Be 'Gap'
             Ca @(Pol -ClientApps @('other','exchangeActiveSync') -Grant @('block'));                           (V 'Test-NRGControlAADLegacyAuth' 'AAD-1.1').State | Should -Be 'Satisfied'
         }
+        It 'AAD-1.1: a legacy-auth block whose application scope is None (or one app) blocks nothing and is not credited' {
+            Ca @(Pol -Apps @('None') -ClientApps @('exchangeActiveSync','mobileAppsAndDesktopClients','other') -Grant @('block'))
+            $v = V 'Test-NRGControlAADLegacyAuth' 'AAD-1.1'; $v.State | Should -Be 'Partial'; $v.Detail | Should -Match 'applications'
+            Ca @(Pol -Apps @('00000003-0000-0ff1-ce00-000000000000') -ClientApps @('other') -Grant @('block'))
+            (V 'Test-NRGControlAADLegacyAuth' 'AAD-1.1').State | Should -Be 'Partial'
+            Ca (@(Pol -Apps @('None') -ClientApps @('other') -Grant @('block')) + @(Pol -Name 'all' -ClientApps @('other') -Grant @('block')))
+            (V 'Test-NRGControlAADLegacyAuth' 'AAD-1.1').State | Should -Be 'Satisfied'
+        }
         It 'AAD-1.4 / 1.5: blocking and risk-remediation responses count' {
             Ca @(Pol -SignInRisk @('high', 'medium') -Grant @('block'));   (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied'
             Ca @(Pol -UserRisk @('high') -Grant @('riskRemediation'));     (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'

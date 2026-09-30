@@ -59,7 +59,7 @@ function Test-NRGControlAADCA {
     # 'other' client type; MFA (or an authentication strength) for all users
     # and all apps; MFA for admins, which an all-users policy also provides.
     $blockLegacy = @($enabled | Where-Object {
-        @($_.Conditions.ClientAppTypes) -contains 'other' -and (Test-NRGCAAllUsers $_) -and (Test-NRGCAGrantRequires -Policy $_ -Any @('block'))
+        @($_.Conditions.ClientAppTypes) -contains 'other' -and (Test-NRGCAAllUsers $_) -and (Test-NRGCAAllApps $_) -and (Test-NRGCAGrantRequires -Policy $_ -Any @('block'))
     }).Count -gt 0
 
     $mfaAllUsers = @($enabled | Where-Object {

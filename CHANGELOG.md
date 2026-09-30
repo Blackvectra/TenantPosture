@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **AAD-1.1 no longer credits a legacy-authentication block that applies to no application.**
+  Found by comparing a ScubaGear 2.0.0 run with NRG on the same tenant: a policy with all
+  users, the `other` client type and a block grant but an application scope of `None`
+  blocks nothing, yet was named as the blocker. AAD-1.1, the legacy-block test EXO-1.6 relies
+  on, and AAD-2.1's legacy-auth track now require the policy to cover all applications too;
+  one scoped to some users, groups or applications is Partial. A Satisfied also says when every
+  qualifying policy excludes a user or group.
+
 - **The seven "Satisfied with limits" controls now judge every component.** AAD-6.2 (user
   consent and the admin consent workflow), AAD-2.1 (the approved Conditional Access template
   set), DEF-2.2 (malware ZAP beside spam and phishing), DEF-2.3 (the approved blocked-type
