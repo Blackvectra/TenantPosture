@@ -249,7 +249,11 @@ function Invoke-NRGCollectPurview {
                 $result.Data.SectionStatus[$Section] = 'Failed'
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     $why = if (-not $cmd.Command) { 'is not available' } else { 'resolved only to the Exchange Online session' }
-                    Register-NRGException -Source "Purview-$Section" -Message "$Cmdlet $why in the Security & Compliance session, so $Section was not collected."
+                    # Microsoft exposes each Security & Compliance cmdlet only to accounts holding the role that
+                    # grants it, so when the session works (other sections collected) a single absent cmdlet
+                    # usually means a missing Purview role, not a tool fault. Stated as a likely cause, not proven.
+                    $hint = if (-not $cmd.Command) { ' The session itself works if other Purview sections collected; Microsoft exposes each cmdlet only to accounts holding the role that grants it, so this usually means the signed-in account lacks that Purview role (for example Information Protection or Compliance Administrator). Check with: Get-Command ' + $Cmdlet + ' in the Security & Compliance session.' } else { '' }
+                    Register-NRGException -Source "Purview-$Section" -Message "$Cmdlet $why in the Security & Compliance session, so $Section was not collected.$hint"
                 }
                 return
             }
