@@ -68,7 +68,10 @@ Describe 'Endpoint device compliance' {
                 [bool]   $Elevated,
                 [hashtable] $Results,   # checkId -> Result
                 [string] $Folder,
-                [switch] $WithBom
+                [switch] $WithBom,
+                # Current by default: an endpoint result older than the freshness window
+                # is (correctly) not counted, so a fixed old date would make every device stale.
+                [string] $CollectedAt = ((Get-Date).ToUniversalTime().ToString('o'))
             )
             $checks = @()
             foreach ($k in $Results.Keys) {
@@ -77,7 +80,7 @@ Describe 'Endpoint device compliance' {
             $doc = [ordered]@{
                 Schema        = 'nrg-device-compliance/1.0'
                 ScriptVersion = '1.0.0'
-                CollectedAt   = '2026-08-25T18:00:00.0000000Z'
+                CollectedAt   = $CollectedAt
                 Elevated      = $Elevated
                 Device        = [ordered]@{ Hostname = $Hostname; OSCaption = 'Windows 11 Pro'; OSBuild = '22631'; Serial = 'SN1'; JoinType = 'EntraJoined' }
                 Checks        = $checks

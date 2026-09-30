@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- **Detection accuracy: whose activity, what evidence, how complete.** From an
+  independent source audit of `main`. (1) Both incident-response entry points
+  called `Get-NRGRawData -AllKeys`, a parameter that does not exist, so each
+  stopped after all collection and evaluation and before any report; the suite
+  stayed green because no test launches those scripts.
+  `NRG.CallBinding.Tests.ps1` now parses every repo script and checks that each
+  call to a module-defined function names only parameters it has. (2) Sign-in
+  triage could say "Tenant looks clean" when reads had failed or stopped at the
+  event cap: SIGNIN-2.1 is now "Not cleared" without complete reads, the report
+  verdict is `NOT CLEARED — EVIDENCE INCOMPLETE` rather than the green one, and
+  the collector registers coverage from what completed instead of `Collected`
+  before any query ran. (3) Any Critical finding rendered as `CONFIRMED
+  COMPROMISE`; it is now `CRITICAL INDICATORS — INVESTIGATE` and says it is
+  heuristic. (4) Flagged-IP scoring (SIGNIN-1.5) tracked success per IP, so on a
+  shared address one user's success scored users who only failed; it is now per
+  user, and the detail shows users seen and users who succeeded. (5) Triage
+  deep-dive findings carried no account and the JSON kept only the last user's
+  mailbox data; findings are now tagged with the account and an Evidence
+  summary, the JSON carries a `DeepDives` record per user, and a failed dive
+  makes the verdict not cleared. (6) An all-pass endpoint result could be
+  labeled Effective from stale scans or a fraction of the fleet; results older
+  than 8 days (or with no readable date) are no longer counted, each endpoint
+  finding records `Coverage` (verdicts, could-not-run, stale, expected fleet
+  from Intune), and Effective requires complete, current coverage. Results with
+  no recorded coverage read Unknown. Tests: `NRG.CallBinding`, `NRG.SignInHonesty`,
+  `NRG.DeviceEvidence`, plus additions to `NRG.SignInTriage`.
+
 - **Defects found by the first live baseline validation (NRGTS, 2026-09-29),
   fixed without touching a single verdict.** DNS collection ran only inside
   the Exchange branch of the entry point, so an Exchange connection failure

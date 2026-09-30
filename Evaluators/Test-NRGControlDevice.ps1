@@ -29,6 +29,11 @@
 
 $script:NRGDeviceControls = $null
 
+# An endpoint result older than this is not evidence about the device today: it is
+# counted as not assessed (never a pass, never a failure), like a check the
+# collector could not run. Matches the baseline's 'Weekly' freshness window.
+$script:NRGDeviceResultMaxAgeDays = 8
+
 function Get-NRGDeviceControlDefinitions {
     <#
         Loads Config/device-controls.json. Returns an empty array rather than
@@ -126,6 +131,36 @@ function Test-NRGControlDevice {
     $total       = $devices.Count
     $notElevated = @($devices | Where-Object { -not $_.Elevated }).Count
 
+    # Age of each device's result. An unreadable timestamp is treated as stale:
+    # a result whose age cannot be shown is not shown to be current.
+    $now = (Get-Date).ToUniversalTime()
+    $staleAge = @{}
+    foreach ($d in $devices) {
+        $host = ([string](Get-NRGObjectField -Item $d -Key 'Hostname' -Default '')).ToUpperInvariant()
+        $ts = [datetime]::MinValue
+        $ok = [datetime]::TryParse([string](Get-NRGObjectField -Item $d -Key 'CollectedAt' -Default ''), [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$ts)
+        if (-not $ok) { $staleAge[$host] = -1 }
+        elseif (($now - $ts.ToUniversalTime()).TotalDays -gt $script:NRGDeviceResultMaxAgeDays) { $staleAge[$host] = [int][math]::Floor(($now - $ts.ToUniversalTime()).TotalDays) }
+    }
+    $staleCount = $staleAge.Count
+
+    # The fleet the results should cover: the managed Windows devices Intune
+    # reported, when it did. Without a reference, completeness cannot be shown.
+    $expectedFleet = $null
+    $intune = Get-NRGRawData -Key 'Intune-DeviceCompliance'
+    if ($intune -and (Get-NRGObjectField -Item $intune -Key 'Success' -Default $false)) {
+        $byPlat = Get-NRGNestedProperty -Object $intune -Path 'Data.OSComplianceSummary.ByPlatform' -Default $null
+        $secOk = [string](Get-NRGNestedProperty -Object $intune -Path 'Data.SectionStatus.OSComplianceSummary' -Default 'Collected')
+        if ($null -ne $byPlat -and $secOk -ne 'Failed') {
+            $names = if ($byPlat -is [System.Collections.IDictionary]) { @($byPlat.Keys) } else { @($byPlat.PSObject.Properties | ForEach-Object { $_.Name }) }
+            $sum = 0
+            foreach ($n in $names) { if ($n -match '^Windows') { $sum += [int](Get-NRGObjectField -Item $byPlat -Key $n -Default 0) } }
+            $expectedFleet = $sum
+        }
+    }
+    $covByCid = @{}
+    $findingsBefore = @(Get-NRGFindings).Count
+
     # Index every device's checks by ID once, rather than re-scanning the whole
     # fleet for each of 35 controls.
     $byCheck = @{}
@@ -134,11 +169,13 @@ function Test-NRGControlDevice {
             $id = [string](Get-NRGObjectField -Item $chk -Key 'Id' -Default '')
             if (-not $id) { continue }
             if (-not $byCheck.ContainsKey($id)) { $byCheck[$id] = [System.Collections.Generic.List[object]]::new() }
+            $hostKey = ([string](Get-NRGObjectField -Item $d -Key 'Hostname' -Default '')).ToUpperInvariant()
+            $isStale = $staleAge.ContainsKey($hostKey)
             $byCheck[$id].Add([ordered]@{
                 Hostname = [string](Get-NRGObjectField -Item $d   -Key 'Hostname' -Default '')
-                Result   = [string](Get-NRGObjectField -Item $chk -Key 'Result'   -Default '')
+                Result   = $(if ($isStale) { 'NotAssessed' } else { [string](Get-NRGObjectField -Item $chk -Key 'Result' -Default '') })
                 Observed = [string](Get-NRGObjectField -Item $chk -Key 'Observed' -Default '')
-                Detail   = [string](Get-NRGObjectField -Item $chk -Key 'Detail'   -Default '')
+                Detail   = $(if ($isStale) { 'Stale result: not counted as a pass or a failure.' } else { [string](Get-NRGObjectField -Item $chk -Key 'Detail' -Default '') })
             })
         }
     }
@@ -188,8 +225,31 @@ function Test-NRGControlDevice {
             }
             $blockedNote += '.'
         }
+        if ($staleCount -gt 0) {
+            $blockedNote += " $staleCount device(s) reported results older than $($script:NRGDeviceResultMaxAgeDays) days (or with no readable date) and were not counted."
+        }
         if ($missing -gt 0) {
             $blockedNote += " $missing device(s) reported no result for this check — check the endpoint script version."
+        }
+        # Structured coverage for this check: what the verdict rests on. The
+        # baseline reads it to decide whether an all-pass result may be labeled
+        # Effective.
+        $verdicts = $pass.Count + $fail.Count + $na.Count
+        $reasons = [System.Collections.Generic.List[string]]::new()
+        if ($notAssessed.Count -gt 0) { $reasons.Add("$($notAssessed.Count) device(s) could not run this check") }
+        if ($missing -gt 0)           { $reasons.Add("$missing device(s) reported no result for this check") }
+        if ($staleCount -gt 0)        { $reasons.Add("$staleCount device(s) reported results older than $($script:NRGDeviceResultMaxAgeDays) days") }
+        if ($null -eq $expectedFleet) { $reasons.Add('the expected fleet size is not known (no Intune managed-device count)') }
+        elseif ($total -lt $expectedFleet) { $reasons.Add("$total of $expectedFleet managed Windows devices reported") }
+        $covByCid[$cid] = [ordered]@{
+            Devices       = $total
+            Verdicts      = $verdicts
+            NotAssessed   = $notAssessed.Count
+            Missing       = $missing
+            Stale         = $staleCount
+            ExpectedFleet = $expectedFleet
+            Complete      = ($reasons.Count -eq 0)
+            Reasons       = @($reasons)
         }
 
         if ($assessed -eq 0) {
@@ -244,6 +304,16 @@ function Test-NRGControlDevice {
                 -Remediation ([string]$c.Remediation) `
                 -AffectedObjects $affected `
                 -FrameworkIds $cits
+        }
+    }
+
+    # Attach each finding's coverage (in place; Add-NRGFinding's record shape is
+    # shared by every control, so the endpoint half adds its own field).
+    $all = @(Get-NRGFindings)
+    for ($i = $findingsBefore; $i -lt $all.Count; $i++) {
+        $f = $all[$i]
+        if ($covByCid.ContainsKey([string]$f.ControlId)) {
+            Add-Member -InputObject $f -NotePropertyName 'Coverage' -NotePropertyValue $covByCid[[string]$f.ControlId] -Force
         }
     }
 }

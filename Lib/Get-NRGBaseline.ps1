@@ -519,7 +519,27 @@ function Get-NRGBaselineCompliance {
                 } elseif ($devStates -contains 'Gap' -or $devStates -contains 'Partial') {
                     $r.EffectivenessState = 'Ineffective'; $r.EffectivenessDetail = "Endpoint checks $($devIds -join ', ') report failing devices."
                 } elseif (@($devStates | Where-Object { $_ -ne 'Satisfied' }).Count -eq 0) {
-                    $r.EffectivenessState = 'Effective'; $r.EffectivenessDetail = "Endpoint checks $($devIds -join ', ') pass on every device that reported."
+                    # All-pass is only Effective when the results cover the fleet
+                    # and are current. A pass from 3 of 38 devices, or from scans
+                    # months old, says nothing about the fleet today. Coverage
+                    # comes from the endpoint evaluator; results with none (older
+                    # JSON) cannot show completeness.
+                    $covProblems = [System.Collections.Generic.List[string]]::new()
+                    foreach ($d in $devIds) {
+                        if (-not $byControl.ContainsKey($d)) { continue }
+                        $cov = Get-NRGObjectField -Item (& $worst @($byControl[$d])) -Key 'Coverage' -Default $null
+                        if ($null -eq $cov) { $covProblems.Add("$d has no recorded coverage"); continue }
+                        if (-not [bool](Get-NRGObjectField -Item $cov -Key 'Complete' -Default $false)) {
+                            $why = @(Get-NRGObjectField -Item $cov -Key 'Reasons' -Default @()) -join '; '
+                            $covProblems.Add("$d`: $(if ($why) { $why } else { 'coverage incomplete' })")
+                        }
+                    }
+                    if ($covProblems.Count -gt 0) {
+                        $r.EffectivenessState = 'Unknown'
+                        $r.EffectivenessDetail = "Endpoint checks $($devIds -join ', ') pass on the devices that reported, but the results do not cover the fleet or are not current, so effectiveness is not shown: $($covProblems -join ' | ')."
+                    } else {
+                        $r.EffectivenessState = 'Effective'; $r.EffectivenessDetail = "Endpoint checks $($devIds -join ', ') pass on every device in the expected fleet, with current results."
+                    }
                 } else {
                     $r.EffectivenessState = 'Unknown'; $r.EffectivenessDetail = "Endpoint checks $($devIds -join ', ') did not all reach a verdict."
                 }
