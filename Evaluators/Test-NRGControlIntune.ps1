@@ -75,8 +75,40 @@ function Test-NRGControlIntune {
         $all = @($d.CompliancePolicies)
         $assigned = @(Select-NRGAssignedPolicies $all)
         if ($assigned.Count -gt 0) {
-            Add-NRGFinding -ControlId 'INT-1.1' -State 'Satisfied' -Category 'Endpoint' -Title $c.Title -Severity 'Informational' -FrameworkIds (& $cit 'INT-1.1') `
-                -CurrentValue "$($assigned.Count) assigned compliance policy(ies)" -RequiredValue 'At least one assigned compliance policy'
+            # The expected state is an assigned compliance policy PER enrolled platform,
+            # each with a non-compliance action. One assigned policy covers one platform,
+            # not the fleet, so coverage is judged per platform from the enrolled-device
+            # counts; the non-compliance action is not read, so it is never credited.
+            $plats = @(
+                @{ Name = 'Windows'; Device = '^Windows';     Policy = '(?i)windows' }
+                @{ Name = 'iOS/iPadOS'; Device = '^(iOS|iPadOS)'; Policy = '(?i)\bios|ipados' }
+                @{ Name = 'Android'; Device = '^Android';     Policy = '(?i)android' }
+                @{ Name = 'macOS'; Device = '^macOS';         Policy = '(?i)macos' }
+            )
+            $unread = $null -eq (Get-NRGEnrolledPlatformCount -Raw $dc -Pattern '.')
+            $covered = @(); $uncovered = @()
+            if (-not $unread) {
+                foreach ($pl in $plats) {
+                    $n = [int](Get-NRGEnrolledPlatformCount -Raw $dc -Pattern $pl.Device)
+                    if ($n -le 0) { continue }
+                    $has = @($assigned | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'Platform' -Default '') -match $pl.Policy }).Count -gt 0
+                    if ($has) { $covered += "$($pl.Name) ($n device(s))" } else { $uncovered += "$($pl.Name) ($n device(s))" }
+                }
+            }
+            $verified = "Verified: $($assigned.Count) assigned compliance policy(ies)."
+            if ($unread) {
+                Add-NRGFinding -ControlId 'INT-1.1' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.1') `
+                    -Detail "$verified Not assessed: whether every enrolled platform has one, because the enrolled-device platform counts were not read; and each policy's non-compliance action is not read." `
+                    -CurrentValue "$($assigned.Count) assigned compliance policy(ies); platform coverage not read" -RequiredValue 'An assigned compliance policy per enrolled platform, each with a non-compliance action'
+            } elseif ($uncovered.Count -gt 0) {
+                Add-NRGFinding -ControlId 'INT-1.1' -State 'Partial' -Category 'Endpoint' -Title $c.Title -Severity 'Medium' -FrameworkIds (& $cit 'INT-1.1') `
+                    -Detail "$verified$(if ($covered.Count) { " Covered: $($covered -join ', ')." }) Shortfall: no assigned compliance policy for $($uncovered -join ', '), so those devices are not held to any baseline." `
+                    -CurrentValue "Covered: $($covered -join ', '); not covered: $($uncovered -join ', ')" -RequiredValue 'An assigned compliance policy per enrolled platform, each with a non-compliance action' -Remediation $c.Remediation
+            } else {
+                Add-NRGFinding -ControlId 'INT-1.1' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.1') `
+                    -Detail "$verified Every enrolled platform has an assigned compliance policy ($($covered -join ', ')). Not assessed: each policy's non-compliance action; it is not read, so the action half of the requirement is not established." `
+                    -CurrentValue "Platforms covered: $($covered -join ', '); non-compliance action not read" -RequiredValue 'An assigned compliance policy per enrolled platform, each with a non-compliance action'
+            }
         } else {
             $why = if ($all.Count) { "$($all.Count) compliance policy(ies) exist but none is assigned to any user or device." } else { 'No device compliance policies configured.' }
             Add-NRGFinding -ControlId 'INT-1.1' -State 'Gap' -Category 'Endpoint' -Title $c.Title -Severity $c.Severity -FrameworkIds (& $cit 'INT-1.1') `

@@ -179,7 +179,7 @@ function Test-NRGControlEXOAutoForward {
     # rule, an enabled preset, and the default. A custom "On" policy lets its
     # senders forward however the default is set.
     $inForce = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $exoData.Data -Key 'OutboundSpamPolicies' -Default @()) `
-        -Rules (Get-NRGObjectField -Item $exoData.Data -Key 'OutboundSpamRules' -Default $null) `
+        -Rules (Get-NRGRuleList -Item $exoData.Data -Key 'OutboundSpamRules') `
         -RulePolicyKey 'HostedOutboundSpamFilterPolicy' -PresetKind 'EOP')
     if ($inForce.Count -eq 0 -or -not $wildcardRemote) {
         Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
@@ -333,7 +333,7 @@ function Test-NRGControlEXOAntiPhish {
         return
     }
     $inForce = Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) `
-        -Rules (Get-NRGObjectField -Item $ap -Key 'Rules' -Default $null) -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP'
+        -Rules (Get-NRGRuleList -Item $ap -Key 'Rules') -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP'
     $f = { param($p, $k) Get-NRGObjectField -Item $p -Key $k -Default $null }
     $pass = { param($p)
         (& $f $p 'EnableOrganizationDomainsProtection') -eq $true -and [string](& $f $p 'TargetedDomainProtectionAction') -notin @('','NoAction') -and
@@ -468,7 +468,7 @@ function Test-NRGControlEXOHonorDMARC {
         return
     }
     $inForce = Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) `
-        -Rules (Get-NRGObjectField -Item $ap -Key 'Rules' -Default $null) -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP'
+        -Rules (Get-NRGRuleList -Item $ap -Key 'Rules') -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP'
     Add-NRGPolicySetFinding -ControlId 'EXO-1.7' -Control $control -FrameworkIds $citations -Policies $inForce `
         -Pass { param($p) (Get-NRGObjectField -Item $p -Key 'HonorDmarcPolicy' -Default $false) -eq $true } `
         -Value { param($p) "HonorDmarcPolicy = $([bool](Get-NRGObjectField -Item $p -Key 'HonorDmarcPolicy' -Default $false))" } `
@@ -785,7 +785,7 @@ function Test-NRGControlEXOOutboundLimits {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Outbound spam policies were not collected; not assessed.'; return
     }
     $inForce = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $exo.Data -Key 'OutboundSpamPolicies' -Default @()) `
-        -Rules (Get-NRGObjectField -Item $exo.Data -Key 'OutboundSpamRules' -Default $null) `
+        -Rules (Get-NRGRuleList -Item $exo.Data -Key 'OutboundSpamRules') `
         -RulePolicyKey 'HostedOutboundSpamFilterPolicy' -PresetKind 'EOP')
     if ($inForce.Count -eq 0) { Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'No outbound spam policy found'; return }
 
@@ -1210,7 +1210,7 @@ function Test-NRGControlEXOPriorityAccountProtection {
     # preset, or the default), with users listed AND an action other than
     # NoAction — NoAction is Microsoft's default and detects without acting.
     $inForce = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) `
-        -Rules (Get-NRGObjectField -Item $ap -Key 'Rules' -Default $null) -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP')
+        -Rules (Get-NRGRuleList -Item $ap -Key 'Rules') -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP')
     $users = { param($p) @(Get-NRGObjectField -Item $p -Key 'TargetedUsersToProtect' -Default @() | Where-Object { $_ }) }
     $listed = { param($p) (Get-NRGObjectField -Item $p -Key 'EnableTargetedUserProtection' -Default $false) -eq $true -and @(& $users $p).Count -gt 0 }
     $acting = { param($p) [string](Get-NRGObjectField -Item $p -Key 'TargetedUserProtectionAction' -Default 'NoAction') -notin @('','NoAction') }
@@ -1257,7 +1257,7 @@ function Test-NRGControlEXOSafeSenderOverride {
     if ($policies.Count -eq 0 -or $unread.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'The allowed sender and domain lists of the anti-spam policies were not collected; not assessed.'; return
     }
-    $inForce = @(Get-NRGInForcePolicies -Policies $policies -Rules (Get-NRGObjectField -Item $exo.Data -Key 'AntiSpamRules' -Default $null) `
+    $inForce = @(Get-NRGInForcePolicies -Policies $policies -Rules (Get-NRGRuleList -Item $exo.Data -Key 'AntiSpamRules') `
         -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
     $hits = @($inForce | ForEach-Object {
         $n = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '?')

@@ -178,4 +178,36 @@ Describe 'Expected state: every mandatory component, each half kept visible' {
             @($j.Rules).Count | Should -Be 0
         }
     }
+
+    Context 'INT-1.1 compliance policies: per enrolled platform, action not read' {
+        BeforeAll {
+            $script:Dc = { param($Policies, $ByPlatform) & $script:Raw 'Intune-DeviceCompliance' @{
+                SectionStatus = @{ CompliancePolicies = 'Collected'; OSComplianceSummary = 'Collected' }
+                CompliancePolicies = @($Policies); OSComplianceSummary = @{ ByPlatform = $ByPlatform } } }
+            $script:Pol = { param($Odata, $Assigned = $true) [pscustomobject]@{ DisplayName = $Odata; Platform = $Odata; IsAssigned = $Assigned } }
+            $script:Int11 = { Test-NRGControlIntune | Out-Null; @(Get-NRGFindings | Where-Object { $_.ControlId -eq 'INT-1.1' })[0] }
+        }
+        It 'a policy for one platform does not cover the fleet: Partial naming the uncovered platform' {
+            Set-NRGRawData -Key 'Intune-DeviceCompliance' -Data (& $script:Dc @((& $script:Pol '#microsoft.graph.windows10CompliancePolicy')) @{ Windows = 30; iOS = 4 })
+            $v = & $script:Int11
+            $v.State  | Should -Be 'Partial'
+            $v.Detail | Should -Match 'Covered: Windows \(30 device'
+            $v.Detail | Should -Match 'no assigned compliance policy for iOS/iPadOS \(4 device'
+        }
+        It 'every enrolled platform covered: verified, but the non-compliance action is not read, so never Satisfied' {
+            Set-NRGRawData -Key 'Intune-DeviceCompliance' -Data (& $script:Dc @((& $script:Pol '#microsoft.graph.windows10CompliancePolicy'), (& $script:Pol '#microsoft.graph.iosCompliancePolicy')) @{ Windows = 30; iOS = 4 })
+            $v = & $script:Int11
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match 'Every enrolled platform has an assigned compliance policy'
+            $v.Detail | Should -Match 'non-compliance action'
+        }
+        It 'an unassigned policy does not cover a platform' {
+            Set-NRGRawData -Key 'Intune-DeviceCompliance' -Data (& $script:Dc @((& $script:Pol '#microsoft.graph.windows10CompliancePolicy'), (& $script:Pol '#microsoft.graph.iosCompliancePolicy' $false)) @{ Windows = 30; iOS = 4 })
+            (& $script:Int11).State | Should -Be 'Partial'
+        }
+        It 'no assigned policy at all is still a Gap' {
+            Set-NRGRawData -Key 'Intune-DeviceCompliance' -Data (& $script:Dc @() @{ Windows = 30 })
+            (& $script:Int11).State | Should -Be 'Gap'
+        }
+    }
 }

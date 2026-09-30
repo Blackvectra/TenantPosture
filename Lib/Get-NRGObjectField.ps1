@@ -68,3 +68,32 @@ function Get-NRGObjectField {
         return $Default
     }
 }
+
+function Get-NRGRuleList {
+    <#
+    .SYNOPSIS
+        Reads a rule LIST field keeping an empty list distinct from an unread one.
+    .DESCRIPTION
+        Get-NRGObjectField hands an empty array back through the pipeline, so the
+        caller receives $null: indistinguishable from "the rules were not
+        collected". Get-NRGInForcePolicies reads $null as "cannot tell, keep every
+        custom policy", which counted a policy that applies to nobody as in force.
+        Here $null still means the field is absent or was not read, and an empty
+        collected list stays an empty list.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowNull()] [object] $Item,
+        [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $Key
+    )
+    if ($null -eq $Item) { return $null }
+    $v = $null
+    if ($Item -is [System.Collections.IDictionary]) {
+        if ($Item.Contains($Key)) { $v = $Item[$Key] }
+    } else {
+        $p = $Item.PSObject.Properties[$Key]
+        if ($p) { $v = $p.Value }
+    }
+    if ($null -eq $v) { return $null }
+    return , @($v)
+}

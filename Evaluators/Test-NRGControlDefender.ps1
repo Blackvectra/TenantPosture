@@ -149,9 +149,9 @@ function Test-NRGControlDefender {
     $sa = $defData.Data['SafeAttachments']
     $sl = $defData.Data['SafeLinks']
     $ap = $defData.Data['AntiPhishing']
-    $saForce = if ($sa -and $sa.Available) { @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $sa -Key 'Policies' -Default @()) -Rules (Get-NRGObjectField -Item $sa -Key 'Rules' -Default $null) -RulePolicyKey 'SafeAttachmentPolicy' -PresetKind 'ATP') } else { @() }
-    $slForce = if ($sl -and $sl.Available) { @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $sl -Key 'Policies' -Default @()) -Rules (Get-NRGObjectField -Item $sl -Key 'Rules' -Default $null) -RulePolicyKey 'SafeLinksPolicy' -PresetKind 'ATP') } else { @() }
-    $apForce = if ($ap -and $ap.Available) { @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) -Rules (Get-NRGObjectField -Item $ap -Key 'Rules' -Default $null) -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP') } else { @() }
+    $saForce = if ($sa -and $sa.Available) { @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $sa -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $sa -Key 'Rules') -RulePolicyKey 'SafeAttachmentPolicy' -PresetKind 'ATP') } else { @() }
+    $slForce = if ($sl -and $sl.Available) { @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $sl -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $sl -Key 'Rules') -RulePolicyKey 'SafeLinksPolicy' -PresetKind 'ATP') } else { @() }
+    $apForce = if ($ap -and $ap.Available) { @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $ap -Key 'Rules') -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP') } else { @() }
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
 
     # ── DEF-1.1 Safe Attachments with Block ──────────────────────────────
@@ -264,7 +264,7 @@ function Test-NRGControlDefenderZAP {
     if (-not (Test-NRGSectionCollected $exo 'AntiSpamPolicies')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiSpamPolicies was not collected; not assessed.'; return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGObjectField -Item $exo.Data -Key 'AntiSpamRules' -Default $null) -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGRuleList -Item $exo.Data -Key 'AntiSpamRules') -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
     # SpamZapEnabled + PhishZapEnabled (ZapEnabled is the deprecated umbrella,
     # used only when neither is present).
@@ -290,6 +290,19 @@ function Test-NRGControlDefenderCommonAttachments {
     if (-not $mf -or -not $mf.Available) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Malware filter data not available'; return
     }
+    # Judged over the policies IN FORCE (an enabled rule, a preset, or the default when
+    # nothing else applies), not "any policy has it on": a filter enabled in a policy
+    # that applies to nobody protects nobody.
+    $mfForce = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $mf -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $mf -Key 'Rules') -RulePolicyKey 'MalwareFilterPolicy' -PresetKind 'EOP')
+    if ($mfForce.Count -gt 0) {
+        Add-NRGPolicySetFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $mfForce `
+            -Pass { (Get-NRGObjectField -Item $_ -Key 'EnableFileFilter' -Default $false) -eq $true } `
+            -Value { "FileFilter=$(Get-NRGObjectField -Item $_ -Key 'EnableFileFilter' -Default '?')" } `
+            -PassDetail 'The common attachments filter blocks high-risk file types regardless of content scan.' `
+            -FailDetail 'The common attachments filter is off for these recipients, so high-risk file types are not blocked by type.' `
+            -RequiredValue 'EnableFileFilter = True in every policy in force'
+        return
+    }
     if ($mf.FileFilterEnabledCount -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Common attachment filter enabled on $($mf.FileFilterEnabledCount) malware policy(ies). High-risk file types blocked regardless of content scan."
     } else {
@@ -309,7 +322,7 @@ function Test-NRGControlDefenderQuarantine {
     if (-not (Test-NRGSectionCollected $exo 'AntiSpamPolicies')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiSpamPolicies was not collected; not assessed.'; return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGObjectField -Item $exo.Data -Key 'AntiSpamRules' -Default $null) -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGRuleList -Item $exo.Data -Key 'AntiSpamRules') -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
     # The quarantine policy decides who may release: DefaultFullAccessPolicy
     # (Microsoft's default for phishing) lets users release their own. Stated,
@@ -334,7 +347,7 @@ function Test-NRGControlDefenderHCSpam {
     if (-not (Test-NRGSectionCollected $exo 'AntiSpamPolicies')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiSpamPolicies was not collected; not assessed.'; return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGObjectField -Item $exo.Data -Key 'AntiSpamRules' -Default $null) -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGRuleList -Item $exo.Data -Key 'AntiSpamRules') -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
     Add-NRGPolicySetFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $policies `
         -Pass { [string](& $f $_ 'HighConfidenceSpamAction' '') -eq 'Quarantine' } `
@@ -356,7 +369,7 @@ function Test-NRGControlDefenderBulkThreshold {
     if (-not (Test-NRGSectionCollected $exo 'AntiSpamPolicies')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiSpamPolicies was not collected; not assessed.'; return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGObjectField -Item $exo.Data -Key 'AntiSpamRules' -Default $null) -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGRuleList -Item $exo.Data -Key 'AntiSpamRules') -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
     # 7 is the default: left at the default is not configured.
     Add-NRGPolicySetFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $policies `
@@ -380,7 +393,7 @@ function Test-NRGControlDefenderUnauthSender {
     if (-not $ap -or -not $ap.Available) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiPhishing policies were not collected; not assessed.'; return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) -Rules (Get-NRGObjectField -Item $ap -Key 'Rules' -Default $null) -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP')
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $ap -Key 'Rules') -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP')
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
     Add-NRGPolicySetFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $policies `
         -Pass { (& $f $_ 'EnableUnauthenticatedSender' $false) -eq $true } -Value { "EnableUnauthenticatedSender=$(& $f $_ 'EnableUnauthenticatedSender' '?')" } `
@@ -402,7 +415,7 @@ function Test-NRGControlDefenderViaTag {
     if (-not $ap -or -not $ap.Available) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiPhishing policies were not collected; not assessed.'; return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) -Rules (Get-NRGObjectField -Item $ap -Key 'Rules' -Default $null) -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP')
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $ap -Key 'Rules') -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP')
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
     Add-NRGPolicySetFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $policies `
         -Pass { (& $f $_ 'EnableViaTag' $false) -eq $true } -Value { "EnableViaTag=$(& $f $_ 'EnableViaTag' '?')" } `
@@ -785,7 +798,7 @@ function Test-NRGControlDefenderSafeLinksOffice {
         Add-NRGDefenderUnavailableFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Section $sl -Feature 'Safe Links'
         return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $sl -Key 'Policies' -Default @()) -Rules (Get-NRGObjectField -Item $sl -Key 'Rules' -Default $null) -RulePolicyKey 'SafeLinksPolicy' -PresetKind 'ATP')
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $sl -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $sl -Key 'Rules') -RulePolicyKey 'SafeLinksPolicy' -PresetKind 'ATP')
     # EnableSafeLinksForOffice (EnableSafeLinksForO365 is the old name; a bare
     # read of it threw under StrictMode and scored this control an Error).
     $office = { param($p) (Get-NRGObjectField -Item $p -Key 'EnableSafeLinksForOffice' -Default $false) -eq $true -or (Get-NRGObjectField -Item $p -Key 'EnableSafeLinksForO365' -Default $false) -eq $true }

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Review of Satisfied baseline controls against their expected state; detection limits documented.**
+  `docs/NRG-DETECTION-LIMITS.md` states, per control, what a verdict proves and what it does
+  not (seven Satisfied controls verify less than their expected state; four NRG standards the
+  tool does not know are named). Fixes from the review: policies-in-force judgment read an
+  EMPTY rule list as "rules not collected" and kept every custom policy in force, including
+  ones that apply to nobody (17 evaluators; `Get-NRGRuleList` keeps an empty collected list
+  distinct from an unread one); DEF-2.3 is now judged over the malware policies in force
+  (the collector also reads the malware filter rules) instead of "any policy has the filter
+  on"; INT-1.1 checks an assigned compliance policy per enrolled platform (a Windows policy
+  no longer covers iOS) and does not credit the non-compliance action, which is not read.
+
 - **EXO-1.6 no longer equates SMTP AUTH with passwords; INT-2.2 reads ASR rule modes.**
   SMTP AUTH carries OAuth as well as passwords and a mailbox can override an
   organization-level disable, so EXO-1.6 now judges password availability from the
