@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **SCuBA citations re-checked against ScubaGear 2.0.0 and its official migration file.**
+  14 of the rule ids NRG cited no longer existed in ScubaGear 2.0.0 (3 version renames, 11
+  Defender-era ids that became `MS.SECURITYSUITE.*`). `Config/scuba-alignment.json` records, for
+  every citation, the current id, the relation (Equivalent 27 / Partial 42 / Manual 3 /
+  Unsupported 15), the rule's SHALL/SHOULD strength and the versions checked (ScubaGear 2.0.0,
+  the migration file's SHA-256); `docs/NRG-SCUBA-ALIGNMENT.md` explains each and lists the 55
+  ScubaGear rules no NRG control is aligned to. **A migrated citation does not establish
+  equivalence**: where the migration maps a rule to a range or to nothing, the rule the evaluator
+  actually covers was chosen per requirement, and 9 obsolete references with no equivalent were
+  removed while NRG's independent controls stay (DEF-1.3, DEF-2.1, DEF-2.6, DEF-4.3, DEF-4.4,
+  EXO-3.5, EXO-4.1, EXO-4.4, PVW-4.1). The bundled authoritative id list is now
+  `scuba-ids-v2.0.0.txt`. `NRG.ScubaAlignment.Tests.ps1` keeps controls.json and the alignment in
+  step. No verdict changes; 78 of 204 controls now cite a SCuBA rule (was 87).
+
 - **Coverage is judged on who is protected, not on which policies exist.** Found by running an
   independent ScubaGear scan on the same tenant and replaying the current code against the stored
   NRG results. Reproduced and fixed: (1) **Conditional Access exclusions were ignored**: AAD-1.1,

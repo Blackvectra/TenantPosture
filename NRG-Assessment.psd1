@@ -110,6 +110,7 @@
         'Get-NRGBaselineRegressions',
         'Get-NRGControlStatus',
         'Get-NRGAsrRuleModes',
+        'Get-NRGScubaAlignment',
         'Get-NRGExclusionCoverage',
         'Get-NRGCAEffectiveCoverage',
         'Get-NRGCANarrowing',
