@@ -356,7 +356,7 @@ function Publish-NRGRemediationPlaybook {
     $null = $exec.AppendLine("| ✅ Meets Requirement | $sat | Control is properly configured |")
     $null = $exec.AppendLine("| ⚠️ Partially Met | $partial | Control exists but needs improvement |")
     $null = $exec.AppendLine("| ❌ Gap Identified | $gap | Control is missing or misconfigured |")
-    $null = $exec.AppendLine("| — Not Applicable | $na | Control does not apply to this environment |")
+    $null = $exec.AppendLine("| — Not scored | $na | Does not apply to this environment, or could not be assessed (unlicensed, not readable, or a manual check). Each says which in the full report |")
     $null = $exec.AppendLine()
 
     # Top 5 most critical findings in business language

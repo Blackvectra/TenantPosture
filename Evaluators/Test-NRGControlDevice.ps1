@@ -145,9 +145,12 @@ function Test-NRGControlDevice {
     $staleCount = $staleAge.Count
     # Devices with a current result, by short name, for matching to the inventory.
     $currentHosts = [System.Collections.Generic.HashSet[string]]::new()
+    $dupResultHosts = [System.Collections.Generic.List[string]]::new()
     foreach ($d in $devices) {
         $devHost = ([string](Get-NRGObjectField -Item $d -Key 'Hostname' -Default '')).ToUpperInvariant()
-        if ($devHost -and -not $staleAge.ContainsKey($devHost)) { [void]$currentHosts.Add($devHost.Split('.')[0]) }
+        if ($devHost -and -not $staleAge.ContainsKey($devHost)) {
+            if (-not $currentHosts.Add($devHost.Split('.')[0])) { $dupResultHosts.Add($devHost.Split('.')[0]) }
+        }
     }
 
     # The fleet the results should cover: the managed Windows devices Intune
@@ -167,7 +170,8 @@ function Test-NRGControlDevice {
             # a current result for a removed machine from one for a managed
             # machine that is missing, so completeness is judged by name.
             $wn = Get-NRGNestedProperty -Object $intune -Path 'Data.OSComplianceSummary.WindowsDeviceNames' -Default $null
-            if ($null -ne $wn) { $expectedNames = @(@($wn) | Where-Object { $_ } | ForEach-Object { ([string]$_).Split('.')[0].ToUpperInvariant() }) }
+            # Blanks are kept as '' so an unnamed managed device is seen, not lost.
+            if ($null -ne $wn) { $expectedNames = @(@($wn) | ForEach-Object { ([string]$_).Trim().Split('.')[0].ToUpperInvariant() }) }
         }
     }
     $covByCid = @{}
@@ -256,11 +260,21 @@ function Test-NRGControlDevice {
             if ($total -lt $expectedFleet) { $reasons.Add("$total of $expectedFleet managed Windows devices reported") }
             $reasons.Add('device names were not matched to the Intune inventory (count only)')
         } else {
-            $unreported = @($expectedNames | Where-Object { -not $currentHosts.Contains($_) })
+            # A result can only be tied to a managed device by a usable, unique
+            # name. Anything else leaves coverage unproven, not assumed.
+            $blank = @($expectedNames | Where-Object { -not $_ }).Count
+            if ($blank -gt 0) { $reasons.Add("$blank managed Windows device(s) have no name in Intune, so results cannot be matched to them") }
+            $named = @($expectedNames | Where-Object { $_ })
+            $dupNames = @($named | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name })
+            if ($dupNames.Count -gt 0) { $reasons.Add("managed Windows devices share a short host name ($((@($dupNames | Sort-Object | Select-Object -First 5)) -join ', ')), so a result cannot be tied to one of them") }
+            if ($expectedNames.Count -ne $expectedFleet) { $reasons.Add("the inventory names account for $($expectedNames.Count) of $expectedFleet managed Windows devices") }
+            $dupRes = @($dupResultHosts | Sort-Object -Unique)
+            if ($dupRes.Count -gt 0) { $reasons.Add("more than one result file shares a short host name ($((@($dupRes | Select-Object -First 5)) -join ', '))") }
+            $unreported = @($named | Sort-Object -Unique | Where-Object { -not $currentHosts.Contains($_) })
             if ($unreported.Count -gt 0) {
                 $sample = (@($unreported | Sort-Object | Select-Object -First 5) -join ', ')
                 $more = if ($unreported.Count -gt 5) { " and $($unreported.Count - 5) more" } else { '' }
-                $reasons.Add("$($unreported.Count) of $($expectedNames.Count) managed Windows devices have no current result ($sample$more)")
+                $reasons.Add("$($unreported.Count) of $($expectedFleet) managed Windows devices have no current result ($sample$more)")
             }
         }
         $covByCid[$cid] = [ordered]@{

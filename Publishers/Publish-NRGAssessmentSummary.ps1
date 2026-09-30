@@ -562,7 +562,7 @@ function Publish-NRGAssessmentSummary {
     if ($naFindings.Count -gt 0) {
         $null = $sb.AppendLine("### Not Applicable ($($naFindings.Count) controls)")
         $null = $sb.AppendLine()
-        $null = $sb.AppendLine("These controls did not apply to this tenant — typically because the required license is not present, the feature is not enabled, or the workload was skipped at runtime. Expand for full list.")
+        $null = $sb.AppendLine("These controls were not scored. Some do not apply to this tenant; others could not be assessed (the license is not present, the data could not be read, the check is manual, or the workload was skipped). Each finding says which. Not scored is not the same as compliant. Expand for full list.")
         $null = $sb.AppendLine()
         $null = $sb.AppendLine("<details><summary>Show $($naFindings.Count) Not Applicable controls</summary>")
         $null = $sb.AppendLine()

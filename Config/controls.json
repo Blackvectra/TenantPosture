@@ -5531,7 +5531,7 @@
       "ControlId": "AAD-12.1",
       "Title": "Users Without MFA — Named List",
       "Description": "Identifies every enabled user account with no MFA method registered by name and UPN.",
-      "BusinessRisk": "Each account without MFA can be compromised with a stolen password alone. A single phished credential gives an attacker full mailbox access, Teams, SharePoint, and the ability to initiate wire transfers or BEC campaigns.",
+      "BusinessRisk": "An account with no MFA method registered can rely on its password alone at sign-in wherever no policy requires more of it, and a phished or reused password may then give an attacker mailbox, Teams and SharePoint access and the ability to run BEC campaigns. A registration count does not show which policies target the account or how its sign-ins were satisfied.",
       "Severity": "Critical",
       "Workload": "AAD",
       "Category": "Identity",

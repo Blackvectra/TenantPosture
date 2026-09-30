@@ -106,7 +106,7 @@ function Test-NRGControlAADAppCredentialExpiry {
 
     $detail = "Of $total application credentials: $($parts -join ', ')."
     if ($longLived.Count) {
-        $detail += " A long-lived secret is a standing bearer credential — no MFA, no Conditional Access, no sign-in risk evaluation applies to it — and everyone who has ever held it keeps access until it is rotated: $((@($longLived | ForEach-Object { "$($_.App) ($($_.CredentialType), $($_.LifetimeDays)d)" }) | Select-Object -First 5) -join '; ')."
+        $detail += " A long-lived secret is a standing bearer credential — no MFA prompt applies to it, and Conditional Access covers an application only where a workload-identity policy targets an eligible single-tenant service principal — and everyone who has ever held it keeps access until it is rotated: $((@($longLived | ForEach-Object { "$($_.App) ($($_.CredentialType), $($_.LifetimeDays)d)" }) | Select-Object -First 5) -join '; ')."
     }
     if ($expired.Count) {
         $detail += " Expired: $((@($expired | ForEach-Object { "$($_.App) ($($_.CredentialType))" }) | Select-Object -First 5) -join '; '). Remove them — an expired credential left in place is one an operator will rotate under pressure rather than retire."

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **Second review pass.** Endpoint completeness now also requires a usable,
+  unique identity for every managed Windows device: an unnamed device, two
+  devices sharing a short host name, or two result files sharing one leave
+  coverage unproven, and inventory names that do not account for every managed
+  Windows device are not Complete. Wording: the executive legend and Markdown
+  summary no longer say every not-scored control "does not apply" (some could
+  not be assessed); AAD-12.1 no longer asserts a stolen password alone
+  compromises an account it may be covered by policy for; and the
+  application-permission findings state the risk per permission and say
+  Conditional Access reaches an app only through a workload-identity policy on
+  an eligible single-tenant service principal, instead of "no Conditional
+  Access applies".
+
 - **Review fixes on the accuracy PR.** Endpoint completeness is now judged by
   device identity, not count: the Intune collector records the managed Windows
   device names, and a fleet is Complete only when every one has a current

@@ -220,11 +220,12 @@ function Test-NRGControlAppPermTenantTakeover {
 
     Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
         -Severity 'Critical' -FrameworkIds $cit `
-        -Detail ("$($hits.Count) application-permission grant(s) confer tenant takeover: $($perms -join ', '). " +
-                 'These are APPLICATION permissions, not delegated ones — the app acts with no signed-in user, so no MFA ' +
-                 'prompt and no Conditional Access policy applies to it, and its activity does not look like a person in ' +
-                 "the sign-in logs. Any one of these can be used to obtain Global Administrator, forge tokens for any user, " +
-                 "or read every mailbox in the tenant.$msNote") `
+        -Detail ("$($hits.Count) application-permission grant(s) hold permissions rated as able to take over or seriously weaken the tenant: $($perms -join ', '). " +
+                 'What each one allows is stated per grant in the affected objects; they differ, and one alone does not always reach every ' +
+                 'outcome. These are APPLICATION permissions, not delegated ones: the app acts with no signed-in user, so user MFA does not ' +
+                 'apply and its activity does not look like a person in the sign-in logs. Conditional Access can cover an app only through a ' +
+                 'workload-identity policy, which applies to eligible single-tenant service principals and not to multitenant apps or ' +
+                 "managed identities.$msNote") `
         -CurrentValue "$($hits.Count) tenant-takeover application permission(s) granted" `
         -RequiredValue 'No application holds tenant-takeover permissions' `
         -Remediation $ctrl.Remediation -AffectedObjects $objects
@@ -257,7 +258,7 @@ function Test-NRGControlAppPermDataAccess {
 
     $objects = @($hits | Sort-Object PrincipalName, Permission | Select-Object -First 40 | ForEach-Object {
         $when = if ($_.GrantedOn) { " granted $($_.GrantedOn)" } else { '' }
-        "$($_.PrincipalName) [$($_.Origin)] — $($_.Permission) on $($_.Resource)$when"
+        "$($_.PrincipalName) [$($_.Origin)] — $($_.Permission) on $($_.Resource)$when — $($tier2[$_.Permission])"
     })
     $apps  = @($hits | ForEach-Object { $_.PrincipalName } | Sort-Object -Unique)
     $ext   = @($hits | Where-Object { $_.Origin -eq 'External' -or $_.Origin -eq 'Unknown' })
@@ -268,8 +269,9 @@ function Test-NRGControlAppPermDataAccess {
 
     Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
         -Severity $sev -FrameworkIds $cit `
-        -Detail ("$($apps.Count) application(s) hold $($hits.Count) tenant-wide data-access permission(s) — they can reach " +
-                 'every user''s mail, files or chat with no signed-in user and no Conditional Access evaluation. ' +
+        -Detail ("$($apps.Count) application(s) hold $($hits.Count) tenant-wide data-access permission(s); each grant states what it can read. " +
+                 'They act with no signed-in user, so user MFA does not apply; Conditional Access covers an app only through a ' +
+                 'workload-identity policy on an eligible single-tenant service principal. ' +
                  "$($ext.Count) of these grant(s) are held by applications this organization does not own. Each grant should " +
                  "name a business owner and a reason, or be revoked.$msNote") `
         -CurrentValue "$($apps.Count) application(s) with tenant-wide data access" `

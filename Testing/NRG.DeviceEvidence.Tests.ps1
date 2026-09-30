@@ -102,6 +102,26 @@ Describe 'Endpoint evidence: coverage and freshness gate the Effective label' {
             $f.Coverage.Complete | Should -BeFalse
             ($f.Coverage.Reasons -join ' ') | Should -Match 'no current result \(B\)'
         }
+        It 'a managed device with no name in Intune leaves coverage unproven, even when every named device reported' {
+            $f = & $script:Load @((& $script:Dev 'A'), (& $script:Dev 'B')) 2 @('A', '')
+            $f.Coverage.Complete | Should -BeFalse
+            ($f.Coverage.Reasons -join ' ') | Should -Match '1 managed Windows device\(s\) have no name in Intune'
+        }
+        It 'two managed devices with the same short host name cannot both be covered by one result' {
+            $f = & $script:Load @((& $script:Dev 'A')) 2 @('A.east.example', 'A.west.example')
+            $f.Coverage.Complete | Should -BeFalse
+            ($f.Coverage.Reasons -join ' ') | Should -Match 'share a short host name \(A\)'
+        }
+        It 'two result files with the same short host name are not counted as two devices' {
+            $f = & $script:Load @((& $script:Dev 'A.east.example'), (& $script:Dev 'A.west.example')) 2 @('A', 'B')
+            $f.Coverage.Complete | Should -BeFalse
+            ($f.Coverage.Reasons -join ' ') | Should -Match 'result file shares a short host name \(A\)|more than one result file shares a short host name \(A\)'
+        }
+        It 'inventory names that account for fewer devices than the managed Windows count are not complete' {
+            $f = & $script:Load @((& $script:Dev 'A'), (& $script:Dev 'B')) 3 @('A', 'B')
+            $f.Coverage.Complete | Should -BeFalse
+            ($f.Coverage.Reasons -join ' ') | Should -Match 'account for 2 of 3'
+        }
         It 'a matching count with no device names to match against is not complete' {
             $f = & $script:Load @((& $script:Dev 'A'), (& $script:Dev 'B')) 2
             $f.Coverage.Complete | Should -BeFalse

@@ -251,8 +251,10 @@ function Invoke-NRGCollectIntuneDeviceCompliance {
             $result.Data.OSComplianceSummary.ByPlatform = $byPlatform
             # The Windows devices by name, so endpoint results can be matched to the
             # managed inventory by identity, not by count alone.
+            # Blank names are kept, not dropped: the evaluator must see a managed
+            # device with no usable name to know it cannot be matched.
             $winNames = @($devList | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'operatingSystem' -Default '') -like 'Windows*' } |
-                ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'deviceName' -Default '') } | Where-Object { $_ })
+                ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'deviceName' -Default '') })
             $result.Data.OSComplianceSummary.WindowsDeviceNames = $winNames
         } catch {
             $result.Data.SectionStatus['OSComplianceSummary'] = 'Failed'
