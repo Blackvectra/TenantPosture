@@ -107,10 +107,18 @@ function Publish-NRGSignInTriageReport {
         $detail = (& $hxRef ([string]$f.Detail)) -replace "`n",'<br>'
         $remed = if ($f.Remediation) { & $hxRef ([string]$f.Remediation) } else { $null }
         $remedHtml = if ($remed) { "<div class=`"remed`"><b>Recommended action:</b> $remed</div>" } else { '' }
+        $subj = [string](Get-NRGObjectField -Item $f -Key 'Subject' -Default '')
+        $ev = Get-NRGObjectField -Item $f -Key 'Evidence' -Default $null
+        $subjHtml = ''
+        if ($subj) {
+            $miss = @(Get-NRGObjectField -Item $ev -Key 'RequiredMissing' -Default @())
+            $evLine = if ($ev -and $miss.Count -gt 0) { " Evidence incomplete: required source(s) not read: $(& $hxRef ($miss -join ', '))." } elseif ($ev) { ' Evidence: every required mailbox source was read.' } else { '' }
+            $subjHtml = "<div class=`"subject`"><b>Account:</b> $(& $hxRef $subj).$evLine</div>"
+        }
         @"
 <div class="finding $stateClass">
   <div class="finding-hd"><span class="cid">$cid</span><span class="sev $sevClass">$sev</span><span class="finding-title">$title</span></div>
-  <div class="finding-bd"><div class="detail">$detail</div>$remedHtml</div>
+  <div class="finding-bd">$subjHtml<div class="detail">$detail</div>$remedHtml</div>
 </div>
 "@
     }
@@ -156,6 +164,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);line-height:1.5
 .verdict-lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);font-weight:700}
 .verdict-val{font-size:1.7rem;font-weight:800;margin-top:2px}
 .verdict-basis{font-size:.85rem;color:var(--mut);margin-top:4px}
+.subject{font-size:.85rem;color:var(--mut);margin-bottom:6px}
 .verdict.red .verdict-val{color:var(--red-d)}.verdict.amber .verdict-val{color:var(--amber)}.verdict.grn .verdict-val{color:var(--grn)}
 .verdict-counts{margin-left:auto;display:flex;gap:18px}
 .vc{text-align:center;min-width:60px}.vc .n{font-size:1.6rem;font-weight:800;line-height:1}
@@ -292,7 +301,13 @@ td{padding:10px 12px;border-bottom:1px solid var(--bdr);vertical-align:top}
             if ($items.Count -eq 0) { continue }
             $md += "## $section`n`n"
             foreach ($f in $items) {
-                $md += "### $(& $EscMd $f.ControlId): $(& $EscMd $f.Title)`n`n"
+                $fsubj = [string](Get-NRGObjectField -Item $f -Key 'Subject' -Default '')
+                $fev = Get-NRGObjectField -Item $f -Key 'Evidence' -Default $null
+                $md += "### $(& $EscMd $f.ControlId): $(& $EscMd $f.Title)$(if ($fsubj) { " — $(& $EscMd $fsubj)" })`n`n"
+                if ($fsubj -and $fev) {
+                    $fmiss = @(Get-NRGObjectField -Item $fev -Key 'RequiredMissing' -Default @())
+                    $md += "*Account $(& $EscMd $fsubj). $(if ($fmiss.Count -gt 0) { "Evidence incomplete: required source(s) not read: $(& $EscMd ($fmiss -join ', '))." } else { 'Every required mailbox source was read.' })*`n`n"
+                }
                 $md += "$(& $EscMd $f.Detail)`n`n"
                 if ($f.Remediation) { $md += "**Action:** $(& $EscMd $f.Remediation)`n`n" }
             }

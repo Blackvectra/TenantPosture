@@ -233,6 +233,7 @@ try {
     )
     if ($EnableThreatIntel) { $evaluators += 'Test-NRGEmailControlThreatIntel' }
 
+    $findingsBefore = @(Get-NRGFindings).Count
     foreach ($fn in $evaluators) {
         if (Get-Command $fn -ErrorAction SilentlyContinue) {
             try {
@@ -249,6 +250,10 @@ try {
         }
     }
 
+    # Name the mailbox these findings describe and what they rest on.
+    $profileBag = Get-NRGRawData -Key 'IR-MailboxProfile'
+    $subjectUpn = if ($profileBag -and $profileBag.Success -and $profileBag.Data.UserPrincipalName) { [string]$profileBag.Data.UserPrincipalName } else { [string]$reportMetadata['ConnectedAdmin'] }
+    if ($subjectUpn) { $null = Set-NRGFindingSubject -Since $findingsBefore -Subject $subjectUpn -Evidence (Get-NRGDeepDiveEvidence) }
     $findings = @(Get-NRGFindings)
     $rawData  = Get-NRGRawData
     $reportMetadata['FindingCount'] = $findings.Count

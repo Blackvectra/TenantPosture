@@ -317,13 +317,18 @@ try {
         Write-Host ''
         Write-Host "[-] Phase 1 — deep-diving top $($rankedUsers.Count) user(s)..." -ForegroundColor Cyan
         $divedUsers = @()
+        # One record per flagged user: the evidence that user's findings rest on
+        # is kept HERE, because each dive overwrites the shared raw-data keys.
+        $deepDives = [System.Collections.Generic.List[object]]::new()
+        $deepDiveKeys = @('IR-MailboxProfile','IR-MailboxSentItems','IR-MailboxInbox','IR-MailboxRecoverable','IR-MailboxRules','IR-MailboxForwarding','IR-UserConsents','IR-UserAuthMethods')
         foreach ($u in $rankedUsers) {
             $upn = $u.UserPrincipalName
+            $findingsBefore = @(Get-NRGFindings).Count
             Write-Host ''
             Write-Host "  >>> $upn (IoC score $($u.Score)): $($u.Reasons -join '; ')" -ForegroundColor Cyan
             # IMPORTANT: clear raw-data keys between users so each user's mailbox
             # data doesn't bleed into the next user's evaluation.
-            foreach ($key in 'IR-MailboxProfile','IR-MailboxSentItems','IR-MailboxInbox','IR-MailboxRecoverable','IR-MailboxRules','IR-MailboxForwarding','IR-UserConsents','IR-UserAuthMethods') {
+            foreach ($key in $deepDiveKeys) {
                 Set-NRGRawData -Key $key -Data @{ CollectorId=$key; Success=$false; Data=$null }
             }
             try {
@@ -336,21 +341,36 @@ try {
                 foreach ($fn in @('Test-NRGEmailControlInboxRules','Test-NRGEmailControlForwarding','Test-NRGEmailControlOutboundActivity','Test-NRGEmailControlPhishOrigin','Test-NRGEmailControlOAuthConsents','Test-NRGEmailControlAuthMethods')) {
                     try { & $fn } catch { Write-Warning "$fn for $upn failed: $($_.Exception.Message)" }
                 }
+                # Say whose these findings are and what they rest on, BEFORE the
+                # next user's dive replaces the raw data.
+                $evidence = Get-NRGDeepDiveEvidence
+                $null = Set-NRGFindingSubject -Since $findingsBefore -Subject $upn -Evidence $evidence
+                $snapshot = [ordered]@{}
+                foreach ($key in $deepDiveKeys) { $snapshot[$key] = Get-NRGRawData -Key $key }
+                $deepDives.Add([ordered]@{ UserPrincipalName = $upn; Score = $u.Score; Reasons = @($u.Reasons); Status = $(if ($evidence.Complete) { 'Completed' } else { 'Incomplete' }); Evidence = $evidence; RawData = $snapshot })
                 $divedUsers += $upn
-                Write-Host "  [+] Deep-dive complete: $upn" -ForegroundColor Green
+                Write-Host "  [+] Deep-dive $(if ($evidence.Complete) { 'complete' } else { "incomplete (missing: $($evidence.RequiredMissing -join ', '))" }): $upn" -ForegroundColor $(if ($evidence.Complete) { 'Green' } else { 'Yellow' })
             } catch {
                 Write-Warning "Deep-dive collection failed for ${upn}: $($_.Exception.Message)"
+                $deepDives.Add([ordered]@{ UserPrincipalName = $upn; Score = $u.Score; Reasons = @($u.Reasons); Status = 'Failed'; Error = $_.Exception.Message; Evidence = $null; RawData = $null })
             }
         }
         $reportMetadata['DeepDivedUsers'] = $divedUsers
+        $reportMetadata['DeepDives'] = @($deepDives | ForEach-Object { [ordered]@{ UserPrincipalName = $_.UserPrincipalName; Status = $_.Status } })
     }
 
     $findings = @(Get-NRGFindings)
     $rawData  = Get-NRGRawData
+    $rawDataOut = [ordered]@{}
+    foreach ($k in @($rawData.Keys)) { if ($k -notmatch '^IR-(Mailbox|User)') { $rawDataOut[$k] = $rawData[$k] } }
     # What the verdict may claim depends on what was actually read.
     $comp = Get-NRGSignInCollectionCompleteness
-    $reportMetadata['CollectionComplete'] = [bool]$comp.Complete
-    $reportMetadata['CollectionGaps']     = @($comp.Reasons)
+    $ddGaps = @()
+    if ((Get-Variable -Name deepDives -ErrorAction SilentlyContinue) -and $deepDives) {
+        $ddGaps = @($deepDives | Where-Object { $_.Status -ne 'Completed' } | ForEach-Object { "deep-dive for $($_.UserPrincipalName) was $($_.Status.ToLowerInvariant())" })
+    }
+    $reportMetadata['CollectionComplete'] = ([bool]$comp.Complete -and $ddGaps.Count -eq 0)
+    $reportMetadata['CollectionGaps']     = @(@($comp.Reasons) + $ddGaps)
     $reportMetadata['EventsRead']         = [int]$comp.EventsRead
 
     # ── Publish ──────────────────────────────────────────────────────────────
@@ -365,7 +385,10 @@ try {
     $jsonPayload = [ordered]@{
         Metadata   = $reportMetadata
         Findings   = $findings
-        RawData    = $rawData
+        # Per-mailbox keys are kept per user under DeepDives; left in RawData they
+        # would hold only the LAST user's mailbox and read as nobody's.
+        RawData    = $rawDataOut
+        DeepDives  = @($(if ((Get-Variable -Name deepDives -ErrorAction SilentlyContinue) -and $deepDives) { $deepDives } else { @() }))
         Exceptions = @(Get-NRGExceptions)
     } | ConvertTo-Json -Depth 10
     Set-NRGSensitiveFileContent -Path $jsonPath -Content $jsonPayload
