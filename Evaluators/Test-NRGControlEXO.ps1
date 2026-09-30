@@ -347,10 +347,42 @@ function Test-NRGControlEXOAntiPhish {
         elseif ((& $f $p 'EnableMailboxIntelligenceProtection') -ne $true) { $miss += 'intelligence-based protection off' }
         elseif ([string](& $f $p 'MailboxIntelligenceProtectionAction') -in @('','NoAction')) { $miss += 'intelligence action NoAction' }
         if ($miss.Count) { $miss -join ', ' } else { 'domain and mailbox-intelligence impersonation protection acting' } }
-    Add-NRGPolicySetFinding -ControlId 'EXO-1.5' -Control $control -FrameworkIds $citations -Policies $inForce -Pass $pass -Value $value `
-        -PassDetail 'Impersonation of your own domains and of each user''s usual contacts is detected and acted on.' `
-        -FailDetail 'Protection that detects without acting (action NoAction) or is switched off lets domain and contact impersonation reach the inbox.' `
-        -RequiredValue 'EnableOrganizationDomainsProtection and EnableMailboxIntelligenceProtection on, each with an action other than NoAction, in every anti-phishing policy in force'
+    $all = @($inForce | Where-Object { $null -ne $_ })
+    if ($all.Count -eq 0) {
+        Add-NRGFinding -ControlId 'EXO-1.5' -State 'NotApplicable' -Category $control.Category -Title $control.Title -FrameworkIds $citations -Detail 'No anti-phishing policy applies to any recipient; not assessed.'
+        return
+    }
+    $pn = { param($l) (@($l) | ForEach-Object { [string](& $f $_ 'Name') }) -join ', ' }
+    $verified = @(); $short = @(); $unknown = @()
+    $good = @($all | Where-Object { & $pass $_ }); $bad = @($all | Where-Object { -not (& $pass $_) })
+    if ($bad.Count -eq 0) { $verified += "Impersonation of your own (accepted) domains and of each user's usual contacts is detected and acted on in every anti-phishing policy in force ($(& $pn $all))." }
+    else {
+        if ($good.Count) { $verified += "Domain and contact impersonation protection is acting in: $(& $pn $good)." }
+        $short += "Domain or contact impersonation protection falls short in: $((@($bad) | ForEach-Object { "$([string](& $f $_ 'Name')) ($(& $value $_))" }) -join '; ')."
+    }
+
+    # Priority users: targeted user protection, with the approved users listed and an action.
+    $wanted = @((Get-NRGStandards).PriorityUsers | ForEach-Object { $_.ToLowerInvariant() })
+    if ($wanted.Count -eq 0) {
+        $unknown += 'whether the approved priority users are protected, because none are approved (Config/nrg-standards.json PriorityUsers is empty).'
+    } else {
+        $gaps = @()
+        foreach ($pol in $all) {
+            $targets = @(@(& $f $pol 'TargetedUsersToProtect') | Where-Object { $_ } | ForEach-Object { ([string]$_).ToLowerInvariant() })
+            $missing = @($wanted | Where-Object { $u = $_; -not (@($targets | Where-Object { $_ -eq $u -or $_ -like "*;$u" -or $_ -like "*<$u>*" }).Count) })
+            $enabled = (& $f $pol 'EnableTargetedUserProtection') -eq $true
+            $act     = [string](& $f $pol 'TargetedUserProtectionAction') -notin @('','NoAction')
+            $why = @()
+            if (-not $enabled) { $why += 'user impersonation protection off' }
+            elseif (-not $act) { $why += 'user impersonation action NoAction' }
+            if ($missing.Count) { $why += "priority user(s) not listed: $($missing -join ', ')" }
+            if ($why.Count) { $gaps += "$([string](& $f $pol 'Name')) ($($why -join '; '))" }
+        }
+        if ($gaps.Count -eq 0) { $verified += "All $($wanted.Count) approved priority user(s) are protected with an action in every anti-phishing policy in force." }
+        else { $short += "Priority-user protection falls short in: $($gaps -join '; ')." }
+    }
+    Add-NRGExpectedStateFinding -ControlId 'EXO-1.5' -Control $control -FrameworkIds $citations -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+        -RequiredValue 'Organization-domain and mailbox-intelligence protection acting, plus the approved priority users protected, in every anti-phishing policy in force'
 }
 
 # ── EXO-1.6 Modern Auth (OAuth2) Enabled ─────────────────────────────────────
@@ -419,8 +451,8 @@ function Test-NRGControlEXOModernAuth {
         } elseif ($smtpPath -eq 'Available' -and $legacyBlock.Kind -in @('NotBlocked', 'PartlyBlocked')) {
             Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
                 -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
-                -Detail "Verified: $oauthText. Shortfall: $smtpText, and $($legacyBlock.Detail), so a password can still be used to submit mail for the accounts SMTP AUTH is available to. Not read: Exchange authentication policies, which could restrict it further." `
-                -CurrentValue "OAuth2 enabled; $smtpText; $($legacyBlock.Detail)" `
+                -Detail "Verified: $oauthText. Shortfall: $smtpText, and $($legacyBlock.Detail); no setting this assessment reads stops a password being offered to SMTP AUTH. Not established: whether a password is actually accepted, because Exchange authentication policies (which can disable basic authentication for SMTP) are not read; this is an exposure, not a confirmed acceptance." `
+                -CurrentValue "OAuth2 enabled; $smtpText; $($legacyBlock.Detail); Exchange authentication policies not read" `
                 -RequiredValue $reqText `
                 -Remediation $control.Remediation
         } else {

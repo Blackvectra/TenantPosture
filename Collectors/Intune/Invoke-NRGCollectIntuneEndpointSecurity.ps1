@@ -124,7 +124,7 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
                 # For an assigned ASR policy, read the rules it configures and each rule's
                 # mode: a policy existing does not show Block mode. A failed read is recorded
                 # on the entry, never guessed.
-                if ($bucket -eq 'ASR' -and $entry.IsAssigned -ne $false -and $entry.Id) {
+                if ($bucket -in @('ASR','Antivirus') -and $entry.IsAssigned -ne $false -and $entry.Id) {
                     try {
                         $sUri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$($entry.Id)/settings"
                         $sAll = @(); $sPages = 0
@@ -134,12 +134,18 @@ function Invoke-NRGCollectIntuneEndpointSecurity {
                             $sUri = $sPage['@odata.nextLink']
                             $sPages++
                         }
-                        $entry.AsrRuleModes = Get-NRGAsrRuleModes -Settings $sAll
-                        $entry.AsrSettingsStatus = $(if ($sUri) { 'Partial' } else { 'Read' })
+                        $sStatus = $(if ($sUri) { 'Partial' } else { 'Read' })
+                        if ($bucket -eq 'ASR') {
+                            $entry.AsrRuleModes = Get-NRGAsrRuleModes -Settings $sAll
+                            $entry.AsrSettingsStatus = $sStatus
+                        } else {
+                            $entry.AvSettings = Get-NRGAvSettings -Settings $sAll
+                            $entry.AvSettingsStatus = $sStatus
+                        }
                     } catch {
-                        $entry.AsrSettingsStatus = 'Failed'
+                        if ($bucket -eq 'ASR') { $entry.AsrSettingsStatus = 'Failed' } else { $entry.AvSettingsStatus = 'Failed' }
                         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
-                            Register-NRGException -Source 'Intune-EndpointSecurity-AsrSettings' -Message $_.Exception.Message
+                            Register-NRGException -Source "Intune-EndpointSecurity-${bucket}Settings" -Message $_.Exception.Message
                         }
                     }
                 }

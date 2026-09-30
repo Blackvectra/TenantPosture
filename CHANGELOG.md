@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **The seven "Satisfied with limits" controls now judge every component.** AAD-6.2 (user
+  consent and the admin consent workflow), AAD-2.1 (the approved Conditional Access template
+  set), DEF-2.2 (malware ZAP beside spam and phishing), DEF-2.3 (the approved blocked-type
+  list), DNS-1.3 (the approved DMARC reporting address), EXO-1.5 (approved priority users) and
+  INT-1.5 (real-time, cloud-delivered and PUA settings read from the antivirus policy) share
+  one verdict helper, `Add-NRGExpectedStateFinding`: an established shortfall is always
+  reported, an unestablished component leaves the control not assessed with the verified
+  parts in the Detail, and Satisfied needs every component. NRG standards live in
+  `Config/nrg-standards.json` (`Get-NRGStandards`) and **ship empty**; the tool does not invent
+  them. A control waiting on one is filed under the new scope bucket `StandardNotApproved`
+  ("verified in part") and baseline reason code `StandardNotApproved`, not under "data did not
+  collect". A lower score from this is the tool being honest, not a regression. Also: the
+  baseline reason for a Partial now shows its shortfall and for an unread verdict what was
+  not established (it showed the verified half); the XLSX workbook now carries each finding's
+  Detail (it computed the column and dropped it); EXO-1.6 states that a password being accepted
+  is not established while Exchange authentication policies are unread.
+  `NRG.ComponentVerdicts.Tests.ps1` and `NRG.OutputParity.Tests.ps1` (one verdict and its
+  limitation must read the same in the JSON, HTML, Markdown and workbook) pin these.
+
 - **Review of Satisfied baseline controls against their expected state; detection limits documented.**
   `docs/NRG-DETECTION-LIMITS.md` states, per control, what a verdict proves and what it does
   not (seven Satisfied controls verify less than their expected state; four NRG standards the

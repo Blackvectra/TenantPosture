@@ -339,14 +339,16 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
 
     Context 'DNS-1.3 — DMARC Policy at Quarantine or Reject' {
 
-        It 'Satisfied when DMARC is p=reject at 100%' {
+        It 'p=reject at 100% is verified, but with no approved NRG reporting address the verdict is not assessed (never Satisfied)' {
             Set-NRGRawData -Key 'DNS-EmailRecords' -Data (NewRaw 'DNS' @{
                 DomainCount = 1
                 Domains     = @{ 'contoso.com' = [pscustomobject]@{
                     DMARC = 'v=DMARC1; p=reject; rua=mailto:dmarc@contoso.com'
                     DMARCPolicy = 'reject'; DMARCPct = 100 } }
             })
-            (GetVerdict 'Test-NRGControlDNSDMARC' 'DNS-1.3').State | Should -Be 'Satisfied'
+            $v = GetVerdict 'Test-NRGControlDNSDMARC' 'DNS-1.3'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match '^Verified: contoso.com DMARC p=reject'
         }
 
         It 'Partial when p=reject is only partially enforced (pct < 100)' {
@@ -619,9 +621,10 @@ Describe 'Golden fixtures — privilege escalation attack path' {
 
     Context 'AAD-6.2 — User Consent to Apps (consent-phishing entry point)' {
 
-        It 'Satisfied when user consent is restricted to low-impact permissions' {
+        It 'Satisfied when user consent is restricted to low-impact permissions and the admin consent workflow is on' {
             Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (NewRaw2 'AAD' @{
                 ExternalCollab = @{ PermissionGrantPolicies = @('ManagePermissionGrantsForSelf.microsoft-user-default-low') }
+                ConsentPolicy  = @{ IsEnabled = $true }
             })
             (GetVerdict2 'Test-NRGControlAADUserConsent' 'AAD-6.2').State | Should -Be 'Satisfied'
         }
@@ -1287,11 +1290,13 @@ Describe 'Golden fixtures — ransomware attack path' {
 
     Context 'DEF-2.3 — Common attachment filter (malware delivery)' {
 
-        It 'Satisfied when the common attachment filter is enabled on a malware policy' {
+        It 'the filter enabled is verified, but with no approved blocked-type list the verdict is not assessed (never Satisfied)' {
             Set-NRGRawData -Key 'Defender-Policies' -Data (NewRaw3 'DEF' @{
                 MalwareFilter = [pscustomobject]@{ Available = $true; FileFilterEnabledCount = 1 }
             })
-            (GetVerdict3 'Test-NRGControlDefenderCommonAttachments' 'DEF-2.3').State | Should -Be 'Satisfied'
+            $v = GetVerdict3 'Test-NRGControlDefenderCommonAttachments' 'DEF-2.3'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match 'Verified:'
         }
 
         It 'Gap when no policy blocks high-risk file types' {

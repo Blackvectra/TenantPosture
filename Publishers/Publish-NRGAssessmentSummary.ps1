@@ -194,6 +194,7 @@ function Publish-NRGAssessmentSummary {
             $null = $sb.AppendLine("|---------|----------|")
             $null = $sb.AppendLine("| Scored (Satisfied / Partial / Gap / Error) | $($scope.ScoredControls) |")
             $null = $sb.AppendLine("| Could not be assessed — data did not collect | $($scope.CollectionIncomplete.Count) |")
+            $null = $sb.AppendLine("| Verified in part — an NRG standard is not approved or configured | $(@(Get-NRGObjectField -Item $scope -Key 'StandardNotApproved' -Default @()).Count) |")
             $null = $sb.AppendLine("| Not evaluated — quick-scan mode | $($scope.NotEvaluatedThisMode.Count) |")
             $null = $sb.AppendLine("| Not assessed — workload skipped by the operator | $(@(Get-NRGObjectField -Item $scope -Key 'SkippedByOperator' -Default @()).Count) |")
             $null = $sb.AppendLine("| Produced no result at all | $($scope.NoResult.Count) |")
@@ -210,6 +211,7 @@ function Publish-NRGAssessmentSummary {
 
             foreach ($grp in @(
                 @{ Label = 'Could not be assessed — data did not collect'; Items = $scope.CollectionIncomplete }
+                @{ Label = 'Verified in part — an NRG standard is not approved or configured'; Items = @(Get-NRGObjectField -Item $scope -Key 'StandardNotApproved' -Default @()) }
                 @{ Label = 'Not evaluated — quick-scan mode'; Items = $scope.NotEvaluatedThisMode }
                 @{ Label = 'Not assessed — workload skipped by the operator (a -Skip flag)'; Items = @(Get-NRGObjectField -Item $scope -Key 'SkippedByOperator' -Default @()) }
                 @{ Label = 'Produced no result at all'; Items = $scope.NoResult }

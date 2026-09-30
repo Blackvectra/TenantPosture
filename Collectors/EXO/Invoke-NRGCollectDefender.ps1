@@ -247,6 +247,7 @@ function Invoke-NRGCollectDefender {
                         RecommendedPolicyType    = [string](Get-NRGObjectField -Item $_ -Key 'RecommendedPolicyType' -Default '')
                         IsDefault                = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
                         EnableFileFilter         = [bool]($_.EnableFileFilter ?? $false)
+                        ZapEnabled               = (Get-NRGObjectField -Item $_ -Key 'ZapEnabled' -Default $null)
                         FileTypes                = @($_.FileTypes ?? @())
                         Action                   = [string](Get-NRGObjectField -Item $_ -Key 'Action' -Default 'DeleteAttachmentAndUseDefaultAlertText')
                         EnableInternalSenderAdminNotifications = [bool]($_.EnableInternalSenderAdminNotifications ?? $false)

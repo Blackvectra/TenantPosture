@@ -76,6 +76,7 @@ Describe 'Defender, Purview and Power Platform verdicts' {
         }
         It 'DEF-2.2 reads SpamZapEnabled / PhishZapEnabled' {
             Clear-NRGState
+            Set-NRGRawData -Key 'Defender-Policies' -Data (Bag @{ MalwareFilter = @{ Available = $true; Rules = @(); Policies = @(@{ Name = 'Default'; IsDefault = $true; ZapEnabled = $true }) } })
             Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (Bag @{ AntiSpamPolicies = @(@{ Name = 'Default'; IsDefault = $true; SpamZapEnabled = $true; PhishZapEnabled = $true; ZapEnabled = $null }); AntiSpamRules = @(); SectionStatus = @{ AntiSpamPolicies = 'Collected' } })
             (V 'Test-NRGControlDefenderZAP' 'DEF-2.2').State | Should -Be 'Satisfied'
         }
@@ -94,6 +95,7 @@ Describe 'Defender, Purview and Power Platform verdicts' {
         }
         It 'DEF-2.2: a custom policy with no enabled rule applies to nobody and is not counted against the default in force' {
             Clear-NRGState
+            Set-NRGRawData -Key 'Defender-Policies' -Data (Bag @{ MalwareFilter = @{ Available = $true; Rules = @(); Policies = @(@{ Name = 'Default'; IsDefault = $true; ZapEnabled = $true }) } })
             Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (Bag @{
                 AntiSpamPolicies = @(@{ Name = 'Default'; IsDefault = $true; SpamZapEnabled = $true; PhishZapEnabled = $true },
                                      @{ Name = 'Unused weak'; IsDefault = $false; SpamZapEnabled = $false; PhishZapEnabled = $false })
@@ -102,6 +104,7 @@ Describe 'Defender, Purview and Power Platform verdicts' {
         }
         It 'DEF-2.2: rules that could not be read (null) keep every custom policy, because it cannot be told which apply' {
             Clear-NRGState
+            Set-NRGRawData -Key 'Defender-Policies' -Data (Bag @{ MalwareFilter = @{ Available = $true; Rules = @(); Policies = @(@{ Name = 'Default'; IsDefault = $true; ZapEnabled = $true }) } })
             Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (Bag @{
                 AntiSpamPolicies = @(@{ Name = 'Default'; IsDefault = $true; SpamZapEnabled = $true; PhishZapEnabled = $true },
                                      @{ Name = 'Maybe weak'; IsDefault = $false; SpamZapEnabled = $false; PhishZapEnabled = $false })
@@ -118,13 +121,15 @@ Describe 'Defender, Purview and Power Platform verdicts' {
                 Rules = @() } })
             $v = V 'Test-NRGControlDefenderCommonAttachments' 'DEF-2.3'
             $v.State  | Should -Be 'Gap'
-            $v.Detail | Should -Match 'Default \(FileFilter=False\)'
+            $v.Detail | Should -Match 'filter is off in: Default'
         }
-        It 'the default policy in force with the filter on is Satisfied' {
+        It 'the default policy in force with the filter on is verified; with no approved blocked-type list it is not assessed, never Satisfied' {
             Clear-NRGState
             Set-NRGRawData -Key 'Defender-Policies' -Data (Bag @{ MalwareFilter = @{ Available = $true; FileFilterEnabledCount = 1
                 Policies = @(@{ Name = 'Default'; IsDefault = $true; EnableFileFilter = $true }); Rules = @() } })
-            (V 'Test-NRGControlDefenderCommonAttachments' 'DEF-2.3').State | Should -Be 'Satisfied'
+            $v = V 'Test-NRGControlDefenderCommonAttachments' 'DEF-2.3'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match 'Verified: The common attachments filter is on'
         }
     }
 

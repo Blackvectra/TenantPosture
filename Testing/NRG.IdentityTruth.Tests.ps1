@@ -68,10 +68,15 @@ Describe 'Identity controls report what the tenant is configured to do' {
         }
         AfterAll { & $script:Mod { param($o) Set-Item -Path 'function:script:Invoke-NRGGraphRequest' -Value $o } $script:Orig }
 
-        It 'any-app user consent is a Gap; none or low-impact verified publishers is Satisfied' {
+        It 'any-app user consent is a Gap; none or low-impact verified publishers passes the consent half' {
             (Consent '["ManagePermissionGrantsForSelf.microsoft-user-default-legacy"]').State | Should -Be 'Gap'
-            (Consent '["ManagePermissionGrantsForSelf.microsoft-user-default-low"]').State    | Should -Be 'Satisfied'
-            (Consent '[]').State | Should -Be 'Satisfied' -Because 'an empty list (no user consent) must not unroll into "not returned"'
+            # The consent half passes; the workflow half cannot be read through this route, so the
+            # verdict is not assessed with the consent half kept, never Satisfied.
+            $low = Consent '["ManagePermissionGrantsForSelf.microsoft-user-default-low"]'
+            $low.State | Should -Be 'NotApplicable'; $low.Detail | Should -Match 'Verified: User consent is limited to low-impact'
+            $none = Consent '[]'
+            $none.State | Should -Be 'NotApplicable' -Because 'an empty list (no user consent) must not unroll into "not returned"'
+            $none.Detail | Should -Match 'Verified: Users cannot consent'
         }
     }
 

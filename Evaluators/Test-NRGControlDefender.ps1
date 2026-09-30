@@ -252,7 +252,7 @@ function Test-NRGControlDefenderPresetPolicies {
     }
 }
 
-# ── DEF-2.2 Anti-Malware ZAP Enabled ─────────────────────────────────────────
+# ── DEF-2.2 Zero-hour auto purge (spam, phishing AND malware) ────────────────
 function Test-NRGControlDefenderZAP {
     [CmdletBinding()] param()
     $cid = 'DEF-2.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
@@ -264,17 +264,53 @@ function Test-NRGControlDefenderZAP {
     if (-not (Test-NRGSectionCollected $exo 'AntiSpamPolicies')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiSpamPolicies was not collected; not assessed.'; return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGRuleList -Item $exo.Data -Key 'AntiSpamRules') -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
-    # SpamZapEnabled + PhishZapEnabled (ZapEnabled is the deprecated umbrella,
-    # used only when neither is present).
+    $verified = @(); $short = @(); $unknown = @()
+
+    # Spam and phishing ZAP: anti-spam policies in force (SpamZapEnabled + PhishZapEnabled;
+    # ZapEnabled is the deprecated umbrella, used only when neither is present).
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGRuleList -Item $exo.Data -Key 'AntiSpamRules') -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
     $zap = { param($p) $s = & $f $p 'SpamZapEnabled'; $h = & $f $p 'PhishZapEnabled'
         if ($null -eq $s -and $null -eq $h) { (& $f $p 'ZapEnabled' $false) -eq $true } else { $s -eq $true -and $h -eq $true } }
-    Add-NRGPolicySetFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $policies `
-        -Pass { & $zap $_ } -Value { "SpamZap=$(& $f $_ 'SpamZapEnabled' '?'), PhishZap=$(& $f $_ 'PhishZapEnabled' '?')" } `
-        -PassDetail 'Zero-hour auto purge removes spam and phishing delivered before detection.' `
-        -FailDetail 'ZAP is off for these recipients: malicious mail delivered before detection stays in the mailbox.' `
-        -RequiredValue 'SpamZapEnabled and PhishZapEnabled = True'
+    if ($policies.Count -eq 0) {
+        $unknown += 'spam and phishing ZAP (no anti-spam policy in force could be identified).'
+    } else {
+        $bad = @($policies | Where-Object { -not (& $zap $_) })
+        $names = { param($l) (@($l) | ForEach-Object { [string](& $f $_ 'Name' '?') }) -join ', ' }
+        if ($bad.Count -eq 0) { $verified += "Spam and phishing ZAP is on in every anti-spam policy in force ($(& $names $policies))." }
+        else {
+            $goodSp = @($policies | Where-Object { & $zap $_ })
+            if ($goodSp.Count) { $verified += "Spam and phishing ZAP is on in: $(& $names $goodSp)." }
+            $short += "Spam or phishing ZAP is off in: $(& $names $bad)."
+        }
+    }
+
+    # Malware ZAP is an anti-malware policy setting (ZapEnabled on Get-MalwareFilterPolicy).
+    $def = Get-NRGRawData -Key 'Defender-Policies'
+    $mf  = if ($def -and $def.Success) { Get-NRGObjectField -Item $def.Data -Key 'MalwareFilter' -Default $null } else { $null }
+    if (-not $mf -or -not (Get-NRGObjectField -Item $mf -Key 'Available' -Default $false)) {
+        $unknown += 'malware ZAP (the anti-malware policies were not read).'
+    } else {
+        $mfForce = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $mf -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $mf -Key 'Rules') -RulePolicyKey 'MalwareFilterPolicy' -PresetKind 'EOP')
+        if ($mfForce.Count -eq 0) {
+            $unknown += 'malware ZAP (no anti-malware policy in force could be identified).'
+        } else {
+            $read = @($mfForce | Where-Object { $null -ne (& $f $_ 'ZapEnabled') })
+            if ($read.Count -lt $mfForce.Count) {
+                $unknown += 'malware ZAP (ZapEnabled was not returned for every anti-malware policy in force).'
+            } else {
+                $badMf = @($mfForce | Where-Object { (& $f $_ 'ZapEnabled') -ne $true })
+                if ($badMf.Count -eq 0) { $verified += 'Malware ZAP is on in every anti-malware policy in force.' }
+                else {
+                    $goodMf = @($mfForce | Where-Object { (& $f $_ 'ZapEnabled') -eq $true })
+                    if ($goodMf.Count) { $verified += "Malware ZAP is on in: $((@($goodMf) | ForEach-Object { [string](& $f $_ 'Name' '?') }) -join ', ')." }
+                    $short += "Malware ZAP is off in: $((@($badMf) | ForEach-Object { [string](& $f $_ 'Name' '?') }) -join ', ')."
+                }
+            }
+        }
+    }
+    Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+        -RequiredValue 'SpamZapEnabled, PhishZapEnabled and (anti-malware) ZapEnabled = True in every policy in force'
 }
 
 # ── DEF-2.3 Anti-Malware Common Attachments Blocked ─────────────────────────
@@ -294,20 +330,44 @@ function Test-NRGControlDefenderCommonAttachments {
     # nothing else applies), not "any policy has it on": a filter enabled in a policy
     # that applies to nobody protects nobody.
     $mfForce = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $mf -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $mf -Key 'Rules') -RulePolicyKey 'MalwareFilterPolicy' -PresetKind 'EOP')
-    if ($mfForce.Count -gt 0) {
-        Add-NRGPolicySetFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $mfForce `
-            -Pass { (Get-NRGObjectField -Item $_ -Key 'EnableFileFilter' -Default $false) -eq $true } `
-            -Value { "FileFilter=$(Get-NRGObjectField -Item $_ -Key 'EnableFileFilter' -Default '?')" } `
-            -PassDetail 'The common attachments filter blocks high-risk file types regardless of content scan.' `
-            -FailDetail 'The common attachments filter is off for these recipients, so high-risk file types are not blocked by type.' `
-            -RequiredValue 'EnableFileFilter = True in every policy in force'
+    if ($mfForce.Count -eq 0) {
+        # Older results carry no rules: fall back to the policy-wide count, but the
+        # blocked-type list still decides whether the expected state is met.
+        if ($mf.FileFilterEnabledCount -gt 0) {
+            Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
+                -Verified @("The common attachments filter is on in $($mf.FileFilterEnabledCount) malware policy(ies); which policies are in force was not established.") `
+                -NotEstablished @('the NRG blocked-file-type list was not compared (policies in force could not be determined).') `
+                -RequiredValue 'Filter on with the approved blocked-type list in every policy in force'
+        } else {
+            Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Common attachments filter is disabled. High-risk file types (.exe, .js, .vbs, etc.) are not blocked at the mail gateway.' -Remediation $ctrl.Remediation
+        }
         return
     }
-    if ($mf.FileFilterEnabledCount -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Common attachment filter enabled on $($mf.FileFilterEnabledCount) malware policy(ies). High-risk file types blocked regardless of content scan."
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Common attachments filter is disabled. High-risk file types (.exe, .js, .vbs, etc.) are not blocked at the mail gateway.' -Remediation $ctrl.Remediation
+    $fv = { param($p, $k) Get-NRGObjectField -Item $p -Key $k -Default $null }
+    $pname = { param($p) [string](& $fv $p 'Name') }
+    $off = @($mfForce | Where-Object { (& $fv $_ 'EnableFileFilter') -ne $true })
+    $on  = @($mfForce | Where-Object { (& $fv $_ 'EnableFileFilter') -eq $true })
+    $verified = @(); $short = @(); $unknown = @()
+    if ($off.Count -eq 0) { $verified += "The common attachments filter is on in every malware policy in force ($((@($mfForce) | ForEach-Object { & $pname $_ }) -join ', '))." }
+    else {
+        if ($on.Count) { $verified += "The common attachments filter is on in: $((@($on) | ForEach-Object { & $pname $_ }) -join ', ')." }
+        $short += "The common attachments filter is off in: $((@($off) | ForEach-Object { & $pname $_ }) -join ', '), so high-risk file types are not blocked by type for those recipients."
     }
+    $approved = @((Get-NRGStandards).CommonAttachmentFileTypes | ForEach-Object { $_.TrimStart('.').ToLowerInvariant() })
+    if ($approved.Count -eq 0) {
+        $unknown += 'whether the filter blocks the NRG blocked-file-type list, because no list is approved (Config/nrg-standards.json CommonAttachmentFileTypes is empty).'
+    } elseif ($on.Count -gt 0) {
+        $missing = [ordered]@{}
+        foreach ($pol in $on) {
+            $types = @(@(& $fv $pol 'FileTypes') | ForEach-Object { ([string]$_).TrimStart('.').ToLowerInvariant() })
+            $gone = @($approved | Where-Object { $_ -notin $types })
+            if ($gone.Count) { $missing[(& $pname $pol)] = $gone }
+        }
+        if ($missing.Count -eq 0) { $verified += "Every policy with the filter on blocks all $($approved.Count) approved file type(s)." }
+        else { $short += "Approved file types not blocked: $((@($missing.Keys) | ForEach-Object { "$_ ($($missing[$_] -join ', '))" }) -join '; ')." }
+    }
+    Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+        -RequiredValue 'EnableFileFilter = True and the approved blocked-type list in every malware policy in force'
 }
 
 # ── DEF-2.4 Quarantine Policy Admin Managed ──────────────────────────────────

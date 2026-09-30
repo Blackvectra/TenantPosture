@@ -292,7 +292,7 @@ function Get-NRGBaselineCompliance {
     } catch { Write-Verbose "Scope classification unavailable for the baseline view: $($_.Exception.Message)" }
     $bucketOf = @{}
     if ($scope -and $scope.Available) {
-        foreach ($b in @('LicenceBlocked', 'CollectionIncomplete', 'NoProgrammaticCheck', 'ThirdPartyAttested', 'NotApplicableToTenant', 'NotEvaluatedThisMode', 'SkippedByOperator', 'NoResult', 'Errors')) {
+        foreach ($b in @('LicenceBlocked', 'CollectionIncomplete', 'StandardNotApproved', 'NoProgrammaticCheck', 'ThirdPartyAttested', 'NotApplicableToTenant', 'NotEvaluatedThisMode', 'SkippedByOperator', 'NoResult', 'Errors')) {
             foreach ($row in @(Get-NRGObjectField -Item $scope -Key $b -Default @())) {
                 $rid = [string](Get-NRGObjectField -Item $row -Key 'ControlId' -Default '')
                 if ($rid -and -not $bucketOf.ContainsKey($rid)) { $bucketOf[$rid] = @{ Bucket = $b; Reason = [string](Get-NRGObjectField -Item $row -Key 'Reason' -Default '') } }
@@ -454,6 +454,7 @@ function Get-NRGBaselineCompliance {
                     $r.Reason = if ($bucket -and $bucket.Reason) { $bucket.Reason } elseif ($detail) { $detail } else { 'Reported not applicable without a reason the baseline can classify.' }
                     $r.NotVerifiedCause = if ($b -eq 'SkippedByOperator') { 'Skipped by operator' }
                                           elseif ($b -eq 'NoProgrammaticCheck' -or $detail -match 'requires manual verification|manual review required') { 'Manual verification' }
+                                          elseif ($b -eq 'StandardNotApproved') { 'Standard not approved' }
                                           elseif ($detail -match 'was not read|not read\b') { 'Evidence not read' }
                                           # The collector ran and succeeded, but the evaluator still had no
                                           # evidence (a section or a second source, such as the SharePoint

@@ -672,6 +672,7 @@ function Publish-NRGAssessmentHTML {
             $detBlocks = ''
             foreach ($grp in @(
                 @{ Label = 'Controls that could not be assessed — data did not collect'; Items = $scope.CollectionIncomplete }
+                @{ Label = 'Controls verified in part — an NRG standard is not approved or configured'; Items = @(Get-NRGObjectField -Item $scope -Key 'StandardNotApproved' -Default @()) }
                 @{ Label = 'Controls not evaluated — quick-scan mode'; Items = $scope.NotEvaluatedThisMode }
                 @{ Label = 'Controls not assessed — workload skipped by the operator (a -Skip flag)'; Items = @(Get-NRGObjectField -Item $scope -Key 'SkippedByOperator' -Default @()) }
                 @{ Label = 'Controls that produced no result at all'; Items = $scope.NoResult }
@@ -908,6 +909,7 @@ $regHtml
         $hdrScored = $scope.ScoredControls
         $hdrNA     = $scope.LicenceBlocked.Count + $scope.CollectionIncomplete.Count + $scope.NoProgrammaticCheck.Count +
                      @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()).Count +
+                     @(Get-NRGObjectField -Item $scope -Key 'StandardNotApproved' -Default @()).Count +
                      @(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()).Count +
                      @(Get-NRGObjectField -Item $scope -Key 'SkippedByOperator' -Default @()).Count
         # "Controls assessed" is the tenant controls that produced a finding

@@ -110,7 +110,7 @@ $exc = Get-NRGBaselineExceptions -TenantDomain $tenantDomain -AsOf $runTime
 $scope = Get-NRGAssessmentScope -Findings $findings -Coverage $cov -LicenseProfile $licProfile -RawData $raw `
             -QuickScan:([bool](Get-NRGObjectField -Item $meta -Key 'QuickScan' -Default $false))
 $bucketOf = @{}
-foreach ($b in @('LicenceBlocked', 'CollectionIncomplete', 'NoProgrammaticCheck', 'ThirdPartyAttested', 'NotApplicableToTenant', 'NotEvaluatedThisMode', 'SkippedByOperator', 'NoResult', 'Errors')) {
+foreach ($b in @('LicenceBlocked', 'CollectionIncomplete', 'StandardNotApproved', 'NoProgrammaticCheck', 'ThirdPartyAttested', 'NotApplicableToTenant', 'NotEvaluatedThisMode', 'SkippedByOperator', 'NoResult', 'Errors')) {
     foreach ($row in @(Get-NRGObjectField -Item $scope -Key $b -Default @())) {
         $rid = [string](Get-NRGObjectField -Item $row -Key 'ControlId' -Default '')
         if ($rid -and -not $bucketOf.ContainsKey($rid)) { $bucketOf[$rid] = $b }
@@ -193,6 +193,8 @@ foreach ($r in $asRun.Controls) {
             $class = 'ImplementationBugCandidate'; $checks.Add("NotVerified although a verdict ($($fStates -join ',')) exists, its collectors succeeded and the evidence is current")
         } elseif ($r.EvidenceFreshness -eq 'Stale') {
             $class = 'EditorialReview'; $checks.Add("stale at the run time itself: the $($r.FreshnessClass) window is shorter than the gap between collection and this run; is that freshness class realistic?")
+        } elseif ($bucket -eq 'StandardNotApproved') {
+            $class = 'EditorialReview'; $checks.Add('an NRG standard this control is judged against is not approved or configured; approve it (Config/nrg-standards.json, asr-required-rules.json or the monitoring address) and re-run')
         } elseif ($anyCollectorFailed -or $bucket -in @('CollectionIncomplete', 'SkippedByOperator', 'NoResult', 'Errors')) {
             $class = 'CollectorCoverageGap'; $checks.Add("evidence not collected ($(if ($bucket) { $bucket } else { 'collector state' })); the control could have been assessed")
         } elseif ($bucket -eq 'NoProgrammaticCheck' -or $fDetail -match 'requires manual verification') {

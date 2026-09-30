@@ -1032,15 +1032,34 @@ function Test-NRGControlAADUserConsent {
     # which this tool cannot evaluate, so it is not called restricted.
     $unrestrictedConsent = $consentPolicies | Where-Object { $_ -match 'legacy|ByDefault' }
     $custom = @($consentPolicies | Where-Object { $_ -notmatch 'microsoft-user-default-(legacy|low)$' })
+    # Expected state: users cannot consent freely AND consent goes through the admin
+    # consent workflow (the same setting AAD-6.3 reads). Each half is judged on its own;
+    # a half that cannot be established leaves the control not assessed, and an
+    # established shortfall is always reported.
+    $verified = @(); $short = @(); $unknown = @()
     if ($consentPolicies.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Users cannot consent to applications; admin consent is required.' -CurrentValue 'No user consent policy assigned'
+        $verified += 'Users cannot consent to applications (no user consent policy assigned).'
     } elseif (-not $unrestrictedConsent -and $custom.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'User consent is limited to low-impact permissions for apps from verified publishers.' -CurrentValue ($consentPolicies -join ', ')
+        $verified += "User consent is limited to low-impact permissions for apps from verified publishers ($($consentPolicies -join ', '))."
     } elseif (-not $unrestrictedConsent) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "User consent is governed by a custom permission grant policy ($($custom -join ', ')); what it allows requires manual verification." -CurrentValue ($consentPolicies -join ', ')
+        $unknown += "what user consent allows, because it is governed by a custom permission grant policy ($($custom -join ', ')) that requires manual verification."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Users can consent to any app permissions. Consent phishing attacks grant attacker apps access to mailbox, files, and contacts without admin awareness.' -Remediation $ctrl.Remediation
+        $short += 'Users can consent to any app permissions. Consent phishing attacks grant attacker apps access to mailbox, files, and contacts without admin awareness.'
     }
+    if (-not (Test-NRGSectionCollected $gov 'ConsentPolicy')) {
+        $unknown += 'whether the admin consent workflow is enabled (ConsentPolicy was not collected).'
+    } else {
+        $wf = Get-NRGNestedProperty -Object $gov -Path 'Data.ConsentPolicy.IsEnabled' -Default $null
+        if ($wf -is [bool] -and $wf) { $verified += 'The admin consent workflow is enabled, so users can request app access.' }
+        elseif ($wf -is [bool]) { $short += 'The admin consent workflow is disabled: users who need an app have no approval path (see AAD-6.3).' }
+        else { $unknown += 'whether the admin consent workflow is enabled (the setting was not returned).' }
+    }
+    # Unrestricted user consent is the failure this control exists to catch; a workflow
+    # being on does not make it part-way.
+    Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+        -ShortfallState $(if ($unrestrictedConsent) { 'Gap' } else { 'Auto' }) `
+        -CurrentValue $(if ($consentPolicies.Count) { $consentPolicies -join ', ' } else { 'No user consent policy assigned' }) `
+        -RequiredValue 'User consent restricted and the admin consent workflow enabled'
 }
 
 # ── AAD-6.3 Admin Consent Workflow Enabled ────────────────────────────────────

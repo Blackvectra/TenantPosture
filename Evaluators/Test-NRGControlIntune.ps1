@@ -214,8 +214,31 @@ function Test-NRGControlIntune {
     } elseif ($c) {
         $av = @(Select-NRGAssignedPolicies @($d.EndpointSecurityPolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'TemplateType') -eq 'Antivirus' }))
         if ($av.Count -gt 0) {
-            Add-NRGFinding -ControlId 'INT-1.5' -State 'Satisfied' -Category 'Endpoint' -Title $c.Title -Severity 'Informational' -FrameworkIds (& $cit 'INT-1.5') `
-                -Detail "$($av.Count) assigned Microsoft Defender Antivirus policy(ies)." -CurrentValue "$($av.Count) AV policies assigned"
+            # The expected state is that an assigned policy CONFIGURES Defender Antivirus:
+            # real-time protection, cloud-delivered protection and PUA protection. The
+            # policy existing is verified; the settings come from the collector's read.
+            $read = @($av | Where-Object { (Get-NRGObjectField -Item $_ -Key 'AvSettingsStatus' -Default '') -eq 'Read' })
+            $maps = @($read | ForEach-Object { Get-NRGObjectField -Item $_ -Key 'AvSettings' -Default $null } | Where-Object { $null -ne $_ })
+            $verified = @("$($av.Count) assigned Microsoft Defender Antivirus policy(ies).")
+            $short = @(); $unknown = @()
+            if ($read.Count -lt $av.Count) {
+                $unknown += "the antivirus settings of $($av.Count - $read.Count) of $($av.Count) assigned policy(ies) could not be read, so real-time, cloud-delivered and PUA protection are not established."
+            }
+            if ($maps.Count -gt 0) {
+                $label = @{ RealTimeProtection = 'Real-time protection'; CloudProtection = 'Cloud-delivered protection'; PuaProtection = 'PUA protection' }
+                foreach ($row in @(Test-NRGAvSettingSet -SettingMaps $maps)) {
+                    $l = $label[$row.Setting]
+                    switch -Wildcard ($row.Value) {
+                        'On'            { $verified += "$l is on."; break }
+                        'Audit'         { $short += "$l is in audit mode only."; break }
+                        'Off'           { $short += "$l is turned off."; break }
+                        'NotConfigured' { if ($read.Count -eq $av.Count) { $unknown += "$l is not set by any assigned policy (the platform default may apply; the policy does not establish it)." }; break }
+                        default         { $unknown += "$l has a value this tool does not recognize ($($row.Value))." }
+                    }
+                }
+            }
+            Add-NRGExpectedStateFinding -ControlId 'INT-1.5' -Control $c -FrameworkIds (& $cit 'INT-1.5') -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+                -CurrentValue "$($av.Count) AV policies assigned" -RequiredValue 'An assigned Defender Antivirus policy with real-time, cloud-delivered and PUA protection on'
         } else {
             Add-NRGFinding -ControlId 'INT-1.5' -State 'Gap' -Category 'Endpoint' -Title $c.Title -Severity $c.Severity -FrameworkIds (& $cit 'INT-1.5') `
                 -Detail 'No assigned Microsoft Defender Antivirus policy in Intune endpoint security. Devices have no managed antivirus configuration baseline.' -Remediation $c.Remediation
