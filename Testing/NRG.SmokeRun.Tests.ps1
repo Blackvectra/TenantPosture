@@ -169,12 +169,20 @@ function Get-ConnectionInformation { @() }
             $sat.Count | Should -BeLessThan (@($script:Results.BaselineCompliance.Controls).Count / 2)
         }
 
+        It 'builds the multi-page report site and the action plan automatically, with no extra command' {
+            $site = @(Get-ChildItem -LiteralPath $script:LiveOut -Directory -Filter '*-report')
+            $site.Count | Should -Be 1 -Because 'the report site folder is written by the run itself'
+            Test-Path -LiteralPath (Join-Path $site[0].FullName 'index.html') | Should -BeTrue
+            Test-Path -LiteralPath (Join-Path $site[0].FullName 'ActionPlan.csv') | Should -BeTrue
+        }
+
         It 'republishes the saved results with -FromResults and no publisher fails' {
             $out2 = Join-Path $script:Tmp 'republish'
             $r = & $script:Run 'Invoke-NRGAssessment.ps1' "-FromResults '$($script:ResultsFile.FullName)' -NonInteractive -AllFiles -OutputPath '$out2'" $out2
             $r.ExitCode | Should -BeIn @(0, 3) -Because $r.Output
             $r.Output | Should -Not -Match 'publish failed' -Because $r.Output
             @(Get-ChildItem -LiteralPath $out2 -Filter '*-assessment.html' -ErrorAction SilentlyContinue).Count | Should -BeGreaterThan 0
+            @(Get-ChildItem -LiteralPath $out2 -Directory -Filter '*-report' -ErrorAction SilentlyContinue).Count | Should -Be 1 -Because 'a republish rebuilds the site too'
         }
 
         It 'builds the report site and the action-plan CSV from the saved results' {

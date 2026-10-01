@@ -152,6 +152,8 @@ Every run now classifies the tenant into a **Tenant Security Maturity Tier** (In
 | `-MonthlyReport`, `-MonthlyDeltaPath`, `-MonthlyPriorPath` | Monthly MSP report. Work state comes from the delta `.psd1`, the trend from last month's JSON. |
 | `-FromResults` | Republish every report from a saved results JSON, without signing in. |
 | `-BaselineResults` | Compare with a prior results JSON (delta report). |
+| `-ScubaResultsPath` | A ScubaGear `ScubaResults.csv`. The report site shows each mapped result beside the NRG control as an independent comparison (a separate standard, never a score). |
+| `-SkipReportSite` | The multi-page report site (`<base>-report/`: landing page, one page per workload, `ActionPlan.csv`) is written automatically with every run that writes reports and with `-FromResults`; this turns it off. |
 | `-FailOnCritical`, `-FailOnHigh`, `-FailOnScoreBelow` | Exit 10, 11 or 12 when the threshold is crossed; 0 (default) turns it off. |
 | `-NonInteractive` | Never prompts. Missing modules end the run with exit code 1 instead of an install prompt. |
 | `-WhatIfConnections` | Connects, prints the connection table, and stops before collecting anything. |

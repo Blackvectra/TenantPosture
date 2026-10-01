@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **The report site is built automatically.** Every run that writes reports (and every
+  `-FromResults` republish) now writes `<base>-report/` (landing page, one page per workload,
+  `ActionPlan.csv`) beside the other files; before, it needed a separate `New-NRGReportSite.ps1`
+  command. `-ScubaResultsPath <ScubaResults.csv>` places an independent ScubaGear scan beside the
+  mapped controls (a separate standard, never a score); `-SkipReportSite` turns the site off;
+  `-JsonOnly` still writes only the JSON. The smoke test asserts the site exists after a live run
+  and after a republish. `New-NRGReportSite.ps1` remains for rebuilding from an old results file.
+  Reorganizing the single-page `assessment.html` into the same layout is a separate change.
+
 - **A smoke test that runs the real entry point end to end, and the three defects it found.**
   `NRG.SmokeRun.Tests.ps1` launches `Invoke-NRGAssessment.ps1` in a fresh process against stand-in
   Microsoft Graph, Exchange and Teams modules that answer with empty tenants, then republishes the

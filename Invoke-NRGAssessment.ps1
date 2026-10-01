@@ -120,6 +120,19 @@ param(
     })]
     [string] $BaselineResults,
 
+    # Independent comparison: a ScubaGear ScubaResults.csv. The report site places each
+    # mapped result beside the NRG control as a separate standard, never as a score.
+    [ValidateScript({
+        if ([string]::IsNullOrEmpty($_)) { return $true }
+        if ($_ -match '\.\.[\\/]') { throw "Path traversal not allowed in ScubaResultsPath." }
+        if (-not (Test-Path -LiteralPath $_ -PathType Leaf)) { throw "ScubaResultsPath file not found: $_" }
+        return $true
+    })]
+    [string] $ScubaResultsPath,
+    # The multi-page report site is written with every run that writes reports.
+    # This switch turns that off.
+    [switch] $SkipReportSite,
+
     # ── Monthly compliance report (v4.11.0) ─────────────────────────────────
     # When -MonthlyReport is set, Publish-NRGMonthlyReport emits a recurring
     # MSP deliverable (HTML + JSON state file) modeled on the user-supplied
@@ -1452,6 +1465,23 @@ if (-not $JsonOnly) {
                 Write-Warning 'No NIST-cited findings to plan against — improvement plan skipped.'
             }
         } catch { Write-Warning "Improvement plan publish failed: $($_.Exception.Message)" }
+    }
+
+    # Multi-page report site (landing page, one page per workload, ActionPlan.csv):
+    # observed configuration, the NRG baseline verdict and the independent comparison
+    # kept apart. A VIEW over the findings: it changes no verdict. Written with every
+    # run that writes reports, into its own folder beside the other files.
+    if (-not $SkipReportSite -and (Get-Command Publish-NRGReportSite -ErrorAction SilentlyContinue)) {
+        $siteDir = Join-Path $OutputPath "$baseName-report"
+        try {
+            $siteResult = Publish-NRGReportSite -Metadata $reportMetadata -Findings $findings -OutputPath $siteDir `
+                -BaselineCompliance $baselineCompliance -Coverage (Get-NRGCoverage) -ScubaResultsPath $ScubaResultsPath
+            Write-NRGReportFile 'Report site (index.html)' (Join-Path $siteDir 'index.html')
+            Write-NRGReportFile 'Action plan (csv)' (Join-Path $siteDir 'ActionPlan.csv')
+            foreach ($f in @(Get-ChildItem -LiteralPath $siteDir -File -ErrorAction SilentlyContinue)) {
+                Set-NRGSensitiveFileAcl -Path $f.FullName -ErrorAction SilentlyContinue
+            }
+        } catch { Write-Warning "Report site publish failed: $($_.Exception.Message)" }
     }
 
     # Delta report (if baseline provided)
