@@ -526,8 +526,23 @@ function Test-NRGControlAADSignInRisk {
             -Detail "The enabled sign-in risk policies ($names) apply to $($levels -join ', ') risk only, so a medium- or high-risk sign-in (password spray, anonymous IP, token replay) is let through without a challenge." `
             -CurrentValue "signInRiskLevels = $($levels -join ', ')" -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No enabled Conditional Access policy uses the sign-in risk condition, so a sign-in Identity Protection rates risky (password spray, anonymous IP, token replay) is let through without a challenge. (Sign-in risk policies need Entra ID P2; on a tenant without it this control is not scored.)' -CurrentValue 'No sign-in risk policy' -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail ('No enabled Conditional Access policy uses the sign-in risk condition, so a sign-in Identity Protection rates risky (password spray, anonymous IP, token replay) is let through without a challenge. (Sign-in risk policies need Entra ID P2; on a tenant without it this control is not scored.)' + (Get-NRGRiskReportOnlyNote -Policies $ca.Data['Policies'] -Condition 'SignInRiskLevels')) -CurrentValue 'No sign-in risk policy' -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
     }
+}
+
+# Risk-based Conditional Access policies that exist but are only in report-only (audit) mode. They are not
+# enforcing, so they never change the verdict, but "no policy" is the wrong thing to tell an administrator
+# who already has one staged: say which ones, so the next step is to review and enforce them.
+function Get-NRGRiskReportOnlyNote {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] [object[]] $Policies, [Parameter(Mandatory)] [ValidateSet('SignInRiskLevels', 'UserRiskLevels')] [string] $Condition)
+    $ro = @(@($Policies) | Where-Object {
+            $null -ne $_ -and [string](Get-NRGObjectField -Item $_ -Key 'State' -Default '') -eq 'enabledForReportingButNotEnforced' -and
+            @(Get-NRGNestedProperty -Object $_ -Path "Conditions.$Condition" -Default @()).Count -gt 0
+        } | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'DisplayName' -Default '') } | Where-Object { $_ })
+    if ($ro.Count -eq 0) { return '' }
+    return " Report-only (audit mode, not enforcing): $($ro -join ', '). Review the audit results and turn on to enforce."
 }
 
 # ── AAD-1.5 User Risk CA Policy ───────────────────────────────────────────────
@@ -564,7 +579,7 @@ function Test-NRGControlAADUserRisk {
             -Detail "The enabled user risk policies ($names) apply to $($levels -join ', ') risk only, so an account Identity Protection rates high risk (likely compromised) is not forced to change its password or blocked." `
             -CurrentValue "userRiskLevels = $($levels -join ', ')" -RequiredValue 'CA policy: userRiskLevels = high + require password change or risk remediation' -Remediation $ctrl.Remediation
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No enabled Conditional Access policy uses the user risk condition, so an account Identity Protection rates as likely compromised is not forced to change its password or blocked. (User risk policies need Entra ID P2; on a tenant without it this control is not scored.)' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail ('No enabled Conditional Access policy uses the user risk condition, so an account Identity Protection rates as likely compromised is not forced to change its password or blocked. (User risk policies need Entra ID P2; on a tenant without it this control is not scored.)' + (Get-NRGRiskReportOnlyNote -Policies $ca.Data['Policies'] -Condition 'UserRiskLevels')) -Remediation $ctrl.Remediation
     }
 }
 

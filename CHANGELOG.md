@@ -15,6 +15,21 @@
   drops from 69 to 67 on the same data. `NRG.GapSummary.Tests.ps1` pins Total = Distinct + Views and
   that a view of a control with no shortfall stays distinct.
 
+- **The Conditional Access collector now keeps policies the v1.0 list withholds.** An independent
+  ScubaGear scan of the same tenant (raw Graph data, beta endpoint) listed 17 Conditional Access
+  policies; NRG's two live runs listed 15, with the same states and exclusions on every shared
+  policy. The two it missed were user-risk (risk remediation) policies in report-only mode, so the
+  policy inventory and "every policy's true state" were incomplete, and an ENABLED policy withheld
+  the same way would have produced a false Gap. The collector now reads the beta list in full,
+  projects any policy only it returns with the same code, marks it `Source = 'beta'`, and records
+  `PoliciesOnlyInBeta` and `SectionStatus.PolicyCompleteness`; if the beta list cannot be read the
+  v1.0 policies stay and completeness is `Failed` (not proven complete). AAD-1.4 and AAD-1.5 stay Gap
+  without an enabled risk policy but now name the report-only ones ("Report-only (audit mode, not
+  enforcing): ..."), so an administrator who already has one staged is told to review and enforce
+  it, not that none exists. Everything else shared with the scan matched: all 15 policies' state and
+  exclusion counts, the legacy-auth policy that targets application "None", guest invitations open to
+  everyone, guests at member-level permissions, and no user consent to apps.
+
 - **AAD-6.2 and AAD-6.3 are two independent verdicts; one disabled workflow is one baseline failure.**
   AAD-6.2 (User Consent to Apps Restricted) had been requiring the admin consent workflow as well as
   restricted user consent, so a disabled workflow cost two baseline failures (AAD-6.2 Partial and

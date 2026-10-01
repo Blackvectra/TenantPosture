@@ -62,8 +62,8 @@ function Invoke-NRGCollectAADCAPolicies {
             # Success stayed $true — the root cause of false "0 CA policies" +
             # every derived AAD gap. Get-NRGNestedProperty walks each hop with a
             # null guard and is safe on all supported versions.
-            $result.Data.Policies = @($policyRows | ForEach-Object {
-                $p = $_
+            # One projection for both endpoints: the v1.0 list below, and any policy only the beta list returns.
+            $projectPolicy = { param($p)
                 $g = { param($path, $def = @()) Get-NRGNestedProperty -Object $p -Path $path -Default $def }
                 $sif = & $g 'sessionControls.signInFrequency' $null
                 $pb  = & $g 'sessionControls.persistentBrowser' $null
@@ -139,7 +139,8 @@ function Invoke-NRGCollectAADCAPolicies {
                         } else { $null }
                     }
                 }
-            })
+            }
+            $result.Data.Policies = @($policyRows | ForEach-Object { & $projectPolicy $_ })
             $policiesCollected = $true
 
             # Token protection (sessionControls.secureSignInSession) is not in
@@ -147,15 +148,33 @@ function Invoke-NRGCollectAADCAPolicies {
             # from beta per policy; a failure leaves the section unread and the
             # control reports not assessed instead of a gap.
             $result.Data.SectionStatus['TokenProtection'] = 'NotRun'
+            $result.Data.SectionStatus['PolicyCompleteness'] = 'NotRun'
             try {
+                # The v1.0 list withholds some policies. On the first full run it returned 15 policies where
+                # ScubaGear's beta read returned 17: the two missing were user-risk (risk remediation) policies,
+                # so the policy list, "every policy's true state" and the risk controls were incomplete. The
+                # beta list is read in full; a policy only it returns is projected the same way and kept.
                 $betaRows = @(Get-NRGGraphAllPages `
-                    -Uri 'https://graph.microsoft.com/beta/identity/conditionalAccess/policies?$select=id,sessionControls&$top=250')
+                    -Uri 'https://graph.microsoft.com/beta/identity/conditionalAccess/policies?$top=250' `
+                    -Headers @{ Prefer = 'include-unknown-enum-members' })
                 $byId = @{}
+                $knownIds = @{}
+                foreach ($pol in $result.Data.Policies) { $knownIds[[string]$pol['Id']] = $true }
+                $betaOnly = [System.Collections.Generic.List[string]]::new()
                 foreach ($bp in $betaRows) {
                     $id  = [string](Get-NRGObjectField -Item $bp -Key 'id' -Default '')
                     $ssi = Get-NRGNestedProperty -Object $bp -Path 'sessionControls.secureSignInSession.isEnabled' -Default $null
                     if ($id) { $byId[$id] = $ssi }
+                    if ($id -and -not $knownIds.ContainsKey($id)) {
+                        $extra = & $projectPolicy $bp
+                        $extra['Source'] = 'beta'
+                        $result.Data.Policies = @($result.Data.Policies) + @($extra)
+                        $knownIds[$id] = $true
+                        $betaOnly.Add([string]$extra['DisplayName'])
+                    }
                 }
+                $result.Data.PoliciesOnlyInBeta = @($betaOnly)
+                $result.Data.SectionStatus['PolicyCompleteness'] = 'Collected'
                 foreach ($pol in $result.Data.Policies) {
                     $polId = [string]$pol['Id']
                     if ($byId.ContainsKey($polId) -and $null -ne $byId[$polId]) { $pol['SessionControls']['SecureSignInSession'] = [bool]$byId[$polId] }
@@ -163,6 +182,7 @@ function Invoke-NRGCollectAADCAPolicies {
                 $result.Data.SectionStatus['TokenProtection'] = 'Collected'
             } catch {
                 $result.Data.SectionStatus['TokenProtection'] = 'Failed'
+                $result.Data.SectionStatus['PolicyCompleteness'] = 'Failed'
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     Register-NRGException -Source 'AAD-CAPolicies-TokenProtection' -Message $_.Exception.Message
                 }

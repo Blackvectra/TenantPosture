@@ -94,6 +94,15 @@ Describe 'Identity controls report what the tenant is configured to do' {
             Ca (@(Pol -Apps @('None') -ClientApps @('other') -Grant @('block')) + @(Pol -Name 'all' -ClientApps @('other') -Grant @('block')))
             (V 'Test-NRGControlAADLegacyAuth' 'AAD-1.1').State | Should -Be 'Satisfied'
         }
+        It 'AAD-1.4 / 1.5: a risk policy in report-only mode is not enforcing (still a Gap) but is named so the administrator knows it is staged' {
+            $u = Pol -Name 'CA-IDP-001-UserRisk-High' -State 'enabledForReportingButNotEnforced' -Grant @('riskRemediation'); $u.Conditions.UserRiskLevels = @('high')
+            $sg = Pol -Name 'CA-IDP-002-SignInRisk' -State 'enabledForReportingButNotEnforced' -Grant @('mfa'); $sg.Conditions.SignInRiskLevels = @('high', 'medium')
+            Ca @($u, $sg)
+            $a = V 'Test-NRGControlAADUserRisk' 'AAD-1.5'; $a.State | Should -Be 'Gap'; $a.Detail | Should -Match 'Report-only \(audit mode, not enforcing\): CA-IDP-001-UserRisk-High'
+            $b = V 'Test-NRGControlAADSignInRisk' 'AAD-1.4'; $b.State | Should -Be 'Gap'; $b.Detail | Should -Match 'Report-only \(audit mode, not enforcing\): CA-IDP-002-SignInRisk'
+            Ca @()
+            (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').Detail | Should -Not -Match 'Report-only'
+        }
         It 'AAD-1.4 / 1.5: blocking and risk-remediation responses count' {
             Ca @(Pol -SignInRisk @('high', 'medium') -Grant @('block'));   (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied'
             Ca @(Pol -UserRisk @('high') -Grant @('riskRemediation'));     (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
@@ -400,6 +409,41 @@ Describe 'Security Defaults: Conditional Access controls account for it' {
             Clear-NRGState
             Invoke-NRGCollectAADCAPolicies 3>$null | Out-Null
             (Get-NRGCoverage)['AAD-CAPolicies'].Note | Should -Be '' -Because 'a Security Defaults state that was not read changes nothing'
+        }
+
+        It 'a policy only the beta list returns is kept, flagged and readable by AAD-1.5 (the v1.0 list returned 15 where the beta list returned 17)' {
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                $a = @{ id = 'p1'; displayName = 'All users MFA'; state = 'enabled'; conditions = @{ users = @{ includeUsers = @('All') }; applications = @{ includeApplications = @('All') } }; grantControls = @{ operator = 'OR'; builtInControls = @('mfa') } }
+                $b = @{ id = 'p2'; displayName = 'CA-IDP-001-UserRisk-High-RequireRiskRemediation'; state = 'enabledForReportingButNotEnforced'
+                        conditions = @{ userRiskLevels = @('high'); users = @{ includeUsers = @('All') }; applications = @{ includeApplications = @('All') } }
+                        grantControls = @{ operator = 'OR'; builtInControls = @('riskRemediation') } }
+                if ($Uri -match 'v1\.0/identity/conditionalAccess/policies') { return @{ value = @($a) } }
+                if ($Uri -match 'beta/identity/conditionalAccess/policies') { return @{ value = @($a, $b) } }
+                return @{ value = @() }
+            }
+            Invoke-NRGCollectAADCAPolicies 3>$null | Out-Null
+            $raw = Get-NRGRawData -Key 'AAD-CAPolicies'
+            @($raw.Data.Policies).Count | Should -Be 2
+            @($raw.Data.PoliciesOnlyInBeta) | Should -Be @('CA-IDP-001-UserRisk-High-RequireRiskRemediation')
+            $raw.Data.SectionStatus.PolicyCompleteness | Should -Be 'Collected'
+            $extra = @($raw.Data.Policies | Where-Object { $_.Id -eq 'p2' })[0]
+            $extra.State | Should -Be 'enabledForReportingButNotEnforced'
+            @($extra.Conditions.UserRiskLevels) | Should -Be @('high')
+            @($extra.GrantControls.BuiltInControls) | Should -Be @('riskRemediation')
+        }
+
+        It 'when the beta list cannot be read the v1.0 policies stay and the list is marked not proven complete' {
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                if ($Uri -match 'beta/identity') { throw 'Graph beta 403' }
+                return @{ value = @(@{ id = 'p1'; displayName = 'All users MFA'; state = 'enabled'; conditions = @{ users = @{ includeUsers = @('All') } }; grantControls = @{ builtInControls = @('mfa') } }) }
+            }
+            Invoke-NRGCollectAADCAPolicies 3>$null | Out-Null
+            $raw = Get-NRGRawData -Key 'AAD-CAPolicies'
+            $raw.Success | Should -BeTrue
+            @($raw.Data.Policies).Count | Should -Be 1
+            $raw.Data.SectionStatus.PolicyCompleteness | Should -Be 'Failed'
         }
 
         It 'when the CA read fails on a Security Defaults tenant the Failed note still says so' {
