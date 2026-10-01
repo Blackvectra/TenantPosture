@@ -114,6 +114,21 @@ function Get-NRGExoConnectHint {
             'then remove the other version and open a new window.') -f $v, $psv, $range
 }
 
+# A module file under a OneDrive-synced Documents folder can be an "online-only"
+# placeholder. When OneDrive is not running or not signed in, Windows refuses to read it
+# ("The cloud file provider is not running") and the module cannot load. The failure
+# names a file, not the cause, so say the cause beside it.
+function Get-NRGCloudFileHint {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] [AllowEmptyString()] [string] $Message)
+    if ([string]::IsNullOrEmpty($Message)) { return '' }
+    if ($Message -notmatch '(?i)cloud file provider is not running|cloud operation (was|is) (unsuccessful|invalid)|cloud sync root|the cloud file') { return '' }
+    return ('A PowerShell module file is a OneDrive online-only placeholder and OneDrive is not running or not signed in, so Windows cannot read it. ' +
+            'Start OneDrive and wait for it to sign in, or right-click the PowerShell\Modules folder and choose "Always keep on this device". ' +
+            'To stop it recurring, keep modules out of OneDrive: in an elevated PowerShell 7 window run .\Install-NRGPrerequisites.ps1 (it installs for all users when Documents is OneDrive-synced) and Repair-NRGModuleHealth -WhatIf, then open a new window.')
+}
+
 # A connection failure recorded as a bare message ("You cannot call a method
 # on a null-valued expression") cannot be diagnosed from the results JSON: the
 # first live run of v4.14.3 produced exactly that for Exchange and Purview,
@@ -443,6 +458,8 @@ function Connect-NRGServices {
         }
     } catch {
         Write-Host "  [!] Graph: $($_.Exception.Message)" -ForegroundColor Yellow
+        $cloudHint = Get-NRGCloudFileHint -Message $_.Exception.Message
+        if ($cloudHint) { Write-Host "      $cloudHint" -ForegroundColor Yellow }
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
             Register-NRGException -Source 'Connect-Graph' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
         }
@@ -638,6 +655,8 @@ function Connect-NRGServices {
             Write-Host "  [+] Teams connected" -ForegroundColor Green
         } catch {
             Write-Host "  [!] Teams: $($_.Exception.Message)" -ForegroundColor Yellow
+            $cloudHint = Get-NRGCloudFileHint -Message $_.Exception.Message
+            if ($cloudHint) { Write-Host "      $cloudHint" -ForegroundColor Yellow }
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Connect-Teams' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
             }
@@ -709,6 +728,8 @@ function Connect-NRGServices {
             }
         } catch {
             Write-Host "  [!] SharePoint: $($_.Exception.Message)" -ForegroundColor Yellow
+            $cloudHint = Get-NRGCloudFileHint -Message $_.Exception.Message
+            if ($cloudHint) { Write-Host "      $cloudHint" -ForegroundColor Yellow }
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Connect-SPO' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
             }

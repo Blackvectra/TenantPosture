@@ -155,6 +155,7 @@
         'Get-NRGExoModuleFloor',
         'Get-NRGConnectErrorText',
         'Get-NRGExoConnectHint',
+        'Get-NRGCloudFileHint',
         'Get-NRGControlAutomationAudit',
         'Invoke-NRGCollectAADAuthPolicies',
         'Invoke-NRGCollectAADCAPolicies',

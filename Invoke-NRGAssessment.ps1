@@ -805,6 +805,16 @@ if (-not $skipCollection) {
         throw [System.InvalidOperationException]::new('Authentication failure: no Graph or EXO session available.')
     }
     if (-not $conn.ContainsKey('SharePoint')) { $conn['SharePoint'] = $false }
+    # A run with Exchange but no Graph is valid and honest (every control that needs Graph
+    # reads "not assessed"), but it is not the assessment the operator meant to run and it can
+    # take half an hour to find that out. Say it now, before collection, not in the report.
+    if (-not $conn.Graph) {
+        Write-Host ""
+        Write-Host "  [!] Microsoft Graph is NOT connected. Identity (Entra ID), Conditional Access, Intune, users, roles and" -ForegroundColor Red
+        Write-Host "      application controls cannot be assessed in this run; they will read 'not assessed', not 'passed'." -ForegroundColor Red
+        Write-Host "      Fix the Graph error shown above and re-run if you meant a full assessment (Ctrl+C to stop now)." -ForegroundColor Red
+        Write-Host ""
+    }
 
     # A -Skip flag is an operator choice. Recording it lets the scope section
     # file the workload's controls as "not assessed" instead of as data that

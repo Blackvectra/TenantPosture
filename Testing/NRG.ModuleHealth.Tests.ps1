@@ -92,3 +92,22 @@ Describe 'Get-NRGModuleHealth' {
         (Get-NRGModuleHealth).PSObject | Should -Not -BeNullOrEmpty
     }
 }
+
+Describe 'A OneDrive online-only module file is named as the cause of a connect failure' {
+    BeforeAll {
+        $root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $root 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+    }
+    It 'adds a hint for the exact message the first work-computer run produced' {
+        $m = "The cloud file provider is not running. : 'C:\Users\op\OneDrive - Contoso\Documents\PowerShell\Modules\Microsoft.Graph.Reports\2.36.1\Microsoft.Graph.Reports.psd1'."
+        $h = Get-NRGCloudFileHint -Message $m
+        $h | Should -Match 'OneDrive'
+        $h | Should -Match 'Always keep on this device'
+        $h | Should -Match 'Install-NRGPrerequisites'
+    }
+    It 'says nothing for an unrelated connect error' {
+        Get-NRGCloudFileHint -Message 'AADSTS50076: MFA required' | Should -BeNullOrEmpty
+        Get-NRGCloudFileHint -Message '' | Should -BeNullOrEmpty
+        Get-NRGCloudFileHint -Message $null | Should -BeNullOrEmpty
+    }
+}

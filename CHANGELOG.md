@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **A OneDrive online-only module is named as the cause, and a run without Graph says so up front.**
+  The first work-computer run failed to connect Graph with "The cloud file provider is not running"
+  (a `Microsoft.Graph.Reports` file in the OneDrive-synced `Documents\PowerShell\Modules` folder
+  was an online-only placeholder and OneDrive was not running). The error named a file, not the
+  cause; `Get-NRGCloudFileHint` now prints the cause and the fix beside the Graph, Teams and
+  SharePoint connect errors. A run that connects Exchange but not Graph now prints, before any
+  collection, that identity, Conditional Access, Intune and application controls will read
+  "not assessed". No verdict logic changed.
+
 - **The report site is built automatically.** Every run that writes reports (and every
   `-FromResults` republish) now writes `<base>-report/` (landing page, one page per workload,
   `ActionPlan.csv`) beside the other files; before, it needed a separate `New-NRGReportSite.ps1`
