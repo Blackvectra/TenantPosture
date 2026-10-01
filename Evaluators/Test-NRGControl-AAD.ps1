@@ -1076,10 +1076,10 @@ function Test-NRGControlAADUserConsent {
     # which this tool cannot evaluate, so it is not called restricted.
     $unrestrictedConsent = $consentPolicies | Where-Object { $_ -match 'legacy|ByDefault' }
     $custom = @($consentPolicies | Where-Object { $_ -notmatch 'microsoft-user-default-(legacy|low)$' })
-    # Expected state: users cannot consent freely AND consent goes through the admin
-    # consent workflow (the same setting AAD-6.3 reads). Each half is judged on its own;
-    # a half that cannot be established leaves the control not assessed, and an
-    # established shortfall is always reported.
+    # Expected state: users cannot consent freely (disabled, or limited to low-impact permissions from
+    # verified publishers). The admin consent workflow is a different safeguard that AAD-6.3 owns; it is
+    # shown here as related context and never decides this verdict, so one disabled workflow costs one
+    # baseline failure (AAD-6.3), not two.
     $verified = @(); $short = @(); $unknown = @()
     if ($consentPolicies.Count -eq 0) {
         $verified += 'Users cannot consent to applications (no user consent policy assigned).'
@@ -1090,20 +1090,16 @@ function Test-NRGControlAADUserConsent {
     } else {
         $short += 'Users can consent to any app permissions. Consent phishing attacks grant attacker apps access to mailbox, files, and contacts without admin awareness.'
     }
-    if (-not (Test-NRGSectionCollected $gov 'ConsentPolicy')) {
-        $unknown += 'whether the admin consent workflow is enabled (ConsentPolicy was not collected).'
-    } else {
+    $context = ''
+    if (Test-NRGSectionCollected $gov 'ConsentPolicy') {
         $wf = Get-NRGNestedProperty -Object $gov -Path 'Data.ConsentPolicy.IsEnabled' -Default $null
-        if ($wf -is [bool] -and $wf) { $verified += 'The admin consent workflow is enabled, so users can request app access.' }
-        elseif ($wf -is [bool]) { $short += 'The admin consent workflow is disabled: users who need an app have no approval path (see AAD-6.3).' }
-        else { $unknown += 'whether the admin consent workflow is enabled (the setting was not returned).' }
+        if ($wf -is [bool] -and $wf) { $context = 'the admin consent workflow is enabled (AAD-6.3).' }
+        elseif ($wf -is [bool]) { $context = 'the admin consent workflow is disabled, so users who need an app have no approval path (scored under AAD-6.3).' }
     }
-    # Unrestricted user consent is the failure this control exists to catch; a workflow
-    # being on does not make it part-way.
     Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
-        -ShortfallState $(if ($unrestrictedConsent) { 'Gap' } else { 'Auto' }) `
+        -ShortfallState 'Gap' -Context $context `
         -CurrentValue $(if ($consentPolicies.Count) { $consentPolicies -join ', ' } else { 'No user consent policy assigned' }) `
-        -RequiredValue 'User consent restricted and the admin consent workflow enabled'
+        -RequiredValue 'User consent disabled, or limited to low-impact permissions from verified publishers'
 }
 
 # ── AAD-6.3 Admin Consent Workflow Enabled ────────────────────────────────────

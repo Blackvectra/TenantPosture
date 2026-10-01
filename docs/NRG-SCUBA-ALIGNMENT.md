@@ -47,7 +47,7 @@ The old rule id no longer exists and the migrated range does not describe what t
 | AAD-4.1 Guest Invite Permissions Restricted | `MS.AAD.8.2v1` | SHOULD | same | Only Guest Inviters can invite guests. |
 | AAD-4.3 B2B Guest Default Permissions Restricted | `MS.AAD.8.1v1` | SHOULD | same | Guest directory access limited. |
 | AAD-6.1 User App Registration Disabled | `MS.AAD.5.1v1` | SHALL | same | Only administrators register applications. |
-| AAD-6.2 User Consent to Apps Restricted | `MS.AAD.5.2v1` | SHALL | same | User consent restricted; NRG also requires the admin consent workflow. |
+| AAD-6.2 User Consent to Apps Restricted | `MS.AAD.5.2v1` | SHALL | same | Both require user consent to applications restricted; the admin consent workflow is the separate rule 5.3 (AAD-6.3). |
 | AAD-6.3 Admin Consent Workflow Enabled | `MS.AAD.5.3v1` | SHALL | same | Admin consent workflow configured. |
 | DEF-4.1 DLP Policy Covers All Key Workloads | `MS.SECURITYSUITE.3.2v1` | SHOULD | `MS.DEFENDER.4.2v1` (migrated) | DLP applied to Exchange, OneDrive, SharePoint, Teams (and Devices is DEF-4.5). NRG counts only enforcing policies. |
 | EXO-1.1 Mailbox Audit Logging Enabled | `MS.EXO.13.1v1` | SHALL | same | Mailbox auditing enabled; NRG also checks the audit bypass list. |

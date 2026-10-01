@@ -253,7 +253,7 @@
       "Current": "MS.AAD.5.2v1",
       "Relation": "Equivalent",
       "RequirementStrength": "SHALL",
-      "Note": "User consent restricted; NRG also requires the admin consent workflow."
+      "Note": "Both require user consent to applications restricted. The admin consent workflow is the separate rule MS.AAD.5.3 (AAD-6.3) and is not part of this verdict."
     },
     {
       "Control": "AAD-6.3",

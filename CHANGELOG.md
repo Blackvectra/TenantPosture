@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **AAD-6.2 and AAD-6.3 are two independent verdicts; one disabled workflow is one baseline failure.**
+  AAD-6.2 (User Consent to Apps Restricted) had been requiring the admin consent workflow as well as
+  restricted user consent, so a disabled workflow cost two baseline failures (AAD-6.2 Partial and
+  AAD-6.3 Gap) on the first full run. AAD-6.2 now judges only whether users can freely consent
+  (disabled, or limited to low-impact permissions from verified publishers); AAD-6.3 owns the
+  workflow. The workflow appears in the AAD-6.2 Detail as "Related (judged under another control, not
+  part of this verdict)" through a new `-Context` on `Add-NRGExpectedStateFinding`. Catalog
+  description, baseline expected state and notes, the ScubaGear alignment note, the detection-limits
+  table and the tests follow; a matrix test covers restricted/unrestricted consent against workflow
+  enabled/disabled/unread.
+
 - **First full-tenant run (NDACo, Graph connected): two reader-facing fixes.** (1) The report site showed
   "Independent scan: Pass" beside an NRG Gap for AAD-12.4, AAD-15.1 and AAD-15.2, although the mapping
   records ScubaGear's MS.AAD.5.2 as a different requirement; it now says "Different requirement
@@ -144,7 +155,7 @@
   qualifying policy excludes a user or group.
 
 - **The seven "Satisfied with limits" controls now judge every component.** AAD-6.2 (user
-  consent and the admin consent workflow), AAD-2.1 (the approved Conditional Access template
+  consent; since corrected, see the AAD-6.2 / AAD-6.3 entry above), AAD-2.1 (the approved Conditional Access template
   set), DEF-2.2 (malware ZAP beside spam and phishing), DEF-2.3 (the approved blocked-type
   list), DNS-1.3 (the approved DMARC reporting address), EXO-1.5 (approved priority users) and
   INT-1.5 (real-time, cloud-delivered and PUA settings read from the antivirus policy) share

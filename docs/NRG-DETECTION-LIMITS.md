@@ -39,7 +39,7 @@ components kept in the Detail. Nothing narrows the baseline requirement.
 
 | Control | Components judged | What keeps it from Satisfied |
 |---|---|---|
-| AAD-6.2 User consent | Users cannot consent (or only low-impact, verified publishers) **and** the admin consent workflow is enabled | Workflow off is Partial (Gap when user consent is unrestricted); workflow or consent unreadable, or a custom grant policy, is not assessed. AAD-6.3 reads the workflow too and is not linked to AAD-6.2, so a disabled workflow shows in both. |
+| AAD-6.2 User consent | Users cannot freely consent: user consent is disabled, or limited to low-impact permissions from verified publishers | Unrestricted user consent is a Gap; the consent setting unreadable, or a custom grant policy, is not assessed. The admin consent workflow is AAD-6.3's requirement: AAD-6.2 shows it only as related context and it never changes this verdict, so one disabled workflow is one baseline failure. |
 | AAD-2.1 CA policies | Three coverage tracks **and** every template in `RequiredConditionalAccessTemplates` Enforced (report-only, narrower or missing policies do not count) | The approved template list is empty until NRG approves it: tracks verified, set **not assessed** |
 | DEF-2.2 ZAP | Spam, phishing **and malware** ZAP in every policy in force | Malware ZAP off is a shortfall; malware policies or `ZapEnabled` not read is not assessed (the collector now reads `ZapEnabled`) |
 | DEF-2.3 Common attachments | Filter on in every malware policy in force **and** every approved file type blocked | `CommonAttachmentFileTypes` empty: filter verified, list **not assessed** |

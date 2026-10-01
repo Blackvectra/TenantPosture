@@ -2127,7 +2127,7 @@
     {
       "ControlId": "AAD-6.2",
       "Title": "User Consent to Apps Restricted",
-      "Description": "Users cannot consent to application permissions — all consent goes through admin workflow.",
+      "Description": "Users cannot freely consent to application permissions: user consent is disabled, or limited to low-impact permissions from verified publishers. Whether an admin consent workflow exists is a separate control (AAD-6.3).",
       "BusinessRisk": "Consent phishing grants attacker-controlled apps access to mailbox and files. Users cannot distinguish malicious OAuth consent from legitimate.",
       "Severity": "Critical",
       "Workload": "AAD",

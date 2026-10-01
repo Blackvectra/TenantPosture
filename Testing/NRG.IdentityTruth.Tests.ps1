@@ -70,12 +70,12 @@ Describe 'Identity controls report what the tenant is configured to do' {
 
         It 'any-app user consent is a Gap; none or low-impact verified publishers passes the consent half' {
             (Consent '["ManagePermissionGrantsForSelf.microsoft-user-default-legacy"]').State | Should -Be 'Gap'
-            # The consent half passes; the workflow half cannot be read through this route, so the
-            # verdict is not assessed with the consent half kept, never Satisfied.
+            # Restricted consent is Satisfied on its own. The admin consent workflow is a different control
+            # (AAD-6.3) and cannot be read through this route, which must not change this verdict.
             $low = Consent '["ManagePermissionGrantsForSelf.microsoft-user-default-low"]'
-            $low.State | Should -Be 'NotApplicable'; $low.Detail | Should -Match 'Verified: User consent is limited to low-impact'
+            $low.State | Should -Be 'Satisfied'; $low.Detail | Should -Match 'Verified: User consent is limited to low-impact'
             $none = Consent '[]'
-            $none.State | Should -Be 'NotApplicable' -Because 'an empty list (no user consent) must not unroll into "not returned"'
+            $none.State | Should -Be 'Satisfied' -Because 'an empty list (no user consent) must not unroll into "not returned"'
             $none.Detail | Should -Match 'Verified: Users cannot consent'
         }
     }

@@ -52,36 +52,52 @@ Describe 'Baseline controls judge every component of the expected state' {
         }
     }
 
-    Context 'AAD-6.2 user consent restricted AND admin consent workflow' {
+    Context 'AAD-6.2 user consent and AAD-6.3 admin consent workflow are two independent verdicts' {
         BeforeAll {
             $script:Gov = { param($Policies, $Workflow, $Status = @{ ExternalCollab = 'Collected'; ConsentPolicy = 'Collected' })
                 $cp = if ($null -eq $Workflow) { $null } else { @{ IsEnabled = $Workflow } }
                 & $script:Raw 'AAD-IdentityGovernance' @{ SectionStatus = $Status; ExternalCollab = @{ PermissionGrantPolicies = $Policies }; ConsentPolicy = $cp } }
             $script:V62 = { & $script:Verdict 'Test-NRGControlAADUserConsent' 'AAD-6.2' }
+            $script:V63 = { & $script:Verdict 'Test-NRGControlAADAdminConsentWorkflow' 'AAD-6.3' }
+            $script:Legacy = 'ManagePermissionGrantsForSelf.microsoft-user-default-legacy'
         }
-        It 'restricted consent with the workflow on is Satisfied' {
-            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @() $true)
-            $v = & $script:V62; $v.State | Should -Be 'Satisfied'; $v.Detail | Should -Match 'admin consent workflow is enabled'
-        }
-        It 'restricted consent with the workflow OFF is Partial, naming the workflow' {
+        # The matrix: one disabled workflow is ONE baseline failure (AAD-6.3), never two.
+        It 'consent restricted, workflow disabled: AAD-6.2 Satisfied, AAD-6.3 Gap' {
             Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @() $false)
-            $v = & $script:V62; $v.State | Should -Be 'Partial'; $v.Detail | Should -Match 'Verified: Users cannot consent'; $v.Detail | Should -Match 'workflow is disabled'
+            $a = & $script:V62; $b = & $script:V63
+            $a.State | Should -Be 'Satisfied'; $b.State | Should -Be 'Gap'
+            $a.Detail | Should -Match 'Verified: Users cannot consent'
         }
-        It 'the workflow setting not collected leaves it not assessed with the consent half kept' {
+        It 'consent unrestricted, workflow enabled: AAD-6.2 Gap, AAD-6.3 Satisfied' {
+            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @($script:Legacy) $true)
+            (& $script:V62).State | Should -Be 'Gap'; (& $script:V63).State | Should -Be 'Satisfied'
+        }
+        It 'both configured: Satisfied and Satisfied' {
+            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @() $true)
+            (& $script:V62).State | Should -Be 'Satisfied'; (& $script:V63).State | Should -Be 'Satisfied'
+        }
+        It 'neither configured: Gap and Gap (two different requirements)' {
+            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @($script:Legacy) $false)
+            (& $script:V62).State | Should -Be 'Gap'; (& $script:V63).State | Should -Be 'Gap'
+        }
+        It 'consent setting not returned, workflow enabled: AAD-6.2 not assessed, AAD-6.3 Satisfied' {
+            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov $null $true)
+            (& $script:V62).State | Should -Be 'NotApplicable'; (& $script:V63).State | Should -Be 'Satisfied'
+        }
+        It 'the workflow shows in the AAD-6.2 Detail as related context, never as a Shortfall or a Verified component' {
+            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @() $false)
+            $d = (& $script:V62).Detail
+            $d | Should -Match 'Related \(judged under another control, not part of this verdict\): the admin consent workflow is disabled'
+            $d | Should -Not -Match 'Shortfall:'
+        }
+        It 'the workflow read failing does not change AAD-6.2: restricted consent is still Satisfied, with no workflow claim' {
             Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @() $null @{ ExternalCollab = 'Collected'; ConsentPolicy = 'Failed' })
-            $v = & $script:V62; $v.State | Should -Be 'NotApplicable'; $v.Detail | Should -Match 'Verified: Users cannot consent'; $v.Detail | Should -Match 'Not assessed: whether the admin consent workflow'
+            $a = & $script:V62; $a.State | Should -Be 'Satisfied'; $a.Detail | Should -Not -Match 'workflow'
+            (& $script:V63).State | Should -Be 'NotApplicable'
         }
-        It 'a workflow setting that was not returned is not "disabled"' {
-            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @() $null)
-            (& $script:V62).State | Should -Be 'NotApplicable'
-        }
-        It 'unrestricted user consent is a Gap even with the workflow on' {
-            Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @('ManagePermissionGrantsForSelf.microsoft-user-default-legacy') $true)
-            (& $script:V62).State | Should -Be 'Gap'
-        }
-        It 'a custom grant policy cannot be judged: not assessed, but a disabled workflow is still reported' {
+        It 'a custom grant policy cannot be judged: AAD-6.2 not assessed whatever the workflow does' {
             Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @('ManagePermissionGrantsForSelf.nrg-custom') $false)
-            $v = & $script:V62; $v.State | Should -Be 'Gap'; $v.Detail | Should -Match 'workflow is disabled'; $v.Detail | Should -Match 'custom permission grant policy'
+            $v = & $script:V62; $v.State | Should -Be 'NotApplicable'; $v.Detail | Should -Match 'custom permission grant policy'
         }
     }
 

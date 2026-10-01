@@ -60,10 +60,14 @@ function Add-NRGExpectedStateFinding {
         [AllowNull()] [object[]] $AffectedObjects,
         [string] $Instance,
         [string] $TitleSuffix,
-        [ValidateSet('Auto', 'Gap')] [string] $ShortfallState = 'Auto'
+        [ValidateSet('Auto', 'Gap')] [string] $ShortfallState = 'Auto',
+        # A related setting another control owns. Shown first in the Detail so the reader sees it, but it
+        # never enters the verdict (it is not a Verified, Shortfall or Not assessed component).
+        [string] $Context
     )
     $v = @($Verified | Where-Object { $_ }); $s = @($Shortfalls | Where-Object { $_ }); $n = @($NotEstablished | Where-Object { $_ })
     $parts = @()
+    if ($Context) { $parts += "Related (judged under another control, not part of this verdict): $Context" }
     if ($v.Count) { $parts += "Verified: $($v -join ' ')" }
     if ($s.Count) { $parts += "Shortfall: $($s -join ' ')" }
     if ($n.Count) { $parts += "Not assessed: $($n -join ' ')" }
