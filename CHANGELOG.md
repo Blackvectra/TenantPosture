@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **`Repair-NRGModuleHealth` now removes a duplicate that the package manager cannot find.** The first
+  live repair removed nothing: `Uninstall-PSResource` answered "version 2.9.1 ... does not exist" for a
+  copy PowerShell 7 still lists and loads (it sits in a module folder PSResourceGet does not manage).
+  When the package manager fails, the repair now removes the exact version folder `Get-Module` reports,
+  but only after `Test-NRGSafeModuleVersionPath` confirms the path is `<PSModulePath entry>\<module>\<version>`
+  for that module and version; any other path keeps the package manager's error. Still opt-in and
+  `-WhatIf`-able, still never called from the assessment path.
+
 - **Report site layout: columns no longer collapse, and a passing control shows what it observed.**
   The first live view of the site (1637 px wide) broke "Control" into "Con trol" and "Informational"
   into "Infor mati onal": every cell allowed a break anywhere, so the narrow columns shrank to one

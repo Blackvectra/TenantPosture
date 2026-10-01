@@ -45,6 +45,43 @@
 # Sets:     nothing.
 # Graph scopes / cmdlets: none.
 
+# Uninstall-PSResource only finds modules in the scopes PSResourceGet manages. PowerShell 7 also
+# lists modules from other folders on PSModulePath (for example the Windows PowerShell 5.1 folder
+# under Program Files, or a copy placed by hand), and for those it answers "version ... does not
+# exist" even though Get-Module lists them and they still load. The first live repair on a work
+# computer hit exactly that and removed nothing. This decides whether one version folder reported
+# by Get-Module is safe to delete directly: the path must be <PSModulePath entry>\<module>\<version>
+# (or <module>\<version>\ with a file-version leaf), nothing else.
+function Test-NRGSafeModuleVersionPath {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [AllowNull()] [AllowEmptyString()] [string] $Path,
+        [Parameter(Mandatory)] [string] $Name,
+        [Parameter(Mandatory)] [string] $Version,
+        [AllowNull()] [AllowEmptyString()] [string] $PSModulePathValue = $env:PSModulePath
+    )
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    $full = $Path.TrimEnd('\', '/')
+    $leaf = ($full -split '[\\/]')[-1]
+    $parent = $full.Substring(0, [Math]::Max(0, $full.Length - $leaf.Length)).TrimEnd('\', '/')
+    $parentLeaf = ($parent -split '[\\/]')[-1]
+    $root = $parent.Substring(0, [Math]::Max(0, $parent.Length - $parentLeaf.Length)).TrimEnd('\', '/')
+    if ($parentLeaf -ne $Name) { return $false }
+    # Leaf is the version folder. Some modules use a 4-part folder name; compare numerically.
+    $lv = $null; $wv = $null
+    if (-not [version]::TryParse($leaf, [ref]$lv)) { return $false }
+    if (-not [version]::TryParse($Version, [ref]$wv)) { return $false }
+    if ($lv -ne $wv) { return $false }
+    # The folder two levels up must be an entry on PSModulePath (never a drive root or arbitrary path).
+    # ';' separates Windows entries and cannot occur inside a drive-letter path, unlike ':' on Linux/macOS.
+    $sepChar = if ($PSModulePathValue -match ';') { ';' } else { [string][IO.Path]::PathSeparator }
+    foreach ($entry in @($PSModulePathValue -split [regex]::Escape($sepChar) | Where-Object { $_ })) {
+        if ($entry.TrimEnd('\', '/') -ieq $root) { return $true }
+    }
+    return $false
+}
+
 function Repair-NRGModuleHealth {
     [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
@@ -153,12 +190,32 @@ function Repair-NRGModuleHealth {
         try {
             if ($RemoveAction) {
                 & $RemoveAction $item.Name $item.Version
-            } elseif (Get-Command Uninstall-PSResource -ErrorAction SilentlyContinue) {
-                Uninstall-PSResource -Name $item.Name -Version $item.Version -ErrorAction Stop
-            } elseif (Get-Command Uninstall-Module -ErrorAction SilentlyContinue) {
-                Uninstall-Module -Name $item.Name -RequiredVersion $item.Version -Force -ErrorAction Stop
             } else {
-                throw 'Neither Uninstall-PSResource nor Uninstall-Module is available.'
+                $done = $false
+                $pkgError = $null
+                if (Get-Command Uninstall-PSResource -ErrorAction SilentlyContinue) {
+                    try { Uninstall-PSResource -Name $item.Name -Version $item.Version -ErrorAction Stop; $done = $true }
+                    catch { $pkgError = $_.Exception.Message }
+                } elseif (Get-Command Uninstall-Module -ErrorAction SilentlyContinue) {
+                    try { Uninstall-Module -Name $item.Name -RequiredVersion $item.Version -Force -ErrorAction Stop; $done = $true }
+                    catch { $pkgError = $_.Exception.Message }
+                } else {
+                    $pkgError = 'Neither Uninstall-PSResource nor Uninstall-Module is available.'
+                }
+                if (-not $done) {
+                    # The package manager could not find it. Remove the exact version folder Get-Module lists,
+                    # only when it passes the path check; otherwise report the package manager's error.
+                    $viaPath = $false
+                    $want = [version]$item.Version
+                    $found = @(Get-Module -ListAvailable -Name $item.Name -ErrorAction SilentlyContinue | Where-Object { $_.Version -eq $want })
+                    foreach ($mod in $found) {
+                        if (Test-NRGSafeModuleVersionPath -Path ([string]$mod.ModuleBase) -Name $item.Name -Version $item.Version) {
+                            Remove-Item -LiteralPath ([string]$mod.ModuleBase) -Recurse -Force -ErrorAction Stop
+                            $viaPath = $true
+                        }
+                    }
+                    if (-not $viaPath) { throw $pkgError }
+                }
             }
             $removed.Add($item)
         } catch {

@@ -156,6 +156,7 @@
         'Get-NRGConnectErrorText',
         'Get-NRGExoConnectHint',
         'Get-NRGCloudFileHint',
+        'Test-NRGSafeModuleVersionPath',
         'Get-NRGControlAutomationAudit',
         'Invoke-NRGCollectAADAuthPolicies',
         'Invoke-NRGCollectAADCAPolicies',

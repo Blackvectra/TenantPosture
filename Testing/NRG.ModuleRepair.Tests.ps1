@@ -253,3 +253,29 @@ Describe 'Repair-NRGModuleHealth — duplicate MSAL carrier removal' {
         }
     }
 }
+
+Describe 'Test-NRGSafeModuleVersionPath: a duplicate PSResourceGet cannot find is removed only from a real module-version folder' {
+    BeforeAll {
+        $root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $root 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        $script:Mp = 'C:\Program Files\WindowsPowerShell\Modules', 'C:\Program Files\PowerShell\Modules' -join ';'
+    }
+    It 'accepts <module>\<version> directly under a PSModulePath entry' {
+        Test-NRGSafeModuleVersionPath -Path 'C:\Program Files\WindowsPowerShell\Modules\Microsoft.Graph.Authentication\2.9.1' -Name 'Microsoft.Graph.Authentication' -Version '2.9.1' -PSModulePathValue $script:Mp | Should -BeTrue
+    }
+    It 'accepts a trailing separator and different case' {
+        Test-NRGSafeModuleVersionPath -Path 'c:\program files\powershell\modules\exchangeonlinemanagement\3.10.0\' -Name 'ExchangeOnlineManagement' -Version '3.10.0' -PSModulePathValue $script:Mp | Should -BeTrue
+    }
+    It 'refuses a path whose version folder is not the version being removed' {
+        Test-NRGSafeModuleVersionPath -Path 'C:\Program Files\PowerShell\Modules\ExchangeOnlineManagement\3.10.1' -Name 'ExchangeOnlineManagement' -Version '3.10.0' -PSModulePathValue $script:Mp | Should -BeFalse
+    }
+    It 'refuses a path that is not under a PSModulePath entry' {
+        Test-NRGSafeModuleVersionPath -Path 'D:\Temp\Microsoft.Graph.Authentication\2.9.1' -Name 'Microsoft.Graph.Authentication' -Version '2.9.1' -PSModulePathValue $script:Mp | Should -BeFalse
+    }
+    It 'refuses a module root, a drive root, a different module name and empty input' {
+        Test-NRGSafeModuleVersionPath -Path 'C:\Program Files\PowerShell\Modules' -Name 'ExchangeOnlineManagement' -Version '3.10.0' -PSModulePathValue $script:Mp | Should -BeFalse
+        Test-NRGSafeModuleVersionPath -Path 'C:\' -Name 'ExchangeOnlineManagement' -Version '3.10.0' -PSModulePathValue $script:Mp | Should -BeFalse
+        Test-NRGSafeModuleVersionPath -Path 'C:\Program Files\PowerShell\Modules\MicrosoftTeams\3.10.0' -Name 'ExchangeOnlineManagement' -Version '3.10.0' -PSModulePathValue $script:Mp | Should -BeFalse
+        Test-NRGSafeModuleVersionPath -Path '' -Name 'ExchangeOnlineManagement' -Version '3.10.0' -PSModulePathValue $script:Mp | Should -BeFalse
+    }
+}
