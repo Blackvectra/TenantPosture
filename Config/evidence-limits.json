@@ -1,0 +1,10 @@
+{
+  "_comment": "Components of a control's expected state the assessment does not establish, whatever the tenant looks like: the evaluator does not read that evidence. Every surface that shows the control also shows 'Not established: <component>.', so a reader cannot take the verified half for the whole requirement. docs/NRG-DETECTION-LIMITS.md explains each entry; add an entry here in the same change as the limitation.",
+  "Limits": [
+    {
+      "Control": "INT-1.1",
+      "NotEstablished": "configured non-compliance actions",
+      "Reason": "The assessment verifies that compliance policies are assigned and cover each enrolled platform. It does not read the configured non-compliance actions (when a device is marked noncompliant, blocked, retired or otherwise acted upon), so it cannot prove that noncompliant devices lose access or that remediation happens. INT-1.1 therefore never returns Satisfied."
+    }
+  ]
+}

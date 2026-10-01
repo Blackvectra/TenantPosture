@@ -245,7 +245,7 @@ table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nt
             foreach ($r in $trows) {
                 $inst = if ($r.Instance) { " <span class='mut'>($(& $hx $r.Instance))</span>" } else { '' }
                 $badgeCss = switch ($r.Type) { 'Manual' { 'badge m' } 'Declaration' { 'badge d' } default { 'badge' } }
-                $req = "<b>$(& $hx $r.Title)</b>$(if ($r.Required) { "<div class='mut'>Required: $(& $hx $r.Required)</div>" })"
+                $req = "<b>$(& $hx $r.Title)</b>$(if ($r.Required) { "<div class='mut'>Required: $(& $hx $r.Required)</div>" })$(if (Get-NRGEvidenceLimitNote -ControlId $r.ControlId) { "<div class='mut'><em>$(& $hx (Get-NRGEvidenceLimitNote -ControlId $r.ControlId))</em></div>" })"
                 $cmp = if ($r.ScubaId) {
                     $ind = if ($r.IndependentResult) { "<div>Independent scan: <b>$(& $hx $r.IndependentResult)</b></div>" } else { '' }
                     $diff = ''

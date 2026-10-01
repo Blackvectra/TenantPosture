@@ -160,6 +160,8 @@
         'Get-NRGGapSummary',
         'Format-NRGGapSummary',
         'Get-NRGControlViewMap',
+        'Get-NRGEvidenceLimitMap',
+        'Get-NRGEvidenceLimitNote',
         'Test-NRGSafeModuleVersionPath',
         'Get-NRGControlAutomationAudit',
         'Invoke-NRGCollectAADAuthPolicies',

@@ -96,7 +96,8 @@ say what is not assessed:
   rule list (empty until approved), so it reports the modes read and leaves the rule-set
   half not assessed.
 - **INT-1.1** Coverage per enrolled platform (a Windows policy does not cover iOS); the
-  policies' non-compliance actions are not read, so it does not reach Satisfied.
+  policies' non-compliance actions are not read, so it does not reach Satisfied (see
+  "Evidence boundaries shown with the control" below).
 - **DEF-2.3** Judged over the malware policies in force. A filter on in a policy that
   applies to nobody no longer satisfies it.
 - **Policies in force (17 evaluators).** A tenant with **no** custom rules has an empty rule
@@ -128,6 +129,25 @@ These are heuristics, not baseline controls.
 - The phishing-origin ranker reads message previews (about 255 characters), so a link later
   in the body is not seen.
 - None of the incident-response changes has had a live tenant run.
+
+## Evidence boundaries shown with the control
+
+Some controls have a component of their expected state the assessment does not establish, whatever
+the tenant looks like, because the evaluator does not read that evidence. These are recorded in
+`Config/evidence-limits.json`, and the main HTML report and the report site show "Not established:
+<component>." wherever the control is displayed, so a reader cannot take the verified half for the
+whole requirement.
+
+**INT-1.1 — Device Compliance Policies Configured.** The assessment verifies that compliance
+policies exist, are assigned, and cover each enrolled platform. It does not currently read or
+validate the configured non-compliance actions, including when a device is marked noncompliant,
+blocked, retired or otherwise acted upon. Therefore, the assessment cannot prove that noncompliant
+devices lose access or that remediation actions occur. Until those actions are collected and
+evaluated, INT-1.1 does not return Satisfied: verified components stay visible in the Detail while
+the overall result is Gap (no assigned policy), Partial (a platform with no policy) or Not assessed
+(every platform covered, actions unread). Reading "a compliance policy exists" as "noncompliant
+devices are actively restricted" is the misreading this entry exists to prevent; Conditional Access
+(AAD-2.3 / INT-1.2) is what turns device state into restricted access.
 
 ## Open verification
 

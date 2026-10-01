@@ -352,7 +352,7 @@ function Publish-NRGAssessmentHTML {
                     $rows += @"
 <tr>
   <td style='text-align:center;font-weight:700;color:var(--mut)'>$($q.Rank)</td>
-  <td><span class='mono'>$(hx $q.ControlId)</span> <span class='sv $sevCls' style='margin-left:4px'>$(hx $q.Severity)</span><div style='font-size:.82rem;color:var(--mut);margin-top:2px'>$(hx $q.Title)</div>$(if($rem){"<div style='font-size:.8rem;margin-top:4px'>$rem</div>"})</td>
+  <td><span class='mono'>$(hx $q.ControlId)</span> <span class='sv $sevCls' style='margin-left:4px'>$(hx $q.Severity)</span><div style='font-size:.82rem;color:var(--mut);margin-top:2px'>$(hx $q.Title)</div>$(if(Get-NRGEvidenceLimitNote -ControlId ([string]$q.ControlId)){"<div style='font-size:.78rem;color:var(--mut);margin-top:2px'><em>$(hx (Get-NRGEvidenceLimitNote -ControlId ([string]$q.ControlId)))</em></div>"})$(if($rem){"<div style='font-size:.8rem;margin-top:4px'>$rem</div>"})</td>
   <td style='text-align:right;white-space:nowrap;font-weight:700;color:var(--pass)'>+$($q.ScoreLift)</td>
   <td style='text-align:right;white-space:nowrap;font-weight:700'>$($q.CumulativeScore)</td>
 </tr>
@@ -1054,7 +1054,7 @@ $regHtml
                 $s2 = [string]$f.Detail; if ($s2.Length -gt 110) { hx($s2.Substring(0,107)) + '&hellip;' } else { $d }
             } elseif ($f.State -eq 'Satisfied' -and $f.CurrentValue) { $cv2 } else { '' }
 
-            $rows += "<tr $ca><td class='td1'>$(sBadge $f.State)$(svBadge $f.Severity)</td><td class='td3'><div class='ftitle'>$t $mico</div>$(if($cv2 -and $f.State -in @('Gap','Partial')){"<div class='fcv'>$cv2</div>"})</td><td class='td4'>$prev</td></tr>$exHtml"
+            $rows += "<tr $ca><td class='td1'>$(sBadge $f.State)$(svBadge $f.Severity)</td><td class='td3'><div class='ftitle'>$t $mico</div>$(if(Get-NRGEvidenceLimitNote -ControlId ([string]$f.ControlId)){"<div class='fcv'><em>$(hx (Get-NRGEvidenceLimitNote -ControlId ([string]$f.ControlId)))</em></div>"})$(if($cv2 -and $f.State -in @('Gap','Partial')){"<div class='fcv'>$cv2</div>"})</td><td class='td4'>$prev</td></tr>$exHtml"
         }
 
         $findHtml += @"
@@ -1128,7 +1128,7 @@ $regHtml
     function rmItem { param($f,$cls)
         $t4    = hx $f.Title
         $cid4  = hx $f.ControlId
-        "<div class='rm-item'><div class='rm-bullet $cls'>!</div><div><strong>$t4</strong> <span style='font-size:.7rem;color:var(--mut)'>($cid4)</span></div></div>"
+        "<div class='rm-item'><div class='rm-bullet $cls'>!</div><div><strong>$t4</strong> <span style='font-size:.7rem;color:var(--mut)'>($cid4)</span>$(if(Get-NRGEvidenceLimitNote -ControlId ([string]$f.ControlId)){" <span style='font-size:.7rem;color:var(--mut)'><em>$(hx (Get-NRGEvidenceLimitNote -ControlId ([string]$f.ControlId)))</em></span>"})</div></div>"
     }
 
     $p1Html = ($phase1Items | ForEach-Object { rmItem $_ 'p1-bullet' }) -join ''

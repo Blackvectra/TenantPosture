@@ -15,6 +15,15 @@
   drops from 69 to 67 on the same data. `NRG.GapSummary.Tests.ps1` pins Total = Distinct + Views and
   that a view of a control with no shortfall stays distinct.
 
+- **INT-1.1's evidence boundary is documented and shown with the control.** The assessment verifies that
+  compliance policies are assigned and cover each enrolled platform; it never reads the configured
+  non-compliance actions, so it cannot prove noncompliant devices lose access. INT-1.1 does not return
+  Satisfied (Gap, Partial or Not assessed; the verified components stay in the Detail), and a test pins
+  every branch. The limit is recorded in `Config/evidence-limits.json` (read by `Get-NRGEvidenceLimitNote`),
+  and the main HTML report (priority actions, roadmap, all findings) and the report site now show "Not
+  established: configured non-compliance actions." wherever INT-1.1 appears. `docs/NRG-DETECTION-LIMITS.md`
+  gains a section for it. Add an entry to the data file in the same change as any new permanent limit.
+
 - **The Tor Project host name no longer appears in shipped source or the Email-IR README.** A client's
   XDR flagged two evaluator files and a Tor-browser download on the operator's machine on the day the
   folder was extracted (the tool contacts no Tor host and downloads no executable; a CI test pins
