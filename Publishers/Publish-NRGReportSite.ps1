@@ -94,6 +94,8 @@ function Get-NRGSiteRows {
     $base = @{}
     foreach ($b in @(Get-NRGObjectField -Item $BaselineCompliance -Key 'Controls' -Default @())) { $base[[string](Get-NRGObjectField -Item $b -Key 'ControlId' -Default '')] = $b }
     $al = Get-NRGScubaAlignment
+    $linkMap = Get-NRGControlLinkMap
+    $viewMap = Get-NRGControlViewMap
     foreach ($f in @($Findings | Where-Object { $null -ne $_ })) {
         $cid  = [string](Get-NRGObjectField -Item $f -Key 'ControlId' -Default '')
         $c    = $ctl[$cid]
@@ -109,6 +111,7 @@ function Get-NRGSiteRows {
         $indep = if ($scubaId -and $Scuba -and $Scuba.ContainsKey($scubaId)) { [string]$Scuba[$scubaId] } else { '' }
         [pscustomobject]@{
             ControlId = $cid; Instance = [string](Get-NRGObjectField -Item $f -Key 'Instance' -Default '')
+            Relationship = $(if ($viewMap.ContainsKey($cid)) { "Named view of $($viewMap[$cid].Of)" } elseif ($linkMap.ContainsKey($cid) -and $linkMap[$cid].Primary -ne $cid) { "Same setting as $($linkMap[$cid].Primary) (counted once in the score)" } elseif ($linkMap.ContainsKey($cid)) { "Same setting as $((@($linkMap[$cid].Members | Where-Object { $_ -ne $cid })) -join ', ') (counted once in the score)" } else { '' })
             Workload = $prefix; Topic = [string](Get-NRGObjectField -Item $f -Key 'Category' -Default 'General')
             Title = [string](Get-NRGObjectField -Item $f -Key 'Title' -Default ''); State = [string](Get-NRGObjectField -Item $f -Key 'State' -Default '')
             Kind = $kind; VerdictLabel = $v.Label; VerdictCss = $v.Css; Type = $type
@@ -144,13 +147,13 @@ function Publish-NRGActionPlan {
         $action = if ($r.State -in @('Gap', 'Partial', 'Error')) { 'Remediate' } elseif ($r.Kind -eq 'StandardNotApproved') { 'Approve the NRG standard' } elseif ($r.Kind -eq 'Manual') { 'Verify manually' } else { 'Re-collect and verify' }
         [ordered]@{
             'Control ID' = $r.ControlId; 'Instance' = $r.Instance; 'Workload' = $r.Workload; 'Security topic' = $r.Topic; 'Control' = $r.Title
-            'NRG verdict' = $r.VerdictLabel; 'Risk severity' = $r.RiskSeverity; 'Check type' = $r.Type; 'Action type' = $action
+            'NRG verdict' = $r.VerdictLabel; 'Risk severity' = $r.RiskSeverity; 'Check type' = $r.Type; 'Action type' = $action; 'Relationship to other controls' = $r.Relationship
             'Observed' = $r.Observed; 'Required' = $r.Required; 'Why (verified / shortfall / not assessed)' = $r.Detail; 'Remediation' = $r.Remediation
             'Suggested owner area' = $r.Owner; 'Owner' = ''; 'Target date' = ''; 'Resolution status' = 'Open'; 'Evidence of resolution' = ''; 'Notes' = ''
         }
     }
     $lines = [System.Collections.Generic.List[string]]::new()
-    $hdr = @('Control ID','Instance','Workload','Security topic','Control','NRG verdict','Risk severity','Check type','Action type','Observed','Required','Why (verified / shortfall / not assessed)','Remediation','Suggested owner area','Owner','Target date','Resolution status','Evidence of resolution','Notes')
+    $hdr = @('Control ID','Instance','Workload','Security topic','Control','NRG verdict','Risk severity','Check type','Action type','Relationship to other controls','Observed','Required','Why (verified / shortfall / not assessed)','Remediation','Suggested owner area','Owner','Target date','Resolution status','Evidence of resolution','Notes')
     $lines.Add(($hdr | ForEach-Object { '"' + ($_ -replace '"', '""') + '"' }) -join ',')
     foreach ($o in @($out)) { $lines.Add((($hdr | ForEach-Object { '"' + ((ConvertTo-NRGCsvCell $o[$_]) -replace '"', '""') + '"' }) -join ',')) }
     [System.IO.File]::WriteAllLines($Path, $lines, [System.Text.UTF8Encoding]::new($true))
@@ -298,6 +301,13 @@ table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nt
     $landing += "<h2>Workloads</h2><table><thead><tr><th>Workload</th><th>Satisfied</th><th>Partial</th><th>Gap</th><th>Not assessed</th><th>Not scored</th></tr></thead><tbody>"
     foreach ($wl in $counts.Keys) { $c = $counts[$wl]; $landing += "<tr><td><a href='$wl.html'><b>$(& $hx $c.Name)</b></a> <span class='mut'>($($c.Total) findings)</span></td><td>$($c.Satisfied)</td><td>$($c.Partial)</td><td>$($c.Gap)</td><td>$($c.NotAssessed)</td><td>$($c.Other)</td></tr>" }
     $landing += '</tbody></table>'
+    $gapSummary = Get-NRGGapSummary -Findings $Findings
+    if ($gapSummary.GapControls -gt 0) {
+        $landing += "<h2>Gap controls and underlying deficiencies</h2><div class='card'><p>$(& $hx (Format-NRGGapSummary -Summary $gapSummary))</p>"
+        if (@($gapSummary.NamedViews).Count -gt 0) { $landing += '<p><b>Named-object views of another Gap control</b></p><ul>' + ((@($gapSummary.NamedViews | ForEach-Object { "<li><b>$(& $hx $_.Control)</b> is a view of <b>$(& $hx $_.Of)</b>: $(& $hx $_.Reason)</li>" })) -join '') + '</ul>' }
+        if (@($gapSummary.FoldedSameSetting).Count -gt 0) { $landing += '<p><b>Controls that read the same setting (counted once in the score)</b></p><ul>' + ((@($gapSummary.FoldedSameSetting | ForEach-Object { "<li><b>$(& $hx $_.Primary)</b> also covers $(& $hx (@($_.AlsoCounted) -join ', '))</li>" })) -join '') + '</ul>' }
+        $landing += '</div>'
+    }
     $kinds = [ordered]@{ Collection = 'Collection failures (evidence not read)'; Licensing = 'Licensing limits (not scored)'; Manual = 'Manual checks (no automated test)'; Declaration = 'Operator declarations (not verified)'; StandardNotApproved = 'NRG standards not approved or configured' }
     $landing += "<h2>Limitations, kept distinct</h2><div class='card'><ul>"
     foreach ($k in $kinds.Keys) { $n = @($rows | Where-Object { $_.Kind -eq $k }).Count; $landing += "<li><b>$n</b> $(& $hx $kinds[$k])$(if ($n -gt 0) { ': ' + ((@($rows | Where-Object { $_.Kind -eq $k } | Select-Object -First 12 | ForEach-Object { $_.ControlId } | Sort-Object -Unique) -join ', ') -replace '&', '&amp;') + $(if ($n -gt 12) { ', ...' }) })</li>" }

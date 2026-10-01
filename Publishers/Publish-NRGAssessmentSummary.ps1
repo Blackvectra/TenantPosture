@@ -117,6 +117,10 @@ function Publish-NRGAssessmentSummary {
     $null = $sb.AppendLine("| — Not Applicable | $na |")
     $null = $sb.AppendLine("| **Total Controls** | **$total** |")
     $null = $sb.AppendLine()
+    if ($gap -gt 0 -and (Get-Command Get-NRGGapSummary -ErrorAction SilentlyContinue)) {
+        $null = $sb.AppendLine("**Gap controls are not all separate exposures.** $(Format-NRGGapSummary -Summary (Get-NRGGapSummary -Findings $Findings))")
+        $null = $sb.AppendLine()
+    }
 
     # ── Risk Exposure (PR #8 — Get-NRGAggregateRisk) ─────────────────────────
     # Translates open Gap and Partial findings into annualized loss expectancy

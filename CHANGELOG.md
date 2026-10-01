@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **The report separates total Gap controls from distinct deficiencies.** 69 Gap controls are not 69
+  exposures. `Get-NRGGapSummary` / `Format-NRGGapSummary` report the scored Gap controls, how many
+  are a named-object view of a control that already reports the shortfall (new `Views` in
+  `Config/control-links.json`: AAD-12.1 of AAD-1.2, EXO-6.4 and EXO-7.4 of EXO-1.2), how many
+  further controls read the same setting as a Gap control and are already counted once, and the
+  distinct requirements left, with the caution that distinct requirements can still share a root
+  cause. The sentence appears on the console, in the Markdown summary and on the report-site
+  landing page; `ActionPlan.csv` gains a "Relationship to other controls" column. Two same-setting
+  pairs the first full run exposed are now linked for scoring so one setting costs once: SPO-1.4 /
+  SPO-3.4 (guest-access expiration) and SPO-2.6 / SPO-2.7 (email attestation); the NDACo Gap count
+  drops from 69 to 67 on the same data. `NRG.GapSummary.Tests.ps1` pins Total = Distinct + Views and
+  that a view of a control with no shortfall stays distinct.
+
 - **AAD-6.2 and AAD-6.3 are two independent verdicts; one disabled workflow is one baseline failure.**
   AAD-6.2 (User Consent to Apps Restricted) had been requiring the admin consent workflow as well as
   restricted user consent, so a disabled workflow cost two baseline failures (AAD-6.2 Partial and

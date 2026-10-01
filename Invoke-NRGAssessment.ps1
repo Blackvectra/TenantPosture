@@ -1484,7 +1484,7 @@ if (-not $JsonOnly) {
     if (-not $SkipReportSite -and (Get-Command Publish-NRGReportSite -ErrorAction SilentlyContinue)) {
         $siteDir = Join-Path $OutputPath "$baseName-report"
         try {
-            $siteResult = Publish-NRGReportSite -Metadata $reportMetadata -Findings $findings -OutputPath $siteDir `
+            $null = Publish-NRGReportSite -Metadata $reportMetadata -Findings $findings -OutputPath $siteDir `
                 -BaselineCompliance $baselineCompliance -Coverage (Get-NRGCoverage) -ScubaResultsPath $ScubaResultsPath
             Write-NRGReportFile 'Report site (index.html)' (Join-Path $siteDir 'index.html')
             Write-NRGReportFile 'Action plan (csv)' (Join-Path $siteDir 'ActionPlan.csv')
@@ -1579,6 +1579,12 @@ Write-Host "================================================================" -F
 Write-Host "  Satisfied      $($s.Satisfied)"                                  -ForegroundColor Green
 Write-Host "  Partial        $($s.Partial)"                                    -ForegroundColor Yellow
 Write-Host "  Gap            $($s.Gap)"                                        -ForegroundColor Red
+if ($s.Gap -gt 0) {
+    try {
+        $gs = Get-NRGGapSummary -Findings $findings
+        Write-Host "                 = $($gs.DistinctDeficiencies) distinct requirement(s) + $(@($gs.NamedViews).Count) named-object view(s) of a control that already reports the shortfall; $($gs.FoldedControls) more control(s) share a setting and are already counted once" -ForegroundColor DarkGray
+    } catch { Write-Verbose "Gap summary skipped: $($_.Exception.Message)" }
+}
 Write-Host "  Not Applicable $($s.NA)"                                         -ForegroundColor DarkGray
 if ($s.Error -gt 0) {
     Write-Host "  Error          $($s.Error) (collector failures — excluded from score)" -ForegroundColor Magenta
