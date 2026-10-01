@@ -184,6 +184,8 @@ function Publish-NRGRemediationPlaybook {
         if ($licNote) { $lines.Add($licNote); $lines.Add("") }
         $lines.Add("**Risk:** $(EscMd $f.Detail)")
         $lines.Add("")
+        $limNote = Get-NRGEvidenceLimitNote -ControlId ([string]$f.ControlId)
+        if ($limNote) { $lines.Add("**Evidence boundary:** $(EscMd $limNote)  "); $lines.Add("") }
         if ($f.CurrentValue) { $lines.Add("**Current state:** ``$(EscMd $f.CurrentValue)``  ") }
         if ($f.RequiredValue) { $lines.Add("**Required state:** ``$(EscMd $f.RequiredValue)``  ") }
         $lines.Add("")
@@ -280,7 +282,7 @@ function Publish-NRGRemediationPlaybook {
         $null = $sb.AppendLine("| Control | Current State | Required |")
         $null = $sb.AppendLine("|---------|--------------|---------|")
         foreach ($f in ($partials | Select-Object -First 20)) {
-            $null = $sb.AppendLine("| $(EscMd $f.ControlId) — $(EscMd $f.Title) | $(EscMd ($f.CurrentValue ?? 'See report')) | $(EscMd ($f.RequiredValue ?? 'See report')) |")
+            $null = $sb.AppendLine("| $(EscMd $f.ControlId) — $(EscMd $f.Title)$(Get-NRGEvidenceLimitMd $f.ControlId) | $(EscMd ($f.CurrentValue ?? 'See report')) | $(EscMd ($f.RequiredValue ?? 'See report')) |")
         }
         $null = $sb.AppendLine()
     }
@@ -521,6 +523,8 @@ function Publish-NRGRemediationPlaybook {
                 $out += "<div class=`"lic`">&#128273; Requires: $(& $Esc $ctrl.LicenseRequirement)</div>"
             }
             if ($bizRisk)        { $out += "<div class=`"row`"><b>Risk</b> $(& $Esc $bizRisk)</div>" }
+            $limNoteH = Get-NRGEvidenceLimitNote -ControlId ([string]$f.ControlId)
+            if ($limNoteH)       { $out += "<div class=`"row`"><b>Evidence boundary</b> $(& $Esc $limNoteH)</div>" }
             if ($f.CurrentValue) { $out += "<div class=`"row`"><b>Current state</b> <code>$(& $Esc $f.CurrentValue)</code></div>" }
             if ($f.RequiredValue){ $out += "<div class=`"row`"><b>Required state</b> <code>$(& $Esc $f.RequiredValue)</code></div>" }
             if ($remedy) {

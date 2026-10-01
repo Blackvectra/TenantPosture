@@ -40,3 +40,13 @@ function Get-NRGEvidenceLimitNote {
     if (-not $ControlId -or -not $map.ContainsKey($ControlId)) { return '' }
     return "Not established: $($map[$ControlId].NotEstablished)."
 }
+
+# The same note as a Markdown suffix for a table cell (" *Not established: ...*"), or '' when none is recorded.
+function Get-NRGEvidenceLimitMd {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $ControlId)
+    $n = Get-NRGEvidenceLimitNote -ControlId $ControlId
+    if ($n) { return " *$n*" }
+    return ''
+}

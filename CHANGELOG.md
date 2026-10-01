@@ -15,6 +15,18 @@
   drops from 69 to 67 on the same data. `NRG.GapSummary.Tests.ps1` pins Total = Distinct + Views and
   that a view of a control with no shortfall stays distinct.
 
+- **AAD-1.4 / AAD-1.5: report-only is Partial only when the policy is otherwise complete.** Report-only
+  collects evaluation data and enforces nothing. A risk policy in report-only mode is now Partial only when it
+  meets every requirement (AAD-1.5: high user risk; AAD-1.4: high and medium sign-in risk; a responding grant;
+  all users and all applications; no platform, location, device-filter or application-exclusion narrowing) and
+  is a Gap otherwise (absent, disabled, wrong level, wrong grant or narrower scope), with the staged policies
+  named in the Detail. Partial is still a failed baseline requirement. When the Conditional Access list could not
+  be proven complete (`PolicyCompleteness` Failed) and no enforced qualifying policy was read, both controls are
+  Not assessed and filed as a collection gap, never a Gap; results collected before that field existed replay
+  unchanged. The INT-1.1 "Not established: configured non-compliance actions." note now also appears in the
+  Markdown report's control detail and in the remediation playbook (Markdown and HTML), and stays out of the
+  executive summary.
+
 - **INT-1.1's evidence boundary is documented and shown with the control.** The assessment verifies that
   compliance policies are assigned and cover each enrolled platform; it never reads the configured
   non-compliance actions, so it cannot prove noncompliant devices lose access. INT-1.1 does not return

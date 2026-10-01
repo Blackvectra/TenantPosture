@@ -162,6 +162,7 @@
         'Get-NRGControlViewMap',
         'Get-NRGEvidenceLimitMap',
         'Get-NRGEvidenceLimitNote',
+        'Get-NRGEvidenceLimitMd',
         'Test-NRGSafeModuleVersionPath',
         'Get-NRGControlAutomationAudit',
         'Invoke-NRGCollectAADAuthPolicies',

@@ -503,7 +503,7 @@ function Publish-NRGAssessmentSummary {
             $title = EscMd $f.Title
             $detail = EscMd ($f.Detail ?? '')
             $remedy = EscMd ($f.Remediation ?? '')
-            $null = $sb.AppendLine("| $(EscMd $f.ControlId) | **$title** — $detail | $remedy |")
+            $null = $sb.AppendLine("| $(EscMd $f.ControlId) | **$title** — $detail$(Get-NRGEvidenceLimitMd $f.ControlId) | $remedy |")
         }
         $null = $sb.AppendLine()
     }
@@ -514,7 +514,7 @@ function Publish-NRGAssessmentSummary {
         $null = $sb.AppendLine("| Control | Finding | Remediation |")
         $null = $sb.AppendLine("|---------|---------|-------------|")
         foreach ($f in $highGaps) {
-            $null = $sb.AppendLine("| $(EscMd $f.ControlId) | **$(EscMd $f.Title)** — $(EscMd ($f.Detail ?? '')) | $(EscMd ($f.Remediation ?? '')) |")
+            $null = $sb.AppendLine("| $(EscMd $f.ControlId) | **$(EscMd $f.Title)** — $(EscMd ($f.Detail ?? ''))$(Get-NRGEvidenceLimitMd $f.ControlId) | $(EscMd ($f.Remediation ?? '')) |")
         }
         $null = $sb.AppendLine()
     }
@@ -525,7 +525,7 @@ function Publish-NRGAssessmentSummary {
         $null = $sb.AppendLine("| Control | Severity | Finding |")
         $null = $sb.AppendLine("|---------|----------|---------|")
         foreach ($f in $otherGaps) {
-            $null = $sb.AppendLine("| $(EscMd $f.ControlId) | $(EscMd $f.Severity) | $(EscMd $f.Title) |")
+            $null = $sb.AppendLine("| $(EscMd $f.ControlId) | $(EscMd $f.Severity) | $(EscMd $f.Title)$(Get-NRGEvidenceLimitMd $f.ControlId) |")
         }
         $null = $sb.AppendLine()
     }
@@ -561,7 +561,7 @@ function Publish-NRGAssessmentSummary {
         Category, ControlId
     foreach ($f in $sorted) {
         $icon = $stateIcon[$f.State] ?? $f.State
-        $null = $sb.AppendLine("| $(EscMd $f.ControlId) | $(EscMd $f.Category) | $icon $(EscMd $f.State) | $(EscMd $f.Severity) | $(EscMd $f.Title) |")
+        $null = $sb.AppendLine("| $(EscMd $f.ControlId) | $(EscMd $f.Category) | $icon $(EscMd $f.State) | $(EscMd $f.Severity) | $(EscMd $f.Title)$(Get-NRGEvidenceLimitMd $f.ControlId) |")
     }
     $null = $sb.AppendLine()
 
@@ -575,7 +575,7 @@ function Publish-NRGAssessmentSummary {
         $null = $sb.AppendLine("| Control | Category | Title |")
         $null = $sb.AppendLine("|---------|----------|-------|")
         foreach ($f in ($naFindings | Sort-Object Category, ControlId)) {
-            $null = $sb.AppendLine("| $(EscMd $f.ControlId) | $(EscMd $f.Category) | $(EscMd $f.Title) |")
+            $null = $sb.AppendLine("| $(EscMd $f.ControlId) | $(EscMd $f.Category) | $(EscMd $f.Title)$(Get-NRGEvidenceLimitMd $f.ControlId) |")
         }
         $null = $sb.AppendLine()
         $null = $sb.AppendLine("</details>")

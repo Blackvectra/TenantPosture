@@ -94,14 +94,41 @@ Describe 'Identity controls report what the tenant is configured to do' {
             Ca (@(Pol -Apps @('None') -ClientApps @('other') -Grant @('block')) + @(Pol -Name 'all' -ClientApps @('other') -Grant @('block')))
             (V 'Test-NRGControlAADLegacyAuth' 'AAD-1.1').State | Should -Be 'Satisfied'
         }
-        It 'AAD-1.4 / 1.5: a risk policy in report-only mode is not enforcing (still a Gap) but is named so the administrator knows it is staged' {
-            $u = Pol -Name 'CA-IDP-001-UserRisk-High' -State 'enabledForReportingButNotEnforced' -Grant @('riskRemediation'); $u.Conditions.UserRiskLevels = @('high')
-            $sg = Pol -Name 'CA-IDP-002-SignInRisk' -State 'enabledForReportingButNotEnforced' -Grant @('mfa'); $sg.Conditions.SignInRiskLevels = @('high', 'medium')
-            Ca @($u, $sg)
-            $a = V 'Test-NRGControlAADUserRisk' 'AAD-1.5'; $a.State | Should -Be 'Gap'; $a.Detail | Should -Match 'Report-only \(audit mode, not enforcing\): CA-IDP-001-UserRisk-High'
-            $b = V 'Test-NRGControlAADSignInRisk' 'AAD-1.4'; $b.State | Should -Be 'Gap'; $b.Detail | Should -Match 'Report-only \(audit mode, not enforcing\): CA-IDP-002-SignInRisk'
+        It 'AAD-1.4 / 1.5: report-only is Partial only when the policy meets every scope, risk and grant condition; otherwise Gap; disabled is Gap' {
+            $mk = { param($state, $risk, $levels, $grant, $apps = @('All'), $users = @('All'))
+                $p = Pol -Name "risk-$state" -State $state -Grant $grant -Users $users
+                $p.Conditions.Applications.Include = $apps
+                if ($risk -eq 'user') { $p.Conditions.UserRiskLevels = $levels } else { $p.Conditions.SignInRiskLevels = $levels }
+                $p }
+            # AAD-1.5 user risk
+            Ca @((& $mk 'enabledForReportingButNotEnforced' 'user' @('high') @('riskRemediation')))
+            $f = V 'Test-NRGControlAADUserRisk' 'AAD-1.5'; $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'report-only mode'; $f.Detail | Should -Match 'still a failed baseline requirement'
+            Ca @((& $mk 'enabledForReportingButNotEnforced' 'user' @('low') @('riskRemediation')));            (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Gap'    # wrong level
+            Ca @((& $mk 'enabledForReportingButNotEnforced' 'user' @('high') @('compliantDevice')));         (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Gap'    # grant does not respond
+            Ca @((& $mk 'enabledForReportingButNotEnforced' 'user' @('high') @('riskRemediation') @('00000003-0000-0ff1-ce00-000000000000'))); (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Gap' # one application only
+            Ca @((& $mk 'enabledForReportingButNotEnforced' 'user' @('high') @('riskRemediation') @('All') @()));                                  (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Gap' # no users
+            Ca @((& $mk 'disabled' 'user' @('high') @('riskRemediation')));                                  (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Gap'    # disabled
+            Ca @();                                                                                          $none = V 'Test-NRGControlAADUserRisk' 'AAD-1.5'; $none.State | Should -Be 'Gap'; $none.Detail | Should -Not -Match 'Report-only'
+            # AAD-1.4 sign-in risk: Microsoft's template selects High and Medium
+            Ca @((& $mk 'enabledForReportingButNotEnforced' 'signin' @('high', 'medium') @('mfa')));         $g = V 'Test-NRGControlAADSignInRisk' 'AAD-1.4'; $g.State | Should -Be 'Partial'; $g.Detail | Should -Match 'report-only mode'
+            Ca @((& $mk 'enabledForReportingButNotEnforced' 'signin' @('high') @('mfa')));                   (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Gap'  # only one level
+            Ca @((& $mk 'disabled' 'signin' @('high', 'medium') @('mfa')));                                  (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Gap'
+            # an enforced policy still wins over a report-only one
+            Ca @((& $mk 'enabled' 'user' @('high') @('riskRemediation')), (& $mk 'enabledForReportingButNotEnforced' 'user' @('high') @('riskRemediation')))
+            (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
+        }
+        It 'AAD-1.4 / 1.5: a policy list that could not be proven complete is not assessed, never a Gap; an absent key replays as complete' {
+            $incomplete = { param($pols) Clear-NRGState; Set-NRGRawData -Key 'AAD-CAPolicies' -Data (Bag @{ Policies = @($pols); SectionStatus = @{ TokenProtection = 'Collected'; NamedLocations = 'Collected'; PolicyCompleteness = 'Failed' } }) }
+            & $incomplete @()
+            $a = V 'Test-NRGControlAADUserRisk' 'AAD-1.5'; $a.State | Should -Be 'NotApplicable'; $a.Detail | Should -Match '^Not assessed: the Conditional Access policy list could not be read in full'
+            (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'NotApplicable'
+            @((Get-NRGAssessmentScope -Findings @(Get-NRGFindings)).CollectionIncomplete | ForEach-Object { $_.ControlId }) | Should -Contain 'AAD-1.5' -Because 'it must be named as a collection gap, not filed as an advisory'
+            # an enforced qualifying policy is still a pass: the missing policies cannot make it worse
+            $ok = Pol -Name 'u' -Grant @('riskRemediation'); $ok.Conditions.UserRiskLevels = @('high')
+            & $incomplete @($ok)
+            (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
             Ca @()
-            (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').Detail | Should -Not -Match 'Report-only'
+            (V 'Test-NRGControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Gap' -Because 'results collected before the beta merge have no PolicyCompleteness and replay unchanged'
         }
         It 'AAD-1.4 / 1.5: blocking and risk-remediation responses count' {
             Ca @(Pol -SignInRisk @('high', 'medium') -Grant @('block'));   (V 'Test-NRGControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied'

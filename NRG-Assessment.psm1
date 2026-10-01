@@ -195,7 +195,7 @@ $script:ExportedFunctions = @(
     'Get-NRGBaselineExceptionPath', 'Get-NRGBaselineException', 'New-NRGBaselineException', 'Set-NRGBaselineException', 'Remove-NRGBaselineException',
     'Get-NRGModuleHealth',
     'Repair-NRGModuleHealth',
-    'Get-NRGModuleInstallScope', 'Get-NRGExoModuleFloor', 'Get-NRGCloudFileHint', 'Get-NRGMsalConflictHint', 'Get-NRGGapSummary', 'Format-NRGGapSummary', 'Get-NRGControlViewMap', 'Get-NRGEvidenceLimitMap', 'Get-NRGEvidenceLimitNote', 'Test-NRGSafeModuleVersionPath', 'Get-NRGConnectErrorText', 'Get-NRGExoConnectHint',
+    'Get-NRGModuleInstallScope', 'Get-NRGExoModuleFloor', 'Get-NRGCloudFileHint', 'Get-NRGMsalConflictHint', 'Get-NRGGapSummary', 'Format-NRGGapSummary', 'Get-NRGControlViewMap', 'Get-NRGEvidenceLimitMap', 'Get-NRGEvidenceLimitNote', 'Get-NRGEvidenceLimitMd', 'Test-NRGSafeModuleVersionPath', 'Get-NRGConnectErrorText', 'Get-NRGExoConnectHint',
     'Get-NRGControlAutomationAudit',
 
     # ── Collectors — AAD ──────────────────────────────────────────────────────

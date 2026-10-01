@@ -94,4 +94,25 @@ Describe 'INT-1.1: configured non-compliance actions are not established' {
         @($cfg.Limits).Count | Should -BeGreaterThan 0
         foreach ($l in @($cfg.Limits)) { $ids | Should -Contain $l.Control; [string]$l.NotEstablished | Should -Not -BeNullOrEmpty; [string]$l.Reason | Should -Not -BeNullOrEmpty }
     }
+
+    It 'the Markdown report and the remediation playbook show it in control detail and keep it out of the executive summary' {
+        Clear-NRGState
+        Add-NRGFinding -ControlId 'INT-1.1' -State 'Gap' -Severity 'High' -Category 'Endpoint' -Title 'Device Compliance Policies Configured' -Detail 'No device compliance policies configured.' -CurrentValue 'none' -RequiredValue 'one' -Remediation 'Create one.'
+        Add-NRGFinding -ControlId 'INT-1.2' -State 'Gap' -Severity 'High' -Category 'Endpoint' -Title 'Non-Compliant Device Access Blocked via CA' -Detail 'No policy.' -CurrentValue 'none' -RequiredValue 'one' -Remediation 'Create one.'
+        $f = @(Get-NRGFindings)
+        $meta = @{ TenantDomain = 'contoso.example'; TenantId = '00000000-0000-0000-0000-000000000000'; Operator = 'a'; AssessmentDate = 'October 1, 2026'; AssessmentTime = '2026-10-01T00:00:00+00:00'; ToolVersion = '4.14.3'; QuickScan = $false }
+        $conn = @{ Graph = $true; EXO = $true; IPPSSession = $true; Teams = $true; SharePoint = $true }
+        $dir = Join-Path ([IO.Path]::GetTempPath()) ('nrg-limm-' + [guid]::NewGuid().ToString('N').Substring(0, 8)); New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        try {
+            Publish-NRGAssessmentSummary -Metadata $meta -Findings $f -Connections $conn -OutputPath (Join-Path $dir 'a.md') -ErrorAction Stop | Out-Null
+            $md = Get-Content -LiteralPath (Join-Path $dir 'a.md') -Raw
+            $md | Should -Match '\*Not established: configured non-compliance actions\.\*'
+            @($md -split "`n" | Where-Object { $_ -match 'Not established: configured non-compliance' -and $_ -notmatch 'INT-1\.1' }).Count | Should -Be 0 -Because 'the note belongs to INT-1.1 rows only; INT-1.2 is a different control'
+
+            Publish-NRGRemediationPlaybook -Metadata $meta -Findings $f -Connections $conn -OutputPath (Join-Path $dir 'p.md') -ExecutivePath (Join-Path $dir 'e.md') -HtmlOutputPath (Join-Path $dir 'p.html') -ErrorAction Stop
+            (Get-Content -LiteralPath (Join-Path $dir 'p.md') -Raw)   | Should -Match 'Evidence boundary:\*\* Not established: configured non-compliance actions\.'
+            (Get-Content -LiteralPath (Join-Path $dir 'p.html') -Raw) | Should -Match 'Evidence boundary</b> Not established: configured non-compliance actions\.'
+            (Get-Content -LiteralPath (Join-Path $dir 'e.md') -Raw)   | Should -Not -Match 'Not established' -Because 'the executive summary stays free of control-level limits'
+        } finally { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue; Clear-NRGState }
+    }
 }

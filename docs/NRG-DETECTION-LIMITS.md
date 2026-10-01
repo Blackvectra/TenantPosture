@@ -134,8 +134,9 @@ These are heuristics, not baseline controls.
 
 Some controls have a component of their expected state the assessment does not establish, whatever
 the tenant looks like, because the evaluator does not read that evidence. These are recorded in
-`Config/evidence-limits.json`, and the main HTML report and the report site show "Not established:
-<component>." wherever the control is displayed, so a reader cannot take the verified half for the
+`Config/evidence-limits.json`, and the main HTML report, the report site, the Markdown report's control
+detail and the remediation playbook show "Not established: <component>." wherever the control is
+displayed (never in the executive summary), so a reader cannot take the verified half for the
 whole requirement.
 
 **INT-1.1 — Device Compliance Policies Configured.** The assessment verifies that compliance

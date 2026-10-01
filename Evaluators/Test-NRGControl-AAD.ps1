@@ -514,6 +514,12 @@ function Test-NRGControlAADSignInRisk {
     $levels = @($riskPolicies | ForEach-Object { @($_.Conditions.SignInRiskLevels) } | ForEach-Object { [string]$_ } | Sort-Object -Unique)
     $high = $levels -contains 'high'; $medium = $levels -contains 'medium'
     $names = (@($riskPolicies | ForEach-Object { [string]$_.DisplayName }) -join ', ')
+    $ro14 = Get-NRGRiskReportOnlyPolicies -Policies $ca.Data['Policies'] -Condition 'SignInRiskLevels' -RequiredLevels @('high','medium') -GrantAny @('mfa','authStrength','block')
+    if (-not ($high -and $medium) -and (Get-NRGPolicyListIncomplete -CA $ca)) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Not assessed: the Conditional Access policy list could not be read in full (the beta list failed and the v1.0 list withholds some policies), so whether a complete sign-in risk policy exists was not established.$(if ($names) { " Enabled sign-in risk policies read: $names." })"
+        return
+    }
     if ($high -and $medium) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Sign-in risk Conditional Access in force for high and medium risk: $names"
     } elseif ($high -or $medium) {
@@ -521,28 +527,62 @@ function Test-NRGControlAADSignInRisk {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
             -Detail "The enabled sign-in risk policies ($names) apply to $(if ($high) { 'high' } else { 'medium' })-risk sign-ins only. A policy applies only to the risk levels it selects, so a $missing-risk sign-in is let through without a challenge; Microsoft's template selects High and Medium." `
             -CurrentValue "signInRiskLevels = $($levels -join ', ')" -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
+    } elseif ($riskPolicies.Count -eq 0 -and @($ro14.Qualifying).Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail "A sign-in risk policy meets every requirement (high and medium sign-in risk, all users and applications, a responding control) but is in report-only mode, which collects evaluation data and enforces nothing: $(@($ro14.Qualifying) -join ', '). Until it is turned on, a risky sign-in is let through without a challenge; Partial is still a failed baseline requirement.$(Get-NRGRiskReportOnlyNote -ReportOnly $ro14)" `
+            -CurrentValue "Report-only: $(@($ro14.Qualifying) -join ', ')" -RequiredValue 'CA policy in force: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
     } elseif ($riskPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
             -Detail "The enabled sign-in risk policies ($names) apply to $($levels -join ', ') risk only, so a medium- or high-risk sign-in (password spray, anonymous IP, token replay) is let through without a challenge." `
             -CurrentValue "signInRiskLevels = $($levels -join ', ')" -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail ('No enabled Conditional Access policy uses the sign-in risk condition, so a sign-in Identity Protection rates risky (password spray, anonymous IP, token replay) is let through without a challenge. (Sign-in risk policies need Entra ID P2; on a tenant without it this control is not scored.)' + (Get-NRGRiskReportOnlyNote -Policies $ca.Data['Policies'] -Condition 'SignInRiskLevels')) -CurrentValue 'No sign-in risk policy' -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail ('No enabled Conditional Access policy uses the sign-in risk condition, so a sign-in Identity Protection rates risky (password spray, anonymous IP, token replay) is let through without a challenge. (Sign-in risk policies need Entra ID P2; on a tenant without it this control is not scored.)' + (Get-NRGRiskReportOnlyNote -ReportOnly $ro14)) -CurrentValue 'No sign-in risk policy' -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
     }
 }
 
-# Risk-based Conditional Access policies that exist but are only in report-only (audit) mode. They are not
-# enforcing, so they never change the verdict, but "no policy" is the wrong thing to tell an administrator
-# who already has one staged: say which ones, so the next step is to review and enforce them.
+# Risk-based Conditional Access policies in report-only (audit) mode. Report-only collects evaluation
+# telemetry and enforces nothing, so it is never a pass. One that would satisfy the requirement if it were
+# enforced (every required risk level, a responding grant, and a scope of all users and all applications with no
+# platform, location, device-filter or application-exclusion narrowing) is part-way (Partial); anything else
+# is a Gap. Both remain failed baseline requirements.
+# True only when the collector says the Conditional Access list could not be proven complete. A key that is
+# absent (results collected before the beta merge existed) counts as complete, so older results replay unchanged.
+function Get-NRGPolicyListIncomplete {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([AllowNull()] $CA)
+    $st = [string](Get-NRGNestedProperty -Object $CA -Path 'Data.SectionStatus.PolicyCompleteness' -Default '')
+    return ($st -in @('Failed', 'NotRun'))
+}
+
+function Get-NRGRiskReportOnlyPolicies {
+    [CmdletBinding()]
+    param([AllowNull()] [object[]] $Policies, [Parameter(Mandatory)] [ValidateSet('SignInRiskLevels', 'UserRiskLevels')] [string] $Condition,
+          [Parameter(Mandatory)] [string[]] $RequiredLevels, [Parameter(Mandatory)] [string[]] $GrantAny)
+    $qualifying = [System.Collections.Generic.List[string]]::new()
+    $other = [System.Collections.Generic.List[string]]::new()
+    foreach ($pol in @($Policies)) {
+        if ($null -eq $pol) { continue }
+        if ([string](Get-NRGObjectField -Item $pol -Key 'State' -Default '') -ne 'enabledForReportingButNotEnforced') { continue }
+        $levels = @(Get-NRGNestedProperty -Object $pol -Path "Conditions.$Condition" -Default @() | ForEach-Object { [string]$_ } | Where-Object { $_ })
+        if ($levels.Count -eq 0) { continue }
+        $name = [string](Get-NRGObjectField -Item $pol -Key 'DisplayName' -Default '')
+        $why = [System.Collections.Generic.List[string]]::new()
+        $missing = @($RequiredLevels | Where-Object { $_ -notin $levels })
+        if ($missing.Count -gt 0) { $why.Add("does not select $($missing -join '/') risk") }
+        if (-not (Test-NRGCAGrantRequires -Policy $pol -Any $GrantAny)) { $why.Add('does not require a responding control') }
+        foreach ($n in @(Get-NRGCANarrowing -Policy $pol | Where-Object { $_ -ne 'applies only at certain risk levels' })) { $why.Add($n) }
+        if ($why.Count -eq 0) { $qualifying.Add($name) } else { $other.Add("$name ($($why -join '; '))") }
+    }
+    [pscustomobject]@{ Qualifying = @($qualifying); Other = @($other) }
+}
+
 function Get-NRGRiskReportOnlyNote {
     [CmdletBinding()]
     [OutputType([string])]
-    param([AllowNull()] [object[]] $Policies, [Parameter(Mandatory)] [ValidateSet('SignInRiskLevels', 'UserRiskLevels')] [string] $Condition)
-    $ro = @(@($Policies) | Where-Object {
-            $null -ne $_ -and [string](Get-NRGObjectField -Item $_ -Key 'State' -Default '') -eq 'enabledForReportingButNotEnforced' -and
-            @(Get-NRGNestedProperty -Object $_ -Path "Conditions.$Condition" -Default @()).Count -gt 0
-        } | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'DisplayName' -Default '') } | Where-Object { $_ })
-    if ($ro.Count -eq 0) { return '' }
-    return " Report-only (audit mode, not enforcing): $($ro -join ', '). Review the audit results and turn on to enforce."
+    param([AllowNull()] $ReportOnly)
+    if ($null -eq $ReportOnly -or @($ReportOnly.Other).Count -eq 0) { return '' }
+    return " Report-only (audit mode, not enforcing) and not meeting the full requirement: $(@($ReportOnly.Other) -join '; ')."
 }
 
 # ── AAD-1.5 User Risk CA Policy ───────────────────────────────────────────────
@@ -572,14 +612,26 @@ function Test-NRGControlAADUserRisk {
     # a policy without the High level never applies to those accounts.
     $levels = @($riskPolicies | ForEach-Object { @($_.Conditions.UserRiskLevels) } | ForEach-Object { [string]$_ } | Sort-Object -Unique)
     $names = (@($riskPolicies | ForEach-Object { [string]$_.DisplayName }) -join ', ')
+    $ro15 = Get-NRGRiskReportOnlyPolicies -Policies $ca.Data['Policies'] -Condition 'UserRiskLevels' -RequiredLevels @('high') -GrantAny @('mfa','authStrength','passwordChange','riskRemediation','unknownFutureValue','block')
+    # Microsoft's v1.0 list withholds some policies (the risk-remediation ones were withheld on the first full
+    # run), so with the beta list unread, "no qualifying policy" is not a conclusion the evidence supports.
+    if ($levels -notcontains 'high' -and (Get-NRGPolicyListIncomplete -CA $ca)) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Not assessed: the Conditional Access policy list could not be read in full (the beta list failed and the v1.0 list withholds some policies), so whether a user risk policy exists was not established.$(if ($names) { " Enabled user risk policies read: $names." })"
+        return
+    }
     if ($levels -contains 'high') {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "User risk Conditional Access in force for high-risk users: $names"
+    } elseif ($riskPolicies.Count -eq 0 -and @($ro15.Qualifying).Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail "A user risk policy meets every requirement (high user risk, all users and applications, a responding control) but is in report-only mode, which collects evaluation data and enforces nothing: $(@($ro15.Qualifying) -join ', '). Until it is turned on, an account Identity Protection rates high risk is not forced to change its password or blocked; Partial is still a failed baseline requirement.$(Get-NRGRiskReportOnlyNote -ReportOnly $ro15)" `
+            -CurrentValue "Report-only: $(@($ro15.Qualifying) -join ', ')" -RequiredValue 'CA policy in force: userRiskLevels = high + require password change or risk remediation' -Remediation $ctrl.Remediation
     } elseif ($riskPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
             -Detail "The enabled user risk policies ($names) apply to $($levels -join ', ') risk only, so an account Identity Protection rates high risk (likely compromised) is not forced to change its password or blocked." `
             -CurrentValue "userRiskLevels = $($levels -join ', ')" -RequiredValue 'CA policy: userRiskLevels = high + require password change or risk remediation' -Remediation $ctrl.Remediation
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail ('No enabled Conditional Access policy uses the user risk condition, so an account Identity Protection rates as likely compromised is not forced to change its password or blocked. (User risk policies need Entra ID P2; on a tenant without it this control is not scored.)' + (Get-NRGRiskReportOnlyNote -Policies $ca.Data['Policies'] -Condition 'UserRiskLevels')) -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail ('No enabled Conditional Access policy uses the user risk condition, so an account Identity Protection rates as likely compromised is not forced to change its password or blocked. (User risk policies need Entra ID P2; on a tenant without it this control is not scored.)' + (Get-NRGRiskReportOnlyNote -ReportOnly $ro15)) -Remediation $ctrl.Remediation
     }
 }
 
