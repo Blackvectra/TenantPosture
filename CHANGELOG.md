@@ -15,6 +15,13 @@
   drops from 69 to 67 on the same data. `NRG.GapSummary.Tests.ps1` pins Total = Distinct + Views and
   that a view of a control with no shortfall stays distinct.
 
+- **The Tor Project host name no longer appears in shipped source or the Email-IR README.** A client's
+  XDR flagged two evaluator files and a Tor-browser download on the operator's machine on the day the
+  folder was extracted (the tool contacts no Tor host and downloads no executable; a CI test pins
+  that). The only remaining mentions were a removal note in a code comment and the Email-IR README;
+  both now describe the old behavior without the host name, so a keyword scan of the folder finds it
+  only in `docs/EDR-TOR-ALERT.md` and the egress test, which need the literal to do their job.
+
 - **The Conditional Access collector now keeps policies the v1.0 list withholds.** An independent
   ScubaGear scan of the same tenant (raw Graph data, beta endpoint) listed 17 Conditional Access
   policies; NRG's two live runs listed 15, with the same states and exclusions on every shared

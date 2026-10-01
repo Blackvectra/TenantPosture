@@ -13,8 +13,8 @@
 #          permits this. RDAP queries do NOT include identifying info
 #          about the operator's tenant — just the IP being looked up.
 #
-# Outbound: rdap.org only. An earlier version also fetched
-#           https://check.torproject.org/torbulkexitlist for standalone
+# Outbound: rdap.org only. An earlier version also fetched a public Tor
+#           exit-node list from a Tor Project host for standalone
 #           Tor-exit detection; that hostname is flagged by several EDRs
 #           (Palo Alto Cortex XDR, Microsoft Defender for Endpoint,
 #           CrowdStrike) as "Tor infrastructure contact", and a later
