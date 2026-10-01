@@ -341,6 +341,21 @@ return @{ value = @() }
                 SectionStatus = @{ InboxRulesForwarding = 'Collected' } })
             (Verdict 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2').Detail | Should -Match '0 enabled.*disabled'
         }
+        It 'EXO-7.2 names the mailbox, the rule and the recipients of a rule it could not resolve (shape from the first full tenant run)' {
+            $dn1 = '"Jason Horning" [EX:/o=ExchangeLabs/ou=Exchange Administrative Group (FYDIBOHF23SPDLT)/cn=Recipients/cn=b213b2c7d65247289f3ea1f5038a8097-jason.horni]'
+            $dn2 = '"Steven J. Kelsch" [EX:/o=NoDak/ou=ACO/cn=Recipients/cn=skelsch_unmappedcfa13811e09d445d9e475ac191fafc4d]'
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (Raw @{ UnparseableRules = @(); Stats = @{ MailboxesScanned = 81 }
+                InboxRulesForwarding = @(
+                    @{ Mailbox = 'cathy@contoso.com'; RuleName = 'Tribune E-edition Distribution'; Enabled = $true; IsExternal = $false; IsUnresolved = $true; ExternalRecipients = @(); UnresolvedRecipients = @($dn1) }
+                    @{ Mailbox = 'reports@contoso.com'; RuleName = 'Subscription Services Report'; Enabled = $true; IsExternal = $false; IsUnresolved = $true; ExternalRecipients = @(); UnresolvedRecipients = @($dn2) })
+                SectionStatus = @{ InboxRulesForwarding = 'Collected' } })
+            $f = Verdict 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2'
+            $f.State | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match "cathy@contoso\.com rule 'Tribune E-edition Distribution' forwards to Jason Horning"
+            $f.Detail | Should -Match "reports@contoso\.com rule 'Subscription Services Report' forwards to Steven J\. Kelsch"
+            $f.Detail | Should -Not -Match 'EX:/o='
+            @($f.AffectedObjects).Count | Should -Be 2
+        }
         It 'EXO-2.3 is not satisfied by the mailbox plans while existing mailboxes still have POP on' {
             Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (Raw @{ CASMailboxPlans = @(@{ Name = 'Plan'; PopEnabled = $false; ImapEnabled = $false })
                 CASMailboxProtocols = @{ Total = 10; PopEnabledCount = 3; ImapEnabledCount = 0; PopSample = @('a@contoso.com'); ImapSample = @() }

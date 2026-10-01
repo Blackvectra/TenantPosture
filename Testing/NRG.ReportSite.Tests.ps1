@@ -155,4 +155,18 @@ Describe 'Report site preserves every finding, verdict and limitation' {
         $html = Get-Content -LiteralPath (Join-Path $dir 'EXO.html') -Raw
         $html | Should -Match '<td>Mailbox auditing is on for the organization'
     }
+    It 'a rule for a different requirement is labeled as context and is never listed as a disagreement' {
+        $dir = Join-Path $script:Out 'unsupported'
+        $csv = Join-Path $script:Out 'unsupported.csv'
+        Set-Content -LiteralPath $csv -Value "Control ID,Requirement,Result,Criticality`
+MS.AAD.5.2v1,User consent restricted,Pass,Shall" -Encoding utf8
+        $f = @{ ControlId = 'AAD-12.4'; State = 'Gap'; Severity = 'High'; Category = 'Apps'; Title = 'OAuth Apps with Tenant-Wide Consent'
+                Detail = '57 applications hold tenant-wide consent.'; CurrentValue = '57'; RequiredValue = '0'; FrameworkIds = ''; Remediation = '' }
+        $null = Publish-NRGReportSite -Metadata @{ TenantDomain = 'contoso.example'; ToolVersion = '4.14.3' } -Findings @($f) -OutputPath $dir -ScubaResultsPath $csv
+        $aad = Get-Content -LiteralPath (Join-Path $dir 'AAD.html') -Raw
+        $idx = Get-Content -LiteralPath (Join-Path $dir 'index.html') -Raw
+        $aad | Should -Match 'Different requirement \(context only, not compared\)'
+        $aad | Should -Not -Match "<div class='diff'>"
+        $idx | Should -Not -Match '<li><b>AAD-12\.4</b>'
+    }
 }

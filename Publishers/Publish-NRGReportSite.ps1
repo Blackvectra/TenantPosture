@@ -246,10 +246,20 @@ table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nt
                 $cmp = if ($r.ScubaId) {
                     $ind = if ($r.IndependentResult) { "<div>Independent scan: <b>$(& $hx $r.IndependentResult)</b></div>" } else { '' }
                     $diff = ''
-                    if ($r.IndependentResult) {
+                    # A direction difference is a prompt only when both rules judge the same configuration (same or overlapping
+                    # requirement, e.g. DMARC quarantine vs reject). For a different requirement the result is shown for
+                    # context and said so.
+                    $relText = switch ([string]$r.ScubaRelation) {
+                        'Equivalent'  { 'Same requirement' }
+                        'Partial'     { 'Overlaps, not identical' }
+                        'Unsupported' { 'Different requirement (context only, not compared)' }
+                        'Manual'      { 'Manual in the independent scan' }
+                        default       { [string]$r.ScubaRelation }
+                    }
+                    if ($r.IndependentResult -and $r.ScubaRelation -in @('Equivalent', 'Partial')) {
                         if (($r.State -eq 'Satisfied' -and $r.IndependentResult -eq 'Fail') -or ($r.State -in @('Gap', 'Partial') -and $r.IndependentResult -eq 'Pass')) { $diff = " class='diff'" }
                     }
-                    "<div$diff><code>$(& $hx $r.ScubaId)</code> <span class='strength'>$(& $hx $r.ScubaStrength)</span> &middot; $(& $hx $r.ScubaRelation)$ind</div>"
+                    "<div$diff><code>$(& $hx $r.ScubaId)</code> <span class='strength'>$(& $hx $r.ScubaStrength)</span> &middot; $(& $hx $relText)$ind</div>"
                 } else { "<span class='mut'>no mapped rule</span>" }
                 $ev = "<dl class='ev'><dt>Detail</dt><dd>$(& $hx $r.Detail)</dd>"
                 if ($r.Observed) { $ev += "<dt>Observed</dt><dd>$(& $hx $r.Observed)</dd>" }
@@ -294,8 +304,9 @@ table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nt
     $landing += "</ul></div>"
     if ($scuba) {
         $cmpRows = @($rows | Where-Object { $_.IndependentResult })
-        $diffs = @($cmpRows | Where-Object { ($_.State -eq 'Satisfied' -and $_.IndependentResult -eq 'Fail') -or ($_.State -in @('Gap', 'Partial') -and $_.IndependentResult -eq 'Pass') })
-        $landing += "<h2>Independent comparison</h2><div class='card'><p>$($cmpRows.Count) findings map to a rule in the supplied independent scan. <b>$($diffs.Count)</b> differ in direction (NRG satisfied where the scan failed, or NRG found a gap where the scan passed). A difference is a prompt to investigate the configuration, collection time, scope and requirement wording; it is not a score to match, and the two tools may judge the same configuration against different standards.</p>"
+        # Only rules that judge the same configuration (same or overlapping requirement) can differ; a different rule is context.
+        $diffs = @($cmpRows | Where-Object { $_.ScubaRelation -in @('Equivalent', 'Partial') -and (($_.State -eq 'Satisfied' -and $_.IndependentResult -eq 'Fail') -or ($_.State -in @('Gap', 'Partial') -and $_.IndependentResult -eq 'Pass')) })
+        $landing += "<h2>Independent comparison</h2><div class='card'><p>$($cmpRows.Count) findings map to a rule in the supplied independent scan. <b>$($diffs.Count)</b> differ in direction (NRG satisfied where the scan failed, or NRG found a gap where the scan passed) among rules that judge the same or an overlapping requirement; a rule for a different requirement is shown beside its control for context and is not counted here. A difference is a prompt to investigate the configuration, collection time, scope and requirement wording; it is not a score to match, and the two tools may judge the same configuration against different standards.</p>"
         if ($diffs.Count -gt 0) { $landing += '<ul>' + ((@($diffs | Sort-Object ControlId | ForEach-Object { "<li><b>$(& $hx $_.ControlId)</b> NRG $(& $hx $_.VerdictLabel) &middot; $(& $hx $_.ScubaId) independent $(& $hx $_.IndependentResult) &middot; $(& $hx $_.ScubaRelation)</li>" })) -join '') + '</ul>' }
         $landing += '</div>'
     }

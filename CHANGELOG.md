@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **First full-tenant run (NDACo, Graph connected): two reader-facing fixes.** (1) The report site showed
+  "Independent scan: Pass" beside an NRG Gap for AAD-12.4, AAD-15.1 and AAD-15.2, although the mapping
+  records ScubaGear's MS.AAD.5.2 as a different requirement; it now says "Different requirement
+  (context only, not compared)" and such a rule is never listed as a disagreement. Same-requirement
+  and overlapping rules (for example DMARC quarantine against reject) are still flagged. (2) EXO-7.2
+  said "2 rule(s) forward to a recipient that could not be resolved" without naming them; it now names
+  each mailbox, rule and unresolved recipient (display name, not the legacy DN) in the Detail and in
+  `AffectedObjects`, so the manual review starts from the rules themselves.
+
 - **A MSAL version already loaded in the window is named as the cause.** After the modules were
   cleaned up, the next run in the same window still failed Graph with "Method not found ...
   WithLogging": a different `Microsoft.Identity.Client` was already loaded in that window, and a
