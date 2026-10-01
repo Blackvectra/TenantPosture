@@ -140,4 +140,19 @@ Describe 'Report site preserves every finding, verdict and limitation' {
     It 'branding colors are restricted to #rrggbb before they reach CSS' {
         $script:Page['index'] | Should -Match '--p:#[0-9a-fA-F]{6};--s:#[0-9a-fA-F]{6}'
     }
+    It 'findings tables keep identifier, verdict, risk, check and evidence columns from collapsing (first work-computer screenshot: "Con trol", "Infor mati onal")' {
+        $pg = $script:Page['EXO']
+        $pg | Should -Match "<table class='ft'>"
+        # A cell may not break anywhere: that lets a column shrink to one character.
+        $pg | Should -Not -Match 'td\{[^}]*overflow-wrap:anywhere'
+        $pg | Should -Match 'table\.ft th:nth-child\(1\)[^{]*\{white-space:nowrap\}'
+    }
+    It 'a passing control whose evaluator left CurrentValue empty shows its Detail sentence as the observation, not a blank cell' {
+        $f = @{ ControlId = 'EXO-1.1'; State = 'Satisfied'; Severity = 'Informational'; Category = 'Audit'; Title = 'Mailbox Audit Logging Enabled'
+                Detail = 'Mailbox auditing is on for the organization and no mailbox bypasses it.'; CurrentValue = ''; RequiredValue = ''; FrameworkIds = ''; Remediation = '' }
+        $dir = Join-Path $script:Out 'obs'
+        $null = Publish-NRGReportSite -Metadata @{ TenantDomain = 'contoso.example'; ToolVersion = '4.14.3' } -Findings @($f) -OutputPath $dir
+        $html = Get-Content -LiteralPath (Join-Path $dir 'EXO.html') -Raw
+        $html | Should -Match '<td>Mailbox auditing is on for the organization'
+    }
 }

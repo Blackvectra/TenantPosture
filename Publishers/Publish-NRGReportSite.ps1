@@ -193,15 +193,20 @@ function Publish-NRGReportSite {
 *{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
 header{background:var(--p);color:#fff;padding:18px 24px;border-bottom:4px solid var(--s)}header h1{margin:0;font-size:1.25rem}header .sub{opacity:.85;font-size:.9rem}
 nav{padding:10px 24px;background:var(--card);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px 16px}nav a{color:var(--a);text-decoration:none;font-weight:600}
-main{max-width:1200px;margin:0 auto;padding:20px 16px 48px}h2{margin:28px 0 8px;font-size:1.1rem;border-bottom:2px solid var(--s);padding-bottom:4px}
+main{max-width:1500px;margin:0 auto;padding:20px 16px 48px}h2{margin:28px 0 8px;font-size:1.1rem;border-bottom:2px solid var(--s);padding-bottom:4px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:12px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .stat{text-align:center;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--card)}.stat b{display:block;font-size:1.5rem}
-table{width:100%;border-collapse:collapse;table-layout:auto;background:var(--card);font-size:.88rem}th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}.scroll{overflow-x:auto}th{background:var(--p);color:#fff;position:sticky;top:0}
+table{width:100%;border-collapse:collapse;table-layout:auto;background:var(--card);font-size:.88rem}th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.scroll{overflow-x:auto}th{background:var(--p);color:#fff;position:sticky;top:0}
 .pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:.78rem;font-weight:700;color:#fff;white-space:nowrap}.ok{background:#15803d}.part{background:#b45309}.gap{background:#b91c1c}.unk{background:#475569}.na{background:#64748b}
 .badge{display:inline-block;padding:0 7px;border:1px solid var(--a);color:var(--a);border-radius:4px;font-size:.74rem;font-weight:700}.badge.m{border-color:#7c3aed;color:#7c3aed}.badge.d{border-color:#0e7490;color:#0e7490}
 .mut{color:var(--mut)}.strength{font-size:.74rem;font-weight:700;color:var(--mut);border:1px solid var(--line);padding:0 6px;border-radius:4px}
 details{margin:2px 0}summary{cursor:pointer;color:var(--a);font-weight:600}.ev{padding:8px 4px;font-size:.86rem}.ev dt{font-weight:700;margin-top:6px}.ev dd{margin:0 0 0 0}
 .diff{border-left:4px solid var(--s);padding-left:10px}code{font-size:.85em}.note{font-size:.85rem;color:var(--mut)}
+.badge{white-space:nowrap}
+/* Findings tables: identifiers, verdicts, risk, check type and the evidence toggle never wrap (a cell may
+   not shrink below its content); the three prose columns wrap and keep a readable minimum width. */
+table.ft th:nth-child(1),table.ft td:nth-child(1),table.ft th:nth-child(3),table.ft td:nth-child(3),table.ft th:nth-child(4),table.ft td:nth-child(4),table.ft th:nth-child(5),table.ft td:nth-child(5),table.ft th:nth-child(8),table.ft td:nth-child(8){white-space:nowrap}
+table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nth-child(6){min-width:14rem;overflow-wrap:anywhere}table.ft td:nth-child(7){min-width:11rem;overflow-wrap:break-word}
 @media print{nav{display:none}details{display:block}details>summary{display:none}}
 @media(max-width:700px){th:nth-child(n+5),td:nth-child(n+5){display:none}}
 "@
@@ -233,7 +238,7 @@ details{margin:2px 0}summary{cursor:pointer;color:var(--a);font-weight:600}.ev{p
         $body = "<h2>$(& $hx $name)</h2><p class='note'>Grouped by security topic. The verdict is NRG's baseline judgment; the badge says how the check was made (automated, manual, or an operator declaration) and is not a verdict. Risk severity is NRG's; requirement strength (SHALL / SHOULD) is the independent baseline's and is shown only where a rule is mapped.</p>"
         foreach ($topic in @($wrows | ForEach-Object { $_.Topic } | Sort-Object -Unique)) {
             $trows = @($wrows | Where-Object { $_.Topic -eq $topic } | Sort-Object ControlId, Instance)
-            $body += "<h2 style='font-size:1rem'>$(& $hx $topic)</h2><div class='scroll'><table><thead><tr><th>Control</th><th>Requirement</th><th>NRG verdict</th><th>Risk</th><th>Check</th><th>Observed</th><th>Independent comparison</th><th>Evidence</th></tr></thead><tbody>"
+            $body += "<h2 style='font-size:1rem'>$(& $hx $topic)</h2><div class='scroll'><table class='ft'><thead><tr><th>Control</th><th>Requirement</th><th>NRG verdict</th><th>Risk</th><th>Check</th><th>Observed</th><th>Independent comparison</th><th>Evidence</th></tr></thead><tbody>"
             foreach ($r in $trows) {
                 $inst = if ($r.Instance) { " <span class='mut'>($(& $hx $r.Instance))</span>" } else { '' }
                 $badgeCss = switch ($r.Type) { 'Manual' { 'badge m' } 'Declaration' { 'badge d' } default { 'badge' } }
@@ -257,7 +262,12 @@ details{margin:2px 0}summary{cursor:pointer;color:var(--a);font-weight:600}.ev{p
                 if ($r.ScubaNote) { $ev += "<dt>How the independent rule relates</dt><dd>$(& $hx $r.ScubaNote)</dd>" }
                 if ($r.Frameworks) { $ev += "<dt>Framework citations</dt><dd>$(& $hx $r.Frameworks)</dd>" }
                 $ev += '</dl>'
-                $body += "<tr><td><b>$(& $hx $r.ControlId)</b>$inst$(if ($r.Tier) { "<div class='mut'>$(& $hx $r.Tier) tier</div>" })</td><td>$req</td><td><span class='pill $($r.VerdictCss)'>$(& $hx $r.VerdictLabel)</span></td><td>$(& $hx $r.RiskSeverity)</td><td><span class='$badgeCss'>$(& $hx $r.Type)</span></td><td>$(& $hx $r.Observed)</td><td>$cmp</td><td><details><summary>Evidence</summary>$ev</details></td></tr>"
+                # Many evaluators put what they observed in the Detail sentence and leave CurrentValue empty
+                # (20 of 48 passing controls in the first live run). Show that sentence, shortened, rather than
+                # a blank cell; the full text stays under Evidence. The action-plan CSV is not changed.
+                $obsShown = [string]$r.Observed
+                if (-not $obsShown -and $r.Detail) { $obsShown = [string]$r.Detail; if ($obsShown.Length -gt 220) { $obsShown = $obsShown.Substring(0, 217) + '...' } }
+                $body += "<tr><td><b>$(& $hx $r.ControlId)</b>$inst$(if ($r.Tier) { "<div class='mut'>$(& $hx $r.Tier) tier</div>" })</td><td>$req</td><td><span class='pill $($r.VerdictCss)'>$(& $hx $r.VerdictLabel)</span></td><td>$(& $hx $r.RiskSeverity)</td><td><span class='$badgeCss'>$(& $hx $r.Type)</span></td><td>$(& $hx $obsShown)</td><td>$cmp</td><td><details><summary>Evidence</summary>$ev</details></td></tr>"
             }
             $body += '</tbody></table></div>'
         }

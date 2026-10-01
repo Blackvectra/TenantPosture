@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Report site layout: columns no longer collapse, and a passing control shows what it observed.**
+  The first live view of the site (1637 px wide) broke "Control" into "Con trol" and "Informational"
+  into "Infor mati onal": every cell allowed a break anywhere, so the narrow columns shrank to one
+  character. Identifier, verdict, risk, check type and evidence cells no longer wrap, the prose
+  columns keep a readable minimum width, and the page is wider. The Observed cell was blank for
+  controls whose evaluator left `CurrentValue` empty (20 of 48 passing controls); it now shows the
+  Detail sentence, shortened, with the full text under Evidence. Pinned in `NRG.ReportSite.Tests.ps1`.
+
 - **A OneDrive online-only module is named as the cause, and a run without Graph says so up front.**
   The first work-computer run failed to connect Graph with "The cloud file provider is not running"
   (a `Microsoft.Graph.Reports` file in the OneDrive-synced `Documents\PowerShell\Modules` folder
