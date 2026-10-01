@@ -274,6 +274,22 @@ jobs:
           # collide with CodeQL findings in the same repo.
           category: psscriptanalyzer
 
+  docs-lint:
+    name: YAML + Markdown Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+
+      - name: Lint YAML (workflows and config)
+        run: |
+          pip install --quiet yamllint
+          yamllint -c .yamllint.yml .github Config
+
+      - name: Check Markdown (code fences and relative links)
+        run: python3 tools/Test-MarkdownDocs.py
+
   export-sync:
     name: Export List Sync
     runs-on: ubuntu-latest
