@@ -75,14 +75,16 @@ function Publish-NRGRemediationPlaybook {
 
     # Gap findings only, sorted by severity priority
     $sevOrder = @{ 'Critical' = 0; 'High' = 1; 'Medium' = 2; 'Low' = 3; 'Informational' = 4 }
-    $gaps     = @($Findings | Where-Object { $_.State -eq 'Gap' }) |
-                Sort-Object { $sevOrder[$_.Severity] ?? 99 }, Category, ControlId
+    # The whole pipeline sits inside @(): Sort-Object over zero or one object returns
+    # $null or a bare object, and StrictMode throws on `.Count` of either.
+    $gaps     = @(@($Findings | Where-Object { $_.State -eq 'Gap' }) |
+                Sort-Object { $sevOrder[$_.Severity] ?? 99 }, Category, ControlId)
 
     $phase1 = @($gaps | Where-Object { $_.Severity -in @('Critical','High') })
     $phase2 = @($gaps | Where-Object { $_.Severity -eq 'Medium' })
     $phase3 = @($gaps | Where-Object { $_.Severity -eq 'Low' })
-    $partials = @($Findings | Where-Object { $_.State -eq 'Partial' }) |
-                Sort-Object { $sevOrder[$_.Severity] ?? 99 }
+    $partials = @(@($Findings | Where-Object { $_.State -eq 'Partial' }) |
+                Sort-Object { $sevOrder[$_.Severity] ?? 99 })
 
     # ── ENGINEER PLAYBOOK ─────────────────────────────────────────────────────
     $sb = [System.Text.StringBuilder]::new()

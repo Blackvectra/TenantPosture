@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **A smoke test that runs the real entry point end to end, and the three defects it found.**
+  `NRG.SmokeRun.Tests.ps1` launches `Invoke-NRGAssessment.ps1` in a fresh process against stand-in
+  Microsoft Graph, Exchange and Teams modules that answer with empty tenants, then republishes the
+  results with `-FromResults` and builds the report site. It asserts a reported result (exit 0 or
+  3), no publisher failure, every `-Skip` flag recorded as Skipped, and no StrictMode failure in
+  the Exceptions array. It found: (1) a failed prerequisite check crashed in the `finally` block
+  with an unrelated "variable has not been set" error because `$skipCollection` was assigned
+  later; (2) the remediation playbook threw on `.Count` when a run had no Partial findings;
+  (3) five Graph policy reads (authentication methods, SSPR, external collaboration, both
+  consent policies) used direct property reads on API objects that may omit them. All fixed, with
+  the playbook case pinned on its own. CI runs it with the rest of `./Testing`.
+
 - **Fixes from the first live run of the updated collectors (NRGTS, 2026-09-30 17:47).** The
   new evidence arrived: preset exclusion identities (the `careers@` group is excluded from both
   presets), DLP `BlockAccess` (0 of 2 enforcing rules block), antivirus settings and malware

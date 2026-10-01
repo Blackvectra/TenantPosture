@@ -546,6 +546,9 @@ $monitoringSet = @(Set-NRGMonitoringAddresses -Addresses $MonitoringAddress -Sou
 
 # OWASP ASVS V7.3.2 — wrap the entire run in try/finally so service sessions
 # always disconnect, even if a collector / evaluator / publisher throws.
+# $skipCollection is read by the finally block, so it must exist before any early
+# exit (a failed prerequisite check) would otherwise run the finally with it unset.
+$skipCollection = $false
 try {
 
 # ── Module prerequisite check ─────────────────────────────────────────────────
