@@ -111,3 +111,21 @@ Describe 'A OneDrive online-only module file is named as the cause of a connect 
         Get-NRGCloudFileHint -Message $null | Should -BeNullOrEmpty
     }
 }
+
+Describe 'A MSAL version already loaded in the window is named as the cause, with the one fix that works' {
+    BeforeAll {
+        $root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $root 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+    }
+    It 'recognizes the exact Graph error from the second work-computer run and says to open a NEW window' {
+        $m = "InteractiveBrowserCredential authentication failed: Method not found: '!0 Microsoft.Identity.Client.BaseAbstractApplicationBuilder`1.WithLogging(Microsoft.IdentityModel.Abstractions.IIdentityLogger, Boolean)'."
+        $h = Get-NRGMsalConflictHint -Message $m
+        $h | Should -Match 'NEW PowerShell 7 window'
+        $h | Should -Match 'already loaded'
+    }
+    It 'recognizes the assembly-load form and ignores unrelated errors' {
+        Get-NRGMsalConflictHint -Message "Could not load file or assembly 'Microsoft.Identity.Client, Version=4.61.3.0'" | Should -Match 'NEW'
+        Get-NRGMsalConflictHint -Message 'AADSTS50076: MFA required' | Should -BeNullOrEmpty
+        Get-NRGMsalConflictHint -Message $null | Should -BeNullOrEmpty
+    }
+}

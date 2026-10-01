@@ -45,9 +45,9 @@
 # Sets:     nothing.
 # Graph scopes / cmdlets: none.
 
-# Uninstall-PSResource only finds modules in the scopes PSResourceGet manages. PowerShell 7 also
-# lists modules from other folders on PSModulePath (for example the Windows PowerShell 5.1 folder
-# under Program Files, or a copy placed by hand), and for those it answers "version ... does not
+# Uninstall-PSResource searches the current-user scope unless told otherwise, and PowerShell 7 also
+# lists modules from other folders on PSModulePath (the all-users folder the installer uses, the
+# Windows PowerShell 5.1 folder, or a copy placed by hand). For those it answers "version ... does not
 # exist" even though Get-Module lists them and they still load. The first live repair on a work
 # computer hit exactly that and removed nothing. This decides whether one version folder reported
 # by Get-Module is safe to delete directly: the path must be <PSModulePath entry>\<module>\<version>

@@ -129,6 +129,22 @@ function Get-NRGCloudFileHint {
             'To stop it recurring, keep modules out of OneDrive: in an elevated PowerShell 7 window run .\Install-NRGPrerequisites.ps1 (it installs for all users when Documents is OneDrive-synced) and Repair-NRGModuleHealth -WhatIf, then open a new window.')
 }
 
+# "Method not found ... WithLogging" / "WithBroker" and "Could not load file or assembly
+# Microsoft.Identity.Client" mean a different version of MSAL is already loaded in THIS PowerShell
+# window (from an earlier run, a repair, or another module), and a loaded assembly cannot be
+# unloaded or replaced. Fixing the installed modules does not help until a new window is opened.
+# The error text never says that, so say it.
+function Get-NRGMsalConflictHint {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] [AllowEmptyString()] [string] $Message)
+    if ([string]::IsNullOrEmpty($Message)) { return '' }
+    if ($Message -notmatch '(?i)Method not found.*Microsoft\.Identity\.Client|WithLogging|WithBroker|Could not load file or assembly .?Microsoft\.Identity\.Client') { return '' }
+    return ('A different version of Microsoft.Identity.Client (MSAL) is already loaded in this PowerShell window, and a loaded assembly cannot be replaced. ' +
+            'Close this window, open a NEW PowerShell 7 window, and run the assessment first thing in it (before importing or signing in to any other Microsoft module). ' +
+            'Installing, repairing or removing modules does not take effect in a window that was already open.')
+}
+
 # A connection failure recorded as a bare message ("You cannot call a method
 # on a null-valued expression") cannot be diagnosed from the results JSON: the
 # first live run of v4.14.3 produced exactly that for Exchange and Purview,
@@ -460,6 +476,8 @@ function Connect-NRGServices {
         Write-Host "  [!] Graph: $($_.Exception.Message)" -ForegroundColor Yellow
         $cloudHint = Get-NRGCloudFileHint -Message $_.Exception.Message
         if ($cloudHint) { Write-Host "      $cloudHint" -ForegroundColor Yellow }
+        $msalHint = Get-NRGMsalConflictHint -Message $_.Exception.Message
+        if ($msalHint) { Write-Host "      $msalHint" -ForegroundColor Yellow }
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
             Register-NRGException -Source 'Connect-Graph' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
         }
@@ -536,6 +554,8 @@ function Connect-NRGServices {
         }
     } catch {
         Write-Host "  [!] EXO: $($_.Exception.Message)" -ForegroundColor Yellow
+        $msalHintExo = Get-NRGMsalConflictHint -Message $_.Exception.Message
+        if ($msalHintExo) { Write-Host "      $msalHintExo" -ForegroundColor Yellow }
         $exoHint = Get-NRGExoConnectHint -Message $_.Exception.Message
         if ($exoHint) { Write-Host "      $exoHint" -ForegroundColor Yellow }
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {

@@ -2,9 +2,18 @@
 
 ## Unreleased
 
+- **A MSAL version already loaded in the window is named as the cause.** After the modules were
+  cleaned up, the next run in the same window still failed Graph with "Method not found ...
+  WithLogging": a different `Microsoft.Identity.Client` was already loaded in that window, and a
+  loaded assembly cannot be replaced. The error never says so. `Get-NRGMsalConflictHint` now prints,
+  beside a Graph or Exchange connect failure of that shape, that a NEW PowerShell 7 window is the
+  only fix. The repair-fallback comment and entry above now give the real cause of the failed first
+  repair: `Uninstall-PSResource` defaults to the current-user scope and the copies were in the
+  all-users folder.
+
 - **`Repair-NRGModuleHealth` now removes a duplicate that the package manager cannot find.** The first
   live repair removed nothing: `Uninstall-PSResource` answered "version 2.9.1 ... does not exist" for a
-  copy PowerShell 7 still lists and loads (it sits in a module folder PSResourceGet does not manage).
+  copy PowerShell 7 still lists and loads (the copy was in the all-users folder and the call searched the current-user scope).
   When the package manager fails, the repair now removes the exact version folder `Get-Module` reports,
   but only after `Test-NRGSafeModuleVersionPath` confirms the path is `<PSModulePath entry>\<module>\<version>`
   for that module and version; any other path keeps the package manager's error. Still opt-in and
