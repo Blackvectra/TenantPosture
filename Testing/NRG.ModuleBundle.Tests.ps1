@@ -471,6 +471,11 @@ PrivateData = @{ PSData = @{ Tags = @('x') } }
             $h['Bundle']['Active'] | Should -BeFalse
         }
         It 'with the bundle active they are shadowed, listed, and no longer a risk' {
+            # This test is about duplicates ON DISK. Whether the host process already loaded a real
+            # Graph or Exchange module (a CI runner that has them installed, after an earlier suite
+            # imported the tool) is a different condition, pinned in the next test; shadow the loaded-
+            # module probe so the result does not depend on what else ran in this process.
+            function Get-NRGLoadedModuleOutsideBundle { param($Name, $BundlePath) @() }
             $s = Enable-NRGModuleBundle -ToolRoot $script:Root -Path $script:Live3 6>$null
             $env:PSModulePath = $env:PSModulePath + $script:Sep + $script:Mach3
             $h = Get-NRGModuleHealth
@@ -482,6 +487,21 @@ PrivateData = @{ PSData = @{ Tags = @('x') } }
             @($auth['ShadowedVersions']) | Should -Contain '2.9.1'
             $h['HasConflictRisk'] | Should -BeFalse
             $h['Bundle']['Active'] | Should -BeTrue
+            Disable-NRGModuleBundle -State $s
+        }
+        It 'a carrier already loaded from OUTSIDE the active bundle is still a conflict risk: a path change cannot replace it' {
+            function Get-NRGLoadedModuleOutsideBundle {
+                param($Name, $BundlePath)
+                if ($Name -eq 'Microsoft.Graph.Authentication') { return @([pscustomobject]@{ Name = $Name; Version = [version]'2.9.1'; ModuleBase = 'C:\\Users\\x\\OneDrive\\Documents\\PowerShell\\Modules\\Microsoft.Graph.Authentication\\2.9.1' }) }
+                @()
+            }
+            $s = Enable-NRGModuleBundle -ToolRoot $script:Root -Path $script:Live3 6>$null -WarningAction SilentlyContinue
+            $h = Get-NRGModuleHealth
+            $auth = @($h['Modules'] | Where-Object { $_['Name'] -eq 'Microsoft.Graph.Authentication' })[0]
+            $auth['LoadedOutsideBundle'] | Should -BeTrue
+            $auth['Issues'] | Should -Contain 'loaded-outside-bundle'
+            $h['HasConflictRisk'] | Should -BeTrue
+            @($s['LoadedOutside']).Count | Should -BeGreaterThan 0 -Because 'Enable-NRGModuleBundle must say so too'
             Disable-NRGModuleBundle -State $s
         }
         It '-InstalledOverride still ignores the bundle and the machine, so synthetic-state tests stay deterministic' {

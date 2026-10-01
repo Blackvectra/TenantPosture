@@ -68,6 +68,7 @@ function Invoke-MgGraphRequest { [CmdletBinding()] param(`$Uri, `$Method, `$Outp
                     @"
 $mark
 function Connect-ExchangeOnline { [CmdletBinding()] param([switch] `$ShowBanner, [switch] `$DisableWAM, `$Organization, `$UserPrincipalName, `$DelegatedOrganization, [switch] `$SkipLoadingFormatData) $(& $call 'Connect-ExchangeOnline') }
+function Connect-IPPSSession { [CmdletBinding()] param([switch] `$ShowBanner, [switch] `$DisableWAM, `$DelegatedOrganization, `$UserPrincipalName) $(& $call 'Connect-IPPSSession') }
 function Disconnect-ExchangeOnline { [CmdletBinding()] param(`$Confirm) }
 function Get-ConnectionInformation { @() }
 "@
@@ -117,15 +118,17 @@ function Get-CsTenant { [pscustomobject]@{ TenantId = '00000000-0000-0000-0000-0
         $script:Bundle = Join-Path $script:Tmp 'bundle'
         & $script:BuildBundle $script:Bundle
 
-        # Runs one entry point in a fresh pwsh. The driver puts the machine copies on PSModulePath
-        # (the way a real machine has them), optionally points NRG_MODULE_BUNDLE at a bundle,
-        # and reports PSModulePath before and after the script.
+        # Runs one entry point in a fresh pwsh. The driver sets PSModulePath to the stand-in "machine"
+        # folder plus PowerShell's own built-in modules and nothing else, so a real Graph, Exchange or
+        # Teams module installed on whatever host runs this test can never be found (the real Exchange
+        # module exports Connect-IPPSSession, which autoload would otherwise reach for). It optionally
+        # points NRG_MODULE_BUNDLE at a bundle and reports PSModulePath before and after the script.
         $script:Run = {
             param([string] $ScriptName, [string] $ArgText, [string] $BundlePath, [string] $Prelude = '')
             $driver = Join-Path $script:Tmp ("driver-" + [guid]::NewGuid().ToString('N') + '.ps1')
             $bundleLine = if ($BundlePath) { "`$env:NRG_MODULE_BUNDLE = '$BundlePath'" } else { "Remove-Item Env:NRG_MODULE_BUNDLE -ErrorAction SilentlyContinue" }
             Set-Content -LiteralPath $driver -Encoding utf8 -Value @"
-`$env:PSModulePath = '$($script:Machine)' + '$($script:Sep)' + `$env:PSModulePath
+`$env:PSModulePath = '$($script:Machine)' + '$($script:Sep)' + '$(Join-Path $PSHOME 'Modules')'
 $bundleLine
 $Prelude
 `$before = `$env:PSModulePath
