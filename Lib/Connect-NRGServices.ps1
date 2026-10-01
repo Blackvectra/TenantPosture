@@ -243,7 +243,8 @@ function Connect-NRGServices {
                 }
                 Write-Host "      This causes 'Could not load file or assembly Microsoft.Identity.Client' at Exchange connect," -ForegroundColor DarkYellow
                 Write-Host "      or a token acquisition that never returns — the run hangs on the first collector with no error." -ForegroundColor DarkYellow
-                Write-Host "      Fix: Repair-NRGModuleHealth -WhatIf   (review, then re-run without -WhatIf)" -ForegroundColor DarkYellow
+                Write-Host "      Fix, without touching this machine's modules: .\Install-NRGPrerequisites.ps1 -Local   (one pinned copy of each module inside the tool, used first for this run only)" -ForegroundColor DarkYellow
+                Write-Host "      Or clean the machine: Repair-NRGModuleHealth -WhatIf   (review, then re-run without -WhatIf)" -ForegroundColor DarkYellow
                 Write-Host "      Then start a NEW PowerShell window — an assembly already loaded cannot be unloaded." -ForegroundColor DarkYellow
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     $bad = @($health.Modules | Where-Object { $_.MultipleVersions -or $_.OneDrivePath } | ForEach-Object { $_.Name })
@@ -305,22 +306,41 @@ function Connect-NRGServices {
             Write-Host "  [*] Microsoft Graph (reusing the caller's existing session)..." -ForegroundColor Cyan
         } else {
             # Force-load the LATEST Microsoft.Graph.Authentication to prevent assembly conflicts
-            # when multiple versions exist or EOM has loaded an older bundled version
-            $mgAuthVersions = @(Get-Module -ListAvailable -Name Microsoft.Graph.Authentication |
-                Sort-Object Version -Descending)
-            if ($mgAuthVersions) {
+            # when multiple versions exist or EOM has loaded an older bundled version.
+            # Get-NRGAvailableModule returns the module bundle's single copy when the bundle is
+            # active (.modules/, first on PSModulePath): sorting every copy by Version here would
+            # pick the highest one ACROSS paths and let a duplicate elsewhere beat the bundle.
+            #
+            # One exception: with the bundle active, a Graph.Authentication copy from OUTSIDE it
+            # already loaded in this session (Enable-NRGModuleBundle said so) is left alone. A
+            # forced import of the bundle's copy over it would load a second set of Graph's
+            # assemblies beside the first, which is the conflict the bundle exists to prevent.
+            $graphLoadedOutside = @(Get-NRGLoadedModuleOutsideBundle -Name 'Microsoft.Graph.Authentication').Count -gt 0
+            $mgAuthVersions = @(Get-NRGAvailableModule -Name 'Microsoft.Graph.Authentication')
+            if ($mgAuthVersions -and -not $graphLoadedOutside) {
                 Import-Module $mgAuthVersions[0].Path -Force -ErrorAction SilentlyContinue -WarningAction SilentlyContinue 3>$null
             }
 
-            # Pre-import Graph sub-modules before Connect-MgGraph locks the version
+            # Pre-import Graph sub-modules before Connect-MgGraph locks the version. With the
+            # bundle active only the bundle's copies are imported: a machine copy (an older
+            # version, an online-only OneDrive placeholder) is exactly what the bundle is there
+            # to keep out, and nothing on the read path calls these cmdlets.
             $graphSubModules = @(
                 'Microsoft.Graph.Reports',
                 'Microsoft.Graph.Identity.Governance',
                 'Microsoft.Graph.Identity.SignIns',
                 'Microsoft.Graph.Users'
             )
+            $bundleActive = [bool](Get-NRGActiveModuleBundlePath)
             foreach ($gm in $graphSubModules) {
-                if (Get-Module -ListAvailable -Name $gm -ErrorAction SilentlyContinue) {
+                if ($graphLoadedOutside) {
+                    # The submodules require Authentication at their version or newer; importing
+                    # the bundle's would pull its Authentication in beside the loaded one.
+                    continue
+                } elseif ($bundleActive) {
+                    $bundledSub = Get-NRGBundledModule -Name $gm
+                    if ($bundledSub) { Import-Module $bundledSub.Path -ErrorAction SilentlyContinue -WarningAction SilentlyContinue 3>$null }
+                } elseif (Get-Module -ListAvailable -Name $gm -ErrorAction SilentlyContinue) {
                     Import-Module $gm -ErrorAction SilentlyContinue -WarningAction SilentlyContinue 3>$null
                 }
             }
@@ -594,14 +614,19 @@ function Connect-NRGServices {
         Write-Host "  [*] Microsoft Teams..." -ForegroundColor Cyan
         try {
             # Check both installed and in-session (handles just-installed modules)
-            $teamsAvail = (Get-Module -ListAvailable -Name MicrosoftTeams -ErrorAction SilentlyContinue) -or
+            # With the module bundle active, import the bundle's copy by its path: that is
+            # the copy the run was built around, whatever else the machine has.
+            $teamsBundled = Get-NRGBundledModule -Name 'MicrosoftTeams'
+            $teamsTarget  = if ($teamsBundled) { $teamsBundled.Path } else { 'MicrosoftTeams' }
+            $teamsAvail = $teamsBundled -or
+                          (Get-Module -ListAvailable -Name MicrosoftTeams -ErrorAction SilentlyContinue) -or
                           (Get-Module -Name MicrosoftTeams -ErrorAction SilentlyContinue)
             if (-not $teamsAvail) {
                 # Try importing directly — may have been installed this session
-                try { Import-Module MicrosoftTeams -Force -ErrorAction Stop -WarningAction SilentlyContinue }
+                try { Import-Module $teamsTarget -Force -ErrorAction Stop -WarningAction SilentlyContinue }
                 catch { throw 'MicrosoftTeams module not installed. Run: Install-Module MicrosoftTeams -Scope CurrentUser -Force' }
             }
-            Import-Module MicrosoftTeams -ErrorAction Stop -WarningAction SilentlyContinue
+            Import-Module $teamsTarget -ErrorAction Stop -WarningAction SilentlyContinue
 
             if ($isAppOnly) {
                 Connect-MicrosoftTeams -TenantId $TenantId -ApplicationId $AppId `
@@ -610,7 +635,7 @@ function Connect-NRGServices {
             } else {
                 # Import module explicitly in case it was just installed this session
                 if (-not (Get-Command Connect-MicrosoftTeams -ErrorAction SilentlyContinue)) {
-                    Import-Module MicrosoftTeams -Force -ErrorAction SilentlyContinue
+                    Import-Module $teamsTarget -Force -ErrorAction SilentlyContinue
                 }
                 # Interactive browser MFA (matches ScubaGear); no device-code flow.
                 # Pass the already-verified Graph context tenant — under GDAP
@@ -673,7 +698,7 @@ function Connect-NRGServices {
                     # an ASR rule that blocks the process fails here, and the
                     # SharePoint controls that need it stay not assessed.
                     if ($PSVersionTable.PSEdition -eq 'Core') {
-                        $spoMod = @(Get-Module -ListAvailable -Name Microsoft.Online.SharePoint.PowerShell -ErrorAction SilentlyContinue | Sort-Object Version -Descending)[0]
+                        $spoMod = @(Get-NRGAvailableModule -Name 'Microsoft.Online.SharePoint.PowerShell')[0]
                         $spoTarget = if ($spoMod -and $spoMod.Path) { $spoMod.Path } else { 'Microsoft.Online.SharePoint.PowerShell' }
                         try {
                             Import-Module $spoTarget -UseWindowsPowerShell -ErrorAction Stop -WarningAction SilentlyContinue 3>$null | Out-Null

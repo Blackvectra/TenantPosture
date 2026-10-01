@@ -75,7 +75,7 @@ jobs:
           $tag  = '${{ github.ref_name }}'
           $name = "NRG-Assessment-$tag"
           # Stage everything a client/operator needs; exclude repo plumbing.
-          $exclude = @('.git', '.github', 'output', 'Testing')
+          $exclude = @('.git', '.github', 'output', 'Testing', '.modules')
           New-Item -ItemType Directory -Path "./$name" | Out-Null
           Get-ChildItem -Force | Where-Object {
               $_.Name -ne $name -and $exclude -notcontains $_.Name
@@ -153,7 +153,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $files = Get-ChildItem -Recurse -File -Include '*.ps1','*.psm1','*.psd1' |
-                   Where-Object { $_.FullName -notmatch '[\\/](output|\.git)[\\/]' }
+                   Where-Object { $_.FullName -notmatch '[\\/](output|\.git|\.modules)[\\/]' }
           $valid = 0; $notSigned = 0; $bad = 0
           foreach ($f in $files) {
               $sig = Get-AuthenticodeSignature -LiteralPath $f.FullName

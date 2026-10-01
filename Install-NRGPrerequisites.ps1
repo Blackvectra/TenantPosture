@@ -10,11 +10,41 @@
 #   .\Install-NRGPrerequisites.ps1 -SkipPython     # skip Python/openpyxl for XLSX
 #   .\Install-NRGPrerequisites.ps1 -Force          # reinstall everything
 #
+#   .\Install-NRGPrerequisites.ps1 -Local          # build the tool's own module bundle
+#   .\Install-NRGPrerequisites.ps1 -Local -Force   # ... rebuilding it from scratch
+#   .\Install-NRGPrerequisites.ps1 -Local -IncludeSharePointShell
+#
+# -Local is the venv equivalent. It saves exactly one pinned version of each Microsoft module
+# the tool uses (Config/module-bundle.json) into .modules/ inside the tool and installs
+# NOTHING on the machine: no execution policy change, no module in your user or system module
+# folders, nothing removed. Invoke-NRGAssessment.ps1 and the batch runner then put that folder
+# first on PSModulePath for their own process only, so a duplicate or an online-only OneDrive
+# copy elsewhere cannot be loaded instead. Without the folder the tool behaves as before.
+# -Force with -Local removes only the bundle's own module folders and rebuilds them.
+# NRG_MODULE_BUNDLE (or -BundlePath) puts the bundle elsewhere, e.g. outside OneDrive.
+#
 
 [CmdletBinding()]
 param(
     [switch] $SkipPython,
-    [switch] $Force
+    [switch] $Force,
+
+    # Build the tool-local module bundle and stop (see above).
+    [switch] $Local,
+
+    # Where -Local builds it. Default: NRG_MODULE_BUNDLE, else .modules in the tool folder.
+    # Same traversal rejection as -OutputPath / -OutputRoot (OWASP A01 / ASVS V12.3.1).
+    [ValidateScript({
+        if ($_ -match '\.\.[/\\]' -or $_ -match '[/\\]\.\.' -or $_ -match '^\.\.') {
+            throw "Path traversal not allowed in BundlePath."
+        }
+        return $true
+    })]
+    [ValidateNotNullOrEmpty()]
+    [string] $BundlePath,
+
+    # With -Local: also save the SharePoint Online Management Shell.
+    [switch] $IncludeSharePointShell
 )
 
 # Audit fix (v4.6.x LOW): EAP=Stop module-wide. Individual install steps
@@ -38,6 +68,33 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 }
 Write-Host "  [+] PowerShell $($PSVersionTable.PSVersion) — OK" -ForegroundColor Green
 
+# ── -Local: build the tool's module bundle, change nothing on the machine, stop ──
+if ($Local) {
+    Write-Host ""
+    Write-Host "[-] Building the tool-local module bundle (-Local)..." -ForegroundColor Cyan
+    Write-Host "    Machine-wide steps (execution policy, module installs, duplicate removal) are skipped." -ForegroundColor DarkGray
+    . (Join-Path $PSScriptRoot 'Lib/Get-NRGModuleInstallScope.ps1')
+    . (Join-Path $PSScriptRoot 'Lib/Get-NRGModuleBundle.ps1')
+    . (Join-Path $PSScriptRoot 'Lib/New-NRGModuleBundle.ps1')
+    $buildArgs = @{ ToolRoot = $PSScriptRoot; IncludeSharePointShell = $IncludeSharePointShell; Force = $Force; Confirm = $false }
+    if ($BundlePath) { $buildArgs['Path'] = $BundlePath }
+    $build = New-NRGModuleBundle @buildArgs
+    Write-Host "    Folder: $($build['Path'])" -ForegroundColor DarkGray
+    foreach ($r in @($build['Removed']))        { Write-Host "  [-] Removed old $r" -ForegroundColor Yellow }
+    foreach ($a in @($build['AlreadyPresent'])) { Write-Host "  [+] $a — already in the bundle" -ForegroundColor Green }
+    foreach ($sv in @($build['Saved']))         { Write-Host "  [+] Saved $sv" -ForegroundColor Green }
+    foreach ($w in @($build['Warnings']))       { Write-Host "  [i] $w" -ForegroundColor DarkGray }
+    foreach ($e in @($build['Errors']))         { Write-Host "  [!] $e" -ForegroundColor Red }
+    Write-Host ""
+    if ($build['Valid']) {
+        Write-Host "  [+] Module bundle ready. The assessment will use it automatically (first on PSModulePath for that run only)." -ForegroundColor Green
+        Write-Host "      Delete the folder to go back to the machine's own modules." -ForegroundColor DarkGray
+        exit 0
+    }
+    Write-Host "  [!] The module bundle is not usable yet; the assessment will keep using the machine's modules." -ForegroundColor Red
+    exit 1
+}
+
 # ── Execution policy ─────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "[2/6] Checking execution policy..." -ForegroundColor Cyan
@@ -59,7 +116,10 @@ Write-Host ""
 Write-Host "[3/6] Unblocking files (Zone.Identifier from downloads)..." -ForegroundColor Cyan
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 try {
-    Get-ChildItem -Path $scriptDir -Recurse -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
+    # .modules is the module bundle: Microsoft's own packages, nothing here to unblock.
+    Get-ChildItem -Path $scriptDir -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch '[\\/]\.modules[\\/]' } |
+        Unblock-File -ErrorAction SilentlyContinue
     Write-Host "  [+] Files unblocked" -ForegroundColor Green
 } catch {
     Write-Host "  [!] Unblock failed: $($_.Exception.Message)" -ForegroundColor Yellow

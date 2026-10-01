@@ -125,7 +125,9 @@ $files = Get-ChildItem -Path $RepoRoot -Recurse -File |
     Where-Object {
         $_.Extension -in $signableExt -and
         $_.FullName -notmatch '\\output\\' -and
-        $_.FullName -notmatch '\\\.git\\'
+        $_.FullName -notmatch '\\\.git\\' -and
+        # .modules holds Microsoft's own signed packages (the module bundle): never re-sign them.
+        $_.FullName -notmatch '[\\/]\.modules[\\/]'
     } |
     Sort-Object FullName
 

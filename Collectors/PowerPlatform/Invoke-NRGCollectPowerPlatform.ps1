@@ -246,7 +246,7 @@ function Get-NRGPowerPlatformToken {
         # one in the shared context first; if not, load the copy that ships
         # with Microsoft.Graph.Authentication (same files, no child process).
         $graphMod = Get-Module Microsoft.Graph.Authentication | Select-Object -First 1
-        if (-not $graphMod) { $graphMod = Get-Module -ListAvailable Microsoft.Graph.Authentication | Sort-Object Version -Descending | Select-Object -First 1 }
+        if (-not $graphMod) { $graphMod = @(Get-NRGAvailableModule -Name 'Microsoft.Graph.Authentication')[0] }
         if ($graphMod) {
             $dep = Join-Path $graphMod.ModuleBase 'Dependencies'
             foreach ($dll in @((Join-Path $dep 'Microsoft.IdentityModel.Abstractions.dll'), (Join-Path $dep 'Core' 'Microsoft.Identity.Client.dll'))) {

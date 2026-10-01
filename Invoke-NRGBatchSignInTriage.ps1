@@ -1,5 +1,4 @@
 #Requires -Version 7.0
-#Requires -Modules @{ ModuleName='Microsoft.Graph.Authentication'; ModuleVersion='2.0.0' }
 
 <#
 .SYNOPSIS
@@ -170,6 +169,25 @@ if ($WhatIf) {
     exit 0
 }
 
+# ── Module bundle (.modules/) ─────────────────────────────────────────────────
+# One pinned copy of each Microsoft module (Install-NRGPrerequisites.ps1 -Local), first on
+# PSModulePath for THIS process, so the per-client triage runs below (which import the tool
+# in this process) load it instead of a duplicate or online-only OneDrive copy. No folder, no
+# change. PSModulePath is put back by the outermost finally at the end of this script.
+#
+# This script no longer declares '#Requires -Modules Microsoft.Graph.Authentication 2.0.0':
+# a #Requires line imports the module BEFORE any code runs, which loaded the machine's copy
+# ahead of the bundle. The same requirement is checked below, after the bundle is in place.
+. (Join-Path $scriptDir 'Lib' 'Get-NRGModuleInstallScope.ps1')
+. (Join-Path $scriptDir 'Lib' 'Get-NRGModuleBundle.ps1')
+$nrgModuleBundle = Enable-NRGModuleBundle -ToolRoot $scriptDir
+try {
+
+if (-not @(Get-NRGAvailableModule -Name 'Microsoft.Graph.Authentication' | Where-Object { $_.Version -ge [version]'2.0.0' })) {
+    Write-Host '[!] Microsoft.Graph.Authentication 2.0.0 or later is required. Run .\Install-NRGPrerequisites.ps1 (or .\Install-NRGPrerequisites.ps1 -Local for the tool-local bundle).' -ForegroundColor Red
+    exit 1
+}
+
 # ── Batch loop ────────────────────────────────────────────────────────────────
 $resolvedOutput = [System.IO.Path]::GetFullPath($OutputRoot)
 $timestamp      = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -286,3 +304,8 @@ if ($critClients.Count -gt 0) {
 }
 if ($failed.Count -gt 0) { exit 3 }
 exit 0
+}
+finally {
+    # Outermost: runs on every exit path, including the exit statements above.
+    Disable-NRGModuleBundle -State $nrgModuleBundle
+}

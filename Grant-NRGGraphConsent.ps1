@@ -48,6 +48,14 @@ Set-StrictMode -Version Latest
 $env:MSAL_ALLOW_BROKER        = '0'
 $env:MSAL_DISABLE_TOKENBROKER = '1'
 
+# One pinned copy of each Microsoft module (Install-NRGPrerequisites.ps1 -Local), first on
+# PSModulePath for THIS process before the import below loads the manifest's RequiredModules.
+# No folder, no change. The outermost finally at the end puts PSModulePath back.
+. (Join-Path $PSScriptRoot 'Lib' 'Get-NRGModuleInstallScope.ps1')
+. (Join-Path $PSScriptRoot 'Lib' 'Get-NRGModuleBundle.ps1')
+$nrgModuleBundle = Enable-NRGModuleBundle -ToolRoot $PSScriptRoot
+try {
+
 $mod = Import-Module (Join-Path $PSScriptRoot 'NRG-Assessment.psd1') -Force -PassThru
 $scopes    = & $mod { Get-NRGGraphScopeList }
 $consentMap = @(& $mod { Get-NRGConsentScopeMap })
@@ -89,4 +97,9 @@ try {
     exit 3
 } finally {
     try { Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null } catch { }
+}
+}
+finally {
+    # Outermost: runs on every exit path, including the exit statements above.
+    Disable-NRGModuleBundle -State $nrgModuleBundle
 }

@@ -2,6 +2,76 @@
 
 ## Unreleased
 
+- **Module bundle: one pinned copy of each Microsoft module, inside the tool.**
+  The assessment failed on a work computer before it collected anything:
+  Microsoft.Graph.Reports 2.36.1 sat in the OneDrive-synced Documents module
+  folder as an online-only placeholder ("The cloud file provider is not
+  running"), and two versions of Microsoft.Graph.Authentication (2.40.0 and
+  2.9.1) and of ExchangeOnlineManagement (3.10.1 and 3.10.0) were installed
+  side by side, the known cause of a hang at the first collector. The tool
+  detected all of it and only warned; the operator repaired each workstation
+  by hand. `Install-NRGPrerequisites.ps1 -Local` (also `-BundlePath`,
+  `-IncludeSharePointShell`, `-Force`) now saves exactly one pinned version of
+  each module into `.modules\` with `Save-PSResource` and installs nothing on
+  the machine. Pins and membership are `Config/module-bundle.json`
+  (Microsoft.Graph.Authentication and the seven Graph submodules the tool
+  imports or calls at 2.40.0, MicrosoftTeams 8.0.0, the SharePoint shell on
+  request); the Exchange version is whatever `Get-NRGExoModuleFloor` allows
+  for the running PowerShell, with 3.10.1 preferred when the range allows it.
+  When the folder exists and validates, the assessment, the batch runner, both
+  incident-response scripts, the batch sign-in triage and the consent script
+  put it first on `PSModulePath` for that process only, before the tool is
+  imported (the manifest's RequiredModules load on import), and an outermost
+  `finally` puts `PSModulePath` back on every exit path. No folder, no change.
+  A present but invalid bundle (no lock file, a second version, a module not
+  in the spec, Exchange outside the range for this PowerShell, online-only
+  files) is named and not used, never half used. `NRG_MODULE_BUNDLE` moves it,
+  for instance outside OneDrive. New: `Test-NRGModuleBundle`,
+  `Enable-NRGModuleBundle`, `Disable-NRGModuleBundle`, `New-NRGModuleBundle`
+  (353 exports); suites `NRG.ModuleBundle.Tests.ps1` and
+  `NRG.ModuleBundleRun.Tests.ps1` (82).
+
+  Three things found building it, each now pinned by a test. **First on
+  `PSModulePath` was not enough:** PowerShell does resolve a name, a
+  RequiredModules entry and command autoload to the first path even when a
+  later path holds a higher version (verified on 7.6), but `Connect-NRGServices`
+  listed every copy and imported the highest by explicit path, so a
+  higher-version duplicate won anyway; it, the SharePoint shell import and
+  the Power Platform fallback now go through `Get-NRGAvailableModule`, and the
+  Graph submodule pre-import takes only the bundle's copies when it is active.
+  **`#Requires -Modules` pre-empts it:** a `#Requires` line imports the module
+  before any code runs, so `Invoke-NRGBatchAssessment.ps1` and
+  `Invoke-NRGBatchSignInTriage.ps1` loaded the machine's copy ahead of the
+  bundle; the lines are replaced by the same check run after activation.
+  **`Save-Module` poisons the folder:** ExchangeOnlineManagement 3.10.1 lists
+  PackageManagement and PowerShellGet as gallery dependencies and `Save-Module`
+  saved PackageManagement 1.4.8.1 and PowerShellGet 2.2.5 beside it, where they
+  would shadow the machine's own; the builder uses `Save-PSResource
+  -SkipDependencyCheck` and validation rejects any module that is not in the
+  spec. Also: `Import-PowerShellDataFile` cannot read the Exchange module's own
+  manifest (it contains `$PSEdition` conditionals), so versions are read by
+  parsing the manifest, never executing it; and `.modules` is excluded from the
+  three repo-wide test scans, `tools/Verify-Integrity.ps1`, the release zip and
+  the release signer (which would otherwise re-sign Microsoft's own modules
+  with the NRG certificate). On Linux `Get-ChildItem -Recurse` skips
+  dot-directories, so those scans never saw `.modules` there; on Windows they
+  would, which is why the exclusions exist and why a test finds any new
+  repo-wide scan that forgets one (checked with a visible stand-in folder: the
+  rule-violating module fails each original scan and passes each excluded
+  one). A Graph.Authentication copy already loaded in the session from
+  outside the bundle is reported and left alone: `Connect-NRGServices` no
+  longer force-imports the bundle's copy over it, which would load a second
+  set of Graph assemblies beside the first. `-BundlePath` rejects `..`
+  sequences like `-OutputPath`.
+
+- **Fixed: `Invoke-NRGBatchAssessment.ps1` could not start.** It declared
+  `[CmdletBinding(SupportsShouldProcess)]` and its own `[switch] $WhatIf`;
+  PowerShell rejects that at parameter binding ("A parameter with the name
+  'WhatIf' was defined multiple times"), so every invocation failed, `-WhatIf`
+  included. Nothing launched it in a test. It is now `[CmdletBinding()]` (the
+  script's own `-WhatIf` switch is unchanged; the unused `-Confirm` goes), and
+  `NRG.ModuleBundleRun.Tests.ps1` runs it end to end against stub modules.
+
 - **Defects found by the first live baseline validation (NRGTS, 2026-09-29),
   fixed without touching a single verdict.** DNS collection ran only inside
   the Exchange branch of the entry point, so an Exchange connection failure

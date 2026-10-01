@@ -1,0 +1,94 @@
+{
+  "SchemaVersion": 1,
+  "Description": "Pinned Microsoft modules for the tool-local module bundle (.modules/), built by Install-NRGPrerequisites.ps1 -Local. One version of each, saved inside the tool, put first on PSModulePath for the assessment process only. The Graph modules share one version (each submodule requires Microsoft.Graph.Authentication at that version or newer). ExchangeOnlineManagement's version is decided by Get-NRGExoModuleFloor for the PowerShell in use: the Version below is a preference, honored only when it falls inside the range that function allows. Versions were chosen from what the tool has run against live: Microsoft.Graph.Authentication 2.40.0, ExchangeOnlineManagement 3.10.1 and MicrosoftTeams 8.0.0 (Exchange connected before Teams). Changing a pin is a deliberate, tested edit, like the MaximumVersion caps in NRG-Assessment.psd1.",
+  "Modules": [
+    {
+      "Name": "Microsoft.Graph.Authentication",
+      "Version": "2.40.0",
+      "Family": "Graph",
+      "VersionPolicy": "Exact",
+      "Optional": false,
+      "Why": "Graph sign-in and every Graph read (Invoke-MgGraphRequest). NRG-Assessment.psd1 lists it in RequiredModules, so importing the tool loads it."
+    },
+    {
+      "Name": "Microsoft.Graph.Reports",
+      "Version": "2.40.0",
+      "Family": "Graph",
+      "VersionPolicy": "Exact",
+      "Optional": false,
+      "Why": "Pre-imported by Connect-NRGServices. Bundled so a copy elsewhere on the machine (an online-only OneDrive placeholder, an older version) is never imported."
+    },
+    {
+      "Name": "Microsoft.Graph.Identity.Governance",
+      "Version": "2.40.0",
+      "Family": "Graph",
+      "VersionPolicy": "Exact",
+      "Optional": false,
+      "Why": "Pre-imported by Connect-NRGServices."
+    },
+    {
+      "Name": "Microsoft.Graph.Identity.SignIns",
+      "Version": "2.40.0",
+      "Family": "Graph",
+      "VersionPolicy": "Exact",
+      "Optional": false,
+      "Why": "Pre-imported by Connect-NRGServices; Apply-NRGBaseline.ps1 calls its Conditional Access cmdlets."
+    },
+    {
+      "Name": "Microsoft.Graph.Users",
+      "Version": "2.40.0",
+      "Family": "Graph",
+      "VersionPolicy": "Exact",
+      "Optional": false,
+      "Why": "Pre-imported by Connect-NRGServices."
+    },
+    {
+      "Name": "Microsoft.Graph.Groups",
+      "Version": "2.40.0",
+      "Family": "Graph",
+      "VersionPolicy": "Exact",
+      "Optional": false,
+      "Why": "Break-glass group discovery calls Get-MgGroup when the cmdlet is present; a Get-Command check would otherwise autoload whatever copy the machine has."
+    },
+    {
+      "Name": "Microsoft.Graph.Identity.DirectoryManagement",
+      "Version": "2.40.0",
+      "Family": "Graph",
+      "VersionPolicy": "Exact",
+      "Optional": false,
+      "Why": "Break-glass administrator discovery calls Get-MgDirectoryRole and Get-MgDirectoryRoleMember when present."
+    },
+    {
+      "Name": "Microsoft.Graph.Applications",
+      "Version": "2.40.0",
+      "Family": "Graph",
+      "VersionPolicy": "Exact",
+      "Optional": false,
+      "Why": "Tenant onboarding (-RegisterApp) creates the app registration with its cmdlets."
+    },
+    {
+      "Name": "ExchangeOnlineManagement",
+      "Version": "3.10.1",
+      "Family": "Exchange",
+      "VersionPolicy": "ExchangeFloor",
+      "Optional": false,
+      "Why": "Exchange Online and Purview (Security & Compliance) sessions. The version follows Get-NRGExoModuleFloor: 3.10.0 or later on PowerShell 7.6, 3.7.2 to 3.9.x on 7.4 and 7.5. NRG-Assessment.psd1 lists it in RequiredModules."
+    },
+    {
+      "Name": "MicrosoftTeams",
+      "Version": "8.0.0",
+      "Family": "Teams",
+      "VersionPolicy": "Exact",
+      "Optional": false,
+      "Why": "Teams policy collection. Connected after Exchange and Purview, because it loads its own Microsoft.Identity.Client."
+    },
+    {
+      "Name": "Microsoft.Online.SharePoint.PowerShell",
+      "Version": "16.0.27709.12000",
+      "Family": "SharePoint",
+      "VersionPolicy": "Exact",
+      "Optional": true,
+      "Why": "SharePoint Online Management Shell, used only with -IncludeSharePointShell. Opt-in at build time (Install-NRGPrerequisites.ps1 -Local -IncludeSharePointShell). PowerShell 7 loads it through the Windows PowerShell compatibility session, by the bundled path."
+    }
+  ]
+}

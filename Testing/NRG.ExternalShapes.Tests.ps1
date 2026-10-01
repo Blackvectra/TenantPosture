@@ -175,7 +175,7 @@ failing the whole section. Use Get-NRGNestedProperty -Object <var> -Path 'a.b'.
         It 'no module file references a variable whose name contains "?" (other than the automatic $?)' {
             $offenders = [System.Collections.Generic.List[string]]::new()
             $files = Get-ChildItem -LiteralPath $script:RepoRoot -Recurse -Include '*.ps1', '*.psm1' -File |
-                Where-Object { $_.FullName -notmatch '[\\/](Testing|output|\.git)[\\/]' }
+                Where-Object { $_.FullName -notmatch '[\\/](Testing|output|\.git|\.modules)[\\/]' }
             foreach ($f in $files) {
                 $tokens = $null; $errs = $null
                 $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$tokens, [ref]$errs)

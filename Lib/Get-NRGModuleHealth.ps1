@@ -31,6 +31,14 @@
 # This function only INSPECTS state (never installs/removes anything). Callers
 # (Connect-NRGServices preflight, Test-NRGModulePrerequisites) decide what to do.
 #
+# Module bundle (.modules/, Lib/Get-NRGModuleBundle.ps1): when it is active in this process
+#   (first on PSModulePath) the copy that will load is the bundle's single one, so duplicates and
+#   OneDrive copies elsewhere on the machine are SHADOWED, not a conflict. They are listed per
+#   module (ShadowedVersions) so the operator can see them. One condition still counts as risk:
+#   a carrier already loaded in this session from outside the bundle, because a path change
+#   cannot replace a loaded module (LoadedOutsideBundle). -InstalledOverride bypasses all of
+#   this, so the existing synthetic-state tests are unaffected by what is on the machine.
+#
 # Testability: pass -InstalledOverride @{ '<ModuleName>' = @(<objs with .Version
 #   and .ModuleBase>) } to evaluate synthetic install states without any modules
 #   present. Omit it to read the real machine via Get-Module -ListAvailable.
@@ -65,9 +73,31 @@ function Get-NRGModuleHealth {
     $modules = [System.Collections.Generic.List[object]]::new()
     $anyRisk = $false
 
+    # The bundle only applies to the real machine, never to a synthetic override.
+    $bundleRoot = $null
+    if (-not $InstalledOverride -and (Get-Command Get-NRGActiveModuleBundlePath -ErrorAction SilentlyContinue)) {
+        $bundleRoot = Get-NRGActiveModuleBundlePath
+    }
+
     foreach ($s in $specs) {
         $found = @()
-        if ($InstalledOverride) {
+        $shadowed = @()
+        $loadedOutside = $false
+        $source = 'Machine'
+        $bundledCopy = $null
+        if ($bundleRoot) { $bundledCopy = Get-NRGBundledModule -Name $s.Name }
+        if ($bundledCopy) {
+            $source = 'Bundle'
+            $found = @($bundledCopy)
+            $prefix = $bundleRoot.TrimEnd([char]'\', [char]'/') + [System.IO.Path]::DirectorySeparatorChar
+            try {
+                $shadowed = @(Get-Module -ListAvailable -Name $s.Name -ErrorAction SilentlyContinue |
+                    Where-Object { -not ([string]$_.ModuleBase + [System.IO.Path]::DirectorySeparatorChar).StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) } |
+                    ForEach-Object { [string]$_.Version } | Sort-Object -Unique)
+            } catch { $shadowed = @() }
+            # A loaded module cannot be swapped by a path change.
+            if (@(Get-NRGLoadedModuleOutsideBundle -Name $s.Name -BundlePath $bundleRoot).Count -gt 0) { $loadedOutside = $true }
+        } elseif ($InstalledOverride) {
             # -InstalledOverride replaces the machine as the source of truth
             # for THIS call. A module the caller did not name in it is "not
             # installed", never a silent fallback to the real machine — a
@@ -102,9 +132,12 @@ function Get-NRGModuleHealth {
         if ($belowMin)       { $issues.Add('below-min') }
         if ($offPin)         { $issues.Add('off-pin') }
 
+        if ($loadedOutside) { $issues.Add('loaded-outside-bundle') }
+
         # The assembly conflict is driven by the MSAL carriers having more than
-        # one version present OR living under OneDrive. Those two flip the risk.
-        if ($s.MsalCarrier -and ($multiple -or $oneDrive)) { $anyRisk = $true }
+        # one version present OR living under OneDrive. Those two flip the risk, as does
+        # a copy already loaded from outside an active bundle.
+        if ($s.MsalCarrier -and ($multiple -or $oneDrive -or $loadedOutside)) { $anyRisk = $true }
 
         $modules.Add([ordered]@{
             Name               = $s.Name
@@ -117,6 +150,9 @@ function Get-NRGModuleHealth {
             OffPin             = $offPin
             MsalCarrier        = [bool]$s.MsalCarrier
             RecommendedVersion = if ($s.Pin) { $s.Pin.ToString() } else { $null }
+            Source             = $source
+            ShadowedVersions   = @($shadowed)
+            LoadedOutsideBundle = $loadedOutside
             Issues             = @($issues)
         })
     }
@@ -136,5 +172,6 @@ function Get-NRGModuleHealth {
         Modules            = @($modules)
         LoadedMsalVersions = @($msalLoaded)
         HasConflictRisk    = $anyRisk
+        Bundle             = [ordered]@{ Active = [bool]$bundleRoot; Path = $bundleRoot }
     }
 }

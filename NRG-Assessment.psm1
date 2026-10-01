@@ -195,6 +195,7 @@ $script:ExportedFunctions = @(
     'Get-NRGBaselineExceptionPath', 'Get-NRGBaselineException', 'New-NRGBaselineException', 'Set-NRGBaselineException', 'Remove-NRGBaselineException',
     'Get-NRGModuleHealth',
     'Repair-NRGModuleHealth',
+    'Test-NRGModuleBundle', 'Enable-NRGModuleBundle', 'Disable-NRGModuleBundle', 'New-NRGModuleBundle',
     'Get-NRGModuleInstallScope', 'Get-NRGExoModuleFloor', 'Get-NRGConnectErrorText', 'Get-NRGExoConnectHint',
     'Get-NRGControlAutomationAudit',
 

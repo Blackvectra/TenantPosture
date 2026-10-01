@@ -49,6 +49,7 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             Where-Object { $_.FullName -notmatch '[/\\]Testing[/\\]' -and
                            $_.FullName -notmatch '[/\\]output[/\\]' -and
                            $_.FullName -notmatch '[/\\]Config[/\\]' -and
+                           $_.FullName -notmatch '[/\\]\.modules[/\\]' -and
                            $_.FullName -notmatch '\.git' }
 
         # Try to load module for runtime tests

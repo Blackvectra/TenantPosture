@@ -204,6 +204,16 @@ if (-not $NonInteractive) {
     Write-Host ''
 }
 
+# ── Module bundle (.modules/) ─────────────────────────────────────────────────
+# One pinned copy of each Microsoft module (Install-NRGPrerequisites.ps1 -Local), first on
+# PSModulePath for THIS process before the import below loads the manifest's RequiredModules,
+# so a duplicate or an online-only OneDrive copy elsewhere cannot win. No folder, no change.
+# The outermost finally at the end of this script puts PSModulePath back on every exit path.
+. (Join-Path $scriptDir 'Lib' 'Get-NRGModuleInstallScope.ps1')
+. (Join-Path $scriptDir 'Lib' 'Get-NRGModuleBundle.ps1')
+$nrgModuleBundle = Enable-NRGModuleBundle -ToolRoot $scriptDir
+try {
+
 # Load module
 $manifestPath = Join-Path $scriptDir 'NRG-Assessment.psd1'
 Write-Host '[-] Loading NRG-Assessment module...' -ForegroundColor Cyan
@@ -417,3 +427,8 @@ if ($script:NRGSITriageFatalExitCode)     { exit $script:NRGSITriageFatalExitCod
 if ($script:NRGSITriageThresholdExitCode) { exit $script:NRGSITriageThresholdExitCode }
 if ($null -ne $script:NRGSITriageSuccessExitCode) { exit $script:NRGSITriageSuccessExitCode }
 exit 0
+}
+finally {
+    # Outermost: runs on every exit path, including the exit statements above.
+    Disable-NRGModuleBundle -State $nrgModuleBundle
+}

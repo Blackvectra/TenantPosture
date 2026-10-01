@@ -22,7 +22,7 @@ Describe 'Network egress surface' {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
         # All .ps1/.psm1 source, excluding tests and any output/.git.
         $script:SourceFiles = Get-ChildItem -Path $script:RepoRoot -Recurse -File -Include '*.ps1','*.psm1' |
-            Where-Object { $_.FullName -notmatch '[\\/](Testing|output|\.git)[\\/]' }
+            Where-Object { $_.FullName -notmatch '[\\/](Testing|output|\.git|\.modules)[\\/]' }
 
         # Hosts the tool is permitted to contact. Everything read-only /
         # documented. Tor infrastructure is deliberately absent.

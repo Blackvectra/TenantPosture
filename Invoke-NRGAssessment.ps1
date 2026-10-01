@@ -375,6 +375,19 @@ $resolvedOutput = [System.IO.Path]::GetFullPath($OutputPath)
 # StartsWith bounds check on $resolvedOutput exists at a use site.
 $null = $resolvedOutput
 
+# ── Module bundle (.modules/) ─────────────────────────────────────────────────
+# Install-NRGPrerequisites.ps1 -Local saves one pinned copy of each Microsoft module into
+# .modules/ inside the tool. When that folder is present and valid it goes FIRST on
+# PSModulePath for THIS process, before anything imports Graph or Exchange: the manifest's
+# RequiredModules are loaded by the Import-Module below, from whatever PSModulePath resolves
+# first, so a duplicate or an online-only OneDrive copy elsewhere cannot win. No folder, no
+# change. The outermost try/finally at the end of this script puts PSModulePath back on every
+# exit path (the early exits below included), so a shell that ran the script is left as it was.
+. (Join-Path $scriptDir 'Lib' 'Get-NRGModuleInstallScope.ps1')
+. (Join-Path $scriptDir 'Lib' 'Get-NRGModuleBundle.ps1')
+$nrgModuleBundle = Enable-NRGModuleBundle -ToolRoot $scriptDir
+try {
+
 # ── Import module ─────────────────────────────────────────────────────────────
 Write-Host "[-] Loading NRG-Assessment module..." -ForegroundColor Cyan
 $manifestPath = Join-Path $scriptDir 'NRG-Assessment.psd1'
@@ -534,8 +547,8 @@ $moduleSpecs = @(
 )
 $needsAction = @()
 foreach ($spec in $moduleSpecs) {
-    $installed = Get-Module -ListAvailable -Name $spec.Name -ErrorAction SilentlyContinue |
-        Sort-Object Version -Descending | Select-Object -First 1
+    # The bundle's copy when the module bundle is active, else the newest on the machine.
+    $installed = @(Get-NRGAvailableModule -Name $spec.Name)[0]
     if ($installed -and $spec.MaxVersion -and $installed.Version -gt [version]$spec.MaxVersion) {
         Write-Host "  [!] $($spec.Name) $($installed.Version) is newer than PowerShell $($PSVersionTable.PSVersion) supports (up to $($spec.MaxVersion)); connecting will fail inside the module. Upgrade PowerShell or install a version in [$($spec.MinVersion),$($spec.MaxVersion)]." -ForegroundColor Yellow
     }
@@ -565,6 +578,7 @@ if ($needsAction.Count -gt 0) {
         Write-Host "  [!] NonInteractive — run .\Install-NRGPrerequisites.ps1 manually then retry." -ForegroundColor Red
         exit 1
     }
+    Write-Host "      Or build the tool's own module bundle, which installs nothing on this machine: .\Install-NRGPrerequisites.ps1 -Local" -ForegroundColor DarkGray
     $install = Read-Host "  Install/fix modules now? [Y/N]"
     if ($install -match '^[Yy]') {
         # A fresh install previously always used -Scope CurrentUser, which is
@@ -1646,3 +1660,8 @@ if ($null -ne $script:NRGSuccessExitCode) {
     exit $script:NRGSuccessExitCode
 }
 exit 0
+}
+finally {
+    # Outermost: runs on every exit path, including the exit statements above.
+    Disable-NRGModuleBundle -State $nrgModuleBundle
+}

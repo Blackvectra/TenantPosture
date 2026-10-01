@@ -53,6 +53,23 @@ cd C:\path\to\NRG-Assessment-Tool
 
 This installs/pins required PowerShell modules (with EOM at the known-good 3.2.0 version), sets execution policy, unblocks files, and installs Python+openpyxl if you want XLSX compliance matrices. Skip Python with `-SkipPython`.
 
+### Module bundle — one pinned copy of each Microsoft module, inside the tool
+
+Two machine problems stop an assessment before it collects anything, and neither is about the tenant: **two versions of the same module installed side by side** (Microsoft.Graph.Authentication 2.40.0 and 2.9.1, ExchangeOnlineManagement 3.10.1 and 3.10.0), which makes the `Microsoft.Identity.Client` assembly that loads nondeterministic and can hang the run at the first collector; and a **module folder inside OneDrive** whose files are online-only placeholders ("The cloud file provider is not running"). The tool detects both, but the fix used to be by hand, on every workstation. The bundle is the venv equivalent:
+
+```powershell
+.\Install-NRGPrerequisites.ps1 -Local                           # build .modules\ once (about 500 MB)
+.\Install-NRGPrerequisites.ps1 -Local -IncludeSharePointShell   # also bundle the SharePoint Online Management Shell
+.\Install-NRGPrerequisites.ps1 -Local -Force                    # rebuild: after a PowerShell upgrade or a pin change
+```
+
+- **What it builds.** `Save-PSResource` puts exactly one pinned version of each module the tool uses into `.modules\` (git-ignored): `Microsoft.Graph.Authentication` and the Graph submodules the tool imports, `ExchangeOnlineManagement`, `MicrosoftTeams`, and the SharePoint shell on request. The list and the pins are `Config\module-bundle.json`. The Exchange version is decided by `Get-NRGExoModuleFloor` for the PowerShell you run it under (3.10.0 or later on 7.6, 3.7.2 to 3.9.x on 7.4 and 7.5); the file's version is only a preference, used when that range allows it. **It installs nothing on the machine and removes nothing from it.**
+- **How it is used.** When `.modules\` exists and validates, `Invoke-NRGAssessment.ps1`, `Invoke-NRGBatchAssessment.ps1`, `Invoke-NRGSignInTriage.ps1`, `Invoke-NRGEmailAssessment.ps1`, `Invoke-NRGBatchSignInTriage.ps1` and `Grant-NRGGraphConsent.ps1` put it **first on `PSModulePath` for that process only** before the tool is imported, so a duplicate or a OneDrive copy elsewhere cannot win, and put `PSModulePath` back when they exit. Nothing is written to your profile, the registry or the machine's environment.
+- **No folder, no change.** Without `.modules\` the tool behaves exactly as before. A bundle that is present but not valid (a build that was interrupted, a PowerShell upgrade that moved the Exchange range, online-only files, a module that is not in the spec) is **reported and not used**, never half used; the run falls back to the machine's modules and prints the reason and the rebuild command.
+- **Where it lives.** `NRG_MODULE_BUNDLE` overrides the folder: one bundle shared by several checkouts, or kept **outside OneDrive** when the tool folder itself is inside it (`$env:NRG_MODULE_BUNDLE = 'C:\NRG\modules'`, then `.\Install-NRGPrerequisites.ps1 -Local`). `-BundlePath` builds there directly. Graph's own file names are long, so a short folder like that one also keeps clear of Windows' 260-character path limit when the tool itself sits deep inside a OneDrive path.
+- **What it cannot do.** A module already loaded in the PowerShell session cannot be replaced by a path change; the run says so and asks for a new window. `Apply-NRGBaseline.ps1` (write mode) does not use the bundle. The pins are versions the tool has run against (Graph 2.40.0, Exchange 3.10.1, Teams 8.0.0); moving one is a deliberate edit to `Config\module-bundle.json` followed by `-Local -Force`.
+- **Safety.** The builder writes only inside the bundle folder, refuses a folder that already holds something else, removes nothing without `-Force` (and then only the bundle's own module folders), and writes its lock file last, so an interrupted build is resumed by the next run and never activated half-built. It uses `Save-PSResource -SkipDependencyCheck`: `Save-Module` follows Exchange's gallery dependencies and would drop `PackageManagement` and `PowerShellGet` into the folder, where they would shadow the machine's own.
+
 ## Quick Start
 
 > **First time on Windows?** After extracting, unblock the files and set execution policy:
@@ -258,11 +275,13 @@ so CLI and GUI workflows can be mixed freely.
 Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (349 exports, dependency declarations)
+NRG-Assessment.psd1               ← Module manifest (353 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
   Connect-NRGServices.ps1         Auth (interactive browser MFA / app-only cert; process-scoped MSAL)
+  Get-NRGModuleBundle.ps1         Module bundle: validate, put .modules\ first on PSModulePath (process only), restore
+  New-NRGModuleBundle.ps1         Module bundle builder behind Install-NRGPrerequisites.ps1 -Local
   ConvertTo-NRGHtmlSafe.ps1       XSS prevention (all tenant data escapes through here)
   Get-NRGControlDefinitions.ps1   controls.json loader + content validation
 
@@ -293,14 +312,17 @@ Publishers/                       (7 files)
   Publish-NRGMonthlyReport.ps1    Monthly maturity-tier trend report
   Publish-NRGRemediationPlaybook.ps1 / -RemediationScript.ps1  Remediation guidance
 
+.modules/                         Module bundle (git-ignored; built by Install-NRGPrerequisites.ps1 -Local)
+
 Config/
   controls.json                   204 control definitions + framework citations
+  module-bundle.json              Pinned Microsoft modules for the module bundle
   frameworks.json                 CIS, SCuBA, NIST, CMMC, MITRE metadata
   clients.json                    MSP client registry (TenantId + GDAP config)
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          80 Pester suites — the FULL suite gates every PR
+Testing/                          82 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -533,7 +555,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **80 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **82 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -585,7 +607,7 @@ Six GitHub Actions workflows cover the repository. All run automatically on push
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (80 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (82 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -604,4 +626,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 349 exported functions · full Pester suite (80 suites) gating CI*
+*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 353 exported functions · full Pester suite (82 suites) gating CI*

@@ -44,6 +44,7 @@ $files = Get-ChildItem -LiteralPath $repoRoot -Recurse -File |
         $_.FullName -notmatch '\\output\\' -and
         $_.FullName -notmatch '\\\.git\\' -and
         $_.FullName -notmatch '\\\.github\\' -and
+        $_.FullName -notmatch '[\\/]\.modules[\\/]' -and
         $_.FullName -notmatch '\\tools\\integrity-manifest'
     } |
     Sort-Object FullName

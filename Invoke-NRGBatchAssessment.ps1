@@ -1,6 +1,4 @@
 #Requires -Version 7.0
-#Requires -Modules @{ ModuleName='Microsoft.Graph.Authentication'; ModuleVersion='2.0.0' }
-#Requires -Modules @{ ModuleName='ExchangeOnlineManagement'; ModuleVersion='3.0.0' }
 <#
 .SYNOPSIS
     NRG-Assessment Batch Runner — GDAP multi-tenant mode.
@@ -160,6 +158,28 @@ Write-Host ''
 if ($WhatIf) {
     Write-Host "WhatIf — no assessments run." -ForegroundColor Yellow
     exit 0
+}
+
+# ── Module bundle (.modules/) ─────────────────────────────────────────────────
+# This runner calls Connect-MgGraph BEFORE it imports the tool, so the bundle (one pinned copy
+# of each Microsoft module, built by Install-NRGPrerequisites.ps1 -Local) has to be first on
+# PSModulePath here, not only inside the per-client assessment. For this process only, and put
+# back by the outermost finally at the end of this script. Each client's Invoke-NRGAssessment.ps1
+# then finds it already first and leaves it alone. No folder, no change.
+. (Join-Path $scriptDir 'Lib' 'Get-NRGModuleInstallScope.ps1')
+. (Join-Path $scriptDir 'Lib' 'Get-NRGModuleBundle.ps1')
+$nrgModuleBundle = Enable-NRGModuleBundle -ToolRoot $scriptDir
+try {
+
+# This script no longer declares '#Requires -Modules' for Microsoft.Graph.Authentication
+# (2.0.0) and ExchangeOnlineManagement (3.0.0): a #Requires line imports the module BEFORE any
+# code runs, which loaded the machine's copy ahead of the bundle. The same requirements are
+# checked here, with the bundle already in place.
+foreach ($req in @(@{ Name = 'Microsoft.Graph.Authentication'; Min = '2.0.0' }, @{ Name = 'ExchangeOnlineManagement'; Min = '3.0.0' })) {
+    if (-not @(Get-NRGAvailableModule -Name $req.Name | Where-Object { $_.Version -ge [version]$req.Min })) {
+        Write-Host "[!] $($req.Name) $($req.Min) or later is required. Run .\Install-NRGPrerequisites.ps1 (or .\Install-NRGPrerequisites.ps1 -Local for the tool-local bundle)." -ForegroundColor Red
+        exit 1
+    }
 }
 
 # ── Initial Graph auth — one prompt for all tenants ───────────────────────────
@@ -458,3 +478,8 @@ Write-Host '================================================================' -F
 Write-Host " Done: $success/$($batchResults.Count) succeeded" -ForegroundColor $(if ($success -eq $batchResults.Count) { 'Green' } else { 'Yellow' })
 Write-Host " Summary: $summaryPath" -ForegroundColor White
 Write-Host ''
+}
+finally {
+    # Outermost: runs on every exit path, including the exit statements above.
+    Disable-NRGModuleBundle -State $nrgModuleBundle
+}

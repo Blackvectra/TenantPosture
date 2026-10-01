@@ -33,3 +33,8 @@ Thumbs.db
 # the EXAMPLE- template is tracked.
 Config/monthly-delta/*.psd1
 !Config/monthly-delta/EXAMPLE-*.psd1
+
+# Module bundle (Install-NRGPrerequisites.ps1 -Local): Microsoft's own packages, saved
+# inside the tool. Machine-specific and several hundred MB; never committed, never signed,
+# never hashed into the integrity manifest.
+.modules/
