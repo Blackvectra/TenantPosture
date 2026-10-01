@@ -1,0 +1,34 @@
+{
+  "SchemaVersion": 1,
+  "Notes": [
+    "What Install-NRGPrerequisites.ps1 -Local saves into the tool's own module folder (.modules/), and what Get-NRGModuleBundle.ps1 checks before that folder is put first on PSModulePath.",
+    "Graph: every Microsoft.Graph.* module in the bundle shares ONE version. Microsoft releases the SDK in lockstep and a submodule built for one Authentication release is not safe on another, so the version is stated once here and the list below carries names only. 2.40.0 and Teams 8.0.0 are the releases the last live run used (2026-09-29); change a pin here, in one reviewed line, to move the tool to a newer release.",
+    "ExchangeOnline: the version is NOT stated here. Get-NRGExoModuleFloor decides it from the PowerShell in use (3.10.0 or later on 7.6, 3.7.2 to 3.9.x on 7.4 and 7.5), and the newest release inside that range is saved. A second table here would drift from the function the installer, the entry point's preflight and Get-NRGModuleHealth already share.",
+    "SharePointShell is saved only when the installer is given -IncludeSharePointShell. It is the one optional module, and in PowerShell 7 it loads through a Windows PowerShell child process (see Connect-NRGServices).",
+    "Graph modules listed beyond Authentication are the ones the tool can call: Reports, Identity.Governance, Identity.SignIns and Users are pre-imported by Connect-NRGServices; Groups and Identity.DirectoryManagement are read by Get-NRGBreakGlassExclusions; Applications serves the -RegisterApp onboarding path. A Graph submodule left out of the bundle would be auto-loaded from whichever other copy sits on PSModulePath, which is the mixed-version load this folder exists to prevent."
+  ],
+  "Graph": {
+    "Version": "2.40.0",
+    "Modules": [
+      "Microsoft.Graph.Authentication",
+      "Microsoft.Graph.Applications",
+      "Microsoft.Graph.Groups",
+      "Microsoft.Graph.Identity.DirectoryManagement",
+      "Microsoft.Graph.Identity.Governance",
+      "Microsoft.Graph.Identity.SignIns",
+      "Microsoft.Graph.Reports",
+      "Microsoft.Graph.Users"
+    ]
+  },
+  "ExchangeOnline": {
+    "Name": "ExchangeOnlineManagement"
+  },
+  "Teams": {
+    "Name": "MicrosoftTeams",
+    "Version": "8.0.0"
+  },
+  "SharePointShell": {
+    "Name": "Microsoft.Online.SharePoint.PowerShell",
+    "Version": "16.0.27709.12000"
+  }
+}
