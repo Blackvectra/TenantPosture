@@ -19,6 +19,7 @@ coming back to this after six months, start here.
 | Build a CMMC / 800-171 plan | Add `-SSP` |
 | Find out who got phished | `Invoke-NRGSignInTriage.ps1` |
 | Investigate one mailbox | `Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@client.com` |
+| Harden distribution lists | `Invoke-NRGDistributionListScan.ps1 -UserPrincipalName admin@client.com` |
 | Print device guidance (no scan) | `New-NRGDeviceGuide.ps1` |
 | Set up a new machine | `Install-NRGPrerequisites.ps1` |
 | Actually change tenant settings | `Apply-NRGBaseline.ps1` — the only one that writes |
@@ -139,6 +140,22 @@ origin, auth methods, OAuth consents.
 when you are working an incident and cannot wait for admin access.
 
 Output: `output\<upn>\<timestamp>-email-incident.html`.
+
+### `Invoke-NRGDistributionListScan.ps1` — distribution lists only
+
+Every distribution list with its members and current settings, compared with a documented
+recommendation (Microsoft's own defaults and guidance; NRG judgments only once the owner approves
+them). Connects to **Exchange Online only**; everything else is not assessed, and the output says so.
+
+```powershell
+.\Invoke-NRGDistributionListScan.ps1 -UserPrincipalName admin@client.com
+```
+
+**Read-only.** It lists members; it never creates, adds, removes or changes a user, group or
+setting. The commands in the worksheet are text for an administrator to review and run.
+
+Output: `output\<tenant>-<timestamp>-distribution-lists.txt` and `.csv`. See
+[`NRG-DISTRIBUTION-LISTS.md`](NRG-DISTRIBUTION-LISTS.md).
 
 ---
 

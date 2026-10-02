@@ -15,5 +15,21 @@
   "RequiredConditionalAccessTemplates": {
     "_help": "Ids from Config/conditional-access-baseline.json that NRG requires Enforced (for example block-legacy-auth, mfa-all-users). AAD-2.1.",
     "Values": []
+  },
+  "DistributionListMaxMembers": {
+    "_help": "One whole number: the most direct members NRG allows on a distribution list (for example \"500\"). DL-2.1, distribution-list worksheet only. Empty means not approved: the member count is reported and not assessed.",
+    "Values": []
+  },
+  "DistributionListAllowedJoinRestrictions": {
+    "_help": "MemberJoinRestriction values NRG accepts on a distribution list, most preferred first: any of Open, Closed, ApprovalRequired. DL-1.4, distribution-list worksheet only. Empty means not approved: the setting is reported and not assessed.",
+    "Values": []
+  },
+  "DistributionListAllowedDepartRestrictions": {
+    "_help": "MemberDepartRestriction values NRG accepts on a distribution list, most preferred first: any of Open, Closed. DL-1.5, distribution-list worksheet only. Empty means not approved: the setting is reported and not assessed.",
+    "Values": []
+  },
+  "DistributionListExternalMembers": {
+    "_help": "Set to exactly one value, Prohibited, to make external members (addresses outside the tenant's accepted domains) a shortfall. DL-2.2, distribution-list worksheet only. Empty means not approved: external members are listed and not assessed.",
+    "Values": []
   }
 }

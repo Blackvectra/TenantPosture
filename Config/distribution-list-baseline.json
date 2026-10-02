@@ -1,0 +1,214 @@
+{
+  "_comment": "Recommendations the distribution-list worksheet compares each list against, read by Lib/Get-NRGDistributionListBaseline.ps1 and judged by Evaluators/Test-NRGControlDistributionLists.ps1 (the DL-* series; NOT in Config/controls.json, not scored, not a compliance claim). Every recommended value is either a value Microsoft documents (a default or a stated behavior) or an NRG judgment. An NRG judgment (a member cap, banning external members, the join/leave policy) carries RecommendedValueSource 'NRGStandard' and a StandardKey into Config/nrg-standards.json: those lists ship EMPTY until the owner approves them, and an empty list means the setting is reported but NOT assessed, never met. Commands are TEXT for an administrator to review and run; this tool never runs them, and the static tests keep it that way. Microsoft Learn pages fetched 2026-10-02.",
+  "Version": "1.0",
+  "FrameworkCoverage": {
+    "NIST_SP_800-53_Rev5": "A MAPPING made by this tool, not a quotation of NIST and not a NIST requirement for distribution lists. Each Nist80053 id was chosen because the Rev 5 statement of that control fits what the setting does; NistMappingNote says how well (Direct or Related). Rev 5 titles come from Config/nist-800-53-catalog.json.",
+    "CIS_Microsoft_365_Foundations": "No CIS benchmark item written for distribution-list settings was verified. None is cited.",
+    "CISA_SCuBA": "No SCuBA rule for distribution-list settings was verified. None is cited.",
+    "Microsoft": "Each recommendation cites the Microsoft Learn page that documents the setting and its default. That page is the source; this file only points at it."
+  },
+  "Recommendations": [
+    {
+      "Id": "DL-1.1",
+      "Title": "Accept mail only from authenticated (internal) senders",
+      "Area": "Who can send to the list",
+      "Setting": "RequireSenderAuthenticationEnabled",
+      "AppliesTo": ["Distribution", "MailEnabledSecurity", "RoomList", "Dynamic"],
+      "RecommendedValue": "True",
+      "RecommendedValueSource": "MicrosoftDefault",
+      "StandardKey": null,
+      "Severity": "High",
+      "Why": "Microsoft documents that a list set to 'Only allow messages from people inside my organization' rejects mail from outside the organization, and that this is the default for a new list. That choice is the RequireSenderAuthenticationEnabled setting, so a list where it is False accepts mail from anyone on the internet. Unless AcceptMessagesOnlyFrom limits the senders, an outsider who learns the address can mail every member: a phishing and spam channel into the whole audience.",
+      "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
+      "AlsoSee": [
+        "https://learn.microsoft.com/powershell/module/exchangepowershell/set-distributiongroup",
+        "https://learn.microsoft.com/exchange/mail-flow/mail-routing/recipient-resolution"
+      ],
+      "Nist80053": ["AC-3", "SC-7", "SI-8"],
+      "NistMappingNote": "Tool mapping, not NIST text. AC-3 (Access Enforcement) and SC-7 (Boundary Protection) are Direct: the setting decides who may send to the list and whether mail from outside the boundary reaches it. SI-8 (Spam Protection) is Related only: closing the outside-sender path narrows how unsolicited mail enters, but the setting is not itself a spam-detection mechanism.",
+      "Commands": {
+        "Distribution": "Set-DistributionGroup -Identity {Identity} -RequireSenderAuthenticationEnabled $true",
+        "Dynamic": "Set-DynamicDistributionGroup -Identity {Identity} -RequireSenderAuthenticationEnabled $true"
+      },
+      "FixNote": "Confirm first that no outside sender legitimately mails this list. Microsoft notes that with 'Only allow messages from people inside my organization', mail from a mail contact is rejected even if the contact is on the allowed-senders list."
+    },
+    {
+      "Id": "DL-1.2",
+      "Title": "The list has at least one owner",
+      "Area": "Ownership",
+      "Setting": "ManagedBy",
+      "AppliesTo": ["Distribution", "MailEnabledSecurity", "RoomList", "Dynamic"],
+      "RecommendedValue": "At least one owner",
+      "RecommendedValueSource": "MicrosoftGuidance",
+      "StandardKey": null,
+      "Severity": "Medium",
+      "Why": "Microsoft states that a distribution list must have at least one owner, and that the owner can change the list's properties, add or remove members, delete the group and approve join and leave requests. A list with no owner has nobody accountable for who is in it or who may mail it, so membership drifts and nothing prompts a review. This check reads only that an owner is named; it does not check that the named owner is a current, active person.",
+      "SourceUrl": "https://learn.microsoft.com/powershell/module/exchangepowershell/set-distributiongroup",
+      "AlsoSee": [
+        "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups"
+      ],
+      "Nist80053": ["AC-2"],
+      "NistMappingNote": "Tool mapping, not NIST text. AC-2 (Account Management) is Direct: it calls for assigned account managers and specified group membership; the list owner is that manager for the list.",
+      "Commands": {
+        "Distribution": "Set-DistributionGroup -Identity {Identity} -ManagedBy @{Add='<owner-address>'}",
+        "Dynamic": "Set-DynamicDistributionGroup -Identity {Identity} -ManagedBy @{Add='<owner-address>'}"
+      },
+      "FixNote": "Replace <owner-address> with the person who is accountable for the list. The owner must be a mailbox, mail user or mail-enabled security group (Microsoft)."
+    },
+    {
+      "Id": "DL-1.3",
+      "Title": "If moderation is on, someone can approve messages",
+      "Area": "Moderation",
+      "Setting": "ModerationEnabled + ModeratedBy + ManagedBy",
+      "AppliesTo": ["Distribution", "MailEnabledSecurity", "RoomList", "Dynamic"],
+      "RecommendedValue": "A moderator or an owner is named whenever moderation is on",
+      "RecommendedValueSource": "MicrosoftGuidance",
+      "StandardKey": null,
+      "Severity": "Medium",
+      "Why": "Microsoft documents that moderation is off by default, and that when it is on without a named moderator, messages go to the group owners for approval. Moderation on with neither a moderator nor an owner leaves no one who can approve, so mail to the list has no approver (this follows from the documented behavior; Microsoft does not state the outcome). No Microsoft recommendation to turn moderation on was verified, so a list with moderation off is reported, not judged.",
+      "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
+      "AlsoSee": [
+        "https://learn.microsoft.com/powershell/module/exchangepowershell/set-distributiongroup"
+      ],
+      "Nist80053": [],
+      "NistMappingNote": "No framework item verified.",
+      "Commands": {
+        "Distribution": "Set-DistributionGroup -Identity {Identity} -ModeratedBy '<moderator-address>'",
+        "Dynamic": "Set-DynamicDistributionGroup -Identity {Identity} -ModeratedBy '<moderator-address>'"
+      },
+      "FixNote": "Replace <moderator-address> with a mailbox, mail user or mail contact in your organization, or add an owner (see DL-1.2)."
+    },
+    {
+      "Id": "DL-1.4",
+      "Title": "Who may join the list without owner approval",
+      "Area": "Membership control",
+      "Setting": "MemberJoinRestriction",
+      "AppliesTo": ["Distribution", "MailEnabledSecurity", "RoomList"],
+      "RecommendedValue": "NRG standard (not approved until Config/nrg-standards.json DistributionListAllowedJoinRestrictions is filled)",
+      "RecommendedValueSource": "NRGStandard",
+      "StandardKey": "DistributionListAllowedJoinRestrictions",
+      "Severity": "Medium",
+      "Why": "Microsoft documents three values: Open (users add themselves without approval), Closed (only owners add members; requests to join are rejected) and ApprovalRequired (an owner approves each request). The cmdlet reference gives Closed as the default for universal distribution groups. Whether Open is acceptable depends on who the list is for, which is NRG's judgment, so a list is judged only against an approved NRG standard. With no standard approved the setting is reported and not assessed.",
+      "SourceUrl": "https://learn.microsoft.com/powershell/module/exchangepowershell/set-distributiongroup",
+      "AlsoSee": [
+        "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups"
+      ],
+      "Nist80053": ["AC-2", "AC-6"],
+      "NistMappingNote": "Tool mapping, not NIST text. AC-2 (Account Management) is Direct: it asks for prerequisites and a specified process for group membership, and an open list lets users enroll themselves. AC-6 (Least Privilege) is Related: self-added members receive whatever the list gives its members (mail, and access wherever the list is used for permissions).",
+      "Commands": {
+        "Distribution": "Set-DistributionGroup -Identity {Identity} -MemberJoinRestriction {Approved}",
+        "Dynamic": null
+      },
+      "FixNote": "{Approved} is filled from the first value in the approved NRG standard. A dynamic list has no join setting: its membership is its filter."
+    },
+    {
+      "Id": "DL-1.5",
+      "Title": "Who may leave the list without owner approval",
+      "Area": "Membership control",
+      "Setting": "MemberDepartRestriction",
+      "AppliesTo": ["Distribution", "MailEnabledSecurity", "RoomList"],
+      "RecommendedValue": "NRG standard (not approved until Config/nrg-standards.json DistributionListAllowedDepartRestrictions is filled)",
+      "RecommendedValueSource": "NRGStandard",
+      "StandardKey": "DistributionListAllowedDepartRestrictions",
+      "Severity": "Low",
+      "Why": "Microsoft documents Open (members may leave without approval, the default for universal distribution groups) and Closed (only owners remove members). Which one a list should use is NRG's judgment, so the setting is judged only against an approved NRG standard and is otherwise reported and not assessed.",
+      "SourceUrl": "https://learn.microsoft.com/powershell/module/exchangepowershell/set-distributiongroup",
+      "AlsoSee": [
+        "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups"
+      ],
+      "Nist80053": [],
+      "NistMappingNote": "No framework item verified.",
+      "Commands": {
+        "Distribution": "Set-DistributionGroup -Identity {Identity} -MemberDepartRestriction {Approved}",
+        "Dynamic": null
+      },
+      "FixNote": "{Approved} is filled from the first value in the approved NRG standard."
+    },
+    {
+      "Id": "DL-1.6",
+      "Title": "Hidden from address lists (reported only)",
+      "Area": "Visibility",
+      "Setting": "HiddenFromAddressListsEnabled",
+      "AppliesTo": ["Distribution", "MailEnabledSecurity", "RoomList", "Dynamic"],
+      "RecommendedValue": "No recommendation",
+      "RecommendedValueSource": "None",
+      "StandardKey": null,
+      "Severity": "Informational",
+      "Why": "Microsoft documents that a hidden list can still be mailed by anyone who types its address. Hiding a list is therefore not a control on who can send to it, and this scan does not treat it as one. It is reported so an administrator does not read 'hidden' as 'protected'.",
+      "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
+      "AlsoSee": [],
+      "Nist80053": [],
+      "NistMappingNote": "No framework item verified.",
+      "Commands": {
+        "Distribution": null,
+        "Dynamic": null
+      },
+      "FixNote": ""
+    },
+    {
+      "Id": "DL-2.1",
+      "Title": "Member count within the approved maximum",
+      "Area": "Membership",
+      "Setting": "Member count",
+      "AppliesTo": ["Distribution", "MailEnabledSecurity", "RoomList", "Dynamic"],
+      "RecommendedValue": "NRG standard (not approved until Config/nrg-standards.json DistributionListMaxMembers is filled)",
+      "RecommendedValueSource": "NRGStandard",
+      "StandardKey": "DistributionListMaxMembers",
+      "Severity": "Low",
+      "Why": "No Microsoft recommended maximum membership was verified, so none is cited. A cap is an NRG judgment about how large a list can grow before its membership cannot realistically be reviewed, so the count is judged only against an approved standard. With no standard approved the count is reported and not assessed. Members of nested groups are not expanded: a count of direct members understates the real audience when groups are nested.",
+      "SourceUrl": "https://learn.microsoft.com/powershell/module/exchangepowershell/get-distributiongroupmember",
+      "AlsoSee": [],
+      "Nist80053": ["AC-2"],
+      "NistMappingNote": "Tool mapping, not NIST text. AC-2 (Account Management) is Related: membership has to be reviewable for the account-management review to mean anything; the cap itself is NRG's, not NIST's.",
+      "Commands": {
+        "Distribution": "Get-DistributionGroupMember -Identity {Identity} -ResultSize Unlimited",
+        "Dynamic": "Get-DynamicDistributionGroupMember -Identity {Identity} -ResultSize Unlimited"
+      },
+      "FixNote": "The command only lists members, for review with the list owner. Removing members is a decision for the owner and is not generated here."
+    },
+    {
+      "Id": "DL-2.2",
+      "Title": "No external members (when NRG prohibits them)",
+      "Area": "Membership",
+      "Setting": "Members outside the tenant's accepted domains",
+      "AppliesTo": ["Distribution", "MailEnabledSecurity", "RoomList", "Dynamic"],
+      "RecommendedValue": "NRG standard (not approved until Config/nrg-standards.json DistributionListExternalMembers is set to Prohibited)",
+      "RecommendedValueSource": "NRGStandard",
+      "StandardKey": "DistributionListExternalMembers",
+      "Severity": "Medium",
+      "Why": "Microsoft documents that a list can contain mail contacts and mail users, which can point at outside addresses. Whether a list may forward internal mail to outside recipients is NRG's judgment, so external members are judged only when NRG approves the standard 'Prohibited'. With no standard approved, external members are listed and not assessed. A member is external when its address is outside the tenant's accepted domains; a member whose domain cannot be classified is counted separately and is never called internal.",
+      "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
+      "AlsoSee": [
+        "https://learn.microsoft.com/powershell/module/exchangepowershell/get-distributiongroupmember"
+      ],
+      "Nist80053": ["AC-2", "AC-4"],
+      "NistMappingNote": "Tool mapping, not NIST text. AC-4 (Information Flow Enforcement) is Direct: mail sent to the list flows to every member, including outside recipients. AC-2 (Account Management) is Related: the list's membership is the specified group membership that is meant to be authorized and reviewed.",
+      "Commands": {
+        "Distribution": "Remove-DistributionGroupMember -Identity {Identity} -Member '<member-address>'",
+        "Dynamic": null
+      },
+      "FixNote": "Run only after the list owner confirms the member should go. A dynamic list is changed by editing its filter, not by removing members."
+    },
+    {
+      "Id": "DL-2.3",
+      "Title": "Nested groups (reported only)",
+      "Area": "Membership",
+      "Setting": "Members that are themselves groups",
+      "AppliesTo": ["Distribution", "MailEnabledSecurity", "RoomList"],
+      "RecommendedValue": "No recommendation",
+      "RecommendedValueSource": "None",
+      "StandardKey": null,
+      "Severity": "Informational",
+      "Why": "No Microsoft recommendation about nesting groups was verified. A nested group hides its own members behind one entry, so the people who actually receive mail from the list are not all shown here: the members of a nested group are not expanded by this scan. They are reported so an administrator reviews those groups too.",
+      "SourceUrl": "https://learn.microsoft.com/powershell/module/exchangepowershell/get-distributiongroupmember",
+      "AlsoSee": [],
+      "Nist80053": ["AC-2"],
+      "NistMappingNote": "Tool mapping, not NIST text. AC-2 (Account Management) is Related: a membership review has to follow nested groups to be complete.",
+      "Commands": {
+        "Distribution": null,
+        "Dynamic": null
+      },
+      "FixNote": ""
+    }
+  ]
+}

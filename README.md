@@ -30,7 +30,7 @@ Connects to a Microsoft 365 tenant via delegated auth (or GDAP for MSP batch run
 
 **Zero writes to tenant. Read-only by design.**
 
-Four entry points:
+Five entry points:
 
 | Script | Purpose |
 |---|---|
@@ -38,6 +38,7 @@ Four entry points:
 | `Invoke-NRGBatchAssessment.ps1` | All clients in `Config/clients.json` via GDAP, one login |
 | `Invoke-NRGSignInTriage.ps1` (+ batch variant) | Admin-scope sign-in IoC triage — ranks likely-compromised users |
 | `Invoke-NRGEmailAssessment.ps1` | Per-user mailbox incident-response deep-dive (Email-IR mode) |
+| `Invoke-NRGDistributionListScan.ps1` | Distribution lists only (Exchange Online only): members, settings, and a hardening worksheet |
 
 ---
 
@@ -230,6 +231,33 @@ login via GDAP — the same multi-tenant model as the batch assessment.
 > open the script header — each lists its full switch set and exit codes
 > (`0` ok, `1` auth, `10` critical IoC found).
 
+### Distribution-list scan — members, settings, and a hardening worksheet
+
+`Invoke-NRGDistributionListScan.ps1` scans **distribution lists only**. It signs in to Exchange
+Online and nothing else (every other area is *not assessed*, and every output says so), lists each
+list's members and current settings, compares each setting with a documented recommendation, and
+writes a worksheet an administrator uses to harden the lists. It is read-only: it never creates,
+adds, removes or changes a user, group or setting. The PowerShell it prints to close a shortfall is
+**text for a human to run**; the tool never runs it.
+
+```powershell
+.\Invoke-NRGDistributionListScan.ps1 -UserPrincipalName admin@client.com
+.\Invoke-NRGDistributionListScan.ps1 -DelegatedOrganization client.onmicrosoft.com -TenantId <guid>   # GDAP
+```
+Output: `.\output\<tenant>-<timestamp>-distribution-lists.txt` (one section per list) and `.csv` (one
+row per list per recommendation), written through the restricted-file writer because they hold
+tenant inventory.
+
+The recommendations are the `DL-*` series in `Config/distribution-list-baseline.json`: Microsoft's
+documented defaults and guidance, each with its Microsoft Learn source and a NIST SP 800-53 Rev 5
+mapping that is labeled as this tool's mapping, not NIST text. No CIS or SCuBA id is cited because
+none was verified for distribution lists. Anything that is NRG's own judgment (a member cap, external
+members, the join and leave policy) comes from `Config/nrg-standards.json` and **ships empty**: until
+the owner approves it, the setting is reported and not assessed. Details, statuses and limits:
+[`docs/NRG-DISTRIBUTION-LISTS.md`](docs/NRG-DISTRIBUTION-LISTS.md).
+
+---
+
 ### Local Web GUI
 
 For operators who prefer clicking over typing, `-Web` boots a local browser
@@ -260,8 +288,9 @@ so CLI and GUI workflows can be mixed freely.
 ```
 Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
+Invoke-NRGDistributionListScan.ps1 ← Distribution lists only: Exchange Online only, read-only, worksheet out
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (387 exports, dependency declarations)
+NRG-Assessment.psd1               ← Module manifest (396 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -271,7 +300,7 @@ Lib/                              ← Shared infrastructure
 
 Collectors/                       READ-ONLY — raw data collection, no scoring
   AAD/    (7 files)               Auth policies, CA, users+MFA, roles, PIM, identity governance, inventory
-  EXO/    (3 files)               Mailbox config, EXO inventory, Defender policies
+  EXO/    (4 files)               Mailbox config, EXO inventory, Defender policies, distribution lists
   DNS/    (1 file)                SPF, DKIM, DMARC, MTA-STS, TLS-RPT, DNSSEC
   Intune/ (3 files)               Device compliance, app protection, endpoint security
   SharePoint/ Teams/ Purview/ PowerPlatform/ AI/   (1 file each)
@@ -287,6 +316,7 @@ Evaluators/                       SCORING ONLY — reads raw data, writes findin
   Test-NRGControlIntune.ps1       17 controls
   Test-NRGControlPowerPlatform.ps1 11 controls
   Test-NRGControlDNS.ps1          10 controls
+  Test-NRGControlDistributionLists.ps1  DL-* worksheet series (not in controls.json, not scored)
 
 Publishers/                       (7 files)
   Publish-NRGAssessmentHTML.ps1   Interactive HTML report with exec summary + findings
@@ -295,15 +325,17 @@ Publishers/                       (7 files)
   Publish-NRGDeltaReport.ps1      Baseline-vs-current drift report
   Publish-NRGMonthlyReport.ps1    Monthly maturity-tier trend report
   Publish-NRGRemediationPlaybook.ps1 / -RemediationScript.ps1  Remediation guidance
+  Publish-NRGDistributionListWorksheet.ps1  Distribution-list worksheet (.txt + .csv, restricted-file writer)
 
 Config/
   controls.json                   204 control definitions + framework citations
+  distribution-list-baseline.json DL-* recommendations: Microsoft source + NIST mapping per entry
   frameworks.json                 CIS, SCuBA, NIST, CMMC, MITRE metadata
   clients.json                    MSP client registry (TenantId + GDAP config)
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          92 Pester suites — the FULL suite gates every PR
+Testing/                          95 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -536,7 +568,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **92 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **95 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -588,7 +620,7 @@ Six GitHub Actions workflows cover the repository. All run automatically on push
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (92 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (95 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -607,4 +639,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 387 exported functions · full Pester suite (92 suites) gating CI*
+*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 396 exported functions · full Pester suite (95 suites) gating CI*

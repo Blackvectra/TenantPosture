@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- **New: distribution-list scan (`Invoke-NRGDistributionListScan.ps1`).** Lists every distribution list
+  with its members and current settings, compares each setting with a documented recommendation, and
+  writes `<tenant>-<timestamp>-distribution-lists.txt` and `.csv` (one section per list; one row per
+  list per recommendation) for an administrator hardening the lists. It connects to Exchange Online
+  only (`Connect-NRGExchangeOnly`: no Graph, Purview, Teams or SharePoint), says plainly that every
+  other area was not assessed, and is read-only: it never creates, adds, removes or changes a user,
+  group or setting, and the PowerShell it prints beside a shortfall is text that is never run. The new
+  `EXO-DistributionLists` collector reads `Get-DistributionGroup`, `Get-DynamicDistributionGroup` and
+  both member cmdlets through the Exchange Online session, publishes `SectionStatus` per section,
+  reads every property through `Get-NRGObjectField` with an absent-vs-empty sentinel (an omitted
+  `ManagedBy` is "not read", an empty one is "no owner"), retries throttled calls with backoff, caps
+  members per list (`limit + 1` detects truncation) and keeps a member to a UPN and a display name.
+  The `DL-*` series (DL-0.1, DL-1.1 to DL-1.6, DL-2.1 to DL-2.3) is **not** in `Config/controls.json`
+  and is not scored; recommendations are data in `Config/distribution-list-baseline.json`, each with a
+  Microsoft Learn source and a NIST SP 800-53 Rev 5 mapping labeled as this tool's mapping (every id
+  exists in `Config/nist-800-53-catalog.json`). No CIS or SCuBA id is cited: none was verified for
+  distribution lists. Microsoft's documented defaults are judged as written; anything that is NRG's
+  own judgment (a member cap, external members, the join and leave policy) comes from four new
+  `DistributionList*` lists in `Config/nrg-standards.json` that **ship empty**, and an empty list
+  means the setting is reported and not assessed, never met. Missing evidence is never Satisfied.
+  Output goes through `Set-NRGSensitiveFileContent`; tenant text cannot forge a spreadsheet formula,
+  a worksheet line or a terminal escape; a command names a list only by a safe address or GUID.
+  Three new suites (collector, evaluator/catalog/standards, worksheet/safety/entry script, the last
+  running the real script in a child process against stand-in modules that record any call outside
+  Exchange reads). See `docs/NRG-DISTRIBUTION-LISTS.md`. Not yet run against a live tenant.
+
 - **The first email assessment on a real mailbox raised two false indicators.** (1) EMAIL-4.1 printed
   "UNVERIFIED publisher" for every OAuth grant whose app lookup failed; that lookup needs
   Directory.Read.All, which a delegated user sign-in never has, so Microsoft's own apps were
