@@ -233,14 +233,13 @@ function Start-NRGWebServer {
             $id     = $WebEvent.Parameters['id']
             # Guard against path traversal: both segments are filename-only.
             if ($tenant -match '[\\/]' -or $id -match '[\\/]') {
-                Set-PodeResponseStatus -Code 400
-                Write-PodeTextResponse -Value 'Invalid path segment.'
+                # -StatusCode, not Set-PodeResponseStatus (see POST /api/scan).
+                Write-PodeTextResponse -Value 'Invalid path segment.' -StatusCode 400
                 return
             }
             $htmlPath = Join-Path (Get-PodeState -Name 'cfg').OutputRoot $tenant ($id + '-assessment.html')
             if (-not (Test-Path -LiteralPath $htmlPath)) {
-                Set-PodeResponseStatus -Code 404
-                Write-PodeTextResponse -Value 'Report not found.'
+                Write-PodeTextResponse -Value 'Report not found.' -StatusCode 404
                 return
             }
             $html = Get-Content -LiteralPath $htmlPath -Raw -Encoding utf8
