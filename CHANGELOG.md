@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **The first email assessment on a real mailbox raised two false indicators.** (1) EMAIL-4.1 printed
+  "UNVERIFIED publisher" for every OAuth grant whose app lookup failed; that lookup needs
+  Directory.Read.All, which a delegated user sign-in never has, so Microsoft's own apps were
+  reported as unverified and the finding was Critical. It now says "app not identified" and
+  "publisher not checked", is High until an app is identified, stays Critical only when an identified
+  app holds a write scope, and says how to identify the app. (2) EMAIL-3.1 ranked Microsoft Loop, an
+  Ingram Micro reminder and a LevelUp course as the "most likely phish": a display name saying
+  "Microsoft" from a non-Microsoft domain counted as a strong signal, and the same display name
+  was counted twice (impersonation and brand claim). A display-name claim is now one weak signal;
+  strong signals are urgency wording, a sign-in link to a non-Microsoft host, and a typo-squatted
+  sending domain. Leads resting on a display name alone are still listed (nothing is hidden) but rank
+  below strong leads, are labeled, and make the finding Medium, not a High indicator.
+  `sharepointonline.com` and `microsoft365.com` are Microsoft domains. Six new tests in
+  `NRG.EmailIR.Tests.ps1`, all failing on the old code.
+
 - **A scan started from the web GUI could not sign in to Graph.** The GUI runs the assessment in a
   hidden child process; Windows' broker sign-in (WAM) needs a parent window handle, so Graph failed
   with "A window handle must be configured" while Exchange, Purview and Teams (which use

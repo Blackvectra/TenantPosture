@@ -195,6 +195,37 @@ Describe 'NRG Email IR — evaluators against synthetic fixtures' {
             $f = Run @() @($m)
             $f.State | Should -Be 'NotApplicable'
         }
+        It 'a Microsoft Loop digest from sharepointonline.com is not a lead (a Microsoft domain)' {
+            $m = Msg 'm1' 'Start your day by getting in the Loop' 'no-reply@sharepointonline.com' 'Microsoft Loop'
+            (Run @($m)).State | Should -Be 'NotApplicable'
+        }
+        It 'a partner or distributor whose display name says Microsoft is a weaker lead, Medium, never a High indicator' {
+            $m = Msg 'm2' 'Microsoft SPLA Reporting Reminder' 'Microsoft-SPLA@ingrammicro.example' 'Microsoft-SPLA'
+            $f = Run @($m)
+            $f.State    | Should -Be 'Gap'
+            $f.Severity | Should -Be 'Medium'
+            $f.Detail   | Should -Match 'weaker lead: a display name alone'
+            $f.Detail   | Should -Match 'No lead carries a strong phishing signal'
+        }
+        It 'one display name counts once: the Microsoft claim does not also fire the brand-spoof signal' {
+            $m = Msg 'm3' 'Course enrollment' 'DoNotReply@training.example' 'LevelUp for Microsoft'
+            $f = Run @($m)
+            $f.Detail | Should -Not -Match "claims 'microsoft'"
+            $f.Detail | Should -Match 'Rank score 45'
+        }
+        It 'a typo-squatted Microsoft domain is a strong lead and stays High' {
+            $m = Msg 'm4' 'Notice' 'noreply@microsft-support.example' 'Support'
+            $f = Run @($m)
+            $f.Severity | Should -Be 'High'
+            $f.Detail   | Should -Match 'sending domain'
+        }
+        It 'a strong lead outranks a weaker lead with a higher score' {
+            $weak   = Msg 'm5' 'Hello' 'a@vendor.example' 'Microsoft Partner Network'
+            $strong = Msg 'm6' 'Verify your account now' 'x@other.example' 'Account Team'
+            $f = Run @($weak, $strong)
+            $f.Severity | Should -Be 'High'
+            $f.Detail.IndexOf('x@other.example') | Should -BeLessThan $f.Detail.IndexOf('a@vendor.example')
+        }
         It 'a genuine DocuSign message from a DocuSign domain is not called a brand spoof' {
             $m = Msg 'd1' 'Please review: contract for signature' 'dse@docusign.net' 'DocuSign'
             $f = Run @($m)
@@ -538,6 +569,21 @@ Describe 'NRG Email IR — EMAIL-4.1 OAuth consent grants' {
         $f[0].Detail   | Should -Match 'UNVERIFIED publisher'
         $f[0].Detail   | Should -Match 'Mail\.Send'
         $f[0].Detail   | Should -Not -Match 'Teams'
+    }
+
+    It 'a write-scope grant whose app was never identified is High, never labeled UNVERIFIED, and says how to identify it' {
+        Set-NRGRawData -Key 'IR-UserConsents' -Data (NewBag 'c' @{
+            Count = 1
+            Grants = @([ordered]@{ GrantId='g1'; ClientSpId='sp-unknown'; App=$null; ConsentType='Principal'; Scope='Mail.ReadWrite openid profile offline_access' })
+        })
+        Test-NRGEmailControlOAuthConsents
+        $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.1')
+        $f[0].State    | Should -Be 'Gap'
+        $f[0].Severity | Should -Be 'High' -Because 'an unidentified app may be an ordinary Microsoft one; Critical needs an identified app'
+        $f[0].Detail   | Should -Match 'app not identified'
+        $f[0].Detail   | Should -Match 'publisher not checked'
+        $f[0].Detail   | Should -Not -Match 'UNVERIFIED'
+        $f[0].Detail   | Should -Match 'Identify each app first'
     }
 
     It 'Read-only mail scope lands as Partial (verify with user), not Gap' {

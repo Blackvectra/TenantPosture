@@ -20,7 +20,7 @@
 $script:NRGEmailLegitMSDomains = @(
     'microsoft.com', 'microsoftonline.com', 'live.com', 'outlook.com',
     'office.com', 'office365.com', 'azure.com', 'onmicrosoft.com',
-    'sharepoint.com', 'msft.net', 'azureedge.net', 'azurewebsites.net'
+    'sharepoint.com', 'sharepointonline.com', 'microsoft365.com', 'msft.net', 'azureedge.net', 'azurewebsites.net'
 )
 
 # Microsoft-impersonation substrings — domains that mention Microsoft
@@ -115,6 +115,19 @@ function Get-NRGEmailBrandSpoof {
     }
     if ($DisplayName -match '(?i)microsoft|onedrive' -and -not (Test-NRGEmailIsLegitMSDomain $d)) { return 'microsoft' }
     return $null
+}
+
+# The strong half of the impersonation test: the SENDING DOMAIN itself imitates Microsoft's
+# (a typo-squat such as microsft or office356). A display name alone is not this.
+function Test-NRGEmailMSDomainTyposquat {
+    [CmdletBinding()]
+    param([string] $Domain)
+    if (-not $Domain) { return $false }
+    $d = $Domain.ToLowerInvariant()
+    foreach ($pat in $script:NRGEmailMSImpersonationPatterns) {
+        if ($d -like "*$pat*") { return $true }
+    }
+    return $false
 }
 
 function Test-NRGEmailMatchesMSImpersonation {
@@ -472,7 +485,8 @@ function Test-NRGEmailControlPhishOrigin {
         $score = 0
         $reasons = @()
         $senderDomain = Get-NRGEmailDomainFromAddress $m.FromAddress
-        $contentSignals = 0
+        $contentSignals = 0   # strong signals: urgency, a sign-in link to a non-Microsoft host, a typo-squatted domain
+        $weakSignals    = 0   # a display name that claims a brand; legitimate vendors and distributors do this too
         $isInternal = $false
 
         # +30 if the sender is outside the mailbox's domain. A sender INSIDE it is
@@ -494,9 +508,18 @@ function Test-NRGEmailControlPhishOrigin {
 
         # +25 if domain mentions Microsoft branding without being legit MS
         $fromName = Get-NRGObjectField -Item $m -Key 'FromName' -Default $null
-        if (Test-NRGEmailMatchesMSImpersonation -Domain $senderDomain -DisplayName $fromName) {
+        # A typo-squatted sending domain is a strong signal. A display name that merely says
+        # "Microsoft" from a non-Microsoft domain is weak: Microsoft partners, distributors and training
+        # services do exactly that (the first live run ranked LevelUp, an Ingram Micro reminder and a
+        # Loop digest as the "most likely phish"), so it is counted once, as a weak signal.
+        $msDomainTypo = Test-NRGEmailMSDomainTyposquat -Domain $senderDomain
+        $msNameClaim  = Test-NRGEmailMatchesMSImpersonation -Domain $senderDomain -DisplayName $fromName
+        if ($msDomainTypo) {
             $score += 25; $contentSignals++
-            $reasons += "Microsoft-impersonation pattern"
+            $reasons += "Microsoft-impersonation pattern in the sending domain"
+        } elseif ($msNameClaim) {
+            $score += 15; $weakSignals++
+            $reasons += "the display name says Microsoft but the sending domain is not a Microsoft domain (weak on its own: vendors, distributors and training services do this)"
         }
 
         # +20 if subject contains urgency keywords
@@ -529,9 +552,10 @@ function Test-NRGEmailControlPhishOrigin {
 
         # +10 when the display name claims a brand the sending domain does not
         # belong to. Each brand is judged against its own domains.
+        # (Microsoft itself is already judged above; counting it again made one display name two signals.)
         $spoofBrand = Get-NRGEmailBrandSpoof -Domain $senderDomain -DisplayName $fromName
-        if ($spoofBrand) {
-            $score += 10; $contentSignals++
+        if ($spoofBrand -and -not ($spoofBrand -eq 'microsoft' -and $msNameClaim)) {
+            $score += 10; $weakSignals++
             $reasons += "display name claims '$spoofBrand' but the sending domain is not one of its domains: '$fromName'"
         }
 
@@ -553,7 +577,7 @@ function Test-NRGEmailControlPhishOrigin {
         # sender location, an unparseable address or a deletion alone do not
         # make a phishing candidate.
         $needed = if ($isInternal) { 2 } else { 1 }
-        if ($contentSignals -lt $needed) { continue }
+        if (($contentSignals + $weakSignals) -lt $needed) { continue }
 
         [ordered]@{
             Internal         = $isInternal
@@ -562,6 +586,7 @@ function Test-NRGEmailControlPhishOrigin {
             FromName         = $fromName
             Subject          = $subject
             Score            = $score
+            WeakOnly         = ($contentSignals -eq 0)
             Reasons          = $reasons
             URLs             = @($m.BodyURLs)
             Recovered        = $isRecovered
@@ -574,7 +599,11 @@ function Test-NRGEmailControlPhishOrigin {
     # A bare external sender with no other signal scores exactly 30 — almost
     # all inbound mail is external, so a >= 30 threshold would flood the report
     # with every correspondent. > 30 keeps it to actual phish candidates.
-    $top = @($scored | Where-Object { $_.Score -gt 30 -or $_.Internal } | Sort-Object { $_.Score } -Descending | Select-Object -First 5)
+    # Leads with a strong signal come first; a lead resting on a display name alone is kept (so nothing
+    # is hidden) but ranks below them and is labeled.
+    $top = @($scored | Where-Object { $_.Score -gt 30 -or $_.Internal } |
+        Sort-Object @{ Expression = { -not $_.WeakOnly }; Descending = $true }, @{ Expression = { $_.Score }; Descending = $true } |
+        Select-Object -First 5)
 
     # What was read, stated with every result: the folders, the window, whether
     # the read was complete, and that links come from the message PREVIEW only.
@@ -592,7 +621,7 @@ function Test-NRGEmailControlPhishOrigin {
 
     $detail = "TOP $($top.Count) LEADS (highest rank first; a rank orders messages for review, it is not a probability):`n"
     foreach ($t in $top) {
-        $detail += "`n  Rank score $($t.Score) | $($t.ReceivedDateTime)$(if ($t.Internal) { ' | lower confidence: sender inside the mailbox domain' })`n"
+        $detail += "`n  Rank score $($t.Score) | $($t.ReceivedDateTime)$(if ($t.Internal) { ' | lower confidence: sender inside the mailbox domain' })$(if ($t.WeakOnly) { ' | weaker lead: a display name alone, no other phishing signal' })`n"
         $detail += "    From    : `"$($t.FromName)`" <$($t.From)>`n"
         $detail += "    Subject : $($t.Subject)`n"
         $detail += "    Why     : $($t.Reasons -join '; ')`n"
@@ -602,8 +631,14 @@ function Test-NRGEmailControlPhishOrigin {
     }
     $detail += "`nThese are investigative leads to review in Outlook, not a finding that any of them caused the compromise. $scope"
 
+    # High only when a lead carries a strong signal; leads that rest on a display name alone are
+    # worth a look, not a High indicator.
+    $leadSeverity = if (@($top | Where-Object { -not $_.WeakOnly }).Count -gt 0) { 'High' } else { 'Medium' }
+    if ($leadSeverity -eq 'Medium') {
+        $detail = "No lead carries a strong phishing signal (urgency wording, a sign-in link to a non-Microsoft host, or a typo-squatted sending domain); every lead below rests on a display name alone.`n`n" + $detail
+    }
     Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
-        -Title $title -Severity 'High' -Detail $detail `
+        -Title $title -Severity $leadSeverity -Detail $detail `
         -CurrentValue "Top lead: $($top[0].Subject) (rank score $($top[0].Score))" `
         -Remediation "Review the leads and confirm whether any is a real phish. If one is: 1) submit its URL and sender to Microsoft Defender Submissions, 2) block the sender domain at the tenant boundary, 3) search for and purge the same message for other users (admin scope required)."
 }
@@ -717,14 +752,23 @@ function Test-NRGEmailControlOAuthConsents {
 
     $flagged = @()
     $watched = @()
+    $identifiedFlagged = 0
+    $unidentifiedFlagged = 0
     foreach ($g in $grants) {
         $scopeList = @(([string]$g.Scope) -split '\s+' | Where-Object { $_ })
         $hits  = @($scopeList | Where-Object { $riskScopes  -contains $_ })
         $soft  = @($scopeList | Where-Object { $watchScopes -contains $_ })
-        $appLabel = if ($g.App -and $g.App.DisplayName) { $g.App.DisplayName } else { "spId $($g.ClientSpId)" }
-        $verified = if ($g.App -and $g.App.PublisherName) { "publisher '$($g.App.PublisherName)'" } else { 'UNVERIFIED publisher' }
+        # Say only what was checked. The app lookup needs Directory.Read.All, which a delegated
+        # user sign-in does not have, so "UNVERIFIED publisher" was printed for every app whose publisher
+        # was never read (Microsoft's own apps included).
+        $appKnown = [bool]($g.App -and $g.App.DisplayName)
+        $appLabel = if ($appKnown) { $g.App.DisplayName } else { "app not identified, service principal $($g.ClientSpId)" }
+        $verified = if ($g.App -and $g.App.PublisherName) { "publisher '$($g.App.PublisherName)'" }
+                    elseif ($appKnown) { 'UNVERIFIED publisher (the lookup returned no publisher name)' }
+                    else { 'publisher not checked: the lookup needs Directory.Read.All' }
         if ($hits.Count -gt 0) {
             $flagged += "  - '$appLabel' ($verified): $($hits -join ', ')  [full scope: $($g.Scope)]"
+            if ($appKnown) { $identifiedFlagged++ } else { $unidentifiedFlagged++ }
         } elseif ($soft.Count -gt 0) {
             $watched += "  - '$appLabel' ($verified): $($soft -join ', ')"
         }
@@ -733,9 +777,13 @@ function Test-NRGEmailControlOAuthConsents {
     if ($flagged.Count -gt 0) {
         $detail = "FOUND $($flagged.Count) grant(s) with mail/file write-or-send scopes — OAuth persistence survives password reset + MFA re-enrollment; only revoking the grant kills it.`n" +
                   ($flagged -join "`n") +
+                  $(if ($unidentifiedFlagged -gt 0) { "`n`nIdentify each app first: Entra admin center > Enterprise applications > search the service principal ID (the Object ID). A Microsoft or other recognized app that holds this scope on purpose is expected; an app nobody recognizes is not." } else { '' }) +
                   $(if ($watched.Count -gt 0) { "`nAlso review (read-level scopes):`n" + ($watched -join "`n") } else { '' })
+        # Critical when an app was identified and holds the scope; High while none was identified,
+        # because an unidentified app may be an ordinary Microsoft one.
+        $grantSeverity = if ($identifiedFlagged -gt 0) { 'Critical' } else { 'High' }
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
-            -Title $title -Severity 'Critical' -Detail $detail `
+            -Title $title -Severity $grantSeverity -Detail $detail `
             -CurrentValue "$($flagged.Count) high-risk grant(s) of $($grants.Count) total" `
             -RequiredValue 'No unrecognized grants with mail/file write scopes' `
             -Remediation 'Revoke each unrecognized grant: Entra > Enterprise applications > the app > Permissions, or Remove-MgOauth2PermissionGrant -OAuth2PermissionGrantId <grantId>. Then check the app is not tenant-consented for other users.'
