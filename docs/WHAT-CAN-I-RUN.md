@@ -19,6 +19,7 @@ coming back to this after six months, start here.
 | Build a CMMC / 800-171 plan | Add `-SSP` |
 | Find out who got phished | `Invoke-NRGSignInTriage.ps1` |
 | Investigate one mailbox | `Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@client.com` |
+| Harden the distribution lists | `Invoke-NRGDistributionListScan.ps1` (Exchange Online only; read-only) |
 | Print device guidance (no scan) | `New-NRGDeviceGuide.ps1` |
 | Set up a new machine | `Install-NRGPrerequisites.ps1` |
 | Actually change tenant settings | `Apply-NRGBaseline.ps1` — the only one that writes |
@@ -139,6 +140,25 @@ origin, auth methods, OAuth consents.
 when you are working an incident and cannot wait for admin access.
 
 Output: `output\<upn>\<timestamp>-email-incident.html`.
+
+### `Invoke-NRGDistributionListScan.ps1` — distribution lists only
+
+Who can email each distribution list, who owns it, who can join it, who is on it, and
+which members are outside the organization. Writes a plain worksheet (`.txt`) and a CSV,
+one row per list, with the finding, the recommended setting and, as **text**, the
+commands an Exchange administrator would run to harden the list.
+
+```powershell
+.\Invoke-NRGDistributionListScan.ps1
+.\Invoke-NRGDistributionListScan.ps1 -TenantDomain client.com
+```
+
+**Needs:** an Exchange administrator sign-in (Exchange Online only; no Graph, no other
+service). **Read-only:** it changes no list, member or setting, and never runs the
+commands it prints. **Assesses distribution lists and nothing else**; the output says
+which areas were not assessed. Internal use: the files list members.
+
+Output: `output\<tenant>-<timestamp>-distribution-lists.txt`, `.csv` and `-results.json`.
 
 ---
 

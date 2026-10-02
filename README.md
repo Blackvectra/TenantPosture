@@ -30,7 +30,7 @@ Connects to a Microsoft 365 tenant via delegated auth (or GDAP for MSP batch run
 
 **Zero writes to tenant. Read-only by design.**
 
-Four entry points:
+Five entry points:
 
 | Script | Purpose |
 |---|---|
@@ -38,6 +38,7 @@ Four entry points:
 | `Invoke-NRGBatchAssessment.ps1` | All clients in `Config/clients.json` via GDAP, one login |
 | `Invoke-NRGSignInTriage.ps1` (+ batch variant) | Admin-scope sign-in IoC triage — ranks likely-compromised users |
 | `Invoke-NRGEmailAssessment.ps1` | Per-user mailbox incident-response deep-dive (Email-IR mode) |
+| `Invoke-NRGDistributionListScan.ps1` | Distribution lists only (Exchange Online only, read-only): a text worksheet + CSV to close each list's email exposure |
 
 ---
 
@@ -255,13 +256,73 @@ so CLI and GUI workflows can be mixed freely.
 
 ---
 
+### Distribution-list scan (Exchange Online only)
+
+`Invoke-NRGDistributionListScan.ps1` runs **only against distribution lists** and writes a plain
+worksheet to help close each list's email exposure. It signs in to **Exchange Online only** (no
+Microsoft Graph, no Teams, no Purview), reads the lists, and writes a text worksheet and a CSV with
+one row per list. It is **read-only**: it never creates, adds, removes or changes a list, a member
+or a setting. The commands in the worksheet are printed as text for an Exchange administrator to
+review and run; the tool never runs them.
+
+```powershell
+# Sign in as an Exchange administrator and scan the tenant the account belongs to
+.\Invoke-NRGDistributionListScan.ps1
+
+# A GDAP client: the scan stops, reading nothing, if the sign-in landed on any other tenant
+.\Invoke-NRGDistributionListScan.ps1 -TenantDomain contoso.com
+
+# Raise the per-list member cap, or leave the member listing out of the text file
+.\Invoke-NRGDistributionListScan.ps1 -MemberLimit 5000 -NoMembers
+```
+
+What it reads, per list: who can send to it (`RequireSenderAuthenticationEnabled`, the sender
+allow-lists, moderation), its owners (`ManagedBy`), who can join it (`MemberJoinRestriction`),
+whether it is hidden from the address book, and its members (display name and UPN only), including
+which are outside the organization (guests, mail contacts, addresses outside the accepted domains)
+and which are nested groups. Findings use their own `DL-*` series (`DL-1.1` who can send, `DL-2.1`
+owners, `DL-2.2` who can join, `DL-3.1` outside members). They are hardening checks for this scan,
+not baseline controls: they are not in `Config/controls.json`, carry no framework citation and move
+no score.
+
+| File | Contents |
+|---|---|
+| `<tenant>-<timestamp>-distribution-lists.txt` | The worksheet: what was and was not assessed, lists to fix (worst first), lists not fully assessed, lists with nothing to change, the members of each list, and for each list that needs a change the exact command, as text, with what it could break |
+| `<tenant>-<timestamp>-distribution-lists.csv` | One row per list: list, address, type, who can send to it today, owners, member count, outside members, status, severity, the finding, the recommended setting, and any read limit |
+| `<tenant>-<timestamp>-distribution-lists-results.json` | Findings, the raw data, the Exceptions array and coverage |
+
+Honesty rules, each pinned by `NRG.DistributionLists.Tests.ps1`:
+
+- A list accepting mail from outside with no allow-list and no moderation is a **Gap** (the way an
+  all-staff list gets used for phishing); moderated is **Partial**.
+- A value Exchange did not return, a section that did not collect, a member read that failed, hit
+  the cap, or could not be classified is **not assessed**, never "clean". A list with no finding at
+  all is not assessed. An empty list inventory from a failed query is never "none exist".
+- Exchange returns 1000 rows unless asked otherwise: the list read asks for all of them and each
+  member read asks for the cap plus one, so a larger list reads as truncated, not as complete.
+  Throttled reads are retried; after three lists in a row stay throttled the member reads stop and
+  the rest say so.
+- Only direct members are read; nested groups are listed, not expanded. Microsoft 365 Groups
+  (including Teams-connected groups) are a different object and are not covered. Every other area
+  of the tenant (Entra ID, Defender, Teams, SharePoint, Intune, Purview, DNS) is not assessed by
+  this scan, and the worksheet and the console say so.
+- The hardening commands live in `Config/distribution-list-hardening.json`, not in any file the
+  module runs. A command that needs a value from the reader, an alternative to the main change, or
+  a member removal is printed commented out; an address that is not safe to paste gets no command.
+- **Internal use.** The files list the tenant's lists, owners and members and are written with
+  restricted permissions (`Set-NRGSensitiveFileAcl`). Exit codes: 0 complete, 1 sign-in failure or
+  wrong tenant, 2 no lists returned, 3 partial collection, 4 fatal error.
+
+---
+
 ## Architecture
 
 ```
 Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (387 exports, dependency declarations)
+Invoke-NRGDistributionListScan.ps1 ← Distribution-list scan (Exchange Online only; worksheet + CSV)
+NRG-Assessment.psd1               ← Module manifest (398 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -271,7 +332,7 @@ Lib/                              ← Shared infrastructure
 
 Collectors/                       READ-ONLY — raw data collection, no scoring
   AAD/    (7 files)               Auth policies, CA, users+MFA, roles, PIM, identity governance, inventory
-  EXO/    (3 files)               Mailbox config, EXO inventory, Defender policies
+  EXO/    (4 files)               Mailbox config, EXO inventory, Defender policies, distribution lists
   DNS/    (1 file)                SPF, DKIM, DMARC, MTA-STS, TLS-RPT, DNSSEC
   Intune/ (3 files)               Device compliance, app protection, endpoint security
   SharePoint/ Teams/ Purview/ PowerPlatform/ AI/   (1 file each)
@@ -289,6 +350,7 @@ Evaluators/                       SCORING ONLY — reads raw data, writes findin
   Test-NRGControlDNS.ps1          10 controls
 
 Publishers/                       (7 files)
+  Publish-NRGDistributionListWorksheet.ps1 Distribution-list worksheet (.txt) + CSV; commands as text only
   Publish-NRGAssessmentHTML.ps1   Interactive HTML report with exec summary + findings
   Publish-NRGAssessmentSummary.ps1 Markdown report for OneNote / GitHub
   Publish-NRGComplianceMatrix.ps1 Framework compliance matrix (XLSX when openpyxl present)
@@ -303,7 +365,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          92 Pester suites — the FULL suite gates every PR
+Testing/                          93 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -536,7 +598,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **92 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **93 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -588,7 +650,7 @@ Six GitHub Actions workflows cover the repository. All run automatically on push
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (92 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (93 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -607,4 +669,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 387 exported functions · full Pester suite (92 suites) gating CI*
+*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 398 exported functions · full Pester suite (93 suites) gating CI*

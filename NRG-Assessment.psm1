@@ -371,7 +371,20 @@ $script:ExportedFunctions = @(
     'Get-NRGIPSignInIntel',
     'Invoke-NRGEmailCollectUserSecurity',
     'Test-NRGEmailControlOAuthConsents',
-    'Test-NRGEmailControlAuthMethods'
+    'Test-NRGEmailControlAuthMethods',
+
+    # ── Distribution-list scan: Exchange Online only, read-only ──────────────
+    'Connect-NRGExchangeOnlineOnly',
+    'Disconnect-NRGExchangeOnlineOnly',
+    'Invoke-NRGCollectDistributionLists',
+    'Test-NRGDistributionListControls',
+    'Test-NRGDistributionListSenderExposure',
+    'Test-NRGDistributionListOwners',
+    'Test-NRGDistributionListJoinRestriction',
+    'Test-NRGDistributionListExternalMembers',
+    'Get-NRGDistributionListSenderAccess',
+    'Get-NRGDistributionListMemberClass',
+    'Publish-NRGDistributionListWorksheet'
 )
 
 Export-ModuleMember -Function $script:ExportedFunctions -Variable NRGAssessmentVersion, NRGBrand

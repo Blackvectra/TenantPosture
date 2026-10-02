@@ -1,0 +1,78 @@
+{
+  "Version": "1.0",
+  "Note": "TEXT ONLY. NRG-Assessment is read-only toward the tenant and never runs these. The distribution-list worksheet prints them, with the list's address filled in, for an Exchange administrator to review and run by hand. They live here, as data, so that no file the module executes contains a command that changes a list. {Identity} and {Member} are replaced with a single-quoted, validated address; a value that is not address-shaped gets no command. A quoted placeholder such as '<owner-upn>' is for the administrator to replace and fails harmlessly if pasted unedited. Kind: Primary = the recommended change; Alternative = another way to close the same exposure when the primary change would break a legitimate use; ReviewFirst = printed commented out, because whether it applies is a human decision; Instruction = no command exists, so the worksheet prints the step.",
+  "Templates": [
+    {
+      "ControlId": "DL-1.1",
+      "AppliesTo": "Distribution",
+      "Kind": "Primary",
+      "Intent": "Accept mail only from authenticated senders inside the organization",
+      "Command": "Set-DistributionGroup -Identity {Identity} -RequireSenderAuthenticationEnabled $true",
+      "Impact": "Outside senders that email this list today (customers, vendors, scanners, web forms, SaaS notifications) will get a bounce after this change. Confirm nobody outside needs to write to it first."
+    },
+    {
+      "ControlId": "DL-1.1",
+      "AppliesTo": "Dynamic",
+      "Kind": "Primary",
+      "Intent": "Accept mail only from authenticated senders inside the organization",
+      "Command": "Set-DynamicDistributionGroup -Identity {Identity} -RequireSenderAuthenticationEnabled $true",
+      "Impact": "Outside senders that email this list today (customers, vendors, scanners, web forms, SaaS notifications) will get a bounce after this change. Confirm nobody outside needs to write to it first."
+    },
+    {
+      "ControlId": "DL-1.1",
+      "AppliesTo": "Distribution",
+      "Kind": "Alternative",
+      "Intent": "If outside senders must keep writing to this list, require a moderator to approve every message",
+      "Command": "Set-DistributionGroup -Identity {Identity} -ModerationEnabled $true -ModeratedBy '<moderator-upn>'",
+      "Impact": "Every message to the list waits for a moderator, so delivery is delayed and an unattended moderator mailbox stalls the list."
+    },
+    {
+      "ControlId": "DL-1.1",
+      "AppliesTo": "Dynamic",
+      "Kind": "Alternative",
+      "Intent": "If outside senders must keep writing to this list, require a moderator to approve every message",
+      "Command": "Set-DynamicDistributionGroup -Identity {Identity} -ModerationEnabled $true -ModeratedBy '<moderator-upn>'",
+      "Impact": "Every message to the list waits for a moderator, so delivery is delayed and an unattended moderator mailbox stalls the list."
+    },
+    {
+      "ControlId": "DL-2.1",
+      "AppliesTo": "Distribution",
+      "Kind": "Primary",
+      "Intent": "Give the list an owner who is accountable for its members and its senders",
+      "Command": "Set-DistributionGroup -Identity {Identity} -ManagedBy @{Add='<owner-upn>'}",
+      "Impact": "None for mail flow. The owner can then change the list's members, and its sender settings where the organization lets owners do so."
+    },
+    {
+      "ControlId": "DL-2.1",
+      "AppliesTo": "Dynamic",
+      "Kind": "Primary",
+      "Intent": "Give the list an owner who is accountable for its filter and its senders",
+      "Command": "Set-DynamicDistributionGroup -Identity {Identity} -ManagedBy @{Add='<owner-upn>'}",
+      "Impact": "None for mail flow."
+    },
+    {
+      "ControlId": "DL-2.2",
+      "AppliesTo": "Distribution",
+      "Kind": "Primary",
+      "Intent": "Stop anyone in the organization from adding themselves to the list",
+      "Command": "Set-DistributionGroup -Identity {Identity} -MemberJoinRestriction Closed",
+      "Impact": "People who join this list themselves today (a self-service mailing list) can no longer do so; an owner or administrator must add them. ApprovalRequired is the middle setting: a join request goes to the owner."
+    },
+    {
+      "ControlId": "DL-3.1",
+      "AppliesTo": "Distribution",
+      "Kind": "ReviewFirst",
+      "Intent": "Remove this outside member only if it should not receive the list's mail",
+      "Command": "Remove-DistributionGroupMember -Identity {Identity} -Member {Member} -Confirm:$false",
+      "Impact": "The person or contact stops receiving every message sent to the list. Some outside members (a vendor, a partner mailbox) are intended; confirm with the list owner first."
+    },
+    {
+      "ControlId": "DL-3.1",
+      "AppliesTo": "Dynamic",
+      "Kind": "Instruction",
+      "Intent": "Members of a dynamic list come from its recipient filter and cannot be removed one by one. Change the filter so it stops matching the outside recipient, then let Exchange recalculate the list (up to 24 hours).",
+      "Command": "",
+      "Impact": "Changing the filter changes who receives mail sent to the list; preview the result before saving it."
+    }
+  ]
+}

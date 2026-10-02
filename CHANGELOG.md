@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- **New: a scan that runs only against distribution lists (`Invoke-NRGDistributionListScan.ps1`).**
+  It signs in to Exchange Online only (no Graph, no other service), reads every distribution list,
+  mail-enabled security group and dynamic distribution list, and writes a plain worksheet
+  (`<base>-distribution-lists.txt`) and a CSV (one row per list: list, address, who can send to it
+  today, owners, member count, outside members, status, severity, the finding, the recommended
+  setting, any read limit) to help close each list's email exposure. It is read-only: the
+  collector and evaluators call Get-* cmdlets only, and the hardening commands in the worksheet
+  (`Set-DistributionGroup -RequireSenderAuthenticationEnabled $true` and the like) are printed as
+  text for an administrator, from `Config/distribution-list-hardening.json`, never run and never
+  held in a file the module executes. New `DL-*` findings (not in `controls.json`, no score): DL-1.1
+  a list that accepts mail from outside with no allow-list and no moderation is a Gap (Partial when
+  moderated), DL-2.1 no owner, DL-2.2 anyone can join, DL-3.1 members outside the organization. A
+  value Exchange did not return, a failed section, a member read that failed, hit the cap or could
+  not be classified reads "not assessed", never clean; a list with no finding is not assessed.
+  Exchange returns 1000 rows by default, so the list read asks for all and a member read asks for the
+  cap plus one (a larger list is Truncated); throttled reads are retried and, after three lists in
+  a row, member reads stop and say so. Members are listed by display name and UPN only. The files
+  are internal (they list members) and are written through `Set-NRGSensitiveFileContent`. Not covered:
+  Microsoft 365 Groups, nested groups' members. New: `Connect-NRGExchangeOnlineOnly` (tenant-pinned,
+  one Exchange session per window), `Lib/Get-NRGDistributionListRules.ps1`, 11 exported functions
+  (398 total), `NRG.DistributionLists.Tests.ps1` (105 tests, including one that runs the real entry
+  script in a child process against a fake Exchange module with no Graph module present).
+
 - **The first email assessment on a real mailbox raised two false indicators.** (1) EMAIL-4.1 printed
   "UNVERIFIED publisher" for every OAuth grant whose app lookup failed; that lookup needs
   Directory.Read.All, which a delegated user sign-in never has, so Microsoft's own apps were
