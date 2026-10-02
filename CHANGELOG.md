@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Tor Project host name removed from every shipped file.** The header comment in
+  `Email-IR/Lib/Get-NRGIPThreatIntel.ps1` now says only that the helper calls rdap.org and does no
+  Tor-exit detection; `docs/EDR-TOR-ALERT.md` and `Testing/NRG.NetworkEgress.Tests.ps1` no longer
+  contain the host name (the test builds its pattern from pieces and still fails on any non-comment
+  line that names it). An EDR keyword scan of the folder no longer matches. Behavior is unchanged.
+
 - **The report separates total Gap controls from distinct deficiencies.** 69 Gap controls are not 69
   exposures. `Get-NRGGapSummary` / `Format-NRGGapSummary` report the scored Gap controls, how many
   are a named-object view of a control that already reports the shortfall (new `Views` in

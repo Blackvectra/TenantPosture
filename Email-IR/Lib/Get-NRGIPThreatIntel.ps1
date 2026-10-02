@@ -13,19 +13,12 @@
 #          permits this. RDAP queries do NOT include identifying info
 #          about the operator's tenant — just the IP being looked up.
 #
-# Outbound: rdap.org only. An earlier version also fetched a public Tor
-#           exit-node list from a Tor Project host for standalone
-#           Tor-exit detection; that hostname is flagged by several EDRs
-#           (Palo Alto Cortex XDR, Microsoft Defender for Endpoint,
-#           CrowdStrike) as "Tor infrastructure contact", and a later
-#           version replaced it with an operator-supplied local exit-list
-#           file to drop the live fetch. Tor-exit detection has since been
-#           REMOVED from this helper entirely — no local-file lookup, no
-#           TOR_EXIT flag. Tor sign-ins for tenants with Entra ID P2 are
-#           still caught upstream: Microsoft Identity Protection labels
-#           them server-side via 'anonymizedIPAddress' in riskEventTypes_v2,
-#           and the sign-in scorer already reads that signal unchanged —
-#           this file was never that signal's only source.
+# Outbound: rdap.org only. This helper makes no other network call and
+#           does no Tor-exit detection (an earlier version did; it was
+#           removed). Tor sign-ins for tenants with Entra ID P2 are caught
+#           upstream: Microsoft Identity Protection labels them server-side
+#           via 'anonymizedIPAddress' in riskEventTypes_v2, which the
+#           sign-in scorer reads unchanged.
 #
 # Caching: per-process cache keyed by IP.
 
