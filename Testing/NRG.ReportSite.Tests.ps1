@@ -169,4 +169,39 @@ MS.AAD.5.2v1,User consent restricted,Pass,Shall" -Encoding utf8
         $aad | Should -Not -Match "<div class='diff'>"
         $idx | Should -Not -Match '<li><b>AAD-12\.4</b>'
     }
+    It 'accepts the ScubaGear JSON results file as well as the CSV, with the same verdicts' {
+        $dir = Join-Path $script:Out 'scuba-json'
+        $json = Join-Path $script:Out 'ScubaResults_x.json'
+        $doc = [ordered]@{ MetaData = @{ ToolVersion = '2.0.0' }; Results = [ordered]@{
+            EXO = @([ordered]@{ GroupName = 'Forwarding'; Controls = @([ordered]@{ 'Control ID' = 'MS.EXO.1.1v2'; Result = 'Fail'; Requirement = 'x' }) })
+            SecuritySuite = @([ordered]@{ GroupName = 'DLP'; Controls = @([ordered]@{ 'Control ID' = 'MS.SECURITYSUITE.3.2v1'; Result = 'Warning' }) }) } }
+        $doc | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $json -Encoding utf8
+        $map = & (Get-Module NRG-Assessment) { param($p) Read-NRGScubaResults -Path $p } $json
+        $map['MS.EXO.1.1v2'] | Should -Be 'Fail'
+        $map['MS.SECURITYSUITE.3.2v1'] | Should -Be 'Warning'
+        $f = @{ ControlId = 'EXO-6.1'; State = 'Satisfied'; Severity = 'High'; Category = 'Mail'; Title = 'Forwarding'
+                Detail = 'No forwarding.'; CurrentValue = ''; RequiredValue = ''; FrameworkIds = ''; Remediation = '' }
+        $r = Publish-NRGReportSite -Metadata @{ TenantDomain = 'contoso.example'; ToolVersion = '4.14.3' } -Findings @($f) -OutputPath $dir -ScubaResultsPath $json
+        Test-Path (Join-Path $dir 'index.html') | Should -BeTrue
+    }
+    It 'a file that is not a ScubaGear result costs the comparison, never the site' {
+        $dir = Join-Path $script:Out 'scuba-foreign'
+        $bad = Join-Path $script:Out 'foreign.json'
+        Set-Content -LiteralPath $bad -Value '{"hello": "world"}' -Encoding utf8
+        $f = @{ ControlId = 'EXO-6.1'; State = 'Satisfied'; Severity = 'High'; Category = 'Mail'; Title = 'Forwarding'
+                Detail = 'No forwarding.'; CurrentValue = ''; RequiredValue = ''; FrameworkIds = ''; Remediation = '' }
+        $null = Publish-NRGReportSite -Metadata @{ TenantDomain = 'contoso.example'; ToolVersion = '4.14.3' } -Findings @($f) -OutputPath $dir -ScubaResultsPath $bad -WarningVariable w -WarningAction SilentlyContinue
+        Test-Path (Join-Path $dir 'index.html') | Should -BeTrue
+        ($w -join ' ') | Should -Match 'ScubaGear results not used'
+    }
+    It 'a CSV without the Control ID and Result columns is reported, not a crash' {
+        $dir = Join-Path $script:Out 'scuba-badcsv'
+        $bad = Join-Path $script:Out 'bad.csv'
+        Set-Content -LiteralPath $bad -Value "Name,Value`
+foo,bar" -Encoding utf8
+        $f = @{ ControlId = 'EXO-6.1'; State = 'Satisfied'; Severity = 'High'; Category = 'Mail'; Title = 'Forwarding'
+                Detail = 'No forwarding.'; CurrentValue = ''; RequiredValue = ''; FrameworkIds = ''; Remediation = '' }
+        { Publish-NRGReportSite -Metadata @{ TenantDomain = 'contoso.example'; ToolVersion = '4.14.3' } -Findings @($f) -OutputPath $dir -ScubaResultsPath $bad -WarningAction SilentlyContinue } | Should -Not -Throw
+        Test-Path (Join-Path $dir 'index.html') | Should -BeTrue
+    }
 }

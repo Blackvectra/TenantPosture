@@ -78,6 +78,37 @@ function ConvertTo-NRGCsvCell {
     return $s
 }
 
+function Read-NRGScubaResults {
+    # Reads a ScubaGear result file (ScubaResults.csv, or the ScubaResults_<id>.json
+    # beside it) into @{ 'MS.EXO.1.1v2' = 'Fail'; ... }. Anything that is not a
+    # ScubaGear result is an error that names what was expected.
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)] [string] $Path)
+    $map = @{}
+    $ext = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+    if ($ext -eq '.json') {
+        $doc = Get-Content -LiteralPath $Path -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
+        $results = Get-NRGObjectField -Item $doc -Key 'Results' -Default $null
+        if ($null -eq $results) { throw "'$Path' is JSON but has no 'Results' section; pass ScubaResults.csv or ScubaResults_<id>.json from a ScubaGear run." }
+        foreach ($product in @($results.PSObject.Properties)) {
+            foreach ($group in @($product.Value)) {
+                foreach ($c in @(Get-NRGObjectField -Item $group -Key 'Controls' -Default @())) {
+                    $id = [string](Get-NRGObjectField -Item $c -Key 'Control ID' -Default '')
+                    if ($id) { $map[$id] = [string](Get-NRGObjectField -Item $c -Key 'Result' -Default '') }
+                }
+            }
+        }
+    } else {
+        $rows = @(Import-Csv -LiteralPath $Path -Encoding utf8)
+        foreach ($r in $rows) {
+            $id = [string](Get-NRGObjectField -Item $r -Key 'Control ID' -Default '')
+            if ($id) { $map[$id] = [string](Get-NRGObjectField -Item $r -Key 'Result' -Default '') }
+        }
+    }
+    if ($map.Count -eq 0) { throw "No ScubaGear control results were found in '$Path' (expected a 'Control ID' and 'Result' for each rule)." }
+    $map
+}
+
 function Get-NRGSiteRows {
     <#
     .SYNOPSIS
@@ -185,8 +216,10 @@ function Publish-NRGReportSite {
 
     $scuba = $null
     if ($ScubaResultsPath -and (Test-Path -LiteralPath $ScubaResultsPath)) {
-        $scuba = @{}
-        foreach ($r in @(Import-Csv -LiteralPath $ScubaResultsPath -Encoding utf8)) { $id = [string]$r.'Control ID'; if ($id) { $scuba[$id] = [string]$r.Result } }
+        # An unreadable or foreign file costs the independent comparison only,
+        # never the site.
+        try { $scuba = Read-NRGScubaResults -Path $ScubaResultsPath }
+        catch { Write-Warning "ScubaGear results not used: $($_.Exception.Message)"; $scuba = $null }
     }
     $rows = @(Get-NRGSiteRows -Findings $Findings -BaselineCompliance $BaselineCompliance -Scuba $scuba)
 

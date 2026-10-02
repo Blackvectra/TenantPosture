@@ -29,7 +29,7 @@ Build the report site from the results JSON the run wrote (connects to nothing):
 
 ```powershell
 ./New-NRGReportSite.ps1 -ResultsPath .\output\<tenant>-<timestamp>-results.json `
-    -OutputPath .\output\site -ScubaResultsPath <folder>\ScubaResults.csv
+    -OutputPath .\output\site -ScubaResultsPath <folder>\ScubaResults.csv   # or ScubaResults_<id>.json
 ```
 
 ## 3. Spot-check method

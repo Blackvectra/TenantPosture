@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **A ScubaGear results file that is not the CSV no longer fails the report site.** The site read
+  `-ScubaResultsPath` only as CSV, so the `ScubaResults_<id>.json` from the same run threw "The
+  property 'Control ID' cannot be found" and the whole site was skipped (found on the first run
+  with a real scan). `Read-NRGScubaResults` now accepts the CSV or the JSON, and a file that is not
+  a ScubaGear result (or has no Control ID / Result) is reported as "ScubaGear results not used"
+  while the site is still built without the comparison. `NRG.ReportSite.Tests.ps1` pins JSON, CSV,
+  a foreign JSON and a CSV without the columns.
+
 - **Tor Project host name removed from every shipped file.** The header comment in
   `Email-IR/Lib/Get-NRGIPThreatIntel.ps1` now says only that the helper calls rdap.org and does no
   Tor-exit detection; `docs/EDR-TOR-ALERT.md` and `Testing/NRG.NetworkEgress.Tests.ps1` no longer
