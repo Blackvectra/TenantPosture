@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **A scan started from the web GUI could not sign in to Graph.** The GUI runs the assessment in a
+  hidden child process; Windows' broker sign-in (WAM) needs a parent window handle, so Graph failed
+  with "A window handle must be configured" while Exchange, Purview and Teams (which use
+  `-DisableWAM`) connected, leaving a scan with no Entra ID data. The GUI now sets
+  `NRG_DISABLE_WAM=1` for the child and `Connect-NRGServices` then calls
+  `Set-MgGraphOption -DisableLoginByWAM $true` before `Connect-MgGraph` (guarded: only when the SDK
+  has the option). The sign-in goes through the system browser, with the same MFA and Conditional
+  Access. Pinned by a static test; not yet confirmed by a live GUI scan.
+
 - **Web GUI, first run on a real workstation.** Two defects showed on screen: a user name typed in
   the tenant box (`admin@ndaco.org`) was refused as "Invalid domain format" and the message did not
   say what to enter; and the run list showed the incident-response mailbox run (a folder named after

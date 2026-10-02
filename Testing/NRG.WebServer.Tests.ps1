@@ -73,6 +73,17 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
         }
     }
 
+    Context 'A scan started from the page can sign in' {
+        It 'the scan job tells the child to avoid WAM, and Connect-NRGServices honors it for Graph only when the SDK supports it' {
+            $web = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib' 'Start-NRGWebServer.ps1') -Raw
+            $web | Should -Match "\$env:NRG_DISABLE_WAM = '1'" -Because 'a hidden child has no window handle, so WAM sign-in fails'
+            $conn = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib' 'Connect-NRGServices.ps1') -Raw
+            $conn | Should -Match "\$env:NRG_DISABLE_WAM -eq '1'"
+            $conn | Should -Match "Parameters\.ContainsKey\('DisableLoginByWAM'\)" -Because 'older SDKs lack the option; the call must be guarded'
+            $conn | Should -Match 'Set-MgGraphOption -DisableLoginByWAM \$true'
+        }
+    }
+
     Context 'Server bind + CSP posture' {
         BeforeAll {
             $script:ServerSrc = Get-Content -LiteralPath $script:ServerPath -Raw

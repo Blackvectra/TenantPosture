@@ -6,8 +6,9 @@ meanwhile. A fix is its own change, not part of the pull request that recorded i
 ## Web GUI (`-Web`)
 
 The server shell, the run list, the report viewer and the tenant box were exercised on a real
-workstation (see CHANGELOG). Starting a scan from the page has not been run end to end against a
-tenant.
+workstation (see CHANGELOG). A scan started from the page signed in to Exchange, Purview and Teams
+but not Graph (a hidden child process has no window handle for WAM); the fix is in place but a GUI
+scan has not yet been confirmed end to end against a tenant.
 
 - **Runs from the command line are not listed.** The GUI lists runs saved under
   `output\<domain>\`, which is where a scan started from the GUI writes. A command-line run writes
