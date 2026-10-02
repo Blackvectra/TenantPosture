@@ -240,6 +240,14 @@ try {
     $reportMetadata['TenantId']       = $ctx.TenantId
 } catch {
     Write-Host "  [!] Connection failed: $($_.Exception.Message)" -ForegroundColor Red
+    # The first line is often all a credential error carries; the cause (a closed or hidden
+    # sign-in window, a consent or Conditional Access refusal) sits in the inner exceptions.
+    $inner = $_.Exception.InnerException
+    while ($inner) {
+        if ($inner.Message) { Write-Host ("      caused by: {0}" -f (($inner.Message -split "`r?`n")[0])) -ForegroundColor Red }
+        $inner = $inner.InnerException
+    }
+    Write-Host '      If the window never appeared or closed, retry in a NEW PowerShell 7 window; the sign-in window can open behind other windows.' -ForegroundColor Yellow
     exit 1
 }
 

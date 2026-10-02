@@ -54,14 +54,34 @@ function Invoke-NRGEmailCollectSignIns {
     try {
         $events = @()
         $select = 'id,createdDateTime,userPrincipalName,userId,userDisplayName,appDisplayName,ipAddress,clientAppUsed,deviceDetail,location,status,riskState,riskLevelAggregated,riskLevelDuringSignIn,riskEventTypes,riskEventTypes_v2,conditionalAccessStatus,authenticationDetails'
-        $uri = "https://graph.microsoft.com/v1.0/auditLogs/signIns?`$top=1000&`$filter=createdDateTime ge $cutoff&`$select=$select"
+        $baseUri = "https://graph.microsoft.com/v1.0/auditLogs/signIns?`$top=1000&`$filter=createdDateTime ge $cutoff"
         $pageCap = [Math]::Ceiling($MaxEvents / 1000)
-        $pages   = 0
-        while ($uri -and $pages -lt $pageCap -and $events.Count -lt $MaxEvents) {
-            $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
-            if ($resp.value) { $events += $resp.value }
-            $uri = if ($resp['@odata.nextLink']) { $resp['@odata.nextLink'] } else { $null }
-            $pages++
+        # The first live run answered this read with BadRequest while the anomaly reads (no
+        # $select) succeeded. If Graph rejects the property list, read the same window without
+        # it rather than lose the whole section, and say so in the data.
+        $selectFallback = $false
+        $uri = $null; $pages = 0
+        foreach ($useSelect in @($true, $false)) {
+            $events = @(); $pages = 0
+            $uri = if ($useSelect) { "$baseUri&`$select=$select" } else { $baseUri }
+            try {
+                while ($uri -and $pages -lt $pageCap -and $events.Count -lt $MaxEvents) {
+                    $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+                    if ($resp.value) { $events += $resp.value }
+                    $uri = if ($resp['@odata.nextLink']) { $resp['@odata.nextLink'] } else { $null }
+                    $pages++
+                }
+                if (-not $useSelect) { $selectFallback = $true }
+                break
+            } catch {
+                $body = [string](Get-NRGNestedProperty -Object $_ -Path 'ErrorDetails.Message' -Default '')
+                $isBadRequest = ($_.Exception.Message -match 'BadRequest|\b400\b') -or ($body -match 'BadRequest|Invalid')
+                if ($useSelect -and $isBadRequest) {
+                    Register-NRGException -Source "$collectorId-Recent" -Message ("Graph rejected the sign-in property list (retrying without it): $($_.Exception.Message) $body".Trim())
+                    continue
+                }
+                throw ("$($_.Exception.Message) $body".Trim())
+            }
         }
         # Trim to cap (defensive — pages can return slightly over)
         if ($events.Count -gt $MaxEvents) { $events = $events[0..($MaxEvents - 1)] }
@@ -75,6 +95,7 @@ function Invoke-NRGEmailCollectSignIns {
             Count      = $events.Count
             MaxEvents  = $MaxEvents
             Truncated  = $wasTruncated
+            SelectFallback = $selectFallback
             Events     = @($events)
         }
         $recentBag.Success = $true

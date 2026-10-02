@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **First live runs of the incident-response entry points.** Against NDACo, the account's mailbox
+  reads answered NotFound and the sign-in reads answered BadRequest, and three console lines were
+  misleading or silent: (1) the email assessment printed "Mailbox data collected" while every
+  required mailbox read had failed; it now says "Mailbox data NOT read", names the sources, and
+  states that NotFound likely means the account has no Exchange Online mailbox (unconfirmed);
+  (2) the recent sign-in read (`/auditLogs/signIns` with a long `$select`) was rejected with
+  BadRequest and the whole section was lost; the collector now logs the Graph error body, retries
+  the same window without the property list, and records `SelectFallback` in the data; (3) a
+  failed Graph sign-in printed only the first line of the error; the inner exceptions are now
+  printed with a hint to retry in a new window. Verdicts were already honest (NOT CLEARED); these
+  make the reason visible. Pinned by `NRG.IREntryPoints.Tests.ps1`.
+
 - **ScubaGear alignment corrected from the second independent scan.** EXO-6.1, EXO-7.1 and EXO-7.2
   read mailbox and inbox-rule forwarding; ScubaGear MS.EXO.1.1v2 reads the remote-domain setting
   (NRG's EXO-1.3 reads that one), so their relation is now Unsupported ("different requirement,

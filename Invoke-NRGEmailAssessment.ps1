@@ -194,6 +194,14 @@ try {
     $reportMetadata['TenantId']         = $ctx.TenantId
 } catch {
     Write-Host "  [!] Connection failed: $($_.Exception.Message)" -ForegroundColor Red
+    # The first line is often all a credential error carries; the cause (a closed or hidden
+    # sign-in window, a consent or Conditional Access refusal) sits in the inner exceptions.
+    $inner = $_.Exception.InnerException
+    while ($inner) {
+        if ($inner.Message) { Write-Host ("      caused by: {0}" -f (($inner.Message -split "`r?`n")[0])) -ForegroundColor Red }
+        $inner = $inner.InnerException
+    }
+    Write-Host '      If the window never appeared or closed, retry in a NEW PowerShell 7 window; the sign-in window can open behind other windows.' -ForegroundColor Yellow
     exit 1
 }
 
@@ -207,7 +215,18 @@ try {
     $evaluatorFailures = [System.Collections.Generic.List[string]]::new()
     try {
         Invoke-NRGEmailCollectMailbox -WindowDays $WindowDays
-        Write-Host '  [+] Mailbox data collected' -ForegroundColor Green
+        # "Collected" only when the required reads came back; the collector fails soft per source,
+        # so reaching this line does not mean the mailbox was read.
+        $mailMissing = @((Get-NRGDeepDiveEvidence).RequiredMissing)
+        if ($mailMissing.Count -eq 0) {
+            Write-Host '  [+] Mailbox data collected' -ForegroundColor Green
+        } else {
+            Write-Host ("  [!] Mailbox data NOT read: {0} required source(s) missing ({1}); the result will be NOT CLEARED" -f $mailMissing.Count, ($mailMissing -join ', ')) -ForegroundColor Yellow
+            $notFound = @(Get-NRGExceptions | Where-Object { [string]$_.Source -like 'IR-Mailbox-*' -and [string]$_.Message -match 'NotFound|404|MailboxNotEnabled' })
+            if ($notFound.Count -gt 0) {
+                Write-Host '      Graph answered NotFound for the mailbox reads. A likely cause is that this account has no Exchange Online mailbox (for example an unlicensed admin account); not confirmed.' -ForegroundColor Yellow
+            }
+        }
     } catch {
         Write-Warning "Mailbox collection failed: $($_.Exception.Message)"
         $healthGaps.Add("mailbox collection stopped: $($_.Exception.Message)")

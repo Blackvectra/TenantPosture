@@ -133,6 +133,19 @@ function Invoke-MgGraphRequest {
             $r.ExitCode | Should -Be 0 -Because $r.Console
         }
 
+        It 'a mailbox that Graph answers NotFound for is reported as not read on the console, never as collected, with the likely cause stated as unconfirmed' {
+            $routes = @(
+                @{ match = 'SentItems/messages'; throw = 'Response status code does not indicate success: NotFound (Not Found).' }
+                @{ match = 'mailFolders/inbox/messages'; throw = 'Response status code does not indicate success: NotFound (Not Found).' }
+                @{ match = 'messageRules'; throw = 'Response status code does not indicate success: NotFound (Not Found).' }
+            ) + @(& $script:Benign)
+            $r = & $script:Email $routes
+            $r.Console | Should -Not -Match 'Mailbox data collected'
+            $r.Console | Should -Match 'Mailbox data NOT read'
+            $r.Console | Should -Match 'no Exchange Online mailbox.*not confirmed'
+            $r.Json.Metadata.CollectionComplete | Should -BeFalse
+        }
+
         It 'a required read that failed: NOT CLEARED, never green, exit 3, and the gap is named in JSON, HTML and Markdown' {
             $routes = @(@{ match = 'SentItems/messages'; throw = 'Graph 403 Forbidden' }) + @(& $script:Benign)
             $r = & $script:Email $routes
@@ -251,6 +264,20 @@ function Invoke-MgGraphRequest {
             $r = & $script:Triage @()
             $r.Json.Metadata.CollectionComplete | Should -BeTrue -Because ($r.Json.Metadata.CollectionGaps -join '; ')
             $r.Html | Should -Match 'NO STRONG INDICATORS IN THE EVENTS READ'
+        }
+
+        It 'Graph rejecting the sign-in property list (BadRequest) does not lose the section: the window is read without it, the rejection is logged, and the fallback is recorded' {
+            $routes = @(
+                @{ match = 'auditLogs/signIns.*select='; throw = 'Response status code does not indicate success: BadRequest (Bad Request).' }
+                @{ match = 'auditLogs/signIns.*anonymizedIPAddress'; body = @{ value = @() } }
+                @{ match = 'auditLogs/signIns'; body = @{ value = @() } }
+            )
+            $r = & $script:Triage $routes
+            $r.Json | Should -Not -BeNullOrEmpty -Because $r.Console
+            $r.Json.Metadata.CollectionComplete | Should -BeTrue -Because ($r.Json.Metadata.CollectionGaps -join '; ')
+            $recent = $r.Json.RawData.'IR-SignIn-Recent'
+            $recent.Data.SelectFallback | Should -BeTrue
+            (@($r.Json.Exceptions) | ForEach-Object { $_.Message }) -join ' ' | Should -Match 'rejected the sign-in property list'
         }
 
         It 'two flagged users: each dive is recorded with its own evidence, findings carry their own subject, and the report names both' {
