@@ -141,6 +141,8 @@ foreach ($folder in $loadOrder) {
 }
 
 # ── Exported function list ────────────────────────────────────────────────────
+# Keep the comments inside this list free of parentheses: NRG.ExportSync.Tests.ps1 reads it with a
+# lazy pattern that stops at the first closing parenthesis, so one in a comment hides every later name.
 $script:ExportedFunctions = @(
     # ── Lib helpers ───────────────────────────────────────────────────────────
     'Add-NRGFinding', 'Get-NRGFindings', 'Clear-NRGFindings', 'Clear-NRGState',
