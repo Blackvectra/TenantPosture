@@ -319,7 +319,7 @@
       "Current": "MS.SECURITYSUITE.7.1v1",
       "Relation": "Partial",
       "RequirementStrength": "SHOULD",
-      "Note": "Safe Links hardening overlaps URL block-list comparison (7.1); SCuBA 7.2 and 7.3 (download scanning, click tracking) are separate rules."
+      "Note": "NRG is stricter in scope. SCuBA 7.1 passes when the Standard or Strict preset applies URL block-list comparison; NRG also judges recipients covered only by the built-in protection policy (click-through allowed, URL rewrite off) and reports them as not protected. Safe Links hardening overlaps URL block-list comparison (7.1); SCuBA 7.2 and 7.3 (download scanning, click tracking) are separate rules."
     },
     {
       "Control": "DEF-1.3",
@@ -537,9 +537,9 @@
       "CitedIdStatus": "current",
       "MigrationNewId": null,
       "Current": "MS.EXO.3.1v1",
-      "Relation": "Equivalent",
+      "Relation": "Partial",
       "RequirementStrength": "SHOULD",
-      "Note": "DKIM signing enabled."
+      "Note": "NRG is stricter. SCuBA 3.1 passes when DKIM signing is enabled; NRG also requires a 2048-bit key and reports a domain with a 1024-bit key as Partial. A pass here with an NRG Partial is expected, not a disagreement."
     },
     {
       "Control": "EXO-1.5",
@@ -658,7 +658,7 @@
       "CitedIdStatus": "current",
       "MigrationNewId": null,
       "Current": "MS.EXO.1.1v2",
-      "Relation": "Partial",
+      "Relation": "Unsupported",
       "RequirementStrength": "SHALL",
       "Note": "Mailbox-level forwarding is not the remote-domain forwarding setting SCuBA reads."
     },
@@ -691,7 +691,7 @@
       "CitedIdStatus": "current",
       "MigrationNewId": null,
       "Current": "MS.EXO.1.1v2",
-      "Relation": "Partial",
+      "Relation": "Unsupported",
       "RequirementStrength": "SHALL",
       "Note": "Mailbox forwarding is not the remote-domain forwarding setting SCuBA reads."
     },
@@ -702,7 +702,7 @@
       "CitedIdStatus": "current",
       "MigrationNewId": null,
       "Current": "MS.EXO.1.1v2",
-      "Relation": "Partial",
+      "Relation": "Unsupported",
       "RequirementStrength": "SHALL",
       "Note": "Inbox-rule forwarding is not the remote-domain forwarding setting SCuBA reads."
     },

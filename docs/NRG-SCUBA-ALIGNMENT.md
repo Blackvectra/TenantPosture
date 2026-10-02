@@ -10,10 +10,10 @@ Checked against **ScubaGear 2.0.0** and its official migration file (`PowerShell
 
 | Relation | Meaning | Citations |
 |---|---|---|
-| Equivalent | The NRG evaluator checks the same requirement. | 27 |
-| Partial | The NRG evaluator covers part of the requirement, or a stricter or looser form of it. Read the note. | 42 |
+| Equivalent | The NRG evaluator checks the same requirement. | 25 |
+| Partial | The NRG evaluator covers part of the requirement, or a stricter or looser form of it. Read the note. | 41 |
 | Manual | The NRG control is manual or advisory; it asserts nothing about the rule. | 3 |
-| Unsupported | The NRG control does not establish this requirement. The citation stays only where the current id still exists, flagged; an obsolete id with no equivalent was removed. | 15 |
+| Unsupported | The NRG control does not establish this requirement. The citation stays only where the current id still exists, flagged; an obsolete id with no equivalent was removed. | 18 |
 
 Obsolete rule ids the migration file maps to `None` (removed by CISA): `MS.EXO.8.3v1`, `MS.EXO.9.2v1`, `MS.EXO.9.4v1`, `MS.EXO.11.3v1`, `MS.DEFENDER.4.5v1`. NRG cited none of them.
 
@@ -49,10 +49,8 @@ The old rule id no longer exists and the migrated range does not describe what t
 | AAD-6.1 User App Registration Disabled | `MS.AAD.5.1v1` | SHALL | same | Only administrators register applications. |
 | AAD-6.2 User Consent to Apps Restricted | `MS.AAD.5.2v1` | SHALL | same | Both require user consent to applications restricted; the admin consent workflow is the separate rule 5.3 (AAD-6.3). |
 | AAD-6.3 Admin Consent Workflow Enabled | `MS.AAD.5.3v1` | SHALL | same | Admin consent workflow configured. |
-| DEF-4.1 DLP Policy Covers All Key Workloads | `MS.SECURITYSUITE.3.2v1` | SHOULD | `MS.DEFENDER.4.2v1` (migrated) | ScubaGear 3.2 needs ONE enabled rule, in an Enable-mode policy, matching all three of SSN, ITIN and Credit Card Number, applied to All of each workload; NRG judges whole-workload coverage by enforcing policies matching sensitive information types, whatever the types. Relation: Partial. |
 | EXO-1.1 Mailbox Audit Logging Enabled | `MS.EXO.13.1v1` | SHALL | same | Mailbox auditing enabled; NRG also checks the audit bypass list. |
 | EXO-1.2 SMTP Client Authentication Disabled | `MS.EXO.5.1v1` | SHALL | same | SMTP AUTH disabled. |
-| EXO-1.4 DKIM Signing Enabled for All Domains | `MS.EXO.3.1v1` | SHOULD | same | DKIM signing enabled. |
 | EXO-4.3 Safe Attachments for SharePoint OneDrive Teams Enabled | `MS.SECURITYSUITE.1.4v1` | SHOULD | `MS.DEFENDER.1.1v1` (migrated) | Safe Attachments for SharePoint, OneDrive and Teams = attachments in those workloads scanned for malware. |
 | PPL-1.1 Power Platform Tenant Isolation Enabled | `MS.POWERPLATFORM.3.1v1` | - | same | Tenant isolation enabled. (The ScubaGear run reported this rule as "test results missing".) |
 | PPL-1.3 Power Platform Environment Creation Restricted | `MS.POWERPLATFORM.1.1v1` | SHALL | same | Environment creation restricted to admins. |
@@ -76,7 +74,7 @@ The old rule id no longer exists and the migrated range does not describe what t
 | AAD-2.1 Conditional Access Policies Deployed | `MS.AAD.1.1v1` | SHALL | same | Only the legacy-authentication track of AAD-2.1 overlaps MS.AAD.1.1; AAD-2.1 also judges MFA tracks and the approved policy set. |
 | AAD-9.1 Authenticator Number Matching Enabled | `MS.AAD.3.3v2` | SHALL | same | v2 requires login context information; NRG checks number matching. |
 | DEF-1.1 Safe Attachments Enabled with Block Action | `MS.SECURITYSUITE.1.3v1` | SHALL | `MS.DEFENDER.1.1v1` (migrated) | The migration maps the old preset rule to a range (1.1 to 1.4). Safe Attachments with a block action overlaps "malware is quarantined or dropped" (1.3) only. |
-| DEF-1.2 Safe Links Enabled and Hardened | `MS.SECURITYSUITE.7.1v1` | SHOULD | `MS.DEFENDER.1.3v1` (migrated) | Safe Links hardening overlaps URL block-list comparison (7.1); SCuBA 7.2 and 7.3 (download scanning, click tracking) are separate rules. |
+| DEF-1.2 Safe Links Enabled and Hardened | `MS.SECURITYSUITE.7.1v1` | SHOULD | `MS.DEFENDER.1.3v1` (migrated) | NRG is stricter in scope. SCuBA 7.1 passes when the Standard or Strict preset applies URL block-list comparison; NRG also judges recipients covered only by the built-in protection policy (click-through allowed, URL rewrite off) and reports them as not protected. Safe Links hardening overlaps URL block-list comparison (7.1); SCuBA 7.2 and 7.3 (download scanning, click tracking) are separate rules. |
 | DEF-2.2 Zero-Hour Auto Purge Enabled | `MS.SECURITYSUITE.1.2v1` | SHALL | `MS.DEFENDER.1.2v1` (migrated) | Zero-hour auto purge is how mail is reviewed after delivery (1.2); SCuBA states the capability, NRG verifies the setting for spam, phishing and malware. |
 | DEF-2.3 Anti-Malware Common Attachments Blocked | `MS.SECURITYSUITE.1.1v1` | SHALL | `MS.EXO.9.1v2` (migrated) | SCuBA requires click-to-run attachments (at minimum .exe, .cmd, .vbe) blocked. NRG verifies the attachment filter and, once approved, the blocked-type list. |
 | DEF-2.5 High Confidence Spam to Quarantine | `MS.SECURITYSUITE.6.1v1` | SHALL | `MS.DEFENDER.1.1v1` (migrated) | High-confidence spam to quarantine overlaps "spam and phishing are not delivered to the inbox" (6.1). |
@@ -94,11 +92,8 @@ The old rule id no longer exists and the migrated range does not describe what t
 | EXO-4.2 Admin Audit Log Enabled | `MS.SECURITYSUITE.5.1v1` | SHALL | `MS.DEFENDER.6.1v1` (migrated) | Admin audit log enabled overlaps unified audit logging (5.1); NRG judges searchability separately. |
 | EXO-5.1 Per-User Mailbox Audit Logging Enabled for All Mailboxes | `MS.EXO.13.1v1` | SHALL | same | Per-user mailbox auditing; SCuBA states the tenant requirement. |
 | EXO-5.2 Priority Account Protection Active in Anti-Phishing Policy | `MS.SECURITYSUITE.2.1v1` | SHOULD | `MS.DEFENDER.2.1v1` (migrated) | Priority-account protection in the anti-phishing policy overlaps sensitive-user impersonation protection (2.1). |
-| EXO-6.1 Mailboxes with External Email Forwarding — Named List | `MS.EXO.1.1v2` | SHALL | same | Mailbox-level forwarding is not the remote-domain forwarding setting SCuBA reads. |
 | EXO-6.3 Mailboxes with Audit Logging Disabled — Named List | `MS.EXO.13.1v1` | SHALL | same | Named mailboxes with auditing bypassed; SCuBA states the tenant requirement. |
 | EXO-6.4 Per-User SMTP AUTH Override — Named List | `MS.EXO.5.1v1` | SHALL | same | Per-user SMTP AUTH overrides versus tenant SMTP AUTH disabled. |
-| EXO-7.1 No Mailbox Forwarding to External Addresses | `MS.EXO.1.1v2` | SHALL | same | Mailbox forwarding is not the remote-domain forwarding setting SCuBA reads. |
-| EXO-7.2 No Inbox Rules Forwarding Externally | `MS.EXO.1.1v2` | SHALL | same | Inbox-rule forwarding is not the remote-domain forwarding setting SCuBA reads. |
 | EXO-7.3 No Mailboxes with Per-User Audit Explicitly Disabled | `MS.EXO.13.1v1` | SHALL | same | Per-user audit bypass versus tenant mailbox auditing. |
 | EXO-7.4 No Per-User SMTP AUTH Overrides | `MS.EXO.5.1v1` | SHALL | same | Per-user SMTP AUTH overrides versus tenant SMTP AUTH disabled. |
 | PPL-1.2 Power Platform DLP Policy Active | `MS.POWERPLATFORM.2.1v1` | SHALL | same | SCuBA requires a DLP policy restricting connectors in the default environment; NRG checks that a DLP policy is active. |
@@ -111,6 +106,8 @@ The old rule id no longer exists and the migrated range does not describe what t
 | TMS-2.2 Unverified App Publisher Blocked | `MS.TEAMS.5.2v2` | SHOULD | same | SCuBA: only agency-approved third-party apps; NRG: unverified publishers blocked. |
 | TMS-2.7 External User Chat Restricted | `MS.TEAMS.2.3v2` | SHOULD | same | SCuBA: internal users should not initiate contact with unmanaged users; NRG: external user chat restricted. |
 | TMS-3.2 Auto-Admit Only Authenticated Organization Users | `MS.TEAMS.1.3v1` | SHOULD | same | SCuBA: anonymous and dial-in callers not admitted automatically; NRG: auto-admit only organization users. |
+| DEF-4.1 DLP Policy Covers All Key Workloads | `MS.SECURITYSUITE.3.2v1` | SHOULD | `MS.DEFENDER.4.2v1` (migrated) | ScubaGear 3.2 is met only when ONE enabled rule, in an Enable-mode policy, matches all three of SSN, ITIN and Credit Card Number, and that policy's location is All for each of Exchange, OneDrive, SharePoint, Teams and Devices. NRG judges workload coverage: enforcing policies with whole-workload scope whose rules match sensitive information types, whatever the types. Policies can cover every workload and still fail 3.2 when no single rule matches all three named types. |
+| EXO-1.4 DKIM Signing Enabled for All Domains | `MS.EXO.3.1v1` | SHOULD | same | NRG is stricter. SCuBA 3.1 passes when DKIM signing is enabled; NRG also requires a 2048-bit key and reports a domain with a 1024-bit key as Partial. A pass here with an NRG Partial is expected, not a disagreement. |
 
 ## Manual
 
@@ -130,6 +127,9 @@ The old rule id no longer exists and the migrated range does not describe what t
 | AAD-15.2 Applications with Tenant-Wide Data Permissions — Named List | `MS.AAD.5.2v1` | SHALL | same | Application permissions held by apps are not the user-consent restriction (5.2). |
 | AAD-3.2 No Permanent Admin Role Assignments | `MS.AAD.7.3v1` | SHALL | same | MS.AAD.7.3 is cloud-only privileged accounts. AAD-3.2 is about permanent versus eligible assignments (PIM), a different requirement. Covered by AAD-10.2. |
 | AAD-9.2 Passwordless Authentication Methods Available | `MS.AAD.3.1v1` | SHALL | same | MS.AAD.3.1 requires phishing-resistant MFA ENFORCED for all users; AAD-9.2 only checks that passwordless methods are available. Enforcement is AAD-1.3 (administrators). |
+| EXO-6.1 Mailboxes with External Email Forwarding — Named List | `MS.EXO.1.1v2` | SHALL | same | Mailbox-level forwarding is not the remote-domain forwarding setting SCuBA reads. |
+| EXO-7.1 No Mailbox Forwarding to External Addresses | `MS.EXO.1.1v2` | SHALL | same | Mailbox forwarding is not the remote-domain forwarding setting SCuBA reads. |
+| EXO-7.2 No Inbox Rules Forwarding Externally | `MS.EXO.1.1v2` | SHALL | same | Inbox-rule forwarding is not the remote-domain forwarding setting SCuBA reads. |
 
 ## ScubaGear 2.0.0 rules no NRG control is aligned to (55)
 

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **ScubaGear alignment corrected from the second independent scan.** EXO-6.1, EXO-7.1 and EXO-7.2
+  read mailbox and inbox-rule forwarding; ScubaGear MS.EXO.1.1v2 reads the remote-domain setting
+  (NRG's EXO-1.3 reads that one), so their relation is now Unsupported ("different requirement,
+  context only") instead of Partial, and the report site no longer lists them as a disagreement.
+  EXO-1.4 (NRG also requires a 2048-bit DKIM key) moves from Equivalent to Partial and DEF-1.2 (NRG
+  also judges recipients covered only by the built-in protection policy) gains a note: both say
+  NRG is stricter than the ScubaGear rule. Verdicts and scores are unchanged.
+
 - **A ScubaGear results file that is not the CSV no longer fails the report site.** The site read
   `-ScubaResultsPath` only as CSV, so the `ScubaResults_<id>.json` from the same run threw "The
   property 'Control ID' cannot be found" and the whole site was skipped (found on the first run
