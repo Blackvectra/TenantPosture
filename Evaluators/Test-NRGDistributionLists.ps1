@@ -8,10 +8,11 @@
 #          the DL-* finding series. SCORING ONLY -- no API calls, and nothing here is
 #          ever executed against a tenant.
 #
-# Sets:     findings DL-1.1 (who can send to a list), DL-2.1 .. DL-2.5 (owner,
-#           moderation, external members, member cap, join restriction),
+# Sets:     findings DL-1.1 (who can send to a list), DL-2.1, DL-2.2, DL-2.4, DL-2.5
+#           (owner, moderation, member cap, join restriction),
 #           DL-3.1 .. DL-3.5 (filtering bypasses that apply to every list),
-#           DL-4.1 (context the tool cannot detect).
+#           DL-4.1 (context the tool cannot detect). DL-1.2 (allowed senders) and
+#           DL-2.3 (external members) are worksheet context rows, not findings.
 # Consumes: EXO-DistributionLists. Nothing else: this series is NOT in
 #           Config/controls.json, and the function is deliberately NOT named
 #           Test-NRGControl*, because Invoke-NRGAssessment.ps1 runs every function
@@ -24,7 +25,7 @@
 #    list is read as "none" only when its SectionStatus says Collected.
 # 2. A property Exchange omitted is not a value. RequireSenderAuthenticationEnabled
 #    $null is "not returned", never "authenticated senders only".
-# 3. An NRG judgment (member cap, external members, join restriction) is judged only
+# 3. An NRG judgment (member cap, join restriction) is judged only
 #    against a value approved in Config/nrg-standards.json. Until then ONE tenant-level
 #    "not assessed" finding says so; it is never a pass and never a per-list wall of
 #    noise.
@@ -206,8 +207,7 @@ function Test-NRGDistributionLists {
     }
 
     # ── Per list ──────────────────────────────────────────────────────────────────
-    $scannedNames = @($lists | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'DisplayName' -Default '') } | Where-Object { $_ })
-    $extStd = $std.ExternalMembers; $capStd = $std.MaxMembers; $joinStd = $std.JoinRestriction
+    $capStd = $std.MaxMembers; $joinStd = $std.JoinRestriction
     foreach ($l in $lists) {
         $addr = [string](Get-NRGObjectField -Item $l -Key 'PrimarySmtpAddress' -Default '')
         $name = [string](Get-NRGObjectField -Item $l -Key 'Name' -Default '')
@@ -220,6 +220,10 @@ function Test-NRGDistributionLists {
         $auth = Get-NRGObjectField -Item $l -Key 'RequireSenderAuthenticationEnabled' -Default $null
         $allowedKnown = [bool](Get-NRGObjectField -Item $l -Key 'AllowedSendersKnown' -Default $false)
         $allowedN = @(Get-NRGObjectField -Item $l -Key 'AllowedSenders' -Default @()).Count
+        # External members are expected on these lists. Requiring authenticated senders would stop them sending (Microsoft: True
+        # rejects unauthenticated, external senders), so a list that holds some is pointed at the allowed-senders option instead.
+        $extN11 = if ([string](Get-NRGObjectField -Item $l -Key 'MemberStatus' -Default 'NotRun') -eq 'Collected') { [int](Get-NRGObjectField -Item $l -Key 'ExternalMemberCount' -Default 0) } else { 0 }
+        $extNote = if ($extN11 -gt 0) { " This list has $extN11 external member(s): requiring authenticated senders would stop them sending to it, so the allowed-senders option (DL-1.2) is the one that keeps them." } else { '' }
         if ($null -eq $auth) {
             Add-NRGDlFinding -Entry $Rec['DL-1.1'] -State 'NotApplicable' -Instance $inst -AffectedObjects @($ref) -Detail "Not assessed: Exchange did not return RequireSenderAuthenticationEnabled for $who, so who can send to it is unknown."
         } elseif ($auth -eq $true) {
@@ -227,11 +231,11 @@ function Test-NRGDistributionLists {
                 -Detail "Read: $who accepts mail only from authenticated senders inside the organization (RequireSenderAuthenticationEnabled = True). Not assessed here: filtering bypasses that apply to every list (DL-3.x)."
         } elseif ($allowedKnown -and $allowedN -gt 0) {
             Add-NRGDlFinding -Entry $Rec['DL-1.1'] -State 'Partial' -Instance $inst -AffectedObjects @($ref) -CurrentValue 'RequireSenderAuthenticationEnabled = False' -RequiredValue $Rec['DL-1.1'].Recommended `
-                -Detail "Shortfall: $who accepts mail from outside the organization (RequireSenderAuthenticationEnabled = False), limited to $allowedN specified sender(s). Not assessed: whether those senders are themselves reachable by a spoofed message, or any filtering bypass (DL-3.x)."
+                -Detail "Shortfall: $who accepts mail from outside the organization (RequireSenderAuthenticationEnabled = False), limited to $allowedN specified sender(s). Not assessed: whether those senders are themselves reachable by a spoofed message, or any filtering bypass (DL-3.x).$extNote"
         } else {
             $tail = if ($allowedKnown) { 'No allowed-senders list limits it.' } else { 'Exchange did not return an allowed-senders list, so it may be narrower than this shows.' }
             Add-NRGDlFinding -Entry $Rec['DL-1.1'] -State 'Gap' -Instance $inst -AffectedObjects @($ref) -CurrentValue 'RequireSenderAuthenticationEnabled = False' -RequiredValue $Rec['DL-1.1'].Recommended `
-                -Detail "Shortfall: $who accepts mail from anyone, including senders outside the organization (RequireSenderAuthenticationEnabled = False). $tail DMARC does not change this: it judges only mail that claims your own domain."
+                -Detail "Shortfall: $who accepts mail from anyone, including senders outside the organization (RequireSenderAuthenticationEnabled = False). $tail DMARC does not change this: it judges only mail that claims your own domain.$extNote"
         }
 
         # DL-2.1 owner
@@ -262,34 +266,8 @@ function Test-NRGDistributionLists {
         }
         # Moderation off is Microsoft's default and there is no recommendation to turn it on: nothing is judged.
 
-        # DL-2.3 external members (against the approved NRG standard only)
-        if ($extStd.Approved) {
-            $mst = [string](Get-NRGObjectField -Item $l -Key 'MemberStatus' -Default 'NotRun')
-            $cnt = [int](Get-NRGObjectField -Item $l -Key 'MemberCount' -Default 0)
-            $trunc = [bool](Get-NRGObjectField -Item $l -Key 'MembersTruncated' -Default $false)
-            $extN = [int](Get-NRGObjectField -Item $l -Key 'ExternalMemberCount' -Default 0)
-            $unres = [int](Get-NRGObjectField -Item $l -Key 'UnresolvedMemberCount' -Default 0)
-            $basis = if ($kind -ne 'Dynamic') { '' } elseif ([string](Get-NRGObjectField -Item $l -Key 'MembershipBasis' -Default '') -eq 'DynamicPreview') { ' (a preview of the list''s filter at scan time, not the stored membership; it can differ from who receives mail sent now)' } else { ' (the calculated membership Microsoft stores on a dynamic list, refreshed about every 24 hours; it can differ from who receives mail sent now)' }
-            if ($mst -ne 'Collected') {
-                Add-NRGDlFinding -Entry $Rec['DL-2.3'] -State 'NotApplicable' -Instance $inst -AffectedObjects @($ref) -Detail "Not assessed: the members of $who were not read ($([string](Get-NRGObjectField -Item $l -Key 'MemberError' -Default 'no error recorded')))."
-            } elseif ($extN -gt 0) {
-                $ext = @(@(Get-NRGObjectField -Item $l -Key 'Members' -Default @()) | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'Class' -Default '') -eq 'External' } |
-                    ForEach-Object { [ordered]@{ List = $name; Member = [string](Get-NRGObjectField -Item $_ -Key 'DisplayName' -Default ''); UPN = [string](Get-NRGObjectField -Item $_ -Key 'UPN' -Default '') } })
-                Add-NRGDlFinding -Entry $Rec['DL-2.3'] -State 'Gap' -Instance $inst -AffectedObjects $ext -CurrentValue "$extN external member(s)" -RequiredValue 'External members prohibited (approved NRG standard)' `
-                    -Detail "Shortfall against the approved NRG standard: $who has $extN external member(s) among the $cnt read$(if ($trunc) { ' (more members exist than were read)' })$basis. Direct members only: nested groups are not expanded."
-            } elseif ($trunc -or $unres -gt 0) {
-                $why = @(); if ($trunc) { $why += "only the first $cnt members were read" }; if ($unres -gt 0) { $why += "$unres member(s) could not be classified as internal or external" }
-                Add-NRGDlFinding -Entry $Rec['DL-2.3'] -State 'NotApplicable' -Instance $inst -AffectedObjects @($ref) -Detail "Not assessed: no external member was found in $who, but $($why -join ' and '), so the list is not shown to be free of them.$basis"
-            } else {
-                $nested = @(Get-NRGObjectField -Item $l -Key 'NestedGroups' -Default @())
-                $unscanned = @($nested | Where-Object { $_ -notin $scannedNames })
-                if ($unscanned.Count -gt 0) {
-                    Add-NRGDlFinding -Entry $Rec['DL-2.3'] -State 'NotApplicable' -Instance $inst -AffectedObjects @($ref) -Detail "Not assessed: $who has no external direct member among $cnt, but it contains $($unscanned.Count) nested group(s) that are not lists in this scan and are not expanded ($($unscanned -join ', ')).$basis"
-                } else {
-                    Add-NRGDlFinding -Entry $Rec['DL-2.3'] -State 'Satisfied' -Instance $inst -AffectedObjects @($ref) -CurrentValue '0 external members' -Detail "Read: $who has no external direct member among its $cnt member(s)$(if ($nested.Count) { '; its nested groups are lists assessed under their own rows' }).$basis"
-                }
-            }
-        }
+        # External members (DL-2.3) are shown in the worksheet and not judged here: the owner decided they stay, so there is
+        # no standard and no finding. What limits their exposure is DL-1.1 and the allowed-senders list the worksheet proposes.
 
         # DL-2.4 member cap (against the approved NRG standard only)
         if ($capStd.Approved) {
@@ -326,7 +304,6 @@ function Test-NRGDistributionLists {
 
     # ── Standards that are not approved: said once, never per list, never as a pass ──
     $notApproved = @(
-        @{ Id = 'DL-2.3'; Std = $extStd; Key = 'DistributionListExternalMembers'; What = 'whether a list may hold external members' }
         @{ Id = 'DL-2.4'; Std = $capStd; Key = 'DistributionListMaxMembers';      What = 'how many members a list may have' }
         @{ Id = 'DL-2.5'; Std = $joinStd; Key = 'DistributionListMemberJoinRestriction'; What = 'which join setting a list may have' }
     )

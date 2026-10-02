@@ -20,10 +20,6 @@
     "_help": "Distribution-list scan, DL-2.4. A single whole number: the largest member count one list may have, for example [\"500\"]. Empty means no cap is approved and the check is not assessed.",
     "Values": []
   },
-  "DistributionListExternalMembers": {
-    "_help": "Distribution-list scan, DL-2.3. The one recognized value is \"Prohibited\": a list may hold no external member (mail contact, mail user or guest). Empty means external members are not judged.",
-    "Values": []
-  },
   "DistributionListMemberJoinRestriction": {
     "_help": "Distribution-list scan, DL-2.5. The join settings NRG accepts, any of Open, Closed, ApprovalRequired (for example [\"Closed\", \"ApprovalRequired\"]). Empty means join restriction is not judged.",
     "Values": []

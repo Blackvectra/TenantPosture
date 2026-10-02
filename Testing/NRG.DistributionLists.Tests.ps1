@@ -150,7 +150,7 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             [pscustomobject]$o }
         $script:Approved = {
             [ordered]@{ DmarcReportingAddresses = @(); CommonAttachmentFileTypes = @(); PriorityUsers = @(); RequiredConditionalAccessTemplates = @()
-                        DistributionListMaxMembers = @('2'); DistributionListExternalMembers = @('Prohibited'); DistributionListMemberJoinRestriction = @('Closed', 'ApprovalRequired') } }
+                        DistributionListMaxMembers = @('2'); DistributionListMemberJoinRestriction = @('Closed', 'ApprovalRequired') } }
     }
     AfterEach { Remove-Stubs; Clear-NRGState }
     AfterAll  { Remove-Stubs; Clear-NRGState; Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue }
@@ -173,12 +173,21 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             (Get-NRGRawData -Key 'EXO-DistributionLists').CollectorId | Should -Be 'EXO-DistributionLists'
         }
 
-        It 'a member row carries only a display name, a UPN, a type and a class: no phone, title, department or manager' {
+        It 'a member row carries only a display name, a UPN, the primary address, a type and a class: no phone, title, department or manager' {
             $r = Invoke-Scan @{ Lists = @(New-DlRaw 'Sales' 'sales@contoso.com'); Members = @{ 'sales@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com') } }
             $m = $r.Data.Lists[0].Members[0]
-            @($m.Keys | Sort-Object) | Should -Be @('Class', 'DisplayName', 'RecipientType', 'UPN')
+            @($m.Keys | Sort-Object) | Should -Be @('Address', 'Class', 'DisplayName', 'RecipientType', 'UPN')
             $json = $r | ConvertTo-Json -Depth 12
             foreach ($pii in '555-0100', 'Chief Executive', 'Executive', 'Some Manager') { $json | Should -Not -Match ([regex]::Escape($pii)) -Because "$pii is on the raw member and must not be copied" }
+        }
+
+        It 'a member''s Address is its primary SMTP address, which is not always its UPN; a contact with no UPN keeps its address in both' {
+            $r = Invoke-Scan @{ Lists = @(New-DlRaw 'Sales' 'sales@contoso.com'); Members = @{ 'sales@contoso.com' = @(
+                New-DlMember 'Ann' 'ann@contoso.com' -With @{ UserPrincipalName = 'ann.upn@contoso.onmicrosoft.com' }
+                New-DlMember 'Vendor' 'v@vendor.example' 'MailContact') } }
+            $m = @($r.Data.Lists[0].Members)
+            $m[0].Address | Should -Be 'ann@contoso.com'; $m[0].UPN | Should -Be 'ann.upn@contoso.onmicrosoft.com'
+            $m[1].Address | Should -Be 'v@vendor.example'; $m[1].UPN | Should -Be 'v@vendor.example'
         }
 
         It 'classifies members External / Internal / Unresolved from the raw shapes, never a blank as Internal' {
@@ -448,10 +457,10 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             (F 'DL-2.2' 'modunread@*').State | Should -Be 'NotApplicable'
         }
 
-        It 'DL-2.3 / 2.4 / 2.5: with no approved NRG standard there is ONE tenant-level "not assessed" each, and no list is judged' {
+        It 'DL-2.4 / 2.5: with no approved NRG standard there is ONE tenant-level "not assessed" each, and no list is judged' {
             Invoke-Scan @{ Lists = @(New-DlRaw 'A' 'a@contoso.com' -With @{ MemberJoinRestriction = 'Open' }; New-DlRaw 'B' 'b@contoso.com'); Members = @{
                 'a@contoso.com' = @(New-DlMember 'Vendor' 'v@vendor.example' 'MailContact') } } | Out-Null
-            foreach ($id in 'DL-2.3', 'DL-2.4', 'DL-2.5') {
+            foreach ($id in 'DL-2.4', 'DL-2.5') {
                 $f = F $id
                 $f.Count | Should -Be 1 -Because "$id is an NRG judgment"
                 $f[0].State | Should -Be 'NotApplicable'
@@ -470,40 +479,23 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
         Context 'with the standards approved' {
             BeforeEach { Mock -ModuleName 'NRG-Assessment' Get-NRGStandards -MockWith $script:Approved }
 
-            It 'DL-2.3: an external member is a Gap that names them; none is Met; unread, unresolved or truncated is not assessed' {
-                Invoke-Scan @{ Lists = @(New-DlRaw 'Ext' 'ext@contoso.com'; New-DlRaw 'Clean' 'clean@contoso.com'; New-DlRaw 'Broken' 'broken@contoso.com'; New-DlRaw 'Unres' 'unres@contoso.com'; New-DlRaw 'Big' 'big@contoso.com')
+            It 'DL-2.3: external members are expected, so they are never a finding: not Met, not a Gap, not even "not assessed"' {
+                Invoke-Scan @{ Lists = @(New-DlRaw 'Ext' 'ext@contoso.com'; New-DlRaw 'Clean' 'clean@contoso.com'; New-DlRaw 'Broken' 'broken@contoso.com')
+                    Dynamic = @(New-DlDynamic 'Everyone' 'everyone@contoso.com')
                     MemberThrow = @{ 'broken@contoso.com' = 'object not found' }; Members = @{
-                        'ext@contoso.com'   = @(New-DlMember 'Ann' 'ann@contoso.com'; New-DlMember 'Vendor' 'v@vendor.example' 'MailContact')
-                        'clean@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com')
-                        'unres@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com'; New-DlMember 'No addr' '' 'MailContact' -Omit @('PrimarySmtpAddress'))
-                        'big@contoso.com'   = @(1..6 | ForEach-Object { New-DlMember "U$_" "u$_@contoso.com" }) } } @{ MaxMembersPerList = 5 } | Out-Null
-                $e = F 'DL-2.3' 'ext@*'; $e.State | Should -Be 'Gap'
-                @($e.AffectedObjects).Count | Should -Be 1
-                $e.AffectedObjects[0].UPN | Should -Be 'v@vendor.example'
-                $e.Detail | Should -Match 'Direct members only'
-                (F 'DL-2.3' 'clean@*').State | Should -Be 'Satisfied'
-                (F 'DL-2.3' 'broken@*').State | Should -Be 'NotApplicable'
-                (F 'DL-2.3' 'unres@*').State | Should -Be 'NotApplicable'
-                (F 'DL-2.3' 'unres@*').Detail | Should -Match 'could not be classified'
-                $b = F 'DL-2.3' 'big@*'; $b.State | Should -Be 'NotApplicable'; $b.Detail | Should -Match 'only the first 5 members were read'
+                        'ext@contoso.com'      = @(New-DlMember 'Ann' 'ann@contoso.com'; New-DlMember 'Vendor' 'v@vendor.example' 'MailContact')
+                        'clean@contoso.com'    = @(New-DlMember 'Ann' 'ann@contoso.com')
+                        'everyone@contoso.com' = @(New-DlMember 'Vendor' 'v@vendor.example' 'MailContact') } } | Out-Null
+                @(F 'DL-2.3').Count | Should -Be 0
             }
 
-            It 'DL-2.3: a dynamic list''s finding says how its members were obtained' {
-                Invoke-Scan @{ Dynamic = @(New-DlDynamic 'Everyone' 'everyone@contoso.com'); Members = @{ 'everyone@contoso.com' = @(New-DlMember 'Vendor' 'v@vendor.example' 'MailContact') } } | Out-Null
-                (F 'DL-2.3' 'everyone@*').State | Should -Be 'Gap'
-                (F 'DL-2.3' 'everyone@*').Detail | Should -Match 'calculated membership Microsoft stores'
-                Clear-NRGState; Remove-Stubs; Remove 'Get-DynamicDistributionGroupMember'
-                Use-Scenario @{ Dynamic = @(New-DlDynamic 'Everyone' 'everyone@contoso.com'); Preview = @(New-DlMember 'Vendor' 'v@vendor.example' 'MailContact') }
-                Remove 'Get-DynamicDistributionGroupMember'
-                Invoke-NRGCollectDistributionLists -ThrottleBaseDelaySeconds 0 | Out-Null
-                Test-NRGDistributionLists
-                (F 'DL-2.3' 'everyone@*').Detail | Should -Match 'preview of the list''s filter'
-            }
-
-            It 'DL-2.3: a nested group that is not a list in this scan is not assumed clean' {
-                Invoke-Scan @{ Lists = @(New-DlRaw 'Parent' 'parent@contoso.com'); Members = @{ 'parent@contoso.com' = @(New-DlMember 'Elsewhere' 'else@contoso.com' 'MailUniversalDistributionGroup') } } | Out-Null
-                (F 'DL-2.3' 'parent@*').State | Should -Be 'NotApplicable'
-                (F 'DL-2.3' 'parent@*').Detail | Should -Match 'nested group'
+            It 'DL-2.3: a leftover DistributionListExternalMembers value in the standards file is ignored: nothing judges or removes an external member' {
+                Mock -ModuleName 'NRG-Assessment' Get-NRGStandards -MockWith { $s = & $script:Approved; $s.DistributionListExternalMembers = @('Prohibited'); $s }
+                Invoke-Scan @{ Lists = @(New-DlRaw 'Ext' 'ext@contoso.com'); Members = @{ 'ext@contoso.com' = @(New-DlMember 'Vendor' 'v@vendor.example' 'MailContact') } } | Out-Null
+                @(F 'DL-2.3').Count | Should -Be 0
+                $ws = Get-NRGDistributionListWorksheet -Metadata @{}
+                @($ws.Lists | ForEach-Object { $_.Settings } | ForEach-Object { $_.Commands } | Where-Object { $_ -match 'Remove-DistributionGroupMember' }) | Should -BeNullOrEmpty
+                (@($ws.Lists[0].Settings) | Where-Object { $_.ControlId -eq 'DL-2.3' }).Verdict | Should -Be 'Context'
             }
 
             It 'DL-2.4: over the cap is a Gap, at or under is Met, and a truncated count that cannot settle it is not assessed' {
@@ -833,13 +825,19 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
 
             It 'carries the exact PowerShell for a shortfall, marked "text only", with -WhatIf advised, and never runs it' {
                 $o = & $script:Build $script:Scn 'cmds'
-                $o.Txt | Should -Match "Set-DistributionGroup -Identity 'allstaff@contoso\.com' -RequireSenderAuthenticationEnabled \`$true"
+                # allstaff holds an external member, whom 'require authenticated senders' would stop sending, so that command is not printed for it.
+                $o.Txt | Should -Not -Match "Set-DistributionGroup -Identity 'allstaff@contoso\.com' -RequireSenderAuthenticationEnabled"
+                $o.Txt | Should -Match "Set-DistributionGroup -Identity 'allstaff@contoso\.com' -AcceptMessagesOnlyFromSendersOrMembers 'ann@contoso\.com','bob@vendor\.example'"
                 $o.Txt | Should -Match "Set-DistributionGroup -Identity 'allstaff@contoso\.com' -ManagedBy '<owner>'"
                 $o.Txt | Should -Match 'Commands for an administrator to review and run, with -WhatIf first \(text only; this tool never runs them\)'
                 $o.Txt | Should -Match "Disable-TransportRule -Identity 'Allow partner'"
                 $o.Txt | Should -Match "Set-HostedConnectionFilterPolicy -Identity Default -IPAllowList @\{Remove='203\.0\.113\.0/24'\}"
-                $cmd = ($o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ListAddress -eq 'allstaff@contoso.com' -and $_.ControlId -eq 'DL-1.1' }).AdminCommand
-                $cmd | Should -Be "Set-DistributionGroup -Identity 'allstaff@contoso.com' -RequireSenderAuthenticationEnabled `$true"
+                ($o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ListAddress -eq 'allstaff@contoso.com' -and $_.ControlId -eq 'DL-1.1' }).AdminCommand | Should -BeNullOrEmpty
+                ($o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ListAddress -eq 'allstaff@contoso.com' -and $_.ControlId -eq 'DL-1.2' }).AdminCommand |
+                    Should -Be "Set-DistributionGroup -Identity 'allstaff@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers 'ann@contoso.com','bob@vendor.example'"
+                # A list with no external member still gets the require-authentication command.
+                $p = & $script:Build @{ Lists = @(New-DlRaw 'Internal Open' 'iopen@contoso.com' -With @{ RequireSenderAuthenticationEnabled = $false }); Members = @{ 'iopen@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com') } } 'cmds-internal'
+                ($p.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ControlId -eq 'DL-1.1' }).AdminCommand | Should -Be "Set-DistributionGroup -Identity 'iopen@contoso.com' -RequireSenderAuthenticationEnabled `$true"
                 @(Get-CallLog | Where-Object { $_ -like 'WRITE:*' }) | Should -BeNullOrEmpty -Because 'the scan printed write commands; it must never have run one'
             }
 
@@ -848,11 +846,12 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 $o.Txt | Should -Match "Set-DynamicDistributionGroup -Identity 'everyone@contoso\.com' -RequireSenderAuthenticationEnabled"
             }
 
-            It 'with the standards approved, the join and external-member shortfalls get their commands' {
+            It 'with the standards approved, the join shortfall gets its command, and no command removes an external member' {
                 Mock -ModuleName 'NRG-Assessment' Get-NRGStandards -MockWith $script:Approved
                 $o = & $script:Build $script:Scn 'std'
                 $o.Txt | Should -Match "Set-DistributionGroup -Identity 'allstaff@contoso\.com' -MemberJoinRestriction 'Closed'"
-                $o.Txt | Should -Match "Remove-DistributionGroupMember -Identity 'allstaff@contoso\.com' -Member 'bob@vendor\.example'"
+                $o.Txt | Should -Not -Match 'Remove-DistributionGroupMember' -Because 'external members stay; the owner decided not to ban them'
+                @($o.Csv | Where-Object { $_.AdminCommand -match 'Remove-DistributionGroupMember' }) | Should -BeNullOrEmpty
                 ($o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ListAddress -eq 'allstaff@contoso.com' -and $_.ControlId -eq 'DL-2.5' }).Verdict | Should -Be 'Gap'
                 @(Get-CallLog | Where-Object { $_ -like 'WRITE:*' }) | Should -BeNullOrEmpty
             }
@@ -891,10 +890,26 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 & $script:Mod { Format-NRGDlCommand -Template '' -Values @{} } | Should -BeNullOrEmpty
             }
 
-            It 'a list address that contains a placeholder cannot reach the member in the printed removal command' {
-                Mock -ModuleName 'NRG-Assessment' Get-NRGStandards -MockWith $script:Approved
-                $o = & $script:Build @{ Lists = @(New-DlRaw 'Tmpl' 'x{Member}y@contoso.com'); Members = @{ 'x{Member}y@contoso.com' = @(New-DlMember 'Vendor' 'bob@vendor.example' 'MailContact') } } 'tmpl'
-                $o.Txt | Should -Match "Remove-DistributionGroupMember -Identity 'x\{Member\}y@contoso\.com' -Member 'bob@vendor\.example'"
+            It '{Senders}: every address is its own quoted literal, in order; an empty list or ONE bad address yields no command at all, never a partial one' {
+                $tpl = 'Set-DistributionGroup -Identity {List} -AcceptMessagesOnlyFromSendersOrMembers {Senders}'
+                (& $script:Mod { param($t) Format-NRGDlCommand -Template $t -Values @{ List = 'l@contoso.com'; Senders = @('a@x.example', "o'b@x.example") } } $tpl) |
+                    Should -Be "Set-DistributionGroup -Identity 'l@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers 'a@x.example','o''b@x.example'"
+                (& $script:Mod { param($t) Format-NRGDlCommand -Template $t -Values @{ List = 'l@contoso.com'; Senders = @('only@x.example') } } $tpl) |
+                    Should -Be "Set-DistributionGroup -Identity 'l@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers 'only@x.example'"
+                foreach ($bad in "x$([char]0x2018)y@x.example", "x$([char]0x201B)y@x.example", "x`ny@x.example", '', $null) {
+                    $r = & $script:Mod { param($t, $b) Format-NRGDlCommand -Template $t -Values @{ List = 'l@contoso.com'; Senders = @('ok@x.example', $b, 'also@x.example') } } $tpl $bad
+                    ($null -eq $r) | Should -BeTrue -Because "a command with a sender dropped would reject that sender; got [$r] for [$bad]"
+                }
+                ($null -eq (& $script:Mod { param($t) Format-NRGDlCommand -Template $t -Values @{ List = 'l@contoso.com'; Senders = @() } } $tpl)) | Should -BeTrue
+                ($null -eq (& $script:Mod { param($t) Format-NRGDlCommand -Template $t -Values @{ List = 'l@contoso.com' } } $tpl)) | Should -BeTrue
+                # Tenant text that looks like a placeholder is inserted once and never substituted again.
+                (& $script:Mod { param($t) Format-NRGDlCommand -Template $t -Values @{ List = 'a{Senders}b@contoso.com'; Senders = @('s{List}t@x.example') } } $tpl) |
+                    Should -Be "Set-DistributionGroup -Identity 'a{Senders}b@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers 's{List}t@x.example'"
+            }
+
+            It 'a list address that contains a placeholder cannot reach the senders in the printed allow-list command' {
+                $o = & $script:Build @{ Lists = @(New-DlRaw 'Tmpl' 'x{Senders}y@contoso.com' -With @{ RequireSenderAuthenticationEnabled = $false }); Members = @{ 'x{Senders}y@contoso.com' = @(New-DlMember 'Vendor' 'bob@vendor.example' 'MailContact') } } 'tmpl'
+                $o.Txt | Should -Match "Set-DistributionGroup -Identity 'x\{Senders\}y@contoso\.com' -AcceptMessagesOnlyFromSendersOrMembers 'bob@vendor\.example'"
                 $o.Txt | Should -Not -Match "-Identity 'x'bob"
             }
 
@@ -944,6 +959,148 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 $o = & $script:Build @{ Lists = @(New-DlRaw 'Only' 'only@contoso.com'); MemberThrow = @{ 'only@contoso.com' = 'object not found' } } 'extfail'
                 $o.Worksheet.Summary.ListsWithExternalMembers | Should -Be 0
                 $o.Worksheet.Summary.ListsMembersNotRead | Should -Be 1
+            }
+        }
+
+        Context 'the allowed-senders proposal: a snapshot of the members read now, offered only where it is safe to offer' {
+            BeforeAll {
+                # One list, one DL-1.2 row. -Auth / -With shape the list; members are raw Get-DistributionGroupMember shapes.
+                $script:Prop = {
+                    param([hashtable] $Scn, [string] $Name = 'prop')
+                    $o = & $script:Build $Scn $Name
+                    $row = $o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ControlId -eq 'DL-1.2' } | Select-Object -First 1
+                    [pscustomobject]@{ O = $o; Row = $row; Cmd = [string]$row.AdminCommand; Detail = [string]$row.Detail; Verdict = [string]$row.Verdict }
+                }
+                $script:OpenList = { param([hashtable] $With = @{}, [string] $Addr = 'open@contoso.com') New-DlRaw 'Open' $Addr -With (@{ RequireSenderAuthenticationEnabled = $false } + $With) }
+            }
+
+            It 'offers the members read now as the allowed senders: internal, external and nested group, each its own quoted address, in member order' {
+                $r = & $script:Prop @{ Lists = @(& $script:OpenList); Members = @{ 'open@contoso.com' = @(
+                    New-DlMember 'Ann' 'ann@contoso.com'; New-DlMember 'Vendor Bob' 'bob@vendor.example' 'MailContact'; New-DlMember 'Subteam' 'sub@contoso.com' 'MailUniversalDistributionGroup') } } 'p1'
+                $r.Verdict | Should -Be 'Proposal'
+                $r.Cmd | Should -Be "Set-DistributionGroup -Identity 'open@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers 'ann@contoso.com','bob@vendor.example','sub@contoso.com'"
+                $r.Detail | Should -Match 'Proposed allow list: the 3 address\(es\) read now \(1 external, 1 nested group\(s\)\)'
+                $r.Detail | Should -Match 'It is a snapshot: a member added later is not on it'
+                $r.Detail | Should -Match 'does not authenticate an outside sender'
+                $r.Detail | Should -Match '-WhatIf first'
+                $r.O.Txt | Should -Match "(?m)^\s+> Set-DistributionGroup -Identity 'open@contoso\.com' -AcceptMessagesOnlyFromSendersOrMembers 'ann@contoso\.com','bob@vendor\.example','sub@contoso\.com'$"
+                $r.O.Txt | Should -Match 'Allowed senders  \[Proposal\]'
+                $r.O.Worksheet.Summary.AllowListsProposed | Should -Be 1
+                $r.O.Txt | Should -Match 'Lists with an allow list proposed:\s+1'
+                @(Get-CallLog | Where-Object { $_ -like 'WRITE:*' }) | Should -BeNullOrEmpty -Because 'the proposal is text; nothing was set'
+            }
+
+            It 'uses each member''s primary address, not its UPN, because an email address is what Microsoft documents as an identifier' {
+                $r = & $script:Prop @{ Lists = @(& $script:OpenList); Members = @{ 'open@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com' -With @{ UserPrincipalName = 'ann.upn@contoso.onmicrosoft.com' }) } } 'p2'
+                $r.Cmd | Should -Match "'ann@contoso\.com'$"
+                $r.Cmd | Should -Not -Match 'ann\.upn'
+            }
+
+            It 'lists an address once however many members carry it, ignoring case' {
+                $r = & $script:Prop @{ Lists = @(& $script:OpenList); Members = @{ 'open@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com'; New-DlMember 'Ann again' 'ANN@contoso.com'; New-DlMember 'Cy' 'cy@contoso.com') } } 'p3'
+                $r.Cmd | Should -Match "-AcceptMessagesOnlyFromSendersOrMembers 'ann@contoso\.com','cy@contoso\.com'$"
+            }
+
+            It 'an apostrophe in an address is doubled, and text that looks like a placeholder stays text' {
+                $r = & $script:Prop @{ Lists = @(& $script:OpenList); Members = @{ 'open@contoso.com' = @(New-DlMember "O'Brien" "o'brien@vendor.example" 'MailContact'; New-DlMember 'Odd' 'a{Senders}b@vendor.example' 'MailContact') } } 'p4'
+                $r.Cmd | Should -Be "Set-DistributionGroup -Identity 'open@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers 'o''brien@vendor.example','a{Senders}b@vendor.example'"
+            }
+
+            It 'a member address that cannot be quoted safely withholds the WHOLE command: an allow list with someone left out would reject them' {
+                $r = & $script:Prop @{ Lists = @(& $script:OpenList); Members = @{ 'open@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com'; New-DlMember 'Smart' "smart$([char]0x2019)@vendor.example" 'MailContact') } } 'p5'
+                $r.Cmd | Should -BeNullOrEmpty
+                $r.Verdict | Should -Be 'Context'
+                $r.Detail | Should -Match 'cannot be quoted safely'
+                $r.Detail | Should -Match 'a command with a member left out would reject that member'
+                $r.O.Txt | Should -Not -Match '(?m)^\s+> Set-DistributionGroup -Identity .* -AcceptMessagesOnlyFromSendersOrMembers'
+                $r.O.Worksheet.Summary.AllowListsProposed | Should -Be 0
+            }
+
+            It 'withholds the command, and says why, whenever a command could reject people it should not' {
+                $cases = @(
+                    @{ Why = 'senders must already be authenticated'; Match = 'cannot send to it while that is True'
+                       List = (New-DlRaw 'Open' 'open@contoso.com'); Members = @(New-DlMember 'Vendor' 'v@vendor.example' 'MailContact') }
+                    @{ Why = 'an allow list already exists'; Match = 'already has 1 allowed sender\(s\) and this scan does not propose replacing'
+                       List = (& $script:OpenList @{ AcceptMessagesOnlyFromSendersOrMembers = @('Partner Pat') }); Members = @(New-DlMember 'Ann' 'ann@contoso.com') }
+                    @{ Why = 'the allowed-senders setting was not returned'; Match = 'did not return the allowed-senders setting'
+                       List = (New-DlRaw 'Open' 'open@contoso.com' -With @{ RequireSenderAuthenticationEnabled = $false } -Omit @('AcceptMessagesOnlyFromSendersOrMembers', 'AcceptMessagesOnlyFrom', 'AcceptMessagesOnlyFromDLMembers')); Members = @(New-DlMember 'Ann' 'ann@contoso.com') }
+                    @{ Why = 'the sender setting was not returned'; Match = 'did not return RequireSenderAuthenticationEnabled'
+                       List = (New-DlRaw 'Open' 'open@contoso.com' -Omit @('RequireSenderAuthenticationEnabled')); Members = @(New-DlMember 'Ann' 'ann@contoso.com') }
+                    @{ Why = 'the list has no members'; Match = 'has no members'
+                       List = (& $script:OpenList); Members = @() }
+                    @{ Why = 'a member returned no primary address'; Match = '1 member\(s\) returned no primary address'
+                       List = (& $script:OpenList); Members = @((New-DlMember 'Ann' 'ann@contoso.com'), (New-DlMember 'No addr' '' 'MailContact' -Omit @('PrimarySmtpAddress'))) }
+                )
+                $n = 0
+                foreach ($c in $cases) {
+                    $n++
+                    $r = & $script:Prop @{ Lists = @($c.List); Members = @{ 'open@contoso.com' = @($c.Members) } } "p6-$n"
+                    $r.Cmd | Should -BeNullOrEmpty -Because $c.Why
+                    $r.Verdict | Should -Be 'Context' -Because $c.Why
+                    $r.Detail | Should -Match $c.Match -Because $c.Why
+                    $r.O.Txt | Should -Not -Match '(?m)^\s+> Set-DistributionGroup -Identity .* -AcceptMessagesOnlyFromSendersOrMembers' -Because $c.Why
+                    $r.O.Worksheet.Summary.AllowListsProposed | Should -Be 0 -Because $c.Why
+                }
+            }
+
+            It 'a list read only in part is never turned into an allow list: it would reject the members it did not read' {
+                Invoke-Scan @{ Lists = @(& $script:OpenList); Members = @{ 'open@contoso.com' = @(1..3 | ForEach-Object { New-DlMember "U$_" "u$_@contoso.com" }) } } @{ MaxMembersPerList = 2 } | Out-Null
+                $ws = Get-NRGDistributionListWorksheet -Metadata @{}
+                $row = @($ws.Lists[0].Settings | Where-Object { $_.ControlId -eq 'DL-1.2' })[0]
+                @($row.Commands).Count | Should -Be 0
+                $row.Detail | Should -Match 'only the first 2 members were read and the list has more'
+            }
+
+            It 'a list whose members could not be read gets no allow list, not an empty one' {
+                $r = & $script:Prop @{ Lists = @(& $script:OpenList); MemberThrow = @{ 'open@contoso.com' = 'object not found' } } 'p7'
+                $r.Cmd | Should -BeNullOrEmpty
+                $r.Detail | Should -Match 'the members were not read'
+            }
+
+            It 'a dynamic list gets none: a snapshot of a calculated membership would not follow who is a member later' {
+                $r = & $script:Prop @{ Dynamic = @(New-DlDynamic 'Everyone' 'everyone@contoso.com' -With @{ RequireSenderAuthenticationEnabled = $false }); Members = @{ 'everyone@contoso.com' = @(New-DlMember 'Dee' 'dee@contoso.com') } } 'p8'
+                $r.Cmd | Should -BeNullOrEmpty
+                $r.Detail | Should -Match 'dynamic list'
+            }
+
+            It 'a command too long for one spreadsheet cell is withheld, in both files' {
+                $long = @(1..420 | ForEach-Object { New-DlMember "V$_" ("vendor-with-a-deliberately-long-local-part-number-$_@a-long-external-domain-name.example") 'MailContact' })
+                $r = & $script:Prop @{ Lists = @(& $script:OpenList); Members = @{ 'open@contoso.com' = $long } } 'p9'
+                $r.Cmd | Should -BeNullOrEmpty
+                $r.Detail | Should -Match 'longer than one spreadsheet cell holds'
+                $r.O.Txt | Should -Not -Match '(?m)^\s+> Set-DistributionGroup -Identity .* -AcceptMessagesOnlyFromSendersOrMembers'
+            }
+
+            It 'the verdict, the finding text and the command read the same in the text file and the CSV' {
+                $r = & $script:Prop @{ Lists = @(& $script:OpenList); Members = @{ 'open@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com'; New-DlMember 'Bob' 'bob@vendor.example' 'MailContact') } } 'p10'
+                ($r.O.Txt -replace '\s+', ' ') | Should -Match ([regex]::Escape(($r.Detail -replace '\s+', ' ').Trim()))
+                $r.O.Txt | Should -Match ([regex]::Escape($r.Cmd))
+            }
+        }
+
+        Context 'external members are shown, not judged, and are not removed' {
+            It 'the DL-2.3 row reports the count as context, with no verdict and no command' {
+                $o = & $script:Build @{ Lists = @(New-DlRaw 'Ext' 'ext@contoso.com'); Members = @{ 'ext@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com'; New-DlMember 'Vendor' 'v@vendor.example' 'MailContact') } } 'ctx'
+                $row = $o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ControlId -eq 'DL-2.3' }
+                $row.Verdict | Should -Be 'Context'
+                $row.Current | Should -Be '1 external of 2'
+                $row.AdminCommand | Should -BeNullOrEmpty
+                $row.Detail | Should -Match 'shown and not judged'
+                $o.Txt | Should -Match 'External members  \[Context\]'
+            }
+
+            It 'DL-1.1 on a list with external members points at the allowed-senders option instead of requiring authentication' {
+                Invoke-Scan @{ Lists = @(
+                    New-DlRaw 'Open' 'open@contoso.com' -With @{ RequireSenderAuthenticationEnabled = $false }
+                    New-DlRaw 'Named' 'named@contoso.com' -With @{ RequireSenderAuthenticationEnabled = $false; AcceptMessagesOnlyFromSendersOrMembers = @('Partner Pat') }
+                    New-DlRaw 'Plain' 'plain@contoso.com' -With @{ RequireSenderAuthenticationEnabled = $false }); Members = @{
+                        'open@contoso.com'  = @(New-DlMember 'Vendor' 'v@vendor.example' 'MailContact'; New-DlMember 'Ann' 'ann@contoso.com')
+                        'named@contoso.com' = @(New-DlMember 'Vendor' 'v@vendor.example' 'MailContact')
+                        'plain@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com') } } | Out-Null
+                (F 'DL-1.1' 'open@*').Detail | Should -Match 'has 1 external member\(s\): requiring authenticated senders would stop them sending to it'
+                (F 'DL-1.1' 'named@*').State | Should -Be 'Partial'
+                (F 'DL-1.1' 'named@*').Detail | Should -Match 'has 1 external member\(s\)'
+                (F 'DL-1.1' 'plain@*').Detail | Should -Not -Match 'external member'
             }
         }
 

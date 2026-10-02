@@ -16,8 +16,8 @@ function Get-NRGStandards {
     .SYNOPSIS
         Returns the approved lists from Config/nrg-standards.json as string arrays
         (DmarcReportingAddresses, CommonAttachmentFileTypes, PriorityUsers,
-        RequiredConditionalAccessTemplates, and the three distribution-list
-        standards DistributionListMaxMembers, DistributionListExternalMembers,
+        RequiredConditionalAccessTemplates, and the two distribution-list
+        standards DistributionListMaxMembers and
         DistributionListMemberJoinRestriction). A missing or unreadable file yields
         empty lists, which means "not approved", never "nothing required is met".
     #>
@@ -26,7 +26,7 @@ function Get-NRGStandards {
     param([string] $Path)
 
     $std = [ordered]@{ DmarcReportingAddresses = @(); CommonAttachmentFileTypes = @(); PriorityUsers = @(); RequiredConditionalAccessTemplates = @()
-                       DistributionListMaxMembers = @(); DistributionListExternalMembers = @(); DistributionListMemberJoinRestriction = @() }
+                       DistributionListMaxMembers = @(); DistributionListMemberJoinRestriction = @() }
     if (-not $Path) { $Path = Join-Path (Split-Path -Parent $PSScriptRoot) 'Config' 'nrg-standards.json' }
     if (-not (Test-Path -LiteralPath $Path)) { return $std }
     try {

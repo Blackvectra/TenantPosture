@@ -5,7 +5,7 @@
     NRG.DistributionListCatalog.Tests.ps1 — NRG Technology Services / NextLayerSec LLC
     Author: Matthew Levorson
     Purpose: Integrity of the distribution-list recommendation catalog
-             (Config/distribution-list-baseline.json) and of the three NRG standards
+             (Config/distribution-list-baseline.json) and of the two NRG standards
              it depends on (Config/nrg-standards.json). Same discipline as the
              Conditional Access baseline: every source a real Learn link, every cited
              800-53 control present in the catalog, every judgment that is NRG's own
@@ -116,9 +116,9 @@ Describe 'Distribution-list recommendation catalog' {
         It 'no Basis Microsoft entry borrows a standard, and no entry recommends a value of its own invention' {
             foreach ($r in @($script:Recs | Where-Object { $_.Basis -eq 'Microsoft' })) { $r.PSObject.Properties.Name | Should -Not -Contain 'StandardKey' }
         }
-        It 'the three distribution-list standards ship empty (unapproved means not assessed, never met)' {
+        It 'the two distribution-list standards ship empty (unapproved means not assessed, never met)' {
             $s = Get-NRGStandards -Path (Join-Path $script:Root 'Config' 'nrg-standards.json')
-            foreach ($k in 'DistributionListMaxMembers', 'DistributionListExternalMembers', 'DistributionListMemberJoinRestriction') {
+            foreach ($k in 'DistributionListMaxMembers', 'DistributionListMemberJoinRestriction') {
                 $s.Contains($k) | Should -BeTrue
                 @($s[$k]).Count | Should -Be 0 -Because "$k must stay empty until the owner approves a value"
                 @($script:Std.$k.Values).Count | Should -Be 0
@@ -126,8 +126,30 @@ Describe 'Distribution-list recommendation catalog' {
         }
         It 'the unapproved standards read as not approved, with no issue to report' {
             $d = Get-NRGDistributionListStandards -Standards (Get-NRGStandards -Path (Join-Path $script:Root 'Config' 'nrg-standards.json'))
-            $d.MaxMembers.Approved | Should -BeFalse; $d.ExternalMembers.Approved | Should -BeFalse; $d.JoinRestriction.Approved | Should -BeFalse
+            $d.MaxMembers.Approved | Should -BeFalse; $d.JoinRestriction.Approved | Should -BeFalse
             $d.MaxMembers.Issue | Should -BeNullOrEmpty
+        }
+        It 'there is no external-members standard: the owner decided external members stay, so nothing can ban them' {
+            (Get-Content -LiteralPath (Join-Path $script:Root 'Config' 'nrg-standards.json') -Raw -Encoding utf8) | Should -Not -Match 'DistributionListExternalMembers'
+            (Get-NRGStandards -Path (Join-Path $script:Root 'Config' 'nrg-standards.json')).Contains('DistributionListExternalMembers') | Should -BeFalse
+            (Get-NRGDistributionListStandards -Standards (Get-NRGStandards -Path (Join-Path $script:Root 'Config' 'nrg-standards.json'))).Contains('ExternalMembers') | Should -BeFalse
+            @($script:Recs | Where-Object { $_.StandardKey -eq 'DistributionListExternalMembers' }) | Should -BeNullOrEmpty
+        }
+        It 'DL-2.3 is context: no standard, no finding, and no command that removes a member' {
+            $r = $script:Recs | Where-Object { $_.ControlId -eq 'DL-2.3' }
+            $r.Kind | Should -Be 'Context'
+            $r.EmitsFinding | Should -BeFalse
+            $r.PSObject.Properties.Name | Should -Not -Contain 'StandardKey'
+            @($r.AdminCommands.PSObject.Properties.Value | Where-Object { $_ }) | Should -BeNullOrEmpty
+            ($script:Recs | ForEach-Object { @($_.AdminCommands.PSObject.Properties.Value) } | Where-Object { $_ -match 'Remove-DistributionGroupMember' }) | Should -BeNullOrEmpty
+        }
+        It 'DL-1.2 carries the allowed-senders command with a {Senders} list, and cites the cmdlet reference and the outside-sender page' {
+            $r = $script:Recs | Where-Object { $_.ControlId -eq 'DL-1.2' }
+            $r.AdminCommands.Distribution | Should -Be 'Set-DistributionGroup -Identity {List} -AcceptMessagesOnlyFromSendersOrMembers {Senders}'
+            $r.SourceUrl | Should -Be 'https://learn.microsoft.com/powershell/module/exchange/set-distributiongroup'
+            @($r.AlsoSee) | Should -Contain 'https://learn.microsoft.com/troubleshoot/exchange/email-delivery/ndr/fix-error-code-5-7-136-in-exchange-online'
+            $r.Why | Should -Match 'rejected'
+            $r.Why | Should -Match 'SNAPSHOT'
         }
     }
 
@@ -183,7 +205,7 @@ Describe 'Catalog loader and standards interpretation' {
 
     Context 'standards' {
         BeforeAll {
-            $script:Std = { param([hashtable] $v) $s = [ordered]@{}; foreach ($k in 'DistributionListMaxMembers', 'DistributionListExternalMembers', 'DistributionListMemberJoinRestriction') { $s[$k] = @($(if ($v.ContainsKey($k)) { $v[$k] } else { @() })) }; Get-NRGDistributionListStandards -Standards $s }
+            $script:Std = { param([hashtable] $v) $s = [ordered]@{}; foreach ($k in 'DistributionListMaxMembers', 'DistributionListMemberJoinRestriction') { $s[$k] = @($(if ($v.ContainsKey($k)) { $v[$k] } else { @() })) }; Get-NRGDistributionListStandards -Standards $s }
         }
         It 'accepts one whole number as the member cap' {
             $r = & $script:Std @{ DistributionListMaxMembers = @('500') }
@@ -196,12 +218,6 @@ Describe 'Catalog loader and standards interpretation' {
                 $r.MaxMembers.Issue | Should -Not -BeNullOrEmpty
             }
         }
-        It 'accepts only Prohibited for external members' {
-            (& $script:Std @{ DistributionListExternalMembers = @('Prohibited') }).ExternalMembers.Prohibited | Should -BeTrue
-            $r = & $script:Std @{ DistributionListExternalMembers = @('Allowed') }
-            $r.ExternalMembers.Approved | Should -BeFalse
-            $r.ExternalMembers.Issue | Should -Match "accepts only 'Prohibited'"
-        }
         It 'accepts any of the three documented join settings and no other' {
             $r = & $script:Std @{ DistributionListMemberJoinRestriction = @('closed', 'ApprovalRequired') }
             $r.JoinRestriction.Approved | Should -BeTrue
@@ -212,7 +228,7 @@ Describe 'Catalog loader and standards interpretation' {
         }
         It 'a standards dictionary lacking the keys (an older mock) reads as not approved, never throws' {
             $r = Get-NRGDistributionListStandards -Standards ([ordered]@{ PriorityUsers = @() })
-            $r.MaxMembers.Approved | Should -BeFalse; $r.ExternalMembers.Approved | Should -BeFalse; $r.JoinRestriction.Approved | Should -BeFalse
+            $r.MaxMembers.Approved | Should -BeFalse; $r.JoinRestriction.Approved | Should -BeFalse
         }
     }
 }

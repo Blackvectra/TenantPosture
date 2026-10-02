@@ -27,9 +27,17 @@
   `Config/distribution-list-baseline.json` holds each recommendation with its Microsoft Learn page and
   the tool's own NIST SP 800-53 Rev 5 mapping, labeled as a mapping and not a quotation of NIST. **No
   CISA ScubaGear or CIS id is cited**: ScubaGear 2.0.0 has no distribution-list rule and no CIS item
-  was found, so the worksheet prints "no framework item verified". Three NRG judgments (a member cap,
-  banning external members, a required join setting) are not Microsoft recommendations; they live in
+  was found, so the worksheet prints "no framework item verified". Two NRG judgments (a member cap and
+  a required join setting) are not Microsoft recommendations; they live in
   `Config/nrg-standards.json`, **ship empty**, and read "Not assessed" until the owner approves a value.
+  There is no external-members standard: the owner decided external members stay, so they are shown
+  (DL-2.3 is a context row) and never judged, and no command removes one. For a list open to outside
+  mail the hardening is an allowed-senders list built from its current members: the worksheet prints
+  `Set-DistributionGroup ... -AcceptMessagesOnlyFromSendersOrMembers` with each member's primary SMTP
+  address (text only; a snapshot), and withholds it, with the reason, when it could reject people it
+  should not (members partly read, an address that cannot be quoted safely, an allow list that already
+  exists, and others). A list with an external member is not given the require-authenticated-senders
+  command, which would stop the external member sending.
   Where Microsoft's own pages disagree it says so rather than choosing: the troubleshooting page says
   the IP Allow List does not override DMARC failures and the allowlist page says mail from allowed IPs
   skips SPF, DKIM and DMARC. An own-domain entry on an anti-spam allow list carries Microsoft's
@@ -37,7 +45,7 @@
   bypass-rule condition is. Microsoft's Exchange Online page does not name Open as the join default
   (only the Exchange Server 2013 page does), so the catalog claims none. The files are written through
   the restricted-file writer; a spreadsheet formula in a list name is neutralized and terminal escapes
-  are stripped. Scope is classic distribution lists only (owner's decision: lists with external users are the target; Microsoft 365 Groups and Teams-connected lists are out of scope for now). The summary counts lists that hold at least one external member (a floor, counted only where members were read) and ranks a list with more external members first among otherwise equal ones; that is an observation, and the external-members standard still ships empty. 8 new exports, 2 new suites (126 tests). 8 deliberate breakages of the code (a safe default for an omitted setting, a failed member read marked collected, a command built from the list name, an unneutralized spreadsheet cell, and four more) were each caught by a test. Review found two real defects in the first version, both fixed and pinned: the command builder substituted placeholders one after another, so a tenant address containing the text `{Member}` could end the quoted literal early (it is now one regex pass); and the guard against typographic quotes was typed with those characters in the source, which PowerShell reads as quote delimiters even inside a single-quoted string, so it silently refused nothing (it is now built from code points, and a static test fails on any such character in a file the scan loads).
+  are stripped. Scope is classic distribution lists only (owner's decision: lists with external users are the target; Microsoft 365 Groups and Teams-connected lists are out of scope for now). The summary counts lists that hold at least one external member (a floor, counted only where members were read) and ranks a list with more external members first among otherwise equal ones; that is an observation, not a verdict. 8 new exports, 2 new suites (142 tests). 14 deliberate breakages of the code (a safe default for an omitted setting, a failed member read marked collected, a command built from the list name, an unneutralized spreadsheet cell, and four more) were each caught by a test. Review found two real defects in the first version, both fixed and pinned: the command builder substituted placeholders one after another, so a tenant address containing the text `{Member}` could end the quoted literal early (it is now one regex pass); and the guard against typographic quotes was typed with those characters in the source, which PowerShell reads as quote delimiters even inside a single-quoted string, so it silently refused nothing (it is now built from code points, and a static test fails on any such character in a file the scan loads). Adding the allow-list command exposed a third: a `return` inside a `foreach` whose output is captured emits what was gathered so far, so a bad address handed the caller a command holding only the senders before it; the test for "one bad address yields no command, never a partial one" caught it and the builder now uses an explicit loop.
   **Not yet run against a live tenant** (see `docs/KNOWN-ISSUES.md`); the collector is tested against a
   stubbed Exchange boundary fed raw cmdlet shapes. Merge note: this edits `Config/nrg-standards.json`
   and `Lib/Get-NRGStandards.ps1`, which the standards-approval PR also edits; the conflict is two

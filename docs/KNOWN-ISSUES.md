@@ -34,12 +34,11 @@ tenant**. Until it is, treat these as open:
   external users are the target. The worksheet says so; this is a scope boundary, not a defect.
 - **"Lists with an external member" is a floor.** It counts lists whose members were read and that hold
   at least one external member; a list whose member read failed is in "members not read" and is not
-  counted, and a truncated list can only have more. It is an observation, not a verdict: whether an
-  external member is acceptable is the `DistributionListExternalMembers` standard, which is still
-  empty until the owner approves it.
+  counted, and a truncated list can only have more. It is an observation, not a verdict: external
+  members stay by the owner's decision, so there is no standard that judges them.
 - **Nested groups are listed, not expanded.** A list whose nested group holds an external member is
-  not reported as having one; the nested group is assessed under its own row when it is a list in the
-  scan, and otherwise the external-member check reads "Not assessed" for the parent.
+  not reported as having one, and the allowed-senders proposal lists the nested group itself (Microsoft
+  allows a group as an allowed sender, which admits its members), not its members.
 - **Dynamic-list members can differ from who receives mail sent now.** The collector uses
   `Get-DynamicDistributionGroupMember`, which Microsoft documents as the calculated membership list
   stored on the group and refreshed about every 24 hours. If that cmdlet is unavailable it falls back
@@ -54,8 +53,19 @@ tenant**. Until it is, treat these as open:
   prints both statements.
 - **A transport rule is tied to a list only through `SentTo`.** A rule scoped by `SentToMemberOf` or a
   recipient domain is reported tenant-wide and is not matched to individual lists.
-- **The three NRG standards ship empty**, so the member-cap, external-member and join-setting checks
-  read "Not assessed" until the owner approves values in `Config/nrg-standards.json`.
+- **The two NRG standards ship empty**, so the member-cap and join-setting checks read "Not assessed"
+  until the owner approves values in `Config/nrg-standards.json`.
+- **The allowed-senders command is a proposal, not a verified fix.** It is built from each member's
+  primary SMTP address, which Microsoft documents as an identifier, but it has not been run against a
+  tenant: run it with `-WhatIf` first and on one list before many. It is a snapshot (a later member is
+  not on it), it rejects every sender not on it (an owner, shared mailbox or application that mails the
+  list and is not a member must be added), and it matches the sender's address, so it does not
+  authenticate an outside sender. The cmdlet reference documents no limit on how many senders one list
+  may hold; the scan reads at most `-MaxMembersPerList` (500) members and withholds a command longer
+  than a spreadsheet cell holds. The proposal assumes each external member is a mail contact or mail
+  user (Microsoft's requirement for an outside sender to be accepted), which a member of a distribution
+  list always is. An existing allow list is never replaced, and the scan does not compare it with the
+  members because Exchange returns allowed senders as directory names, not addresses.
 - **The printed commands are templates.** They follow Microsoft's documented syntax but were not run
   against a tenant; run each with `-WhatIf` first. A mail-enabled security group may need
   `-BypassSecurityGroupManagerCheck` to change its owner; the worksheet does not add it.

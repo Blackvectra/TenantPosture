@@ -29,16 +29,16 @@
       "Title": "Allowed senders limit who can send to the list",
       "Setting": "AcceptMessagesOnlyFromSendersOrMembers",
       "AppliesTo": ["Distribution", "Dynamic"],
-      "Recommended": "A specified-senders list when the list must accept outside mail",
+      "Recommended": "When the list must accept outside mail: an allowed-senders list limited to the people the list serves (for a list with external members, seeded from its current members)",
       "Basis": "Microsoft",
       "Severity": "Informational",
-      "Why": "Microsoft documents that an allowed-senders list limits who can send to the group further: if you add senders to it, they are the only ones who can send, and mail from anyone not on the list is rejected. It is the documented way to narrow a list that must accept outside mail. Microsoft also notes that with 'only senders inside my organization' selected, mail from a mail contact is rejected even when the contact is on the list.",
-      "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
-      "AlsoSee": ["https://learn.microsoft.com/exchange/mail-flow/mail-routing/recipient-resolution"],
+      "Why": "Microsoft documents that AcceptMessagesOnlyFromSendersOrMembers specifies who is allowed to send to the list and that messages from other senders are rejected; individual senders (mailboxes, mail users, mail contacts) and groups are valid values, identified by name, alias, distinguished name, email address or GUID. To accept chosen outside senders, Microsoft's troubleshooting page (written for a mail user as the recipient; its delivery-restrictions page says other recipient types use the same parameters) says to represent each one with a mail contact or mail user, clear 'Require that all senders are authenticated' (RequireSenderAuthenticationEnabled False), and list the outside senders together with the internal senders or a group that holds them: everyone not on the list is rejected, internal staff included. The Exchange Online cmdlet reference states that RequireSenderAuthenticationEnabled True rejects unauthenticated (external) senders, so an external member cannot send to a list that requires authenticated senders. An allowed-senders list matches the sender's address; it does not authenticate an outside sender. The worksheet proposes a list built from the current members as a SNAPSHOT: a member added later is not on it.",
+      "SourceUrl": "https://learn.microsoft.com/powershell/module/exchange/set-distributiongroup",
+      "AlsoSee": ["https://learn.microsoft.com/troubleshoot/exchange/email-delivery/ndr/fix-error-code-5-7-136-in-exchange-online", "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups", "https://learn.microsoft.com/exchange/mail-flow/mail-routing/recipient-resolution"],
       "Nist80053": ["AC-3"],
       "AdminCommands": {
-        "Distribution": "Set-DistributionGroup -Identity {List} -AcceptMessagesOnlyFromSendersOrMembers '<sender or group>'",
-        "Dynamic": "Set-DynamicDistributionGroup -Identity {List} -AcceptMessagesOnlyFromSendersOrMembers '<sender or group>'"
+        "Distribution": "Set-DistributionGroup -Identity {List} -AcceptMessagesOnlyFromSendersOrMembers {Senders}",
+        "Dynamic": ""
       }
     },
     {
@@ -95,22 +95,19 @@
     },
     {
       "ControlId": "DL-2.3",
-      "Kind": "Finding",
-      "Title": "Distribution list has external members",
+      "Kind": "Context",
+      "EmitsFinding": false,
+      "Title": "External members are shown, not judged",
       "Setting": "Members (external mail contacts, mail users, guests)",
       "AppliesTo": ["Distribution", "Dynamic"],
-      "Recommended": "Per the approved NRG standard for external members",
-      "Basis": "NRG",
-      "StandardKey": "DistributionListExternalMembers",
-      "Severity": "Medium",
-      "Why": "Microsoft's page on managing distribution lists names mail contacts and mail users among the supported member types, which is how outside addresses become members, and makes no recommendation about outside members either way. Whether outside members are acceptable is an NRG judgment, so the finding is made only against an approved standard. A list that holds outside addresses sends them everything mailed to it, including internal replies and attachments.",
+      "Recommended": "No recommendation: external members are expected on a list that serves outside parties; what limits their exposure is who can send to the list (DL-1.1, DL-1.2)",
+      "Basis": "Microsoft",
+      "Severity": "Informational",
+      "Why": "Microsoft's page on managing distribution lists names mail contacts and mail users among the supported member types, which is how outside addresses become members, and makes no recommendation about outside members either way. This scan therefore reads and counts them (Class External in the member rows) and does not judge them, and it prints no command that removes one. What it does judge is who can send to the list, because a list that accepts mail from anyone and holds outside addresses sends everything mailed to it, internal replies and attachments included, to those addresses.",
       "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
       "AlsoSee": [],
       "Nist80053": ["AC-2", "AC-3"],
-      "AdminCommands": {
-        "Distribution": "Remove-DistributionGroupMember -Identity {List} -Member {Member}",
-        "Dynamic": ""
-      }
+      "AdminCommands": {}
     },
     {
       "ControlId": "DL-2.4",

@@ -31,8 +31,8 @@
 #                      MemberJoinRestriction, MemberDepartRestriction,
 #                      HiddenFromAddressListsEnabled, MembershipBasis, MemberStatus,
 #                      MemberError, MemberCount, MemberCountIsLowerBound,
-#                      MembersTruncated, Members[] (DisplayName, UPN, RecipientType,
-#                      Class), ExternalMemberCount, UnresolvedMemberCount,
+#                      MembersTruncated, Members[] (DisplayName, UPN, Address,
+#                      RecipientType, Class), ExternalMemberCount, UnresolvedMemberCount,
 #                      NestedGroupCount, NestedGroups
 #   AcceptedDomains[]  lower-case domain names
 #   BypassInputs       TransportRules[] (SCL-setting rules and their conditions),
@@ -160,7 +160,10 @@ function ConvertTo-NRGDlMember {
         if (-not [string]::IsNullOrWhiteSpace($addr)) { $class = Get-NRGRecipientClass -Recipient $addr -AcceptedDomains $AcceptedDomains }
     }
 
-    return [ordered]@{ DisplayName = $display; UPN = $upn; RecipientType = $type; Class = $class }
+    # Address is the primary SMTP address: Microsoft documents an email address (not a UPN) as an identifier for a sender in
+    # AcceptMessagesOnlyFromSendersOrMembers, and the allow-list proposal is built from it. It is the same kind of identifier
+    # as the UPN already kept; no phone, title, department or manager is copied.
+    return [ordered]@{ DisplayName = $display; UPN = $upn; Address = $primary; RecipientType = $type; Class = $class }
 }
 
 function Invoke-NRGCollectDistributionLists {

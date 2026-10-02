@@ -44,8 +44,11 @@ function ConvertTo-NRGDlPsLiteral {
 }
 
 # Fill a catalog command template. {List}/{Member}/{Value}/{Policy} become quoted literals;
-# {Parameter} is one of two fixed words. Returns $null when any value cannot be quoted
-# safely or the template is empty, so the caller prints the portal note instead.
+# {Senders} is a LIST of addresses, each its own quoted literal, joined with commas (an
+# allowed-senders list is multi-valued); {Parameter} is one of two fixed words. Returns $null
+# when any value cannot be quoted safely, when {Senders} is empty, or when the template is
+# empty, so the caller prints the portal note instead. A command with one sender dropped
+# would be WORSE than none: an allow list that leaves a member out rejects that member.
 #
 # ONE PASS, on purpose. Substituting the placeholders one after another re-scans text that
 # was already inserted, so a tenant-controlled address containing the literal text {Member}
@@ -60,9 +63,23 @@ function Format-NRGDlCommand {
         [hashtable] $Values = @{}
     )
     if ([string]::IsNullOrWhiteSpace($Template)) { return $null }
-    $pattern = '\{(List|Member|Value|Policy|Parameter)\}'
+    $pattern = '\{(List|Member|Value|Policy|Parameter|Senders)\}'
     $fill = @{}
     foreach ($k in @([regex]::Matches($Template, $pattern) | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)) {
+        if ($k -eq 'Senders') {
+            $items = @(@($(if ($Values.ContainsKey($k)) { $Values[$k] } else { @() })) | ForEach-Object { [string]$_ })
+            if ($items.Count -eq 0) { return $null }
+            # An explicit loop, not `$x = foreach { ... return $null ... }`: a return inside a foreach whose output is captured emits the
+            # literals gathered so far, which would hand the caller a command with senders missing.
+            $lits = [System.Collections.Generic.List[string]]::new()
+            foreach ($it in $items) {
+                $q = ConvertTo-NRGDlPsLiteral -Value $it
+                if ($null -eq $q) { return $null }
+                $lits.Add($q)
+            }
+            $fill[$k] = ($lits -join ',')
+            continue
+        }
         $raw = [string]$(if ($Values.ContainsKey($k)) { $Values[$k] } else { '' })
         if ($k -eq 'Parameter') {
             if ($raw -notin @('AllowedSenders', 'AllowedSenderDomains')) { return $null }
@@ -257,12 +274,57 @@ function Get-NRGDistributionListWorksheet {
         # 1. Who can send
         $f11 = & $fnd 'DL-1.1'; $v11 = & $verdictOf $f11 'Not assessed'
         $cur11 = if ($null -eq $auth) { 'Not returned' } else { "RequireSenderAuthenticationEnabled = $auth" }
-        $c11 = @(); if ($v11 -in @('Gap', 'Partial')) { $c11 += (& $cmdFor 'DL-1.1' @{ List = $addr }) }
+        # Requiring authenticated senders would stop a list's external members sending to it, so no such command is printed for a list
+        # that holds one: the allowed-senders proposal (DL-1.2) is the option that keeps them. The finding's Detail says why.
+        $c11 = @(); if ($v11 -in @('Gap', 'Partial') -and -not ($mst -eq 'Collected' -and $extN -gt 0)) { $c11 += (& $cmdFor 'DL-1.1' @{ List = $addr }) }
         $rows.Add((& $mkRow 'DL-1.1' 'Who can send to the list' $cur11 $v11 (& $detailOf $f11 'Not assessed.') $ident $c11))
 
-        # 2. Allowed senders (context)
+        # 2. Allowed senders: context, plus a PROPOSED allow list built from the members read now, offered only where it is safe to offer.
+        # It is a SNAPSHOT and it is TEXT: nothing here sets anything. An allow list built from part of the membership, over an existing
+        # list, or with one address dropped would reject people who should be able to send, so each of those withholds the command.
         $cur12 = if (-not $allowedKnown) { 'Not returned' } elseif ($allowedN -eq 0) { 'None specified' } else { "$allowedN specified sender(s)" }
-        $rows.Add((& $mkRow 'DL-1.2' 'Allowed senders' $cur12 'Context' 'Context only: an allowed-senders list narrows who can send; it is judged under who can send (DL-1.1).' $ident @()))
+        $proposalCmd = $null
+        $addrs = @()
+        if ($kind -eq 'Dynamic') {
+            $proposal = 'No allow list is proposed for a dynamic list: its members are calculated from a filter, so a snapshot of them would not follow who is a member later.'
+        } elseif ($null -eq $auth) {
+            $proposal = 'No allow list is proposed: Exchange did not return RequireSenderAuthenticationEnabled for this list.'
+        } elseif ($auth -eq $true) {
+            $proposal = "No allow list is needed to keep outside mail out: the list accepts mail only from authenticated senders inside the organization$(if ($mst -eq 'Collected' -and $extN -gt 0) { "; its $extN external member(s) cannot send to it while that is True (Microsoft)" })."
+        } elseif (-not $allowedKnown) {
+            $proposal = 'No allow list is proposed: Exchange did not return the allowed-senders setting, so a command that sets it could overwrite a list that already exists.'
+        } elseif ($allowedN -gt 0) {
+            $proposal = "No allow list is proposed: this list already has $allowedN allowed sender(s) and this scan does not propose replacing them."
+        } elseif ($mst -ne 'Collected') {
+            $proposal = 'No allow list is proposed: the members were not read, and an allow list built from part of the membership would reject the members it left out.'
+        } elseif ($trunc) {
+            $proposal = "No allow list is proposed: only the first $cnt members were read and the list has more, and an allow list built from part of the membership would reject the rest. Raise -MaxMembersPerList to cover the whole list."
+        } elseif ($members.Count -eq 0) {
+            $proposal = 'No allow list is proposed: the list has no members, so a snapshot would be empty, and an empty allowed-senders list restricts nothing.'
+        } else {
+            $seenAddr = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+            $blank = 0
+            foreach ($m in $members) {
+                $a = [string](Get-NRGObjectField -Item $m -Key 'Address' -Default '')
+                if ([string]::IsNullOrWhiteSpace($a)) { $blank++ } elseif ($seenAddr.Add($a)) { $addrs += $a }
+            }
+            if ($blank -gt 0) {
+                $proposal = "No allow list is proposed: $blank member(s) returned no primary address, so the list would be incomplete and would reject them."
+            } else {
+                $built = Format-NRGDlCommand -Template ([string]$rec['DL-1.2'].AdminCommands['Distribution']) -Values @{ List = $addr; Senders = $addrs }
+                if (-not $built) {
+                    $proposal = "No allow list is proposed: this list's address or a member's address cannot be quoted safely in a command (a quote-like or line-break character), and a command with a member left out would reject that member. Set the allowed senders in the portal."
+                } elseif ($built.Length -gt 30000) {
+                    $proposal = "No allow list is proposed: the command for $($addrs.Count) members would be longer than one spreadsheet cell holds (about 32,000 characters). Split the list or set the allowed senders in the portal."
+                } else {
+                    $proposalCmd = $built
+                    $nestedN = [int](Get-NRGObjectField -Item $l -Key 'NestedGroupCount' -Default 0)
+                    $proposal = "Proposed allow list: the $($addrs.Count) address(es) read now ($extN external, $nestedN nested group(s)) become the only senders this list accepts, and anyone else is rejected, staff who are not members included. It is a snapshot: a member added later is not on it, so add a new member to the allowed senders when adding them to the list. An owner, shared mailbox or application that sends to the list and is not a member is rejected unless it is added to the command. External members can send only while RequireSenderAuthenticationEnabled is False, which it is on this list. An allow list matches the sender's address; it does not authenticate an outside sender. Run it with -WhatIf first."
+                }
+            }
+        }
+        $v12 = if ($proposalCmd) { 'Proposal' } else { 'Context' }
+        $rows.Add((& $mkRow 'DL-1.2' 'Allowed senders' $cur12 $v12 ("Context only: an allowed-senders list narrows who can send; it is judged under who can send (DL-1.1). " + $proposal) $ident @($proposalCmd)))
 
         # 3. Owner
         $f21 = & $fnd 'DL-2.1'; $v21 = & $verdictOf $f21 'Not assessed'
@@ -278,19 +340,9 @@ function Get-NRGDistributionListWorksheet {
         $c22 = @(); if ($v22 -eq 'Gap') { $c22 += (& $cmdFor 'DL-2.2' @{ List = $addr }) }
         $rows.Add((& $mkRow 'DL-2.2' 'Moderation' $cur22 $v22 $d22 $ident $c22))
 
-        # 5. External members
-        $f23 = & $fnd 'DL-2.3'; $v23 = & $verdictOf $f23 'Not assessed'
+        # 5. External members: shown, never judged (the owner decided external members stay) and no command removes one.
         $cur23 = if ($mst -ne 'Collected') { 'Members not read' } else { "$extN external of $(if ($trunc) { 'at least ' })$cnt" }
-        $c23 = @()
-        if ($v23 -eq 'Gap' -and $kind -ne 'Dynamic') {
-            $extM = @($members | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'Class' -Default '') -eq 'External' })
-            foreach ($m in @($extM | Select-Object -First 25)) {
-                $c = Format-NRGDlCommand -Template ([string]$rec['DL-2.3'].AdminCommands['Distribution']) -Values @{ List = $addr; Member = [string](Get-NRGObjectField -Item $m -Key 'UPN' -Default '') }
-                $c23 += $(if ($c) { $c } else { "# member '$([string](Get-NRGObjectField -Item $m -Key 'DisplayName' -Default ''))' cannot be quoted safely here; remove it in the portal." })
-            }
-            if ($extM.Count -gt 25) { $c23 += "# $($extM.Count - 25) further external member(s) are not shown; the member rows list them all." }
-        }
-        $rows.Add((& $mkRow 'DL-2.3' 'External members' $cur23 $v23 (& $detailOf $f23 'Not assessed.') $ident $c23))
+        $rows.Add((& $mkRow 'DL-2.3' 'External members' $cur23 'Context' 'Context only: external members are expected on a list that serves outside parties, so they are shown and not judged; this scan prints no command that removes one. What limits their exposure is who can send to the list (DL-1.1, DL-1.2). They are listed under Members with class External; a nested group is listed, not expanded.' $ident @()))
 
         # 6. Member count
         $f24 = & $fnd 'DL-2.4'; $v24 = & $verdictOf $f24 'Not assessed'
@@ -358,6 +410,7 @@ function Get-NRGDistributionListWorksheet {
             Reach = $reachRow; Settings = @($rows); Risk = $worst
             # An observation, not a verdict: counted only when the member read completed (a failed read leaves Members empty, not clean).
             ExternalMemberCount = $(if ($mst -eq 'Collected') { $extN } else { 0 })
+            AllowListProposed = [bool]$proposalCmd
         })
     }
     # Most exposed first; among equals, the list with more external members first, because those are the lists this scan is aimed at.
@@ -372,6 +425,8 @@ function Get-NRGDistributionListWorksheet {
         # At least one external member among the lists whose members were read (a truncated list can only have more). Lists whose
         # members were not read are in ListsMembersNotRead and are not counted here, so this is a floor, never a clean bill.
         ListsWithExternalMembers = @($sortedLists | Where-Object { $_.ExternalMemberCount -gt 0 }).Count
+        # Lists for which the worksheet prints an allowed-senders command (text only; a list it withholds one for says why on its row).
+        AllowListsProposed   = @($sortedLists | Where-Object { $_.AllowListProposed }).Count
         SettingGaps          = (& $count 'Gap')
         SettingPartials      = (& $count 'Partial')
         SettingsNotAssessed  = (& $count 'Not assessed')

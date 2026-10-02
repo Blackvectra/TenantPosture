@@ -79,7 +79,9 @@ function Get-NRGDistributionListBaseline {
 function Get-NRGDistributionListStandards {
     <#
     .SYNOPSIS
-        Interprets the three NRG distribution-list standards. Each answer carries
+        Interprets the two NRG distribution-list standards (a member cap and a join
+        restriction). There is deliberately no standard for external members: the owner
+        decided external members stay, so they are shown and never judged. Each answer carries
         Approved ($true only for a recognized, usable value) and Issue (why an
         entered value was not accepted), so "empty" and "entered but unusable" are
         both "not assessed" and the worksheet can say which.
@@ -110,14 +112,6 @@ function Get-NRGDistributionListStandards {
         else { $max.Issue = "DistributionListMaxMembers value '$($m[0])' is not a whole number of 1 or more, so no cap is applied." }
     }
 
-    # External members: the one recognized value is 'Prohibited'.
-    $ext = [ordered]@{ Approved = $false; Prohibited = $false; Issue = '' }
-    $x = @(& $vals 'DistributionListExternalMembers')
-    if ($x.Count -gt 0) {
-        if (@($x | Where-Object { $_ -ne 'Prohibited' }).Count -eq 0) { $ext.Approved = $true; $ext.Prohibited = $true }
-        else { $ext.Issue = "DistributionListExternalMembers accepts only 'Prohibited'; it holds '$($x -join "', '")', so external members are not judged." }
-    }
-
     # Join restriction: any of the three documented values.
     $valid = @('Open', 'Closed', 'ApprovalRequired')
     $join = [ordered]@{ Approved = $false; Allowed = @(); Issue = '' }
@@ -128,5 +122,5 @@ function Get-NRGDistributionListStandards {
         else { $join.Approved = $true; $join.Allowed = @($valid | Where-Object { $_ -in $j }) }
     }
 
-    return [ordered]@{ MaxMembers = $max; ExternalMembers = $ext; JoinRestriction = $join }
+    return [ordered]@{ MaxMembers = $max; JoinRestriction = $join }
 }

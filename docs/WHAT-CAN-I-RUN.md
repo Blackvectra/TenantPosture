@@ -74,7 +74,9 @@ from outside or through a bypass, and how that compares with a cited recommendat
 ```
 
 **Needs:** an Exchange Online sign-in and nothing else (no Graph, Purview, Teams or SharePoint).
-**Gives you:** `<tenant>-<timestamp>-distribution-lists.txt` and `.csv` in the output folder.
+**Gives you:** `<tenant>-<timestamp>-distribution-lists.txt` and `.csv` in the output folder. For a list
+open to outside mail it also prints, as text, a proposed allowed-senders command built from the list's
+current members (external members stay; nothing removes them).
 **Read-only:** it lists members and never changes anything. The commands in the worksheet are
 text for an administrator to run with `-WhatIf` first. Every other area is not assessed.
 Not yet run against a live tenant. See the README section for what it cannot see.
