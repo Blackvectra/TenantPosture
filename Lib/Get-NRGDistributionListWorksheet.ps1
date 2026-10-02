@@ -356,9 +356,12 @@ function Get-NRGDistributionListWorksheet {
             MemberStatus = $mst; MemberLine = $memberLine; Members = $memberRows
             NestedGroups = @(Get-NRGObjectField -Item $l -Key 'NestedGroups' -Default @())
             Reach = $reachRow; Settings = @($rows); Risk = $worst
+            # An observation, not a verdict: counted only when the member read completed (a failed read leaves Members empty, not clean).
+            ExternalMemberCount = $(if ($mst -eq 'Collected') { $extN } else { 0 })
         })
     }
-    $sortedLists = @($listRows | Sort-Object @{ Expression = { $_.Risk }; Descending = $true }, @{ Expression = { $_.Name } })
+    # Most exposed first; among equals, the list with more external members first, because those are the lists this scan is aimed at.
+    $sortedLists = @($listRows | Sort-Object @{ Expression = { $_.Risk }; Descending = $true }, @{ Expression = { $_.ExternalMemberCount }; Descending = $true }, @{ Expression = { $_.Name } })
 
     # ── Summary ───────────────────────────────────────────────────────────────────
     $count = { param($v) @($sortedLists | ForEach-Object { $_.Settings } | Where-Object { $_.Verdict -eq $v }).Count }
@@ -366,6 +369,9 @@ function Get-NRGDistributionListWorksheet {
         ListCount            = $sortedLists.Count
         ListsReachableFromOutside = @($sortedLists | Where-Object { $_.Reach.Lines[0] -like '*accepted from anyone*' }).Count
         ListsMembersNotRead  = @($sortedLists | Where-Object { $_.MemberStatus -ne 'Collected' }).Count
+        # At least one external member among the lists whose members were read (a truncated list can only have more). Lists whose
+        # members were not read are in ListsMembersNotRead and are not counted here, so this is a floor, never a clean bill.
+        ListsWithExternalMembers = @($sortedLists | Where-Object { $_.ExternalMemberCount -gt 0 }).Count
         SettingGaps          = (& $count 'Gap')
         SettingPartials      = (& $count 'Partial')
         SettingsNotAssessed  = (& $count 'Not assessed')

@@ -102,6 +102,7 @@ function ConvertTo-NRGDlWorksheetText {
     & $add ('-' * 100)
     & $add ("Lists read:                              {0}" -f $s.ListCount)
     & $add ("Lists that accept mail from anyone:      {0}" -f $s.ListsReachableFromOutside)
+    & $add ("Lists with an external member:           {0}  (counted only among lists whose members were read)" -f (Get-NRGObjectField -Item $s -Key 'ListsWithExternalMembers' -Default 0))
     & $add ("Lists whose members were not read:       {0}" -f $s.ListsMembersNotRead)
     & $add ("Members read:                            {0}" -f $s.MembersRead)
     & $add ("Setting gaps / partials / not assessed:  {0} / {1} / {2}" -f $s.SettingGaps, $s.SettingPartials, $s.SettingsNotAssessed)

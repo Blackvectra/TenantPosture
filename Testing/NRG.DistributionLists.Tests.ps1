@@ -914,6 +914,39 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             $o.Worksheet.Summary.ListsMembersNotRead | Should -Be 1
         }
 
+        Context 'lists with external members are the target, so they are counted and ranked' {
+            BeforeAll {
+                $script:ExtScn = @{
+                    Lists   = @(New-DlRaw 'Alpha Internal' 'alpha@contoso.com'; New-DlRaw 'Beta Vendors' 'beta@contoso.com'; New-DlRaw 'Gamma Vendors' 'gamma@contoso.com'; New-DlRaw 'Delta Broken' 'delta@contoso.com')
+                    Members = @{
+                        'alpha@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com')
+                        'beta@contoso.com'  = @(New-DlMember 'Vendor One' 'one@vendor.example' 'MailContact')
+                        'gamma@contoso.com' = @(New-DlMember 'Vendor Two' 'two@vendor.example' 'MailContact'; New-DlMember 'Vendor Three' 'three@vendor.example' 'MailContact')
+                    }
+                    MemberThrow = @{ 'delta@contoso.com' = 'object not found' }
+                }
+            }
+
+            It 'counts a list with an external member, and does not count the list whose members could not be read' {
+                $o = & $script:Build $script:ExtScn 'extcount'
+                $o.Worksheet.Summary.ListsWithExternalMembers | Should -Be 2
+                $o.Worksheet.Summary.ListsMembersNotRead | Should -Be 1
+                $o.Txt | Should -Match 'Lists with an external member:\s+2\s+\(counted only among lists whose members were read\)'
+            }
+
+            It 'ranks the list with more external members first when the settings are otherwise equal' {
+                $o = & $script:Build $script:ExtScn 'extorder'
+                $names = @($o.Worksheet.Lists | ForEach-Object { $_.Name })
+                $names.IndexOf('Gamma Vendors') | Should -BeLessThan $names.IndexOf('Beta Vendors')
+            }
+
+            It 'a failed member read is never counted as having no external members' {
+                $o = & $script:Build @{ Lists = @(New-DlRaw 'Only' 'only@contoso.com'); MemberThrow = @{ 'only@contoso.com' = 'object not found' } } 'extfail'
+                $o.Worksheet.Summary.ListsWithExternalMembers | Should -Be 0
+                $o.Worksheet.Summary.ListsMembersNotRead | Should -Be 1
+            }
+        }
+
         It 'a dynamic list''s member line says its members are the calculated list, which can differ from who receives mail now' {
             $o = & $script:Build @{ Dynamic = @(New-DlDynamic 'Everyone' 'everyone@contoso.com'); Members = @{ 'everyone@contoso.com' = @(New-DlMember 'Dee' 'dee@contoso.com') } } 'dynline'
             $o.Txt | Should -Match 'calculated list Microsoft stores on the group'

@@ -104,7 +104,7 @@ function Invoke-NRGDistributionListScan {
         $out.ExitCode = if ($dl.Count -eq 0) { 2 } elseif (-not [bool](Get-NRGObjectField -Item $raw -Key 'Success' -Default $false) -or $notCollected.Count -gt 0) { 3 } else { 0 }
 
         Write-Host ''
-        Write-Host ("  Lists read: {0}   Lists that accept mail from anyone: {1}   Lists whose members were not read: {2}" -f $ws.Summary.ListCount, $ws.Summary.ListsReachableFromOutside, $ws.Summary.ListsMembersNotRead) -ForegroundColor White
+        Write-Host ("  Lists read: {0}   Lists that accept mail from anyone: {1}   Lists with an external member: {2}   Lists whose members were not read: {3}" -f $ws.Summary.ListCount, $ws.Summary.ListsReachableFromOutside, $ws.Summary.ListsWithExternalMembers, $ws.Summary.ListsMembersNotRead) -ForegroundColor White
         if ($notCollected.Count) { Write-Host "  [!] Not collected: $($notCollected -join ', '). Those parts read 'Not assessed' in the worksheet; they are not clean." -ForegroundColor Yellow }
         Write-Host "  [+] Worksheet (text): $($out.TextPath)" -ForegroundColor Green
         Write-Host "  [+] Worksheet (CSV):  $($out.CsvPath)" -ForegroundColor Green

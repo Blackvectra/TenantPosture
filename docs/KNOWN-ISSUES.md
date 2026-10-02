@@ -30,7 +30,13 @@ Tested against a stubbed Exchange boundary fed raw cmdlet shapes; **not yet run 
 tenant**. Until it is, treat these as open:
 
 - **Microsoft 365 Groups and Teams-connected lists are not read** (`Get-UnifiedGroup` is not called).
-  The worksheet says so. Whether they belong in scope is the owner's decision.
+  Out of scope by the owner's decision: classic distribution lists only for now, because lists with
+  external users are the target. The worksheet says so; this is a scope boundary, not a defect.
+- **"Lists with an external member" is a floor.** It counts lists whose members were read and that hold
+  at least one external member; a list whose member read failed is in "members not read" and is not
+  counted, and a truncated list can only have more. It is an observation, not a verdict: whether an
+  external member is acceptable is the `DistributionListExternalMembers` standard, which is still
+  empty until the owner approves it.
 - **Nested groups are listed, not expanded.** A list whose nested group holds an external member is
   not reported as having one; the nested group is assessed under its own row when it is a list in the
   scan, and otherwise the external-member check reads "Not assessed" for the parent.
