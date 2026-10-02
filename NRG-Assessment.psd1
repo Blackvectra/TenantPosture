@@ -124,6 +124,8 @@
         'New-NRGBaselineException',
         'Set-NRGBaselineException',
         'Remove-NRGBaselineException',
+        'Get-NRGBaselineTenantComparison',
+        'Publish-NRGBaselineTenantComparison',
         'Get-NRGModuleHealth',
         'Repair-NRGModuleHealth',
         'Get-NRGModuleInstallScope',

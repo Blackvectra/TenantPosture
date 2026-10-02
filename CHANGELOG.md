@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+- **Tenant-versus-tenant baseline comparison (`Compare-NRGTenantBaseline.ps1`).**
+  Sets two tenants side by side against the NRG Security Baseline (a prospective
+  client against an existing one) from two results JSON files. Standalone and
+  offline: it connects to nothing, and `NRG.TenantComparison.Tests.ps1` enforces
+  that statically (no sign-in, Graph, Exchange, DNS, HTTP or process cmdlets, no
+  URL in the code) and dynamically (the network and sign-in commands are mocked
+  to throw and are never invoked). The logic is `Get-NRGBaselineTenantComparison`
+  in `Lib/`, the rendering `Publish-NRGBaselineTenantComparison` in `Publishers/`;
+  both are exported. It is a view: no findings, no score, no module state read or
+  written. This is not the run-over-run comparison: `Publish-NRGDeltaReport`
+  still refuses a baseline from a different tenant, and a test pins that.
+  Owner decisions: internal only (the default output names both tenants; `-Anonymize`
+  labels them A and B in every output and file name, but no client-facing wording
+  or branding is added) and any tier may be compared. Only controls required at
+  BOTH tenants are compared, so a Minimum run against a Standard run compares the
+  Minimum controls; the rest are listed as not compared with the tier that
+  required them. If the two runs used different baseline versions the report says
+  the standard changed and compares only controls whose required tier and
+  expected state are the same in both files. Each control is classified from
+  `ObservedState` and `ReasonCode`: BothSatisfied, BothFailed, DiffersASatisfied,
+  DiffersBSatisfied, or NotComparable. NotComparable covers NotVerified,
+  NotApplicable, LicenseBlocked and ThirdPartyHandled on either side, plus a state
+  that contradicts its own reason code, and is never counted as a match; a
+  64-pair matrix test pins every combination in both directions. The headline is
+  a count of controls both tenants verified, with the not-comparable and
+  one-sided counts beside it: no score, no ranking, no "compliant". Both
+  tenants' evidence-coverage lines, run dates, evidence freshness, tier, baseline
+  version and license differences are shown side by side, and runs more than 7
+  days apart (`-MaxRunGapDays`) draw a warning. An approved exception is shown as
+  a disposition beside the observed state and never changes it. The output carries
+  control IDs, titles, states, reason codes, tiers, versions, dates and counts
+  only; no finding detail, exception text, UPN or object name appears in either
+  mode, and with `-Anonymize` no tenant name, domain or ID appears in the model,
+  the files or the file names (identifiers found inside a title are replaced; a
+  hostile-names fixture pins it). The HTML is self-contained with no script and a
+  strict Content-Security-Policy, every string is escaped, and CSV cells that
+  could be read as spreadsheet formulas are neutralized. Reads go through
+  `Get-NRGObjectField`, so results files written before a field existed (no
+  reason code, no coverage block, no metadata) still compare, and a static test
+  fails on any direct access to input data.
+
 - **Defects found by the first live baseline validation (NRGTS, 2026-09-29),
   fixed without touching a single verdict.** DNS collection ran only inside
   the Exchange branch of the entry point, so an Exchange connection failure
