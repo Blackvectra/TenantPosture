@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+- **Web GUI: command-line runs are listed, the report site is linked, and the
+  server starts without `-ScriptDir`.** Three recorded gaps, fixed together
+  because they share one file. (1) `/api/runs` listed only
+  `output\<domain>\*-results.json`, the layout a GUI scan writes, so a command-line
+  run (flat `output\<tenant>-<yyyyMMdd-HHmmss>-results.json`) never appeared. Both
+  layouts are listed, once each. A flat run is labeled from its results file's
+  `Metadata.TenantDomain` (read through `Get-NRGObjectField`; only that object is
+  parsed, 0.1 s against 6 s for `ConvertFrom-Json` on a 15 MB file, cached per
+  file) and from its file name when the file has no usable domain; a label that
+  is not domain-shaped is not shown. Incident-response mailbox runs and sign-in
+  triage results are excluded. A run is addressed by `(folder, id)`, never a
+  client-supplied path: `folder` is the tenant folder, or the reserved segment
+  `_flat` for the output folder itself, and `tenant` is only a display label.
+  (2) The multi-page report site (`<base>-report\`) was written but not linked.
+  A **Report site** link now opens it in a new tab through
+  `/site/:tenant/:id/:page`, which serves only `.html` and `.csv` directly inside
+  that run's `-report` folder. The site's pages are self-contained (inline
+  `<style>`, no script, no external asset, relative links), so they need nothing
+  the server's CSP does not already allow; the CSP is unchanged, set in one place,
+  and a test asserts the site's responses carry the identical header. (3)
+  `Start-NRGWebServer` defaulted `-ScriptDir` to
+  `Split-Path -Parent $PSCommandPath`, which is `Lib`, so a direct call threw
+  "Web asset directory not found". It now defaults to the repository root
+  (`Get-NRGWebDefaultScriptDir`); the parameter is kept.
+  The guards are pure functions in `Lib/Get-NRGWebRunIndex.ps1`, loaded into
+  Pode's route runspaces with `Use-PodeScript` (those runspaces start from a
+  default session state, so module functions are not visible), which also lets CI
+  test them although it skips the real-server context. Segments are a whitelist
+  rather than a list of separators to reject; the boundary is pinned inside the
+  output folder before the file is pinned inside the boundary; a symbolic link in
+  the report folder is refused (a OneDrive placeholder has no `LinkTarget`, so it
+  is not). The new routes send status and body in one `Write-PodeTextResponse
+  -StatusCode` call: `Set-PodeResponseStatus` renders Pode's own error page, and
+  a body written after it is replaced by a slice of that page.
+
 - **Defects found by the first live baseline validation (NRGTS, 2026-09-29),
   fixed without touching a single verdict.** DNS collection ran only inside
   the Exchange branch of the entry point, so an Exchange connection failure

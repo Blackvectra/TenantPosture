@@ -8,8 +8,10 @@
 # 127.0.0.1 (never exposed to the network) that lets the operator:
 #   - Pick a tenant from clients.json or enter one ad-hoc
 #   - Trigger a scan as a background job, with live progress
-#   - Browse prior runs from ./output/
+#   - Browse prior runs from ./output/ (both layouts: output\<domain>\ from the
+#     GUI and the batch runner, and the flat output\ a command-line run writes)
 #   - Open the HTML report inline in the same browser window
+#   - Open the multi-page report site (<base>-report\) in a new tab
 #
 # Tenant data never leaves the workstation. The scan itself runs in a
 # child pwsh job that does its own Microsoft Graph / EXO authentication via
@@ -19,10 +21,26 @@
 # Consumed:
 #   - Pode 2.10+ (PSGallery)  — soft import; user-installed
 #   - Config/clients.json     — tenant list
-#   - ./output/               — prior scan results
+#   - ./output/               — prior scan results (read only; the server never
+#                               writes here and makes no tenant call itself)
+#   - Lib/Get-NRGWebRunIndex.ps1, Lib/Get-NRGObjectField.ps1 — run listing and
+#     the path guards, loaded into Pode's runspaces with Use-PodeScript
 #
 # Graph scopes / cmdlets used: none directly. The child scan job uses what
 # Invoke-NRGAssessment.ps1 requests.
+
+# The repository root: this file is Lib\Start-NRGWebServer.ps1 and Web\ sits
+# beside Lib\. A default of Split-Path -Parent $PSCommandPath resolves to Lib\
+# itself, so calling Start-NRGWebServer directly failed with "Web asset
+# directory not found"; only Invoke-NRGAssessment.ps1 -Web, which passes the
+# root explicitly, worked. A function (not an inline expression) so a test can
+# ask what the default resolves to without starting a server.
+function Get-NRGWebDefaultScriptDir {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+    return (Split-Path -Parent $PSScriptRoot)
+}
 
 function Start-NRGWebServer {
     [CmdletBinding()]
@@ -32,7 +50,7 @@ function Start-NRGWebServer {
         [int] $Port = 8765,
 
         [Parameter()]
-        [string] $ScriptDir = (Split-Path -Parent $PSCommandPath),
+        [string] $ScriptDir = (Get-NRGWebDefaultScriptDir),
 
         # Skip the auto-open browser step. Useful for headless testing.
         [switch] $NoBrowser
@@ -64,6 +82,19 @@ function Start-NRGWebServer {
     $clientsFile = Join-Path $ScriptDir 'Config\clients.json'
     $outputRoot  = Join-Path (Get-Location) 'output'
     [void][System.IO.Directory]::CreateDirectory($outputRoot)
+
+    # The run listing and the path guards, loaded into Pode's runspaces below.
+    # Route bodies run in runspaces built from a default session state, so a
+    # module function is not visible there unless Use-PodeScript brings it in.
+    $podeScripts = @(
+        (Join-Path $ScriptDir 'Lib\Get-NRGObjectField.ps1'),
+        (Join-Path $ScriptDir 'Lib\Get-NRGWebRunIndex.ps1')
+    )
+    foreach ($podeScript in $podeScripts) {
+        if (-not (Test-Path -LiteralPath $podeScript -PathType Leaf)) {
+            throw "Web server support script not found: $podeScript"
+        }
+    }
 
     # ── Auto-open browser after a small delay so the server is listening ─
     if (-not $NoBrowser) {
@@ -115,6 +146,15 @@ function Start-NRGWebServer {
         # can read what the scan handler writes without locking ceremony in the
         # route bodies.
         Set-PodeState -Name 'scans' -Value @{} | Out-Null
+
+        # Tenant labels already read from results files (keyed by file, valid
+        # until its length or write time changes), so polling /api/runs does
+        # not re-read every results JSON. Synchronized: four route runspaces
+        # write it.
+        Set-PodeState -Name 'runLabels' -Value ([hashtable]::Synchronized(@{})) | Out-Null
+
+        # Bring the run listing and the path guards into the route runspaces.
+        foreach ($podeScript in $podeScripts) { Use-PodeScript -Path $podeScript }
 
         # Security headers on every response. Same CSP family as the HTML
         # report publisher: deny everything by default, allow same-origin
@@ -183,68 +223,69 @@ function Start-NRGWebServer {
             Write-PodeJsonResponse -Value @($clients)
         }
 
-        # GET /api/runs — list of prior runs by scanning the output directory.
-        # Each subfolder under output/ is one tenant; each *-results.json is
-        # one run.
+        # GET /api/runs — every prior assessment run under ./output/, newest
+        # first. Both layouts: output\<domain>\*-results.json (a GUI or batch
+        # run) and output\*-results.json (a command-line run). The listing and
+        # its exclusions (incident-response mailbox runs, sign-in triage) live
+        # in Get-NRGWebRunIndex.ps1. Each row carries `folder`, the address
+        # segment the report and site routes take; `tenant` is only a label.
         Add-PodeRoute -Method Get -Path '/api/runs' -ScriptBlock {
-            $root = (Get-PodeState -Name 'cfg').OutputRoot
-            if (-not (Test-Path -LiteralPath $root)) {
-                Write-PodeJsonResponse -Value @()
-                return
-            }
-            # Collect raw FileInfo + tenant first so we can sort by the real
-            # DateTime, not the formatted display string. Sorting the formatted
-            # string via `[datetime]$_.timestamp` uses CurrentCulture parsing,
-            # which throws on non-en-US locales for the 'yyyy-MM-dd HH:mm:ss'
-            # format we emit.
-            $entries = @()
-            foreach ($tenantDir in Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue) {
-                foreach ($json in Get-ChildItem -LiteralPath $tenantDir.FullName -File -Filter '*-results.json' -ErrorAction SilentlyContinue) {
-                    $entries += [pscustomobject]@{
-                        File   = $json
-                        Tenant = $tenantDir.Name
-                    }
-                }
-            }
-            $entries = @($entries | Sort-Object { $_.File.LastWriteTime } -Descending)
-
-            $runs = foreach ($e in $entries) {
-                $json = $e.File
-                # Derive the matching .html sibling: strip `-results.json` and
-                # append `-assessment.html`.
-                $base          = $json.BaseName -replace '-results$', ''
-                $htmlCandidate = Join-Path $json.Directory.FullName ($base + '-assessment.html')
-                [ordered]@{
-                    id        = $base
-                    tenant    = $e.Tenant
-                    timestamp = $json.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
-                    sizeKb    = [int]($json.Length / 1KB)
-                    hasReport = Test-Path -LiteralPath $htmlCandidate
-                }
-            }
+            $cfg = Get-PodeState -Name 'cfg'
+            $runs = Get-NRGWebRunList -OutputRoot $cfg.OutputRoot -LabelCache (Get-PodeState -Name 'runLabels')
+            # @(...) so zero or one row still serializes as a JSON array.
             Write-PodeJsonResponse -Value @($runs)
         }
 
         # GET /api/runs/:tenant/:id/report — return the HTML report so the
         # frontend can inject it via iframe srcdoc. The HTML report carries
-        # its own strict CSP; the iframe sandbox is the bound.
+        # its own strict CSP; the iframe sandbox is the bound. :tenant is the
+        # folder segment from /api/runs (the tenant folder, or the reserved
+        # flat segment); a path is never taken from the client. The guards
+        # (whitelisted segments, containment, no links) are in
+        # Resolve-NRGWebRunPath.
         Add-PodeRoute -Method Get -Path '/api/runs/:tenant/:id/report' -ScriptBlock {
-            $tenant = $WebEvent.Parameters['tenant']
-            $id     = $WebEvent.Parameters['id']
-            # Guard against path traversal: both segments are filename-only.
-            if ($tenant -match '[\\/]' -or $id -match '[\\/]') {
-                Set-PodeResponseStatus -Code 400
-                Write-PodeTextResponse -Value 'Invalid path segment.'
+            $found = Resolve-NRGWebRunPath -OutputRoot (Get-PodeState -Name 'cfg').OutputRoot `
+                -Folder $WebEvent.Parameters['tenant'] -Id $WebEvent.Parameters['id'] -Kind Report
+            if ($found.Status -ne 'Ok') {
+                # Status and body in one call: Set-PodeResponseStatus renders
+                # Pode's own error page, and a Write-PodeTextResponse after it
+                # sends only a slice of that page cut to the new body's length.
+                Write-PodeTextResponse -Value $found.Message -StatusCode $found.HttpStatus
                 return
             }
-            $htmlPath = Join-Path (Get-PodeState -Name 'cfg').OutputRoot $tenant ($id + '-assessment.html')
-            if (-not (Test-Path -LiteralPath $htmlPath)) {
-                Set-PodeResponseStatus -Code 404
-                Write-PodeTextResponse -Value 'Report not found.'
-                return
-            }
-            $html = Get-Content -LiteralPath $htmlPath -Raw -Encoding utf8
+            $html = Get-Content -LiteralPath $found.Path -Raw -Encoding utf8
             Write-PodeHtmlResponse -Value $html
+        }
+
+        # GET /site/:tenant/:id/:page — one file of the multi-page report site
+        # (<base>-report\: index.html, one page per workload, ActionPlan.csv).
+        # It is a route of its own, not a static folder, because the folder is
+        # chosen per run. Only a .html or .csv directly inside that run's
+        # -report folder is served (Resolve-NRGWebRunPath -Kind SitePage); the
+        # pages link each other by relative name, which resolves under this
+        # same prefix. The strict CSP above applies unchanged: the site's pages
+        # are self-contained (inline style, no script, no external asset), and
+        # frame-ancestors 'none' means they open in their own tab, never framed.
+        Add-PodeRoute -Method Get -Path '/site/:tenant/:id/:page' -ScriptBlock {
+            $found = Resolve-NRGWebRunPath -OutputRoot (Get-PodeState -Name 'cfg').OutputRoot `
+                -Folder $WebEvent.Parameters['tenant'] -Id $WebEvent.Parameters['id'] `
+                -Kind SitePage -Page $WebEvent.Parameters['page']
+            if ($found.Status -ne 'Ok') {
+                # Status and body in one call: Set-PodeResponseStatus renders
+                # Pode's own error page, and a Write-PodeTextResponse after it
+                # sends only a slice of that page cut to the new body's length.
+                Write-PodeTextResponse -Value $found.Message -StatusCode $found.HttpStatus
+                return
+            }
+            $text = Get-Content -LiteralPath $found.Path -Raw -Encoding utf8
+            if ([System.IO.Path]::GetExtension($found.Path).ToLowerInvariant() -eq '.csv') {
+                # The page name was whitelisted to letters, digits, dot,
+                # underscore and hyphen, so it is safe inside the header.
+                Set-PodeHeader -Name 'Content-Disposition' -Value ('attachment; filename="{0}"' -f [System.IO.Path]::GetFileName($found.Path))
+                Write-PodeTextResponse -Value $text -ContentType 'text/csv'
+            } else {
+                Write-PodeHtmlResponse -Value $text
+            }
         }
 
         # POST /api/scan — kick off a scan. Body: { clientId or domain }.

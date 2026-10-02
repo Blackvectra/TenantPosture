@@ -248,7 +248,31 @@ Install-Module Pode -MinimumVersion 2.10.0 -Scope CurrentUser
 
 The GUI consumes the same `Config/clients.json` as the CLI, scans run via the
 same module functions, and reports land in the same `./output/` directory —
-so CLI and GUI workflows can be mixed freely.
+so CLI and GUI workflows can be mixed freely:
+
+- **Recent runs lists both layouts.** A scan started from the GUI (and the batch
+  runner) writes `output\<domain>\`; a command-line run writes flat files into
+  `output\`. Both are listed once each, newest first, and a command-line run is
+  marked "command line". A flat run is labeled with the tenant domain recorded in
+  its results file (`Metadata.TenantDomain`), or the tenant tag in its file name
+  when the file has none. Incident-response mailbox runs (`*-email-results.json`)
+  and sign-in triage results are not assessments and are never listed.
+- **Report site.** A run that wrote the multi-page report site (`<base>-report\`,
+  built by default with the reports) shows a **Report site** link beside it and
+  in the open report's header. It opens in a new tab (the server forbids framing)
+  and serves only `.html` and `.csv` files directly inside that run's own
+  `-report` folder, under the same strict Content-Security-Policy as the rest of
+  the GUI. A request to leave that folder, or for any other file type, is refused,
+  and a symbolic link inside it is not followed.
+- **Calling it directly.** With the module imported,
+  `Start-NRGWebServer` finds the repository root on its own; `-ScriptDir` is still
+  accepted. It reads `.\output` relative to the current directory.
+
+The server is read-only toward tenants: listing runs and serving report files
+makes no Graph or Exchange call (only a scan you start from the page does, in its
+own child process). `Testing/NRG.WebServer.Tests.ps1` has a context that starts a
+real server; it runs only where Pode 2.10+ is installed, so CI skips it — run it
+locally after changing the GUI.
 
 ---
 

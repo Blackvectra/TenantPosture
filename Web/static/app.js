@@ -59,14 +59,32 @@
   }
 
   // ─────────────────────── prior runs ─────────────────────────
+  // Where the multi-page report site for a run is served. `folder` is the
+  // address segment from /api/runs (the tenant folder, or the reserved segment
+  // for a command-line run), never the display label.
+  function siteUrl(run) {
+    return '/site/' + encodeURIComponent(run.folder) + '/' + encodeURIComponent(run.id) + '/index.html';
+  }
+
+  // Returns the list it rendered so a caller can find the run it just made.
   async function loadRuns() {
     let runs = [];
     try { runs = await jsonFetch('/api/runs'); }
     catch (e) { /* empty list is fine */ }
+    if (!Array.isArray(runs)) runs = [];
 
     const list = $('run-list');
     list.replaceChildren();
     runs.forEach(function (r) {
+      // Older servers sent only `tenant`, which was the folder name then.
+      const run = { folder: r.folder || r.tenant, id: r.id, tenant: r.tenant, timestamp: r.timestamp, hasSite: !!r.hasSite };
+
+      const wrap = document.createElement('div');
+      wrap.className = 'run-row';
+
+      // The clickable part (opens the single-page report). The site link is a
+      // sibling, not a child: an anchor nested in a role=button would also fire
+      // the button's key handler.
       const row = document.createElement('div');
       row.className = 'run-item';
       row.setAttribute('role', 'button');
@@ -75,6 +93,12 @@
       const tenant = document.createElement('div');
       tenant.className = 'run-tenant';
       tenant.textContent = r.tenant;
+      if (r.layout === 'flat') {
+        const origin = document.createElement('span');
+        origin.className = 'run-origin';
+        origin.textContent = ' · command line';
+        tenant.appendChild(origin);
+      }
       row.appendChild(tenant);
 
       const time = document.createElement('div');
@@ -88,16 +112,30 @@
       row.appendChild(size);
 
       if (r.hasReport) {
-        row.addEventListener('click', function () { openReport(r.tenant, r.id, r.timestamp); });
+        row.addEventListener('click', function () { openReport(run); });
         row.addEventListener('keydown', function (e) {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openReport(r.tenant, r.id, r.timestamp); }
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openReport(run); }
         });
       } else {
         row.style.opacity = '0.5';
         row.style.cursor = 'default';
       }
-      list.appendChild(row);
+      wrap.appendChild(row);
+
+      if (run.hasSite) {
+        // New tab: the server forbids framing (frame-ancestors 'none'), and the
+        // site is a multi-page document that wants the whole window anyway.
+        const site = document.createElement('a');
+        site.className = 'run-site';
+        site.textContent = 'Report site';
+        site.href = siteUrl(run);
+        site.target = '_blank';
+        site.rel = 'noopener';
+        wrap.appendChild(site);
+      }
+      list.appendChild(wrap);
     });
+    return runs;
   }
 
   // ─────────────────────── scan trigger ────────────────────────
@@ -153,9 +191,15 @@
 
       if (s.status === 'completed') {
         setStatus('Scan complete');
-        await loadRuns();
+        const runs = await loadRuns();
         if (s.resultId) {
-          openReport(domain, s.resultId, '(just now)');
+          // A scan started here writes under output\<domain>\, so its folder
+          // segment is the domain; the list says whether it has a report site.
+          const made = runs.find(function (r) { return r.folder === domain && r.id === s.resultId; });
+          openReport({
+            folder: domain, id: s.resultId, tenant: domain,
+            timestamp: '(just now)', hasSite: !!(made && made.hasSite)
+          });
         }
         break;
       }
@@ -168,9 +212,10 @@
   }
 
   // ─────────────────────── report viewer ───────────────────────
-  async function openReport(tenant, id, timestamp) {
+  // `run` is a row from /api/runs: { folder, id, tenant, timestamp, hasSite }.
+  async function openReport(run) {
     setStatus('Loading report…');
-    const url = '/api/runs/' + encodeURIComponent(tenant) + '/' + encodeURIComponent(id) + '/report';
+    const url = '/api/runs/' + encodeURIComponent(run.folder) + '/' + encodeURIComponent(run.id) + '/report';
     let html;
     try {
       const res = await fetch(url);
@@ -181,8 +226,16 @@
       return;
     }
     $('panel-report').hidden = false;
-    $('report-title').textContent = tenant + (timestamp ? ' — ' + timestamp : '');
+    $('report-title').textContent = run.tenant + (run.timestamp ? ' — ' + run.timestamp : '');
     $('report-frame').srcdoc = html;
+    const site = $('link-report-site');
+    if (run.hasSite) {
+      site.href = siteUrl(run);
+      site.hidden = false;
+    } else {
+      site.removeAttribute('href');
+      site.hidden = true;
+    }
     setStatus('Ready');
     $('panel-report').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -190,6 +243,7 @@
   function closeReport() {
     $('panel-report').hidden = true;
     $('report-frame').srcdoc = '';
+    $('link-report-site').hidden = true;
   }
 
   // ─────────────────────── wire-up ─────────────────────────────
