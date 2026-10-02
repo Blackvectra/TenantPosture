@@ -24,7 +24,7 @@ GitHub: [Blackvectra/NRG-Assessment-Tool](https://github.com/Blackvectra/NRG-Ass
 
 ## What It Does
 
-> **New here, or back after a while?** [`docs/WHAT-CAN-I-RUN.md`](docs/WHAT-CAN-I-RUN.md) lists every entry point, what it needs, and what it produces — including what this tool deliberately does *not* cover.
+> **New here, or back after a while?** [`docs/WHAT-CAN-I-RUN.md`](docs/WHAT-CAN-I-RUN.md) lists every entry point, what it needs, and what it produces — including what this tool deliberately does *not* cover. Known issues and what has not yet been run against a live tenant are in [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md).
 
 Connects to a Microsoft 365 tenant via delegated auth (or GDAP for MSP batch runs), collects raw configuration data across all M365 services, evaluates **204 security controls with license-aware scoring**, and produces client-ready HTML and Markdown reports with citations into six frameworks (CIS M365, CISA SCuBA, NIST 800-53r5, CMMC 2.0, ISO 27001, MITRE ATT&CK) plus CIS Controls v8.1.
 
