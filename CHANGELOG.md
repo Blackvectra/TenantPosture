@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **NRG standards approved.** The owner approved, on 2026-10-02: DNS-1.3's reporting address
+  (`dmarc@nrgtechservices.com`), DEF-2.3's blocked file types (Microsoft's 53 default common
+  attachments filter types), AAD-2.1's required Conditional Access templates (`block-legacy-auth`,
+  `mfa-all-users`, `mfa-admins`, `mfa-azure-mgmt`, `block-device-code`), and INT-2.2's required ASR rules
+  (Microsoft's three standard protection rules, keyed as a real tenant read reports them).
+  `PriorityUsers` (EXO-1.5) stays empty on purpose: priority users differ per tenant and the file is
+  shared by every client. Expect the next run to judge those components instead of "not assessed",
+  so scores and the baseline's not-verified count move: a tenant missing a template, a blocked type or
+  the reporting address now reads as a shortfall. Tests pin the approved values and their invariants.
+
 - **Review of this release (2026-10-04): failed, truncated or unread evidence no longer produces a
   clean or failed verdict, and severities match the evidence.** Four reviewers checked the PR head
   `9eeb60b`; every confirmed defect below has a regression test that fails on that head (61 such
