@@ -59,6 +59,20 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
         }
     }
 
+    Context 'Tenant input and run list' {
+        It 'a user name typed in the tenant box is reduced to its domain, and the refusal message says what to enter' {
+            $js = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Web' 'static' 'app.js') -Raw
+            $js | Should -Match 'function normalizeDomain'
+            $js | Should -Match "lastIndexOf\('@'\)"
+            $js | Should -Match 'Enter the tenant domain, for example'
+            $js | Should -Not -Match "setStatus\('Invalid domain format'\)"
+        }
+        It 'the run list excludes incident-response mailbox results' {
+            $src = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib' 'Start-NRGWebServer.ps1') -Raw
+            $src | Should -Match '-email-results'
+        }
+    }
+
     Context 'Server bind + CSP posture' {
         BeforeAll {
             $script:ServerSrc = Get-Content -LiteralPath $script:ServerPath -Raw
@@ -242,8 +256,20 @@ Set-StrictMode -Version Latest
 Start-NRGWebServer -Port $($script:Port) -ScriptDir '$($script:RepoRoot)' -NoBrowser
 "@ | Set-Content -LiteralPath $boot -Encoding utf8
 
+            # The server reads ./output relative to its working directory: seed one assessment run
+            # and one incident-response run in a temp directory so the run list can be checked.
+            $script:WebWork = Join-Path ([System.IO.Path]::GetTempPath()) ("nrgweb-work-{0}" -f ([Guid]::NewGuid().ToString('N')))
+            $seed = Join-Path $script:WebWork 'output' 'ndaco.org'
+            New-Item -ItemType Directory -Path $seed -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $seed 'NRGTS-20261002-114907-results.json') -Value '{}' -Encoding utf8
+            Set-Content -LiteralPath (Join-Path $seed 'NRGTS-20261002-114907-assessment.html') -Value '<html></html>' -Encoding utf8
+            $ir = Join-Path $script:WebWork 'output' 'Administrator_ndaco.org'
+            New-Item -ItemType Directory -Path $ir -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $ir '20261002-122037-email-results.json') -Value '{}' -Encoding utf8
+
             $pwshExe = (Get-Process -Id $PID).Path
             $script:Proc = Start-Process -FilePath $pwshExe `
+                -WorkingDirectory $script:WebWork `
                 -ArgumentList @('-NoProfile', '-File', $boot) `
                 -RedirectStandardOutput $script:LogFile `
                 -RedirectStandardError  "$($script:LogFile).err" `
@@ -270,6 +296,7 @@ Start-NRGWebServer -Port $($script:Port) -ScriptDir '$($script:RepoRoot)' -NoBro
             foreach ($f in @($script:BootFile, $script:LogFile, "$($script:LogFile).err")) {
                 if ($f) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
             }
+            if ($script:WebWork) { Remove-Item -LiteralPath $script:WebWork -Recurse -Force -ErrorAction SilentlyContinue }
         }
 
         It 'comes up and serves the index page' {
@@ -293,6 +320,14 @@ Start-NRGWebServer -Port $($script:Port) -ScriptDir '$($script:RepoRoot)' -NoBro
             $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/api/runs" -TimeoutSec 5 -UseBasicParsing
             $r.StatusCode | Should -Be 200
             $r.Content.Trim() | Should -Not -Be 'null'
+        }
+
+        It 'lists the assessment run and not the incident-response mailbox run' {
+            $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/api/runs" -TimeoutSec 5 -UseBasicParsing
+            $runs = @($r.Content | ConvertFrom-Json)
+            $runs.Count | Should -Be 1
+            $runs[0].tenant | Should -Be 'ndaco.org'
+            $runs[0].hasReport | Should -BeTrue
         }
 
         It 'emits the strict CSP header on a real response' {

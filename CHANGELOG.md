@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Web GUI, first run on a real workstation.** Two defects showed on screen: a user name typed in
+  the tenant box (`admin@ndaco.org`) was refused as "Invalid domain format" and the message did not
+  say what to enter; and the run list showed the incident-response mailbox run (a folder named after
+  a user) as an assessment run. The box now reduces a user name to its domain and the refusal says
+  "Enter the tenant domain, for example ndaco.org"; `*-email-results.json` is no longer listed as a
+  run. The server-side domain check is unchanged. The test that starts a real server now seeds an
+  assessment run and a mailbox run and checks the list (it runs only where Pode is installed, so CI
+  skips it; run it locally).
+
 - **SIGNIN-1.4 no longer counts users already reviewed as safe.** The risky-user read removes
   dismissed and remediated users but not `confirmedSafe`, and the evaluator reported every returned
   user as "FOUND N risky" (a High Gap) and scored each 15 points: against NDACo one at-risk user
