@@ -20,6 +20,8 @@ Describe 'Verdict and evidence limitation survive every output format' {
         $script:Root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
         Import-Module (Join-Path $script:Root 'NRG-Assessment.psm1') -Force -ErrorAction Stop
         Clear-NRGState
+        # Pins the 'no approved list' scenario: the shipped lists are approved, so the file is replaced for this test.
+        Mock -ModuleName NRG-Assessment Get-NRGStandards { [ordered]@{ DmarcReportingAddresses = @(); CommonAttachmentFileTypes = @(); PriorityUsers = @(); RequiredConditionalAccessTemplates = @() } }
         $raw = { param([string] $Id, $Data) @{ CollectorId = $Id; CollectedAt = (Get-Date).ToString('o'); Success = $true; Data = $Data } }
         # DEF-2.3: filter on, no approved blocked-type list -> not assessed, filter half verified.
         Set-NRGRawData -Key 'Defender-Policies' -Data (& $raw 'Defender-Policies' @{
