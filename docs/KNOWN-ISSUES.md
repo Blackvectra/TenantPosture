@@ -82,3 +82,51 @@ Confirmed by the 2026-10-04 review; none of them produces a clean conclusion fro
   `Config/branding.psd1` is read twice in a row. PSScriptAnalyzer reports
   `PSUseDeclaredVarsMoreThanAssignments` for `$monitoringSet` in `Invoke-NRGAssessment.ps1`
   (present before the review; CI does not fail on it).
+
+## Not yet confirmed on a live run
+
+These fixes passed their tests but have not been seen working against a real tenant or workstation.
+
+- **Sign-in triage.** The recent sign-ins read now retries without its property list if Graph rejects
+  it (BadRequest). Confirm the section completes and SIGNIN-1.4 names only active risky users.
+- **Email assessment findings.** EMAIL-3.1 (display-name-only leads rank below strong leads) and
+  EMAIL-4.1 (an app that was never looked up is "not identified", High until identified) changed
+  after the first live run on a real mailbox. Re-run on the same mailbox to confirm.
+- **Pode 2.10.0.** It is the minimum supported version. It warns that it has not been tested on
+  PowerShell 7.6.6; the server started and listened. Try a newer Pode first if the GUI misbehaves.
+
+## Known, not yet examined
+
+- **EMAIL-2.1 recipients to warn.** The outbound summary reported 7 recipients to warn on 13 sent
+  messages (3 external and 4 internal recipients were counted). The count and the wording have not
+  been checked against the messages.
+- **An EDR alert during a run.** Cortex XDR alerted on the operator's endpoint while the tool ran
+  (script detections and a Tor-browser download block). Nothing shows the tool caused any of them;
+  the process behind the download event has not been identified. The Tor Project host name was
+  removed from every shipped file as a precaution, and a test fails if a live reference returns.
+- **INT-1.1 non-compliance actions** are not read, by design; see `NRG-DETECTION-LIMITS.md`.
+
+## Environment problems on an operator's workstation
+
+Not defects in this tool, but they stop it or its companions from running.
+
+- **PowerShell 7 package layer.** `Install-Module` and `Install-PackageProvider` can fail with
+  "Collection was modified" or "NuGet provider is required". Use `Install-PSResource` or
+  `Save-PSResource`, which do not need NuGet.
+- **ScubaGear rule step on Windows.** ScubaGear 2.0.0 passed its rule files to OPA without a drive
+  letter when run from a non-system drive, so every product failed to evaluate. Running it from
+  `C:` in Windows PowerShell 5.1 worked. ScubaGear's own sign-in also failed in PowerShell 7 (an
+  embedded-browser error from the borrowed MSAL) and worked in 5.1.
+- **OneDrive-redirected module folders.** A module file can become an online-only placeholder and
+  fail to load. Keep modules out of OneDrive (see `Install-NRGPrerequisites.ps1`).
+- **Run in a new window.** A PowerShell window that already loaded another version of the Microsoft
+  sign-in library (MSAL) cannot load a different one; open a new window.
+
+## Planned follow-ups (separate changes)
+
+- A single-page `assessment.html` report in the ScubaGear layout.
+- A private PowerShell module bundle, so the tool does not depend on the operator's module folders.
+- An offline comparison of two saved results files to show whether two tenants meet the same
+  baseline (internal use; any tier, stating the tier each used).
+- The web GUI items above (run list for command-line runs, report-site link, `-ScriptDir` default).
+- The NLS twin has not received these fixes.
