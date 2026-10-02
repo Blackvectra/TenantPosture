@@ -269,10 +269,25 @@ function Test-NRGSignInControlRiskyUsers {
         return
     }
 
-    $users = @($bag.Data.Users)
+    # A user an administrator already confirmed safe, dismissed or remediated is not an active
+    # risk. The endpoint filter removes dismissed and remediated; confirmedSafe still comes back
+    # (riskLevel 'none'), and counting it listed five risky users when one was at risk. A state
+    # this code does not recognize stays active: unknown is not safe.
+    $reviewedStates = @('confirmedsafe', 'dismissed', 'remediated')
+    $users = [System.Collections.Generic.List[object]]::new()
+    $reviewedUsers = [System.Collections.Generic.List[object]]::new()
+    foreach ($candidate in @($bag.Data.Users)) {
+        $stateText = ([string](Get-NRGObjectField -Item $candidate -Key 'riskState' -Default '')).ToLowerInvariant()
+        if ($stateText -in $reviewedStates) { $reviewedUsers.Add($candidate) } else { $users.Add($candidate) }
+    }
+    $reviewedNote = ''
+    if ($reviewedUsers.Count -gt 0) {
+        $reviewedNote = "`n$($reviewedUsers.Count) user(s) already reviewed as confirmed safe, dismissed or remediated are not counted: " +
+            ((@($reviewedUsers | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'userPrincipalName' -Default '') } | Where-Object { $_ } | Select-Object -First 10)) -join ', ') + '.'
+    }
     if ($users.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
-            -Title $title -Severity 'Medium' -Detail 'No active risky users flagged by Identity Protection.'
+            -Title $title -Severity 'Medium' -Detail ('No active risky users flagged by Identity Protection.' + $reviewedNote)
         return
     }
 
@@ -294,13 +309,14 @@ function Test-NRGSignInControlRiskyUsers {
         }
     }
 
-    $detail = "FOUND $($users.Count) risky user(s) flagged by Microsoft Identity Protection:`n"
+    $detail = "FOUND $($users.Count) active risky user(s) flagged by Microsoft Identity Protection:`n"
     foreach ($u in ($users | Sort-Object { switch ($_.riskLevel) {'high'{3}'medium'{2}'low'{1}default{0}} } -Descending | Select-Object -First 10)) {
         $detail += "  - $($u.userPrincipalName) — risk level: $($u.riskLevel), state: $($u.riskState), last updated: $($u.riskLastUpdatedDateTime)`n"
     }
+    $detail += $reviewedNote.TrimStart("`n")
     Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
         -Title $title -Severity 'High' -Detail $detail `
-        -CurrentValue "$($users.Count) risky users" `
+        -CurrentValue "$($users.Count) active risky users" `
         -Remediation "Review each in Defender Portal > Identity Protection > Risky users. Confirm or dismiss the risk after triage. Use the per-user mailbox deep-dive (Email-IR) to confirm compromise before action."
 }
 

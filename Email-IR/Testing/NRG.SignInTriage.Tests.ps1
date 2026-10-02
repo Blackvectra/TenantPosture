@@ -171,6 +171,48 @@ Describe 'NRG Sign-In Triage — IoC evaluators against synthetic fixtures' {
         }
     }
 
+    Context 'SIGNIN-1.4 reviewed-safe users are not active risk' {
+        It 'a confirmed-safe user beside one at risk: only the at-risk user is counted and scored, the reviewed user is named as not counted' {
+            $now = (Get-Date).ToString('o')
+            $users = @(
+                @{ userPrincipalName='risky@corp.com'; userDisplayName='Risky'; riskLevel='low'; riskState='atRisk'; riskLastUpdatedDateTime=$now }
+                @{ userPrincipalName='safe@corp.com'; userDisplayName='Safe'; riskLevel='none'; riskState='confirmedSafe'; riskLastUpdatedDateTime=$now }
+            )
+            Set-NRGRawData -Key 'IR-SignIn-RiskyUsers' -Data (NewBag 'IR-SignIn-RiskyUsers' @{ Count = 2; Users = $users })
+            Test-NRGSignInControlRiskyUsers
+            $f = @(Get-NRGFindings | Where-Object ControlId -eq 'SIGNIN-1.4')
+            $f[0].State | Should -Be 'Gap'
+            $f[0].Detail | Should -Match 'FOUND 1 active risky user'
+            $f[0].Detail | Should -Match 'risky@corp.com'
+            $f[0].Detail | Should -Match 'not counted: safe@corp.com'
+            $f[0].CurrentValue | Should -Be '1 active risky users'
+            Test-NRGSignInControlRankUsers
+            $rank = @((Get-NRGRawData -Key 'IR-SignIn-Ranked').Data.Users)
+            @($rank | Where-Object UserPrincipalName -eq 'safe@corp.com').Count | Should -Be 0
+            @($rank | Where-Object UserPrincipalName -eq 'risky@corp.com').Count | Should -Be 1
+        }
+        It 'only reviewed-safe users: Satisfied, with the reviewed users named, never a Gap' {
+            $users = @(@{ userPrincipalName='safe@corp.com'; riskLevel='none'; riskState='confirmedSafe' }, @{ userPrincipalName='fixed@corp.com'; riskLevel='none'; riskState='remediated' })
+            Set-NRGRawData -Key 'IR-SignIn-RiskyUsers' -Data (NewBag 'IR-SignIn-RiskyUsers' @{ Count = 2; Users = $users })
+            Test-NRGSignInControlRiskyUsers
+            $f = @(Get-NRGFindings | Where-Object ControlId -eq 'SIGNIN-1.4')
+            $f[0].State | Should -Be 'Satisfied'
+            $f[0].Detail | Should -Match '2 user\(s\) already reviewed'
+        }
+        It 'a risk state this code does not recognize stays active: unknown is not safe' {
+            $users = @(@{ userPrincipalName='odd@corp.com'; riskLevel='none'; riskState='someFutureState' })
+            Set-NRGRawData -Key 'IR-SignIn-RiskyUsers' -Data (NewBag 'IR-SignIn-RiskyUsers' @{ Count = 1; Users = $users })
+            Test-NRGSignInControlRiskyUsers
+            @(Get-NRGFindings | Where-Object ControlId -eq 'SIGNIN-1.4')[0].State | Should -Be 'Gap'
+        }
+        It 'a confirmed-compromised user is active' {
+            $users = @(@{ userPrincipalName='bad@corp.com'; riskLevel='high'; riskState='confirmedCompromised' })
+            Set-NRGRawData -Key 'IR-SignIn-RiskyUsers' -Data (NewBag 'IR-SignIn-RiskyUsers' @{ Count = 1; Users = $users })
+            Test-NRGSignInControlRiskyUsers
+            @(Get-NRGFindings | Where-Object ControlId -eq 'SIGNIN-1.4')[0].State | Should -Be 'Gap'
+        }
+    }
+
     Context 'SIGNIN-2.1 Rank aggregator' {
         It 'Ranks users by accumulated IoC score' {
             # alice: failed→success cluster only (60 pts)

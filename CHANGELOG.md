@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **SIGNIN-1.4 no longer counts users already reviewed as safe.** The risky-user read removes
+  dismissed and remediated users but not `confirmedSafe`, and the evaluator reported every returned
+  user as "FOUND N risky" (a High Gap) and scored each 15 points: against NDACo one at-risk user
+  appeared as five, and four confirmed-safe users entered the triage ranking. Confirmed-safe,
+  dismissed and remediated users are now listed as "not counted" (named, never silently dropped);
+  an unrecognized risk state stays active (unknown is not safe); only active users are scored and
+  ranked, and a tenant whose only entries were reviewed gets Satisfied. Pinned in
+  `NRG.SignInTriage.Tests.ps1` (two of the four new tests fail on the old evaluator).
+
 - **First live runs of the incident-response entry points.** Against NDACo, the account's mailbox
   reads answered NotFound and the sign-in reads answered BadRequest, and three console lines were
   misleading or silent: (1) the email assessment printed "Mailbox data collected" while every
