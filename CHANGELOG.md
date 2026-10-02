@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **GUI error responses carried Pode's HTML error page, not the JSON the
+  handler wrote.** `POST /api/scan` (400 `domain is required` / `invalid
+  domain format`) and `GET /api/scan/:id/status` (404 `unknown runId`) called
+  `Set-PodeResponseStatus` and then `Write-PodeJsonResponse`.
+  `Set-PodeResponseStatus` renders Pode's error page immediately, so the
+  client received HTTP 400 with `Content-Type: application/json` and a body
+  of the page's first N bytes (N = the JSON's length): `<html
+  style='background-color: #0`. The UI shows that body verbatim, so the
+  operator read "Could not start scan: <html style=...". The status now
+  rides on the write (`Write-PodeJsonResponse -StatusCode`). Pinned by new
+  assertions in the live-server context of `NRG.WebServer.Tests.ps1`, which
+  boots a real server (Pode 2.10+ required; skipped where it is absent) and
+  checks status, content type and that the body parses as JSON with the
+  expected `error`; each fails against the old handlers. No tenant call is
+  made, the server stays loopback-only, and no scan is started. The
+  `Set-PodeResponseStatus` + `Write-PodeTextResponse` pair on
+  `GET /api/runs/:tenant/:id/report` has the same defect and is not changed
+  here.
+
 - **Defects found by the first live baseline validation (NRGTS, 2026-09-29),
   fixed without touching a single verdict.** DNS collection ran only inside
   the Exchange branch of the entry point, so an Exchange connection failure

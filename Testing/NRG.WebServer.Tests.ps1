@@ -304,5 +304,63 @@ Start-NRGWebServer -Port $($script:Port) -ScriptDir '$($script:RepoRoot)' -NoBro
             $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/static/app.js" -TimeoutSec 5 -UseBasicParsing
             $r.StatusCode | Should -Be 200
         }
+
+        Context 'Error responses carry the JSON the handler wrote' {
+            # Set-PodeResponseStatus renders Pode's own HTML error page
+            # immediately. A Write-PodeJsonResponse after it sets
+            # Content-Length from the JSON but the page bytes are what get
+            # sent, so a 400 arrived with Content-Type: application/json and
+            # a body of '<html style=...' cut off at the JSON's length -- and
+            # app.js shows that body verbatim ('Could not start scan: <html
+            # style='). The status has to ride on the same call:
+            # Write-PodeJsonResponse -StatusCode.
+            #
+            # Every request here is rejected before the handler reaches
+            # Start-Job, so no scan starts and no tenant is contacted. A VALID
+            # POST /api/scan is deliberately not made: that would launch a
+            # child pwsh and a Microsoft sign-in.
+            BeforeAll {
+                $script:Send = {
+                    param([string]$Method, [string]$Path, [string]$Body)
+                    $p = @{
+                        Uri                = "http://127.0.0.1:$($script:Port)$Path"
+                        Method             = $Method
+                        TimeoutSec         = 5
+                        UseBasicParsing    = $true
+                        SkipHttpErrorCheck = $true   # 4xx must come back as a response, not throw
+                    }
+                    if ($PSBoundParameters.ContainsKey('Body')) {
+                        $p.Body        = $Body
+                        $p.ContentType = 'application/json'
+                    }
+                    Invoke-WebRequest @p
+                }
+            }
+
+            It 'POST /api/scan <Name> returns 400 with a JSON error body' -ForEach @(
+                @{ Name = 'with no domain';          Body = '{}';                          Expected = 'domain is required'    }
+                @{ Name = 'with a blank domain';     Body = '{"domain":"   "}';            Expected = 'domain is required'    }
+                @{ Name = 'with a malformed domain'; Body = '{"domain":"bad domain!"}';    Expected = 'invalid domain format' }
+                @{ Name = 'with a traversal domain'; Body = '{"domain":"../../etc/passwd"}'; Expected = 'invalid domain format' }
+            ) {
+                $r = & $script:Send 'Post' '/api/scan' $Body
+                $r.StatusCode | Should -Be 400
+                ([string]($r.Headers['Content-Type'] | Select-Object -First 1)) | Should -Match '^application/json'
+                $r.Content | Should -Not -Match '<html' -Because "the body must be the handler's JSON, not Pode's error page"
+                $script:parsed = $null
+                { $script:parsed = $r.Content | ConvertFrom-Json -ErrorAction Stop } | Should -Not -Throw -Because "the body was: $($r.Content)"
+                $script:parsed.error | Should -Be $Expected
+            }
+
+            It 'GET /api/scan/:id/status for an unknown runId returns 404 with a JSON error body' {
+                $r = & $script:Send 'Get' '/api/scan/doesnotexist/status'
+                $r.StatusCode | Should -Be 404
+                ([string]($r.Headers['Content-Type'] | Select-Object -First 1)) | Should -Match '^application/json'
+                $r.Content | Should -Not -Match '<html' -Because "the body must be the handler's JSON, not Pode's error page"
+                $script:parsed = $null
+                { $script:parsed = $r.Content | ConvertFrom-Json -ErrorAction Stop } | Should -Not -Throw -Because "the body was: $($r.Content)"
+                $script:parsed.error | Should -Be 'unknown runId'
+            }
+        }
     }
 }

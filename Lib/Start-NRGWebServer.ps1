@@ -254,15 +254,17 @@ function Start-NRGWebServer {
         Add-PodeRoute -Method Post -Path '/api/scan' -ScriptBlock {
             $body = $WebEvent.Data
             $domain = [string]$body.domain
+            # The status rides on the write call (-StatusCode), never a prior
+            # Set-PodeResponseStatus: that renders Pode's HTML error page on
+            # the spot, and the JSON written after it only sets Content-Length
+            # -- the client gets the page's first N bytes under a JSON header.
             if ([string]::IsNullOrWhiteSpace($domain)) {
-                Set-PodeResponseStatus -Code 400
-                Write-PodeJsonResponse -Value @{ error = 'domain is required' }
+                Write-PodeJsonResponse -Value @{ error = 'domain is required' } -StatusCode 400
                 return
             }
             # Filename-safe and path-traversal-safe.
             if ($domain -notmatch '^[A-Za-z0-9.\-]{1,253}$') {
-                Set-PodeResponseStatus -Code 400
-                Write-PodeJsonResponse -Value @{ error = 'invalid domain format' }
+                Write-PodeJsonResponse -Value @{ error = 'invalid domain format' } -StatusCode 400
                 return
             }
 
@@ -348,8 +350,8 @@ function Start-NRGWebServer {
             $id = $WebEvent.Parameters['id']
             $scans = (Get-PodeState -Name 'scans')
             if (-not $scans.ContainsKey($id)) {
-                Set-PodeResponseStatus -Code 404
-                Write-PodeJsonResponse -Value @{ error = 'unknown runId' }
+                # -StatusCode, not Set-PodeResponseStatus (see POST /api/scan).
+                Write-PodeJsonResponse -Value @{ error = 'unknown runId' } -StatusCode 404
                 return
             }
             $row = $scans[$id]
