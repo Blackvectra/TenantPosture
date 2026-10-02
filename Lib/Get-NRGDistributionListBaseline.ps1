@@ -15,7 +15,7 @@
 # THE COMMANDS ARE TEXT. A recommendation carries a command template such as
 #   Set-DistributionGroup -Identity {Identity} -RequireSenderAuthenticationEnabled $true
 # and Get-NRGDistributionListFixCommand returns a STRING. Nothing in the module
-# evaluates that string: no Invoke-Expression, no `&`, no script block. The
+# evaluates that string: no expression evaluation, no call operator on it, no script block. The
 # templates live in JSON (data), never in a .ps1 the module loads, so the
 # read-only static tests keep passing for the right reason. NRG.DistributionLists
 # .Tests.ps1 pins that, and defines a throwing Set-DistributionGroup to prove a

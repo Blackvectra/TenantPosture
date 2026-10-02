@@ -320,8 +320,9 @@ function Invoke-NRGCollectDistributionLists {
                     $rec.MemberStatus = if ($truncated) { 'Truncated' } else { 'Collected' }
                 } catch {
                     $rec.MemberStatus = 'Failed'
-                    $rec.MemberError = ([string]$_.Exception.Message) -replace '[\x00-\x1F\x7F]+', ' '
-                    if ($rec.MemberError.Length -gt 300) { $rec.MemberError = $rec.MemberError.Substring(0, 300) }
+                    $errText = ([string]$_.Exception.Message) -replace '[\x00-\x1F\x7F]+', ' '
+                    if ($errText.Length -gt 300) { $errText = $errText.Substring(0, 300) }
+                    $rec.MemberError = $errText
                     $membersFailed++
                     & $fail 'EXO-DL-Members' ("{0}: {1}" -f $(if ($smtp) { $smtp } else { $name }), $rec.MemberError)
                 }
