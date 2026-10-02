@@ -272,15 +272,41 @@ function ConvertTo-NRGDLQuotedLiteral {
     return "'" + ($v -replace "'", "''") + "'"
 }
 
+# Structural check on a command template before the worksheet prints it. The templates are
+# reviewed data, but a file of commands an administrator may paste is an injection surface, so
+# each one is also checked when it is loaded: ONE command, shaped verb-noun -Identity {Identity},
+# with parameters whose values are a bare word, $true / $false, a {Member} placeholder, or one of
+# the two quoted placeholder forms. No chaining, pipe, redirection, subexpression, backtick or
+# other quote can match. The SHAPE is checked, not a list of cmdlet names, so no file the module
+# runs names a command that changes a list. An instruction has no command and is accepted.
+function Test-NRGDistributionListCommandTemplate {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([AllowNull()] [AllowEmptyString()] [string] $Command)
+    if ([string]::IsNullOrEmpty($Command)) { return $true }
+    $value = ' (\$true|\$false|[A-Za-z]+|\{Member\}|''<[a-z-]+>''|@\{Add=''<[a-z-]+>''\})'
+    $pattern = '^(Set|Remove|Add)-(Dynamic)?Distribution[A-Za-z]+ -Identity \{Identity\}( -[A-Za-z]+(:\$false|' + $value + ')?)*$'
+    return [bool]($Command -cmatch $pattern)
+}
+
 # The hardening commands are DATA (Config/distribution-list-hardening.json), kept
-# out of every file the module executes, so no module code path can call them.
+# out of every file the module executes, so no module code path can call them. A template
+# whose command fails the structural check is not loaded, and the loss is warned about.
 function Get-NRGDistributionListHardeningTemplates {
     [CmdletBinding()]
-    param()
-    $path = Join-Path (Split-Path -Parent $PSScriptRoot) 'Config/distribution-list-hardening.json'
-    if (-not (Test-Path -LiteralPath $path)) { return @() }
-    $cfg = Get-Content -LiteralPath $path -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
-    return @($cfg.Templates)
+    param([string] $Path)
+    if (-not $Path) { $Path = Join-Path (Split-Path -Parent $PSScriptRoot) 'Config/distribution-list-hardening.json' }
+    if (-not (Test-Path -LiteralPath $Path)) { return @() }
+    $cfg = Get-Content -LiteralPath $Path -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
+    $loaded = [System.Collections.Generic.List[object]]::new()
+    foreach ($t in @($cfg.Templates)) {
+        if (Test-NRGDistributionListCommandTemplate -Command ([string](Get-NRGObjectField -Item $t -Key 'Command' -Default ''))) {
+            $loaded.Add($t)
+        } else {
+            Write-Warning ("Distribution-list hardening template for {0} was not loaded: its command is not a single command of the expected shape." -f [string](Get-NRGObjectField -Item $t -Key 'ControlId' -Default '?'))
+        }
+    }
+    return @($loaded)
 }
 
 # Text for the worksheet. Substitutes {Identity} and {Member} with a quoted,

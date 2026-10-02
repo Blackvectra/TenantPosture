@@ -11,7 +11,8 @@
   collector and evaluators call Get-* cmdlets only, and the hardening commands in the worksheet
   (`Set-DistributionGroup -RequireSenderAuthenticationEnabled $true` and the like) are printed as
   text for an administrator, from `Config/distribution-list-hardening.json`, never run and never
-  held in a file the module executes. New `DL-*` findings (not in `controls.json`, no score): DL-1.1
+  held in a file the module executes (each template is checked at load to be one command of the
+  expected shape, so a tampered template is not printed). New `DL-*` findings (not in `controls.json`, no score): DL-1.1
   a list that accepts mail from outside with no allow-list and no moderation is a Gap (Partial when
   moderated), DL-2.1 no owner, DL-2.2 anyone can join, DL-3.1 members outside the organization. A
   value Exchange did not return, a failed section, a member read that failed, hit the cap or could
@@ -22,7 +23,7 @@
   are internal (they list members) and are written through `Set-NRGSensitiveFileContent`. Not covered:
   Microsoft 365 Groups, nested groups' members. New: `Connect-NRGExchangeOnlineOnly` (tenant-pinned,
   one Exchange session per window), `Lib/Get-NRGDistributionListRules.ps1`, 11 exported functions
-  (398 total), `NRG.DistributionLists.Tests.ps1` (105 tests, including one that runs the real entry
+  (398 total), `NRG.DistributionLists.Tests.ps1` (107 tests, including one that runs the real entry
   script in a child process against a fake Exchange module with no Graph module present).
 
 - **The first email assessment on a real mailbox raised two false indicators.** (1) EMAIL-4.1 printed

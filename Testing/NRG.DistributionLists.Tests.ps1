@@ -1015,6 +1015,43 @@ Describe 'Distribution-list scan' {
                 $t.Impact | Should -Not -BeNullOrEmpty -Because 'a change an administrator is asked to make says what it can break'
             }
         }
+        It 'the load-time check accepts every shipped template and rejects anything that is not one command of the expected shape' {
+            $cfg = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config/distribution-list-hardening.json') -Raw | ConvertFrom-Json
+            foreach ($t in @($cfg.Templates)) {
+                (& $script:Mod { param($c) Test-NRGDistributionListCommandTemplate -Command $c } ([string]$t.Command)) | Should -BeTrue -Because "$($t.ControlId) $($t.AppliesTo) $($t.Kind)"
+            }
+            foreach ($bad in @(
+                'Set-DistributionGroup -Identity {Identity} -MemberJoinRestriction Closed; Remove-Mailbox -Identity x',
+                'Set-DistributionGroup -Identity {Identity} -MemberJoinRestriction Closed | Out-Null',
+                'Set-DistributionGroup -Identity {Identity} -ManagedBy $(whoami)',
+                'Set-DistributionGroup -Identity {Identity} -ManagedBy `whoami',
+                "Set-DistributionGroup -Identity {Identity} -MemberJoinRestriction Closed`nRemove-Mailbox x",
+                "Set-DistributionGroup -Identity '{Identity}' -MemberJoinRestriction Closed",
+                'Set-Mailbox -Identity {Identity} -HiddenFromAddressListsEnabled $true',
+                'Invoke-Expression -Identity {Identity}',
+                'Set-DistributionGroup -MemberJoinRestriction Closed',
+                'Set-DistributionGroup -Identity {Identity} -ManagedBy {Other}',
+                'Set-DistributionGroup -Identity {Identity} -ManagedBy @{Add=''x''}; calc',
+                'Set-DistributionGroup -Identity {Identity} > out.txt')) {
+                (& $script:Mod { param($c) Test-NRGDistributionListCommandTemplate -Command $c } $bad) | Should -BeFalse -Because $bad
+            }
+        }
+        It 'a tampered template is not loaded (and the loss is warned about), so the worksheet cannot print it' {
+            $tmp = Join-Path ([IO.Path]::GetTempPath()) ("nrg-dl-tpl-" + [Guid]::NewGuid().ToString('N').Substring(0, 8) + '.json')
+            try {
+                @{ Templates = @(
+                    @{ ControlId = 'DL-2.2'; AppliesTo = 'Distribution'; Kind = 'Primary'; Intent = 'ok'; Command = 'Set-DistributionGroup -Identity {Identity} -MemberJoinRestriction Closed'; Impact = 'x' },
+                    @{ ControlId = 'DL-2.2'; AppliesTo = 'Distribution'; Kind = 'Alternative'; Intent = 'bad'; Command = 'Set-DistributionGroup -Identity {Identity} -MemberJoinRestriction Closed; Remove-Mailbox -Identity ceo'; Impact = 'x' }
+                ) } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $tmp -Encoding utf8
+                $all = @(& $script:Mod { param($p) Get-NRGDistributionListHardeningTemplates -Path $p 3>&1 } $tmp)
+                $warn = @($all | Where-Object { $_ -is [System.Management.Automation.WarningRecord] })
+                $loaded = @($all | Where-Object { $_ -isnot [System.Management.Automation.WarningRecord] })
+                $loaded.Count | Should -Be 1
+                $loaded[0].Kind | Should -Be 'Primary'
+                $warn.Count | Should -Be 1
+                $warn[0].Message | Should -Match 'was not loaded'
+            } finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+        }
         It 'the tests cannot be satisfied by an empty template list: every control that has a Gap or Partial has a primary change' {
             $cfg = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config/distribution-list-hardening.json') -Raw | ConvertFrom-Json
             foreach ($id in 'DL-1.1', 'DL-2.1') {
