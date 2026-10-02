@@ -204,4 +204,16 @@ foo,bar" -Encoding utf8
         { Publish-NRGReportSite -Metadata @{ TenantDomain = 'contoso.example'; ToolVersion = '4.14.3' } -Findings @($f) -OutputPath $dir -ScubaResultsPath $bad -WarningAction SilentlyContinue } | Should -Not -Throw
         Test-Path (Join-Path $dir 'index.html') | Should -BeTrue
     }
+    It 'a relative OutputPath is created under the current PowerShell location, not the process start folder' {
+        $base = Join-Path $script:Out 'relbase'
+        $null = New-Item -ItemType Directory -Path $base -Force
+        $f = @{ ControlId = 'EXO-6.1'; State = 'Satisfied'; Severity = 'High'; Category = 'Mail'; Title = 'Forwarding'
+                Detail = 'No forwarding.'; CurrentValue = ''; RequiredValue = ''; FrameworkIds = ''; Remediation = '' }
+        Push-Location -LiteralPath $base
+        try {
+            $null = Publish-NRGReportSite -Metadata @{ TenantDomain = 'contoso.example'; ToolVersion = '4.14.3' } -Findings @($f) -OutputPath '.\out\site'
+        } finally { Pop-Location }
+        Test-Path (Join-Path $base 'out\site\index.html') | Should -BeTrue
+        Test-Path (Join-Path $base 'out\site\EXO.html') | Should -BeTrue
+    }
 }

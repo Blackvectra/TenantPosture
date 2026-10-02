@@ -8,7 +8,10 @@
   with a real scan). `Read-NRGScubaResults` now accepts the CSV or the JSON, and a file that is not
   a ScubaGear result (or has no Control ID / Result) is reported as "ScubaGear results not used"
   while the site is still built without the comparison. `NRG.ReportSite.Tests.ps1` pins JSON, CSV,
-  a foreign JSON and a CSV without the columns.
+  a foreign JSON and a CSV without the columns. The same live run exposed a second defect: a
+  relative `-OutputPath` (`.\output\site`) was created by .NET against the shell's start folder,
+  not the current PowerShell location, so the page writes failed; the publisher now resolves the
+  path through the session first (pinned by a test that changes location before publishing).
 
 - **Tor Project host name removed from every shipped file.** The header comment in
   `Email-IR/Lib/Get-NRGIPThreatIntel.ps1` now says only that the helper calls rdap.org and does no

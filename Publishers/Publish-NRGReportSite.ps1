@@ -205,6 +205,9 @@ function Publish-NRGReportSite {
         if (-not (Get-Command $req -ErrorAction SilentlyContinue)) { throw "$req not loaded: refusing to generate the report site without it." }
     }
     if ($OutputPath -match '\.\.[\\/]') { throw 'Path traversal not allowed in OutputPath.' }
+    # A relative path must resolve against the PowerShell location: .NET resolves it against the
+    # process start folder, which Set-Location does not change.
+    $OutputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
     $null = [System.IO.Directory]::CreateDirectory($OutputPath)
     $hx = { param($v) ConvertTo-NRGHtmlSafe $v }
 
