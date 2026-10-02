@@ -15,6 +15,16 @@
   drops from 69 to 67 on the same data. `NRG.GapSummary.Tests.ps1` pins Total = Distinct + Views and
   that a view of a control with no shortfall stays distinct.
 
+- **The DEF-4.1 / DEF-4.5 disagreement with ScubaGear is explained: a different standard, not a detection fault.**
+  ScubaGear's raw data from the September 30 scan holds the same DLP policies NRG read (same modes, same "All"
+  locations, no command failed), so the scan did see them. Its rule MS.SECURITYSUITE.3.2v1 is met only when ONE
+  enabled rule, in an Enable-mode policy, matches all three of U.S. Social Security Number, U.S. Individual Taxpayer
+  Identification Number and Credit Card Number, applied to All of each workload. On the tenant, the enforcing PII
+  policy covers all four workloads and matches SSN and ITIN but not credit cards; credit cards are matched only by
+  a policy in test mode, so no rule qualifies and ScubaGear reports every location as not covered. NRG DEF-4.1
+  judges workload coverage by enforcing policies whatever the types, so the two differ on the requirement. The
+  alignment relation for DEF-4.1 is now Partial (it was Equivalent) and both notes say what 3.2 requires.
+
 - **AAD-1.4 / AAD-1.5: report-only is Partial only when the policy is otherwise complete.** Report-only
   collects evaluation data and enforces nothing. A risk policy in report-only mode is now Partial only when it
   meets every requirement (AAD-1.5: high user risk; AAD-1.4: high and medium sign-in risk; a responding grant;

@@ -49,7 +49,7 @@ The old rule id no longer exists and the migrated range does not describe what t
 | AAD-6.1 User App Registration Disabled | `MS.AAD.5.1v1` | SHALL | same | Only administrators register applications. |
 | AAD-6.2 User Consent to Apps Restricted | `MS.AAD.5.2v1` | SHALL | same | Both require user consent to applications restricted; the admin consent workflow is the separate rule 5.3 (AAD-6.3). |
 | AAD-6.3 Admin Consent Workflow Enabled | `MS.AAD.5.3v1` | SHALL | same | Admin consent workflow configured. |
-| DEF-4.1 DLP Policy Covers All Key Workloads | `MS.SECURITYSUITE.3.2v1` | SHOULD | `MS.DEFENDER.4.2v1` (migrated) | DLP applied to Exchange, OneDrive, SharePoint, Teams (and Devices is DEF-4.5). NRG counts only enforcing policies. |
+| DEF-4.1 DLP Policy Covers All Key Workloads | `MS.SECURITYSUITE.3.2v1` | SHOULD | `MS.DEFENDER.4.2v1` (migrated) | ScubaGear 3.2 needs ONE enabled rule, in an Enable-mode policy, matching all three of SSN, ITIN and Credit Card Number, applied to All of each workload; NRG judges whole-workload coverage by enforcing policies matching sensitive information types, whatever the types. Relation: Partial. |
 | EXO-1.1 Mailbox Audit Logging Enabled | `MS.EXO.13.1v1` | SHALL | same | Mailbox auditing enabled; NRG also checks the audit bypass list. |
 | EXO-1.2 SMTP Client Authentication Disabled | `MS.EXO.5.1v1` | SHALL | same | SMTP AUTH disabled. |
 | EXO-1.4 DKIM Signing Enabled for All Domains | `MS.EXO.3.1v1` | SHOULD | same | DKIM signing enabled. |
@@ -82,7 +82,7 @@ The old rule id no longer exists and the migrated range does not describe what t
 | DEF-2.5 High Confidence Spam to Quarantine | `MS.SECURITYSUITE.6.1v1` | SHALL | `MS.DEFENDER.1.1v1` (migrated) | High-confidence spam to quarantine overlaps "spam and phishing are not delivered to the inbox" (6.1). |
 | DEF-3.4 Defender Alert Email Notifications Configured | `MS.SECURITYSUITE.4.2v1` | SHOULD | `MS.DEFENDER.5.2v1` (migrated) | Alerts sent to a monitored address: NRG judges recipients and, once configured, the NRG monitoring address. |
 | DEF-4.2 DLP Policy Uses Sensitive Information Types | `MS.SECURITYSUITE.3.1v1` | SHALL | `MS.DEFENDER.4.1v2` (migrated) | SCuBA requires the policy to block named types (card numbers, ITIN, SSN and others); NRG verifies detection of sensitive information types in enforcing rules and reports blocking only when read. |
-| DEF-4.5 Endpoint DLP Policy Active on Managed Devices | `MS.SECURITYSUITE.3.2v1` | SHOULD | `MS.DEFENDER.4.2v1` (migrated) | Devices are one of the locations SCuBA 3.2 lists; NRG checks endpoint DLP on managed devices. |
+| DEF-4.5 Endpoint DLP Policy Active on Managed Devices | `MS.SECURITYSUITE.3.2v1` | SHOULD | `MS.DEFENDER.4.2v1` (migrated) | Devices are one of the locations SCuBA 3.2 lists, and 3.2 also needs one enabled rule matching SSN, ITIN and Credit Card Number; NRG checks endpoint DLP on managed devices. |
 | DEF-4.7 Safe Links Protects Office Applications | `MS.SECURITYSUITE.7.1v1` | SHOULD | `MS.DEFENDER.1.3v1` (migrated) | Safe Links for Office applications overlaps URL block-list comparison (7.1) in Office documents. |
 | DNS-1.1 SPF Record Published | `MS.EXO.2.2v3` | SHALL | `MS.EXO.2.2v2` (migrated) | v3 accepts a hard or soft fail and is the current rule; NRG judges that an SPF record is published and its policy ending. |
 | DNS-1.2 DKIM Records Published | `MS.EXO.3.1v1` | SHOULD | same | NRG verifies the published selector records; SCuBA verifies DKIM is enabled in Exchange Online for each domain. |

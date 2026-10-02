@@ -405,9 +405,9 @@
       "CitedIdStatus": "migrated",
       "MigrationNewId": "MS.SECURITYSUITE.3.2v1",
       "Current": "MS.SECURITYSUITE.3.2v1",
-      "Relation": "Equivalent",
+      "Relation": "Partial",
       "RequirementStrength": "SHOULD",
-      "Note": "DLP applied to Exchange, OneDrive, SharePoint, Teams (and Devices is DEF-4.5). NRG counts only enforcing policies."
+      "Note": "ScubaGear 3.2 is met only when ONE enabled rule, in an Enable-mode policy, matches all three of SSN, ITIN and Credit Card Number, and that policy's location is All for each of Exchange, OneDrive, SharePoint, Teams and Devices. NRG judges workload coverage: enforcing policies with whole-workload scope whose rules match sensitive information types, whatever the types. Policies can cover every workload and still fail 3.2 when no single rule matches all three named types."
     },
     {
       "Control": "DEF-4.2",
@@ -451,7 +451,7 @@
       "Current": "MS.SECURITYSUITE.3.2v1",
       "Relation": "Partial",
       "RequirementStrength": "SHOULD",
-      "Note": "Devices are one of the locations SCuBA 3.2 lists; NRG checks endpoint DLP on managed devices."
+      "Note": "Devices are one of the locations SCuBA 3.2 lists, and 3.2 also needs one enabled rule matching SSN, ITIN and Credit Card Number; NRG DEF-4.5 checks that endpoint DLP policies are active on managed devices."
     },
     {
       "Control": "DEF-4.7",
