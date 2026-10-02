@@ -528,10 +528,35 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
                 Test-NRGWebSegment -Value $_ | Should -BeTrue
             }
 
-            It 'rejects <_>' -ForEach @(
-                '..', '.', '../x', '..\x', 'a/b', 'a\b', '/', '\', '.hidden', '-x', 'a b', 'a%2Fb', 'a:b', 'a;b', 'a*b', 'a?b', "a`0b", "a`nb", "a`tb",
-                'a..b', '....', 'index.html::$DATA', ('x' * 256)) {
-                Test-NRGWebSegment -Value $_ | Should -BeFalse
+            # Each case carries a printable Label: the name of a test goes into the
+            # NUnit XML report, and a literal NUL in it makes Pester's own export
+            # throw ("hexadecimal value 0x00, is an invalid character") AFTER every
+            # test has passed. The raw value stays in Value, where it is data.
+            It 'rejects <Label>' -ForEach @(
+                @{ Label = '..';                    Value = '..' }
+                @{ Label = '.';                     Value = '.' }
+                @{ Label = '../x';                  Value = '../x' }
+                @{ Label = '..\x';                  Value = '..\x' }
+                @{ Label = 'a/b';                   Value = 'a/b' }
+                @{ Label = 'a\b';                   Value = 'a\b' }
+                @{ Label = '/';                     Value = '/' }
+                @{ Label = '\';                     Value = '\' }
+                @{ Label = '.hidden';               Value = '.hidden' }
+                @{ Label = '-x';                    Value = '-x' }
+                @{ Label = 'a b (space)';           Value = 'a b' }
+                @{ Label = 'a%2Fb';                 Value = 'a%2Fb' }
+                @{ Label = 'a:b';                   Value = 'a:b' }
+                @{ Label = 'a;b';                   Value = 'a;b' }
+                @{ Label = 'a*b';                   Value = 'a*b' }
+                @{ Label = 'a?b';                   Value = 'a?b' }
+                @{ Label = 'a NUL b';               Value = "a`0b" }
+                @{ Label = 'a LF b';                Value = "a`nb" }
+                @{ Label = 'a TAB b';               Value = "a`tb" }
+                @{ Label = 'a..b';                  Value = 'a..b' }
+                @{ Label = '....';                  Value = '....' }
+                @{ Label = 'index.html::$DATA';     Value = 'index.html::$DATA' }
+                @{ Label = '256 characters (over the limit)'; Value = ('x' * 256) }) {
+                Test-NRGWebSegment -Value $Value | Should -BeFalse
             }
 
             It 'rejects null and empty' {
@@ -565,17 +590,43 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
                     -Because 'a flat run is not under a tenant folder'
             }
 
-            It 'refuses a folder segment <_>' -ForEach @(
-                '..', '../x', '..\x', 'a/b', 'a\b', '', '.hidden', '-x', 'a b', 'x%2Fy', '/etc', 'C:\x', 'C:', "a`0b", '..%2F', '....', 'a..b') {
-                $r = & $script:Resolve $_ $script:Id 'Report' ''
+            It 'refuses a folder segment <Label>' -ForEach @(
+                @{ Label = '..';             Value = '..' }
+                @{ Label = '../x';           Value = '../x' }
+                @{ Label = '..\x';           Value = '..\x' }
+                @{ Label = 'a/b';            Value = 'a/b' }
+                @{ Label = 'a\b';            Value = 'a\b' }
+                @{ Label = '(empty)';        Value = '' }
+                @{ Label = '.hidden';        Value = '.hidden' }
+                @{ Label = '-x';             Value = '-x' }
+                @{ Label = 'a b (space)';    Value = 'a b' }
+                @{ Label = 'x%2Fy';          Value = 'x%2Fy' }
+                @{ Label = '/etc';           Value = '/etc' }
+                @{ Label = 'C:\x';           Value = 'C:\x' }
+                @{ Label = 'C:';             Value = 'C:' }
+                @{ Label = 'a NUL b';        Value = "a`0b" }
+                @{ Label = '..%2F';          Value = '..%2F' }
+                @{ Label = '....';           Value = '....' }
+                @{ Label = 'a..b';           Value = 'a..b' }) {
+                $r = & $script:Resolve $Value $script:Id 'Report' ''
                 $r.Status | Should -BeIn @('BadRequest', 'NotFound')
                 $r.Path | Should -BeNullOrEmpty
                 $r.HttpStatus | Should -BeIn @(400, 404)
             }
 
-            It 'refuses a run id <_>' -ForEach @(
-                '..', '../x', '..\x', '../../secret', 'a/b', 'a\b', '', '.hidden', 'a b', "x`0y", 'a..b') {
-                $r = & $script:Resolve '_flat' $_ 'Report' ''
+            It 'refuses a run id <Label>' -ForEach @(
+                @{ Label = '..';             Value = '..' }
+                @{ Label = '../x';           Value = '../x' }
+                @{ Label = '..\x';           Value = '..\x' }
+                @{ Label = '../../secret';   Value = '../../secret' }
+                @{ Label = 'a/b';            Value = 'a/b' }
+                @{ Label = 'a\b';            Value = 'a\b' }
+                @{ Label = '(empty)';        Value = '' }
+                @{ Label = '.hidden';        Value = '.hidden' }
+                @{ Label = 'a b (space)';    Value = 'a b' }
+                @{ Label = 'x NUL y';        Value = "x`0y" }
+                @{ Label = 'a..b';           Value = 'a..b' }) {
+                $r = & $script:Resolve '_flat' $Value 'Report' ''
                 $r.Status | Should -BeIn @('BadRequest', 'NotFound')
                 $r.Path | Should -BeNullOrEmpty
             }
