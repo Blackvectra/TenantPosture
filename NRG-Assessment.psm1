@@ -197,6 +197,9 @@ $script:ExportedFunctions = @(
     'Repair-NRGModuleHealth',
     'Get-NRGModuleInstallScope', 'Get-NRGExoModuleFloor', 'Get-NRGCloudFileHint', 'Get-NRGMsalConflictHint', 'Get-NRGGapSummary', 'Format-NRGGapSummary', 'Get-NRGControlViewMap', 'Get-NRGEvidenceLimitMap', 'Get-NRGEvidenceLimitNote', 'Get-NRGEvidenceLimitMd', 'Test-NRGSafeModuleVersionPath', 'Get-NRGConnectErrorText', 'Get-NRGExoConnectHint',
     'Get-NRGControlAutomationAudit',
+    # ── Distribution-list scan, the -DistributionListsOnly mode: read-only and Exchange Online only ──
+    'Invoke-NRGCollectDistributionLists', 'Test-NRGDistributionLists', 'Get-NRGDistributionListBaseline', 'Get-NRGDistributionListStandards',
+    'Get-NRGDistributionListWorksheet', 'Publish-NRGDistributionListWorksheet', 'Invoke-NRGDistributionListScan', 'Connect-NRGExchangeOnly',
 
     # ── Collectors — AAD ──────────────────────────────────────────────────────
     'Invoke-NRGCollectAADAuthPolicies', 'Invoke-NRGCollectAADCAPolicies',

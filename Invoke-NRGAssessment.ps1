@@ -275,6 +275,25 @@ param(
     # them. Implied by -AllFiles.
     [switch] $ImprovementPlan,
 
+    # The distribution-list scan. Signs in to Exchange Online ONLY (no Graph, Purview, Teams or
+    # SharePoint), lists every distribution list with its members, settings and who can reach it
+    # (including the tenant-wide filtering bypasses that let mail past spam filtering), compares
+    # each setting with a cited recommendation, and writes <tenant>-<time>-distribution-lists.txt
+    # and .csv for an administrator to harden the lists. READ-ONLY: it never creates, adds,
+    # removes or changes a user, group, rule or setting; the commands in the worksheet are text a
+    # human runs. Every other area is not assessed and the worksheet says so. Reuses -UserPrincipalName,
+    # -TenantDomain, and the app-only parameters; -OutputPath applies. Not implied by -AllFiles.
+    [switch] $DistributionListsOnly,
+
+    # Members read per list in the distribution-list scan. A larger list is reported as "more than N",
+    # never as complete.
+    [ValidateRange(1, 50000)]
+    [int] $MaxMembersPerList = 500,
+
+    # Lists read in one distribution-list scan; a tenant with more is reported as truncated.
+    [ValidateRange(1, 100000)]
+    [int] $MaxLists = 5000,
+
     [switch] $WhatIfConnections,
 
     # GDAP batch mode establishes ONE Graph/EXO/Teams/IPPS session meant to be
@@ -509,6 +528,39 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
         Write-Host "  [i] $TenantDomain is not onboarded for app-only auth. Falling back to interactive." -ForegroundColor DarkGray
         Write-Host "      Onboard it once with:  .\Invoke-NRGAssessment.ps1 -RegisterApp -TenantDomain $TenantDomain" -ForegroundColor DarkGray
     }
+}
+
+# -DistributionListsOnly short-circuits the full assessment, like -Web and -RegisterApp above: it needs
+# Exchange Online and nothing else, so it skips the Graph / Teams / Purview prerequisite check and every
+# collector, evaluator and publisher the full run uses. It is READ-ONLY (Get-* cmdlets only) and says in
+# its output that every other area was not assessed.
+if ($DistributionListsOnly) {
+    $exoFloor = Get-NRGExoModuleFloor
+    if (-not $exoFloor.Supported) { Write-Host "  [!] $($exoFloor.Reason)" -ForegroundColor Red }
+    if ($exoFloor.StoreBuild) {
+        Write-Host "  [!] Microsoft Store build of PowerShell detected (`$PSHOME is under WindowsApps); the Exchange Online module has failed to import from it. Install the MSI build: winget install --id Microsoft.PowerShell --source winget" -ForegroundColor Yellow
+    }
+    $exoModule = Get-Module -ListAvailable -Name ExchangeOnlineManagement -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
+    if (-not $exoModule) {
+        Write-Host "  [!] ExchangeOnlineManagement is not installed. Run .\Install-NRGPrerequisites.ps1, then retry." -ForegroundColor Red
+        exit 1
+    }
+    if (-not $TenantDomain) {
+        Write-Host "  [i] No -TenantDomain given: the tool cannot confirm WHICH tenant you signed in to. The worksheet names the connected tenant; check it before you act on it." -ForegroundColor Yellow
+    }
+    $dlParams = @{ OutputPath = $OutputPath; MaxMembersPerList = $MaxMembersPerList; MaxLists = $MaxLists }
+    if ($TenantDomain) { $dlParams['TenantDomain'] = $TenantDomain }
+    if ($AppId -and $TenantId -and $CertificateThumbprint) {
+        $dlParams['AppId'] = $AppId; $dlParams['TenantId'] = $TenantId; $dlParams['CertificateThumbprint'] = $CertificateThumbprint
+        if ($OrganizationDomain) { $dlParams['OrganizationDomain'] = $OrganizationDomain }
+    } else {
+        if ($UserPrincipalName)  { $dlParams['UserPrincipalName']  = $UserPrincipalName }
+        if ($targetTenantId)     { $dlParams['ExpectedTenantId']   = $targetTenantId }
+        if ($targetDelegatedOrg) { $dlParams['DelegatedOrganization'] = $targetDelegatedOrg }
+    }
+    if ($KeepSession) { $dlParams['KeepSession'] = $true }
+    $dlResult = Invoke-NRGDistributionListScan @dlParams
+    exit ([int]$dlResult.ExitCode)
 }
 
 # MSP-wide default: EdrStack in Config/branding.psd1 declares the third-party

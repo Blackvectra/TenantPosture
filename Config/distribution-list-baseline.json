@@ -1,0 +1,252 @@
+{
+  "_comment": "Recommendation catalog for the distribution-list scan (Invoke-NRGAssessment.ps1 -DistributionListsOnly), read by Lib/Get-NRGDistributionListBaseline.ps1. ADVISORY and READ-ONLY: nothing here is scored in the assessment, and nothing here is ever executed. AdminCommands are TEXT printed in the worksheet for a human to review and run. Every recommended value is either Microsoft's documented default or guidance (Basis 'Microsoft') or an NRG judgment (Basis 'NRG'). An NRG judgment is never invented here: it names a StandardKey in Config/nrg-standards.json, which ships empty until the owner approves it, and an empty standard means 'not assessed', never 'met'. Every SourceUrl was opened on Microsoft Learn on 2026-10-02. Nist80053 is NRG's own mapping of each setting to the 800-53 Rev 5 control whose text it fits; it is not a quotation of NIST and not a statement that NIST addresses distribution lists. No CISA ScubaGear or CIS item written for distribution lists was found (ScubaGear 2.0.0 has none), so no such id is cited anywhere: the worksheet prints 'no framework item verified' instead of guessing.",
+  "Verified": "2026-10-02",
+  "NistMappingNote": "NRG mapping of the setting to an 800-53 Rev 5 control, for the reader's own documentation. Not a quotation of NIST.",
+  "FrameworkNote": "no framework item verified",
+  "recommendations": [
+    {
+      "ControlId": "DL-1.1",
+      "Kind": "Finding",
+      "Title": "Distribution list accepts mail from outside senders",
+      "Setting": "RequireSenderAuthenticationEnabled",
+      "AppliesTo": ["Distribution", "Dynamic"],
+      "Recommended": "True (only senders inside the organization)",
+      "Basis": "Microsoft",
+      "Severity": "High",
+      "Why": "Microsoft documents that new distribution lists accept mail only from senders inside the organization by default, and that the other option ('Senders inside and outside of my organization') allows anyone, including people on the Internet, to send to the list. DMARC does not close this: it is evaluated for mail that claims your own domain in the From address, and it is not a recipient-side limit on who may send to a list. An all-staff list reachable from outside is reachable by whoever finds its address.",
+      "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
+      "AlsoSee": ["https://learn.microsoft.com/exchange/mail-flow/mail-routing/recipient-resolution"],
+      "Nist80053": ["AC-3", "SI-8"],
+      "AdminCommands": {
+        "Distribution": "Set-DistributionGroup -Identity {List} -RequireSenderAuthenticationEnabled $true",
+        "Dynamic": "Set-DynamicDistributionGroup -Identity {List} -RequireSenderAuthenticationEnabled $true"
+      }
+    },
+    {
+      "ControlId": "DL-1.2",
+      "Kind": "Context",
+      "EmitsFinding": false,
+      "Title": "Allowed senders limit who can send to the list",
+      "Setting": "AcceptMessagesOnlyFromSendersOrMembers",
+      "AppliesTo": ["Distribution", "Dynamic"],
+      "Recommended": "A specified-senders list when the list must accept outside mail",
+      "Basis": "Microsoft",
+      "Severity": "Informational",
+      "Why": "Microsoft documents that an allowed-senders list limits who can send to the group further: if you add senders to it, they are the only ones who can send, and mail from anyone not on the list is rejected. It is the documented way to narrow a list that must accept outside mail. Microsoft also notes that with 'only senders inside my organization' selected, mail from a mail contact is rejected even when the contact is on the list.",
+      "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
+      "AlsoSee": ["https://learn.microsoft.com/exchange/mail-flow/mail-routing/recipient-resolution"],
+      "Nist80053": ["AC-3"],
+      "AdminCommands": {
+        "Distribution": "Set-DistributionGroup -Identity {List} -AcceptMessagesOnlyFromSendersOrMembers '<sender or group>'",
+        "Dynamic": "Set-DynamicDistributionGroup -Identity {List} -AcceptMessagesOnlyFromSendersOrMembers '<sender or group>'"
+      }
+    },
+    {
+      "ControlId": "DL-1.3",
+      "Kind": "Context",
+      "EmitsFinding": false,
+      "Title": "Hiding a list from the address list does not stop mail reaching it",
+      "Setting": "HiddenFromAddressListsEnabled",
+      "AppliesTo": ["Distribution", "Dynamic"],
+      "Recommended": "Not an access control; do not rely on it",
+      "Basis": "Microsoft",
+      "Severity": "Informational",
+      "Why": "Microsoft documents that even when a list is hidden from the global address list, people can still send mail to it by typing the email address. A hidden list is not a protected list.",
+      "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
+      "AlsoSee": [],
+      "Nist80053": ["AC-3"],
+      "AdminCommands": {}
+    },
+    {
+      "ControlId": "DL-2.1",
+      "Kind": "Finding",
+      "Title": "Distribution list has no owner",
+      "Setting": "ManagedBy",
+      "AppliesTo": ["Distribution", "Dynamic"],
+      "Recommended": "At least one owner",
+      "Basis": "Microsoft",
+      "Severity": "Medium",
+      "Why": "Microsoft states that each distribution list must have at least one owner. An ownerless list has no one accountable for who is in it, who may join, or who approves moderated mail.",
+      "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
+      "AlsoSee": [],
+      "Nist80053": ["AC-2"],
+      "AdminCommands": {
+        "Distribution": "Set-DistributionGroup -Identity {List} -ManagedBy '<owner>'",
+        "Dynamic": "Set-DynamicDistributionGroup -Identity {List} -ManagedBy '<owner>'"
+      }
+    },
+    {
+      "ControlId": "DL-2.2",
+      "Kind": "Finding",
+      "Title": "Moderation is on but no one is named to approve mail",
+      "Setting": "ModerationEnabled / ModeratedBy / ManagedBy",
+      "AppliesTo": ["Distribution", "Dynamic"],
+      "Recommended": "A named moderator, or an owner to receive approvals, whenever moderation is on",
+      "Basis": "Microsoft",
+      "Severity": "Low",
+      "Why": "Moderation is off by default. Microsoft documents that when moderation is on and no moderator is selected, messages to the group are sent to the group owners for approval. A moderated list with no moderator and no owner has no one to approve its mail.",
+      "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
+      "AlsoSee": [],
+      "Nist80053": ["AC-3"],
+      "AdminCommands": {
+        "Distribution": "Set-DistributionGroup -Identity {List} -ModeratedBy '<moderator>'",
+        "Dynamic": "Set-DynamicDistributionGroup -Identity {List} -ModeratedBy '<moderator>'"
+      }
+    },
+    {
+      "ControlId": "DL-2.3",
+      "Kind": "Finding",
+      "Title": "Distribution list has external members",
+      "Setting": "Members (external mail contacts, mail users, guests)",
+      "AppliesTo": ["Distribution", "Dynamic"],
+      "Recommended": "Per the approved NRG standard for external members",
+      "Basis": "NRG",
+      "StandardKey": "DistributionListExternalMembers",
+      "Severity": "Medium",
+      "Why": "Microsoft's page on managing distribution lists names mail contacts and mail users among the supported member types, which is how outside addresses become members, and makes no recommendation about outside members either way. Whether outside members are acceptable is an NRG judgment, so the finding is made only against an approved standard. A list that holds outside addresses sends them everything mailed to it, including internal replies and attachments.",
+      "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
+      "AlsoSee": [],
+      "Nist80053": ["AC-2", "AC-3"],
+      "AdminCommands": {
+        "Distribution": "Remove-DistributionGroupMember -Identity {List} -Member {Member}",
+        "Dynamic": ""
+      }
+    },
+    {
+      "ControlId": "DL-2.4",
+      "Kind": "Finding",
+      "Title": "Distribution list has more members than the approved cap",
+      "Setting": "Members (count)",
+      "AppliesTo": ["Distribution", "Dynamic"],
+      "Recommended": "At or under the approved NRG maximum",
+      "Basis": "NRG",
+      "StandardKey": "DistributionListMaxMembers",
+      "Severity": "Low",
+      "Why": "Microsoft's page on managing distribution lists makes no recommendation about maximum membership. A cap is an NRG judgment about how large a blast radius one address should have, so the finding is made only against an approved number. For a dynamic list the count is the calculated membership Microsoft stores on the group, refreshed about every 24 hours (or, when that cannot be read, a preview of its filter), so it can differ from who receives mail sent now.",
+      "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
+      "AlsoSee": ["https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-dynamic-distribution-groups/create-manage-dynamic-distribution-groups"],
+      "Nist80053": ["AC-6"],
+      "AdminCommands": {}
+    },
+    {
+      "ControlId": "DL-2.5",
+      "Kind": "Finding",
+      "Title": "Anyone can join the distribution list",
+      "Setting": "MemberJoinRestriction",
+      "AppliesTo": ["Distribution"],
+      "Recommended": "Per the approved NRG standard for join restriction",
+      "Basis": "NRG",
+      "StandardKey": "DistributionListMemberJoinRestriction",
+      "Severity": "Medium",
+      "Why": "Microsoft documents three join settings: Open (anyone can join without owner approval), Closed (only owners can add members) and ApprovalRequired (anyone may request, owners approve). Microsoft's Exchange Server 2013 page names Open as the default; the Exchange Online page lists the values without naming one, so this tool reads the actual value and recommends none of its own. Which setting NRG requires is an NRG judgment, so the finding is made only against an approved standard. An open list lets any user add themselves and receive everything sent to it.",
+      "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
+      "AlsoSee": ["https://learn.microsoft.com/exchange/manage-distribution-groups-exchange-2013-help"],
+      "Nist80053": ["AC-6", "AC-2"],
+      "AdminCommands": {
+        "Distribution": "Set-DistributionGroup -Identity {List} -MemberJoinRestriction {Value}",
+        "Dynamic": ""
+      }
+    },
+    {
+      "ControlId": "DL-3.1",
+      "Kind": "Finding",
+      "Title": "A mail flow rule bypasses spam filtering (SCL -1) on a weak condition",
+      "Setting": "Get-TransportRule: SetSCL -1 and its conditions",
+      "AppliesTo": ["Tenant"],
+      "Recommended": "No SCL -1 rule on a sender domain alone, on no sender condition, or on a domain you own; any bypass rule should carry a further condition such as Authentication-Results dmarc=pass or a restricted source IP",
+      "Basis": "Microsoft",
+      "Severity": "High",
+      "Why": "Microsoft: never configure a mail flow rule with only the sender domain as the condition to skip spam filtering, because that significantly increases the chance an attacker can spoof the domain, skip all spam filtering, and skip sender authentication checks. Microsoft also says not to use domains you own (accepted domains) or popular domains as conditions. A bypass rule applies to every recipient it matches, so it reaches every distribution list in scope of the rule. SCL -1 overrides spam filtering only: it cannot bypass malware or high confidence phishing filtering.",
+      "SourceUrl": "https://learn.microsoft.com/defender-office-365/create-safe-sender-lists-in-office-365",
+      "AlsoSee": ["https://learn.microsoft.com/defender-office-365/anti-spam-policies-troubleshooting", "https://learn.microsoft.com/exchange/security-and-compliance/mail-flow-rules/use-rules-to-set-scl"],
+      "Nist80053": ["SI-8", "SC-7"],
+      "AdminCommands": {
+        "Tenant": "Get-TransportRule | Where-Object {$_.SetSCL -ne $null} | Format-Table Name, State, Priority, SetSCL"
+      },
+      "RuleCommand": "Disable-TransportRule -Identity {Value}"
+    },
+    {
+      "ControlId": "DL-3.2",
+      "Kind": "Finding",
+      "Title": "IP Allow List skips spam filtering for the listed addresses",
+      "Setting": "Get-HostedConnectionFilterPolicy: IPAllowList",
+      "AppliesTo": ["Tenant"],
+      "Recommended": "Empty, or as few entries as possible, each /24 or smaller, none from consumer or shared infrastructure, reviewed regularly",
+      "Basis": "Microsoft",
+      "Severity": "Medium",
+      "Why": "Microsoft: keep the IP Allow List to a minimum, be as restrictive as possible, recommend an address range of /24 or less, do not use ranges that belong to consumer services or shared infrastructure, and review entries regularly. Mail from an allowed address skips spam filtering for every recipient, including every distribution list. Microsoft's own pages differ on whether such mail can still fail DMARC: the anti-spam troubleshooting page says the IP Allow List does not override DMARC failures, while the allowlist page says mail from allowed IPs skips SPF, DKIM and DMARC checks. The tool treats an allowed address as a spam-filtering bypass either way. Malware and high confidence phishing are still filtered.",
+      "SourceUrl": "https://learn.microsoft.com/defender-office-365/create-safe-sender-lists-in-office-365",
+      "AlsoSee": ["https://learn.microsoft.com/defender-office-365/connection-filter-policies-configure", "https://learn.microsoft.com/defender-office-365/anti-spam-policies-troubleshooting"],
+      "Nist80053": ["SC-7", "SI-8"],
+      "AdminCommands": {
+        "Tenant": "Get-HostedConnectionFilterPolicy -Identity Default | Format-List IPAllowList"
+      },
+      "RuleCommand": "Set-HostedConnectionFilterPolicy -Identity Default -IPAllowList @{Remove={Value}}"
+    },
+    {
+      "ControlId": "DL-3.3",
+      "Kind": "Finding",
+      "Title": "Anti-spam policy lists allowed senders or allowed domains",
+      "Setting": "Get-HostedContentFilterPolicy: AllowedSenders / AllowedSenderDomains",
+      "AppliesTo": ["Tenant"],
+      "Recommended": "None configured; if one is unavoidable, temporary and never a popular domain",
+      "Basis": "Microsoft",
+      "Severity": "Medium",
+      "Why": "Microsoft: avoid allowed sender and allowed domain lists in anti-spam policies if at all possible, because senders on them bypass spam, spoof and phishing protection (except high confidence phishing); the method is best used for temporary testing only, and attackers can spoof allowed domains. Never add common domains such as microsoft.com or office.com. By default these lists are not configured in the default anti-spam policy.",
+      "SourceUrl": "https://learn.microsoft.com/defender-office-365/anti-spam-protection-about",
+      "AlsoSee": ["https://learn.microsoft.com/defender-office-365/create-safe-sender-lists-in-office-365", "https://learn.microsoft.com/defender-office-365/anti-spam-policies-troubleshooting"],
+      "Nist80053": ["SI-8"],
+      "AdminCommands": {
+        "Tenant": "Get-HostedContentFilterPolicy | Format-List Name, AllowedSenders, AllowedSenderDomains"
+      },
+      "RuleCommand": "Set-HostedContentFilterPolicy -Identity {Policy} -{Parameter} @{Remove={Value}}"
+    },
+    {
+      "ControlId": "DL-3.4",
+      "Kind": "Finding",
+      "Title": "One of the tenant's own domains is on an allow list",
+      "Setting": "Transport rule SenderDomainIs and anti-spam allowed senders/domains, against Get-AcceptedDomain",
+      "AppliesTo": ["Tenant"],
+      "Recommended": "No accepted domain on any allow list or bypass rule condition",
+      "Basis": "Microsoft",
+      "Severity": "Medium",
+      "Why": "Microsoft: do not use domains you own (accepted domains) as conditions in mail flow rules, because doing so creates opportunities for attackers to send email that would otherwise be filtered. For allowed sender and allowed domain lists in anti-spam policies, Microsoft notes that since September 2022 allowed senders, domains and subdomains in your own accepted domains must pass email authentication checks to skip spam filtering, so spoofed mail claiming your domain does not skip filtering by that route. An own-domain bypass rule carries no such note. Either way, an own-domain entry is a standing exception to the filtering your DMARC policy relies on.",
+      "SourceUrl": "https://learn.microsoft.com/defender-office-365/create-safe-sender-lists-in-office-365",
+      "AlsoSee": ["https://learn.microsoft.com/defender-office-365/anti-spam-protection-about"],
+      "Nist80053": ["SI-8"],
+      "AdminCommands": {}
+    },
+    {
+      "ControlId": "DL-3.5",
+      "Kind": "Context",
+      "EmitsFinding": true,
+      "Title": "Outlook Safe Senders (per mailbox) can bypass spam filtering",
+      "Setting": "Get-MailboxJunkEmailConfiguration: TrustedSendersAndDomains (not read)",
+      "AppliesTo": ["Tenant"],
+      "Recommended": "Not assessed by this scan",
+      "Basis": "Microsoft",
+      "Severity": "Informational",
+      "Why": "Microsoft documents that entries in a user's Safe Senders list make senders skip spam filtering for that mailbox, that this method creates a high risk of attackers delivering mail that would otherwise be filtered, and that it is not desirable in most situations. The list lives in each mailbox, so reading it means one query per mailbox; this scan does not do that, so the exposure is unmeasured, not absent.",
+      "SourceUrl": "https://learn.microsoft.com/defender-office-365/create-safe-sender-lists-in-office-365",
+      "AlsoSee": ["https://learn.microsoft.com/defender-office-365/anti-spam-policies-troubleshooting"],
+      "Nist80053": ["SI-8"],
+      "AdminCommands": {}
+    },
+    {
+      "ControlId": "DL-4.1",
+      "Kind": "Context",
+      "EmitsFinding": true,
+      "Title": "Lookalike domains and display-name impersonation are not covered by DMARC reject",
+      "Setting": "Not detectable by this scan",
+      "AppliesTo": ["Tenant"],
+      "Recommended": "Not assessed by this scan",
+      "Basis": "Microsoft",
+      "Severity": "Informational",
+      "Why": "DMARC validates mail that claims your domain in the From address. A message from a different, real domain that looks like yours, or that uses an executive's display name from an unrelated address, is not a DMARC failure for your domain. Microsoft documents that impersonation can pass SPF, DKIM and DMARC when the attacker publishes valid DNS records for a lookalike domain, and that impersonation protection is part of Defender for Office 365 anti-phishing policies. This scan cannot detect either case, so a clean worksheet does not mean a list is safe from them.",
+      "SourceUrl": "https://learn.microsoft.com/defender-office-365/anti-phishing-policies-about",
+      "AlsoSee": ["https://learn.microsoft.com/defender-office-365/email-authentication-dmarc-configure"],
+      "Nist80053": ["SI-8"],
+      "AdminCommands": {}
+    }
+  ]
+}

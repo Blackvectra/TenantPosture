@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+- **Distribution-list scan (`-DistributionListsOnly`).** NRG hardens distribution lists as a service
+  because a list can be reached by spoofed or outside mail even when the domain's DMARC policy is
+  reject: DMARC judges only mail that claims your own domain in the From address, and mail can also
+  reach a list through a filtering bypass. The new mode signs in to Exchange Online only and writes a
+  worksheet (`<tenant>-<time>-distribution-lists.txt` and `.csv`) showing, per list, the members, the
+  current settings, whether mail can reach it from outside or through a bypass, and how that compares
+  with a cited recommendation. **Read-only without exception:** it lists members and never creates,
+  adds, removes or changes a user, group, rule or setting. The commands in the worksheet are text for
+  an administrator to run with `-WhatIf` first; they are built only from a list's primary address,
+  quoted so a tenant-controlled name cannot break out of the command (a typographic quote or line
+  break is refused), and a spy test proves none is ever run.
+  `Collectors/EXO/Invoke-NRGCollectDistributionLists.ps1` reads lists, dynamic lists, bounded and
+  throttle-retried member lists (UPN and display name only; a dynamic list's members are the calculated list Microsoft stores on it, or a labeled filter preview when that cmdlet is unavailable), owners, delivery, moderation and join
+  settings, and the tenant-level bypass inputs: SCL -1 mail flow rules **with their conditions**
+  (EXO-Inventory keeps `SetSCL` but not the conditions), the IP Allow List, anti-spam allowed
+  senders and domains, and accepted domains. It reuses `EXO-MailboxConfig` and `EXO-ConnectionFilter`
+  when a full assessment already collected them. Every section publishes `SectionStatus`; a list
+  whose members could not be read says so and is never an empty list; a property Exchange omitted is
+  not-read, never the safe value (`RequireSenderAuthenticationEnabled` absent is not "authenticated
+  senders only"); a string `"False"` is parsed, not cast.
+  `Evaluators/Test-NRGDistributionLists.ps1` emits the `DL-*` series (not in `controls.json`, so
+  nothing is scored; deliberately not named `Test-NRGControl*`, which a full assessment runs).
+  `Config/distribution-list-baseline.json` holds each recommendation with its Microsoft Learn page and
+  the tool's own NIST SP 800-53 Rev 5 mapping, labeled as a mapping and not a quotation of NIST. **No
+  CISA ScubaGear or CIS id is cited**: ScubaGear 2.0.0 has no distribution-list rule and no CIS item
+  was found, so the worksheet prints "no framework item verified". Three NRG judgments (a member cap,
+  banning external members, a required join setting) are not Microsoft recommendations; they live in
+  `Config/nrg-standards.json`, **ship empty**, and read "Not assessed" until the owner approves a value.
+  Where Microsoft's own pages disagree it says so rather than choosing: the troubleshooting page says
+  the IP Allow List does not override DMARC failures and the allowlist page says mail from allowed IPs
+  skips SPF, DKIM and DMARC. An own-domain entry on an anti-spam allow list carries Microsoft's
+  September 2022 note that it must pass authentication, so it is Partial, not the Gap an own-domain
+  bypass-rule condition is. Microsoft's Exchange Online page does not name Open as the join default
+  (only the Exchange Server 2013 page does), so the catalog claims none. The files are written through
+  the restricted-file writer; a spreadsheet formula in a list name is neutralized and terminal escapes
+  are stripped. 8 new exports, 2 new suites (123 tests). 8 deliberate breakages of the code (a safe default for an omitted setting, a failed member read marked collected, a command built from the list name, an unneutralized spreadsheet cell, and four more) were each caught by a test. Review found two real defects in the first version, both fixed and pinned: the command builder substituted placeholders one after another, so a tenant address containing the text `{Member}` could end the quoted literal early (it is now one regex pass); and the guard against typographic quotes was typed with those characters in the source, which PowerShell reads as quote delimiters even inside a single-quoted string, so it silently refused nothing (it is now built from code points, and a static test fails on any such character in a file the scan loads).
+  **Not yet run against a live tenant** (see `docs/KNOWN-ISSUES.md`); the collector is tested against a
+  stubbed Exchange boundary fed raw cmdlet shapes. Merge note: this edits `Config/nrg-standards.json`
+  and `Lib/Get-NRGStandards.ps1`, which the standards-approval PR also edits; the conflict is two
+  appended keys and one added line.
+
 - **The first email assessment on a real mailbox raised two false indicators.** (1) EMAIL-4.1 printed
   "UNVERIFIED publisher" for every OAuth grant whose app lookup failed; that lookup needs
   Directory.Read.All, which a delegated user sign-in never has, so Microsoft's own apps were

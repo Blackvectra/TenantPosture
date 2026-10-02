@@ -17,6 +17,7 @@ coming back to this after six months, start here.
 | Hand a client a NIST document | Add `-NISTMatrix` |
 | Get closer to NIST, in order | Add `-ImprovementPlan` |
 | Build a CMMC / 800-171 plan | Add `-SSP` |
+| Harden a client's distribution lists | `Invoke-NRGAssessment.ps1 -DistributionListsOnly -UserPrincipalName admin@client.com -TenantDomain client.com` |
 | Find out who got phished | `Invoke-NRGSignInTriage.ps1` |
 | Investigate one mailbox | `Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@client.com` |
 | Print device guidance (no scan) | `New-NRGDeviceGuide.ps1` |
@@ -60,6 +61,25 @@ Parameters worth knowing:
 | `-IncludePurview` | Purview is **skipped by default** (EOM WAM crash). Opt in. |
 | `-FailOnCritical / -FailOnHigh / -FailOnScoreBelow` | Non-zero exit for CI or Task Scheduler. |
 | `-JsonOnly` | Machine record only, no report. |
+
+### `-DistributionListsOnly` — harden the distribution lists
+
+DMARC judges only mail that claims your own domain, so it does not make an "all staff"
+list safe: a list can accept mail from anyone, and mail can reach it through a filtering
+bypass. This mode shows, per list, who is in it, its settings, whether mail can reach it
+from outside or through a bypass, and how that compares with a cited recommendation.
+
+```powershell
+.\Invoke-NRGAssessment.ps1 -DistributionListsOnly -UserPrincipalName admin@client.com -TenantDomain client.com
+```
+
+**Needs:** an Exchange Online sign-in and nothing else (no Graph, Purview, Teams or SharePoint).
+**Gives you:** `<tenant>-<timestamp>-distribution-lists.txt` and `.csv` in the output folder.
+**Read-only:** it lists members and never changes anything. The commands in the worksheet are
+text for an administrator to run with `-WhatIf` first. Every other area is not assessed.
+Not yet run against a live tenant. See the README section for what it cannot see.
+
+---
 
 ### `Invoke-NRGBatchAssessment.ps1` — every client, one login
 
