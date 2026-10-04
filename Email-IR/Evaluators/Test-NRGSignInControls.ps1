@@ -22,7 +22,12 @@ function Clear-NRGSignInTriageState {
     $script:NRGSignInUserScores = @{}
 }
 
-# Internal helper: add to a user's IoC score with a reason tag
+# Internal helper: add to a user's IoC score with a reason tag.
+# Scoring rule: each DISTINCT reason counts once per user. The reasons shown are
+# deduplicated, so the score must be too: repeating one benign event (two
+# sign-ins from the same neighboring-state city, 35 + 35) stacked a user to the
+# Critical rank threshold (70) on a single observation. Different reasons (a
+# different location, a separate correlation, another address) still add up.
 function script:Add-NRGSignInScore {
     param([string] $UserPrincipalName, [int] $Points, [string] $Reason)
     if (-not $UserPrincipalName) { return }
@@ -35,10 +40,9 @@ function script:Add-NRGSignInScore {
             DisplayName       = $null
         }
     }
+    if ($Reason -and ($script:NRGSignInUserScores[$upn].Reasons -contains $Reason)) { return }
     $script:NRGSignInUserScores[$upn].Score += $Points
-    if ($Reason -and ($script:NRGSignInUserScores[$upn].Reasons -notcontains $Reason)) {
-        $script:NRGSignInUserScores[$upn].Reasons += $Reason
-    }
+    if ($Reason) { $script:NRGSignInUserScores[$upn].Reasons += $Reason }
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

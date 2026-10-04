@@ -243,4 +243,29 @@ Describe 'Review 106 — incident-response honesty' {
             (& $script:Finding 'SIGNIN-1.2').Severity | Should -Be 'Critical'
         }
     }
+    Context 'R2b: a repeated reason does not stack a user to Critical' {
+        BeforeAll {
+            $script:GeoRun = {
+                param([int] $AwayCount)
+                Clear-NRGState; Clear-NRGSignInTriageState
+                $now = (Get-Date).ToUniversalTime()
+                $ev = @(1..5 | ForEach-Object { @{ id = "h$_"; userPrincipalName = 'a@corp.example'; createdDateTime = $now.AddHours(-$_).ToString('o'); ipAddress = '198.51.100.1'; status = @{ errorCode = 0 }; location = @{ city = 'Fargo'; state = 'North Dakota'; countryOrRegion = 'US' } } })
+                $ev += @(1..$AwayCount | ForEach-Object { @{ id = "m$_"; userPrincipalName = 'b@corp.example'; createdDateTime = $now.AddMinutes(-$_).ToString('o'); ipAddress = '198.51.100.77'; status = @{ errorCode = 0 }; location = @{ city = 'Moorhead'; state = 'Minnesota'; countryOrRegion = 'US' } } })
+                & $script:Ok 'IR-SignIn-Recent' ([ordered]@{ WindowDays = 7; Count = $ev.Count; Truncated = $false; Events = $ev })
+                & $script:Ok 'IR-SignIn-AnonIp' ([ordered]@{ Count = 0; Truncated = $false; Events = @() })
+                & $script:Ok 'IR-SignIn-Travel' ([ordered]@{ Count = 0; Truncated = $false; Events = @() })
+                Test-NRGSignInControlGeoAnomaly -HomeState 'North Dakota' -HomeCountry 'US'
+                Test-NRGSignInControlRankUsers
+                $score = @((Get-NRGRawData -Key 'IR-SignIn-Ranked').Data.Users | Where-Object { $_.UserPrincipalName -eq 'b@corp.example' })[0].Score
+                [ordered]@{ Score = $score; Rank = (& $script:Finding 'SIGNIN-2.1') }
+            }
+        }
+
+        It 'two successful sign-ins from the same neighboring-state city score the same as one, and the ranking is not Critical' {
+            $one = & $script:GeoRun 1
+            $two = & $script:GeoRun 2
+            $two.Score | Should -Be $one.Score -Because 'the same reason is scored once per user'
+            $two.Rank.Severity | Should -Not -Be 'Critical'
+        }
+    }
 }
