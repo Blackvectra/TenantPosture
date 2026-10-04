@@ -674,10 +674,18 @@ function Test-NRGControlDefenderDLPWorkloads {
     # mode or turned off protects nothing, so its workloads do not count (they are reported). Whether
     # rules detect sensitive data is DEF-4.2; whether they block is not claimed here.
     $required = @('Exchange','SharePoint','OneDriveForBusiness','Teams')
-    $enforcing = @($dlpPolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Mode' -Default '') -eq 'Enable' })
-    $notEnforcing = @($dlpPolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Mode' -Default '') -ne 'Enable' })
+    # Mode values Microsoft documents for a DLP policy. Only Enable enforces; an empty, absent or
+    # unrecognized Mode is unknown evidence, never "not enforcing": it can neither cover nor fail a workload.
+    $knownOff  = @('TestWithNotifications', 'TestWithoutNotifications', 'Disable', 'PendingDeletion')
+    $modeOf    = { param($p) [string](Get-NRGObjectField -Item $p -Key 'Mode' -Default '') }
+    $enforcing = @($dlpPolicies | Where-Object { (& $modeOf $_) -eq 'Enable' })
+    $notEnforcing = @($dlpPolicies | Where-Object { (& $modeOf $_) -in $knownOff })
+    $unknownMode  = @($dlpPolicies | Where-Object { (& $modeOf $_) -ne 'Enable' -and (& $modeOf $_) -notin $knownOff })
     $covered  = @($enforcing | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'Workloads' -Default @()) } | Sort-Object -Unique)
-    $missing  = @($required | Where-Object { $_ -notin $covered })
+    # Workloads an unknown-mode policy names (all of them when it names none) and no enforcing policy covers.
+    $maybe    = @($unknownMode | ForEach-Object { $wl = @(Get-NRGObjectField -Item $_ -Key 'Workloads' -Default @() | Where-Object { $_ }); if ($wl.Count) { $wl } else { $required } } | Sort-Object -Unique)
+    $modeUnknownWl = @($required | Where-Object { $_ -notin $covered -and $_ -in $maybe })
+    $missing  = @($required | Where-Object { $_ -notin $covered -and $_ -notin $modeUnknownWl })
     # A workload named on a policy is not the workload covered: the policy may be scoped to a few
     # mailboxes, sites or teams. Judge the scope per workload across enforcing policies.
     $fullScope = @(); $partScope = [ordered]@{}; $scopeUnread = @()
@@ -704,7 +712,13 @@ function Test-NRGControlDefenderDLPWorkloads {
     if ($partScope.Count -gt 0) { $short += "Covered only for part of the workload: $((@($partScope.Keys) | ForEach-Object { "$_ ($($partScope[$_] -join '; '))" }) -join '; ')." }
     if ($fullScope.Count -gt 0) { $verified += "Whole-workload scope (All, no exclusions) confirmed for: $($fullScope -join ', ')." }
     if ($scopeUnread.Count -gt 0) { $unknownScope += "whether the policies cover the whole workload or only named locations for: $($scopeUnread -join ', '), because the policy location scope was not returned in this result." }
-    if ($enforcing.Count -eq 0) { $short += 'No DLP policy is in enforcing mode (Enable).' }
+    if ($enforcing.Count -eq 0 -and $unknownMode.Count -eq 0) { $short += 'No DLP policy is in enforcing mode (Enable).' }
+    if ($unknownMode.Count -gt 0) {
+        $um = ($unknownMode | ForEach-Object { "$([string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '?')) [unknown mode]" }) -join '; '
+        if ($modeUnknownWl.Count -gt 0) { $unknownScope += "whether $($modeUnknownWl -join ', ') $(if ($modeUnknownWl.Count -eq 1) { 'is' } else { 'are' }) covered, because the Mode of $um was empty or not recognized, so whether it enforces is unknown." }
+        elseif ($verified.Count -gt 0) { $verified += "Not counted (mode not read): $um." }
+        else { $short += "Not counted (mode not read): $um." }
+    }
     # A policy in test mode or off is reported, never credited: the note is not a verified component, so
     # it rides with the verified list only when something real was verified, else with the shortfall.
     if ($notEnforcing.Count -gt 0) {

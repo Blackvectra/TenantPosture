@@ -112,4 +112,43 @@ Describe 'Review 106: DLP and preset scope verdicts' {
             $v.State | Should -Be 'Partial'; $v.Detail | Should -Match 'fabrikam.com'
         }
     }
+
+    Context 'D4: a DLP policy whose Mode is unknown is never the basis of a shortfall' {
+        It 'DEF-4.1: the only policy has an empty Mode: not assessed, with the [unknown mode] note' {
+            Clear-NRGState
+            Set-NRGRawData -Key 'Purview' -Data (Bag @{ DLPPolicies = @(@{ Name = 'P1'; Mode = ''; Workloads = $script:AllWl }); DLPRules = @()
+                                                        SectionStatus = @{ DLPPolicies = 'Collected'; DLPRules = 'Collected' } })
+            $v = V 'Test-NRGControlDefenderDLPWorkloads' 'DEF-4.1'
+            $v.State | Should -Be 'NotApplicable' -Because "whether P1 enforces is unknown (got: $($v.Detail))"
+            $v.Detail | Should -Match 'P1 \[unknown mode\]'
+            $v.Detail | Should -Not -Match 'Shortfall:'
+        }
+        It 'DEF-4.1: a policy with no Mode property at all is treated the same way' {
+            Clear-NRGState
+            Set-NRGRawData -Key 'Purview' -Data (Bag @{ DLPPolicies = @(@{ Name = 'P1'; Workloads = $script:AllWl }); DLPRules = @()
+                                                        SectionStatus = @{ DLPPolicies = 'Collected'; DLPRules = 'Collected' } })
+            (V 'Test-NRGControlDefenderDLPWorkloads' 'DEF-4.1').State | Should -Be 'NotApplicable'
+        }
+        It 'DEF-4.1: workloads an enforcing policy covers stay verified; those only an unknown-mode policy names are not assessed' {
+            $loc = [ordered]@{ Exchange = @{ Include = @('All'); Exclude = @() } }
+            Clear-NRGState
+            Set-NRGRawData -Key 'Purview' -Data (Bag @{ DLPPolicies = @(@{ Name = 'Mail'; Mode = 'Enable'; Workloads = @('Exchange'); Locations = $loc },
+                                                                        @{ Name = 'P1'; Mode = ''; Workloads = @('SharePoint', 'OneDriveForBusiness', 'Teams') }); DLPRules = @()
+                                                        SectionStatus = @{ DLPPolicies = 'Collected'; DLPRules = 'Collected' } })
+            $v = V 'Test-NRGControlDefenderDLPWorkloads' 'DEF-4.1'
+            $v.State | Should -Be 'NotApplicable' -Because "the remaining workloads hang on a policy whose mode is unknown (got: $($v.Detail))"
+            $v.Detail | Should -Match 'Verified: .*Exchange'
+            $v.Detail | Should -Match 'P1 \[unknown mode\]'
+        }
+        It 'DEF-4.1: a workload no policy names is still a real shortfall beside an unknown-mode policy' {
+            Clear-NRGState
+            Set-NRGRawData -Key 'Purview' -Data (Bag @{ DLPPolicies = @(@{ Name = 'P1'; Mode = ''; Workloads = @('Exchange') }); DLPRules = @()
+                                                        SectionStatus = @{ DLPPolicies = 'Collected'; DLPRules = 'Collected' } })
+            $v = V 'Test-NRGControlDefenderDLPWorkloads' 'DEF-4.1'
+            $v.State | Should -Be 'Gap'
+            $v.Detail | Should -Match 'No enforcing policy covers: SharePoint, OneDriveForBusiness, Teams'
+            $v.Detail | Should -Not -Match 'covers: Exchange'
+            $v.Detail | Should -Match 'P1 \[unknown mode\]'
+        }
+    }
 }
