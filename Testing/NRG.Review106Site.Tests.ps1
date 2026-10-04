@@ -35,3 +35,23 @@ Describe 'S1: a run with no findings still writes the site and an empty action p
         $script:R.ActionPlanRows | Should -Be 0
     }
 }
+
+Describe 'S2: New-NRGReportSite.ps1 builds the site from a results file with "Findings": []' {
+    BeforeAll {
+        $script:Out2 = & $script:NewOut
+        $null = New-Item -ItemType Directory -Force -Path $script:Out2
+        $script:Res2 = Join-Path $script:Out2 'empty-results.json'
+        Set-Content -LiteralPath $script:Res2 -Encoding utf8 -Value (@{ Metadata = $script:Meta; Findings = @() } | ConvertTo-Json -Depth 5)
+    }
+    AfterAll { Remove-Item -LiteralPath $script:Out2 -Recurse -Force -ErrorAction SilentlyContinue; Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue }
+
+    It 'the results file really carries an empty Findings array' {
+        (Get-Content -LiteralPath $script:Res2 -Raw) | Should -Match '"Findings":\s*\[\s*\]'
+    }
+    It 'does not throw and writes index.html and a header-only ActionPlan.csv' {
+        $site = Join-Path $script:Out2 'site'
+        { $null = & (Join-Path $script:Root 'New-NRGReportSite.ps1') -ResultsPath $script:Res2 -OutputPath $site 6>$null } | Should -Not -Throw
+        Test-Path -LiteralPath (Join-Path $site 'index.html') | Should -BeTrue
+        @(Get-Content -LiteralPath (Join-Path $site 'ActionPlan.csv')).Count | Should -Be 1
+    }
+}

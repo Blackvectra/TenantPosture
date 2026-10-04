@@ -27,7 +27,9 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'NRG-Assessment.psm1') -Force
 $j = Get-Content -LiteralPath $ResultsPath -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable -Depth 60
 $meta = if ($j.ContainsKey('Metadata')) { [hashtable]$j.Metadata } else { @{} }
-$findings = if ($j.ContainsKey('Findings')) { @($j.Findings) } else { @() }
+# Two statements: an if-statement that yields an empty array assigns null (see CLAUDE.md).
+$findings = @()
+if ($j.ContainsKey('Findings')) { $findings = @($j.Findings | Where-Object { $null -ne $_ }) }
 $baseline = if ($j.ContainsKey('BaselineCompliance')) { $j.BaselineCompliance } else { $null }
 $r = Publish-NRGReportSite -Metadata $meta -Findings $findings -OutputPath $OutputPath -BaselineCompliance $baseline -ScubaResultsPath $ScubaResultsPath
 Write-Host ("Report site: {0} findings across {1} workload page(s); {2} action-plan row(s)." -f $r.Findings, @($r.Workloads).Count, $r.ActionPlanRows)
