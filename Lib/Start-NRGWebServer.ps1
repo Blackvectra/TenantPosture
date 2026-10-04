@@ -325,10 +325,6 @@ function Start-NRGWebServer {
                 # -File confines that exit to the nested process, so
                 # $LASTEXITCODE survives here to report on the pipeline.
                 $pwshPath = (Get-Process -Id $PID).Path
-                # This child has no window of its own, so Windows' broker sign-in (WAM) has no parent
-                # window handle to attach to and Graph fails with "A window handle must be configured".
-                # Tell the scan to sign in through the system browser instead (see Connect-NRGServices).
-                $env:NRG_DISABLE_WAM = '1'
                 # -TenantDomain, not a made-up "scan@<domain>" UPN: it pins the
                 # scan to the chosen tenant (clients.json TenantId/DelegatedOrg,
                 # else the domain's OpenID metadata) and aborts if the sign-in

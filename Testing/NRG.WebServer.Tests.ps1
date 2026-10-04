@@ -73,14 +73,16 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
         }
     }
 
-    Context 'A scan started from the page can sign in' {
-        It 'the scan job tells the child to avoid WAM, and Connect-NRGServices honors it for Graph only when the SDK supports it' {
+    Context 'A scan started from the page signs in through the supported default path' {
+        It 'the scan job sets no NRG_DISABLE_WAM and Connect-NRGServices writes no Graph options' {
+            # Set-MgGraphOption -DisableLoginByWAM only takes effect with a custom ClientId (the tool
+            # uses the default client) and writes a settings file to the operator's profile, so the
+            # GUI must not use it. Sign-in from the GUI is a documented known limitation instead.
             $web = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib' 'Start-NRGWebServer.ps1') -Raw
-            $web | Should -Match "\$env:NRG_DISABLE_WAM = '1'" -Because 'a hidden child has no window handle, so WAM sign-in fails'
+            $web | Should -Not -Match 'NRG_DISABLE_WAM'
             $conn = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib' 'Connect-NRGServices.ps1') -Raw
-            $conn | Should -Match "\$env:NRG_DISABLE_WAM -eq '1'"
-            $conn | Should -Match "Parameters\.ContainsKey\('DisableLoginByWAM'\)" -Because 'older SDKs lack the option; the call must be guarded'
-            $conn | Should -Match 'Set-MgGraphOption -DisableLoginByWAM \$true'
+            $conn | Should -Not -Match 'NRG_DISABLE_WAM'
+            $conn | Should -Not -Match 'Set-MgGraphOption'
         }
     }
 

@@ -194,3 +194,40 @@ Describe 'S4: an Error finding is not assessed (the check errored), never a Gap 
         $cells[$hdr.IndexOf('Errored') - 1] | Should -Be '1'
     }
 }
+
+Describe 'G1: interactive Graph sign-in uses the supported default path and writes no Graph options' {
+    # Set-MgGraphOption -DisableLoginByWAM only applies with a custom ClientId (the SDK's
+    # AuthContext: WamEnabled => !(DisableWAMForMSGraph && IsCustomClientId)), and the cmdlet
+    # writes a settings file to the operator's profile every time it runs. The tool signs in with
+    # the default client, so the option changed nothing and persisted a file. The supported path is
+    # the default client (WAM on Windows) with nothing written to the Graph options.
+    BeforeAll {
+        $script:ModuleFiles = @(foreach ($d in 'Lib', 'Collectors', 'Evaluators', 'Publishers', 'Email-IR/Lib', 'Email-IR/Collectors', 'Email-IR/Evaluators', 'Email-IR/Publishers') {
+            Get-ChildItem -LiteralPath (Join-Path $script:Root $d) -Recurse -Filter '*.ps1' -ErrorAction SilentlyContinue
+        }) + @(Get-Item -LiteralPath (Join-Path $script:Root 'NRG-Assessment.psm1'))
+        $script:ConnPath = Join-Path $script:Root 'Lib' 'Connect-NRGServices.ps1'
+        $script:ConnAst = [System.Management.Automation.Language.Parser]::ParseFile($script:ConnPath, [ref]$null, [ref]$null)
+    }
+
+    It 'no module-loaded file calls Set-MgGraphOption or reads/sets NRG_DISABLE_WAM' {
+        $hits = foreach ($f in $script:ModuleFiles) {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
+            $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and "$($n.GetCommandName())" -eq 'Set-MgGraphOption' }, $true) |
+                ForEach-Object { "$($f.Name):$($_.Extent.StartLineNumber) Set-MgGraphOption" }
+            $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.VariableExpressionAst] -and $n.VariablePath.UserPath -eq 'env:NRG_DISABLE_WAM' }, $true) |
+                ForEach-Object { "$($f.Name):$($_.Extent.StartLineNumber) NRG_DISABLE_WAM" }
+        }
+        @($hits) | Should -BeNullOrEmpty
+    }
+    It 'the interactive Connect-MgGraph call passes no -ClientId (default client)' {
+        $calls = @($script:ConnAst.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and "$($n.GetCommandName())" -eq 'Connect-MgGraph' }, $true))
+        # The interactive call is the splatted one; the other is the app-only certificate path.
+        $interactive = @($calls | Where-Object { $_.Extent.Text -match '@mgConnectParams' })
+        $interactive.Count | Should -Be 1
+        @($interactive[0].CommandElements | Where-Object { $_ -is [System.Management.Automation.Language.CommandParameterAst] -and $_.ParameterName -eq 'ClientId' }) | Should -BeNullOrEmpty
+        $src = Get-Content -LiteralPath $script:ConnPath -Raw
+        $src | Should -Not -Match "mgConnectParams\[\s*'ClientId'\s*\]|mgConnectParams\.ClientId"
+        [regex]::Match($src, '\$mgConnectParams\s*=\s*@\{[^}]*\}').Value | Should -Not -Match 'ClientId'
+        $src | Should -Not -Match 'Sign-in uses the system browser'
+    }
+}
