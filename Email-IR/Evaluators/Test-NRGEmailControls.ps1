@@ -763,6 +763,7 @@ function Test-NRGEmailControlOAuthConsents {
     $flagged = @()
     $watched = @()
     $identifiedFlagged = 0
+    $noPublisherFlagged = 0
     $unidentifiedFlagged = 0
     foreach ($g in $grants) {
         $scopeList = @(([string]$g.Scope) -split '\s+' | Where-Object { $_ })
@@ -778,7 +779,10 @@ function Test-NRGEmailControlOAuthConsents {
                     else { 'publisher not checked: the lookup needs Directory.Read.All' }
         if ($hits.Count -gt 0) {
             $flagged += "  - '$appLabel' ($verified): $($hits -join ', ')  [full scope: $($g.Scope)]"
-            if ($appKnown) { $identifiedFlagged++ } else { $unidentifiedFlagged++ }
+            if ($appKnown) {
+                $identifiedFlagged++
+                if (-not $g.App.PublisherName) { $noPublisherFlagged++ }
+            } else { $unidentifiedFlagged++ }
         } elseif ($soft.Count -gt 0) {
             $watched += "  - '$appLabel' ($verified): $($soft -join ', ')"
         }
@@ -790,9 +794,16 @@ function Test-NRGEmailControlOAuthConsents {
                   $(if ($unidentifiedFlagged -gt 0) { "`n`nIdentify each app first: Entra admin center > Enterprise applications > search the service principal ID (the Object ID). A Microsoft or other recognized app that holds this scope on purpose is expected; an app nobody recognizes is not." } else { '' }) +
                   $(if ($watched.Count -gt 0) { "`nAlso review (read-level scopes):`n" + ($watched -join "`n") } else { '' }) +
                   $(if ($grantsTruncated) { "`n$truncNote" } else { '' })
-        # Critical when an app was identified and holds the scope; High while none was identified,
-        # because an unidentified app may be an ordinary Microsoft one.
-        $grantSeverity = if ($identifiedFlagged -gt 0) { 'Critical' } else { 'High' }
+        # Critical only when an app was identified AND its lookup returned no publisher
+        # name. An identified app with a publisher name is High ("verify the app"): Graph
+        # documents publisherName as the name of the Entra tenant that published the app,
+        # so it is a lead to check, not proof either way, and a Microsoft app holding a
+        # mail scope on purpose must not read as Critical. An unidentified app is High,
+        # because it may be an ordinary Microsoft one.
+        $grantSeverity = if ($noPublisherFlagged -gt 0) { 'Critical' } else { 'High' }
+        if ($identifiedFlagged -gt $noPublisherFlagged) {
+            $detail += "`nVerify each app that names a publisher: the publisher name is the Entra tenant that published the app, not a verification. Confirm the app and publisher are ones the user and the organization expect."
+        }
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
             -Title $title -Severity $grantSeverity -Detail $detail `
             -CurrentValue "$($flagged.Count) high-risk grant(s) of $($grants.Count) total" `

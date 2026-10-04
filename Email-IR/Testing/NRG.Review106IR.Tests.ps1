@@ -292,4 +292,24 @@ Describe 'Review 106 — incident-response honesty' {
             (& $script:Geo 'Ile-de-France' 'FR').Severity | Should -Be 'Critical'
         }
     }
+    Context 'R2d: EMAIL-4.1 is Critical only for an identified app with no publisher name' {
+        BeforeAll {
+            $script:Grant = { param($App) & $script:Ok 'IR-UserConsents' ([ordered]@{ Count = 1; Truncated = $false; Grants = @([ordered]@{ GrantId = 'g1'; ClientSpId = 'sp1'; App = $App; ConsentType = 'Principal'; Scope = 'Mail.ReadWrite Mail.Send offline_access' }) }) }
+        }
+
+        It 'an identified app with a publisher name holding a write scope is High (verify the app), not Critical' {
+            & $script:Grant ([ordered]@{ DisplayName = 'Microsoft Outlook Sync'; AppId = 'a1'; PublisherName = 'Microsoft Services' })
+            Test-NRGEmailControlOAuthConsents
+            $f = & $script:Finding 'EMAIL-4.1'
+            $f.State    | Should -Be 'Gap'
+            $f.Severity | Should -Be 'High'
+            $f.Detail   | Should -Match 'Microsoft Services'
+        }
+
+        It 'an identified app with no publisher name holding a write scope stays Critical' {
+            & $script:Grant ([ordered]@{ DisplayName = 'Mail Helper Pro'; AppId = 'a2'; PublisherName = $null })
+            Test-NRGEmailControlOAuthConsents
+            (& $script:Finding 'EMAIL-4.1').Severity | Should -Be 'Critical'
+        }
+    }
 }
