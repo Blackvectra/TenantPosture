@@ -66,7 +66,12 @@ function Get-NRGCANarrowing {
     $apps = @(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.Applications.Include' -Default @())
     if ($apps -notcontains 'All') { $why.Add($(if ($apps -contains 'None' -or $apps.Count -eq 0) { 'applies to no application' } else { 'applies to only some applications' })) }
     if (@(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.Applications.Exclude' -Default @() | Where-Object { $_ }).Count -gt 0) { $why.Add('excludes some applications') }
-    if (@(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.Platforms' -Default @() | Where-Object { $_ }).Count -gt 0) { $why.Add('limited to some device platforms') }
+    # Platforms holds Graph's includePlatforms. 'all' is "Any device" and narrows
+    # nothing unless platforms are also excluded; a specific list does narrow.
+    # Results from before ExcludePlatforms was collected read as no exclusion.
+    $platInc = @(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.Platforms' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
+    $platExc = @(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.ExcludePlatforms' -Default @() | Where-Object { $_ })
+    if (($platInc.Count -gt 0 -and $platInc -notcontains 'all') -or $platExc.Count -gt 0) { $why.Add('limited to some device platforms') }
     $locInc = @(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.Locations.Include' -Default @() | Where-Object { $_ })
     if ($locInc.Count -gt 0 -and $locInc -notcontains 'All') { $why.Add('limited to some locations') }
     if (@(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.Locations.Exclude' -Default @() | Where-Object { $_ }).Count -gt 0) { $why.Add('excludes some locations') }

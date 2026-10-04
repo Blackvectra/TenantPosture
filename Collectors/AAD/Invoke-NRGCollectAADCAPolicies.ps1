@@ -79,6 +79,9 @@ function Invoke-NRGCollectAADCAPolicies {
                         UserRiskLevels    = @(& $g 'conditions.userRiskLevels')
                         AuthFlows         = @(& $g 'conditions.authenticationFlows')
                         Platforms         = @(& $g 'conditions.platforms.includePlatforms')
+                        # 'All' in Platforms is "Any device"; only an exclusion
+                        # beside it narrows the policy (Get-NRGCANarrowing).
+                        ExcludePlatforms  = @(& $g 'conditions.platforms.excludePlatforms')
                         Locations         = @{
                             Include = @(& $g 'conditions.locations.includeLocations')
                             Exclude = @(& $g 'conditions.locations.excludeLocations')
