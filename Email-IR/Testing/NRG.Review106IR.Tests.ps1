@@ -177,4 +177,50 @@ Describe 'Review 106 — incident-response honesty' {
             (Get-NRGDeepDiveEvidence).Complete | Should -BeTrue
         }
     }
+    Context 'R1: RDAP answers are read as the RIRs shape them (RFC 9083)' {
+        BeforeAll {
+            # Minimal fields from live answers on 2026-10-04: https://rdap.org/ip/8.8.8.8 (ARIN)
+            # and https://rdap.org/ip/193.0.6.139 (RIPE). Entity order is preserved.
+            $script:Arin = @'
+{"objectClassName":"ip network","handle":"NET-8-8-8-0-2","startAddress":"8.8.8.0","endAddress":"8.8.8.255","name":"GOGL","cidr0_cidrs":[{"v4prefix":"8.8.8.0","length":24}],
+ "entities":[{"objectClassName":"entity","handle":"GOGL","roles":["registrant"],"vcardArray":["vcard",[["version",{},"text","4.0"],["fn",{},"text","Google LLC"],["kind",{},"text","org"]]]}]}
+'@
+            $script:Ripe = @'
+{"objectClassName":"ip network","handle":"193.0.0.0 - 193.0.7.255","startAddress":"193.0.0.0","endAddress":"193.0.7.255","name":"RIPE-NCC","country":"NL","cidr0_cidrs":[{"v4prefix":"193.0.0.0","length":21}],
+ "entities":[{"objectClassName":"entity","handle":"MDIR-RIPE","roles":["administrative"],"vcardArray":["vcard",[["version",{},"text","4.0"],["fn",{},"text","Managing Director"],["kind",{},"text","group"]]]},
+  {"objectClassName":"entity","handle":"OPS4-RIPE","roles":["technical"],"vcardArray":["vcard",[["version",{},"text","4.0"],["fn",{},"text","RIPE NCC Operations"],["kind",{},"text","group"]]]},
+  {"objectClassName":"entity","handle":"ORG-RIEN1-RIPE","roles":["registrant"],"vcardArray":["vcard",[["version",{},"text","4.0"],["fn",{},"text","Reseaux IP Europeens Network Coordination Centre (RIPE NCC)"],["kind",{},"text","org"]]]},
+  {"objectClassName":"entity","handle":"RIPE-NCC-MNT","roles":["registrant"],"vcardArray":["vcard",[["version",{},"text","4.0"],["fn",{},"text","RIPE-NCC-MNT"],["kind",{},"text","individual"]]]},
+  {"objectClassName":"entity","handle":"OPS4-RIPE","roles":["abuse"],"vcardArray":["vcard",[["version",{},"text","4.0"],["fn",{},"text","RIPE NCC Operations"],["kind",{},"text","group"]]]}]}
+'@
+        }
+        BeforeEach { & (Get-Module 'NRG-Assessment') { Clear-NRGIPThreatIntelCache } }
+
+        It 'an ARIN answer (no top-level country) resolves to its registrant, not a Failed lookup' {
+            Mock -ModuleName 'NRG-Assessment' Invoke-RestMethod { $script:Arin | ConvertFrom-Json }
+            $r = Get-NRGIPSignInIntel -IPAddress '8.8.8.8'
+            $r.Error        | Should -BeNullOrEmpty
+            $r.LookupStatus | Should -Be 'Resolved'
+            $r.ASNOwner     | Should -Be 'Google LLC'
+        }
+
+        It 'a RIPE answer names the registrant organization, never the administrative contact listed first' {
+            Mock -ModuleName 'NRG-Assessment' Invoke-RestMethod { $script:Ripe | ConvertFrom-Json }
+            $r = Get-NRGIPSignInIntel -IPAddress '193.0.6.139'
+            $r.LookupStatus | Should -Be 'Resolved'
+            $r.ASNOwner     | Should -Be 'Reseaux IP Europeens Network Coordination Centre (RIPE NCC)'
+            $r.Country      | Should -Be 'NL'
+        }
+
+        It 'an answer with contacts but no registrant is NoOwnerData, never a contact name judged as the owner' {
+            Mock -ModuleName 'NRG-Assessment' Invoke-RestMethod {
+                $o = $script:Ripe | ConvertFrom-Json
+                $o.entities = @($o.entities | Where-Object { $_.roles -notcontains 'registrant' })
+                $o
+            }
+            $r = Get-NRGIPSignInIntel -IPAddress '193.0.6.140'
+            $r.LookupStatus | Should -Be 'NoOwnerData' -Because $r.Error
+            $r.ASNOwner     | Should -BeNullOrEmpty
+        }
+    }
 }
