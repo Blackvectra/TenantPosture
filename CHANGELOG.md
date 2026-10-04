@@ -58,24 +58,24 @@
   see `docs/KNOWN-ISSUES.md`.
 
 - **Web GUI, first run on a real workstation.** Two defects showed on screen: a user name typed in
-  the tenant box (`admin@ndaco.org`) was refused as "Invalid domain format" and the message did not
+  the tenant box (`admin@contoso.com`) was refused as "Invalid domain format" and the message did not
   say what to enter; and the run list showed the incident-response mailbox run (a folder named after
   a user) as an assessment run. The box now reduces a user name to its domain and the refusal says
-  "Enter the tenant domain, for example ndaco.org"; `*-email-results.json` is no longer listed as a
+  "Enter the tenant domain, for example contoso.com"; `*-email-results.json` is no longer listed as a
   run. The server-side domain check is unchanged. The test that starts a real server now seeds an
   assessment run and a mailbox run and checks the list (it runs only where Pode is installed, so CI
   skips it; run it locally).
 
 - **SIGNIN-1.4 no longer counts users already reviewed as safe.** The risky-user read removes
   dismissed and remediated users but not `confirmedSafe`, and the evaluator reported every returned
-  user as "FOUND N risky" (a High Gap) and scored each 15 points: against NDACo one at-risk user
+  user as "FOUND N risky" (a High Gap) and scored each 15 points: on the first live run one at-risk user
   appeared as five, and four confirmed-safe users entered the triage ranking. Confirmed-safe,
   dismissed and remediated users are now listed as "not counted" (named, never silently dropped);
   an unrecognized risk state stays active (unknown is not safe); only active users are scored and
   ranked, and a tenant whose only entries were reviewed gets Satisfied. Pinned in
   `NRG.SignInTriage.Tests.ps1` (two of the four new tests fail on the old evaluator).
 
-- **First live runs of the incident-response entry points.** Against NDACo, the account's mailbox
+- **First live runs of the incident-response entry points.** On the first live run, the account's mailbox
   reads answered NotFound and the sign-in reads answered BadRequest, and three console lines were
   misleading or silent: (1) the email assessment printed "Mailbox data collected" while every
   required mailbox read had failed; it now says "Mailbox data NOT read", names the sources, and
@@ -121,8 +121,8 @@
   cause. The sentence appears on the console, in the Markdown summary and on the report-site
   landing page; `ActionPlan.csv` gains a "Relationship to other controls" column. Two same-setting
   pairs the first full run exposed are now linked for scoring so one setting costs once: SPO-1.4 /
-  SPO-3.4 (guest-access expiration) and SPO-2.6 / SPO-2.7 (email attestation); the NDACo Gap count
-  drops from 69 to 67 on the same data. `NRG.GapSummary.Tests.ps1` pins Total = Distinct + Views and
+  SPO-3.4 (guest-access expiration) and SPO-2.6 / SPO-2.7 (email attestation); on the first full run's data the Gap
+  count drops from 69 to 67. `NRG.GapSummary.Tests.ps1` pins Total = Distinct + Views and
   that a view of a control with no shortfall stays distinct.
 
 - **The DEF-4.1 / DEF-4.5 disagreement with ScubaGear is explained: a different standard, not a detection fault.**
@@ -189,7 +189,7 @@
   table and the tests follow; a matrix test covers restricted/unrestricted consent against workflow
   enabled/disabled/unread.
 
-- **First full-tenant run (NDACo, Graph connected): two reader-facing fixes.** (1) The report site showed
+- **First full-tenant run (Graph connected): two reader-facing fixes.** (1) The report site showed
   "Independent scan: Pass" beside an NRG Gap for AAD-12.4, AAD-15.1 and AAD-15.2, although the mapping
   records ScubaGear's MS.AAD.5.2 as a different requirement; it now says "Different requirement
   (context only, not compared)" and such a rule is never listed as a disagreement. Same-requirement
@@ -2178,9 +2178,9 @@ Patch release closing the correctness sweep defined in `docs/CORRECTNESS-SWEEP-v
 
 ### Security / privacy
 
-- **`.gitignore` now excludes `output/`.** NRG had the same gap as NLS (only `Reports/` was excluded); NRG never had real client data committed because the port excluded `output/` at copy time, but future `Invoke-NRGAssessment` runs would have started tracking output files.
+- **`.gitignore` now excludes `output/`.** NRG had the same gap as NLS (only `Reports/` was excluded); future `Invoke-NRGAssessment` runs would have started tracking output files. (Correction, 2026-10-04: this entry said NRG never had real client data committed. That was wrong: client assessment output was uploaded to `output/` on 2026-05-12 and 2026-05-18, removed from the tree on 2026-05-19 and 2026-05-26, and remains in git history.)
 - **Sample HTML sanitization.** `sample-report/example-assessment.html` had 7 occurrences of real personal domain `mattlevorson.com` (secondary domain on the source tenant) and 2 admin display names rendered as `NRG Technology Services / NextLayerSec LLC` (collision from `Matthew Levorson → NRG Technology Services / NextLayerSec LLC` sanitization). Replaced with `example2.com` / `Admin 2` / `Admin 3`.
-- **Branding/PII leaks** in initial NRG port surfaced and fixed: NRG phone number in `branding.psd1`, "North Dakota" geographic identifier in CLAUDE.md, real client names NDACo / Dunn County in sample configs.
+- **Branding/PII leaks** in initial NRG port surfaced and fixed: NRG phone number in `branding.psd1`, "North Dakota" geographic identifier in CLAUDE.md, real client names in sample configs.
 
 ### Release engineering
 

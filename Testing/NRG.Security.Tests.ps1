@@ -699,6 +699,43 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             }
             $hits | Should -BeNullOrEmpty
         }
+
+        # Client identifiers stay out of the repository. A real client's
+        # domain reached a GUI help string, test fixtures and CHANGELOG
+        # entries, and a live tenant ID sat in two test files; the secret
+        # scanners look for credentials, not names. The list holds SHA-256
+        # hashes of lower-cased identifiers, so the test does not itself
+        # publish them; add a hash when a new client identifier must never
+        # appear. Failures name the file and line, never the value.
+        It 'No known client identifier appears in a tracked text file' {
+            $clientIdHashes = @(
+                '11e16614922618fac053edc9ee0644b94a64e63edf590a0cb8539494450d510b'
+                '1714c4a4da0f3ae69c9510b45fb0bb68df4b5a93fbf4eb17b3f7a11d4b0b0e25'
+                '0d8112db2b6e124be99af9f39e9edd525b9c301b5cf66d3c1706fce1d436175a'
+            )
+            $sha = [System.Security.Cryptography.SHA256]::Create()
+            $hashOf = @{}
+            $textExt = @('.ps1', '.psm1', '.psd1', '.md', '.json', '.js', '.html', '.css', '.yml', '.yaml', '.txt', '.csv', '.py', '.toml', '.xml')
+            $files = Get-ChildItem -LiteralPath $script:RepoRoot -Recurse -File |
+                Where-Object { $_.Extension -in $textExt -and $_.FullName -notmatch '[/\\](\.git|output|node_modules)[/\\]' }
+            $hits = @(foreach ($f in $files) {
+                $n = 0
+                foreach ($line in [System.IO.File]::ReadLines($f.FullName)) {
+                    $n++
+                    foreach ($m in [regex]::Matches($line.ToLowerInvariant(), '[a-z0-9][a-z0-9._\-]*[a-z0-9]')) {
+                        # The whole token (a domain, a GUID) and each part of it.
+                        foreach ($t in @($m.Value) + @($m.Value -split '[._\-]')) {
+                            if ($t.Length -lt 3) { continue }
+                            if (-not $hashOf.ContainsKey($t)) {
+                                $hashOf[$t] = -join ($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($t)) | ForEach-Object { $_.ToString('x2') })
+                            }
+                            if ($hashOf[$t] -in $clientIdHashes) { "$($f.FullName.Substring($script:RepoRoot.Length + 1)):$n"; break }
+                        }
+                    }
+                }
+            })
+            $hits -join "`n" | Should -BeNullOrEmpty -Because 'client names, domains and tenant IDs are client data; use example.com / contoso.com and synthetic GUIDs'
+        }
     }
 
     # ── File & Module Inventory ───────────────────────────────────────────

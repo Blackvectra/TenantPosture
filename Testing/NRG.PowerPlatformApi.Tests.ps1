@@ -33,7 +33,7 @@ Describe 'Power Platform admin API collector' {
         & $script:Mod {
             Set-Item -Path 'function:script:Get-MgContext' -Value {
                 if ($script:T_NoGraph) { return $null }
-                [pscustomobject]@{ TenantId = '375e7ed2-25cc-4bec-bc68-890dc9095311'; Account = 'op@contoso.com'; AuthType = $script:T_AuthType }
+                [pscustomobject]@{ TenantId = 'abcdef01-2345-4678-9abc-def012345678'; Account = 'op@contoso.com'; AuthType = $script:T_AuthType }
             }
             Set-Item -Path 'function:script:Get-NRGPowerPlatformToken' -Value {
                 param([string] $TenantId, [string] $LoginHint)
@@ -119,7 +119,7 @@ Describe 'Power Platform admin API collector' {
 
         It 'pins the Power Platform sign-in to the Graph tenant' {
             Invoke-Collector | Out-Null
-            (& $script:Mod { $script:T_TokenTenant }) | Should -Be '375e7ed2-25cc-4bec-bc68-890dc9095311'
+            (& $script:Mod { $script:T_TokenTenant }) | Should -Be 'abcdef01-2345-4678-9abc-def012345678'
         }
 
         It 'zero DLP policies is collected (a real Gap), not "not available"' {
@@ -230,7 +230,7 @@ Describe 'Power Platform admin API collector' {
         It 'the token helper fails with a clear reason when it cannot sign in' {
             # No browser (CI) or no sign-in library: either way it must throw a
             # reason, never return an empty token.
-            { & $script:Mod { param($t) & $t -TenantId '375e7ed2-25cc-4bec-bc68-890dc9095311' -TimeoutSeconds 5 } $script:RealToken } | Should -Throw
+            { & $script:Mod { param($t) & $t -TenantId 'abcdef01-2345-4678-9abc-def012345678' -TimeoutSeconds 5 } $script:RealToken } | Should -Throw
         }
     }
 }

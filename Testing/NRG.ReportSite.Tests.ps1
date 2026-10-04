@@ -23,7 +23,7 @@ Describe 'Report site preserves every finding, verdict and limitation' {
         $script:Hostile = '<script>alert(1)</script>"&'
         $add = { param($id, $state, $detail, $extra = @{}) Add-NRGFinding -ControlId $id -State $state -Category 'Identity' -Title "Title $id" -Severity 'High' -Detail $detail -CurrentValue "observed-$id" -RequiredValue "required-$id" -Remediation "fix-$id" -FrameworkIds 'NIST:AC-2' @extra }
         & $add 'AAD-1.1' 'Satisfied' 'Verified: blocked by policy X.'
-        & $add 'DNS-1.3' 'Satisfied' 'ndaco.org DMARC p=quarantine (100%).' @{ Instance = 'ndaco.org' }
+        & $add 'DNS-1.3' 'Satisfied' 'contoso.com DMARC p=quarantine (100%).' @{ Instance = 'contoso.com' }
         & $add 'DNS-1.3' 'Partial'   'other.org DMARC p=quarantine but pct=50.' @{ Instance = 'other.org' }
         & $add 'AAD-1.2' 'Gap'       "Shortfall: $($script:Hostile) excluded." @{ AffectedObjects = @([ordered]@{ UserPrincipalName = 'a@x.example'; Reason = 'none' }, 'plain-string-object') }
         & $add 'AAD-11.3' 'NotApplicable' 'The risky service principal data was not collected; not assessed.'
@@ -63,7 +63,7 @@ Describe 'Report site preserves every finding, verdict and limitation' {
         }
     }
     It 'every per-domain instance is its own row' {
-        $script:Page['DNS'] | Should -Match 'ndaco\.org'; $script:Page['DNS'] | Should -Match 'other\.org'
+        $script:Page['DNS'] | Should -Match 'contoso\.com'; $script:Page['DNS'] | Should -Match 'other\.org'
     }
     It 'the verdict counts on the pages equal the finding states' {
         $pills = @([regex]::Matches(($script:Page.GetEnumerator() | Where-Object { $_.Key -ne 'index' } | ForEach-Object { $_.Value }) -join '', "<span class='pill \w+'>([^<]+)</span>") | ForEach-Object { $_.Groups[1].Value })

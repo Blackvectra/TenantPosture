@@ -272,11 +272,11 @@ Start-NRGWebServer -Port $($script:Port) -ScriptDir '$($script:RepoRoot)' -NoBro
             # The server reads ./output relative to its working directory: seed one assessment run
             # and one incident-response run in a temp directory so the run list can be checked.
             $script:WebWork = Join-Path ([System.IO.Path]::GetTempPath()) ("nrgweb-work-{0}" -f ([Guid]::NewGuid().ToString('N')))
-            $seed = Join-Path $script:WebWork 'output' 'ndaco.org'
+            $seed = Join-Path $script:WebWork 'output' 'contoso.com'
             New-Item -ItemType Directory -Path $seed -Force | Out-Null
-            Set-Content -LiteralPath (Join-Path $seed 'NRGTS-20261002-114907-results.json') -Value '{}' -Encoding utf8
-            Set-Content -LiteralPath (Join-Path $seed 'NRGTS-20261002-114907-assessment.html') -Value '<html></html>' -Encoding utf8
-            $ir = Join-Path $script:WebWork 'output' 'Administrator_ndaco.org'
+            Set-Content -LiteralPath (Join-Path $seed 'contoso-20261002-114907-results.json') -Value '{}' -Encoding utf8
+            Set-Content -LiteralPath (Join-Path $seed 'contoso-20261002-114907-assessment.html') -Value '<html></html>' -Encoding utf8
+            $ir = Join-Path $script:WebWork 'output' 'Administrator_contoso.com'
             New-Item -ItemType Directory -Path $ir -Force | Out-Null
             Set-Content -LiteralPath (Join-Path $ir '20261002-122037-email-results.json') -Value '{}' -Encoding utf8
 
@@ -339,7 +339,7 @@ Start-NRGWebServer -Port $($script:Port) -ScriptDir '$($script:RepoRoot)' -NoBro
             $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/api/runs" -TimeoutSec 5 -UseBasicParsing
             $runs = @($r.Content | ConvertFrom-Json)
             $runs.Count | Should -Be 1
-            $runs[0].tenant | Should -Be 'ndaco.org'
+            $runs[0].tenant | Should -Be 'contoso.com'
             $runs[0].hasReport | Should -BeTrue
         }
 
