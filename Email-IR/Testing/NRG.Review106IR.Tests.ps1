@@ -98,4 +98,40 @@ Describe 'Review 106 — incident-response honesty' {
             $f.Detail | Should -Match 'incomplete'
         }
     }
+    Context 'B3: SIGNIN-1.5 is not assessed when the inputs it enriches were not read' {
+
+        It 'anonymous-IP and travel reads both failed: not assessed, never "no suspicious source IPs"' {
+            Set-NRGRawData -Key 'IR-SignIn-AnonIp' -Data @{ CollectorId = 'IR-SignIn-AnonIp'; Success = $false; Data = $null }
+            Set-NRGRawData -Key 'IR-SignIn-Travel' -Data @{ CollectorId = 'IR-SignIn-Travel'; Success = $false; Data = $null }
+            Test-NRGSignInControlIPIntel
+            $f = & $script:Finding 'SIGNIN-1.5'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'IR-SignIn-AnonIp did not complete'
+        }
+
+        It 'one input failed and the other was empty: not assessed' {
+            & $script:Ok 'IR-SignIn-AnonIp' ([ordered]@{ Count = 0; Source = 'server-side filter, first page (1000 events)'; Truncated = $false; Events = @() })
+            Set-NRGRawData -Key 'IR-SignIn-Travel' -Data @{ CollectorId = 'IR-SignIn-Travel'; Success = $false; Data = $null }
+            Test-NRGSignInControlIPIntel
+            (& $script:Finding 'SIGNIN-1.5').State | Should -Be 'NotApplicable'
+        }
+
+        It 'every address read resolved unflagged, but an input was truncated: not cleared, never Satisfied' {
+            Mock -ModuleName 'NRG-Assessment' Get-NRGIPSignInIntel { [ordered]@{ IPAddress = $IPAddress; Country = 'US'; ASNOwner = 'Example Telecom'; LookupStatus = 'Resolved'; Flags = @() } }
+            $ev = @(@{ id = 'x'; userPrincipalName = 'a@corp.example'; createdDateTime = (Get-Date).ToUniversalTime().ToString('o'); ipAddress = '203.0.113.9'; status = @{ errorCode = 0 } })
+            & $script:Ok 'IR-SignIn-AnonIp' ([ordered]@{ Count = 1; Source = 'server-side filter, first page (1000 events)'; Truncated = $true; Events = $ev })
+            & $script:Ok 'IR-SignIn-Travel' ([ordered]@{ Count = 0; Source = 'client-side over the recent read'; Truncated = $false; Events = @() })
+            Test-NRGSignInControlIPIntel
+            $f = & $script:Finding 'SIGNIN-1.5'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'Not cleared'
+        }
+
+        It 'complete inputs with nothing to enrich stay Satisfied' {
+            & $script:Ok 'IR-SignIn-AnonIp' ([ordered]@{ Count = 0; Source = 'server-side filter, first page (1000 events)'; Truncated = $false; Events = @() })
+            & $script:Ok 'IR-SignIn-Travel' ([ordered]@{ Count = 0; Source = 'client-side over the recent read'; Truncated = $false; Events = @() })
+            Test-NRGSignInControlIPIntel
+            (& $script:Finding 'SIGNIN-1.5').State | Should -Be 'Satisfied'
+        }
+    }
 }

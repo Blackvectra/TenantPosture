@@ -543,7 +543,18 @@ function Test-NRGSignInControlIPIntel {
         }
     }
 
+    # The address set is only as complete as the reads it came from. A failed or
+    # truncated input means suspicious addresses may be missing from it.
+    $inputs = Get-NRGSignInCollectionCompleteness -Keys 'IR-SignIn-AnonIp', 'IR-SignIn-Travel'
+    $inputNote = if (-not $inputs.Complete) { " The inputs were incomplete ($($inputs.Reasons -join '; ')), so suspicious addresses may be missing from this set." } else { '' }
+
     if ($ipToUsers.Keys.Count -eq 0) {
+        if (-not $inputs.Complete) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+                -Title $title -Severity 'Medium' `
+                -Detail "Not assessed: no suspicious source address was found to enrich, but the reads it depends on were incomplete ($($inputs.Reasons -join '; '))."
+            return
+        }
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'Medium' -Detail 'No suspicious source IPs to enrich (no anon-IP or impossible-travel events).'
         return
@@ -577,7 +588,7 @@ function Test-NRGSignInControlIPIntel {
     $resolved = @($enriched | Where-Object { (Get-NRGObjectField -Item $_ -Key 'LookupStatus' -Default '') -eq 'Resolved' })
     $noOwner  = @($enriched | Where-Object { (Get-NRGObjectField -Item $_ -Key 'LookupStatus' -Default '') -eq 'NoOwnerData' }).Count
     $capNote  = if ($ipToUsers.Keys.Count -gt $targets.Count) { " Only the first $($targets.Count) of $($ipToUsers.Keys.Count) suspicious addresses were looked up." } else { '' }
-    $lookupNote = "Registrant data came back for $($resolved.Count) of $($targets.Count) address(es) looked up; $failed lookup(s) failed and $noOwner returned no owner.$capNote"
+    $lookupNote = "Registrant data came back for $($resolved.Count) of $($targets.Count) address(es) looked up; $failed lookup(s) failed and $noOwner returned no owner.$capNote$inputNote"
 
     # Stash enrichment for the publisher.
     Set-NRGRawData -Key 'IR-SignIn-IPIntel' -Data @{
@@ -611,14 +622,14 @@ function Test-NRGSignInControlIPIntel {
             -Title $title -Severity 'High' -Detail $detail `
             -CurrentValue "$($flagged.Count) of $($resolved.Count) resolved IP(s) registered to a hosting or VPN provider name (context, not a malicious-IP verdict)" `
             -Remediation "A registrant name that matches a hosting or VPN provider is context, not a reputation verdict: legitimate users also sign in through commercial VPNs and hosted desktops, and a shared address (a corporate VPN exit, an office NAT) is possible. The detail shows how many users were seen from each address and how many succeeded. Confirm with those users before blocking, then prioritize the users who succeeded for deep-dive."
-    } elseif ($resolved.Count -eq $ipToUsers.Keys.Count) {
+    } elseif ($resolved.Count -eq $ipToUsers.Keys.Count -and $inputs.Complete) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'Medium' -Detail $detail `
             -CurrentValue "$($resolved.Count) IP(s) resolved, none registered to a hosting or VPN provider name"
     } else {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
             -Title $title -Severity 'Medium' `
-            -Detail "Not cleared: nothing among the addresses that resolved matched a hosting or VPN provider name, but not every suspicious address could be looked up, and an unresolved address is not a clean one. $detail" `
+            -Detail "Not cleared: nothing among the addresses that resolved matched a hosting or VPN provider name, but not every suspicious address could be looked up or read, and an unresolved or unread address is not a clean one. $detail" `
             -CurrentValue "$($resolved.Count) of $($ipToUsers.Keys.Count) suspicious IP(s) resolved, none flagged"
     }
 }
