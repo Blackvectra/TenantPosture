@@ -336,4 +336,68 @@ function Invoke-MgGraphRequest {
             $r.ExitCode | Should -Be 3
         }
     }
+    Context 'Invoke-NRGBatchSignInTriage.ps1 rolls each client''s result into the batch honestly' {
+        BeforeAll {
+            # The real batch runner beside a stand-in triage script that exits with
+            # the code chosen per tenant: the runner invokes the triage by path.
+            $script:BatchDir = Join-Path $script:Tmp 'batch'
+            New-Item -ItemType Directory -Path $script:BatchDir -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $script:Root 'Invoke-NRGBatchSignInTriage.ps1') -Destination $script:BatchDir
+            Set-Content -LiteralPath (Join-Path $script:BatchDir 'Invoke-NRGSignInTriage.ps1') -Encoding utf8 -Value @'
+param($TenantId, $OutputPath, $WindowDays, $DeepDive, $DeepDiveMinScore, $EnableThreatIntel, [switch] $NonInteractive, [switch] $SkipMailDive)
+$null = [System.IO.Directory]::CreateDirectory($OutputPath)   # as the real triage does first
+$codes = $env:NRG_TEST_EXITS | ConvertFrom-Json -AsHashtable
+exit ([int]$codes[$TenantId])
+'@
+            $script:Batch = {
+                param([int[]] $Codes)
+                $case = Join-Path $script:Tmp ([guid]::NewGuid().ToString('N'))
+                New-Item -ItemType Directory -Path $case -Force | Out-Null
+                $clients = @(); $map = @{}
+                for ($i = 0; $i -lt $Codes.Count; $i++) {
+                    $tid = '00000000-0000-0000-0000-{0:D12}' -f ($i + 1)
+                    $clients += [ordered]@{ ClientName = "Client$i"; TenantDomain = "client$i.example"; TenantId = $tid; Active = $true }
+                    $map[$tid] = $Codes[$i]
+                }
+                $cfg = Join-Path $case 'clients.json'
+                (@{ clients = $clients } | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath $cfg -Encoding utf8
+                $out = Join-Path $case 'out'
+                $old = @{ P = $env:PSModulePath; E = $env:NRG_TEST_EXITS }
+                try {
+                    $env:PSModulePath = $script:Mods + [System.IO.Path]::PathSeparator + $env:PSModulePath
+                    $env:NRG_TEST_EXITS = ($map | ConvertTo-Json -Compress)
+                    $cmd = "& '$(Join-Path $script:BatchDir 'Invoke-NRGBatchSignInTriage.ps1')' -ClientsFile '$cfg' -OutputRoot '$out'; exit `$LASTEXITCODE"
+                    $text = & pwsh -NoProfile -NonInteractive -Command $cmd 2>&1 | Out-String
+                    $code = $LASTEXITCODE
+                } finally { $env:PSModulePath = $old.P; $env:NRG_TEST_EXITS = $old.E }
+                $sum = @(Get-ChildItem -LiteralPath $out -Filter 'triage-summary-*.md' -ErrorAction SilentlyContinue)[0]
+                [ordered]@{ ExitCode = $code; Console = $text; Summary = $(if ($sum) { Get-Content -LiteralPath $sum.FullName -Raw } else { '' }) }
+            }
+        }
+
+        It 'a client whose triage was not cleared (child exit 3) is reported as not cleared, ranks above complete clients, and the batch exits 3' {
+            $r = & $script:Batch @(0, 3)
+            $r.Summary | Should -Match '\| Client1 \| client1\.example \| \*\*NOT CLEARED\*\*'
+            $r.Summary | Should -Not -Match 'ExitCode-3'
+            $r.Summary.IndexOf('Client1') | Should -BeLessThan $r.Summary.IndexOf('Client0') -Because 'a client that was not cleared is on the call list before a completed one'
+            $r.Summary | Should -Match '(?s)## Not cleared or not assessed.*Client1'
+            $r.ExitCode | Should -Be 3 -Because $r.Console
+        }
+
+        It 'an authentication failure (child exit 1) or a fatal error (child exit 4) makes the batch fail, and is named' {
+            $r = & $script:Batch @(0, 1)
+            $r.Summary | Should -Match 'AUTH FAILED'
+            $r.ExitCode | Should -Be 1 -Because $r.Console
+            $r = & $script:Batch @(0, 4, 1, 3)
+            $r.Summary | Should -Match 'ERROR'
+            $r.ExitCode | Should -Be 4 -Because 'the most severe failure wins'
+        }
+
+        It 'a Critical client still sets exit 10 and sorts first; every client completing with no Critical exits 0' {
+            $r = & $script:Batch @(3, 10, 4)
+            $r.ExitCode | Should -Be 10
+            $r.Summary.IndexOf('Client1') | Should -BeLessThan $r.Summary.IndexOf('Client2')
+            (& $script:Batch @(0, 2)).ExitCode | Should -Be 0
+        }
+    }
 }
