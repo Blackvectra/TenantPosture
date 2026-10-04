@@ -268,4 +268,28 @@ Describe 'Review 106 — incident-response honesty' {
             $two.Rank.Severity | Should -Not -Be 'Critical'
         }
     }
+    Context 'R2c: an out-of-state success is visible but not Critical; an out-of-country success can be' {
+        BeforeAll {
+            $script:Geo = {
+                param([string] $State, [string] $Country)
+                $now = (Get-Date).ToUniversalTime()
+                $ev = @(1..5 | ForEach-Object { @{ id = "h$_"; userPrincipalName = 'a@corp.example'; createdDateTime = $now.AddHours(-$_).ToString('o'); ipAddress = '198.51.100.1'; status = @{ errorCode = 0 }; location = @{ city = 'Fargo'; state = 'North Dakota'; countryOrRegion = 'US' } } })
+                $ev += @{ id = 'away'; userPrincipalName = 'b@corp.example'; createdDateTime = $now.ToString('o'); ipAddress = '203.0.113.50'; status = @{ errorCode = 0 }; location = @{ city = 'X'; state = $State; countryOrRegion = $Country } }
+                & $script:Ok 'IR-SignIn-Recent' ([ordered]@{ WindowDays = 7; Count = $ev.Count; Truncated = $false; Events = $ev })
+                Test-NRGSignInControlGeoAnomaly -HomeState 'North Dakota' -HomeCountry 'US'
+                & $script:Finding 'SIGNIN-1.6'
+            }
+        }
+
+        It 'a single successful out-of-state sign-in is a High Gap, listed, not Critical' {
+            $f = & $script:Geo 'Minnesota' 'US'
+            $f.State    | Should -Be 'Gap'
+            $f.Severity | Should -Be 'High'
+            $f.Detail   | Should -Match 'b@corp\.example.*Minnesota'
+        }
+
+        It 'a successful out-of-country sign-in stays Critical' {
+            (& $script:Geo 'Ile-de-France' 'FR').Severity | Should -Be 'Critical'
+        }
+    }
 }

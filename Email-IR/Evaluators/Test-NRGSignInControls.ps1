@@ -370,8 +370,9 @@ function Test-NRGSignInControlRiskyUsers {
 #
 # Scoring (only SUCCESSFUL sign-ins count — a failed attempt from abroad is
 # noise; a success is access):
-#   foreign COUNTRY success  : 55   (account accessed from another country)
-#   out-of-home-STATE success: 35   (same country, wrong state)
+#   foreign COUNTRY success  : 55   (account accessed from another country; finding Critical)
+#   out-of-home-STATE success: 35   (same country, wrong state; finding High, since
+#                                    mobile-carrier geolocation often lands out of state)
 # Failed attempts from outside the home base are listed for context but not
 # scored, to keep the ranking focused on actual access.
 function Test-NRGSignInControlGeoAnomaly {
@@ -499,12 +500,18 @@ function Test-NRGSignInControlGeoAnomaly {
     }
     if (-not $completeness.Complete) { $detail += "Note: the sign-in read was incomplete ($($completeness.Reasons -join '; ')); more may exist.`n" }
 
-    $state    = if ($successAnoms.Count -gt 0) { 'Gap' }     else { 'Gap' }
-    $severity = if ($successAnoms.Count -gt 0) { 'Critical' } else { 'High' }
+    # Severity: Critical only for a SUCCESSFUL sign-in from another COUNTRY.
+    # Out-of-state successes are listed and scored but High: IP geolocation for
+    # mobile carriers and VPN egress routinely places a home user in a
+    # neighboring state, so one such sign-in is not access from somewhere the
+    # user never is. Failed attempts alone stay High (context, not access).
+    $foreignSuccess = @($successAnoms | Where-Object { $_.Kind -eq 'foreign-country' })
+    $state    = 'Gap'
+    $severity = if ($foreignSuccess.Count -gt 0) { 'Critical' } else { 'High' }
     Add-NRGFinding -ControlId $cid -State $state -Category $cat `
         -Title $title -Severity $severity -Detail $detail `
         -CurrentValue "$($anomalies.Count) out-of-home sign-in(s), $($successAnoms.Count) successful" `
-        -Remediation "Confirm whether the flagged users actually traveled. Successful sign-ins from a foreign country or a state the user never works from are high-confidence account-takeover IoCs — deep-dive those mailboxes first. Set -HomeState / -HomeCountry to override the auto-detected baseline if the modal state is wrong for this tenant."
+        -Remediation "Confirm whether the flagged users actually traveled. A successful sign-in from a foreign country is a strong account-takeover indicator — deep-dive those mailboxes first. An out-of-state success is weaker: mobile-carrier and VPN addresses often geolocate to a neighboring state, so check the address and device before treating it as access by someone else. Set -HomeState / -HomeCountry to override the auto-detected baseline if the modal state is wrong for this tenant."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
