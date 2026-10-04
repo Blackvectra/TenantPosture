@@ -172,7 +172,7 @@ function Publish-NRGActionPlan {
         resolution status and evidence fields for the team to fill in.
     #>
     [CmdletBinding()]
-    param([Parameter(Mandatory)] [object[]] $Rows, [Parameter(Mandatory)] [string] $Path)
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Rows, [Parameter(Mandatory)] [string] $Path)
     $need = @($Rows | Where-Object { $_.State -in @('Gap', 'Partial', 'Error') -or ($_.State -eq 'NotApplicable' -and $_.Kind -in @('Collection', 'StandardNotApproved', 'Manual')) })
     $out = foreach ($r in $need) {
         $action = if ($r.State -in @('Gap', 'Partial', 'Error')) { 'Remediate' } elseif ($r.Kind -eq 'StandardNotApproved') { 'Approve the NRG standard' } elseif ($r.Kind -eq 'Manual') { 'Verify manually' } else { 'Re-collect and verify' }
