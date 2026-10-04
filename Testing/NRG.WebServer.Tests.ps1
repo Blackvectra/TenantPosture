@@ -1176,6 +1176,34 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
                 if (-not $script:Fx.HardMade) { Set-ItResult -Skipped -Because 'this filesystem could not create a hard link'; return }
                 Test-NRGWebPathIsPlain -Path (Join-Path $script:Fx.Out "$($script:Id)-report" 'hard.html') | Should -BeTrue
             }
+
+            It 'a junction is not plain, and a report folder that is a junction is never served (Windows only)' {
+                # A junction is a directory reparse point whose LinkType is Junction, a
+                # kind of link a symbolic-link test does not exercise. It exists only on
+                # Windows, so this is where the Windows CI job earns its keep.
+                if (-not $IsWindows) { Set-ItResult -Skipped -Because 'junctions exist only on Windows'; return }
+                $out      = Join-Path $script:Work 'junction-out'
+                $target   = Join-Path $script:Work 'junction-target'
+                $junction = Join-Path $out 'JUNC-20261002-070000-report'
+                $null = New-Item -ItemType Directory -Path $out, $target -Force
+                Set-Content -LiteralPath (Join-Path $target 'index.html') -Value '<p>outside</p>' -Encoding utf8
+                try {
+                    $null = New-Item -ItemType Junction -Path $junction -Target $target -ErrorAction Stop
+                } catch {
+                    Set-ItResult -Skipped -Because 'this filesystem could not create a junction'
+                    return
+                }
+                try {
+                    (Get-Item -LiteralPath $junction -Force).LinkType | Should -BeExactly 'Junction' -Because 'that is the premise of this test'
+                    Test-NRGWebPathIsPlain -Path $junction | Should -BeFalse
+                    $r = Resolve-NRGWebRunPath -OutputRoot $out -Folder '_flat' -Id 'JUNC-20261002-070000' -Kind SitePage -Page 'index.html'
+                    $r.Status | Should -Be 'NotFound'
+                    $r.Path | Should -BeNullOrEmpty
+                } finally {
+                    # Delete the junction itself, never what it points to.
+                    [System.IO.Directory]::Delete($junction, $false)
+                }
+            }
         }
 
         Context 'what the helpers may do' {
