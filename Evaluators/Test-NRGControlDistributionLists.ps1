@@ -346,14 +346,14 @@ function Test-NRGControlDistributionLists {
     }
 
     # ── Scan-level finding: was the inventory read? (not a catalog recommendation) ──
-    $scanId = 'DL-0.1'
-    $scanRec = [pscustomobject]@{ RecommendedValue = 'Every list and its members read in full'; RecommendedValueSource = 'None'
-        SourceUrl = 'https://learn.microsoft.com/powershell/module/exchangepowershell/get-distributiongroup'; Nist80053 = @() }
+    $scanId = $script:NRGDlScan.Id
+    $scanRec = [pscustomobject]@{ RecommendedValue = $script:NRGDlScan.Recommended; RecommendedValueSource = 'None'
+        SourceUrl = $script:NRGDlScan.SourceUrl; Nist80053 = @() }
     $scanCite = Get-NRGDlCitationText -Rec $scanRec
     $raw = Get-NRGRawData -Key 'EXO-DistributionLists'
     $ok  = ($null -ne $raw) -and [bool](Get-NRGNestedProperty -Object $raw -Path 'Success' -Default $false)
     if (-not $ok) {
-        Add-NRGDlFinding -ControlId $scanId -State 'NotApplicable' -Severity 'Informational' -Title 'Distribution-list inventory was read' -Instance '(scan)' `
+        Add-NRGDlFinding -ControlId $scanId -State 'NotApplicable' -Severity 'Informational' -Title $script:NRGDlScan.Title -Instance $script:NRGDlScan.Instance `
             -Detail (Format-NRGDlDetail -Rec $scanRec -Kind NotAssessed -CitationText $scanCite -Lead 'The distribution-list read did not run or failed, so no list was evaluated.' -NotRead @('every list, its settings and its members'))
         return
     }
@@ -374,7 +374,7 @@ function Test-NRGControlDistributionLists {
     $alwaysLimits = @('Microsoft 365 (Unified) groups and Teams-connected groups are not read', 'members of a nested group are not expanded')
     $incomplete = ($runLimits.Count -gt 0)
     $scanLead = if ($incomplete) { "Not assessed in full: $($runLimits -join '; ')." } else { "$($lists.Count) list(s) read; every section collected." }
-    Add-NRGDlFinding -ControlId $scanId -State $(if ($incomplete) { 'NotApplicable' } else { 'Satisfied' }) -Severity 'Informational' -Title 'Distribution-list inventory was read' -Instance '(scan)' `
+    Add-NRGDlFinding -ControlId $scanId -State $(if ($incomplete) { 'NotApplicable' } else { 'Satisfied' }) -Severity 'Informational' -Title $script:NRGDlScan.Title -Instance $script:NRGDlScan.Instance `
         -CurrentValue ("Lists read: {0}; sections: DistributionGroups {1}, DynamicDistributionGroups {2}, AcceptedDomains {3}, Members {4}" -f $lists.Count, $secDG, $secDDG, $secAD, $secMem) `
         -Detail (Format-NRGDlDetail -Rec $scanRec -CitationText $scanCite -Lead $scanLead -Read @("$($lists.Count) list(s)") -NotRead (@($runLimits) + $alwaysLimits))
 

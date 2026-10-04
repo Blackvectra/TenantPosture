@@ -413,6 +413,47 @@ Describe 'Distribution-list worksheet, safety and entry point' {
             $t | Should -Match "tenantTag -replace '\[\^a-zA-Z0-9-\]'"
             foreach ($p in 'UserPrincipalName', 'DelegatedOrganization', 'TenantId', 'OutputPath', 'MemberReadLimit', 'KeepSession') { $script:Ast['Invoke-NRGDistributionListScan.ps1'].ParamBlock.Parameters.Name.VariablePath.UserPath | Should -Contain $p }
         }
+        It 'every new file carries the repo header: requires, NRG / NextLayerSec, author, data keys and cmdlets' {
+            foreach ($f in $script:NewFiles) {
+                $head = (Get-Content -LiteralPath (Join-Path $script:Root $f) -TotalCount 90) -join "`n"
+                $head | Should -Match 'NRG Technology Services' -Because $f
+                $head | Should -Match 'NextLayerSec' -Because $f
+                $head | Should -Match 'Matthew Levorson' -Because "$f needs the Author line"
+                $head | Should -Match '(?i)data keys?' -Because "$f needs the data-keys line"
+                $head | Should -Match '(?i)cmdlets?' -Because "$f needs the cmdlets line"
+            }
+        }
+        It 'every function in the new files is an advanced function' {
+            foreach ($f in $script:NewFiles) {
+                $fns = $script:Ast[$f].FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)
+                foreach ($fn in $fns) {
+                    $cb = @($fn.Body.ParamBlock.Attributes | Where-Object { $_.TypeName.Name -eq 'CmdletBinding' })
+                    $cb.Count | Should -BeGreaterThan 0 -Because "$f $($fn.Name) needs [CmdletBinding()]"
+                }
+            }
+        }
+        It 'the collector, evaluator and publisher write no host output' {
+            foreach ($f in $script:NewFiles | Where-Object { $_ -notmatch '^Invoke-NRG' }) {
+                @(& $script:Calls $script:Ast[$f] | Where-Object { $_ -eq 'Write-Host' }) | Should -BeNullOrEmpty -Because $f
+            }
+        }
+        It 'the DL-0.1 scan entry is defined once: the evaluator and the worksheet read it, neither restates it' {
+            $lib = Get-Content -LiteralPath (Join-Path $script:Root 'Lib/Get-NRGDistributionListBaseline.ps1') -Raw
+            $lib | Should -Match 'NRGDlScan = '
+            foreach ($f in 'Evaluators/Test-NRGControlDistributionLists.ps1', 'Publishers/Publish-NRGDistributionListWorksheet.ps1', 'Collectors/EXO/Invoke-NRGCollectDistributionLists.ps1') {
+                $t = Get-Content -LiteralPath (Join-Path $script:Root $f) -Raw
+                $t | Should -Not -Match "'DL-0\.1'" -Because "$f restates the scan id"
+                $t | Should -Not -Match 'Distribution-list inventory was read' -Because "$f restates the scan title"
+                $t | Should -Not -Match 'learn\.microsoft\.com/powershell/module/exchangepowershell/get-distributiongroup' -Because "$f restates the scan source"
+            }
+        }
+        It 'the length caps are named constants, not bare numbers' {
+            $t = Get-Content -LiteralPath (Join-Path $script:Root 'Collectors/EXO/Invoke-NRGCollectDistributionLists.ps1') -Raw
+            $t | Should -Not -Match '(?<![\w.$])(1900|300)(?![\w.])' -Because 'use NRGDlExceptionMessageMax / NRGDlMemberErrorMax'
+            $t | Should -Match 'NRGDlExceptionMessageMax'
+            $t | Should -Match 'NRGDlMemberErrorMax'
+            (& (Get-Module NRG-Assessment) { $script:NRGDlExceptionMessageMax }) | Should -BeLessThan 2000 -Because 'Register-NRGException rejects 2000 or more'
+        }
         It 'the DL series is documented where the other series are' {
             (Get-Content -LiteralPath (Join-Path $script:Root 'docs/NRG-DISTRIBUTION-LISTS.md') -Raw) | Should -Match 'DL-1\.1'
             (Get-Content -LiteralPath (Join-Path $script:Root 'README.md') -Raw) | Should -Match 'Invoke-NRGDistributionListScan\.ps1'

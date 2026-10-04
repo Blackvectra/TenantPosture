@@ -169,13 +169,12 @@ function Invoke-NRGCollectDistributionLists {
             }
         }
     }
-    # Register-NRGException accepts 1 to 2000 characters. An Exchange error body can be longer, and
-    # a throw from inside a catch block would abandon every read that came after it, so the
-    # message is bounded here, once, for every call site.
+    # An Exchange error body can exceed Register-NRGException's limit (see
+    # NRGDlExceptionMessageMax), so the message is bounded here, once, for every call site.
     $fail = {
         param([string] $Source, [string] $Message)
         if ([string]::IsNullOrWhiteSpace($Message)) { $Message = '(no message)' }
-        if ($Message.Length -gt 1900) { $Message = $Message.Substring(0, 1900) }
+        if ($Message.Length -gt $script:NRGDlExceptionMessageMax) { $Message = $Message.Substring(0, $script:NRGDlExceptionMessageMax) }
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
             Register-NRGException -Source $Source -Message $Message
         }
@@ -328,7 +327,7 @@ function Invoke-NRGCollectDistributionLists {
                 } catch {
                     $rec.MemberStatus = 'Failed'
                     $errText = ([string]$_.Exception.Message) -replace '[\x00-\x1F\x7F]+', ' '
-                    if ($errText.Length -gt 300) { $errText = $errText.Substring(0, 300) }
+                    if ($errText.Length -gt $script:NRGDlMemberErrorMax) { $errText = $errText.Substring(0, $script:NRGDlMemberErrorMax) }
                     $rec.MemberError = $errText
                     $membersFailed++
                     & $fail 'EXO-DL-Members' ("{0}: {1}" -f $(if ($smtp) { $smtp } else { $name }), $rec.MemberError)

@@ -105,7 +105,7 @@ function Get-NRGDistributionListWorksheet {
     $version = ConvertTo-NRGDlText (Get-NRGObjectField -Item $Metadata -Key 'ToolVersion' -Default 'unknown')
 
     # The scan-level finding (DL-0.1): what was read, what was not.
-    $scanF = @($Findings | Where-Object { $_.ControlId -eq 'DL-0.1' }) | Select-Object -First 1
+    $scanF = @($Findings | Where-Object { $_.ControlId -eq $script:NRGDlScan.Id }) | Select-Object -First 1
 
     # The NRG standards, as a reader needs them: approved or not, never blank.
     $stdLines = [System.Collections.Generic.List[string]]::new()
@@ -345,9 +345,9 @@ function ConvertTo-NRGDlWorksheetCsv {
     }
     # The scan row first: what was read and what was not travels with the data.
     $scan = [pscustomobject]@{ Name = '(scan)'; Address = ''; Type = ''; DirectorySynced = ''; Owners = ''; MemberCount = ''; MembersTruncated = $false; MemberStatus = ''; Members = @(); ExternalMembers = @(); NestedGroups = @() }
-    $scanRow = [pscustomobject]@{ Id = 'DL-0.1'; Title = 'Distribution-list inventory was read'; Setting = 'Collector SectionStatus'; Current = $Model.ScanCurrent
-        Recommended = 'Every list and its members read in full (no recommendation)'; Status = $Model.ScanStatus; Finding = $Model.ScanFinding
-        SourceUrl = 'https://learn.microsoft.com/powershell/module/exchangepowershell/get-distributiongroup'; Nist = @(); Command = $null
+    $scanRow = [pscustomobject]@{ Id = $script:NRGDlScan.Id; Title = $script:NRGDlScan.Title; Setting = $script:NRGDlScan.Setting; Current = $Model.ScanCurrent
+        Recommended = "$($script:NRGDlScan.Recommended) (no recommendation)"; Status = $Model.ScanStatus; Finding = $Model.ScanFinding
+        SourceUrl = $script:NRGDlScan.SourceUrl; Nist = @(); Command = $null
         FixNote = $(if (@($Model.Problems).Count) { 'Collection problems: ' + ((@($Model.Problems) | Select-Object -First 5) -join ' | ') + $(if (@($Model.Problems).Count -gt 5) { " | ... and $(@($Model.Problems).Count - 5) more in the text worksheet" } else { '' }) } else { '' }) }
     $rows.Add((& $row $scan $scanRow))
     foreach ($l in $Model.Lists) { foreach ($r in $l.Rows) { $rows.Add((& $row $l $r)) } }

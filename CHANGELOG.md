@@ -38,6 +38,12 @@
   refuse a session whose tenant could not be read; a failed list query beside an empty one exited 2
   ("no lists found") instead of 3; and the console pointed at "Exceptions" that nothing printed (the
   worksheet now has a Collection problems block). `MailNonUniversalGroup` members are now nested groups.
+  A standards pass then brought the new files to the repo's conventions: the entry script's header
+  carries the Author, data-key and cmdlet lines like its siblings, the DL-0.1 scan entry (id, title,
+  source) is defined once in `Lib/Get-NRGDistributionListBaseline.ps1` instead of restated in the
+  evaluator and the worksheet, and the 1900- and 300-character caps are named constants. Static tests
+  pin the header, `[CmdletBinding()]` on every function, no host output outside the entry script, and
+  the single definition.
   The evaluator is split into one verdict function per rule (the repo's one-function-per-control
   convention) behind a single emitter.
 

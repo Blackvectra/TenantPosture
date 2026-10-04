@@ -56,6 +56,11 @@
 
 .NOTES
     NRG Technology Services / NextLayerSec LLC — nrgtechservices.com
+    Author: Matthew Levorson
+    Data keys set/consumed: EXO-DistributionLists (set by Invoke-NRGCollectDistributionLists).
+    Cmdlets: Connect-ExchangeOnline; Get-DistributionGroup, Get-DynamicDistributionGroup,
+             Get-DistributionGroupMember, Get-DynamicDistributionGroupMember, Get-AcceptedDomain
+             (read-only). No Microsoft Graph scope is requested.
     Read-only. Exit codes: 0 success | 1 sign-in failure | 2 no lists found |
                            3 partial read | 4 fatal error.
 #>

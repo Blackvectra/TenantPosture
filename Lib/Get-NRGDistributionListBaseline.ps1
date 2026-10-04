@@ -29,6 +29,24 @@
 
 $script:NRGDlBaselineCache = $null
 
+# The scan-level entry (DL-0.1) is not a catalog recommendation, so it has no row in
+# Config/distribution-list-baseline.json. The evaluator emits it and the worksheet
+# renders it; both read this one definition so the id, title and source cannot drift.
+$script:NRGDlScan = [pscustomobject]@{
+    Id          = 'DL-0.1'
+    Instance    = '(scan)'
+    Title       = 'Distribution-list inventory was read'
+    Setting     = 'Collector SectionStatus'
+    Recommended = 'Every list and its members read in full'
+    SourceUrl   = 'https://learn.microsoft.com/powershell/module/exchangepowershell/get-distributiongroup'
+}
+
+# Register-NRGException accepts 1 to 2000 characters: one call site that throws from inside
+# a catch block would abandon every read after it, so messages are bounded below that.
+$script:NRGDlExceptionMessageMax = 1900
+# A per-list member-read error is shown beside the list, so it is kept short.
+$script:NRGDlMemberErrorMax = 300
+
 function Get-NRGDlArray {
     # A list field as a plain array: absent, null and empty all become "nothing", and the
     # caller wraps the call in @() so zero or one element is still an array. (Do not use
