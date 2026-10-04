@@ -732,7 +732,17 @@ function Test-NRGEmailControlOAuthConsents {
     }
 
     $grants = @($consentRaw.Data.Grants)
+    # The collector reads one page. A next link means more grants exist than were
+    # read: what the page holds can be reported, "none" cannot be concluded.
+    $grantsTruncated = [bool](Get-NRGNestedProperty -Object $consentRaw -Path 'Data.Truncated' -Default $false)
+    $truncNote = 'The grant list stopped at one page (Graph returned a next link), so more grants exist than were read.'
     if ($grants.Count -eq 0) {
+        if ($grantsTruncated) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+                -Title $title -Severity 'Critical' `
+                -Detail "Not cleared: no grant was on the page read. $truncNote"
+            return
+        }
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'Critical' `
             -Detail 'No user-principal OAuth consent grants on this account.'
@@ -778,7 +788,8 @@ function Test-NRGEmailControlOAuthConsents {
         $detail = "FOUND $($flagged.Count) grant(s) with mail/file write-or-send scopes — OAuth persistence survives password reset + MFA re-enrollment; only revoking the grant kills it.`n" +
                   ($flagged -join "`n") +
                   $(if ($unidentifiedFlagged -gt 0) { "`n`nIdentify each app first: Entra admin center > Enterprise applications > search the service principal ID (the Object ID). A Microsoft or other recognized app that holds this scope on purpose is expected; an app nobody recognizes is not." } else { '' }) +
-                  $(if ($watched.Count -gt 0) { "`nAlso review (read-level scopes):`n" + ($watched -join "`n") } else { '' })
+                  $(if ($watched.Count -gt 0) { "`nAlso review (read-level scopes):`n" + ($watched -join "`n") } else { '' }) +
+                  $(if ($grantsTruncated) { "`n$truncNote" } else { '' })
         # Critical when an app was identified and holds the scope; High while none was identified,
         # because an unidentified app may be an ordinary Microsoft one.
         $grantSeverity = if ($identifiedFlagged -gt 0) { 'Critical' } else { 'High' }
@@ -793,12 +804,18 @@ function Test-NRGEmailControlOAuthConsents {
     if ($watched.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $cat `
             -Title $title -Severity 'High' `
-            -Detail ("No write/send-scope grants, but $($watched.Count) grant(s) carry mail/file READ scopes — verify the user recognizes each app:`n" + ($watched -join "`n")) `
+            -Detail ("No write/send-scope grants among those read, but $($watched.Count) grant(s) carry mail/file READ scopes — verify the user recognizes each app:`n" + ($watched -join "`n") + $(if ($grantsTruncated) { "`n$truncNote" } else { '' })) `
             -CurrentValue "$($watched.Count) read-scope grant(s)" `
             -Remediation 'Confirm each app with the user; revoke anything unrecognized (Entra > Users > the user > Applications).'
         return
     }
 
+    if ($grantsTruncated) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+            -Title $title -Severity 'Critical' `
+            -Detail "Not cleared: none of the $($grants.Count) grant(s) read carry mail or file scopes. $truncNote"
+        return
+    }
     Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
         -Title $title -Severity 'Critical' `
         -Detail "Reviewed $($grants.Count) consent grant(s) — none carry mail or file scopes."

@@ -134,4 +134,47 @@ Describe 'Review 106 — incident-response honesty' {
             (& $script:Finding 'SIGNIN-1.5').State | Should -Be 'Satisfied'
         }
     }
+    Context 'B4: a truncated consent-grant list cannot support "none carry mail or file scopes"' {
+        BeforeAll {
+            $script:Required = { foreach ($k in 'IR-MailboxProfile', 'IR-MailboxSentItems', 'IR-MailboxInbox', 'IR-MailboxRules') { & $script:Ok $k ([ordered]@{ Count = 0; Truncated = $false }) } }
+            $script:Benign = [ordered]@{ GrantId = 'g1'; ClientSpId = 'sp1'; App = [ordered]@{ DisplayName = 'Teams'; AppId = 'a1'; PublisherName = 'Microsoft' }; ConsentType = 'Principal'; Scope = 'User.Read openid profile' }
+        }
+
+        It 'benign grants on a list that stopped at one page: not cleared, never Satisfied' {
+            & $script:Ok 'IR-UserConsents' ([ordered]@{ Count = 1; Truncated = $true; Grants = @($script:Benign) })
+            Test-NRGEmailControlOAuthConsents
+            $f = & $script:Finding 'EMAIL-4.1'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match '^Not cleared'
+            $f.Detail | Should -Match 'one page'
+        }
+
+        It 'an empty first page with more pages: not cleared' {
+            & $script:Ok 'IR-UserConsents' ([ordered]@{ Count = 0; Truncated = $true; Grants = @() })
+            Test-NRGEmailControlOAuthConsents
+            (& $script:Finding 'EMAIL-4.1').State | Should -Be 'NotApplicable'
+        }
+
+        It 'a write-scope grant on a truncated list is still reported, with the truncation stated' {
+            $bad = [ordered]@{ GrantId = 'g2'; ClientSpId = 'sp2'; App = $null; ConsentType = 'Principal'; Scope = 'Mail.ReadWrite' }
+            & $script:Ok 'IR-UserConsents' ([ordered]@{ Count = 2; Truncated = $true; Grants = @($script:Benign, $bad) })
+            Test-NRGEmailControlOAuthConsents
+            $f = & $script:Finding 'EMAIL-4.1'
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'more grants exist'
+        }
+
+        It 'the deep-dive evidence is not Complete when the (optional) consent read was truncated, and names it' {
+            & $script:Required
+            & $script:Ok 'IR-UserConsents' ([ordered]@{ Count = 1; Truncated = $true; Grants = @($script:Benign) })
+            $e = Get-NRGDeepDiveEvidence
+            $e.Complete | Should -BeFalse -Because 'the source was read and stopped early: a clean dive verdict would rest on truncated evidence'
+            ($e.OptionalTruncated -join ' ') | Should -Match 'IR-UserConsents'
+        }
+
+        It 'an optional source that was simply not read keeps the documented behavior: named, not incomplete' {
+            & $script:Required
+            (Get-NRGDeepDiveEvidence).Complete | Should -BeTrue
+        }
+    }
 }
