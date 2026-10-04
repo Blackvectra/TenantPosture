@@ -122,6 +122,74 @@ jobs:
           path: pester-results.xml
           if-no-files-found: warn
 
+  # The local web GUI's real-server tests on Windows. The Pester job above runs
+  # on Ubuntu without Pode, so it skips that context; this job installs Pode and
+  # runs it where the tool is actually used. What it adds over Ubuntu: NTFS
+  # symbolic links, junctions and hard links (the report-folder link guard),
+  # Windows path semantics, and the loopback server itself.
+  web-gui-windows:
+    name: Web GUI (Windows, real server)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+
+      - name: Install Pester (>= 5.5.0) and Pode (>= 2.10.0)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # The runner image ships Pester 3.4 for Windows PowerShell; the version
+          # is therefore asked for, and imported, explicitly. Retried 3x to ride
+          # out a brief PSGallery hiccup; upper bounds keep an unreleased major
+          # from being adopted by surprise.
+          $wanted = @(
+              @{ Name = 'Pester'; Min = '5.5.0'; Max = '5.99.99' },
+              @{ Name = 'Pode';   Min = '2.10.0'; Max = '2.99.99' }
+          )
+          foreach ($m in $wanted) {
+              $delays = @(2, 4, 8)
+              $lastErr = $null
+              for ($i = 0; $i -lt $delays.Length; $i++) {
+                  try {
+                      Install-Module -Name $m.Name -MinimumVersion $m.Min -MaximumVersion $m.Max -Force -Scope CurrentUser -SkipPublisherCheck -AllowClobber -ErrorAction Stop
+                      $lastErr = $null
+                      break
+                  } catch {
+                      $lastErr = $_
+                      Write-Host ('Install of {0} failed: {1}' -f $m.Name, $_.Exception.Message) -ForegroundColor Yellow
+                      if ($i -lt $delays.Length - 1) { Start-Sleep -Seconds $delays[$i] }
+                  }
+              }
+              if ($lastErr) { throw $lastErr }
+          }
+          Import-Module Pester -MinimumVersion 5.5.0 -Force
+          Write-Host ('pwsh {0} on {1}' -f $PSVersionTable.PSVersion, $PSVersionTable.OS)
+          Write-Host ('Pester {0}' -f (Get-Module Pester).Version)
+          Write-Host ('Pode   {0}' -f (Get-Module -ListAvailable Pode | Sort-Object Version -Descending | Select-Object -First 1).Version)
+
+      - name: Run the web GUI tests
+        shell: pwsh
+        run: |
+          Import-Module Pester -MinimumVersion 5.5.0 -Force
+          $config = New-PesterConfiguration
+          $config.Run.Path = @('./Testing/NRG.WebServer.Tests.ps1')
+          $config.Run.Exit = $true
+          $config.Run.Throw = $false
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = 'pester-web-windows.xml'
+          $config.TestResult.OutputFormat = 'NUnitXml'
+          Invoke-Pester -Configuration $config
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pester-web-windows
+          path: pester-web-windows.xml
+          if-no-files-found: warn
+
   psscriptanalyzer:
     name: PSScriptAnalyzer
     runs-on: ubuntu-latest
