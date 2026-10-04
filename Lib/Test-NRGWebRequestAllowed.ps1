@@ -23,6 +23,17 @@
 #   application/json, must come from this server's own origin when the browser
 #   says where it came from, and must not be marked cross-site by Fetch Metadata.
 #
+# What this is not a defense against: a program running as the operator can send
+# any header it likes, so it can send a right Host and no Origin. That is local
+# code, which the loopback bind and the operating system own; this policy decides
+# what a BROWSER may do. So a request that carries neither Origin nor
+# Sec-Fetch-Site is taken to be a non-browser caller and is allowed when it meets
+# the Host rule and, for a write, the JSON rule. A web page cannot take that path:
+# a cross-site write from a browser carries Origin (and, in current engines,
+# Sec-Fetch-Site), and the content-type rule alone already stops a form or a
+# no-preflight fetch. The residual risk is a browser old enough to send neither
+# header, which still cannot send JSON without a preflight this server never grants.
+#
 # The verdict carries a Reason for tests and logs; the Message is fixed text and
 # never echoes the request. Both rejections are 403.
 #

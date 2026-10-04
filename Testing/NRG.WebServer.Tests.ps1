@@ -54,6 +54,8 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
         $script:IndexLib   = Join-Path $script:RepoRoot 'Lib\Get-NRGWebRunIndex.ps1'
         $script:PathLib    = Join-Path $script:RepoRoot 'Lib\Resolve-NRGWebRunPath.ps1'
         $script:RequestLib = Join-Path $script:RepoRoot 'Lib\Test-NRGWebRequestAllowed.ps1'
+        $script:DomainLib  = Join-Path $script:RepoRoot 'Lib\Test-NRGDomainName.ps1'
+        $script:ApiErrorLib = Join-Path $script:RepoRoot 'Lib\Get-NRGWebApiError.ps1'
         $script:FieldLib   = Join-Path $script:RepoRoot 'Lib\Get-NRGObjectField.ps1'
         $script:WebRoot    = Join-Path $script:RepoRoot 'Web'
         $script:IndexHtml  = Join-Path $script:WebRoot  'index.html'
@@ -183,10 +185,12 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
         It 'Lib/Start-NRGWebServer.ps1 is present' {
             Test-Path -LiteralPath $script:ServerPath | Should -BeTrue
         }
-        It 'the three support files are present: path guard, run index, request policy' {
-            Test-Path -LiteralPath $script:PathLib    | Should -BeTrue
-            Test-Path -LiteralPath $script:IndexLib   | Should -BeTrue
-            Test-Path -LiteralPath $script:RequestLib | Should -BeTrue
+        It 'the support files are present: path guard, run index, request policy, domain-name rule, error table' {
+            Test-Path -LiteralPath $script:PathLib     | Should -BeTrue
+            Test-Path -LiteralPath $script:IndexLib    | Should -BeTrue
+            Test-Path -LiteralPath $script:RequestLib  | Should -BeTrue
+            Test-Path -LiteralPath $script:DomainLib   | Should -BeTrue
+            Test-Path -LiteralPath $script:ApiErrorLib | Should -BeTrue
         }
         It 'Web/index.html is present' {
             Test-Path -LiteralPath $script:IndexHtml | Should -BeTrue
@@ -251,7 +255,9 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             # The refusal is sent with its status in ONE call (Set-PodeResponseStatus
             # renders Pode's own error page and a later body is a slice of it) and
             # stops the pipeline before any route runs.
-            $script:ServerSrc | Should -Match '(?s)Add-PodeMiddleware -Name .RequestGuard.*?Write-PodeTextResponse -Value \$verdict\.Message -StatusCode \$verdict\.HttpStatus\s+return \$false'
+            # Under /api/ the refusal is the JSON contract, elsewhere text; either
+            # way it is one call and it ends the pipeline.
+            $script:ServerSrc | Should -Match '(?s)Add-PodeMiddleware -Name .RequestGuard.*?-not \$verdict\.Allowed.*?-clike ./api/\*.*?Get-NRGWebApiError -Code Forbidden\s+Write-PodeJsonResponse -Value \$apiError\.Body -StatusCode \$apiError\.HttpStatus.*?Write-PodeTextResponse -Value \$verdict\.Message -StatusCode \$verdict\.HttpStatus.*?return \$false'
         }
 
         It 'the policy reads every header it decides on, and the port it is told the server uses' {
@@ -285,9 +291,43 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             @($routes) | Should -Be @('/static')
         }
 
-        It 'POST /api/scan validates domain against an FQDN regex' {
-            $script:ServerSrc | Should -Match 'domain -notmatch' `
-                -Because 'Unvalidated domain input is fed to the child scan job; an attacker could inject shell-substitution-like chars'
+        It 'POST /api/scan validates the domain with the one domain-name rule, and keeps no pattern of its own' {
+            # The domain is fed to the child scan job and becomes a folder name:
+            # the rule that accepts it must be the rule the listing, the path
+            # guard and the entry script agree with. The route had a regex of its
+            # own, which accepted "a..b.com" and a trailing line feed.
+            $script:ServerSrc | Should -Match '(?s)''/api/scan''.*?Test-NRGDomainName\s+-Value\s+\$domain'
+            $script:ServerSrc | Should -Not -Match '\$domain\s+-(not)?c?match' `
+                -Because 'a second definition of a valid domain is how the first drifted'
+        }
+
+        It 'no route uses Set-PodeResponseStatus (it renders Pode''s own error page and cuts the body written after it)' {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:ServerPath, [ref]$null, [ref]$null)
+            $names = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true) |
+                ForEach-Object { $_.GetCommandName() } | Where-Object { $_ })
+            $names.Count | Should -BeGreaterThan 0
+            $names | Should -Not -Contain 'Set-PodeResponseStatus'
+        }
+
+        It 'a route under /api/ answers a refusal with the JSON contract, never with text' {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:ServerPath, [ref]$null, [ref]$null)
+            $routes = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Add-PodeRoute' }, $true))
+            $api = 0
+            foreach ($route in $routes) {
+                $path = $null; $block = $null
+                $els = $route.CommandElements
+                for ($i = 0; $i -lt $els.Count - 1; $i++) {
+                    if ($els[$i] -isnot [System.Management.Automation.Language.CommandParameterAst]) { continue }
+                    if ($els[$i].ParameterName -eq 'Path')        { $path  = $els[$i + 1].Value }
+                    if ($els[$i].ParameterName -eq 'ScriptBlock') { $block = $els[$i + 1] }
+                }
+                if ($path -cnotlike '/api/*') { continue }
+                $api++
+                $inner = @($block.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true) |
+                    ForEach-Object { $_.GetCommandName() } | Where-Object { $_ })
+                $inner | Should -Not -Contain 'Write-PodeTextResponse' -Because "route $path"
+            }
+            $api | Should -BeGreaterOrEqual 5 -Because 'a route list that did not parse would pass this vacuously'
         }
     }
 
@@ -332,6 +372,13 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             $script:AppJsSrc | Should -Not -Match '\.(innerHTML|outerHTML)\s*[+]?=' `
                 -Because 'every API field is rendered with textContent / setAttribute'
             $script:AppJsSrc | Should -Not -Match 'insertAdjacentHTML'
+        }
+
+        It 'app.js shows the API''s fixed sentence for a refused scan, not the raw response body' {
+            # Every refusal under /api/ is { error, message }; printing the body
+            # would show JSON, and printing text() of an error page would show markup.
+            $script:AppJsSrc | Should -Match 'j\.message' -Because 'the GUI shows the message field'
+            $script:AppJsSrc | Should -Not -Match 'new Error\(await r\.text\(\)\)'
         }
 
         It 'the report-site link addresses the run by folder + id, encoded, and opens in a new tab without an opener' {
@@ -446,7 +493,7 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             # The paths are computed outside the block and carried in by the
             # closure (no $using:).
             $script:ServerBlockSrc | Should -Match 'Use-PodeScript\s+-Path\s+\$podeScript'
-            foreach ($f in 'Get-NRGObjectField', 'Resolve-NRGWebRunPath', 'Get-NRGWebRunIndex', 'Test-NRGWebRequestAllowed') {
+            foreach ($f in 'Get-NRGObjectField', 'Resolve-NRGWebRunPath', 'Get-NRGWebRunIndex', 'Test-NRGWebRequestAllowed', 'Test-NRGDomainName', 'Get-NRGWebApiError') {
                 $script:Src | Should -Match ('Lib\\' + $f + '\.ps1')
             }
         }
@@ -538,6 +585,8 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             . $script:PathLib
             . $script:IndexLib
             . $script:RequestLib
+            . $script:DomainLib
+            . $script:ApiErrorLib
             $script:Work = Join-Path ([System.IO.Path]::GetTempPath()) ("nrgweb-unit-{0}" -f ([Guid]::NewGuid().ToString('N')))
             $script:Fx   = & $script:NewFixture $script:Work
             $script:Id   = $script:Fx.Id
@@ -775,19 +824,180 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
                 Test-NRGWebSegment -Value '' | Should -BeFalse
             }
 
-            It 'the domain-shape check has the same anchors: no trailing newline, no Kelvin sign' {
-                Test-NRGWebDomainShape -Value 'ndaco.org' | Should -BeTrue
-                Test-NRGWebDomainShape -Value 'a-b.example.com' | Should -BeTrue
-                Test-NRGWebDomainShape -Value "ndaco.org`n" | Should -BeFalse
-                Test-NRGWebDomainShape -Value ('ndaco.or' + [char]0x212A) | Should -BeFalse
-                Test-NRGWebDomainShape -Value '-x.com' | Should -BeFalse
-                Test-NRGWebDomainShape -Value '' | Should -BeFalse
-                Test-NRGWebDomainShape -Value $null | Should -BeFalse
-            }
-
             It 'is an ASCII whitelist: a non-ASCII character that case-folds into [A-Za-z] (the Kelvin sign) is rejected' {
                 Test-NRGWebSegment -Value ('a' + [char]0x212A + 'b') | Should -BeFalse
                 Test-NRGWebSegment -Value ([string][char]0xFF0E + [char]0xFF0E) | Should -BeFalse -Because 'fullwidth full stops are not dots'
+            }
+        }
+
+        Context 'the domain-name rule (one definition: the scan route, the listing and the entry script)' {
+            # Discovery-time data: the same lists drive the per-case tests (-ForEach)
+            # and the whole-list tests (a single case that carries the list), so each
+            # is written once.
+            BeforeDiscovery {
+                $script:acceptedNames = @(
+                    'contoso.com', 'a-b.example.com', 'ndaco.org', 'tenant.onmicrosoft.com', 'JOINED.COM', 'a.co',
+                    '1.example.org', 'xn--bcher-kva.example', 'x.y.z.example.com', (('a' * 63) + '.com'),
+                    ((('a' * 63) + '.') * 3 + ('d' * 57) + '.com'))
+                $script:rejectedCases = @(
+                    @{ Label = 'null';                         Value = $null }
+                    @{ Label = 'empty';                        Value = '' }
+                    @{ Label = 'one label';                    Value = 'localhost' }
+                    @{ Label = 'empty label (a..b.com)';       Value = 'a..b.com' }
+                    @{ Label = 'leading dot';                  Value = '.com' }
+                    @{ Label = 'trailing dot';                 Value = 'a.com.' }
+                    @{ Label = 'only dots';                    Value = '..' }
+                    @{ Label = 'label starts with hyphen';     Value = '-x.com' }
+                    @{ Label = 'label ends with hyphen';       Value = 'x-.com' }
+                    @{ Label = 'inner label starts with hyphen'; Value = 'a.-b.com' }
+                    @{ Label = 'underscore';                   Value = 'a_b.com' }
+                    @{ Label = 'space';                        Value = 'a b.com' }
+                    @{ Label = 'one-letter TLD';               Value = 'a.c' }
+                    @{ Label = 'numeric TLD';                  Value = 'a.123' }
+                    @{ Label = 'digit in TLD';                 Value = 'a.c0m' }
+                    @{ Label = 'trailing LF';                  Value = "a.com`n" }
+                    @{ Label = 'trailing CRLF';                Value = "a.com`r`n" }
+                    @{ Label = 'leading space';                Value = ' a.com' }
+                    @{ Label = 'NUL';                          Value = "a.com`0" }
+                    @{ Label = 'Kelvin sign in the TLD';       Value = ('ndaco.or' + [char]0x212A) }
+                    @{ Label = 'fullwidth full stop';          Value = ('a' + [char]0xFF0E + 'com') }
+                    @{ Label = 'slash';                        Value = 'a/b.com' }
+                    @{ Label = 'backslash';                    Value = 'a\b.com' }
+                    @{ Label = 'path traversal';               Value = '../x.com' }
+                    @{ Label = 'port';                         Value = 'a.com:443' }
+                    @{ Label = 'userinfo';                     Value = 'user@a.com' }
+                    @{ Label = 'wildcard';                     Value = '*.a.com' }
+                    @{ Label = 'label of 64 characters';       Value = (('a' * 64) + '.com') }
+                    @{ Label = 'top-level label of 64 letters'; Value = ('a.' + ('b' * 64)) }
+                    @{ Label = '254 characters in all';        Value = ((('a' * 63) + '.') * 3 + ('d' * 58) + '.com') }
+                    @{ Label = 'bad domain!';                  Value = 'bad domain!' })
+            }
+
+            It 'accepts a real domain name: <_>' -ForEach $script:acceptedNames {
+                Test-NRGDomainName -Value $_ | Should -BeTrue
+            }
+
+            It 'accepts a 63-character label and a name of exactly 253 characters' {
+                Test-NRGDomainName -Value (('a' * 63) + '.com') | Should -BeTrue
+                $longest = ((('a' * 63) + '.') * 3 + ('d' * 57) + '.com')
+                $longest.Length | Should -Be 253
+                Test-NRGDomainName -Value $longest | Should -BeTrue
+            }
+
+            It 'rejects <Label>' -ForEach $script:rejectedCases {
+                Test-NRGDomainName -Value $Value | Should -BeFalse
+            }
+
+            It 'every name it accepts is also a valid path segment, so a scan can never create a folder the GUI cannot open' -ForEach @(@{ Accepted = $script:acceptedNames }) {
+                # Exhaustive over every string of up to six characters from an
+                # alphabet that holds each character class that matters (letter,
+                # digit, hyphen, dot, underscore).
+                $alphabet = @('a', '1', '-', '.', '_')
+                $level = @('')
+                $accepted = 0
+                $violations = [System.Collections.Generic.List[string]]::new()
+                foreach ($length in 1..6) {
+                    $next = [System.Collections.Generic.List[string]]::new()
+                    foreach ($prefix in $level) {
+                        foreach ($c in $alphabet) {
+                            $candidate = $prefix + $c
+                            $next.Add($candidate)
+                            if (Test-NRGDomainName -Value $candidate) {
+                                $accepted++
+                                if (-not (Test-NRGWebSegment -Value $candidate)) { $violations.Add($candidate) }
+                            }
+                        }
+                    }
+                    $level = $next
+                }
+                $accepted | Should -BeGreaterThan 20 -Because 'a corpus that accepted nothing would pass this vacuously'
+                @($violations) | Should -BeNullOrEmpty
+                # The same, on the names that matter in practice.
+                foreach ($name in $Accepted) { Test-NRGWebSegment -Value $name | Should -BeTrue -Because $name }
+            }
+
+            It 'the entry script''s -TenantDomain attribute is the same rule, case-sensitive, and behaves the same on every case above' -ForEach @(@{ Accepted = $script:acceptedNames; Rejected = $script:rejectedCases }) {
+                $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:EntryScript, [ref]$null, [ref]$null)
+                $param = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'TenantDomain' }
+                $attr = $param.Attributes | Where-Object { $_.TypeName.Name -eq 'ValidatePattern' }
+                @($attr).Count | Should -Be 1
+                # The attribute binds before any module loads, so it carries a copy
+                # of the pattern; the copy must be the rule, plus the empty value
+                # (the parameter is optional).
+                $attr.PositionalArguments[0].Value | Should -BeExactly ('\A\z|' + (Get-NRGDomainNamePattern))
+                (@($attr.NamedArguments | Where-Object { $_.ArgumentName -eq 'Options' }).Argument.Value) | Should -Be 'None' `
+                    -Because 'the default is IgnoreCase, which lets the Kelvin sign pass as a letter'
+                # And it behaves like the function: bind the real attribute.
+                $probe = [scriptblock]::Create("param($($attr.Extent.Text) [string] `$D) 'bound'")
+                foreach ($name in $Accepted) {
+                    (& $probe -D $name) | Should -Be 'bound' -Because $name
+                }
+                foreach ($case in $Rejected) {
+                    if ([string]::IsNullOrEmpty($case.Value)) { continue }
+                    { & $probe -D $case.Value } | Should -Throw -Because $case.Label
+                }
+                (& $probe -D '') | Should -Be 'bound' -Because 'the parameter is optional'
+            }
+
+            It 'a results file or clients.json entry that is not a domain name never becomes a label' {
+                $f = Join-Path $script:Work 'label-probe.json'
+                Set-Content -LiteralPath $f -Value '{"Metadata":{"TenantDomain":"a..b.com"}}' -Encoding utf8
+                (Read-NRGWebRunMetadata -Path $f).TenantDomain | Should -Be ''
+                Set-Content -LiteralPath $f -Value '{"Metadata":{"TenantDomain":"Unknown"}}' -Encoding utf8
+                (Read-NRGWebRunMetadata -Path $f).TenantDomain | Should -Be ''
+                Set-Content -LiteralPath $f -Value '{"Metadata":{"TenantDomain":"ok.example.com"}}' -Encoding utf8
+                (Read-NRGWebRunMetadata -Path $f).TenantDomain | Should -Be 'ok.example.com'
+            }
+        }
+
+        Context 'the API failure contract' {
+            BeforeAll {
+                # The statuses are written out here, independently of the table.
+                $script:ExpectedApiErrors = @{
+                    DomainRequired = 400; InvalidDomain = 400; UnknownRunId = 404
+                    InvalidPath = 400; NotFound = 404; Forbidden = 403
+                }
+            }
+
+            It 'has exactly the codes the routes use, each with its status: <Code>' -ForEach @(
+                @{ Code = 'DomainRequired'; Status = 400 }, @{ Code = 'InvalidDomain'; Status = 400 }, @{ Code = 'UnknownRunId'; Status = 404 },
+                @{ Code = 'InvalidPath';    Status = 400 }, @{ Code = 'NotFound';      Status = 404 }, @{ Code = 'Forbidden';    Status = 403 }) {
+                $e = Get-NRGWebApiError -Code $Code
+                $e.HttpStatus | Should -Be $Status
+                @($e.Body.Keys) | Should -Be @('error', 'message') -Because 'the body is exactly { error, message }'
+                $e.Body.error | Should -BeExactly $Code
+                $e.Body.message | Should -Match '^[A-Z][^<>"''&]+\.$' -Because 'one fixed sentence, nothing that could carry markup'
+                (($e.Body | ConvertTo-Json -Compress) | ConvertFrom-Json).error | Should -BeExactly $Code
+            }
+
+            It 'the set of codes is the one written down here (a new code needs a deliberate test)' {
+                $valid = @((Get-Command Get-NRGWebApiError).Parameters['Code'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }).ValidValues
+                @($valid | Sort-Object) | Should -Be @($script:ExpectedApiErrors.Keys | Sort-Object)
+            }
+
+            It 'every message is different, so a code can be told from its sentence' {
+                $messages = foreach ($code in $script:ExpectedApiErrors.Keys) { (Get-NRGWebApiError -Code $code).Body.message }
+                @($messages | Sort-Object -Unique).Count | Should -Be $script:ExpectedApiErrors.Count
+            }
+
+            It 'refuses a code that is not in the table' {
+                { Get-NRGWebApiError -Code 'Whatever' } | Should -Throw
+            }
+
+            It 'the path guard''s own sentences are the table''s, so the two cannot drift apart' {
+                $bad  = Resolve-NRGWebRunPath -OutputRoot $script:Fx.Out -Folder 'a b' -Id 'x' -Kind Report
+                $none = Resolve-NRGWebRunPath -OutputRoot $script:Fx.Out -Folder '_flat' -Id 'NOSUCH-20261002-000000' -Kind Report
+                $bad.Message  | Should -BeExactly (Get-NRGWebApiError -Code InvalidPath).Body.message
+                $none.Message | Should -BeExactly (Get-NRGWebApiError -Code NotFound).Body.message
+                $bad.HttpStatus  | Should -Be (Get-NRGWebApiError -Code InvalidPath).HttpStatus
+                $none.HttpStatus | Should -Be (Get-NRGWebApiError -Code NotFound).HttpStatus
+            }
+
+            It 'the table is pure: it reads no file and makes no call' {
+                $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:ApiErrorLib, [ref]$null, [ref]$null)
+                $names = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true) |
+                    ForEach-Object { $_.GetCommandName() } | Where-Object { $_ })
+                @($names | Where-Object { $_ -match '^(Get-Content|Get-Item|Test-Path|Import-|Connect-|Invoke-|Start-|Set-|Out-File)' }) | Should -BeNullOrEmpty
             }
         }
 
@@ -971,9 +1181,10 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
         Context 'what the helpers may do' {
             BeforeAll {
                 $script:Parsed = @{}
-                foreach ($entry in @(@('Index', $script:IndexLib), @('Path', $script:PathLib), @('Request', $script:RequestLib))) {
+                foreach ($entry in @(@('Index', $script:IndexLib), @('Path', $script:PathLib), @('Request', $script:RequestLib), @('Domain', $script:DomainLib), @('ApiError', $script:ApiErrorLib))) {
                     $ast = [System.Management.Automation.Language.Parser]::ParseFile($entry[1], [ref]$null, [ref]$null)
                     $script:Parsed[$entry[0]] = @{
+                        Functions = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)).Count
                         Commands = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true) |
                             ForEach-Object { $_.GetCommandName() } | Where-Object { $_ } | Sort-Object -Unique)
                         Members  = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.MemberExpressionAst] -and $n -isnot [System.Management.Automation.Language.InvokeMemberExpressionAst] }, $true) |
@@ -982,10 +1193,10 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
                 }
             }
 
-            It 'is read-only and makes no tenant or network call, in any of the three files' {
+            It 'is read-only and makes no tenant or network call, in any of the five files' {
                 $forbidden = '^(Connect-|Disconnect-|Invoke-(Mg|NRGGraph|RestMethod|WebRequest|Command)|.*-Mg[A-Z]|Start-(Process|Job)|Set-Content|Add-Content|Out-File|Remove-Item|New-Item|Move-Item|Copy-Item|Rename-Item|Clear-Content|Resolve-NRGDns|Resolve-DnsName|Get-NRGRawData)'
                 foreach ($k in $script:Parsed.Keys) {
-                    $script:Parsed[$k].Commands.Count | Should -BeGreaterThan 0 -Because "the $k file must have parsed"
+                    $script:Parsed[$k].Functions | Should -BeGreaterThan 0 -Because "the $k file must have parsed"
                     @($script:Parsed[$k].Commands | Where-Object { $_ -match $forbidden }) | Should -BeNullOrEmpty -Because "the $k file"
                 }
             }
@@ -1276,7 +1487,7 @@ Start-NRGWebServer $($parts -join ' ') -NoBrowser
             $script:FxB = & $script:NewFixture $script:Install
             Copy-Item -LiteralPath $script:WebRoot -Destination (Join-Path $script:Install 'Web') -Recurse
             $null = New-Item -ItemType Directory -Path (Join-Path $script:Install 'Lib') -Force
-            foreach ($f in $script:FieldLib, $script:PathLib, $script:IndexLib, $script:RequestLib) {
+            foreach ($f in $script:FieldLib, $script:PathLib, $script:IndexLib, $script:RequestLib, $script:DomainLib, $script:ApiErrorLib) {
                 Copy-Item -LiteralPath $f -Destination (Join-Path $script:Install 'Lib')
             }
             $script:PortB = Get-Random -Minimum 23001 -Maximum 26000
@@ -1542,7 +1753,14 @@ Start-NRGWebServer $($parts -join ' ') -NoBrowser
                 }
                 $r = & $script:Raw $script:Port $Path 'GET' @{ Host = $hostValue }
                 $r.Status | Should -Be 403
-                $r.Body | Should -Be 'Forbidden.'
+                if ($Path -clike '/api/*') {
+                    $r.Headers['content-type'] | Should -Match '^application/json'
+                    $j = $r.Body | ConvertFrom-Json
+                    $j.error   | Should -BeExactly 'Forbidden'
+                    $j.message | Should -BeExactly 'Forbidden.'
+                } else {
+                    $r.Body | Should -Be 'Forbidden.' -Because 'a page or document route refuses in plain text'
+                }
                 $r.Body | Should -Not -Match 'MARKER|"id"|<!DOCTYPE' -Because 'nothing of the page or the data may leave with a refusal'
             }
 
@@ -1593,13 +1811,13 @@ Start-NRGWebServer $($parts -join ' ') -NoBrowser
                 @{ Label = 'no content type at all';         Headers = @{};                                                                                           Body = '{"domain":"bad domain!"}' }) {
                 $r = & $script:Raw $script:Port '/api/scan' 'POST' $Headers $Body
                 $r.Status | Should -Be 403
-                $r.Body | Should -Be 'Forbidden.'
+                ($r.Body | ConvertFrom-Json).error | Should -BeExactly 'Forbidden'
             }
 
             It 'a state-changing request with a foreign Host is refused before its content is looked at' {
                 $r = & $script:Raw $script:Port '/api/scan' 'POST' @{ Host = 'evil.example.com'; 'Content-Type' = 'application/json'; Origin = 'http://evil.example.com' } '{"domain":"bad domain!"}'
                 $r.Status | Should -Be 403
-                $r.Body | Should -Be 'Forbidden.'
+                ($r.Body | ConvertFrom-Json).error | Should -BeExactly 'Forbidden'
             }
 
             It 'a preflight is never granted' {
@@ -1622,6 +1840,91 @@ Start-NRGWebServer $($parts -join ' ') -NoBrowser
 
             It 'refusing leaves no scan behind: the status route knows no run' {
                 (& $script:Raw $script:Port '/api/scan/does-not-exist/status').Status | Should -Be 404
+            }
+        }
+
+        Context 'a refusal under /api/ is JSON with a stable code; outside /api/ it is text' {
+            # Server B is an installation folder with no entry script: if a domain
+            # that must be refused were ever accepted, the scan it started would
+            # fail at once instead of reaching a tenant. Server A, started from the
+            # repository's own ScriptDir, is not used for a request that could start one.
+            BeforeAll {
+                $script:PostScan = {
+                    param([string] $Body)
+                    & $script:Raw $script:PortB '/api/scan' 'POST' @{ 'Content-Type' = 'application/json' } $Body
+                }
+            }
+
+            It 'refuses a domain the one rule refuses with 400 InvalidDomain and a fixed sentence: <Label>' -ForEach @(
+                @{ Label = 'a..b.com (the entry script accepted it)';       Body = '{"domain":"a..b.com"}';        Echo = 'a..b' }
+                @{ Label = 'a trailing line feed (a $ anchor accepted it)'; Body = '{"domain":"ndaco.org\n"}';    Echo = 'ndaco' }
+                @{ Label = 'a space and a bang';                           Body = '{"domain":"bad domain!"}';     Echo = 'bad domain' }
+                @{ Label = 'one label';                                    Body = '{"domain":"localhost"}';       Echo = 'localhost' }
+                @{ Label = 'a leading hyphen';                             Body = '{"domain":"-x.com"}';          Echo = '-x.com' }
+                @{ Label = 'two dots';                                     Body = '{"domain":".."}';              Echo = '..' }
+                @{ Label = 'a trailing dot';                               Body = '{"domain":"client.example.com."}'; Echo = 'client.example' }) {
+                $r = & $script:PostScan $Body
+                $r.Status | Should -Be 400
+                $r.Headers['content-type'] | Should -Match '^application/json'
+                $j = $r.Body | ConvertFrom-Json
+                @($j.PSObject.Properties.Name) | Should -Be @('error', 'message')
+                $j.error   | Should -BeExactly 'InvalidDomain'
+                $j.message | Should -BeExactly 'The domain is not a valid domain name.'
+                $r.Body | Should -Not -Match ([regex]::Escape($Echo)) -Because 'a refusal never echoes the request'
+                $r.Body | Should -Not -Match '<html' -Because 'Pode''s own error page is not the answer'
+            }
+
+            It 'asks for a domain with 400 DomainRequired when there is none: <Label>' -ForEach @(
+                @{ Label = 'an empty string'; Body = '{"domain":""}' }
+                @{ Label = 'only spaces';     Body = '{"domain":"   "}' }
+                @{ Label = 'no domain field'; Body = '{}' }) {
+                $r = & $script:PostScan $Body
+                $r.Status | Should -Be 400
+                $j = $r.Body | ConvertFrom-Json
+                $j.error   | Should -BeExactly 'DomainRequired'
+                $j.message | Should -BeExactly 'A domain is required.'
+            }
+
+            It 'a valid domain is accepted: the route answers 200 with a run id, and the status route knows it' {
+                $r = & $script:PostScan '{"domain":"Client-One.example.com"}'
+                $r.Status | Should -Be 200
+                $runId = ($r.Body | ConvertFrom-Json).runId
+                $runId | Should -Match '^[0-9a-f]{12}$'
+                $st = & $script:Raw $script:PortB "/api/scan/$runId/status"
+                $st.Status | Should -Be 200
+                $sj = $st.Body | ConvertFrom-Json
+                $sj.domain | Should -BeExactly 'Client-One.example.com'
+                $sj.status | Should -BeIn @('queued', 'running', 'failed', 'completed')
+                @($sj.PSObject.Properties.Name) | Should -Not -Contain 'error'
+                # The route creates nothing itself: the folder is the entry script's to make.
+                Test-Path -LiteralPath (Join-Path $script:FxB.Out 'Client-One.example.com') | Should -BeFalse
+            }
+
+            It 'answers an unknown scan id with 404 UnknownRunId' {
+                $r = & $script:Raw $script:Port '/api/scan/does-not-exist/status'
+                $r.Status | Should -Be 404
+                $r.Headers['content-type'] | Should -Match '^application/json'
+                $j = $r.Body | ConvertFrom-Json
+                $j.error   | Should -BeExactly 'UnknownRunId'
+                $j.message | Should -BeExactly 'No scan with that run id.'
+            }
+
+            It 'answers the report route''s refusals in the same contract: <Path>' -ForEach @(
+                @{ Path = '/api/runs/_flat/NOSUCH-20261002-000000/report'; Status = 404; Code = 'NotFound' }
+                @{ Path = '/api/runs/nosuchfolder/NOSUCH-20261002-000000/report'; Status = 404; Code = 'NotFound' }
+                @{ Path = '/api/runs/_flat/a%20b/report';                  Status = 400; Code = 'InvalidPath' }
+                @{ Path = '/api/runs/a%20b/x/report';                      Status = 400; Code = 'InvalidPath' }) {
+                $r = & $script:Raw $script:Port $Path
+                $r.Status | Should -Be $Status
+                $r.Headers['content-type'] | Should -Match '^application/json'
+                ($r.Body | ConvertFrom-Json).error | Should -BeExactly $Code
+            }
+
+            It 'a document route (the report site) still refuses in plain text, and says the same thing' {
+                $r = & $script:Raw $script:Port '/site/_flat/NOSUCH-20261002-000000/index.html'
+                $r.Status | Should -Be 404
+                $r.Headers['content-type'] | Should -Not -Match 'json'
+                $r.Body | Should -BeExactly 'Not found.'
             }
         }
 

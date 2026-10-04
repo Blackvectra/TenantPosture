@@ -49,8 +49,9 @@
   host-resolver rule simulating rebinding): every one refused, and the GUI's own
   requests unaffected.
   **Structure.** The path guard (`Lib/Resolve-NRGWebRunPath.ps1`), the run listing
-  (`Lib/Get-NRGWebRunIndex.ps1`) and the request policy
-  (`Lib/Test-NRGWebRequestAllowed.ps1`) are separate files of pure functions,
+  (`Lib/Get-NRGWebRunIndex.ps1`), the request policy
+  (`Lib/Test-NRGWebRequestAllowed.ps1`), the domain-name rule and the error table
+  are separate files of pure functions,
   loaded into Pode's route runspaces with `Use-PodeScript` (those runspaces start
   from a default session state, so module functions are not visible), which also
   lets CI test them although it skips the real-server context. Segments are an
@@ -63,6 +64,28 @@
   and body in one `Write-PodeTextResponse -StatusCode` call:
   `Set-PodeResponseStatus` renders Pode's own error page and a body written after
   it is replaced by a slice of that page.
+  **One domain rule, one failure contract.** The scan route accepted any string of
+  letters, digits, dots and hyphens (including `a..b.com` and a trailing line
+  feed, since `$` also matches before one), `Invoke-NRGAssessment.ps1
+  -TenantDomain` accepted `a..b.com` too, and the path guard refuses any name
+  holding `..`: a scan could be started for a folder the GUI could never open.
+  `Test-NRGDomainName` (`Lib/Test-NRGDomainName.ps1`) is now the only definition
+  (a fully qualified hostname: at most 253 characters, at least two labels of 1-63
+  letters, digits and inner hyphens, a final label of two or more letters, no
+  trailing dot), used by the scan route and the run listing; the entry script's
+  `-TenantDomain` attribute carries a copy of the same pattern (a parameter
+  attribute binds before any module loads) with `Options = 'None'` so it is
+  case-sensitive, and a test fails if the copy differs or binds differently. A test
+  also proves, over every string of up to six characters from a five-character
+  alphabet, that an accepted name is always a valid path segment. Every refusal
+  under `/api/` is now JSON, `{ "error": "<Code>", "message": "<fixed sentence>" }`,
+  from one table (`Lib/Get-NRGWebApiError.ps1`): `DomainRequired`, `InvalidDomain`,
+  `UnknownRunId`, `InvalidPath`, `NotFound`, `Forbidden`, each with its status and
+  none echoing the request. `POST /api/scan` and `GET /api/scan/:id/status` used
+  `Set-PodeResponseStatus` and returned Pode's error page cut to the body's length
+  (`<html style='background-color: #0`) instead of their JSON; no route does now,
+  and a test fails if one does. The GUI shows the `message` field. Outside `/api/`
+  (static files, the report site) a refusal is still a plain-text sentence.
 
 - **Defects found by the first live baseline validation (NRGTS, 2026-09-29),
   fixed without touching a single verdict.** DNS collection ran only inside

@@ -169,7 +169,13 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ domain: domain })
       });
-      if (!r.ok) throw new Error(await r.text());
+      if (!r.ok) {
+        // Every refusal under /api/ is { error, message }; show the fixed
+        // sentence, and only fall back to the status when the body is not it.
+        let msg = 'HTTP ' + r.status;
+        try { const j = await r.json(); if (j && typeof j.message === 'string') msg = j.message; } catch (_) { /* keep the status */ }
+        throw new Error(msg);
+      }
       runId = (await r.json()).runId;
     } catch (e) {
       setStatus('Could not start scan: ' + e.message);

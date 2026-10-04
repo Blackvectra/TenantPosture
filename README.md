@@ -297,13 +297,29 @@ a web page open in your own browser, so the server also decides per request:
   written to the browser's disk cache) and `Cross-Origin-Resource-Policy:
   same-origin`.
 
+**What a refusal looks like.** Every refusal under `/api/` is JSON with a stable
+code and a fixed sentence that never echoes the request:
+
+```json
+{ "error": "InvalidDomain", "message": "The domain is not a valid domain name." }
+```
+
+The codes are `DomainRequired` and `InvalidDomain` (400), `InvalidPath` (400),
+`NotFound` and `UnknownRunId` (404) and `Forbidden` (403). Branch on `error`, never
+on the sentence. Outside `/api/` (the static files and the report site) a refusal
+is a plain-text sentence. A path no route serves, or a method a route does not
+allow, still gets Pode's own error page: that is not under this contract. The
+domain a scan is started for must be a fully qualified hostname (two or more
+labels, no trailing dot); the same rule is applied by `Invoke-NRGAssessment.ps1
+-TenantDomain`.
+
 The server is read-only toward tenants: listing runs and serving report files
 makes no Graph or Exchange call (only a scan you start from the page does, in its
 own child process). `Testing/NRG.WebServer.Tests.ps1` has a context that starts a
 real server; it runs only where Pode 2.10+ is installed, so CI skips it. Run it
-locally after changing the GUI. The path guard, the run listing and the request
-policy are pure functions in `Lib/` and are tested without a server, so CI runs
-those.
+locally after changing the GUI. The path guard, the run listing, the request
+policy, the domain-name rule and the error table are pure functions in `Lib/` and
+are tested without a server, so CI runs those.
 
 ---
 

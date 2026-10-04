@@ -107,15 +107,17 @@ function Start-NRGWebServer {
     $outputRoot  = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputRoot)
     [void][System.IO.Directory]::CreateDirectory($outputRoot)
 
-    # The path guard, the run listing and the request policy, loaded into
-    # Pode's runspaces below. Route bodies and middleware run in runspaces built
+    # The path guard, the run listing, the request policy, the domain-name rule
+    # and the error table, loaded into Pode's runspaces below. Route bodies and middleware run in runspaces built
     # from a default session state, so a module function is not visible there
     # unless Use-PodeScript brings it in.
     $podeScripts = @(
         (Join-Path $ScriptDir 'Lib\Get-NRGObjectField.ps1'),
         (Join-Path $ScriptDir 'Lib\Resolve-NRGWebRunPath.ps1'),
         (Join-Path $ScriptDir 'Lib\Get-NRGWebRunIndex.ps1'),
-        (Join-Path $ScriptDir 'Lib\Test-NRGWebRequestAllowed.ps1')
+        (Join-Path $ScriptDir 'Lib\Test-NRGWebRequestAllowed.ps1'),
+        (Join-Path $ScriptDir 'Lib\Test-NRGDomainName.ps1'),
+        (Join-Path $ScriptDir 'Lib\Get-NRGWebApiError.ps1')
     )
     foreach ($podeScript in $podeScripts) {
         if (-not (Test-Path -LiteralPath $podeScript -PathType Leaf)) {
@@ -184,8 +186,8 @@ function Start-NRGWebServer {
         # every results JSON. Synchronized: four route runspaces write it.
         Set-PodeState -Name 'runMetadata' -Value ([hashtable]::Synchronized(@{})) | Out-Null
 
-        # Bring the path guard, the run listing and the request policy into the
-        # route runspaces.
+        # Bring the path guard, the run listing, the request policy, the
+        # domain-name rule and the error table into the route runspaces.
         foreach ($podeScript in $podeScripts) { Use-PodeScript -Path $podeScript }
 
         # Security headers on every response. Same CSP family as the HTML
@@ -234,7 +236,14 @@ function Start-NRGWebServer {
                 -Scheme $cfg.Scheme `
                 -AllowedHost $cfg.AllowedHost
             if (-not $verdict.Allowed) {
-                Write-PodeTextResponse -Value $verdict.Message -StatusCode $verdict.HttpStatus
+                # An API caller gets the same JSON contract as every other
+                # refusal under /api/; a browser asking for a page gets text.
+                if ($WebEvent.Path -clike '/api/*') {
+                    $apiError = Get-NRGWebApiError -Code Forbidden
+                    Write-PodeJsonResponse -Value $apiError.Body -StatusCode $apiError.HttpStatus
+                } else {
+                    Write-PodeTextResponse -Value $verdict.Message -StatusCode $verdict.HttpStatus
+                }
                 return $false
             }
             return $true
@@ -311,10 +320,12 @@ function Start-NRGWebServer {
             $found = Resolve-NRGWebRunPath -OutputRoot (Get-PodeState -Name 'cfg').OutputRoot `
                 -Folder $WebEvent.Parameters['tenant'] -Id $WebEvent.Parameters['id'] -Kind Report
             if ($found.Status -ne 'Ok') {
-                # Status and body in one call: Set-PodeResponseStatus renders
-                # Pode's own error page, and a Write-PodeTextResponse after it
-                # sends only a slice of that page cut to the new body's length.
-                Write-PodeTextResponse -Value $found.Message -StatusCode $found.HttpStatus
+                # Under /api/, so a refusal is the JSON contract. Status and
+                # body in one call: Set-PodeResponseStatus renders Pode's own
+                # error page, and a body written after it is a slice of that
+                # page cut to the new body's length.
+                $apiError = Get-NRGWebApiError -Code $(if ($found.Status -eq 'BadRequest') { 'InvalidPath' } else { 'NotFound' })
+                Write-PodeJsonResponse -Value $apiError.Body -StatusCode $apiError.HttpStatus
                 return
             }
             $html = Get-Content -LiteralPath $found.Path -Raw -Encoding utf8
@@ -363,15 +374,19 @@ function Start-NRGWebServer {
         Add-PodeRoute -Method Post -Path '/api/scan' -ScriptBlock {
             $body = $WebEvent.Data
             $domain = [string]$body.domain
+            # Status and body in one call (see the report route). The domain
+            # rule is Test-NRGDomainName, the same one the run listing and the
+            # entry script's -TenantDomain use: the name becomes a folder under
+            # the output root, so a name the path guard would refuse to serve
+            # must not be accepted here either.
             if ([string]::IsNullOrWhiteSpace($domain)) {
-                Set-PodeResponseStatus -Code 400
-                Write-PodeJsonResponse -Value @{ error = 'domain is required' }
+                $apiError = Get-NRGWebApiError -Code DomainRequired
+                Write-PodeJsonResponse -Value $apiError.Body -StatusCode $apiError.HttpStatus
                 return
             }
-            # Filename-safe and path-traversal-safe.
-            if ($domain -notmatch '^[A-Za-z0-9.\-]{1,253}$') {
-                Set-PodeResponseStatus -Code 400
-                Write-PodeJsonResponse -Value @{ error = 'invalid domain format' }
+            if (-not (Test-NRGDomainName -Value $domain)) {
+                $apiError = Get-NRGWebApiError -Code InvalidDomain
+                Write-PodeJsonResponse -Value $apiError.Body -StatusCode $apiError.HttpStatus
                 return
             }
 
@@ -457,8 +472,8 @@ function Start-NRGWebServer {
             $id = $WebEvent.Parameters['id']
             $scans = (Get-PodeState -Name 'scans')
             if (-not $scans.ContainsKey($id)) {
-                Set-PodeResponseStatus -Code 404
-                Write-PodeJsonResponse -Value @{ error = 'unknown runId' }
+                $apiError = Get-NRGWebApiError -Code UnknownRunId
+                Write-PodeJsonResponse -Value $apiError.Body -StatusCode $apiError.HttpStatus
                 return
             }
             $row = $scans[$id]

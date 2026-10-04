@@ -20,7 +20,8 @@
 # so module functions are not visible there; Start-NRGWebServer loads these
 # files into those runspaces with Use-PodeScript.
 #
-# Consumed:  Get-NRGObjectField, Resolve-NRGWebRunPath / Get-NRGWebFlatSegment
+# Consumed:  Get-NRGObjectField, Test-NRGDomainName, Resolve-NRGWebRunPath /
+#            Get-NRGWebFlatSegment
 # Reads:     ./output/ *-results.json (Metadata only) and, optionally,
 #            Config/clients.json (to name a flat run the way its client is named)
 # Graph scopes / cmdlets used: none.
@@ -37,18 +38,6 @@ function Test-NRGWebRunResultName {
     if ($Name -match '-email-results\.json\z') { return $false }
     if ($Name -match '-signin-triage') { return $false }
     return $true
-}
-
-# A string that may be shown as a tenant domain: letters, digits, dots, hyphens.
-# Anything else, from a results file or clients.json that someone edited, is not
-# used.
-function Test-NRGWebDomainShape {
-    [CmdletBinding()]
-    [OutputType([bool])]
-    param([Parameter()] [AllowNull()] [AllowEmptyString()] [string] $Value)
-
-    if ([string]::IsNullOrEmpty($Value)) { return $false }
-    return ($Value -cmatch '\A[A-Za-z0-9][A-Za-z0-9.\-]{0,252}\z')
 }
 
 # Metadata.TenantDomain and Metadata.TenantId as recorded in a results file;
@@ -84,8 +73,9 @@ function Read-NRGWebRunMetadata {
         } finally { $stream.Dispose() }
 
         $domain = [string](Get-NRGObjectField -Item $meta -Key 'TenantDomain' -Default '')
-        # 'Unknown' is what a replay of a file with no metadata records.
-        if (-not (Test-NRGWebDomainShape -Value $domain) -or $domain -eq 'Unknown') { $domain = '' }
+        # Only a domain name is used as a label. 'Unknown', which a replay of a
+        # file with no metadata records, is a single label and so is dropped here.
+        if (-not (Test-NRGDomainName -Value $domain)) { $domain = '' }
         $tenantId = [string](Get-NRGObjectField -Item $meta -Key 'TenantId' -Default '')
         $tenantId = if ($tenantId -cmatch '\A[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\z') { $tenantId.ToLowerInvariant() } else { '' }
         return [pscustomobject]@{ TenantDomain = $domain; TenantId = $tenantId }
@@ -145,11 +135,11 @@ function Get-NRGWebClientMap {
     }
     foreach ($client in @(Get-NRGObjectField -Item $raw -Key 'clients' -Default @())) {
         $domain = [string](Get-NRGObjectField -Item $client -Key 'TenantDomain' -Default '')
-        if (-not (Test-NRGWebDomainShape -Value $domain)) { continue }
+        if (-not (Test-NRGDomainName -Value $domain)) { continue }
         $tenantId = ([string](Get-NRGObjectField -Item $client -Key 'TenantId' -Default '')).ToLowerInvariant()
         if ($tenantId -cmatch '\A[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\z') { $map["id:$tenantId"] = $domain }
         $org = ([string](Get-NRGObjectField -Item $client -Key 'DelegatedOrg' -Default '')).ToLowerInvariant()
-        if (Test-NRGWebDomainShape -Value $org) { $map["org:$org"] = $domain }
+        if (Test-NRGDomainName -Value $org) { $map["org:$org"] = $domain }
     }
     return $map
 }
