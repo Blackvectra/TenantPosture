@@ -247,32 +247,63 @@ Install-Module Pode -MinimumVersion 2.10.0 -Scope CurrentUser
 ```
 
 The GUI consumes the same `Config/clients.json` as the CLI, scans run via the
-same module functions, and reports land in the same `./output/` directory —
-so CLI and GUI workflows can be mixed freely:
+same module functions, and reports land in the same `output\` folder, so CLI and
+GUI workflows can be mixed freely:
 
+- **The folder is the command line's.** The GUI reads `<repo>\output`, the folder
+  `Invoke-NRGAssessment.ps1` and the batch runner write to by default, whatever
+  directory it was started from (it used to read the current directory's `output`
+  and listed nothing when started from anywhere else). With
+  `Invoke-NRGAssessment.ps1 -OutputPath D:\reports -Web` it shows `D:\reports`.
 - **Recent runs lists both layouts.** A scan started from the GUI (and the batch
   runner) writes `output\<domain>\`; a command-line run writes flat files into
   `output\`. Both are listed once each, newest first, and a command-line run is
-  marked "command line". A flat run is labeled with the tenant domain recorded in
-  its results file (`Metadata.TenantDomain`), or the tenant tag in its file name
-  when the file has none. Incident-response mailbox runs (`*-email-results.json`)
-  and sign-in triage results are not assessments and are never listed.
-- **Report site.** A run that wrote the multi-page report site (`<base>-report\`,
-  built by default with the reports) shows a **Report site** link beside it and
-  in the open report's header. It opens in a new tab (the server forbids framing)
-  and serves only `.html` and `.csv` files directly inside that run's own
-  `-report` folder, under the same strict Content-Security-Policy as the rest of
-  the GUI. A request to leave that folder, or for any other file type, is refused,
-  and a symbolic link inside it is not followed.
-- **Calling it directly.** With the module imported,
-  `Start-NRGWebServer` finds the repository root on its own; `-ScriptDir` is still
-  accepted. It reads `.\output` relative to the current directory.
+  marked "command line". A flat run is named the way its client is named in
+  `Config/clients.json` (found by tenant id, then by routing domain), because a
+  results file records the tenant's initial `.onmicrosoft.com` domain while the
+  GUI files the same client under its own domain; with no match it is the domain
+  the results file records, then the tenant tag in its file name. Incident-response
+  mailbox runs (`*-email-results.json`) and sign-in triage results are not
+  assessments and are never listed.
+- **Report site.** A run whose output includes the multi-page report site folder
+  (`<base>-report\`) shows a **Report site** link beside it and in the open
+  report's header. The GUI serves that folder; it does not build it. The link
+  opens in a new tab (the server forbids framing) and serves only `.html` and
+  `.csv` files directly inside that run's own `-report` folder, under the same
+  strict Content-Security-Policy as the rest of the GUI, and the action plan is
+  sent byte for byte so Excel still sees its UTF-8 byte-order mark. A request to
+  leave that folder, or for any other file type, is refused; a symbolic link
+  (or junction) inside it is not followed, and neither is a path that cannot be
+  inspected.
+- **Calling it directly.** With the module imported, `Start-NRGWebServer` finds the
+  repository root on its own; `-ScriptDir`, `-OutputRoot` and `-Port` are accepted.
+  A relative `-OutputRoot` is relative to your PowerShell location.
+
+**Who the server answers.** Binding to `127.0.0.1` keeps the network out, but not
+a web page open in your own browser, so the server also decides per request:
+
+- A request whose `Host` header is not `127.0.0.1:<port>` or `localhost:<port>` is
+  refused with 403, on every route. This is what stops DNS rebinding, where a
+  page on another site makes its own name resolve to `127.0.0.1` to read the GUI
+  (reports, the run list, the report site). If you reach the GUI through a port
+  forward or tunnel, add that name with `-AllowedHost` (for example
+  `Start-NRGWebServer -AllowedHost localhost:9000`); leave it empty otherwise.
+- Anything but GET and HEAD must be `application/json`, must come from this
+  server's own origin when the browser says where it came from, and must not be
+  marked cross-site by the browser. A cross-site form cannot meet that, so a web
+  page cannot start a scan on your machine. The server sends no CORS headers, so
+  no preflight is ever granted.
+- Every response is `Cache-Control: no-store` (reports are tenant data and are not
+  written to the browser's disk cache) and `Cross-Origin-Resource-Policy:
+  same-origin`.
 
 The server is read-only toward tenants: listing runs and serving report files
 makes no Graph or Exchange call (only a scan you start from the page does, in its
 own child process). `Testing/NRG.WebServer.Tests.ps1` has a context that starts a
-real server; it runs only where Pode 2.10+ is installed, so CI skips it — run it
-locally after changing the GUI.
+real server; it runs only where Pode 2.10+ is installed, so CI skips it. Run it
+locally after changing the GUI. The path guard, the run listing and the request
+policy are pure functions in `Lib/` and are tested without a server, so CI runs
+those.
 
 ---
 

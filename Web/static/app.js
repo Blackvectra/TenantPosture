@@ -66,6 +66,12 @@
     return '/site/' + encodeURIComponent(run.folder) + '/' + encodeURIComponent(run.id) + '/index.html';
   }
 
+  // The fields the viewer needs from a row of /api/runs. Older servers sent only
+  // `tenant`, which was the folder name then.
+  function toRun(r) {
+    return { folder: r.folder || r.tenant, id: r.id, tenant: r.tenant, timestamp: r.timestamp, hasSite: !!r.hasSite };
+  }
+
   // Returns the list it rendered so a caller can find the run it just made.
   async function loadRuns() {
     let runs = [];
@@ -76,8 +82,7 @@
     const list = $('run-list');
     list.replaceChildren();
     runs.forEach(function (r) {
-      // Older servers sent only `tenant`, which was the folder name then.
-      const run = { folder: r.folder || r.tenant, id: r.id, tenant: r.tenant, timestamp: r.timestamp, hasSite: !!r.hasSite };
+      const run = toRun(r);
 
       const wrap = document.createElement('div');
       wrap.className = 'run-row';
@@ -193,13 +198,20 @@
         setStatus('Scan complete');
         const runs = await loadRuns();
         if (s.resultId) {
-          // A scan started here writes under output\<domain>\, so its folder
-          // segment is the domain; the list says whether it has a report site.
-          const made = runs.find(function (r) { return r.folder === domain && r.id === s.resultId; });
-          openReport({
-            folder: domain, id: s.resultId, tenant: domain,
-            timestamp: '(just now)', hasSite: !!(made && made.hasSite)
+          // A scan started here writes under output\<domain>\. The folder keeps
+          // the case it was first created with (NTFS ignores case, so scanning
+          // Contoso.com into an existing contoso.com folder reuses it), so the
+          // run is found by its id and a case-insensitive folder, and opened
+          // under the folder name the server reports. The list also says
+          // whether it has a report site.
+          const want = String(domain).toLowerCase();
+          const made = runs.find(function (r) {
+            return r.id === s.resultId && String(r.folder).toLowerCase() === want;
           });
+          const run = made ? toRun(made)
+                           : { folder: domain, id: s.resultId, tenant: domain, hasSite: false };
+          run.timestamp = '(just now)';
+          openReport(run);
         }
         break;
       }

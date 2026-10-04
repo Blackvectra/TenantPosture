@@ -2,7 +2,7 @@
 #Requires -Modules @{ ModuleName='Pester'; ModuleVersion='5.5.0' }
 <#
 .SYNOPSIS
-    Pester invariants for the local web GUI (Lib/Start-NRGWebServer.ps1 + Lib/Get-NRGWebRunIndex.ps1 + Web/).
+    Pester invariants for the local web GUI (Lib/Start-NRGWebServer.ps1, the three Lib/*NRGWeb* support files, and Web/).
 
 .DESCRIPTION
     The GUI is a thin Pode-backed loopback server. These tests pin its
@@ -29,7 +29,12 @@
         it. The guards are pure functions (Lib/Get-NRGWebRunIndex.ps1) so they
         are tested here WITHOUT a server and run in CI.
       - Calling Start-NRGWebServer without -ScriptDir resolves the repository
-        root, not Lib.
+        root, not Lib, and the runs are read from <ScriptDir>\output (where the
+        command line writes), never from the current directory.
+      - Only requests meant for this server are answered: a Host header that is
+        not 127.0.0.1 / localhost on its own port is refused (DNS rebinding), and
+        anything that changes state must be same-origin JSON (cross-site forms).
+        The policy is a pure function, tested here without a server.
 
     Most of these are static (file-content checks) or call the pure helpers,
     and run on every CI push. The 'Server actually starts' context is NOT
@@ -47,6 +52,8 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
         $script:RepoRoot   = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
         $script:ServerPath = Join-Path $script:RepoRoot 'Lib\Start-NRGWebServer.ps1'
         $script:IndexLib   = Join-Path $script:RepoRoot 'Lib\Get-NRGWebRunIndex.ps1'
+        $script:PathLib    = Join-Path $script:RepoRoot 'Lib\Resolve-NRGWebRunPath.ps1'
+        $script:RequestLib = Join-Path $script:RepoRoot 'Lib\Test-NRGWebRequestAllowed.ps1'
         $script:FieldLib   = Join-Path $script:RepoRoot 'Lib\Get-NRGObjectField.ps1'
         $script:WebRoot    = Join-Path $script:RepoRoot 'Web'
         $script:IndexHtml  = Join-Path $script:WebRoot  'index.html'
@@ -65,12 +72,19 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
         #     CLITENANT-20261002-114907-report\           index.html AAD.html ActionPlan.csv
         #                                                 + notes.txt raw.json (not servable)
         #     METAFIRST / NOMETA / BROKEN / HOSTILE / FLATNDACO   flat runs, other label cases
+        #     JOINED / ORGONLY / HCLIENT                  flat runs whose label comes from clients.json
+        #     joined.com\JOINEDGUI-*                      the same client's GUI-layout run
         #     ndaco.org\NDACO-20261002-100000-*           GUI-layout run
         #     Administrator_ndaco.org\...-email-results.json     IR run (never listed)
         #     *-signin-triage.json, *-signin-triage-results.json (never listed)
         #     _flat\RESERVED-*                            a real folder with the reserved name
         #     outside.html                                a file next to, not in, the report folder
         #   secret.html                                   a file above the output folder
+        #   Config\clients.json                           the client registry the labels are joined to
+        #
+        # The results files record the tenant's INITIAL domain (.onmicrosoft.com),
+        # as Connect-NRGServices does, while the GUI saves under the client's own
+        # domain: a fixture that used one name for both hid exactly that.
         $script:NewFixture = {
             param([string] $Work)
             $out = Join-Path $Work 'output'
@@ -87,7 +101,10 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             $site = Join-Path $out "$id-report"
             & $put (Join-Path $site 'index.html')      '<!doctype html><html><head><meta charset="utf-8"><style>b{color:red}</style></head><body>SITE-INDEX-MARKER <a href="AAD.html">AAD</a> <a href="ActionPlan.csv">plan</a></body></html>'
             & $put (Join-Path $site 'AAD.html')        '<!doctype html><html><body>SITE-AAD-MARKER</body></html>'
-            & $put (Join-Path $site 'ActionPlan.csv')  "Control,Owner`nSITE-CSV-MARKER,`n"
+            # The publisher writes the action plan with a UTF-8 BOM so Excel does
+            # not read it as ANSI; non-ASCII text makes a dropped BOM visible.
+            $null = New-Item -ItemType Directory -Path $site -Force
+            [System.IO.File]::WriteAllLines((Join-Path $site 'ActionPlan.csv'), @('Control,Owner', "SITE-CSV-MARKER,Jos$([char]0xE9) $([char]0x2014) M$([char]0xFC)ller"), [System.Text.UTF8Encoding]::new($true))
             & $put (Join-Path $site 'notes.txt')       'TXT-MARKER'
             & $put (Join-Path $site 'raw.json')        '{"m":"JSON-MARKER"}'
             & $put (Join-Path $out 'outside.html')     '<html>OUTSIDE-MARKER</html>'
@@ -103,6 +120,20 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             & $put (Join-Path $out 'HOSTILE-20261001-070000-results.json')   '{"Metadata":{"TenantDomain":"<img src=x onerror=alert(1)>"}}'
             & $put (Join-Path $out 'FLATNDACO-20261002-090000-results.json') '{"Metadata":{"TenantDomain":"ndaco.org"}}'
 
+            & $put (Join-Path $out 'JOINED-20261002-070500-results.json')    '{"Metadata":{"TenantDomain":"joined.onmicrosoft.com","TenantId":"11111111-2222-3333-4444-555555555555"}}'
+            & $put (Join-Path $out 'ORGONLY-20261002-070400-results.json')   '{"Metadata":{"TenantDomain":"orgonly.onmicrosoft.com"}}'
+            & $put (Join-Path $out 'HCLIENT-20261002-070300-results.json')   '{"Metadata":{"TenantDomain":"hostile.onmicrosoft.com","TenantId":"99999999-8888-7777-6666-555555555555"}}'
+            # Graph could not answer /organization, so Connect-NRGServices fell back to
+            # the SIGNED-IN ACCOUNT's domain: under GDAP that is the MSP's own, so the
+            # file names the wrong tenant. Only the tenant id still identifies it.
+            & $put (Join-Path $out 'UPNFALL-20261002-070100-results.json')   '{"Metadata":{"TenantDomain":"msp.example","TenantId":"aaaaaaaa-0000-0000-0000-000000000001"}}'
+            & $put (Join-Path $out 'joined.com\JOINEDGUI-20261002-070200-results.json') '{}'
+            & $put (Join-Path $Work 'Config\clients.json') (@{ clients = @(
+                @{ ClientName = 'Joined Co'; TenantDomain = 'joined.com';  TenantId = '11111111-2222-3333-4444-555555555555'; DelegatedOrg = 'joined.onmicrosoft.com'; Active = $true }
+                @{ ClientName = 'Org Only';  TenantDomain = 'orgonly.com'; TenantId = '';                                      DelegatedOrg = 'orgonly.onmicrosoft.com' }
+                @{ ClientName = 'Upn Co';    TenantDomain = 'upn.com';     TenantId = 'AAAAAAAA-0000-0000-0000-000000000001'; DelegatedOrg = 'upn.onmicrosoft.com' }
+                @{ ClientName = 'Hostile';   TenantDomain = '<b>x</b>';    TenantId = '99999999-8888-7777-6666-555555555555'; DelegatedOrg = 'hostile.onmicrosoft.com' }
+            ) } | ConvertTo-Json -Depth 4)
             & $put (Join-Path $out 'ndaco.org\NDACO-20261002-100000-results.json')    '{}'
             & $put (Join-Path $out 'ndaco.org\NDACO-20261002-100000-assessment.html') '<html>FOLDER-REPORT-MARKER</html>'
 
@@ -112,12 +143,15 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             & $put (Join-Path $out '_flat\RESERVED-20261002-110000-results.json')    '{}'
             & $put (Join-Path $out '_flat\RESERVED-20261002-110000-assessment.html') '<html>RESERVED-MARKER</html>'
 
-            # Newest first: CLITENANT, then NDACO, FLATNDACO, METAFIRST, NOMETA, BROKEN, HOSTILE.
+            # Newest first: CLITENANT, NDACO, FLATNDACO, METAFIRST, NOMETA, BROKEN,
+            # HOSTILE, JOINED, ORGONLY, HCLIENT, UPNFALL, JOINEDGUI.
             $base = [datetime]'2026-10-02T12:00:00'
             $order = @(
                 "$id-results.json", 'ndaco.org\NDACO-20261002-100000-results.json', 'FLATNDACO-20261002-090000-results.json',
                 'METAFIRST-20261002-080000-results.json', 'NOMETA-20261001-090000-results.json',
-                'BROKEN-20261001-080000-results.json', 'HOSTILE-20261001-070000-results.json')
+                'BROKEN-20261001-080000-results.json', 'HOSTILE-20261001-070000-results.json',
+                'JOINED-20261002-070500-results.json', 'ORGONLY-20261002-070400-results.json',
+                'HCLIENT-20261002-070300-results.json', 'UPNFALL-20261002-070100-results.json', 'joined.com\JOINEDGUI-20261002-070200-results.json')
             for ($i = 0; $i -lt $order.Count; $i++) { & $stamp (Join-Path $out $order[$i]) $base.AddHours(-$i) }
 
             # Links inside the report folder: a file link out, and a whole
@@ -133,7 +167,15 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
                 $linksMade = $true
             } catch { Write-Verbose "No symbolic links on this filesystem: $($_.Exception.Message)" }
 
-            return @{ Out = $out; Work = $Work; Id = $id; LinksMade = $linksMade }
+            # A hard link is not a symbolic link: both names are the same file, and
+            # the guard must not refuse it.
+            $hardMade = $false
+            try {
+                $null = New-Item -ItemType HardLink -Path (Join-Path $site 'hard.html') -Target (Join-Path $site 'AAD.html') -ErrorAction Stop
+                $hardMade = $true
+            } catch { Write-Verbose "No hard links here: $($_.Exception.Message)" }
+
+            return @{ Out = $out; Work = $Work; Id = $id; LinksMade = $linksMade; HardMade = $hardMade; Clients = (Join-Path $Work 'Config\clients.json') }
         }
     }
 
@@ -141,8 +183,10 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
         It 'Lib/Start-NRGWebServer.ps1 is present' {
             Test-Path -LiteralPath $script:ServerPath | Should -BeTrue
         }
-        It 'Lib/Get-NRGWebRunIndex.ps1 is present' {
-            Test-Path -LiteralPath $script:IndexLib | Should -BeTrue
+        It 'the three support files are present: path guard, run index, request policy' {
+            Test-Path -LiteralPath $script:PathLib    | Should -BeTrue
+            Test-Path -LiteralPath $script:IndexLib   | Should -BeTrue
+            Test-Path -LiteralPath $script:RequestLib | Should -BeTrue
         }
         It 'Web/index.html is present' {
             Test-Path -LiteralPath $script:IndexHtml | Should -BeTrue
@@ -189,6 +233,35 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             # has a reason to set its own. A second Set-PodeHeader would be a
             # second, possibly weaker, policy.
             ([regex]::Matches($script:ServerSrc, 'Content-Security-Policy')).Count | Should -Be 1
+        }
+
+        It 'every response is no-store and refuses cross-origin embedding' {
+            # Reports and the action plan are tenant data: no-store keeps them out
+            # of the browser's on-disk cache, which the tool's own file ACLs do not
+            # cover; CORP same-origin stops another origin embedding or reading a
+            # response it managed to request.
+            $script:ServerSrc | Should -Match "Set-PodeHeader -Name 'Cache-Control' -Value 'no-store'"
+            $script:ServerSrc | Should -Match "Set-PodeHeader -Name 'Cross-Origin-Resource-Policy' -Value 'same-origin'"
+        }
+
+        It 'a RequestGuard middleware applies the request policy, after the headers so a refusal carries them' {
+            $script:ServerSrc | Should -Match "Add-PodeMiddleware -Name 'RequestGuard'"
+            $script:ServerSrc | Should -Match 'Test-NRGWebRequestAllowed'
+            $script:ServerSrc.IndexOf("Add-PodeMiddleware -Name 'SecurityHeaders'") | Should -BeLessThan $script:ServerSrc.IndexOf("Add-PodeMiddleware -Name 'RequestGuard'")
+            # The refusal is sent with its status in ONE call (Set-PodeResponseStatus
+            # renders Pode's own error page and a later body is a slice of it) and
+            # stops the pipeline before any route runs.
+            $script:ServerSrc | Should -Match '(?s)Add-PodeMiddleware -Name .RequestGuard.*?Write-PodeTextResponse -Value \$verdict\.Message -StatusCode \$verdict\.HttpStatus\s+return \$false'
+        }
+
+        It 'the policy reads every header it decides on, and the port it is told the server uses' {
+            foreach ($h in 'Host', 'Origin', 'Content-Type', 'Sec-Fetch-Site') {
+                $script:ServerSrc | Should -Match "Get-PodeHeader -Name '$h'"
+            }
+            $script:ServerSrc | Should -Match '-Port \$cfg\.Port'
+            $script:ServerSrc | Should -Match '-Scheme \$cfg\.Scheme'
+            $script:ServerSrc | Should -Match "Scheme\s+=\s+'http'" -Because 'the server chooses the protocol, so the server says which scheme'
+            $script:ServerSrc | Should -Match '-AllowedHost \$cfg\.AllowedHost'
         }
     }
 
@@ -268,6 +341,18 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             $script:AppJsSrc | Should -Match "\.rel\s*=\s*'noopener'"
             $script:IndexSrc | Should -Match '<a id="link-report-site"[^>]*rel="noopener"' `
                 -Because 'the server forbids framing (frame-ancestors none), so the site opens in its own tab'
+        }
+
+        It 'a finished scan is found by its id and a case-insensitive folder, and opened under the folder name the server reports' {
+            # NTFS ignores case: scanning Contoso.com into an existing contoso.com
+            # folder reuses it, the server reports 'contoso.com', and a strict
+            # comparison with what was typed missed the run, so the Report site
+            # link was not shown for a run that had a site.
+            $script:AppJsSrc | Should -Not -Match 'r\.folder\s*===\s*domain'
+            $script:AppJsSrc | Should -Match 'String\(domain\)\.toLowerCase\(\)'
+            $script:AppJsSrc | Should -Match 'String\(r\.folder\)\.toLowerCase\(\)\s*===\s*want'
+            $script:AppJsSrc | Should -Match 'r\.id\s*===\s*s\.resultId'
+            $script:AppJsSrc | Should -Match 'made\s*\?\s*toRun\(made\)' -Because 'the folder name on disk, not the typed one, addresses the run'
         }
 
         It 'opening a report no longer builds its URL from the display label' {
@@ -361,8 +446,9 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             # The paths are computed outside the block and carried in by the
             # closure (no $using:).
             $script:ServerBlockSrc | Should -Match 'Use-PodeScript\s+-Path\s+\$podeScript'
-            $script:Src | Should -Match "Lib\\Get-NRGObjectField\.ps1"
-            $script:Src | Should -Match "Lib\\Get-NRGWebRunIndex\.ps1"
+            foreach ($f in 'Get-NRGObjectField', 'Resolve-NRGWebRunPath', 'Get-NRGWebRunIndex', 'Test-NRGWebRequestAllowed') {
+                $script:Src | Should -Match ('Lib\\' + $f + '\.ps1')
+            }
         }
     }
 
@@ -371,13 +457,50 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             $script:Src = Get-Content -LiteralPath $script:ServerPath -Raw
             $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:ServerPath, [ref]$null, [ref]$null)
             $fn  = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Start-NRGWebServer' }, $true)
-            $script:ScriptDirParam = $fn.Body.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'ScriptDir' }
+            $script:ScriptDirParam  = $fn.Body.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'ScriptDir' }
+            $script:OutputRootParam = $fn.Body.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'OutputRoot' }
+            $script:AllowedHostParam = $fn.Body.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'AllowedHost' }
+            . $script:ServerPath
         }
 
-        It 'keeps the explicit -ScriptDir parameter (Invoke-NRGAssessment.ps1 -Web passes it)' {
+        It 'keeps the explicit -ScriptDir parameter, and the entry point passes both it and its output folder' {
             $script:ScriptDirParam | Should -Not -BeNullOrEmpty
             $entry = Get-Content -LiteralPath $script:EntryScript -Raw
-            $entry | Should -Match 'Start-NRGWebServer\s+-Port\s+\$WebPort\s+-ScriptDir\s+\$scriptDir'
+            $entry | Should -Match 'Start-NRGWebServer\s+-Port\s+\$WebPort\s+-ScriptDir\s+\$scriptDir\s+-OutputRoot\s+\$OutputPath' `
+                -Because 'Invoke-NRGAssessment.ps1 -OutputPath D:\reports -Web must show D:\reports'
+        }
+
+        It 'reads runs from the ScriptDir output folder, where the command line writes, never from the current directory' {
+            # The command line and the batch runner default to <script dir>\output.
+            # The server used (Get-Location)\output, so a GUI started from any
+            # other folder listed none of what the command line had produced.
+            $script:OutputRootParam | Should -Not -BeNullOrEmpty
+            $script:OutputRootParam.DefaultValue.Extent.Text | Should -Match 'Join-Path \$ScriptDir ''output'''
+            $script:OutputRootParam.DefaultValue.Extent.Text | Should -Not -Match 'Get-Location|\$PWD'
+            $script:Src | Should -Not -Match 'Join-Path \(Get-Location\)'
+            $entry = Get-Content -LiteralPath $script:EntryScript -Raw
+            $entry | Should -Match '\[string\]\s*\$OutputPath'
+            $entry | Should -Match 'if \(-not \$OutputPath\) \{ \$OutputPath = Join-Path \$scriptDir ''output'' \}' `
+                -Because 'the two defaults must stay the same folder, or the history splits again'
+        }
+
+        It 'a relative -OutputRoot is resolved from the PowerShell location, not the process start folder' {
+            $script:Src | Should -Match 'GetUnresolvedProviderPathFromPSPath\(\$OutputRoot\)'
+        }
+
+        It '-AllowedHost accepts a host or host:port and refuses anything else, before the server starts' {
+            # Parameter validation runs at bind time, so these need no Pode.
+            foreach ($bad in 'a b', 'a/b', '*', '*.example.com', 'http://evil', 'evil.com:99999x', 'evil.com:', ':8765', '-x.com', "evil.com`n", 'a@b.com') {
+                $err = $null
+                try { Start-NRGWebServer -AllowedHost $bad -NoBrowser } catch { $err = $_ }
+                $err | Should -Not -BeNullOrEmpty -Because "'$bad' is not a host name"
+                $err.FullyQualifiedErrorId | Should -Match 'ParameterArgumentValidationError' -Because 'refused by parameter validation, before any server code runs'
+            }
+            # And the names that are fine are accepted by the same validation.
+            foreach ($good in 'localhost', 'tunnel.test:9000', 'a-b.example.com', '127.0.0.1:8765') {
+                $attr = ($script:AllowedHostParam.Attributes | Where-Object { $_.TypeName.Name -eq 'ValidatePattern' }).PositionalArguments[0].Value
+                $good | Should -Match $attr -Because "'$good' is a host name"
+            }
         }
 
         It 'does not default it from $PSCommandPath, which is Lib itself' {
@@ -412,11 +535,13 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
     Context 'Run listing and path guards (no server)' {
         BeforeAll {
             . $script:FieldLib
+            . $script:PathLib
             . $script:IndexLib
+            . $script:RequestLib
             $script:Work = Join-Path ([System.IO.Path]::GetTempPath()) ("nrgweb-unit-{0}" -f ([Guid]::NewGuid().ToString('N')))
             $script:Fx   = & $script:NewFixture $script:Work
             $script:Id   = $script:Fx.Id
-            $script:Runs = @(Get-NRGWebRunList -OutputRoot $script:Fx.Out)
+            $script:Runs = @(Get-NRGWebRunList -OutputRoot $script:Fx.Out -ClientsFile $script:Fx.Clients)
             $script:Resolve = {
                 param($Folder, $Id, $Kind, $Page)
                 Resolve-NRGWebRunPath -OutputRoot $script:Fx.Out -Folder $Folder -Id $Id -Kind $Kind -Page $Page
@@ -449,12 +574,15 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
 
             It 'lists exactly the assessment runs, newest first, and nothing else' {
                 $ids = @($script:Runs | ForEach-Object { $_.id })
-                $expected = @($script:Id, 'NDACO-20261002-100000', 'FLATNDACO-20261002-090000', 'METAFIRST-20261002-080000',
-                    'NOMETA-20261001-090000', 'BROKEN-20261001-080000', 'HOSTILE-20261001-070000')
+                $stamped = @($script:Id, 'NDACO-20261002-100000', 'FLATNDACO-20261002-090000', 'METAFIRST-20261002-080000',
+                    'NOMETA-20261001-090000', 'BROKEN-20261001-080000', 'HOSTILE-20261001-070000',
+                    'JOINED-20261002-070500', 'ORGONLY-20261002-070400', 'HCLIENT-20261002-070300', 'UPNFALL-20261002-070100', 'JOINEDGUI-20261002-070200')
+                $expected = @($stamped)
                 if ($script:Fx.LinksMade) { $expected += 'LINKDIR-20261002-070000' }
-                # LINKDIR was written last-but-stamped-by-creation; compare as a set plus the order of the stamped ones.
+                # LINKDIR is created after the stamps, so it carries the current time:
+                # compare the set, then the order of the stamped runs alone.
                 @($ids | Sort-Object) | Should -Be @($expected | Sort-Object)
-                @($ids | Where-Object { $_ -in $expected[0..6] }) | Should -Be $expected[0..6]
+                @($ids | Where-Object { $_ -in $stamped }) | Should -Be $stamped
             }
 
             It 'never lists incident-response mailbox runs, sign-in triage results or a run inside a folder named like the reserved segment' {
@@ -491,7 +619,7 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
 
             It 'a name that is only a timestamp gets an explicit unknown label, not an empty one' {
                 $f = New-Item -ItemType File -Path (Join-Path $script:Work '20261001-070000-results.json') -Value '{}'
-                Get-NRGWebRunLabel -File $f | Should -Be '(unknown tenant)'
+                Resolve-NRGWebRunLabel -File $f -Metadata $null -ClientMap @{} | Should -Be '(unknown tenant)'
             }
 
             It 'an empty or missing output folder yields no rows (not one null row)' {
@@ -511,14 +639,83 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
 
             It 'does not re-read an unchanged results file, and does when it changes' {
                 $f = Get-Item -LiteralPath (Join-Path $script:Fx.Out "$($script:Id)-results.json")
-                Mock Read-NRGWebRunTenantDomain { 'mocked.example' }
+                Mock Read-NRGWebRunMetadata { [pscustomobject]@{ TenantDomain = 'mocked.example'; TenantId = '' } }
                 $cache = [hashtable]::Synchronized(@{})
-                Get-NRGWebRunLabel -File $f -Cache $cache | Should -Be 'mocked.example'
-                Get-NRGWebRunLabel -File $f -Cache $cache | Should -Be 'mocked.example'
-                Should -Invoke Read-NRGWebRunTenantDomain -Times 1 -Exactly
+                (Get-NRGWebRunMetadata -File $f -Cache $cache).TenantDomain | Should -Be 'mocked.example'
+                (Get-NRGWebRunMetadata -File $f -Cache $cache).TenantDomain | Should -Be 'mocked.example'
+                Should -Invoke Read-NRGWebRunMetadata -Times 1 -Exactly
                 Add-Content -LiteralPath $f.FullName -Value ' ' -NoNewline
-                Get-NRGWebRunLabel -File (Get-Item -LiteralPath $f.FullName) -Cache $cache | Should -Be 'mocked.example'
-                Should -Invoke Read-NRGWebRunTenantDomain -Times 2 -Exactly
+                (Get-NRGWebRunMetadata -File (Get-Item -LiteralPath $f.FullName) -Cache $cache).TenantDomain | Should -Be 'mocked.example'
+                Should -Invoke Read-NRGWebRunMetadata -Times 2 -Exactly
+            }
+        }
+
+        Context 'naming a flat run the way its client is named' {
+            # A results file records the tenant's INITIAL domain (.onmicrosoft.com);
+            # the GUI and the batch runner file the same client under its own domain
+            # from clients.json. Joined by tenant id, then by routing domain, so one
+            # client is one name.
+            It 'a run whose tenant id is in clients.json takes that client''s domain' {
+                ($script:Runs | Where-Object { $_.id -eq 'JOINED-20261002-070500' }).tenant | Should -Be 'joined.com'
+            }
+
+            It 'with no tenant id, the routing domain (DelegatedOrg) finds the client' {
+                ($script:Runs | Where-Object { $_.id -eq 'ORGONLY-20261002-070400' }).tenant | Should -Be 'orgonly.com'
+            }
+
+            It 'a run whose file names the WRONG domain (the account''s, under GDAP) is still found by its tenant id' {
+                # The domain is the MSP's own and is in no client's record; only the
+                # tenant id says whose run this is. Without the id join it would be
+                # listed under the MSP's name, as if it were the MSP's own tenant.
+                ($script:Runs | Where-Object { $_.id -eq 'UPNFALL-20261002-070100' }).tenant | Should -Be 'upn.com'
+                $meta = Read-NRGWebRunMetadata -Path (Join-Path $script:Fx.Out 'UPNFALL-20261002-070100-results.json')
+                $meta.TenantDomain | Should -Be 'msp.example'
+            }
+
+            It 'a command-line run and a GUI run of the same client are listed under the same name, at different addresses' {
+                $rows = @($script:Runs | Where-Object { $_.tenant -eq 'joined.com' })
+                $rows.Count | Should -Be 2
+                @($rows | ForEach-Object { $_.folder } | Sort-Object) | Should -Be @('_flat', 'joined.com')
+            }
+
+            It 'a client whose domain in clients.json is not domain-shaped is ignored, and the results file''s own domain is used' {
+                $row = $script:Runs | Where-Object { $_.id -eq 'HCLIENT-20261002-070300' }
+                $row.tenant | Should -Be 'hostile.onmicrosoft.com'
+                $row.tenant | Should -Not -Match '[<>]'
+            }
+
+            It 'without clients.json the label is what the results file says' {
+                $rows = @(Get-NRGWebRunList -OutputRoot $script:Fx.Out)
+                ($rows | Where-Object { $_.id -eq 'JOINED-20261002-070500' }).tenant | Should -Be 'joined.onmicrosoft.com'
+                @(Get-NRGWebRunList -OutputRoot $script:Fx.Out -ClientsFile (Join-Path $script:Work 'no-such.json')).Count | Should -Be $rows.Count
+            }
+
+            It 'the client map: keys are lowercase, an unreadable or missing file is an empty map, a hostile entry is skipped' {
+                $map = Get-NRGWebClientMap -ClientsFile $script:Fx.Clients
+                $map['id:11111111-2222-3333-4444-555555555555'] | Should -Be 'joined.com'
+                $map['org:joined.onmicrosoft.com'] | Should -Be 'joined.com'
+                $map.ContainsKey('id:99999999-8888-7777-6666-555555555555') | Should -BeFalse
+                (Get-NRGWebClientMap -ClientsFile (Join-Path $script:Work 'missing.json')).Count | Should -Be 0
+                (Get-NRGWebClientMap -ClientsFile $null).Count | Should -Be 0
+                $bad = Join-Path $script:Work 'bad-clients.json'
+                Set-Content -LiteralPath $bad -Value '{not json' -Encoding utf8
+                (Get-NRGWebClientMap -ClientsFile $bad).Count | Should -Be 0
+                $upper = Join-Path $script:Work 'upper-clients.json'
+                Set-Content -LiteralPath $upper -Value '{"clients":[{"TenantDomain":"Up.com","TenantId":"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE","DelegatedOrg":"UP.onmicrosoft.com"}]}' -Encoding utf8
+                $m = Get-NRGWebClientMap -ClientsFile $upper
+                $m['id:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'] | Should -Be 'Up.com'
+                $m['org:up.onmicrosoft.com'] | Should -Be 'Up.com'
+            }
+
+            It 'the metadata read returns the tenant id lowercased, and nothing for one that is not a GUID' {
+                $f = Join-Path $script:Work 'META-20261002-000000-results.json'
+                Set-Content -LiteralPath $f -Value '{"Metadata":{"TenantDomain":"m.example","TenantId":"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"}}' -Encoding utf8
+                (Read-NRGWebRunMetadata -Path $f).TenantId | Should -BeExactly 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' -Because '-Be would ignore the case'
+                Set-Content -LiteralPath $f -Value '{"Metadata":{"TenantDomain":"m.example","TenantId":"not-a-guid"}}' -Encoding utf8
+                (Read-NRGWebRunMetadata -Path $f).TenantId | Should -Be ''
+                # A JSON-escaped line feed: valid JSON whose value ends in a newline.
+                Set-Content -LiteralPath $f -Value '{"Metadata":{"TenantDomain":"m.example\n"}}' -Encoding utf8
+                (Read-NRGWebRunMetadata -Path $f).TenantDomain | Should -Be '' -Because 'a trailing newline is not part of a domain'
             }
         }
 
@@ -559,9 +756,33 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
                 Test-NRGWebSegment -Value $Value | Should -BeFalse
             }
 
+            # `$` also matches before a FINAL line feed in .NET, so a `$`-anchored
+            # pattern accepts "abc`n". The anchor is \z, and each case below is a
+            # value a `$` anchor lets through.
+            It 'rejects a value that ends in a line break or other whitespace: <Label>' -ForEach @(
+                @{ Label = 'trailing LF';            Value = "abc`n" }
+                @{ Label = 'trailing CRLF';          Value = "abc`r`n" }
+                @{ Label = 'trailing CR';            Value = "abc`r" }
+                @{ Label = 'page ending in LF';      Value = "index.html`n" }
+                @{ Label = 'trailing space';         Value = 'abc ' }
+                @{ Label = 'trailing TAB';           Value = "abc`t" }
+                @{ Label = 'leading LF';             Value = "`nabc" }) {
+                Test-NRGWebSegment -Value $Value | Should -BeFalse
+            }
+
             It 'rejects null and empty' {
                 Test-NRGWebSegment -Value $null | Should -BeFalse
                 Test-NRGWebSegment -Value '' | Should -BeFalse
+            }
+
+            It 'the domain-shape check has the same anchors: no trailing newline, no Kelvin sign' {
+                Test-NRGWebDomainShape -Value 'ndaco.org' | Should -BeTrue
+                Test-NRGWebDomainShape -Value 'a-b.example.com' | Should -BeTrue
+                Test-NRGWebDomainShape -Value "ndaco.org`n" | Should -BeFalse
+                Test-NRGWebDomainShape -Value ('ndaco.or' + [char]0x212A) | Should -BeFalse
+                Test-NRGWebDomainShape -Value '-x.com' | Should -BeFalse
+                Test-NRGWebDomainShape -Value '' | Should -BeFalse
+                Test-NRGWebDomainShape -Value $null | Should -BeFalse
             }
 
             It 'is an ASCII whitelist: a non-ASCII character that case-folds into [A-Za-z] (the Kelvin sign) is rejected' {
@@ -703,6 +924,12 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
                 $r.Path | Should -BeNullOrEmpty
             }
 
+            It 'a hard link is a normal file and is served (LinkType reports HardLink for BOTH names, so it cannot be told from the real file)' {
+                if (-not $script:Fx.HardMade) { Set-ItResult -Skipped -Because 'this filesystem could not create a hard link'; return }
+                (& $script:Resolve '_flat' $script:Id 'SitePage' 'hard.html').Status | Should -Be 'Ok'
+                (& $script:Resolve '_flat' $script:Id 'SitePage' 'AAD.html').Status | Should -Be 'Ok'
+            }
+
             It 'never serves a report folder that is itself a link, and does not list a site for it' {
                 if (-not $script:Fx.LinksMade) { Set-ItResult -Skipped -Because 'this filesystem could not create symbolic links'; return }
                 (& $script:Resolve '_flat' 'LINKDIR-20261002-070000' 'SitePage' 'index.html').Status | Should -Be 'NotFound'
@@ -710,26 +937,72 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             }
         }
 
+        Context 'the link guard fails closed and does not depend on a newer runtime' {
+            It 'a plain file and a plain folder are plain' {
+                Test-NRGWebPathIsPlain -Path (Join-Path $script:Fx.Out "$($script:Id)-report" 'AAD.html') | Should -BeTrue
+                Test-NRGWebPathIsPlain -Path (Join-Path $script:Fx.Out "$($script:Id)-report") | Should -BeTrue
+            }
+
+            It 'a path that cannot be inspected is NOT plain (fail closed)' {
+                Test-NRGWebPathIsPlain -Path (Join-Path $script:Work 'no-such-file.html') | Should -BeFalse
+            }
+
+            It 'an item that exists but cannot be read is NOT plain (a race or an access error must not serve it)' {
+                Mock Get-Item { $null }
+                Test-NRGWebPathIsPlain -Path (Join-Path $script:Fx.Out "$($script:Id)-report" 'AAD.html') | Should -BeFalse
+            }
+
+            It 'a symbolic link is not plain, even where the runtime has no LinkTarget property' {
+                if (-not $script:Fx.LinksMade) { Set-ItResult -Skipped -Because 'this filesystem could not create symbolic links'; return }
+                $link = Join-Path $script:Fx.Out "$($script:Id)-report" 'linked.html'
+                Test-NRGWebPathIsPlain -Path $link | Should -BeFalse
+                # LinkTarget is .NET 6+. Hide it, as an older runtime would: LinkType
+                # (PowerShell 6.0+) must still catch the link.
+                Mock Get-NRGObjectField { '' } -ParameterFilter { $Key -eq 'LinkTarget' }
+                Test-NRGWebPathIsPlain -Path $link | Should -BeFalse
+            }
+
+            It 'a hard link is plain' {
+                if (-not $script:Fx.HardMade) { Set-ItResult -Skipped -Because 'this filesystem could not create a hard link'; return }
+                Test-NRGWebPathIsPlain -Path (Join-Path $script:Fx.Out "$($script:Id)-report" 'hard.html') | Should -BeTrue
+            }
+        }
+
         Context 'what the helpers may do' {
             BeforeAll {
-                $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:IndexLib, [ref]$null, [ref]$null)
-                $script:Commands = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true) |
-                    ForEach-Object { $_.GetCommandName() } | Where-Object { $_ } | Sort-Object -Unique)
-                $script:Members = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.MemberExpressionAst] -and $n -isnot [System.Management.Automation.Language.InvokeMemberExpressionAst] }, $true) |
-                    ForEach-Object { [string]$_.Member.Value })
+                $script:Parsed = @{}
+                foreach ($entry in @(@('Index', $script:IndexLib), @('Path', $script:PathLib), @('Request', $script:RequestLib))) {
+                    $ast = [System.Management.Automation.Language.Parser]::ParseFile($entry[1], [ref]$null, [ref]$null)
+                    $script:Parsed[$entry[0]] = @{
+                        Commands = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true) |
+                            ForEach-Object { $_.GetCommandName() } | Where-Object { $_ } | Sort-Object -Unique)
+                        Members  = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.MemberExpressionAst] -and $n -isnot [System.Management.Automation.Language.InvokeMemberExpressionAst] }, $true) |
+                            ForEach-Object { [string]$_.Member.Value })
+                    }
+                }
             }
 
-            It 'is read-only and makes no tenant or network call' {
-                $script:Commands.Count | Should -BeGreaterThan 0
+            It 'is read-only and makes no tenant or network call, in any of the three files' {
                 $forbidden = '^(Connect-|Disconnect-|Invoke-(Mg|NRGGraph|RestMethod|WebRequest|Command)|.*-Mg[A-Z]|Start-(Process|Job)|Set-Content|Add-Content|Out-File|Remove-Item|New-Item|Move-Item|Copy-Item|Rename-Item|Clear-Content|Resolve-NRGDns|Resolve-DnsName|Get-NRGRawData)'
-                @($script:Commands | Where-Object { $_ -match $forbidden }) | Should -BeNullOrEmpty
+                foreach ($k in $script:Parsed.Keys) {
+                    $script:Parsed[$k].Commands.Count | Should -BeGreaterThan 0 -Because "the $k file must have parsed"
+                    @($script:Parsed[$k].Commands | Where-Object { $_ -match $forbidden }) | Should -BeNullOrEmpty -Because "the $k file"
+                }
             }
 
-            It 'reads the results file only through Get-NRGObjectField' {
-                $script:Commands | Should -Contain 'Get-NRGObjectField'
-                # No dotted access to a results field: a replayed older file does
-                # not carry newer fields and StrictMode throws on the read.
-                @($script:Members | Where-Object { $_ -in @('Metadata', 'TenantDomain', 'Findings', 'RawData') }) | Should -BeNullOrEmpty
+            It 'reads the results file and clients.json only through Get-NRGObjectField' {
+                $script:Parsed['Index'].Commands | Should -Contain 'Get-NRGObjectField'
+                # No dotted access to a field of an input file: a replayed older file
+                # does not carry newer fields and StrictMode throws on the read.
+                foreach ($k in 'Index', 'Path') {
+                    @($script:Parsed[$k].Members | Where-Object { $_ -in @('Metadata', 'TenantDomain', 'TenantId', 'DelegatedOrg', 'clients', 'Findings', 'RawData', 'LinkType', 'LinkTarget') }) |
+                        Should -BeNullOrEmpty -Because "the $k file"
+                }
+            }
+
+            It 'the request policy needs nothing from outside: no module function, no file, no state' {
+                $script:Parsed['Request'].Commands | Should -Not -Contain 'Get-NRGObjectField'
+                @($script:Parsed['Request'].Commands | Where-Object { $_ -match '^(Get-Content|Get-Item|Test-Path|Get-ChildItem|Import-)' }) | Should -BeNullOrEmpty
             }
 
             It 'the server file makes no tenant call of its own (the scan is a child process of the entry script)' {
@@ -741,6 +1014,156 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
                 @($names | Where-Object { $_ -match '^(Connect-|Invoke-(Mg|NRGGraph)|.*-Mg[A-Z]|Get-NRGRawData|Resolve-NRGDns)' }) | Should -BeNullOrEmpty
             }
         }
+
+        Context 'the request policy (Host allow-list; same-origin JSON for anything that changes state)' {
+            BeforeAll {
+                $script:Policy = {
+                    param([hashtable] $Req)
+                    $a = @{ Method = 'GET'; Port = 8765 }
+                    foreach ($k in $Req.Keys) { $a[$k] = $Req[$k] }
+                    Test-NRGWebRequestAllowed @a
+                }
+                $script:Json = @{ Method = 'POST'; HostHeader = '127.0.0.1:8765'; ContentType = 'application/json' }
+            }
+
+            It 'allows a read on the names the server is meant to be reached as: <Label>' -ForEach @(
+                @{ Label = '127.0.0.1 and its port';  HostName = '127.0.0.1:8765' }
+                @{ Label = 'localhost and its port';  HostName = 'localhost:8765' }
+                @{ Label = 'LOCALHOST (case)';        HostName = 'LOCALHOST:8765' }) {
+                $v = & $script:Policy @{ HostHeader = $HostName }
+                $v.Allowed | Should -BeTrue
+            }
+
+            It 'allows HEAD as a read' {
+                (& $script:Policy @{ Method = 'HEAD'; HostHeader = '127.0.0.1:8765' }).Allowed | Should -BeTrue
+            }
+
+            It 'refuses a request whose Host header is not one of ours (DNS rebinding): <Label>' -ForEach @(
+                @{ Label = 'a name the attacker owns';          HostName = 'evil.example.com:8765' }
+                @{ Label = 'the attacker name, no port';        HostName = 'evil.example.com' }
+                @{ Label = 'a LAN address';                     HostName = '192.168.1.50:8765' }
+                @{ Label = '127.0.0.1 without the port';        HostName = '127.0.0.1' }
+                @{ Label = 'localhost without the port';        HostName = 'localhost' }
+                @{ Label = '127.0.0.1 on another port';         HostName = '127.0.0.1:8766' }
+                @{ Label = 'localhost with a trailing dot';     HostName = 'localhost.:8765' }
+                @{ Label = 'a subdomain of localhost';          HostName = 'x.localhost:8765' }
+                @{ Label = 'a list of hosts';                   HostName = '127.0.0.1:8765, evil.example.com' }
+                @{ Label = 'a trailing space';                  HostName = '127.0.0.1:8765 ' }
+                @{ Label = 'a trailing line feed';              HostName = "127.0.0.1:8765`n" }
+                @{ Label = 'userinfo before the real host';     HostName = 'evil.example.com@127.0.0.1:8765' }
+                @{ Label = 'the real host as a userinfo';       HostName = '127.0.0.1:8765@evil.example.com' }
+                @{ Label = 'IPv6 loopback (not bound)';         HostName = '[::1]:8765' }
+                @{ Label = 'a decimal form of 127.0.0.1';       HostName = '2130706433:8765' }
+                @{ Label = 'a different scheme in the header';  HostName = 'http://127.0.0.1:8765' }) {
+                $v = & $script:Policy @{ HostHeader = $HostName }
+                $v.Allowed | Should -BeFalse
+                $v.HttpStatus | Should -Be 403
+                $v.Reason | Should -Be 'HostNotAllowed'
+            }
+
+            It 'refuses a request with no Host header or an empty one' {
+                (& $script:Policy @{ HostHeader = $null }).Reason | Should -Be 'HostNotAllowed'
+                (& $script:Policy @{ HostHeader = '' }).Reason | Should -Be 'HostNotAllowed'
+                (& $script:Policy @{}).Reason | Should -Be 'HostNotAllowed'
+            }
+
+            It 'the message is fixed text and never echoes the request' {
+                $v = & $script:Policy @{ HostHeader = 'evil.example.com:8765'; Origin = 'http://attacker.test' }
+                $v.Message | Should -Be 'Forbidden.'
+                $v.Message | Should -Not -Match 'evil|attacker'
+            }
+
+            It 'allows a state-changing request that is same-origin JSON: <Label>' -ForEach @(
+                @{ Label = 'a browser, same origin, Fetch Metadata same-origin'; Extra = @{ Origin = 'http://127.0.0.1:8765'; SecFetchSite = 'same-origin' } }
+                @{ Label = 'a browser on localhost';                              Extra = @{ HostHeader = 'localhost:8765'; Origin = 'http://localhost:8765'; SecFetchSite = 'same-origin' } }
+                @{ Label = 'JSON with a charset';                                 Extra = @{ ContentType = 'Application/JSON; charset=utf-8' } }
+                @{ Label = 'a client that sends no Origin (not a browser)';       Extra = @{} }
+                @{ Label = 'a request the user started by hand (Fetch Metadata none)'; Extra = @{ SecFetchSite = 'none' } }) {
+                $req = @{} + $script:Json
+                foreach ($k in $Extra.Keys) { $req[$k] = $Extra[$k] }
+                (& $script:Policy $req).Allowed | Should -BeTrue
+            }
+
+            It 'refuses a state-changing request that is not JSON (a cross-site form cannot send JSON): <Label>' -ForEach @(
+                @{ Label = 'a urlencoded form';       Type = 'application/x-www-form-urlencoded' }
+                @{ Label = 'a multipart form';        Type = 'multipart/form-data; boundary=x' }
+                @{ Label = 'text/plain';              Type = 'text/plain' }
+                @{ Label = 'no content type';         Type = $null }
+                @{ Label = 'an empty content type';   Type = '' }
+                @{ Label = 'a look-alike media type'; Type = 'application/jsonp' }
+                @{ Label = 'JSON-looking suffix';     Type = 'text/json' }
+                @{ Label = 'JSON as a parameter only'; Type = 'text/plain; x=application/json' }) {
+                $v = & $script:Policy @{ Method = 'POST'; HostHeader = '127.0.0.1:8765'; ContentType = $Type }
+                $v.Allowed | Should -BeFalse
+                $v.Reason | Should -Be 'ContentTypeNotJson'
+                $v.HttpStatus | Should -Be 403
+            }
+
+            It 'refuses an Origin that is not this server, even with JSON: <Label>' -ForEach @(
+                @{ Label = 'another site';              Origin = 'http://evil.example.com' }
+                @{ Label = 'another site, same port';   Origin = 'http://evil.example.com:8765' }
+                @{ Label = 'null (sandboxed frame)';    Origin = 'null' }
+                @{ Label = 'https for the same host';   Origin = 'https://127.0.0.1:8765' }
+                @{ Label = 'same host, another port';   Origin = 'http://127.0.0.1:8766' }
+                @{ Label = 'a LAN address';             Origin = 'http://192.168.1.50:8765' }) {
+                $v = & $script:Policy @{ Method = 'POST'; HostHeader = '127.0.0.1:8765'; ContentType = 'application/json'; Origin = $Origin }
+                $v.Allowed | Should -BeFalse
+                $v.Reason | Should -Be 'OriginNotAllowed'
+            }
+
+            It 'refuses a state-changing request the browser marks as cross-site: <Site>' -ForEach @(
+                @{ Site = 'cross-site' }, @{ Site = 'same-site' }) {
+                $v = & $script:Policy @{ Method = 'POST'; HostHeader = '127.0.0.1:8765'; ContentType = 'application/json'; SecFetchSite = $Site }
+                $v.Allowed | Should -BeFalse
+                $v.Reason | Should -Be 'FetchSiteNotSameOrigin'
+            }
+
+            It 'treats every method but GET and HEAD as state-changing: <Method>' -ForEach @(
+                @{ Method = 'POST' }, @{ Method = 'PUT' }, @{ Method = 'PATCH' }, @{ Method = 'DELETE' }, @{ Method = 'OPTIONS' }, @{ Method = 'TRACE' }, @{ Method = 'post' }) {
+                (& $script:Policy @{ Method = $Method; HostHeader = '127.0.0.1:8765' }).Reason | Should -Be 'ContentTypeNotJson'
+            }
+
+            It 'the Host check applies to a state-changing request too, and comes first' {
+                (& $script:Policy @{ Method = 'POST'; HostHeader = 'evil.example.com:8765'; ContentType = 'application/json'; Origin = 'http://evil.example.com:8765' }).Reason | Should -Be 'HostNotAllowed'
+            }
+
+            It 'a read is not refused for its Fetch Metadata or Origin (a link from another page must still open the GUI)' {
+                (& $script:Policy @{ HostHeader = '127.0.0.1:8765'; Origin = 'http://evil.example.com'; SecFetchSite = 'cross-site' }).Allowed | Should -BeTrue
+            }
+
+            It '-AllowedHost adds names for a tunnel: a bare host takes the server port, host:port is exact, anything else is still refused' {
+                $extra = @('tunnel.test:9000', 'alias.test')
+                (& $script:Policy @{ HostHeader = 'tunnel.test:9000'; AllowedHost = $extra }).Allowed | Should -BeTrue
+                (& $script:Policy @{ HostHeader = 'alias.test:8765';  AllowedHost = $extra }).Allowed | Should -BeTrue
+                (& $script:Policy @{ HostHeader = 'tunnel.test:9001'; AllowedHost = $extra }).Allowed | Should -BeFalse
+                (& $script:Policy @{ HostHeader = 'tunnel.test';      AllowedHost = $extra }).Allowed | Should -BeFalse
+                (& $script:Policy @{ HostHeader = 'alias.test:9000';  AllowedHost = $extra }).Allowed | Should -BeFalse
+                (& $script:Policy @{ HostHeader = 'evil.example.com:8765'; AllowedHost = $extra }).Allowed | Should -BeFalse
+                # And an allowed tunnel name is an allowed Origin for the JSON POST.
+                (& $script:Policy @{ Method = 'POST'; HostHeader = 'tunnel.test:9000'; ContentType = 'application/json'; Origin = 'http://tunnel.test:9000'; AllowedHost = $extra }).Allowed | Should -BeTrue
+                (& $script:Policy @{ Method = 'POST'; HostHeader = 'tunnel.test:9000'; ContentType = 'application/json'; Origin = 'http://127.0.0.1:8765'; AllowedHost = $extra }).Allowed | Should -BeTrue
+            }
+
+            It 'the scheme comes from the server, not the policy: https origins are accepted only when the server says https' {
+                $post = @{ Method = 'POST'; HostHeader = '127.0.0.1:8765'; ContentType = 'application/json'; Origin = 'https://127.0.0.1:8765' }
+                (& $script:Policy $post).Reason | Should -Be 'OriginNotAllowed'
+                (& $script:Policy ($post + @{ Scheme = 'https' })).Allowed | Should -BeTrue
+                (& $script:Policy ($post + @{ Scheme = 'http' })).Reason | Should -Be 'OriginNotAllowed'
+                $http = @{ Method = 'POST'; HostHeader = '127.0.0.1:8765'; ContentType = 'application/json'; Origin = 'http://127.0.0.1:8765' }
+                (& $script:Policy ($http + @{ Scheme = 'https' })).Reason | Should -Be 'OriginNotAllowed'
+                { Test-NRGWebRequestAllowed -Method GET -HostHeader 'localhost:8765' -Port 8765 -Scheme 'ftp' } | Should -Throw
+            }
+
+            It 'a blank or null -AllowedHost entry adds nothing' {
+                (& $script:Policy @{ HostHeader = ':8765'; AllowedHost = @('', '  ', $null) }).Allowed | Should -BeFalse
+                (& $script:Policy @{ HostHeader = '127.0.0.1:8765'; AllowedHost = $null }).Allowed | Should -BeTrue
+            }
+
+            It 'the port must be a real port' {
+                { Test-NRGWebRequestAllowed -Method GET -HostHeader 'localhost:0' -Port 0 } | Should -Throw
+                { Test-NRGWebRequestAllowed -Method GET -HostHeader 'localhost:70000' -Port 70000 } | Should -Throw
+            }
+        }
     }
 
     Context 'Server actually starts and serves' -Skip:(-not (Get-Module -ListAvailable -Name Pode | Where-Object { $_.Version -ge [version]'2.10.0' })) {
@@ -748,23 +1171,26 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
         # this file is a grep or a pure-function check; neither can tell you
         # the server never came up.
         BeforeAll {
-            # Starts a server whose working directory is $Work (the server reads
-            # ./output relative to it). $Explicit adds -ScriptDir; without it
-            # the server must find the repository root by itself.
+            # Starts a server and waits for it. $Opt: Cwd (where it runs: always a
+            # neutral folder, so nothing can pass by reading the current directory),
+            # Port, and optionally ScriptDir, OutputRoot and Extra (more arguments).
             $script:Boot = {
-                param([string] $Work, [int] $Port, [bool] $Explicit)
+                param([hashtable] $Opt)
                 $boot = Join-Path ([System.IO.Path]::GetTempPath()) ("nrgweb-{0}.ps1" -f ([Guid]::NewGuid().ToString('N')))
-                $dirArg = if ($Explicit) { " -ScriptDir '$($script:RepoRoot)'" } else { '' }
+                $parts = @("-Port $($Opt.Port)")
+                if ($Opt.ContainsKey('ScriptDir'))  { $parts += "-ScriptDir '$($Opt.ScriptDir)'" }
+                if ($Opt.ContainsKey('OutputRoot')) { $parts += "-OutputRoot '$($Opt.OutputRoot)'" }
+                if ($Opt.ContainsKey('Extra'))      { $parts += $Opt.Extra }
                 @"
 `$ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . '$($script:ServerPath)'
-Start-NRGWebServer -Port $Port$dirArg -NoBrowser
+Start-NRGWebServer $($parts -join ' ') -NoBrowser
 "@ | Set-Content -LiteralPath $boot -Encoding utf8
 
                 $pwshExe = (Get-Process -Id $PID).Path
                 $proc = Start-Process -FilePath $pwshExe `
-                    -WorkingDirectory $Work `
+                    -WorkingDirectory $Opt.Cwd `
                     -ArgumentList @('-NoProfile', '-File', $boot) `
                     -RedirectStandardOutput "$boot.log" `
                     -RedirectStandardError  "$boot.log.err" `
@@ -777,58 +1203,88 @@ Start-NRGWebServer -Port $Port$dirArg -NoBrowser
                 foreach ($i in 1..40) {
                     Start-Sleep -Milliseconds 750
                     try {
-                        $null = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/" -TimeoutSec 3 -UseBasicParsing
+                        $null = Invoke-WebRequest -Uri "http://127.0.0.1:$($Opt.Port)/" -TimeoutSec 3 -UseBasicParsing
                         $up = $true
                         break
                     } catch { }
                 }
-                return @{ Proc = $proc; Boot = $boot; Up = $up; Port = $Port }
+                return @{ Proc = $proc; Boot = $boot; Up = $up; Port = $Opt.Port }
             }
 
-            # A raw HTTP/1.1 GET. Invoke-WebRequest runs the URL through
+            # A raw HTTP/1.1 request. Invoke-WebRequest runs the URL through
             # System.Uri, which collapses ../ and decodes %2e before anything is
-            # sent, so a traversal test through it never reaches the server
-            # as written. This sends the request line exactly as given.
+            # sent, and it will not send an arbitrary Host or Origin: so a traversal,
+            # DNS-rebinding or forged-origin test through it never reaches the
+            # server as written. This sends the request exactly as given and returns
+            # the body as bytes too (a byte-order mark does not survive a string).
             $script:Raw = {
-                param([int] $Port, [string] $Target)
+                param([int] $Port, [string] $Target, [string] $Method = 'GET', [hashtable] $Headers = @{}, [string] $Body = '')
                 $client = [System.Net.Sockets.TcpClient]::new()
                 try {
                     $client.Connect('127.0.0.1', $Port)
                     $stream = $client.GetStream()
                     $stream.ReadTimeout = 8000
-                    $req = [System.Text.Encoding]::ASCII.GetBytes("GET $Target HTTP/1.1`r`nHost: 127.0.0.1:$Port`r`nConnection: close`r`n`r`n")
-                    $stream.Write($req, 0, $req.Length)
+                    $hdr = [ordered]@{ Host = "127.0.0.1:$Port" }
+                    foreach ($k in $Headers.Keys) { $hdr[$k] = $Headers[$k] }
+                    $payload = [System.Text.Encoding]::UTF8.GetBytes($Body)
+                    if ($payload.Length -gt 0) { $hdr['Content-Length'] = $payload.Length }
+                    $lines = @("$Method $Target HTTP/1.1") + @($hdr.Keys | ForEach-Object { "${_}: $($hdr[$_])" }) + 'Connection: close'
+                    $head = [System.Text.Encoding]::ASCII.GetBytes(($lines -join "`r`n") + "`r`n`r`n")
+                    $stream.Write($head, 0, $head.Length)
+                    if ($payload.Length -gt 0) { $stream.Write($payload, 0, $payload.Length) }
                     $ms = [System.IO.MemoryStream]::new()
                     $stream.CopyTo($ms)
-                    $text = [System.Text.Encoding]::UTF8.GetString($ms.ToArray())
-                    $head, $body = $text -split "`r`n`r`n", 2
-                    $status = [int](($head -split "`r`n")[0] -split ' ')[1]
+                    $all = $ms.ToArray()
+                    $split = -1
+                    for ($i = 0; $i -le $all.Length - 4; $i++) {
+                        if ($all[$i] -eq 13 -and $all[$i + 1] -eq 10 -and $all[$i + 2] -eq 13 -and $all[$i + 3] -eq 10) { $split = $i; break }
+                    }
+                    $headText = [System.Text.Encoding]::ASCII.GetString($all, 0, [Math]::Max($split, 0))
+                    $bodyBytes = [byte[]]::new([Math]::Max($all.Length - $split - 4, 0))
+                    if ($bodyBytes.Length -gt 0) { [Array]::Copy($all, $split + 4, $bodyBytes, 0, $bodyBytes.Length) }
+                    $status = [int](($headText -split "`r`n")[0] -split ' ')[1]
                     $headers = @{}
-                    foreach ($line in ($head -split "`r`n" | Select-Object -Skip 1)) {
+                    foreach ($line in ($headText -split "`r`n" | Select-Object -Skip 1)) {
                         $k, $v = $line -split ':\s*', 2
                         if ($k) { $headers[$k.ToLowerInvariant()] = $v }
                     }
-                    return [pscustomobject]@{ Status = $status; Headers = $headers; Body = [string]$body }
+                    return [pscustomobject]@{ Status = $status; Headers = $headers; Body = [System.Text.Encoding]::UTF8.GetString($bodyBytes); BodyBytes = $bodyBytes }
                 } finally { $client.Dispose() }
             }
 
-            $script:Work = Join-Path ([System.IO.Path]::GetTempPath()) ("nrgweb-work-{0}" -f ([Guid]::NewGuid().ToString('N')))
+            $tmp = [System.IO.Path]::GetTempPath()
+            $script:Elsewhere = Join-Path $tmp ("nrgweb-cwd-{0}" -f ([Guid]::NewGuid().ToString('N')))
+            $null = New-Item -ItemType Directory -Path $script:Elsewhere -Force
+
+            $script:Work = Join-Path $tmp ("nrgweb-work-{0}" -f ([Guid]::NewGuid().ToString('N')))
             $script:Fx   = & $script:NewFixture $script:Work
             $script:Id   = $script:Fx.Id
 
-            # Server A: no -ScriptDir at all. If the default were Lib (the old
-            # behavior) this throws "Web asset directory not found" and never
-            # comes up, so every test below fails.
-            $script:Port = Get-Random -Minimum 20000 -Maximum 24000
-            $script:A = & $script:Boot $script:Work $script:Port $false
+            # Server A: no -ScriptDir at all (if the default were Lib, the old
+            # behavior, this throws "Web asset directory not found" and never
+            # comes up) and an explicit -OutputRoot, so it never reads the real
+            # repository's output folder. Run from a neutral folder.
+            $script:Port = Get-Random -Minimum 20000 -Maximum 23000
+            $script:A = & $script:Boot @{ Cwd = $script:Elsewhere; Port = $script:Port; OutputRoot = $script:Fx.Out }
             $script:Up = $script:A.Up
 
-            # Server B: the explicit parameter still works. Its own empty
-            # working directory, so it also starts with nothing in ./output.
-            $script:WorkB = Join-Path ([System.IO.Path]::GetTempPath()) ("nrgweb-workb-{0}" -f ([Guid]::NewGuid().ToString('N')))
-            $null = New-Item -ItemType Directory -Path $script:WorkB -Force
-            $script:PortB = Get-Random -Minimum 24001 -Maximum 29000
-            $script:B = & $script:Boot $script:WorkB $script:PortB $true
+            # Server B: an "installation" in its own folder, with the explicit
+            # -ScriptDir and NO -OutputRoot: the runs must come from
+            # <ScriptDir>\output, the clients from <ScriptDir>\Config\clients.json,
+            # and the current directory (the neutral folder) must be left alone.
+            $script:Install = Join-Path $tmp ("nrgweb-install-{0}" -f ([Guid]::NewGuid().ToString('N')))
+            $script:FxB = & $script:NewFixture $script:Install
+            Copy-Item -LiteralPath $script:WebRoot -Destination (Join-Path $script:Install 'Web') -Recurse
+            $null = New-Item -ItemType Directory -Path (Join-Path $script:Install 'Lib') -Force
+            foreach ($f in $script:FieldLib, $script:PathLib, $script:IndexLib, $script:RequestLib) {
+                Copy-Item -LiteralPath $f -Destination (Join-Path $script:Install 'Lib')
+            }
+            $script:PortB = Get-Random -Minimum 23001 -Maximum 26000
+            $script:B = & $script:Boot @{ Cwd = $script:Elsewhere; Port = $script:PortB; ScriptDir = $script:Install }
+
+            # Server C: extra names for a tunnel.
+            $script:PortC = Get-Random -Minimum 26001 -Maximum 29000
+            $script:C = & $script:Boot @{ Cwd = $script:Elsewhere; Port = $script:PortC; OutputRoot = $script:Fx.Out; Extra = "-AllowedHost 'tunnel.test:9000','alias.test'" }
 
             $script:Base = "http://127.0.0.1:$($script:Port)"
             $script:Get = {
@@ -838,7 +1294,7 @@ Start-NRGWebServer -Port $Port$dirArg -NoBrowser
         }
 
         AfterAll {
-            foreach ($s in @($script:A, $script:B)) {
+            foreach ($s in @($script:A, $script:B, $script:C)) {
                 if ($s -and $s.Proc -and -not $s.Proc.HasExited) {
                     Stop-Process -Id $s.Proc.Id -Force -ErrorAction SilentlyContinue
                 }
@@ -848,7 +1304,7 @@ Start-NRGWebServer -Port $Port$dirArg -NoBrowser
                     }
                 }
             }
-            foreach ($d in @($script:Work, $script:WorkB)) {
+            foreach ($d in @($script:Work, $script:Install, $script:Elsewhere)) {
                 if ($d) { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
             }
         }
@@ -866,12 +1322,33 @@ Start-NRGWebServer -Port $Port$dirArg -NoBrowser
             [string]$err | Should -Not -Match 'Web asset directory not found'
         }
 
-        It 'still comes up with an explicit -ScriptDir' {
-            $script:B.Up | Should -BeTrue
-            $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:PortB)/static/app.js" -TimeoutSec 5 -UseBasicParsing
-            $r.StatusCode | Should -Be 200
-            $rows = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:PortB)/api/runs" -TimeoutSec 5 -UseBasicParsing
-            $rows.Content.Trim() | Should -Be '[]' -Because 'that server was started in an empty working directory'
+        Context 'the output folder is the ScriptDir output folder, not the current directory' {
+            BeforeAll {
+                $script:RunsB = @((Invoke-WebRequest -Uri "http://127.0.0.1:$($script:PortB)/api/runs" -TimeoutSec 8 -UseBasicParsing).Content | ConvertFrom-Json)
+            }
+
+            It 'a server started from another folder lists the runs the command line wrote into the ScriptDir output folder' {
+                $script:B.Up | Should -BeTrue
+                $expected = if ($script:FxB.LinksMade) { 13 } else { 12 }
+                $script:RunsB.Count | Should -Be $expected `
+                    -Because 'before, it read (Get-Location)\output and listed nothing unless it was started from the repository root'
+                @($script:RunsB | Where-Object { $_.id -eq $script:FxB.Id }).Count | Should -Be 1
+            }
+
+            It 'it did not create or use an output folder in the current directory' {
+                Test-Path -LiteralPath (Join-Path $script:Elsewhere 'output') | Should -BeFalse
+            }
+
+            It 'it read the ScriptDir Config\clients.json, so a command-line run carries its client''s name' {
+                ($script:RunsB | Where-Object { $_.id -eq 'JOINED-20261002-070500' }).tenant | Should -Be 'joined.com'
+                ($script:RunsB | Where-Object { $_.id -eq 'ORGONLY-20261002-070400' }).tenant | Should -Be 'orgonly.com'
+                @($script:RunsB | Where-Object { $_.tenant -eq 'joined.com' }).Count | Should -Be 2 -Because 'the GUI-layout run of the same client has the same name'
+            }
+
+            It 'still serves its static assets and its reports' {
+                (Invoke-WebRequest -Uri "http://127.0.0.1:$($script:PortB)/static/app.js" -TimeoutSec 5 -UseBasicParsing).StatusCode | Should -Be 200
+                (& $script:Raw $script:PortB "/api/runs/_flat/$($script:FxB.Id)/report").Body | Should -Match 'FLAT-REPORT-MARKER'
+            }
         }
 
         It 'serves /api/clients as a JSON array, never null' {
@@ -909,7 +1386,7 @@ Start-NRGWebServer -Port $Port$dirArg -NoBrowser
             It 'lists the GUI-layout run too, and not the incident-response or triage files' {
                 @($script:RunList | Where-Object { $_.id -eq 'NDACO-20261002-100000' }).Count | Should -Be 1
                 @($script:RunList | Where-Object { $_.id -match 'email|signin|^2026\d{4}-\d{6}$' }) | Should -BeNullOrEmpty
-                $expected = if ($script:Fx.LinksMade) { 8 } else { 7 }
+                $expected = if ($script:Fx.LinksMade) { 13 } else { 12 }
                 $script:RunList.Count | Should -Be $expected
             }
 
@@ -950,12 +1427,25 @@ Start-NRGWebServer -Port $Port$dirArg -NoBrowser
                 }
             }
 
-            It 'serves the action plan as a CSV attachment' {
+            It 'serves the action plan as a CSV attachment, once-charset media type' {
                 $c = & $script:Get "/site/_flat/$($script:Id)/ActionPlan.csv"
                 $c.StatusCode | Should -Be 200
                 $c.Headers['Content-Type'] | Should -Match 'text/csv'
+                [string]$c.Headers['Content-Type'] | Should -Not -Match 'charset=[^;]*;\s*charset=' -Because 'Pode adds the charset itself'
                 [string]$c.Headers['Content-Disposition'] | Should -Match 'attachment; filename="ActionPlan.csv"'
                 $c.Content | Should -Match 'SITE-CSV-MARKER'
+            }
+
+            It 'serves the action plan byte for byte, keeping the UTF-8 byte-order mark Excel needs' {
+                # The publisher writes the file with a BOM so Excel reads UTF-8 and not
+                # ANSI. Reading it as text and sending the string drops the BOM and the
+                # non-ASCII text turns to mojibake in Excel.
+                $disk = [System.IO.File]::ReadAllBytes((Join-Path $script:Fx.Out "$($script:Id)-report" 'ActionPlan.csv'))
+                $disk[0..2] -join ',' | Should -Be '239,187,191' -Because 'the fixture carries a BOM'
+                $r = & $script:Raw $script:Port "/site/_flat/$($script:Id)/ActionPlan.csv"
+                $r.Status | Should -Be 200
+                $r.BodyBytes.Length | Should -Be $disk.Length
+                ($r.BodyBytes -join ',') | Should -Be ($disk -join ',')
             }
 
             It 'the site is served under the same strict CSP, not a relaxed one' {
@@ -1023,6 +1513,139 @@ Start-NRGWebServer -Port $Port$dirArg -NoBrowser
                 $r.Status | Should -Be 404
                 $r.Body | Should -Be 'Not found.' -Because 'status and body are sent together'
                 $r.Headers['content-type'] | Should -Match 'text/plain'
+            }
+        }
+
+        Context 'only requests meant for this server are answered' {
+            # Every refused state-changing request below uses a domain that is
+            # INVALID on purpose: the route would reject it with 400, so even a
+            # request that got past the guard could not start a scan.
+
+            It 'refuses a request whose Host header is not ours, on every route (DNS rebinding): <HostCase> <Path>' -ForEach @(
+                @{ Path = '/';                                                     HostCase = 'evil.example.com' }
+                @{ Path = '/static/app.js';                                        HostCase = 'evil.example.com' }
+                @{ Path = '/api/clients';                                          HostCase = 'evil.example.com' }
+                @{ Path = '/api/runs';                                             HostCase = 'evil.example.com' }
+                @{ Path = '/api/runs/_flat/CLITENANT-20261002-114907/report';      HostCase = 'evil.example.com' }
+                @{ Path = '/site/_flat/CLITENANT-20261002-114907/index.html';      HostCase = 'evil.example.com' }
+                @{ Path = '/site/_flat/CLITENANT-20261002-114907/ActionPlan.csv';  HostCase = 'evil.example.com' }
+                @{ Path = '/api/runs';                                             HostCase = 'lan' }
+                @{ Path = '/api/runs';                                             HostCase = 'noport' }
+                @{ Path = '/api/runs';                                             HostCase = 'localhost-noport' }
+                @{ Path = '/api/runs';                                             HostCase = 'otherport' }) {
+                $hostValue = switch ($HostCase) {
+                    'evil.example.com' { "evil.example.com:$($script:Port)" }
+                    'lan'              { "192.168.1.50:$($script:Port)" }
+                    'noport'           { '127.0.0.1' }
+                    'localhost-noport' { 'localhost' }
+                    'otherport'        { "127.0.0.1:$($script:Port + 1)" }
+                }
+                $r = & $script:Raw $script:Port $Path 'GET' @{ Host = $hostValue }
+                $r.Status | Should -Be 403
+                $r.Body | Should -Be 'Forbidden.'
+                $r.Body | Should -Not -Match 'MARKER|"id"|<!DOCTYPE' -Because 'nothing of the page or the data may leave with a refusal'
+            }
+
+            It 'answers 127.0.0.1 and localhost on its own port' {
+                (& $script:Raw $script:Port '/api/runs' 'GET' @{ Host = "127.0.0.1:$($script:Port)" }).Status | Should -Be 200
+                (& $script:Raw $script:Port '/api/runs' 'GET' @{ Host = "localhost:$($script:Port)" }).Status | Should -Be 200
+                (& $script:Raw $script:Port '/api/runs' 'GET' @{ Host = "LOCALHOST:$($script:Port)" }).Status | Should -Be 200
+            }
+
+            It 'a refusal carries the same security headers as an answer' {
+                $r = & $script:Raw $script:Port '/' 'GET' @{ Host = 'evil.example.com' }
+                $r.Status | Should -Be 403
+                $r.Headers['content-security-policy'] | Should -Match "default-src 'none'"
+                $r.Headers['cache-control'] | Should -Be 'no-store'
+                $r.Headers['cross-origin-resource-policy'] | Should -Be 'same-origin'
+                $r.Headers['x-content-type-options'] | Should -Be 'nosniff'
+            }
+
+            It 'every kind of answer is no-store and same-origin-only: <Path>' -ForEach @(
+                @{ Path = '/' }
+                @{ Path = '/static/app.js' }
+                @{ Path = '/api/clients' }
+                @{ Path = '/api/runs' }
+                @{ Path = '/api/runs/_flat/CLITENANT-20261002-114907/report' }
+                @{ Path = '/site/_flat/CLITENANT-20261002-114907/index.html' }
+                @{ Path = '/site/_flat/CLITENANT-20261002-114907/ActionPlan.csv' }
+                @{ Path = '/site/_flat/NOSUCH-20261002-000000/index.html' }) {
+                $r = & $script:Raw $script:Port $Path
+                $r.Headers['cache-control'] | Should -Be 'no-store'
+                $r.Headers['cross-origin-resource-policy'] | Should -Be 'same-origin'
+                $r.Headers.ContainsKey('access-control-allow-origin') | Should -BeFalse -Because 'the server never opts in to cross-origin reads'
+            }
+
+            It 'a page that makes the browser read us cross-origin still gets no CORS grant' {
+                $r = & $script:Raw $script:Port '/api/runs' 'GET' @{ Origin = 'http://evil.example.com' }
+                $r.Status | Should -Be 200 -Because 'the Host is ours: a read is allowed, but the browser may not hand it to the page'
+                $r.Headers.ContainsKey('access-control-allow-origin') | Should -BeFalse
+                $r.Headers['cross-origin-resource-policy'] | Should -Be 'same-origin'
+            }
+
+            It 'refuses a state-changing request that is not same-origin JSON: <Label>' -ForEach @(
+                @{ Label = 'a cross-site form (urlencoded)'; Headers = @{ 'Content-Type' = 'application/x-www-form-urlencoded'; Origin = 'http://evil.example.com' }; Body = 'domain=bad domain!' }
+                @{ Label = 'a form with no Origin';          Headers = @{ 'Content-Type' = 'application/x-www-form-urlencoded' };                                     Body = 'domain=bad domain!' }
+                @{ Label = 'text/plain (the no-preflight trick)'; Headers = @{ 'Content-Type' = 'text/plain' };                                                       Body = '{"domain":"bad domain!"}' }
+                @{ Label = 'JSON from another origin';       Headers = @{ 'Content-Type' = 'application/json'; Origin = 'http://evil.example.com' };                  Body = '{"domain":"bad domain!"}' }
+                @{ Label = 'JSON from a null origin';        Headers = @{ 'Content-Type' = 'application/json'; Origin = 'null' };                                      Body = '{"domain":"bad domain!"}' }
+                @{ Label = 'JSON marked cross-site';         Headers = @{ 'Content-Type' = 'application/json'; 'Sec-Fetch-Site' = 'cross-site' };                      Body = '{"domain":"bad domain!"}' }
+                @{ Label = 'no content type at all';         Headers = @{};                                                                                           Body = '{"domain":"bad domain!"}' }) {
+                $r = & $script:Raw $script:Port '/api/scan' 'POST' $Headers $Body
+                $r.Status | Should -Be 403
+                $r.Body | Should -Be 'Forbidden.'
+            }
+
+            It 'a state-changing request with a foreign Host is refused before its content is looked at' {
+                $r = & $script:Raw $script:Port '/api/scan' 'POST' @{ Host = 'evil.example.com'; 'Content-Type' = 'application/json'; Origin = 'http://evil.example.com' } '{"domain":"bad domain!"}'
+                $r.Status | Should -Be 403
+                $r.Body | Should -Be 'Forbidden.'
+            }
+
+            It 'a preflight is never granted' {
+                $r = & $script:Raw $script:Port '/api/scan' 'OPTIONS' @{ Origin = 'http://evil.example.com'; 'Access-Control-Request-Method' = 'POST'; 'Access-Control-Request-Headers' = 'content-type' }
+                $r.Status | Should -BeIn @(403, 405)
+                $r.Headers.ContainsKey('access-control-allow-origin') | Should -BeFalse
+                $r.Headers.ContainsKey('access-control-allow-methods') | Should -BeFalse
+            }
+
+            It 'the GUI''s own request gets through to the route: same-origin JSON reaches the validator, which says 400 for the invalid domain' {
+                # 400 is the ROUTE's answer to an invalid domain, so no scan was started.
+                $own = @{ 'Content-Type' = 'application/json'; Origin = $script:Base; 'Sec-Fetch-Site' = 'same-origin' }
+                (& $script:Raw $script:Port '/api/scan' 'POST' $own '{"domain":"bad domain!"}').Status | Should -Be 400
+                # A client that is not a browser sends no Origin and is a normal caller.
+                (& $script:Raw $script:Port '/api/scan' 'POST' @{ 'Content-Type' = 'application/json' } '{"domain":"bad domain!"}').Status | Should -Be 400
+                # localhost is the same server.
+                $viaName = @{ Host = "localhost:$($script:Port)"; 'Content-Type' = 'application/json'; Origin = "http://localhost:$($script:Port)" }
+                (& $script:Raw $script:Port '/api/scan' 'POST' $viaName '{"domain":"bad domain!"}').Status | Should -Be 400
+            }
+
+            It 'refusing leaves no scan behind: the status route knows no run' {
+                (& $script:Raw $script:Port '/api/scan/does-not-exist/status').Status | Should -Be 404
+            }
+        }
+
+        Context '-AllowedHost (a tunnel or port forward)' {
+            It 'answers the extra names, on the port they were given, and still refuses everything else' {
+                $pc = $script:PortC
+                (& $script:Raw $pc '/api/runs' 'GET' @{ Host = 'tunnel.test:9000' }).Status | Should -Be 200
+                (& $script:Raw $pc '/api/runs' 'GET' @{ Host = "alias.test:$pc" }).Status | Should -Be 200
+                (& $script:Raw $pc '/api/runs' 'GET' @{ Host = "127.0.0.1:$pc" }).Status | Should -Be 200
+                (& $script:Raw $pc '/api/runs' 'GET' @{ Host = 'tunnel.test:9001' }).Status | Should -Be 403
+                (& $script:Raw $pc '/api/runs' 'GET' @{ Host = 'tunnel.test' }).Status | Should -Be 403
+                (& $script:Raw $pc '/api/runs' 'GET' @{ Host = "evil.example.com:$pc" }).Status | Should -Be 403
+            }
+
+            It 'an extra name is also an acceptable origin for the GUI''s own request, and a stranger still is not' {
+                $pc = $script:PortC
+                $ok  = @{ Host = 'tunnel.test:9000'; 'Content-Type' = 'application/json'; Origin = 'http://tunnel.test:9000' }
+                $bad = @{ Host = 'tunnel.test:9000'; 'Content-Type' = 'application/json'; Origin = 'http://evil.example.com' }
+                (& $script:Raw $pc '/api/scan' 'POST' $ok '{"domain":"bad domain!"}').Status | Should -Be 400
+                (& $script:Raw $pc '/api/scan' 'POST' $bad '{"domain":"bad domain!"}').Status | Should -Be 403
+            }
+
+            It 'the default server (no -AllowedHost) does not answer those names' {
+                (& $script:Raw $script:Port '/api/runs' 'GET' @{ Host = 'tunnel.test:9000' }).Status | Should -Be 403
             }
         }
 

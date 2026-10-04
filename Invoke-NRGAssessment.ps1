@@ -391,7 +391,7 @@ try {
 # and report viewing in a browser. The server binds to 127.0.0.1 only —
 # never exposed to the network — and exits cleanly on Ctrl+C.
 if ($Web) {
-    Start-NRGWebServer -Port $WebPort -ScriptDir $scriptDir
+    Start-NRGWebServer -Port $WebPort -ScriptDir $scriptDir -OutputRoot $OutputPath
     exit 0
 }
 

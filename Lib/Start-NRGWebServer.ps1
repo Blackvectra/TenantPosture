@@ -21,10 +21,14 @@
 # Consumed:
 #   - Pode 2.10+ (PSGallery)  — soft import; user-installed
 #   - Config/clients.json     — tenant list
-#   - ./output/               — prior scan results (read only; the server never
+#   - <ScriptDir>/output/     — prior scan results, the same folder the command
+#                               line writes to (read only; the server never
 #                               writes here and makes no tenant call itself)
-#   - Lib/Get-NRGWebRunIndex.ps1, Lib/Get-NRGObjectField.ps1 — run listing and
-#     the path guards, loaded into Pode's runspaces with Use-PodeScript
+#   - Lib/Resolve-NRGWebRunPath.ps1       — the path guard
+#     Lib/Get-NRGWebRunIndex.ps1          — run listing and labels
+#     Lib/Test-NRGWebRequestAllowed.ps1   — the request policy
+#     Lib/Get-NRGObjectField.ps1
+#     loaded into Pode's runspaces with Use-PodeScript
 #
 # Graph scopes / cmdlets used: none directly. The child scan job uses what
 # Invoke-NRGAssessment.ps1 requests.
@@ -51,6 +55,24 @@ function Start-NRGWebServer {
 
         [Parameter()]
         [string] $ScriptDir = (Get-NRGWebDefaultScriptDir),
+
+        # Where the runs are. Defaults to <ScriptDir>\output, which is where
+        # Invoke-NRGAssessment.ps1 and the batch runner write by default. It used
+        # to be the CURRENT directory's output folder, so a GUI started from
+        # anywhere but the repository root listed nothing of what the command
+        # line had produced. A relative path is relative to the PowerShell
+        # location.
+        [Parameter()]
+        [string] $OutputRoot = (Join-Path $ScriptDir 'output'),
+
+        # Further names the GUI may be reached as, only for a port forward or
+        # tunnel (for example localhost:9000 when 8765 is forwarded to it). The
+        # server answers only to 127.0.0.1 and localhost on its own port and
+        # refuses any other Host header, which is what stops DNS rebinding; this
+        # widens that list, so leave it empty unless you need it.
+        [Parameter()]
+        [ValidatePattern('\A[A-Za-z0-9]([A-Za-z0-9.\-]*[A-Za-z0-9])?(:\d{1,5})?\z')]
+        [string[]] $AllowedHost = @(),
 
         # Skip the auto-open browser step. Useful for headless testing.
         [switch] $NoBrowser
@@ -80,15 +102,20 @@ function Start-NRGWebServer {
         throw "Web asset directory not found: $webRoot"
     }
     $clientsFile = Join-Path $ScriptDir 'Config\clients.json'
-    $outputRoot  = Join-Path (Get-Location) 'output'
+    # Relative means relative to where the operator is in PowerShell, not to the
+    # process start folder that .NET would use.
+    $outputRoot  = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputRoot)
     [void][System.IO.Directory]::CreateDirectory($outputRoot)
 
-    # The run listing and the path guards, loaded into Pode's runspaces below.
-    # Route bodies run in runspaces built from a default session state, so a
-    # module function is not visible there unless Use-PodeScript brings it in.
+    # The path guard, the run listing and the request policy, loaded into
+    # Pode's runspaces below. Route bodies and middleware run in runspaces built
+    # from a default session state, so a module function is not visible there
+    # unless Use-PodeScript brings it in.
     $podeScripts = @(
         (Join-Path $ScriptDir 'Lib\Get-NRGObjectField.ps1'),
-        (Join-Path $ScriptDir 'Lib\Get-NRGWebRunIndex.ps1')
+        (Join-Path $ScriptDir 'Lib\Resolve-NRGWebRunPath.ps1'),
+        (Join-Path $ScriptDir 'Lib\Get-NRGWebRunIndex.ps1'),
+        (Join-Path $ScriptDir 'Lib\Test-NRGWebRequestAllowed.ps1')
     )
     foreach ($podeScript in $podeScripts) {
         if (-not (Test-Path -LiteralPath $podeScript -PathType Leaf)) {
@@ -130,6 +157,8 @@ function Start-NRGWebServer {
     $serverBlock = {
         # Loopback only. Binding to 127.0.0.1 (not 0.0.0.0) is load-bearing —
         # this server is for the local operator, never the network.
+        # The scheme is stated once more in the config state below (Scheme): the
+        # request policy compares the Origin header with it and hard-codes neither.
         Add-PodeEndpoint -Address '127.0.0.1' -Port $Port -Protocol Http
 
         # Config for the route bodies. Pode's state machinery is synchronized
@@ -140,6 +169,9 @@ function Start-NRGWebServer {
             ClientsFile = $clientsFile
             OutputRoot  = $outputRoot
             ScriptDir   = $ScriptDir
+            Port        = $Port
+            Scheme      = 'http'
+            AllowedHost = @($AllowedHost)
         } | Out-Null
 
         # Shared in-memory state — same machinery, so the status-poll handler
@@ -147,13 +179,13 @@ function Start-NRGWebServer {
         # route bodies.
         Set-PodeState -Name 'scans' -Value @{} | Out-Null
 
-        # Tenant labels already read from results files (keyed by file, valid
-        # until its length or write time changes), so polling /api/runs does
-        # not re-read every results JSON. Synchronized: four route runspaces
-        # write it.
-        Set-PodeState -Name 'runLabels' -Value ([hashtable]::Synchronized(@{})) | Out-Null
+        # What was read from each results file (keyed by file, valid until its
+        # length or write time changes), so polling /api/runs does not re-read
+        # every results JSON. Synchronized: four route runspaces write it.
+        Set-PodeState -Name 'runMetadata' -Value ([hashtable]::Synchronized(@{})) | Out-Null
 
-        # Bring the run listing and the path guards into the route runspaces.
+        # Bring the path guard, the run listing and the request policy into the
+        # route runspaces.
         foreach ($podeScript in $podeScripts) { Use-PodeScript -Path $podeScript }
 
         # Security headers on every response. Same CSP family as the HTML
@@ -174,6 +206,37 @@ function Start-NRGWebServer {
             )
             Set-PodeHeader -Name 'X-Content-Type-Options' -Value 'nosniff'
             Set-PodeHeader -Name 'Referrer-Policy' -Value 'no-referrer'
+            # Everything served here is tenant data. no-store keeps the browser
+            # from writing reports and the action plan to its on-disk cache,
+            # outside the access-restricted files the tool itself writes.
+            Set-PodeHeader -Name 'Cache-Control' -Value 'no-store'
+            # No other origin may embed or read a response (a script tag, an
+            # image, a no-cors fetch), whatever it managed to request.
+            Set-PodeHeader -Name 'Cross-Origin-Resource-Policy' -Value 'same-origin'
+            return $true
+        }
+
+        # Who may talk to this server at all. Binding to 127.0.0.1 keeps the
+        # network out, not the operator's own browser: DNS rebinding lets a web
+        # page read the GUI, and a cross-site form can post to it. The policy
+        # (Host allow-list; JSON, same-origin requests only for anything that
+        # changes state) is Test-NRGWebRequestAllowed. It runs AFTER the headers
+        # above so a refusal carries them too, and refuses before any route.
+        Add-PodeMiddleware -Name 'RequestGuard' -ScriptBlock {
+            $cfg = Get-PodeState -Name 'cfg'
+            $verdict = Test-NRGWebRequestAllowed `
+                -Method $WebEvent.Method `
+                -HostHeader (Get-PodeHeader -Name 'Host') `
+                -Origin (Get-PodeHeader -Name 'Origin') `
+                -ContentType (Get-PodeHeader -Name 'Content-Type') `
+                -SecFetchSite (Get-PodeHeader -Name 'Sec-Fetch-Site') `
+                -Port $cfg.Port `
+                -Scheme $cfg.Scheme `
+                -AllowedHost $cfg.AllowedHost
+            if (-not $verdict.Allowed) {
+                Write-PodeTextResponse -Value $verdict.Message -StatusCode $verdict.HttpStatus
+                return $false
+            }
             return $true
         }
 
@@ -231,7 +294,8 @@ function Start-NRGWebServer {
         # segment the report and site routes take; `tenant` is only a label.
         Add-PodeRoute -Method Get -Path '/api/runs' -ScriptBlock {
             $cfg = Get-PodeState -Name 'cfg'
-            $runs = Get-NRGWebRunList -OutputRoot $cfg.OutputRoot -LabelCache (Get-PodeState -Name 'runLabels')
+            $runs = Get-NRGWebRunList -OutputRoot $cfg.OutputRoot -ClientsFile $cfg.ClientsFile `
+                -MetadataCache (Get-PodeState -Name 'runMetadata')
             # @(...) so zero or one row still serializes as a JSON array.
             Write-PodeJsonResponse -Value @($runs)
         }
@@ -277,14 +341,18 @@ function Start-NRGWebServer {
                 Write-PodeTextResponse -Value $found.Message -StatusCode $found.HttpStatus
                 return
             }
-            $text = Get-Content -LiteralPath $found.Path -Raw -Encoding utf8
+            # The file's own bytes, not text read and re-encoded: the action plan
+            # is written with a UTF-8 BOM so Excel does not read it as ANSI, and
+            # re-encoding it as text drops the BOM. Pode adds the charset to the
+            # media type itself (an explicit one comes out doubled).
+            $bytes = [System.IO.File]::ReadAllBytes($found.Path)
             if ([System.IO.Path]::GetExtension($found.Path).ToLowerInvariant() -eq '.csv') {
                 # The page name was whitelisted to letters, digits, dot,
                 # underscore and hyphen, so it is safe inside the header.
                 Set-PodeHeader -Name 'Content-Disposition' -Value ('attachment; filename="{0}"' -f [System.IO.Path]::GetFileName($found.Path))
-                Write-PodeTextResponse -Value $text -ContentType 'text/csv'
+                Write-PodeTextResponse -Bytes $bytes -ContentType 'text/csv'
             } else {
-                Write-PodeHtmlResponse -Value $text
+                Write-PodeTextResponse -Bytes $bytes -ContentType 'text/html'
             }
         }
 

@@ -2,40 +2,67 @@
 
 ## Unreleased
 
-- **Web GUI: command-line runs are listed, the report site is linked, and the
-  server starts without `-ScriptDir`.** Three recorded gaps, fixed together
-  because they share one file. (1) `/api/runs` listed only
-  `output\<domain>\*-results.json`, the layout a GUI scan writes, so a command-line
+- **Web GUI: command-line runs are listed, the report site is linked, the server
+  starts without `-ScriptDir`, and it only answers requests meant for it.**
+  Three recorded gaps, and the hardening that serving more tenant data called for.
+  (1) `/api/runs` listed only `output\<domain>\*-results.json`, so a command-line
   run (flat `output\<tenant>-<yyyyMMdd-HHmmss>-results.json`) never appeared. Both
-  layouts are listed, once each. A flat run is labeled from its results file's
-  `Metadata.TenantDomain` (read through `Get-NRGObjectField`; only that object is
-  parsed, 0.1 s against 6 s for `ConvertFrom-Json` on a 15 MB file, cached per
-  file) and from its file name when the file has no usable domain; a label that
-  is not domain-shaped is not shown. Incident-response mailbox runs and sign-in
-  triage results are excluded. A run is addressed by `(folder, id)`, never a
-  client-supplied path: `folder` is the tenant folder, or the reserved segment
-  `_flat` for the output folder itself, and `tenant` is only a display label.
-  (2) The multi-page report site (`<base>-report\`) was written but not linked.
-  A **Report site** link now opens it in a new tab through
-  `/site/:tenant/:id/:page`, which serves only `.html` and `.csv` directly inside
-  that run's `-report` folder. The site's pages are self-contained (inline
-  `<style>`, no script, no external asset, relative links), so they need nothing
-  the server's CSP does not already allow; the CSP is unchanged, set in one place,
-  and a test asserts the site's responses carry the identical header. (3)
-  `Start-NRGWebServer` defaulted `-ScriptDir` to
+  layouts are listed, once each. The server also read `(Get-Location)\output`
+  while the command line and batch runner write to `<script dir>\output`, so it
+  found nothing unless started from the repository root; it now defaults to
+  `<ScriptDir>\output` (`-OutputRoot`, which `Invoke-NRGAssessment.ps1 -Web`
+  sets from `-OutputPath`). A flat run is named the way its client is in
+  `Config/clients.json`, found by tenant id and then by routing domain: a results
+  file records the tenant's INITIAL domain (`Connect-NRGServices` prefers
+  `isInitial`) and, when Graph cannot answer, the signed-in account's domain,
+  which under GDAP is the MSP's own, so the same client was two names or the
+  wrong one. Without a match it is the recorded domain, then the file name. Only
+  `Metadata` is parsed (0.1 s against 6 s for `ConvertFrom-Json` on a 15 MB file;
+  cached per file). Incident-response mailbox runs and sign-in triage results are
+  excluded. A run is addressed by `(folder, id)`, never a client-supplied path:
+  `folder` is the tenant folder, or the reserved segment `_flat` for the output
+  folder itself, and `tenant` is only a display label. (2) The multi-page report
+  site (`<base>-report\`) is linked: a **Report site** link opens it in a new tab
+  through `/site/:tenant/:id/:page`, which serves only `.html` and `.csv` directly
+  inside that run's `-report` folder. The GUI serves the folder; it does not
+  build it. The pages are self-contained (inline `<style>`, no script, no
+  external asset), so they need nothing the CSP does not already allow; the CSP
+  is unchanged, set in one place, and a test asserts the site's responses carry
+  the identical header. The action plan is sent byte for byte: it is written with
+  a UTF-8 byte-order mark so Excel does not read it as ANSI, and reading it as
+  text dropped the mark. (3) `Start-NRGWebServer` defaulted `-ScriptDir` to
   `Split-Path -Parent $PSCommandPath`, which is `Lib`, so a direct call threw
-  "Web asset directory not found". It now defaults to the repository root
-  (`Get-NRGWebDefaultScriptDir`); the parameter is kept.
-  The guards are pure functions in `Lib/Get-NRGWebRunIndex.ps1`, loaded into
-  Pode's route runspaces with `Use-PodeScript` (those runspaces start from a
-  default session state, so module functions are not visible), which also lets CI
-  test them although it skips the real-server context. Segments are a whitelist
-  rather than a list of separators to reject; the boundary is pinned inside the
-  output folder before the file is pinned inside the boundary; a symbolic link in
-  the report folder is refused (a OneDrive placeholder has no `LinkTarget`, so it
-  is not). The new routes send status and body in one `Write-PodeTextResponse
-  -StatusCode` call: `Set-PodeResponseStatus` renders Pode's own error page, and
-  a body written after it is replaced by a slice of that page.
+  "Web asset directory not found"; it now defaults to the repository root.
+  **Who the server answers.** Binding to `127.0.0.1` keeps the network out, not a
+  web page in the operator's own browser. Any `Host` header was accepted, so DNS
+  rebinding let a page read reports, the run list and the report site, and a
+  cross-site form POST was parsed by `/api/scan`. Now `Test-NRGWebRequestAllowed`
+  (a pure function, tested without a server) refuses with 403 any request whose
+  `Host` is not `127.0.0.1:<port>` / `localhost:<port>` (`-AllowedHost` adds a
+  tunnel's name), and for anything but GET/HEAD requires `application/json`, this
+  server's own `Origin` when the browser sends one, and a Fetch-Metadata site of
+  `same-origin` or `none`. A refusal carries the same headers as an answer, which
+  now include `Cache-Control: no-store` (reports no longer land in the browser's
+  disk cache) and `Cross-Origin-Resource-Policy: same-origin`; no CORS headers are
+  ever sent. Checked in headless Chromium against an attacker page on another
+  origin (script embed, cross-origin read and JSON POST, auto-submitted form, and a
+  host-resolver rule simulating rebinding): every one refused, and the GUI's own
+  requests unaffected.
+  **Structure.** The path guard (`Lib/Resolve-NRGWebRunPath.ps1`), the run listing
+  (`Lib/Get-NRGWebRunIndex.ps1`) and the request policy
+  (`Lib/Test-NRGWebRequestAllowed.ps1`) are separate files of pure functions,
+  loaded into Pode's route runspaces with `Use-PodeScript` (those runspaces start
+  from a default session state, so module functions are not visible), which also
+  lets CI test them although it skips the real-server context. Segments are an
+  ASCII whitelist anchored with `\z` (`$` also matches before a final line feed);
+  the boundary is pinned inside the output folder before the file is pinned inside
+  the boundary; a symbolic link or junction in the report folder is refused by
+  `LinkType` (`LinkTarget` is .NET 6+ and would fail open on an older runtime), an
+  item that cannot be inspected is refused rather than served, and a hard link is
+  not refused (it reports `HardLink` for both names). The new routes send status
+  and body in one `Write-PodeTextResponse -StatusCode` call:
+  `Set-PodeResponseStatus` renders Pode's own error page and a body written after
+  it is replaced by a slice of that page.
 
 - **Defects found by the first live baseline validation (NRGTS, 2026-09-29),
   fixed without touching a single verdict.** DNS collection ran only inside
