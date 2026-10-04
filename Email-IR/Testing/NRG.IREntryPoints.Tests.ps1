@@ -211,6 +211,22 @@ function Invoke-MgGraphRequest {
             $r.ExitCode | Should -Be 3
         }
 
+        It 'the consent-grant read stopped at one page: EMAIL-4.1 is not cleared, never Satisfied, and the run is NOT CLEARED with exit 3' {
+            $routes = @(@{ match = 'oauth2PermissionGrants'; body = @{ value = @(@{ id = 'g1'; clientId = 'sp1'; consentType = 'Principal'; scope = 'User.Read openid profile' })
+                '@odata.nextLink' = 'https://graph.microsoft.com/v1.0/me/oauth2PermissionGrants?$skiptoken=x' } }
+                @{ match = 'servicePrincipals/sp1'; body = @{ displayName = 'Teams'; appId = 'a1'; publisherName = 'Microsoft' } }) + @(& $script:Benign)
+            $r = & $script:Email $routes
+            $r.Json | Should -Not -BeNullOrEmpty -Because $r.Console
+            $f = @($r.Json.Findings | Where-Object { $_.ControlId -eq 'EMAIL-4.1' })[0]
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match '^Not cleared'
+            $r.Json.Metadata.CollectionComplete | Should -BeFalse
+            ($r.Json.Metadata.CollectionGaps -join ' ') | Should -Match 'IR-UserConsents'
+            $r.Html | Should -Match 'NOT CLEARED'
+            $r.Html | Should -Not -Match 'NO STRONG INDICATORS'
+            $r.ExitCode | Should -Be 3
+        }
+
         It 'a hidden-name rule that forwards out is "critical indicators", never "likely compromised", with complete evidence' {
             $routes = @(@{ match = 'messageRules'; body = @{ value = @(@{ id = 'r1'; displayName = '.'; isEnabled = $true
                 actions = @{ forwardTo = @(@{ emailAddress = @{ address = 'attacker@evil.example' } }); delete = $true }; conditions = @{} }) } }) + @(& $script:Benign)
@@ -258,6 +274,37 @@ function Invoke-MgGraphRequest {
             $r.Json.Metadata.CollectionComplete | Should -BeFalse
             ($r.Json.Metadata.CollectionGaps -join ' ') | Should -Match 'stopped at'
             $r.Html | Should -Not -Match 'NO STRONG INDICATORS'
+        }
+
+        It 'every sign-in read failing (429, risky users included): NOT CLEARED, exit 3, and no SIGNIN control is Satisfied' {
+            $r = & $script:Triage @(@{ match = '.'; throw = 'Response status code does not indicate success: TooManyRequests (Too Many Requests).' })
+            $r.Json | Should -Not -BeNullOrEmpty -Because $r.Console
+            $r.Json.Metadata.CollectionComplete | Should -BeFalse
+            $sat = @($r.Json.Findings | Where-Object { $_.ControlId -like 'SIGNIN-*' -and $_.State -eq 'Satisfied' } | ForEach-Object { $_.ControlId })
+            $sat | Should -BeNullOrEmpty -Because "nothing was read, so nothing can be cleared (Satisfied: $($sat -join ', '))"
+            foreach ($t in $r.Html, $r.Md) { $t | Should -Match 'NOT CLEARED'; $t | Should -Not -Match 'NO STRONG INDICATORS' }
+            $r.ExitCode | Should -Be 3
+        }
+
+        It 'the recent read truncated at its cap: NOT CLEARED, and no check that rests on it concludes "nothing found"' {
+            $now = (Get-Date).ToUniversalTime()
+            $atHome = @(1..3 | ForEach-Object { @{ id = "e$_"; userPrincipalName = 'a@corp.example'; createdDateTime = $now.AddHours(-$_).ToString('o'); ipAddress = '198.51.100.1'
+                status = @{ errorCode = 0 }; location = @{ city = 'Fargo'; state = 'North Dakota'; countryOrRegion = 'US' }; riskEventTypes_v2 = @() } })
+            $routes = @(
+                @{ match = 'auditLogs/signIns.*anonymizedIPAddress'; body = @{ value = @() } }
+                @{ match = 'auditLogs/signIns'; body = @{ value = $atHome; '@odata.nextLink' = 'https://graph.microsoft.com/v1.0/auditLogs/signIns?next=1' } }
+            )
+            $r = & $script:Triage $routes
+            $r.Json | Should -Not -BeNullOrEmpty -Because $r.Console
+            $r.Json.Metadata.CollectionComplete | Should -BeFalse
+            foreach ($cid in 'SIGNIN-1.1', 'SIGNIN-1.3', 'SIGNIN-1.6', 'SIGNIN-2.1') {
+                $f = @($r.Json.Findings | Where-Object { $_.ControlId -eq $cid })
+                $f.Count | Should -Be 1 -Because "$cid should report"
+                $f[0].State | Should -Not -Be 'Satisfied' -Because "$cid rests on the truncated recent read: $($f[0].Detail)"
+            }
+            $r.Html | Should -Match 'NOT CLEARED'
+            $r.Html | Should -Not -Match 'NO STRONG INDICATORS'
+            $r.ExitCode | Should -Be 3
         }
 
         It 'complete, benign reads: green verdict scoped to the events read, exit 0 with no exceptions' {
