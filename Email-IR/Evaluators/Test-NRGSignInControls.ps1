@@ -179,7 +179,17 @@ function Test-NRGSignInControlAnonymousIp {
     }
 
     $events = @($bag.Data.Events)
+    # A read that stopped at its page (or a fallback over a truncated recent read)
+    # can report what it found, never that nothing happened.
+    $completeness = Get-NRGSignInCollectionCompleteness -Keys 'IR-SignIn-AnonIp'
+    $incompleteNote = if (-not $completeness.Complete) { "Note: the read was incomplete ($($completeness.Reasons -join '; ')); more may exist.`n" } else { '' }
     if ($events.Count -eq 0) {
+        if (-not $completeness.Complete) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+                -Title $title -Severity 'High' `
+                -Detail "Not cleared: no anon-IP sign-in was in the events read, but the read was incomplete ($($completeness.Reasons -join '; ')), so this is not evidence that none occurred."
+            return
+        }
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'High' -Detail 'No anon-IP sign-ins flagged by Microsoft in the window.'
         return
@@ -203,6 +213,7 @@ function Test-NRGSignInControlAnonymousIp {
     foreach ($k in ($userHits.Keys | Sort-Object { -$userHits[$_].Success } | Select-Object -First 10)) {
         $detail += "  - $k — SUCCESS: $($userHits[$k].Success), failed: $($userHits[$k].Failed)`n"
     }
+    $detail += $incompleteNote
     Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
         -Title $title -Severity 'Critical' -Detail $detail `
         -CurrentValue "$($events.Count) anon-IP events, $($userHits.Keys.Count) users" `
@@ -226,7 +237,15 @@ function Test-NRGSignInControlImpossibleTravel {
     }
 
     $events = @($bag.Data.Events)
+    # Derived from the recent read: only as complete as that read.
+    $completeness = Get-NRGSignInCollectionCompleteness -Keys 'IR-SignIn-Travel'
     if ($events.Count -eq 0) {
+        if (-not $completeness.Complete) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+                -Title $title -Severity 'High' `
+                -Detail "Not cleared: no impossible-travel / unfamiliar-features event was in the events read, but the read was incomplete ($($completeness.Reasons -join '; ')), so this is not evidence that none occurred."
+            return
+        }
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'High' -Detail 'No impossible-travel / unfamiliar-features events flagged in the window.'
         return
@@ -247,6 +266,7 @@ function Test-NRGSignInControlImpossibleTravel {
         $loc = if ($sample.location) { "$($sample.location.city), $($sample.location.countryOrRegion)" } else { '(unknown)' }
         $detail += "  - $($g.Name) — $($g.Group.Count) event(s), most recent IP $($sample.ipAddress), location $loc`n"
     }
+    if (-not $completeness.Complete) { $detail += "Note: the read was incomplete ($($completeness.Reasons -join '; ')); more may exist.`n" }
     Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
         -Title $title -Severity 'High' -Detail $detail `
         -Remediation "Cross-check each flagged user's recent travel + VPN use before treating as IoC. Microsoft's heuristic is noisy. Successful sign-ins paired with mailbox-level IoCs (inbox rules, outbound BEC) are the high-confidence subset."
@@ -440,7 +460,14 @@ function Test-NRGSignInControlGeoAnomaly {
     }
 
     $homeLabel = (@($HomeState, $HomeCountry) | Where-Object { $_ }) -join ' / '
+    $completeness = Get-NRGSignInCollectionCompleteness -Keys 'IR-SignIn-Recent'
     if ($anomalies.Count -eq 0) {
+        if (-not $completeness.Complete) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+                -Title $title -Severity 'High' `
+                -Detail "Not cleared: home baseline $homeLabel; all $($located.Count) located sign-in(s) read are within it, but the sign-in read was incomplete ($($completeness.Reasons -join '; ')), so this is not evidence that no out-of-home sign-in occurred."
+            return
+        }
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'High' `
             -Detail "Home baseline: $homeLabel. All $($located.Count) located sign-in(s) are within the home state/country."
@@ -455,6 +482,7 @@ function Test-NRGSignInControlGeoAnomaly {
         $loc = (@($a.City, $a.State, $a.Country) | Where-Object { $_ }) -join ', '
         $detail += "  [$tag] $($a.UserPrincipalName) — $loc  ($($a.IP), $($a.When)) [$($a.Kind)]`n"
     }
+    if (-not $completeness.Complete) { $detail += "Note: the sign-in read was incomplete ($($completeness.Reasons -join '; ')); more may exist.`n" }
 
     $state    = if ($successAnoms.Count -gt 0) { 'Gap' }     else { 'Gap' }
     $severity = if ($successAnoms.Count -gt 0) { 'Critical' } else { 'High' }

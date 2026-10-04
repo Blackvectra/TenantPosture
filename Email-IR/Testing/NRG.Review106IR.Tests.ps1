@@ -53,4 +53,49 @@ Describe 'Review 106 — incident-response honesty' {
             $anon.Data.Truncated | Should -BeFalse
         }
     }
+
+    Context 'B2: a truncated read cannot support "nothing found"' {
+
+        It 'SIGNIN-1.2: an anonymous-IP read that stopped at its first page with nothing in it is not cleared, never Satisfied' {
+            & $script:Ok 'IR-SignIn-AnonIp' ([ordered]@{ Count = 0; Source = 'server-side filter, first page (1000 events)'; Truncated = $true; Events = @() })
+            Test-NRGSignInControlAnonymousIp
+            $f = & $script:Finding 'SIGNIN-1.2'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match '^Not cleared'
+        }
+
+        It 'SIGNIN-1.2: the client-side fallback over a truncated recent read is not cleared either' {
+            & $script:Ok 'IR-SignIn-AnonIp' ([ordered]@{ Count = 0; Source = 'client-side over the recent read'; Truncated = $true; Events = @() })
+            Test-NRGSignInControlAnonymousIp
+            (& $script:Finding 'SIGNIN-1.2').State | Should -Be 'NotApplicable'
+        }
+
+        It 'SIGNIN-1.3: a travel bag derived from a truncated recent read is not cleared, never Satisfied' {
+            & $script:Ok 'IR-SignIn-Travel' ([ordered]@{ Count = 0; Source = 'client-side over the recent read'; Truncated = $true; Events = @() })
+            Test-NRGSignInControlImpossibleTravel
+            $f = & $script:Finding 'SIGNIN-1.3'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match '^Not cleared'
+        }
+
+        It 'SIGNIN-1.6: every located sign-in at home in a truncated recent read is not cleared, never Satisfied' {
+            $ev = @(1..3 | ForEach-Object { @{ id = "e$_"; userPrincipalName = 'a@corp.example'; createdDateTime = (Get-Date).ToUniversalTime().AddHours(-$_).ToString('o'); ipAddress = '198.51.100.1'
+                status = @{ errorCode = 0 }; location = @{ city = 'Fargo'; state = 'North Dakota'; countryOrRegion = 'US' } } })
+            & $script:Ok 'IR-SignIn-Recent' ([ordered]@{ WindowDays = 7; Count = 100; MaxEvents = 100; Truncated = $true; Events = $ev })
+            Test-NRGSignInControlGeoAnomaly
+            $f = & $script:Finding 'SIGNIN-1.6'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match '^Not cleared'
+            $f.Detail | Should -Match 'stopped at 100 events'
+        }
+
+        It 'what a truncated read DID find is still reported, with the truncation stated beside it' {
+            $ev = @(@{ id = 'x'; userPrincipalName = 'a@corp.example'; createdDateTime = (Get-Date).ToUniversalTime().ToString('o'); ipAddress = '203.0.113.9'; status = @{ errorCode = 0 }; riskEventTypes_v2 = @('anonymizedIPAddress') })
+            & $script:Ok 'IR-SignIn-AnonIp' ([ordered]@{ Count = 1; Source = 'server-side filter, first page (1000 events)'; Truncated = $true; Events = $ev })
+            Test-NRGSignInControlAnonymousIp
+            $f = & $script:Finding 'SIGNIN-1.2'
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'incomplete'
+        }
+    }
 }
