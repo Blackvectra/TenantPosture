@@ -82,4 +82,34 @@ Describe 'Review 106: DLP and preset scope verdicts' {
             $v.Detail | Should -Match 'Not counted \(not enforcing\): P1 \[TestWithoutNotifications\]'
         }
     }
+
+    Context 'D3: unread accepted domains leave preset scope not assessed, not short' {
+        BeforeAll {
+            $script:Preset = { param([hashtable] $Rule)
+                Clear-NRGState
+                Set-NRGRawData -Key 'Defender-Policies' -Data (Bag @{ PresetRules = @{ Available = $true; ATP = @(); EOP = @($Rule) } })
+            }
+            $script:DomRule = @{ Name = 'Standard Preset Security Policy'; State = 'Enabled'; RecipientDomainIs = @('contoso.com'); SentTo = @(); SentToMemberOf = @()
+                                 ExceptIfSentTo = @(); ExceptIfSentToMemberOf = @(); ExceptIfRecipientDomainIs = @(); HasExceptions = $false }
+        }
+        It 'a preset scoped by domain with AcceptedDomains not read is NotApplicable' {
+            & $script:Preset $script:DomRule
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (Bag @{ AcceptedDomains = @(); SectionStatus = @{ AcceptedDomains = 'Failed' } })
+            $v = V 'Test-NRGControlDefenderPresetPolicies' 'DEF-2.1'
+            $v.State | Should -Be 'NotApplicable' -Because "who the preset covers was not established (got: $($v.Detail))"
+            $v.Detail | Should -Match 'Not assessed: .*accepted domains were not read'
+            $v.Detail | Should -Not -Match 'Shortfall:'
+        }
+        It 'with the accepted domains read and covered, the same preset is Satisfied' {
+            & $script:Preset $script:DomRule
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (Bag @{ AcceptedDomains = @(@{ DomainName = 'contoso.com' }); SectionStatus = @{ AcceptedDomains = 'Collected' } })
+            (V 'Test-NRGControlDefenderPresetPolicies' 'DEF-2.1').State | Should -Be 'Satisfied'
+        }
+        It 'a real shortfall (a missing accepted domain) is still reported' {
+            & $script:Preset $script:DomRule
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (Bag @{ AcceptedDomains = @(@{ DomainName = 'contoso.com' }, @{ DomainName = 'fabrikam.com' }); SectionStatus = @{ AcceptedDomains = 'Collected' } })
+            $v = V 'Test-NRGControlDefenderPresetPolicies' 'DEF-2.1'
+            $v.State | Should -Be 'Partial'; $v.Detail | Should -Match 'fabrikam.com'
+        }
+    }
 }

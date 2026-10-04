@@ -261,7 +261,7 @@ function Test-NRGControlDefenderPresetPolicies {
     }
     $names = ($on | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '?') } | Sort-Object -Unique) -join ', '
     $byName = @($on | Group-Object { [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '?') })
-    $cands = @(); $scopeNotes = @(); $scopeUnknown = @()
+    $cands = @(); $scopeNotes = @(); $scopeUnknown = @(); $scopeUnread = @()
     foreach ($g in $byName) {
         $rules = @($g.Group)
         # A preset's EOP and ATP rules carry the same scope; judge the most restrictive view.
@@ -289,7 +289,8 @@ function Test-NRGControlDefenderPresetPolicies {
             if ($r0 -is [System.Collections.IDictionary]) { $r0.Contains('ExceptIfSentToMemberOf') } else { $null -ne $r0.PSObject.Properties['ExceptIfSentToMemberOf'] } }).Count -eq $rules.Count
         if ($doms.Count -eq 0 -and $shaped) { $cands += [pscustomobject]@{ Name = $g.Name; Exclusions = $ex }; continue }
         if ($doms.Count -eq 0) { $scopeUnknown += "$($g.Name): the rule returned no recipient scope and this result predates the exclusion fields, so who it applies to is not established"; continue }
-        if ($accepted.Count -eq 0) { $scopeNotes += "$($g.Name): the accepted domains were not read, so whether it covers every domain is not established"; continue }
+        # Unread accepted domains establish nothing either way: not assessed, never a shortfall.
+        if ($accepted.Count -eq 0) { $scopeUnread += "$($g.Name): the accepted domains were not read, so whether it covers every domain is not established"; continue }
         if ($missingDoms.Count -gt 0) { $scopeNotes += "$($g.Name) does not include accepted domain(s): $($missingDoms -join ', ')"; continue }
         $cands += [pscustomobject]@{ Name = $g.Name; Exclusions = $ex }
     }
@@ -299,9 +300,11 @@ function Test-NRGControlDefenderPresetPolicies {
         'Full'       { $verified += "$($cov.FullNames -join ', ') applies to every accepted domain with no recipient exclusions." }
         'Exceptions' { $short += "Every preset that covers all domains excludes the same recipients ($($cov.Exceptions -join ', ')), so they get no preset protection and fall back to the Built-In, custom or default policies (see DEF-1.1 to DEF-1.6 for what those provide)." }
         'Unproven'   { $unknown += "whether any recipient is excluded from every preset: $((@($cov.ExcludedBy.Keys) | ForEach-Object { "$_ excludes $(@($cov.ExcludedBy[$_]).Count) recipient scope(s)" }) -join '; '); group membership was not resolved, so overlap between the excluded groups is unproven." }
-        'None'       { if ($scopeUnknown.Count -eq 0) { $short += 'No preset applies to all recipients.' } }
+        'None'       { if ($scopeUnknown.Count -eq 0 -and $scopeUnread.Count -eq 0) { $short += 'No preset applies to all recipients.' } }
     }
     foreach ($n in $scopeUnknown) { $unknown += "$n." }
+    # With another preset proven to cover everyone, the unread scope cannot change the verdict.
+    foreach ($n in $scopeUnread) { if ($cov.Kind -eq 'Full') { $verified += "Also: $n." } else { $unknown += "$n." } }
     foreach ($n in $scopeNotes) { if ($cov.Kind -eq 'Full') { $verified += "Also: $n." } else { $short += "$n." } }
     Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
         -CurrentValue $names -RequiredValue 'A Standard or Strict preset that applies to every recipient, with no exclusion unless another preset covers those recipients'
