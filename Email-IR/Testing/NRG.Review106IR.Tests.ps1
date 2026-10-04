@@ -223,4 +223,24 @@ Describe 'Review 106 — incident-response honesty' {
             $r.ASNOwner     | Should -BeNullOrEmpty
         }
     }
+    Context 'R2a: SIGNIN-1.2 is Critical only when an anonymous-IP sign-in succeeded' {
+        BeforeAll {
+            $script:AnonEv = { param([string] $Upn, [int] $Err) @{ id = [guid]::NewGuid().ToString(); userPrincipalName = $Upn; createdDateTime = (Get-Date).ToUniversalTime().ToString('o'); ipAddress = '185.220.101.1'; status = @{ errorCode = $Err }; riskEventTypes_v2 = @('anonymizedIPAddress') } }
+        }
+
+        It 'failed-only anonymous-IP attempts are reported below Critical and score below a success' {
+            & $script:Ok 'IR-SignIn-AnonIp' ([ordered]@{ Count = 2; Source = 'server-side filter, first page (1000 events)'; Truncated = $false; Events = @((& $script:AnonEv 'a@corp.example' 50126), (& $script:AnonEv 'a@corp.example' 50126)) })
+            Test-NRGSignInControlAnonymousIp
+            $f = & $script:Finding 'SIGNIN-1.2'
+            $f.State    | Should -Be 'Gap'
+            $f.Severity | Should -Be 'High' -Because 'no anonymous-IP sign-in succeeded'
+            $f.Remediation | Should -Not -Match 'near-certain'
+        }
+
+        It 'a successful anonymous-IP sign-in stays Critical' {
+            & $script:Ok 'IR-SignIn-AnonIp' ([ordered]@{ Count = 2; Source = 'server-side filter, first page (1000 events)'; Truncated = $false; Events = @((& $script:AnonEv 'a@corp.example' 50126), (& $script:AnonEv 'b@corp.example' 0)) })
+            Test-NRGSignInControlAnonymousIp
+            (& $script:Finding 'SIGNIN-1.2').Severity | Should -Be 'Critical'
+        }
+    }
 }

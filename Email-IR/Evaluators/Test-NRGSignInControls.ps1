@@ -214,10 +214,21 @@ function Test-NRGSignInControlAnonymousIp {
         $detail += "  - $k — SUCCESS: $($userHits[$k].Success), failed: $($userHits[$k].Failed)`n"
     }
     $detail += $incompleteNote
+    # Critical only when an anonymous-IP sign-in SUCCEEDED (access was obtained).
+    # Failed attempts show someone trying the account through an anonymizer, which
+    # is worth review (High) but is not access; they also score 15 against 50.
+    $successTotal = @($userHits.Values | ForEach-Object { $_.Success } | Measure-Object -Sum).Sum
+    if ($successTotal -gt 0) {
+        $sev = 'Critical'
+        $rem = "Successful sign-ins from anon-IP infrastructure are near-certain compromise. Revoke sessions + reset passwords for each flagged user. If the tenant has Conditional Access, block sign-ins from anonymous IP addresses tenant-wide."
+    } else {
+        $sev = 'High'
+        $rem = "No anonymous-IP sign-in succeeded in the events read: these are attempts, not access. Confirm with each user, check the failure reason (a failure after a correct password, such as an MFA interruption, means the password is known and should be reset), and if the tenant has Conditional Access, block sign-ins from anonymous IP addresses tenant-wide."
+    }
     Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
-        -Title $title -Severity 'Critical' -Detail $detail `
-        -CurrentValue "$($events.Count) anon-IP events, $($userHits.Keys.Count) users" `
-        -Remediation "Successful sign-ins from anon-IP infrastructure are near-certain compromise. Revoke sessions + reset passwords for each flagged user. If the tenant has Conditional Access, block sign-ins from anonymous IP addresses tenant-wide."
+        -Title $title -Severity $sev -Detail $detail `
+        -CurrentValue "$($events.Count) anon-IP events ($successTotal successful), $($userHits.Keys.Count) users" `
+        -Remediation $rem
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
