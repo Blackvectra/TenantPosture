@@ -934,6 +934,43 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 $e | Should -Be "Set-X -Identity 'a`$1b`$&c@contoso.com'" -Because 'replacement-pattern characters in tenant text are literal'
             }
 
+            It 'refuses a value holding an invisible or direction-changing character, so a printed command cannot look different from what runs' {
+                $tpl1 = 'Set-X -Identity {List}'; $tpl2 = 'Set-X -S {Senders}'
+                $cases = @(0x202E, 0x202A, 0x2066, 0x2069, 0x200B, 0x200D, 0xFEFF, 0x00AD, 0x2060) | ForEach-Object { "a$([char]$_)b@contoso.com" }
+                $cases += "a$([char]::ConvertFromUtf32(0xE0041))b@contoso.com"   # a tag character: a surrogate pair in UTF-16
+                foreach ($v in $cases) {
+                    $one = & $script:Mod { param($t, $x) Format-NRGDlCommand -Template $t -Values @{ List = $x } } $tpl1 $v
+                    ($null -eq $one) | Should -BeTrue -Because ('[{0}]' -f (($v.ToCharArray() | ForEach-Object { '{0:X4}' -f [int]$_ }) -join ' '))
+                    $many = & $script:Mod { param($t, $x) Format-NRGDlCommand -Template $t -Values @{ Senders = @('ok@x.example', $x) } } $tpl2 $v
+                    ($null -eq $many) | Should -BeTrue
+                }
+                # ordinary non-ASCII letters are still accepted: refusing them would leave a legitimately named object with no command
+                foreach ($ok in "jos$([char]0xE9)@contoso.com", "$([char]0x65E5)$([char]0x672C)@contoso.com") {
+                    (& $script:Mod { param($t, $x) Format-NRGDlCommand -Template $t -Values @{ List = $x } } $tpl1 $ok) | Should -Be "Set-X -Identity '$ok'"
+                }
+            }
+
+            It 'shows an invisible or direction-changing character in tenant text as a visible code marker, in both files, instead of passing it through' {
+                $rlo = [string][char]0x202E
+                $o = & $script:Build @{ Lists = @(New-DlRaw "Fin${rlo}ance" 'fin@contoso.com' -With @{ RequireSenderAuthenticationEnabled = $false })
+                    Members = @{ 'fin@contoso.com' = @(New-DlMember "Ann${rlo}Lee" 'ann@contoso.com') } } 'bidi'
+                ($o.Txt + $o.CsvRaw) | Should -Not -Match '‮'
+                $o.Txt | Should -Match 'Fin<U\+202E>ance'
+                $o.Txt | Should -Match 'Ann<U\+202E>Lee'
+                @($o.Csv | Where-Object { $_.Member -like '*<U+202E>*' }).Count | Should -Be 1
+            }
+
+            It 'a policy name holding one cannot get into a printed command: the command is withheld and the portal is named instead' {
+                $rlo = [string][char]0x202E
+                $pol = @([pscustomobject]@{ Name = 'Default'; IsDefault = $true; AllowedSenders = @(); AllowedSenderDomains = @() }
+                         [pscustomobject]@{ Name = "Bob${rlo}s Policy"; IsDefault = $false; AllowedSenders = @(); AllowedSenderDomains = @('x.example') })
+                $o = & $script:Build @{ AntiSpam = $pol; AntiSpamRules = @([pscustomobject]@{ Name = 'r'; HostedContentFilterPolicy = "Bob${rlo}s Policy"; State = 'Enabled' }) } 'bidipol'
+                $row = $o.Worksheet.Tenant | Where-Object { $_.ControlId -eq 'DL-3.3' }
+                @($row.Commands | Where-Object { $_ -match 'Remove=' }) | Should -BeNullOrEmpty
+                ($row.Commands -join ' ') | Should -Match 'cannot be quoted safely'
+                ($o.Txt + $o.CsvRaw) | Should -Not -Match '‮'
+            }
+
             It 'refuses to build a command from a value that cannot be quoted safely, or from an unrecognized parameter word' {
                 foreach ($bad in "a$([char]0x2018)b@contoso.com", "a$([char]0x201B)b@contoso.com", "a`nb@contoso.com", '', $null) {
                     & $script:Mod { param($v) Format-NRGDlCommand -Template 'Set-X -Identity {List}' -Values @{ List = $v } } $bad | Should -BeNullOrEmpty -Because "[$bad]"
@@ -1517,6 +1554,15 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 foreach ($cp in 0x2018, 0x2019, 0x201A, 0x201B, 0x201C, 0x201D, 0x0085, 0x2028, 0x2029) {
                     if ($text.Contains([string][char]$cp)) { '{0}: U+{1:X4}' -f $f, $cp }
                 }
+            }
+            @($bad) | Should -BeNullOrEmpty
+        }
+
+        It 'no scan file contains an invisible or direction-changing character (Trojan Source): code a reviewer reads must be code that runs' {
+            $bad = foreach ($f in $script:ScanFiles) {
+                $text = Get-Content -LiteralPath (Join-Path $script:Root $f) -Raw -Encoding utf8
+                $text = $text.TrimStart([char]0xFEFF)
+                foreach ($m in [regex]::Matches($text, '\p{Cf}')) { '{0}: U+{1:X4} at {2}' -f $f, [int][char]$m.Value, $m.Index }
             }
             @($bad) | Should -BeNullOrEmpty
         }

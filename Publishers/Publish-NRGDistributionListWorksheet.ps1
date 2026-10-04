@@ -36,6 +36,10 @@ function ConvertTo-NRGDlSafeText {
     $s = $s -replace '[\r\n\u0085]+', ' '
     foreach ($cp in 0x2028, 0x2029) { $s = $s.Replace([string][char]$cp, ' ') }   # code points, not typed: see Get-NRGDistributionListWorksheet.ps1
     $s = $s -replace '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', ''
+    # An invisible or direction-changing character (bidirectional override, zero-width, byte order mark, tag character) is shown as
+    # <U+XXXX> rather than passed through or silently dropped: a reviewer should SEE that a name was tampered with, and a name
+    # must not be able to reorder the text around it.
+    $s = [regex]::Replace($s, '\p{Cf}|\uDB40[\uDC00-\uDC7F]', [System.Text.RegularExpressions.MatchEvaluator]{ param($m) '<U+{0:X4}>' -f [char]::ConvertToUtf32($m.Value, 0) })
     return $s.Trim()
 }
 

@@ -40,6 +40,10 @@ function ConvertTo-NRGDlPsLiteral {
     # what the pattern means (NRG.DistributionLists.Tests.ps1 scans the source for any such character).
     foreach ($cp in 0x2018, 0x2019, 0x201A, 0x201B, 0x0085, 0x2028, 0x2029) { if ($v.Contains([string][char]$cp)) { return $null } }
     if ($v -match '[\r\n\0]') { return $null }
+    # Invisible and direction-changing characters (Unicode format characters: bidirectional overrides and isolates, zero-width
+    # characters, the byte order mark, the soft hyphen, tag characters) can make a command LOOK different from what runs
+    # ("Trojan Source"). Every command here is reviewed by eye before it is run, so a value holding one is refused.
+    if ($v -match '[\p{Cf}\p{Cc}\p{Zl}\p{Zp}]' -or $v -match '\uDB40[\uDC00-\uDC7F]') { return $null }
     return "'" + ($v -replace "'", "''") + "'"
 }
 
