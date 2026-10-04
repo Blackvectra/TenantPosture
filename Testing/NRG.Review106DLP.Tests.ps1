@@ -55,4 +55,31 @@ Describe 'Review 106: DLP and preset scope verdicts' {
             (V 'Test-NRGControlPurviewSensitiveInfoTypes' 'PVW-3.4').State | Should -Be 'Gap'
         }
     }
+
+    Context 'D2: a DLP policy in test mode is reported, never credited' {
+        It 'DEF-4.1: the only policy in TestWithNotifications covering all four workloads is a Gap, with the note kept' {
+            Clear-NRGState
+            Set-NRGRawData -Key 'Purview' -Data (Bag @{ DLPPolicies = @(@{ Name = 'P1'; Mode = 'TestWithNotifications'; Enabled = $false; Workloads = $script:AllWl }); DLPRules = @()
+                                                        SectionStatus = @{ DLPPolicies = 'Collected'; DLPRules = 'Collected' } })
+            $v = V 'Test-NRGControlDefenderDLPWorkloads' 'DEF-4.1'
+            $v.State | Should -Be 'Gap' -Because "nothing enforces (got: $($v.Detail))"
+            $v.Detail | Should -Match 'Not counted \(not enforcing\): P1 \[TestWithNotifications\]'
+            $v.Detail | Should -Not -Match 'Verified:'
+        }
+        It 'DEF-4.1: an enforcing policy that covers none of the required workloads is a Gap' {
+            Clear-NRGState
+            Set-NRGRawData -Key 'Purview' -Data (Bag @{ DLPPolicies = @(@{ Name = 'Devices'; Mode = 'Enable'; Enabled = $true; Workloads = @('EndpointDevices') }); DLPRules = @()
+                                                        SectionStatus = @{ DLPPolicies = 'Collected'; DLPRules = 'Collected' } })
+            (V 'Test-NRGControlDefenderDLPWorkloads' 'DEF-4.1').State | Should -Be 'Gap'
+        }
+        It 'DEF-4.1: an enforcing policy covering part of the workloads beside a test-mode one stays Partial, note kept' {
+            Clear-NRGState
+            Set-NRGRawData -Key 'Purview' -Data (Bag @{ DLPPolicies = @(@{ Name = 'PII'; Mode = 'Enable'; Enabled = $true; Workloads = @('Exchange') },
+                                                                        @{ Name = 'P1'; Mode = 'TestWithoutNotifications'; Enabled = $false; Workloads = $script:AllWl }); DLPRules = @()
+                                                        SectionStatus = @{ DLPPolicies = 'Collected'; DLPRules = 'Collected' } })
+            $v = V 'Test-NRGControlDefenderDLPWorkloads' 'DEF-4.1'
+            $v.State | Should -Be 'Partial'
+            $v.Detail | Should -Match 'Not counted \(not enforcing\): P1 \[TestWithoutNotifications\]'
+        }
+    }
 }

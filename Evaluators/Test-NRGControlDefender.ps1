@@ -691,16 +691,23 @@ function Test-NRGControlDefenderDLPWorkloads {
         if ($isFull) { $fullScope += $w } elseif ($named.Count -gt 0) { $partScope[$w] = $named } elseif ($unread) { $scopeUnread += $w }
     }
     $verified = @(); $short = @(); $unknownScope = @()
-    if ($enforcing.Count -gt 0) { $verified += "$($enforcing.Count) enforcing DLP polic$(if ($enforcing.Count -eq 1) { 'y' } else { 'ies' }) (Mode Enable) cover: $(($required | Where-Object { $_ -in $covered }) -join ', ')$(if (-not ($required | Where-Object { $_ -in $covered })) { 'none of the required workloads' })." }
+    # Only a required workload that an enforcing policy covers is a verified component; an enforcing
+    # policy covering none of them is reported with the shortfall, never as something met.
+    if ($enforcing.Count -gt 0) {
+        $line = "$($enforcing.Count) enforcing DLP polic$(if ($enforcing.Count -eq 1) { 'y' } else { 'ies' }) (Mode Enable) cover: $(($required | Where-Object { $_ -in $covered }) -join ', ')$(if (-not ($required | Where-Object { $_ -in $covered })) { 'none of the required workloads' })."
+        if ($required | Where-Object { $_ -in $covered }) { $verified += $line } else { $short += $line }
+    }
     if ($missing.Count -gt 0) { $short += "No enforcing policy covers: $($missing -join ', '). Data can leave those channels without policy enforcement." }
     if ($partScope.Count -gt 0) { $short += "Covered only for part of the workload: $((@($partScope.Keys) | ForEach-Object { "$_ ($($partScope[$_] -join '; '))" }) -join '; ')." }
     if ($fullScope.Count -gt 0) { $verified += "Whole-workload scope (All, no exclusions) confirmed for: $($fullScope -join ', ')." }
     if ($scopeUnread.Count -gt 0) { $unknownScope += "whether the policies cover the whole workload or only named locations for: $($scopeUnread -join ', '), because the policy location scope was not returned in this result." }
+    if ($enforcing.Count -eq 0) { $short += 'No DLP policy is in enforcing mode (Enable).' }
+    # A policy in test mode or off is reported, never credited: the note is not a verified component, so
+    # it rides with the verified list only when something real was verified, else with the shortfall.
     if ($notEnforcing.Count -gt 0) {
         $nm = ($notEnforcing | ForEach-Object { "$([string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '?')) [$([string](Get-NRGObjectField -Item $_ -Key 'Mode' -Default 'unknown mode'))]" }) -join '; '
-        $verified += "Not counted (not enforcing): $nm."
+        if ($verified.Count -gt 0) { $verified += "Not counted (not enforcing): $nm." } else { $short += "Not counted (not enforcing): $nm." }
     }
-    if ($enforcing.Count -eq 0) { $short += 'No DLP policy is in enforcing mode (Enable).' }
     Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknownScope `
         -CurrentValue "Enforcing workloads: $(@($covered) -join ', ')" -RequiredValue 'Enforcing DLP policies covering Exchange, SharePoint, OneDrive and Teams'
 }
