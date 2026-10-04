@@ -90,7 +90,8 @@ function Get-NRGSiteVerdict {
         'Satisfied' { return @{ Label = 'Satisfied'; Css = 'ok' } }
         'Partial'   { return @{ Label = 'Partial'; Css = 'part' } }
         'Gap'       { return @{ Label = 'Gap'; Css = 'gap' } }
-        'Error'     { return @{ Label = 'Error'; Css = 'gap' } }
+        # The check did not reach a verdict: not assessed, never a Gap (as Get-NRGControlStatus says).
+        'Error'     { return @{ Label = 'Not assessed (the check errored)'; Css = 'unk' } }
     }
     switch ($Kind) {
         'Declaration'         { return @{ Label = 'Declared, not verified'; Css = 'na' } }
@@ -219,7 +220,7 @@ function Publish-NRGActionPlan {
     param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Rows, [Parameter(Mandatory)] [string] $Path)
     $need = @($Rows | Where-Object { $_.State -in @('Gap', 'Partial', 'Error') -or ($_.State -eq 'NotApplicable' -and $_.Kind -in @('Collection', 'StandardNotApproved', 'Manual')) })
     $out = foreach ($r in $need) {
-        $action = if ($r.State -in @('Gap', 'Partial', 'Error')) { 'Remediate' } elseif ($r.Kind -eq 'StandardNotApproved') { 'Approve the NRG standard' } elseif ($r.Kind -eq 'Manual') { 'Verify manually' } else { 'Re-collect and verify' }
+        $action = if ($r.State -eq 'Error') { 'Re-run or investigate the check' } elseif ($r.State -in @('Gap', 'Partial')) { 'Remediate' } elseif ($r.Kind -eq 'StandardNotApproved') { 'Approve the NRG standard' } elseif ($r.Kind -eq 'Manual') { 'Verify manually' } else { 'Re-collect and verify' }
         [ordered]@{
             'Control ID' = $r.ControlId; 'Instance' = $r.Instance; 'Workload' = $r.Workload; 'Security topic' = $r.Topic; 'Control' = $r.Title
             'NRG verdict' = $r.VerdictLabel; 'Risk severity' = $r.RiskSeverity; 'Check type' = $r.Type; 'Action type' = $action; 'Relationship to other controls' = $r.Relationship
@@ -326,7 +327,8 @@ table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nt
         $name = $script:NRGSiteWorkloadNames[$wl]; if (-not $name) { $name = $wl }
         $counts[$wl] = [ordered]@{ Name = $name; Total = $wrows.Count
             Satisfied = @($wrows | Where-Object { $_.State -eq 'Satisfied' }).Count; Partial = @($wrows | Where-Object { $_.State -eq 'Partial' }).Count
-            Gap = @($wrows | Where-Object { $_.State -in @('Gap', 'Error') }).Count
+            Gap = @($wrows | Where-Object { $_.State -eq 'Gap' }).Count
+            Errored = @($wrows | Where-Object { $_.State -eq 'Error' }).Count
             NotAssessed = @($wrows | Where-Object { $_.State -eq 'NotApplicable' -and $_.Kind -in @('Collection', 'StandardNotApproved', 'Manual', 'Skipped') }).Count
             Other = @($wrows | Where-Object { $_.State -eq 'NotApplicable' -and $_.Kind -in @('Licensing', 'Declaration', 'NotApplicable') }).Count }
         $body = "<h2>$(& $hx $name)</h2><p class='note'>Grouped by security topic. The verdict is NRG's baseline judgment; the badge says how the check was made (automated, manual, or an operator declaration) and is not a verdict. Risk severity is NRG's; requirement strength (SHALL / SHOULD) is the independent baseline's and is shown only where a rule is mapped.</p>"
@@ -357,6 +359,7 @@ table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nt
                 } else { "<span class='mut'>no mapped rule</span>" }
                 $ev = "<dl class='ev'><dt>Detail</dt><dd>$(& $hx $r.Detail)</dd>"
                 if ($r.Observed) { $ev += "<dt>Observed</dt><dd>$(& $hx $r.Observed)</dd>" }
+                if ($r.State -eq 'Error') { $ev += "<dt>Limitation</dt><dd>The check errored and did not reach a verdict: re-run or investigate it. Neither a pass nor a failure.</dd>" }
                 if ($r.Kind -ne 'Verdict') { $ev += "<dt>Limitation</dt><dd>$(& $hx @{ Collection = 'Collection: the evidence was not read'; Manual = 'Manual check: no automated test'; Declaration = 'Operator declaration: not verified by this assessment'; Licensing = 'Licensing: not scored'; StandardNotApproved = 'An NRG standard is not approved or configured'; NotApplicable = 'Reported not applicable'; Skipped = 'Skipped by the operator: this workload was not assessed this run' }[$r.Kind])</dd>" }
                 if (@($r.Affected).Count -gt 0) {
                     $aff = @($r.Affected | Select-Object -First 25 | ForEach-Object { if ($_ -is [System.Collections.IDictionary]) { ($_.GetEnumerator() | ForEach-Object { "$($_.Key): $($_.Value)" }) -join ', ' } elseif ($_ -isnot [string] -and @($_.PSObject.Properties).Count -gt 0 -and $_ -isnot [ValueType]) { ($_.PSObject.Properties | ForEach-Object { "$($_.Name): $($_.Value)" }) -join ', ' } else { [string]$_ } })
@@ -381,16 +384,16 @@ table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nt
     }
 
     # ── Landing page ──────────────────────────────────────────────────────────
-    $tot = @{ Satisfied = 0; Partial = 0; Gap = 0; NotAssessed = 0; Other = 0 }
+    $tot = @{ Satisfied = 0; Partial = 0; Gap = 0; Errored = 0; NotAssessed = 0; Other = 0 }
     foreach ($c in $counts.Values) { foreach ($k in @($tot.Keys)) { $tot[$k] += $c[$k] } }
     $bl = $BaselineCompliance
     $blText = if ($bl -and (Get-NRGObjectField -Item $bl -Key 'Available' -Default $false)) { "NRG Security Baseline $(& $hx (Get-NRGObjectField -Item $bl -Key 'BaselineVersion' -Default '')), target tier $(& $hx (Get-NRGObjectField -Item $bl -Key 'TargetTier' -Default ''))" } else { 'NRG Security Baseline: not resolved for this run' }
     $al = Get-NRGScubaAlignment
     $alText = if ($al.Available) { "Independent baseline mapping: $(& $hx $al.Source.Tool) $(& $hx $al.Source.ToolVersion), checked $(& $hx $al.Source.CheckedOn)" } else { 'Independent baseline mapping: not available' }
     $landing = "<h2>Tenant and run</h2><div class='card'><table><tbody><tr><th style='width:220px'>Tenant</th><td>$tenant</td></tr><tr><th>Tenant ID</th><td>$tenantId</td></tr><tr><th>Run time</th><td>$runAt</td></tr><tr><th>Tool version</th><td>NRG-Assessment $toolVer</td></tr><tr><th>Baseline versions</th><td>$blText<br>$alText$(if ($scuba) { '<br>Independent scan results supplied: shown beside each mapped control' })</td></tr></tbody></table></div>"
-    $landing += "<h2>Summary</h2><div class='grid'><div class='stat'><b>$($tot.Satisfied)</b>Satisfied</div><div class='stat'><b>$($tot.Partial)</b>Partial</div><div class='stat'><b>$($tot.Gap)</b>Gap</div><div class='stat'><b>$($tot.NotAssessed)</b>Not assessed</div><div class='stat'><b>$($tot.Other)</b>Not scored (licensing, declared, not applicable)</div></div><p class='note'>These are counts of findings, not a compliance percentage. Not assessed means the tool could not establish the answer (evidence not read, a manual check, an NRG standard that is not approved, or a workload the operator skipped); it is neither a pass nor a failure.</p>"
-    $landing += "<h2>Workloads</h2><table><thead><tr><th>Workload</th><th>Satisfied</th><th>Partial</th><th>Gap</th><th>Not assessed</th><th>Not scored</th></tr></thead><tbody>"
-    foreach ($wl in $counts.Keys) { $c = $counts[$wl]; $landing += "<tr><td><a href='$wl.html'><b>$(& $hx $c.Name)</b></a> <span class='mut'>($($c.Total) findings)</span></td><td>$($c.Satisfied)</td><td>$($c.Partial)</td><td>$($c.Gap)</td><td>$($c.NotAssessed)</td><td>$($c.Other)</td></tr>" }
+    $landing += "<h2>Summary</h2><div class='grid'><div class='stat'><b>$($tot.Satisfied)</b>Satisfied</div><div class='stat'><b>$($tot.Partial)</b>Partial</div><div class='stat'><b>$($tot.Gap)</b>Gap</div><div class='stat'><b>$($tot.Errored)</b>Not assessed (the check errored)</div><div class='stat'><b>$($tot.NotAssessed)</b>Not assessed</div><div class='stat'><b>$($tot.Other)</b>Not scored (licensing, declared, not applicable)</div></div><p class='note'>These are counts of findings, not a compliance percentage. Not assessed means the tool could not establish the answer (evidence not read, a manual check, an NRG standard that is not approved, or a workload the operator skipped); it is neither a pass nor a failure. A check that errored did not reach a verdict and is counted on its own, not as a Gap.</p>"
+    $landing += "<h2>Workloads</h2><table><thead><tr><th>Workload</th><th>Satisfied</th><th>Partial</th><th>Gap</th><th>Errored</th><th>Not assessed</th><th>Not scored</th></tr></thead><tbody>"
+    foreach ($wl in $counts.Keys) { $c = $counts[$wl]; $landing += "<tr><td><a href='$wl.html'><b>$(& $hx $c.Name)</b></a> <span class='mut'>($($c.Total) findings)</span></td><td>$($c.Satisfied)</td><td>$($c.Partial)</td><td>$($c.Gap)</td><td>$($c.Errored)</td><td>$($c.NotAssessed)</td><td>$($c.Other)</td></tr>" }
     $landing += '</tbody></table>'
     $gapSummary = Get-NRGGapSummary -Findings $Findings
     if ($gapSummary.GapControls -gt 0) {

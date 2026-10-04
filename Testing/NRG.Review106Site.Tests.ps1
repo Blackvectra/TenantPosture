@@ -160,3 +160,37 @@ Describe 'S3: New-NRGReportSite.ps1 reads the run''s coverage from the results f
         @(Import-Csv -LiteralPath (Join-Path $script:Site3 'ActionPlan.csv')) | Should -BeNullOrEmpty
     }
 }
+
+Describe 'S4: an Error finding is not assessed (the check errored), never a Gap to remediate' {
+    BeforeAll {
+        Import-Module (Join-Path $script:Root 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        Clear-NRGState
+        Add-NRGFinding -ControlId 'AAD-1.1' -State 'Gap' -Category 'Identity' -Title 'Legacy auth' -Severity 'High' -Detail 'Shortfall: not blocked.' -FrameworkIds 'NIST:AC-17'
+        Add-NRGFinding -ControlId 'AAD-1.2' -State 'Error' -Category 'Identity' -Title 'MFA all users' -Severity 'High' -Detail 'Evaluator threw: boom.' -FrameworkIds 'NIST:IA-2'
+        $script:Out4 = & $script:NewOut
+        $null = Publish-NRGReportSite -Metadata $script:Meta -Findings @(Get-NRGFindings) -OutputPath $script:Out4
+        $script:Aad4 = Get-Content -LiteralPath (Join-Path $script:Out4 'AAD.html') -Raw
+        $script:Idx4 = Get-Content -LiteralPath (Join-Path $script:Out4 'index.html') -Raw
+        $script:Plan4 = @(Import-Csv -LiteralPath (Join-Path $script:Out4 'ActionPlan.csv'))
+    }
+    AfterAll { Remove-Item -LiteralPath $script:Out4 -Recurse -Force -ErrorAction SilentlyContinue; Clear-NRGState; Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue }
+
+    It 'the verdict reads Not assessed (the check errored)' {
+        [regex]::Match($script:Aad4, "<b>AAD-1\.2</b>.*?<span class='pill \w+'>([^<]+)</span>").Groups[1].Value | Should -Be 'Not assessed (the check errored)'
+    }
+    It 'the action is to re-run or investigate the check, not to remediate' {
+        $row = $script:Plan4 | Where-Object { $_.'Control ID' -eq 'AAD-1.2' }
+        $row.'Action type' | Should -Be 'Re-run or investigate the check'
+        $row.'NRG verdict' | Should -Be 'Not assessed (the check errored)'
+        ($script:Plan4 | Where-Object { $_.'Control ID' -eq 'AAD-1.1' }).'Action type' | Should -Be 'Remediate'
+    }
+    It 'Error is counted apart from Gap on the landing page' {
+        [regex]::Match($script:Idx4, "<div class='stat'><b>(\d+)</b>Gap</div>").Groups[1].Value | Should -Be '1'
+        [regex]::Match($script:Idx4, "<div class='stat'><b>(\d+)</b>Not assessed \(the check errored\)</div>").Groups[1].Value | Should -Be '1'
+        $hdr = @([regex]::Matches([regex]::Match($script:Idx4, '<h2>Workloads</h2><table><thead><tr>(.*?)</tr>').Groups[1].Value, '<th>([^<]+)</th>') | ForEach-Object { $_.Groups[1].Value })
+        $cells = @([regex]::Matches([regex]::Match($script:Idx4, "<tr><td><a href='AAD\.html'>.*?</tr>").Value, '<td>([^<]*)</td>') | ForEach-Object { $_.Groups[1].Value })
+        # The first cell (the workload link) holds markup and is not captured; data cells follow it.
+        $cells[$hdr.IndexOf('Gap') - 1] | Should -Be '1'
+        $cells[$hdr.IndexOf('Errored') - 1] | Should -Be '1'
+    }
+}
