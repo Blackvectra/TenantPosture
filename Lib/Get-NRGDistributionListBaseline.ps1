@@ -192,6 +192,92 @@ function ConvertTo-NRGDlPsLiteral {
     return "'$q'"
 }
 
+# ── How a finding is worded and how its status is read back ───────────────────
+# A NotApplicable verdict is four different things to the reader. The evaluator says which by
+# starting the finding's Detail with one of these labels followed by ". ", and the worksheet reads the
+# label back from the START of the Detail only. It does not search the prose: the Detail contains the
+# list's display name, which a user can set to anything, so a name reading "reported only" must not be
+# able to change another row's status. Writer (Format-NRGDlDetail) and reader
+# (Get-NRGDlKindFromDetail) share this one table; change them together.
+$script:NRGDlKindLabels = [ordered]@{
+    NoStandard   = 'Not assessed (no approved NRG standard)'
+    DoesNotApply = 'Does not apply'
+    ReportedOnly = 'Reported only'
+    NotAssessed  = 'Not assessed'
+}
+
+function Get-NRGDlKindFromDetail {
+    # The status label a Detail starts with, or '' when it carries none.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] [string] $Detail)
+    if ([string]::IsNullOrEmpty($Detail)) { return '' }
+    foreach ($label in $script:NRGDlKindLabels.Values) {
+        if ($Detail.StartsWith("$label. ", [StringComparison]::Ordinal)) { return $label }
+    }
+    return ''
+}
+
+function Get-NRGDlSourceLabel {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([string] $Source)
+    switch ($Source) {
+        'MicrosoftDefault'  { 'Microsoft documented default' }
+        'MicrosoftGuidance' { 'Microsoft documented guidance' }
+        'NRGStandard'       { 'NRG standard' }
+        default             { 'no recommendation' }
+    }
+}
+
+function Format-NRGDlRecommended {
+    # The recommended value as a reader sees it. A Microsoft value names where it comes from;
+    # an NRG standard or "no recommendation" already says so in its own words.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] $Rec)
+    if ($Rec.RecommendedValueSource -in 'MicrosoftDefault', 'MicrosoftGuidance') {
+        return ('{0} ({1})' -f $Rec.RecommendedValue, (Get-NRGDlSourceLabel -Source $Rec.RecommendedValueSource))
+    }
+    return [string]$Rec.RecommendedValue
+}
+
+function Get-NRGDlCitationText {
+    # The NIST sentence for a recommendation, with each Rev 5 title. Computed once per recommendation
+    # by the evaluator, not once per finding.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] $Rec)
+    $haveTitles = [bool](Get-Command Get-NRGNISTControlTitle -ErrorAction SilentlyContinue)
+    $nist = @(@($Rec.Nist80053) | ForEach-Object {
+        $t = if ($haveTitles) { Get-NRGNISTControlTitle -ControlId $_ } else { '' }
+        if ($t) { "$_ $t" } else { [string]$_ } })
+    if ($nist.Count -gt 0) { return "NIST SP 800-53 Rev 5 (this tool's mapping, not NIST text): $($nist -join '; ')." }
+    return 'Framework: no framework item verified.'
+}
+
+function Format-NRGDlDetail {
+    # [Kind label. ] verdict sentence, what was read, what was not, the source and the NIST mapping.
+    # Every output prints this text unchanged. The recommended value is not repeated here: it travels
+    # as the finding's RequiredValue and the worksheet's Recommended field.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)] $Rec,
+        [Parameter(Mandatory)] [string] $Lead,
+        [string[]] $Read = @(),
+        [string[]] $NotRead = @(),
+        [ValidateSet('', 'NotAssessed', 'ReportedOnly', 'NoStandard', 'DoesNotApply')] [string] $Kind = '',
+        [string] $CitationText
+    )
+    if (-not $CitationText) { $CitationText = Get-NRGDlCitationText -Rec $Rec }
+    $Read = @($Read | Where-Object { $_ }); $NotRead = @($NotRead | Where-Object { $_ })
+    $readText    = if ($Read.Count)    { ($Read -join '; ') }    else { 'nothing for this setting' }
+    $notReadText = if ($NotRead.Count) { ($NotRead -join '; ') } else { 'nothing further for this setting' }
+    $prefix = if ($Kind) { "$($script:NRGDlKindLabels[$Kind]). " } else { '' }
+    return ("{0}{1} Read: {2}. Not read: {3}. Source: {4}. {5}" -f $prefix, $Lead.Trim(), $readText, $notReadText, $Rec.SourceUrl, $CitationText)
+}
+
 function Get-NRGDlListKey {
     <#
     .SYNOPSIS

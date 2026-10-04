@@ -27,6 +27,19 @@
   Three new suites (collector, evaluator/catalog/standards, worksheet/safety/entry script, the last
   running the real script in a child process against stand-in modules that record any call outside
   Exchange reads). See `docs/NRG-DISTRIBUTION-LISTS.md`. Not yet run against a live tenant.
+  A self-review before merge found and fixed seven defects, each now pinned by a test that fails on
+  the earlier code: the worksheet took a row's status by searching the finding's prose, which holds the
+  list's display name, so a list named "reported only" changed other rows' status (the evaluator now
+  writes the status as the first words of the Detail and the worksheet reads only that prefix); matching
+  findings to lists scanned every finding per row, so publishing grew with the square of the list count
+  (800 lists took 280 seconds, now 15); an Exchange error over 2000 characters made
+  `Register-NRGException` throw from inside a catch block and abandon every later read; a relative
+  `-OutputPath` resolved against the process directory, not the PowerShell location; `-TenantId` did not
+  refuse a session whose tenant could not be read; a failed list query beside an empty one exited 2
+  ("no lists found") instead of 3; and the console pointed at "Exceptions" that nothing printed (the
+  worksheet now has a Collection problems block). `MailNonUniversalGroup` members are now nested groups.
+  The evaluator is split into one verdict function per rule (the repo's one-function-per-control
+  convention) behind a single emitter.
 
 - **The first email assessment on a real mailbox raised two false indicators.** (1) EMAIL-4.1 printed
   "UNVERIFIED publisher" for every OAuth grant whose app lookup failed; that lookup needs

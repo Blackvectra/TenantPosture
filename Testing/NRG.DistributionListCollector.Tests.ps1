@@ -295,4 +295,36 @@ Describe 'Distribution-list collector' {
             @(Get-NRGExceptions | Where-Object Message -Match 'WRITE CMDLET').Count | Should -Be 0
         }
     }
+
+
+    Context 'Regressions found in review' {
+        It 'an exception message longer than Register-NRGException accepts does not abandon the reads that come after it' {
+            # Regression: the over-long message made Register-NRGException throw from inside a catch block,
+            # which escaped the whole collector, so the dynamic lists were never read (NotRun) and Success was false.
+            $script:Fixtures.GroupsError = ('x' * 3000)
+            $script:Fixtures.Dynamic = @([pscustomobject]@{ Name = 'ddg'; DisplayName = 'DDG'; PrimarySmtpAddress = 'ddg@contoso.com'; RecipientTypeDetails = 'DynamicDistributionGroup' })
+            $r = Invoke-NRGCollectDistributionLists -ThrottleRetries 0
+            $r.Success | Should -BeTrue
+            $r.Data.SectionStatus.DistributionGroups | Should -Be 'Failed'
+            $r.Data.SectionStatus.DynamicDistributionGroups | Should -Be 'Collected' -Because 'one failed section must not stop the next read'
+            $e = @(Get-NRGExceptions | Where-Object Source -eq 'EXO-DL-DistributionGroups')
+            $e.Count | Should -Be 1
+            $e[0].Message.Length | Should -BeLessOrEqual 2000
+        }
+        It 'a mail-enabled group that is not universal (MailNonUniversalGroup) is a nested group, not a person' {
+            # Regression: only universal group types were recognized, so a synced non-universal group was
+            # classified as a person and left out of the nested-group list.
+            $script:Fixtures.Groups = @(& $script:Dg 'mix' '99999999-9999-9999-9999-999999999999')
+            $script:Fixtures.MemberBehavior = { param($id, $rs) @([pscustomobject]@{ DisplayName = 'Legacy group'; PrimarySmtpAddress = 'legacy@contoso.com'; RecipientType = 'MailNonUniversalGroup'; RecipientTypeDetails = 'MailNonUniversalGroup' }) }
+            $l = (Invoke-NRGCollectDistributionLists).Data.Lists[0]
+            @($l.NestedGroups).Count | Should -Be 1
+            @($l.ExternalMembers).Count | Should -Be 0
+        }
+        It 'no person recipient type is mistaken for a group' {
+            foreach ($t in 'UserMailbox', 'SharedMailbox', 'MailUser', 'MailContact', 'GuestMailUser', 'RoomMailbox', 'EquipmentMailbox', 'RemoteUserMailbox') {
+                $k = & $script:Mod { param($type) Get-NRGDlMemberKind -Member ([pscustomobject]@{ RecipientTypeDetails = $type; RecipientType = $type; PrimarySmtpAddress = 'p@contoso.com' }) -AcceptedDomains @('contoso.com') } $t
+                $k.Kind | Should -Be 'Person' -Because $t
+            }
+        }
+    }
 }

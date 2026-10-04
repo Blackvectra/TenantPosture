@@ -47,22 +47,22 @@ function ConvertTo-NRGDlText {
 }
 
 function Get-NRGDlStatus {
-    # The reader's word for a finding. NotApplicable is three different things and the
-    # worksheet keeps them apart: reported (no recommendation to judge it by), not
-    # assessed (evidence missing, or no approved NRG standard), and does not apply.
+    # The reader's word for a finding. NotApplicable is four different things and the worksheet keeps
+    # them apart: reported only (no recommendation to judge it by), not assessed (evidence missing),
+    # not assessed because no NRG standard is approved, and does not apply. Which one is read from the
+    # label the evaluator put at the START of the Detail (Get-NRGDlKindFromDetail), never searched for
+    # in the prose: the Detail contains the list's display name, which a user can set to any text.
     [CmdletBinding()]
     [OutputType([string])]
     param([AllowNull()] $Finding)
     if ($null -eq $Finding) { return 'No finding produced' }
-    $detail = [string](Get-NRGObjectField -Item $Finding -Key 'Detail' -Default '')
     switch ([string](Get-NRGObjectField -Item $Finding -Key 'State' -Default '')) {
         'Satisfied' { return 'Meets' }
         'Gap'       { return 'Shortfall' }
         'Partial'   { return 'Partly meets' }
         'NotApplicable' {
-            if ($detail -match 'reported only')                { return 'Reported only' }
-            if ($detail -match 'because none is approved')     { return 'Not assessed (no approved NRG standard)' }
-            if ($detail -match 'does not apply to a ')         { return 'Does not apply' }
+            $kind = Get-NRGDlKindFromDetail -Detail ([string](Get-NRGObjectField -Item $Finding -Key 'Detail' -Default ''))
+            if ($kind) { return $kind }
             return 'Not assessed'
         }
         default     { return 'Not assessed' }
@@ -83,13 +83,22 @@ function Get-NRGDistributionListWorksheet {
         [Parameter(Mandatory)] [AllowEmptyCollection()] [AllowNull()] [object[]] $Findings,
         [AllowNull()] $Baseline,
         [AllowNull()] $Standards,
-        [AllowNull()] [hashtable] $Metadata
+        [AllowNull()] [hashtable] $Metadata,
+        # Why a read failed (the registered exceptions), already filtered by the caller.
+        [AllowNull()] [string[]] $Problems
     )
     Set-StrictMode -Version Latest
     if ($null -eq $Baseline)  { $Baseline  = Get-NRGDistributionListBaseline }
     if ($null -eq $Standards) { $Standards = Get-NRGDistributionListStandards }
     $Findings = @($Findings | Where-Object { $null -ne $_ })
     $recs = @($Baseline.Recommendations)
+    # One lookup per (control, list) instead of a scan of every finding per row: with a scan, the cost
+    # grows with the SQUARE of the list count (800 lists took 280 seconds to publish).
+    $byKey = @{}
+    foreach ($f in $Findings) {
+        $k = "$([string]$f.ControlId)|$([string]$f.Instance)"
+        if (-not $byKey.ContainsKey($k)) { $byKey[$k] = $f }
+    }
 
     $tenant = ConvertTo-NRGDlText (Get-NRGObjectField -Item $Metadata -Key 'TenantDomain' -Default (Get-NRGNestedProperty -Object $Raw -Path 'Data.TenantDomain' -Default ''))
     $generated = [string](Get-NRGObjectField -Item $Metadata -Key 'AssessmentTime' -Default (Get-Date).ToString('o'))
@@ -148,7 +157,7 @@ function Get-NRGDistributionListWorksheet {
 
         $rows = [System.Collections.Generic.List[object]]::new()
         foreach ($rec in $recs) {
-            $f = @($Findings | Where-Object { $_.ControlId -eq $rec.Id -and [string]$_.Instance -eq $key }) | Select-Object -First 1
+            $f = $byKey["$($rec.Id)|$key"]
             $status = Get-NRGDlStatus -Finding $f
             # A command is offered only beside a shortfall: it is what an administrator would
             # run to close it, never a suggestion for a setting that already meets or is unjudged.
@@ -217,6 +226,7 @@ function Get-NRGDistributionListWorksheet {
         ScanStatus     = $(if ($scanF) { Get-NRGDlStatus -Finding $scanF } else { 'No finding produced' })
         ScanFinding    = $(if ($scanF) { ConvertTo-NRGDlText $scanF.Detail } else { 'No scan-level finding was produced; treat the whole read as not assessed.' })
         ScanCurrent    = $(if ($scanF) { ConvertTo-NRGDlText $scanF.CurrentValue } else { '' })
+        Problems       = @(@($Problems) | Where-Object { $_ } | ForEach-Object { ConvertTo-NRGDlText $_ } | Where-Object { $_ })
         StatusOrder    = $statusOrder
         Summary        = @($summary)
         Lists          = @($outLists)
@@ -239,6 +249,11 @@ function ConvertTo-NRGDlWorksheetText {
     & $line "  $($Model.Mode)"
     & $line "  Scan result ($($Model.ScanStatus)): $($Model.ScanFinding)"
     if ($Model.ScanCurrent) { & $line "  $($Model.ScanCurrent)" }
+    if (@($Model.Problems).Count) {
+        & $line
+        & $line 'COLLECTION PROBLEMS (why a read failed; what it covered is reported above as not assessed)'
+        foreach ($p in $Model.Problems) { & $line "  - $p" }
+    }
     & $line
     & $line 'FRAMEWORKS'
     foreach ($f in $Model.Frameworks) { & $line "  - $f" }
@@ -332,7 +347,8 @@ function ConvertTo-NRGDlWorksheetCsv {
     $scan = [pscustomobject]@{ Name = '(scan)'; Address = ''; Type = ''; DirectorySynced = ''; Owners = ''; MemberCount = ''; MembersTruncated = $false; MemberStatus = ''; Members = @(); ExternalMembers = @(); NestedGroups = @() }
     $scanRow = [pscustomobject]@{ Id = 'DL-0.1'; Title = 'Distribution-list inventory was read'; Setting = 'Collector SectionStatus'; Current = $Model.ScanCurrent
         Recommended = 'Every list and its members read in full (no recommendation)'; Status = $Model.ScanStatus; Finding = $Model.ScanFinding
-        SourceUrl = 'https://learn.microsoft.com/powershell/module/exchangepowershell/get-distributiongroup'; Nist = @(); Command = $null; FixNote = '' }
+        SourceUrl = 'https://learn.microsoft.com/powershell/module/exchangepowershell/get-distributiongroup'; Nist = @(); Command = $null
+        FixNote = $(if (@($Model.Problems).Count) { 'Collection problems: ' + ((@($Model.Problems) | Select-Object -First 5) -join ' | ') + $(if (@($Model.Problems).Count -gt 5) { " | ... and $(@($Model.Problems).Count - 5) more in the text worksheet" } else { '' }) } else { '' }) }
     $rows.Add((& $row $scan $scanRow))
     foreach ($l in $Model.Lists) { foreach ($r in $l.Rows) { $rows.Add((& $row $l $r)) } }
     return ((@($rows) | ConvertTo-Csv -NoTypeInformation) -join "`r`n") + "`r`n"
@@ -353,7 +369,8 @@ function Publish-NRGDistributionListWorksheet {
         [AllowNull()] $Raw,
         [AllowNull()] [object[]] $Findings,
         [AllowNull()] $Baseline,
-        [AllowNull()] $Standards
+        [AllowNull()] $Standards,
+        [AllowNull()] [string[]] $Problems
     )
     Set-StrictMode -Version Latest
     $ErrorActionPreference = 'Stop'
@@ -362,11 +379,19 @@ function Publish-NRGDistributionListWorksheet {
     $stem = ($BaseName -replace '[^a-zA-Z0-9-]', '')
     if (-not $stem) { $stem = 'tenant' }
     if ($OutputDirectory -match '\.\.[/\\]') { throw "OutputDirectory '$OutputDirectory' contains a traversal sequence." }
+    # A relative path is relative to the PowerShell location. [System.IO.Directory] resolves against the
+    # PROCESS working directory, which Set-Location does not change, so a relative path would land
+    # somewhere the operator is not looking.
+    $OutputDirectory = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
     $null = [System.IO.Directory]::CreateDirectory($OutputDirectory)
 
     if ($null -eq $Raw)      { $Raw = Get-NRGRawData -Key 'EXO-DistributionLists' }
     if ($null -eq $Findings) { $Findings = @(Get-NRGFindings | Where-Object { [string]$_.ControlId -like 'DL-*' }) }
-    $model = Get-NRGDistributionListWorksheet -Raw $Raw -Findings $Findings -Baseline $Baseline -Standards $Standards -Metadata $Metadata
+    if ($null -eq $Problems) {
+        $Problems = @(Get-NRGExceptions | Where-Object { [string]$_.Source -match '^(EXO-DL-|EXO-DistributionLists|DL-Evaluator|Connect-EXO)' } |
+            ForEach-Object { '{0}: {1}' -f $_.Source, $_.Message })
+    }
+    $model = Get-NRGDistributionListWorksheet -Raw $Raw -Findings $Findings -Baseline $Baseline -Standards $Standards -Metadata $Metadata -Problems $Problems
 
     $txtPath = Join-Path $OutputDirectory "$stem-distribution-lists.txt"
     $csvPath = Join-Path $OutputDirectory "$stem-distribution-lists.csv"

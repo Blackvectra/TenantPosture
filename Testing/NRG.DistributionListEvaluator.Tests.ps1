@@ -449,4 +449,49 @@ Describe 'DL-* evaluator, catalog and standards' {
             }
         }
     }
+
+
+    Context 'Structure: rules return verdicts, and the status is structural, not parsed from prose' {
+        It 'a rule function returns a verdict and writes NO finding (verdicts are separate from emission)' {
+            Clear-NRGState
+            $v = & $script:Mod { param($l) $std = Get-NRGDistributionListStandards -Standards ([ordered]@{})
+                $c = Get-NRGDlListContext -List $l -Standards $std -AcceptedDomainsSection 'Collected'
+                Get-NRGDlVerdictOwner -Ctx $c } (& $script:L @{ Owners = @() })
+            $v.State | Should -Be 'Gap'
+            @(Get-NRGFindings).Count | Should -Be 0
+        }
+        It 'every NotApplicable list finding names its kind at the START of the Detail' {
+            $bare = & $script:L @{ Owners = $null; RequireSenderAuthenticationEnabled = $null; ModerationEnabled = $null; HiddenFromAddressListsEnabled = $null; MemberJoinRestriction = $null; MemberDepartRestriction = $null; MemberStatus = 'Failed'; MemberCount = $null }
+            $dyn = & $script:L @{ Name = 'd'; DisplayName = 'D'; PrimarySmtpAddress = 'd@contoso.com'; Guid = '22222222-2222-2222-2222-222222222222'; ListType = 'Dynamic'; MemberJoinRestriction = $null; MemberDepartRestriction = $null }
+            $normal = & $script:L @{ Name = 'n'; DisplayName = 'N'; PrimarySmtpAddress = 'n@contoso.com'; Guid = '33333333-3333-3333-3333-333333333333' }
+            Clear-NRGState
+            Set-NRGRawData -Key 'EXO-DistributionLists' -Data @{ Success = $true; Data = @{ Lists = @($bare, $dyn, $normal); SectionStatus = (& $script:Sec); Stats = @{ MemberReadLimit = 5000 } } }
+            Test-NRGControlDistributionLists -Standards (& $script:Std)
+            $na = @(Get-NRGFindings | Where-Object { $_.State -eq 'NotApplicable' -and $_.Instance -ne '(scan)' })
+            $na.Count | Should -BeGreaterThan 10
+            foreach ($f in $na) { (& $script:Mod { param($d) Get-NRGDlKindFromDetail -Detail $d } $f.Detail) | Should -Not -BeNullOrEmpty -Because "$($f.ControlId) $($f.Instance): $($f.Detail.Substring(0, 60))" }
+            $kinds = @($na | ForEach-Object { & $script:Mod { param($d) Get-NRGDlKindFromDetail -Detail $d } $_.Detail } | Sort-Object -Unique)
+            $kinds | Should -Contain 'Reported only'
+            $kinds | Should -Contain 'Does not apply'
+            $kinds | Should -Contain 'Not assessed'
+            $kinds | Should -Contain 'Not assessed (no approved NRG standard)'
+        }
+        It 'the label is read only from the start: a list name, or other text, containing a label changes nothing' {
+            $read = { param($d) & $script:Mod { param($x) Get-NRGDlKindFromDetail -Detail $x } $d }
+            (& $read 'Reported only. List x: y') | Should -Be 'Reported only'
+            (& $read 'Does not apply. List x: y') | Should -Be 'Does not apply'
+            (& $read 'Not assessed. List x: y') | Should -Be 'Not assessed'
+            (& $read 'Not assessed (no approved NRG standard). List x: y') | Should -Be 'Not assessed (no approved NRG standard)'
+            (& $read "List 'Reported only. x' (Distribution): was not returned.") | Should -BeNullOrEmpty
+            (& $read 'Not assessed in full: a section failed.') | Should -BeNullOrEmpty
+            (& $read 'reported only. lower case') | Should -BeNullOrEmpty
+            (& $read '') | Should -BeNullOrEmpty
+        }
+        It 'Format-NRGDlDetail writes the label that Get-NRGDlKindFromDetail reads back' {
+            foreach ($k in 'NotAssessed', 'ReportedOnly', 'NoStandard', 'DoesNotApply') {
+                $d = & $script:Mod { param($kind, $rec) Format-NRGDlDetail -Rec $rec -Lead 'List x: y.' -Kind $kind } $k $script:Baseline.Recommendations[0]
+                (& $script:Mod { param($x) Get-NRGDlKindFromDetail -Detail $x } $d) | Should -Be (& $script:Mod { param($kind) $script:NRGDlKindLabels[$kind] } $k)
+            }
+        }
+    }
 }

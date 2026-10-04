@@ -78,7 +78,12 @@ function Connect-NRGExchangeOnly {
 
         $now = @(& $connected) | Select-Object -Last 1
         $tid = [string](Get-NRGObjectField -Item $now -Key 'TenantID' -Default '')
-        if ($ExpectedTenantId -and $tid -and $tid -ne $ExpectedTenantId) {
+        # A requested tenant that cannot be confirmed is refused, not assumed: a session whose tenant
+        # could not be read would otherwise be assessed as the client's.
+        if ($ExpectedTenantId -and -not $tid) {
+            throw "The connected Exchange Online tenant could not be read, so it cannot be confirmed as the requested tenant $ExpectedTenantId."
+        }
+        if ($ExpectedTenantId -and $tid -ne $ExpectedTenantId) {
             throw "Exchange Online session is for tenant $tid, not the requested tenant $ExpectedTenantId."
         }
         $result.EXO = $true

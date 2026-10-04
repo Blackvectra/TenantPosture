@@ -28,8 +28,10 @@ Teams-connected groups, are **not assessed**, and every output says so.
 | `-MemberReadLimit` | The most members read per list (default 5000); a larger list is read up to the limit and marked truncated |
 | `-KeepSession` | Leave the Exchange Online session open |
 
-Exit codes: `0` success, `1` sign-in failure, `2` no lists found, `3` partial read (a section failed
-or a list was truncated), `4` fatal.
+Exit codes: `0` success, `1` sign-in failure, `2` no lists found (every section read and none exists),
+`3` partial read (a section failed, a member read failed, or a list was truncated), `4` fatal (both
+list queries failed). A failed section is a partial read even when the other section returned nothing:
+"no lists found" is only said when every section read.
 
 Output, written through the restricted-file writer (`Set-NRGSensitiveFileContent`: owner, SYSTEM and
 Administrators on Windows; mode 0600 elsewhere), because it holds tenant inventory:
@@ -103,6 +105,10 @@ scored.
 | Not assessed (no approved NRG standard) | NRG's judgment, and the standard is not approved, so the setting is reported and not judged |
 | Does not apply | For example a join setting on a dynamic list |
 
+The status is not guessed from the finding's text: the evaluator writes it as the first words of the
+finding's Detail, and the worksheet reads only that prefix. A list's display name appears later in the
+Detail and can be any text a user typed, so a name that says "reported only" changes nothing.
+
 Missing evidence is never Satisfied. An omitted property is "not read", never "empty": a list with no
 `ManagedBy` returned is "owner not read", and only a `ManagedBy` that came back empty is "no owner".
 
@@ -125,7 +131,9 @@ leave value is what the printed command uses.
 ## Limits and how reads fail
 
 - A failed query is never "no lists": `Data.SectionStatus` records `DistributionGroups`,
-  `DynamicDistributionGroups`, `AcceptedDomains` and `Members` as `Collected` or `Failed`.
+  `DynamicDistributionGroups`, `AcceptedDomains` and `Members` as `Collected` or `Failed`. Why a read
+  failed is printed on the console and listed in the worksheet under COLLECTION PROBLEMS (and in the
+  CSV scan row's `Note`), with each message sanitized and bounded.
 - A throttled Exchange call is retried with backoff (2, 4, 8 seconds); one that still fails marks
   **that list's** member read failed, never "no members".
 - A list over `-MemberReadLimit` is read up to the limit (`limit + 1` is requested, so exactly at the
@@ -147,8 +155,8 @@ leave value is what the printed command uses.
 | `Invoke-NRGDistributionListScan.ps1` | Entry point: connect (Exchange only), collect, evaluate, publish |
 | `Lib/Connect-NRGExchangeOnly.ps1` | Exchange Online sign-in and nothing else |
 | `Collectors/EXO/Invoke-NRGCollectDistributionLists.ps1` | Read-only collector; raw data key `EXO-DistributionLists` |
-| `Evaluators/Test-NRGControlDistributionLists.ps1` | The DL-* verdicts |
-| `Lib/Get-NRGDistributionListBaseline.ps1` | Catalog and standards loaders; command text builder |
+| `Evaluators/Test-NRGControlDistributionLists.ps1` | The DL-* verdicts: one `Get-NRGDlVerdict<Rule>` function per rule returns a verdict; `Add-NRGDlFinding` is the only emitter |
+| `Lib/Get-NRGDistributionListBaseline.ps1` | Catalog and standards loaders; command text builder; finding wording and the status label (writer and reader together) |
 | `Config/distribution-list-baseline.json` | The recommendations (reviewable data) |
 | `Config/nrg-standards.json` | The four `DistributionList*` standards (empty) |
 | `Publishers/Publish-NRGDistributionListWorksheet.ps1` | The `.txt` and `.csv` |

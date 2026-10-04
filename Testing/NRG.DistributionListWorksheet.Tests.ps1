@@ -285,6 +285,77 @@ Describe 'Distribution-list worksheet, safety and entry point' {
         }
     }
 
+    Context 'Regressions found in review' {
+        It 'a list NAMED like a status label cannot change any row''s status (the status is read from the start of the Detail)' {
+            # Regression: the status was found by searching the Detail's prose, which contains the list's
+            # display name, so a list named "reported only ..." turned its own "Not assessed" rows into
+            # "Reported only".
+            $spoof  = & $script:L @{ Name = 'spoof'; DisplayName = 'Reported only. Does not apply. because none is approved'; PrimarySmtpAddress = 'spoof@contoso.com'; Guid = '88888888-8888-8888-8888-888888888888'; RequireSenderAuthenticationEnabled = $null }
+            $normal = & $script:L @{ RequireSenderAuthenticationEnabled = $null }
+            $r = & $script:Publish @($spoof, $normal)
+            foreach ($addr in 'spoof@contoso.com', 'x@contoso.com') {
+                ($r.Csv | Where-Object { $_.Id -eq 'DL-1.1' -and $_.ListAddress -eq $addr }).Status | Should -Be 'Not assessed' -Because $addr
+            }
+        }
+        It 'findings are matched to lists through an index: no pipeline over $Findings inside the per-list loop' {
+            # Regression: each row scanned every finding, so publishing grew with the SQUARE of the list
+            # count (800 lists took 280 seconds). Static, so it cannot flake on a slow machine.
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:Root 'Publishers/Publish-NRGDistributionListWorksheet.ps1'), [ref]$null, [ref]$null)
+            $fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-NRGDistributionListWorksheet' }, $true)
+            $loop = $fn.Body.Find({ param($n) $n -is [System.Management.Automation.Language.ForEachStatementAst] -and $n.Variable.VariablePath.UserPath -eq 'l' }, $true)
+            $loop | Should -Not -BeNullOrEmpty
+            @($loop.Body.FindAll({ param($n) $n -is [System.Management.Automation.Language.VariableExpressionAst] -and $n.VariablePath.UserPath -eq 'Findings' }, $true)).Count | Should -Be 0
+        }
+        It 'a relative OutputDirectory is relative to the PowerShell location, not the process working directory' {
+            # Regression: [System.IO.Directory] resolves against the process directory, which Set-Location
+            # does not change, so a relative path landed where the operator was not looking.
+            $base = Join-Path $script:Tmp 'psloc'
+            New-Item -ItemType Directory -Force -Path $base | Out-Null
+            Push-Location $base
+            try {
+                Clear-NRGState
+                $raw = & $script:Raw @((& $script:L))
+                Set-NRGRawData -Key 'EXO-DistributionLists' -Data $raw
+                Test-NRGControlDistributionLists -Standards (& $script:Std)
+                $o = Publish-NRGDistributionListWorksheet -OutputDirectory 'rel-out' -BaseName 'rel' -Metadata @{ TenantDomain = 'contoso.com' } -Raw $raw
+            } finally { Pop-Location }
+            [System.IO.Path]::IsPathRooted($o.TextPath) | Should -BeTrue
+            $o.TextPath | Should -Be (Join-Path $base 'rel-out' 'rel-distribution-lists.txt')
+            Test-Path -LiteralPath (Join-Path $base 'rel-out' 'rel-distribution-lists.txt') | Should -BeTrue
+        }
+        It 'collection problems appear in the text worksheet and the CSV scan row, sanitized and capped' {
+            $esc = [string][char]27
+            $problems = 1..7 | ForEach-Object { "EXO-DL-Members: list$_@contoso.com: throttled${esc}[31m (429)`nFORGED line" }
+            Clear-NRGState
+            $raw = & $script:Raw @((& $script:L))
+            Set-NRGRawData -Key 'EXO-DistributionLists' -Data $raw
+            Test-NRGControlDistributionLists -Standards (& $script:Std)
+            $o = Publish-NRGDistributionListWorksheet -OutputDirectory (Join-Path $script:Tmp 'probs') -BaseName 'probs' -Metadata @{ TenantDomain = 'contoso.com' } -Raw $raw -Problems $problems
+            $txt = Get-Content -LiteralPath $o.TextPath -Raw
+            $txt | Should -Match 'COLLECTION PROBLEMS'
+            ([regex]::Matches($txt, '(?m)^  - EXO-DL-Members: list\d@contoso\.com')).Count | Should -Be 7
+            $txt | Should -Not -Match '\x1b'
+            $txt | Should -Not -Match '(?m)^FORGED'
+            $note = (Import-Csv -LiteralPath $o.CsvPath -Encoding utf8 | Where-Object Id -eq 'DL-0.1').Note
+            $note | Should -Match '^Collection problems: '
+            $note | Should -Match '\.\.\. and 2 more in the text worksheet'
+        }
+        It 'no problems means no COLLECTION PROBLEMS block' {
+            $r = & $script:Publish @((& $script:L))
+            $r.Txt | Should -Not -Match 'COLLECTION PROBLEMS'
+        }
+        It 'a requested tenant that cannot be confirmed is refused: tenant pinning fails closed' {
+            function global:Connect-ExchangeOnline { param([switch] $ShowBanner, [switch] $DisableWAM, $UserPrincipalName, $DelegatedOrganization, $ErrorAction) }
+            function global:Get-ConnectionInformation { param($ErrorAction) @() }
+            try {
+                $r = Connect-NRGExchangeOnly -ExpectedTenantId '11111111-1111-1111-1111-111111111111'
+                $r.EXO | Should -BeFalse
+                $r.Error | Should -Match 'could not be read'
+                (Connect-NRGExchangeOnly).EXO | Should -BeTrue -Because 'with no tenant requested, an unreadable tenant is not an error'
+            } finally { Remove-Item function:global:Connect-ExchangeOnline, function:global:Get-ConnectionInformation -ErrorAction SilentlyContinue }
+        }
+    }
+
     Context 'Static: read-only, Exchange-only, no execution of text' {
         BeforeAll {
             $script:NewFiles = @('Collectors/EXO/Invoke-NRGCollectDistributionLists.ps1', 'Evaluators/Test-NRGControlDistributionLists.ps1', 'Publishers/Publish-NRGDistributionListWorksheet.ps1',
@@ -422,6 +493,8 @@ function Get-ConnectionInformation { @() }
 function Connect-IPPSSession { Add-Content -LiteralPath $mark -Value 'Connect-IPPSSession' }
 function Get-AcceptedDomain { @([pscustomobject]@{ DomainName = 'smoke.example'; Default = `$true }) }
 function Get-DistributionGroup { param(`$ResultSize)
+    if (`$env:NRG_DL_MODE -eq 'groupsfail') { throw 'The operation could not be performed: access denied.' }
+    if (`$env:NRG_DL_MODE -eq 'empty') { return @() }
     @([pscustomobject]@{ Name = 'open'; DisplayName = 'Open List'; PrimarySmtpAddress = 'open@smoke.example'; Guid = [guid]'aaaaaaaa-0000-0000-0000-000000000001'; RecipientTypeDetails = 'MailUniversalDistributionGroup'
         ManagedBy = @(); RequireSenderAuthenticationEnabled = `$false; AcceptMessagesOnlyFrom = @(); AcceptMessagesOnlyFromDLMembers = @(); AcceptMessagesOnlyFromSendersOrMembers = @()
         ModerationEnabled = `$false; ModeratedBy = @(); MemberJoinRestriction = 'Open'; MemberDepartRestriction = 'Open'; HiddenFromAddressListsEnabled = `$false }) }
@@ -436,17 +509,23 @@ function Remove-DistributionGroupMember { Add-Content -LiteralPath $mark -Value 
 function New-DistributionGroup { Add-Content -LiteralPath $mark -Value 'New-DistributionGroup' }
 "@
             & $newStub 'MicrosoftTeams' '5.9.0' 'd0d0d0d0-1111-4222-8333-666666666666' "function Connect-MicrosoftTeams { Add-Content -LiteralPath $mark -Value 'Connect-MicrosoftTeams' }"
-            $script:ScanOut = Join-Path $script:Tmp 'scan-out'
-            $old = $env:PSModulePath; $oldMark = $env:NRG_DL_MARKER
-            try {
-                $env:PSModulePath = $script:Mods + [System.IO.Path]::PathSeparator + $env:PSModulePath
-                $env:NRG_DL_MARKER = $script:Marker
-                $cmd = "& '$(Join-Path $script:Root 'Invoke-NRGDistributionListScan.ps1')' -OutputPath '$($script:ScanOut)' -UserPrincipalName 'tech@smoke.example'; exit `$LASTEXITCODE"
-                $text = (& pwsh -NoProfile -NonInteractive -Command $cmd *>&1 | Out-String)
-                $script:ScanCode = $LASTEXITCODE
-            } finally { $env:PSModulePath = $old; $env:NRG_DL_MARKER = $oldMark }
-            $script:ScanText = ($text -replace "\e\[[0-9;]*m", '')
-            $script:ScanFiles = @(Get-ChildItem -LiteralPath $script:ScanOut -File -ErrorAction SilentlyContinue)
+            # Runs the real entry script in a fresh pwsh with the stand-in modules first on PSModulePath.
+            $script:RunScan = { param([string] $Mode, [string] $OutDir)
+                $old = $env:PSModulePath; $oldMark = $env:NRG_DL_MARKER; $oldMode = $env:NRG_DL_MODE
+                try {
+                    $env:PSModulePath = $script:Mods + [System.IO.Path]::PathSeparator + $env:PSModulePath
+                    $env:NRG_DL_MARKER = $script:Marker; $env:NRG_DL_MODE = $Mode
+                    $cmd = "& '$(Join-Path $script:Root 'Invoke-NRGDistributionListScan.ps1')' -OutputPath '$OutDir' -UserPrincipalName 'tech@smoke.example'; exit `$LASTEXITCODE"
+                    $text = (& pwsh -NoProfile -NonInteractive -Command $cmd *>&1 | Out-String)
+                    $code = $LASTEXITCODE
+                } finally { $env:PSModulePath = $old; $env:NRG_DL_MARKER = $oldMark; $env:NRG_DL_MODE = $oldMode }
+                $files = @(Get-ChildItem -LiteralPath $OutDir -File -ErrorAction SilentlyContinue)
+                $txtFile = $files | Where-Object Extension -eq '.txt' | Select-Object -First 1
+                [pscustomobject]@{ Code = $code; Text = ($text -replace "\e\[[0-9;]*m", ''); Files = $files; Worksheet = $(if ($txtFile) { Get-Content -LiteralPath $txtFile.FullName -Raw } else { '' }) } }
+            $script:Ok = & $script:RunScan '' (Join-Path $script:Tmp 'scan-out')
+            $script:ScanCode = $script:Ok.Code; $script:ScanText = $script:Ok.Text; $script:ScanFiles = $script:Ok.Files
+            $script:Failed = & $script:RunScan 'groupsfail' (Join-Path $script:Tmp 'scan-fail')
+            $script:Empty  = & $script:RunScan 'empty' (Join-Path $script:Tmp 'scan-empty')
         }
         It 'exits 0 (every section read, nothing truncated) and prints the scope and the worksheet paths' {
             $script:ScanCode | Should -Be 0 -Because $script:ScanText
@@ -465,6 +544,23 @@ function New-DistributionGroup { Add-Content -LiteralPath $mark -Value 'New-Dist
             $calls | Should -Contain 'EXO-connect'
             $calls | Should -Contain 'EXO-disconnect'
             @($calls | Where-Object { $_ -notin 'EXO-connect', 'EXO-disconnect' }) | Should -BeNullOrEmpty
+        }
+        It 'a failed list query with nothing returned by the other is a PARTIAL read (exit 3), never "no lists found" (exit 2)' {
+            # Regression: the exit code tested "zero lists" before "a section failed", so a denied
+            # Get-DistributionGroup beside an empty dynamic read exited 2, "no lists found".
+            $script:Failed.Code | Should -Be 3 -Because $script:Failed.Text
+        }
+        It 'says why the read failed: on the console and in a COLLECTION PROBLEMS block of the worksheet' {
+            # Regression: the console said "(see Exceptions)" and nothing in this tool printed them.
+            $script:Failed.Text | Should -Match 'access denied'
+            $script:Failed.Worksheet | Should -Match 'COLLECTION PROBLEMS'
+            $script:Failed.Worksheet | Should -Match 'EXO-DL-DistributionGroups: The operation could not be performed: access denied'
+            $script:Failed.Worksheet | Should -Match 'Scan result \(Not assessed\)'
+        }
+        It 'every section read with no lists is "no lists found" (exit 2) and still writes the worksheet' {
+            $script:Empty.Code | Should -Be 2 -Because $script:Empty.Text
+            @($script:Empty.Files).Count | Should -Be 2
+            $script:Empty.Worksheet | Should -Not -Match 'COLLECTION PROBLEMS'
         }
     }
 }

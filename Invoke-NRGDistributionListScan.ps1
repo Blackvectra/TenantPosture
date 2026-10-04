@@ -139,7 +139,7 @@ try {
         Write-Host ("  [+] {0} list(s) read: {1} distribution/security, {2} dynamic" -f $stats.ListsRead, $stats.DistributionGroups, $stats.DynamicDistributionGroups) -ForegroundColor Green
         Write-Host ("      Members read in full: {0}   truncated at the limit: {1}   failed: {2}   throttle retries: {3}" -f $stats.ListsMembersCollected, $stats.ListsMembersTruncated, $stats.ListsMembersFailed, $stats.ThrottleRetries) -ForegroundColor White
         foreach ($k in $sec.Keys) {
-            if ($sec[$k] -ne 'Collected') { Write-Host "  [!] Section $k : $($sec[$k]) (see Exceptions); the worksheet reports what it covers as NOT assessed" -ForegroundColor Yellow }
+            if ($sec[$k] -ne 'Collected') { Write-Host "  [!] Section $k : $($sec[$k]); the worksheet reports what it covers as NOT assessed" -ForegroundColor Yellow }
         }
 
         Test-NRGControlDistributionLists
@@ -161,12 +161,18 @@ try {
         Write-Host "  [+] Worksheet (CSV):  $($out.CsvPath)" -ForegroundColor Green
         Write-Host '      These files hold tenant inventory; their access is restricted to you, SYSTEM and Administrators.' -ForegroundColor DarkYellow
 
+        # Why a read failed is in the worksheet ("Collection problems"); the first few are printed here too.
+        foreach ($p in @($out.Model.Problems | Select-Object -First 5)) { Write-Host "  [!] $p" -ForegroundColor Yellow }
+        if (@($out.Model.Problems).Count -gt 5) { Write-Host "      ... and $(@($out.Model.Problems).Count - 5) more in the worksheet." -ForegroundColor Yellow }
+
         $shortfalls = @($out.Model.Lists | ForEach-Object { $_.Rows | Where-Object { $_.Status -eq 'Shortfall' } }).Count
         Write-Host ("      {0} shortfall(s) across {1} list(s). Review every command before running it; this tool did not." -f $shortfalls, $out.ListCount) -ForegroundColor White
 
+        # "No lists found" (2) is only true when every section read. A section that failed is a
+        # partial read (3) even when the other one returned nothing, and both failing is fatal (4).
         $exitCode = if ($sec.DistributionGroups -ne 'Collected' -and $sec.DynamicDistributionGroups -ne 'Collected') { 4 }
-                    elseif ($stats.ListsRead -eq 0) { 2 }
                     elseif (@($sec.Values | Where-Object { $_ -ne 'Collected' }).Count -gt 0 -or $stats.ListsMembersTruncated -gt 0) { 3 }
+                    elseif ($stats.ListsRead -eq 0) { 2 }
                     else { 0 }
     }
 } catch {

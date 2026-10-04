@@ -48,7 +48,9 @@ a child process against stand-in modules. **Not yet run against a live tenant.**
   included, labeled by type. Whether they belong in this scan is an open question for the owner.
 - **Scale.** Members are one Exchange call per list. A tenant with thousands of lists is slow, and a
   throttled call is retried three times (2, 4, 8 seconds) before that list's member read is marked
-  failed. A list over `-MemberReadLimit` (default 5000) is truncated, and no "no external member" is
+  failed. Evaluating and publishing are linear in the number of lists, measured at about 16 and 20
+  milliseconds per list (2000 lists: roughly 30 and 40 seconds) on a development machine, not on a
+  live tenant. A list over `-MemberReadLimit` (default 5000) is truncated, and no "no external member" is
   claimed for it.
 - **The CSV is long format** (one row per list per recommendation), not one row per list.
 - **The DL-* findings are not baseline controls.** They are not in `Config/controls.json`, are not

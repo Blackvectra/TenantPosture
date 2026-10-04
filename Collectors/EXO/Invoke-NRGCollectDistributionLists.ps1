@@ -114,7 +114,9 @@ function Get-NRGDlMemberKind {
     param([Parameter(Mandatory)] $Member, [AllowEmptyCollection()] [string[]] $AcceptedDomains = @())
     $details = [string](Get-NRGObjectField -Item $Member -Key 'RecipientTypeDetails' -Default '')
     $type    = [string](Get-NRGObjectField -Item $Member -Key 'RecipientType' -Default '')
-    $isGroup = (($details + ' ' + $type) -match 'DistributionGroup|SecurityGroup|RoomList|GroupMailbox')
+    # Every group type carries "Group" (MailUniversalDistributionGroup, MailUniversalSecurityGroup,
+    # MailNonUniversalGroup, DynamicDistributionGroup, GroupMailbox); no person type does.
+    $isGroup = (($details + ' ' + $type) -match 'Group|RoomList')
     if ($isGroup) { return [pscustomobject]@{ Kind = 'Group'; Class = 'Internal' } }
 
     # ExternalEmailAddress first, as Get-NRGRecipientClass does: on a mail user the primary
@@ -167,8 +169,13 @@ function Invoke-NRGCollectDistributionLists {
             }
         }
     }
+    # Register-NRGException accepts 1 to 2000 characters. An Exchange error body can be longer, and
+    # a throw from inside a catch block would abandon every read that came after it, so the
+    # message is bounded here, once, for every call site.
     $fail = {
         param([string] $Source, [string] $Message)
+        if ([string]::IsNullOrWhiteSpace($Message)) { $Message = '(no message)' }
+        if ($Message.Length -gt 1900) { $Message = $Message.Substring(0, 1900) }
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
             Register-NRGException -Source $Source -Message $Message
         }
