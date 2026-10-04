@@ -55,6 +55,15 @@ tenant**. Until it is, treat these as open:
   recipient domain is reported tenant-wide and is not matched to individual lists.
 - **The two NRG standards ship empty**, so the member-cap and join-setting checks read "Not assessed"
   until the owner approves values in `Config/nrg-standards.json`.
+- **A list whose `IsDirSynced` was not returned is treated as not synchronized.** Exchange omits a
+  property it does not return, and the scan does not guess: it prints that list's commands. A list
+  that is synchronized from on-premises Active Directory gets none, because Microsoft documents that
+  such a group must be managed on-premises and Exchange Online refuses the change.
+- **SCL -1 rules are judged only by what the scan can verify.** A condition on the
+  `Authentication-Results` header or on a source IP range verifies the sender; any other header does
+  not, and a rule whose conditions the scan cannot classify reads "Not assessed" rather than
+  "none weak". `HeaderMatches` is judged by the header name the rule stores; a rule that omits it is
+  not treated as verifying.
 - **The allowed-senders command is a proposal, not a verified fix.** It is built from each member's
   primary SMTP address, which Microsoft documents as an identifier, but it has not been run against a
   tenant: run it with `-WhatIf` first and on one list before many. It is a snapshot (a later member is

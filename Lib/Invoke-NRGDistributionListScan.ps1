@@ -12,8 +12,9 @@
 # Consumes: Exchange Online (Get-* cmdlets only).
 #
 # Exit codes (returned in .ExitCode, applied by the entry point): 0 success, 1 sign-in
-# failure, 2 nothing produced, 3 partial collection (a section did not collect, so part
-# of the worksheet reads "Not assessed"), 4 fatal error.
+# failure, 2 the read completed and Exchange returned no distribution list, 3 partial
+# collection (a section did not collect, or lists beyond -MaxLists were left out, so
+# part of the worksheet reads "Not assessed" or is missing), 4 fatal error.
 
 function Invoke-NRGDistributionListScan {
     [CmdletBinding()]
@@ -49,7 +50,9 @@ function Invoke-NRGDistributionListScan {
         try {
             $connect = @{}
             if ($AppId -and $TenantId -and $CertificateThumbprint) {
-                if (-not $OrganizationDomain) { throw 'App-only sign-in needs the .onmicrosoft.com routing domain (-OrganizationDomain).' }
+                if ($OrganizationDomain -notmatch '^[a-zA-Z0-9][a-zA-Z0-9-]*\.onmicrosoft\.com$') {
+                    throw "App-only sign-in needs the tenant's .onmicrosoft.com routing domain (-OrganizationDomain); '$OrganizationDomain' is not one. Find it in the Microsoft 365 admin center under Settings, Domains."
+                }
                 $connect = @{ AppId = $AppId; TenantId = $TenantId; CertificateThumbprint = $CertificateThumbprint; OrganizationDomain = $OrganizationDomain }
             } else {
                 if ($UserPrincipalName) { $connect['UserPrincipalName'] = $UserPrincipalName }
@@ -98,13 +101,18 @@ function Invoke-NRGDistributionListScan {
         $out.TextPath = $paths.TextPath; $out.CsvPath = $paths.CsvPath
         $out.Summary = $ws.Summary
 
-        $dl = @(Get-NRGFindings | Where-Object { [string]$_.ControlId -like 'DL-*' })
         $notCollected = @(@('Lists', 'DynamicLists', 'Members', 'AcceptedDomains', 'TransportRules', 'ConnectionFilter', 'AntiSpam') |
             Where-Object { [string](Get-NRGNestedProperty -Object $raw -Path "Data.SectionStatus.$_" -Default 'NotRun') -ne 'Collected' })
-        $out.ExitCode = if ($dl.Count -eq 0) { 2 } elseif (-not [bool](Get-NRGObjectField -Item $raw -Key 'Success' -Default $false) -or $notCollected.Count -gt 0) { 3 } else { 0 }
+        # Lists the -MaxLists cap left out are as incomplete as a section that failed: the worksheet reads whole and is not.
+        $beyondCap = [int](Get-NRGObjectField -Item $ws.Summary -Key 'ListsBeyondCap' -Default 0)
+        $out.ExitCode = if (-not [bool](Get-NRGObjectField -Item $raw -Key 'Success' -Default $false) -or $notCollected.Count -gt 0 -or $beyondCap -gt 0) { 3 }
+                        elseif ([int]$ws.Summary.ListCount -eq 0) { 2 }
+                        else { 0 }
 
         Write-Host ''
         Write-Host ("  Lists read: {0}   Lists that accept mail from anyone: {1}   Lists with an external member: {2}   Allow lists proposed: {3}   Lists whose members were not read: {4}" -f $ws.Summary.ListCount, $ws.Summary.ListsReachableFromOutside, $ws.Summary.ListsWithExternalMembers, $ws.Summary.AllowListsProposed, $ws.Summary.ListsMembersNotRead) -ForegroundColor White
+        if ($beyondCap -gt 0) { Write-Host "  [!] $beyondCap list(s) beyond -MaxLists $MaxLists were NOT read and are not in the worksheet. That is not a clean result for them; raise -MaxLists and run again." -ForegroundColor Yellow }
+        if ($ws.Summary.ListCount -eq 0 -and $notCollected.Count -eq 0) { Write-Host '  [!] Exchange returned no distribution list. If the signed-in account is scoped to part of the directory, lists outside that scope are not returned.' -ForegroundColor Yellow }
         if ($notCollected.Count) { Write-Host "  [!] Not collected: $($notCollected -join ', '). Those parts read 'Not assessed' in the worksheet; they are not clean." -ForegroundColor Yellow }
         Write-Host "  [+] Worksheet (text): $($out.TextPath)" -ForegroundColor Green
         Write-Host "  [+] Worksheet (CSV):  $($out.CsvPath)" -ForegroundColor Green

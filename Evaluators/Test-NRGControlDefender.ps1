@@ -23,7 +23,10 @@ function Get-NRGInForcePolicies {
         [AllowNull()] [object[]] $Policies,
         [AllowNull()] $Rules,
         [Parameter(Mandatory)] [string] $RulePolicyKey,
-        [Parameter(Mandatory)] [ValidateSet('EOP','ATP')] [string] $PresetKind
+        [Parameter(Mandatory)] [ValidateSet('EOP','ATP')] [string] $PresetKind,
+        # The tenant's accepted domains, when the caller holds them itself (the -DistributionListsOnly run has no
+        # EXO-MailboxConfig). Omitted: read from EXO-MailboxConfig, as before.
+        [AllowNull()] [string[]] $AcceptedDomains = $null
     )
     $def = Get-NRGRawData -Key 'Defender-Policies'
     $pr  = Get-NRGNestedProperty -Object $def -Path 'Data.PresetRules' -Default $null
@@ -37,7 +40,9 @@ function Get-NRGInForcePolicies {
     }
     $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
     $accepted = @()
-    if ($exo -and (Test-NRGSectionCollected $exo 'AcceptedDomains')) {
+    if ($null -ne $AcceptedDomains) {
+        $accepted = @($AcceptedDomains | ForEach-Object { ([string]$_).ToLowerInvariant() } | Where-Object { $_ })
+    } elseif ($exo -and (Test-NRGSectionCollected $exo 'AcceptedDomains')) {
         $accepted = @(@(Get-NRGNestedProperty -Object $exo -Path 'Data.AcceptedDomains' -Default @()) | ForEach-Object { ([string](Get-NRGObjectField -Item $_ -Key 'DomainName' -Default '')).ToLowerInvariant() } | Where-Object { $_ })
     }
     $coversAll = {

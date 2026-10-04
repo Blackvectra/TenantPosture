@@ -101,6 +101,7 @@ function ConvertTo-NRGDlWorksheetText {
     & $add 'SUMMARY'
     & $add ('-' * 100)
     & $add ("Lists read:                              {0}" -f $s.ListCount)
+    & $add ("Lists beyond -MaxLists, NOT in this file: {0}  (not assessed, and not clean)" -f (Get-NRGObjectField -Item $s -Key 'ListsBeyondCap' -Default 0))
     & $add ("Lists that accept mail from anyone:      {0}" -f $s.ListsReachableFromOutside)
     & $add ("Lists with an external member:           {0}  (counted only among lists whose members were read)" -f (Get-NRGObjectField -Item $s -Key 'ListsWithExternalMembers' -Default 0))
     & $add ("Lists with an allow list proposed:       {0}  (a snapshot of the members read now; text only, never applied)" -f (Get-NRGObjectField -Item $s -Key 'AllowListsProposed' -Default 0))
@@ -131,6 +132,7 @@ function ConvertTo-NRGDlWorksheetText {
         & $add ("LIST: {0} <{1}>   [{2}]" -f (& $t $l.Name), (& $t $l.Address), (& $t $l.Kind))
         & $add ('-' * 100)
         & $add ("  Owners:  {0}" -f (& $t $l.OwnersLine))
+        if ([string](Get-NRGObjectField -Item $l -Key 'SyncNote' -Default '')) { & $wrap ([string]$l.SyncNote) 2 'Source of truth: ' }
         & $add ("  Members: {0}" -f (& $t $l.MemberLine))
         foreach ($m in @($l.Members)) { & $add ("    - {0} <{1}>  [{2}, {3}]" -f (& $t $m.DisplayName), (& $t $m.UPN), (& $t $m.RecipientType), $m.Class) }
         if (@($l.NestedGroups).Count) { & $wrap ("Nested groups (listed, not expanded): " + ((@($l.NestedGroups) | ForEach-Object { & $t $_ }) -join '; ')) 2 '' }
@@ -195,7 +197,7 @@ function ConvertTo-NRGDlWorksheetCsv {
     & $mk @{ RowType = 'Limitation'; Item = 'NIST mapping'; Detail = $Worksheet.NistMappingNote }
     foreach ($r in @($Worksheet.Tenant)) {
         & $mk @{ RowType = 'Tenant bypass'; ControlId = $r.ControlId; Item = $r.Item; Current = $r.Current; Recommended = $r.Recommended; Verdict = $r.Verdict; Basis = $r.Basis
-                 Detail = $r.Detail; Why = $r.Why; Source = $r.Source; AlsoSee = ($r.AlsoSee -join '; '); Nist80053Mapping = ($r.Nist80053 -join ', ')
+                 Detail = $r.Detail; Source = $r.Source; Nist80053Mapping = ($r.Nist80053 -join ', ')
                  OtherFrameworks = $r.FrameworkItem; AdminCommand = (@($r.Commands) -join '; ') }
         foreach ($o in @($r.Objects)) { & $mk @{ RowType = 'Tenant bypass entry'; ControlId = $r.ControlId; Item = $r.Item; Current = $o; Verdict = $r.Verdict; Source = $r.Source } }
     }
@@ -203,13 +205,22 @@ function ConvertTo-NRGDlWorksheetCsv {
         $id = @{ ListName = $l.Name; ListAddress = $l.Address; ListType = $l.Kind }
         & $mk ($id + @{ RowType = 'Reach'; Item = 'Who can reach it today'; Current = ($l.Reach.Lines -join ' '); Verdict = $l.Reach.Verdict
                         Detail = 'Setting plus tenant-wide bypasses; see the tenant rows for each.'; OtherFrameworks = $l.Reach.FrameworkItem })
+        if ([string](Get-NRGObjectField -Item $l -Key 'SyncNote' -Default '')) { & $mk ($id + @{ RowType = 'Directory'; Item = 'Source of truth'; Current = 'Synchronized from on-premises Active Directory'; Detail = [string]$l.SyncNote }) }
         & $mk ($id + @{ RowType = 'Members'; Item = 'Members'; Current = $l.MemberLine })
         foreach ($m in @($l.Members)) { & $mk ($id + @{ RowType = 'Member'; Item = 'Member'; Member = $m.DisplayName; MemberUPN = $m.UPN; MemberType = $m.RecipientType; MemberClass = $m.Class }) }
         foreach ($r in @($l.Settings)) {
             & $mk ($id + @{ RowType = 'Setting'; ControlId = $r.ControlId; Item = $r.Item; Current = $r.Current; Recommended = $r.Recommended; Verdict = $r.Verdict; Basis = $r.Basis
-                            Detail = $r.Detail; Why = $r.Why; Source = $r.Source; AlsoSee = ($r.AlsoSee -join '; '); Nist80053Mapping = ($r.Nist80053 -join ', ')
+                            Detail = $r.Detail; Source = $r.Source; Nist80053Mapping = ($r.Nist80053 -join ', ')
                             OtherFrameworks = $r.FrameworkItem; AdminCommand = (@($r.Commands) -join '; ') })
         }
+    }
+    # Why each recommendation exists, ONCE per control (the text file does the same in its reference section), instead of repeating a
+    # paragraph on every setting row of every list, which made the CSV large and slow to filter in a spreadsheet.
+    $seenRef = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($r in @(@($Worksheet.Tenant) + @($Worksheet.Lists | ForEach-Object { $_.Settings }))) {
+        if (-not $r.ControlId -or -not $seenRef.Add([string]$r.ControlId)) { continue }
+        & $mk @{ RowType = 'Reference'; ControlId = $r.ControlId; Item = $r.Item; Recommended = $r.Recommended; Basis = $r.Basis; Why = $r.Why; Source = $r.Source
+                 AlsoSee = ($r.AlsoSee -join '; '); Nist80053Mapping = ($r.Nist80053 -join ', '); OtherFrameworks = $r.FrameworkItem }
     }
     return (($rows | ConvertTo-Csv -NoTypeInformation) -join "`r`n") + "`r`n"
 }

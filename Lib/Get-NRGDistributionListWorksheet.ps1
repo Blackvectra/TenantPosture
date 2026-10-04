@@ -97,7 +97,12 @@ function Format-NRGDlCommand {
 function Get-NRGDlLimitations {
     [CmdletBinding()]
     [OutputType([string[]])]
-    param([int] $MaxMembersPerList = 500, [string[]] $SectionsNotCollected = @())
+    param(
+        [int] $MaxMembersPerList = 500, [string[]] $SectionsNotCollected = @(),
+        # A truncated inventory and an empty one are limitations in their own right: every section can read "Collected" and the
+        # worksheet still not be the whole tenant, which a reader would otherwise take it to be.
+        [bool] $ListsTruncated = $false, [int] $ListsSeen = 0, [int] $MaxLists = 0, [bool] $NoListsReturned = $false
+    )
     $l = @(
         'Read-only: this scan lists members and settings. It never creates, adds, removes or changes a user, group, rule or setting.',
         'Only Exchange Online was connected. Every other area was not assessed: Entra ID identity, Conditional Access, Defender for Office 365 beyond the anti-spam allow lists read here, Purview, Teams, SharePoint, Intune, Power Platform and DNS.',
@@ -108,6 +113,12 @@ function Get-NRGDlLimitations {
         "A recommendation marked Basis 'NRG' is judged only against a value approved in Config/nrg-standards.json. An unapproved standard is reported as not assessed, never as met.",
         "NIST SP 800-53 Rev 5 identifiers are NRG's own mapping, not a quotation of NIST. No CISA ScubaGear or CIS item written for distribution lists was found, so none is cited: no framework item verified."
     )
+    if ($ListsTruncated) {
+        $l += "Lists: only the first $MaxLists of $ListsSeen lists were read (-MaxLists $MaxLists). The other $($ListsSeen - $MaxLists) are NOT in this worksheet, so their members, settings and reach are not assessed. This is not a clean result for them; raise -MaxLists and run again."
+    }
+    if ($NoListsReturned) {
+        $l += 'Lists: Exchange returned no distribution list, so none was assessed. If the signed-in account is scoped to part of the directory, lists outside that scope would not be returned.'
+    }
     $bad = @($SectionsNotCollected | Where-Object { $_ })
     if ($bad.Count) { $l += ('Not collected in this run: ' + ($bad -join ', ') + '. Anything that depends on them reads "Not assessed", not clean.') }
     return $l
@@ -159,9 +170,15 @@ function Get-NRGDistributionListWorksheet {
     $stats  = Get-NRGObjectField -Item $data -Key 'Stats' -Default $null
     $ss     = Get-NRGObjectField -Item $data -Key 'SectionStatus' -Default $null
     $maxM   = [int](Get-NRGObjectField -Item $limits -Key 'MaxMembersPerList' -Default 500)
+    $listsTrunc = [bool](Get-NRGObjectField -Item $limits -Key 'ListsTruncated' -Default $false)
+    $listsSeen  = [int](Get-NRGObjectField -Item $limits -Key 'ListsSeen' -Default 0)
+    $maxL       = [int](Get-NRGObjectField -Item $limits -Key 'MaxLists' -Default 0)
     $notCollected = @()
     if (-not $ok) { $notCollected = @('the distribution-list inventory') }
     else { foreach ($k in 'Lists', 'DynamicLists', 'Members', 'AcceptedDomains', 'TransportRules', 'ConnectionFilter', 'AntiSpam') { if ([string](Get-NRGObjectField -Item $ss -Key $k -Default 'NotRun') -ne 'Collected') { $notCollected += $k } } }
+
+    # An inventory that came back empty from a read that completed (a failed read is in $notCollected, not here).
+    $noLists = $ok -and ([string](Get-NRGObjectField -Item $ss -Key 'Lists' -Default 'NotRun') -eq 'Collected') -and ([string](Get-NRGObjectField -Item $ss -Key 'DynamicLists' -Default 'NotRun') -eq 'Collected') -and (@(Get-NRGObjectField -Item $data -Key 'Lists' -Default @()).Count -eq 0)
 
     # Findings indexed by control and instance. A tenant-level finding (no instance) is the fallback
     # for a per-list row, which is how "no approved standard" reads on every list.
@@ -213,14 +230,15 @@ function Get-NRGDistributionListWorksheet {
         if ($verdict -in @('Gap', 'Partial')) {
             foreach ($t in @($r.AdminCommands.Values)) { if ($t) { $cmds += $t } }   # the read-only look at the setting, as Microsoft prints it
             foreach ($o in $objs) {
+                # An IP Allow List entry that is within a /24 is what Microsoft recommends staying within: no command removes it.
+                if ($cid -eq 'DL-3.2' -and [string](Get-NRGObjectField -Item $o -Key 'Class' -Default '') -notin @('WiderThan24', 'Unparsed')) { continue }
                 $nm = [string](Get-NRGObjectField -Item $o -Key 'Name' -Default '')
                 $src = [string](Get-NRGObjectField -Item $o -Key 'Source' -Default '')
-                $det = [string](Get-NRGObjectField -Item $o -Key 'Detail' -Default '')
                 $c = $null
                 if ($r.RuleCommand -and $src -eq 'Mail flow rule' -and $cid -eq 'DL-3.1') { $c = Format-NRGDlCommand -Template $r.RuleCommand -Values @{ Value = $nm } }
                 elseif ($r.RuleCommand -and $src -eq 'IP Allow List' -and $cid -eq 'DL-3.2') { $c = Format-NRGDlCommand -Template $r.RuleCommand -Values @{ Value = $nm } }
                 elseif ($r.RuleCommand -and $src -eq 'Anti-spam policy' -and $cid -eq 'DL-3.3') {
-                    $pn = if ($det -match "policy '([^']*)'") { $Matches[1] } else { '' }
+                    $pn = [string](Get-NRGObjectField -Item $o -Key 'Policy' -Default '')
                     $par = if ([string](Get-NRGObjectField -Item $o -Key 'Class' -Default '') -eq 'allowed domain') { 'AllowedSenderDomains' } else { 'AllowedSenders' }
                     $c = Format-NRGDlCommand -Template $r.RuleCommand -Values @{ Policy = $pn; Parameter = $par; Value = $nm }
                 }
@@ -237,6 +255,8 @@ function Get-NRGDistributionListWorksheet {
     # ── Lists ─────────────────────────────────────────────────────────────────────
     $listRows = [System.Collections.Generic.List[object]]::new()
     $joinStd = $Standards.JoinRestriction
+    # The rule classification does not depend on the list, so it is done once, not once per list.
+    $bypassRules = @($rules | ForEach-Object { [pscustomobject]@{ Rule = $_; Class = (Get-NRGDlTransportRuleClass -Rule $_) } } | Where-Object { $_.Class.IsBypass -and $_.Class.InForce })
     foreach ($l in @(Get-NRGObjectField -Item $data -Key 'Lists' -Default @())) {
         $addr = [string](Get-NRGObjectField -Item $l -Key 'PrimarySmtpAddress' -Default '')
         $name = [string](Get-NRGObjectField -Item $l -Key 'Name' -Default '')
@@ -268,6 +288,11 @@ function Get-NRGDistributionListWorksheet {
         $hidden = Get-NRGObjectField -Item $l -Key 'HiddenFromAddressListsEnabled' -Default $null
         $extN = [int](Get-NRGObjectField -Item $l -Key 'ExternalMemberCount' -Default 0)
         $members = @(Get-NRGObjectField -Item $l -Key 'Members' -Default @())
+        # Microsoft: a group created by directory synchronization must be managed in the on-premises environment, and Exchange Online
+        # refuses these changes ("the object is being synchronized from your on-premises organization"). $null = not returned.
+        $dirSynced = ((Get-NRGObjectField -Item $l -Key 'IsDirSynced' -Default $null) -eq $true)
+        $syncNote = ''
+        if ($dirSynced) { $syncNote = 'Synchronized from on-premises Active Directory: Microsoft says it must be managed there, and Exchange Online refuses these changes. No Exchange Online command is printed for this list; make the change on-premises (the same cmdlets in the on-premises Exchange Management Shell).' }
 
         $rows = [System.Collections.Generic.List[object]]::new()
 
@@ -285,7 +310,9 @@ function Get-NRGDistributionListWorksheet {
         $cur12 = if (-not $allowedKnown) { 'Not returned' } elseif ($allowedN -eq 0) { 'None specified' } else { "$allowedN specified sender(s)" }
         $proposalCmd = $null
         $addrs = @()
-        if ($kind -eq 'Dynamic') {
+        if ($dirSynced) {
+            $proposal = 'No allow list command is printed: this list is synchronized from on-premises Active Directory, where it must be managed.'
+        } elseif ($kind -eq 'Dynamic') {
             $proposal = 'No allow list is proposed for a dynamic list: its members are calculated from a filter, so a snapshot of them would not follow who is a member later.'
         } elseif ($null -eq $auth) {
             $proposal = 'No allow list is proposed: Exchange did not return RequireSenderAuthenticationEnabled for this list.'
@@ -354,12 +381,22 @@ function Get-NRGDistributionListWorksheet {
         $cur25 = if ($kind -eq 'Dynamic') { 'Not applicable: a dynamic list has no join setting' } elseif ($join) { "MemberJoinRestriction = $join" } else { 'Not returned' }
         $v25 = if ($kind -eq 'Dynamic') { 'Not applicable' } else { & $verdictOf $f25 'Not assessed' }
         $d25 = if ($kind -eq 'Dynamic') { 'Not applicable: membership of a dynamic list comes from its recipient filter, not from join requests.' } else { & $detailOf $f25 'Not assessed.' }
-        $c25 = @(); if ($v25 -eq 'Gap' -and $joinStd.Approved -and @($joinStd.Allowed).Count) { $c25 += (& $cmdFor 'DL-2.5' @{ List = $addr; Value = [string]@($joinStd.Allowed)[0] }) }
+        # With several approved values the command uses the MOST restrictive (Closed, then ApprovalRequired, then Open), never the first
+        # in some arbitrary order: picking Open would loosen a list that is only approval-gated.
+        $c25 = @()
+        if ($v25 -eq 'Gap' -and $joinStd.Approved -and @($joinStd.Allowed).Count) {
+            $joinPick = [string](@('Closed', 'ApprovalRequired', 'Open') | Where-Object { $_ -in @($joinStd.Allowed) } | Select-Object -First 1)
+            $c25 += (& $cmdFor 'DL-2.5' @{ List = $addr; Value = $joinPick })
+            if (@($joinStd.Allowed).Count -gt 1) { $d25 += " The command uses '$joinPick', the most restrictive of the approved values." }
+        }
         $rows.Add((& $mkRow 'DL-2.5' 'Who can join' $cur25 $v25 $d25 $ident $c25))
 
         # 8/9. Leave restriction and hidden: read and shown, no recommendation
         $rows.Add((& $mkRow '' 'Who can leave' $(if ($kind -eq 'Dynamic') { 'Not applicable' } elseif ($depart) { "MemberDepartRestriction = $depart" } else { 'Not returned' }) 'No recommendation' 'Shown for the administrator; neither Microsoft nor an approved NRG standard recommends a value.' $ident @()))
         $rows.Add((& $mkRow 'DL-1.3' 'Hidden from address lists' $(if ($null -eq $hidden) { 'Not returned' } else { "HiddenFromAddressListsEnabled = $hidden" }) 'Context' 'Context only: hiding a list does not stop mail reaching it.' $ident @()))
+
+        # An Exchange Online command for a synchronized list would be refused, so none is printed for it (the list's note says why).
+        if ($dirSynced) { foreach ($row in $rows) { $row.Commands = @() } }
 
         # Who can reach it today: the setting plus every bypass that applies to all mail
         $outside = switch ($v11) {
@@ -369,9 +406,8 @@ function Get-NRGDistributionListWorksheet {
             default    { 'Outside senders: unknown (the setting was not returned).' }
         }
         $ruleHits = @()
-        foreach ($rr in $rules) {
-            $cls = Get-NRGDlTransportRuleClass -Rule $rr
-            if (-not ($cls.IsBypass -and $cls.InForce)) { continue }
+        foreach ($br in $bypassRules) {
+            $rr = $br.Rule; $cls = $br.Class
             foreach ($st in @(Get-NRGObjectField -Item $rr -Key 'SentTo' -Default @())) {
                 if ([string]$st -ieq $addr -or [string]$st -ieq $name -or [string]$st -ieq [string](Get-NRGObjectField -Item $l -Key 'DisplayName' -Default '')) {
                     $ruleHits += "Mail flow rule '$([string](Get-NRGObjectField -Item $rr -Key 'Name' -Default ''))' sets SCL -1 (skips spam filtering) for mail sent to this list ($($cls.Class))."
@@ -411,6 +447,9 @@ function Get-NRGDistributionListWorksheet {
             # An observation, not a verdict: counted only when the member read completed (a failed read leaves Members empty, not clean).
             ExternalMemberCount = $(if ($mst -eq 'Collected') { $extN } else { 0 })
             AllowListProposed = [bool]$proposalCmd
+            AcceptsFromAnyone = ($v11 -eq 'Gap')
+            DirSynced = $dirSynced
+            SyncNote = $syncNote
         })
     }
     # Most exposed first; among equals, the list with more external members first, because those are the lists this scan is aimed at.
@@ -420,7 +459,9 @@ function Get-NRGDistributionListWorksheet {
     $count = { param($v) @($sortedLists | ForEach-Object { $_.Settings } | Where-Object { $_.Verdict -eq $v }).Count }
     $summary = [ordered]@{
         ListCount            = $sortedLists.Count
-        ListsReachableFromOutside = @($sortedLists | Where-Object { $_.Reach.Lines[0] -like '*accepted from anyone*' }).Count
+        ListsReachableFromOutside = @($sortedLists | Where-Object { $_.AcceptsFromAnyone }).Count
+        # Lists the cap left out of the worksheet (they are not assessed, and not clean).
+        ListsBeyondCap       = $(if ($listsTrunc -and $listsSeen -gt $maxL) { $listsSeen - $maxL } else { 0 })
         ListsMembersNotRead  = @($sortedLists | Where-Object { $_.MemberStatus -ne 'Collected' }).Count
         # At least one external member among the lists whose members were read (a truncated list can only have more). Lists whose
         # members were not read are in ListsMembersNotRead and are not counted here, so this is a floor, never a clean bill.
@@ -444,7 +485,7 @@ function Get-NRGDistributionListWorksheet {
             Mode         = 'Distribution lists only (Exchange Online; every other area not assessed)'
             Handling     = 'INTERNAL USE ONLY. This file holds tenant inventory: member names and addresses, list settings and mail flow rules.'
         }
-        Limitations = @(Get-NRGDlLimitations -MaxMembersPerList $maxM -SectionsNotCollected $notCollected)
+        Limitations = @(Get-NRGDlLimitations -MaxMembersPerList $maxM -SectionsNotCollected $notCollected -ListsTruncated $listsTrunc -ListsSeen $listsSeen -MaxLists $maxL -NoListsReturned $noLists)
         NistMappingNote = [string]$Baseline.NistMappingNote
         FrameworkNote   = $fwNote
         Summary = $summary

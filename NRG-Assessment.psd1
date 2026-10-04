@@ -161,6 +161,7 @@
         'Repair-NRGModuleHealth',
         'Get-NRGModuleInstallScope',
         'Get-NRGExoModuleFloor',
+        'Get-NRGExoPreflightNotes',
         'Get-NRGConnectErrorText',
         'Get-NRGExoConnectHint',
         'Get-NRGCloudFileHint',

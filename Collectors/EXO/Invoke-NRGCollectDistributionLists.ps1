@@ -14,9 +14,10 @@
 #
 # Sets:     EXO-DistributionLists
 # Consumes: EXO-MailboxConfig (accepted domains, anti-spam policies and rules),
-#           EXO-ConnectionFilter (IP Allow List) -- reused when a full assessment
-#           already collected them, read here when not (the -DistributionListsOnly
-#           run collects nothing else).
+#           EXO-ConnectionFilter (IP Allow List) -- reused when a caller already holds
+#           them in module state, read here when not. The -DistributionListsOnly run
+#           clears state first (so no other tenant's data can bleed in) and therefore
+#           always reads them itself.
 # Cmdlets:  Get-DistributionGroup, Get-DistributionGroupMember,
 #           Get-DynamicDistributionGroup, Get-DynamicDistributionGroupMember,
 #           Get-Recipient (dynamic-list preview fallback), Get-AcceptedDomain,
@@ -29,14 +30,15 @@
 #                      RequireSenderAuthenticationEnabled, AllowedSenders,
 #                      AllowedSendersKnown, ModerationEnabled, ModeratedBy, ModeratedByKnown,
 #                      MemberJoinRestriction, MemberDepartRestriction,
-#                      HiddenFromAddressListsEnabled, MembershipBasis, MemberStatus,
-#                      MemberError, MemberCount, MemberCountIsLowerBound,
-#                      MembersTruncated, Members[] (DisplayName, UPN, Address,
+#                      HiddenFromAddressListsEnabled, IsDirSynced, MembershipBasis, MemberStatus,
+#                      MemberError, MemberCount, MembersTruncated (true: the list has
+#                      MORE members than MemberCount, which is a lower bound), Members[] (DisplayName, UPN, Address,
 #                      RecipientType, Class), ExternalMemberCount, UnresolvedMemberCount,
 #                      NestedGroupCount, NestedGroups
 #   AcceptedDomains[]  lower-case domain names
 #   BypassInputs       TransportRules[] (SCL-setting rules and their conditions),
-#                      ConnectionFilter[], AntiSpamPolicies[], AntiSpamRulesRead,
+#                      ConnectionFilter[], AntiSpamPolicies[], AntiSpamRules[] (the
+#                      facts; the evaluator decides which policies apply), AntiSpamRulesRead,
 #                      Source (where each came from)
 #   Stats, Limits, Scope
 #   SectionStatus      Lists, DynamicLists, Members, AcceptedDomains, TransportRules,
@@ -296,10 +298,16 @@ function Invoke-NRGCollectDistributionLists {
             $identity = if ($primary) { $primary } elseif ([string](Get-NRGObjectField -Item $g -Key 'ExternalDirectoryObjectId' -Default '')) { [string](Get-NRGObjectField -Item $g -Key 'ExternalDirectoryObjectId' -Default '') } else { $name }
 
             $owners = @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $g -Key 'ManagedBy' -Default $null))
-            $allowed = @()
+            # Microsoft: what is set in AcceptMessagesOnlyFrom (individual senders) or AcceptMessagesOnlyFromDLMembers (groups) is
+            # copied into AcceptMessagesOnlyFromSendersOrMembers, so the three properties overlap. Adding them up counted every
+            # allowed sender two or three times; a sender is one sender however many properties name it.
+            $allowed = [System.Collections.Generic.List[string]]::new()
+            $allowedSeen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
             $allowedKnown = $false
             foreach ($ak in 'AcceptMessagesOnlyFromSendersOrMembers', 'AcceptMessagesOnlyFrom', 'AcceptMessagesOnlyFromDLMembers') {
-                if (Test-NRGDlHasField -Item $g -Key $ak) { $allowedKnown = $true; $allowed += @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $g -Key $ak -Default $null)) }
+                if (-not (Test-NRGDlHasField -Item $g -Key $ak)) { continue }
+                $allowedKnown = $true
+                foreach ($allowedEntry in @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $g -Key $ak -Default $null))) { if ($allowedSeen.Add($allowedEntry)) { $allowed.Add($allowedEntry) } }
             }
             $joinRaw   = [string](Get-NRGObjectField -Item $g -Key 'MemberJoinRestriction' -Default '')
             $departRaw = [string](Get-NRGObjectField -Item $g -Key 'MemberDepartRestriction' -Default '')
@@ -324,13 +332,14 @@ function Invoke-NRGCollectDistributionLists {
                 MemberJoinRestriction              = $(if ($joinRaw) { $joinRaw } else { $null })
                 MemberDepartRestriction            = $(if ($departRaw) { $departRaw } else { $null })
                 HiddenFromAddressListsEnabled      = ConvertTo-NRGDlBool -Value (Get-NRGObjectField -Item $g -Key 'HiddenFromAddressListsEnabled' -Default $null)
+                # Microsoft: a group created by directory synchronization must be managed on-premises. $null = not returned.
+                IsDirSynced                        = ConvertTo-NRGDlBool -Value (Get-NRGObjectField -Item $g -Key 'IsDirSynced' -Default $null)
                 # Dynamic: 'DynamicCalculated' is the list Microsoft stores on the group (Get-DynamicDistributionGroupMember);
                 # 'DynamicPreview' is a preview of the list's filter, used only when that cmdlet is unavailable.
                 MembershipBasis                    = $(if ($kind -eq 'Dynamic') { 'DynamicCalculated' } else { 'Static' })
                 MemberStatus                       = 'NotRun'
                 MemberError                        = ''
                 MemberCount                        = $null
-                MemberCountIsLowerBound            = $false
                 MembersTruncated                   = $false
                 Members                            = @()
                 ExternalMemberCount                = 0
@@ -363,7 +372,6 @@ function Invoke-NRGCollectDistributionLists {
                 $members = @($kept | ForEach-Object { ConvertTo-NRGDlMember -Recipient $_ -AcceptedDomains $domains -DomainsKnown $domainsKnown })
                 $row.Members               = $members
                 $row.MemberCount           = $members.Count
-                $row.MemberCountIsLowerBound = $row.MembersTruncated
                 $row.ExternalMemberCount   = @($members | Where-Object { $_.Class -eq 'External' }).Count
                 $row.UnresolvedMemberCount = @($members | Where-Object { $_.Class -eq 'Unresolved' }).Count
                 $nested = @($members | Where-Object { $_.RecipientType -match 'DistributionGroup|SecurityGroup|GroupMailbox|RoomList' })
@@ -424,6 +432,7 @@ function Invoke-NRGCollectDistributionLists {
                     SentTo                      = @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $r -Key 'SentTo' -Default $null))
                     SentToMemberOf              = @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $r -Key 'SentToMemberOf' -Default $null))
                     HeaderContainsMessageHeader = [string](Get-NRGObjectField -Item $r -Key 'HeaderContainsMessageHeader' -Default '')
+                    HeaderMatchesMessageHeader  = [string](Get-NRGObjectField -Item $r -Key 'HeaderMatchesMessageHeader' -Default '')
                     HeaderContainsWords         = @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $r -Key 'HeaderContainsWords' -Default $null))
                     SubjectContainsWords        = @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $r -Key 'SubjectContainsWords' -Default $null))
                     SubjectOrBodyContainsWords  = @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $r -Key 'SubjectOrBodyContainsWords' -Default $null))
@@ -492,24 +501,34 @@ function Invoke-NRGCollectDistributionLists {
                 $d.BypassInputs.Source.AntiSpam = 'Read'
             }
             $d.BypassInputs.AntiSpamRulesRead = $rulesRead
+            # The collector stores what Exchange returned; WHICH policies apply is decided in the evaluator, through the shared
+            # Get-NRGInForcePolicies, so a replayed results file is re-judged and EXO and DL read one rule.
             $d.BypassInputs.AntiSpamPolicies = @($policies | ForEach-Object {
-                $pn = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '')
-                $isDef = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
-                # In force: the default policy always; a custom policy only when an enabled rule applies it
-                # ($null when the rules were not read, so the verdict keeps the entry rather than dropping it).
-                $inForce = if ($isDef) { $true } elseif (-not $rulesRead) { $null } else {
-                    [bool](@(@($rulesRaw) | Where-Object {
-                        [string](Get-NRGObjectField -Item $_ -Key 'HostedContentFilterPolicy' -Default '') -eq $pn -and
-                        [string](Get-NRGObjectField -Item $_ -Key 'State' -Default '') -eq 'Enabled' }).Count -gt 0)
-                }
                 [ordered]@{
-                    Name                 = $pn
-                    IsDefault            = $isDef
-                    AllowedSenders       = @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $_ -Key 'AllowedSenders' -Default $null))
-                    AllowedSenderDomains = @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $_ -Key 'AllowedSenderDomains' -Default $null))
-                    InForce              = $inForce
+                    Name                  = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '')
+                    IsDefault             = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
+                    RecommendedPolicyType = [string](Get-NRGObjectField -Item $_ -Key 'RecommendedPolicyType' -Default '')
+                    AllowedSenders        = @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $_ -Key 'AllowedSenders' -Default $null))
+                    AllowedSenderDomains  = @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $_ -Key 'AllowedSenderDomains' -Default $null))
                 }
             })
+            $ruleRows = @()
+            if ($rulesRead) {
+                $ruleRows = @(@($rulesRaw) | ForEach-Object {
+                    $hasExc = if (Test-NRGDlHasField -Item $_ -Key 'HasExceptions') { [bool](Get-NRGObjectField -Item $_ -Key 'HasExceptions' -Default $true) }
+                              else { [bool]@(@(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $_ -Key 'ExceptIfSentTo' -Default $null)) + @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $_ -Key 'ExceptIfSentToMemberOf' -Default $null)) + @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $_ -Key 'ExceptIfRecipientDomainIs' -Default $null))).Count }
+                    [ordered]@{
+                        Name                      = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '')
+                        HostedContentFilterPolicy = [string](Get-NRGObjectField -Item $_ -Key 'HostedContentFilterPolicy' -Default '')
+                        State                     = [string](Get-NRGObjectField -Item $_ -Key 'State' -Default '')
+                        RecipientDomainIs         = @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $_ -Key 'RecipientDomainIs' -Default $null))
+                        SentTo                    = @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $_ -Key 'SentTo' -Default $null))
+                        SentToMemberOf            = @(ConvertTo-NRGDlStringList -Value (Get-NRGObjectField -Item $_ -Key 'SentToMemberOf' -Default $null))
+                        HasExceptions             = $hasExc
+                    }
+                })
+            }
+            $d.BypassInputs.AntiSpamRules = @($ruleRows)
             $status.AntiSpam = 'Collected'
         } catch { & $fail 'AntiSpam' $_ }
 

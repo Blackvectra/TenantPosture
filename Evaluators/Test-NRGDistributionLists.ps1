@@ -34,10 +34,14 @@
 
 # Predicate names (the Exchange predicate class name without its namespace and the
 # 'Predicate' suffix) that VERIFY something about the sender beyond who it claims to
-# be: an authentication header, or the connecting address.
-$script:NRGDlVerifyingPredicates = @('HeaderContains', 'HeaderMatchesPatterns', 'HeaderMatches', 'SenderIpRanges')
+# be: the connecting address.
+$script:NRGDlVerifyingPredicates = @('SenderIpRanges')
+# A header condition verifies the sender ONLY when the header is Authentication-Results, which the receiving server writes.
+# Any other header (X-Partner: yes) is text the sender chooses, so a condition on it proves nothing.
+$script:NRGDlAuthHeaderName      = 'Authentication-Results'
+$script:NRGDlHeaderPredicates    = @('HeaderContains', 'HeaderMatchesPatterns', 'HeaderMatches')
 # Predicates that identify the sender by what it claims, which is what an attacker controls.
-$script:NRGDlSenderPredicates    = @('SenderDomainIs', 'From', 'FromMemberOf', 'FromAddressContainsWords', 'FromAddressMatchesPatterns', 'SenderAddressLocation')
+$script:NRGDlSenderPredicates    = @('SenderDomainIs', 'From', 'FromScope', 'FromMemberOf', 'FromAddressContainsWords', 'FromAddressMatchesPatterns', 'SenderAddressLocation')
 
 # The width of one IP Allow List entry: a single address, a CIDR block, or an a-b range.
 # The service accepts only /24 to /32 CIDR blocks, so a range is the only way an entry
@@ -77,7 +81,7 @@ function Test-NRGDlOwnDomain {
 # the other values as inputs to filtering, not as a skip.
 #   NotBypass         the rule does not set SCL -1
 #   Unclassified      the rule's conditions were not returned, so its breadth is unknown
-#   Verified          carries a condition that verifies the sender (an authentication
+#   Verified          carries a condition that verifies the sender (the Authentication-Results
 #                     header, or a restricted source address): Microsoft's own pattern
 #   SenderDomainOnly  the only sender condition is the sender domain: Microsoft says never
 #   NoSenderCondition no condition limits who the sender is, so it applies to any sender
@@ -101,11 +105,16 @@ function Get-NRGDlTransportRuleClass {
     if (@(Get-NRGObjectField -Item $Rule -Key 'SubjectContainsWords' -Default @()).Count -gt 0)       { [void]$preds.Add('SubjectContainsWords') }
     if (@(Get-NRGObjectField -Item $Rule -Key 'SubjectOrBodyContainsWords' -Default @()).Count -gt 0) { [void]$preds.Add('SubjectOrBodyContainsWords') }
     $names = @($preds | Sort-Object)
+    # Which header a header condition tests. Only Authentication-Results counts as verifying.
+    $hdrNames = @(@((Get-NRGObjectField -Item $Rule -Key 'HeaderContainsMessageHeader' -Default ''), (Get-NRGObjectField -Item $Rule -Key 'HeaderMatchesMessageHeader' -Default '')) |
+        ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    $authHeader = (@($hdrNames | Where-Object { $_ -ieq $script:NRGDlAuthHeaderName }).Count -gt 0)
 
     $class = 'NotBypass'; $reason = 'does not set SCL -1'
     if ($null -ne $scl -and "$scl" -eq '-1') {
         $conditionsKnown = [bool](Get-NRGObjectField -Item $Rule -Key 'ConditionsKnown' -Default $false)
         $verifying = @($names | Where-Object { $_ -in $script:NRGDlVerifyingPredicates })
+        if ($authHeader) { $verifying += $script:NRGDlAuthHeaderName + ' header' }
         $senderPreds    = @($names | Where-Object { $_ -in $script:NRGDlSenderPredicates })
         $content   = @($names | Where-Object { $_ -match '^(Subject|Body|Attachment|Message)' })
         if (-not $conditionsKnown -and $names.Count -eq 0) {
@@ -117,7 +126,9 @@ function Get-NRGDlTransportRuleClass {
         } elseif ($senderPreds.Count -eq 1 -and $senderPreds[0] -eq 'SenderDomainIs' -and $content.Count -eq 0) {
             $class = 'SenderDomainOnly'; $reason = 'its only sender condition is the sender domain, which Microsoft says never to use alone to skip spam filtering'
         } else {
-            $class = 'Other'; $reason = 'has conditions (' + ($names -join ', ') + ') that this scan does not judge weak or strong'
+            $reason = 'has conditions (' + ($names -join ', ') + ') that this scan cannot judge weak or strong'
+            if (@($names | Where-Object { $_ -in $script:NRGDlHeaderPredicates }).Count -gt 0 -and -not $authHeader) { $reason += '; a header condition proves nothing unless the header is Authentication-Results' }
+            $class = 'Other'
         }
     }
     return [pscustomobject]@{
@@ -327,18 +338,19 @@ function Test-NRGDistributionLists {
         Add-NRGDlFinding -Entry $Rec['DL-3.1'] -State 'NotApplicable' -Detail 'Not assessed: the mail flow rules were not read (Get-TransportRule failed or did not run), so whether a rule bypasses spam filtering for the lists is unknown.'
     } else {
         $weak = @($inForceRules | Where-Object { $_.Class.Class -in @('NoSenderCondition', 'SenderDomainOnly') })
-        $unk  = @($inForceRules | Where-Object { $_.Class.Class -eq 'Unclassified' })
+        # A rule this scan cannot judge (conditions not returned, or conditions it does not recognize as verifying) is never read as clean.
+        $unk  = @($inForceRules | Where-Object { $_.Class.Class -in @('Unclassified', 'Other') })
         $offNote = if ($offRules.Count) { " $($offRules.Count) further SCL -1 rule(s) are disabled or in test mode and were not judged." } else { '' }
         if ($weak.Count -gt 0) {
             $ao = @($weak | ForEach-Object { [ordered]@{ Source = 'Mail flow rule'; Name = [string](Get-NRGObjectField -Item $_.Rule -Key 'Name' -Default ''); Class = $_.Class.Class; Detail = $_.Class.Reason } })
             Add-NRGDlFinding -Entry $Rec['DL-3.1'] -State 'Gap' -AffectedObjects $ao -CurrentValue "$($weak.Count) weak SCL -1 rule(s)" -RequiredValue $Rec['DL-3.1'].Recommended `
                 -Detail ("Shortfall: $($weak.Count) enabled mail flow rule(s) set SCL -1 (bypass spam filtering) on a weak condition: " + (($ao | ForEach-Object { "'$($_.Name)' ($($_.Detail))" }) -join '; ') + ". A bypass rule reaches every list it matches. SCL -1 skips spam filtering only, not malware or high confidence phishing.$offNote")
         } elseif ($unk.Count -gt 0) {
-            Add-NRGDlFinding -Entry $Rec['DL-3.1'] -State 'NotApplicable' -AffectedObjects @($unk | ForEach-Object { [ordered]@{ Source = 'Mail flow rule'; Name = [string](Get-NRGObjectField -Item $_.Rule -Key 'Name' -Default ''); Class = 'Unclassified'; Detail = $_.Class.Reason } }) `
-                -Detail "Not assessed: $($unk.Count) enabled mail flow rule(s) set SCL -1 but their conditions were not returned, so how broad they are cannot be judged.$offNote"
+            Add-NRGDlFinding -Entry $Rec['DL-3.1'] -State 'NotApplicable' -AffectedObjects @($unk | ForEach-Object { [ordered]@{ Source = 'Mail flow rule'; Name = [string](Get-NRGObjectField -Item $_.Rule -Key 'Name' -Default ''); Class = $_.Class.Class; Detail = $_.Class.Reason } }) `
+                -Detail ("Not assessed: $($unk.Count) enabled mail flow rule(s) set SCL -1 but this scan cannot judge how broad they are: " + (($unk | ForEach-Object { "'$([string](Get-NRGObjectField -Item $_.Rule -Key 'Name' -Default ''))' ($($_.Class.Reason))" }) -join '; ') + ".$offNote")
         } elseif ($inForceRules.Count -gt 0) {
-            Add-NRGDlFinding -Entry $Rec['DL-3.1'] -State 'Satisfied' -CurrentValue "$($inForceRules.Count) SCL -1 rule(s), none weak" `
-                -Detail ("Read: $($inForceRules.Count) enabled mail flow rule(s) set SCL -1, none on a sender domain alone or on no sender condition: " + (($inForceRules | ForEach-Object { "'$([string](Get-NRGObjectField -Item $_.Rule -Key 'Name' -Default ''))' ($($_.Class.Class))" }) -join '; ') + ". They still skip spam filtering for the mail they match; review them.$offNote")
+            Add-NRGDlFinding -Entry $Rec['DL-3.1'] -State 'Satisfied' -CurrentValue "$($inForceRules.Count) SCL -1 rule(s), each with a verifying condition" `
+                -Detail ("Read: $($inForceRules.Count) enabled mail flow rule(s) set SCL -1, each with a condition that verifies the sender (the Authentication-Results header or a source IP range): " + (($inForceRules | ForEach-Object { "'$([string](Get-NRGObjectField -Item $_.Rule -Key 'Name' -Default ''))'" }) -join '; ') + ". They still skip spam filtering for the mail they match; review them.$offNote")
         } else {
             Add-NRGDlFinding -Entry $Rec['DL-3.1'] -State 'Satisfied' -CurrentValue 'No SCL -1 rule' -Detail "Read: no enabled mail flow rule sets SCL -1.$offNote"
         }
@@ -371,24 +383,34 @@ function Test-NRGDistributionLists {
     if (-not $asOk) {
         Add-NRGDlFinding -Entry $Rec['DL-3.3'] -State 'NotApplicable' -Detail 'Not assessed: the anti-spam policies were not read, so whether allowed senders or domains skip spam filtering for the lists is unknown.'
     } else {
-        $pols = @(Get-NRGObjectField -Item $bypass -Key 'AntiSpamPolicies' -Default @())
+        $pols = @(@(Get-NRGObjectField -Item $bypass -Key 'AntiSpamPolicies' -Default @()) | Where-Object { $null -ne $_ })
+        # Which policies apply is the shared rule (Get-NRGInForcePolicies), not a copy of it: the default policy always, a custom
+        # policy only through an enabled rule, and the default drops out when an enabled rule covers every accepted domain.
+        # $null rules = not read (keep every custom policy); an empty list = read, none exist. Two statements: an if-block that
+        # yields an empty array assigns $null.
+        $rulesRead = [bool](Get-NRGObjectField -Item $bypass -Key 'AntiSpamRulesRead' -Default $false)
+        $ruleArg = $null
+        if ($rulesRead) { $ruleArg = @(@(Get-NRGObjectField -Item $bypass -Key 'AntiSpamRules' -Default @()) | Where-Object { $null -ne $_ }) }
+        $forceArgs = @{ Policies = $pols; Rules = $ruleArg; RulePolicyKey = 'HostedContentFilterPolicy'; PresetKind = 'EOP' }
+        if ($acceptedOk) { $forceArgs['AcceptedDomains'] = $accepted }
+        $forcedNames = @(Get-NRGInForcePolicies @forceArgs | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '') })
         $skipped = 0
         foreach ($p in $pols) {
-            $pn = [string](Get-NRGObjectField -Item $p -Key 'Name' -Default ''); $inF = Get-NRGObjectField -Item $p -Key 'InForce' -Default $null
+            $pn = [string](Get-NRGObjectField -Item $p -Key 'Name' -Default '')
             foreach ($kv in @(@{ K = 'AllowedSenders'; Label = 'allowed sender' }, @{ K = 'AllowedSenderDomains'; Label = 'allowed domain' })) {
                 foreach ($v in @(Get-NRGObjectField -Item $p -Key $kv.K -Default @())) {
                     if ($v -isnot [string] -and $null -eq $v) { continue }
-                    if ($inF -eq $false) { $skipped++; continue }   # a custom policy no enabled rule applies: it bypasses nothing
-                    $asEntries += [pscustomobject]@{ Policy = $pn; Kind = $kv.Label; Value = [string]$v; InForce = $inF }
+                    if ($pn -notin $forcedNames) { $skipped++; continue }   # a policy no enabled rule applies: it bypasses nothing
+                    $asEntries += [pscustomobject]@{ Policy = $pn; Kind = $kv.Label; Value = [string]$v }
                 }
             }
         }
-        if ($skipped) { $asOffNote = " $skipped further entr$(if ($skipped -eq 1) { 'y is' } else { 'ies are' }) on a custom policy no enabled rule applies, so they bypass nothing and were not judged." }
+        if ($skipped) { $asOffNote = " $skipped further entr$(if ($skipped -eq 1) { 'y is' } else { 'ies are' }) on a policy that applies to no recipient (a custom policy no enabled rule applies, or the default policy when an enabled rule covers every accepted domain), so they bypass nothing and were not judged." }
         $rulesNote = if (-not [bool](Get-NRGObjectField -Item $bypass -Key 'AntiSpamRulesRead' -Default $false)) { ' The anti-spam rules were not read, so whether a custom policy is applied to anyone is unknown and its entries are counted.' } else { '' }
         if ($asEntries.Count -eq 0) {
             Add-NRGDlFinding -Entry $Rec['DL-3.3'] -State 'Satisfied' -CurrentValue 'No allowed senders or domains' -Detail "Read: no anti-spam policy that applies lists an allowed sender or an allowed domain.$asOffNote$rulesNote"
         } else {
-            $ao = @($asEntries | ForEach-Object { [ordered]@{ Source = 'Anti-spam policy'; Name = $_.Value; Class = $_.Kind; Detail = "policy '$($_.Policy)'" } })
+            $ao = @($asEntries | ForEach-Object { [ordered]@{ Source = 'Anti-spam policy'; Name = $_.Value; Class = $_.Kind; Policy = $_.Policy; Detail = "policy '$($_.Policy)'" } })
             Add-NRGDlFinding -Entry $Rec['DL-3.3'] -State 'Gap' -AffectedObjects $ao -CurrentValue "$($asEntries.Count) allow entr$(if ($asEntries.Count -eq 1) { 'y' } else { 'ies' })" -RequiredValue $Rec['DL-3.3'].Recommended `
                 -Detail ("Shortfall: $($asEntries.Count) allowed sender/domain entr$(if ($asEntries.Count -eq 1) { 'y' } else { 'ies' }) in policies that apply: " + (($asEntries | ForEach-Object { "$($_.Value) ($($_.Kind), policy '$($_.Policy)')" }) -join '; ') + ". Microsoft: avoid these lists if at all possible; senders on them skip spam, spoof and phishing protection except high confidence phishing.$asOffNote$rulesNote")
         }

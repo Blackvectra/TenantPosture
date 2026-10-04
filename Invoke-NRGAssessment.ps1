@@ -536,23 +536,35 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
 # its output that every other area was not assessed.
 if ($DistributionListsOnly) {
     $exoFloor = Get-NRGExoModuleFloor
-    if (-not $exoFloor.Supported) { Write-Host "  [!] $($exoFloor.Reason)" -ForegroundColor Red }
-    if ($exoFloor.StoreBuild) {
-        Write-Host "  [!] Microsoft Store build of PowerShell detected (`$PSHOME is under WindowsApps); the Exchange Online module has failed to import from it. Install the MSI build: winget install --id Microsoft.PowerShell --source winget" -ForegroundColor Yellow
-    }
     $exoModule = Get-Module -ListAvailable -Name ExchangeOnlineManagement -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
+    # One wording for the PowerShell floor, the Store build and the module's version range (Get-NRGExoPreflightNotes), shared with
+    # the full run. A version this PowerShell cannot run fails INSIDE Connect-ExchangeOnline, so an error-level note stops here.
+    $exoNotes = @(Get-NRGExoPreflightNotes -Floor $exoFloor -InstalledVersion $(if ($exoModule) { $exoModule.Version } else { $null }))
+    foreach ($n in $exoNotes) { Write-Host "  [!] $($n.Text)" -ForegroundColor $(if ($n.Level -eq 'Error') { 'Red' } else { 'Yellow' }) }
     if (-not $exoModule) {
         Write-Host "  [!] ExchangeOnlineManagement is not installed. Run .\Install-NRGPrerequisites.ps1, then retry." -ForegroundColor Red
         exit 1
     }
+    if (@($exoNotes | Where-Object { $_.Level -eq 'Error' }).Count -gt 0) { exit 1 }
+    $dlAppOnly = [bool]($AppId -and $TenantId -and $CertificateThumbprint)
     if (-not $TenantDomain) {
         Write-Host "  [i] No -TenantDomain given: the tool cannot confirm WHICH tenant you signed in to. The worksheet names the connected tenant; check it before you act on it." -ForegroundColor Yellow
+    } elseif (-not $dlAppOnly -and -not $targetTenantId) {
+        # The full run refuses here too. Without the tenant id nothing checks which tenant the interactive sign-in lands in, and the
+        # worksheet would be labeled with the domain that was TYPED: a client's name on another tenant's members and settings.
+        Write-Host "  [!] Could not resolve a tenant ID for $TenantDomain, so the tenant you sign in to cannot be confirmed. Nothing was collected." -ForegroundColor Red
+        Write-Host "      Check the domain, or add the client to Config\clients.json (TenantId and DelegatedOrg)." -ForegroundColor Red
+        exit 1
     }
     $dlParams = @{ OutputPath = $OutputPath; MaxMembersPerList = $MaxMembersPerList; MaxLists = $MaxLists }
     if ($TenantDomain) { $dlParams['TenantDomain'] = $TenantDomain }
     if ($AppId -and $TenantId -and $CertificateThumbprint) {
         $dlParams['AppId'] = $AppId; $dlParams['TenantId'] = $TenantId; $dlParams['CertificateThumbprint'] = $CertificateThumbprint
-        if ($OrganizationDomain) { $dlParams['OrganizationDomain'] = $OrganizationDomain }
+        # Exchange wants the .onmicrosoft.com routing domain. An onboarded client's TenantDomain is its primary domain, so use the
+        # client's DelegatedOrg when the domain in hand is not a routing domain.
+        $dlOrg = $OrganizationDomain
+        if ($dlOrg -notmatch '\.onmicrosoft\.com$' -and $targetDelegatedOrg) { $dlOrg = $targetDelegatedOrg }
+        if ($dlOrg) { $dlParams['OrganizationDomain'] = $dlOrg }
     } else {
         if ($UserPrincipalName)  { $dlParams['UserPrincipalName']  = $UserPrincipalName }
         if ($targetTenantId)     { $dlParams['ExpectedTenantId']   = $targetTenantId }
@@ -623,10 +635,8 @@ try {
 # to 3.9.x on 7.4/7.5) so the preflight, the installer and Get-NRGModuleHealth
 # agree; a version outside that range fails inside the module at connect time.
 $exoFloor = Get-NRGExoModuleFloor
-if (-not $exoFloor.Supported) { Write-Host "  [!] $($exoFloor.Reason)" -ForegroundColor Red }
-if ($exoFloor.StoreBuild) {
-    Write-Host "  [!] Microsoft Store build of PowerShell detected (`$PSHOME is under WindowsApps); the Exchange Online module has failed to import from it. Install the MSI build: winget install --id Microsoft.PowerShell --source winget" -ForegroundColor Yellow
-}
+# Floor and Store-build notes only (no installed version): the module range is checked per module below.
+foreach ($n in @(Get-NRGExoPreflightNotes -Floor $exoFloor -InstalledVersion $null)) { Write-Host "  [!] $($n.Text)" -ForegroundColor $(if ($n.Level -eq 'Error') { 'Red' } else { 'Yellow' }) }
 $moduleSpecs = @(
     @{ Name='Microsoft.Graph.Authentication'; MinVersion='2.0.0';       PinVersion=$null; MaxVersion=$null }
     @{ Name='ExchangeOnlineManagement';       MinVersion=$exoFloor.Min; PinVersion=$null; MaxVersion=$exoFloor.Max }

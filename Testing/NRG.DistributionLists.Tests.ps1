@@ -297,7 +297,7 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             $l = $r.Data.Lists[0]
             $l.MemberCount | Should -Be 500
             $l.MembersTruncated | Should -BeTrue
-            $l.MemberCountIsLowerBound | Should -BeTrue
+            $l.Contains('MemberCountIsLowerBound') | Should -BeFalse -Because 'it always equalled MembersTruncated; one flag says it'
             @($l.Members).Count | Should -Be 500
             (& $script:Mod { $script:DlScn.ResultSizes['huge@contoso.com'] }) | Should -Be 501
             $r.Data.Stats.ListsMembersTruncated | Should -Be 1
@@ -381,17 +381,36 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             ($r.Data.BypassInputs.TransportRules | Where-Object { $_.Name -eq 'No conditions field' }).ConditionsKnown | Should -BeFalse
         }
 
-        It 'marks which custom anti-spam policies an enabled rule applies, and leaves it unknown when the rules were not read' {
+        It 'stores the anti-spam policies and rules as facts (the evaluator decides which apply), and says when the rules were not read' {
             $pol = @([pscustomobject]@{ Name = 'Default'; IsDefault = $true; AllowedSenders = @(); AllowedSenderDomains = @() }
-                     [pscustomobject]@{ Name = 'Applied'; IsDefault = $false; AllowedSenders = @('a@x.example'); AllowedSenderDomains = @() }
-                     [pscustomobject]@{ Name = 'Dormant'; IsDefault = $false; AllowedSenders = @('b@x.example'); AllowedSenderDomains = @() })
-            $r = Invoke-Scan @{ AntiSpam = $pol; AntiSpamRules = @([pscustomobject]@{ Name = 'r1'; HostedContentFilterPolicy = 'Applied'; State = 'Enabled' }, [pscustomobject]@{ Name = 'r2'; HostedContentFilterPolicy = 'Dormant'; State = 'Disabled' }) }
-            $by = @{}; foreach ($p in $r.Data.BypassInputs.AntiSpamPolicies) { $by[$p.Name] = $p.InForce }
-            $by['Default'] | Should -Be $true; $by['Applied'] | Should -Be $true; $by['Dormant'] | Should -Be $false
+                     [pscustomobject]@{ Name = 'Applied'; IsDefault = $false; AllowedSenders = @('a@x.example'); AllowedSenderDomains = @() })
+            $rule = [pscustomobject]@{ Name = 'r1'; HostedContentFilterPolicy = 'Applied'; State = 'Enabled'; RecipientDomainIs = @('contoso.com'); ExceptIfSentTo = @('boss@contoso.com') }
+            $r = Invoke-Scan @{ AntiSpam = $pol; AntiSpamRules = @($rule, [pscustomobject]@{ Name = 'r2'; HostedContentFilterPolicy = 'Applied'; State = 'Disabled' }) }
+            $r.Data.BypassInputs.AntiSpamRulesRead | Should -BeTrue
+            @($r.Data.BypassInputs.AntiSpamPolicies | ForEach-Object { $_.Contains('InForce') }) | Should -Not -Contain $true -Because 'which policies apply is judged in the evaluator, through Get-NRGInForcePolicies'
+            $r1 = @($r.Data.BypassInputs.AntiSpamRules | Where-Object { $_.Name -eq 'r1' })[0]
+            $r1.HostedContentFilterPolicy | Should -Be 'Applied'; $r1.State | Should -Be 'Enabled'
+            @($r1.RecipientDomainIs) | Should -Be @('contoso.com')
+            $r1.HasExceptions | Should -BeTrue -Because 'ExceptIfSentTo is an exception'
+            (@($r.Data.BypassInputs.AntiSpamRules | Where-Object { $_.Name -eq 'r2' })[0]).HasExceptions | Should -BeFalse
             $r2 = Invoke-Scan @{ AntiSpam = $pol; Throw = @{ 'Get-HostedContentFilterRule' = 'denied' } }
             $r2.Data.BypassInputs.AntiSpamRulesRead | Should -BeFalse
-            ($r2.Data.BypassInputs.AntiSpamPolicies | Where-Object { $_.Name -eq 'Dormant' }).InForce | Should -Be $null
+            @($r2.Data.BypassInputs.AntiSpamRules).Count | Should -Be 0
             $r2.Data.SectionStatus.AntiSpam | Should -Be 'Collected'
+        }
+
+        It 'counts an allowed sender once however many of the three overlapping properties name it' {
+            # Microsoft: what is set in AcceptMessagesOnlyFrom or AcceptMessagesOnlyFromDLMembers is copied into AcceptMessagesOnlyFromSendersOrMembers.
+            $r = Invoke-Scan @{ Lists = @(New-DlRaw 'Named' 'named@contoso.com' -With @{ RequireSenderAuthenticationEnabled = $false
+                AcceptMessagesOnlyFromSendersOrMembers = @('Pat', 'Lee', 'Team'); AcceptMessagesOnlyFrom = @('pat', 'Lee'); AcceptMessagesOnlyFromDLMembers = @('Team') }) }
+            @($r.Data.Lists[0].AllowedSenders).Count | Should -Be 3
+            (F 'DL-1.1' 'named@*').Detail | Should -Match 'limited to 3 specified sender\(s\)'
+        }
+
+        It 'IsDirSynced is read as True, False, or not returned (never defaulted)' {
+            $r = Invoke-Scan @{ Lists = @(New-DlRaw 'S' 's@contoso.com' -With @{ IsDirSynced = $true }; New-DlRaw 'C' 'c@contoso.com' -With @{ IsDirSynced = 'False' }; New-DlRaw 'U' 'u@contoso.com') }
+            $by = @{}; foreach ($l in $r.Data.Lists) { $by[$l.Name] = $l.IsDirSynced }
+            $by['S'] | Should -BeTrue; $by['C'] | Should -BeFalse; $by['U'] | Should -Be $null
         }
 
         It 'a failed bypass read fails only its own section' {
@@ -467,6 +486,41 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 $f[0].Instance | Should -BeNullOrEmpty
                 $f[0].Detail | Should -Match 'no standard is approved'
             }
+        }
+
+        It 'DL-3.1: only the Authentication-Results header (or a source IP range) verifies a sender; any other header is text the sender chooses' {
+            $cls = { param($rule) & $script:Mod { param($r) (Get-NRGDlTransportRuleClass -Rule $r).Class } $rule }
+            $base = @{ Name = 'r'; State = 'Enabled'; Mode = 'Enforce'; SetSCL = -1; ConditionsKnown = $true }
+            (& $cls ($base + @{ Predicates = @('SenderDomainIs', 'HeaderContains'); SenderDomainIs = @('partner.example'); HeaderContainsMessageHeader = 'X-Partner'; HeaderContainsWords = @('yes') })) | Should -Be 'SenderDomainOnly'
+            (& $cls ($base + @{ Predicates = @('HeaderContains'); HeaderContainsMessageHeader = 'X-Partner'; HeaderContainsWords = @('yes') })) | Should -Be 'NoSenderCondition'
+            (& $cls ($base + @{ Predicates = @('SenderDomainIs', 'HeaderContains'); SenderDomainIs = @('partner.example'); HeaderContainsMessageHeader = ' authentication-results '; HeaderContainsWords = @('dmarc=pass') })) | Should -Be 'Verified'
+            (& $cls ($base + @{ Predicates = @('SenderDomainIs', 'HeaderMatches'); SenderDomainIs = @('partner.example'); HeaderMatchesMessageHeader = 'Authentication-Results' })) | Should -Be 'Verified'
+            (& $cls ($base + @{ Predicates = @('SenderIpRanges'); SenderIpRanges = @('203.0.113.7') })) | Should -Be 'Verified'
+            (& $cls ($base + @{ Predicates = @('FromScope'); FromScope = 'InOrganization' })) | Should -Be 'Other' -Because 'a sender-scope condition is a sender condition, so the rule is not "applies to any sender"'
+        }
+
+        It 'DL-3.1: a rule this scan cannot judge is "not assessed", never "none weak"; a fake header is a Gap; an Authentication-Results rule is Satisfied' {
+            Invoke-Scan @{ Rules = @(New-Rule 'Scope only' -Predicates 'FromScope' -With @{ FromScope = 'InOrganization' }) } | Out-Null
+            (F 'DL-3.1').State | Should -Be 'NotApplicable'
+            (F 'DL-3.1').Detail | Should -Match 'cannot judge how broad they are'
+            Invoke-Scan @{ Rules = @(New-Rule 'Fake header' -Predicates 'SenderDomainIs', 'HeaderContains' -With @{ SenderDomainIs = @('partner.example'); HeaderContainsMessageHeader = 'X-Partner'; HeaderContainsWords = @('yes') }) } | Out-Null
+            (F 'DL-3.1').State | Should -Be 'Gap'
+            Invoke-Scan @{ Rules = @(New-Rule 'Verified' -Predicates 'SenderDomainIs', 'HeaderContains' -With @{ SenderDomainIs = @('partner.example'); HeaderContainsMessageHeader = 'Authentication-Results'; HeaderContainsWords = @('dmarc=pass') }) } | Out-Null
+            (F 'DL-3.1').State | Should -Be 'Satisfied'
+            (F 'DL-3.1').Detail | Should -Match 'each with a condition that verifies the sender'
+        }
+
+        It 'DL-3.3: the default policy drops out when an enabled rule covers every accepted domain (the shared in-force rule); an exception keeps it' {
+            $def = [pscustomobject]@{ Name = 'Default'; IsDefault = $true; AllowedSenders = @(); AllowedSenderDomains = @('stale.example') }
+            $all = [pscustomobject]@{ Name = 'All staff'; IsDefault = $false; AllowedSenders = @(); AllowedSenderDomains = @() }
+            $cover = [pscustomobject]@{ Name = 'r'; HostedContentFilterPolicy = 'All staff'; State = 'Enabled'; RecipientDomainIs = @('contoso.com', 'contoso.onmicrosoft.com') }
+            Invoke-Scan @{ AntiSpam = @($def, $all); AntiSpamRules = @($cover) } | Out-Null
+            (F 'DL-3.3').State | Should -Be 'Satisfied'
+            (F 'DL-3.3').Detail | Should -Match 'bypass nothing'
+            $partial = [pscustomobject]@{ Name = 'r'; HostedContentFilterPolicy = 'All staff'; State = 'Enabled'; RecipientDomainIs = @('contoso.com', 'contoso.onmicrosoft.com'); ExceptIfSentTo = @('boss@contoso.com') }
+            Invoke-Scan @{ AntiSpam = @($def, $all); AntiSpamRules = @($partial) } | Out-Null
+            (F 'DL-3.3').State | Should -Be 'Gap' -Because 'a rule with an exception does not cover everyone, so the default policy still applies'
+            (F 'DL-3.3').Detail | Should -Match 'stale\.example'
         }
 
         It 'an entered but unusable standard is not assessed, and the finding says why' {
@@ -686,8 +740,8 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
 
         BeforeAll {
             $script:Build = {
-                param([hashtable] $S, [string] $Name = 'ws')
-                Invoke-Scan $S | Out-Null
+                param([hashtable] $S, [string] $Name = 'ws', [hashtable] $Collect = @{})
+                Invoke-Scan $S $Collect | Out-Null
                 $meta = @{ TenantDomain = 'contoso.onmicrosoft.com'; TenantId = '00000000-0000-0000-0000-000000000000'; ToolVersion = 'test'; AssessmentDate = '2026-10-02 10:00' }
                 $ws = Get-NRGDistributionListWorksheet -Metadata $meta
                 $dir = Join-Path $TestDrive $Name
@@ -831,7 +885,7 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 $o.Txt | Should -Match "Set-DistributionGroup -Identity 'allstaff@contoso\.com' -ManagedBy '<owner>'"
                 $o.Txt | Should -Match 'Commands for an administrator to review and run, with -WhatIf first \(text only; this tool never runs them\)'
                 $o.Txt | Should -Match "Disable-TransportRule -Identity 'Allow partner'"
-                $o.Txt | Should -Match "Set-HostedConnectionFilterPolicy -Identity Default -IPAllowList @\{Remove='203\.0\.113\.0/24'\}"
+                $o.Txt | Should -Not -Match "Set-HostedConnectionFilterPolicy -Identity Default -IPAllowList @\{Remove='203\.0\.113\.0/24'\}" -Because 'a /24 entry is within what Microsoft recommends, so no command removes it'
                 ($o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ListAddress -eq 'allstaff@contoso.com' -and $_.ControlId -eq 'DL-1.1' }).AdminCommand | Should -BeNullOrEmpty
                 ($o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ListAddress -eq 'allstaff@contoso.com' -and $_.ControlId -eq 'DL-1.2' }).AdminCommand |
                     Should -Be "Set-DistributionGroup -Identity 'allstaff@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers 'ann@contoso.com','bob@vendor.example'"
@@ -1104,6 +1158,85 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             }
         }
 
+        Context 'a worksheet never reads whole when it is not' {
+
+            It 'says so, in both files and the summary, when -MaxLists left lists out of the worksheet' {
+                $o = & $script:Build @{ Lists = @(1..5 | ForEach-Object { New-DlRaw "L$_" "l$_@contoso.com" }) } 'cap' @{ MaxLists = 3 }
+                @($o.Worksheet.Lists).Count | Should -Be 3
+                ($o.Worksheet.Limitations -join ' ') | Should -Match 'only the first 3 of 5 lists were read'
+                ($o.Worksheet.Limitations -join ' ') | Should -Match 'not a clean result for them'
+                $o.Worksheet.Summary.ListsBeyondCap | Should -Be 2
+                ($o.Txt -replace '\s+', ' ') | Should -Match 'only the first 3 of 5 lists were read'
+                $o.Txt | Should -Match 'Lists beyond -MaxLists, NOT in this file:\s+2'
+                @($o.Csv | Where-Object { $_.RowType -eq 'Limitation' -and $_.Detail -match 'only the first 3 of 5 lists were read' }).Count | Should -Be 1
+            }
+
+            It 'an inventory that completed empty says so; a failed read says "not collected", not "no list"' {
+                $o = & $script:Build @{} 'empty'
+                ($o.Worksheet.Limitations -join ' ') | Should -Match 'Exchange returned no distribution list'
+                $o.Worksheet.Summary.ListCount | Should -Be 0
+                $f = & $script:Build @{ Throw = @{ 'Get-DistributionGroup' = 'denied'; 'Get-DynamicDistributionGroup' = 'denied' } } 'failed'
+                ($f.Worksheet.Limitations -join ' ') | Should -Not -Match 'Exchange returned no distribution list'
+                ($f.Worksheet.Limitations -join ' ') | Should -Match 'Not collected in this run: Lists, DynamicLists'
+            }
+        }
+
+        It 'DL-2.5: with several approved join settings the command uses the most restrictive, never the first listed' {
+            Mock -ModuleName 'NRG-Assessment' Get-NRGStandards -MockWith { $s = & $script:Approved; $s.DistributionListMemberJoinRestriction = @('Open', 'Closed'); $s }
+            $o = & $script:Build @{ Lists = @(New-DlRaw 'Gated' 'gated@contoso.com' -With @{ MemberJoinRestriction = 'ApprovalRequired' }) } 'join'
+            $row = $o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ControlId -eq 'DL-2.5' }
+            $row.Verdict | Should -Be 'Gap'
+            $row.AdminCommand | Should -Be "Set-DistributionGroup -Identity 'gated@contoso.com' -MemberJoinRestriction 'Closed'"
+            $row.Detail | Should -Match "uses 'Closed', the most restrictive of the approved values"
+        }
+
+        It 'DL-3.2: only an entry wider than a /24 (or unparsed) gets a removal command; a compliant entry is never offered for removal' {
+            $o = & $script:Build @{ ConnFilter = @([pscustomobject]@{ Name = 'Default'; IsDefault = $true; IPAllowList = @('203.0.113.0/24', '10.0.0.0/8') }) } 'ipw'
+            $row = $o.Worksheet.Tenant | Where-Object { $_.ControlId -eq 'DL-3.2' }
+            $row.Verdict | Should -Be 'Gap'
+            $rm = @($row.Commands | Where-Object { $_ -match 'Remove=' })
+            $rm.Count | Should -Be 1
+            $rm[0] | Should -Match "Remove='10\.0\.0\.0/8'"
+            ($row.Commands -join ' ') | Should -Not -Match '203\.0\.113\.0'
+        }
+
+        It 'DL-3.3: the printed command takes the policy name from its own field, so an apostrophe in the name cannot change which policy it names' {
+            $pol = @([pscustomobject]@{ Name = 'Default'; IsDefault = $true; AllowedSenders = @(); AllowedSenderDomains = @() }
+                     [pscustomobject]@{ Name = "Bob's Policy"; IsDefault = $false; AllowedSenders = @(); AllowedSenderDomains = @('x.example') })
+            $o = & $script:Build @{ AntiSpam = $pol; AntiSpamRules = @([pscustomobject]@{ Name = 'r'; HostedContentFilterPolicy = "Bob's Policy"; State = 'Enabled' }) } 'pol'
+            $row = $o.Worksheet.Tenant | Where-Object { $_.ControlId -eq 'DL-3.3' }
+            $row.Verdict | Should -Be 'Gap'
+            @($row.Commands | Where-Object { $_ -match 'Remove=' }) | Should -Be @("Set-HostedContentFilterPolicy -Identity 'Bob''s Policy' -AllowedSenderDomains @{Remove='x.example'}")
+        }
+
+        It 'the CSV carries each recommendation''s explanation once, on a Reference row, not on every setting row' {
+            $o = & $script:Build $script:Scn 'csvwhy'
+            @($o.Csv | Where-Object { $_.RowType -in 'Setting', 'Tenant bypass' -and $_.Why }) | Should -BeNullOrEmpty
+            $refs = @($o.Csv | Where-Object { $_.RowType -eq 'Reference' })
+            $refs.Count | Should -BeGreaterThan 5
+            @($refs | ForEach-Object { $_.ControlId } | Sort-Object -Unique).Count | Should -Be $refs.Count
+            ($refs | Where-Object { $_.ControlId -eq 'DL-1.1' }).Why | Should -Match 'DMARC does not close this'
+            ($refs | Where-Object { $_.ControlId -eq 'DL-1.2' }).AlsoSee | Should -Match 'fix-error-code-5-7-136'
+        }
+
+        It 'a list synchronized from on-premises gets no Exchange Online command and says where to make the change' {
+            $o = & $script:Build @{ Lists = @(New-DlRaw 'Synced' 'synced@contoso.com' -With @{ IsDirSynced = $true; RequireSenderAuthenticationEnabled = $false; ManagedBy = @() }); Members = @{ 'synced@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com') } } 'sync'
+            $o.Txt | Should -Match 'Source of truth: Synchronized from on-premises Active Directory'
+            @($o.Csv | Where-Object { $_.ListAddress -eq 'synced@contoso.com' -and $_.AdminCommand }) | Should -BeNullOrEmpty
+            $o.Txt | Should -Not -Match "Set-DistributionGroup -Identity 'synced@contoso\.com'"
+            ($o.Csv | Where-Object { $_.RowType -eq 'Directory' }).Detail | Should -Match 'managed there'
+            $o.Worksheet.Summary.AllowListsProposed | Should -Be 0
+            # a list that is not synchronized still gets its commands
+            $p = & $script:Build @{ Lists = @(New-DlRaw 'Local' 'local@contoso.com' -With @{ IsDirSynced = $false; ManagedBy = @() }) } 'nosync'
+            @($p.Csv | Where-Object { $_.ListAddress -eq 'local@contoso.com' -and $_.AdminCommand }).Count | Should -BeGreaterThan 0
+        }
+
+        It '"Lists that accept mail from anyone" counts lists by their DL-1.1 verdict, not by a phrase in rendered text' {
+            $o = & $script:Build @{ Lists = @(New-DlRaw 'A' 'a@contoso.com' -With @{ RequireSenderAuthenticationEnabled = $false }; New-DlRaw 'B' 'b@contoso.com' -With @{ RequireSenderAuthenticationEnabled = $false }; New-DlRaw 'C' 'c@contoso.com') } 'anyone'
+            $o.Worksheet.Summary.ListsReachableFromOutside | Should -Be 2
+            @($o.Worksheet.Lists | Where-Object { $_.AcceptsFromAnyone }).Count | Should -Be 2
+        }
+
         It 'a dynamic list''s member line says its members are the calculated list, which can differ from who receives mail now' {
             $o = & $script:Build @{ Dynamic = @(New-DlDynamic 'Everyone' 'everyone@contoso.com'); Members = @{ 'everyone@contoso.com' = @(New-DlMember 'Dee' 'dee@contoso.com') } } 'dynline'
             $o.Txt | Should -Match 'calculated list Microsoft stores on the group'
@@ -1202,6 +1335,37 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             (Get-Content -LiteralPath $r.TextPath -Raw) | Should -Match 'Not collected in this run: TransportRules'
         }
 
+        It 'lists left out by -MaxLists are exit code 3 with a console warning, never a clean 0' {
+            Mock -ModuleName 'NRG-Assessment' Connect-NRGExchangeOnly -MockWith { $script:Tenant }
+            Mock -ModuleName 'NRG-Assessment' Disconnect-NRGServices -MockWith { }
+            Use-Scenario @{ Lists = @(1..5 | ForEach-Object { New-DlRaw "L$_" "l$_@contoso.com" })
+                ConnFilter = @([pscustomobject]@{ Name = 'Default'; IsDefault = $true; IPAllowList = @() }); AntiSpam = @([pscustomobject]@{ Name = 'Default'; IsDefault = $true; AllowedSenders = @(); AllowedSenderDomains = @() }) }
+            $r = Invoke-NRGDistributionListScan -OutputPath (Join-Path $TestDrive 'run-cap') -MaxLists 3 6>$null
+            $r.ExitCode | Should -Be 3
+            (Get-Content -LiteralPath $r.TextPath -Raw) -replace '\s+', ' ' | Should -Match 'only the first 3 of 5 lists were read'
+        }
+
+        It 'a completed read that returned no list is exit code 2, and the console and worksheet say so' {
+            Mock -ModuleName 'NRG-Assessment' Connect-NRGExchangeOnly -MockWith { $script:Tenant }
+            Mock -ModuleName 'NRG-Assessment' Disconnect-NRGServices -MockWith { }
+            Use-Scenario @{ ConnFilter = @([pscustomobject]@{ Name = 'Default'; IsDefault = $true; IPAllowList = @() }); AntiSpam = @([pscustomobject]@{ Name = 'Default'; IsDefault = $true; AllowedSenders = @(); AllowedSenderDomains = @() }) }
+            $r = Invoke-NRGDistributionListScan -OutputPath (Join-Path $TestDrive 'run-empty') 6>$null
+            $r.ExitCode | Should -Be 2
+            (Get-Content -LiteralPath $r.TextPath -Raw) -replace '\s+', ' ' | Should -Match 'Exchange returned no distribution list'
+        }
+
+        It 'an app-only sign-in with a primary domain instead of the routing domain says so plainly, and connects to nothing' {
+            Mock -ModuleName 'NRG-Assessment' Connect-NRGExchangeOnly -MockWith { $script:Tenant }
+            Mock -ModuleName 'NRG-Assessment' Disconnect-NRGServices -MockWith { }
+            Use-Scenario @{}
+            $g = '11111111-1111-1111-1111-111111111111'
+            $r = Invoke-NRGDistributionListScan -OutputPath (Join-Path $TestDrive 'run-org') -AppId $g -TenantId $g -CertificateThumbprint ('A' * 40) -OrganizationDomain 'client.com' 6>$null
+            $r.ExitCode | Should -Be 1
+            $r.Error | Should -Match "'client\.com' is not one"
+            $r.Error | Should -Match 'onmicrosoft\.com routing domain'
+            Should -Invoke -ModuleName 'NRG-Assessment' Connect-NRGExchangeOnly -Times 0 -Exactly
+        }
+
         It 'a session that is not Exchange Online is exit code 1' {
             Mock -ModuleName 'NRG-Assessment' Connect-NRGExchangeOnly -MockWith { @{ EXO = $false } }
             Mock -ModuleName 'NRG-Assessment' Disconnect-NRGServices -MockWith { }
@@ -1279,6 +1443,40 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
     }
 
     # ═════════════════════════════════════════════════════════════════════════════════
+    # ═════════════════════════════════════════════════════════════════════════════════
+    Context 'shared helpers' {
+
+        It 'Get-NRGExoPreflightNotes reports an unsupported PowerShell, the Store build, and a module outside this PowerShell''s range' {
+            $f76 = Get-NRGExoModuleFloor -PSVersion ([version]'7.6.6') -PSHomePath 'C:\Program Files\PowerShell\7'
+            @(Get-NRGExoPreflightNotes -Floor $f76 -InstalledVersion ([version]'3.10.0')).Count | Should -Be 0
+            @(Get-NRGExoPreflightNotes -Floor $f76 -InstalledVersion $null).Count | Should -Be 0
+            $old = @(Get-NRGExoPreflightNotes -Floor $f76 -InstalledVersion ([version]'3.9.2'))
+            $old.Count | Should -Be 1; $old[0].Level | Should -Be 'Error'
+            $old[0].Text | Should -Match '3\.9\.2 is older than the 3\.10\.0 this PowerShell needs'
+            $f74 = Get-NRGExoModuleFloor -PSVersion ([version]'7.4.6') -PSHomePath 'C:\Program Files\PowerShell\7'
+            $new = @(Get-NRGExoPreflightNotes -Floor $f74 -InstalledVersion ([version]'3.10.0'))
+            $new.Count | Should -Be 1; $new[0].Level | Should -Be 'Warning'; $new[0].Text | Should -Match 'newer than PowerShell'
+            @(Get-NRGExoPreflightNotes -Floor $f74 -InstalledVersion ([version]'3.8.0')).Count | Should -Be 0
+            $f72 = Get-NRGExoModuleFloor -PSVersion ([version]'7.2.24') -PSHomePath 'C:\Program Files\PowerShell\7'
+            $u = @(Get-NRGExoPreflightNotes -Floor $f72 -InstalledVersion ([version]'3.9.0'))
+            $u.Count | Should -Be 1 -Because 'an unsupported PowerShell is one error, not also a version complaint'
+            $u[0].Level | Should -Be 'Error'
+            $store = Get-NRGExoModuleFloor -PSVersion ([version]'7.6.6') -PSHomePath 'C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.6.0_x64__8wekyb3d8bbwe'
+            $st = @(Get-NRGExoPreflightNotes -Floor $store -InstalledVersion $null)
+            $st.Count | Should -Be 1; $st[0].Level | Should -Be 'Warning'; $st[0].Text | Should -Match 'Microsoft Store build'
+        }
+
+        It 'Get-NRGInForcePolicies uses the accepted domains it is handed when there is no EXO-MailboxConfig, and behaves as before when it is not' {
+            Clear-NRGState
+            $pols = @([pscustomobject]@{ Name = 'Default'; IsDefault = $true }, [pscustomobject]@{ Name = 'All'; IsDefault = $false })
+            $rules = @([pscustomobject]@{ Name = 'r'; HostedContentFilterPolicy = 'All'; State = 'Enabled'; RecipientDomainIs = @('contoso.com'); SentTo = @(); SentToMemberOf = @(); HasExceptions = $false })
+            $with = & $script:Mod { param($p, $r) @(Get-NRGInForcePolicies -Policies $p -Rules $r -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP' -AcceptedDomains @('contoso.com')) | ForEach-Object { $_.Name } } $pols $rules
+            @($with) | Should -Be @('All')
+            $without = & $script:Mod { param($p, $r) @(Get-NRGInForcePolicies -Policies $p -Rules $r -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP') | ForEach-Object { $_.Name } } $pols $rules
+            @($without | Sort-Object) | Should -Be @('All', 'Default') -Because 'with no accepted domains known, the default policy is never dropped'
+        }
+    }
+
     Context 'read-only guarantees [Static]' {
 
         BeforeAll {
@@ -1364,6 +1562,20 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             $block | Should -Not -Match 'Connect-NRGServices|Connect-MgGraph|Connect-IPPSSession|Connect-MicrosoftTeams|Connect-SPOService'
             $start | Should -BeLessThan $src.IndexOf('$moduleSpecs = @(') -Because 'the Graph / Teams prerequisite check must not gate an Exchange-only scan'
             $start | Should -BeGreaterThan $src.IndexOf('Start-NRGWebServer')
+        }
+
+        It 'the entry point refuses an unconfirmable tenant, falls back to the routing domain for app-only, and shares the Exchange preflight wording' {
+            $src = Get-Content -LiteralPath (Join-Path $script:Root 'Invoke-NRGAssessment.ps1') -Raw
+            $start = $src.IndexOf('if ($DistributionListsOnly) {')
+            $end = $src.IndexOf('exit ([int]$dlResult.ExitCode)', $start)
+            $block = $src.Substring($start, $end - $start)
+            $block | Should -Match 'Could not resolve a tenant ID for \$TenantDomain'
+            $block.IndexOf('Could not resolve a tenant ID') | Should -BeLessThan $block.IndexOf('Invoke-NRGDistributionListScan @dlParams') -Because 'the refusal must come before any sign-in'
+            $block | Should -Match '-not \$dlAppOnly -and -not \$targetTenantId'
+            $block | Should -Match '\$targetDelegatedOrg'
+            $block | Should -Match 'Get-NRGExoPreflightNotes'
+            $block | Should -Match "Level -eq 'Error'"
+            $src | Should -Match 'Get-NRGExoPreflightNotes -Floor \$exoFloor -InstalledVersion \$null' -Because 'the full run reads the same floor and Store-build wording'
         }
 
         It 'the catalog holds the write commands as data, in no file the module loads for execution' {
