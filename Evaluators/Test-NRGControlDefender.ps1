@@ -731,6 +731,13 @@ function Test-NRGControlDefenderDLPSITs {
             -Detail "DLP rule configuration could not be read: $why. Sensitive information type coverage was not assessed."
         return
     }
+    # A rule counts only inside an enforcing policy, so the policy Mode is half the evidence:
+    # without the policy read, no rule can be shown enforcing or not.
+    if (-not (Test-NRGSectionCollected $pvw 'DLPPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'DLP policies were not collected, so whether any DLP rule is in an enforcing policy is unknown; sensitive information type coverage not assessed.'
+        return
+    }
 
     if ($dlpPolicies.Count -eq 0 -and $dlpRules.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
@@ -747,6 +754,7 @@ function Test-NRGControlDefenderDLPSITs {
     $activeRules = @($states | Where-Object { $_.State -eq 'Enforcing' })
     $unknownRules = @($states | Where-Object { $_.State -eq 'Unknown' })
     $testRules   = @($states | Where-Object { $_.State -eq 'TestMode' })
+    $unknownSit  = @($unknownRules | Where-Object { @($_.SITs).Count -gt 0 })
     $withSITs    = @($activeRules | Where-Object { @($_.SITs).Count -gt 0 })
 
     if ($withSITs.Count -gt 0) {
@@ -764,6 +772,11 @@ function Test-NRGControlDefenderDLPSITs {
         $unk = @(if ($unknownRules.Count -gt 0) { "whether $($unknownRules.Count) rule(s) are in an enforcing policy, because their parent policy was not found among the collected policies." })
         Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -NotEstablished $unk `
             -CurrentValue "$($sitNames.Count) distinct sensitive information type(s) in enforcing rules"
+    } elseif ($unknownSit.Count -gt 0) {
+        # A rule matching a type whose parent policy was not found may be enforcing: not a Gap. A rule
+        # matching no type cannot meet the requirement in any mode, so it does not hold the Gap back.
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "No rule in an enforcing policy matches a sensitive information type, but $($unknownSit.Count) enabled rule(s) that match one belong to a policy that was not found among the collected policies ($((@($unknownSit | ForEach-Object { $_.Policy } | Sort-Object -Unique)) -join ', ')), so whether they enforce is unknown; not assessed."
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
