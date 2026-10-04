@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **`Invoke-NRGBatchAssessment.ps1` could not start.** It declared
+  `[CmdletBinding(SupportsShouldProcess)]` and its own `[switch] $WhatIf`;
+  PowerShell adds `-WhatIf` itself for `SupportsShouldProcess`, so every
+  invocation, `-WhatIf` included, failed at binding with "A parameter with
+  the name 'WhatIf' was defined multiple times". It is now
+  `[CmdletBinding()]`; the script's own `-WhatIf` (list the clients and
+  exit) is unchanged, and the unused `-Confirm` goes with it. Found in #107.
+  `NRG.Security.Tests.ps1` now fails on any script or function that declares
+  `WhatIf`/`Confirm` beside `SupportsShouldProcess`, and reads the batch
+  runner's parameter metadata.
+
 - **Defects found by the first live baseline validation (NRGTS, 2026-09-29),
   fixed without touching a single verdict.** DNS collection ran only inside
   the Exchange branch of the entry point, so an Exchange connection failure
