@@ -89,6 +89,39 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             })
             $hits -join "`n" | Should -BeNullOrEmpty -Because 'write ${name}: — a bare $name: is a scope qualifier'
         }
+        # [CmdletBinding(SupportsShouldProcess)] makes PowerShell add -WhatIf and -Confirm
+        # itself. A script that ALSO declares its own [switch] $WhatIf (or $Confirm) parses
+        # fine and is rejected at parameter binding on every invocation, -WhatIf included:
+        # "A parameter with the name 'WhatIf' was defined multiple times for the command."
+        # Invoke-NRGBatchAssessment.ps1 shipped that way and could not start; the parse
+        # check above passes it, and no test launched it.
+        It 'no script or function declares SupportsShouldProcess and also its own -WhatIf or -Confirm parameter' {
+            $hits = @(foreach ($f in $script:PsFiles) {
+                $t = $null; $e = $null
+                $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$t, [ref]$e)
+                $blocks = [System.Collections.Generic.List[object]]::new()
+                if ($ast.ParamBlock) { $blocks.Add($ast.ParamBlock) }
+                foreach ($fn in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
+                    if ($fn.Body.ParamBlock) { $blocks.Add($fn.Body.ParamBlock) }
+                }
+                foreach ($pb in $blocks) {
+                    $binding = @($pb.Attributes | Where-Object { $_.TypeName.Name -eq 'CmdletBinding' })
+                    $should = $false
+                    foreach ($attr in $binding) {
+                        foreach ($na in $attr.NamedArguments) {
+                            # [CmdletBinding(SupportsShouldProcess)] omits the value; an explicit $false does not count.
+                            if ($na.ArgumentName -eq 'SupportsShouldProcess' -and ($na.ExpressionOmitted -or "$($na.Argument.Extent.Text)" -ne '$false')) { $should = $true }
+                        }
+                    }
+                    if (-not $should) { continue }
+                    foreach ($p in $pb.Parameters) {
+                        $name = $p.Name.VariablePath.UserPath
+                        if ($name -in @('WhatIf', 'Confirm')) { "$($f.Name):$($p.Extent.StartLineNumber) declares `$$name beside SupportsShouldProcess" }
+                    }
+                }
+            })
+            $hits -join "`n" | Should -BeNullOrEmpty -Because 'PowerShell rejects the command at binding, so it cannot start; drop SupportsShouldProcess (keep the own switch) or drop the own parameter'
+        }
     }
 
     Context 'A01 — Path Traversal Prevention [Static]' {

@@ -216,6 +216,17 @@
   29 requirements, 25 mandatory. `RA-5 Vulnerability Monitoring and
   Scanning` added to the 800-53 catalog for the citation.
 
+- **Fixed: `Invoke-NRGBatchAssessment.ps1` could not start.** It declared
+  `[CmdletBinding(SupportsShouldProcess)]` and also its own `[switch] $WhatIf`.
+  PowerShell adds `-WhatIf` itself for `SupportsShouldProcess`, so the two
+  collide at parameter binding ("A parameter with the name 'WhatIf' was
+  defined multiple times for the command") and every invocation failed,
+  `-WhatIf` included. No test launched it and the parse check passes it. It is
+  now `[CmdletBinding()]`; the script's own `-WhatIf` switch (list the clients
+  and exit) is unchanged and the unused `-Confirm` goes. `NRG.Security.Tests.ps1`
+  now fails any script or function that declares `SupportsShouldProcess` beside
+  its own `-WhatIf` or `-Confirm`.
+
 ## v4.14.3 (2026-09-26)
 
 v5.0 backlog sweep: the collector-fields section (places where a collector
