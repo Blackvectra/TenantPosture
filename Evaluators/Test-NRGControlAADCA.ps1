@@ -106,7 +106,10 @@ function Test-NRGControlAADCA {
                 if ($row.Count -eq 0) { $unk += "$id (unknown template or not evaluated)"; continue }
                 $st = [string](Get-NRGObjectField -Item $row[0] -Key 'Status' -Default '')
                 if ($st -eq 'Enforced') { $enf += $id }
-                elseif ($st -eq 'NotRead') { $unk += "$id (Conditional Access state not read)" }
+                elseif ($st -eq 'NotRead') {
+                    $why = [string](Get-NRGObjectField -Item $row[0] -Key 'Note' -Default '')
+                    $unk += "$id ($(if ($why) { $why.TrimEnd('.') } else { 'Conditional Access state not read' }))"
+                }
                 else { $notEnf += "$id ($st)" }
             }
             if ($enf.Count)    { $verified += "Required NRG policies enforced: $($enf -join ', ')." }

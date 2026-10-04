@@ -82,4 +82,55 @@ Describe 'Review 106: Conditional Access defects' {
             @(Get-NRGCANarrowing -Policy $old) | Should -Not -Contain 'limited to some device platforms'
         }
     }
+
+    Context 'D2: AAD-2.1 does not score role-scoped templates when the role catalog was not read' {
+        BeforeAll {
+            function script:Pol([string] $Name, [string[]] $ClientApps, [string[]] $Grant, [string[]] $ExRoles = @()) {
+                @{ Id = $Name; DisplayName = $Name; State = 'enabled'
+                   Conditions = @{ ClientAppTypes = $ClientApps; SignInRiskLevels = @(); UserRiskLevels = @(); AuthFlows = @(); Platforms = @()
+                                   Users = @{ IncludeUsers = @('All'); IncludeGroups = @(); IncludeRoles = @(); ExcludeUsers = @(); ExcludeGroups = @(); ExcludeRoles = $ExRoles }
+                                   Applications = @{ Include = @('All'); Exclude = @(); UserActions = @() }
+                                   Locations = @{ Include = @(); Exclude = @() }; Devices = @{ FilterMode = ''; FilterRule = '' } }
+                   GrantControls = @{ Operator = 'OR'; BuiltInControls = $Grant; AuthStrengthId = ''; TermsOfUse = @() }
+                   SessionControls = @{} }
+            }
+            function script:Approve([string[]] $Templates) {
+                $std = [ordered]@{ DmarcReportingAddresses = @(); CommonAttachmentFileTypes = @(); PriorityUsers = @(); RequiredConditionalAccessTemplates = @($Templates) }
+                Mock -ModuleName NRG-Assessment Get-NRGStandards { $std }.GetNewClosure()
+            }
+            function script:SetCa([object[]] $Policies) {
+                Clear-NRGState
+                Set-NRGRawData -Key 'AAD-CAPolicies' -Data (Bag @{ Policies = @($Policies); NamedLocations = @(); SectionStatus = @{ NamedLocations = 'Collected' } })
+                Set-NRGRawData -Key 'AAD-AuthPolicies' -Data (Bag @{ SecurityDefaults = @{ IsEnabled = $false } })
+            }
+        }
+        It 'an all-users MFA policy with no AAD-DirectoryRoles data is not a shortfall for mfa-admins' {
+            Approve @('mfa-all-users', 'mfa-admins')
+            SetCa @((Pol 'legacy' @('other') @('block')), (Pol 'mfa' @('all') @('mfa')))
+            $v = V 'Test-NRGControlAADCA' 'AAD-2.1'
+            $v.Detail | Should -Not -Match 'Shortfall'
+            $v.State | Should -Be 'Satisfied' -Because $v.Detail
+        }
+        It 'a role-dependent template the policies cannot prove without the catalog is Not assessed, never a shortfall' {
+            Approve @('mfa-all-users', 'admin-phish-resistant-mfa')
+            SetCa @((Pol 'legacy' @('other') @('block')), (Pol 'mfa' @('all') @('mfa')))
+            $v = V 'Test-NRGControlAADCA' 'AAD-2.1'
+            $v.State | Should -Be 'NotApplicable' -Because $v.Detail
+            $v.Detail | Should -Match 'Not assessed:.*admin-phish-resistant-mfa'
+            $v.Detail | Should -Not -Match 'Shortfall'
+        }
+        It 'the view reports the role-dependent template NotRead when the role catalog was not read' {
+            SetCa @((Pol 'legacy' @('other') @('block')), (Pol 'mfa' @('all') @('mfa') -ExRoles @('role-x')))
+            $view = & $script:Mod { Get-NRGConditionalAccessView }
+            $row = @($view.Baseline | Where-Object { $_.Id -eq 'mfa-admins' })[0]
+            $row.Status | Should -Be 'NotRead'
+        }
+        It 'with the role catalog read and no admin coverage, mfa-admins is still a shortfall' {
+            Approve @('mfa-admins')
+            SetCa @((Pol 'legacy' @('other') @('block')), (Pol 'mfa' @('all') @('mfa') -ExRoles @('role-ga')))
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (Bag @{ RoleDefinitions = @(@{ Id = 'role-ga'; DisplayName = 'Global Administrator'; IsPriv = $true }) })
+            $v = V 'Test-NRGControlAADCA' 'AAD-2.1'
+            $v.Detail | Should -Match 'Shortfall:.*mfa-admins'
+        }
+    }
 }
