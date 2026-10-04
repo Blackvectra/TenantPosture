@@ -49,6 +49,39 @@ function Get-NRGFindingLimitKind {
     return 'NotApplicable'
 }
 
+# The site's label for each Get-NRGAssessmentScope bucket. The scope is the one classifier of
+# why a control was not scored (the HTML scope section and the Markdown summary use it), so the
+# site takes its category from there rather than classifying the Detail text a second way.
+$script:NRGSiteScopeBucketKind = [ordered]@{
+    SkippedByOperator     = 'Skipped'
+    ThirdPartyAttested    = 'Declaration'
+    NoProgrammaticCheck   = 'Manual'
+    CollectionIncomplete  = 'Collection'
+    StandardNotApproved   = 'StandardNotApproved'
+    LicenceBlocked        = 'Licensing'
+    NotApplicableToTenant = 'NotApplicable'
+}
+
+function Get-NRGSiteScopeKind {
+    <#
+    .SYNOPSIS
+        ControlId -> site limitation kind, from Get-NRGAssessmentScope over the findings given, with
+        the run's coverage, raw data and license profile. Empty when the scope is unavailable.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([AllowNull()] [AllowEmptyCollection()] [object[]] $Findings, [hashtable] $ScopeArgs = @{})
+    $map = @{}
+    if (-not (Get-Command Get-NRGAssessmentScope -ErrorAction SilentlyContinue)) { return $map }
+    $scope = $null
+    try { $scope = Get-NRGAssessmentScope -Findings @($Findings) @ScopeArgs } catch { Write-Verbose "Report site: assessment scope unavailable: $($_.Exception.Message)"; return $map }
+    if (-not $scope -or -not $scope.Available) { return $map }
+    foreach ($bucket in $script:NRGSiteScopeBucketKind.Keys) {
+        foreach ($c in @($scope[$bucket])) { if ($null -ne $c) { $map[[string]$c.ControlId] = $script:NRGSiteScopeBucketKind[$bucket] } }
+    }
+    return $map
+}
+
 function Get-NRGSiteVerdict {
     [CmdletBinding()]
     param([AllowNull()] $Finding, [string] $Kind)
@@ -61,6 +94,7 @@ function Get-NRGSiteVerdict {
     }
     switch ($Kind) {
         'Declaration'         { return @{ Label = 'Declared, not verified'; Css = 'na' } }
+        'Skipped'             { return @{ Label = 'Not assessed (skipped by the operator)'; Css = 'unk' } }
         'Licensing'           { return @{ Label = 'Not licensed (not scored)'; Css = 'na' } }
         'NotApplicable'       { return @{ Label = 'Not applicable'; Css = 'na' } }
         default               { return @{ Label = 'Not assessed'; Css = 'unk' } }
@@ -116,7 +150,7 @@ function Get-NRGSiteRows {
         (optionally) the independent scan's result.
     #>
     [CmdletBinding()]
-    param([AllowNull()] [object[]] $Findings, [AllowNull()] $BaselineCompliance, [AllowNull()] $Scuba)
+    param([AllowNull()] [object[]] $Findings, [AllowNull()] $BaselineCompliance, [AllowNull()] $Scuba, [hashtable] $ScopeArgs = @{})
     $ctl = @{}
     $cpath = Join-Path (Split-Path -Parent $PSScriptRoot) 'Config' 'controls.json'
     if (Test-Path -LiteralPath $cpath) {
@@ -127,10 +161,20 @@ function Get-NRGSiteRows {
     $al = Get-NRGScubaAlignment
     $linkMap = Get-NRGControlLinkMap
     $viewMap = Get-NRGControlViewMap
-    foreach ($f in @($Findings | Where-Object { $null -ne $_ })) {
+    $present = @($Findings | Where-Object { $null -ne $_ })
+    $scopeKind = Get-NRGSiteScopeKind -Findings $present -ScopeArgs $ScopeArgs
+    $perControl = @{}
+    foreach ($f in $present) { $k = [string](Get-NRGObjectField -Item $f -Key 'ControlId' -Default ''); $perControl[$k] = 1 + [int]$perControl[$k] }
+    foreach ($f in $present) {
         $cid  = [string](Get-NRGObjectField -Item $f -Key 'ControlId' -Default '')
         $c    = $ctl[$cid]
         $kind = Get-NRGFindingLimitKind -Finding $f
+        if ($kind -ne 'Verdict') {
+            # Not scored: the category is the scope's. A control with several instance findings is
+            # classified per instance (the scope's control-level answer describes its worst one).
+            $sk = if ($perControl[$cid] -gt 1) { (Get-NRGSiteScopeKind -Findings @($f) -ScopeArgs $ScopeArgs)[$cid] } else { $scopeKind[$cid] }
+            if ($sk) { $kind = $sk }
+        }
         $v    = Get-NRGSiteVerdict -Finding $f -Kind $kind
         $prefix = ($cid -split '-')[0]
         $b    = $base[$cid]
@@ -199,6 +243,10 @@ function Publish-NRGReportSite {
         [Parameter(Mandatory)] [string] $OutputPath,
         [AllowNull()] $BaselineCompliance = $null,
         [AllowNull()] $Coverage = $null,
+        # Optional: the run's raw data and license profile for the scope classifier; module state
+        # (as the HTML report and the Markdown summary read it) when omitted.
+        [AllowNull()] $RawData = $null,
+        [AllowNull()] $LicenseProfile = $null,
         [string] $ScubaResultsPath
     )
     foreach ($req in 'ConvertTo-NRGHtmlSafe', 'Get-NRGObjectField', 'Get-NRGScubaAlignment') {
@@ -224,7 +272,14 @@ function Publish-NRGReportSite {
         try { $scuba = Read-NRGScubaResults -Path $ScubaResultsPath }
         catch { Write-Warning "ScubaGear results not used: $($_.Exception.Message)"; $scuba = $null }
     }
-    $rows = @(Get-NRGSiteRows -Findings $Findings -BaselineCompliance $BaselineCompliance -Scuba $scuba)
+    # The not-scored category of each control comes from Get-NRGAssessmentScope, given the same
+    # coverage (a -Skip flag), raw data (the hard-evidence step) and license profile.
+    $scopeArgs = @{ QuickScan = [bool](Get-NRGObjectField -Item $Metadata -Key 'QuickScan' -Default $false) }
+    if ($Coverage -is [System.Collections.IDictionary]) { $cv = @{}; foreach ($k in @($Coverage.Keys)) { $cv[[string]$k] = $Coverage[$k] }; $scopeArgs.Coverage = $cv }
+    if ($null -ne $RawData) { $scopeArgs.RawData = $RawData }
+    if ($null -eq $LicenseProfile -and (Get-Command Get-NRGTenantLicenseProfile -ErrorAction SilentlyContinue)) { try { $LicenseProfile = Get-NRGTenantLicenseProfile } catch { $LicenseProfile = $null } }
+    $scopeArgs.LicenseProfile = $LicenseProfile
+    $rows = @(Get-NRGSiteRows -Findings $Findings -BaselineCompliance $BaselineCompliance -Scuba $scuba -ScopeArgs $scopeArgs)
 
     $css = @"
 :root{--p:$($brand.PrimaryColor);--s:$($brand.SecondaryColor);--a:$($brand.AccentColor);--bg:#f5f7fa;--fg:#1f2937;--mut:#6b7280;--card:#fff;--line:#e5e7eb}
@@ -272,7 +327,7 @@ table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nt
         $counts[$wl] = [ordered]@{ Name = $name; Total = $wrows.Count
             Satisfied = @($wrows | Where-Object { $_.State -eq 'Satisfied' }).Count; Partial = @($wrows | Where-Object { $_.State -eq 'Partial' }).Count
             Gap = @($wrows | Where-Object { $_.State -in @('Gap', 'Error') }).Count
-            NotAssessed = @($wrows | Where-Object { $_.State -eq 'NotApplicable' -and $_.Kind -in @('Collection', 'StandardNotApproved', 'Manual') }).Count
+            NotAssessed = @($wrows | Where-Object { $_.State -eq 'NotApplicable' -and $_.Kind -in @('Collection', 'StandardNotApproved', 'Manual', 'Skipped') }).Count
             Other = @($wrows | Where-Object { $_.State -eq 'NotApplicable' -and $_.Kind -in @('Licensing', 'Declaration', 'NotApplicable') }).Count }
         $body = "<h2>$(& $hx $name)</h2><p class='note'>Grouped by security topic. The verdict is NRG's baseline judgment; the badge says how the check was made (automated, manual, or an operator declaration) and is not a verdict. Risk severity is NRG's; requirement strength (SHALL / SHOULD) is the independent baseline's and is shown only where a rule is mapped.</p>"
         foreach ($topic in @($wrows | ForEach-Object { $_.Topic } | Sort-Object -Unique)) {
@@ -302,7 +357,7 @@ table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nt
                 } else { "<span class='mut'>no mapped rule</span>" }
                 $ev = "<dl class='ev'><dt>Detail</dt><dd>$(& $hx $r.Detail)</dd>"
                 if ($r.Observed) { $ev += "<dt>Observed</dt><dd>$(& $hx $r.Observed)</dd>" }
-                if ($r.Kind -ne 'Verdict') { $ev += "<dt>Limitation</dt><dd>$(& $hx @{ Collection = 'Collection: the evidence was not read'; Manual = 'Manual check: no automated test'; Declaration = 'Operator declaration: not verified by this assessment'; Licensing = 'Licensing: not scored'; StandardNotApproved = 'An NRG standard is not approved or configured'; NotApplicable = 'Reported not applicable' }[$r.Kind])</dd>" }
+                if ($r.Kind -ne 'Verdict') { $ev += "<dt>Limitation</dt><dd>$(& $hx @{ Collection = 'Collection: the evidence was not read'; Manual = 'Manual check: no automated test'; Declaration = 'Operator declaration: not verified by this assessment'; Licensing = 'Licensing: not scored'; StandardNotApproved = 'An NRG standard is not approved or configured'; NotApplicable = 'Reported not applicable'; Skipped = 'Skipped by the operator: this workload was not assessed this run' }[$r.Kind])</dd>" }
                 if (@($r.Affected).Count -gt 0) {
                     $aff = @($r.Affected | Select-Object -First 25 | ForEach-Object { if ($_ -is [System.Collections.IDictionary]) { ($_.GetEnumerator() | ForEach-Object { "$($_.Key): $($_.Value)" }) -join ', ' } elseif ($_ -isnot [string] -and @($_.PSObject.Properties).Count -gt 0 -and $_ -isnot [ValueType]) { ($_.PSObject.Properties | ForEach-Object { "$($_.Name): $($_.Value)" }) -join ', ' } else { [string]$_ } })
                     $ev += "<dt>Affected objects ($(@($r.Affected).Count))</dt><dd>$((@($aff | ForEach-Object { & $hx $_ }) -join '<br>'))$(if (@($r.Affected).Count -gt 25) { '<br>...' })</dd>"
@@ -333,7 +388,7 @@ table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nt
     $al = Get-NRGScubaAlignment
     $alText = if ($al.Available) { "Independent baseline mapping: $(& $hx $al.Source.Tool) $(& $hx $al.Source.ToolVersion), checked $(& $hx $al.Source.CheckedOn)" } else { 'Independent baseline mapping: not available' }
     $landing = "<h2>Tenant and run</h2><div class='card'><table><tbody><tr><th style='width:220px'>Tenant</th><td>$tenant</td></tr><tr><th>Tenant ID</th><td>$tenantId</td></tr><tr><th>Run time</th><td>$runAt</td></tr><tr><th>Tool version</th><td>NRG-Assessment $toolVer</td></tr><tr><th>Baseline versions</th><td>$blText<br>$alText$(if ($scuba) { '<br>Independent scan results supplied: shown beside each mapped control' })</td></tr></tbody></table></div>"
-    $landing += "<h2>Summary</h2><div class='grid'><div class='stat'><b>$($tot.Satisfied)</b>Satisfied</div><div class='stat'><b>$($tot.Partial)</b>Partial</div><div class='stat'><b>$($tot.Gap)</b>Gap</div><div class='stat'><b>$($tot.NotAssessed)</b>Not assessed</div><div class='stat'><b>$($tot.Other)</b>Not scored (licensing, declared, not applicable)</div></div><p class='note'>These are counts of findings, not a compliance percentage. Not assessed means the tool could not establish the answer (evidence not read, a manual check, or an NRG standard that is not approved); it is neither a pass nor a failure.</p>"
+    $landing += "<h2>Summary</h2><div class='grid'><div class='stat'><b>$($tot.Satisfied)</b>Satisfied</div><div class='stat'><b>$($tot.Partial)</b>Partial</div><div class='stat'><b>$($tot.Gap)</b>Gap</div><div class='stat'><b>$($tot.NotAssessed)</b>Not assessed</div><div class='stat'><b>$($tot.Other)</b>Not scored (licensing, declared, not applicable)</div></div><p class='note'>These are counts of findings, not a compliance percentage. Not assessed means the tool could not establish the answer (evidence not read, a manual check, an NRG standard that is not approved, or a workload the operator skipped); it is neither a pass nor a failure.</p>"
     $landing += "<h2>Workloads</h2><table><thead><tr><th>Workload</th><th>Satisfied</th><th>Partial</th><th>Gap</th><th>Not assessed</th><th>Not scored</th></tr></thead><tbody>"
     foreach ($wl in $counts.Keys) { $c = $counts[$wl]; $landing += "<tr><td><a href='$wl.html'><b>$(& $hx $c.Name)</b></a> <span class='mut'>($($c.Total) findings)</span></td><td>$($c.Satisfied)</td><td>$($c.Partial)</td><td>$($c.Gap)</td><td>$($c.NotAssessed)</td><td>$($c.Other)</td></tr>" }
     $landing += '</tbody></table>'
@@ -344,7 +399,7 @@ table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nt
         if (@($gapSummary.FoldedSameSetting).Count -gt 0) { $landing += '<p><b>Controls that read the same setting (counted once in the score)</b></p><ul>' + ((@($gapSummary.FoldedSameSetting | ForEach-Object { "<li><b>$(& $hx $_.Primary)</b> also covers $(& $hx (@($_.AlsoCounted) -join ', '))</li>" })) -join '') + '</ul>' }
         $landing += '</div>'
     }
-    $kinds = [ordered]@{ Collection = 'Collection failures (evidence not read)'; Licensing = 'Licensing limits (not scored)'; Manual = 'Manual checks (no automated test)'; Declaration = 'Operator declarations (not verified)'; StandardNotApproved = 'NRG standards not approved or configured' }
+    $kinds = [ordered]@{ Collection = 'Collection failures (evidence not read)'; Licensing = 'Licensing limits (not scored)'; Manual = 'Manual checks (no automated test)'; Declaration = 'Operator declarations (not verified)'; StandardNotApproved = 'NRG standards not approved or configured'; Skipped = 'Workloads skipped by the operator (not assessed)' }
     $landing += "<h2>Limitations, kept distinct</h2><div class='card'><ul>"
     foreach ($k in $kinds.Keys) { $n = @($rows | Where-Object { $_.Kind -eq $k }).Count; $landing += "<li><b>$n</b> $(& $hx $kinds[$k])$(if ($n -gt 0) { ': ' + ((@($rows | Where-Object { $_.Kind -eq $k } | Select-Object -First 12 | ForEach-Object { $_.ControlId } | Sort-Object -Unique) -join ', ') -replace '&', '&amp;') + $(if ($n -gt 12) { ', ...' }) })</li>" }
     $landing += "</ul></div>"
