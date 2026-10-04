@@ -151,4 +151,26 @@ Describe 'Review 106: DLP and preset scope verdicts' {
             $v.Detail | Should -Match 'P1 \[unknown mode\]'
         }
     }
+
+    Context 'D5: a DLP rule in a policy with an unrecognized Mode is Unknown, never test mode' {
+        It 'Get-NRGDlpRuleStates: only Enable enforces, only documented values are test mode, anything else is Unknown' {
+            $pol = @(@{ Name = 'E'; Mode = 'Enable' }, @{ Name = 'T1'; Mode = 'TestWithNotifications' }, @{ Name = 'T2'; Mode = 'TestWithoutNotifications' },
+                     @{ Name = 'D'; Mode = 'Disable' }, @{ Name = 'P'; Mode = 'PendingDeletion' }, @{ Name = 'X'; Mode = 'SomethingNew' }, @{ Name = 'Z'; Mode = '' })
+            $rules = @($pol | ForEach-Object { @{ Name = "r-$($_.Name)"; ParentPolicyName = $_.Name; Disabled = $false; SensitiveInfoTypes = @('Credit Card Number') } })
+            $st = @{}; foreach ($r in @(Get-NRGDlpRuleStates -Policies $pol -Rules $rules)) { $st[$r.Policy] = $r.State }
+            $st['E'] | Should -Be 'Enforcing'
+            foreach ($n in 'T1', 'T2', 'D', 'P') { $st[$n] | Should -Be 'TestMode' -Because "$n is a documented non-enforcing Mode" }
+            $st['X'] | Should -Be 'Unknown' -Because 'an unrecognized Mode says nothing about enforcement'
+            $st['Z'] | Should -Be 'Unknown'
+        }
+        It 'DEF-4.2 / PVW-3.4: the only matching rule sits in a policy with an unrecognized Mode: not assessed, never a Gap' {
+            Clear-NRGState
+            Set-NRGRawData -Key 'Purview' -Data (Bag @{ DLPPolicies = @(@{ Name = 'Financial'; Mode = 'SomethingNew'; Workloads = $script:AllWl }); DLPRules = @($script:CardRule)
+                                                        SectionStatus = @{ DLPPolicies = 'Collected'; DLPRules = 'Collected' } })
+            $a = V 'Test-NRGControlDefenderDLPSITs' 'DEF-4.2'
+            $b = V 'Test-NRGControlPurviewSensitiveInfoTypes' 'PVW-3.4'
+            $a.State | Should -Be 'NotApplicable' -Because "got: $($a.Detail)"
+            $b.State | Should -Be 'NotApplicable' -Because "got: $($b.Detail)"
+        }
+    }
 }

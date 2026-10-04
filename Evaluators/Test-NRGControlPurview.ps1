@@ -392,7 +392,7 @@ function Test-NRGControlPurviewSensitiveInfoTypes {
         Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -CurrentValue "$($withSit.Count) of $($active.Count) enforcing rules use SITs"
     } elseif ($unknownR.Count -gt 0) {
         # A rule whose parent policy was not found may be the enforcing one: not a Gap.
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "No rule in an enforcing DLP policy matches a sensitive information type, but $($unknownR.Count) enabled rule(s) that match one belong to a policy that was not found among the collected policies, so whether they enforce is unknown; not assessed."
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "No rule in an enforcing DLP policy matches a sensitive information type, but $($unknownR.Count) enabled rule(s) that match one belong to a policy that was not found among the collected policies or whose Mode was empty or not recognized, so whether they enforce is unknown; not assessed."
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "No enabled DLP rule matches on a sensitive information type ($($active.Count) enabled rule(s)). Regulated data (SSN, card numbers, health data) is not being detected." -CurrentValue "0 of $($active.Count) enabled rules use SITs" -RequiredValue 'Enabled DLP rules matching sensitive information types' -Remediation $ctrl.Remediation
     }

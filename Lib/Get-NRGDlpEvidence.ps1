@@ -20,8 +20,10 @@ function Get-NRGDlpRuleStates {
     <#
     .SYNOPSIS
         Joins each DLP rule to its parent policy and classifies it Enforcing (enabled
-        rule in a policy whose Mode is Enable), TestMode (enabled rule in a policy in
-        test mode or off) or Disabled, with the rule's sensitive information types and
+        rule in a policy whose Mode is Enable), TestMode (enabled rule in a policy whose
+        Mode is TestWithNotifications, TestWithoutNotifications, Disable or
+        PendingDeletion), Unknown (parent not found, or its Mode empty or not
+        recognized) or Disabled, with the rule's sensitive information types and
         whether it blocks.
     #>
     [CmdletBinding()]
@@ -36,9 +38,11 @@ function Get-NRGDlpRuleStates {
         $parent = [string](Get-NRGObjectField -Item $r -Key 'ParentPolicyName' -Default '')
         $pm = if ($parent -and $mode.ContainsKey($parent)) { $mode[$parent] } else { '' }
         $disabled = (Get-NRGObjectField -Item $r -Key 'Disabled' -Default $false) -eq $true
+        # Only Enable enforces; only Microsoft's documented non-enforcing Mode values are test mode / off.
+        # An empty, absent or unrecognized Mode (or a parent not found) says nothing: Unknown.
         $state = if ($disabled) { 'Disabled' }
                  elseif ($pm -eq 'Enable') { 'Enforcing' }
-                 elseif ($pm) { 'TestMode' }
+                 elseif ($pm -in @('TestWithNotifications', 'TestWithoutNotifications', 'Disable', 'PendingDeletion')) { 'TestMode' }
                  else { 'Unknown' }
         $blocks = Get-NRGObjectField -Item $r -Key 'BlockAccess' -Default $null
         [pscustomobject]@{
