@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+- **Review of this release (2026-10-04): failed, truncated or unread evidence no longer produces a
+  clean or failed verdict, and severities match the evidence.** Four reviewers checked the PR head
+  `9eeb60b`; every confirmed defect below has a regression test that fails on that head (61 such
+  failures across `Testing/NRG.Review106CA/DLP/Site.Tests.ps1`,
+  `Email-IR/Testing/NRG.Review106IR.Tests.ps1` and new cases in `NRG.IREntryPoints.Tests.ps1`).
+  - Conditional Access: a policy for "Any device" (`includePlatforms` `all`) is no longer read as
+    limited to some platforms (it had made AAD-1.1 Partial and affected AAD-1.2, 1.3, 11.1 and
+    EXO-1.6); `excludePlatforms` is now collected, and `all` with exclusions is narrowing. AAD-2.1
+    leaves `mfa-admins` / `admin-phish-resistant-mfa` not assessed when the role catalog was not read,
+    instead of scoring them Missing.
+  - DLP and Defender: a failed DLP policy read, or a policy whose Mode is empty or unrecognized,
+    leaves DEF-4.1, DEF-4.2 and PVW-3.4 not assessed instead of a Gap (only `Enable` enforces; only
+    the documented test and off modes are "not enforcing"); test-mode-only DLP is a Gap, never
+    Partial; DEF-2.1 leaves unread accepted domains not assessed instead of a shortfall.
+  - Incident response: an anonymous-IP or travel read derived from a failed recent read is not a
+    successful read; SIGNIN-1.2, 1.3, 1.5 and 1.6 and EMAIL-4.1 no longer conclude "nothing found" from
+    a failed or truncated read (an optional source that stopped at its page cap now makes the dive
+    incomplete); the batch sign-in triage reports a client that was not cleared, failed to sign in
+    or errored as such and exits non-zero (10 critical, then 4, 1, 3). Both real entry points are
+    proven end to end in child processes with every read failing (429) and with truncated reads.
+  - Incident-response reliability: the IP owner lookup reads RDAP fields safely (it failed on every
+    ARIN address) and takes the owner only from the registrant (it had judged a RIPE contact's name);
+    SIGNIN-1.2 is Critical only for a successful anonymous-IP sign-in, SIGNIN-1.6 only for a
+    successful sign-in from another country, EMAIL-4.1 only for an identified app with no publisher
+    name; each distinct reason scores once per user; timestamps are kept as ISO 8601 and parsed with
+    the invariant culture (EMAIL-4.2 threw on a non-US workstation).
+  - Report site: a run with no findings, and a results file with an empty findings list, build an
+    empty site; unscored controls take their category from `Get-NRGAssessmentScope`, so skipped
+    workloads read "skipped by the operator" and get no "re-collect" row; an errored check reads
+    "Not assessed (the check errored)", is counted apart from Gaps and is told to re-run, not to
+    remediate; `-FromResults` keeps `Skipped` coverage on restore.
+  - Items confirmed but left as follow-ups are listed in `docs/KNOWN-ISSUES.md`.
+
 - **The first email assessment on a real mailbox raised two false indicators.** (1) EMAIL-4.1 printed
   "UNVERIFIED publisher" for every OAuth grant whose app lookup failed; that lookup needs
   Directory.Read.All, which a delegated user sign-in never has, so Microsoft's own apps were
@@ -17,14 +50,12 @@
   `sharepointonline.com` and `microsoft365.com` are Microsoft domains. Six new tests in
   `NRG.EmailIR.Tests.ps1`, all failing on the old code.
 
-- **A scan started from the web GUI could not sign in to Graph.** The GUI runs the assessment in a
-  hidden child process; Windows' broker sign-in (WAM) needs a parent window handle, so Graph failed
-  with "A window handle must be configured" while Exchange, Purview and Teams (which use
-  `-DisableWAM`) connected, leaving a scan with no Entra ID data. The GUI now sets
-  `NRG_DISABLE_WAM=1` for the child and `Connect-NRGServices` then calls
-  `Set-MgGraphOption -DisableLoginByWAM $true` before `Connect-MgGraph` (guarded: only when the SDK
-  has the option). The sign-in goes through the system browser, with the same MFA and Conditional
-  Access. Pinned by a static test; not yet confirmed by a live GUI scan.
+- **A scan started from the web GUI still cannot sign in to Graph (known limitation).** The GUI runs
+  the assessment in a hidden child process and Graph's Windows broker sign-in (WAM) needs a window.
+  A first attempt (`NRG_DISABLE_WAM` plus `Set-MgGraphOption -DisableLoginByWAM`) was removed in the
+  review below: the SDK honors that option only for a custom client id, and the cmdlet writes a
+  settings file to the operator's profile on every call. Run the assessment from a PowerShell window;
+  see `docs/KNOWN-ISSUES.md`.
 
 - **Web GUI, first run on a real workstation.** Two defects showed on screen: a user name typed in
   the tenant box (`admin@ndaco.org`) was refused as "Invalid domain format" and the message did not
