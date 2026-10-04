@@ -377,12 +377,14 @@ function Test-NRGEmailControlOutboundActivity {
                 break
             }
         }
-        # Burst detection — group by hour bucket
-        try {
-            $hour = [datetime]::Parse($m.SentDateTime).ToString('yyyy-MM-dd HH')
+        # Burst detection — group by hour bucket (UTC, culture-invariant; an
+        # unparseable time is unknown and is left out of the buckets).
+        $sentUtc = ConvertTo-NRGUtcDateTime $m.SentDateTime
+        if ($sentUtc) {
+            $hour = $sentUtc.ToString('yyyy-MM-dd HH', [cultureinfo]::InvariantCulture)
             if (-not $burstWindows.ContainsKey($hour)) { $burstWindows[$hour] = 0 }
             $burstWindows[$hour]++
-        } catch { }
+        }
     }
 
     $maxBurst = if ($burstWindows.Count -gt 0) { ($burstWindows.Values | Measure-Object -Maximum).Maximum } else { 0 }
@@ -875,7 +877,9 @@ function Test-NRGEmailControlAuthMethods {
     if ($phoneCount -gt 1) { $signals += "$phoneCount phone methods registered (attackers add a second phone)" }
     $cutoff = (Get-Date).ToUniversalTime().AddDays(-14)
     $recent = @($methods | Where-Object {
-        $_.CreatedDateTime -and ([datetime]::Parse([string]$_.CreatedDateTime).ToUniversalTime() -gt $cutoff)
+        # Culture-invariant; an unparseable date is unknown, not recent and not a throw.
+        $createdUtc = ConvertTo-NRGUtcDateTime $_.CreatedDateTime
+        $createdUtc -and ($createdUtc -gt $cutoff)
     })
     if ($recent.Count -gt 0) {
         $signals += "$($recent.Count) method(s) registered in the last 14 days: " + (@($recent | ForEach-Object { $_.MethodType }) -join ', ')

@@ -312,4 +312,64 @@ Describe 'Review 106 — incident-response honesty' {
             (& $script:Finding 'EMAIL-4.1').Severity | Should -Be 'Critical'
         }
     }
+    Context 'R3: dates are kept as ISO 8601 and parsed culture-invariantly' {
+        BeforeAll {
+            $script:WithCulture = {
+                param([string] $Name, [scriptblock] $Body)
+                $old = [System.Threading.Thread]::CurrentThread.CurrentCulture
+                try { [System.Threading.Thread]::CurrentThread.CurrentCulture = [cultureinfo]::GetCultureInfo($Name); & $Body }
+                finally { [System.Threading.Thread]::CurrentThread.CurrentCulture = $old }
+            }
+            # A recent day whose day-of-month differs from its month, so a
+            # month/day swap cannot land on the same date.
+            $script:Recent = (Get-Date).ToUniversalTime().Date.AddDays(-3).AddHours(10)
+            if ($script:Recent.Day -eq $script:Recent.Month) { $script:Recent = $script:Recent.AddDays(-1) }
+            # A day > 12 for the burst test: 25 September 2026, 10:00 UTC.
+            $script:Day25 = [datetime]::new(2026, 9, 25, 10, 0, 0, [System.DateTimeKind]::Utc)
+        }
+
+        It 'the user-security collector stores an authentication method''s creation time as ISO 8601 under en-GB' {
+            Mock -ModuleName 'NRG-Assessment' Invoke-NRGGraphRequest {
+                if ($Uri -match 'authentication/methods') { return [ordered]@{ value = @(@{ '@odata.type' = '#microsoft.graph.phoneAuthenticationMethod'; id = 'm1'; phoneNumber = '+1 555 0100'; createdDateTime = $script:Day25 }) } }
+                [ordered]@{ value = @() }
+            }
+            & $script:WithCulture 'en-GB' { Invoke-NRGEmailCollectUserSecurity -TargetUpn 'a@corp.example' }
+            (Get-NRGRawData -Key 'IR-UserAuthMethods').Data.Methods[0].CreatedDateTime | Should -Match '^2026-09-25T10:00:00'
+        }
+
+        It 'EMAIL-4.2 reads an older invariant-culture date under en-GB, and treats an unparseable one as unknown, never a throw' {
+            & $script:Ok 'IR-UserAuthMethods' ([ordered]@{ Count = 2; Methods = @(
+                [ordered]@{ Id = 'm1'; MethodType = 'phoneAuthenticationMethod'; Display = '+1 555 0100'; CreatedDateTime = $script:Recent.ToString('MM/dd/yyyy HH:mm:ss', [cultureinfo]::InvariantCulture) }
+                [ordered]@{ Id = 'm2'; MethodType = 'microsoftAuthenticatorAuthenticationMethod'; Display = 'Phone'; CreatedDateTime = 'not a date' }) })
+            & $script:WithCulture 'en-GB' { Test-NRGEmailControlAuthMethods }
+            $f = & $script:Finding 'EMAIL-4.2'
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match '1 method\(s\) registered in the last 14 days: phoneAuthenticationMethod'
+        }
+
+        It 'EMAIL-2.1 finds a 25-message burst on the 25th under en-GB, whether the time is a DateTime or an ISO string' {
+            foreach ($shape in 'DateTime', 'Iso') {
+                Clear-NRGState
+                & $script:Ok 'IR-MailboxProfile' ([ordered]@{ UserPrincipalName = 'a@corp.example' })
+                $msgs = @(0..24 | ForEach-Object {
+                    $t = $script:Day25.AddMinutes($_)
+                    [ordered]@{ Id = "m$_"; Subject = 'Weekly notes'; SentDateTime = $(if ($shape -eq 'Iso') { $t.ToString('o') } else { $t }); Recipients = @('colleague@corp.example'); HasAttachments = $false; BodyURLs = @() } })
+                & $script:Ok 'IR-MailboxSentItems' ([ordered]@{ WindowDays = 7; Count = 25; Truncated = $false; Messages = $msgs })
+                & $script:WithCulture 'en-GB' { Test-NRGEmailControlOutboundActivity }
+                $f = & $script:Finding 'EMAIL-2.1'
+                $f.State  | Should -Be 'Gap' -Because "$shape shape: $($f.Detail)"
+            }
+        }
+
+        It 'the mailbox collector stores sent times as ISO 8601 under en-GB' {
+            Mock -ModuleName 'NRG-Assessment' Invoke-NRGGraphRequest {
+                if ($Uri -match 'SentItems') { return [ordered]@{ value = @(@{ id = 's1'; subject = 's'; sentDateTime = $script:Day25; toRecipients = @(); ccRecipients = @(); bccRecipients = @(); hasAttachments = $false; bodyPreview = '' }) } }
+                [ordered]@{ value = @() }
+            }
+            & $script:WithCulture 'en-GB' { Invoke-NRGEmailCollectMailbox -WindowDays 7 }
+            $bag = Get-NRGRawData -Key 'IR-MailboxSentItems'
+            $bag.Data.Messages[0].SentDateTime | Should -Match '^2026-09-25T10:00:00'
+            $bag.Data.EarliestObserved | Should -Match '^2026-09-25T10:00:00'
+        }
+    }
 }
