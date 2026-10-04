@@ -231,3 +231,85 @@ Describe 'G1: interactive Graph sign-in uses the supported default path and writ
         $src | Should -Not -Match 'Sign-in uses the system browser'
     }
 }
+
+Describe 'S5: -FromResults keeps a Skipped coverage entry, so a republish still says skipped by the operator' {
+    BeforeAll {
+        # Stub modules on PSModulePath stand in for the Microsoft 365 boundary (as NRG.SmokeRun
+        # does): Graph returns empty collections and nothing touches a network or a tenant.
+        Import-Module (Join-Path $script:Root 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        $exoVersion = [string](& (Get-Module NRG-Assessment) { Get-NRGExoModuleFloor }).Min
+        Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue
+        $script:Tmp5 = & $script:NewOut
+        $mods = Join-Path $script:Tmp5 'mods'
+        $stubs = @(
+            ,@('Microsoft.Graph.Authentication', '2.40.0', 'b0b0b0b0-1111-4222-8333-444444444444', @'
+function Connect-MgGraph { [CmdletBinding()] param($Scopes, $ContextScope, [switch] $NoWelcome, $TenantId, $Environment) }
+function Disconnect-MgGraph { [CmdletBinding()] param() }
+function Get-MgContext { [pscustomobject]@{ Account = 'admin@smoke.example'; TenantId = '00000000-0000-0000-0000-00000000abcd'; Scopes = @(); Environment = 'Global' } }
+function Invoke-MgGraphRequest { [CmdletBinding()] param($Uri, $Method, $OutputType, $Headers, $Body) @{ value = @() } }
+'@)
+            ,@('ExchangeOnlineManagement', $exoVersion, 'c0c0c0c0-1111-4222-8333-555555555555', @'
+function Connect-ExchangeOnline { [CmdletBinding()] param([switch] $ShowBanner, [switch] $DisableWAM, $Organization, $UserPrincipalName, [switch] $SkipLoadingFormatData) }
+function Disconnect-ExchangeOnline { [CmdletBinding()] param($Confirm) }
+function Get-ConnectionInformation { @() }
+'@)
+            ,@('MicrosoftTeams', '5.9.0', 'd0d0d0d0-1111-4222-8333-666666666666', '# stand-in')
+        )
+        foreach ($m in $stubs) {
+            $dir = Join-Path $mods $m[0] $m[1]
+            $null = New-Item -ItemType Directory -Force -Path $dir
+            Set-Content -LiteralPath (Join-Path $dir "$($m[0]).psd1") -Encoding utf8 -Value "@{ RootModule = '$($m[0]).psm1'; ModuleVersion = '$($m[1])'; GUID = '$($m[2])'; FunctionsToExport = '*'; CmdletsToExport = @(); AliasesToExport = @() }"
+            Set-Content -LiteralPath (Join-Path $dir "$($m[0]).psm1") -Encoding utf8 -Value $m[3]
+        }
+        # The real entry point, in a child process.
+        $run = {
+            param([string] $ArgText)
+            $cmd = "& '$(Join-Path $script:Root 'Invoke-NRGAssessment.ps1')' $ArgText; exit `$LASTEXITCODE"
+            $old = $env:PSModulePath
+            try {
+                $env:PSModulePath = $mods + [System.IO.Path]::PathSeparator + $env:PSModulePath
+                $text = ((& pwsh -NoProfile -NonInteractive -Command $cmd *>&1 | Out-String) -replace "\e\[[0-9;]*m", '')
+                [pscustomobject]@{ Text = $text; Code = $LASTEXITCODE }
+            } finally { $env:PSModulePath = $old }
+        }
+        # 1. A live (stubbed) run with Teams and the other optional workloads skipped.
+        $liveOut = Join-Path $script:Tmp5 'live'
+        $script:Live5 = & $run "-NonInteractive -SkipPurview -SkipTeams -SkipSharePoint -SkipIntune -SkipPowerPlatform -SkipDNS -JsonOnly -OutputPath '$liveOut'"
+        $script:Res5 = Get-ChildItem -LiteralPath $liveOut -Filter '*-results.json' -ErrorAction SilentlyContinue | Select-Object -First 1
+        $j = Get-Content -LiteralPath $script:Res5.FullName -Raw | ConvertFrom-Json -AsHashtable -Depth 60
+        $script:TeamsCov5 = [string]$j.Coverage['Teams'].Status
+        # The scope's own answer for the saved findings and coverage is the expected skip set.
+        Import-Module (Join-Path $script:Root 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        $cov = @{}; foreach ($k in $j.Coverage.Keys) { $cov[$k] = [pscustomobject]$j.Coverage[$k] }
+        $script:SkipIds5 = @((Get-NRGAssessmentScope -Findings @($j.Findings) -Coverage $cov -RawData @{}).SkippedByOperator | ForEach-Object { $_.ControlId })
+        Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue
+        # 2. Republish that file.
+        $script:Out5 = Join-Path $script:Tmp5 'republish'
+        $script:Rep5 = & $run "-FromResults '$($script:Res5.FullName)' -NonInteractive -AllFiles -OutputPath '$script:Out5'"
+        $script:Md5 = Get-ChildItem -LiteralPath $script:Out5 -Filter '*-assessment.md' -ErrorAction SilentlyContinue | Select-Object -First 1
+        $script:Site5 = Get-ChildItem -LiteralPath $script:Out5 -Directory -Filter '*-report' -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    AfterAll { Remove-Item -LiteralPath $script:Tmp5 -Recurse -Force -ErrorAction SilentlyContinue }
+
+    It 'the saved results record Teams as Skipped and the republish writes the Markdown summary and the site' {
+        $script:Res5 | Should -Not -BeNullOrEmpty -Because $script:Live5.Text
+        $script:TeamsCov5 | Should -Be 'Skipped'
+        $script:SkipIds5 | Should -Contain 'TMS-1.1'
+        $script:Rep5.Code | Should -BeIn @(0, 2, 3) -Because $script:Rep5.Text
+        $script:Rep5.Text | Should -Not -Match 'publish failed' -Because $script:Rep5.Text
+        $script:Md5 | Should -Not -BeNullOrEmpty
+        $script:Site5 | Should -Not -BeNullOrEmpty
+    }
+    It 'the Markdown scope section counts the skipped workloads as skipped by the operator' {
+        $md = Get-Content -LiteralPath $script:Md5.FullName -Raw
+        $md | Should -Match "\| Not assessed — workload skipped by the operator \| $($script:SkipIds5.Count) \|"
+        $md | Should -Match "$($script:SkipIds5.Count) control\(s\) were not assessed because the operator skipped their workload"
+    }
+    It 'the site labels the Teams controls skipped by the operator and gives them no action-plan row' {
+        $html = Get-Content -LiteralPath (Join-Path $script:Site5.FullName 'TMS.html') -Raw
+        foreach ($cid in @($script:SkipIds5 | Where-Object { $_ -like 'TMS-*' })) {
+            [regex]::Match($html, "<b>$([regex]::Escape($cid))</b>.*?<span class='pill \w+'>([^<]+)</span>").Groups[1].Value | Should -Be 'Not assessed (skipped by the operator)' -Because $cid
+        }
+        @(Import-Csv -LiteralPath (Join-Path $script:Site5.FullName 'ActionPlan.csv') | Where-Object { $_.'Control ID' -in $script:SkipIds5 }) | Should -BeNullOrEmpty
+    }
+}
