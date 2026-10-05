@@ -75,9 +75,26 @@ tenant**. Until it is, treat these as open:
   user (Microsoft's requirement for an outside sender to be accepted), which a member of a distribution
   list always is. An existing allow list is never replaced, and the scan does not compare it with the
   members because Exchange returns allowed senders as directory names, not addresses.
-- **The printed commands are templates.** They follow Microsoft's documented syntax but were not run
-  against a tenant; run each with `-WhatIf` first. A mail-enabled security group may need
-  `-BypassSecurityGroupManagerCheck` to change its owner; the worksheet does not add it.
+- **The printed commands are bundles, and none has been run against a tenant.** Each follows Microsoft's
+  documented syntax: `-WhatIf` and `-Confirm` are documented on every cmdlet used, `@{Add=...}` and
+  `@{Remove=...}` on the connection filter and anti-spam policies, and the overwrite form on
+  `AcceptMessagesOnlyFromSendersOrMembers`. What Microsoft does **not** document, and the scan therefore cannot
+  claim: **clearing `AcceptMessagesOnlyFromSendersOrMembers` or `ModeratedBy` with `$null`** (the rollback that
+  restores a captured empty list writes `$null`; the bundle says so, and its check afterwards is what proves the state
+  came back); **whether `Disable-TransportRule` leaves a rule's `Mode` alone** (its page is silent; the check shows
+  the mode); and **removing several entries of different IP types in one `@{Remove=...}`** (Microsoft's example removes
+  one value). Exchange returns allowed senders as names or GUIDs unless asked for display names, so the verify step
+  after an allowed-senders change compares a count, not addresses. An ownerless list's owner is one-way, because
+  Microsoft states every distribution list must have at least one owner. `Disable-TransportRule` has a built-in
+  confirmation pause and the `Set-*` cmdlets have none, which is why a tenant-wide apply carries `-Confirm`. A preset
+  (Standard or Strict) anti-spam policy gets no command, because Microsoft says not to modify the policies behind a
+  preset. A mail-enabled security group may need `-BypassSecurityGroupManagerCheck` to change its owner; the
+  worksheet does not add it. Run a bundle's preview first and on one object before many.
+- **The scan account's Exchange permissions are documented, not validated.** Microsoft publishes no per-cmdlet role
+  table. [`EXCHANGE-RBAC-DISTRIBUTION-LISTS.md`](EXCHANGE-RBAC-DISTRIBUTION-LISTS.md) lists the cmdlets the scan calls
+  (pinned against the collector by a test), the read-only grants Microsoft documents (View-Only Organization
+  Management, Global Reader), and the `Get-ManagementRole -Cmdlet` check to run in a tenant before relying on a custom
+  role group. Until that check is recorded, a custom role group for the scan is unverified.
 - **No ScubaGear or CIS item is cited**, because none written for distribution lists was found. If one
   is published, add it to the catalog with a test that checks it against the authoritative baseline.
 

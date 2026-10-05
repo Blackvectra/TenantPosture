@@ -47,9 +47,37 @@ function Get-NRGDistributionListBaseline {
     foreach ($r in @(Get-NRGObjectField -Item $j -Key 'recommendations' -Default @())) {
         $id = [string](Get-NRGObjectField -Item $r -Key 'ControlId' -Default '')
         if (-not $id) { continue }
-        $cmds = [ordered]@{}
-        $cmdNode = Get-NRGObjectField -Item $r -Key 'AdminCommands' -Default $null
-        if ($cmdNode) { foreach ($p in $cmdNode.PSObject.Properties) { $cmds[[string]$p.Name] = [string]$p.Value } }
+        # Inspect: read-only commands (Get-*) that show the setting, printed beside a finding. Remediation: the command templates
+        # New-NRGDlRemediation turns into a bundle (captured state, check, preview, apply, verify, rollback), per kind of object.
+        $inspect = [ordered]@{}
+        $inspectNode = Get-NRGObjectField -Item $r -Key 'Inspect' -Default $null
+        if ($inspectNode) { foreach ($p in $inspectNode.PSObject.Properties) { $inspect[[string]$p.Name] = [string]$p.Value } }
+        $remediation = $null
+        $remNode = Get-NRGObjectField -Item $r -Key 'Remediation' -Default $null
+        if ($remNode) {
+            $kinds = [ordered]@{}
+            $kindsNode = Get-NRGObjectField -Item $remNode -Key 'Kinds' -Default $null
+            if ($kindsNode) {
+                foreach ($kp in $kindsNode.PSObject.Properties) {
+                    $t = $kp.Value
+                    $kinds[[string]$kp.Name] = [ordered]@{
+                        TargetKind       = [string](Get-NRGObjectField -Item $t -Key 'TargetKind' -Default '')
+                        Property         = [string](Get-NRGObjectField -Item $t -Key 'Property' -Default '')
+                        Get              = [string](Get-NRGObjectField -Item $t -Key 'Get' -Default '')
+                        Show             = @(@(Get-NRGObjectField -Item $t -Key 'Show' -Default @()) | ForEach-Object { [string]$_ })
+                        Apply            = [string](Get-NRGObjectField -Item $t -Key 'Apply' -Default '')
+                        Rollback         = [string](Get-NRGObjectField -Item $t -Key 'Rollback' -Default '')
+                        RollbackRestores = [string](Get-NRGObjectField -Item $t -Key 'RollbackRestores' -Default '')
+                        RollbackReason   = [string](Get-NRGObjectField -Item $t -Key 'RollbackReason' -Default '')
+                        EmptyRestoreNote = [string](Get-NRGObjectField -Item $t -Key 'EmptyRestoreNote' -Default '')
+                        ShowsNames       = [bool](Get-NRGObjectField -Item $t -Key 'ShowsNames' -Default $false)
+                        RequiresInput    = @(@(Get-NRGObjectField -Item $t -Key 'RequiresInput' -Default @()) | ForEach-Object { [string]$_ })
+                        Effect           = [string](Get-NRGObjectField -Item $t -Key 'Effect' -Default '')
+                    }
+                }
+            }
+            $remediation = [ordered]@{ Impact = [string](Get-NRGObjectField -Item $remNode -Key 'Impact' -Default 'Standard'); Kinds = $kinds }
+        }
         $entries.Add([pscustomobject][ordered]@{
             ControlId     = $id
             Kind          = [string](Get-NRGObjectField -Item $r -Key 'Kind' -Default 'Finding')
@@ -65,8 +93,8 @@ function Get-NRGDistributionListBaseline {
             SourceUrl     = [string](Get-NRGObjectField -Item $r -Key 'SourceUrl' -Default '')
             AlsoSee       = @(@(Get-NRGObjectField -Item $r -Key 'AlsoSee' -Default @()) | ForEach-Object { [string]$_ })
             Nist80053     = @(@(Get-NRGObjectField -Item $r -Key 'Nist80053' -Default @()) | ForEach-Object { [string]$_ })
-            AdminCommands = $cmds
-            RuleCommand   = [string](Get-NRGObjectField -Item $r -Key 'RuleCommand' -Default '')
+            Inspect       = $inspect
+            Remediation   = $remediation
         })
     }
     $out.Entries = @($entries)

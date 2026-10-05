@@ -58,6 +58,24 @@
   read back out of rendered text; the rule classification runs once, not once per list; the CSV carries each recommendation's
   explanation once (`Reference` rows) instead of on every row; the Exchange floor and Store-build wording is one function
   (`Get-NRGExoPreflightNotes`, 396 exports) shared with the full run, and the scan now checks the installed module's version range.
+  **Remediation bundles.** Every command the worksheet prints is now a bundle (`Lib/New-NRGDistributionListRemediation.ps1`): the
+  state the scan read, a `Get-*` check, a `-WhatIf` preview that is the apply command plus `-WhatIf` and nothing else, the apply on
+  its own line, a check afterwards, and a rollback that restores the **captured** state, never a generic inverse (`False` then `$true`
+  then `$false`; `ApprovalRequired` then `Closed` then `ApprovalRequired`; a removed IP Allow List entry is re-added with
+  `@{Add=...}`). A recommendation whose original state is not known, is outside Microsoft's documented set, or cannot be quoted safely
+  is withheld with its reason and carries no command. Synchronized lists, lists with an external member (DL-1.1), preset anti-spam
+  policies and ambiguous names get a withheld bundle, not a command. A change to every recipient (DL-3.1 to DL-3.3) is stricter:
+  a backup step, `-Confirm` on the apply and the rollback, one bundle per rule or policy so one apply has one rollback, and no bundle
+  when no rollback can be built. `NRG.DistributionListRemediation.Tests.ps1` pins all of it, the apply never sharing a line or a CSV
+  cell with the preview, and a fixed command grammar that no tenant text can extend. The catalog's `AdminCommands` and `RuleCommand`
+  became per-control `Remediation` templates (`NRG.DistributionListCatalog.Tests.ps1` requires every `Set-*` rollback to write
+  `{Before}` or undo exactly what the apply changed); the CSV's `AdminCommand` column is replaced by `Impact`, `Step`, `Command` and
+  `Expect` columns, one row per step, so a cell never holds two commands. Microsoft documents no clearing with `$null` for
+  `AcceptMessagesOnlyFromSendersOrMembers` or `ModeratedBy`, so those two rollbacks (restoring a captured empty list) say so; an
+  ownerless list's owner is one-way. `docs/EXCHANGE-RBAC-DISTRIBUTION-LISTS.md` lists the read-only cmdlets the scan calls, what
+  Microsoft documents about the access they need, and how to verify it in a tenant (`Get-ManagementRole -Cmdlet`), pinned against the
+  collector by `NRG.DistributionListRbacDoc.Tests.ps1`. A versioned JSON model of the worksheet and an opt-in DMARC enrichment are
+  follow-ups, deliberately not part of this change.
   A last hardening pass: a value holding an invisible or direction-changing character (a bidirectional override, a zero-width
   character, the byte order mark, a tag character: "Trojan Source") is refused in a printed command, because every command is reviewed by
   eye, and is shown as a visible `<U+XXXX>` marker in both files instead of passing through; no scan file may contain one either.

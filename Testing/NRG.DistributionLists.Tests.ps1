@@ -93,7 +93,7 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
         }
         # Every command the worksheet PRINTS is a write. If any of these is ever called, the log says so.
         $script:WriteSpies = @('Set-DistributionGroup', 'Set-DynamicDistributionGroup', 'Remove-DistributionGroupMember', 'Add-DistributionGroupMember',
-            'New-DistributionGroup', 'Disable-TransportRule', 'Set-TransportRule', 'New-TransportRule', 'Remove-TransportRule',
+            'New-DistributionGroup', 'Disable-TransportRule', 'Enable-TransportRule', 'Set-TransportRule', 'New-TransportRule', 'Remove-TransportRule',
             'Set-HostedConnectionFilterPolicy', 'Set-HostedContentFilterPolicy', 'Set-Mailbox', 'Update-DistributionGroupMember')
         # Anything but Exchange Online is a connection this scan must never make.
         $script:ConnectSpies = @('Connect-MgGraph', 'Connect-IPPSSession', 'Connect-MicrosoftTeams', 'Connect-SPOService')
@@ -110,6 +110,9 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             foreach ($n in @($script:ReadStubs.Keys) + $script:WriteSpies) { Remove $n }
         }
         function script:Get-CallLog { @(& $script:Mod { $script:DlLog.ToArray() }) }
+        # Every command a remediation bundle carries, whichever step it is in.
+        function script:Get-BundleCommands { param($Bundle)
+            @($Bundle.Backup.Command, $Bundle.Precheck.Command, $Bundle.Preview.Command, $Bundle.Apply.Command, $Bundle.Verify.Command, $Bundle.Rollback.Command | Where-Object { $_ }) }
         function script:Invoke-Scan { param([hashtable] $S = @{}, [hashtable] $Collect = @{})
             Clear-NRGState
             Use-Scenario $S
@@ -548,7 +551,8 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 Invoke-Scan @{ Lists = @(New-DlRaw 'Ext' 'ext@contoso.com'); Members = @{ 'ext@contoso.com' = @(New-DlMember 'Vendor' 'v@vendor.example' 'MailContact') } } | Out-Null
                 @(F 'DL-2.3').Count | Should -Be 0
                 $ws = Get-NRGDistributionListWorksheet -Metadata @{}
-                @($ws.Lists | ForEach-Object { $_.Settings } | ForEach-Object { $_.Commands } | Where-Object { $_ -match 'Remove-DistributionGroupMember' }) | Should -BeNullOrEmpty
+                @($ws.Lists | ForEach-Object { $_.Settings } | ForEach-Object { $_.Remediations } | ForEach-Object { Get-BundleCommands $_ } | Where-Object { $_ -match 'Remove-DistributionGroupMember' }) | Should -BeNullOrEmpty
+                @($ws.Lists | ForEach-Object { $_.Settings } | Where-Object { $_.ControlId -eq 'DL-2.3' } | ForEach-Object { $_.Remediations }) | Should -BeNullOrEmpty
                 (@($ws.Lists[0].Settings) | Where-Object { $_.ControlId -eq 'DL-2.3' }).Verdict | Should -Be 'Context'
             }
 
@@ -622,6 +626,17 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             Invoke-Scan @{ Throw = @{ 'Get-TransportRule' = 'denied' } } | Out-Null
             (F 'DL-3.1').State | Should -Be 'NotApplicable'
             (F 'DL-3.1').Detail | Should -Match 'mail flow rules were not read'
+        }
+
+        It 'DL-3.2: every affected entry carries the policy it was read from, because a remediation bundle names the policy and captures that policy''s whole list' {
+            Invoke-Scan @{ ConnFilter = @([pscustomobject]@{ Name = 'Default'; IsDefault = $true; IPAllowList = @('203.0.113.0/24', '10.0.0.0/8') }
+                                          [pscustomobject]@{ Name = 'Second'; IsDefault = $false; IPAllowList = @('198.51.100.1-198.51.101.200') }) } | Out-Null
+            $f = F 'DL-3.2'
+            $f.State | Should -Be 'Gap'
+            $by = @($f.AffectedObjects | ForEach-Object { "$($_.Policy)|$($_.Name)|$($_.Class)" })
+            $by | Should -Contain 'Default|203.0.113.0/24|Within24'
+            $by | Should -Contain 'Default|10.0.0.0/8|WiderThan24'
+            $by | Should -Contain 'Second|198.51.100.1-198.51.101.200|WiderThan24'
         }
 
         It 'DL-3.2: empty is Met; entries within a /24 are Partial; a range wider than a /24 or an unparsable entry is a Gap; unread is not assessed' {
@@ -748,6 +763,12 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 $paths = Publish-NRGDistributionListWorksheet -Worksheet $ws -OutputBase (Join-Path $dir 'contoso-20261002-100000')
                 [pscustomobject]@{ Worksheet = $ws; Txt = (Get-Content -LiteralPath $paths.TextPath -Raw); Csv = @(Import-Csv -LiteralPath $paths.CsvPath); CsvRaw = (Get-Content -LiteralPath $paths.CsvPath -Raw); Paths = $paths; Dir = $dir }
             }
+            # One step of a remediation bundle as the CSV carries it (one command per cell), and the bundles on a worksheet row.
+            $script:StepCmd = { param($o, [string] $Control, [string] $Step, [string] $List = '')
+                @($o.Csv | Where-Object { $_.RowType -eq 'Remediation' -and $_.ControlId -eq $Control -and $_.Step -eq $Step -and ($List -eq '' -or $_.ListAddress -eq $List) } | ForEach-Object { $_.Command }) }
+            $script:Bundles = { param($o, [string] $Control, [string] $List = '')
+                $rows = if ($List) { @(($o.Worksheet.Lists | Where-Object { $_.Address -eq $List }).Settings) } else { @($o.Worksheet.Tenant) }
+                @($rows | Where-Object { $_.ControlId -eq $Control } | ForEach-Object { $_.Remediations }) }
             $script:Scn = @{
                 Lists = @(
                     New-DlRaw 'All Staff' 'allstaff@contoso.com' -With @{ RequireSenderAuthenticationEnabled = $false; ManagedBy = @(); MemberJoinRestriction = 'Open' }
@@ -877,21 +898,22 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
 
         Context 'the administrator commands are text' {
 
-            It 'carries the exact PowerShell for a shortfall, marked "text only", with -WhatIf advised, and never runs it' {
+            It 'carries the exact PowerShell for a shortfall as a bundle, marked text only, and never runs it' {
                 $o = & $script:Build $script:Scn 'cmds'
-                # allstaff holds an external member, whom 'require authenticated senders' would stop sending, so that command is not printed for it.
+                # allstaff holds an external member, whom 'require authenticated senders' would stop sending, so that bundle is withheld, with the reason, and carries no command.
                 $o.Txt | Should -Not -Match "Set-DistributionGroup -Identity 'allstaff@contoso\.com' -RequireSenderAuthenticationEnabled"
+                @(& $script:StepCmd $o 'DL-1.1' 'Apply' 'allstaff@contoso.com') | Should -BeNullOrEmpty
+                (@($o.Csv | Where-Object { $_.RowType -eq 'Remediation' -and $_.ControlId -eq 'DL-1.1' -and $_.ListAddress -eq 'allstaff@contoso.com' -and $_.Step -eq 'Withheld' }).Detail) | Should -Match 'external member'
                 $o.Txt | Should -Match "Set-DistributionGroup -Identity 'allstaff@contoso\.com' -AcceptMessagesOnlyFromSendersOrMembers 'ann@contoso\.com','bob@vendor\.example'"
                 $o.Txt | Should -Match "Set-DistributionGroup -Identity 'allstaff@contoso\.com' -ManagedBy '<owner>'"
-                $o.Txt | Should -Match 'Commands for an administrator to review and run, with -WhatIf first \(text only; this tool never runs them\)'
+                $o.Txt | Should -Match 'Remediation \(text for an administrator; this tool never runs a command\)'
                 $o.Txt | Should -Match "Disable-TransportRule -Identity 'Allow partner'"
-                $o.Txt | Should -Not -Match "Set-HostedConnectionFilterPolicy -Identity Default -IPAllowList @\{Remove='203\.0\.113\.0/24'\}" -Because 'a /24 entry is within what Microsoft recommends, so no command removes it'
-                ($o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ListAddress -eq 'allstaff@contoso.com' -and $_.ControlId -eq 'DL-1.1' }).AdminCommand | Should -BeNullOrEmpty
-                ($o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ListAddress -eq 'allstaff@contoso.com' -and $_.ControlId -eq 'DL-1.2' }).AdminCommand |
+                $o.Txt | Should -Not -Match "Set-HostedConnectionFilterPolicy .*@\{Remove='203\.0\.113\.0/24'\}" -Because 'a /24 entry is within what Microsoft recommends, so no command removes it'
+                (& $script:StepCmd $o 'DL-1.2' 'Apply' 'allstaff@contoso.com') |
                     Should -Be "Set-DistributionGroup -Identity 'allstaff@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers 'ann@contoso.com','bob@vendor.example'"
-                # A list with no external member still gets the require-authentication command.
+                # A list with no external member still gets the require-authentication bundle.
                 $p = & $script:Build @{ Lists = @(New-DlRaw 'Internal Open' 'iopen@contoso.com' -With @{ RequireSenderAuthenticationEnabled = $false }); Members = @{ 'iopen@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com') } } 'cmds-internal'
-                ($p.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ControlId -eq 'DL-1.1' }).AdminCommand | Should -Be "Set-DistributionGroup -Identity 'iopen@contoso.com' -RequireSenderAuthenticationEnabled `$true"
+                (& $script:StepCmd $p 'DL-1.1' 'Apply') | Should -Be "Set-DistributionGroup -Identity 'iopen@contoso.com' -RequireSenderAuthenticationEnabled `$true"
                 @(Get-CallLog | Where-Object { $_ -like 'WRITE:*' }) | Should -BeNullOrEmpty -Because 'the scan printed write commands; it must never have run one'
             }
 
@@ -905,8 +927,9 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 $o = & $script:Build $script:Scn 'std'
                 $o.Txt | Should -Match "Set-DistributionGroup -Identity 'allstaff@contoso\.com' -MemberJoinRestriction 'Closed'"
                 $o.Txt | Should -Not -Match 'Remove-DistributionGroupMember' -Because 'external members stay; the owner decided not to ban them'
-                @($o.Csv | Where-Object { $_.AdminCommand -match 'Remove-DistributionGroupMember' }) | Should -BeNullOrEmpty
+                @($o.Csv | Where-Object { $_.Command -match 'Remove-DistributionGroupMember' }) | Should -BeNullOrEmpty
                 ($o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ListAddress -eq 'allstaff@contoso.com' -and $_.ControlId -eq 'DL-2.5' }).Verdict | Should -Be 'Gap'
+                (& $script:StepCmd $o 'DL-2.5' 'Rollback' 'allstaff@contoso.com') | Should -Be "Set-DistributionGroup -Identity 'allstaff@contoso.com' -MemberJoinRestriction 'Open'" -Because 'the rollback writes back the value that was captured'
                 @(Get-CallLog | Where-Object { $_ -like 'WRITE:*' }) | Should -BeNullOrEmpty
             }
 
@@ -920,33 +943,34 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 $cmdLines = @($o.Txt -split "`n" | Where-Object { $_ -match '^\s+> ' })
                 $cmdLines.Count | Should -BeGreaterThan 0
                 @($cmdLines | Where-Object { $_ -match 'Remove-Item|Set-Mailbox' }) | Should -BeNullOrEmpty -Because 'no command line may carry text from a tenant-controlled name'
-                @($o.Csv | Where-Object { $_.AdminCommand -match 'Remove-Item|Set-Mailbox' }) | Should -BeNullOrEmpty
-                $o.Txt | Should -Match 'cannot be quoted safely here; change this setting in the portal'
-                @($o.Csv | Where-Object { $_.AdminCommand -match "Set-DistributionGroup -Identity '(smart|nl)" }) | Should -BeNullOrEmpty
+                @($o.Csv | Where-Object { $_.Command -match 'Remove-Item|Set-Mailbox' }) | Should -BeNullOrEmpty
+                $o.Txt | Should -Match 'cannot be quoted safely in a command'
+                @($o.Csv | Where-Object { $_.Command -match "Set-DistributionGroup -Identity '(smart|nl)" }) | Should -BeNullOrEmpty
+                @($o.Csv | Where-Object { $_.RowType -eq 'Remediation' -and $_.Step -eq 'Withheld' -and $_.ListAddress -like 'smart*' }).Count | Should -BeGreaterThan 0
             }
 
             It 'fills the placeholders in ONE pass: tenant text that looks like a placeholder is never substituted again (it would end the quoted literal early)' {
-                $c = & $script:Mod { Format-NRGDlCommand -Template 'Remove-DistributionGroupMember -Identity {List} -Member {Member}' -Values @{ List = 'a{Member}b@contoso.com'; Member = "m'x@contoso.com" } }
-                $c | Should -Be "Remove-DistributionGroupMember -Identity 'a{Member}b@contoso.com' -Member 'm''x@contoso.com'"
-                $d = & $script:Mod { Format-NRGDlCommand -Template 'Set-X -Identity {List} -Y {Value}' -Values @{ List = 'p{Value}q@contoso.com'; Value = 'v' } }
-                $d | Should -Be "Set-X -Identity 'p{Value}q@contoso.com' -Y 'v'"
-                $e = & $script:Mod { Format-NRGDlCommand -Template 'Set-X -Identity {List}' -Values @{ List = 'a$1b$&c@contoso.com' } }
+                $c = & $script:Mod { Format-NRGDlCommand -Template 'Set-X -Identity {Target} -Y {After}' -Values @{ Target = 'a{After}b@contoso.com'; After = "m'x@contoso.com" } }
+                $c | Should -Be "Set-X -Identity 'a{After}b@contoso.com' -Y 'm''x@contoso.com'"
+                $d = & $script:Mod { Format-NRGDlCommand -Template 'Set-X -Identity {Target} -Y {Before}' -Values @{ Target = 'p{Before}q@contoso.com'; Before = 'v' } }
+                $d | Should -Be "Set-X -Identity 'p{Before}q@contoso.com' -Y 'v'"
+                $e = & $script:Mod { Format-NRGDlCommand -Template 'Set-X -Identity {Target}' -Values @{ Target = 'a$1b$&c@contoso.com' } }
                 $e | Should -Be "Set-X -Identity 'a`$1b`$&c@contoso.com'" -Because 'replacement-pattern characters in tenant text are literal'
             }
 
             It 'refuses a value holding an invisible or direction-changing character, so a printed command cannot look different from what runs' {
-                $tpl1 = 'Set-X -Identity {List}'; $tpl2 = 'Set-X -S {Senders}'
+                $tpl1 = 'Set-X -Identity {Target}'; $tpl2 = 'Set-X -S {After}'
                 $cases = @(0x202E, 0x202A, 0x2066, 0x2069, 0x200B, 0x200D, 0xFEFF, 0x00AD, 0x2060) | ForEach-Object { "a$([char]$_)b@contoso.com" }
                 $cases += "a$([char]::ConvertFromUtf32(0xE0041))b@contoso.com"   # a tag character: a surrogate pair in UTF-16
                 foreach ($v in $cases) {
-                    $one = & $script:Mod { param($t, $x) Format-NRGDlCommand -Template $t -Values @{ List = $x } } $tpl1 $v
+                    $one = & $script:Mod { param($t, $x) Format-NRGDlCommand -Template $t -Values @{ Target = $x } } $tpl1 $v
                     ($null -eq $one) | Should -BeTrue -Because ('[{0}]' -f (($v.ToCharArray() | ForEach-Object { '{0:X4}' -f [int]$_ }) -join ' '))
-                    $many = & $script:Mod { param($t, $x) Format-NRGDlCommand -Template $t -Values @{ Senders = @('ok@x.example', $x) } } $tpl2 $v
+                    $many = & $script:Mod { param($t, $x) Format-NRGDlCommand -Template $t -Values @{ After = @('ok@x.example', $x) } } $tpl2 $v
                     ($null -eq $many) | Should -BeTrue
                 }
                 # ordinary non-ASCII letters are still accepted: refusing them would leave a legitimately named object with no command
                 foreach ($ok in "jos$([char]0xE9)@contoso.com", "$([char]0x65E5)$([char]0x672C)@contoso.com") {
-                    (& $script:Mod { param($t, $x) Format-NRGDlCommand -Template $t -Values @{ List = $x } } $tpl1 $ok) | Should -Be "Set-X -Identity '$ok'"
+                    (& $script:Mod { param($t, $x) Format-NRGDlCommand -Template $t -Values @{ Target = $x } } $tpl1 $ok) | Should -Be "Set-X -Identity '$ok'"
                 }
             }
 
@@ -960,42 +984,53 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 @($o.Csv | Where-Object { $_.Member -like '*<U+202E>*' }).Count | Should -Be 1
             }
 
-            It 'a policy name holding one cannot get into a printed command: the command is withheld and the portal is named instead' {
+            It 'a policy name holding one cannot get into a printed command: the bundle is withheld and the portal is named instead' {
                 $rlo = [string][char]0x202E
                 $pol = @([pscustomobject]@{ Name = 'Default'; IsDefault = $true; AllowedSenders = @(); AllowedSenderDomains = @() }
                          [pscustomobject]@{ Name = "Bob${rlo}s Policy"; IsDefault = $false; AllowedSenders = @(); AllowedSenderDomains = @('x.example') })
                 $o = & $script:Build @{ AntiSpam = $pol; AntiSpamRules = @([pscustomobject]@{ Name = 'r'; HostedContentFilterPolicy = "Bob${rlo}s Policy"; State = 'Enabled' }) } 'bidipol'
                 $row = $o.Worksheet.Tenant | Where-Object { $_.ControlId -eq 'DL-3.3' }
-                @($row.Commands | Where-Object { $_ -match 'Remove=' }) | Should -BeNullOrEmpty
-                ($row.Commands -join ' ') | Should -Match 'cannot be quoted safely'
+                $b = @($row.Remediations)
+                $b.Count | Should -Be 1
+                $b[0].Available | Should -BeFalse
+                $b[0].Reason | Should -Match 'cannot be quoted safely'
+                @($o.Csv | Where-Object { $_.Command -match 'Remove=' }) | Should -BeNullOrEmpty
                 ($o.Txt + $o.CsvRaw) | Should -Not -Match '‮'
             }
 
             It 'refuses to build a command from a value that cannot be quoted safely, or from an unrecognized parameter word' {
                 foreach ($bad in "a$([char]0x2018)b@contoso.com", "a$([char]0x201B)b@contoso.com", "a`nb@contoso.com", '', $null) {
-                    & $script:Mod { param($v) Format-NRGDlCommand -Template 'Set-X -Identity {List}' -Values @{ List = $v } } $bad | Should -BeNullOrEmpty -Because "[$bad]"
+                    & $script:Mod { param($v) Format-NRGDlCommand -Template 'Set-X -Identity {Target}' -Values @{ Target = $v } } $bad | Should -BeNullOrEmpty -Because "[$bad]"
                 }
-                & $script:Mod { Format-NRGDlCommand -Template 'Set-HostedContentFilterPolicy -Identity {Policy} -{Parameter} @{Remove={Value}}' -Values @{ Policy = 'Default'; Parameter = 'BlockedSenders; calc'; Value = 'x' } } | Should -BeNullOrEmpty
-                & $script:Mod { Format-NRGDlCommand -Template 'Set-HostedContentFilterPolicy -Identity {Policy} -{Parameter} @{Remove={Value}}' -Values @{ Policy = 'Default'; Parameter = 'AllowedSenderDomains'; Value = 'x.example' } } |
+                $tpl = 'Set-HostedContentFilterPolicy -Identity {Target} -{Parameter} @{Remove={Remove}}'
+                & $script:Mod { param($t) Format-NRGDlCommand -Template $t -Values @{ Target = 'Default'; Parameter = 'BlockedSenders; calc'; Remove = @('x') } } $tpl | Should -BeNullOrEmpty
+                & $script:Mod { param($t) Format-NRGDlCommand -Template $t -Values @{ Target = 'Default'; Parameter = 'AllowedSenderDomains'; Remove = @('x.example') } } $tpl |
                     Should -Be "Set-HostedContentFilterPolicy -Identity 'Default' -AllowedSenderDomains @{Remove='x.example'}"
                 & $script:Mod { Format-NRGDlCommand -Template '' -Values @{} } | Should -BeNullOrEmpty
             }
 
-            It '{Senders}: every address is its own quoted literal, in order; an empty list or ONE bad address yields no command at all, never a partial one' {
-                $tpl = 'Set-DistributionGroup -Identity {List} -AcceptMessagesOnlyFromSendersOrMembers {Senders}'
-                (& $script:Mod { param($t) Format-NRGDlCommand -Template $t -Values @{ List = 'l@contoso.com'; Senders = @('a@x.example', "o'b@x.example") } } $tpl) |
-                    Should -Be "Set-DistributionGroup -Identity 'l@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers 'a@x.example','o''b@x.example'"
-                (& $script:Mod { param($t) Format-NRGDlCommand -Template $t -Values @{ List = 'l@contoso.com'; Senders = @('only@x.example') } } $tpl) |
-                    Should -Be "Set-DistributionGroup -Identity 'l@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers 'only@x.example'"
+            It 'typed values: a boolean is $true / $false, a string a quoted literal, a list its quoted literals in order; an unknown value, a missing value or ONE bad entry yields no command at all, never a partial one' {
+                $tpl = 'Set-X -Identity {Target} -S {After}'
+                $fmt = { param($v) & $script:Mod { param($t, $x) Format-NRGDlCommand -Template $t -Values @{ Target = 'l@contoso.com'; After = $x } } $tpl $v }
+                (& $fmt $true)  | Should -Be "Set-X -Identity 'l@contoso.com' -S `$true"
+                (& $fmt $false) | Should -Be "Set-X -Identity 'l@contoso.com' -S `$false"
+                (& $fmt 'Closed') | Should -Be "Set-X -Identity 'l@contoso.com' -S 'Closed'"
+                (& $fmt @('a@x.example', "o'b@x.example")) | Should -Be "Set-X -Identity 'l@contoso.com' -S 'a@x.example','o''b@x.example'"
+                (& $fmt @('only@x.example')) | Should -Be "Set-X -Identity 'l@contoso.com' -S 'only@x.example'"
                 foreach ($bad in "x$([char]0x2018)y@x.example", "x$([char]0x201B)y@x.example", "x`ny@x.example", '', $null) {
-                    $r = & $script:Mod { param($t, $b) Format-NRGDlCommand -Template $t -Values @{ List = 'l@contoso.com'; Senders = @('ok@x.example', $b, 'also@x.example') } } $tpl $bad
-                    ($null -eq $r) | Should -BeTrue -Because "a command with a sender dropped would reject that sender; got [$r] for [$bad]"
+                    $r = & $fmt @('ok@x.example', $bad, 'also@x.example')
+                    ($null -eq $r) | Should -BeTrue -Because "a command with an entry dropped would be worse than none; got [$r] for [$bad]"
                 }
-                ($null -eq (& $script:Mod { param($t) Format-NRGDlCommand -Template $t -Values @{ List = 'l@contoso.com'; Senders = @() } } $tpl)) | Should -BeTrue
-                ($null -eq (& $script:Mod { param($t) Format-NRGDlCommand -Template $t -Values @{ List = 'l@contoso.com' } } $tpl)) | Should -BeTrue
+                ($null -eq (& $fmt $null)) | Should -BeTrue -Because 'not known is not a value'
+                ($null -eq (& $fmt 5)) | Should -BeTrue -Because 'only a boolean, a string or a list of strings is a value'
+                ($null -eq (& $fmt @())) | Should -BeTrue -Because 'an empty list is never a value to set'
+                ($null -eq (& $script:Mod { param($t) Format-NRGDlCommand -Template $t -Values @{ Target = 'l@contoso.com' } } $tpl)) | Should -BeTrue -Because 'a placeholder with no value'
+                # Only {Before} may be an empty list: a captured empty list is restored by writing $null.
+                (& $script:Mod { Format-NRGDlCommand -Template 'Set-X -Identity {Target} -S {Before}' -Values @{ Target = 'l@contoso.com'; Before = @() } }) | Should -Be "Set-X -Identity 'l@contoso.com' -S `$null"
+                ($null -eq (& $script:Mod { Format-NRGDlCommand -Template 'Set-X -Identity {Target} -S {Before}' -Values @{ Target = 'l@contoso.com'; Before = $null } })) | Should -BeTrue -Because 'unknown is not empty'
                 # Tenant text that looks like a placeholder is inserted once and never substituted again.
-                (& $script:Mod { param($t) Format-NRGDlCommand -Template $t -Values @{ List = 'a{Senders}b@contoso.com'; Senders = @('s{List}t@x.example') } } $tpl) |
-                    Should -Be "Set-DistributionGroup -Identity 'a{Senders}b@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers 's{List}t@x.example'"
+                (& $script:Mod { param($t) Format-NRGDlCommand -Template $t -Values @{ Target = 'a{After}b@contoso.com'; After = @('s{Target}t@x.example') } } $tpl) |
+                    Should -Be "Set-X -Identity 'a{After}b@contoso.com' -S 's{Target}t@x.example'"
             }
 
             It 'a list address that contains a placeholder cannot reach the senders in the printed allow-list command' {
@@ -1060,7 +1095,8 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                     param([hashtable] $Scn, [string] $Name = 'prop')
                     $o = & $script:Build $Scn $Name
                     $row = $o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ControlId -eq 'DL-1.2' } | Select-Object -First 1
-                    [pscustomobject]@{ O = $o; Row = $row; Cmd = [string]$row.AdminCommand; Detail = [string]$row.Detail; Verdict = [string]$row.Verdict }
+                    $apply = @($o.Csv | Where-Object { $_.RowType -eq 'Remediation' -and $_.ControlId -eq 'DL-1.2' -and $_.Step -eq 'Apply' } | Select-Object -First 1)
+                    [pscustomobject]@{ O = $o; Row = $row; Cmd = [string]$apply.Command; Detail = [string]$row.Detail; Verdict = [string]$row.Verdict }
                 }
                 $script:OpenList = { param([hashtable] $With = @{}, [string] $Addr = 'open@contoso.com') New-DlRaw 'Open' $Addr -With (@{ RequireSenderAuthenticationEnabled = $false } + $With) }
             }
@@ -1073,7 +1109,7 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 $r.Detail | Should -Match 'Proposed allow list: the 3 address\(es\) read now \(1 external, 1 nested group\(s\)\)'
                 $r.Detail | Should -Match 'It is a snapshot: a member added later is not on it'
                 $r.Detail | Should -Match 'does not authenticate an outside sender'
-                $r.Detail | Should -Match '-WhatIf first'
+                $r.Detail | Should -Match 'a -WhatIf preview, the apply, a check afterwards and a rollback'
                 $r.O.Txt | Should -Match "(?m)^\s+> Set-DistributionGroup -Identity 'open@contoso\.com' -AcceptMessagesOnlyFromSendersOrMembers 'ann@contoso\.com','bob@vendor\.example','sub@contoso\.com'$"
                 $r.O.Txt | Should -Match 'Allowed senders  \[Proposal\]'
                 $r.O.Worksheet.Summary.AllowListsProposed | Should -Be 1
@@ -1102,7 +1138,7 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 $r.Cmd | Should -BeNullOrEmpty
                 $r.Verdict | Should -Be 'Context'
                 $r.Detail | Should -Match 'cannot be quoted safely'
-                $r.Detail | Should -Match 'a command with a member left out would reject that member'
+                $r.Detail | Should -Match 'An allow list with a member left out would reject that member'
                 $r.O.Txt | Should -Not -Match '(?m)^\s+> Set-DistributionGroup -Identity .* -AcceptMessagesOnlyFromSendersOrMembers'
                 $r.O.Worksheet.Summary.AllowListsProposed | Should -Be 0
             }
@@ -1138,7 +1174,8 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 Invoke-Scan @{ Lists = @(& $script:OpenList); Members = @{ 'open@contoso.com' = @(1..3 | ForEach-Object { New-DlMember "U$_" "u$_@contoso.com" }) } } @{ MaxMembersPerList = 2 } | Out-Null
                 $ws = Get-NRGDistributionListWorksheet -Metadata @{}
                 $row = @($ws.Lists[0].Settings | Where-Object { $_.ControlId -eq 'DL-1.2' })[0]
-                @($row.Commands).Count | Should -Be 0
+                @($row.Remediations | Where-Object { $_.Available }).Count | Should -Be 0
+                @($row.Remediations | Where-Object { -not $_.Available }).Count | Should -Be 1 -Because 'the recommendation is withheld, with its reason, not silently dropped'
                 $row.Detail | Should -Match 'only the first 2 members were read and the list has more'
             }
 
@@ -1175,7 +1212,8 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 $row = $o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ControlId -eq 'DL-2.3' }
                 $row.Verdict | Should -Be 'Context'
                 $row.Current | Should -Be '1 external of 2'
-                $row.AdminCommand | Should -BeNullOrEmpty
+                @(& $script:Bundles $o 'DL-2.3' 'ext@contoso.com').Count | Should -Be 0
+                @($o.Csv | Where-Object { $_.ControlId -eq 'DL-2.3' -and $_.RowType -eq 'Remediation' }).Count | Should -Be 0
                 $row.Detail | Should -Match 'shown and not judged'
                 $o.Txt | Should -Match 'External members  \[Context\]'
             }
@@ -1223,7 +1261,8 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             $o = & $script:Build @{ Lists = @(New-DlRaw 'Gated' 'gated@contoso.com' -With @{ MemberJoinRestriction = 'ApprovalRequired' }) } 'join'
             $row = $o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ControlId -eq 'DL-2.5' }
             $row.Verdict | Should -Be 'Gap'
-            $row.AdminCommand | Should -Be "Set-DistributionGroup -Identity 'gated@contoso.com' -MemberJoinRestriction 'Closed'"
+            (& $script:StepCmd $o 'DL-2.5' 'Apply') | Should -Be "Set-DistributionGroup -Identity 'gated@contoso.com' -MemberJoinRestriction 'Closed'"
+            (& $script:StepCmd $o 'DL-2.5' 'Rollback') | Should -Be "Set-DistributionGroup -Identity 'gated@contoso.com' -MemberJoinRestriction 'ApprovalRequired'" -Because 'the rollback restores the captured value, not the generic inverse'
             $row.Detail | Should -Match "uses 'Closed', the most restrictive of the approved values"
         }
 
@@ -1231,10 +1270,13 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             $o = & $script:Build @{ ConnFilter = @([pscustomobject]@{ Name = 'Default'; IsDefault = $true; IPAllowList = @('203.0.113.0/24', '10.0.0.0/8') }) } 'ipw'
             $row = $o.Worksheet.Tenant | Where-Object { $_.ControlId -eq 'DL-3.2' }
             $row.Verdict | Should -Be 'Gap'
-            $rm = @($row.Commands | Where-Object { $_ -match 'Remove=' })
-            $rm.Count | Should -Be 1
-            $rm[0] | Should -Match "Remove='10\.0\.0\.0/8'"
-            ($row.Commands -join ' ') | Should -Not -Match '203\.0\.113\.0'
+            $b = @($row.Remediations)
+            $b.Count | Should -Be 1 -Because 'one apply, one rollback, per policy'
+            $b[0].Available | Should -BeTrue
+            $b[0].Apply.Command | Should -Be "Set-HostedConnectionFilterPolicy -Identity 'Default' -IPAllowList @{Remove='10.0.0.0/8'} -Confirm"
+            (Get-BundleCommands $b[0] | Where-Object { $_ -match 'Remove=|Add=' }) -join ' ' | Should -Not -Match '203\.0\.113\.0' -Because 'a compliant entry is never offered for removal, and the rollback re-adds only what was removed'
+            $b[0].Rollback.Command | Should -Be "Set-HostedConnectionFilterPolicy -Identity 'Default' -IPAllowList @{Add='10.0.0.0/8'} -Confirm"
+            $b[0].Observed['IPAllowList'] | Should -Be '203.0.113.0/24, 10.0.0.0/8' -Because 'the whole captured list is what the check compares against'
         }
 
         It 'DL-3.3: the printed command takes the policy name from its own field, so an apostrophe in the name cannot change which policy it names' {
@@ -1243,7 +1285,11 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             $o = & $script:Build @{ AntiSpam = $pol; AntiSpamRules = @([pscustomobject]@{ Name = 'r'; HostedContentFilterPolicy = "Bob's Policy"; State = 'Enabled' }) } 'pol'
             $row = $o.Worksheet.Tenant | Where-Object { $_.ControlId -eq 'DL-3.3' }
             $row.Verdict | Should -Be 'Gap'
-            @($row.Commands | Where-Object { $_ -match 'Remove=' }) | Should -Be @("Set-HostedContentFilterPolicy -Identity 'Bob''s Policy' -AllowedSenderDomains @{Remove='x.example'}")
+            $b = @($row.Remediations)
+            $b.Count | Should -Be 1
+            $b[0].Preview.Command | Should -Be "Set-HostedContentFilterPolicy -Identity 'Bob''s Policy' -AllowedSenderDomains @{Remove='x.example'} -WhatIf"
+            $b[0].Apply.Command | Should -Be "Set-HostedContentFilterPolicy -Identity 'Bob''s Policy' -AllowedSenderDomains @{Remove='x.example'} -Confirm"
+            $b[0].Rollback.Command | Should -Be "Set-HostedContentFilterPolicy -Identity 'Bob''s Policy' -AllowedSenderDomains @{Add='x.example'} -Confirm"
         }
 
         It 'the CSV carries each recommendation''s explanation once, on a Reference row, not on every setting row' {
@@ -1259,13 +1305,14 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
         It 'a list synchronized from on-premises gets no Exchange Online command and says where to make the change' {
             $o = & $script:Build @{ Lists = @(New-DlRaw 'Synced' 'synced@contoso.com' -With @{ IsDirSynced = $true; RequireSenderAuthenticationEnabled = $false; ManagedBy = @() }); Members = @{ 'synced@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com') } } 'sync'
             $o.Txt | Should -Match 'Source of truth: Synchronized from on-premises Active Directory'
-            @($o.Csv | Where-Object { $_.ListAddress -eq 'synced@contoso.com' -and $_.AdminCommand }) | Should -BeNullOrEmpty
+            @($o.Csv | Where-Object { $_.ListAddress -eq 'synced@contoso.com' -and $_.Command }) | Should -BeNullOrEmpty
+            @($o.Csv | Where-Object { $_.ListAddress -eq 'synced@contoso.com' -and $_.RowType -eq 'Remediation' -and $_.Step -eq 'Withheld' -and $_.Detail -match 'managed there' }).Count | Should -BeGreaterThan 0
             $o.Txt | Should -Not -Match "Set-DistributionGroup -Identity 'synced@contoso\.com'"
             ($o.Csv | Where-Object { $_.RowType -eq 'Directory' }).Detail | Should -Match 'managed there'
             $o.Worksheet.Summary.AllowListsProposed | Should -Be 0
             # a list that is not synchronized still gets its commands
             $p = & $script:Build @{ Lists = @(New-DlRaw 'Local' 'local@contoso.com' -With @{ IsDirSynced = $false; ManagedBy = @() }) } 'nosync'
-            @($p.Csv | Where-Object { $_.ListAddress -eq 'local@contoso.com' -and $_.AdminCommand }).Count | Should -BeGreaterThan 0
+            @($p.Csv | Where-Object { $_.ListAddress -eq 'local@contoso.com' -and $_.Step -eq 'Apply' -and $_.Command }).Count | Should -BeGreaterThan 0
         }
 
         It '"Lists that accept mail from anyone" counts lists by their DL-1.1 verdict, not by a phrase in rendered text' {
@@ -1519,7 +1566,7 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
         BeforeAll {
             $script:ScanFiles = @(
                 'Collectors/EXO/Invoke-NRGCollectDistributionLists.ps1', 'Evaluators/Test-NRGDistributionLists.ps1', 'Lib/Get-NRGDistributionListBaseline.ps1',
-                'Lib/Get-NRGDistributionListWorksheet.ps1', 'Publishers/Publish-NRGDistributionListWorksheet.ps1', 'Lib/Invoke-NRGDistributionListScan.ps1', 'Lib/Connect-NRGExchangeOnly.ps1')
+                'Lib/Get-NRGDistributionListWorksheet.ps1', 'Lib/New-NRGDistributionListRemediation.ps1', 'Publishers/Publish-NRGDistributionListWorksheet.ps1', 'Lib/Invoke-NRGDistributionListScan.ps1', 'Lib/Connect-NRGExchangeOnly.ps1')
             $script:Ast = @{}
             foreach ($f in $script:ScanFiles) {
                 $e = $null; $t = $null
@@ -1628,10 +1675,10 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             $loaded = @(Get-ChildItem -LiteralPath $script:Root -Recurse -Filter '*.ps1' -File | Where-Object { $_.FullName -match '[\\/](Lib|Collectors|Evaluators|Publishers)[\\/]' })
             foreach ($f in $loaded) {
                 $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
-                $bad = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -in @('Set-DistributionGroup', 'Set-DynamicDistributionGroup', 'Remove-DistributionGroupMember', 'Add-DistributionGroupMember', 'Disable-TransportRule', 'Set-HostedConnectionFilterPolicy', 'Set-HostedContentFilterPolicy') }, $true))
+                $bad = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -in @('Set-DistributionGroup', 'Set-DynamicDistributionGroup', 'Remove-DistributionGroupMember', 'Add-DistributionGroupMember', 'Disable-TransportRule', 'Enable-TransportRule', 'Set-HostedConnectionFilterPolicy', 'Set-HostedContentFilterPolicy') }, $true))
                 $bad | Should -BeNullOrEmpty -Because "$($f.Name) must not call a distribution-list write cmdlet"
             }
-            (Get-Content -LiteralPath (Join-Path $script:Root 'Config/distribution-list-baseline.json') -Raw) | Should -Match 'Set-DistributionGroup -Identity \{List\}'
+            (Get-Content -LiteralPath (Join-Path $script:Root 'Config/distribution-list-baseline.json') -Raw) | Should -Match 'Set-DistributionGroup -Identity \{Target\}'
         }
     }
 }

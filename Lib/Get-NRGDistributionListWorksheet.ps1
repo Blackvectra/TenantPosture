@@ -15,87 +15,15 @@
 #
 # A VIEW, LIKE Get-NRGAssessmentScope: it emits no finding and moves no score.
 #
-# COMMANDS ARE TEXT. The worksheet carries the exact PowerShell an administrator
-# would run to apply a recommendation, as STRINGS. Nothing here, in the publisher, or
-# anywhere the module loads runs them: NRG.DistributionLists.Tests.ps1 parses these
-# files and fails on any call to a cmdlet that is not a read.
-#
-# TENANT TEXT NEVER BECOMES CODE. A list's name can be set by its owner, so a name
-# is never interpolated into a command. The command uses the primary SMTP address,
-# in a single-quoted literal with embedded quotes doubled, and PowerShell treats the
-# typographic single quotes (U+2018 .. U+201B) as quotes too, so an identity holding
-# one, or a line break, is refused rather than quoted: the worksheet says to use the
-# portal for that object.
-
-# One value as a single-quoted PowerShell literal, or $null when it cannot be quoted safely.
-function ConvertTo-NRGDlPsLiteral {
-    [CmdletBinding()]
-    [OutputType([string])]
-    param([AllowNull()] [string] $Value)
-    $v = [string]$Value
-    if ([string]::IsNullOrWhiteSpace($v)) { return $null }
-    # PowerShell reads U+2018 .. U+201B as single-quote characters even INSIDE a single-quoted string, so a value holding one
-    # could end its literal early. Those, the Unicode line separators and control characters are refused. The code points are
-    # built at run time on purpose: typing the characters in this file would make the parser read them as quotes and change
-    # what the pattern means (NRG.DistributionLists.Tests.ps1 scans the source for any such character).
-    foreach ($cp in 0x2018, 0x2019, 0x201A, 0x201B, 0x0085, 0x2028, 0x2029) { if ($v.Contains([string][char]$cp)) { return $null } }
-    if ($v -match '[\r\n\0]') { return $null }
-    # Invisible and direction-changing characters (Unicode format characters: bidirectional overrides and isolates, zero-width
-    # characters, the byte order mark, the soft hyphen, tag characters) can make a command LOOK different from what runs
-    # ("Trojan Source"). Every command here is reviewed by eye before it is run, so a value holding one is refused.
-    if ($v -match '[\p{Cf}\p{Cc}\p{Zl}\p{Zp}]' -or $v -match '\uDB40[\uDC00-\uDC7F]') { return $null }
-    return "'" + ($v -replace "'", "''") + "'"
-}
-
-# Fill a catalog command template. {List}/{Member}/{Value}/{Policy} become quoted literals;
-# {Senders} is a LIST of addresses, each its own quoted literal, joined with commas (an
-# allowed-senders list is multi-valued); {Parameter} is one of two fixed words. Returns $null
-# when any value cannot be quoted safely, when {Senders} is empty, or when the template is
-# empty, so the caller prints the portal note instead. A command with one sender dropped
-# would be WORSE than none: an allow list that leaves a member out rejects that member.
-#
-# ONE PASS, on purpose. Substituting the placeholders one after another re-scans text that
-# was already inserted, so a tenant-controlled address containing the literal text {Member}
-# would be substituted a second time, and that second literal's quotes would end the first
-# literal early: a quote breakout from tenant data. A single regex pass never rescans what
-# it inserted.
-function Format-NRGDlCommand {
-    [CmdletBinding()]
-    [OutputType([string])]
-    param(
-        [AllowNull()] [string] $Template,
-        [hashtable] $Values = @{}
-    )
-    if ([string]::IsNullOrWhiteSpace($Template)) { return $null }
-    $pattern = '\{(List|Member|Value|Policy|Parameter|Senders)\}'
-    $fill = @{}
-    foreach ($k in @([regex]::Matches($Template, $pattern) | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)) {
-        if ($k -eq 'Senders') {
-            $items = @(@($(if ($Values.ContainsKey($k)) { $Values[$k] } else { @() })) | ForEach-Object { [string]$_ })
-            if ($items.Count -eq 0) { return $null }
-            # An explicit loop, not `$x = foreach { ... return $null ... }`: a return inside a foreach whose output is captured emits the
-            # literals gathered so far, which would hand the caller a command with senders missing.
-            $lits = [System.Collections.Generic.List[string]]::new()
-            foreach ($it in $items) {
-                $q = ConvertTo-NRGDlPsLiteral -Value $it
-                if ($null -eq $q) { return $null }
-                $lits.Add($q)
-            }
-            $fill[$k] = ($lits -join ',')
-            continue
-        }
-        $raw = [string]$(if ($Values.ContainsKey($k)) { $Values[$k] } else { '' })
-        if ($k -eq 'Parameter') {
-            if ($raw -notin @('AllowedSenders', 'AllowedSenderDomains')) { return $null }
-            $fill[$k] = $raw
-        } else {
-            $lit = ConvertTo-NRGDlPsLiteral -Value $raw
-            if ($null -eq $lit) { return $null }
-            $fill[$k] = $lit
-        }
-    }
-    return [regex]::Replace($Template, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $fill[$m.Groups[1].Value] })
-}
+# COMMANDS ARE TEXT, AND A COMMAND IS A BUNDLE. Each recommendation that has a command
+# carries a remediation bundle (Lib/New-NRGDistributionListRemediation.ps1): the state this
+# scan captured, a check, a preview, the apply, a check afterwards and a rollback that
+# restores the captured state. A recommendation whose original state is not known gets a
+# withheld bundle with the reason and no command at all. Nothing here, in the publisher, or
+# anywhere the module loads runs a command: NRG.DistributionLists.Tests.ps1 parses these
+# files and fails on any call to a cmdlet that is not a read. How a name or address becomes
+# part of a command (single-quoted literal, one pass, refusal of quote-like, line-break and
+# invisible characters) is decided in the builder, not here.
 
 # The limitations every output prints, in this order, in these words.
 function Get-NRGDlLimitations {
@@ -173,6 +101,8 @@ function Get-NRGDistributionListWorksheet {
     $limits = Get-NRGObjectField -Item $data -Key 'Limits' -Default $null
     $stats  = Get-NRGObjectField -Item $data -Key 'Stats' -Default $null
     $ss     = Get-NRGObjectField -Item $data -Key 'SectionStatus' -Default $null
+    # When the state a bundle's commands were built from was read, so the administrator can tell how old it is.
+    $observedAt = [string](Get-NRGObjectField -Item $Raw -Key 'CollectedAt' -Default '')
     $maxM   = [int](Get-NRGObjectField -Item $limits -Key 'MaxMembersPerList' -Default 500)
     $listsTrunc = [bool](Get-NRGObjectField -Item $limits -Key 'ListsTruncated' -Default $false)
     $listsSeen  = [int](Get-NRGObjectField -Item $limits -Key 'ListsSeen' -Default 0)
@@ -196,7 +126,7 @@ function Get-NRGDistributionListWorksheet {
     $fwNote = [string]$Baseline.FrameworkNote
 
     $mkRow = {
-        param($cid, $item, $current, $verdict, $detail, $list, $commands)
+        param($cid, $item, $current, $verdict, $detail, $list, $bundles)
         $r = $null; if ($cid -and $rec.ContainsKey($cid)) { $r = $rec[$cid] }
         [ordered]@{
             RowType      = 'Setting'
@@ -215,7 +145,10 @@ function Get-NRGDistributionListWorksheet {
             AlsoSee      = $(if ($r) { @($r.AlsoSee) } else { @() })
             Nist80053    = $(if ($r) { @($r.Nist80053) } else { @() })
             FrameworkItem = $fwNote
-            Commands     = @($commands | Where-Object { $_ })
+            # Remediation bundles (captured state, check, preview, apply, verify, rollback), or a withheld bundle with its reason.
+            Remediations = @($bundles | Where-Object { $null -ne $_ })
+            # Read-only commands (Get-*) that show the setting; no change.
+            Inspect      = @()
         }
     }
 
@@ -228,28 +161,17 @@ function Get-NRGDistributionListWorksheet {
         $verdict = if ($f) { Get-NRGDlVerdictWord -State ([string](Get-NRGObjectField -Item $f -Key 'State' -Default '')) } else { 'Not assessed' }
         $detail  = if ($f) { [string](Get-NRGObjectField -Item $f -Key 'Detail' -Default '') } else { 'Not assessed: the distribution-list scan produced no verdict for this item.' }
         $cur     = if ($f) { [string](Get-NRGObjectField -Item $f -Key 'CurrentValue' -Default '') } else { '' }
-        $cmds = @()
         $objs = if ($f) { @(Get-NRGObjectField -Item $f -Key 'AffectedObjects' -Default @()) } else { @() }
         $r = $rec[$cid]
+        $bundles = @(); $inspect = @()
         if ($verdict -in @('Gap', 'Partial')) {
-            foreach ($t in @($r.AdminCommands.Values)) { if ($t) { $cmds += $t } }   # the read-only look at the setting, as Microsoft prints it
-            foreach ($o in $objs) {
-                # An IP Allow List entry that is within a /24 is what Microsoft recommends staying within: no command removes it.
-                if ($cid -eq 'DL-3.2' -and [string](Get-NRGObjectField -Item $o -Key 'Class' -Default '') -notin @('WiderThan24', 'Unparsed')) { continue }
-                $nm = [string](Get-NRGObjectField -Item $o -Key 'Name' -Default '')
-                $src = [string](Get-NRGObjectField -Item $o -Key 'Source' -Default '')
-                $c = $null
-                if ($r.RuleCommand -and $src -eq 'Mail flow rule' -and $cid -eq 'DL-3.1') { $c = Format-NRGDlCommand -Template $r.RuleCommand -Values @{ Value = $nm } }
-                elseif ($r.RuleCommand -and $src -eq 'IP Allow List' -and $cid -eq 'DL-3.2') { $c = Format-NRGDlCommand -Template $r.RuleCommand -Values @{ Value = $nm } }
-                elseif ($r.RuleCommand -and $src -eq 'Anti-spam policy' -and $cid -eq 'DL-3.3') {
-                    $pn = [string](Get-NRGObjectField -Item $o -Key 'Policy' -Default '')
-                    $par = if ([string](Get-NRGObjectField -Item $o -Key 'Class' -Default '') -eq 'allowed domain') { 'AllowedSenderDomains' } else { 'AllowedSenders' }
-                    $c = Format-NRGDlCommand -Template $r.RuleCommand -Values @{ Policy = $pn; Parameter = $par; Value = $nm }
-                }
-                if ($c) { $cmds += $c } elseif ($r.RuleCommand -and $src) { $cmds += "# '$src' entry has a name that cannot be quoted safely here; change it in the portal." }
-            }
+            foreach ($t in @($r.Inspect.Values)) { if ($t) { $inspect += $t } }   # the read-only look at the setting, as Microsoft prints it
+            # An IP Allow List entry within a /24 is what Microsoft recommends staying within: no command removes it (the builder only
+            # takes the entries the finding marks WiderThan24 or Unparsed).
+            $bundles = @(Get-NRGDlTenantRemediations -Entry $r -AffectedObjects $objs -BypassInputs (Get-NRGObjectField -Item $data -Key 'BypassInputs' -Default $null) -ObservedAt $observedAt)
         }
-        $row = & $mkRow $cid $r.Title $cur $verdict $detail $null @($cmds | Select-Object -Unique)
+        $row = & $mkRow $cid $r.Title $cur $verdict $detail $null $bundles
+        $row.Inspect = @($inspect | Select-Object -Unique)
         $row.RowType = 'Tenant bypass'
         $row.Objects = @($objs | ForEach-Object { "$([string](Get-NRGObjectField -Item $_ -Key 'Source' -Default '')): $([string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '')) ($([string](Get-NRGObjectField -Item $_ -Key 'Detail' -Default '')))" })
         $tenantRows.Add($row)
@@ -270,12 +192,15 @@ function Get-NRGDistributionListWorksheet {
         $fnd = { param($cid) $k = "$cid|$($inst.ToLowerInvariant())"; if ($byInst.ContainsKey($k)) { $byInst[$k] } elseif ($tenantF.ContainsKey($cid)) { $tenantF[$cid] } else { $null } }
         $verdictOf = { param($f, $fallback) if ($f) { Get-NRGDlVerdictWord -State ([string](Get-NRGObjectField -Item $f -Key 'State' -Default '')) } else { $fallback } }
         $detailOf  = { param($f, $fallback) if ($f) { [string](Get-NRGObjectField -Item $f -Key 'Detail' -Default '') } else { $fallback } }
-        $cmdFor = {
-            param($cid, $vals)
-            $r = $rec[$cid]; $t = ''
-            if ($r.AdminCommands.Contains($(if ($kind -eq 'Dynamic') { 'Dynamic' } else { 'Distribution' }))) { $t = [string]$r.AdminCommands[$(if ($kind -eq 'Dynamic') { 'Dynamic' } else { 'Distribution' })] }
-            $c = Format-NRGDlCommand -Template $t -Values $vals
-            if ($c) { $c } elseif ($t) { "# '$name': its address cannot be quoted safely here; change this setting in the portal." } else { $null }
+        $kindKey = if ($kind -eq 'Dynamic') { 'Dynamic' } else { 'Distribution' }
+        # One bundle for this list. A synchronized list withholds every one of them: Exchange Online refuses the change, and the
+        # reason is the same for each. $before $null means the original state is NOT known, which withholds the bundle.
+        $bundleFor = {
+            param($cid, $before, $after, $context, $withhold)
+            $why = if ($dirSynced) { $syncNote } else { [string]$withhold }
+            $bp = @{ Entry = $rec[$cid]; Kind = $kindKey; Target = $addr; TargetLabel = $name; BeforeValue = $before; AfterValue = $after; Withhold = $why; ObservedAt = $observedAt }
+            if ($context) { $bp['Context'] = $context }
+            New-NRGDlRemediation @bp
         }
 
         $auth = Get-NRGObjectField -Item $l -Key 'RequireSenderAuthenticationEnabled' -Default $null
@@ -305,31 +230,43 @@ function Get-NRGDistributionListWorksheet {
         $cur11 = if ($null -eq $auth) { 'Not returned' } else { "RequireSenderAuthenticationEnabled = $auth" }
         # Requiring authenticated senders would stop a list's external members sending to it, so no such command is printed for a list
         # that holds one: the allowed-senders proposal (DL-1.2) is the option that keeps them. The finding's Detail says why.
-        $c11 = @(); if ($v11 -in @('Gap', 'Partial') -and -not ($mst -eq 'Collected' -and $extN -gt 0)) { $c11 += (& $cmdFor 'DL-1.1' @{ List = $addr }) }
+        $c11 = @()
+        if ($v11 -in @('Gap', 'Partial')) {
+            $why11 = ''
+            if ($mst -eq 'Collected' -and $extN -gt 0) { $why11 = "This list has $extN external member(s): requiring authenticated senders would stop them sending to it (Microsoft: True rejects unauthenticated, external senders), so no command is offered. The allowed-senders option (DL-1.2) is the one that keeps them." }
+            # Only a value Exchange returned as a boolean is a captured original; anything else leaves the original unknown.
+            $before11 = $null; if ($auth -is [bool]) { $before11 = $auth }
+            $c11 = @(& $bundleFor 'DL-1.1' $before11 $true $null $why11)
+        }
         $rows.Add((& $mkRow 'DL-1.1' 'Who can send to the list' $cur11 $v11 (& $detailOf $f11 'Not assessed.') $ident $c11))
 
         # 2. Allowed senders: context, plus a PROPOSED allow list built from the members read now, offered only where it is safe to offer.
         # It is a SNAPSHOT and it is TEXT: nothing here sets anything. An allow list built from part of the membership, over an existing
         # list, or with one address dropped would reject people who should be able to send, so each of those withholds the command.
         $cur12 = if (-not $allowedKnown) { 'Not returned' } elseif ($allowedN -eq 0) { 'None specified' } else { "$allowedN specified sender(s)" }
-        $proposalCmd = $null
+        $proposalBundle = $null
         $addrs = @()
         if ($dirSynced) {
             $proposal = 'No allow list command is printed: this list is synchronized from on-premises Active Directory, where it must be managed.'
+            $proposalBundle = & $bundleFor 'DL-1.2' $null $null $null $proposal
         } elseif ($kind -eq 'Dynamic') {
             $proposal = 'No allow list is proposed for a dynamic list: its members are calculated from a filter, so a snapshot of them would not follow who is a member later.'
         } elseif ($null -eq $auth) {
             $proposal = 'No allow list is proposed: Exchange did not return RequireSenderAuthenticationEnabled for this list.'
+            $proposalBundle = & $bundleFor 'DL-1.2' $null $null $null $proposal
         } elseif ($auth -eq $true) {
             $proposal = "No allow list is needed to keep outside mail out: the list accepts mail only from authenticated senders inside the organization$(if ($mst -eq 'Collected' -and $extN -gt 0) { "; its $extN external member(s) cannot send to it while that is True (Microsoft)" })."
         } elseif (-not $allowedKnown) {
-            $proposal = 'No allow list is proposed: Exchange did not return the allowed-senders setting, so a command that sets it could overwrite a list that already exists.'
+            $proposal = 'No allow list is proposed: Exchange did not return the allowed-senders setting, so its original state is unknown and a command that sets it could overwrite a list that already exists.'
+            $proposalBundle = & $bundleFor 'DL-1.2' $null $null $null $proposal
         } elseif ($allowedN -gt 0) {
             $proposal = "No allow list is proposed: this list already has $allowedN allowed sender(s) and this scan does not propose replacing them."
         } elseif ($mst -ne 'Collected') {
             $proposal = 'No allow list is proposed: the members were not read, and an allow list built from part of the membership would reject the members it left out.'
+            $proposalBundle = & $bundleFor 'DL-1.2' $null $null $null $proposal
         } elseif ($trunc) {
             $proposal = "No allow list is proposed: only the first $cnt members were read and the list has more, and an allow list built from part of the membership would reject the rest. Raise -MaxMembersPerList to cover the whole list."
+            $proposalBundle = & $bundleFor 'DL-1.2' $null $null $null $proposal
         } elseif ($members.Count -eq 0) {
             $proposal = 'No allow list is proposed: the list has no members, so a snapshot would be empty, and an empty allowed-senders list restricts nothing.'
         } else {
@@ -341,26 +278,37 @@ function Get-NRGDistributionListWorksheet {
             }
             if ($blank -gt 0) {
                 $proposal = "No allow list is proposed: $blank member(s) returned no primary address, so the list would be incomplete and would reject them."
+                $proposalBundle = & $bundleFor 'DL-1.2' $null $null $null $proposal
             } else {
-                $built = Format-NRGDlCommand -Template ([string]$rec['DL-1.2'].AdminCommands['Distribution']) -Values @{ List = $addr; Senders = $addrs }
-                if (-not $built) {
-                    $proposal = "No allow list is proposed: this list's address or a member's address cannot be quoted safely in a command (a quote-like or line-break character), and a command with a member left out would reject that member. Set the allowed senders in the portal."
-                } elseif ($built.Length -gt 30000) {
+                # The original is KNOWN to be empty here (allowed senders were returned and none is specified): the rollback writes that back.
+                $built = & $bundleFor 'DL-1.2' @() $addrs ([ordered]@{ RequireSenderAuthenticationEnabled = 'False' }) ''
+                if (-not $built.Available) {
+                    $proposal = "No allow list is proposed: $($built.Reason) An allow list with a member left out would reject that member."
+                    $proposalBundle = $built
+                } elseif ($built.Apply.Command.Length -gt 30000) {
                     $proposal = "No allow list is proposed: the command for $($addrs.Count) members would be longer than one spreadsheet cell holds (about 32,000 characters). Split the list or set the allowed senders in the portal."
+                    $proposalBundle = & $bundleFor 'DL-1.2' $null $null $null $proposal
                 } else {
-                    $proposalCmd = $built
+                    $proposalBundle = $built
                     $nestedN = [int](Get-NRGObjectField -Item $l -Key 'NestedGroupCount' -Default 0)
-                    $proposal = "Proposed allow list: the $($addrs.Count) address(es) read now ($extN external, $nestedN nested group(s)) become the only senders this list accepts, and anyone else is rejected, staff who are not members included. It is a snapshot: a member added later is not on it, so add a new member to the allowed senders when adding them to the list. An owner, shared mailbox or application that sends to the list and is not a member is rejected unless it is added to the command. External members can send only while RequireSenderAuthenticationEnabled is False, which it is on this list. An allow list matches the sender's address; it does not authenticate an outside sender. Run it with -WhatIf first."
+                    $proposal = "Proposed allow list: the $($addrs.Count) address(es) read now ($extN external, $nestedN nested group(s)) become the only senders this list accepts, and anyone else is rejected, staff who are not members included. It is a snapshot: a member added later is not on it, so add a new member to the allowed senders when adding them to the list. An owner, shared mailbox or application that sends to the list and is not a member is rejected unless it is added to the command. External members can send only while RequireSenderAuthenticationEnabled is False, which it is on this list. An allow list matches the sender's address; it does not authenticate an outside sender. The bundle below gives the check to run first, a -WhatIf preview, the apply, a check afterwards and a rollback."
                 }
             }
         }
-        $v12 = if ($proposalCmd) { 'Proposal' } else { 'Context' }
-        $rows.Add((& $mkRow 'DL-1.2' 'Allowed senders' $cur12 $v12 ("Context only: an allowed-senders list narrows who can send; it is judged under who can send (DL-1.1). " + $proposal) $ident @($proposalCmd)))
+        $proposalOk = [bool]($proposalBundle -and $proposalBundle.Available)
+        $v12 = if ($proposalOk) { 'Proposal' } else { 'Context' }
+        $c12 = @(); if ($proposalBundle) { $c12 = @($proposalBundle) }
+        $rows.Add((& $mkRow 'DL-1.2' 'Allowed senders' $cur12 $v12 ("Context only: an allowed-senders list narrows who can send; it is judged under who can send (DL-1.1). " + $proposal) $ident $c12))
 
         # 3. Owner
         $f21 = & $fnd 'DL-2.1'; $v21 = & $verdictOf $f21 'Not assessed'
         $cur21 = if (-not $ownKnown) { 'Not returned' } else { "$ownN owner(s)" }
-        $c21 = @(); if ($v21 -eq 'Gap') { $c21 += (& $cmdFor 'DL-2.1' @{ List = $addr }) }
+        # The captured original is "no owner" only when ManagedBy was returned and empty; otherwise it is unknown and nothing is offered.
+        $c21 = @()
+        if ($v21 -eq 'Gap') {
+            $before21 = $null; if ($ownKnown -and $ownN -eq 0) { $before21 = @() }
+            $c21 = @(& $bundleFor 'DL-2.1' $before21 $null $null '')
+        }
         $rows.Add((& $mkRow 'DL-2.1' 'Owner' $cur21 $v21 (& $detailOf $f21 'Not assessed.') $ident $c21))
 
         # 4. Moderation
@@ -368,7 +316,12 @@ function Get-NRGDistributionListWorksheet {
         $cur22 = if ($null -eq $mod) { 'Not returned' } elseif ($mod -eq $true) { "On, $(@(Get-NRGObjectField -Item $l -Key 'ModeratedBy' -Default @()).Count) moderator(s)" } else { 'Off' }
         $v22 = if ($f22) { & $verdictOf $f22 'Not assessed' } elseif ($mod -eq $false) { 'Not applicable' } else { 'Not assessed' }
         $d22 = if ($f22) { & $detailOf $f22 '' } elseif ($mod -eq $false) { "Not applicable: moderation is off, which is Microsoft's default; there is no recommendation to turn it on." } else { 'Not assessed.' }
-        $c22 = @(); if ($v22 -eq 'Gap') { $c22 += (& $cmdFor 'DL-2.2' @{ List = $addr }) }
+        $c22 = @()
+        if ($v22 -eq 'Gap') {
+            $before22 = $null
+            if ([bool](Get-NRGObjectField -Item $l -Key 'ModeratedByKnown' -Default $false) -and @(Get-NRGObjectField -Item $l -Key 'ModeratedBy' -Default @()).Count -eq 0) { $before22 = @() }
+            $c22 = @(& $bundleFor 'DL-2.2' $before22 $null ([ordered]@{ ModerationEnabled = 'True' }) '')
+        }
         $rows.Add((& $mkRow 'DL-2.2' 'Moderation' $cur22 $v22 $d22 $ident $c22))
 
         # 5. External members: shown, never judged (the owner decided external members stay) and no command removes one.
@@ -390,7 +343,11 @@ function Get-NRGDistributionListWorksheet {
         $c25 = @()
         if ($v25 -eq 'Gap' -and $joinStd.Approved -and @($joinStd.Allowed).Count) {
             $joinPick = [string](@('Closed', 'ApprovalRequired', 'Open') | Where-Object { $_ -in @($joinStd.Allowed) } | Select-Object -First 1)
-            $c25 += (& $cmdFor 'DL-2.5' @{ List = $addr; Value = $joinPick })
+            # Only one of Microsoft's three documented values is a captured original; anything else leaves it unknown.
+            $before25 = $null
+            $canon25 = @('Open', 'Closed', 'ApprovalRequired') | Where-Object { $_ -ieq $join } | Select-Object -First 1
+            if ($canon25) { $before25 = [string]$canon25 }
+            $c25 = @(& $bundleFor 'DL-2.5' $before25 $joinPick $null '')
             if (@($joinStd.Allowed).Count -gt 1) { $d25 += " The command uses '$joinPick', the most restrictive of the approved values." }
         }
         $rows.Add((& $mkRow 'DL-2.5' 'Who can join' $cur25 $v25 $d25 $ident $c25))
@@ -398,9 +355,6 @@ function Get-NRGDistributionListWorksheet {
         # 8/9. Leave restriction and hidden: read and shown, no recommendation
         $rows.Add((& $mkRow '' 'Who can leave' $(if ($kind -eq 'Dynamic') { 'Not applicable' } elseif ($depart) { "MemberDepartRestriction = $depart" } else { 'Not returned' }) 'No recommendation' 'Shown for the administrator; neither Microsoft nor an approved NRG standard recommends a value.' $ident @()))
         $rows.Add((& $mkRow 'DL-1.3' 'Hidden from address lists' $(if ($null -eq $hidden) { 'Not returned' } else { "HiddenFromAddressListsEnabled = $hidden" }) 'Context' 'Context only: hiding a list does not stop mail reaching it.' $ident @()))
-
-        # An Exchange Online command for a synchronized list would be refused, so none is printed for it (the list's note says why).
-        if ($dirSynced) { foreach ($row in $rows) { $row.Commands = @() } }
 
         # Who can reach it today: the setting plus every bypass that applies to all mail
         $outside = switch ($v11) {
@@ -450,7 +404,7 @@ function Get-NRGDistributionListWorksheet {
             Reach = $reachRow; Settings = @($rows); Risk = $worst
             # An observation, not a verdict: counted only when the member read completed (a failed read leaves Members empty, not clean).
             ExternalMemberCount = $(if ($mst -eq 'Collected') { $extN } else { 0 })
-            AllowListProposed = [bool]$proposalCmd
+            AllowListProposed = $proposalOk
             AcceptsFromAnyone = ($v11 -eq 'Gap')
             DirSynced = $dirSynced
             SyncNote = $syncNote
@@ -495,6 +449,6 @@ function Get-NRGDistributionListWorksheet {
         Summary = $summary
         Tenant  = @($tenantRows)
         Lists   = $sortedLists
-        CommandNote = 'Commands are TEXT for an administrator to review and run, with -WhatIf first. This scan never runs them.'
+        CommandNote = 'Commands are TEXT. Each recommendation that has a command is a remediation bundle: check the current state first, preview with -WhatIf, apply, check again, and a rollback that restores the state this scan read. A bundle that could not be built safely is withheld with its reason and carries no command. NRG observes and recommends; an administrator authorizes and executes. This scan never runs a command.'
     }
 }

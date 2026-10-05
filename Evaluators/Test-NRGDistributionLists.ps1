@@ -360,13 +360,18 @@ function Test-NRGDistributionLists {
     if (-not $cfOk) {
         Add-NRGDlFinding -Entry $Rec['DL-3.2'] -State 'NotApplicable' -Detail 'Not assessed: the connection filter policy was not read, so whether an IP Allow List skips spam filtering for the lists is unknown.'
     } else {
-        $entries = @(@(Get-NRGObjectField -Item $bypass -Key 'ConnectionFilter' -Default @()) | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'IPAllowList' -Default @()) } | Where-Object { $_ })
+        # Each entry keeps the policy it was read from: a remediation bundle names the policy to change and captures that policy's list.
+        $entryRows = @(@(Get-NRGObjectField -Item $bypass -Key 'ConnectionFilter' -Default @()) | ForEach-Object {
+            $pn = [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '')
+            foreach ($e in @(Get-NRGObjectField -Item $_ -Key 'IPAllowList' -Default @())) { if ($e) { [pscustomobject]@{ Policy = $pn; Entry = [string]$e } } }
+        })
+        $entries = @($entryRows | ForEach-Object { $_.Entry })
         if ($entries.Count -eq 0) {
             Add-NRGDlFinding -Entry $Rec['DL-3.2'] -State 'Satisfied' -CurrentValue 'IP Allow List empty' -Detail 'Read: the connection filter IP Allow List is empty.'
         } else {
-            $w = @($entries | ForEach-Object { Get-NRGDlIpEntryWidth -Entry $_ })
+            $w = @($entryRows | ForEach-Object { $x = Get-NRGDlIpEntryWidth -Entry $_.Entry; [pscustomobject]@{ Entry = $x.Entry; Valid = $x.Valid; Width = $x.Width; Kind = $x.Kind; Policy = $_.Policy } })
             $wide = @($w | Where-Object { -not $_.Valid -or $_.Width -gt 256 })
-            $ao = @($w | ForEach-Object { [ordered]@{ Source = 'IP Allow List'; Name = $_.Entry; Class = $(if (-not $_.Valid) { 'Unparsed' } elseif ($_.Width -gt 256) { 'WiderThan24' } else { 'Within24' }); Detail = $(if ($_.Valid) { "$([int64]$_.Width) address(es)" } else { 'not a recognized IPv4 address, block or range' }) } })
+            $ao = @($w | ForEach-Object { [ordered]@{ Source = 'IP Allow List'; Name = $_.Entry; Policy = $_.Policy; Class = $(if (-not $_.Valid) { 'Unparsed' } elseif ($_.Width -gt 256) { 'WiderThan24' } else { 'Within24' }); Detail = $(if ($_.Valid) { "$([int64]$_.Width) address(es)" } else { 'not a recognized IPv4 address, block or range' }) } })
             if ($wide.Count -gt 0) {
                 Add-NRGDlFinding -Entry $Rec['DL-3.2'] -State 'Gap' -AffectedObjects $ao -CurrentValue "$($entries.Count) entr$(if ($entries.Count -eq 1) { 'y' } else { 'ies' }), $($wide.Count) wider than a /24 or unparsed" -RequiredValue $Rec['DL-3.2'].Recommended `
                     -Detail "Shortfall: the IP Allow List has $($entries.Count) entr$(if ($entries.Count -eq 1) { 'y' } else { 'ies' }); $($wide.Count) cover more than a /24 or could not be parsed ($(($wide | ForEach-Object { $_.Entry }) -join ', ')). Mail from an allowed address skips spam filtering for every list. Microsoft recommends a /24 or smaller per entry."

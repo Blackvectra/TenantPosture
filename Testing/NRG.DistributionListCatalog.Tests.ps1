@@ -140,16 +140,90 @@ Describe 'Distribution-list recommendation catalog' {
             $r.Kind | Should -Be 'Context'
             $r.EmitsFinding | Should -BeFalse
             $r.PSObject.Properties.Name | Should -Not -Contain 'StandardKey'
-            @($r.AdminCommands.PSObject.Properties.Value | Where-Object { $_ }) | Should -BeNullOrEmpty
-            ($script:Recs | ForEach-Object { @($_.AdminCommands.PSObject.Properties.Value) } | Where-Object { $_ -match 'Remove-DistributionGroupMember' }) | Should -BeNullOrEmpty
+            $r.PSObject.Properties.Name | Should -Not -Contain 'Remediation'
+            $r.PSObject.Properties.Name | Should -Not -Contain 'Inspect'
+            $script:CatalogText | Should -Not -Match 'Remove-DistributionGroupMember'
         }
-        It 'DL-1.2 carries the allowed-senders command with a {Senders} list, and cites the cmdlet reference and the outside-sender page' {
+        It 'DL-1.2 carries the allowed-senders command with an {After} list and a rollback that writes back {Before}, and cites the cmdlet reference and the outside-sender page' {
             $r = $script:Recs | Where-Object { $_.ControlId -eq 'DL-1.2' }
-            $r.AdminCommands.Distribution | Should -Be 'Set-DistributionGroup -Identity {List} -AcceptMessagesOnlyFromSendersOrMembers {Senders}'
+            $r.Remediation.Kinds.Distribution.Apply | Should -Be 'Set-DistributionGroup -Identity {Target} -AcceptMessagesOnlyFromSendersOrMembers {After}'
+            $r.Remediation.Kinds.Distribution.Rollback | Should -Be 'Set-DistributionGroup -Identity {Target} -AcceptMessagesOnlyFromSendersOrMembers {Before}'
+            $r.Remediation.Kinds.Distribution.EmptyRestoreNote | Should -Match 'does not document clearing it with \$null' -Because 'writing $null back is the one rollback Microsoft does not document, and the worksheet says so'
+            $r.Remediation.Kinds.PSObject.Properties.Name | Should -Not -Contain 'Dynamic'
             $r.SourceUrl | Should -Be 'https://learn.microsoft.com/powershell/module/exchange/set-distributiongroup'
             @($r.AlsoSee) | Should -Contain 'https://learn.microsoft.com/troubleshoot/exchange/email-delivery/ndr/fix-error-code-5-7-136-in-exchange-online'
             $r.Why | Should -Match 'rejected'
             $r.Why | Should -Match 'SNAPSHOT'
+        }
+    }
+
+    Context 'remediation templates: a bundle is built from these, and a rollback is never a generic inverse' {
+        BeforeAll {
+            # Every cmdlet a printed command can name. A new one is added here deliberately, after reading it: this list also feeds the
+            # Exchange RBAC documentation (docs/EXCHANGE-RBAC-DISTRIBUTION-LISTS.md) and the read-only guarantees.
+            $script:ReadCmdlets  = @('Get-DistributionGroup', 'Get-DynamicDistributionGroup', 'Get-TransportRule', 'Get-HostedConnectionFilterPolicy', 'Get-HostedContentFilterPolicy')
+            $script:WriteCmdlets = @('Set-DistributionGroup', 'Set-DynamicDistributionGroup', 'Disable-TransportRule', 'Enable-TransportRule', 'Set-HostedConnectionFilterPolicy', 'Set-HostedContentFilterPolicy')
+            $script:Kinds = @(foreach ($r in $script:Recs) { if ($r.PSObject.Properties['Remediation']) { foreach ($k in $r.Remediation.Kinds.PSObject.Properties) { [pscustomobject]@{ Id = $r.ControlId; Kind = $k.Name; Impact = [string]$r.Remediation.Impact; T = $k.Value } } } })
+        }
+        It 'only the three tenant-wide controls are TenantWide, and the others are Standard' {
+            foreach ($r in @($script:Recs | Where-Object { $_.PSObject.Properties['Remediation'] })) {
+                $r.Remediation.Impact | Should -BeIn @('Standard', 'TenantWide')
+                if ($r.ControlId -in 'DL-3.1', 'DL-3.2', 'DL-3.3') { $r.Remediation.Impact | Should -Be 'TenantWide' -Because "$($r.ControlId) changes filtering for every recipient" }
+                else { $r.Remediation.Impact | Should -Be 'Standard' }
+            }
+            @($script:Kinds | Where-Object { $_.Impact -eq 'TenantWide' } | ForEach-Object { $_.Id } | Sort-Object -Unique) | Should -Be @('DL-3.1', 'DL-3.2', 'DL-3.3')
+        }
+        It 'every template names a known kind, a property, and only the known placeholders' {
+            $script:Kinds.Count | Should -BeGreaterThan 8
+            foreach ($k in $script:Kinds) {
+                $k.Kind | Should -BeIn @('Distribution', 'Dynamic', 'Tenant')
+                [string]$k.T.TargetKind | Should -Not -BeNullOrEmpty
+                [string]$k.T.Property | Should -Match '^([A-Za-z]+|\{Parameter\})$' -Because "$($k.Id) $($k.Kind)"
+                foreach ($f in 'Get', 'Apply', 'Rollback') {
+                    foreach ($m in [regex]::Matches([string]$k.T.$f, '\{(\w+)\}')) { $m.Groups[1].Value | Should -BeIn @('Target', 'After', 'Before', 'Remove', 'Parameter') -Because "$($k.Id) $($k.Kind) $f" }
+                }
+                foreach ($c in @($k.T.Show)) { $c | Should -Match '^[A-Za-z]+$' }
+            }
+        }
+        It 'the check is a Get-* read with no pipeline (the builder adds Format-List), and only the reviewed cmdlets are named anywhere' {
+            foreach ($k in $script:Kinds) {
+                $k.T.Get | Should -Match '^Get-' -Because "$($k.Id) $($k.Kind)"
+                $k.T.Get | Should -Not -Match '[|;&`]'
+                ($k.T.Get -split ' ')[0] | Should -BeIn $script:ReadCmdlets
+                ($k.T.Apply -split ' ')[0] | Should -BeIn $script:WriteCmdlets
+                if ($k.T.Rollback) { ($k.T.Rollback -split ' ')[0] | Should -BeIn $script:WriteCmdlets }
+            }
+            foreach ($r in @($script:Recs | Where-Object { $_.PSObject.Properties['Inspect'] })) { foreach ($i in @($r.Inspect.PSObject.Properties.Value)) { $i | Should -Match '^Get-' -Because "$($r.ControlId) Inspect is a read-only look" } }
+        }
+        It 'a template carries no -WhatIf and no -Confirm: the builder adds them, so the preview is the apply plus -WhatIf and nothing else' {
+            foreach ($k in $script:Kinds) { foreach ($f in 'Get', 'Apply', 'Rollback') { [string]$k.T.$f | Should -Not -Match '-WhatIf|-Confirm|[|;&`]' -Because "$($k.Id) $($k.Kind) $f" } }
+        }
+        It 'a rollback writes back the CAPTURED value ({Before}), re-adds or removes exactly what the apply changed, or declares the one state it restores: never a literal inverse' {
+            foreach ($k in $script:Kinds) {
+                $rb = [string]$k.T.Rollback
+                if (-not $rb) {
+                    $k.Impact | Should -Be 'Standard' -Because "$($k.Id): a tenant-wide change without a rollback is withheld, so the catalog must not ship one"
+                    [string]$k.T.RollbackReason | Should -Not -BeNullOrEmpty -Because "$($k.Id) $($k.Kind) is one-way and must say why"
+                    continue
+                }
+                if ($rb -match '^Set-') {
+                    $rb | Should -Match '(\{Before\}|@\{Add=\{Remove\}\}|@\{Remove=\{After\}\})$' -Because "$($k.Id) $($k.Kind): a Set-* rollback must write a captured value or undo exactly the entries the apply changed, not a literal"
+                } else {
+                    [string]$k.T.RollbackRestores | Should -Not -BeNullOrEmpty -Because "$($k.Id): $rb can restore only one state and must say which"
+                }
+            }
+        }
+        It 'a command that needs an administrator-chosen value says so, and nothing else carries a <placeholder>' {
+            foreach ($k in $script:Kinds) {
+                $inText = @([regex]::Matches(([string]$k.T.Apply + ' ' + [string]$k.T.Rollback), '<(\w+)>') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+                @($k.T.RequiresInput | Sort-Object -Unique) | Should -Be $inText -Because "$($k.Id) $($k.Kind)"
+            }
+        }
+        It 'a rollback that writes $null is the only one that says Microsoft does not document it' {
+            foreach ($k in $script:Kinds) {
+                if ($k.T.PSObject.Properties['EmptyRestoreNote']) { [string]$k.T.EmptyRestoreNote | Should -Match 'not document' }
+            }
+            (@($script:Kinds | Where-Object { $_.T.PSObject.Properties['EmptyRestoreNote'] } | ForEach-Object { "$($_.Id)/$($_.Kind)" }) -join ',') | Should -Be 'DL-1.2/Distribution,DL-2.2/Distribution,DL-2.2/Dynamic'
         }
     }
 
@@ -190,7 +264,11 @@ Describe 'Catalog loader and standards interpretation' {
         $b = Get-NRGDistributionListBaseline
         $b.Available | Should -BeTrue
         $b.ById.Contains('DL-1.1') | Should -BeTrue
-        $b.ById['DL-1.1'].AdminCommands['Distribution'] | Should -Match '^Set-DistributionGroup -Identity \{List\}'
+        $b.ById['DL-1.1'].Remediation.Kinds['Distribution'].Apply | Should -Match '^Set-DistributionGroup -Identity \{Target\}'
+        $b.ById['DL-1.1'].Remediation.Impact | Should -Be 'Standard'
+        $b.ById['DL-3.2'].Remediation.Impact | Should -Be 'TenantWide'
+        $b.ById['DL-3.2'].Inspect['Tenant'] | Should -Match '^Get-'
+        $b.ById['DL-2.3'].Remediation | Should -BeNullOrEmpty
         $b.ById['DL-1.2'].EmitsFinding | Should -BeFalse
         $b.ById['DL-3.5'].EmitsFinding | Should -BeTrue
         $b.ById['DL-1.1'].EmitsFinding | Should -BeTrue

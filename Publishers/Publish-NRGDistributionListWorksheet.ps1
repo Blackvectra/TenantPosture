@@ -72,6 +72,58 @@ function Format-NRGDlWrap {
     return @($lines)
 }
 
+# One remediation bundle as text lines. The Apply is its own labeled step, never on the same line as the Preview, and every
+# command is on a line of its own beginning with "> " so it can be selected whole.
+function Get-NRGDlBundleLines {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param([Parameter(Mandatory)] $Bundle, [string] $Item = '', [int] $Indent = 4)
+    $t = ${function:ConvertTo-NRGDlSafeText}
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $pad = ' ' * $Indent
+    $wrap = { param($text, $ind, $prefix) foreach ($ln in @(Format-NRGDlWrap -Text (& $t $text) -Indent $ind -Prefix $prefix)) { $lines.Add($ln) } }
+    $b = $Bundle
+    $scope = if ([string]$b.Impact -eq 'TenantWide') { 'TENANT-WIDE' } else { 'one object' }
+    $obs = @($b.Observed.Keys | ForEach-Object { "$_ = $($b.Observed[$_])" }) -join '; '
+    if (-not [bool]$b.Available) {
+        $lines.Add("$($pad)REMEDIATION WITHHELD [$($b.ControlId)] $(& $t $Item)  --  no command is printed")
+        & $wrap ([string]$b.Reason) ($Indent + 2) 'Reason: '
+        if ($obs) { & $wrap $obs ($Indent + 2) 'State read: ' }
+        return @($lines)
+    }
+    $lines.Add("$($pad)REMEDIATION BUNDLE [$($b.ControlId)] $(& $t $Item)  --  scope: $scope")
+    $target = [string](Get-NRGObjectField -Item $b.Target -Key 'Label' -Default '')
+    if (-not $target) { $target = [string](Get-NRGObjectField -Item $b.Target -Key 'Identity' -Default '') }
+    & $wrap ("$([string]$b.Target.Kind) $target") ($Indent + 2) 'Target: '
+    $when = if ([string]$b.ObservedAt) { " (read $([string]$b.ObservedAt))" } else { '' }
+    & $wrap $obs ($Indent + 2) "State read$($when): "
+    if ($b.Backup) {
+        $lines.Add("$($pad)  BACKUP  (read-only; prints every property of the live object: save the output before you change anything)")
+        $lines.Add("$($pad)    > $(& $t $b.Backup.Command)")
+    }
+    $lines.Add("$($pad)  1. CHECK first  (read-only)")
+    $lines.Add("$($pad)    > $(& $t $b.Precheck.Command)")
+    & $wrap ([string]$b.Precheck.Expect) ($Indent + 4) 'Expect: '
+    $lines.Add("$($pad)  2. PREVIEW  (makes no change; -WhatIf shows what step 3 would do)")
+    $lines.Add("$($pad)    > $(& $t $b.Preview.Command)")
+    $lines.Add("$($pad)  3. APPLY  (CHANGES THE TENANT: run only after the check and the preview look right)")
+    if ([string]$b.Apply.Effect) { & $wrap ([string]$b.Apply.Effect) ($Indent + 4) 'Effect: ' }
+    $lines.Add("$($pad)    > $(& $t $b.Apply.Command)")
+    $lines.Add("$($pad)  4. VERIFY  (read-only)")
+    $lines.Add("$($pad)    > $(& $t $b.Verify.Command)")
+    & $wrap ([string]$b.Verify.Expect) ($Indent + 4) 'Expect: '
+    if ([bool]$b.Rollback.Available) {
+        $lines.Add("$($pad)  ROLLBACK  (restores the state this scan read; run the check first and the check again afterwards)")
+        $lines.Add("$($pad)    > $(& $t $b.Rollback.Command)")
+        & $wrap ([string]$b.Rollback.Expect) ($Indent + 4) 'Expect: '
+    } else {
+        $lines.Add("$($pad)  ROLLBACK  NOT AVAILABLE")
+        & $wrap ([string]$b.Rollback.Reason) ($Indent + 4) 'Reason: '
+    }
+    foreach ($note in @($b.Notes)) { & $wrap ([string]$note) ($Indent + 2) 'Note: ' }
+    return @($lines)
+}
+
 function ConvertTo-NRGDlWorksheetText {
     [CmdletBinding()]
     [OutputType([string])]
@@ -124,8 +176,11 @@ function ConvertTo-NRGDlWorksheetText {
         if ($r.Recommended) { & $wrap $r.Recommended 4 'Recommended: ' }
         & $add ("    Source: {0}" -f $r.Source)
         & $add ("    Mapped NIST 800-53 Rev 5 (NRG mapping): {0}    Other frameworks: {1}" -f (@($r.Nist80053) -join ', '), $r.FrameworkItem)
-        if (@($r.Commands).Count) { & $add '    Commands for an administrator to review and run, with -WhatIf first (text only; this tool never runs them):' }
-        foreach ($c in @($r.Commands)) { & $add ("    > {0}" -f (& $t $c)) }
+        if (@($r.Inspect).Count) {
+            & $add '    Read-only look at the setting (no change):'
+            foreach ($c in @($r.Inspect)) { & $add ("      > {0}" -f (& $t $c)) }
+        }
+        foreach ($b in @($r.Remediations)) { & $add ''; foreach ($ln in @(Get-NRGDlBundleLines -Bundle $b -Item ([string]$r.Item) -Indent 4)) { & $add $ln } }
         & $add ''
     }
 
@@ -146,7 +201,7 @@ function ConvertTo-NRGDlWorksheetText {
         & $add ''
         & $add '  Settings against the recommendation:'
         $n = 0
-        $cmds = [System.Collections.Generic.List[string]]::new()
+        $bundles = [System.Collections.Generic.List[object]]::new()
         foreach ($r in @($l.Settings)) {
             $n++
             & $add ("    {0}. {1}  [{2}]" -f $n, $r.Item, $r.Verdict)
@@ -155,12 +210,12 @@ function ConvertTo-NRGDlWorksheetText {
             & $wrap $r.Detail 7 'Finding:     '
             if ($r.Source) { & $add ("       Source:      {0}" -f $r.Source) }
             if (@($r.Nist80053).Count) { & $add ("       Mapped NIST 800-53 Rev 5 (NRG mapping): {0}    Other frameworks: {1}" -f (@($r.Nist80053) -join ', '), $r.FrameworkItem) }
-            foreach ($c in @($r.Commands)) { $cmds.Add([string]$c) }
+            foreach ($b in @($r.Remediations)) { $bundles.Add([pscustomobject]@{ Item = [string]$r.Item; Bundle = $b }) }
         }
-        if ($cmds.Count) {
+        if ($bundles.Count) {
             & $add ''
-            & $add '  Commands for an administrator to review and run, with -WhatIf first (text only; this tool never runs them):'
-            foreach ($c in $cmds) { & $add ("    > {0}" -f (& $t $c)) }
+            & $add '  Remediation (text for an administrator; this tool never runs a command):'
+            foreach ($x in $bundles) { & $add ''; foreach ($ln in @(Get-NRGDlBundleLines -Bundle $x.Bundle -Item $x.Item -Indent 4)) { & $add $ln } }
         }
     }
 
@@ -188,10 +243,28 @@ function ConvertTo-NRGDlWorksheetCsv {
     param([Parameter(Mandatory)] $Worksheet)
     $cell = ${function:ConvertTo-NRGDlCsvCell}
     $cols = @('RowType', 'ListName', 'ListAddress', 'ListType', 'ControlId', 'Item', 'Current', 'Recommended', 'Verdict', 'Basis', 'Detail', 'Why',
-              'Source', 'AlsoSee', 'Nist80053Mapping', 'OtherFrameworks', 'AdminCommand', 'Member', 'MemberUPN', 'MemberType', 'MemberClass')
+              'Source', 'AlsoSee', 'Nist80053Mapping', 'OtherFrameworks', 'Impact', 'Step', 'Command', 'Expect', 'Member', 'MemberUPN', 'MemberType', 'MemberClass')
     $rows = [System.Collections.Generic.List[object]]::new()
     # One row from named values: a column left out is blank, and a value can never land in the wrong column.
     $mk = { param([hashtable] $v) $o = [ordered]@{}; foreach ($k in $cols) { $o[$k] = & $cell $(if ($v.ContainsKey($k)) { $v[$k] } else { '' }) }; $rows.Add([pscustomobject]$o) }
+    # A remediation bundle as one row per step, so a Command cell holds exactly ONE command: a cell that joined a preview and an
+    # apply with ';' would run both when pasted. The Apply row is its own row, never on the Preview's.
+    $mkRem = {
+        param([hashtable] $id, $r, $b)
+        $base = $id + @{ RowType = 'Remediation'; ControlId = [string]$b.ControlId; Item = [string]$r.Item; Impact = [string]$b.Impact }
+        $obs = @($b.Observed.Keys | ForEach-Object { "$_ = $($b.Observed[$_])" }) -join '; '
+        if (-not [bool]$b.Available) { & $mk ($base + @{ Step = 'Withheld'; Current = $obs; Detail = [string]$b.Reason }); return }
+        $tgt = [string](Get-NRGObjectField -Item $b.Target -Key 'Label' -Default ''); if (-not $tgt) { $tgt = [string](Get-NRGObjectField -Item $b.Target -Key 'Identity' -Default '') }
+        & $mk ($base + @{ Step = 'Observed'; Current = $obs; Detail = "Read $([string]$b.ObservedAt). Target: $([string]$b.Target.Kind) $tgt" })
+        if ($b.Backup) { & $mk ($base + @{ Step = 'Backup'; Command = [string]$b.Backup.Command; Detail = [string]$b.Backup.Purpose }) }
+        & $mk ($base + @{ Step = 'Check'; Command = [string]$b.Precheck.Command; Expect = [string]$b.Precheck.Expect })
+        & $mk ($base + @{ Step = 'Preview'; Command = [string]$b.Preview.Command; Detail = [string]$b.Preview.Note })
+        & $mk ($base + @{ Step = 'Apply'; Command = [string]$b.Apply.Command; Detail = [string]$b.Apply.Effect })
+        & $mk ($base + @{ Step = 'Verify'; Command = [string]$b.Verify.Command; Expect = [string]$b.Verify.Expect })
+        if ([bool]$b.Rollback.Available) { & $mk ($base + @{ Step = 'Rollback'; Command = [string]$b.Rollback.Command; Expect = [string]$b.Rollback.Expect }) }
+        else { & $mk ($base + @{ Step = 'Rollback'; Detail = 'NOT AVAILABLE: ' + [string]$b.Rollback.Reason }) }
+        foreach ($note in @($b.Notes)) { & $mk ($base + @{ Step = 'Note'; Detail = [string]$note }) }
+    }
     $h = $Worksheet.Header
     foreach ($kv in @(@('Tenant', "$($h.TenantDomain) $($h.TenantId)".Trim()), @('Generated', $h.Generated), @('Tool', $h.ToolVersion), @('Mode', $h.Mode), @('Handling', $h.Handling))) {
         & $mk @{ RowType = 'Info'; Item = $kv[0]; Current = $kv[1] }
@@ -202,7 +275,9 @@ function ConvertTo-NRGDlWorksheetCsv {
     foreach ($r in @($Worksheet.Tenant)) {
         & $mk @{ RowType = 'Tenant bypass'; ControlId = $r.ControlId; Item = $r.Item; Current = $r.Current; Recommended = $r.Recommended; Verdict = $r.Verdict; Basis = $r.Basis
                  Detail = $r.Detail; Source = $r.Source; Nist80053Mapping = ($r.Nist80053 -join ', ')
-                 OtherFrameworks = $r.FrameworkItem; AdminCommand = (@($r.Commands) -join '; ') }
+                 OtherFrameworks = $r.FrameworkItem }
+        foreach ($c in @($r.Inspect)) { & $mk @{ RowType = 'Inspect'; ControlId = $r.ControlId; Item = $r.Item; Step = 'Inspect'; Command = [string]$c; Detail = 'Read-only look at the setting; no change.' } }
+        foreach ($b in @($r.Remediations)) { & $mkRem @{} $r $b }
         foreach ($o in @($r.Objects)) { & $mk @{ RowType = 'Tenant bypass entry'; ControlId = $r.ControlId; Item = $r.Item; Current = $o; Verdict = $r.Verdict; Source = $r.Source } }
     }
     foreach ($l in @($Worksheet.Lists)) {
@@ -215,7 +290,8 @@ function ConvertTo-NRGDlWorksheetCsv {
         foreach ($r in @($l.Settings)) {
             & $mk ($id + @{ RowType = 'Setting'; ControlId = $r.ControlId; Item = $r.Item; Current = $r.Current; Recommended = $r.Recommended; Verdict = $r.Verdict; Basis = $r.Basis
                             Detail = $r.Detail; Source = $r.Source; Nist80053Mapping = ($r.Nist80053 -join ', ')
-                            OtherFrameworks = $r.FrameworkItem; AdminCommand = (@($r.Commands) -join '; ') })
+                            OtherFrameworks = $r.FrameworkItem })
+            foreach ($b in @($r.Remediations)) { & $mkRem $id $r $b }
         }
     }
     # Why each recommendation exists, ONCE per control (the text file does the same in its reference section), instead of repeating a

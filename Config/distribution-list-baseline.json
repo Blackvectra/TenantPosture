@@ -17,9 +17,28 @@
       "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
       "AlsoSee": ["https://learn.microsoft.com/exchange/mail-flow/mail-routing/recipient-resolution"],
       "Nist80053": ["AC-3", "SI-8"],
-      "AdminCommands": {
-        "Distribution": "Set-DistributionGroup -Identity {List} -RequireSenderAuthenticationEnabled $true",
-        "Dynamic": "Set-DynamicDistributionGroup -Identity {List} -RequireSenderAuthenticationEnabled $true"
+      "Remediation": {
+        "Impact": "Standard",
+        "Kinds": {
+          "Distribution": {
+            "TargetKind": "DistributionGroup",
+            "Property": "RequireSenderAuthenticationEnabled",
+            "Get": "Get-DistributionGroup -Identity {Target}",
+            "Show": ["Name", "PrimarySmtpAddress", "RequireSenderAuthenticationEnabled"],
+            "Apply": "Set-DistributionGroup -Identity {Target} -RequireSenderAuthenticationEnabled {After}",
+            "Rollback": "Set-DistributionGroup -Identity {Target} -RequireSenderAuthenticationEnabled {Before}",
+            "Effect": "The list accepts mail only from authenticated senders inside the organization; mail from outside the organization is rejected (Microsoft: True rejects unauthenticated, external senders)."
+          },
+          "Dynamic": {
+            "TargetKind": "DynamicDistributionGroup",
+            "Property": "RequireSenderAuthenticationEnabled",
+            "Get": "Get-DynamicDistributionGroup -Identity {Target}",
+            "Show": ["Name", "PrimarySmtpAddress", "RequireSenderAuthenticationEnabled"],
+            "Apply": "Set-DynamicDistributionGroup -Identity {Target} -RequireSenderAuthenticationEnabled {After}",
+            "Rollback": "Set-DynamicDistributionGroup -Identity {Target} -RequireSenderAuthenticationEnabled {Before}",
+            "Effect": "The list accepts mail only from authenticated senders inside the organization; mail from outside the organization is rejected (Microsoft: True rejects unauthenticated, external senders)."
+          }
+        }
       }
     },
     {
@@ -36,9 +55,21 @@
       "SourceUrl": "https://learn.microsoft.com/powershell/module/exchange/set-distributiongroup",
       "AlsoSee": ["https://learn.microsoft.com/troubleshoot/exchange/email-delivery/ndr/fix-error-code-5-7-136-in-exchange-online", "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups", "https://learn.microsoft.com/exchange/mail-flow/mail-routing/recipient-resolution"],
       "Nist80053": ["AC-3"],
-      "AdminCommands": {
-        "Distribution": "Set-DistributionGroup -Identity {List} -AcceptMessagesOnlyFromSendersOrMembers {Senders}",
-        "Dynamic": ""
+      "Remediation": {
+        "Impact": "Standard",
+        "Kinds": {
+          "Distribution": {
+            "TargetKind": "DistributionGroup",
+            "Property": "AcceptMessagesOnlyFromSendersOrMembers",
+            "Get": "Get-DistributionGroup -Identity {Target} -IncludeAcceptMessagesOnlyFromSendersOrMembersWithDisplayNames",
+            "Show": ["Name", "PrimarySmtpAddress", "RequireSenderAuthenticationEnabled", "AcceptMessagesOnlyFromSendersOrMembers", "AcceptMessagesOnlyFromSendersOrMembersWithDisplayNames"],
+            "Apply": "Set-DistributionGroup -Identity {Target} -AcceptMessagesOnlyFromSendersOrMembers {After}",
+            "Rollback": "Set-DistributionGroup -Identity {Target} -AcceptMessagesOnlyFromSendersOrMembers {Before}",
+            "EmptyRestoreNote": "Microsoft's cmdlet page names $null only as this parameter's default (blank) state and does not document clearing it with $null, and this has not been run against a tenant. The check after the rollback is what proves the state was restored: if it still lists entries, stop and clear the setting in the portal.",
+            "ShowsNames": true,
+            "Effect": "Only the listed senders can send to the list. Mail from anyone else is rejected, staff who are not members included (Microsoft)."
+          }
+        }
       }
     },
     {
@@ -54,8 +85,7 @@
       "Why": "Microsoft documents that even when a list is hidden from the global address list, people can still send mail to it by typing the email address. A hidden list is not a protected list.",
       "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
       "AlsoSee": [],
-      "Nist80053": ["AC-3"],
-      "AdminCommands": {}
+      "Nist80053": ["AC-3"]
     },
     {
       "ControlId": "DL-2.1",
@@ -70,9 +100,32 @@
       "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
       "AlsoSee": [],
       "Nist80053": ["AC-2"],
-      "AdminCommands": {
-        "Distribution": "Set-DistributionGroup -Identity {List} -ManagedBy '<owner>'",
-        "Dynamic": "Set-DynamicDistributionGroup -Identity {List} -ManagedBy '<owner>'"
+      "Remediation": {
+        "Impact": "Standard",
+        "Kinds": {
+          "Distribution": {
+            "TargetKind": "DistributionGroup",
+            "Property": "ManagedBy",
+            "Get": "Get-DistributionGroup -Identity {Target} -IncludeManagedByWithDisplayNames",
+            "Show": ["Name", "PrimarySmtpAddress", "ManagedBy", "ManagedByWithDisplayNames"],
+            "Apply": "Set-DistributionGroup -Identity {Target} -ManagedBy '<owner>'",
+            "Rollback": "",
+            "RollbackReason": "The captured original state is no owner. Microsoft states every distribution list must have at least one owner, so this scan prints no command that writes 'no owner' back; treat adding an owner as one-way.",
+            "RequiresInput": ["owner"],
+            "Effect": "The person you name becomes an owner of the list and can change its members and settings."
+          },
+          "Dynamic": {
+            "TargetKind": "DynamicDistributionGroup",
+            "Property": "ManagedBy",
+            "Get": "Get-DynamicDistributionGroup -Identity {Target} -IncludeManagedByWithDisplayNames",
+            "Show": ["Name", "PrimarySmtpAddress", "ManagedBy", "ManagedByWithDisplayNames"],
+            "Apply": "Set-DynamicDistributionGroup -Identity {Target} -ManagedBy '<owner>'",
+            "Rollback": "",
+            "RollbackReason": "The captured original state is no owner. Microsoft states every distribution list must have at least one owner, so this scan prints no command that writes 'no owner' back; treat adding an owner as one-way.",
+            "RequiresInput": ["owner"],
+            "Effect": "The person you name becomes an owner of the list and can change its settings."
+          }
+        }
       }
     },
     {
@@ -88,9 +141,32 @@
       "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
       "AlsoSee": [],
       "Nist80053": ["AC-3"],
-      "AdminCommands": {
-        "Distribution": "Set-DistributionGroup -Identity {List} -ModeratedBy '<moderator>'",
-        "Dynamic": "Set-DynamicDistributionGroup -Identity {List} -ModeratedBy '<moderator>'"
+      "Remediation": {
+        "Impact": "Standard",
+        "Kinds": {
+          "Distribution": {
+            "TargetKind": "DistributionGroup",
+            "Property": "ModeratedBy",
+            "Get": "Get-DistributionGroup -Identity {Target} -IncludeModeratedByWithDisplayNames -IncludeManagedByWithDisplayNames",
+            "Show": ["Name", "PrimarySmtpAddress", "ModerationEnabled", "ModeratedBy", "ModeratedByWithDisplayNames", "ManagedByWithDisplayNames"],
+            "Apply": "Set-DistributionGroup -Identity {Target} -ModeratedBy '<moderator>'",
+            "Rollback": "Set-DistributionGroup -Identity {Target} -ModeratedBy {Before}",
+            "EmptyRestoreNote": "Microsoft's cmdlet page names $null only as this parameter's default (blank) state and does not document clearing it with $null, and this has not been run against a tenant. The check after the rollback is what proves the state was restored: if it still lists entries, stop and clear the setting in the portal.",
+            "RequiresInput": ["moderator"],
+            "Effect": "The person you name approves mail sent to the moderated list before it is delivered."
+          },
+          "Dynamic": {
+            "TargetKind": "DynamicDistributionGroup",
+            "Property": "ModeratedBy",
+            "Get": "Get-DynamicDistributionGroup -Identity {Target} -IncludeModeratedByWithDisplayNames -IncludeManagedByWithDisplayNames",
+            "Show": ["Name", "PrimarySmtpAddress", "ModerationEnabled", "ModeratedBy", "ModeratedByWithDisplayNames", "ManagedByWithDisplayNames"],
+            "Apply": "Set-DynamicDistributionGroup -Identity {Target} -ModeratedBy '<moderator>'",
+            "Rollback": "Set-DynamicDistributionGroup -Identity {Target} -ModeratedBy {Before}",
+            "EmptyRestoreNote": "Microsoft's cmdlet page names $null only as this parameter's default (blank) state and does not document clearing it with $null, and this has not been run against a tenant. The check after the rollback is what proves the state was restored: if it still lists entries, stop and clear the setting in the portal.",
+            "RequiresInput": ["moderator"],
+            "Effect": "The person you name approves mail sent to the moderated list before it is delivered."
+          }
+        }
       }
     },
     {
@@ -106,8 +182,7 @@
       "Why": "Microsoft's page on managing distribution lists names mail contacts and mail users among the supported member types, which is how outside addresses become members, and makes no recommendation about outside members either way. This scan therefore reads and counts them (Class External in the member rows) and does not judge them, and it prints no command that removes one. What it does judge is who can send to the list, because a list that accepts mail from anyone and holds outside addresses sends everything mailed to it, internal replies and attachments included, to those addresses.",
       "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
       "AlsoSee": [],
-      "Nist80053": ["AC-2", "AC-3"],
-      "AdminCommands": {}
+      "Nist80053": ["AC-2", "AC-3"]
     },
     {
       "ControlId": "DL-2.4",
@@ -122,8 +197,7 @@
       "Why": "Microsoft's page on managing distribution lists makes no recommendation about maximum membership. A cap is an NRG judgment about how large a blast radius one address should have, so the finding is made only against an approved number. For a dynamic list the count is the calculated membership Microsoft stores on the group, refreshed about every 24 hours (or, when that cannot be read, a preview of its filter), so it can differ from who receives mail sent now.",
       "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
       "AlsoSee": ["https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-dynamic-distribution-groups/create-manage-dynamic-distribution-groups"],
-      "Nist80053": ["AC-6"],
-      "AdminCommands": {}
+      "Nist80053": ["AC-6"]
     },
     {
       "ControlId": "DL-2.5",
@@ -139,9 +213,19 @@
       "SourceUrl": "https://learn.microsoft.com/exchange/recipients-in-exchange-online/manage-distribution-groups/manage-distribution-groups",
       "AlsoSee": ["https://learn.microsoft.com/exchange/manage-distribution-groups-exchange-2013-help"],
       "Nist80053": ["AC-6", "AC-2"],
-      "AdminCommands": {
-        "Distribution": "Set-DistributionGroup -Identity {List} -MemberJoinRestriction {Value}",
-        "Dynamic": ""
+      "Remediation": {
+        "Impact": "Standard",
+        "Kinds": {
+          "Distribution": {
+            "TargetKind": "DistributionGroup",
+            "Property": "MemberJoinRestriction",
+            "Get": "Get-DistributionGroup -Identity {Target}",
+            "Show": ["Name", "PrimarySmtpAddress", "MemberJoinRestriction"],
+            "Apply": "Set-DistributionGroup -Identity {Target} -MemberJoinRestriction {After}",
+            "Rollback": "Set-DistributionGroup -Identity {Target} -MemberJoinRestriction {Before}",
+            "Effect": "People can join the list only the way the new setting allows (Open: anyone; Closed: only owners add members; ApprovalRequired: owners approve requests)."
+          }
+        }
       }
     },
     {
@@ -157,10 +241,24 @@
       "SourceUrl": "https://learn.microsoft.com/defender-office-365/create-safe-sender-lists-in-office-365",
       "AlsoSee": ["https://learn.microsoft.com/defender-office-365/anti-spam-policies-troubleshooting", "https://learn.microsoft.com/exchange/security-and-compliance/mail-flow-rules/use-rules-to-set-scl"],
       "Nist80053": ["SI-8", "SC-7"],
-      "AdminCommands": {
+      "Inspect": {
         "Tenant": "Get-TransportRule | Where-Object {$_.SetSCL -ne $null} | Format-Table Name, State, Priority, SetSCL"
       },
-      "RuleCommand": "Disable-TransportRule -Identity {Value}"
+      "Remediation": {
+        "Impact": "TenantWide",
+        "Kinds": {
+          "Tenant": {
+            "TargetKind": "TransportRule",
+            "Property": "State",
+            "Get": "Get-TransportRule -Identity {Target}",
+            "Show": ["Name", "State", "Mode", "Priority", "SetSCL"],
+            "Apply": "Disable-TransportRule -Identity {Target}",
+            "Rollback": "Enable-TransportRule -Identity {Target}",
+            "RollbackRestores": "Enabled",
+            "Effect": "Disables the WHOLE rule, not only its SCL -1 setting: every other action the rule takes stops too. Mail it matched is filtered like any other mail."
+          }
+        }
+      }
     },
     {
       "ControlId": "DL-3.2",
@@ -175,10 +273,23 @@
       "SourceUrl": "https://learn.microsoft.com/defender-office-365/create-safe-sender-lists-in-office-365",
       "AlsoSee": ["https://learn.microsoft.com/defender-office-365/connection-filter-policies-configure", "https://learn.microsoft.com/defender-office-365/anti-spam-policies-troubleshooting"],
       "Nist80053": ["SC-7", "SI-8"],
-      "AdminCommands": {
-        "Tenant": "Get-HostedConnectionFilterPolicy -Identity Default | Format-List IPAllowList"
+      "Inspect": {
+        "Tenant": "Get-HostedConnectionFilterPolicy | Format-List Name, IPAllowList"
       },
-      "RuleCommand": "Set-HostedConnectionFilterPolicy -Identity Default -IPAllowList @{Remove={Value}}"
+      "Remediation": {
+        "Impact": "TenantWide",
+        "Kinds": {
+          "Tenant": {
+            "TargetKind": "HostedConnectionFilterPolicy",
+            "Property": "IPAllowList",
+            "Get": "Get-HostedConnectionFilterPolicy -Identity {Target}",
+            "Show": ["Name", "IPAllowList"],
+            "Apply": "Set-HostedConnectionFilterPolicy -Identity {Target} -IPAllowList @{Remove={Remove}}",
+            "Rollback": "Set-HostedConnectionFilterPolicy -Identity {Target} -IPAllowList @{Add={Remove}}",
+            "Effect": "Mail from the removed addresses is no longer exempt from spam filtering, for every recipient."
+          }
+        }
+      }
     },
     {
       "ControlId": "DL-3.3",
@@ -193,10 +304,23 @@
       "SourceUrl": "https://learn.microsoft.com/defender-office-365/anti-spam-protection-about",
       "AlsoSee": ["https://learn.microsoft.com/defender-office-365/create-safe-sender-lists-in-office-365", "https://learn.microsoft.com/defender-office-365/anti-spam-policies-troubleshooting"],
       "Nist80053": ["SI-8"],
-      "AdminCommands": {
+      "Inspect": {
         "Tenant": "Get-HostedContentFilterPolicy | Format-List Name, AllowedSenders, AllowedSenderDomains"
       },
-      "RuleCommand": "Set-HostedContentFilterPolicy -Identity {Policy} -{Parameter} @{Remove={Value}}"
+      "Remediation": {
+        "Impact": "TenantWide",
+        "Kinds": {
+          "Tenant": {
+            "TargetKind": "HostedContentFilterPolicy",
+            "Property": "{Parameter}",
+            "Get": "Get-HostedContentFilterPolicy -Identity {Target}",
+            "Show": ["Name", "AllowedSenders", "AllowedSenderDomains"],
+            "Apply": "Set-HostedContentFilterPolicy -Identity {Target} -{Parameter} @{Remove={Remove}}",
+            "Rollback": "Set-HostedContentFilterPolicy -Identity {Target} -{Parameter} @{Add={Remove}}",
+            "Effect": "Mail from the removed senders or domains is filtered like any other mail, for every recipient the policy applies to."
+          }
+        }
+      }
     },
     {
       "ControlId": "DL-3.4",
@@ -210,8 +334,7 @@
       "Why": "Microsoft: do not use domains you own (accepted domains) as conditions in mail flow rules, because doing so creates opportunities for attackers to send email that would otherwise be filtered. For allowed sender and allowed domain lists in anti-spam policies, Microsoft notes that since September 2022 allowed senders, domains and subdomains in your own accepted domains must pass email authentication checks to skip spam filtering, so spoofed mail claiming your domain does not skip filtering by that route. An own-domain bypass rule carries no such note. Either way, an own-domain entry is a standing exception to the filtering your DMARC policy relies on.",
       "SourceUrl": "https://learn.microsoft.com/defender-office-365/create-safe-sender-lists-in-office-365",
       "AlsoSee": ["https://learn.microsoft.com/defender-office-365/anti-spam-protection-about"],
-      "Nist80053": ["SI-8"],
-      "AdminCommands": {}
+      "Nist80053": ["SI-8"]
     },
     {
       "ControlId": "DL-3.5",
@@ -226,8 +349,7 @@
       "Why": "Microsoft documents that entries in a user's Safe Senders list make senders skip spam filtering for that mailbox, that this method creates a high risk of attackers delivering mail that would otherwise be filtered, and that it is not desirable in most situations. The list lives in each mailbox, so reading it means one query per mailbox; this scan does not do that, so the exposure is unmeasured, not absent.",
       "SourceUrl": "https://learn.microsoft.com/defender-office-365/create-safe-sender-lists-in-office-365",
       "AlsoSee": ["https://learn.microsoft.com/defender-office-365/anti-spam-policies-troubleshooting"],
-      "Nist80053": ["SI-8"],
-      "AdminCommands": {}
+      "Nist80053": ["SI-8"]
     },
     {
       "ControlId": "DL-4.1",
@@ -242,8 +364,7 @@
       "Why": "DMARC validates mail that claims your domain in the From address. A message from a different, real domain that looks like yours, or that uses an executive's display name from an unrelated address, is not a DMARC failure for your domain. Microsoft documents that impersonation can pass SPF, DKIM and DMARC when the attacker publishes valid DNS records for a lookalike domain, and that impersonation protection is part of Defender for Office 365 anti-phishing policies. This scan cannot detect either case, so a clean worksheet does not mean a list is safe from them.",
       "SourceUrl": "https://learn.microsoft.com/defender-office-365/anti-phishing-policies-about",
       "AlsoSee": ["https://learn.microsoft.com/defender-office-365/email-authentication-dmarc-configure"],
-      "Nist80053": ["SI-8"],
-      "AdminCommands": {}
+      "Nist80053": ["SI-8"]
     }
   ]
 }
