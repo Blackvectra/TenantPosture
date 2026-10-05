@@ -67,7 +67,7 @@ All framework references validated against **authoritative, bug-worked-out sourc
 
 | Framework | Authoritative source | Result |
 |---|---|---|
-| **CISA SCuBA** | ScubaGear 2.0.0 baselines (github/cisagov) and its official migration file | Re-checked 2026-09-30: 22 citations re-pointed to current rule ids, 9 obsolete references removed (no equivalent rule), each of the 87 checked for equivalence (27 equivalent, 42 partial, 3 manual, 15 unsupported); **all 78 remaining references valid** — see `docs/NRG-SCUBA-ALIGNMENT.md` |
+| **CISA SCuBA** | ScubaGear 2.0.0 baselines (github/cisagov) and its official migration file | Re-checked 2026-09-30: 22 citations re-pointed to current rule ids, 9 obsolete references removed (no equivalent rule), each of the 87 checked for equivalence (25 equivalent, 41 partial, 3 manual, 18 unsupported, as recorded in `Config/scuba-alignment.json`); **all 78 remaining references valid** — see `docs/NRG-SCUBA-ALIGNMENT.md` |
 | **NIST 800-53r5** | OSCAL catalog | all 57 tokens valid; format-guarded |
 | **MITRE ATT&CK** | attack.mitre.org | `T1533` (a **Mobile** technique) removed from the Enterprise mapping; rest valid |
 | **CIS Controls v8.1** | CIS v8.1 (Mar 2025), 153 safeguards | **new** validated mapping added to all 195 controls (0 invalid) |
