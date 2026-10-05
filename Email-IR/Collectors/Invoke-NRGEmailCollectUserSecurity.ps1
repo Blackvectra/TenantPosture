@@ -37,7 +37,7 @@ function Invoke-NRGEmailCollectUserSecurity {
 
     $userPrefix  = if ($TargetUpn) { "users/$([uri]::EscapeDataString($TargetUpn))" } else { 'me' }
     $collectorId = 'IR-UserSecurity'
-    Register-NRGCoverage -Family 'Email-IR' -Status 'Collected'
+    # Coverage is registered at the end from what completed, in its own family.
 
     # ── OAuth consent grants ─────────────────────────────────────────────────
     $consentBag = [ordered]@{
@@ -50,6 +50,7 @@ function Invoke-NRGEmailCollectUserSecurity {
         $resp = Invoke-NRGGraphRequest -Method GET `
             -Uri "https://graph.microsoft.com/v1.0/${userPrefix}/oauth2PermissionGrants" -ErrorAction Stop
         $grants = @($resp.value)
+        $grantsTruncated = [bool]($resp['@odata.nextLink'])
 
         # Resolve clientId (service principal object id) -> app display name.
         # Needs Directory.Read.All; fail soft per-app so one lookup failure
@@ -85,8 +86,9 @@ function Invoke-NRGEmailCollectUserSecurity {
             }
         }
         $consentBag.Data = [ordered]@{
-            Count  = @($normalized).Count
-            Grants = @($normalized)
+            Count     = @($normalized).Count
+            Truncated = $grantsTruncated
+            Grants    = @($normalized)
         }
         $consentBag.Success = $true
     } catch {
@@ -112,12 +114,17 @@ function Invoke-NRGEmailCollectUserSecurity {
             # display fields the operator needs to recognize their own
             # methods vs an attacker's.
             $mType = ([string]$m['@odata.type']) -replace '^#microsoft\.graph\.', ''
-            $created = $null
+            $rawCreated = $null
             if ($m.PSObject -and ($m.PSObject.Properties.Name -contains 'createdDateTime')) {
-                $created = [string]$m.createdDateTime
+                $rawCreated = $m.createdDateTime
             } elseif ($m -is [hashtable] -and $m.ContainsKey('createdDateTime')) {
-                $created = [string]$m['createdDateTime']
+                $rawCreated = $m['createdDateTime']
             }
+            # Keep ISO 8601: a [string] cast of a parsed DateTime gives the
+            # invariant "MM/dd/yyyy" form, which a reader in another culture
+            # misreads. An unparseable value is kept as text (read as unknown).
+            $createdUtc = ConvertTo-NRGUtcDateTime $rawCreated
+            $created = if ($createdUtc) { $createdUtc.ToString('o', [cultureinfo]::InvariantCulture) } elseif ($null -ne $rawCreated) { [string]$rawCreated } else { $null }
             $display = $null
             foreach ($fld in @('displayName', 'phoneNumber', 'emailAddress')) {
                 $v = $null
@@ -144,4 +151,14 @@ function Invoke-NRGEmailCollectUserSecurity {
         Register-NRGException -Source "$collectorId-AuthMethods" -Message $_.Exception.Message
     }
     Set-NRGRawData -Key 'IR-UserAuthMethods' -Data $methodBag
+
+    $usrFailed = @(@($consentBag, $methodBag) | Where-Object { -not $_.Success } | ForEach-Object { $_.CollectorId })
+    $usrPartial = [bool]($consentBag.Success -and $consentBag.Data -and [bool](Get-NRGObjectField -Item $consentBag.Data -Key 'Truncated' -Default $false))
+    if ($usrFailed.Count -eq 2) {
+        Register-NRGCoverage -Family 'Email-IR-UserSecurity' -Status 'Failed' -Note "No user-security read completed ($($usrFailed -join ', '))."
+    } elseif ($usrFailed.Count -gt 0 -or $usrPartial) {
+        Register-NRGCoverage -Family 'Email-IR-UserSecurity' -Status 'Partial' -Note "Did not complete: $($usrFailed -join ', ')$(if ($usrPartial) { '; consent grants stopped at one page' })."
+    } else {
+        Register-NRGCoverage -Family 'Email-IR-UserSecurity' -Status 'Collected'
+    }
 }

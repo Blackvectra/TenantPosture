@@ -40,7 +40,9 @@ function Invoke-NRGEmailCollectSignIns {
 
     $cutoff      = (Get-Date).ToUniversalTime().AddDays(-$WindowDays).ToString('o')
     $collectorId = 'IR-SignIn'
-    Register-NRGCoverage -Family 'Email-IR' -Status 'Collected'
+    # Coverage is registered at the END from what actually completed. It used to
+    # be 'Collected' here, before any query ran, so a run in which every Graph
+    # read failed still reported complete coverage.
 
     # ── Recent sign-ins ──────────────────────────────────────────────────────
     $recentBag = [ordered]@{
@@ -52,22 +54,48 @@ function Invoke-NRGEmailCollectSignIns {
     try {
         $events = @()
         $select = 'id,createdDateTime,userPrincipalName,userId,userDisplayName,appDisplayName,ipAddress,clientAppUsed,deviceDetail,location,status,riskState,riskLevelAggregated,riskLevelDuringSignIn,riskEventTypes,riskEventTypes_v2,conditionalAccessStatus,authenticationDetails'
-        $uri = "https://graph.microsoft.com/v1.0/auditLogs/signIns?`$top=1000&`$filter=createdDateTime ge $cutoff&`$select=$select"
+        $baseUri = "https://graph.microsoft.com/v1.0/auditLogs/signIns?`$top=1000&`$filter=createdDateTime ge $cutoff"
         $pageCap = [Math]::Ceiling($MaxEvents / 1000)
-        $pages   = 0
-        while ($uri -and $pages -lt $pageCap -and $events.Count -lt $MaxEvents) {
-            $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
-            if ($resp.value) { $events += $resp.value }
-            $uri = if ($resp['@odata.nextLink']) { $resp['@odata.nextLink'] } else { $null }
-            $pages++
+        # The first live run answered this read with BadRequest while the anomaly reads (no
+        # $select) succeeded. If Graph rejects the property list, read the same window without
+        # it rather than lose the whole section, and say so in the data.
+        $selectFallback = $false
+        $uri = $null; $pages = 0
+        foreach ($useSelect in @($true, $false)) {
+            $events = @(); $pages = 0
+            $uri = if ($useSelect) { "$baseUri&`$select=$select" } else { $baseUri }
+            try {
+                while ($uri -and $pages -lt $pageCap -and $events.Count -lt $MaxEvents) {
+                    $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+                    if ($resp.value) { $events += $resp.value }
+                    $uri = if ($resp['@odata.nextLink']) { $resp['@odata.nextLink'] } else { $null }
+                    $pages++
+                }
+                if (-not $useSelect) { $selectFallback = $true }
+                break
+            } catch {
+                $body = [string](Get-NRGNestedProperty -Object $_ -Path 'ErrorDetails.Message' -Default '')
+                $isBadRequest = ($_.Exception.Message -match 'BadRequest|\b400\b') -or ($body -match 'BadRequest|Invalid')
+                if ($useSelect -and $isBadRequest) {
+                    Register-NRGException -Source "$collectorId-Recent" -Message ("Graph rejected the sign-in property list (retrying without it): $($_.Exception.Message) $body".Trim())
+                    continue
+                }
+                throw ("$($_.Exception.Message) $body".Trim())
+            }
         }
         # Trim to cap (defensive — pages can return slightly over)
         if ($events.Count -gt $MaxEvents) { $events = $events[0..($MaxEvents - 1)] }
 
+        # More pages remained ($uri is still set) or the cap trimmed events: the
+        # window was NOT fully read, so "no indicators" cannot mean "none happened".
+        $wasTruncated = [bool]$uri -or ($events.Count -ge $MaxEvents)
         $recentBag.Data = [ordered]@{
             WindowDays = $WindowDays
             Cutoff     = $cutoff
             Count      = $events.Count
+            MaxEvents  = $MaxEvents
+            Truncated  = $wasTruncated
+            SelectFallback = $selectFallback
             Events     = @($events)
         }
         $recentBag.Success = $true
@@ -91,22 +119,35 @@ function Invoke-NRGEmailCollectSignIns {
         # filter of the Recent bag if the server-side filter rejects.
         $filter = "createdDateTime ge $cutoff and riskEventTypes_v2/any(t:t eq 'anonymizedIPAddress')"
         $uri = "https://graph.microsoft.com/v1.0/auditLogs/signIns?`$top=1000&`$filter=$filter"
+        $anonTruncated = $false
+        $anonSource = 'server-side filter, first page (1000 events)'
         try {
             $resp = Invoke-NRGGraphRequest -Method GET -Uri $uri -ErrorAction Stop
             if ($resp.value) { $anonEvents = $resp.value }
+            # One page is read. A next link means more flagged events exist than were read.
+            $anonTruncated = [bool]($resp['@odata.nextLink'])
         } catch {
             # Server-side filter rejected; fall back to client-side over the
-            # Recent bag we already collected.
-            if ($recentBag.Success -and $recentBag.Data.Events) {
-                $anonEvents = $recentBag.Data.Events | Where-Object {
-                    $_.riskEventTypes_v2 -contains 'anonymizedIPAddress' -or
-                    $_.riskEventTypes    -contains 'anonymizedIPAddress'
-                }
+            # Recent bag we already collected. With no completed recent read
+            # there is nothing to fall back to: the bag is NOT read, never an
+            # empty successful one (that read as "no anonymous-IP sign-ins").
+            $serverError = $_.Exception.Message
+            if (-not $recentBag.Success) {
+                throw "The anonymous-IP filter failed ($serverError) and the recent sign-in read it falls back to did not complete."
             }
+            Register-NRGException -Source "$collectorId-AnonIp" -Message "Server-side anonymous-IP filter failed; filtered the recent read instead: $serverError"
+            $anonEvents = @($recentBag.Data.Events | Where-Object {
+                $_.riskEventTypes_v2 -contains 'anonymizedIPAddress' -or
+                $_.riskEventTypes    -contains 'anonymizedIPAddress'
+            })
+            $anonSource = 'client-side over the recent read'
+            $anonTruncated = [bool]$recentBag.Data.Truncated
         }
         $anonBag.Data = [ordered]@{
-            Count  = @($anonEvents).Count
-            Events = @($anonEvents)
+            Count     = @($anonEvents).Count
+            Source    = $anonSource
+            Truncated = $anonTruncated
+            Events    = @($anonEvents)
         }
         $anonBag.Success = $true
     } catch {
@@ -124,8 +165,12 @@ function Invoke-NRGEmailCollectSignIns {
     try {
         $travelEvents = @()
         # Client-side over Recent bag — Graph filter syntax for nested any()
-        # on multiple event types is brittle across versions.
-        if ($recentBag.Success -and $recentBag.Data.Events) {
+        # on multiple event types is brittle across versions. Derived only from
+        # that read, so without it this bag is not read (never an empty success).
+        if (-not $recentBag.Success) {
+            throw 'Derived from the recent sign-in read, which did not complete.'
+        }
+        if ($recentBag.Data.Events) {
             $travelTags = @('unfamiliarFeatures', 'impossibleTravel', 'newCountry', 'malwareInfectedIPAddress')
             $travelEvents = @($recentBag.Data.Events | Where-Object {
                 $events_v2 = @($_.riskEventTypes_v2)
@@ -138,8 +183,11 @@ function Invoke-NRGEmailCollectSignIns {
             })
         }
         $travelBag.Data = [ordered]@{
-            Count  = $travelEvents.Count
-            Events = @($travelEvents)
+            Count     = $travelEvents.Count
+            Source    = 'client-side over the recent read'
+            # Derived from the recent read, so it is only as complete as that read.
+            Truncated = [bool]$recentBag.Data.Truncated
+            Events    = @($travelEvents)
         }
         $travelBag.Success = $true
     } catch {
@@ -185,4 +233,22 @@ function Invoke-NRGEmailCollectSignIns {
         Register-NRGException -Source "$collectorId-RiskyUsers" -Message "Identity Protection not available (Entra ID P2 required?): $($_.Exception.Message)"
     }
     Set-NRGRawData -Key 'IR-SignIn-RiskyUsers' -Data $riskyBag
+
+    # ── Coverage from what completed ─────────────────────────────────────────
+    # Recent, AnonIp and Travel are the reads a "no indicators" conclusion rests
+    # on. RiskyUsers needs Entra ID P2 and is reported, not required.
+    $required = @($recentBag, $anonBag, $travelBag)
+    $failed   = @($required | Where-Object { -not $_.Success } | ForEach-Object { $_.CollectorId })
+    # The same helper the evaluators and reports use, so coverage and the
+    # conclusion cannot disagree about whether the reads were complete
+    # (anonymous-IP and travel truncation count, not only the recent read).
+    $completeness = Get-NRGSignInCollectionCompleteness
+    $truncNote = if (-not $completeness.Complete) { " Incomplete: $($completeness.Reasons -join '; ')." } else { '' }
+    if ($failed.Count -eq $required.Count) {
+        Register-NRGCoverage -Family 'Email-IR' -Status 'Failed' -Note "No sign-in read completed ($($failed -join ', '))."
+    } elseif ($failed.Count -gt 0 -or -not $completeness.Complete) {
+        Register-NRGCoverage -Family 'Email-IR' -Status 'Partial' -Note "Did not complete: $($failed -join ', ').$truncNote"
+    } else {
+        Register-NRGCoverage -Family 'Email-IR' -Status 'Collected'
+    }
 }

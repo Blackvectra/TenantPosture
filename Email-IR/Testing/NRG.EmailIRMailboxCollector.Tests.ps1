@@ -80,6 +80,6 @@ Describe 'Email-IR mailbox collector counts (issue #91)' {
         { Test-NRGEmailControlPhishOrigin } | Should -Not -Throw
         $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-3.1')
         $f.Count | Should -BeGreaterThan 0
-        ($f.Detail -join ' ') | Should -Match 'RECOVERED from Deletions'
+        ($f.Detail -join ' ') | Should -Match 'found in Recoverable Items'
     }
 }

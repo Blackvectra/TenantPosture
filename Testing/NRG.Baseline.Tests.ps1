@@ -364,6 +364,8 @@ Describe 'NRG Security Baseline — compliance view honesty' {
         It 'reads the endpoint check when it was ingested: Effective on pass, Ineffective on a failing device' {
             Set-NRGRawData -Key 'Intune-EndpointSecurity' -Data (& $script:Raw 'Intune-EndpointSecurity')
             $f = @((& $script:Finding 'INT-2.1' 'Satisfied'), (& $script:Finding 'DEV-2.8' 'Satisfied'))
+            # Effective needs proven fleet coverage (see NRG.DeviceEvidence.Tests.ps1); an all-pass finding without it is Unknown.
+            $f[1] | Add-Member -NotePropertyName Coverage -NotePropertyValue ([ordered]@{ Complete = $true; Reasons = @() }) -Force
             $c = Get-NRGBaselineCompliance -Findings $f -TargetTier Minimum -Definition $script:MiniDef -Exceptions $script:NoExc
             (& $script:Row $c 'INT-2.1').EffectivenessState | Should -Be 'Effective'
             $f = @((& $script:Finding 'INT-2.1' 'Satisfied'), (& $script:Finding 'DEV-2.8' 'Gap' 'two laptops not onboarded'))

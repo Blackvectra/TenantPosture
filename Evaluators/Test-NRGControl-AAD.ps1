@@ -238,6 +238,51 @@ function Get-SafeProp {
 #
 
 # ── AAD-1.1 Legacy Authentication Block ──────────────────────────────────────
+function Get-NRGLegacyAuthBlockState {
+    <#
+    .SYNOPSIS
+        Whether password ("Basic") sign-in through legacy protocols is blocked
+        tenant-wide, read from Security Defaults and Conditional Access exactly as
+        AAD-1.1 judges it. Returns an [ordered] Kind and Detail:
+          Blocked         Security Defaults is on, or an enabled CA policy blocks
+                          the 'other' client-app type (IMAP, POP, SMTP AUTH and the
+                          rest) for all users
+          PartlyBlocked   a block exists only for some users or only in report-only
+          NotBlocked      the CA read succeeded and nothing blocks legacy clients
+          Unknown         CA data absent, or the Security Defaults state unresolved
+        Used by EXO-1.6, which must not infer "passwords are allowed" from SMTP AUTH
+        being enabled: SMTP AUTH also carries OAuth.
+    #>
+    [CmdletBinding()] param()
+    if ((Get-NRGSecurityDefaultsState) -eq $true) {
+        return [ordered]@{ Kind = 'Blocked'; Detail = 'Security Defaults is on and blocks legacy authentication tenant-wide' }
+    }
+    $ca = Get-NRGRawData -Key 'AAD-CAPolicies'
+    if (-not $ca -or -not (Get-NRGObjectField -Item $ca -Key 'Success' -Default $false)) {
+        return [ordered]@{ Kind = 'Unknown'; Detail = 'Conditional Access data was not collected' }
+    }
+    if (Test-NRGSecurityDefaultsUnresolved) {
+        return [ordered]@{ Kind = 'Unknown'; Detail = 'the Security Defaults state was not read and no Conditional Access policy is On' }
+    }
+    $legacy = @($ca.Data['Policies'] | Where-Object {
+        @($_.Conditions.ClientAppTypes) -contains 'other' -and (Test-NRGCAGrantRequires -Policy $_ -Any @('block'))
+    })
+    $cov = Get-NRGCAEffectiveCoverage -Policies @($legacy | Where-Object { $_.State -eq 'enabled' })
+    if ($cov.Kind -eq 'Full') {
+        return [ordered]@{ Kind = 'Blocked'; Detail = "Conditional Access blocks legacy authentication (Other clients) for all users on all applications: $($cov.FullNames -join ', ')" }
+    }
+    if ($cov.Kind -eq 'Exceptions') {
+        return [ordered]@{ Kind = 'PartlyBlocked'; Detail = "Conditional Access blocks legacy authentication but every qualifying policy excludes $($cov.Exceptions -join ', ')" }
+    }
+    if ($cov.Kind -eq 'Unproven') {
+        return [ordered]@{ Kind = 'PartlyBlocked'; Detail = 'Conditional Access blocks legacy authentication but each qualifying policy excludes different users or groups, so combined coverage is unproven' }
+    }
+    if ($legacy.Count -gt 0) {
+        return [ordered]@{ Kind = 'PartlyBlocked'; Detail = 'a legacy-authentication block exists only for some users or applications, or only in report-only mode' }
+    }
+    return [ordered]@{ Kind = 'NotBlocked'; Detail = 'no Conditional Access policy blocks legacy authentication and Security Defaults is off' }
+}
+
 function Test-NRGControlAADLegacyAuth {
     [CmdletBinding()] param()
 
@@ -282,17 +327,23 @@ function Test-NRGControlAADLegacyAuth {
     $legacy = @($caData.Data['Policies'] | Where-Object {
         @($_.Conditions.ClientAppTypes) -contains 'other' -and (Test-NRGCAGrantRequires -Policy $_ -Any @('block'))
     })
-    $full    = @($legacy | Where-Object { $_.State -eq 'enabled' -and (Test-NRGCAAllUsers $_) })
-    $scoped  = @($legacy | Where-Object { $_.State -eq 'enabled' -and -not (Test-NRGCAAllUsers $_) })
+    # Combined coverage (Get-NRGCAEffectiveCoverage): a policy must cover all users on all
+    # applications with no extra condition to count; user exclusions are judged across
+    # every qualifying policy, so one policy excluding a break-glass account is not a gap
+    # when another covers them, and is reported as an exception when none does.
+    $cov     = Get-NRGCAEffectiveCoverage -Policies @($legacy | Where-Object { $_.State -eq 'enabled' })
+    $scoped  = @($cov.Narrowed)
     $audit   = @($legacy | Where-Object { $_.State -eq 'enabledForReportingButNotEnforced' })
     $names   = { param($l) (@($l) | ForEach-Object { $_.DisplayName }) -join ', ' }
 
-    if ($full.Count -gt 0) {
-        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
-            -Detail "Legacy authentication (Other clients) is blocked for all users by: $(& $names $full)."
+    if ($cov.Kind -ne 'None') {
+        $cv = Get-NRGCACoverageVerdict -Coverage $cov -What 'Legacy authentication (Other clients) is blocked'
+        Add-NRGExpectedStateFinding -ControlId $controlId -Control $control -FrameworkIds $citations `
+            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished `
+            -CurrentValue "Legacy block: $($cov.Kind) coverage by $($cov.Names -join ', ')" `
+            -RequiredValue 'CA policy blocking Other clients for all users on all applications, or Security Defaults'
     } elseif ($scoped.Count -gt 0 -or $audit.Count -gt 0) {
-        $why = if ($scoped.Count -gt 0) { "blocked only for a subset of users/groups ($(& $names $scoped)); everyone else can still use legacy protocols" } else { "configured only in report-only mode ($(& $names $audit)); nothing is blocked" }
+        $why = if ($scoped.Count -gt 0) { "blocked only for a subset of users, groups or applications, or under a narrowing condition ($(($scoped | ForEach-Object { "$($_.Name): $($_.Why)" }) -join '; ')); everyone else can still use legacy protocols" } else { "configured only in report-only mode ($(& $names $audit)); nothing is blocked" }
         Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
             -Detail "Legacy authentication is $why." `
@@ -371,9 +422,41 @@ function Test-NRGControlAADPhishResistantMFA {
     })
 
     if ($phishResistantPolicies.Count -gt 0) {
-        Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
-            -Detail "Phishing-resistant MFA (Authentication Strength) required for admin roles by $($phishResistantPolicies.Count) CA policy(ies): $(($phishResistantPolicies | ForEach-Object { $_.DisplayName }) -join ', ')."
+        # Coverage of the administrator population, not just "a policy exists": an
+        # all-users policy covers admins; a role-scoped one must include every privileged
+        # role this tenant's own role catalog lists (never Microsoft's fixed list, which
+        # the tool cannot verify here); exclusions are judged across every qualifying policy.
+        $privIds = $null
+        $roleRaw = Get-NRGRawData -Key 'AAD-DirectoryRoles'
+        if ($roleRaw -and (Get-NRGObjectField -Item $roleRaw -Key 'Success' -Default $null) -eq $true) {
+            $defs = @(Get-NRGNestedProperty -Object $roleRaw -Path 'Data.RoleDefinitions' -Default @())
+            if ($defs.Count -gt 0) {
+                $privIds = @{}
+                foreach ($d in $defs) { if ((Get-NRGObjectField -Item $d -Key 'IsPriv' -Default $false) -eq $true) { $privIds[[string](Get-NRGObjectField -Item $d -Key 'Id' -Default '')] = $true } }
+            }
+        }
+        $cands = @(); $narrowed = @(); $roleUnverified = @()
+        foreach ($p in $phishResistantPolicies) {
+            $nm = [string]$p.DisplayName
+            $nar = @(Get-NRGCANarrowing -Policy $p | Where-Object { $_ -ne 'applies to only some users, groups or roles' })
+            if (-not (Test-NRGCAAllUsers $p)) {
+                $rc = Get-NRGCAAdminRoleCoverage -Policy $p -PrivRoleIds $privIds
+                if ($null -eq $rc) { $roleUnverified += $nm }
+                elseif ($rc.CoveredCount -lt $rc.TotalPriv) { $nar += "it covers $($rc.CoveredCount) of $($rc.TotalPriv) privileged roles" }
+            }
+            if ($nar.Count -gt 0) { $narrowed += [pscustomobject]@{ Name = $nm; Why = ($nar -join '; ') } }
+            else { $cands += [pscustomobject]@{ Name = $nm; Exclusions = @(Get-NRGCAPrincipalExclusions -Policy $p) } }
+        }
+        $cov = Get-NRGExclusionCoverage -Candidates $cands
+        $cov['Narrowed'] = @($narrowed)
+        $cv = Get-NRGCACoverageVerdict -Coverage $cov -What 'Phishing-resistant MFA (Authentication Strength) is required for admin roles'
+        if ($cov.Kind -ne 'None' -and $roleUnverified.Count -gt 0 -and @($cov.FullNames | Where-Object { $_ -notin $roleUnverified }).Count -eq 0) {
+            $cv.NotEstablished = @($cv.NotEstablished) + "whether $($roleUnverified -join ', ') covers every privileged role, because this tenant's role catalog was not read."
+        }
+        Add-NRGExpectedStateFinding -ControlId $controlId -Control $control -FrameworkIds $citations `
+            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished `
+            -CurrentValue "Phishing-resistant MFA for admins: $($cov.Kind) coverage" `
+            -RequiredValue 'CA policy with a phishing-resistant authentication strength covering every privileged role'
     } elseif ($unknownStrengthPolicies.Count -gt 0) {
         # A strength is required, but which methods it allows could not be
         # read, so phishing resistance is unverified in either direction.
@@ -431,6 +514,12 @@ function Test-NRGControlAADSignInRisk {
     $levels = @($riskPolicies | ForEach-Object { @($_.Conditions.SignInRiskLevels) } | ForEach-Object { [string]$_ } | Sort-Object -Unique)
     $high = $levels -contains 'high'; $medium = $levels -contains 'medium'
     $names = (@($riskPolicies | ForEach-Object { [string]$_.DisplayName }) -join ', ')
+    $ro14 = Get-NRGRiskReportOnlyPolicies -Policies $ca.Data['Policies'] -Condition 'SignInRiskLevels' -RequiredLevels @('high','medium') -GrantAny @('mfa','authStrength','block')
+    if (-not ($high -and $medium) -and (Get-NRGPolicyListIncomplete -CA $ca)) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Not assessed: the Conditional Access policy list could not be read in full (the beta list failed and the v1.0 list withholds some policies), so whether a complete sign-in risk policy exists was not established.$(if ($names) { " Enabled sign-in risk policies read: $names." })"
+        return
+    }
     if ($high -and $medium) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Sign-in risk Conditional Access in force for high and medium risk: $names"
     } elseif ($high -or $medium) {
@@ -438,13 +527,62 @@ function Test-NRGControlAADSignInRisk {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
             -Detail "The enabled sign-in risk policies ($names) apply to $(if ($high) { 'high' } else { 'medium' })-risk sign-ins only. A policy applies only to the risk levels it selects, so a $missing-risk sign-in is let through without a challenge; Microsoft's template selects High and Medium." `
             -CurrentValue "signInRiskLevels = $($levels -join ', ')" -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
+    } elseif ($riskPolicies.Count -eq 0 -and @($ro14.Qualifying).Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail "A sign-in risk policy meets every requirement (high and medium sign-in risk, all users and applications, a responding control) but is in report-only mode, which collects evaluation data and enforces nothing: $(@($ro14.Qualifying) -join ', '). Until it is turned on, a risky sign-in is let through without a challenge; Partial is still a failed baseline requirement.$(Get-NRGRiskReportOnlyNote -ReportOnly $ro14)" `
+            -CurrentValue "Report-only: $(@($ro14.Qualifying) -join ', ')" -RequiredValue 'CA policy in force: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
     } elseif ($riskPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
             -Detail "The enabled sign-in risk policies ($names) apply to $($levels -join ', ') risk only, so a medium- or high-risk sign-in (password spray, anonymous IP, token replay) is let through without a challenge." `
             -CurrentValue "signInRiskLevels = $($levels -join ', ')" -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No enabled Conditional Access policy uses the sign-in risk condition, so a sign-in Identity Protection rates risky (password spray, anonymous IP, token replay) is let through without a challenge. (Sign-in risk policies need Entra ID P2; on a tenant without it this control is not scored.)' -CurrentValue 'No sign-in risk policy' -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail ('No enabled Conditional Access policy uses the sign-in risk condition, so a sign-in Identity Protection rates risky (password spray, anonymous IP, token replay) is let through without a challenge. (Sign-in risk policies need Entra ID P2; on a tenant without it this control is not scored.)' + (Get-NRGRiskReportOnlyNote -ReportOnly $ro14)) -CurrentValue 'No sign-in risk policy' -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
     }
+}
+
+# Risk-based Conditional Access policies in report-only (audit) mode. Report-only collects evaluation
+# telemetry and enforces nothing, so it is never a pass. One that would satisfy the requirement if it were
+# enforced (every required risk level, a responding grant, and a scope of all users and all applications with no
+# platform, location, device-filter or application-exclusion narrowing) is part-way (Partial); anything else
+# is a Gap. Both remain failed baseline requirements.
+# True only when the collector says the Conditional Access list could not be proven complete. A key that is
+# absent (results collected before the beta merge existed) counts as complete, so older results replay unchanged.
+function Get-NRGPolicyListIncomplete {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([AllowNull()] $CA)
+    $st = [string](Get-NRGNestedProperty -Object $CA -Path 'Data.SectionStatus.PolicyCompleteness' -Default '')
+    return ($st -in @('Failed', 'NotRun'))
+}
+
+function Get-NRGRiskReportOnlyPolicies {
+    [CmdletBinding()]
+    param([AllowNull()] [object[]] $Policies, [Parameter(Mandatory)] [ValidateSet('SignInRiskLevels', 'UserRiskLevels')] [string] $Condition,
+          [Parameter(Mandatory)] [string[]] $RequiredLevels, [Parameter(Mandatory)] [string[]] $GrantAny)
+    $qualifying = [System.Collections.Generic.List[string]]::new()
+    $other = [System.Collections.Generic.List[string]]::new()
+    foreach ($pol in @($Policies)) {
+        if ($null -eq $pol) { continue }
+        if ([string](Get-NRGObjectField -Item $pol -Key 'State' -Default '') -ne 'enabledForReportingButNotEnforced') { continue }
+        $levels = @(Get-NRGNestedProperty -Object $pol -Path "Conditions.$Condition" -Default @() | ForEach-Object { [string]$_ } | Where-Object { $_ })
+        if ($levels.Count -eq 0) { continue }
+        $name = [string](Get-NRGObjectField -Item $pol -Key 'DisplayName' -Default '')
+        $why = [System.Collections.Generic.List[string]]::new()
+        $missing = @($RequiredLevels | Where-Object { $_ -notin $levels })
+        if ($missing.Count -gt 0) { $why.Add("does not select $($missing -join '/') risk") }
+        if (-not (Test-NRGCAGrantRequires -Policy $pol -Any $GrantAny)) { $why.Add('does not require a responding control') }
+        foreach ($n in @(Get-NRGCANarrowing -Policy $pol | Where-Object { $_ -ne 'applies only at certain risk levels' })) { $why.Add($n) }
+        if ($why.Count -eq 0) { $qualifying.Add($name) } else { $other.Add("$name ($($why -join '; '))") }
+    }
+    [pscustomobject]@{ Qualifying = @($qualifying); Other = @($other) }
+}
+
+function Get-NRGRiskReportOnlyNote {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] $ReportOnly)
+    if ($null -eq $ReportOnly -or @($ReportOnly.Other).Count -eq 0) { return '' }
+    return " Report-only (audit mode, not enforcing) and not meeting the full requirement: $(@($ReportOnly.Other) -join '; ')."
 }
 
 # ── AAD-1.5 User Risk CA Policy ───────────────────────────────────────────────
@@ -474,14 +612,26 @@ function Test-NRGControlAADUserRisk {
     # a policy without the High level never applies to those accounts.
     $levels = @($riskPolicies | ForEach-Object { @($_.Conditions.UserRiskLevels) } | ForEach-Object { [string]$_ } | Sort-Object -Unique)
     $names = (@($riskPolicies | ForEach-Object { [string]$_.DisplayName }) -join ', ')
+    $ro15 = Get-NRGRiskReportOnlyPolicies -Policies $ca.Data['Policies'] -Condition 'UserRiskLevels' -RequiredLevels @('high') -GrantAny @('mfa','authStrength','passwordChange','riskRemediation','unknownFutureValue','block')
+    # Microsoft's v1.0 list withholds some policies (the risk-remediation ones were withheld on the first full
+    # run), so with the beta list unread, "no qualifying policy" is not a conclusion the evidence supports.
+    if ($levels -notcontains 'high' -and (Get-NRGPolicyListIncomplete -CA $ca)) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Not assessed: the Conditional Access policy list could not be read in full (the beta list failed and the v1.0 list withholds some policies), so whether a user risk policy exists was not established.$(if ($names) { " Enabled user risk policies read: $names." })"
+        return
+    }
     if ($levels -contains 'high') {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "User risk Conditional Access in force for high-risk users: $names"
+    } elseif ($riskPolicies.Count -eq 0 -and @($ro15.Qualifying).Count -gt 0) {
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail "A user risk policy meets every requirement (high user risk, all users and applications, a responding control) but is in report-only mode, which collects evaluation data and enforces nothing: $(@($ro15.Qualifying) -join ', '). Until it is turned on, an account Identity Protection rates high risk is not forced to change its password or blocked; Partial is still a failed baseline requirement.$(Get-NRGRiskReportOnlyNote -ReportOnly $ro15)" `
+            -CurrentValue "Report-only: $(@($ro15.Qualifying) -join ', ')" -RequiredValue 'CA policy in force: userRiskLevels = high + require password change or risk remediation' -Remediation $ctrl.Remediation
     } elseif ($riskPolicies.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
             -Detail "The enabled user risk policies ($names) apply to $($levels -join ', ') risk only, so an account Identity Protection rates high risk (likely compromised) is not forced to change its password or blocked." `
             -CurrentValue "userRiskLevels = $($levels -join ', ')" -RequiredValue 'CA policy: userRiskLevels = high + require password change or risk remediation' -Remediation $ctrl.Remediation
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No enabled Conditional Access policy uses the user risk condition, so an account Identity Protection rates as likely compromised is not forced to change its password or blocked. (User risk policies need Entra ID P2; on a tenant without it this control is not scored.)' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail ('No enabled Conditional Access policy uses the user risk condition, so an account Identity Protection rates as likely compromised is not forced to change its password or blocked. (User risk policies need Entra ID P2; on a tenant without it this control is not scored.)' + (Get-NRGRiskReportOnlyNote -ReportOnly $ro15)) -Remediation $ctrl.Remediation
     }
 }
 
@@ -993,15 +1143,30 @@ function Test-NRGControlAADUserConsent {
     # which this tool cannot evaluate, so it is not called restricted.
     $unrestrictedConsent = $consentPolicies | Where-Object { $_ -match 'legacy|ByDefault' }
     $custom = @($consentPolicies | Where-Object { $_ -notmatch 'microsoft-user-default-(legacy|low)$' })
+    # Expected state: users cannot consent freely (disabled, or limited to low-impact permissions from
+    # verified publishers). The admin consent workflow is a different safeguard that AAD-6.3 owns; it is
+    # shown here as related context and never decides this verdict, so one disabled workflow costs one
+    # baseline failure (AAD-6.3), not two.
+    $verified = @(); $short = @(); $unknown = @()
     if ($consentPolicies.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Users cannot consent to applications; admin consent is required.' -CurrentValue 'No user consent policy assigned'
+        $verified += 'Users cannot consent to applications (no user consent policy assigned).'
     } elseif (-not $unrestrictedConsent -and $custom.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'User consent is limited to low-impact permissions for apps from verified publishers.' -CurrentValue ($consentPolicies -join ', ')
+        $verified += "User consent is limited to low-impact permissions for apps from verified publishers ($($consentPolicies -join ', '))."
     } elseif (-not $unrestrictedConsent) {
-        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "User consent is governed by a custom permission grant policy ($($custom -join ', ')); what it allows requires manual verification." -CurrentValue ($consentPolicies -join ', ')
+        $unknown += "what user consent allows, because it is governed by a custom permission grant policy ($($custom -join ', ')) that requires manual verification."
     } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Users can consent to any app permissions. Consent phishing attacks grant attacker apps access to mailbox, files, and contacts without admin awareness.' -Remediation $ctrl.Remediation
+        $short += 'Users can consent to any app permissions. Consent phishing attacks grant attacker apps access to mailbox, files, and contacts without admin awareness.'
     }
+    $context = ''
+    if (Test-NRGSectionCollected $gov 'ConsentPolicy') {
+        $wf = Get-NRGNestedProperty -Object $gov -Path 'Data.ConsentPolicy.IsEnabled' -Default $null
+        if ($wf -is [bool] -and $wf) { $context = 'the admin consent workflow is enabled (AAD-6.3).' }
+        elseif ($wf -is [bool]) { $context = 'the admin consent workflow is disabled, so users who need an app have no approval path (scored under AAD-6.3).' }
+    }
+    Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+        -ShortfallState 'Gap' -Context $context `
+        -CurrentValue $(if ($consentPolicies.Count) { $consentPolicies -join ', ' } else { 'No user consent policy assigned' }) `
+        -RequiredValue 'User consent disabled, or limited to low-impact permissions from verified publishers'
 }
 
 # ── AAD-6.3 Admin Consent Workflow Enabled ────────────────────────────────────
@@ -1490,15 +1655,22 @@ function Test-NRGControlAADDeviceCode {
             -IfOff 'no Conditional Access policy blocks it'
         return
     }
-    $caBlocks = @($ca.Data['Policies'] | Where-Object {
+    $dcPolicies = @($ca.Data['Policies'] | Where-Object {
         $_.State -eq 'enabled' -and
         ((@($_.Conditions.AuthFlows) | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'transferMethods') }) -join ',') -match 'deviceCode' -and
         # A policy that scopes device code but only requires MFA still lets
         # the flow run — the phishing kits relay the MFA prompt too.
         (Test-NRGCAGrantRequires -Policy $_ -Any @('block'))
-    }).Count -gt 0
-    if ($caBlocks) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Device code authentication flow is blocked by a Conditional Access policy. Adversary-in-the-middle phishing via device code is prevented.'
+    })
+    # Combined coverage: all users, all applications, no extra condition; exclusions are
+    # judged across every qualifying policy (see Get-NRGCAEffectiveCoverage).
+    $cov = Get-NRGCAEffectiveCoverage -Policies $dcPolicies
+    if ($cov.Kind -ne 'None' -or @($cov.Narrowed).Count -gt 0) {
+        $cv = Get-NRGCACoverageVerdict -Coverage $cov -What 'The device code authentication flow is blocked'
+        Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
+            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished `
+            -CurrentValue "Device code flow block: $($cov.Kind) coverage$(if ($cov.Names.Count) { ' by ' + ($cov.Names -join ', ') })" `
+            -RequiredValue 'CA policy blocking the device code flow for all users on all applications (or Security Defaults)'
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Device code authentication flow is not blocked. Attackers use this flow in phishing campaigns where victims visit a URL and enter a code — no password required to compromise the account.' -CurrentValue 'No CA policy blocks deviceCodeFlow' -RequiredValue 'CA policy blocking deviceCodeFlow for all users' -Remediation $ctrl.Remediation
     }

@@ -38,13 +38,13 @@ function Invoke-NRGCollectAADAuthPolicies {
                 -ErrorAction Stop
             if ($amp) {
                 $result.Data.AuthMethodsPolicy = @{
-                    Id                            = [string]$amp.id
-                    Description                   = [string]$amp.description
-                    PolicyVersion                 = [string]$amp.policyVersion
+                    Id                            = [string](Get-NRGObjectField -Item $amp -Key 'id' -Default '')
+                    Description                   = [string](Get-NRGObjectField -Item $amp -Key 'description' -Default '')
+                    PolicyVersion                 = [string](Get-NRGObjectField -Item $amp -Key 'policyVersion' -Default '')
                     # preMigration / migrationInProgress: SSPR methods are still
                     # governed by the legacy SSPR policy, not this one (AAD-5.2).
                     PolicyMigrationState          = [string](Get-NRGObjectField -Item $amp -Key 'policyMigrationState' -Default '')
-                    AuthenticationMethodConfigs   = @($amp.authenticationMethodConfigurations | ForEach-Object {
+                    AuthenticationMethodConfigs   = @(@(Get-NRGObjectField -Item $amp -Key 'authenticationMethodConfigurations' -Default @()) | ForEach-Object {
                         # featureSettings is absent on most method configs; a bare
                         # $_.featureSettings then throws and empties this whole list.
                         $cfg = $_
@@ -161,8 +161,8 @@ function Invoke-NRGCollectAADAuthPolicies {
                 -ErrorAction Stop
             if ($consentPol) {
                 $result.Data.AdminConsentPolicy = @{
-                    IsEnabled = [bool]($consentPol.isEnabled ?? $false)
-                    Reviewers = @($consentPol.reviewers ?? @())
+                    IsEnabled = [bool](Get-NRGObjectField -Item $consentPol -Key 'isEnabled' -Default $false)
+                    Reviewers = @(Get-NRGObjectField -Item $consentPol -Key 'reviewers' -Default @())
                 }
             }
         } catch {

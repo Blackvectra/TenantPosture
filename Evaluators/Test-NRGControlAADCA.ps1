@@ -59,7 +59,7 @@ function Test-NRGControlAADCA {
     # 'other' client type; MFA (or an authentication strength) for all users
     # and all apps; MFA for admins, which an all-users policy also provides.
     $blockLegacy = @($enabled | Where-Object {
-        @($_.Conditions.ClientAppTypes) -contains 'other' -and (Test-NRGCAAllUsers $_) -and (Test-NRGCAGrantRequires -Policy $_ -Any @('block'))
+        @($_.Conditions.ClientAppTypes) -contains 'other' -and (Test-NRGCAAllUsers $_) -and (Test-NRGCAAllApps $_) -and (Test-NRGCAGrantRequires -Policy $_ -Any @('block'))
     }).Count -gt 0
 
     $mfaAllUsers = @($enabled | Where-Object {
@@ -87,12 +87,39 @@ function Test-NRGControlAADCA {
             -FrameworkIds $cit
     }
     elseif ($covered -ge 3) {
-        Add-NRGFinding -ControlId 'AAD-2.1' -State 'Satisfied' `
-            -Category 'Identity' -Title 'Conditional Access Policies Deployed' `
-            -Severity 'High' `
+        # The three tracks are a proxy. The expected state is the NRG baseline policy set,
+        # an approved list (Config/nrg-standards.json RequiredConditionalAccessTemplates,
+        # empty until approved) judged against the Conditional Access view's own
+        # Enforced / Similar / Missing status per template.
+        $verified = @("$($enabled.Count) enabled CA policies cover the legacy-auth block, MFA for all users and admin MFA ($($tracks -join ', ')).")
+        $short = @(); $unknown = @()
+        $wanted = @((Get-NRGStandards).RequiredConditionalAccessTemplates)
+        if ($wanted.Count -eq 0) {
+            $unknown += 'whether the NRG baseline policy set is deployed, because none is approved (Config/nrg-standards.json RequiredConditionalAccessTemplates is empty). The three tracks above are a proxy.'
+        } else {
+            $view = $null
+            try { $view = Get-NRGConditionalAccessView } catch { $view = $null }
+            $rows = if ($view -and (Get-NRGObjectField -Item $view -Key 'ReadStatus' -Default '') -eq 'Collected') { @(Get-NRGObjectField -Item $view -Key 'Baseline' -Default @()) } else { @() }
+            $enf = @(); $notEnf = @(); $unk = @()
+            foreach ($id in $wanted) {
+                $row = @($rows | Where-Object { (Get-NRGObjectField -Item $_ -Key 'Id' -Default '') -eq $id } | Select-Object -First 1)
+                if ($row.Count -eq 0) { $unk += "$id (unknown template or not evaluated)"; continue }
+                $st = [string](Get-NRGObjectField -Item $row[0] -Key 'Status' -Default '')
+                if ($st -eq 'Enforced') { $enf += $id }
+                elseif ($st -eq 'NotRead') {
+                    $why = [string](Get-NRGObjectField -Item $row[0] -Key 'Note' -Default '')
+                    $unk += "$id ($(if ($why) { $why.TrimEnd('.') } else { 'Conditional Access state not read' }))"
+                }
+                else { $notEnf += "$id ($st)" }
+            }
+            if ($enf.Count)    { $verified += "Required NRG policies enforced: $($enf -join ', ')." }
+            if ($notEnf.Count) { $short += "Required NRG policies not enforced: $($notEnf -join '; ') (report-only, narrower or missing policies do not count)." }
+            if ($unk.Count)    { $unknown += "required NRG policies that could not be evaluated: $($unk -join '; ')." }
+        }
+        Add-NRGExpectedStateFinding -ControlId 'AAD-2.1' -Control ([pscustomobject]@{ Category = 'Identity'; Title = 'Conditional Access Policies Deployed'; Severity = 'High'; Remediation = 'Deploy the approved NRG Conditional Access policy set. Stage each in report-only mode first, then enforce.' }) `
+            -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
             -CurrentValue "$($enabled.Count) enabled CA policies. Coverage tracks satisfied: $($tracks -join ', ')." `
-            -RequiredValue 'At least 3 enabled CA policies covering legacy-auth block, MFA all users, and admin MFA' `
-            -FrameworkIds $cit
+            -RequiredValue 'The approved NRG Conditional Access policy set, enabled (report-only does not count)'
     }
     else {
         $missing = @('block-legacy-auth','mfa-all-users','mfa-admin-roles') | Where-Object { $_ -notin $tracks }

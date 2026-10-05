@@ -19,6 +19,7 @@
       LicensingUnknown            plan only: licensing not read yet
       CollectorUnavailable        a collector did not complete successfully
       EvidenceStale               evidence older than its freshness window
+      StandardNotApproved         the evidence was read but an NRG standard it is judged against is not approved
       EvidenceNotRead             the collector ran but the evidence was not read
       EvaluationError             the evaluator errored or produced no result
       ControlFailed               assessed and below the expected state
@@ -53,6 +54,7 @@ function Get-NRGBaselineReasonCodes {
         @('LicensingUnknown',           'Plan', 'Licensing has not been read; whether the control applies is unknown until the tenant is connected.'),
         @('CollectorUnavailable',       'Run',  'A collector this control depends on did not complete successfully, so its evidence is missing.'),
         @('EvidenceStale',              'Run',  'The evidence is older than the freshness window for its class; a verdict that old is not evidence.'),
+        @('StandardNotApproved',        'Run',  'The evidence was read, but an NRG standard the expected state names (an approved list or monitoring address) is not approved or configured, so that part is not assessed.'),
         @('EvidenceNotRead',            'Run',  'The collector ran but the specific evidence this control needs was not read (a section failed, a value could not be resolved).'),
         @('EvaluationError',            'Run',  'The evaluator raised an error or produced no result; the true state is unknown.'),
         @('ControlFailed',              'Run',  'Assessed and below the expected state (a Gap or a Partial).'),
@@ -138,7 +140,15 @@ function Resolve-NRGBaselineReason {
     $prose  = [string](Get-NRGObjectField -Item $Row -Key 'Reason' -Default '')
     $fState = [string](Get-NRGObjectField -Item $Row -Key 'ObservedFindingState' -Default '')
     $cid    = [string](Get-NRGObjectField -Item $Row -Key 'ControlId' -Default '')
-    $sentence = Get-NRGReasonSentence -Text $Detail
+    # A multi-component detail reads "Verified: ... Shortfall: ... Not assessed: ...".
+    # The reason must name what decides the code, not the half that passed: a Partial
+    # shows its shortfall, an unread verdict shows what was not established.
+    $focus = $Detail
+    if ($Detail -match '(?s)^\s*Verified:') {
+        if ($state -eq 'Failed' -and $Detail -match '(?s)Shortfall:\s*(.+?)(?=\s+Not assessed:|$)') { $focus = $Matches[1] }
+        elseif ($state -eq 'NotVerified' -and $Detail -match '(?s)Not assessed:\s*(.+)$') { $focus = "Not established: $($Matches[1])" }
+    }
+    $sentence = Get-NRGReasonSentence -Text $focus
     $out = { param([string] $code, [string] $reason) [ordered]@{ ReasonCode = $code; Reason = $reason } }
 
     if ($state -eq 'NotVerified') {
@@ -161,6 +171,9 @@ function Resolve-NRGBaselineReason {
         if ($cause -eq 'Stale evidence') {
             $s = Get-NRGReasonSentence -Text $prose
             return & $out 'EvidenceStale' $(if ($s) { $s } else { 'The evidence is older than its freshness window.' })
+        }
+        if ($cause -eq 'Standard not approved') {
+            return & $out 'StandardNotApproved' $(if ($sentence) { $sentence } else { 'An NRG standard this control is judged against is not approved or configured.' })
         }
         if ($cause -eq 'Evidence not read') {
             if ($null -ne $OptionalCollector) {
@@ -241,7 +254,7 @@ function Get-NRGBaselineCoverage {
     $rows = @($Rows | Where-Object { $null -ne $_ })
     $code = { param($r) [string](Get-NRGObjectField -Item $r -Key 'ReasonCode' -Default '') }
     $knownCodes   = @('Satisfied', 'ControlFailed', 'ThirdPartyHandled')
-    $unknownCodes = @('CollectorUnavailable', 'EvidenceStale', 'EvidenceNotRead', 'ManualVerificationRequired', 'SkippedByOperator', 'OptionalCollectorRequired', 'EvaluationError', 'LicensingUnknown')
+    $unknownCodes = @('CollectorUnavailable', 'EvidenceStale', 'StandardNotApproved', 'EvidenceNotRead', 'ManualVerificationRequired', 'SkippedByOperator', 'OptionalCollectorRequired', 'EvaluationError', 'LicensingUnknown')
     $na  = @($rows | Where-Object { (& $code $_) -eq 'NotApplicable' })
     $lb  = @($rows | Where-Object { (& $code $_) -eq 'LicenseBlocked' })
     $kn  = @($rows | Where-Object { (& $code $_) -in $knownCodes })

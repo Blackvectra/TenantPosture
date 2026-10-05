@@ -172,16 +172,22 @@ function Get-NRGCAAdminRoleCoverage {
     .DESCRIPTION
         Never claims Microsoft's specific 14-role list is covered — it can
         only compare against roles this tenant's own role catalog says are
-        privileged, and says so. $null when the role catalog was not
-        collected: coverage cannot be judged either way.
+        privileged, and says so. When the role catalog was not collected,
+        only an all-users policy excluding no role is proved to cover every
+        privileged role; otherwise $null: coverage cannot be judged either way.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)] $Policy, [AllowNull()] [hashtable] $PrivRoleIds)
-    if ($null -eq $PrivRoleIds) { return $null }
-    if ($PrivRoleIds.Count -eq 0) { return $null }
     $inc = [System.Collections.Generic.HashSet[string]]::new([string[]]@(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.Users.IncludeRoles' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ }))
     $exc = [System.Collections.Generic.HashSet[string]]::new([string[]]@(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.Users.ExcludeRoles' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ }))
     $allUsers = (@(Get-NRGNestedProperty -Object $Policy -Path 'Conditions.Users.IncludeUsers' -Default @()) -contains 'All')
+    if ($null -eq $PrivRoleIds) {
+        # Catalog not read: only an all-users policy that excludes no role is
+        # proved to cover every privileged role; anything else cannot be judged.
+        if ($allUsers -and $exc.Count -eq 0) { return [pscustomobject]@{ CoveredCount = 1; TotalPriv = 1; RoleScoped = $false } }
+        return $null
+    }
+    if ($PrivRoleIds.Count -eq 0) { return $null }
     $covered = [System.Collections.Generic.List[string]]::new()
     foreach ($rid in $PrivRoleIds.Keys) {
         if ($exc.Contains($rid)) { continue }
@@ -502,6 +508,11 @@ function Get-NRGConditionalAccessView {
         } elseif (@($matchByTemplate[$tid].Similar).Count -gt 0) {
             $status = 'Similar'
             $note = 'A related policy exists but is report-only, disabled, or narrower than this template.'
+        } elseif ($tid -in @('mfa-admins', 'admin-phish-resistant-mfa') -and $null -eq $privRoleIds) {
+            # Unread evidence is not a missing policy: without the tenant's role
+            # catalog, coverage of its privileged roles cannot be judged.
+            $status = 'NotRead'
+            $note = "The tenant's directory role catalog (AAD-DirectoryRoles) was not read, so coverage of its privileged roles cannot be judged."
         } elseif ($licKnown -and -not $licMet) {
             $status = 'NotLicensed'
             $note = "Requires $($t.LicenseRequirement)."

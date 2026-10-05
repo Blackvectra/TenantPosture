@@ -182,7 +182,7 @@ $reportMetadata = [ordered]@{
     UserPrincipalName = $UserPrincipalName
     WindowDays        = $WindowDays
     InboxWindowDays   = 30
-    ToolVersion       = $script:NRGAssessmentVersion
+    ToolVersion       = $(if (Get-Variable -Name NRGAssessmentVersion -ErrorAction SilentlyContinue) { [string]$NRGAssessmentVersion } else { 'unknown' })
     Brand             = $NRGBrand
     ThreatIntelEnabled = [bool]$EnableThreatIntel
 }
@@ -194,6 +194,14 @@ try {
     $reportMetadata['TenantId']         = $ctx.TenantId
 } catch {
     Write-Host "  [!] Connection failed: $($_.Exception.Message)" -ForegroundColor Red
+    # The first line is often all a credential error carries; the cause (a closed or hidden
+    # sign-in window, a consent or Conditional Access refusal) sits in the inner exceptions.
+    $inner = $_.Exception.InnerException
+    while ($inner) {
+        if ($inner.Message) { Write-Host ("      caused by: {0}" -f (($inner.Message -split "`r?`n")[0])) -ForegroundColor Red }
+        $inner = $inner.InnerException
+    }
+    Write-Host '      If the window never appeared or closed, retry in a NEW PowerShell 7 window; the sign-in window can open behind other windows.' -ForegroundColor Yellow
     exit 1
 }
 
@@ -201,11 +209,27 @@ try {
     # ── Collect ──────────────────────────────────────────────────────────────
     Write-Host ''
     Write-Host '[-] Collecting mailbox data...' -ForegroundColor Cyan
+    # What stopped a required step. A throw here or in an evaluator is not just
+    # a warning: it decides whether the result may say "nothing found".
+    $healthGaps = [System.Collections.Generic.List[string]]::new()
+    $evaluatorFailures = [System.Collections.Generic.List[string]]::new()
     try {
         Invoke-NRGEmailCollectMailbox -WindowDays $WindowDays
-        Write-Host '  [+] Mailbox data collected' -ForegroundColor Green
+        # "Collected" only when the required reads came back; the collector fails soft per source,
+        # so reaching this line does not mean the mailbox was read.
+        $mailMissing = @((Get-NRGDeepDiveEvidence).RequiredMissing)
+        if ($mailMissing.Count -eq 0) {
+            Write-Host '  [+] Mailbox data collected' -ForegroundColor Green
+        } else {
+            Write-Host ("  [!] Mailbox data NOT read: {0} required source(s) missing ({1}); the result will be NOT CLEARED" -f $mailMissing.Count, ($mailMissing -join ', ')) -ForegroundColor Yellow
+            $notFound = @(Get-NRGExceptions | Where-Object { [string]$_.Source -like 'IR-Mailbox-*' -and [string]$_.Message -match 'NotFound|404|MailboxNotEnabled' })
+            if ($notFound.Count -gt 0) {
+                Write-Host '      Graph answered NotFound for the mailbox reads. A likely cause is that this account has no Exchange Online mailbox (for example an unlicensed admin account); not confirmed.' -ForegroundColor Yellow
+            }
+        }
     } catch {
         Write-Warning "Mailbox collection failed: $($_.Exception.Message)"
+        $healthGaps.Add("mailbox collection stopped: $($_.Exception.Message)")
     }
     # v4.12.1: OAuth consents + auth methods. Under the delegated 3-scope
     # connection these Graph reads usually 403 — the collector fails soft
@@ -217,6 +241,7 @@ try {
         Write-Host '  [+] User-security data collected (OAuth grants + auth methods)' -ForegroundColor Green
     } catch {
         Write-Warning "User-security collection failed: $($_.Exception.Message)"
+        $healthGaps.Add("user-security collection stopped: $($_.Exception.Message)")
     }
 
     # ── Evaluate ─────────────────────────────────────────────────────────────
@@ -233,6 +258,7 @@ try {
     )
     if ($EnableThreatIntel) { $evaluators += 'Test-NRGEmailControlThreatIntel' }
 
+    $findingsBefore = @(Get-NRGFindings).Count
     foreach ($fn in $evaluators) {
         if (Get-Command $fn -ErrorAction SilentlyContinue) {
             try {
@@ -240,18 +266,37 @@ try {
                 Write-Host "  [+] $fn" -ForegroundColor Green
             } catch {
                 Write-Warning "$fn failed: $($_.Exception.Message)"
+                $evaluatorFailures.Add("$fn did not finish: $($_.Exception.Message)")
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     Register-NRGException -Source $fn -Message $_.Exception.Message
                 }
             }
         } else {
             Write-Warning "Evaluator $fn not exported"
+            $evaluatorFailures.Add("$fn was not available to run")
         }
     }
 
+    # Name the mailbox these findings describe and what they rest on.
+    $profileBag = Get-NRGRawData -Key 'IR-MailboxProfile'
+    $subjectUpn = if ($profileBag -and $profileBag.Success -and $profileBag.Data.UserPrincipalName) { [string]$profileBag.Data.UserPrincipalName } else { [string]$UserPrincipalName }
+    if ($subjectUpn) { $null = Set-NRGFindingSubject -Since $findingsBefore -Subject $subjectUpn -Evidence (Get-NRGDeepDiveEvidence) }
     $findings = @(Get-NRGFindings)
-    $rawData  = Get-NRGRawData -AllKeys
+    $rawData  = Get-NRGRawData
     $reportMetadata['FindingCount'] = $findings.Count
+
+    # Assessment health: collection AND evaluation. Successful collection is not
+    # enough: a required detector that threw produced no verdict, and its absence
+    # must not read as a clean one.
+    $evidence = Get-NRGDeepDiveEvidence
+    foreach ($m in @($evidence.RequiredMissing)) { $healthGaps.Add("required source $m was not read") }
+    foreach ($p in @($evidence.RequiredPartial)) { $healthGaps.Add("required source $p") }
+    foreach ($p in @($evidence.OptionalTruncated)) { $healthGaps.Add("source $p") }
+    foreach ($f in $evaluatorFailures) { $healthGaps.Add($f) }
+    $reportMetadata['CollectionComplete'] = ($healthGaps.Count -eq 0)
+    $reportMetadata['CollectionGaps']     = @($healthGaps)
+    $reportMetadata['EvaluatorFailures']  = @($evaluatorFailures)
+    $reportMetadata['Evidence']           = $evidence
 
     # ── Publish ──────────────────────────────────────────────────────────────
     Write-Host ''
@@ -297,17 +342,28 @@ try {
     Write-Host "  Critical IoCs      : $($crits.Count)" -ForegroundColor $(if ($crits.Count -gt 0) {'Red'} else {'Green'})
     Write-Host "  High IoCs          : $($highs.Count)" -ForegroundColor $(if ($highs.Count -gt 0) {'Yellow'} else {'Green'})
     Write-Host "  Output             : $OutputPath"   -ForegroundColor White
+    if (-not $reportMetadata['CollectionComplete']) {
+        Write-Host '  NOT CLEARED: part of the evidence could not be read or checked:' -ForegroundColor Yellow
+        foreach ($g in @($reportMetadata['CollectionGaps'])) { Write-Host "    - $g" -ForegroundColor Yellow }
+    }
     Write-Host ''
     if ($crits.Count -gt 0) {
         Write-Host '  ╔══════════════════════════════════════════════════╗' -ForegroundColor Red
-        Write-Host '  ║   CRITICAL IoCs found — likely compromise.       ║' -ForegroundColor Red
+        Write-Host '  ║   CRITICAL indicators found — investigate.       ║' -ForegroundColor Red
         Write-Host '  ║   Review the incident report and take action     ║' -ForegroundColor Red
         Write-Host '  ║   (revoke sessions, reset password, force MFA).  ║' -ForegroundColor Red
         Write-Host '  ╚══════════════════════════════════════════════════╝' -ForegroundColor Red
         Write-Host ''
     }
 
-    if ($findings.Count -eq 0) {
+    # Exit-code precedence (highest first): 4 fatal error, 10 Critical indicator
+    # (only with -FailOnCriticalIoC), 3 evidence incomplete, a required check did
+    # not finish, or exceptions were recorded, 2 no findings, 0 complete. Incomplete
+    # outranks "no findings": a run whose detectors failed has no findings because
+    # nothing evaluated, not because nothing was wrong.
+    if (-not $reportMetadata['CollectionComplete']) {
+        $script:NRGEmailSuccessExitCode = 3
+    } elseif ($findings.Count -eq 0) {
         $script:NRGEmailSuccessExitCode = 2
     } elseif (@(Get-NRGExceptions).Count -gt 0) {
         $script:NRGEmailSuccessExitCode = 3

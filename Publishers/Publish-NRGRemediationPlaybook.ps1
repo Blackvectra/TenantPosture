@@ -75,14 +75,16 @@ function Publish-NRGRemediationPlaybook {
 
     # Gap findings only, sorted by severity priority
     $sevOrder = @{ 'Critical' = 0; 'High' = 1; 'Medium' = 2; 'Low' = 3; 'Informational' = 4 }
-    $gaps     = @($Findings | Where-Object { $_.State -eq 'Gap' }) |
-                Sort-Object { $sevOrder[$_.Severity] ?? 99 }, Category, ControlId
+    # The whole pipeline sits inside @(): Sort-Object over zero or one object returns
+    # $null or a bare object, and StrictMode throws on `.Count` of either.
+    $gaps     = @(@($Findings | Where-Object { $_.State -eq 'Gap' }) |
+                Sort-Object { $sevOrder[$_.Severity] ?? 99 }, Category, ControlId)
 
     $phase1 = @($gaps | Where-Object { $_.Severity -in @('Critical','High') })
     $phase2 = @($gaps | Where-Object { $_.Severity -eq 'Medium' })
     $phase3 = @($gaps | Where-Object { $_.Severity -eq 'Low' })
-    $partials = @($Findings | Where-Object { $_.State -eq 'Partial' }) |
-                Sort-Object { $sevOrder[$_.Severity] ?? 99 }
+    $partials = @(@($Findings | Where-Object { $_.State -eq 'Partial' }) |
+                Sort-Object { $sevOrder[$_.Severity] ?? 99 })
 
     # ── ENGINEER PLAYBOOK ─────────────────────────────────────────────────────
     $sb = [System.Text.StringBuilder]::new()
@@ -182,6 +184,8 @@ function Publish-NRGRemediationPlaybook {
         if ($licNote) { $lines.Add($licNote); $lines.Add("") }
         $lines.Add("**Risk:** $(EscMd $f.Detail)")
         $lines.Add("")
+        $limNote = Get-NRGEvidenceLimitNote -ControlId ([string]$f.ControlId)
+        if ($limNote) { $lines.Add("**Evidence boundary:** $(EscMd $limNote)  "); $lines.Add("") }
         if ($f.CurrentValue) { $lines.Add("**Current state:** ``$(EscMd $f.CurrentValue)``  ") }
         if ($f.RequiredValue) { $lines.Add("**Required state:** ``$(EscMd $f.RequiredValue)``  ") }
         $lines.Add("")
@@ -278,7 +282,7 @@ function Publish-NRGRemediationPlaybook {
         $null = $sb.AppendLine("| Control | Current State | Required |")
         $null = $sb.AppendLine("|---------|--------------|---------|")
         foreach ($f in ($partials | Select-Object -First 20)) {
-            $null = $sb.AppendLine("| $(EscMd $f.ControlId) — $(EscMd $f.Title) | $(EscMd ($f.CurrentValue ?? 'See report')) | $(EscMd ($f.RequiredValue ?? 'See report')) |")
+            $null = $sb.AppendLine("| $(EscMd $f.ControlId) — $(EscMd $f.Title)$(Get-NRGEvidenceLimitMd $f.ControlId) | $(EscMd ($f.CurrentValue ?? 'See report')) | $(EscMd ($f.RequiredValue ?? 'See report')) |")
         }
         $null = $sb.AppendLine()
     }
@@ -356,7 +360,7 @@ function Publish-NRGRemediationPlaybook {
     $null = $exec.AppendLine("| ✅ Meets Requirement | $sat | Control is properly configured |")
     $null = $exec.AppendLine("| ⚠️ Partially Met | $partial | Control exists but needs improvement |")
     $null = $exec.AppendLine("| ❌ Gap Identified | $gap | Control is missing or misconfigured |")
-    $null = $exec.AppendLine("| — Not Applicable | $na | Control does not apply to this environment |")
+    $null = $exec.AppendLine("| — Not scored | $na | Does not apply to this environment, or could not be assessed (unlicensed, not readable, or a manual check). Each says which in the full report |")
     $null = $exec.AppendLine()
 
     # Top 5 most critical findings in business language
@@ -519,6 +523,8 @@ function Publish-NRGRemediationPlaybook {
                 $out += "<div class=`"lic`">&#128273; Requires: $(& $Esc $ctrl.LicenseRequirement)</div>"
             }
             if ($bizRisk)        { $out += "<div class=`"row`"><b>Risk</b> $(& $Esc $bizRisk)</div>" }
+            $limNoteH = Get-NRGEvidenceLimitNote -ControlId ([string]$f.ControlId)
+            if ($limNoteH)       { $out += "<div class=`"row`"><b>Evidence boundary</b> $(& $Esc $limNoteH)</div>" }
             if ($f.CurrentValue) { $out += "<div class=`"row`"><b>Current state</b> <code>$(& $Esc $f.CurrentValue)</code></div>" }
             if ($f.RequiredValue){ $out += "<div class=`"row`"><b>Required state</b> <code>$(& $Esc $f.RequiredValue)</code></div>" }
             if ($remedy) {
