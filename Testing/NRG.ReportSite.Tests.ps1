@@ -222,8 +222,9 @@ foo,bar" -Encoding utf8
 # observed values and affected objects (mailboxes, forwarding targets, app names), so its files get
 # the same owner-only protection as the results JSON, applied before the content is written, on
 # both callers: the entry point and the standalone rebuild, which used to republish an owner-only
-# results file into files every local user could read.
-Describe 'Report site files are owner-only' {
+# results file into files every local user could read. And a results file is input: a control ID
+# from it must not name a file outside the site folder or break out of a link on the landing page.
+Describe 'Report site files are owner-only and a results file cannot steer file names' {
     BeforeAll {
         $script:Root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
         Import-Module (Join-Path $script:Root 'NRG-Assessment.psm1') -Force -ErrorAction Stop
@@ -271,5 +272,26 @@ Describe 'Report site files are owner-only' {
         $plain = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -in @('Set-Content', 'Out-File', 'Add-Content') }, $true))
         $dotnet = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and [string]$n.Member -match '^Write(All|Lines|Text|Bytes)' }, $true))
         ($plain.Count + $dotnet.Count) | Should -Be 0
+    }
+    It 'a control ID from a results file cannot name a file outside the site folder or break out of a link' {
+        # Two levels deep, so a '../../' escape lands inside the temp folder this test searches.
+        $site = Join-Path $script:Tmp 'a' 'b' 'site-hostile'
+        $mk ={ param($id) @{ ControlId = $id; State = 'Gap'; Severity = 'High'; Category = 'X'; Title = 't'; Detail = 'd'; CurrentValue = ''; RequiredValue = ''; FrameworkIds = ''; Remediation = '' } }
+        $hostile = @(
+            (& $mk "x'onmouseover='alert(1)-1.1"),
+            (& $mk '..\..\escape-1.1'),
+            (& $mk '../../escape-1.2'),
+            (& $mk 'EXO-6.1')
+        )
+        { $null = Publish-NRGReportSite -Metadata $script:Meta -Findings $hostile -OutputPath $site } | Should -Not -Throw
+        # Nothing written beside or above the site folder.
+        @(Get-ChildItem -LiteralPath $script:Tmp -Filter '*escape*' -Recurse -ErrorAction SilentlyContinue).Count | Should -Be 0
+        foreach ($f in @(Get-ChildItem -LiteralPath $site -Recurse -File)) {
+            $f.DirectoryName | Should -Be ((Resolve-Path -LiteralPath $site).Path)
+            $f.Name | Should -Match '^([A-Za-z]{1,12}\.html|ActionPlan\.csv)$'
+        }
+        (Get-Content -LiteralPath (Join-Path $site 'index.html') -Raw) | Should -Not -Match "onmouseover='alert"
+        # The finding itself is still reported, under an unrecognized workload.
+        (Get-ChildItem -LiteralPath $site -Filter '*.html' | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join "`n" | Should -Match 'onmouseover=&#39;alert'
     }
 }

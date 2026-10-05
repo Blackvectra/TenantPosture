@@ -178,6 +178,9 @@ function Get-NRGSiteRows {
         }
         $v    = Get-NRGSiteVerdict -Finding $f -Kind $kind
         $prefix = ($cid -split '-')[0]
+        # The prefix names a page file and goes into a link on the landing page; a control ID read
+        # from a results file is input, so anything but a plain word is filed under 'Other'.
+        if ($prefix -notmatch '^[A-Za-z]{1,12}$') { $prefix = 'Other' }
         $b    = $base[$cid]
         $disp = [string](Get-NRGObjectField -Item $b -Key 'Disposition' -Default '')
         $autoFlag = if ($c) { (Get-NRGObjectField -Item $c -Key 'Automated' -Default $true) -eq $true } else { $true }
