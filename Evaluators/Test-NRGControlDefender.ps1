@@ -149,9 +149,9 @@ function Test-NRGControlDefender {
     $sa = $defData.Data['SafeAttachments']
     $sl = $defData.Data['SafeLinks']
     $ap = $defData.Data['AntiPhishing']
-    $saForce = if ($sa -and $sa.Available) { @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $sa -Key 'Policies' -Default @()) -Rules (Get-NRGObjectField -Item $sa -Key 'Rules' -Default $null) -RulePolicyKey 'SafeAttachmentPolicy' -PresetKind 'ATP') } else { @() }
-    $slForce = if ($sl -and $sl.Available) { @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $sl -Key 'Policies' -Default @()) -Rules (Get-NRGObjectField -Item $sl -Key 'Rules' -Default $null) -RulePolicyKey 'SafeLinksPolicy' -PresetKind 'ATP') } else { @() }
-    $apForce = if ($ap -and $ap.Available) { @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) -Rules (Get-NRGObjectField -Item $ap -Key 'Rules' -Default $null) -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP') } else { @() }
+    $saForce = if ($sa -and $sa.Available) { @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $sa -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $sa -Key 'Rules') -RulePolicyKey 'SafeAttachmentPolicy' -PresetKind 'ATP') } else { @() }
+    $slForce = if ($sl -and $sl.Available) { @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $sl -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $sl -Key 'Rules') -RulePolicyKey 'SafeLinksPolicy' -PresetKind 'ATP') } else { @() }
+    $apForce = if ($ap -and $ap.Available) { @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $ap -Key 'Rules') -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP') } else { @() }
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
 
     # ── DEF-1.1 Safe Attachments with Block ──────────────────────────────
@@ -244,15 +244,73 @@ function Test-NRGControlDefenderPresetPolicies {
     }
     $on = @(@(Get-NRGObjectField -Item $pr -Key 'EOP' -Default @()) + @(Get-NRGObjectField -Item $pr -Key 'ATP' -Default @()) |
         Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'State' -Default '') -eq 'Enabled' })
-    if ($on.Count -gt 0) {
-        $names = ($on | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '?') } | Sort-Object -Unique) -join ', '
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Preset security policy turned on: $names." -CurrentValue $names
-    } else {
+    if ($on.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No Standard or Strict preset security policy is turned on. Protection depends on the default and any custom policies, which must each be kept at recommended values by hand.' -CurrentValue 'No preset turned on' -RequiredValue 'Standard or Strict preset applied' -Remediation $ctrl.Remediation
+        return
     }
+    # A preset turned on is not a preset that applies to everyone. Judge WHO it covers: a
+    # rule that names every accepted domain, names no other recipient scope and has no
+    # exclusions covers everyone; otherwise recipients in a scope gap or an exclusion fall
+    # back to whatever else is in force (the Built-In protection policy, a custom or the
+    # default policy, which DEF-1.x judge). Standard and Strict are combined: a recipient
+    # excluded from one is still covered by the other unless excluded from both.
+    $exo = Get-NRGRawData -Key 'EXO-MailboxConfig'
+    $accepted = @()
+    if ($exo -and (Test-NRGSectionCollected $exo 'AcceptedDomains')) {
+        $accepted = @(@(Get-NRGNestedProperty -Object $exo -Path 'Data.AcceptedDomains' -Default @()) | ForEach-Object { ([string](Get-NRGObjectField -Item $_ -Key 'DomainName' -Default '')).ToLowerInvariant() } | Where-Object { $_ })
+    }
+    $names = ($on | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '?') } | Sort-Object -Unique) -join ', '
+    $byName = @($on | Group-Object { [string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '?') })
+    $cands = @(); $scopeNotes = @(); $scopeUnknown = @(); $scopeUnread = @()
+    foreach ($g in $byName) {
+        $rules = @($g.Group)
+        # A preset's EOP and ATP rules carry the same scope; judge the most restrictive view.
+        $scoped = @($rules | Where-Object {
+            @(Get-NRGObjectField -Item $_ -Key 'SentTo' -Default @() | Where-Object { $_ }).Count -gt 0 -or
+            @(Get-NRGObjectField -Item $_ -Key 'SentToMemberOf' -Default @() | Where-Object { $_ }).Count -gt 0 })
+        $doms = @($rules | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'RecipientDomainIs' -Default @()) } | ForEach-Object { ([string]$_).ToLowerInvariant() } | Where-Object { $_ } | Sort-Object -Unique)
+        $missingDoms = @($accepted | Where-Object { $_ -notin $doms })
+        $ex = @($rules | ForEach-Object {
+            foreach ($x in @(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentTo' -Default @())) { if ($x) { "recipient:$x" } }
+            foreach ($x in @(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentToMemberOf' -Default @())) { if ($x) { "group:$x" } }
+            foreach ($x in @(Get-NRGObjectField -Item $_ -Key 'ExceptIfRecipientDomainIs' -Default @())) { if ($x) { "domain:$x" } }
+            # An older result carries only the flag: the exclusion exists, its identity is unknown.
+            if ((Get-NRGObjectField -Item $_ -Key 'HasExceptions' -Default $false) -eq $true -and
+                @(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentTo' -Default @()).Count -eq 0 -and @(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentToMemberOf' -Default @()).Count -eq 0 -and
+                @(Get-NRGObjectField -Item $_ -Key 'ExceptIfRecipientDomainIs' -Default @()).Count -eq 0) { "unnamed-exclusion:$($g.Name)" }
+        } | Sort-Object -Unique)
+        if ($scoped.Count -gt 0) { $scopeNotes += "$($g.Name) applies only to named recipients or groups" ; continue }
+        # Microsoft documents that when a Standard or Strict preset rule's conditions and exceptions are
+        # all empty there are no recipient restrictions: it applies to everyone. That reading is only safe
+        # when the collector demonstrably read the exception fields (current results carry them); an older
+        # result lacking them cannot tell "empty" from "not read", so scope stays not established.
+        $shaped = @($rules | Where-Object {
+            $r0 = $_
+            if ($r0 -is [System.Collections.IDictionary]) { $r0.Contains('ExceptIfSentToMemberOf') } else { $null -ne $r0.PSObject.Properties['ExceptIfSentToMemberOf'] } }).Count -eq $rules.Count
+        if ($doms.Count -eq 0 -and $shaped) { $cands += [pscustomobject]@{ Name = $g.Name; Exclusions = $ex }; continue }
+        if ($doms.Count -eq 0) { $scopeUnknown += "$($g.Name): the rule returned no recipient scope and this result predates the exclusion fields, so who it applies to is not established"; continue }
+        # Unread accepted domains establish nothing either way: not assessed, never a shortfall.
+        if ($accepted.Count -eq 0) { $scopeUnread += "$($g.Name): the accepted domains were not read, so whether it covers every domain is not established"; continue }
+        if ($missingDoms.Count -gt 0) { $scopeNotes += "$($g.Name) does not include accepted domain(s): $($missingDoms -join ', ')"; continue }
+        $cands += [pscustomobject]@{ Name = $g.Name; Exclusions = $ex }
+    }
+    $cov = Get-NRGExclusionCoverage -Candidates $cands
+    $verified = @("Preset security policy turned on: $names."); $short = @(); $unknown = @()
+    switch ($cov.Kind) {
+        'Full'       { $verified += "$($cov.FullNames -join ', ') applies to every accepted domain with no recipient exclusions." }
+        'Exceptions' { $short += "Every preset that covers all domains excludes the same recipients ($($cov.Exceptions -join ', ')), so they get no preset protection and fall back to the Built-In, custom or default policies (see DEF-1.1 to DEF-1.6 for what those provide)." }
+        'Unproven'   { $unknown += "whether any recipient is excluded from every preset: $((@($cov.ExcludedBy.Keys) | ForEach-Object { "$_ excludes $(@($cov.ExcludedBy[$_]).Count) recipient scope(s)" }) -join '; '); group membership was not resolved, so overlap between the excluded groups is unproven." }
+        'None'       { if ($scopeUnknown.Count -eq 0 -and $scopeUnread.Count -eq 0) { $short += 'No preset applies to all recipients.' } }
+    }
+    foreach ($n in $scopeUnknown) { $unknown += "$n." }
+    # With another preset proven to cover everyone, the unread scope cannot change the verdict.
+    foreach ($n in $scopeUnread) { if ($cov.Kind -eq 'Full') { $verified += "Also: $n." } else { $unknown += "$n." } }
+    foreach ($n in $scopeNotes) { if ($cov.Kind -eq 'Full') { $verified += "Also: $n." } else { $short += "$n." } }
+    Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+        -CurrentValue $names -RequiredValue 'A Standard or Strict preset that applies to every recipient, with no exclusion unless another preset covers those recipients'
 }
 
-# ── DEF-2.2 Anti-Malware ZAP Enabled ─────────────────────────────────────────
+# ── DEF-2.2 Zero-hour auto purge (spam, phishing AND malware) ────────────────
 function Test-NRGControlDefenderZAP {
     [CmdletBinding()] param()
     $cid = 'DEF-2.2'; $ctrl = Get-NRGControlById -ControlId $cid; if (-not $ctrl) { return }
@@ -264,17 +322,53 @@ function Test-NRGControlDefenderZAP {
     if (-not (Test-NRGSectionCollected $exo 'AntiSpamPolicies')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiSpamPolicies was not collected; not assessed.'; return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGObjectField -Item $exo.Data -Key 'AntiSpamRules' -Default $null) -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
-    # SpamZapEnabled + PhishZapEnabled (ZapEnabled is the deprecated umbrella,
-    # used only when neither is present).
+    $verified = @(); $short = @(); $unknown = @()
+
+    # Spam and phishing ZAP: anti-spam policies in force (SpamZapEnabled + PhishZapEnabled;
+    # ZapEnabled is the deprecated umbrella, used only when neither is present).
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGRuleList -Item $exo.Data -Key 'AntiSpamRules') -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
     $zap = { param($p) $s = & $f $p 'SpamZapEnabled'; $h = & $f $p 'PhishZapEnabled'
         if ($null -eq $s -and $null -eq $h) { (& $f $p 'ZapEnabled' $false) -eq $true } else { $s -eq $true -and $h -eq $true } }
-    Add-NRGPolicySetFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $policies `
-        -Pass { & $zap $_ } -Value { "SpamZap=$(& $f $_ 'SpamZapEnabled' '?'), PhishZap=$(& $f $_ 'PhishZapEnabled' '?')" } `
-        -PassDetail 'Zero-hour auto purge removes spam and phishing delivered before detection.' `
-        -FailDetail 'ZAP is off for these recipients: malicious mail delivered before detection stays in the mailbox.' `
-        -RequiredValue 'SpamZapEnabled and PhishZapEnabled = True'
+    if ($policies.Count -eq 0) {
+        $unknown += 'spam and phishing ZAP (no anti-spam policy in force could be identified).'
+    } else {
+        $bad = @($policies | Where-Object { -not (& $zap $_) })
+        $names = { param($l) (@($l) | ForEach-Object { [string](& $f $_ 'Name' '?') }) -join ', ' }
+        if ($bad.Count -eq 0) { $verified += "Spam and phishing ZAP is on in every anti-spam policy in force ($(& $names $policies))." }
+        else {
+            $goodSp = @($policies | Where-Object { & $zap $_ })
+            if ($goodSp.Count) { $verified += "Spam and phishing ZAP is on in: $(& $names $goodSp)." }
+            $short += "Spam or phishing ZAP is off in: $(& $names $bad)."
+        }
+    }
+
+    # Malware ZAP is an anti-malware policy setting (ZapEnabled on Get-MalwareFilterPolicy).
+    $def = Get-NRGRawData -Key 'Defender-Policies'
+    $mf  = if ($def -and $def.Success) { Get-NRGObjectField -Item $def.Data -Key 'MalwareFilter' -Default $null } else { $null }
+    if (-not $mf -or -not (Get-NRGObjectField -Item $mf -Key 'Available' -Default $false)) {
+        $unknown += 'malware ZAP (the anti-malware policies were not read).'
+    } else {
+        $mfForce = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $mf -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $mf -Key 'Rules') -RulePolicyKey 'MalwareFilterPolicy' -PresetKind 'EOP')
+        if ($mfForce.Count -eq 0) {
+            $unknown += 'malware ZAP (no anti-malware policy in force could be identified).'
+        } else {
+            $read = @($mfForce | Where-Object { $null -ne (& $f $_ 'ZapEnabled') })
+            if ($read.Count -lt $mfForce.Count) {
+                $unknown += 'malware ZAP (ZapEnabled was not returned for every anti-malware policy in force).'
+            } else {
+                $badMf = @($mfForce | Where-Object { (& $f $_ 'ZapEnabled') -ne $true })
+                if ($badMf.Count -eq 0) { $verified += 'Malware ZAP is on in every anti-malware policy in force.' }
+                else {
+                    $goodMf = @($mfForce | Where-Object { (& $f $_ 'ZapEnabled') -eq $true })
+                    if ($goodMf.Count) { $verified += "Malware ZAP is on in: $((@($goodMf) | ForEach-Object { [string](& $f $_ 'Name' '?') }) -join ', ')." }
+                    $short += "Malware ZAP is off in: $((@($badMf) | ForEach-Object { [string](& $f $_ 'Name' '?') }) -join ', ')."
+                }
+            }
+        }
+    }
+    Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+        -RequiredValue 'SpamZapEnabled, PhishZapEnabled and (anti-malware) ZapEnabled = True in every policy in force'
 }
 
 # ── DEF-2.3 Anti-Malware Common Attachments Blocked ─────────────────────────
@@ -290,11 +384,48 @@ function Test-NRGControlDefenderCommonAttachments {
     if (-not $mf -or -not $mf.Available) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Malware filter data not available'; return
     }
-    if ($mf.FileFilterEnabledCount -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Common attachment filter enabled on $($mf.FileFilterEnabledCount) malware policy(ies). High-risk file types blocked regardless of content scan."
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Common attachments filter is disabled. High-risk file types (.exe, .js, .vbs, etc.) are not blocked at the mail gateway.' -Remediation $ctrl.Remediation
+    # Judged over the policies IN FORCE (an enabled rule, a preset, or the default when
+    # nothing else applies), not "any policy has it on": a filter enabled in a policy
+    # that applies to nobody protects nobody.
+    $mfForce = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $mf -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $mf -Key 'Rules') -RulePolicyKey 'MalwareFilterPolicy' -PresetKind 'EOP')
+    if ($mfForce.Count -eq 0) {
+        # Older results carry no rules: fall back to the policy-wide count, but the
+        # blocked-type list still decides whether the expected state is met.
+        if ($mf.FileFilterEnabledCount -gt 0) {
+            Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
+                -Verified @("The common attachments filter is on in $($mf.FileFilterEnabledCount) malware policy(ies); which policies are in force was not established.") `
+                -NotEstablished @('the NRG blocked-file-type list was not compared (policies in force could not be determined).') `
+                -RequiredValue 'Filter on with the approved blocked-type list in every policy in force'
+        } else {
+            Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Common attachments filter is disabled. High-risk file types (.exe, .js, .vbs, etc.) are not blocked at the mail gateway.' -Remediation $ctrl.Remediation
+        }
+        return
     }
+    $fv = { param($p, $k) Get-NRGObjectField -Item $p -Key $k -Default $null }
+    $pname = { param($p) [string](& $fv $p 'Name') }
+    $off = @($mfForce | Where-Object { (& $fv $_ 'EnableFileFilter') -ne $true })
+    $on  = @($mfForce | Where-Object { (& $fv $_ 'EnableFileFilter') -eq $true })
+    $verified = @(); $short = @(); $unknown = @()
+    if ($off.Count -eq 0) { $verified += "The common attachments filter is on in every malware policy in force ($((@($mfForce) | ForEach-Object { & $pname $_ }) -join ', '))." }
+    else {
+        if ($on.Count) { $verified += "The common attachments filter is on in: $((@($on) | ForEach-Object { & $pname $_ }) -join ', ')." }
+        $short += "The common attachments filter is off in: $((@($off) | ForEach-Object { & $pname $_ }) -join ', '), so high-risk file types are not blocked by type for those recipients."
+    }
+    $approved = @((Get-NRGStandards).CommonAttachmentFileTypes | ForEach-Object { $_.TrimStart('.').ToLowerInvariant() })
+    if ($approved.Count -eq 0) {
+        $unknown += 'whether the filter blocks the NRG blocked-file-type list, because no list is approved (Config/nrg-standards.json CommonAttachmentFileTypes is empty).'
+    } elseif ($on.Count -gt 0) {
+        $missing = [ordered]@{}
+        foreach ($pol in $on) {
+            $types = @(@(& $fv $pol 'FileTypes') | ForEach-Object { ([string]$_).TrimStart('.').ToLowerInvariant() })
+            $gone = @($approved | Where-Object { $_ -notin $types })
+            if ($gone.Count) { $missing[(& $pname $pol)] = $gone }
+        }
+        if ($missing.Count -eq 0) { $verified += "Every policy with the filter on blocks all $($approved.Count) approved file type(s)." }
+        else { $short += "Approved file types not blocked: $((@($missing.Keys) | ForEach-Object { "$_ ($($missing[$_] -join ', '))" }) -join '; ')." }
+    }
+    Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+        -RequiredValue 'EnableFileFilter = True and the approved blocked-type list in every malware policy in force'
 }
 
 # ── DEF-2.4 Quarantine Policy Admin Managed ──────────────────────────────────
@@ -309,7 +440,7 @@ function Test-NRGControlDefenderQuarantine {
     if (-not (Test-NRGSectionCollected $exo 'AntiSpamPolicies')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiSpamPolicies was not collected; not assessed.'; return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGObjectField -Item $exo.Data -Key 'AntiSpamRules' -Default $null) -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGRuleList -Item $exo.Data -Key 'AntiSpamRules') -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
     # The quarantine policy decides who may release: DefaultFullAccessPolicy
     # (Microsoft's default for phishing) lets users release their own. Stated,
@@ -334,7 +465,7 @@ function Test-NRGControlDefenderHCSpam {
     if (-not (Test-NRGSectionCollected $exo 'AntiSpamPolicies')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiSpamPolicies was not collected; not assessed.'; return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGObjectField -Item $exo.Data -Key 'AntiSpamRules' -Default $null) -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGRuleList -Item $exo.Data -Key 'AntiSpamRules') -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
     Add-NRGPolicySetFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $policies `
         -Pass { [string](& $f $_ 'HighConfidenceSpamAction' '') -eq 'Quarantine' } `
@@ -356,7 +487,7 @@ function Test-NRGControlDefenderBulkThreshold {
     if (-not (Test-NRGSectionCollected $exo 'AntiSpamPolicies')) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiSpamPolicies was not collected; not assessed.'; return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGObjectField -Item $exo.Data -Key 'AntiSpamRules' -Default $null) -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGNestedProperty -Object $exo -Path 'Data.AntiSpamPolicies' -Default @()) -Rules (Get-NRGRuleList -Item $exo.Data -Key 'AntiSpamRules') -RulePolicyKey 'HostedContentFilterPolicy' -PresetKind 'EOP')
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
     # 7 is the default: left at the default is not configured.
     Add-NRGPolicySetFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $policies `
@@ -380,7 +511,7 @@ function Test-NRGControlDefenderUnauthSender {
     if (-not $ap -or -not $ap.Available) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiPhishing policies were not collected; not assessed.'; return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) -Rules (Get-NRGObjectField -Item $ap -Key 'Rules' -Default $null) -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP')
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $ap -Key 'Rules') -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP')
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
     Add-NRGPolicySetFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $policies `
         -Pass { (& $f $_ 'EnableUnauthenticatedSender' $false) -eq $true } -Value { "EnableUnauthenticatedSender=$(& $f $_ 'EnableUnauthenticatedSender' '?')" } `
@@ -402,7 +533,7 @@ function Test-NRGControlDefenderViaTag {
     if (-not $ap -or -not $ap.Available) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AntiPhishing policies were not collected; not assessed.'; return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) -Rules (Get-NRGObjectField -Item $ap -Key 'Rules' -Default $null) -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP')
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $ap -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $ap -Key 'Rules') -RulePolicyKey 'AntiPhishPolicy' -PresetKind 'EOP')
     $f = { param($p, $k, $d = $null) Get-NRGObjectField -Item $p -Key $k -Default $d }
     Add-NRGPolicySetFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $policies `
         -Pass { (& $f $_ 'EnableViaTag' $false) -eq $true } -Value { "EnableViaTag=$(& $f $_ 'EnableViaTag' '?')" } `
@@ -482,9 +613,31 @@ function Test-NRGControlDefenderAlertNotification {
     }
 
     if ($silent.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "All $($high.Count) enabled High/Critical alert policy(ies) have email recipients configured."
+        # Recipients exist. Whether they are the NRG monitoring address is a separate
+        # claim that needs an explicit configured list (Get-NRGMonitoringAddresses).
+        $routing = Get-NRGAlertRouting -Policies $high -Addresses (Get-NRGMonitoringAddresses)
+        if (-not $routing.Configured) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+                -Title $ctrl.Title -FrameworkIds $cit `
+                -Detail "Verified: all $($high.Count) enabled High/Critical alert policy(ies) have email recipients configured. Not assessed: whether any recipient is the NRG monitoring address, because no monitoring address is configured (-MonitoringAddress, MonitoringAddresses in clients.json, or MonitoringAddresses in branding.psd1)." `
+                -CurrentValue "$($high.Count) of $($high.Count) High/Critical policies have recipients; routing to NRG not checked" `
+                -RequiredValue 'Every enabled High/Critical alert policy notifies the NRG monitoring address'
+        } elseif ($routing.Unrouted.Count -eq 0) {
+            Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+                -Detail "All $($high.Count) enabled High/Critical alert policy(ies) notify a configured NRG monitoring address."
+        } else {
+            $affected = @($routing.Unrouted | ForEach-Object {
+                [ordered]@{ DisplayName = [string]$_.Name; Severity = [string]$_.Severity; Recipients = (@($_.NotifyUser) -join ', ') }
+            })
+            $st = if ($routing.Routed.Count -gt 0) { 'Partial' } else { 'Gap' }
+            Add-NRGFinding -ControlId $cid -State $st -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity $(if ($st -eq 'Gap') { $ctrl.Severity } else { 'Medium' }) -FrameworkIds $cit `
+                -Detail "Verified: all $($high.Count) enabled High/Critical alert policy(ies) have recipients. Shortfall: $($routing.Unrouted.Count) of $($high.Count) do not notify a configured NRG monitoring address, so those alerts go to people who may not be watching for them." `
+                -CurrentValue "$($routing.Routed.Count) of $($high.Count) policies notify the NRG monitoring address" `
+                -RequiredValue 'Every enabled High/Critical alert policy notifies the NRG monitoring address' `
+                -Remediation $ctrl.Remediation -AffectedObjects $affected
+        }
     } else {
         $affected = @($silent | ForEach-Object {
             [ordered]@{
@@ -517,14 +670,63 @@ function Test-NRGControlDefenderDLPWorkloads {
     if ($dlpPolicies.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No DLP policies configured. Sensitive data can be emailed, shared via Teams, or uploaded to SharePoint with no controls.' -Remediation $ctrl.Remediation; return
     }
+    # COVERAGE only: which workloads an ENFORCING policy (Mode = Enable) is scoped to. A policy in test
+    # mode or turned off protects nothing, so its workloads do not count (they are reported). Whether
+    # rules detect sensitive data is DEF-4.2; whether they block is not claimed here.
     $required = @('Exchange','SharePoint','OneDriveForBusiness','Teams')
-    $covered  = @($dlpPolicies | ForEach-Object { $_.Workloads ?? @() } | Sort-Object -Unique)
-    $missing  = @($required | Where-Object { $_ -notin $covered })
-    if ($missing.Count -eq 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "DLP policies cover all required workloads: Exchange, SharePoint, OneDrive, Teams."
-    } else {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "DLP policies missing coverage for: $($missing -join ', '). Data can leave those channels without policy enforcement." -CurrentValue "Missing: $($missing -join ', ')" -RequiredValue 'Exchange + SharePoint + OneDrive + Teams all covered' -Remediation $ctrl.Remediation
+    # Mode values Microsoft documents for a DLP policy. Only Enable enforces; an empty, absent or
+    # unrecognized Mode is unknown evidence, never "not enforcing": it can neither cover nor fail a workload.
+    $knownOff  = @('TestWithNotifications', 'TestWithoutNotifications', 'Disable', 'PendingDeletion')
+    $modeOf    = { param($p) [string](Get-NRGObjectField -Item $p -Key 'Mode' -Default '') }
+    $enforcing = @($dlpPolicies | Where-Object { (& $modeOf $_) -eq 'Enable' })
+    $notEnforcing = @($dlpPolicies | Where-Object { (& $modeOf $_) -in $knownOff })
+    $unknownMode  = @($dlpPolicies | Where-Object { (& $modeOf $_) -ne 'Enable' -and (& $modeOf $_) -notin $knownOff })
+    $covered  = @($enforcing | ForEach-Object { @(Get-NRGObjectField -Item $_ -Key 'Workloads' -Default @()) } | Sort-Object -Unique)
+    # Workloads an unknown-mode policy names (all of them when it names none) and no enforcing policy covers.
+    $maybe    = @($unknownMode | ForEach-Object { $wl = @(Get-NRGObjectField -Item $_ -Key 'Workloads' -Default @() | Where-Object { $_ }); if ($wl.Count) { $wl } else { $required } } | Sort-Object -Unique)
+    $modeUnknownWl = @($required | Where-Object { $_ -notin $covered -and $_ -in $maybe })
+    $missing  = @($required | Where-Object { $_ -notin $covered -and $_ -notin $modeUnknownWl })
+    # A workload named on a policy is not the workload covered: the policy may be scoped to a few
+    # mailboxes, sites or teams. Judge the scope per workload across enforcing policies.
+    $fullScope = @(); $partScope = [ordered]@{}; $scopeUnread = @()
+    foreach ($w in @($required | Where-Object { $_ -in $covered })) {
+        $isFull = $false; $named = @(); $unread = $false
+        foreach ($pol in @($enforcing | Where-Object { $w -in @(Get-NRGObjectField -Item $_ -Key 'Workloads' -Default @()) })) {
+            $loc = Get-NRGObjectField -Item (Get-NRGObjectField -Item $pol -Key 'Locations' -Default $null) -Key $w -Default $null
+            $inc = Get-NRGObjectField -Item $loc -Key 'Include' -Default $null
+            if ($null -eq $inc) { $unread = $true; continue }
+            $exc = @(Get-NRGObjectField -Item $loc -Key 'Exclude' -Default @())
+            if (@($inc) -contains 'All' -and $exc.Count -eq 0) { $isFull = $true }
+            else { $named += "$([string](Get-NRGObjectField -Item $pol -Key 'Name' -Default '?')): $(if (@($inc) -contains 'All') { 'all, except ' + ($exc -join ', ') } else { @($inc).Count.ToString() + ' named location(s)' })" }
+        }
+        if ($isFull) { $fullScope += $w } elseif ($named.Count -gt 0) { $partScope[$w] = $named } elseif ($unread) { $scopeUnread += $w }
     }
+    $verified = @(); $short = @(); $unknownScope = @()
+    # Only a required workload that an enforcing policy covers is a verified component; an enforcing
+    # policy covering none of them is reported with the shortfall, never as something met.
+    if ($enforcing.Count -gt 0) {
+        $line = "$($enforcing.Count) enforcing DLP polic$(if ($enforcing.Count -eq 1) { 'y' } else { 'ies' }) (Mode Enable) cover: $(($required | Where-Object { $_ -in $covered }) -join ', ')$(if (-not ($required | Where-Object { $_ -in $covered })) { 'none of the required workloads' })."
+        if ($required | Where-Object { $_ -in $covered }) { $verified += $line } else { $short += $line }
+    }
+    if ($missing.Count -gt 0) { $short += "No enforcing policy covers: $($missing -join ', '). Data can leave those channels without policy enforcement." }
+    if ($partScope.Count -gt 0) { $short += "Covered only for part of the workload: $((@($partScope.Keys) | ForEach-Object { "$_ ($($partScope[$_] -join '; '))" }) -join '; ')." }
+    if ($fullScope.Count -gt 0) { $verified += "Whole-workload scope (All, no exclusions) confirmed for: $($fullScope -join ', ')." }
+    if ($scopeUnread.Count -gt 0) { $unknownScope += "whether the policies cover the whole workload or only named locations for: $($scopeUnread -join ', '), because the policy location scope was not returned in this result." }
+    if ($enforcing.Count -eq 0 -and $unknownMode.Count -eq 0) { $short += 'No DLP policy is in enforcing mode (Enable).' }
+    if ($unknownMode.Count -gt 0) {
+        $um = ($unknownMode | ForEach-Object { "$([string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '?')) [unknown mode]" }) -join '; '
+        if ($modeUnknownWl.Count -gt 0) { $unknownScope += "whether $($modeUnknownWl -join ', ') $(if ($modeUnknownWl.Count -eq 1) { 'is' } else { 'are' }) covered, because the Mode of $um was empty or not recognized, so whether it enforces is unknown." }
+        elseif ($verified.Count -gt 0) { $verified += "Not counted (mode not read): $um." }
+        else { $short += "Not counted (mode not read): $um." }
+    }
+    # A policy in test mode or off is reported, never credited: the note is not a verified component, so
+    # it rides with the verified list only when something real was verified, else with the shortfall.
+    if ($notEnforcing.Count -gt 0) {
+        $nm = ($notEnforcing | ForEach-Object { "$([string](Get-NRGObjectField -Item $_ -Key 'Name' -Default '?')) [$([string](Get-NRGObjectField -Item $_ -Key 'Mode' -Default 'unknown mode'))]" }) -join '; '
+        if ($verified.Count -gt 0) { $verified += "Not counted (not enforcing): $nm." } else { $short += "Not counted (not enforcing): $nm." }
+    }
+    Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknownScope `
+        -CurrentValue "Enforcing workloads: $(@($covered) -join ', ')" -RequiredValue 'Enforcing DLP policies covering Exchange, SharePoint, OneDrive and Teams'
 }
 
 # ── DEF-4.2 DLP Policy Uses Sensitive Information Types ──────────────────────
@@ -553,6 +755,13 @@ function Test-NRGControlDefenderDLPSITs {
             -Detail "DLP rule configuration could not be read: $why. Sensitive information type coverage was not assessed."
         return
     }
+    # A rule counts only inside an enforcing policy, so the policy Mode is half the evidence:
+    # without the policy read, no rule can be shown enforcing or not.
+    if (-not (Test-NRGSectionCollected $pvw 'DLPPolicies')) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'DLP policies were not collected, so whether any DLP rule is in an enforcing policy is unknown; sensitive information type coverage not assessed.'
+        return
+    }
 
     if ($dlpPolicies.Count -eq 0 -and $dlpRules.Count -eq 0) {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
@@ -563,17 +772,35 @@ function Test-NRGControlDefenderDLPSITs {
         return
     }
 
-    $activeRules = @($dlpRules | Where-Object { -not $_.Disabled })
-    $withSITs    = @($activeRules | Where-Object { @($_.SensitiveInfoTypes).Count -gt 0 })
+    # DETECTION: an enabled rule counts only inside a policy that is enforcing (Mode Enable). Rules in a
+    # policy in test mode (or off) detect nothing that is enforced; their types are reported, not credited.
+    $states      = @(Get-NRGDlpRuleStates -Policies $dlpPolicies -Rules $dlpRules)
+    $activeRules = @($states | Where-Object { $_.State -eq 'Enforcing' })
+    $unknownRules = @($states | Where-Object { $_.State -eq 'Unknown' })
+    $testRules   = @($states | Where-Object { $_.State -eq 'TestMode' })
+    $unknownSit  = @($unknownRules | Where-Object { @($_.SITs).Count -gt 0 })
+    $withSITs    = @($activeRules | Where-Object { @($_.SITs).Count -gt 0 })
 
     if ($withSITs.Count -gt 0) {
-        $sitNames = @($withSITs | ForEach-Object { $_.SensitiveInfoTypes } | Sort-Object -Unique)
+        $sitNames = @($withSITs | ForEach-Object { $_.SITs } | Sort-Object -Unique)
         $shown    = @($sitNames | Select-Object -First 8) -join ', '
         $more     = if ($sitNames.Count -gt 8) { " (+$($sitNames.Count - 8) more)" } else { '' }
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "$($withSITs.Count) of $($activeRules.Count) enabled DLP rule(s) match on sensitive information types: $shown$more." `
-            -CurrentValue "$($sitNames.Count) distinct sensitive information type(s) in use"
+        $blocking = @($withSITs | Where-Object { $_.Blocks -eq $true }).Count
+        $unread   = @($withSITs | Where-Object { $null -eq $_.Blocks }).Count
+        $enf = if ($unread -eq $withSITs.Count) { 'Whether they block or only notify was not read.' } else { "$blocking of $($withSITs.Count) block access; the rest notify or audit." }
+        $verified = @("$($withSITs.Count) of $($activeRules.Count) enabled rule(s) in enforcing policies match on sensitive information types: $shown$more.", $enf)
+        if ($testRules.Count -gt 0) {
+            $tSits = @($testRules | ForEach-Object { $_.SITs } | Sort-Object -Unique)
+            $verified += "Not counted (policy in test mode or off): $($testRules.Count) rule(s)$(if ($tSits.Count) { " that would detect $(@($tSits | Select-Object -First 6) -join ', ')" }) in $((@($testRules | ForEach-Object { $_.Policy } | Sort-Object -Unique)) -join ', ')."
+        }
+        $unk = @(if ($unknownRules.Count -gt 0) { "whether $($unknownRules.Count) rule(s) are in an enforcing policy, because their parent policy was not found among the collected policies or its Mode was empty or not recognized." })
+        Add-NRGExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -NotEstablished $unk `
+            -CurrentValue "$($sitNames.Count) distinct sensitive information type(s) in enforcing rules"
+    } elseif ($unknownSit.Count -gt 0) {
+        # A rule matching a type whose parent policy was not found may be enforcing: not a Gap. A rule
+        # matching no type cannot meet the requirement in any mode, so it does not hold the Gap back.
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "No rule in an enforcing policy matches a sensitive information type, but $($unknownSit.Count) enabled rule(s) that match one belong to a policy that was not found among the collected policies or whose Mode was empty or not recognized ($((@($unknownSit | ForEach-Object { $_.Policy } | Sort-Object -Unique)) -join ', ')), so whether they enforce is unknown; not assessed."
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
@@ -763,7 +990,7 @@ function Test-NRGControlDefenderSafeLinksOffice {
         Add-NRGDefenderUnavailableFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Section $sl -Feature 'Safe Links'
         return
     }
-    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $sl -Key 'Policies' -Default @()) -Rules (Get-NRGObjectField -Item $sl -Key 'Rules' -Default $null) -RulePolicyKey 'SafeLinksPolicy' -PresetKind 'ATP')
+    $policies = @(Get-NRGInForcePolicies -Policies @(Get-NRGObjectField -Item $sl -Key 'Policies' -Default @()) -Rules (Get-NRGRuleList -Item $sl -Key 'Rules') -RulePolicyKey 'SafeLinksPolicy' -PresetKind 'ATP')
     # EnableSafeLinksForOffice (EnableSafeLinksForO365 is the old name; a bare
     # read of it threw under StrictMode and scored this control an Error).
     $office = { param($p) (Get-NRGObjectField -Item $p -Key 'EnableSafeLinksForOffice' -Default $false) -eq $true -or (Get-NRGObjectField -Item $p -Key 'EnableSafeLinksForO365' -Default $false) -eq $true }

@@ -76,12 +76,27 @@ function Publish-NRGEmailIncidentReport {
         Satisfied = @($Findings | Where-Object { $_.State -eq 'Satisfied' })
         Notes     = @($Findings | Where-Object { $_.State -eq 'NotApplicable' })
     }
-    $verdict = if ($byState.Critical.Count -gt 0) { 'LIKELY COMPROMISED' }
-               elseif ($byState.High.Count -gt 0) { 'SUSPICIOUS — REVIEW' }
-               else { 'NO STRONG IOCS' }
+    # The verdict describes indicators, never a confirmed compromise, and "no
+    # strong indicators" is allowed only when the reads and detectors behind it
+    # completed. A failed or truncated required read, or a detector that threw,
+    # makes the result NOT CLEARED. Metadata from before completeness was
+    # recorded keeps its previous behavior.
+    $complete = $true
+    $cc = Get-NRGObjectField -Item $Metadata -Key 'CollectionComplete' -Default $null
+    if ($null -ne $cc) { $complete = [bool]$cc }
+    $gaps = @(Get-NRGObjectField -Item $Metadata -Key 'CollectionGaps' -Default @()) | Where-Object { $_ }
+    $verdict = if ($byState.Critical.Count -gt 0) { 'CRITICAL INDICATORS — INVESTIGATE' }
+               elseif ($byState.High.Count -gt 0) { 'SUSPECT ACTIVITY — REVIEW' }
+               elseif (-not $complete) { 'NOT CLEARED — EVIDENCE INCOMPLETE' }
+               else { 'NO STRONG INDICATORS IN THE EVIDENCE READ' }
     $verdictColor = if ($byState.Critical.Count -gt 0) { 'red' }
-                    elseif ($byState.High.Count -gt 0) { 'amber' }
+                    elseif ($byState.High.Count -gt 0 -or -not $complete) { 'amber' }
                     else { 'grn' }
+    $incompleteNote = if (-not $complete) { " The evidence is also incomplete, so more indicators may exist: $(@($gaps) -join '; ')." } else { '' }
+    $verdictBasis = if ($byState.Critical.Count -gt 0) { "Heuristic indicators, not a confirmed compromise. Verify before acting.$incompleteNote" }
+                    elseif ($byState.High.Count -gt 0 -and -not $complete) { "Review the flagged findings.$incompleteNote" }
+                    elseif (-not $complete) { "Not cleared: $(@($gaps) -join '; ')." }
+                    else { 'Describes the mailbox evidence read, not every route an attacker may have used.' }
     $verdictIco = if ($verdictColor -eq 'grn') { '&#10003;' } else { '&#9888;' }
 
     # ── Header values (pre-compute then escape — avoids `& $hx (if ...)`
@@ -187,6 +202,12 @@ function Publish-NRGEmailIncidentReport {
             'Validate each high-severity finding manually before acting.'
             'If the top phish candidate looks legitimate after review, no immediate action — but note that this user is being targeted.'
             'Consider proactive MFA re-registration if the user clicked any URL flagged here.'
+        )
+    } elseif (-not $complete) {
+        @(
+            'This result does not clear the account: part of the evidence could not be read (see the verdict note above).'
+            'Fix what is named there (permissions, a failed read, a detector that stopped) and run the assessment again.'
+            'If you suspect compromise in the meantime, treat the account as not cleared and review its sign-ins and rules by hand.'
         )
     } else {
         @(
@@ -298,6 +319,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);line-height:1.5
 .verdict.grn{background:var(--grn-bg);border:1px solid var(--grn-bd)}
 .verdict-ico{font-size:2.5rem;line-height:1}
 .verdict.red .verdict-ico{color:var(--red-d)}.verdict.amber .verdict-ico{color:var(--amber)}.verdict.grn .verdict-ico{color:var(--grn)}
+.verdict-basis{font-size:.85rem;color:var(--mut);margin-top:4px}
 .verdict-lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);font-weight:700}
 .verdict-val{font-size:1.7rem;font-weight:800;letter-spacing:-.02em;margin-top:2px}
 .verdict.red .verdict-val{color:var(--red-d)}.verdict.amber .verdict-val{color:var(--amber)}.verdict.grn .verdict-val{color:var(--grn)}
@@ -384,6 +406,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);line-height:1.5
     <div>
       <div class="verdict-lbl">Verdict</div>
       <div class="verdict-val">$verdict</div>
+      <div class="verdict-basis">$(& $hx $verdictBasis)</div>
     </div>
     <div class="verdict-counts">
       <div class="vc crit"><div class="n">$($byState.Critical.Count)</div><div class="l">Critical</div></div>
@@ -495,7 +518,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);line-height:1.5
         $md += "**Assessed:** $(& $EscMd $assRaw)  `n"
         $md += "**Tool:** NRG-Assessment v$(& $EscMd $verRaw)  `n"
         $md += "**Window:** $(& $EscMd $winRaw) days outbound / 30 days inbox  `n"
-        $md += "**Verdict:** **$verdict**  `n`n"
+        $md += "**Verdict:** **$verdict**  `n$(& $EscMd $verdictBasis)  `n`n"
         $md += "| Severity | Count |`n|---|---|`n"
         $md += "| Critical | $($byState.Critical.Count) |`n"
         $md += "| High     | $($byState.High.Count) |`n"

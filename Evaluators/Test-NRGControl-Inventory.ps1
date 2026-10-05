@@ -92,7 +92,7 @@ function Test-NRGControlInventoryMFAUsers {
         $remaining = if ($noMFA.Count -gt 100) { " ($($noMFA.Count - 100) additional users in full results)" } else { '' }
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "$($withMFA.Count) of $total $popLabel ($pct%) have MFA registered. The $($noMFA.Count) user(s) listed below have no MFA method — each is one stolen password away from a full mailbox compromise.$remaining$syncNote" `
+            -Detail "$($withMFA.Count) of $total $popLabel ($pct%) have MFA registered. The $($noMFA.Count) user(s) listed below have no MFA method registered. That is a registration gap: it does not show whether a sign-in was attempted or succeeded, or which Conditional Access policies apply to the account, but a password alone may be enough to sign in wherever no policy requires more.$remaining$syncNote" `
             -CurrentValue "$($withMFA.Count)/$total users with MFA ($pct%)" `
             -RequiredValue '100% of enabled users registered for MFA' `
             -Remediation $ctrl.Remediation -AffectedObjects $objects

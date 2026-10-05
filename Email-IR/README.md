@@ -70,7 +70,7 @@ issue the TAP yourself in the Admin Center.
 flagged sign-in IPs to `rdap.org` for geolocation + ASN-owner enrichment —
 confirm the client's data-handling policy permits this, or pass
 `-EnableThreatIntel:$false` to skip the external calls. Standalone Tor-exit
-detection has been removed entirely — no `check.torproject.org` fetch, no
+detection has been removed entirely — no live fetch of a Tor exit list, no
 operator-curated local list. Tor sign-ins are still caught via Microsoft
 Identity Protection's `anonymizedIPAddress` risk-event type (Entra ID P2,
 scored under `SIGNIN-1.2`), which never depended on this file. All users with a

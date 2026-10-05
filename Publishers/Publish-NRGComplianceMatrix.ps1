@@ -488,7 +488,7 @@ def build_findings_sheet(wb, title, rows, columns):
 ALL_COLS = [
     ('Control ID',18),('Title',36),('Category',14),('State',12),
     ('Severity',10),('Current Value',22),('Required Value',22),
-    ('Business Risk',36),('Remediation',40),('CIS',12),('SCuBA',16),
+    ('Detail',60),('Business Risk',36),('Remediation',40),('CIS',12),('SCuBA',16),
     ('NIST',14),('CMMC',14),('ISO 27001',14),('SOC 2',14),('HIPAA',14),
     ('License',28),('MITRE',20),
 ]
@@ -558,7 +558,9 @@ for sheet_title, fw_key, ref_col_name, cols in FW_SHEETS:
     fw_rows.sort(key=lambda x:['Gap','Partial','Satisfied','NotApplicable'].index(x['State'])
                  if x['State'] in ['Gap','Partial','Satisfied','NotApplicable'] else 9)
     if fw_rows:
-        build_findings_sheet(wb, sheet_title, fw_rows, cols)
+        # The finding's Detail carries what was verified and what was not; a framework
+        # sheet without it reads cleaner than the run it reprints.
+        build_findings_sheet(wb, sheet_title, fw_rows, list(cols) + [('Detail',60)])
 
 # NIST physical / media / device sheet — the checklist an assessor works down
 # while collecting evidence that does not exist inside the tenant. Flattened by

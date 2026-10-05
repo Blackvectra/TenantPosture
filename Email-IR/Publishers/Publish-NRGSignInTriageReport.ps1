@@ -40,23 +40,38 @@ function Publish-NRGSignInTriageReport {
         Satisfied = @($Findings | Where-Object { $_.State -eq 'Satisfied' })
         Notes     = @($Findings | Where-Object { $_.State -eq 'NotApplicable' })
     }
-    $verdict = if ($byState.Critical.Count -gt 0) { 'CONFIRMED COMPROMISE' }
+    # The verdict describes indicators, never a confirmed compromise: every rule
+    # here is a heuristic over sign-in metadata, and a Critical is the strongest
+    # heuristic, not proof. "No strong indicators" is only allowed when the reads
+    # behind it completed; otherwise the tenant is NOT cleared.
+    $complete = $true
+    # Get-NRGObjectField, not .ContainsKey: the entry point passes an [ordered] dictionary.
+    $cc = Get-NRGObjectField -Item $Metadata -Key 'CollectionComplete' -Default $null
+    if ($null -ne $cc) { $complete = [bool]$cc }
+    $gaps = @(Get-NRGObjectField -Item $Metadata -Key 'CollectionGaps' -Default @()) | Where-Object { $_ }
+    $verdict = if ($byState.Critical.Count -gt 0) { 'CRITICAL INDICATORS — INVESTIGATE' }
                elseif ($byState.High.Count -gt 0) { 'SUSPECT ACTIVITY — REVIEW' }
-               else { 'NO STRONG IOCS' }
+               elseif (-not $complete) { 'NOT CLEARED — EVIDENCE INCOMPLETE' }
+               else { 'NO STRONG INDICATORS IN THE EVENTS READ' }
     $verdictColor = if ($byState.Critical.Count -gt 0) { 'red' }
-                    elseif ($byState.High.Count -gt 0) { 'amber' }
+                    elseif ($byState.High.Count -gt 0 -or -not $complete) { 'amber' }
                     else { 'grn' }
+    $incompleteNote = if (-not $complete) { " The evidence is also incomplete, so more indicators may exist: $(@($gaps) -join '; ')." } else { '' }
+    $verdictBasis = if ($byState.Critical.Count -gt 0) { "Heuristic indicators, not a confirmed compromise. Verify each flagged account before acting.$incompleteNote" }
+                    elseif ($byState.High.Count -gt 0 -and -not $complete) { "Review the flagged findings.$incompleteNote" }
+                    elseif (-not $complete) { "Not cleared: $($gaps -join '; ')." }
+                    else { 'Describes the sign-in events read in the window, not the whole tenant.' }
     $verdictIco = if ($verdictColor -eq 'grn') { '&#10003;' } else { '&#9888;' }
 
     # Header values (pre-compute then escape; avoids inline-if-in-arg parsing)
-    $brand     = if ($Metadata.Brand)         { $Metadata.Brand } else { @{} }
-    $bnRaw     = if ($brand.CompanyName)      { $brand.CompanyName } else { 'NRG Technology Services' }
-    $adminRaw  = if ($Metadata.ConnectedAdmin){ $Metadata.ConnectedAdmin } else { 'unknown' }
-    $tidRaw    = if ($Metadata.TenantId)      { $Metadata.TenantId } else { 'unknown' }
-    $assRaw    = if ($Metadata.AssessmentDate){ $Metadata.AssessmentDate } else { Get-Date -Format 'MMMM dd, yyyy HH:mm UTC' }
-    $winRaw    = if ($Metadata.WindowDays)    { $Metadata.WindowDays } else { 7 }
-    $verRaw    = if ($Metadata.ToolVersion)   { $Metadata.ToolVersion } else { '' }
-    $divedCount = @($Metadata.DeepDivedUsers).Count
+    $brand     = if ((Get-NRGObjectField -Item $Metadata -Key 'Brand' -Default $null))         { (Get-NRGObjectField -Item $Metadata -Key 'Brand' -Default $null) } else { @{} }
+    $bnRaw     = if (Get-NRGObjectField -Item $brand -Key 'CompanyName' -Default $null) { Get-NRGObjectField -Item $brand -Key 'CompanyName' -Default '' } else { 'NRG Technology Services' }
+    $adminRaw  = if ((Get-NRGObjectField -Item $Metadata -Key 'ConnectedAdmin' -Default $null)){ (Get-NRGObjectField -Item $Metadata -Key 'ConnectedAdmin' -Default $null) } else { 'unknown' }
+    $tidRaw    = if ((Get-NRGObjectField -Item $Metadata -Key 'TenantId' -Default $null))      { (Get-NRGObjectField -Item $Metadata -Key 'TenantId' -Default $null) } else { 'unknown' }
+    $assRaw    = if ((Get-NRGObjectField -Item $Metadata -Key 'AssessmentDate' -Default $null)){ (Get-NRGObjectField -Item $Metadata -Key 'AssessmentDate' -Default $null) } else { Get-Date -Format 'MMMM dd, yyyy HH:mm UTC' }
+    $winRaw    = if ((Get-NRGObjectField -Item $Metadata -Key 'WindowDays' -Default $null))    { (Get-NRGObjectField -Item $Metadata -Key 'WindowDays' -Default $null) } else { 7 }
+    $verRaw    = if ((Get-NRGObjectField -Item $Metadata -Key 'ToolVersion' -Default $null))   { (Get-NRGObjectField -Item $Metadata -Key 'ToolVersion' -Default $null) } else { '' }
+    $divedCount = @((Get-NRGObjectField -Item $Metadata -Key 'DeepDivedUsers' -Default $null)).Count
 
     $brandName = & $hx $bnRaw
     $admin     = & $hx $adminRaw
@@ -96,10 +111,18 @@ function Publish-NRGSignInTriageReport {
         $detail = (& $hxRef ([string]$f.Detail)) -replace "`n",'<br>'
         $remed = if ($f.Remediation) { & $hxRef ([string]$f.Remediation) } else { $null }
         $remedHtml = if ($remed) { "<div class=`"remed`"><b>Recommended action:</b> $remed</div>" } else { '' }
+        $subj = [string](Get-NRGObjectField -Item $f -Key 'Subject' -Default '')
+        $ev = Get-NRGObjectField -Item $f -Key 'Evidence' -Default $null
+        $subjHtml = ''
+        if ($subj) {
+            $miss = @(Get-NRGObjectField -Item $ev -Key 'RequiredMissing' -Default @())
+            $evLine = if ($ev -and $miss.Count -gt 0) { " Evidence incomplete: required source(s) not read: $(& $hxRef ($miss -join ', '))." } elseif ($ev) { ' Evidence: every required mailbox source was read.' } else { '' }
+            $subjHtml = "<div class=`"subject`"><b>Account:</b> $(& $hxRef $subj).$evLine</div>"
+        }
         @"
 <div class="finding $stateClass">
   <div class="finding-hd"><span class="cid">$cid</span><span class="sev $sevClass">$sev</span><span class="finding-title">$title</span></div>
-  <div class="finding-bd"><div class="detail">$detail</div>$remedHtml</div>
+  <div class="finding-bd">$subjHtml<div class="detail">$detail</div>$remedHtml</div>
 </div>
 "@
     }
@@ -144,6 +167,8 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);line-height:1.5
 .verdict.red .verdict-ico{color:var(--red-d)}.verdict.amber .verdict-ico{color:var(--amber)}.verdict.grn .verdict-ico{color:var(--grn)}
 .verdict-lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);font-weight:700}
 .verdict-val{font-size:1.7rem;font-weight:800;margin-top:2px}
+.verdict-basis{font-size:.85rem;color:var(--mut);margin-top:4px}
+.subject{font-size:.85rem;color:var(--mut);margin-bottom:6px}
 .verdict.red .verdict-val{color:var(--red-d)}.verdict.amber .verdict-val{color:var(--amber)}.verdict.grn .verdict-val{color:var(--grn)}
 .verdict-counts{margin-left:auto;display:flex;gap:18px}
 .vc{text-align:center;min-width:60px}.vc .n{font-size:1.6rem;font-weight:800;line-height:1}
@@ -209,6 +234,7 @@ td{padding:10px 12px;border-bottom:1px solid var(--bdr);vertical-align:top}
     <div>
       <div class="verdict-lbl">Verdict</div>
       <div class="verdict-val">$verdict</div>
+      <div class="verdict-basis">$(& $hx $verdictBasis)</div>
     </div>
     <div class="verdict-counts">
       <div class="vc crit"><div class="n">$($byState.Critical.Count)</div><div class="l">Critical</div></div>
@@ -263,7 +289,7 @@ td{padding:10px 12px;border-bottom:1px solid var(--bdr);vertical-align:top}
         }
         $md = "# Sign-In Triage Report — $(& $EscMd $tidRaw)`n`n"
         $md += "**Admin:** $(& $EscMd $adminRaw)  `n**Assessed:** $(& $EscMd $assRaw)  `n**Window:** $(& $EscMd ([string]$winRaw)) day(s)  `n"
-        $md += "**Tool:** NRG-Assessment v$(& $EscMd $verRaw)  `n**Verdict:** **$verdict**  `n`n"
+        $md += "**Tool:** NRG-Assessment v$(& $EscMd $verRaw)  `n**Verdict:** **$verdict**  `n$(& $EscMd $verdictBasis)  `n`n"
         $md += "| Severity | Count |`n|---|---|`n| Critical | $($byState.Critical.Count) |`n| High | $($byState.High.Count) |`n| Clean | $($byState.Satisfied.Count) |`n`n"
         $md += "## Ranked Users`n`n"
         if ($RankedUsers.Count -eq 0) { $md += "_No users met the IoC threshold._`n`n" }
@@ -279,7 +305,13 @@ td{padding:10px 12px;border-bottom:1px solid var(--bdr);vertical-align:top}
             if ($items.Count -eq 0) { continue }
             $md += "## $section`n`n"
             foreach ($f in $items) {
-                $md += "### $(& $EscMd $f.ControlId): $(& $EscMd $f.Title)`n`n"
+                $fsubj = [string](Get-NRGObjectField -Item $f -Key 'Subject' -Default '')
+                $fev = Get-NRGObjectField -Item $f -Key 'Evidence' -Default $null
+                $md += "### $(& $EscMd $f.ControlId): $(& $EscMd $f.Title)$(if ($fsubj) { " — $(& $EscMd $fsubj)" })`n`n"
+                if ($fsubj -and $fev) {
+                    $fmiss = @(Get-NRGObjectField -Item $fev -Key 'RequiredMissing' -Default @())
+                    $md += "*Account $(& $EscMd $fsubj). $(if ($fmiss.Count -gt 0) { "Evidence incomplete: required source(s) not read: $(& $EscMd ($fmiss -join ', '))." } else { 'Every required mailbox source was read.' })*`n`n"
+                }
                 $md += "$(& $EscMd $f.Detail)`n`n"
                 if ($f.Remediation) { $md += "**Action:** $(& $EscMd $f.Remediation)`n`n" }
             }

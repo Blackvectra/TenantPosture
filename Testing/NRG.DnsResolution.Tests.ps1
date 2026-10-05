@@ -638,6 +638,7 @@ Describe 'DNS evaluators — a failed lookup never scores as an absent record' {
             CAA    = @{ Present = $false; Records = @(); IssuanceAllowed = @(); WildcardAllowed = @(); IodefContact = @() }
             DKIM   = @{ Selector1 = $null; Selector2 = $null; CustomSelectors = @() }
         }
-        script:Verdict 'Test-NRGControlDNSDMARC' 'DNS-1.3' | Should -Be 'Satisfied'
+        script:Verdict 'Test-NRGControlDNSDMARC' 'DNS-1.3' | Should -Be 'NotApplicable' -Because 'enforcement is verified but no NRG reporting address is approved, so the verdict is not assessed'
+        (@(Get-NRGFindings | Where-Object { $_.ControlId -eq 'DNS-1.3' })[0]).Detail | Should -Match '^Verified: example.com DMARC p=reject'
     }
 }

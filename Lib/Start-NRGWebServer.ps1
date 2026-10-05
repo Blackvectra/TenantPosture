@@ -199,7 +199,9 @@ function Start-NRGWebServer {
             # format we emit.
             $entries = @()
             foreach ($tenantDir in Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue) {
-                foreach ($json in Get-ChildItem -LiteralPath $tenantDir.FullName -File -Filter '*-results.json' -ErrorAction SilentlyContinue) {
+                # *-email-results.json is an incident-response mailbox run, not an assessment: it has
+                # no report to open and its folder name is a user name, not a tenant domain.
+                foreach ($json in Get-ChildItem -LiteralPath $tenantDir.FullName -File -Filter '*-results.json' -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '-email-results\.json$' }) {
                     $entries += [pscustomobject]@{
                         File   = $json
                         Tenant = $tenantDir.Name

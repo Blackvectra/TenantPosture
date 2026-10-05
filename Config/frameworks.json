@@ -18,8 +18,8 @@
     },
     {
       "Id": "SCuBA",
-      "FullName": "CISA Secure Cloud Business Applications (SCuBA) v1.7.1",
-      "Version": "1.7.1",
+      "FullName": "CISA Secure Cloud Business Applications (SCuBA) — ScubaGear 2.0.0 baselines",
+      "Version": "2.0.0",
       "Publisher": "Cybersecurity and Infrastructure Security Agency",
       "URL": "https://www.cisa.gov/resources-tools/services/secure-cloud-business-applications-scuba-project",
       "Applicable": "Federal civilian executive branch; recommended for state/local government"

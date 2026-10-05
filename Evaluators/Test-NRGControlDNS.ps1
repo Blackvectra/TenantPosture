@@ -225,6 +225,28 @@ function Test-NRGControlDNSDKIM {
     }
 }
 
+# rua addresses of a DMARC record, lower-case, mailto: and !size stripped.
+function Get-NRGDmarcReportAddresses {
+    [CmdletBinding()] [OutputType([string[]])]
+    param([AllowNull()] [string] $Record)
+    if ([string]::IsNullOrWhiteSpace($Record)) { return @() }
+    $m = [regex]::Match($Record, '(?i)(?:^|;)\s*rua\s*=\s*([^;]*)')
+    if (-not $m.Success) { return @() }
+    return @($m.Groups[1].Value -split ',' | ForEach-Object { ($_.Trim() -replace '(?i)^mailto:', '' -replace '!\d+[kmgt]?$', '').Trim().ToLowerInvariant() } | Where-Object { $_ })
+}
+
+# $Wanted is an address or an @domain.
+function Test-NRGDmarcReportAddress {
+    [CmdletBinding()] [OutputType([bool])]
+    param([Parameter(Mandatory)] [string] $Wanted, [AllowNull()] [string[]] $Present)
+    $w = $Wanted.Trim().ToLowerInvariant()
+    foreach ($a in @($Present)) {
+        if ($w.StartsWith('@')) { if ($a.EndsWith($w)) { return $true } }
+        elseif ($a -eq $w) { return $true }
+    }
+    return $false
+}
+
 # ── DNS-1.3 DMARC Policy at Quarantine or Reject ────────────────────────────
 function Test-NRGControlDNSDMARC {
     [CmdletBinding()] param()
@@ -285,9 +307,19 @@ function Test-NRGControlDNSDMARC {
                         -CurrentValue $d.DMARC -RequiredValue 'sp=quarantine or sp=reject (or omit sp)'
                 } else {
                     $advice = if ($policy -eq 'quarantine') { ' p=reject is stronger: quarantined mail still reaches the user''s junk folder.' } else { '' }
-                    Add-NRGFinding -ControlId $controlId @common -State 'Satisfied' -Severity 'Informational' `
-                        -Detail "$domain DMARC p=$policy (100%)$origin. Spoofed mail failing authentication is $action.$advice" `
-                        -CurrentValue $d.DMARC
+                    # The expected state also names the NRG reporting address (DMARCian) in rua.
+                    $ruaList = @(Get-NRGDmarcReportAddresses -Record ([string]$d.DMARC))
+                    $wanted  = @((Get-NRGStandards).DmarcReportingAddresses)
+                    $short = @(); $unknown = @()
+                    if ($wanted.Count -eq 0) {
+                        $unknown += 'whether rua names the NRG reporting address, because none is approved (Config/nrg-standards.json DmarcReportingAddresses is empty).'
+                    } else {
+                        $absent = @($wanted | Where-Object { -not (Test-NRGDmarcReportAddress -Wanted $_ -Present $ruaList) })
+                        if ($absent.Count) { $short += "rua $(if ($ruaList.Count) { "($($ruaList -join ', ')) " })does not include the NRG reporting address: $($absent -join ', ')." }
+                    }
+                    Add-NRGExpectedStateFinding -ControlId $controlId -Control $control -FrameworkIds $citations -Instance $domain -TitleSuffix ": $domain" `
+                        -Verified @("$domain DMARC p=$policy (100%)$origin. Spoofed mail failing authentication is $action.$advice") `
+                        -Shortfalls $short -NotEstablished $unknown -CurrentValue ([string]$d.DMARC) -RequiredValue "p=$policy with pct=100 and the approved reporting address in rua"
                 }
             }
             'none' {

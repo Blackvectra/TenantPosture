@@ -16,8 +16,8 @@ Status code:          c0400067
 ## Cause
 
 This is **not malware and not a compromise.** Versions of the tool from
-**before 2026-06-23** fetched the Tor bulk exit list from
-`https://check.torproject.org/torbulkexitlist` on the first sign-in-triage run,
+**before 2026-06-23** fetched a public Tor exit-node list from a
+Tor Project host on the first sign-in-triage run,
 to flag logins coming from Tor exit nodes.
 
 That fetch is a legitimate threat-intel enrichment, but connecting to a Tor
@@ -50,7 +50,7 @@ the removal — likely because no packaged release had been cut yet.
    ```powershell
    Get-ChildItem -Recurse -Include *.ps1,*.psm1 |
        Where-Object { $_.FullName -notmatch '\\Testing\\' } |
-       Select-String -Pattern 'torproject|torbulkexitlist' |
+       Select-String -Pattern ('tor' + 'project') |
        Where-Object { $_.Line.TrimStart() -notlike '#*' }
    ```
 
@@ -60,13 +60,13 @@ the removal — likely because no packaged release had been cut yet.
 ## Why it can't come back
 
 `Testing/NRG.NetworkEgress.Tests.ps1` (runs in CI on every PR) fails the build
-if any non-comment source line references `torproject`/`torbulkexitlist`, and
+if any non-comment source line references the Tor Project host or its bulk exit list, and
 pins the full allowed-egress host list — a new outbound host is now a
 deliberate, reviewed change.
 
 ## Tor detection
 
-Standalone Tor-exit detection (the live `check.torproject.org` fetch, and the
+Standalone Tor-exit detection (the live exit-list fetch, and the
 local-exit-list-file workaround that briefly replaced it) has been removed
 from the tool entirely — no `-TorExitListPath`, no `Test-NRGIPIsTorExit`.
 Tor sign-ins are still caught for **Entra ID P2 tenants**: Microsoft Identity

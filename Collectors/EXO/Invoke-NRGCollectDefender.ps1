@@ -198,9 +198,14 @@ function Invoke-NRGCollectDefender {
             $mkPr = { param($r) @{
                 Name = [string](Get-NRGObjectField -Item $r -Key 'Name' -Default '')
                 State = [string](Get-NRGObjectField -Item $r -Key 'State' -Default '')
-                RecipientDomainIs = @(Get-NRGObjectField -Item $r -Key 'RecipientDomainIs' -Default @())
-                SentTo = @(Get-NRGObjectField -Item $r -Key 'SentTo' -Default @())
-                SentToMemberOf = @(Get-NRGObjectField -Item $r -Key 'SentToMemberOf' -Default @())
+                RecipientDomainIs = @(@(Get-NRGObjectField -Item $r -Key 'RecipientDomainIs' -Default @()) | Where-Object { $_ })
+                SentTo = @(@(Get-NRGObjectField -Item $r -Key 'SentTo' -Default @()) | Where-Object { $_ })
+                SentToMemberOf = @(@(Get-NRGObjectField -Item $r -Key 'SentToMemberOf' -Default @()) | Where-Object { $_ })
+                # WHO the preset does not apply to: the exclusions, by identity, so a reader (and the
+                # coverage judgment) can see them instead of a bare HasExceptions flag.
+                ExceptIfSentTo = @(@(Get-NRGObjectField -Item $r -Key 'ExceptIfSentTo' -Default @()) | Where-Object { $_ } | ForEach-Object { [string]$_ })
+                ExceptIfSentToMemberOf = @(@(Get-NRGObjectField -Item $r -Key 'ExceptIfSentToMemberOf' -Default @()) | Where-Object { $_ } | ForEach-Object { [string]$_ })
+                ExceptIfRecipientDomainIs = @(@(Get-NRGObjectField -Item $r -Key 'ExceptIfRecipientDomainIs' -Default @()) | Where-Object { $_ } | ForEach-Object { [string]$_ })
                 HasExceptions = [bool]@(@(Get-NRGObjectField -Item $r -Key 'ExceptIfSentTo' -Default @()) + @(Get-NRGObjectField -Item $r -Key 'ExceptIfSentToMemberOf' -Default @()) + @(Get-NRGObjectField -Item $r -Key 'ExceptIfRecipientDomainIs' -Default @()) | Where-Object { $_ }).Count } }
             $eop = @(Get-EOPProtectionPolicyRule -ErrorAction Stop)
             $atp = @()
@@ -216,14 +221,38 @@ function Invoke-NRGCollectDefender {
         # ── Malware Filter ────────────────────────────────────────────────
         try {
             $mfPolicies = @(Get-MalwareFilterPolicy -ErrorAction Stop)
+            # Which policies are actually applied (an enabled rule) decides who the
+            # attachment filter covers; a policy that exists but applies to nobody
+            # protects nobody. A failed rule read leaves Rules $null, never an empty
+            # list, so the evaluator cannot mistake it for "no custom rules".
+            $mfRules = $null
+            try { $mfRules = @(Get-MalwareFilterRule -ErrorAction Stop) } catch {
+                if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
+                    Register-NRGException -Source 'Defender-MalwareFilterRules' -Message $_.Exception.Message
+                }
+            }
 
             $result.Data['MalwareFilter'] = @{
                 Available = $true
+                Rules     = $(if ($null -eq $mfRules) { $null } else { @($mfRules | ForEach-Object {
+                    @{
+                        Name              = [string]$_.Name
+                        MalwareFilterPolicy = [string](Get-NRGObjectField -Item $_ -Key 'MalwareFilterPolicy' -Default '')
+                        State             = [string](Get-NRGObjectField -Item $_ -Key 'State' -Default '')
+                        Priority          = (Get-NRGObjectField -Item $_ -Key 'Priority' -Default $null)
+                        RecipientDomainIs = @(Get-NRGObjectField -Item $_ -Key 'RecipientDomainIs' -Default @())
+                        SentTo            = @(Get-NRGObjectField -Item $_ -Key 'SentTo' -Default @())
+                        SentToMemberOf    = @(Get-NRGObjectField -Item $_ -Key 'SentToMemberOf' -Default @())
+                        HasExceptions     = [bool]@(@(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentTo' -Default @()) + @(Get-NRGObjectField -Item $_ -Key 'ExceptIfSentToMemberOf' -Default @()) + @(Get-NRGObjectField -Item $_ -Key 'ExceptIfRecipientDomainIs' -Default @()) | Where-Object { $_ })
+                    }
+                }) })
                 Policies  = @($mfPolicies | ForEach-Object {
                     @{
                         Name                     = [string]$_.Name
+                        RecommendedPolicyType    = [string](Get-NRGObjectField -Item $_ -Key 'RecommendedPolicyType' -Default '')
                         IsDefault                = [bool](Get-NRGObjectField -Item $_ -Key 'IsDefault' -Default $false)
                         EnableFileFilter         = [bool]($_.EnableFileFilter ?? $false)
+                        ZapEnabled               = (Get-NRGObjectField -Item $_ -Key 'ZapEnabled' -Default $null)
                         FileTypes                = @($_.FileTypes ?? @())
                         Action                   = [string](Get-NRGObjectField -Item $_ -Key 'Action' -Default 'DeleteAttachmentAndUseDefaultAlertText')
                         EnableInternalSenderAdminNotifications = [bool]($_.EnableInternalSenderAdminNotifications ?? $false)

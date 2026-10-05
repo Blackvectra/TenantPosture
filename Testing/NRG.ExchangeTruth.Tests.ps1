@@ -341,6 +341,21 @@ return @{ value = @() }
                 SectionStatus = @{ InboxRulesForwarding = 'Collected' } })
             (Verdict 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2').Detail | Should -Match '0 enabled.*disabled'
         }
+        It 'EXO-7.2 names the mailbox, the rule and the recipients of a rule it could not resolve (synthetic values in the shape of a live tenant run)' {
+            $dn1 = '"Pat Example" [EX:/o=ExchangeLabs/ou=Exchange Administrative Group (FYDIBOHF23SPDLT)/cn=Recipients/cn=00000000000000000000000000000001-pat.exampl]'
+            $dn2 = '"Sam Q. Sample" [EX:/o=ExampleOrg/ou=Example Unit/cn=Recipients/cn=ssample_unmapped00000000000000000000000000000002]'
+            Set-NRGRawData -Key 'EXO-Inventory' -Data (Raw @{ UnparseableRules = @(); Stats = @{ MailboxesScanned = 12 }
+                InboxRulesForwarding = @(
+                    @{ Mailbox = 'pat@contoso.com'; RuleName = 'Newsletter Distribution'; Enabled = $true; IsExternal = $false; IsUnresolved = $true; ExternalRecipients = @(); UnresolvedRecipients = @($dn1) }
+                    @{ Mailbox = 'reports@contoso.com'; RuleName = 'Subscription Services Report'; Enabled = $true; IsExternal = $false; IsUnresolved = $true; ExternalRecipients = @(); UnresolvedRecipients = @($dn2) })
+                SectionStatus = @{ InboxRulesForwarding = 'Collected' } })
+            $f = Verdict 'Test-NRGControlEXOInboxRulesForwarding' 'EXO-7.2'
+            $f.State | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match "pat@contoso\.com rule 'Newsletter Distribution' forwards to Pat Example"
+            $f.Detail | Should -Match "reports@contoso\.com rule 'Subscription Services Report' forwards to Sam Q\. Sample"
+            $f.Detail | Should -Not -Match 'EX:/o='
+            @($f.AffectedObjects).Count | Should -Be 2
+        }
         It 'EXO-2.3 is not satisfied by the mailbox plans while existing mailboxes still have POP on' {
             Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (Raw @{ CASMailboxPlans = @(@{ Name = 'Plan'; PopEnabled = $false; ImapEnabled = $false })
                 CASMailboxProtocols = @{ Total = 10; PopEnabledCount = 3; ImapEnabledCount = 0; PopSample = @('a@contoso.com'); ImapSample = @() }
@@ -398,6 +413,15 @@ return @{ value = @() }
             $f.Detail | Should -Match '^1 of 2 enabled member accounts'
             $f.Detail | Should -Match '1 Entra Connect sync service account\(s\) excluded'
             @($f.AffectedObjects) | Should -Not -Match 'Sync_'
+        }
+        It 'AAD-12.1 describes a registration gap and does not assert that a stolen password compromises the mailbox' {
+            Set-NRGRawData -Key 'AAD-Users' -Data (Raw @{
+                Users = @(@{ UserPrincipalName = 'a@contoso.com'; DisplayName = 'A'; AccountEnabled = $true; UserType = 'Member' })
+                MFARegistration = @{ RegistrationDetails = @(@{ UserPrincipalName = 'a@contoso.com'; IsMfaRegistered = $false; IsEnabled = $true }) } })
+            $f = Verdict 'Test-NRGControlInventoryMFAUsers' 'AAD-12.1'
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'registration gap'
+            $f.Detail | Should -Not -Match 'stolen password away|full mailbox compromise|guaranteed'
         }
         It 'a finding with no Detail carries its CurrentValue, so no verdict prints without a reason' {
             Add-NRGFinding -ControlId 'TMS-1.4' -State 'Satisfied' -Category 'Teams' -Title 't' -CurrentValue 'External participants cannot give or request control'

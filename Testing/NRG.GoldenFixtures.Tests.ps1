@@ -140,6 +140,7 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
     Context 'AAD-1.3 — Phishing-Resistant MFA for Admins' {
 
         It 'Satisfied when a role-targeted policy uses an Authentication Strength' {
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw 'AAD' @{ RoleDefinitions = @(@{ Id = '62e90394-69f5-4237-9190-012177145e10'; DisplayName = 'Global Administrator'; IsPriv = $true }) })
             Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{
                 Policies = @( NewCaPolicy -DisplayName 'Admins: phish-resistant' -State 'enabled' `
                                 -IncludeRoles @('62e90394-69f5-4237-9190-012177145e10') `
@@ -185,6 +186,7 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
         }
 
         It 'judges a custom strength by every combination it allows' {
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw 'AAD' @{ RoleDefinitions = @(@{ Id = '62e90394-69f5-4237-9190-012177145e10'; DisplayName = 'Global Administrator'; IsPriv = $true }) })
             $mk = { param([string[]] $Combos)
                 $p = NewCaPolicy -DisplayName 'Admins: custom' -State 'enabled' `
                         -IncludeRoles @('62e90394-69f5-4237-9190-012177145e10') -AuthStrengthId 'd6c840e6-b1ff-4cc2-8253-10409d809f22'
@@ -212,11 +214,74 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
 
     Context 'EXO-1.6 — Modern Authentication Enabled' {
 
-        It 'Satisfied when OAuth2ClientProfileEnabled is true' {
+        It 'Satisfied when OAuth2 is on, SMTP AUTH is disabled organization-wide and no mailbox overrides it' {
             Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
                 OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
+                TransportConfig    = [pscustomobject]@{ SmtpClientAuthenticationDisabled = $true }
+                SmtpAuthConfig     = @{ TenantDisabled = $true; PerMailboxEnabledCount = 0; SampleEnabled = @() }
+                SectionStatus      = @{ SmtpAuthConfig = 'Collected' }
             })
             (GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6').State | Should -Be 'Satisfied'
+        }
+
+        It 'an ENABLED mailbox override beside an organization-level disable is an exception: Partial when nothing blocks passwords' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
+                TransportConfig    = [pscustomobject]@{ SmtpClientAuthenticationDisabled = $true }
+                SmtpAuthConfig     = @{ TenantDisabled = $true; PerMailboxEnabledCount = 2; SampleEnabled = @('scanner@contoso.com', 'app@contoso.com') }
+                SectionStatus      = @{ SmtpAuthConfig = 'Collected' }
+            })
+            Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{ Policies = @( NewCaPolicy -DisplayName 'MFA' -State 'enabled' -ClientAppTypes @('browser') -BuiltInControls @('mfa') ) })
+            Set-NRGRawData -Key 'AAD-AuthPolicies' -Data (NewRaw 'AAD' @{ SecurityDefaults = @{ IsEnabled = $false } })
+            $v = GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6'
+            $v.State  | Should -Be 'Partial'
+            $v.Detail | Should -Match '2 mailbox\(es\) override it'
+            $v.Detail | Should -Match 'scanner@contoso.com'
+            $v.Detail | Should -Match 'Verified: modern authentication'
+        }
+
+        It 'SMTP AUTH enabled is OAuth-capable: with legacy authentication blocked tenant-wide, passwords are not allowed and the control is Satisfied' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
+                TransportConfig    = [pscustomobject]@{ SmtpClientAuthenticationDisabled = $false }
+            })
+            Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{
+                Policies = @( NewCaPolicy -DisplayName 'Block legacy auth' -State 'enabled' -ClientAppTypes @('other', 'exchangeActiveSync') -BuiltInControls @('block') ) })
+            $v = GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6'
+            $v.State  | Should -Be 'Satisfied'
+            $v.Detail | Should -Match 'password authentication to legacy protocols is blocked'
+        }
+
+        It 'SMTP AUTH enabled with no legacy-authentication block read as absent is Partial, with what was not read stated' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
+                TransportConfig    = [pscustomobject]@{ SmtpClientAuthenticationDisabled = $false }
+            })
+            Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{ Policies = @( NewCaPolicy -DisplayName 'MFA' -State 'enabled' -ClientAppTypes @('browser') -BuiltInControls @('mfa') ) })
+            Set-NRGRawData -Key 'AAD-AuthPolicies' -Data (NewRaw 'AAD' @{ SecurityDefaults = @{ IsEnabled = $false } })
+            $v = GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6'
+            $v.State  | Should -Be 'Partial'
+            $v.Detail | Should -Match 'Shortfall: SMTP AUTH is enabled for the organization'
+            $v.Detail | Should -Match 'authentication policies'
+        }
+
+        It 'SMTP AUTH enabled and the legacy-authentication evidence missing: not assessed, never a pass or a fail' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
+                TransportConfig    = [pscustomobject]@{ SmtpClientAuthenticationDisabled = $false }
+            })
+            $v = GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match 'Verified: modern authentication'
+            $v.Detail | Should -Match 'Conditional Access data was not collected'
+        }
+
+        It 'organization disabled but the mailbox overrides not read: not assessed, never assumed clean' {
+            Set-NRGRawData -Key 'EXO-MailboxConfig' -Data (NewRaw 'EXO' @{
+                OrganizationConfig = [pscustomobject]@{ OAuth2ClientProfileEnabled = $true }
+                TransportConfig    = [pscustomobject]@{ SmtpClientAuthenticationDisabled = $true }
+            })
+            (GetVerdict 'Test-NRGControlEXOModernAuth' 'EXO-1.6').State | Should -Be 'NotApplicable'
         }
 
         It 'Gap when modern auth is explicitly disabled (basic auth bypasses MFA)' {
@@ -276,14 +341,16 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
 
     Context 'DNS-1.3 — DMARC Policy at Quarantine or Reject' {
 
-        It 'Satisfied when DMARC is p=reject at 100%' {
+        It 'p=reject at 100% is verified, but with no approved NRG reporting address the verdict is not assessed (never Satisfied)' {
             Set-NRGRawData -Key 'DNS-EmailRecords' -Data (NewRaw 'DNS' @{
                 DomainCount = 1
                 Domains     = @{ 'contoso.com' = [pscustomobject]@{
                     DMARC = 'v=DMARC1; p=reject; rua=mailto:dmarc@contoso.com'
                     DMARCPolicy = 'reject'; DMARCPct = 100 } }
             })
-            (GetVerdict 'Test-NRGControlDNSDMARC' 'DNS-1.3').State | Should -Be 'Satisfied'
+            $v = GetVerdict 'Test-NRGControlDNSDMARC' 'DNS-1.3'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match '^Verified: contoso.com DMARC p=reject'
         }
 
         It 'Partial when p=reject is only partially enforced (pct < 100)' {
@@ -403,6 +470,7 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
     Context 'Cross-cutting — a compliant tenant is never reported as vulnerable' {
 
         It 'the compliant fixtures above produce zero Gap findings for their controls' {
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw 'AAD' @{ RoleDefinitions = @(@{ Id = '62e90394-69f5-4237-9190-012177145e10'; DisplayName = 'Global Administrator'; IsPriv = $true }) })
             Set-NRGRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{
                 Policies = @(
                     (NewCaPolicy -DisplayName 'Block legacy' -State 'enabled' `
@@ -556,9 +624,10 @@ Describe 'Golden fixtures — privilege escalation attack path' {
 
     Context 'AAD-6.2 — User Consent to Apps (consent-phishing entry point)' {
 
-        It 'Satisfied when user consent is restricted to low-impact permissions' {
+        It 'Satisfied when user consent is restricted to low-impact permissions and the admin consent workflow is on' {
             Set-NRGRawData -Key 'AAD-IdentityGovernance' -Data (NewRaw2 'AAD' @{
                 ExternalCollab = @{ PermissionGrantPolicies = @('ManagePermissionGrantsForSelf.microsoft-user-default-low') }
+                ConsentPolicy  = @{ IsEnabled = $true }
             })
             (GetVerdict2 'Test-NRGControlAADUserConsent' 'AAD-6.2').State | Should -Be 'Satisfied'
         }
@@ -816,14 +885,39 @@ Describe 'DEF-3.4 / DEF-4.3 alert policy configuration — implemented' {
     Context 'DEF-3.4 — high severity alerts reach a human' {
 
         It 'no longer returns a permanent placeholder' {
+            $null = Set-NRGMonitoringAddresses -Addresses 'soc@contoso.com'
             Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @((Pol 'Malware campaign detected')))
             (AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4').State | Should -Not -Be 'NotApplicable'
         }
 
-        It 'Satisfied when every enabled High/Critical policy has recipients' {
+        It 'recipients exist but no monitoring address is configured: the recipients half is verified, routing to NRG is not assessed' {
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
+                (Pol 'Malware campaign detected'), (Pol 'Elevation of privilege' 'Critical')))
+            $v = AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match 'Verified: all 2 enabled High/Critical alert policy\(ies\) have email recipients'
+            $v.Detail | Should -Match 'Not assessed: whether any recipient is the NRG monitoring address'
+        }
+
+        It 'Satisfied when every enabled High/Critical policy notifies the configured monitoring address' {
+            $null = Set-NRGMonitoringAddresses -Addresses 'soc@contoso.com'
             Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
                 (Pol 'Malware campaign detected'), (Pol 'Elevation of privilege' 'Critical')))
             (AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4').State | Should -Be 'Satisfied'
+        }
+
+        It 'Partial when only some policies notify the monitoring address; Gap when none do' {
+            $null = Set-NRGMonitoringAddresses -Addresses '@contoso.com'
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
+                (Pol 'Malware campaign detected'), (Pol 'Elevation of privilege' 'Critical' $false @('someone@other.example'))))
+            $v = AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4'
+            $v.State  | Should -Be 'Partial'
+            $v.Detail | Should -Match 'Verified: all 2'
+            ($v.AffectedObjects | ConvertTo-Json -Depth 4) | Should -Match 'Elevation of privilege'
+            Clear-NRGState
+            $null = Set-NRGMonitoringAddresses -Addresses 'soc@contoso.com'
+            Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @((Pol 'Malware campaign detected' 'High' $false @('someone@other.example'))))
+            (AlertVerdict 'Test-NRGControlDefenderAlertNotification' 'DEF-3.4').State | Should -Be 'Gap'
         }
 
         It 'Gap — naming the policy — when a High policy has no recipients' {
@@ -836,6 +930,7 @@ Describe 'DEF-3.4 / DEF-4.3 alert policy configuration — implemented' {
         }
 
         It 'ignores DISABLED policies when judging coverage' {
+            $null = Set-NRGMonitoringAddresses -Addresses 'soc@contoso.com'
             Set-NRGRawData -Key 'Purview' -Data (PvwRaw -Alerts @(
                 (Pol 'Malware campaign detected'),
                 (Pol 'Retired policy' 'High' $true @())))
@@ -1198,11 +1293,13 @@ Describe 'Golden fixtures — ransomware attack path' {
 
     Context 'DEF-2.3 — Common attachment filter (malware delivery)' {
 
-        It 'Satisfied when the common attachment filter is enabled on a malware policy' {
+        It 'the filter enabled is verified, but with no approved blocked-type list the verdict is not assessed (never Satisfied)' {
             Set-NRGRawData -Key 'Defender-Policies' -Data (NewRaw3 'DEF' @{
                 MalwareFilter = [pscustomobject]@{ Available = $true; FileFilterEnabledCount = 1 }
             })
-            (GetVerdict3 'Test-NRGControlDefenderCommonAttachments' 'DEF-2.3').State | Should -Be 'Satisfied'
+            $v = GetVerdict3 'Test-NRGControlDefenderCommonAttachments' 'DEF-2.3'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match 'Verified:'
         }
 
         It 'Gap when no policy blocks high-risk file types' {
@@ -1222,11 +1319,14 @@ Describe 'Golden fixtures — ransomware attack path' {
 
     Context 'INT-2.2 — Attack Surface Reduction rules (endpoint execution)' {
 
-        It 'Satisfied when ASR policies are deployed' {
+        It 'an assigned ASR policy verifies existence only: enforcement (rules and Block mode) is not assessed, never Satisfied' {
             Set-NRGRawData -Key 'Intune-EndpointSecurity' -Data (NewRaw3 'INT' @{
                 ASRPolicies = @([pscustomobject]@{ DisplayName = 'ASR Baseline' })
             })
-            (GetVerdict3 'Test-NRGControlIntuneASR' 'INT-2.2').State | Should -Be 'Satisfied'
+            $v = GetVerdict3 'Test-NRGControlIntuneASR' 'INT-2.2'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match 'Verified: 1 assigned Attack Surface Reduction'
+            $v.Detail | Should -Match 'Not assessed: the rule settings of 1 of 1 assigned policy'
         }
 
         It 'Gap when no ASR policy exists (Office macro and credential-theft vectors open)' {

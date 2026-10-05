@@ -18,8 +18,13 @@
     posture batch runner. The first tenant prompts a browser sign-in; later
     tenants typically SSO silently off the same MSAL session (GDAP).
 
-    Per-client exit codes roll up into the batch summary:
-      0 = clean    2 = no findings    10 = CRITICAL IoCs (likely compromise)
+    Per-client exit codes (the single-tenant triage's) roll up into the batch summary:
+      0  = complete, no Critical indicator       2 = no findings
+      3  = NOT CLEARED (evidence incomplete)      1 = authentication failed
+      4  = error (the triage stopped)             10 = CRITICAL indicators (investigate; heuristic, not a confirmed compromise)
+    The batch exits with the most severe: 10 when any client has Critical
+    indicators, else 4 when any client errored, else 1 when any client failed
+    to authenticate, else 3 when any client was not cleared, else 0.
 
     Output per client: output\<tenantdomain>\IR-Triage\<timestamp>-signin-triage.html + .md + .json
     Batch summary:     output\triage-summary-<timestamp>.md
@@ -186,7 +191,7 @@ foreach ($client in $clients) {
     Write-Host ''
     Write-Host "━━━ $($client.ClientName) ($($client.TenantDomain)) ━━━" -ForegroundColor Cyan
 
-    $status   = 'Clean'
+    $status   = 'ERROR'
     $errMsg   = ''
     $exitCode = $null
 
@@ -206,17 +211,31 @@ foreach ($client in $clients) {
         }
         if ($SkipMailDive) { $params['SkipMailDive'] = $true }
 
+        # Cleared first, so a child that ends without an exit code is not read
+        # as the previous client's result.
+        $global:LASTEXITCODE = $null
         & $triagePath @params
         $exitCode = $LASTEXITCODE
 
+        # Anything not recognized is an error, never a pass: an unknown result
+        # did not clear the tenant.
         $status = switch ($exitCode) {
-            0       { 'Clean' }
-            2       { 'NoFindings' }
+            0       { 'COMPLETE, NO CRITICAL' }
+            2       { 'NO FINDINGS' }
+            3       { 'NOT CLEARED' }
+            1       { 'AUTH FAILED' }
             10      { 'CRITICAL-IOCS' }
-            default { "ExitCode-$exitCode" }
+            default { 'ERROR' }
+        }
+        $errMsg = switch ($exitCode) {
+            3       { 'Evidence incomplete or a required check did not finish; see the client triage report.' }
+            1       { 'The triage could not sign in to this tenant.' }
+            4       { 'The triage stopped with a fatal error; see the console output above.' }
+            { $_ -notin 0, 1, 2, 3, 4, 10 } { "The triage ended with an unrecognized exit code ($(if ($null -eq $exitCode) { 'none' } else { $exitCode }))." }
+            default { '' }
         }
     } catch {
-        $status = 'Failed'
+        $status = 'ERROR'
         $errMsg = $_.Exception.Message
         Write-Host "  [!] $errMsg" -ForegroundColor Red
     }
@@ -234,10 +253,12 @@ foreach ($client in $clients) {
 }
 
 # ── Batch summary ─────────────────────────────────────────────────────────────
-# CRITICAL-IOCS clients sort to the top — that's the call list.
-$statusRank = @{ 'CRITICAL-IOCS' = 0; 'Failed' = 1; 'Clean' = 2; 'NoFindings' = 3 }
+# CRITICAL-IOCS clients sort to the top — that's the call list — then every
+# client that was not assessed or not cleared, before the completed ones.
+$statusRank = @{ 'CRITICAL-IOCS' = 0; 'ERROR' = 1; 'AUTH FAILED' = 2; 'NOT CLEARED' = 3; 'COMPLETE, NO CRITICAL' = 4; 'NO FINDINGS' = 5 }
+$notCompleted = @('ERROR', 'AUTH FAILED', 'NOT CLEARED')
 foreach ($r in $batchResults) {
-    $rank = if ($statusRank.ContainsKey($r.Status)) { $statusRank[$r.Status] } else { 4 }
+    $rank = if ($statusRank.ContainsKey($r.Status)) { $statusRank[$r.Status] } else { 1 }
     $r | Add-Member -NotePropertyName SortRank -NotePropertyValue $rank -Force
 }
 $ordered = @($batchResults | Sort-Object -Property SortRank)
@@ -248,13 +269,13 @@ $md += "**Clients:** $($batchResults.Count)  `n"
 $md += "**Window:** $WindowDays day(s)  `n`n"
 $md += "| Client | Tenant | Status | Minutes | Output |`n|---|---|---|---|---|`n"
 foreach ($r in $ordered) {
-    $statusCell = if ($r.Status -eq 'CRITICAL-IOCS') { "**$($r.Status)**" } else { $r.Status }
+    $statusCell = if ($r.Status -eq 'CRITICAL-IOCS' -or $r.Status -in $notCompleted) { "**$($r.Status)**" } else { $r.Status }
     $md += "| $($r.ClientName) | $($r.TenantDomain) | $statusCell | $($r.ElapsedMin) | ``$($r.OutputPath)`` |`n"
 }
-$failed = @($batchResults | Where-Object { $_.Status -eq 'Failed' })
+$failed = @($ordered | Where-Object { $_.Status -in $notCompleted })
 if ($failed.Count -gt 0) {
-    $md += "`n## Failures`n`n"
-    foreach ($r in $failed) { $md += "- **$($r.ClientName)**: $($r.Error)`n" }
+    $md += "`n## Not cleared or not assessed`n`n"
+    foreach ($r in $failed) { $md += "- **$($r.ClientName)** ($($r.Status)): $($r.Error)`n" }
 }
 
 $summaryPath = Join-Path $resolvedOutput "triage-summary-$timestamp.md"
@@ -272,17 +293,23 @@ Write-Host ' Batch Triage Summary' -ForegroundColor Cyan
 Write-Host '════════════════════════════════════════════════════════════' -ForegroundColor Cyan
 foreach ($r in $ordered) {
     $color = switch ($r.Status) {
-        'CRITICAL-IOCS' { 'Red' } 'Failed' { 'Yellow' } default { 'Green' }
+        'CRITICAL-IOCS' { 'Red' } 'ERROR' { 'Red' } 'AUTH FAILED' { 'Red' } 'NOT CLEARED' { 'Yellow' } default { 'Green' }
     }
-    Write-Host ("  {0,-28} {1,-16} {2}" -f $r.ClientName, $r.Status, "$($r.ElapsedMin)m") -ForegroundColor $color
+    Write-Host ("  {0,-28} {1,-22} {2}" -f $r.ClientName, $r.Status, "$($r.ElapsedMin)m") -ForegroundColor $color
 }
 Write-Host ''
 Write-Host "  Summary: $summaryPath" -ForegroundColor White
 Write-Host ''
 
+if ($failed.Count -gt 0) {
+    Write-Host "  [!] $($failed.Count) client(s) not cleared or not assessed — see the summary." -ForegroundColor Yellow
+}
+# The most severe result wins (see the header).
 if ($critClients.Count -gt 0) {
     Write-Host "  [!] $($critClients.Count) client(s) with CRITICAL IoCs — review their triage reports first." -ForegroundColor Red
     exit 10
 }
-if ($failed.Count -gt 0) { exit 3 }
+if (@($batchResults | Where-Object { $_.Status -eq 'ERROR' }).Count -gt 0)       { exit 4 }
+if (@($batchResults | Where-Object { $_.Status -eq 'AUTH FAILED' }).Count -gt 0) { exit 1 }
+if (@($batchResults | Where-Object { $_.Status -eq 'NOT CLEARED' }).Count -gt 0) { exit 3 }
 exit 0

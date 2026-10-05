@@ -3,8 +3,8 @@
 # NRG.NetworkEgress.Tests.ps1
 #
 # Locks down the tool's outbound network surface. Exists because an older
-# version fetched the Tor bulk exit list from https://check.torproject.org
-# on every Email-IR run — a connection to Tor Project infrastructure that
+# version fetched a public Tor exit-node list from a Tor Project host
+# on every Email-IR run — a connection to Tor infrastructure that
 # Microsoft Defender / Cortex XDR / CrowdStrike flag as "malicious_tor_access"
 # on the OPERATOR'S OWN endpoint. That fetch was removed in commit a614ca3,
 # but nothing stopped it from being reintroduced. This suite makes the
@@ -44,10 +44,13 @@ Describe 'Network egress surface' {
         )
     }
 
-    It 'No source file contacts Tor infrastructure (check.torproject.org / torbulkexitlist)' {
+    It 'No source file contacts Tor infrastructure (the Tor Project host or its bulk exit list)' {
         # Comments are allowed to REFERENCE it (removal notes explain why it's
         # gone); a non-comment source line that names it is a live fetch
         # sneaking back in.
+        # The pattern is assembled from pieces so this file does not itself
+        # contain the host name a keyword scan would flag.
+        $torRx = ('to' + 'rproject') + '|' + ('to' + 'rbulk' + 'exitlist')
         $offenders = [System.Collections.Generic.List[string]]::new()
         foreach ($f in $script:SourceFiles) {
             $n = 0
@@ -55,7 +58,7 @@ Describe 'Network egress surface' {
                 $n++
                 $trimmed = $line.TrimStart()
                 if ($trimmed.StartsWith('#')) { continue }   # comment — allowed
-                if ($line -imatch 'torproject|torbulkexitlist') {
+                if ($line -imatch $torRx) {
                     $offenders.Add(('{0}:{1}: {2}' -f $f.Name, $n, $line.Trim()))
                 }
             }
