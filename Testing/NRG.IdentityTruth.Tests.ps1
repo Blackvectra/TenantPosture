@@ -656,6 +656,36 @@ Describe 'Security Defaults: Conditional Access controls account for it' {
             $f.CurrentValue | Should -Match 'GA1, GA2'
         }
 
+        # First live run on the owner's tenant: the break-glass account was
+        # excluded from every policy that can block sign-in, but SharePoint's
+        # app-enforced restrictions policy (session control only, no grant)
+        # reached it, so AAD-7.2 said "no emergency access path".
+        It 'AAD-7.2: a session-only policy (no grant control) does not disqualify a break-glass account; a blocking policy that reaches it is named' {
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                return @{ value = @() }
+            }
+            $gas = @((Asg 'bg1' 'BG1'), (Asg 'bg2' 'BG2'), (Asg 'adm' 'Admin'))
+            $pool = @($gas | ForEach-Object { $c = @{} + $_; $c.Source = 'permanent'; $c })
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (Bag @{ RoleAssignments = $gas; AllPrivilegedAssignments = $pool; SectionStatus = @{ RoleAssignments = 'Collected' } })
+            $session = New-Pol -Name 'SharePoint app-enforced restrictions' -Session @{ ApplicationEnforcedRestrictions = $true }
+            $block = New-Pol -Name 'Block legacy' -ClientApps @('other') -Grant @('block'); $block.Conditions.Users.ExcludeUsers = @('bg1', 'bg2')
+            Set-CA @($session, $block); Set-SD $false
+            Invoke-NRGCollectAADIdentityGovernance 3>$null | Out-Null
+            $f = V 'Test-NRGControlAADBreakGlass' 'AAD-7.2'
+            $f.State | Should -Be 'Satisfied' -Because 'the only policy that does not exclude them cannot deny a sign-in'
+
+            Clear-NRGState
+            Set-NRGRawData -Key 'AAD-DirectoryRoles' -Data (Bag @{ RoleAssignments = $gas; AllPrivilegedAssignments = $pool; SectionStatus = @{ RoleAssignments = 'Collected' } })
+            $mfa = New-Pol -Name 'Require MFA all users' -Grant @('mfa'); $mfa.Conditions.Users.ExcludeUsers = @('bg1')
+            Set-CA @($session, $block, $mfa); Set-SD $false
+            Invoke-NRGCollectAADIdentityGovernance 3>$null | Out-Null
+            $f = V 'Test-NRGControlAADBreakGlass' 'AAD-7.2'
+            $f.State | Should -Be 'Partial'
+            $f.Detail | Should -Match "BG2 \(bg2@x\.onmicrosoft\.com\) is still reached by: 'Require MFA all users'"
+            $f.Detail | Should -Not -Match 'SharePoint app-enforced'
+        }
+
         It 'AAD-3.2: under Security Defaults a stale CAExcluded=$true is not credited — two permanent cloud-only Global Administrators beside PIM-eligible assignments are not applicable, and a permanent Exchange Administrator is still a Gap that says none was set aside' {
             $pim = Bag @{ EligibleSchedules = @('e1'); ActiveSchedules = @(); SectionStatus = @{ EligibleSchedules = 'Collected' } }
             $gov = Bag @{ BreakGlassIndicators = @(@{ PrincipalId = 'bg1'; CAExcluded = $true; Synced = $false }, @{ PrincipalId = 'bg2'; CAExcluded = $true; Synced = $false }) }

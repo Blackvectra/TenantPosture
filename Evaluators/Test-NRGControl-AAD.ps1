@@ -1294,14 +1294,25 @@ function Test-NRGControlAADBreakGlass {
     $bgAccounts = @($gov.Data['BreakGlassIndicators'] | Where-Object { $_.CAExcluded -eq $true -and -not $_.Synced })
     $unknownBg  = @($gov.Data['BreakGlassIndicators'] | Where-Object { $null -eq $_.CAExcluded -and -not $_.Synced })
     $allGAs     = @($gov.Data['BreakGlassIndicators'])
+    # Name the cloud-only Global Administrators that a blocking policy still
+    # reaches (collected since the session-only fix; older results carry no
+    # list and add nothing), so an account excluded from all but one policy
+    # reads as that one policy to fix, not as "no emergency access path".
+    $nearMiss = @($allGAs | Where-Object { $_.CAExcluded -eq $false -and -not $_.Synced } | ForEach-Object {
+        $left = @(@(Get-NRGObjectField -Item $_ -Key 'NotExcludedFrom' -Default @()) | Where-Object { $_ })
+        if ($left.Count -ge 1 -and $left.Count -le 2) {
+            "$([string](Get-NRGObjectField -Item $_ -Key 'DisplayName' -Default '')) ($([string](Get-NRGObjectField -Item $_ -Key 'UPN' -Default ''))) is still reached by: $((@($left | ForEach-Object { "'$_'" })) -join ', ')"
+        }
+    })
+    $nearNote = if ($nearMiss.Count -gt 0) { " Not excluded from every policy that can block sign-in: $($nearMiss -join '; ')." } else { '' }
     if ($bgAccounts.Count -lt 2 -and $unknownBg.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "$($unknownBg.Count) Global Administrator account(s) may be excluded through a group whose membership could not be read, so break-glass coverage was not assessed."
     } elseif ($bgAccounts.Count -ge 2) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($bgAccounts.Count) cloud-only GA account(s) excluded from CA policies — consistent with break-glass pattern."
+        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($bgAccounts.Count) cloud-only GA account(s) are excluded from every Conditional Access policy that can block sign-in, consistent with the break-glass pattern. Session-only policies (no grant control) are not counted: they cannot lock an account out."
     } elseif ($bgAccounts.Count -eq 1) {
-        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Only one CA-excluded cloud-only GA found. Best practice is two break-glass accounts for redundancy.' -CurrentValue '1 break-glass account' -RequiredValue '2 break-glass accounts'
+        Add-NRGFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail "Only one cloud-only GA is excluded from every Conditional Access policy that can block sign-in. Best practice is two break-glass accounts for redundancy.$nearNote" -CurrentValue '1 break-glass account' -RequiredValue '2 break-glass accounts'
     } elseif ($allGAs.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No CA-excluded cloud-only GA accounts detected. If CA policies break, there is no emergency access path to the tenant.' -Remediation $ctrl.Remediation
+        Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "No cloud-only GA account is excluded from every Conditional Access policy that can block sign-in, so a misconfigured policy could leave no emergency access path to the tenant.$nearNote" -Remediation $ctrl.Remediation
     } else {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'No GA accounts found to evaluate'
     }

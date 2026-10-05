@@ -239,32 +239,51 @@ function Invoke-NRGCollectAADIdentityGovernance {
                 # used to count, so an admin excluded from a single pilot
                 # policy was reported as an emergency access path.
                 $gaRoleId = '62e90394-69f5-4237-9190-012177145e10'
+                # Only a policy with a grant control (block, MFA, compliant
+                # device, an authentication strength, terms of use) can deny a
+                # sign-in. A session-only policy, such as the one the SharePoint
+                # admin center creates for app-enforced restrictions, limits
+                # what a session can do and cannot lock an account out, so it
+                # does not make an emergency access account unusable.
+                $canDeny = {
+                    param($p)
+                    $n = @(@(Get-NRGNestedProperty -Object $p -Path 'GrantControls.BuiltInControls' -Default @()) | Where-Object { $_ }).Count
+                    $n += @(@(Get-NRGNestedProperty -Object $p -Path 'GrantControls.TermsOfUse' -Default @()) | Where-Object { $_ }).Count
+                    $n += @(@(Get-NRGNestedProperty -Object $p -Path 'GrantControls.CustomControls' -Default @()) | Where-Object { $_ }).Count
+                    ($n -gt 0) -or [bool][string](Get-NRGNestedProperty -Object $p -Path 'GrantControls.AuthStrengthId' -Default '')
+                }
                 $reaching = @()
                 if ($caPolicies -and $caPolicies.Success) {
                     $reaching = @(@($caPolicies.Data.Policies) | Where-Object {
-                        $_.State -eq 'enabled' -and (
+                        $_.State -eq 'enabled' -and (& $canDeny $_) -and (
                             @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.IncludeUsers' -Default @()) -contains 'All' -or
                             @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.IncludeRoles' -Default @()) -contains $gaRoleId)
                     })
                 }
                 foreach ($ga in $gaAccounts) {
                     $isExcluded = $false
+                    # The policies that can deny this account's sign-in and do
+                    # not exclude it, named so the finding can say which one
+                    # keeps an otherwise excluded account from qualifying.
+                    $notExcludedFrom = [System.Collections.Generic.List[string]]::new()
                     if ($caPolicies -and $caPolicies.Success) {
-                        $allExcluded = $true; $unknown = $false
+                        $unknown = $false
                         foreach ($policy in $reaching) {
-                            $excludeUsers  = @($policy.Conditions.Users.ExcludeUsers  ?? @())
-                            $excludeGroups = @($policy.Conditions.Users.ExcludeGroups ?? @())
+                            $excludeUsers  = @(Get-NRGNestedProperty -Object $policy -Path 'Conditions.Users.ExcludeUsers'  -Default @())
+                            $excludeGroups = @(Get-NRGNestedProperty -Object $policy -Path 'Conditions.Users.ExcludeGroups' -Default @())
                             if ($excludeUsers -contains $ga.PrincipalId) { continue }
-                            $matched = $false
+                            $matched = $false; $groupUnknown = $false
                             foreach ($gid in $excludeGroups) {
                                 $members = & $resolveGroupMembers $gid
-                                if ($null -eq $members) { $unknown = $true; continue }
+                                if ($null -eq $members) { $groupUnknown = $true; continue }
                                 if ($members -contains $ga.PrincipalId) { $matched = $true; break }
                             }
-                            if (-not $matched) { $allExcluded = $false; break }
+                            if ($matched) { continue }
+                            if ($groupUnknown) { $unknown = $true; continue }
+                            $notExcludedFrom.Add([string](Get-NRGObjectField -Item $policy -Key 'DisplayName' -Default '(unnamed policy)'))
                         }
                         # $null = could not tell (a group membership was unreadable).
-                        $isExcluded = if ($allExcluded -and $reaching.Count -gt 0) { $true } elseif ($unknown) { $null } else { $false }
+                        $isExcluded = if ($notExcludedFrom.Count -gt 0) { $false } elseif ($unknown) { $null } elseif ($reaching.Count -gt 0) { $true } else { $false }
                     }
                     $breakGlass += @{
                         PrincipalId  = [string]$ga.PrincipalId
@@ -273,6 +292,7 @@ function Invoke-NRGCollectAADIdentityGovernance {
                         CAExcluded   = $isExcluded
                         Synced       = $ga.OnPremisesSyncEnabled -eq $true
                         Source       = [string]($ga.Source ?? 'permanent')
+                        NotExcludedFrom = [string[]]@($notExcludedFrom)
                     }
                 }
             }
