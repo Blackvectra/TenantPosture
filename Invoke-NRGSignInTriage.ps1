@@ -372,7 +372,7 @@ try {
                 # The same combined health decision as the recorded Status: a dive whose
                 # evidence was read but whose detectors did not finish is not complete.
                 $diveOk = ($evidence.Complete -and $diveFailures.Count -eq 0)
-                $diveWhy = @(@($evidence.RequiredMissing | ForEach-Object { "missing $_" }) + @($evidence.RequiredPartial | ForEach-Object { "partial $_" }) + @($diveFailures))
+                $diveWhy = @(@($evidence.RequiredMissing | ForEach-Object { "missing $_" }) + @($evidence.RequiredPartial | ForEach-Object { "partial $_" }) + @($evidence.OptionalTruncated | ForEach-Object { "partial $_" }) + @($diveFailures))
                 Write-Host "  [+] Deep-dive $(if ($diveOk) { 'complete' } else { "incomplete ($($diveWhy -join '; '))" }): $upn" -ForegroundColor $(if ($diveOk) { 'Green' } else { 'Yellow' })
             } catch {
                 Write-Warning "Deep-dive collection failed for ${upn}: $($_.Exception.Message)"

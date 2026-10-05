@@ -22,7 +22,12 @@ function Clear-NRGSignInTriageState {
     $script:NRGSignInUserScores = @{}
 }
 
-# Internal helper: add to a user's IoC score with a reason tag
+# Internal helper: add to a user's IoC score with a reason tag.
+# Scoring rule: each DISTINCT reason counts once per user. The reasons shown are
+# deduplicated, so the score must be too: repeating one benign event (two
+# sign-ins from the same neighboring-state city, 35 + 35) stacked a user to the
+# Critical rank threshold (70) on a single observation. Different reasons (a
+# different location, a separate correlation, another address) still add up.
 function script:Add-NRGSignInScore {
     param([string] $UserPrincipalName, [int] $Points, [string] $Reason)
     if (-not $UserPrincipalName) { return }
@@ -35,10 +40,9 @@ function script:Add-NRGSignInScore {
             DisplayName       = $null
         }
     }
+    if ($Reason -and ($script:NRGSignInUserScores[$upn].Reasons -contains $Reason)) { return }
     $script:NRGSignInUserScores[$upn].Score += $Points
-    if ($Reason -and ($script:NRGSignInUserScores[$upn].Reasons -notcontains $Reason)) {
-        $script:NRGSignInUserScores[$upn].Reasons += $Reason
-    }
+    if ($Reason) { $script:NRGSignInUserScores[$upn].Reasons += $Reason }
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -179,7 +183,17 @@ function Test-NRGSignInControlAnonymousIp {
     }
 
     $events = @($bag.Data.Events)
+    # A read that stopped at its page (or a fallback over a truncated recent read)
+    # can report what it found, never that nothing happened.
+    $completeness = Get-NRGSignInCollectionCompleteness -Keys 'IR-SignIn-AnonIp'
+    $incompleteNote = if (-not $completeness.Complete) { "Note: the read was incomplete ($($completeness.Reasons -join '; ')); more may exist.`n" } else { '' }
     if ($events.Count -eq 0) {
+        if (-not $completeness.Complete) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+                -Title $title -Severity 'High' `
+                -Detail "Not cleared: no anon-IP sign-in was in the events read, but the read was incomplete ($($completeness.Reasons -join '; ')), so this is not evidence that none occurred."
+            return
+        }
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'High' -Detail 'No anon-IP sign-ins flagged by Microsoft in the window.'
         return
@@ -203,10 +217,22 @@ function Test-NRGSignInControlAnonymousIp {
     foreach ($k in ($userHits.Keys | Sort-Object { -$userHits[$_].Success } | Select-Object -First 10)) {
         $detail += "  - $k — SUCCESS: $($userHits[$k].Success), failed: $($userHits[$k].Failed)`n"
     }
+    $detail += $incompleteNote
+    # Critical only when an anonymous-IP sign-in SUCCEEDED (access was obtained).
+    # Failed attempts show someone trying the account through an anonymizer, which
+    # is worth review (High) but is not access; they also score 15 against 50.
+    $successTotal = @($userHits.Values | ForEach-Object { $_.Success } | Measure-Object -Sum).Sum
+    if ($successTotal -gt 0) {
+        $sev = 'Critical'
+        $rem = "Successful sign-ins from anon-IP infrastructure are near-certain compromise. Revoke sessions + reset passwords for each flagged user. If the tenant has Conditional Access, block sign-ins from anonymous IP addresses tenant-wide."
+    } else {
+        $sev = 'High'
+        $rem = "No anonymous-IP sign-in succeeded in the events read: these are attempts, not access. Confirm with each user, check the failure reason (a failure after a correct password, such as an MFA interruption, means the password is known and should be reset), and if the tenant has Conditional Access, block sign-ins from anonymous IP addresses tenant-wide."
+    }
     Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
-        -Title $title -Severity 'Critical' -Detail $detail `
-        -CurrentValue "$($events.Count) anon-IP events, $($userHits.Keys.Count) users" `
-        -Remediation "Successful sign-ins from anon-IP infrastructure are near-certain compromise. Revoke sessions + reset passwords for each flagged user. If the tenant has Conditional Access, block sign-ins from anonymous IP addresses tenant-wide."
+        -Title $title -Severity $sev -Detail $detail `
+        -CurrentValue "$($events.Count) anon-IP events ($successTotal successful), $($userHits.Keys.Count) users" `
+        -Remediation $rem
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -226,7 +252,15 @@ function Test-NRGSignInControlImpossibleTravel {
     }
 
     $events = @($bag.Data.Events)
+    # Derived from the recent read: only as complete as that read.
+    $completeness = Get-NRGSignInCollectionCompleteness -Keys 'IR-SignIn-Travel'
     if ($events.Count -eq 0) {
+        if (-not $completeness.Complete) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+                -Title $title -Severity 'High' `
+                -Detail "Not cleared: no impossible-travel / unfamiliar-features event was in the events read, but the read was incomplete ($($completeness.Reasons -join '; ')), so this is not evidence that none occurred."
+            return
+        }
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'High' -Detail 'No impossible-travel / unfamiliar-features events flagged in the window.'
         return
@@ -247,6 +281,7 @@ function Test-NRGSignInControlImpossibleTravel {
         $loc = if ($sample.location) { "$($sample.location.city), $($sample.location.countryOrRegion)" } else { '(unknown)' }
         $detail += "  - $($g.Name) — $($g.Group.Count) event(s), most recent IP $($sample.ipAddress), location $loc`n"
     }
+    if (-not $completeness.Complete) { $detail += "Note: the read was incomplete ($($completeness.Reasons -join '; ')); more may exist.`n" }
     Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
         -Title $title -Severity 'High' -Detail $detail `
         -Remediation "Cross-check each flagged user's recent travel + VPN use before treating as IoC. Microsoft's heuristic is noisy. Successful sign-ins paired with mailbox-level IoCs (inbox rules, outbound BEC) are the high-confidence subset."
@@ -335,8 +370,9 @@ function Test-NRGSignInControlRiskyUsers {
 #
 # Scoring (only SUCCESSFUL sign-ins count — a failed attempt from abroad is
 # noise; a success is access):
-#   foreign COUNTRY success  : 55   (account accessed from another country)
-#   out-of-home-STATE success: 35   (same country, wrong state)
+#   foreign COUNTRY success  : 55   (account accessed from another country; finding Critical)
+#   out-of-home-STATE success: 35   (same country, wrong state; finding High, since
+#                                    mobile-carrier geolocation often lands out of state)
 # Failed attempts from outside the home base are listed for context but not
 # scored, to keep the ranking focused on actual access.
 function Test-NRGSignInControlGeoAnomaly {
@@ -440,7 +476,14 @@ function Test-NRGSignInControlGeoAnomaly {
     }
 
     $homeLabel = (@($HomeState, $HomeCountry) | Where-Object { $_ }) -join ' / '
+    $completeness = Get-NRGSignInCollectionCompleteness -Keys 'IR-SignIn-Recent'
     if ($anomalies.Count -eq 0) {
+        if (-not $completeness.Complete) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+                -Title $title -Severity 'High' `
+                -Detail "Not cleared: home baseline $homeLabel; all $($located.Count) located sign-in(s) read are within it, but the sign-in read was incomplete ($($completeness.Reasons -join '; ')), so this is not evidence that no out-of-home sign-in occurred."
+            return
+        }
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'High' `
             -Detail "Home baseline: $homeLabel. All $($located.Count) located sign-in(s) are within the home state/country."
@@ -455,13 +498,20 @@ function Test-NRGSignInControlGeoAnomaly {
         $loc = (@($a.City, $a.State, $a.Country) | Where-Object { $_ }) -join ', '
         $detail += "  [$tag] $($a.UserPrincipalName) — $loc  ($($a.IP), $($a.When)) [$($a.Kind)]`n"
     }
+    if (-not $completeness.Complete) { $detail += "Note: the sign-in read was incomplete ($($completeness.Reasons -join '; ')); more may exist.`n" }
 
-    $state    = if ($successAnoms.Count -gt 0) { 'Gap' }     else { 'Gap' }
-    $severity = if ($successAnoms.Count -gt 0) { 'Critical' } else { 'High' }
+    # Severity: Critical only for a SUCCESSFUL sign-in from another COUNTRY.
+    # Out-of-state successes are listed and scored but High: IP geolocation for
+    # mobile carriers and VPN egress routinely places a home user in a
+    # neighboring state, so one such sign-in is not access from somewhere the
+    # user never is. Failed attempts alone stay High (context, not access).
+    $foreignSuccess = @($successAnoms | Where-Object { $_.Kind -eq 'foreign-country' })
+    $state    = 'Gap'
+    $severity = if ($foreignSuccess.Count -gt 0) { 'Critical' } else { 'High' }
     Add-NRGFinding -ControlId $cid -State $state -Category $cat `
         -Title $title -Severity $severity -Detail $detail `
         -CurrentValue "$($anomalies.Count) out-of-home sign-in(s), $($successAnoms.Count) successful" `
-        -Remediation "Confirm whether the flagged users actually traveled. Successful sign-ins from a foreign country or a state the user never works from are high-confidence account-takeover IoCs — deep-dive those mailboxes first. Set -HomeState / -HomeCountry to override the auto-detected baseline if the modal state is wrong for this tenant."
+        -Remediation "Confirm whether the flagged users actually traveled. A successful sign-in from a foreign country is a strong account-takeover indicator — deep-dive those mailboxes first. An out-of-state success is weaker: mobile-carrier and VPN addresses often geolocate to a neighboring state, so check the address and device before treating it as access by someone else. Set -HomeState / -HomeCountry to override the auto-detected baseline if the modal state is wrong for this tenant."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -515,7 +565,18 @@ function Test-NRGSignInControlIPIntel {
         }
     }
 
+    # The address set is only as complete as the reads it came from. A failed or
+    # truncated input means suspicious addresses may be missing from it.
+    $inputs = Get-NRGSignInCollectionCompleteness -Keys 'IR-SignIn-AnonIp', 'IR-SignIn-Travel'
+    $inputNote = if (-not $inputs.Complete) { " The inputs were incomplete ($($inputs.Reasons -join '; ')), so suspicious addresses may be missing from this set." } else { '' }
+
     if ($ipToUsers.Keys.Count -eq 0) {
+        if (-not $inputs.Complete) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+                -Title $title -Severity 'Medium' `
+                -Detail "Not assessed: no suspicious source address was found to enrich, but the reads it depends on were incomplete ($($inputs.Reasons -join '; '))."
+            return
+        }
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'Medium' -Detail 'No suspicious source IPs to enrich (no anon-IP or impossible-travel events).'
         return
@@ -549,7 +610,7 @@ function Test-NRGSignInControlIPIntel {
     $resolved = @($enriched | Where-Object { (Get-NRGObjectField -Item $_ -Key 'LookupStatus' -Default '') -eq 'Resolved' })
     $noOwner  = @($enriched | Where-Object { (Get-NRGObjectField -Item $_ -Key 'LookupStatus' -Default '') -eq 'NoOwnerData' }).Count
     $capNote  = if ($ipToUsers.Keys.Count -gt $targets.Count) { " Only the first $($targets.Count) of $($ipToUsers.Keys.Count) suspicious addresses were looked up." } else { '' }
-    $lookupNote = "Registrant data came back for $($resolved.Count) of $($targets.Count) address(es) looked up; $failed lookup(s) failed and $noOwner returned no owner.$capNote"
+    $lookupNote = "Registrant data came back for $($resolved.Count) of $($targets.Count) address(es) looked up; $failed lookup(s) failed and $noOwner returned no owner.$capNote$inputNote"
 
     # Stash enrichment for the publisher.
     Set-NRGRawData -Key 'IR-SignIn-IPIntel' -Data @{
@@ -583,14 +644,14 @@ function Test-NRGSignInControlIPIntel {
             -Title $title -Severity 'High' -Detail $detail `
             -CurrentValue "$($flagged.Count) of $($resolved.Count) resolved IP(s) registered to a hosting or VPN provider name (context, not a malicious-IP verdict)" `
             -Remediation "A registrant name that matches a hosting or VPN provider is context, not a reputation verdict: legitimate users also sign in through commercial VPNs and hosted desktops, and a shared address (a corporate VPN exit, an office NAT) is possible. The detail shows how many users were seen from each address and how many succeeded. Confirm with those users before blocking, then prioritize the users who succeeded for deep-dive."
-    } elseif ($resolved.Count -eq $ipToUsers.Keys.Count) {
+    } elseif ($resolved.Count -eq $ipToUsers.Keys.Count -and $inputs.Complete) {
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'Medium' -Detail $detail `
             -CurrentValue "$($resolved.Count) IP(s) resolved, none registered to a hosting or VPN provider name"
     } else {
         Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
             -Title $title -Severity 'Medium' `
-            -Detail "Not cleared: nothing among the addresses that resolved matched a hosting or VPN provider name, but not every suspicious address could be looked up, and an unresolved address is not a clean one. $detail" `
+            -Detail "Not cleared: nothing among the addresses that resolved matched a hosting or VPN provider name, but not every suspicious address could be looked up or read, and an unresolved or unread address is not a clean one. $detail" `
             -CurrentValue "$($resolved.Count) of $($ipToUsers.Keys.Count) suspicious IP(s) resolved, none flagged"
     }
 }

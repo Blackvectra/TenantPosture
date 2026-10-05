@@ -762,6 +762,11 @@ if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
     # than the original run.
     if ($priorData.Contains('Coverage') -and $priorData.Coverage) {
         $restored = 0
+        # Every status Register-NRGCoverage accepts, read from its own ValidateSet so the two
+        # cannot drift. 'Skipped' (a -Skip flag) must survive: dropping it filed every
+        # operator-skipped control as a collection failure on the republish.
+        $validCoverage = @((Get-Command Register-NRGCoverage).Parameters['Status'].Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] } | ForEach-Object { $_.ValidValues })
         foreach ($famKey in @($priorData.Coverage.Keys)) {
             $entry  = $priorData.Coverage[$famKey]
             $status = [string](Get-NRGObjectField -Item $entry -Key 'Status' -Default '')
@@ -769,7 +774,7 @@ if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
             # Register-NRGCoverage validates Status; a baseline written by a
             # future version could carry a value this build does not know, and
             # that must not abort the republish.
-            if ($status -notin @('Collected','Partial','NotCollected','Failed')) { continue }
+            if ($status -notin $validCoverage) { continue }
             try { Register-NRGCoverage -Family ([string]$famKey) -Status $status -Note $note; $restored++ } catch { }
         }
         if ($restored -gt 0) { Write-Host "  [+] Restored coverage for $restored collector(s)" -ForegroundColor Green }

@@ -128,15 +128,20 @@ function Invoke-NRGEmailCollectSignIns {
             $anonTruncated = [bool]($resp['@odata.nextLink'])
         } catch {
             # Server-side filter rejected; fall back to client-side over the
-            # Recent bag we already collected.
-            if ($recentBag.Success -and $recentBag.Data.Events) {
-                $anonEvents = $recentBag.Data.Events | Where-Object {
-                    $_.riskEventTypes_v2 -contains 'anonymizedIPAddress' -or
-                    $_.riskEventTypes    -contains 'anonymizedIPAddress'
-                }
-                $anonSource = 'client-side over the recent read'
-                $anonTruncated = [bool]$recentBag.Data.Truncated
+            # Recent bag we already collected. With no completed recent read
+            # there is nothing to fall back to: the bag is NOT read, never an
+            # empty successful one (that read as "no anonymous-IP sign-ins").
+            $serverError = $_.Exception.Message
+            if (-not $recentBag.Success) {
+                throw "The anonymous-IP filter failed ($serverError) and the recent sign-in read it falls back to did not complete."
             }
+            Register-NRGException -Source "$collectorId-AnonIp" -Message "Server-side anonymous-IP filter failed; filtered the recent read instead: $serverError"
+            $anonEvents = @($recentBag.Data.Events | Where-Object {
+                $_.riskEventTypes_v2 -contains 'anonymizedIPAddress' -or
+                $_.riskEventTypes    -contains 'anonymizedIPAddress'
+            })
+            $anonSource = 'client-side over the recent read'
+            $anonTruncated = [bool]$recentBag.Data.Truncated
         }
         $anonBag.Data = [ordered]@{
             Count     = @($anonEvents).Count
@@ -160,8 +165,12 @@ function Invoke-NRGEmailCollectSignIns {
     try {
         $travelEvents = @()
         # Client-side over Recent bag — Graph filter syntax for nested any()
-        # on multiple event types is brittle across versions.
-        if ($recentBag.Success -and $recentBag.Data.Events) {
+        # on multiple event types is brittle across versions. Derived only from
+        # that read, so without it this bag is not read (never an empty success).
+        if (-not $recentBag.Success) {
+            throw 'Derived from the recent sign-in read, which did not complete.'
+        }
+        if ($recentBag.Data.Events) {
             $travelTags = @('unfamiliarFeatures', 'impossibleTravel', 'newCountry', 'malwareInfectedIPAddress')
             $travelEvents = @($recentBag.Data.Events | Where-Object {
                 $events_v2 = @($_.riskEventTypes_v2)
@@ -177,7 +186,7 @@ function Invoke-NRGEmailCollectSignIns {
             Count     = $travelEvents.Count
             Source    = 'client-side over the recent read'
             # Derived from the recent read, so it is only as complete as that read.
-            Truncated = [bool]($recentBag.Success -and $recentBag.Data.Truncated)
+            Truncated = [bool]$recentBag.Data.Truncated
             Events    = @($travelEvents)
         }
         $travelBag.Success = $true

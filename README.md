@@ -305,7 +305,7 @@ Config/
   distribution-list-baseline.json Distribution-list recommendations, each with its Microsoft Learn source
   clients.json                    MSP client registry (TenantId + GDAP config)
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
-  framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
+  framework-baselines/            Authoritative SCuBA (ScubaGear v2.0.0) + CIS Controls v8.1 ID lists (CI-enforced)
 
 Testing/                          96 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
@@ -336,7 +336,7 @@ Testing/                          96 Pester suites — the FULL suite gates ever
 
 **Severity distribution:** 11 Critical · 92 High · 65 Medium · 27 Low
 
-**Framework citations per control:** CIS M365 Foundations v6.0.1 · CISA SCuBA (ScubaGear v1.8.0 policy IDs) · NIST SP 800-53 Rev 5 · CMMC 2.0 · ISO/IEC 27001:2022 · MITRE ATT&CK — plus CIS Controls v8.1 safeguards, SOC 2, HIPAA, and PCI DSS references. Controls whose license requirement the tenant doesn't meet are routed to an Upgrade Unlocks section instead of dragging the score down.
+**Framework citations per control:** CIS M365 Foundations v6.0.1 · CISA SCuBA (ScubaGear v2.0.0 policy IDs) · NIST SP 800-53 Rev 5 · CMMC 2.0 · ISO/IEC 27001:2022 · MITRE ATT&CK — plus CIS Controls v8.1 safeguards, SOC 2, HIPAA, and PCI DSS references. Controls whose license requirement the tenant doesn't meet are routed to an Upgrade Unlocks section instead of dragging the score down.
 
 ### NIST SP 800-53 Rev 5 — family rollup
 
@@ -620,7 +620,7 @@ Six GitHub Actions workflows cover the repository. All run automatically on push
 | **Scorecard** | OpenSSF Scorecard supply-chain posture, weekly |
 | **Release** | On `v*` tags: CycloneDX SBOM generation + Authenticode signature/integrity verification |
 
-The framework-accuracy suite validates every SCuBA citation against the bundled ScubaGear v1.8.0 policy list, every CIS Controls citation against the v8.1 safeguard list, CMMC domain/level correctness, and ISO 27001:2022 Annex-A ranges — a wrong citation fails the PR, not the client report.
+The framework-accuracy suite validates every SCuBA citation against the bundled ScubaGear v2.0.0 policy list, every CIS Controls citation against the v8.1 safeguard list, CMMC domain/level correctness, and ISO 27001:2022 Annex-A ranges — a wrong citation fails the PR, not the client report.
 
 ---
 

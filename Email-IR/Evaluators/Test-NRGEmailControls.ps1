@@ -377,12 +377,14 @@ function Test-NRGEmailControlOutboundActivity {
                 break
             }
         }
-        # Burst detection — group by hour bucket
-        try {
-            $hour = [datetime]::Parse($m.SentDateTime).ToString('yyyy-MM-dd HH')
+        # Burst detection — group by hour bucket (UTC, culture-invariant; an
+        # unparseable time is unknown and is left out of the buckets).
+        $sentUtc = ConvertTo-NRGUtcDateTime $m.SentDateTime
+        if ($sentUtc) {
+            $hour = $sentUtc.ToString('yyyy-MM-dd HH', [cultureinfo]::InvariantCulture)
             if (-not $burstWindows.ContainsKey($hour)) { $burstWindows[$hour] = 0 }
             $burstWindows[$hour]++
-        } catch { }
+        }
     }
 
     $maxBurst = if ($burstWindows.Count -gt 0) { ($burstWindows.Values | Measure-Object -Maximum).Maximum } else { 0 }
@@ -732,7 +734,17 @@ function Test-NRGEmailControlOAuthConsents {
     }
 
     $grants = @($consentRaw.Data.Grants)
+    # The collector reads one page. A next link means more grants exist than were
+    # read: what the page holds can be reported, "none" cannot be concluded.
+    $grantsTruncated = [bool](Get-NRGNestedProperty -Object $consentRaw -Path 'Data.Truncated' -Default $false)
+    $truncNote = 'The grant list stopped at one page (Graph returned a next link), so more grants exist than were read.'
     if ($grants.Count -eq 0) {
+        if ($grantsTruncated) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+                -Title $title -Severity 'Critical' `
+                -Detail "Not cleared: no grant was on the page read. $truncNote"
+            return
+        }
         Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'Critical' `
             -Detail 'No user-principal OAuth consent grants on this account.'
@@ -753,6 +765,7 @@ function Test-NRGEmailControlOAuthConsents {
     $flagged = @()
     $watched = @()
     $identifiedFlagged = 0
+    $noPublisherFlagged = 0
     $unidentifiedFlagged = 0
     foreach ($g in $grants) {
         $scopeList = @(([string]$g.Scope) -split '\s+' | Where-Object { $_ })
@@ -768,7 +781,10 @@ function Test-NRGEmailControlOAuthConsents {
                     else { 'publisher not checked: the lookup needs Directory.Read.All' }
         if ($hits.Count -gt 0) {
             $flagged += "  - '$appLabel' ($verified): $($hits -join ', ')  [full scope: $($g.Scope)]"
-            if ($appKnown) { $identifiedFlagged++ } else { $unidentifiedFlagged++ }
+            if ($appKnown) {
+                $identifiedFlagged++
+                if (-not $g.App.PublisherName) { $noPublisherFlagged++ }
+            } else { $unidentifiedFlagged++ }
         } elseif ($soft.Count -gt 0) {
             $watched += "  - '$appLabel' ($verified): $($soft -join ', ')"
         }
@@ -778,10 +794,18 @@ function Test-NRGEmailControlOAuthConsents {
         $detail = "FOUND $($flagged.Count) grant(s) with mail/file write-or-send scopes — OAuth persistence survives password reset + MFA re-enrollment; only revoking the grant kills it.`n" +
                   ($flagged -join "`n") +
                   $(if ($unidentifiedFlagged -gt 0) { "`n`nIdentify each app first: Entra admin center > Enterprise applications > search the service principal ID (the Object ID). A Microsoft or other recognized app that holds this scope on purpose is expected; an app nobody recognizes is not." } else { '' }) +
-                  $(if ($watched.Count -gt 0) { "`nAlso review (read-level scopes):`n" + ($watched -join "`n") } else { '' })
-        # Critical when an app was identified and holds the scope; High while none was identified,
-        # because an unidentified app may be an ordinary Microsoft one.
-        $grantSeverity = if ($identifiedFlagged -gt 0) { 'Critical' } else { 'High' }
+                  $(if ($watched.Count -gt 0) { "`nAlso review (read-level scopes):`n" + ($watched -join "`n") } else { '' }) +
+                  $(if ($grantsTruncated) { "`n$truncNote" } else { '' })
+        # Critical only when an app was identified AND its lookup returned no publisher
+        # name. An identified app with a publisher name is High ("verify the app"): Graph
+        # documents publisherName as the name of the Entra tenant that published the app,
+        # so it is a lead to check, not proof either way, and a Microsoft app holding a
+        # mail scope on purpose must not read as Critical. An unidentified app is High,
+        # because it may be an ordinary Microsoft one.
+        $grantSeverity = if ($noPublisherFlagged -gt 0) { 'Critical' } else { 'High' }
+        if ($identifiedFlagged -gt $noPublisherFlagged) {
+            $detail += "`nVerify each app that names a publisher: the publisher name is the Entra tenant that published the app, not a verification. Confirm the app and publisher are ones the user and the organization expect."
+        }
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $cat `
             -Title $title -Severity $grantSeverity -Detail $detail `
             -CurrentValue "$($flagged.Count) high-risk grant(s) of $($grants.Count) total" `
@@ -793,12 +817,18 @@ function Test-NRGEmailControlOAuthConsents {
     if ($watched.Count -gt 0) {
         Add-NRGFinding -ControlId $cid -State 'Partial' -Category $cat `
             -Title $title -Severity 'High' `
-            -Detail ("No write/send-scope grants, but $($watched.Count) grant(s) carry mail/file READ scopes — verify the user recognizes each app:`n" + ($watched -join "`n")) `
+            -Detail ("No write/send-scope grants among those read, but $($watched.Count) grant(s) carry mail/file READ scopes — verify the user recognizes each app:`n" + ($watched -join "`n") + $(if ($grantsTruncated) { "`n$truncNote" } else { '' })) `
             -CurrentValue "$($watched.Count) read-scope grant(s)" `
             -Remediation 'Confirm each app with the user; revoke anything unrecognized (Entra > Users > the user > Applications).'
         return
     }
 
+    if ($grantsTruncated) {
+        Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+            -Title $title -Severity 'Critical' `
+            -Detail "Not cleared: none of the $($grants.Count) grant(s) read carry mail or file scopes. $truncNote"
+        return
+    }
     Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $cat `
         -Title $title -Severity 'Critical' `
         -Detail "Reviewed $($grants.Count) consent grant(s) — none carry mail or file scopes."
@@ -847,7 +877,9 @@ function Test-NRGEmailControlAuthMethods {
     if ($phoneCount -gt 1) { $signals += "$phoneCount phone methods registered (attackers add a second phone)" }
     $cutoff = (Get-Date).ToUniversalTime().AddDays(-14)
     $recent = @($methods | Where-Object {
-        $_.CreatedDateTime -and ([datetime]::Parse([string]$_.CreatedDateTime).ToUniversalTime() -gt $cutoff)
+        # Culture-invariant; an unparseable date is unknown, not recent and not a throw.
+        $createdUtc = ConvertTo-NRGUtcDateTime $_.CreatedDateTime
+        $createdUtc -and ($createdUtc -gt $cutoff)
     })
     if ($recent.Count -gt 0) {
         $signals += "$($recent.Count) method(s) registered in the last 14 days: " + (@($recent | ForEach-Object { $_.MethodType }) -join ', ')

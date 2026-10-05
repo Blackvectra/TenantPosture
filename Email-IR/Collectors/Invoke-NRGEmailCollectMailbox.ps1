@@ -113,10 +113,12 @@ function Invoke-NRGEmailCollectMailbox {
                 $addr = [string](Get-NRGNestedProperty -Object $r -Path 'emailAddress.address' -Default '')
                 if ($addr) { $recipients += $addr.ToLowerInvariant() }
             }
+            $sentUtc = ConvertTo-NRGUtcDateTime $m.sentDateTime
             [ordered]@{
                 Id              = $m.id
                 Subject         = [string]$m.subject
-                SentDateTime    = $m.sentDateTime
+                # ISO 8601, so the order and the reading do not depend on culture.
+                SentDateTime    = $(if ($sentUtc) { $sentUtc.ToString('o', [cultureinfo]::InvariantCulture) } else { $m.sentDateTime })
                 FromAddress     = Get-NRGNestedProperty -Object $m -Path 'from.emailAddress.address' -Default $null
                 Recipients      = $recipients
                 HasAttachments  = [bool]$m.hasAttachments

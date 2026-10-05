@@ -291,6 +291,7 @@ try {
     $evidence = Get-NRGDeepDiveEvidence
     foreach ($m in @($evidence.RequiredMissing)) { $healthGaps.Add("required source $m was not read") }
     foreach ($p in @($evidence.RequiredPartial)) { $healthGaps.Add("required source $p") }
+    foreach ($p in @($evidence.OptionalTruncated)) { $healthGaps.Add("source $p") }
     foreach ($f in $evaluatorFailures) { $healthGaps.Add($f) }
     $reportMetadata['CollectionComplete'] = ($healthGaps.Count -eq 0)
     $reportMetadata['CollectionGaps']     = @($healthGaps)

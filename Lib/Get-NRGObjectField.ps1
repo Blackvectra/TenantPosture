@@ -97,3 +97,31 @@ function Get-NRGRuleList {
     if ($null -eq $v) { return $null }
     return , @($v)
 }
+
+# Reads a timestamp from API or replayed data without depending on the
+# workstation's culture. Graph JSON can arrive as a [datetime] (already parsed)
+# or as an ISO 8601 string; older results files hold the invariant-culture
+# string a [string] cast produced ("09/25/2026 10:00:00"). A bare
+# [datetime]::Parse uses the CURRENT culture, so under en-GB that string throws
+# on any day above 12 and swaps day and month below it. Returns a UTC
+# [datetime], or $null when the value is absent or unparseable (unknown, never
+# a throw). A value with no zone is taken as UTC, which is what Graph sends.
+function ConvertTo-NRGUtcDateTime {
+    [CmdletBinding()]
+    [OutputType([datetime])]
+    param(
+        [Parameter(Mandatory = $false, Position = 0)]
+        [AllowNull()]
+        [object] $Value
+    )
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [datetimeoffset]) { return $Value.UtcDateTime }
+    $parsed = [datetime]::MinValue
+    if ($Value -is [datetime]) {
+        $parsed = $Value
+    } elseif (-not [datetime]::TryParse([string]$Value, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsed)) {
+        return $null
+    }
+    if ($parsed.Kind -eq [System.DateTimeKind]::Unspecified) { return [datetime]::SpecifyKind($parsed, [System.DateTimeKind]::Utc) }
+    return $parsed.ToUniversalTime()
+}

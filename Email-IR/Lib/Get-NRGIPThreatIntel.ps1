@@ -73,31 +73,46 @@ function Get-NRGIPGeolocation {
         $url = "https://rdap.org/ip/$IPAddress"
         $resp = Invoke-RestMethod -Uri $url -TimeoutSec $TimeoutSeconds -UseBasicParsing -ErrorAction Stop
 
-        # Country comes from the top-level "country" field on most RIRs.
-        if ($resp.country) { $result.Country = [string]$resp.country }
+        # Every field is optional in RDAP (RFC 9083) and the RIRs differ: ARIN
+        # sends no top-level "country", so a dot-read threw under StrictMode and
+        # every North American address came back Failed. Read each field through
+        # Get-NRGObjectField.
+        $country = [string](Get-NRGObjectField -Item $resp -Key 'country' -Default '')
+        if ($country) { $result.Country = $country }
         # CIDR network range
-        if ($resp.handle) { $result.CIDR = [string]$resp.handle }
-        elseif ($resp.cidr0_cidrs -and $resp.cidr0_cidrs.Count -gt 0) {
-            $result.CIDR = "$($resp.cidr0_cidrs[0].v4prefix)/$($resp.cidr0_cidrs[0].length)"
+        $handle = [string](Get-NRGObjectField -Item $resp -Key 'handle' -Default '')
+        $cidrs = @(@(Get-NRGObjectField -Item $resp -Key 'cidr0_cidrs' -Default @()) | Where-Object { $_ })
+        if ($handle) { $result.CIDR = $handle }
+        elseif ($cidrs.Count -gt 0) {
+            $prefix = Get-NRGObjectField -Item $cidrs[0] -Key 'v4prefix' -Default (Get-NRGObjectField -Item $cidrs[0] -Key 'v6prefix' -Default '')
+            $result.CIDR = "$prefix/$(Get-NRGObjectField -Item $cidrs[0] -Key 'length' -Default '')"
         }
 
-        # ASN owner is the entity with role 'registrant' or 'administrative'
-        if ($resp.entities) {
-            $owner = $resp.entities | Where-Object {
-                $_.roles -contains 'registrant' -or
-                $_.roles -contains 'administrative' -or
-                $_.roles -contains 'technical'
-            } | Select-Object -First 1
-            if ($owner) {
-                # vcardArray is the standard contact format
-                if ($owner.vcardArray -and $owner.vcardArray.Count -ge 2) {
-                    foreach ($v in $owner.vcardArray[1]) {
-                        if ($v -is [array] -and $v.Count -ge 4 -and $v[0] -eq 'fn') {
-                            $result.ASNOwner = [string]$v[3]; break
-                        }
-                    }
-                }
-                if (-not $result.ASNOwner -and $owner.handle) { $result.ASNOwner = [string]$owner.handle }
+        # The holder of the address is the entity with the 'registrant' role
+        # (RFC 9083 section 10.2.4). Administrative, technical and abuse
+        # entities are CONTACTS: RIPE lists its "Managing Director" contact
+        # first, and judging a contact's name as the owner is wrong. With no
+        # registrant the owner stays unknown (NoOwnerData). RIPE also tags its
+        # maintainer object 'registrant' (vCard kind 'individual'), so an
+        # organization registrant is preferred when there is one.
+        $vcardValue = {
+            param($Entity, [string] $Property)
+            $vc = @(Get-NRGObjectField -Item $Entity -Key 'vcardArray' -Default @())
+            if ($vc.Count -lt 2) { return $null }
+            foreach ($v in @($vc[1])) {
+                if ($v -is [array] -and $v.Count -ge 4 -and $v[0] -eq $Property) { return [string]$v[3] }
+            }
+            return $null
+        }
+        $entities = @(@(Get-NRGObjectField -Item $resp -Key 'entities' -Default @()) | Where-Object { $_ })
+        $registrants = @($entities | Where-Object { @(Get-NRGObjectField -Item $_ -Key 'roles' -Default @()) -contains 'registrant' })
+        $owner = $registrants | Where-Object { (& $vcardValue $_ 'kind') -eq 'org' } | Select-Object -First 1
+        if (-not $owner -and $registrants.Count -gt 0) { $owner = $registrants[0] }
+        if ($owner) {
+            $result.ASNOwner = & $vcardValue $owner 'fn'
+            if (-not $result.ASNOwner) {
+                $ownerHandle = [string](Get-NRGObjectField -Item $owner -Key 'handle' -Default '')
+                if ($ownerHandle) { $result.ASNOwner = $ownerHandle }
             }
         }
 

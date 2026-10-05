@@ -23,7 +23,7 @@ Describe 'Report site preserves every finding, verdict and limitation' {
         $script:Hostile = '<script>alert(1)</script>"&'
         $add = { param($id, $state, $detail, $extra = @{}) Add-NRGFinding -ControlId $id -State $state -Category 'Identity' -Title "Title $id" -Severity 'High' -Detail $detail -CurrentValue "observed-$id" -RequiredValue "required-$id" -Remediation "fix-$id" -FrameworkIds 'NIST:AC-2' @extra }
         & $add 'AAD-1.1' 'Satisfied' 'Verified: blocked by policy X.'
-        & $add 'DNS-1.3' 'Satisfied' 'ndaco.org DMARC p=quarantine (100%).' @{ Instance = 'ndaco.org' }
+        & $add 'DNS-1.3' 'Satisfied' 'contoso.com DMARC p=quarantine (100%).' @{ Instance = 'contoso.com' }
         & $add 'DNS-1.3' 'Partial'   'other.org DMARC p=quarantine but pct=50.' @{ Instance = 'other.org' }
         & $add 'AAD-1.2' 'Gap'       "Shortfall: $($script:Hostile) excluded." @{ AffectedObjects = @([ordered]@{ UserPrincipalName = 'a@x.example'; Reason = 'none' }, 'plain-string-object') }
         & $add 'AAD-11.3' 'NotApplicable' 'The risky service principal data was not collected; not assessed.'
@@ -63,7 +63,7 @@ Describe 'Report site preserves every finding, verdict and limitation' {
         }
     }
     It 'every per-domain instance is its own row' {
-        $script:Page['DNS'] | Should -Match 'ndaco\.org'; $script:Page['DNS'] | Should -Match 'other\.org'
+        $script:Page['DNS'] | Should -Match 'contoso\.com'; $script:Page['DNS'] | Should -Match 'other\.org'
     }
     It 'the verdict counts on the pages equal the finding states' {
         $pills = @([regex]::Matches(($script:Page.GetEnumerator() | Where-Object { $_.Key -ne 'index' } | ForEach-Object { $_.Value }) -join '', "<span class='pill \w+'>([^<]+)</span>") | ForEach-Object { $_.Groups[1].Value })
@@ -215,5 +215,83 @@ foo,bar" -Encoding utf8
         } finally { Pop-Location }
         Test-Path (Join-Path $base 'out\site\index.html') | Should -BeTrue
         Test-Path (Join-Path $base 'out\site\EXO.html') | Should -BeTrue
+    }
+}
+
+# Found by the security review of #106 (2026-10-04). The report site carries finding Detail,
+# observed values and affected objects (mailboxes, forwarding targets, app names), so its files get
+# the same owner-only protection as the results JSON, applied before the content is written, on
+# both callers: the entry point and the standalone rebuild, which used to republish an owner-only
+# results file into files every local user could read. And a results file is input: a control ID
+# from it must not name a file outside the site folder or break out of a link on the landing page.
+Describe 'Report site files are owner-only and a results file cannot steer file names' {
+    BeforeAll {
+        $script:Root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:Root 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        $script:Tmp = Join-Path ([IO.Path]::GetTempPath()) ("nrg-siteacl-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        $null = New-Item -ItemType Directory -Path $script:Tmp -Force
+        $script:OwnerOnly = {
+            param([string] $Path)
+            if ($IsWindows) {
+                $acl = Get-Acl -LiteralPath $Path
+                $broad = @($acl.Access | Where-Object { [string]$_.IdentityReference -match '(^|\\)(Everyone|Users|Authenticated Users)$' })
+                return ($acl.AreAccessRulesProtected -and $broad.Count -eq 0)
+            }
+            # Group and other bits (rwx rwx) clear.
+            return (([int][System.IO.File]::GetUnixFileMode($Path)) -band 0x3F) -eq 0
+        }
+        $script:Gap = @{ ControlId = 'EXO-7.2'; State = 'Gap'; Severity = 'High'; Category = 'Mail'; Title = 'External forwarding rules'
+                         Detail = 'Shortfall: 1 inbox rule forwards outside the organization.'; CurrentValue = '1 rule'; RequiredValue = 'none'
+                         FrameworkIds = ''; Remediation = 'Remove the rule.'
+                         AffectedObjects = @([ordered]@{ Mailbox = 'ceo@contoso.example'; RuleName = 'r'; ForwardTo = 'drop@evil.example' }) }
+        $script:Meta = @{ TenantDomain = 'contoso.example'; TenantId = '00000000-0000-0000-0000-000000000000'; ToolVersion = '4.14.3' }
+    }
+    AfterAll { if ($script:Tmp) { Remove-Item -LiteralPath $script:Tmp -Recurse -Force -ErrorAction SilentlyContinue } }
+
+    It 'every file the publisher writes is owner-only when it returns, before any caller-side step' {
+        $site = Join-Path $script:Tmp 'site-direct'
+        $r = Publish-NRGReportSite -Metadata $script:Meta -Findings @($script:Gap) -OutputPath $site
+        @($r.Files).Count | Should -BeGreaterThan 2
+        foreach ($f in @($r.Files)) { (& $script:OwnerOnly $f) | Should -BeTrue -Because "$(Split-Path -Leaf $f) carries tenant findings" }
+        # The action plan keeps the byte-order mark Excel needs.
+        $bytes = [System.IO.File]::ReadAllBytes((Join-Path $site 'ActionPlan.csv'))
+        @($bytes[0..2]) | Should -Be @(239, 187, 191)
+    }
+    It 'the standalone rebuild (New-NRGReportSite.ps1) writes owner-only files from an owner-only results file' {
+        $res = Join-Path $script:Tmp 'contoso-results.json'
+        Set-NRGSensitiveFileContent -Path $res -Content (@{ Metadata = $script:Meta; Findings = @($script:Gap) } | ConvertTo-Json -Depth 10)
+        $site = Join-Path $script:Tmp 'site-standalone'
+        $null = & pwsh -NoProfile -File (Join-Path $script:Root 'New-NRGReportSite.ps1') -ResultsPath $res -OutputPath $site 2>&1
+        $LASTEXITCODE | Should -Be 0
+        $files = @(Get-ChildItem -LiteralPath $site -File)
+        $files.Count | Should -BeGreaterThan 2
+        foreach ($f in $files) { (& $script:OwnerOnly $f.FullName) | Should -BeTrue -Because "$($f.Name) carries tenant findings" }
+    }
+    It 'the publisher writes only through the hardened writer' {
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:Root 'Publishers/Publish-NRGReportSite.ps1'), [ref]$null, [ref]$null)
+        $plain = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -in @('Set-Content', 'Out-File', 'Add-Content') }, $true))
+        $dotnet = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and [string]$n.Member -match '^Write(All|Lines|Text|Bytes)' }, $true))
+        ($plain.Count + $dotnet.Count) | Should -Be 0
+    }
+    It 'a control ID from a results file cannot name a file outside the site folder or break out of a link' {
+        # Two levels deep, so a '../../' escape lands inside the temp folder this test searches.
+        $site = Join-Path $script:Tmp 'a' 'b' 'site-hostile'
+        $mk ={ param($id) @{ ControlId = $id; State = 'Gap'; Severity = 'High'; Category = 'X'; Title = 't'; Detail = 'd'; CurrentValue = ''; RequiredValue = ''; FrameworkIds = ''; Remediation = '' } }
+        $hostile = @(
+            (& $mk "x'onmouseover='alert(1)-1.1"),
+            (& $mk '..\..\escape-1.1'),
+            (& $mk '../../escape-1.2'),
+            (& $mk 'EXO-6.1')
+        )
+        { $null = Publish-NRGReportSite -Metadata $script:Meta -Findings $hostile -OutputPath $site } | Should -Not -Throw
+        # Nothing written beside or above the site folder.
+        @(Get-ChildItem -LiteralPath $script:Tmp -Filter '*escape*' -Recurse -ErrorAction SilentlyContinue).Count | Should -Be 0
+        foreach ($f in @(Get-ChildItem -LiteralPath $site -Recurse -File)) {
+            $f.DirectoryName | Should -Be ((Resolve-Path -LiteralPath $site).Path)
+            $f.Name | Should -Match '^([A-Za-z]{1,12}\.html|ActionPlan\.csv)$'
+        }
+        (Get-Content -LiteralPath (Join-Path $site 'index.html') -Raw) | Should -Not -Match "onmouseover='alert"
+        # The finding itself is still reported, under an unrecognized workload.
+        (Get-ChildItem -LiteralPath $site -Filter '*.html' | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join "`n" | Should -Match 'onmouseover=&#39;alert'
     }
 }

@@ -109,7 +109,7 @@
   }
 
   // The scan is pinned to a tenant DOMAIN. People type the account they sign in with, so a user
-  // name (admin@ndaco.org) is reduced to its domain instead of being refused.
+  // name (admin@contoso.com) is reduced to its domain instead of being refused.
   function normalizeDomain(value) {
     let v = String(value || '').trim().toLowerCase();
     const at = v.lastIndexOf('@');
@@ -121,7 +121,7 @@
     domain = normalizeDomain(domain);
     if (!domain) { setStatus('Enter a tenant domain first'); return; }
     if (!/^[a-z0-9.\-]+$/.test(domain)) {
-      setStatus('Enter the tenant domain, for example ndaco.org (letters, numbers, dots and hyphens only)');
+      setStatus('Enter the tenant domain, for example contoso.com (letters, numbers, dots and hyphens only)');
       return;
     }
     if (!confirm('Run a full assessment of ' + (displayName || domain) + '?')) return;

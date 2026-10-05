@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+- **Review of this release (2026-10-04): failed, truncated or unread evidence no longer produces a
+  clean or failed verdict, and severities match the evidence.** Four reviewers checked the PR head
+  `9eeb60b`; every confirmed defect below has a regression test that fails on that head (61 such
+  failures across `Testing/NRG.Review106CA/DLP/Site.Tests.ps1`,
+  `Email-IR/Testing/NRG.Review106IR.Tests.ps1` and new cases in `NRG.IREntryPoints.Tests.ps1`).
+  - Conditional Access: a policy for "Any device" (`includePlatforms` `all`) is no longer read as
+    limited to some platforms (it had made AAD-1.1 Partial and affected AAD-1.2, 1.3, 11.1 and
+    EXO-1.6); `excludePlatforms` is now collected, and `all` with exclusions is narrowing. AAD-2.1
+    leaves `mfa-admins` / `admin-phish-resistant-mfa` not assessed when the role catalog was not read,
+    instead of scoring them Missing.
+  - DLP and Defender: a failed DLP policy read, or a policy whose Mode is empty or unrecognized,
+    leaves DEF-4.1, DEF-4.2 and PVW-3.4 not assessed instead of a Gap (only `Enable` enforces; only
+    the documented test and off modes are "not enforcing"); test-mode-only DLP is a Gap, never
+    Partial; DEF-2.1 leaves unread accepted domains not assessed instead of a shortfall.
+  - Incident response: an anonymous-IP or travel read derived from a failed recent read is not a
+    successful read; SIGNIN-1.2, 1.3, 1.5 and 1.6 and EMAIL-4.1 no longer conclude "nothing found" from
+    a failed or truncated read (an optional source that stopped at its page cap now makes the dive
+    incomplete); the batch sign-in triage reports a client that was not cleared, failed to sign in
+    or errored as such and exits non-zero (10 critical, then 4, 1, 3). Both real entry points are
+    proven end to end in child processes with every read failing (429) and with truncated reads.
+  - Incident-response reliability: the IP owner lookup reads RDAP fields safely (it failed on every
+    ARIN address) and takes the owner only from the registrant (it had judged a RIPE contact's name);
+    SIGNIN-1.2 is Critical only for a successful anonymous-IP sign-in, SIGNIN-1.6 only for a
+    successful sign-in from another country, EMAIL-4.1 only for an identified app with no publisher
+    name; each distinct reason scores once per user; timestamps are kept as ISO 8601 and parsed with
+    the invariant culture (EMAIL-4.2 threw on a non-US workstation).
+  - Report site: a run with no findings, and a results file with an empty findings list, build an
+    empty site; unscored controls take their category from `Get-NRGAssessmentScope`, so skipped
+    workloads read "skipped by the operator" and get no "re-collect" row; an errored check reads
+    "Not assessed (the check errored)", is counted apart from Gaps and is told to re-run, not to
+    remediate; `-FromResults` keeps `Skipped` coverage on restore.
+  - Items confirmed but left as follow-ups are listed in `docs/KNOWN-ISSUES.md`.
+
 - **Distribution-list scan (`-DistributionListsOnly`).** NRG hardens distribution lists as a service
   because a list can be reached by spoofed or outside mail even when the domain's DMARC policy is
   reject: DMARC judges only mail that claims your own domain in the From address, and mail can also
@@ -100,34 +133,32 @@
   `sharepointonline.com` and `microsoft365.com` are Microsoft domains. Six new tests in
   `NRG.EmailIR.Tests.ps1`, all failing on the old code.
 
-- **A scan started from the web GUI could not sign in to Graph.** The GUI runs the assessment in a
-  hidden child process; Windows' broker sign-in (WAM) needs a parent window handle, so Graph failed
-  with "A window handle must be configured" while Exchange, Purview and Teams (which use
-  `-DisableWAM`) connected, leaving a scan with no Entra ID data. The GUI now sets
-  `NRG_DISABLE_WAM=1` for the child and `Connect-NRGServices` then calls
-  `Set-MgGraphOption -DisableLoginByWAM $true` before `Connect-MgGraph` (guarded: only when the SDK
-  has the option). The sign-in goes through the system browser, with the same MFA and Conditional
-  Access. Pinned by a static test; not yet confirmed by a live GUI scan.
+- **A scan started from the web GUI still cannot sign in to Graph (known limitation).** The GUI runs
+  the assessment in a hidden child process and Graph's Windows broker sign-in (WAM) needs a window.
+  A first attempt (`NRG_DISABLE_WAM` plus `Set-MgGraphOption -DisableLoginByWAM`) was removed in the
+  review below: the SDK honors that option only for a custom client id, and the cmdlet writes a
+  settings file to the operator's profile on every call. Run the assessment from a PowerShell window;
+  see `docs/KNOWN-ISSUES.md`.
 
 - **Web GUI, first run on a real workstation.** Two defects showed on screen: a user name typed in
-  the tenant box (`admin@ndaco.org`) was refused as "Invalid domain format" and the message did not
+  the tenant box (`admin@contoso.com`) was refused as "Invalid domain format" and the message did not
   say what to enter; and the run list showed the incident-response mailbox run (a folder named after
   a user) as an assessment run. The box now reduces a user name to its domain and the refusal says
-  "Enter the tenant domain, for example ndaco.org"; `*-email-results.json` is no longer listed as a
+  "Enter the tenant domain, for example contoso.com"; `*-email-results.json` is no longer listed as a
   run. The server-side domain check is unchanged. The test that starts a real server now seeds an
   assessment run and a mailbox run and checks the list (it runs only where Pode is installed, so CI
   skips it; run it locally).
 
 - **SIGNIN-1.4 no longer counts users already reviewed as safe.** The risky-user read removes
   dismissed and remediated users but not `confirmedSafe`, and the evaluator reported every returned
-  user as "FOUND N risky" (a High Gap) and scored each 15 points: against NDACo one at-risk user
+  user as "FOUND N risky" (a High Gap) and scored each 15 points: on the first live run one at-risk user
   appeared as five, and four confirmed-safe users entered the triage ranking. Confirmed-safe,
   dismissed and remediated users are now listed as "not counted" (named, never silently dropped);
   an unrecognized risk state stays active (unknown is not safe); only active users are scored and
   ranked, and a tenant whose only entries were reviewed gets Satisfied. Pinned in
   `NRG.SignInTriage.Tests.ps1` (two of the four new tests fail on the old evaluator).
 
-- **First live runs of the incident-response entry points.** Against NDACo, the account's mailbox
+- **First live runs of the incident-response entry points.** On the first live run, the account's mailbox
   reads answered NotFound and the sign-in reads answered BadRequest, and three console lines were
   misleading or silent: (1) the email assessment printed "Mailbox data collected" while every
   required mailbox read had failed; it now says "Mailbox data NOT read", names the sources, and
@@ -173,8 +204,8 @@
   cause. The sentence appears on the console, in the Markdown summary and on the report-site
   landing page; `ActionPlan.csv` gains a "Relationship to other controls" column. Two same-setting
   pairs the first full run exposed are now linked for scoring so one setting costs once: SPO-1.4 /
-  SPO-3.4 (guest-access expiration) and SPO-2.6 / SPO-2.7 (email attestation); the NDACo Gap count
-  drops from 69 to 67 on the same data. `NRG.GapSummary.Tests.ps1` pins Total = Distinct + Views and
+  SPO-3.4 (guest-access expiration) and SPO-2.6 / SPO-2.7 (email attestation); on the first full run's data the Gap
+  count drops from 69 to 67. `NRG.GapSummary.Tests.ps1` pins Total = Distinct + Views and
   that a view of a control with no shortfall stays distinct.
 
 - **The DEF-4.1 / DEF-4.5 disagreement with ScubaGear is explained: a different standard, not a detection fault.**
@@ -241,7 +272,7 @@
   table and the tests follow; a matrix test covers restricted/unrestricted consent against workflow
   enabled/disabled/unread.
 
-- **First full-tenant run (NDACo, Graph connected): two reader-facing fixes.** (1) The report site showed
+- **First full-tenant run (Graph connected): two reader-facing fixes.** (1) The report site showed
   "Independent scan: Pass" beside an NRG Gap for AAD-12.4, AAD-15.1 and AAD-15.2, although the mapping
   records ScubaGear's MS.AAD.5.2 as a different requirement; it now says "Different requirement
   (context only, not compared)" and such a rule is never listed as a disagreement. Same-requirement
@@ -555,6 +586,37 @@
   from Intune), and Effective requires complete, current coverage. Results with
   no recorded coverage read Unknown. Tests: `NRG.CallBinding`, `NRG.SignInHonesty`,
   `NRG.DeviceEvidence`, plus additions to `NRG.SignInTriage`.
+
+- **GUI error responses carried Pode's HTML error page, not the body the
+  handler wrote.** `POST /api/scan` (400 `domain is required` / `invalid
+  domain format`), `GET /api/scan/:id/status` (404 `unknown runId`) and
+  `GET /api/runs/:tenant/:id/report` (400 `Invalid path segment.` / 404
+  `Report not found.`) called `Set-PodeResponseStatus` and then
+  `Write-PodeJsonResponse` / `Write-PodeTextResponse`.
+  `Set-PodeResponseStatus` renders Pode's error page immediately, so the
+  client received the right status and content type and a body of the page's
+  first N bytes (N = the handler body's length): `<html
+  style='background-color: #0`. The UI shows the scan body verbatim, so the
+  operator read "Could not start scan: <html style=...". The status now
+  rides on the write (`-StatusCode`) on all five paths. Pinned by new
+  assertions in the live-server context of `NRG.WebServer.Tests.ps1`, which
+  boots a real server (Pode 2.10+ required; skipped where it is absent) and
+  checks status, content type and the body: JSON with the expected `error`
+  for the scan routes, the exact handler text for the report route (its 400
+  is reached with an encoded backslash, `%5C`); each fails against the old
+  handlers. No tenant call is made, the server stays loopback-only, and no
+  scan is started.
+
+- **`Invoke-NRGBatchAssessment.ps1` could not start.** It declared
+  `[CmdletBinding(SupportsShouldProcess)]` and its own `[switch] $WhatIf`;
+  PowerShell adds `-WhatIf` itself for `SupportsShouldProcess`, so every
+  invocation, `-WhatIf` included, failed at binding with "A parameter with
+  the name 'WhatIf' was defined multiple times". It is now
+  `[CmdletBinding()]`; the script's own `-WhatIf` (list the clients and
+  exit) is unchanged, and the unused `-Confirm` goes with it. Found in #107.
+  `NRG.Security.Tests.ps1` now fails on any script or function that declares
+  `WhatIf`/`Confirm` beside `SupportsShouldProcess`, and reads the batch
+  runner's parameter metadata.
 
 - **Defects found by the first live baseline validation (NRGTS, 2026-09-29),
   fixed without touching a single verdict.** DNS collection ran only inside
@@ -2230,9 +2292,9 @@ Patch release closing the correctness sweep defined in `docs/CORRECTNESS-SWEEP-v
 
 ### Security / privacy
 
-- **`.gitignore` now excludes `output/`.** NRG had the same gap as NLS (only `Reports/` was excluded); NRG never had real client data committed because the port excluded `output/` at copy time, but future `Invoke-NRGAssessment` runs would have started tracking output files.
+- **`.gitignore` now excludes `output/`.** NRG had the same gap as NLS (only `Reports/` was excluded); future `Invoke-NRGAssessment` runs would have started tracking output files. (Correction, 2026-10-04: this entry said NRG never had real client data committed. That was wrong: client assessment output was uploaded to `output/` on 2026-05-12 and 2026-05-18, removed from the tree on 2026-05-19 and 2026-05-26, and remains in git history.)
 - **Sample HTML sanitization.** `sample-report/example-assessment.html` had 7 occurrences of real personal domain `mattlevorson.com` (secondary domain on the source tenant) and 2 admin display names rendered as `NRG Technology Services / NextLayerSec LLC` (collision from `Matthew Levorson → NRG Technology Services / NextLayerSec LLC` sanitization). Replaced with `example2.com` / `Admin 2` / `Admin 3`.
-- **Branding/PII leaks** in initial NRG port surfaced and fixed: NRG phone number in `branding.psd1`, "North Dakota" geographic identifier in CLAUDE.md, real client names NDACo / Dunn County in sample configs.
+- **Branding/PII leaks** in initial NRG port surfaced and fixed: NRG phone number in `branding.psd1`, "North Dakota" geographic identifier in CLAUDE.md, real client names in sample configs.
 
 ### Release engineering
 

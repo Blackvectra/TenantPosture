@@ -114,12 +114,17 @@ function Invoke-NRGEmailCollectUserSecurity {
             # display fields the operator needs to recognize their own
             # methods vs an attacker's.
             $mType = ([string]$m['@odata.type']) -replace '^#microsoft\.graph\.', ''
-            $created = $null
+            $rawCreated = $null
             if ($m.PSObject -and ($m.PSObject.Properties.Name -contains 'createdDateTime')) {
-                $created = [string]$m.createdDateTime
+                $rawCreated = $m.createdDateTime
             } elseif ($m -is [hashtable] -and $m.ContainsKey('createdDateTime')) {
-                $created = [string]$m['createdDateTime']
+                $rawCreated = $m['createdDateTime']
             }
+            # Keep ISO 8601: a [string] cast of a parsed DateTime gives the
+            # invariant "MM/dd/yyyy" form, which a reader in another culture
+            # misreads. An unparseable value is kept as text (read as unknown).
+            $createdUtc = ConvertTo-NRGUtcDateTime $rawCreated
+            $created = if ($createdUtc) { $createdUtc.ToString('o', [cultureinfo]::InvariantCulture) } elseif ($null -ne $rawCreated) { [string]$rawCreated } else { $null }
             $display = $null
             foreach ($fld in @('displayName', 'phoneNumber', 'emailAddress')) {
                 $v = $null

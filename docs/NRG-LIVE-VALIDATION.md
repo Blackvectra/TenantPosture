@@ -7,7 +7,7 @@ shows it is right about a tenant.
 
 ## 1. Prepare
 
-- Branch: the current head of PR #106 (`claude/nls-assessment-nrg-update-WWQcp`). Do not merge first.
+- Version: `main` at or after the merge of PR #106 (the detection-accuracy, report-site and incident-response changes this runbook validates).
 - Use a workstation with PowerShell 7, the Microsoft Graph and Exchange Online modules, and (for SharePoint) the SharePoint Online Management Shell. The assessment is read-only: it makes no change to the tenant.
 - Decide, and do not invent, the organizational standards the tool cannot know. Until you supply them, the controls that need them report that component **not assessed**:
   - the monitoring mailbox: `-MonitoringAddress alerts@your-domain.com` (or `MonitoringAddresses` in `Config/clients.json`)

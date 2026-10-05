@@ -84,30 +84,12 @@ Describe 'Tenant onboarding is outside the read-only module' {
             # write cmdlet for the reader is fine; calling one is not.
             foreach ($f in Get-ChildItem -LiteralPath (Join-Path $script:RepoRoot $d) -Recurse -Filter '*.ps1' -ErrorAction SilentlyContinue) {
                 $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
-                # One named exception: Set-MgGraphOption -DisableLoginByWAM changes how THIS process's Graph
-                # SDK opens its sign-in window (a hidden child has no window handle); it sends nothing to
-                # the tenant. Allowed only in Connect-NRGServices.ps1, and only with that one parameter
-                # (pinned by the next test).
                 $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and
-                               "$($n.GetCommandName())" -match '^(New|Update|Remove|Set)-Mg[A-Z]' -and
-                               -not ("$($n.GetCommandName())" -eq 'Set-MgGraphOption' -and $f.Name -eq 'Connect-NRGServices.ps1') }, $true) |
+                               "$($n.GetCommandName())" -match '^(New|Update|Remove|Set)-Mg[A-Z]' }, $true) |
                     ForEach-Object { "$($f.FullName):$($_.Extent.StartLineNumber) $($_.GetCommandName())" }
             }
         }
         @($hits) | Should -BeNullOrEmpty -Because 'tenant writes belong in Onboard/ or Apply/, never in the read-only module'
-    }
-    It 'the one allowed Set-Mg* call is a local SDK option: only Set-MgGraphOption -DisableLoginByWAM, only in Connect-NRGServices.ps1' {
-        $all = foreach ($d in 'Lib', 'Collectors', 'Evaluators', 'Publishers', 'Email-IR/Lib', 'Email-IR/Collectors', 'Email-IR/Evaluators', 'Email-IR/Publishers') {
-            foreach ($f in Get-ChildItem -LiteralPath (Join-Path $script:RepoRoot $d) -Recurse -Filter '*.ps1' -ErrorAction SilentlyContinue) {
-                $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
-                foreach ($c in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and "$($n.GetCommandName())" -eq 'Set-MgGraphOption' }, $true)) {
-                    [pscustomobject]@{ File = $f.Name; Params = @($c.CommandElements | Where-Object { $_ -is [System.Management.Automation.Language.CommandParameterAst] } | ForEach-Object { $_.ParameterName }) }
-                }
-            }
-        }
-        @($all).Count | Should -Be 1
-        @($all)[0].File | Should -Be 'Connect-NRGServices.ps1'
-        @($all)[0].Params | Should -Be @('DisableLoginByWAM')
     }
     It '-RegisterApp still works: the entry script loads the onboarding file for that path' {
         $entry = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Invoke-NRGAssessment.ps1') -Raw

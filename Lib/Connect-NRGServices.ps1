@@ -366,18 +366,6 @@ function Connect-NRGServices {
                 # WarningAction: the SDK's multi-line WAM notice is replaced by
                 # the one-line hint below. WAM itself stays on.
                 Write-Host "      Sign-in window may open behind this one." -ForegroundColor DarkGray
-                # WAM (the default on Windows) needs a parent window handle. A scan started from the
-                # web GUI runs in a hidden child process that has none, and Graph then fails with "A window
-                # handle must be configured". The GUI sets NRG_DISABLE_WAM=1 for that child: the SDK signs
-                # in through the system browser instead (same MFA and Conditional Access, as with the
-                # Exchange and Purview -DisableWAM switch).
-                if ($env:NRG_DISABLE_WAM -eq '1') {
-                    $setMgOption = Get-Command Set-MgGraphOption -ErrorAction SilentlyContinue
-                    if ($setMgOption -and $setMgOption.Parameters.ContainsKey('DisableLoginByWAM')) {
-                        Set-MgGraphOption -DisableLoginByWAM $true
-                        Write-Host "      Sign-in uses the system browser (no window handle is available here)." -ForegroundColor DarkGray
-                    }
-                }
                 $mgConnectParams = @{ Scopes = $scopes; ContextScope = 'Process'; NoWelcome = $true; ErrorAction = 'Stop'; WarningAction = 'SilentlyContinue' }
                 if ($ExpectedTenantId) { $mgConnectParams['TenantId'] = $ExpectedTenantId }
                 Connect-MgGraph @mgConnectParams
