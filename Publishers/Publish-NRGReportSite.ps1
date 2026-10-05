@@ -232,7 +232,9 @@ function Publish-NRGActionPlan {
     $hdr = @('Control ID','Instance','Workload','Security topic','Control','NRG verdict','Risk severity','Check type','Action type','Relationship to other controls','Observed','Required','Why (verified / shortfall / not assessed)','Remediation','Suggested owner area','Owner','Target date','Resolution status','Evidence of resolution','Notes')
     $lines.Add(($hdr | ForEach-Object { '"' + ($_ -replace '"', '""') + '"' }) -join ',')
     foreach ($o in @($out)) { $lines.Add((($hdr | ForEach-Object { '"' + ((ConvertTo-NRGCsvCell $o[$_]) -replace '"', '""') + '"' }) -join ',')) }
-    [System.IO.File]::WriteAllLines($Path, $lines, [System.Text.UTF8Encoding]::new($true))
+    # Owner-only before any content lands (Set-NRGSensitiveFileContent), with the byte-order mark Excel needs.
+    $csv = ($lines -join [Environment]::NewLine) + [Environment]::NewLine
+    Set-NRGSensitiveFileContent -Path $Path -Content $csv -Encoding ([System.Text.UTF8Encoding]::new($true))
     return @($out).Count
 }
 
@@ -250,7 +252,7 @@ function Publish-NRGReportSite {
         [AllowNull()] $LicenseProfile = $null,
         [string] $ScubaResultsPath
     )
-    foreach ($req in 'ConvertTo-NRGHtmlSafe', 'Get-NRGObjectField', 'Get-NRGScubaAlignment') {
+    foreach ($req in 'ConvertTo-NRGHtmlSafe', 'Get-NRGObjectField', 'Get-NRGScubaAlignment', 'Set-NRGSensitiveFileContent') {
         if (-not (Get-Command $req -ErrorAction SilentlyContinue)) { throw "$req not loaded: refusing to generate the report site without it." }
     }
     if ($OutputPath -match '\.\.[\\/]') { throw 'Path traversal not allowed in OutputPath.' }
@@ -379,7 +381,8 @@ table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nt
             $body += '</tbody></table></div>'
         }
         $f = Join-Path $OutputPath "$wl.html"
-        Set-Content -LiteralPath $f -Value (& $shell $name $body $wl) -Encoding utf8
+        # Every page carries tenant findings: owner-only before the content is written, on every caller.
+        Set-NRGSensitiveFileContent -Path $f -Content (& $shell $name $body $wl)
         $written.Add($f)
     }
 
@@ -416,7 +419,7 @@ table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nt
     }
     $landing += "<h2>Action plan</h2><div class='card'><p><a href='ActionPlan.csv'>ActionPlan.csv</a>: every shortfall to fix, component to verify and standard to approve, with blank owner, target date, resolution status and evidence columns.</p></div>"
     $lf = Join-Path $OutputPath 'index.html'
-    Set-Content -LiteralPath $lf -Value (& $shell 'Overview' $landing '') -Encoding utf8
+    Set-NRGSensitiveFileContent -Path $lf -Content (& $shell 'Overview' $landing '')
     $written.Add($lf)
     $planCount = Publish-NRGActionPlan -Rows $rows -Path (Join-Path $OutputPath 'ActionPlan.csv')
     $written.Add((Join-Path $OutputPath 'ActionPlan.csv'))

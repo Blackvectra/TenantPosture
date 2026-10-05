@@ -217,3 +217,59 @@ foo,bar" -Encoding utf8
         Test-Path (Join-Path $base 'out\site\EXO.html') | Should -BeTrue
     }
 }
+
+# Found by the security review of #106 (2026-10-04). The report site carries finding Detail,
+# observed values and affected objects (mailboxes, forwarding targets, app names), so its files get
+# the same owner-only protection as the results JSON, applied before the content is written, on
+# both callers: the entry point and the standalone rebuild, which used to republish an owner-only
+# results file into files every local user could read.
+Describe 'Report site files are owner-only' {
+    BeforeAll {
+        $script:Root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:Root 'NRG-Assessment.psm1') -Force -ErrorAction Stop
+        $script:Tmp = Join-Path ([IO.Path]::GetTempPath()) ("nrg-siteacl-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        $null = New-Item -ItemType Directory -Path $script:Tmp -Force
+        $script:OwnerOnly = {
+            param([string] $Path)
+            if ($IsWindows) {
+                $acl = Get-Acl -LiteralPath $Path
+                $broad = @($acl.Access | Where-Object { [string]$_.IdentityReference -match '(^|\\)(Everyone|Users|Authenticated Users)$' })
+                return ($acl.AreAccessRulesProtected -and $broad.Count -eq 0)
+            }
+            # Group and other bits (rwx rwx) clear.
+            return (([int][System.IO.File]::GetUnixFileMode($Path)) -band 0x3F) -eq 0
+        }
+        $script:Gap = @{ ControlId = 'EXO-7.2'; State = 'Gap'; Severity = 'High'; Category = 'Mail'; Title = 'External forwarding rules'
+                         Detail = 'Shortfall: 1 inbox rule forwards outside the organization.'; CurrentValue = '1 rule'; RequiredValue = 'none'
+                         FrameworkIds = ''; Remediation = 'Remove the rule.'
+                         AffectedObjects = @([ordered]@{ Mailbox = 'ceo@contoso.example'; RuleName = 'r'; ForwardTo = 'drop@evil.example' }) }
+        $script:Meta = @{ TenantDomain = 'contoso.example'; TenantId = '00000000-0000-0000-0000-000000000000'; ToolVersion = '4.14.3' }
+    }
+    AfterAll { if ($script:Tmp) { Remove-Item -LiteralPath $script:Tmp -Recurse -Force -ErrorAction SilentlyContinue } }
+
+    It 'every file the publisher writes is owner-only when it returns, before any caller-side step' {
+        $site = Join-Path $script:Tmp 'site-direct'
+        $r = Publish-NRGReportSite -Metadata $script:Meta -Findings @($script:Gap) -OutputPath $site
+        @($r.Files).Count | Should -BeGreaterThan 2
+        foreach ($f in @($r.Files)) { (& $script:OwnerOnly $f) | Should -BeTrue -Because "$(Split-Path -Leaf $f) carries tenant findings" }
+        # The action plan keeps the byte-order mark Excel needs.
+        $bytes = [System.IO.File]::ReadAllBytes((Join-Path $site 'ActionPlan.csv'))
+        @($bytes[0..2]) | Should -Be @(239, 187, 191)
+    }
+    It 'the standalone rebuild (New-NRGReportSite.ps1) writes owner-only files from an owner-only results file' {
+        $res = Join-Path $script:Tmp 'contoso-results.json'
+        Set-NRGSensitiveFileContent -Path $res -Content (@{ Metadata = $script:Meta; Findings = @($script:Gap) } | ConvertTo-Json -Depth 10)
+        $site = Join-Path $script:Tmp 'site-standalone'
+        $null = & pwsh -NoProfile -File (Join-Path $script:Root 'New-NRGReportSite.ps1') -ResultsPath $res -OutputPath $site 2>&1
+        $LASTEXITCODE | Should -Be 0
+        $files = @(Get-ChildItem -LiteralPath $site -File)
+        $files.Count | Should -BeGreaterThan 2
+        foreach ($f in $files) { (& $script:OwnerOnly $f.FullName) | Should -BeTrue -Because "$($f.Name) carries tenant findings" }
+    }
+    It 'the publisher writes only through the hardened writer' {
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:Root 'Publishers/Publish-NRGReportSite.ps1'), [ref]$null, [ref]$null)
+        $plain = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -in @('Set-Content', 'Out-File', 'Add-Content') }, $true))
+        $dotnet = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and [string]$n.Member -match '^Write(All|Lines|Text|Bytes)' }, $true))
+        ($plain.Count + $dotnet.Count) | Should -Be 0
+    }
+}
