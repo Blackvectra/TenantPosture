@@ -69,8 +69,8 @@
   `Set-DistributionGroup ... -AcceptMessagesOnlyFromSendersOrMembers` with each member's primary SMTP
   address (text only; a snapshot), and withholds it, with the reason, when it could reject people it
   should not (members partly read, an address that cannot be quoted safely, an allow list that already
-  exists, and others). A list with an external member is not given the require-authenticated-senders
-  command, which would stop the external member sending.
+  exists, and others). A list with external members is held for a business-purpose review before the
+  require-authenticated-senders change.
   Where Microsoft's own pages disagree it says so rather than choosing: the troubleshooting page says
   the IP Allow List does not override DMARC failures and the allowlist page says mail from allowed IPs
   skips SPF, DKIM and DMARC. An own-domain entry on an anti-spam allow list carries Microsoft's
@@ -91,24 +91,32 @@
   read back out of rendered text; the rule classification runs once, not once per list; the CSV carries each recommendation's
   explanation once (`Reference` rows) instead of on every row; the Exchange floor and Store-build wording is one function
   (`Get-NRGExoPreflightNotes`, 396 exports) shared with the full run, and the scan now checks the installed module's version range.
-  **Remediation bundles.** Every command the worksheet prints is now a bundle (`Lib/New-NRGDistributionListRemediation.ps1`): the
-  state the scan read, a `Get-*` check, a `-WhatIf` preview that is the apply command plus `-WhatIf` and nothing else, the apply on
-  its own line, a check afterwards, and a rollback that restores the **captured** state, never a generic inverse (`False` then `$true`
-  then `$false`; `ApprovalRequired` then `Closed` then `ApprovalRequired`; a removed IP Allow List entry is re-added with
-  `@{Add=...}`). A recommendation whose original state is not known, is outside Microsoft's documented set, or cannot be quoted safely
-  is withheld with its reason and carries no command. Synchronized lists, lists with an external member (DL-1.1), preset anti-spam
-  policies and ambiguous names get a withheld bundle, not a command. A change to every recipient (DL-3.1 to DL-3.3) is stricter:
-  a backup step, `-Confirm` on the apply and the rollback, one bundle per rule or policy so one apply has one rollback, and no bundle
-  when no rollback can be built. `NRG.DistributionListRemediation.Tests.ps1` pins all of it, the apply never sharing a line or a CSV
-  cell with the preview, and a fixed command grammar that no tenant text can extend. The catalog's `AdminCommands` and `RuleCommand`
-  became per-control `Remediation` templates (`NRG.DistributionListCatalog.Tests.ps1` requires every `Set-*` rollback to write
-  `{Before}` or undo exactly what the apply changed); the CSV's `AdminCommand` column is replaced by `Impact`, `Step`, `Command` and
-  `Expect` columns, one row per step, so a cell never holds two commands. Microsoft documents no clearing with `$null` for
-  `AcceptMessagesOnlyFromSendersOrMembers` or `ModeratedBy`, so those two rollbacks (restoring a captured empty list) say so; an
-  ownerless list's owner is one-way. `docs/EXCHANGE-RBAC-DISTRIBUTION-LISTS.md` lists the read-only cmdlets the scan calls, what
-  Microsoft documents about the access they need, and how to verify it in a tenant (`Get-ManagementRole -Cmdlet`), pinned against the
-  collector by `NRG.DistributionListRbacDoc.Tests.ps1`. A versioned JSON model of the worksheet and an opt-in DMARC enrichment are
-  follow-ups, deliberately not part of this change.
+  **Remediation records.** Every command the worksheet prints is now one of three records (`Lib/New-NRGDistributionListRemediation.ps1`).
+  A reversible **bundle** carries the state the scan read (typed, and as JSON in a CSV column), a `Get-*` check with a **Compare** that prints
+  `True` only when the live value equals the captured value, a `-WhatIf` preview that is the apply command plus `-WhatIf` and nothing else, the
+  apply on its own line, a verify Compare against the new value, and a rollback that restores the **captured** value, never a generic inverse,
+  proved by the same Compare (`False` then `$true` then `$false`; `ApprovalRequired` then `Closed` then `ApprovalRequired`; a removed IP Allow
+  List entry is re-added with `@{Add=...}`). **Every bundle has a rollback; none is one-way.** A labeled **manual action** is outside the
+  bundles: an owner for an ownerless list (a list must keep one) and an allowed-senders or moderator list captured empty (restoring it means
+  clearing with `$null`, which Microsoft does not document); it has the check, Compare and preview, a Change step, and says in words how to undo
+  it, with no rollback command. A **withheld** record has a reason and no command. **No captured state, no command:** an unknown original, a
+  value outside Microsoft's documented set, a name that cannot be quoted, or an entry not in the captured list is withheld. Synchronized
+  lists, preset anti-spam policies and ambiguous names are withheld with the reason. A list with external members is held for a
+  **business-purpose review** before "require authenticated senders" (an external member is not an external sender), no longer described as
+  technically unsuitable. A change to every recipient (DL-3.1 to DL-3.3) is stricter: a required **capture of the current configuration** (an
+  inspection the administrator must save, not a backup), `-Confirm` on the apply and the rollback, one bundle per rule or policy so one apply
+  has one rollback, and no record when no rollback can be built; it is never a manual action. Where Exchange returns names or GUIDs the Compare
+  is a count and says so. `NRG.DistributionListRemediation.Tests.ps1` pins all of it, and **runs every Compare against stubbed `Get-*` objects**
+  (equal in a different order and case is True; one entry missing or extra is False; `Open` is not an acceptable stand-in for a captured
+  `ApprovalRequired`), plus the apply never sharing a line or a CSV cell with the preview and a fixed command grammar no tenant text can extend.
+  Every Compare starts with `(` or `[`, because a spreadsheet prefixes an apostrophe to a cell starting with `-`, `=`, `+` or `@`, which
+  would break the pasted expression. The catalog's `AdminCommands` and `RuleCommand` became per-control `Remediation` templates; the CSV's
+  `AdminCommand` column is replaced by `Impact`, `Step`, `Command`, `Expect` and `CapturedJson` columns, one row per step (a manual action has
+  its own `Manual action` row type), so a cell never holds two commands. `docs/EXCHANGE-RBAC-DISTRIBUTION-LISTS.md` lists the read-only
+  cmdlets the scan calls, what Microsoft documents about the access they need, and how to verify it in a tenant (`Get-ManagementRole
+  -Cmdlet`), pinned against the collector by `NRG.DistributionListRbacDoc.Tests.ps1`; `docs/DL-REMEDIATION-VALIDATION-RUNBOOK.md` is the one
+  controlled test on a disposable cloud-only list that would validate the records, and **has not been run**. A versioned JSON model of the
+  worksheet and an opt-in DMARC enrichment are follow-ups, deliberately not part of this change.
   A last hardening pass: a value holding an invisible or direction-changing character (a bidirectional override, a zero-width
   character, the byte order mark, a tag character: "Trojan Source") is refused in a printed command, because every command is reviewed by
   eye, and is shown as a visible `<U+XXXX>` marker in both files instead of passing through; no scan file may contain one either.

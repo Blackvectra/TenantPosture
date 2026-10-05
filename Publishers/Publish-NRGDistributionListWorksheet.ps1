@@ -72,8 +72,10 @@ function Format-NRGDlWrap {
     return @($lines)
 }
 
-# One remediation bundle as text lines. The Apply is its own labeled step, never on the same line as the Preview, and every
-# command is on a line of its own beginning with "> " so it can be selected whole.
+# One remediation record as text lines: a reversible BUNDLE, a labeled MANUAL ACTION (no rollback command, outside the bundles),
+# or a WITHHELD record (a reason, no command). The apply is its own labeled step, never on the same line as the preview, and every
+# command is on a line of its own beginning with "> " so it can be selected whole. A Compare is a read-only expression whose output
+# must be True: it is how a check, a verify and a rollback establish a fact instead of leaving a printout to interpretation.
 function Get-NRGDlBundleLines {
     [CmdletBinding()]
     [OutputType([string[]])]
@@ -83,42 +85,52 @@ function Get-NRGDlBundleLines {
     $pad = ' ' * $Indent
     $wrap = { param($text, $ind, $prefix) foreach ($ln in @(Format-NRGDlWrap -Text (& $t $text) -Indent $ind -Prefix $prefix)) { $lines.Add($ln) } }
     $b = $Bundle
+    $kind = [string](Get-NRGObjectField -Item $b -Key 'Kind' -Default 'Withheld')
     $scope = if ([string]$b.Impact -eq 'TenantWide') { 'TENANT-WIDE' } else { 'one object' }
     $obs = @($b.Observed.Keys | ForEach-Object { "$_ = $($b.Observed[$_])" }) -join '; '
-    if (-not [bool]$b.Available) {
+    if ($kind -eq 'Withheld' -or -not [bool]$b.Available) {
         $lines.Add("$($pad)REMEDIATION WITHHELD [$($b.ControlId)] $(& $t $Item)  --  no command is printed")
         & $wrap ([string]$b.Reason) ($Indent + 2) 'Reason: '
         if ($obs) { & $wrap $obs ($Indent + 2) 'State read: ' }
         return @($lines)
     }
-    $lines.Add("$($pad)REMEDIATION BUNDLE [$($b.ControlId)] $(& $t $Item)  --  scope: $scope")
+    $manual = ($kind -eq 'ManualAction')
+    if ($manual) { $lines.Add("$($pad)MANUAL ACTION [$($b.ControlId)] $(& $t $Item)  --  NOT a reversible bundle: no rollback command is offered") }
+    else { $lines.Add("$($pad)REMEDIATION BUNDLE [$($b.ControlId)] $(& $t $Item)  --  reversible; scope: $scope") }
+    if ($manual) { & $wrap ([string]$b.Reason) ($Indent + 2) 'Why manual: ' }
     $target = [string](Get-NRGObjectField -Item $b.Target -Key 'Label' -Default '')
     if (-not $target) { $target = [string](Get-NRGObjectField -Item $b.Target -Key 'Identity' -Default '') }
     & $wrap ("$([string]$b.Target.Kind) $target") ($Indent + 2) 'Target: '
     $when = if ([string]$b.ObservedAt) { " (read $([string]$b.ObservedAt))" } else { '' }
     & $wrap $obs ($Indent + 2) "State read$($when): "
-    if ($b.Backup) {
-        $lines.Add("$($pad)  BACKUP  (read-only; prints every property of the live object: save the output before you change anything)")
-        $lines.Add("$($pad)    > $(& $t $b.Backup.Command)")
+    if ($b.Captured) { & $wrap ([string]$b.Captured.Json) ($Indent + 2) 'Captured value, exact (JSON): ' }
+    if ($b.Capture) {
+        $lines.Add("$($pad)  CAPTURE CURRENT CONFIGURATION  (read-only; REQUIRED before the apply)")
+        $lines.Add("$($pad)    > $(& $t $b.Capture.Command)")
+        & $wrap ([string]$b.Capture.Purpose) ($Indent + 4) ''
     }
     $lines.Add("$($pad)  1. CHECK first  (read-only)")
     $lines.Add("$($pad)    > $(& $t $b.Precheck.Command)")
+    $lines.Add("$($pad)    > $(& $t $b.Precheck.Compare)")
     & $wrap ([string]$b.Precheck.Expect) ($Indent + 4) 'Expect: '
     $lines.Add("$($pad)  2. PREVIEW  (makes no change; -WhatIf shows what step 3 would do)")
     $lines.Add("$($pad)    > $(& $t $b.Preview.Command)")
-    $lines.Add("$($pad)  3. APPLY  (CHANGES THE TENANT: run only after the check and the preview look right)")
+    if ($manual) { $lines.Add("$($pad)  3. CHANGE  (CHANGES THE TENANT; there is no rollback command, so decide how to undo it before you run it)") }
+    else { $lines.Add("$($pad)  3. APPLY  (CHANGES THE TENANT: run only after the check and the preview look right)") }
     if ([string]$b.Apply.Effect) { & $wrap ([string]$b.Apply.Effect) ($Indent + 4) 'Effect: ' }
     $lines.Add("$($pad)    > $(& $t $b.Apply.Command)")
     $lines.Add("$($pad)  4. VERIFY  (read-only)")
     $lines.Add("$($pad)    > $(& $t $b.Verify.Command)")
+    $lines.Add("$($pad)    > $(& $t $b.Verify.Compare)")
     & $wrap ([string]$b.Verify.Expect) ($Indent + 4) 'Expect: '
-    if ([bool]$b.Rollback.Available) {
-        $lines.Add("$($pad)  ROLLBACK  (restores the state this scan read; run the check first and the check again afterwards)")
-        $lines.Add("$($pad)    > $(& $t $b.Rollback.Command)")
-        & $wrap ([string]$b.Rollback.Expect) ($Indent + 4) 'Expect: '
+    if ($manual) {
+        $lines.Add("$($pad)  UNDO  (in words; this worksheet prints no rollback command for it)")
+        & $wrap ([string]$b.Undo) ($Indent + 4) ''
     } else {
-        $lines.Add("$($pad)  ROLLBACK  NOT AVAILABLE")
-        & $wrap ([string]$b.Rollback.Reason) ($Indent + 4) 'Reason: '
+        $lines.Add("$($pad)  ROLLBACK  (restores the captured value; run the check first, then the Compare after)")
+        $lines.Add("$($pad)    > $(& $t $b.Rollback.Command)")
+        $lines.Add("$($pad)    > $(& $t $b.Rollback.Compare)")
+        & $wrap ([string]$b.Rollback.Expect) ($Indent + 4) 'Expect: '
     }
     foreach ($note in @($b.Notes)) { & $wrap ([string]$note) ($Indent + 2) 'Note: ' }
     return @($lines)
@@ -165,6 +177,7 @@ function ConvertTo-NRGDlWorksheetText {
     & $add ("Members read:                            {0}" -f $s.MembersRead)
     & $add ("Setting gaps / partials / not assessed:  {0} / {1} / {2}" -f $s.SettingGaps, $s.SettingPartials, $s.SettingsNotAssessed)
     & $add ("Tenant-wide bypass gaps:                 {0}" -f $s.TenantBypassGaps)
+    & $add ("Remediation: reversible bundles / manual actions (no rollback command) / withheld:  {0} / {1} / {2}" -f (Get-NRGObjectField -Item $s -Key 'RemediationBundles' -Default 0), (Get-NRGObjectField -Item $s -Key 'ManualActions' -Default 0), (Get-NRGObjectField -Item $s -Key 'RemediationsWithheld' -Default 0))
     & $add ''
 
     & $add 'TENANT-WIDE FILTERING BYPASSES (these apply to every list)'
@@ -243,26 +256,35 @@ function ConvertTo-NRGDlWorksheetCsv {
     param([Parameter(Mandatory)] $Worksheet)
     $cell = ${function:ConvertTo-NRGDlCsvCell}
     $cols = @('RowType', 'ListName', 'ListAddress', 'ListType', 'ControlId', 'Item', 'Current', 'Recommended', 'Verdict', 'Basis', 'Detail', 'Why',
-              'Source', 'AlsoSee', 'Nist80053Mapping', 'OtherFrameworks', 'Impact', 'Step', 'Command', 'Expect', 'Member', 'MemberUPN', 'MemberType', 'MemberClass')
+              'Source', 'AlsoSee', 'Nist80053Mapping', 'OtherFrameworks', 'Impact', 'Step', 'Command', 'Expect', 'CapturedJson', 'Member', 'MemberUPN', 'MemberType', 'MemberClass')
     $rows = [System.Collections.Generic.List[object]]::new()
     # One row from named values: a column left out is blank, and a value can never land in the wrong column.
     $mk = { param([hashtable] $v) $o = [ordered]@{}; foreach ($k in $cols) { $o[$k] = & $cell $(if ($v.ContainsKey($k)) { $v[$k] } else { '' }) }; $rows.Add([pscustomobject]$o) }
-    # A remediation bundle as one row per step, so a Command cell holds exactly ONE command: a cell that joined a preview and an
-    # apply with ';' would run both when pasted. The Apply row is its own row, never on the Preview's.
+    # A remediation record as one row per step, so a Command cell holds exactly ONE command: a cell that joined a preview and an
+    # apply with ';' would run both when pasted. The apply is its own row, never on the preview's. A Compare is its own row too (its
+    # output must be True). A manual action has its own RowType and a Change step instead of Apply, and an Undo row in words.
     $mkRem = {
         param([hashtable] $id, $r, $b)
-        $base = $id + @{ RowType = 'Remediation'; ControlId = [string]$b.ControlId; Item = [string]$r.Item; Impact = [string]$b.Impact }
+        $kind = [string](Get-NRGObjectField -Item $b -Key 'Kind' -Default 'Withheld')
+        $rowType = if ($kind -eq 'ManualAction') { 'Manual action' } else { 'Remediation' }
+        $base = $id + @{ RowType = $rowType; ControlId = [string]$b.ControlId; Item = [string]$r.Item; Impact = [string]$b.Impact }
         $obs = @($b.Observed.Keys | ForEach-Object { "$_ = $($b.Observed[$_])" }) -join '; '
-        if (-not [bool]$b.Available) { & $mk ($base + @{ Step = 'Withheld'; Current = $obs; Detail = [string]$b.Reason }); return }
+        if ($kind -eq 'Withheld' -or -not [bool]$b.Available) { & $mk ($base + @{ Step = 'Withheld'; Current = $obs; Detail = [string]$b.Reason }); return }
         $tgt = [string](Get-NRGObjectField -Item $b.Target -Key 'Label' -Default ''); if (-not $tgt) { $tgt = [string](Get-NRGObjectField -Item $b.Target -Key 'Identity' -Default '') }
-        & $mk ($base + @{ Step = 'Observed'; Current = $obs; Detail = "Read $([string]$b.ObservedAt). Target: $([string]$b.Target.Kind) $tgt" })
-        if ($b.Backup) { & $mk ($base + @{ Step = 'Backup'; Command = [string]$b.Backup.Command; Detail = [string]$b.Backup.Purpose }) }
+        $why = if ($kind -eq 'ManualAction') { " NOT a reversible bundle: $([string]$b.Reason)" } else { '' }
+        & $mk ($base + @{ Step = 'Observed'; Current = $obs; CapturedJson = [string]$b.Captured.Json; Detail = "Read $([string]$b.ObservedAt). Target: $([string]$b.Target.Kind) $tgt.$why" })
+        if ($b.Capture) { & $mk ($base + @{ Step = 'Capture'; Command = [string]$b.Capture.Command; Detail = [string]$b.Capture.Purpose }) }
         & $mk ($base + @{ Step = 'Check'; Command = [string]$b.Precheck.Command; Expect = [string]$b.Precheck.Expect })
+        & $mk ($base + @{ Step = 'CheckCompare'; Command = [string]$b.Precheck.Compare; Expect = 'Must print True.' })
         & $mk ($base + @{ Step = 'Preview'; Command = [string]$b.Preview.Command; Detail = [string]$b.Preview.Note })
-        & $mk ($base + @{ Step = 'Apply'; Command = [string]$b.Apply.Command; Detail = [string]$b.Apply.Effect })
+        & $mk ($base + @{ Step = $(if ($kind -eq 'ManualAction') { 'Change' } else { 'Apply' }); Command = [string]$b.Apply.Command; Detail = [string]$b.Apply.Effect })
         & $mk ($base + @{ Step = 'Verify'; Command = [string]$b.Verify.Command; Expect = [string]$b.Verify.Expect })
-        if ([bool]$b.Rollback.Available) { & $mk ($base + @{ Step = 'Rollback'; Command = [string]$b.Rollback.Command; Expect = [string]$b.Rollback.Expect }) }
-        else { & $mk ($base + @{ Step = 'Rollback'; Detail = 'NOT AVAILABLE: ' + [string]$b.Rollback.Reason }) }
+        & $mk ($base + @{ Step = 'VerifyCompare'; Command = [string]$b.Verify.Compare; Expect = 'Must print True.' })
+        if ($kind -eq 'ManualAction') { & $mk ($base + @{ Step = 'Undo'; Detail = [string]$b.Undo }) }
+        else {
+            & $mk ($base + @{ Step = 'Rollback'; Command = [string]$b.Rollback.Command; Expect = [string]$b.Rollback.Expect })
+            & $mk ($base + @{ Step = 'RollbackCompare'; Command = [string]$b.Rollback.Compare; Expect = 'Must print True: the captured value was restored.' })
+        }
         foreach ($note in @($b.Notes)) { & $mk ($base + @{ Step = 'Note'; Detail = [string]$note }) }
     }
     $h = $Worksheet.Header

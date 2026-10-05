@@ -20,11 +20,18 @@
 #
 # THE SAFETY MODEL
 # ----------------
+# 0. THREE KINDS OF RECORD. A BUNDLE is reversible: it has a rollback command Microsoft
+#    documents, and every bundle has one. A MANUAL ACTION is a change this worksheet cannot
+#    offer a validated rollback for (an owner, because a list must keep one; an empty list,
+#    because restoring it means clearing with $null, which Microsoft does not document). It
+#    is labeled so, kept OUTSIDE the reversible bundles, carries the same checks and a
+#    preview, and says in words how to undo it. A WITHHELD record carries a reason and no
+#    command. Nothing is a bundle without a rollback, and nothing is "one-way" inside one.
 # 1. NO CAPTURED STATE, NO COMMAND. The rollback is built from the value this scan read, so
-#    a bundle whose original state is not known (a property Exchange omitted, a value
-#    outside Microsoft's documented set, an entry that cannot be quoted) is returned with
-#    Available = $false, a Reason, and NO command in any field. "Known to be empty"
-#    (@()) and "not known" ($null) are different answers and are never confused.
+#    a record whose original state is not known (a property Exchange omitted, a value
+#    outside Microsoft's documented set, an entry that cannot be quoted) is returned
+#    withheld, with a Reason and NO command in any field. "Known to be empty" (@()) and
+#    "not known" ($null) are different answers and are never confused.
 # 2. ROLLBACK IS RESTORATION, NEVER AN INVERSE. The rollback command writes back the value
 #    that was captured (Before False -> After True -> Rollback False; Before ApprovalRequired
 #    -> After Closed -> Rollback ApprovalRequired, not 'Open'). A rollback command that can
@@ -32,12 +39,18 @@
 #    only when that is the value that was captured.
 # 3. PREVIEW IS THE APPLY COMMAND PLUS -WhatIf, nothing else, so what was previewed is what
 #    is applied. The Apply is its own field and is never joined to the Preview.
-# 4. TENANT-WIDE CHANGES ARE STRICTER. A change that reaches every recipient (a mail flow
-#    rule, an anti-spam or connection-filter list) also carries a Backup step and -Confirm
-#    on the Apply and the Rollback, and is withheld outright when no rollback can be built.
-#    A change to one list may be one-way (OneWay = $true, said in words) only when the
-#    original state cannot be written back, such as "no owner".
-# 5. TENANT TEXT NEVER BECOMES CODE. A name or address is placed only in a single-quoted
+# 4. A CHECK ESTABLISHES A FACT. The check, the verify and the rollback each carry a
+#    read-only Compare expression that prints True when the live value equals the captured
+#    value (or the new one), so "was the captured value restored" is answered by a value
+#    comparison, not by reading a printout. Where Exchange returns names or GUIDs instead of
+#    the addresses that were set, the Compare is a count, and says so. The exact captured
+#    values are kept typed (Captured.Value) and as JSON (Captured.Json).
+# 5. TENANT-WIDE CHANGES ARE STRICTER. A change that reaches every recipient (a mail flow
+#    rule, an anti-spam or connection-filter list) also carries a REQUIRED capture of the
+#    current configuration (an inspection the administrator must save, not a backup) and
+#    -Confirm on the Apply and the Rollback, and is withheld outright when no rollback can be
+#    built; it is never a manual action.
+# 6. TENANT TEXT NEVER BECOMES CODE. A name or address is placed only in a single-quoted
 #    literal with embedded quotes doubled, and a value holding a quote-like, line-break,
 #    control or invisible character is refused rather than quoted. Placeholders are filled
 #    in ONE pass, so inserted text is never scanned for placeholders again.
@@ -146,36 +159,88 @@ function Format-NRGDlValueText {
     return [string]$Value
 }
 
-# The one bundle shape. A withheld bundle has no step objects at all: not one command-shaped string for a reader to copy.
+# The one record shape. A WITHHELD record (Kind 'Withheld') has no step objects at all: not one command-shaped string for a reader to copy.
 function New-NRGDlWithheldBundle {
     [CmdletBinding()]
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
     param([string] $ControlId, [string] $Impact, [string] $TargetKind, [string] $Target, [string] $Reason, [System.Collections.IDictionary] $Observed, [string] $ObservedAt, [string] $Property = '', [string] $TargetLabel = '')
     return [ordered]@{
+        Kind          = 'Withheld'
         ControlId     = $ControlId
         Impact        = $Impact
         Available     = $false
         Reason        = $Reason
-        OneWay        = $false
         RequiresInput = @()
         Target        = [ordered]@{ Kind = $TargetKind; Identity = $Target; Label = $TargetLabel }
         Property      = $Property
         ObservedAt    = $ObservedAt
         Observed      = $(if ($Observed) { $Observed } else { [ordered]@{} })
-        Backup        = $null
+        Captured      = $null
+        Capture       = $null
         Precheck      = $null
         Preview       = $null
         Apply         = $null
         Verify        = $null
         Rollback      = $null
+        Undo          = ''
         Notes         = @()
     }
+}
+
+# A read-only expression that prints True when the live value equals a value, so a check, a verify and a rollback establish a
+# fact instead of leaving a printout to interpretation. The shapes are fixed (NRG.DistributionListRemediation.Tests.ps1 pins
+# them): a boolean or a string compared with -eq, a list compared with Compare-Object (order and case ignored, as Exchange does),
+# an empty list as a zero count, and, where Exchange returns names or GUIDs instead of the addresses that were set, a COUNT.
+# Every expression starts with "(" or "[": a spreadsheet neutralizes a cell that starts with - = + or @ by prefixing an apostrophe,
+# which would break the expression when it is pasted from the CSV. Returns $null when it cannot be built safely, and the caller
+# withholds the record.
+function New-NRGDlCompareCommand {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)] [string] $GetBase,
+        [Parameter(Mandatory)] [string] $Property,
+        [AllowNull()] $Expected,
+        [switch] $CountOnly,
+        [int] $ExpectedCount = -1
+    )
+    if ($Property -notmatch '^[A-Za-z]+$' -or [string]::IsNullOrWhiteSpace($GetBase)) { return $null }
+    $isList = ($Expected -is [System.Collections.IEnumerable]) -and ($Expected -isnot [string])
+    if ($CountOnly) {
+        $n = $ExpectedCount
+        if ($n -lt 0 -and $isList) { $n = @($Expected).Count }
+        if ($n -lt 0) { return $null }
+        return "(@(($GetBase).$Property)).Count -eq $n"
+    }
+    if ($null -eq $Expected) { return $null }
+    if ($Expected -is [bool]) { return "($GetBase).$Property -eq $(if ($Expected) { '$true' } else { '$false' })" }
+    if ($Expected -is [string]) {
+        $lit = ConvertTo-NRGDlPsLiteral -Value $Expected
+        if ($null -eq $lit) { return $null }
+        return "[string]($GetBase).$Property -eq $lit"
+    }
+    if ($isList) {
+        if (@($Expected).Count -eq 0) { return "(@(($GetBase).$Property)).Count -eq 0" }
+        $lits = ConvertTo-NRGDlPsValue -Value $Expected
+        if ($null -eq $lits) { return $null }
+        return "(-not (Compare-Object -ReferenceObject @($lits) -DifferenceObject @(($GetBase).$Property | ForEach-Object { [string]`$_ })))"
+    }
+    return $null
 }
 
 function New-NRGDlRemediation {
     <#
     .SYNOPSIS
-        Builds one remediation bundle from a catalog entry and the state this scan captured.
+        Builds one remediation record from a catalog entry and the state this scan captured: a reversible BUNDLE, a labeled
+        MANUAL ACTION, or a WITHHELD record.
+    .DESCRIPTION
+        Kind 'Bundle': the state read, a check that compares the live value with it, a preview, the apply, a verify that compares
+        the live value with the new one, and a rollback whose own comparison establishes that the captured value was restored.
+        Every bundle has a rollback; none is one-way.
+        Kind 'ManualAction': a change this worksheet cannot offer a validated rollback for (an owner, because a list must keep
+        one; an empty list, because restoring it means clearing with $null, which Microsoft does not document). It is outside the
+        reversible bundles, labeled so, carries the same checks and a preview, and says in words how to undo it. No rollback command.
+        Kind 'Withheld': no command at all, with the reason.
     .PARAMETER Entry
         The catalog entry (Get-NRGDistributionListBaseline .ById[id]); its Remediation node holds the command templates.
     .PARAMETER Kind
@@ -183,10 +248,9 @@ function New-NRGDlRemediation {
     .PARAMETER Target
         The identity the commands name: a list's primary SMTP address, a rule name, a policy name. $null or blank withholds.
     .PARAMETER BeforeValue
-        The captured value of the changed property. $null means NOT KNOWN and withholds the bundle; an empty list means
-        known to be empty (a rollback then writes $null).
+        The captured value of the changed property. $null means NOT KNOWN and withholds; an empty list means known to be empty.
     .PARAMETER AfterValue
-        The value the Apply sets (a boolean or a string).
+        The value the Apply sets (a boolean, a string, or a list of strings).
     .PARAMETER Remove
         For a list property changed by removing entries: the entries to remove. Every one must be in BeforeValue.
     .PARAMETER Parameter
@@ -194,8 +258,8 @@ function New-NRGDlRemediation {
     .PARAMETER Context
         Other captured values shown in the check and the observed state (display only), such as RequireSenderAuthenticationEnabled.
     .PARAMETER Withhold
-        A reason the caller already knows the recommendation cannot be offered (a synchronized list, an external member, a
-        preset policy). The bundle is returned withheld with this reason and no command.
+        A reason the caller already knows the recommendation cannot be offered (a synchronized list, a business-purpose review, a
+        preset policy). The record is returned withheld with this reason and no command.
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
@@ -262,26 +326,42 @@ function New-NRGDlRemediation {
         $vals.After = $afterValue
     }
 
-    # The commands. Each is filled in one pass; a value that cannot be quoted safely withholds the WHOLE bundle (a list with an
+    # Is this a reversible bundle or a manual action? A bundle needs a rollback command Microsoft documents. No template means no
+    # rollback (an owner); a captured EMPTY list restored through {Before} would be written back as $null, and Microsoft does not
+    # document clearing these properties with $null. Both are manual actions, outside the reversible bundles. A tenant-wide
+    # change is never offered without a rollback.
+    $rollbackTpl = [string](Get-NRGObjectField -Item $tpl -Key 'Rollback' -Default '')
+    $manualWhy = ''
+    if (-not $rollbackTpl) {
+        $manualWhy = [string](Get-NRGObjectField -Item $tpl -Key 'ManualReason' -Default '')
+        if ([string]::IsNullOrWhiteSpace($manualWhy)) { $manualWhy = 'The captured original state cannot be written back by a documented command.' }
+    } elseif ($isList -and $beforeList.Count -eq 0 -and $rollbackTpl -match '\{Before\}') {
+        $manualWhy = "Restoring the captured empty $property would mean clearing it with `$null, which Microsoft's cmdlet page does not document, so no rollback command is offered."
+    }
+    if ($manualWhy -and $impact -eq 'TenantWide') { return (& $withheld 'A tenant-wide change is offered only with a rollback that restores the captured state, and none can be built for it, so no command is offered.') }
+    $isManual = [bool]$manualWhy
+
+    # The commands. Each is filled in one pass; a value that cannot be quoted safely withholds the WHOLE record (a list with an
     # entry dropped would be worse than none).
     $applyBase    = Format-NRGDlCommand -Template ([string](Get-NRGObjectField -Item $tpl -Key 'Apply' -Default '')) -Values $vals
-    $rollbackTpl  = [string](Get-NRGObjectField -Item $tpl -Key 'Rollback' -Default '')
     $rollbackBase = $null
-    if ($rollbackTpl) { $rollbackBase = Format-NRGDlCommand -Template $rollbackTpl -Values $vals }
+    if ($rollbackTpl -and -not $isManual) { $rollbackBase = Format-NRGDlCommand -Template $rollbackTpl -Values $vals }
     $getBase      = Format-NRGDlCommand -Template ([string](Get-NRGObjectField -Item $tpl -Key 'Get' -Default '')) -Values $vals
     if (-not $applyBase -or -not $getBase) { return (& $withheld 'A name or value in this recommendation cannot be quoted safely in a command (a quote-like, line-break, control or invisible character, or a missing value), so no command is offered. Make the change in the portal.') }
-    if ($rollbackTpl -and -not $rollbackBase) { return (& $withheld 'A captured value cannot be quoted safely in a rollback command, so no command is offered. Make the change in the portal.') }
+    if ($rollbackTpl -and -not $isManual -and -not $rollbackBase) { return (& $withheld 'A captured value cannot be quoted safely in a rollback command, so no command is offered. Make the change in the portal.') }
+
+    # The comparisons: the live value equals the captured value (before the change, and again after a rollback) or the new value.
+    $namesOnly = [bool](Get-NRGObjectField -Item $tpl -Key 'ShowsNames' -Default $false)
+    $afterCount = -1
+    if ($afterValue -is [System.Collections.IEnumerable] -and $afterValue -isnot [string]) { $afterCount = @($afterValue).Count }
+    else { $afterCount = [int](Get-NRGObjectField -Item $tpl -Key 'AfterCount' -Default -1) }
+    $cmpBefore = New-NRGDlCompareCommand -GetBase $getBase -Property $property -Expected $BeforeValue -CountOnly:$namesOnly
+    $cmpAfter  = New-NRGDlCompareCommand -GetBase $getBase -Property $property -Expected $afterValue -CountOnly:$namesOnly -ExpectedCount $afterCount
+    if (-not $cmpBefore -or -not $cmpAfter) { return (& $withheld 'A comparison that establishes the captured value, or the value after the change, could not be built safely, so no command is offered: a change that cannot be verified by value is not offered.') }
 
     $show = @(@(Get-NRGObjectField -Item $tpl -Key 'Show' -Default @()) | ForEach-Object { [string]$_ } | Where-Object { $_ -match '^[A-Za-z]+$' })
     $getCmd = $getBase
     if ($show.Count) { $getCmd = "$getBase | Format-List " + ($show -join ', ') }
-
-    # Rule 4: a tenant-wide change is withheld when it cannot be rolled back; a single-object change may be one-way, said in words.
-    $oneWay = $false
-    if (-not $rollbackBase) {
-        if ($impact -eq 'TenantWide') { return (& $withheld 'A tenant-wide change is offered only with a rollback that restores the captured state, and none can be built for it, so no command is offered.') }
-        $oneWay = $true
-    }
 
     $tenantWide = ($impact -eq 'TenantWide')
     $apply = if ($tenantWide) { "$applyBase -Confirm" } else { $applyBase }
@@ -289,58 +369,60 @@ function New-NRGDlRemediation {
     $notes = [System.Collections.Generic.List[string]]::new()
 
     $beforeText = if ($isList) { if ($beforeList.Count) { "$property holds exactly: $($beforeList -join ', ')" } else { "$property is empty" } } else { "$property = $(Format-NRGDlValueText -Value $BeforeValue)" }
-    $expectBefore = @($beforeText) + @($observed.Keys | Where-Object { $_ -ne $property } | ForEach-Object { "$_ = $($observed[$_])" })
-    $precheckExpect = ($expectBefore -join '; ') + '. If the output differs, STOP: the state has changed since this scan, and this bundle was built from the earlier state. Re-run the scan.'
-
-    $namesOnly = [bool](Get-NRGObjectField -Item $tpl -Key 'ShowsNames' -Default $false)
+    $countNote = if ($namesOnly) { ' (a count: Exchange returns names or GUIDs, not the addresses that were set, so this establishes how many entries there are, not which)' } else { '' }
     $afterText = if ($afterValue -is [System.Collections.IEnumerable] -and $afterValue -isnot [string]) {
         $al = @($afterValue | ForEach-Object { [string]$_ })
-        if ($namesOnly) { "$property lists $($al.Count) entr$(if ($al.Count -eq 1) { 'y' } else { 'ies' }), one for each address in the Apply command (Exchange shows names rather than addresses)" }
+        if ($namesOnly) { "$property has $($al.Count) entr$(if ($al.Count -eq 1) { 'y' } else { 'ies' })" }
         elseif ($al.Count) { "$property holds exactly: $($al -join ', ')" } else { "$property is empty" }
-    } else { "$property = $(Format-NRGDlValueText -Value $afterValue)" }
-    if ($property -in @('ManagedBy', 'ModeratedBy')) { $afterText = "$property lists the person you named in the Apply command" }
+    } elseif ($property -in @('ManagedBy', 'ModeratedBy')) { "$property has $afterCount entry (the person you named)" }
+    else { "$property = $(Format-NRGDlValueText -Value $afterValue)" }
+    $precheckExpect = "The Compare must print True: the live value is still the value this scan captured ($beforeText$countNote)." +
+        $(if ($observed.Count -gt 1) { ' The Check output must also show ' + ((@($observed.Keys | Where-Object { $_ -ne $property } | ForEach-Object { "$_ = $($observed[$_])" })) -join '; ') + '.' } else { '' }) +
+        ' If it prints False, STOP: the state has changed since this scan, and this record was built from the earlier state. Re-run the scan.'
 
-    $backup = $null
+    # The capture of the live object before a change that reaches every recipient. It is an INSPECTION, not a backup: the
+    # administrator must save its output. The exact values this scan read are the Captured field (typed, and as JSON in the CSV).
+    $capture = $null
     if ($tenantWide) {
-        # The captured state is in this worksheet; the backup is a read that prints EVERY property of the live object just before the
-        # change, for the administrator to save (a transcript, a screenshot, a ticket). It writes no file: the repo's security tests
-        # ban serializing objects to disk, and a file name would be one more thing built around tenant text.
-        $backup = [ordered]@{ Command = "$getBase | Format-List *"; Purpose = 'Prints every property of the live object just before the change. Save the output (for example with Start-Transcript) in addition to the state captured in this worksheet.' }
-        $notes.Add('Tenant-wide: this change applies to every recipient, not to one list. Make it in a change window, take the Backup first, and confirm each prompt.')
-    }
-    if (-not $oneWay) {
-        $notes.Add('Rollback restores the state this scan captured (the check and the Verify expectation say what that is). Run the check first: if the state changed after the scan, this bundle was built from state that no longer exists.')
-        # A captured EMPTY list is restored by writing $null. Where the cmdlet page does not document clearing with $null, the
-        # catalog says so, and the check after the rollback is what proves the state came back.
-        $emptyNote = [string](Get-NRGObjectField -Item $tpl -Key 'EmptyRestoreNote' -Default '')
-        if ($emptyNote -and $isList -and $beforeList.Count -eq 0) { $notes.Add($emptyNote) }
+        $capture = [ordered]@{ Command = "$getBase | Format-List *"; Purpose = 'REQUIRED before the Apply. This prints every property of the live object. It is an inspection, not a backup: save its output (for example with Start-Transcript) before you change anything. The exact values this scan read are in the Captured field.' }
+        $notes.Add('Tenant-wide: this change applies to every recipient, not to one list. Make it in a change window, capture and save the current configuration first, and confirm each prompt.')
     }
     $requires = @(@(Get-NRGObjectField -Item $tpl -Key 'RequiresInput' -Default @()) | ForEach-Object { [string]$_ })
     if ($requires.Count) { $notes.Add("The command contains $(@($requires | ForEach-Object { "<$_>" }) -join ', '), which is a person's name only an administrator can choose. Replace it before running anything.") }
 
-    $rollbackStep = if ($oneWay) {
-        [ordered]@{ Available = $false; Command = ''; Expect = ''; Reason = [string](Get-NRGObjectField -Item $tpl -Key 'RollbackReason' -Default 'The captured original state cannot be written back by a command.') }
+    $rollbackStep = $null; $undo = ''
+    if ($isManual) {
+        $undo = [string](Get-NRGObjectField -Item $tpl -Key 'Undo' -Default 'This worksheet offers no command that undoes this change. Decide how to undo it before you apply it.')
+        $notes.Add('MANUAL ACTION: this is not a reversible bundle. No rollback command is offered, so decide how to undo it before you apply it.')
     } else {
-        [ordered]@{ Available = $true; Command = $(if ($tenantWide) { "$rollbackBase -Confirm" } else { $rollbackBase }); Expect = "After the rollback, run the check again. $beforeText."; Reason = '' }
+        $rollbackStep = [ordered]@{
+            Available = $true
+            Command   = $(if ($tenantWide) { "$rollbackBase -Confirm" } else { $rollbackBase })
+            Compare   = $cmpBefore
+            Expect    = "After the rollback, run the Compare again. It must print True, which establishes that the captured value was restored ($beforeText$countNote). If it prints False, the rollback did not restore it: stop and restore from the capture."
+        }
+        $notes.Add('Rollback restores the state this scan captured. Run the check first: if the state changed after the scan, this bundle was built from state that no longer exists.')
     }
 
     return [ordered]@{
+        Kind          = $(if ($isManual) { 'ManualAction' } else { 'Bundle' })
         ControlId     = $cid
         Impact        = $impact
         Available     = $true
-        Reason        = ''
-        OneWay        = $oneWay
+        Reason        = $manualWhy
         RequiresInput = @($requires)
         Target        = [ordered]@{ Kind = $targetKind; Identity = $Target; Label = $TargetLabel }
         Property      = $property
         ObservedAt    = $ObservedAt
         Observed      = $observed
-        Backup        = $backup
-        Precheck      = [ordered]@{ Command = $getCmd; Expect = $precheckExpect }
+        Captured      = [ordered]@{ Property = $property; Value = $BeforeValue; Json = (ConvertTo-Json -InputObject $BeforeValue -Compress -Depth 3) }
+        Capture       = $capture
+        Precheck      = [ordered]@{ Command = $getCmd; Compare = $cmpBefore; Expect = $precheckExpect }
         Preview       = [ordered]@{ Command = $preview; Note = 'Makes no change: -WhatIf shows what the Apply would do.' }
         Apply         = [ordered]@{ Command = $apply; Effect = [string](Get-NRGObjectField -Item $tpl -Key 'Effect' -Default '') }
-        Verify        = [ordered]@{ Command = $getCmd; Expect = "$afterText." }
+        Verify        = [ordered]@{ Command = $getCmd; Compare = $cmpAfter; Expect = "The Compare must print True: the change took effect ($afterText$countNote)." }
         Rollback      = $rollbackStep
+        Undo          = $undo
         Notes         = @($notes)
     }
 }

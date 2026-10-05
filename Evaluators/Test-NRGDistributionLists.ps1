@@ -231,10 +231,13 @@ function Test-NRGDistributionLists {
         $auth = Get-NRGObjectField -Item $l -Key 'RequireSenderAuthenticationEnabled' -Default $null
         $allowedKnown = [bool](Get-NRGObjectField -Item $l -Key 'AllowedSendersKnown' -Default $false)
         $allowedN = @(Get-NRGObjectField -Item $l -Key 'AllowedSenders' -Default @()).Count
-        # External members are expected on these lists. Requiring authenticated senders would stop them sending (Microsoft: True
-        # rejects unauthenticated, external senders), so a list that holds some is pointed at the allowed-senders option instead.
+        # External members are expected on these lists. Requiring authenticated senders rejects every unauthenticated, external
+        # sender (Microsoft: True), so a list that holds external members is pointed at a business-purpose review and, as the
+        # alternative, the allowed-senders option.
         $extN11 = if ([string](Get-NRGObjectField -Item $l -Key 'MemberStatus' -Default 'NotRun') -eq 'Collected') { [int](Get-NRGObjectField -Item $l -Key 'ExternalMemberCount' -Default 0) } else { 0 }
-        $extNote = if ($extN11 -gt 0) { " This list has $extN11 external member(s): requiring authenticated senders would stop them sending to it, so the allowed-senders option (DL-1.2) is the one that keeps them." } else { '' }
+        # An external MEMBER is not an external SENDER: members receive the list's mail, and who legitimately sends to it is a
+        # business-purpose question this scan cannot answer. Requiring authenticated senders rejects every outside sender.
+        $extNote = if ($extN11 -gt 0) { " This list has $extN11 external member(s), which is a different fact from who legitimately needs to send to it: business-purpose review required before requiring authenticated senders (True), which rejects every unauthenticated, external sender. The allowed-senders option (DL-1.2) is the alternative that keeps named outside senders." } else { '' }
         if ($null -eq $auth) {
             Add-NRGDlFinding -Entry $Rec['DL-1.1'] -State 'NotApplicable' -Instance $inst -AffectedObjects @($ref) -Detail "Not assessed: Exchange did not return RequireSenderAuthenticationEnabled for $who, so who can send to it is unknown."
         } elseif ($auth -eq $true) {

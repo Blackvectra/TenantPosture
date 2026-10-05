@@ -84,21 +84,33 @@ tenant**. Until it is, treat these as open:
   user (Microsoft's requirement for an outside sender to be accepted), which a member of a distribution
   list always is. An existing allow list is never replaced, and the scan does not compare it with the
   members because Exchange returns allowed senders as directory names, not addresses.
-- **The printed commands are bundles, and none has been run against a tenant.** Each follows Microsoft's
+- **The printed commands are records, and none has been run against a tenant.** Each follows Microsoft's
   documented syntax: `-WhatIf` and `-Confirm` are documented on every cmdlet used, `@{Add=...}` and
   `@{Remove=...}` on the connection filter and anti-spam policies, and the overwrite form on
-  `AcceptMessagesOnlyFromSendersOrMembers`. What Microsoft does **not** document, and the scan therefore cannot
-  claim: **clearing `AcceptMessagesOnlyFromSendersOrMembers` or `ModeratedBy` with `$null`** (the rollback that
-  restores a captured empty list writes `$null`; the bundle says so, and its check afterwards is what proves the state
-  came back); **whether `Disable-TransportRule` leaves a rule's `Mode` alone** (its page is silent; the check shows
-  the mode); and **removing several entries of different IP types in one `@{Remove=...}`** (Microsoft's example removes
-  one value). Exchange returns allowed senders as names or GUIDs unless asked for display names, so the verify step
-  after an allowed-senders change compares a count, not addresses. An ownerless list's owner is one-way, because
-  Microsoft states every distribution list must have at least one owner. `Disable-TransportRule` has a built-in
-  confirmation pause and the `Set-*` cmdlets have none, which is why a tenant-wide apply carries `-Confirm`. A preset
-  (Standard or Strict) anti-spam policy gets no command, because Microsoft says not to modify the policies behind a
-  preset. A mail-enabled security group may need `-BypassSecurityGroupManagerCheck` to change its owner; the
-  worksheet does not add it. Run a bundle's preview first and on one object before many.
+  `AcceptMessagesOnlyFromSendersOrMembers`. A passing unit test shows the scan builds what it intends and that each
+  Compare returns the right True or False for a given object; it does not show that Exchange accepts a command or that
+  a rollback restores the real configuration. **The one controlled test that would** is
+  [`DL-REMEDIATION-VALIDATION-RUNBOOK.md`](DL-REMEDIATION-VALIDATION-RUNBOOK.md): a disposable cloud-only list,
+  preview, apply, verify, rollback and restoration, with the tenant-wide records out of the first run. It has not been run.
+  What Microsoft does **not** document, and the scan therefore cannot claim: **clearing `AcceptMessagesOnlyFromSendersOrMembers`
+  or `ModeratedBy` with `$null`** (so a captured empty list is a labeled **manual action** with no rollback command, and the
+  undo is given in words); **whether `Disable-TransportRule` leaves a rule's `Mode` alone** (its page is silent; the check
+  shows the mode); and **removing several entries of different IP types in one `@{Remove=...}`** (Microsoft's example
+  removes one value). Exchange returns allowed senders, owners and moderators as names or GUIDs unless asked for display
+  names, so the Compare for those is a **count**, which establishes how many entries there are, not which. An ownerless list's
+  owner is a manual action too, because Microsoft states every distribution list must have at least one owner.
+  `Disable-TransportRule` has a built-in confirmation pause and the `Set-*` cmdlets have none, which is why a tenant-wide
+  apply carries `-Confirm`. A preset (Standard or Strict) anti-spam policy gets no command, because Microsoft says not to
+  modify the policies behind a preset. A mail-enabled security group may need `-BypassSecurityGroupManagerCheck` to change
+  its owner; the worksheet does not add it. A documented rollback for an allowed-senders change exists through
+  `AcceptMessagesOnlyFrom` and `AcceptMessagesOnlyFromDLMembers` with `@{Remove=...}`; it is not used yet because the
+  apply would have to split individual senders from groups, so it is a candidate to promote once the controlled test has run.
+  Run a record's preview first and on one object before many.
+- **A list with external members is held for a business-purpose review, not because the setting is unsuitable.** An external
+  member receives the list's mail; who legitimately sends to the list is a business question the scan cannot answer.
+  Requiring authenticated senders rejects every unauthenticated, external sender, whether or not they are members, so the
+  change is withheld until someone who knows the purpose has decided. The allowed-senders proposal is the alternative that
+  keeps named outside senders.
 - **The scan account's Exchange permissions are documented, not validated.** Microsoft publishes no per-cmdlet role
   table. [`EXCHANGE-RBAC-DISTRIBUTION-LISTS.md`](EXCHANGE-RBAC-DISTRIBUTION-LISTS.md) lists the cmdlets the scan calls
   (pinned against the collector by a test), the read-only grants Microsoft documents (View-Only Organization

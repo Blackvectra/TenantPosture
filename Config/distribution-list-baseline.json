@@ -65,8 +65,8 @@
             "Show": ["Name", "PrimarySmtpAddress", "RequireSenderAuthenticationEnabled", "AcceptMessagesOnlyFromSendersOrMembers", "AcceptMessagesOnlyFromSendersOrMembersWithDisplayNames"],
             "Apply": "Set-DistributionGroup -Identity {Target} -AcceptMessagesOnlyFromSendersOrMembers {After}",
             "Rollback": "Set-DistributionGroup -Identity {Target} -AcceptMessagesOnlyFromSendersOrMembers {Before}",
-            "EmptyRestoreNote": "Microsoft's cmdlet page names $null only as this parameter's default (blank) state and does not document clearing it with $null, and this has not been run against a tenant. The check after the rollback is what proves the state was restored: if it still lists entries, stop and clear the setting in the portal.",
             "ShowsNames": true,
+            "Undo": "Remove the senders you added in the Exchange admin center, or with the AcceptMessagesOnlyFrom and AcceptMessagesOnlyFromDLMembers parameters, whose @{Remove=...} syntax Microsoft documents for individual senders and groups. Clearing AcceptMessagesOnlyFromSendersOrMembers with $null is the usual way, but Microsoft's cmdlet page does not document it, so this worksheet does not print it as a rollback. After undoing it, run the Check again: its Compare must print True.",
             "Effect": "Only the listed senders can send to the list. Mail from anyone else is rejected, staff who are not members included (Microsoft)."
           }
         }
@@ -110,7 +110,10 @@
             "Show": ["Name", "PrimarySmtpAddress", "ManagedBy", "ManagedByWithDisplayNames"],
             "Apply": "Set-DistributionGroup -Identity {Target} -ManagedBy '<owner>'",
             "Rollback": "",
-            "RollbackReason": "The captured original state is no owner. Microsoft states every distribution list must have at least one owner, so this scan prints no command that writes 'no owner' back; treat adding an owner as one-way.",
+            "ManualReason": "Restoring the captured state (no owner) is not offered: Microsoft states every distribution list must have at least one owner, so a command that removes the only owner is not a rollback this worksheet can print.",
+            "Undo": "If the wrong person was made owner, add the correct owner first, then remove the wrong one in the Exchange admin center. A list must keep at least one owner.",
+            "ShowsNames": true,
+            "AfterCount": 1,
             "RequiresInput": ["owner"],
             "Effect": "The person you name becomes an owner of the list and can change its members and settings."
           },
@@ -121,7 +124,10 @@
             "Show": ["Name", "PrimarySmtpAddress", "ManagedBy", "ManagedByWithDisplayNames"],
             "Apply": "Set-DynamicDistributionGroup -Identity {Target} -ManagedBy '<owner>'",
             "Rollback": "",
-            "RollbackReason": "The captured original state is no owner. Microsoft states every distribution list must have at least one owner, so this scan prints no command that writes 'no owner' back; treat adding an owner as one-way.",
+            "ManualReason": "Restoring the captured state (no owner) is not offered: Microsoft states every distribution list must have at least one owner, so a command that removes the only owner is not a rollback this worksheet can print.",
+            "Undo": "If the wrong person was made owner, set the correct owner (a dynamic list can have only one) in the Exchange admin center.",
+            "ShowsNames": true,
+            "AfterCount": 1,
             "RequiresInput": ["owner"],
             "Effect": "The person you name becomes an owner of the list and can change its settings."
           }
@@ -151,7 +157,9 @@
             "Show": ["Name", "PrimarySmtpAddress", "ModerationEnabled", "ModeratedBy", "ModeratedByWithDisplayNames", "ManagedByWithDisplayNames"],
             "Apply": "Set-DistributionGroup -Identity {Target} -ModeratedBy '<moderator>'",
             "Rollback": "Set-DistributionGroup -Identity {Target} -ModeratedBy {Before}",
-            "EmptyRestoreNote": "Microsoft's cmdlet page names $null only as this parameter's default (blank) state and does not document clearing it with $null, and this has not been run against a tenant. The check after the rollback is what proves the state was restored: if it still lists entries, stop and clear the setting in the portal.",
+            "ShowsNames": true,
+            "AfterCount": 1,
+            "Undo": "Remove the moderator you added in the Exchange admin center, or with -ModeratedBy @{Remove=...}, which Microsoft documents. Clearing ModeratedBy with $null is not documented, so this worksheet does not print it as a rollback. After undoing it, run the Check again: its Compare must print True.",
             "RequiresInput": ["moderator"],
             "Effect": "The person you name approves mail sent to the moderated list before it is delivered."
           },
@@ -162,7 +170,9 @@
             "Show": ["Name", "PrimarySmtpAddress", "ModerationEnabled", "ModeratedBy", "ModeratedByWithDisplayNames", "ManagedByWithDisplayNames"],
             "Apply": "Set-DynamicDistributionGroup -Identity {Target} -ModeratedBy '<moderator>'",
             "Rollback": "Set-DynamicDistributionGroup -Identity {Target} -ModeratedBy {Before}",
-            "EmptyRestoreNote": "Microsoft's cmdlet page names $null only as this parameter's default (blank) state and does not document clearing it with $null, and this has not been run against a tenant. The check after the rollback is what proves the state was restored: if it still lists entries, stop and clear the setting in the portal.",
+            "ShowsNames": true,
+            "AfterCount": 1,
+            "Undo": "Remove the moderator you added in the Exchange admin center, or with -ModeratedBy @{Remove=...}, which Microsoft documents. Clearing ModeratedBy with $null is not documented, so this worksheet does not print it as a rollback. After undoing it, run the Check again: its Compare must print True.",
             "RequiresInput": ["moderator"],
             "Effect": "The person you name approves mail sent to the moderated list before it is delivered."
           }

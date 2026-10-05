@@ -113,3 +113,5 @@ When you have run this against a tenant, record the result below and change the 
 - [`AUTH-APP-ONLY.md`](AUTH-APP-ONLY.md) covers the Microsoft Graph permissions for the full assessment; it does not
   cover this Exchange-only scan.
 - [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) lists what the distribution-list scan has and has not been validated against.
+- [`DL-REMEDIATION-VALIDATION-RUNBOOK.md`](DL-REMEDIATION-VALIDATION-RUNBOOK.md) is the one controlled test of the
+  remediation records on a disposable cloud-only list; run it with a separate, write-capable identity.

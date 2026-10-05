@@ -4,30 +4,36 @@
 .SYNOPSIS
     NRG.DistributionListRemediation.Tests.ps1 — NRG Technology Services / NextLayerSec LLC
     Author: Matthew Levorson
-    Purpose: The remediation SAFETY MODEL of the distribution-list scan. Every recommendation that
-             has a command is a bundle: the state this scan captured, a check, a preview, the apply,
-             a check afterwards, and a rollback that restores the CAPTURED state. These tests pin:
+    Purpose: The remediation SAFETY MODEL of the distribution-list scan. A recommendation that has a command is one of three
+             records: a reversible BUNDLE (it has a rollback Microsoft documents, and every bundle has one), a labeled MANUAL
+             ACTION (a change this worksheet cannot offer a validated rollback for: an owner, because a list must keep one,
+             and an empty list, because restoring it means clearing with $null, which Microsoft does not document), or a
+             WITHHELD record (a reason, no command). These tests pin:
                - no captured original state, no command (and not one command-shaped string anywhere);
                - the rollback writes back what was captured, never a generic inverse;
+               - the check, the verify and the rollback each carry a read-only Compare that prints True when the live value
+                 equals the captured (or new) value, and the Compare is exercised here against stubbed Get-* objects, so
+                 "was the captured value restored" is a value comparison, not a printout to interpret;
                - the preview is the apply plus -WhatIf and nothing else, and the two never share a line or a cell;
-               - a tenant-wide change is stricter (backup, -Confirm, and withheld when it cannot be rolled back);
+               - a tenant-wide change is stricter (capture, -Confirm, withheld without a rollback) and is never a manual action;
                - every printed command fits a fixed grammar, so no tenant text can add a second command.
-             Nothing here connects to Exchange or runs a printed command.
+             Nothing here connects to Exchange or runs a printed write command: the only printed text that is evaluated is a
+             Compare expression, against Get-* stubs defined in this file.
     Data keys consumed: none. Graph scopes / cmdlets: none.
 #>
 
-Describe 'Distribution-list remediation bundles' {
+Describe 'Distribution-list remediation records' {
 
     BeforeAll {
         $script:Root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
         Import-Module (Join-Path $script:Root 'NRG-Assessment.psm1') -Force -ErrorAction Stop
         $script:Mod = Get-Module 'NRG-Assessment'
 
-        # A bundle from the REAL catalog entry, in module scope (the builder is internal).
+        # A record from the REAL catalog entry, in module scope (the builder is internal).
         $script:Rem = { param([string] $Control, [hashtable] $P)
             & $script:Mod { param($c, $p) New-NRGDlRemediation -Entry (Get-NRGDistributionListBaseline).ById[$c] @p } $Control $P }
 
-        # Every string anywhere inside a bundle (or any nested structure).
+        # Every string anywhere inside a record (or any nested structure).
         $script:Strings = { param($o)
             if ($null -eq $o) { return }
             if ($o -is [string]) { $o; return }
@@ -36,12 +42,30 @@ Describe 'Distribution-list remediation bundles' {
         }
         # Anything that reads as a command line.
         $script:CommandLike = '(?i)\b(Get|Set|Enable|Disable|Remove|Add|Export|New)-[A-Za-z]+\b'
-        # The only shape a printed command may have: a cmdlet, switches, typed values, and at most one read-only pipe. Quoted
-        # literals are collapsed to L first, so tenant text cannot add a statement, a pipeline stage or a subexpression.
+        # Quoted literals are collapsed to L first, so tenant text cannot add a statement, a pipeline stage or a subexpression.
+        $script:Collapse = { param([string] $Cmd) [regex]::Replace($Cmd, "'(?:[^']|'')*'", 'L') }
+        # The only shape a printed COMMAND may have: a cmdlet, switches, typed values, and at most one read-only Format-List.
         $script:Shape = { param([string] $Cmd)
-            $t = [regex]::Replace($Cmd, "'(?:[^']|'')*'", 'L')
-            $t -match '^(Get|Set|Enable|Disable)-[A-Za-z]+( -[A-Za-z]+( (\$true|\$false|\$null|@\{(Add|Remove)=L(,L)*\}|L(,L)*))?)*( \| Format-List (\*|[A-Za-z]+(, [A-Za-z]+)*))?$' }
-        $script:Steps = { param($b) @($b.Backup.Command, $b.Precheck.Command, $b.Preview.Command, $b.Apply.Command, $b.Verify.Command, $b.Rollback.Command | Where-Object { $_ }) }
+            (& $script:Collapse $Cmd) -match '^(Get|Set|Enable|Disable)-[A-Za-z]+( -[A-Za-z]+( (\$true|\$false|\$null|@\{(Add|Remove)=L(,L)*\}|L(,L)*))?)*( \| Format-List (\*|[A-Za-z]+(, [A-Za-z]+)*))?$' }
+        # The only shapes a COMPARE expression may have (read-only, prints True or False).
+        $script:GetPart = '\(Get-[A-Za-z]+ -Identity L( -[A-Za-z]+)*\)\.[A-Za-z]+'
+        $script:ShapeCompare = { param([string] $Cmd)
+            $t = & $script:Collapse $Cmd
+            $g = $script:GetPart
+            # Every Compare starts with "(" or "[": a spreadsheet prefixes an apostrophe to a cell starting with - = + or @.
+            ($t -match "^$g -eq (\`$true|\`$false)$") -or ($t -match "^\[string\]$g -eq L$") -or
+            ($t -match "^\(@\(\(Get-[A-Za-z]+ -Identity L( -[A-Za-z]+)*\)\.[A-Za-z]+\)\)\.Count -eq \d+$") -or
+            ($t -match "^\(-not \(Compare-Object -ReferenceObject @\(L(,L)*\) -DifferenceObject @\(\(Get-[A-Za-z]+ -Identity L( -[A-Za-z]+)*\)\.[A-Za-z]+ \| ForEach-Object \{ \[string\]\`$_ \}\)\)\)$") }
+        # Every command a record carries, and every Compare it carries.
+        $script:Steps = { param($b) @($b.Capture.Command, $b.Precheck.Command, $b.Preview.Command, $b.Apply.Command, $b.Verify.Command, $b.Rollback.Command | Where-Object { $_ }) }
+        $script:Compares = { param($b) @($b.Precheck.Compare, $b.Verify.Compare, $b.Rollback.Compare | Where-Object { $_ }) }
+
+        # Stand-ins for the Get-* cmdlets a Compare calls, returning whatever $script:Live holds. Only reads are stubbed.
+        foreach ($n in 'Get-DistributionGroup', 'Get-DynamicDistributionGroup', 'Get-TransportRule', 'Get-HostedConnectionFilterPolicy', 'Get-HostedContentFilterPolicy') {
+            Set-Item -Path "function:script:$n" -Value { param($Identity, [Parameter(ValueFromRemainingArguments)] $Rest) $script:Live }
+        }
+        # Evaluate a Compare expression against a live object: True or False.
+        $script:Eval = { param([string] $Expr, $Live) $script:Live = $Live; [bool](& ([scriptblock]::Create($Expr))) }
 
         # One representative, fully known input per control and kind.
         $script:Cases = @(
@@ -57,6 +81,8 @@ Describe 'Distribution-list remediation bundles' {
             @{ Name = 'DL-3.2';              C = 'DL-3.2'; P = @{ Kind = 'Tenant'; Target = 'Default'; BeforeValue = [string[]]@('1.2.3.4', '5.6.7.0/24', '10.0.0.1-10.0.2.255'); Remove = [string[]]@('10.0.0.1-10.0.2.255') } }
             @{ Name = 'DL-3.3';              C = 'DL-3.3'; P = @{ Kind = 'Tenant'; Target = 'Default'; Parameter = 'AllowedSenders'; BeforeValue = [string[]]@('a@x.example', 'b@y.example'); Remove = [string[]]@('a@x.example') } }
         )
+        # Which records are reversible bundles and which are labeled manual actions, for the inputs above.
+        $script:ManualControls = @('DL-1.2', 'DL-2.1', 'DL-2.2')
 
         # ── Hand-built collector output and findings, so the worksheet is exercised without an Exchange stub ─────────
         function script:NewList { param([string] $Addr = 'l@contoso.com', [string] $Kind = 'Distribution', [hashtable] $With = @{}, [string[]] $Omit = @())
@@ -89,15 +115,18 @@ Describe 'Distribution-list remediation bundles' {
             $txt = & $script:Mod { param($w) ConvertTo-NRGDlWorksheetText -Worksheet $w } $ws
             $csvRaw = & $script:Mod { param($w) ConvertTo-NRGDlWorksheetCsv -Worksheet $w } $ws
             [pscustomobject]@{ Worksheet = $ws; Txt = $txt; CsvRaw = $csvRaw; Csv = @($csvRaw | ConvertFrom-Csv) } }
-        # Every bundle on the worksheet, tenant rows and list rows.
+        # Every record on the worksheet, tenant rows and list rows.
         function script:AllBundles { param($Ws) @(@($Ws.Tenant) + @($Ws.Lists | ForEach-Object { $_.Settings }) | ForEach-Object { $_.Remediations } | Where-Object { $null -ne $_ }) }
     }
-    AfterAll { Clear-NRGState; Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue }
+    AfterAll {
+        foreach ($n in 'Get-DistributionGroup', 'Get-DynamicDistributionGroup', 'Get-TransportRule', 'Get-HostedConnectionFilterPolicy', 'Get-HostedContentFilterPolicy') { Remove-Item -Path "function:script:$n" -ErrorAction SilentlyContinue }
+        Clear-NRGState; Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue
+    }
 
     # ═════════════════════════════════════════════════════════════════════════════════
-    Context 'the bundle: observed state, check, preview, apply, verify, rollback' {
+    Context 'the record: observed state, check, preview, apply, verify, and a rollback or a labeled manual action' {
 
-        It 'every recommendation with a command builds a complete bundle, and its preview is the apply plus -WhatIf and nothing else' {
+        It 'every recommendation with a command builds a complete record whose preview is the apply plus -WhatIf and nothing else' {
             foreach ($c in $script:Cases) {
                 $b = & $script:Rem $c.C $c.P
                 $b.Available | Should -BeTrue -Because $c.Name
@@ -108,15 +137,39 @@ Describe 'Distribution-list remediation bundles' {
                 $b.Precheck.Command | Should -Match '^Get-' -Because $c.Name
                 $b.Verify.Command | Should -Be $b.Precheck.Command -Because 'the same read, before and after, so the two outputs compare'
                 $b.Precheck.Expect | Should -Match 'STOP' -Because 'the check says what to do when the state is not what the scan read'
+                $b.Precheck.Expect | Should -Match 'Compare must print True'
                 $b.Observed.Keys.Count | Should -BeGreaterThan 0 -Because $c.Name
                 $b.Target.Identity | Should -Not -BeNullOrEmpty
+                $b.Captured.Property | Should -Be $b.Property
+                $b.Captured.Json | Should -Not -BeNullOrEmpty
             }
         }
 
-        It 'the check, the verify and the backup are reads: no step except the apply, the preview and the rollback names a write cmdlet' {
+        It 'every record is a reversible bundle with a rollback, or a labeled manual action with none: nothing is "one-way" inside a bundle' {
             foreach ($c in $script:Cases) {
                 $b = & $script:Rem $c.C $c.P
-                foreach ($read in @($b.Precheck.Command, $b.Verify.Command, $b.Backup.Command) | Where-Object { $_ }) {
+                $b.Kind | Should -BeIn @('Bundle', 'ManualAction') -Because $c.Name
+                $b.PSObject.Properties.Name | Should -Not -Contain 'OneWay'
+                if ($c.C -in $script:ManualControls) {
+                    $b.Kind | Should -Be 'ManualAction' -Because "$($c.Name): no documented rollback, so it stays outside the reversible bundles"
+                    $b.Rollback | Should -BeNullOrEmpty
+                    $b.Undo | Should -Not -BeNullOrEmpty -Because 'a manual action says in words how to undo it'
+                    $b.Reason | Should -Not -BeNullOrEmpty -Because 'and says why it is not a bundle'
+                    $b.Notes -join ' ' | Should -Match 'MANUAL ACTION: this is not a reversible bundle'
+                } else {
+                    $b.Kind | Should -Be 'Bundle' -Because $c.Name
+                    $b.Rollback.Available | Should -BeTrue
+                    $b.Rollback.Command | Should -Not -BeNullOrEmpty
+                    $b.Rollback.Compare | Should -Be $b.Precheck.Compare -Because 'the rollback is proved by the same comparison that proved the starting state'
+                    $b.Undo | Should -BeNullOrEmpty
+                }
+            }
+        }
+
+        It 'the check, the verify and the capture are reads: no step except the apply, the preview and the rollback names a write cmdlet' {
+            foreach ($c in $script:Cases) {
+                $b = & $script:Rem $c.C $c.P
+                foreach ($read in @($b.Precheck.Command, $b.Precheck.Compare, $b.Verify.Command, $b.Verify.Compare, $b.Capture.Command, $b.Rollback.Compare) | Where-Object { $_ }) {
                     $read | Should -Not -Match '(?i)\b(Set|Enable|Disable|Remove|Add|New)-[A-Za-z]+' -Because "$($c.Name): $read"
                 }
             }
@@ -132,16 +185,17 @@ Describe 'Distribution-list remediation bundles' {
                 $after = if ($v -eq 'Closed') { 'Open' } else { 'Closed' }
                 (& $rb 'DL-2.5' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = $v; AfterValue = $after }) | Should -Be "Set-DistributionGroup -Identity 'l@contoso.com' -MemberJoinRestriction '$v'"
             }
-            # a captured EMPTY list is restored as $null; a captured list is restored as itself
-            (& $rb 'DL-1.2' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = @(); AfterValue = @('a@x.example') }) | Should -Be "Set-DistributionGroup -Identity 'l@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers `$null"
-            (& $rb 'DL-1.2' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = @('old@x.example', 'older@y.example'); AfterValue = @('a@x.example') }) |
-                Should -Be "Set-DistributionGroup -Identity 'l@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers 'old@x.example','older@y.example'"
-            # a list changed by removing entries: exactly those entries are put back, and the expectation after the rollback is the WHOLE captured list
+            # a captured NON-empty allowed-senders list is restored by the overwrite form Microsoft documents: a reversible bundle
+            $nb = & $script:Rem 'DL-1.2' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = @('old@x.example', 'older@y.example'); AfterValue = @('a@x.example') }
+            $nb.Kind | Should -Be 'Bundle'
+            $nb.Rollback.Command | Should -Be "Set-DistributionGroup -Identity 'l@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers 'old@x.example','older@y.example'"
+            # a list changed by removing entries: exactly those entries are put back, and the Compare after the rollback is the WHOLE captured list
             $b = & $script:Rem 'DL-3.2' @{ Kind = 'Tenant'; Target = 'Default'; BeforeValue = [string[]]@('1.2.3.4', '5.6.7.0/24', '10.0.0.1-10.0.2.255'); Remove = [string[]]@('10.0.0.1-10.0.2.255', '5.6.7.0/24') }
             $b.Apply.Command | Should -Match "@\{Remove='10\.0\.0\.1-10\.0\.2\.255','5\.6\.7\.0/24'\}"
             $b.Rollback.Command | Should -Match "@\{Add='10\.0\.0\.1-10\.0\.2\.255','5\.6\.7\.0/24'\} -Confirm$"
+            $b.Rollback.Compare | Should -Match "-ReferenceObject @\('1\.2\.3\.4','5\.6\.7\.0/24','10\.0\.0\.1-10\.0\.2\.255'\)"
             $b.Rollback.Expect | Should -Match 'holds exactly: 1\.2\.3\.4, 5\.6\.7\.0/24, 10\.0\.0\.1-10\.0\.2\.255'
-            $b.Verify.Expect | Should -Match 'holds exactly: 1\.2\.3\.4\.' -Because 'what the list should hold after the apply'
+            $b.Verify.Compare | Should -Match "-ReferenceObject @\('1\.2\.3\.4'\)"
             # a rule: only the state it was in, and only when that state is the one the rollback command restores
             (& $rb 'DL-3.1' @{ Kind = 'Tenant'; Target = 'R'; BeforeValue = 'Enabled'; AfterValue = 'Disabled' }) | Should -Be "Enable-TransportRule -Identity 'R' -Confirm"
         }
@@ -149,7 +203,106 @@ Describe 'Distribution-list remediation bundles' {
         It 'a rollback that can restore only one state is withheld when that is not the state that was captured' {
             $b = & $script:Rem 'DL-3.1' @{ Kind = 'Tenant'; Target = 'R'; BeforeValue = 'Disabled'; AfterValue = 'Disabled' }
             $b.Available | Should -BeFalse
+            $b.Kind | Should -Be 'Withheld'
             $b.Reason | Should -Match "restores 'Enabled'"
+            @(& $script:Steps $b) | Should -BeNullOrEmpty
+        }
+
+        It 'the exact captured value is kept typed and as JSON, so a rollback does not depend on parsing a sentence' {
+            $b = & $script:Rem 'DL-3.2' @{ Kind = 'Tenant'; Target = 'Default'; BeforeValue = [string[]]@('1.2.3.4', "o'brien@x.example", '10.0.0.1-10.0.2.255'); Remove = [string[]]@('1.2.3.4') }
+            @($b.Captured.Value) | Should -Be @('1.2.3.4', "o'brien@x.example", '10.0.0.1-10.0.2.255')
+            ($b.Captured.Json | ConvertFrom-Json) | Should -Be @('1.2.3.4', "o'brien@x.example", '10.0.0.1-10.0.2.255')
+            (& $script:Rem 'DL-1.1' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = $false; AfterValue = $true }).Captured.Json | Should -Be 'false'
+            (& $script:Rem 'DL-2.5' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = 'Open'; AfterValue = 'Closed' }).Captured.Json | Should -Be '"Open"'
+            (& $script:Rem 'DL-2.1' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = @() }).Captured.Json | Should -Be '[]'
+        }
+    }
+
+    # ═════════════════════════════════════════════════════════════════════════════════
+    Context 'a check establishes a fact: each Compare prints True or False by value' {
+
+        It 'every Compare fits one of the fixed read-only shapes, and no command is a Compare or the other way round' {
+            foreach ($c in $script:Cases) {
+                $b = & $script:Rem $c.C $c.P
+                foreach ($cmp in @(& $script:Compares $b)) { (& $script:ShapeCompare $cmp) | Should -BeTrue -Because "$($c.Name): $cmp"; (& $script:Shape $cmp) | Should -BeFalse -Because 'a Compare is not a command' }
+                foreach ($cmd in @(& $script:Steps $b)) { (& $script:ShapeCompare $cmd) | Should -BeFalse -Because "$($c.Name): $cmd" }
+            }
+            (& $script:ShapeCompare "(Get-X -Identity 'a').P -eq `$true; Remove-Item x") | Should -BeFalse
+            (& $script:ShapeCompare "(Get-X -Identity 'a').P -eq `$(calc)") | Should -BeFalse
+        }
+
+        It 'a boolean: True for the captured value before the change and after a rollback, False after the apply, and the other way for the verify' {
+            $b = & $script:Rem 'DL-1.1' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = $false; AfterValue = $true }
+            $off = [pscustomobject]@{ RequireSenderAuthenticationEnabled = $false }; $on = [pscustomobject]@{ RequireSenderAuthenticationEnabled = $true }
+            (& $script:Eval $b.Precheck.Compare $off) | Should -BeTrue;  (& $script:Eval $b.Precheck.Compare $on) | Should -BeFalse
+            (& $script:Eval $b.Verify.Compare $on) | Should -BeTrue;     (& $script:Eval $b.Verify.Compare $off) | Should -BeFalse
+            (& $script:Eval $b.Rollback.Compare $off) | Should -BeTrue -Because 'after the rollback the captured value is back'
+            (& $script:Eval $b.Rollback.Compare $on) | Should -BeFalse -Because 'a rollback that did not take is caught, not interpreted'
+        }
+
+        It 'an enum: ApprovalRequired restored as ApprovalRequired is True, and Open is not an acceptable stand-in' {
+            $b = & $script:Rem 'DL-2.5' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = 'ApprovalRequired'; AfterValue = 'Closed' }
+            $live = { param($v) [pscustomobject]@{ MemberJoinRestriction = $v } }
+            (& $script:Eval $b.Precheck.Compare (& $live 'ApprovalRequired')) | Should -BeTrue
+            (& $script:Eval $b.Verify.Compare (& $live 'Closed')) | Should -BeTrue
+            (& $script:Eval $b.Rollback.Compare (& $live 'ApprovalRequired')) | Should -BeTrue
+            (& $script:Eval $b.Rollback.Compare (& $live 'Open')) | Should -BeFalse -Because 'the captured value was ApprovalRequired, not Open'
+            (& $script:Eval $b.Rollback.Compare (& $live 'Closed')) | Should -BeFalse
+        }
+
+        It 'a list: equal ignoring order and case, False when one entry is missing or extra, and the whole captured list is what the rollback must restore' {
+            $b = & $script:Rem 'DL-3.2' @{ Kind = 'Tenant'; Target = 'Default'; BeforeValue = [string[]]@('1.2.3.4', '5.6.7.0/24', '10.0.0.1-10.0.2.255'); Remove = [string[]]@('10.0.0.1-10.0.2.255') }
+            $live = { param($items) [pscustomobject]@{ IPAllowList = @($items) } }
+            (& $script:Eval $b.Precheck.Compare (& $live '10.0.0.1-10.0.2.255', '1.2.3.4', '5.6.7.0/24')) | Should -BeTrue -Because 'order is not meaningful'
+            (& $script:Eval $b.Precheck.Compare (& $live '1.2.3.4', '5.6.7.0/24')) | Should -BeFalse -Because 'one entry missing'
+            (& $script:Eval $b.Precheck.Compare (& $live '1.2.3.4', '5.6.7.0/24', '10.0.0.1-10.0.2.255', '9.9.9.9')) | Should -BeFalse -Because 'one entry extra'
+            (& $script:Eval $b.Verify.Compare (& $live '1.2.3.4', '5.6.7.0/24')) | Should -BeTrue
+            (& $script:Eval $b.Rollback.Compare (& $live '1.2.3.4', '5.6.7.0/24')) | Should -BeFalse -Because 'the rollback is not complete until the removed entry is back'
+            (& $script:Eval $b.Rollback.Compare (& $live '1.2.3.4', '5.6.7.0/24', '10.0.0.1-10.0.2.255')) | Should -BeTrue
+            # a list emptied by the apply: the verify is a zero count
+            $e = & $script:Rem 'DL-3.3' @{ Kind = 'Tenant'; Target = 'Default'; Parameter = 'AllowedSenders'; BeforeValue = [string[]]@('a@x.example'); Remove = [string[]]@('a@x.example') }
+            $e.Verify.Compare | Should -Match '\.Count -eq 0$'
+            (& $script:Eval $e.Verify.Compare ([pscustomobject]@{ AllowedSenders = @() })) | Should -BeTrue
+            (& $script:Eval $e.Verify.Compare ([pscustomobject]@{ AllowedSenders = @('a@x.example') })) | Should -BeFalse
+            (& $script:Eval $e.Rollback.Compare ([pscustomobject]@{ AllowedSenders = @('a@x.example') })) | Should -BeTrue
+        }
+
+        It 'a value with an apostrophe or a dollar sign is compared as that exact text' {
+            $odd = @("o'brien@x.example", 'a$b@x.example', 'plain@x.example')
+            $b = & $script:Rem 'DL-3.3' @{ Kind = 'Tenant'; Target = 'Default'; Parameter = 'AllowedSenders'; BeforeValue = [string[]]$odd; Remove = [string[]]@('plain@x.example') }
+            (& $script:Eval $b.Precheck.Compare ([pscustomobject]@{ AllowedSenders = $odd })) | Should -BeTrue
+            (& $script:Eval $b.Precheck.Compare ([pscustomobject]@{ AllowedSenders = @("o'brien@x.example", 'a$c@x.example', 'plain@x.example') })) | Should -BeFalse
+        }
+
+        It 'a rule state: True only for the captured State' {
+            $b = & $script:Rem 'DL-3.1' @{ Kind = 'Tenant'; Target = 'R'; BeforeValue = 'Enabled'; AfterValue = 'Disabled' }
+            $live = { param($v) [pscustomobject]@{ State = $v } }
+            (& $script:Eval $b.Precheck.Compare (& $live 'Enabled')) | Should -BeTrue
+            (& $script:Eval $b.Verify.Compare (& $live 'Disabled')) | Should -BeTrue
+            (& $script:Eval $b.Rollback.Compare (& $live 'Disabled')) | Should -BeFalse
+        }
+
+        It 'where Exchange returns names or GUIDs instead of the addresses that were set, the Compare is a COUNT, and the record says so' {
+            $b = & $script:Rem 'DL-1.2' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = @(); AfterValue = @('a@x.example', 'b@y.example') }
+            $b.Precheck.Compare | Should -Match '^\(@\(.*\)\)\.Count -eq 0$'
+            $b.Verify.Compare | Should -Match '^\(@\(.*\)\)\.Count -eq 2$'
+            $b.Verify.Expect | Should -Match 'a count: Exchange returns names or GUIDs'
+            $live = { param($n) [pscustomobject]@{ AcceptMessagesOnlyFromSendersOrMembers = @(for ($i = 0; $i -lt $n; $i++) { [guid]::NewGuid() }) } }
+            (& $script:Eval $b.Precheck.Compare (& $live 0)) | Should -BeTrue
+            (& $script:Eval $b.Verify.Compare (& $live 2)) | Should -BeTrue
+            (& $script:Eval $b.Verify.Compare (& $live 1)) | Should -BeFalse
+            $o = & $script:Rem 'DL-2.1' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = @() }
+            $o.Verify.Compare | Should -Match '\.ManagedBy\)\)\.Count -eq 1$' -Because 'adding one owner leaves one owner'
+        }
+
+        It 'a change that cannot be verified by value is not offered' {
+            # a catalog copy whose property name cannot be used in a comparison
+            $b = & $script:Mod {
+                $e = (Get-NRGDistributionListBaseline).ById['DL-2.5']
+                $e.Remediation.Kinds['Distribution'].Property = 'Member Join'
+                New-NRGDlRemediation -Entry $e -Kind Distribution -Target 'l@contoso.com' -BeforeValue 'Open' -AfterValue 'Closed'
+            }
+            $b.Available | Should -BeFalse
             @(& $script:Steps $b) | Should -BeNullOrEmpty
         }
     }
@@ -162,20 +315,25 @@ Describe 'Distribution-list remediation bundles' {
                 $p = $c.P.Clone(); $p['BeforeValue'] = $null
                 $b = & $script:Rem $c.C $p
                 $b.Available | Should -BeFalse -Because $c.Name
+                $b.Kind | Should -Be 'Withheld'
                 $b.Reason | Should -Match 'not returned by Exchange' -Because $c.Name
-                foreach ($step in 'Backup', 'Precheck', 'Preview', 'Apply', 'Verify', 'Rollback') { $b[$step] | Should -BeNullOrEmpty -Because "$($c.Name): $step must not exist for a bundle that was withheld" }
-                @(& $script:Strings $b | Where-Object { $_ -match $script:CommandLike }) | Should -BeNullOrEmpty -Because "$($c.Name): a withheld bundle carries no command anywhere"
-                @(& $script:Strings $b | Where-Object { $_ -match '(?i)-WhatIf|-Confirm|\$true|\$false|\$null' }) | Should -BeNullOrEmpty
+                foreach ($step in 'Capture', 'Precheck', 'Preview', 'Apply', 'Verify', 'Rollback', 'Captured') { $b[$step] | Should -BeNullOrEmpty -Because "$($c.Name): $step must not exist for a record that was withheld" }
+                $b.Undo | Should -BeNullOrEmpty
+                @(& $script:Strings $b | Where-Object { $_ -match $script:CommandLike }) | Should -BeNullOrEmpty -Because "$($c.Name): a withheld record carries no command anywhere"
+                @(& $script:Strings $b | Where-Object { $_ -match '(?i)-WhatIf|-Confirm|\$true|\$false|\$null|Compare-Object' }) | Should -BeNullOrEmpty
             }
         }
 
-        It 'a known-empty list and an unknown value are different answers: an empty list is restorable, an unknown one is not' {
+        It 'a known-empty list and an unknown value are different answers: an empty list is a manual action, an unknown one is withheld' {
             $known = & $script:Rem 'DL-1.2' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = @(); AfterValue = @('a@x.example') }
             $known.Available | Should -BeTrue
-            $known.Rollback.Command | Should -Match '\$null$'
-            @($known.Notes | Where-Object { $_ -match 'does not document clearing it with \$null' }).Count | Should -Be 1 -Because 'the one undocumented rollback says so'
+            $known.Kind | Should -Be 'ManualAction'
+            $known.Reason | Should -Match 'clearing it with \$null, which Microsoft''s cmdlet page does not document'
+            $known.Rollback | Should -BeNullOrEmpty
+            @(& $script:Strings $known | Where-Object { $_ -match '(?i)\bSet-DistributionGroup\b.*\$null' }) | Should -BeNullOrEmpty -Because 'no printed command writes $null back'
             $unknown = & $script:Rem 'DL-1.2' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = $null; AfterValue = @('a@x.example') }
             $unknown.Available | Should -BeFalse
+            $unknown.Kind | Should -Be 'Withheld'
             # and the other direction: an unknown Target is not a command either
             foreach ($t in $null, '', '  ') {
                 $b = & $script:Rem 'DL-1.1' @{ Kind = 'Distribution'; Target = $t; BeforeValue = $false; AfterValue = $true }
@@ -186,24 +344,22 @@ Describe 'Distribution-list remediation bundles' {
         }
 
         It 'an enum value outside what the catalog restores, or no new value, is not a command either' {
-            # an After that is missing leaves the apply with nothing to set
             $b = & $script:Rem 'DL-2.5' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = 'Open' }
             $b.Available | Should -BeFalse
             @(& $script:Steps $b) | Should -BeNullOrEmpty
-            # a kind the control has no command for (join restriction does not exist on a dynamic list)
             $d = & $script:Rem 'DL-2.5' @{ Kind = 'Dynamic'; Target = 'l@contoso.com'; BeforeValue = 'Open'; AfterValue = 'Closed' }
             $d.Available | Should -BeFalse
             $d.Reason | Should -Match 'no command for a Dynamic object'
         }
 
-        It 'an entry to remove that is not in the captured list withholds the bundle: the state is not what the recommendation was built from' {
+        It 'an entry to remove that is not in the captured list withholds the record: the state is not what the recommendation was built from' {
             $b = & $script:Rem 'DL-3.2' @{ Kind = 'Tenant'; Target = 'Default'; BeforeValue = [string[]]@('1.2.3.4'); Remove = [string[]]@('9.9.9.9') }
             $b.Available | Should -BeFalse
             $b.Reason | Should -Match 'not in the list this scan captured'
             @(& $script:Steps $b) | Should -BeNullOrEmpty
         }
 
-        It 'a value that cannot be quoted safely anywhere in a bundle withholds the WHOLE bundle: a list with an entry dropped would be worse than none' {
+        It 'a value that cannot be quoted safely anywhere in a record withholds the WHOLE record: a list with an entry dropped would be worse than none' {
             $bad = @("a$([char]0x2018)b", "a$([char]0x2019)b", "a$([char]0x201B)b", "a`nb", "a$([char]0x202E)b", "a$([char]0x200B)b", "a$([char]0x0085)b")
             foreach ($v in $bad) {
                 $label = ('{0}' -f (($v.ToCharArray() | ForEach-Object { '{0:X4}' -f [int]$_ }) -join ' '))
@@ -218,25 +374,27 @@ Describe 'Distribution-list remediation bundles' {
                 foreach ($k in $cases) {
                     $b = & $script:Rem $k.C $k.P
                     $b.Available | Should -BeFalse -Because "$($k.C) with U+[$label]"
-                    $b.Reason | Should -Match 'cannot be quoted safely'
+                    $b.Reason | Should -Match 'cannot be quoted safely|comparison'
                     @(& $script:Steps $b) | Should -BeNullOrEmpty -Because "$($k.C) with U+[$label]: no partial command"
+                    @(& $script:Compares $b) | Should -BeNullOrEmpty
                 }
             }
         }
 
-        It 'an entry that is only displayed, not named in any command, cannot reach a command: the bundle stands and none of its commands carries the text' {
+        It 'an entry that is only displayed, not named in any command or comparison of the apply, cannot reach a command; it is compared as exact text' {
             $v = "a$([char]0x2019)b"
+            # in the captured list the whole-list Compare names every entry, so one that cannot be quoted withholds the record
             $b = & $script:Rem 'DL-3.2' @{ Kind = 'Tenant'; Target = 'Default'; BeforeValue = [string[]]@('1.2.3.4', "5.6.7.0/24$v"); Remove = [string[]]@('1.2.3.4') }
-            $b.Available | Should -BeTrue
-            @(& $script:Steps $b | Where-Object { $_.Contains($v) }) | Should -BeNullOrEmpty
+            $b.Available | Should -BeFalse
+            @(& $script:Steps $b) | Should -BeNullOrEmpty
         }
 
-        It 'an unrecognized parameter word withholds the anti-spam bundle' {
+        It 'an unrecognized parameter word withholds the anti-spam record' {
             $b = & $script:Rem 'DL-3.3' @{ Kind = 'Tenant'; Target = 'Default'; Parameter = 'BlockedSenders; calc'; BeforeValue = [string[]]@('x'); Remove = [string[]]@('x') }
             $b.Available | Should -BeFalse
         }
 
-        It 'a caller-supplied reason (a synchronized list, an external member, a preset policy) withholds the bundle with that reason' {
+        It 'a caller-supplied reason (a synchronized list, a business-purpose review, a preset policy) withholds the record with that reason' {
             $b = & $script:Rem 'DL-1.1' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = $false; AfterValue = $true; Withhold = 'Synchronized from on-premises Active Directory.' }
             $b.Available | Should -BeFalse
             $b.Reason | Should -Be 'Synchronized from on-premises Active Directory.'
@@ -245,50 +403,72 @@ Describe 'Distribution-list remediation bundles' {
     }
 
     # ═════════════════════════════════════════════════════════════════════════════════
-    Context 'a change that reaches every recipient is stricter' {
+    Context 'a change that reaches every recipient is stricter, and is never a manual action' {
 
-        It 'carries a backup, asks for confirmation on the apply and the rollback, and does not put -Confirm on the preview' {
+        It 'carries a required capture of the current configuration, asks for confirmation on the apply and the rollback, and does not put -Confirm on the preview' {
             foreach ($c in @($script:Cases | Where-Object { $_.C -in 'DL-3.1', 'DL-3.2', 'DL-3.3' })) {
                 $b = & $script:Rem $c.C $c.P
+                $b.Kind | Should -Be 'Bundle' -Because "$($c.Name): a tenant-wide change without a rollback is withheld, never a manual action"
                 $b.Impact | Should -Be 'TenantWide' -Because $c.Name
-                $b.Backup.Command | Should -Match "^Get-[A-Za-z]+ -Identity '[^']+' \| Format-List \*$" -Because 'the backup is a read that prints every property: it writes no file, and the repo bans serializing objects to disk'
-                $b.Backup.Command | Should -Not -Match 'Export-|Out-File|Set-Content|>' -Because 'a backup that writes a file is a write path'
+                $b.PSObject.Properties.Name | Should -Not -Contain 'Backup' -Because 'it is a capture of the current configuration, not a backup'
+                $b.Capture.Command | Should -Match "^Get-[A-Za-z]+ -Identity '[^']+' \| Format-List \*$" -Because 'the capture is a read that prints every property: it writes no file'
+                $b.Capture.Command | Should -Not -Match 'Export-|Out-File|Set-Content|>'
+                $b.Capture.Purpose | Should -Match 'REQUIRED before the Apply'
+                $b.Capture.Purpose | Should -Match 'inspection, not a backup'
+                $b.Capture.Purpose | Should -Match 'save its output'
                 $b.Apply.Command | Should -Match ' -Confirm$'
                 $b.Rollback.Command | Should -Match ' -Confirm$'
                 $b.Preview.Command | Should -Not -Match '-Confirm'
                 $b.Rollback.Available | Should -BeTrue
-                $b.OneWay | Should -BeFalse
                 $b.Notes -join ' ' | Should -Match 'Tenant-wide'
             }
             foreach ($c in @($script:Cases | Where-Object { $_.C -notin 'DL-3.1', 'DL-3.2', 'DL-3.3' })) {
                 $b = & $script:Rem $c.C $c.P
                 $b.Impact | Should -Be 'Standard' -Because $c.Name
-                $b.Backup | Should -BeNullOrEmpty
+                $b.Capture | Should -BeNullOrEmpty
                 $b.Apply.Command | Should -Not -Match '-Confirm'
             }
         }
 
-        It 'is withheld outright when no rollback can be built for it, rather than offered one-way' {
+        It 'is withheld outright when no rollback can be built for it, rather than offered as a manual action' {
             $b = & $script:Mod {
                 $e = (Get-NRGDistributionListBaseline).ById['DL-3.2']
                 $e.Remediation.Kinds['Tenant'].Rollback = ''
                 New-NRGDlRemediation -Entry $e -Kind Tenant -Target 'Default' -BeforeValue ([string[]]@('1.2.3.4', '10.0.0.0/8')) -Remove ([string[]]@('10.0.0.0/8'))
             }
             $b.Available | Should -BeFalse
+            $b.Kind | Should -Be 'Withheld'
             $b.Reason | Should -Match 'tenant-wide change is offered only with a rollback'
             @(& $script:Steps $b) | Should -BeNullOrEmpty
         }
 
-        It 'a single-object change may be one-way when the captured state cannot be written back, and says so in words: the owner of an ownerless list' {
+        It 'the owner of an ownerless list is a labeled manual action outside the bundles: no rollback command, the reason and the undo in words' {
             $b = & $script:Rem 'DL-2.1' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = @() }
+            $b.Kind | Should -Be 'ManualAction'
             $b.Available | Should -BeTrue
-            $b.OneWay | Should -BeTrue
-            $b.Rollback.Available | Should -BeFalse
-            $b.Rollback.Command | Should -BeNullOrEmpty
-            $b.Rollback.Reason | Should -Match 'at least one owner'
+            $b.Rollback | Should -BeNullOrEmpty
+            $b.Reason | Should -Match 'at least one owner'
+            $b.Undo | Should -Match 'at least one owner'
+            $b.Undo | Should -Not -Match $script:CommandLike -Because 'the undo is guidance in words, never a command'
             $b.RequiresInput | Should -Contain 'owner'
             $b.Notes -join ' ' | Should -Match '<owner>'
             $b.Apply.Command | Should -Match "-ManagedBy '<owner>'$"
+            $b.Precheck.Compare | Should -Match '\.ManagedBy\)\)\.Count -eq 0$'
+        }
+
+        It 'a captured empty moderator list is a manual action, because restoring it would mean clearing with $null' {
+            foreach ($k in 'Distribution', 'Dynamic') {
+                $b = & $script:Rem 'DL-2.2' @{ Kind = $k; Target = 'l@contoso.com'; BeforeValue = @(); Context = ([ordered]@{ ModerationEnabled = 'True' }) }
+                $b.Kind | Should -Be 'ManualAction' -Because $k
+                $b.Rollback | Should -BeNullOrEmpty
+                $b.Reason | Should -Match 'does not document'
+                $b.Undo | Should -Match 'Microsoft documents'
+                $b.Precheck.Expect | Should -Match 'ModerationEnabled = True' -Because 'the context is part of what the check must show'
+            }
+            # a captured non-empty moderator list can be written back, so it is an ordinary bundle
+            $nb = & $script:Rem 'DL-2.2' @{ Kind = 'Distribution'; Target = 'l@contoso.com'; BeforeValue = @('mod1@contoso.com') }
+            $nb.Kind | Should -Be 'Bundle'
+            $nb.Rollback.Command | Should -Match "-ModeratedBy 'mod1@contoso\.com'$"
         }
 
         It 'a command that needs an administrator-chosen name is the only one that carries a <placeholder>' {
@@ -306,6 +486,7 @@ Describe 'Distribution-list remediation bundles' {
         It 'the grammar itself rejects a second statement, a pipeline into anything but a read, and a subexpression' {
             foreach ($ok in "Set-DistributionGroup -Identity 'a@b.c' -RequireSenderAuthenticationEnabled `$true -WhatIf",
                             "Get-DistributionGroup -Identity 'a@b.c' | Format-List Name, PrimarySmtpAddress",
+                            "Get-DistributionGroup -Identity 'a@b.c' | Format-List *",
                             "Set-HostedConnectionFilterPolicy -Identity 'Default' -IPAllowList @{Remove='1.2.3.4','5.6.7.8'} -Confirm") { (& $script:Shape $ok) | Should -BeTrue -Because $ok }
             foreach ($bad in "Set-X -Identity 'a'; Remove-Item x",
                              "Set-X -Identity 'a' | Remove-Item",
@@ -316,7 +497,7 @@ Describe 'Distribution-list remediation bundles' {
                              "Get-X | Where-Object { `$_ }") { (& $script:Shape $bad) | Should -BeFalse -Because $bad }
         }
 
-        It 'every command in every bundle fits the grammar, however hostile the tenant text in it' {
+        It 'every command and every Compare in every record fits its grammar, however hostile the tenant text in it' {
             $hostile = @("o'brien@contoso.com", "x'; Remove-Item -Recurse C:\ ; '@contoso.com", "a`$(calc)@contoso.com", 'a{After}b@contoso.com', 'a$1b$&c@contoso.com', 'a|b@contoso.com', 'a;b@contoso.com', 'a&b@contoso.com', 'a`b@contoso.com')
             foreach ($h in $hostile) {
                 $built = @(
@@ -330,13 +511,18 @@ Describe 'Distribution-list remediation bundles' {
                     $b = & $script:Rem $k.C $k.P
                     $b.Available | Should -BeTrue -Because "$($k.C): the text is quoted, not refused: [$h]"
                     foreach ($cmd in @(& $script:Steps $b)) { (& $script:Shape $cmd) | Should -BeTrue -Because "$($k.C) [$h]: $cmd" }
+                    foreach ($cmp in @(& $script:Compares $b)) { (& $script:ShapeCompare $cmp) | Should -BeTrue -Because "$($k.C) [$h]: $cmp" }
                 }
             }
-            foreach ($c in $script:Cases) { foreach ($cmd in @(& $script:Steps (& $script:Rem $c.C $c.P))) { (& $script:Shape $cmd) | Should -BeTrue -Because "$($c.Name): $cmd" } }
+            foreach ($c in $script:Cases) {
+                $b = & $script:Rem $c.C $c.P
+                foreach ($cmd in @(& $script:Steps $b)) { (& $script:Shape $cmd) | Should -BeTrue -Because "$($c.Name): $cmd" }
+                foreach ($cmp in @(& $script:Compares $b)) { (& $script:ShapeCompare $cmp) | Should -BeTrue -Because "$($c.Name): $cmp" }
+            }
         }
 
-        It 'no command carries a line break' {
-            foreach ($c in $script:Cases) { foreach ($cmd in @(& $script:Steps (& $script:Rem $c.C $c.P))) { $cmd | Should -Not -Match '[\r\n]' } }
+        It 'no command or Compare carries a line break' {
+            foreach ($c in $script:Cases) { $b = & $script:Rem $c.C $c.P; foreach ($cmd in @(@(& $script:Steps $b) + @(& $script:Compares $b))) { $cmd | Should -Not -Match '[\r\n]' } }
         }
     }
 
@@ -360,7 +546,7 @@ Describe 'Distribution-list remediation bundles' {
                 $bundles = @($row.Remediations)
                 @($bundles | Where-Object { $_.Available }).Count | Should -Be 0 -Because "$($c.Id) with $(($with.Keys + $omit) -join ',')"
                 foreach ($b in $bundles) { @(& $script:Steps $b) | Should -BeNullOrEmpty }
-                @($sheet.Csv | Where-Object { $_.ControlId -eq $c.Id -and $_.Step -in 'Apply', 'Preview', 'Rollback', 'Check' }).Count | Should -Be 0 -Because "$($c.Id): no command row in the CSV"
+                @($sheet.Csv | Where-Object { $_.ControlId -eq $c.Id -and $_.Step -in 'Apply', 'Change', 'Preview', 'Rollback', 'Check', 'CheckCompare' }).Count | Should -Be 0 -Because "$($c.Id): no command row in the CSV"
                 $sheet.Txt | Should -Not -Match "(?m)^\s+> (Set|Enable|Disable)-" -Because "$($c.Id): no write command line in the text"
             }
         }
@@ -402,9 +588,10 @@ Describe 'Distribution-list remediation bundles' {
             $p1.Apply.Command | Should -Be "Set-HostedConnectionFilterPolicy -Identity 'P1' -IPAllowList @{Remove='10.0.0.0/8','11.0.0.1-11.0.5.5'} -Confirm"
             $p1.Rollback.Command | Should -Be "Set-HostedConnectionFilterPolicy -Identity 'P1' -IPAllowList @{Add='10.0.0.0/8','11.0.0.1-11.0.5.5'} -Confirm"
             $p1.Observed['IPAllowList'] | Should -Be '1.2.3.4, 10.0.0.0/8, 11.0.0.1-11.0.5.5'
+            @($p1.Captured.Value) | Should -Be @('1.2.3.4', '10.0.0.0/8', '11.0.0.1-11.0.5.5')
             $p2.Rollback.Command | Should -Not -Match '10\.0\.0\.0|11\.0\.0\.1'
-            $p1.Backup.Command | Should -Be "Get-HostedConnectionFilterPolicy -Identity 'P1' | Format-List *"
-            $p2.Backup.Command | Should -Be "Get-HostedConnectionFilterPolicy -Identity 'P2' | Format-List *"
+            $p1.Capture.Command | Should -Be "Get-HostedConnectionFilterPolicy -Identity 'P1' | Format-List *"
+            $p2.Capture.Command | Should -Be "Get-HostedConnectionFilterPolicy -Identity 'P2' | Format-List *"
             # a policy name the finding carries but the raw data does not, or no name at all
             foreach ($name in 'Ghost', '') {
                 $g = NewSheet (NewRaw -Lists @(NewList) -Conn $conn) @(NewFinding 'DL-3.2' 'Gap' '' @((& $obj $name '10.0.0.0/8')))
@@ -432,6 +619,19 @@ Describe 'Distribution-list remediation bundles' {
             @($bundles | Where-Object { -not $_.Available -and $_.Reason -match 'preset security policy' }).Count | Should -Be 2
             foreach ($b in @($bundles | Where-Object { -not $_.Available })) { @(& $script:Steps $b) | Should -BeNullOrEmpty }
         }
+
+        It 'a list with external members is withheld for a BUSINESS-PURPOSE review, not because the setting is technically unsuitable' {
+            $sheet = NewSheet (NewRaw -Lists @(NewList -With @{ ExternalMemberCount = 2; RequireSenderAuthenticationEnabled = $false; OwnerCount = 1; Owners = @('Owner One') })) @(NewFinding 'DL-1.1' 'Gap' 'l@contoso.com')
+            $row = @($sheet.Worksheet.Lists[0].Settings | Where-Object { $_.ControlId -eq 'DL-1.1' })[0]
+            $b = @($row.Remediations)
+            $b.Count | Should -Be 1
+            $b[0].Available | Should -BeFalse
+            $b[0].Kind | Should -Be 'Withheld'
+            $b[0].Reason | Should -Match 'Business-purpose review required'
+            $b[0].Reason | Should -Match 'different fact from who legitimately needs to send to it'
+            $b[0].Reason | Should -Match 'whether or not they are members'
+            $b[0].Reason | Should -Not -Match 'would stop them sending|technically' -Because 'an external member is not an external sender'
+        }
     }
 
     # ═════════════════════════════════════════════════════════════════════════════════
@@ -458,70 +658,109 @@ Describe 'Distribution-list remediation bundles' {
             }
         }
 
-        It 'holds every invariant of the model over a mixed worksheet: withheld means no step, available means a rollback unless one-way, tenant-wide means backup and -Confirm' {
+        It 'holds every invariant of the model over a mixed worksheet: withheld means no step, a bundle has a rollback, a manual action has none, tenant-wide means a capture and -Confirm' {
             $sheet = & $script:Mixed
             $bundles = @(AllBundles $sheet.Worksheet)
             $bundles.Count | Should -BeGreaterThan 8
-            @($bundles | Where-Object { $_.Available }).Count | Should -BeGreaterThan 4
-            @($bundles | Where-Object { -not $_.Available }).Count | Should -BeGreaterThan 2
+            @($bundles | Where-Object { $_.Kind -eq 'Bundle' }).Count | Should -BeGreaterThan 3
+            @($bundles | Where-Object { $_.Kind -eq 'ManualAction' }).Count | Should -BeGreaterThan 1
+            @($bundles | Where-Object { $_.Kind -eq 'Withheld' }).Count | Should -BeGreaterThan 2
             foreach ($b in $bundles) {
-                if (-not $b.Available) {
+                $b.Kind | Should -BeIn @('Bundle', 'ManualAction', 'Withheld')
+                if ($b.Kind -eq 'Withheld') {
+                    $b.Available | Should -BeFalse
                     $b.Reason | Should -Not -BeNullOrEmpty
                     @(& $script:Steps $b) | Should -BeNullOrEmpty
                     continue
                 }
+                $b.Available | Should -BeTrue
                 $b.Observed.Keys.Count | Should -BeGreaterThan 0
                 $b.ObservedAt | Should -Be '2026-10-04T10:00:00.0000000Z'
+                $b.Captured.Json | Should -Not -BeNullOrEmpty
                 $b.Preview.Command | Should -Be (($b.Apply.Command -replace ' -Confirm$', '') + ' -WhatIf')
-                if ($b.OneWay) { $b.Impact | Should -Be 'Standard'; $b.Rollback.Available | Should -BeFalse; $b.Rollback.Reason | Should -Not -BeNullOrEmpty }
-                else { $b.Rollback.Available | Should -BeTrue; $b.Rollback.Command | Should -Not -BeNullOrEmpty }
-                if ($b.Impact -eq 'TenantWide') { $b.Backup | Should -Not -BeNullOrEmpty; $b.Apply.Command | Should -Match ' -Confirm$'; $b.OneWay | Should -BeFalse }
+                if ($b.Kind -eq 'ManualAction') {
+                    $b.Impact | Should -Be 'Standard' -Because 'a tenant-wide change is never a manual action'
+                    $b.Rollback | Should -BeNullOrEmpty
+                    $b.Undo | Should -Not -BeNullOrEmpty
+                    $b.Reason | Should -Not -BeNullOrEmpty
+                } else {
+                    $b.Rollback.Available | Should -BeTrue
+                    $b.Rollback.Command | Should -Not -BeNullOrEmpty
+                    $b.Rollback.Compare | Should -Be $b.Precheck.Compare
+                }
+                if ($b.Impact -eq 'TenantWide') { $b.Capture | Should -Not -BeNullOrEmpty; $b.Apply.Command | Should -Match ' -Confirm$'; $b.Kind | Should -Be 'Bundle' }
                 foreach ($cmd in @(& $script:Steps $b)) { (& $script:Shape $cmd) | Should -BeTrue -Because $cmd }
+                foreach ($cmp in @(& $script:Compares $b)) { (& $script:ShapeCompare $cmp) | Should -BeTrue -Because $cmp }
             }
-            # the list that holds an external member is not given the command that would stop that member sending; a synchronized list gets none
+            # the list that holds an external member is withheld for a business-purpose review; a synchronized list gets none
             $ext = @(@(($sheet.Worksheet.Lists | Where-Object { $_.Address -eq 'ext@contoso.com' }).Settings | Where-Object { $_.ControlId -eq 'DL-1.1' })[0].Remediations)
-            $ext.Count | Should -Be 1; $ext[0].Available | Should -BeFalse; $ext[0].Reason | Should -Match 'external member'
+            $ext.Count | Should -Be 1; $ext[0].Available | Should -BeFalse; $ext[0].Reason | Should -Match 'Business-purpose review required'
             foreach ($row in @(($sheet.Worksheet.Lists | Where-Object { $_.Address -eq 'synced@contoso.com' }).Settings)) { @($row.Remediations | Where-Object { $_.Available }).Count | Should -Be 0 }
+            # the summary counts the three kinds
+            $sheet.Worksheet.Summary.RemediationBundles | Should -Be @($bundles | Where-Object { $_.Kind -eq 'Bundle' }).Count
+            $sheet.Worksheet.Summary.ManualActions | Should -Be @($bundles | Where-Object { $_.Kind -eq 'ManualAction' }).Count
+            $sheet.Worksheet.Summary.RemediationsWithheld | Should -Be @($bundles | Where-Object { $_.Kind -eq 'Withheld' }).Count
+            $sheet.Txt | Should -Match 'Remediation: reversible bundles / manual actions \(no rollback command\) / withheld:\s+\d+ / \d+ / \d+'
         }
 
-        It 'the text prints the apply on its own labeled line, never the same line as the preview, and every command of the model is in the text exactly' {
+        It 'the text labels a bundle, a manual action and a withheld record differently, prints the apply on its own labeled line, and every command of the model is in the text exactly' {
             $sheet = & $script:Mixed
             $lines = @($sheet.Txt -split "`r?`n")
+            $lines | Where-Object { $_ -match '^\s+REMEDIATION BUNDLE \[DL-' } | Should -Not -BeNullOrEmpty
+            @($lines | Where-Object { $_ -match '^\s+REMEDIATION BUNDLE \[DL-' }) | ForEach-Object { $_ | Should -Match '--  reversible; scope: (one object|TENANT-WIDE)$' }
+            @($lines | Where-Object { $_ -match '^\s+MANUAL ACTION \[DL-' }) | ForEach-Object { $_ | Should -Match '--  NOT a reversible bundle: no rollback command is offered$' }
+            $lines | Where-Object { $_ -match '^\s+REMEDIATION WITHHELD \[DL-' } | Should -Not -BeNullOrEmpty
             @($lines | Where-Object { $_ -match '^\s+> .* -WhatIf$' }).Count | Should -BeGreaterThan 4
             foreach ($l in $lines) { if ($l -match '-WhatIf') { $l | Should -Not -Match "-Confirm" ; ([regex]::Matches($l, '(Set|Disable|Enable)-[A-Za-z]+')).Count | Should -BeLessOrEqual 1 } }
             for ($i = 0; $i -lt $lines.Count; $i++) {
                 if ($lines[$i] -match '^\s+2\. PREVIEW') { $lines[$i + 1] | Should -Match ' -WhatIf$' }
-                if ($lines[$i] -match '^\s+3\. APPLY') {
+                if ($lines[$i] -match '^\s+3\. (APPLY|CHANGE)') {
                     $lines[$i] | Should -Match 'CHANGES THE TENANT'
                     $j = $i + 1; while ($lines[$j] -notmatch '^\s+> ') { $j++ }
                     $lines[$j] | Should -Not -Match '-WhatIf'
                 }
             }
             foreach ($b in @(AllBundles $sheet.Worksheet | Where-Object { $_.Available })) {
-                foreach ($cmd in @(& $script:Steps $b)) { @($lines | Where-Object { $_.Trim() -eq "> $cmd" }).Count | Should -BeGreaterOrEqual 1 -Because "the text must carry $cmd verbatim" }
-                if (-not $b.OneWay) { $sheet.Txt | Should -Match 'ROLLBACK  \(restores the state this scan read' }
+                foreach ($cmd in @(@(& $script:Steps $b) + @(& $script:Compares $b))) { @($lines | Where-Object { $_.Trim() -eq "> $cmd" }).Count | Should -BeGreaterOrEqual 1 -Because "the text must carry $cmd verbatim" }
+                if ($b.Kind -eq 'Bundle') { $sheet.Txt | Should -Match 'ROLLBACK  \(restores the captured value; run the check first, then the Compare after\)' }
             }
-            $sheet.Txt | Should -Match 'ROLLBACK  NOT AVAILABLE'
-            $sheet.Txt | Should -Match 'REMEDIATION WITHHELD \[DL-1\.1\]'
-            $sheet.Txt | Should -Match 'BACKUP  \(read-only'
+            $sheet.Txt | Should -Match 'UNDO  \(in words; this worksheet prints no rollback command for it\)'
+            $sheet.Txt | Should -Match 'CAPTURE CURRENT CONFIGURATION  \(read-only; REQUIRED before the apply\)'
+            $sheet.Txt | Should -Match 'Captured value, exact \(JSON\):'
+            ($sheet.Txt -replace '\s+', ' ') | Should -Match 'inspection, not a backup'
+            $sheet.Txt | Should -Not -Match 'ROLLBACK  NOT AVAILABLE|BACKUP  \('
+            # a manual action never prints a rollback command under its own heading
+            $ma = @($lines | Select-String -Pattern '^\s+MANUAL ACTION \[DL-' | ForEach-Object { $_.LineNumber - 1 })
+            foreach ($start in $ma) {
+                $end = $start + 1; while ($end -lt $lines.Count -and $lines[$end] -notmatch '^\s+(MANUAL ACTION|REMEDIATION BUNDLE|REMEDIATION WITHHELD) \[DL-' -and $lines[$end] -notmatch '^[A-Z]{3,}') { $end++ }
+                (@($lines[$start..($end - 1)]) -join "`n") | Should -Not -Match '(?m)^\s+ROLLBACK  '
+            }
         }
 
-        It 'the CSV has one row per step and one command per cell: a preview and an apply never share a cell, and no cell chains commands' {
+        It 'the CSV has one row per step and one command per cell: a preview and an apply never share a cell, a manual action has its own row type, and the exact captured value is a JSON column' {
             $sheet = & $script:Mixed
-            $rem = @($sheet.Csv | Where-Object { $_.RowType -eq 'Remediation' })
-            $rem.Count | Should -BeGreaterThan 20
-            foreach ($r in $rem) { $r.Step | Should -BeIn @('Observed', 'Backup', 'Check', 'Preview', 'Apply', 'Verify', 'Rollback', 'Note', 'Withheld') }
+            $rem = @($sheet.Csv | Where-Object { $_.RowType -in 'Remediation', 'Manual action' })
+            $rem.Count | Should -BeGreaterThan 25
+            foreach ($r in $rem) { $r.Step | Should -BeIn @('Observed', 'Capture', 'Check', 'CheckCompare', 'Preview', 'Apply', 'Change', 'Verify', 'VerifyCompare', 'Rollback', 'RollbackCompare', 'Undo', 'Note', 'Withheld') }
+            foreach ($r in @($rem | Where-Object { $_.RowType -eq 'Manual action' })) {
+                $r.Step | Should -Not -BeIn @('Apply', 'Rollback', 'RollbackCompare') -Because 'a manual action has a Change and an Undo in words, never an Apply or a Rollback'
+            }
+            @($sheet.Csv | Where-Object { $_.RowType -eq 'Remediation' -and $_.Step -in 'Change', 'Undo' }).Count | Should -Be 0
+            @($sheet.Csv | Where-Object { $_.RowType -eq 'Manual action' -and $_.Step -eq 'Change' }).Count | Should -BeGreaterThan 0
             foreach ($r in @($sheet.Csv | Where-Object { $_.Command -and $_.Step -ne 'Inspect' })) {
+                $r.Command | Should -Not -Match "^['=+\-@]" -Because 'a spreadsheet prefixes an apostrophe to a cell starting with one of these, which would break the pasted command'
                 $r.Command | Should -Not -Match '[;&\r\n]' -Because 'a cell that chained a preview and an apply would run both when pasted'
-                (& $script:Shape $r.Command) | Should -BeTrue -Because $r.Command
+                if ($r.Step -like '*Compare') { (& $script:ShapeCompare $r.Command) | Should -BeTrue -Because $r.Command }
+                else { (& $script:Shape $r.Command) | Should -BeTrue -Because $r.Command }
                 if ($r.Step -eq 'Preview') { $r.Command | Should -Match ' -WhatIf$' }
-                if ($r.Step -eq 'Apply') { $r.Command | Should -Not -Match '-WhatIf' }
+                if ($r.Step -in 'Apply', 'Change') { $r.Command | Should -Not -Match '-WhatIf' }
             }
             @($rem | Where-Object { $_.Step -eq 'Withheld' } | Where-Object { $_.Command }) | Should -BeNullOrEmpty -Because 'a withheld row has a reason and no command'
             @($rem | Where-Object { $_.Step -eq 'Withheld' -and -not $_.Detail }) | Should -BeNullOrEmpty
-            # every command in the model is in the CSV, as its own cell, exactly once per bundle
+            foreach ($r in @($rem | Where-Object { $_.Step -eq 'Observed' })) { { $r.CapturedJson | ConvertFrom-Json } | Should -Not -Throw -Because 'the exact captured value is valid JSON'; $r.CapturedJson | Should -Not -BeNullOrEmpty }
+            # every command and Compare in the model is in the CSV as its own cell
             foreach ($b in @(AllBundles $sheet.Worksheet | Where-Object { $_.Available })) {
-                foreach ($cmd in @(& $script:Steps $b)) { @($sheet.Csv | Where-Object { $_.Command -eq $cmd }).Count | Should -BeGreaterOrEqual 1 -Because $cmd }
+                foreach ($cmd in @(@(& $script:Steps $b) + @(& $script:Compares $b))) { @($sheet.Csv | Where-Object { $_.Command -eq $cmd }).Count | Should -BeGreaterOrEqual 1 -Because $cmd }
             }
             $sheet.CsvRaw | Should -Not -Match 'AdminCommand'
         }

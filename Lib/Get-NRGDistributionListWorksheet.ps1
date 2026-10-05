@@ -228,12 +228,13 @@ function Get-NRGDistributionListWorksheet {
         # 1. Who can send
         $f11 = & $fnd 'DL-1.1'; $v11 = & $verdictOf $f11 'Not assessed'
         $cur11 = if ($null -eq $auth) { 'Not returned' } else { "RequireSenderAuthenticationEnabled = $auth" }
-        # Requiring authenticated senders would stop a list's external members sending to it, so no such command is printed for a list
-        # that holds one: the allowed-senders proposal (DL-1.2) is the option that keeps them. The finding's Detail says why.
+        # Requiring authenticated senders rejects every unauthenticated outside sender, and an external MEMBER is not the same fact as an
+        # outside SENDER, so no such command is printed for a list that holds external members until a business-purpose review has
+        # decided; the allowed-senders proposal (DL-1.2) is the alternative. The finding's Detail says why.
         $c11 = @()
         if ($v11 -in @('Gap', 'Partial')) {
             $why11 = ''
-            if ($mst -eq 'Collected' -and $extN -gt 0) { $why11 = "This list has $extN external member(s): requiring authenticated senders would stop them sending to it (Microsoft: True rejects unauthenticated, external senders), so no command is offered. The allowed-senders option (DL-1.2) is the one that keeps them." }
+            if ($mst -eq 'Collected' -and $extN -gt 0) { $why11 = "Business-purpose review required before this change. This list has $extN external member(s). That is a different fact from who legitimately needs to send to it, and this scan cannot tell which outside senders do. Requiring authenticated senders (True) rejects every unauthenticated, external sender (Microsoft), whether or not they are members, so no command is offered until someone who knows the purpose has decided. The allowed-senders option (DL-1.2) is the alternative that keeps named outside senders." }
             # Only a value Exchange returned as a boolean is a captured original; anything else leaves the original unknown.
             $before11 = $null; if ($auth -is [bool]) { $before11 = $auth }
             $c11 = @(& $bundleFor 'DL-1.1' $before11 $true $null $why11)
@@ -255,7 +256,7 @@ function Get-NRGDistributionListWorksheet {
             $proposal = 'No allow list is proposed: Exchange did not return RequireSenderAuthenticationEnabled for this list.'
             $proposalBundle = & $bundleFor 'DL-1.2' $null $null $null $proposal
         } elseif ($auth -eq $true) {
-            $proposal = "No allow list is needed to keep outside mail out: the list accepts mail only from authenticated senders inside the organization$(if ($mst -eq 'Collected' -and $extN -gt 0) { "; its $extN external member(s) cannot send to it while that is True (Microsoft)" })."
+            $proposal = "No allow list is needed to keep outside mail out: the list accepts mail only from authenticated senders inside the organization$(if ($mst -eq 'Collected' -and $extN -gt 0) { "; outside senders, an external member included, are rejected while that is True (Microsoft)" })."
         } elseif (-not $allowedKnown) {
             $proposal = 'No allow list is proposed: Exchange did not return the allowed-senders setting, so its original state is unknown and a command that sets it could overwrite a list that already exists.'
             $proposalBundle = & $bundleFor 'DL-1.2' $null $null $null $proposal
@@ -291,7 +292,7 @@ function Get-NRGDistributionListWorksheet {
                 } else {
                     $proposalBundle = $built
                     $nestedN = [int](Get-NRGObjectField -Item $l -Key 'NestedGroupCount' -Default 0)
-                    $proposal = "Proposed allow list: the $($addrs.Count) address(es) read now ($extN external, $nestedN nested group(s)) become the only senders this list accepts, and anyone else is rejected, staff who are not members included. It is a snapshot: a member added later is not on it, so add a new member to the allowed senders when adding them to the list. An owner, shared mailbox or application that sends to the list and is not a member is rejected unless it is added to the command. External members can send only while RequireSenderAuthenticationEnabled is False, which it is on this list. An allow list matches the sender's address; it does not authenticate an outside sender. The bundle below gives the check to run first, a -WhatIf preview, the apply, a check afterwards and a rollback."
+                    $proposal = "Proposed allow list: the $($addrs.Count) address(es) read now ($extN external, $nestedN nested group(s)) become the only senders this list accepts, and anyone else is rejected, staff who are not members included. It is a snapshot: a member added later is not on it, so add a new member to the allowed senders when adding them to the list. An owner, shared mailbox or application that sends to the list and is not a member is rejected unless it is added to the command. External members can send only while RequireSenderAuthenticationEnabled is False, which it is on this list. An allow list matches the sender's address; it does not authenticate an outside sender. This is a MANUAL ACTION, not a reversible bundle: the section below gives the check to run first (its Compare must print True), a -WhatIf preview, the change, a check afterwards, and in words how to undo it. No rollback command is offered, because restoring an empty allowed-senders list would mean clearing it with `$null, which Microsoft does not document."
                 }
             }
         }
@@ -430,6 +431,11 @@ function Get-NRGDistributionListWorksheet {
         SettingPartials      = (& $count 'Partial')
         SettingsNotAssessed  = (& $count 'Not assessed')
         TenantBypassGaps     = @($tenantRows | Where-Object { $_.Verdict -eq 'Gap' }).Count
+        # The three kinds of remediation record, counted over every row: reversible bundles, labeled manual actions (no rollback
+        # command), and withheld records (a reason and no command).
+        RemediationBundles   = @(@($tenantRows) + @($sortedLists | ForEach-Object { $_.Settings }) | ForEach-Object { $_.Remediations } | Where-Object { $_ -and $_.Kind -eq 'Bundle' }).Count
+        ManualActions        = @(@($tenantRows) + @($sortedLists | ForEach-Object { $_.Settings }) | ForEach-Object { $_.Remediations } | Where-Object { $_ -and $_.Kind -eq 'ManualAction' }).Count
+        RemediationsWithheld = @(@($tenantRows) + @($sortedLists | ForEach-Object { $_.Settings }) | ForEach-Object { $_.Remediations } | Where-Object { $_ -and $_.Kind -eq 'Withheld' }).Count
         MembersRead          = [int](Get-NRGObjectField -Item $stats -Key 'MembersRead' -Default 0)
     }
 

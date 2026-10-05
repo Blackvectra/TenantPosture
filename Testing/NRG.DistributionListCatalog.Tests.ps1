@@ -148,7 +148,7 @@ Describe 'Distribution-list recommendation catalog' {
             $r = $script:Recs | Where-Object { $_.ControlId -eq 'DL-1.2' }
             $r.Remediation.Kinds.Distribution.Apply | Should -Be 'Set-DistributionGroup -Identity {Target} -AcceptMessagesOnlyFromSendersOrMembers {After}'
             $r.Remediation.Kinds.Distribution.Rollback | Should -Be 'Set-DistributionGroup -Identity {Target} -AcceptMessagesOnlyFromSendersOrMembers {Before}'
-            $r.Remediation.Kinds.Distribution.EmptyRestoreNote | Should -Match 'does not document clearing it with \$null' -Because 'writing $null back is the one rollback Microsoft does not document, and the worksheet says so'
+            $r.Remediation.Kinds.Distribution.Undo | Should -Match 'does not document it' -Because 'writing $null back is the one rollback Microsoft does not document, so the worksheet gives the undo in words instead of a command'
             $r.Remediation.Kinds.PSObject.Properties.Name | Should -Not -Contain 'Dynamic'
             $r.SourceUrl | Should -Be 'https://learn.microsoft.com/powershell/module/exchange/set-distributiongroup'
             @($r.AlsoSee) | Should -Contain 'https://learn.microsoft.com/troubleshoot/exchange/email-delivery/ndr/fix-error-code-5-7-136-in-exchange-online'
@@ -203,7 +203,8 @@ Describe 'Distribution-list recommendation catalog' {
                 $rb = [string]$k.T.Rollback
                 if (-not $rb) {
                     $k.Impact | Should -Be 'Standard' -Because "$($k.Id): a tenant-wide change without a rollback is withheld, so the catalog must not ship one"
-                    [string]$k.T.RollbackReason | Should -Not -BeNullOrEmpty -Because "$($k.Id) $($k.Kind) is one-way and must say why"
+                    [string]$k.T.ManualReason | Should -Not -BeNullOrEmpty -Because "$($k.Id) $($k.Kind) has no rollback, so it is a labeled manual action and must say why"
+                    [string]$k.T.Undo | Should -Not -BeNullOrEmpty -Because "$($k.Id) $($k.Kind) must say in words how to undo it"
                     continue
                 }
                 if ($rb -match '^Set-') {
@@ -219,11 +220,18 @@ Describe 'Distribution-list recommendation catalog' {
                 @($k.T.RequiresInput | Sort-Object -Unique) | Should -Be $inText -Because "$($k.Id) $($k.Kind)"
             }
         }
-        It 'a rollback that writes $null is the only one that says Microsoft does not document it' {
-            foreach ($k in $script:Kinds) {
-                if ($k.T.PSObject.Properties['EmptyRestoreNote']) { [string]$k.T.EmptyRestoreNote | Should -Match 'not document' }
+        It 'a rollback that would restore an EMPTY multi-valued property writes $null, which Microsoft does not document, so the builder makes it a manual action and the template says how to undo it in words' {
+            # Exactly these templates restore a list through {Before}: the builder turns each into a manual action when the captured list is empty.
+            $viaBefore = @($script:Kinds | Where-Object { [string]$_.T.Rollback -match '-(AcceptMessagesOnlyFromSendersOrMembers|ModeratedBy) \{Before\}$' } | ForEach-Object { "$($_.Id)/$($_.Kind)" } | Sort-Object)
+            ($viaBefore -join ',') | Should -Be 'DL-1.2/Distribution,DL-2.2/Distribution,DL-2.2/Dynamic'
+            foreach ($k in @($script:Kinds | Where-Object { "$($_.Id)/$($_.Kind)" -in $viaBefore })) {
+                [string]$k.T.Undo | Should -Match 'not document' -Because "$($k.Id)/$($k.Kind): the undo says why no rollback command is printed"
+                [string]$k.T.Undo | Should -Not -Match '(?m)^Set-|^Get-' -Because 'the undo is guidance in words, never a command'
+                $k.T.ShowsNames | Should -BeTrue -Because 'Exchange returns names or GUIDs for these, so the comparison is a count'
             }
-            (@($script:Kinds | Where-Object { $_.T.PSObject.Properties['EmptyRestoreNote'] } | ForEach-Object { "$($_.Id)/$($_.Kind)" }) -join ',') | Should -Be 'DL-1.2/Distribution,DL-2.2/Distribution,DL-2.2/Dynamic'
+            # the one-way owner template is a manual action too, and a count of one after the change
+            foreach ($k in @($script:Kinds | Where-Object { $_.Id -eq 'DL-2.1' })) { [int]$k.T.AfterCount | Should -Be 1; $k.T.ShowsNames | Should -BeTrue }
+            foreach ($k in @($script:Kinds | Where-Object { $_.T.PSObject.Properties['RollbackReason'] -or $_.T.PSObject.Properties['EmptyRestoreNote'] })) { throw "$($k.Id): RollbackReason and EmptyRestoreNote are replaced by ManualReason and Undo" }
         }
     }
 

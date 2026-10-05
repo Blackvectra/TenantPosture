@@ -75,12 +75,13 @@ from outside or through a bypass, and how that compares with a cited recommendat
 
 **Needs:** an Exchange Online sign-in and nothing else (no Graph, Purview, Teams or SharePoint).
 **Gives you:** `<tenant>-<timestamp>-distribution-lists.txt` and `.csv` in the output folder. For a list
-open to outside mail it also prints, as text, a proposed allowed-senders bundle built from the list's
+open to outside mail it also prints, as text, a proposed allowed-senders manual action built from the list's
 current members (external members stay; nothing removes them).
 **Read-only:** it lists members and never changes anything. The commands in the worksheet are
-text for an administrator, and each is a bundle: the state read, a check to run first, a `-WhatIf` preview,
-the apply, a check afterwards, and a rollback that restores the state the scan read (or no command at all
-when that state was not known). Every other area is not assessed. The read-only access it needs is in
+text for an administrator, and each is a record: a reversible bundle (the state read, a check whose Compare prints
+True, a `-WhatIf` preview, the apply, a verify, and a rollback that restores the state the scan read), a labeled manual
+action with no rollback command (an owner, or an allowed-senders list that was empty), or a withheld record with a reason
+and no command at all. Every other area is not assessed. The read-only access it needs is in
 [`EXCHANGE-RBAC-DISTRIBUTION-LISTS.md`](EXCHANGE-RBAC-DISTRIBUTION-LISTS.md).
 Not yet run against a live tenant. See the README section for what it cannot see.
 

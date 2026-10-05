@@ -765,7 +765,7 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             }
             # One step of a remediation bundle as the CSV carries it (one command per cell), and the bundles on a worksheet row.
             $script:StepCmd = { param($o, [string] $Control, [string] $Step, [string] $List = '')
-                @($o.Csv | Where-Object { $_.RowType -eq 'Remediation' -and $_.ControlId -eq $Control -and $_.Step -eq $Step -and ($List -eq '' -or $_.ListAddress -eq $List) } | ForEach-Object { $_.Command }) }
+                @($o.Csv | Where-Object { $_.RowType -in 'Remediation', 'Manual action' -and $_.ControlId -eq $Control -and $_.Step -eq $Step -and ($List -eq '' -or $_.ListAddress -eq $List) } | ForEach-Object { $_.Command }) }
             $script:Bundles = { param($o, [string] $Control, [string] $List = '')
                 $rows = if ($List) { @(($o.Worksheet.Lists | Where-Object { $_.Address -eq $List }).Settings) } else { @($o.Worksheet.Tenant) }
                 @($rows | Where-Object { $_.ControlId -eq $Control } | ForEach-Object { $_.Remediations }) }
@@ -909,7 +909,8 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 $o.Txt | Should -Match 'Remediation \(text for an administrator; this tool never runs a command\)'
                 $o.Txt | Should -Match "Disable-TransportRule -Identity 'Allow partner'"
                 $o.Txt | Should -Not -Match "Set-HostedConnectionFilterPolicy .*@\{Remove='203\.0\.113\.0/24'\}" -Because 'a /24 entry is within what Microsoft recommends, so no command removes it'
-                (& $script:StepCmd $o 'DL-1.2' 'Apply' 'allstaff@contoso.com') |
+                $o.Txt | Should -Match 'MANUAL ACTION \[DL-1\.2\] Allowed senders  --  NOT a reversible bundle: no rollback command is offered' -Because 'restoring an empty allowed-senders list means clearing it with $null, which Microsoft does not document'
+                (& $script:StepCmd $o 'DL-1.2' 'Change' 'allstaff@contoso.com') |
                     Should -Be "Set-DistributionGroup -Identity 'allstaff@contoso.com' -AcceptMessagesOnlyFromSendersOrMembers 'ann@contoso.com','bob@vendor.example'"
                 # A list with no external member still gets the require-authentication bundle.
                 $p = & $script:Build @{ Lists = @(New-DlRaw 'Internal Open' 'iopen@contoso.com' -With @{ RequireSenderAuthenticationEnabled = $false }); Members = @{ 'iopen@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com') } } 'cmds-internal'
@@ -1095,7 +1096,7 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                     param([hashtable] $Scn, [string] $Name = 'prop')
                     $o = & $script:Build $Scn $Name
                     $row = $o.Csv | Where-Object { $_.RowType -eq 'Setting' -and $_.ControlId -eq 'DL-1.2' } | Select-Object -First 1
-                    $apply = @($o.Csv | Where-Object { $_.RowType -eq 'Remediation' -and $_.ControlId -eq 'DL-1.2' -and $_.Step -eq 'Apply' } | Select-Object -First 1)
+                    $apply = @($o.Csv | Where-Object { $_.RowType -eq 'Manual action' -and $_.ControlId -eq 'DL-1.2' -and $_.Step -eq 'Change' } | Select-Object -First 1)
                     [pscustomobject]@{ O = $o; Row = $row; Cmd = [string]$apply.Command; Detail = [string]$row.Detail; Verdict = [string]$row.Verdict }
                 }
                 $script:OpenList = { param([hashtable] $With = @{}, [string] $Addr = 'open@contoso.com') New-DlRaw 'Open' $Addr -With (@{ RequireSenderAuthenticationEnabled = $false } + $With) }
@@ -1109,7 +1110,10 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                 $r.Detail | Should -Match 'Proposed allow list: the 3 address\(es\) read now \(1 external, 1 nested group\(s\)\)'
                 $r.Detail | Should -Match 'It is a snapshot: a member added later is not on it'
                 $r.Detail | Should -Match 'does not authenticate an outside sender'
-                $r.Detail | Should -Match 'a -WhatIf preview, the apply, a check afterwards and a rollback'
+                $r.Detail | Should -Match 'MANUAL ACTION, not a reversible bundle'
+                $r.Detail | Should -Match 'clearing it with \$null, which Microsoft does not document'
+                @($r.O.Csv | Where-Object { $_.ControlId -eq 'DL-1.2' -and $_.Step -in 'Rollback', 'RollbackCompare' }).Count | Should -Be 0 -Because 'a manual action has no rollback command'
+                @($r.O.Csv | Where-Object { $_.ControlId -eq 'DL-1.2' -and $_.Step -eq 'Undo' }).Count | Should -Be 1
                 $r.O.Txt | Should -Match "(?m)^\s+> Set-DistributionGroup -Identity 'open@contoso\.com' -AcceptMessagesOnlyFromSendersOrMembers 'ann@contoso\.com','bob@vendor\.example','sub@contoso\.com'$"
                 $r.O.Txt | Should -Match 'Allowed senders  \[Proposal\]'
                 $r.O.Worksheet.Summary.AllowListsProposed | Should -Be 1
@@ -1145,7 +1149,7 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
 
             It 'withholds the command, and says why, whenever a command could reject people it should not' {
                 $cases = @(
-                    @{ Why = 'senders must already be authenticated'; Match = 'cannot send to it while that is True'
+                    @{ Why = 'senders must already be authenticated'; Match = 'an external member included, are rejected while that is True'
                        List = (New-DlRaw 'Open' 'open@contoso.com'); Members = @(New-DlMember 'Vendor' 'v@vendor.example' 'MailContact') }
                     @{ Why = 'an allow list already exists'; Match = 'already has 1 allowed sender\(s\) and this scan does not propose replacing'
                        List = (& $script:OpenList @{ AcceptMessagesOnlyFromSendersOrMembers = @('Partner Pat') }); Members = @(New-DlMember 'Ann' 'ann@contoso.com') }
@@ -1226,7 +1230,8 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
                         'open@contoso.com'  = @(New-DlMember 'Vendor' 'v@vendor.example' 'MailContact'; New-DlMember 'Ann' 'ann@contoso.com')
                         'named@contoso.com' = @(New-DlMember 'Vendor' 'v@vendor.example' 'MailContact')
                         'plain@contoso.com' = @(New-DlMember 'Ann' 'ann@contoso.com') } } | Out-Null
-                (F 'DL-1.1' 'open@*').Detail | Should -Match 'has 1 external member\(s\): requiring authenticated senders would stop them sending to it'
+                (F 'DL-1.1' 'open@*').Detail | Should -Match 'has 1 external member\(s\), which is a different fact from who legitimately needs to send to it: business-purpose review required before requiring authenticated senders'
+                (F 'DL-1.1' 'open@*').Detail | Should -Not -Match 'would stop them sending' -Because 'an external member is not an external sender; the finding must not imply the setting is technically unsuitable'
                 (F 'DL-1.1' 'named@*').State | Should -Be 'Partial'
                 (F 'DL-1.1' 'named@*').Detail | Should -Match 'has 1 external member\(s\)'
                 (F 'DL-1.1' 'plain@*').Detail | Should -Not -Match 'external member'
@@ -1312,7 +1317,7 @@ foreach ($x in $script:DlScn.AntiSpamRules) { $x }
             $o.Worksheet.Summary.AllowListsProposed | Should -Be 0
             # a list that is not synchronized still gets its commands
             $p = & $script:Build @{ Lists = @(New-DlRaw 'Local' 'local@contoso.com' -With @{ IsDirSynced = $false; ManagedBy = @() }) } 'nosync'
-            @($p.Csv | Where-Object { $_.ListAddress -eq 'local@contoso.com' -and $_.Step -eq 'Apply' -and $_.Command }).Count | Should -BeGreaterThan 0
+            @($p.Csv | Where-Object { $_.ListAddress -eq 'local@contoso.com' -and $_.Step -in 'Apply', 'Change' -and $_.Command }).Count | Should -BeGreaterThan 0
         }
 
         It '"Lists that accept mail from anyone" counts lists by their DL-1.1 verdict, not by a phrase in rendered text' {
