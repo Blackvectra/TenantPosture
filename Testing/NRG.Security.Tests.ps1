@@ -89,6 +89,36 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             })
             $hits -join "`n" | Should -BeNullOrEmpty -Because 'write ${name}: — a bare $name: is a scope qualifier'
         }
+        # SupportsShouldProcess adds -WhatIf and -Confirm itself. A script that
+        # also declares its own $WhatIf parses, but fails at binding with "A
+        # parameter with the name 'WhatIf' was defined multiple times", so
+        # every invocation fails. Invoke-NRGBatchAssessment.ps1 shipped that
+        # way and no test launched it.
+        It 'no script or function declares its own WhatIf or Confirm beside SupportsShouldProcess' {
+            $hits = @(foreach ($f in $script:PsFiles) {
+                $t = $null; $e = $null
+                $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$t, [ref]$e)
+                foreach ($pb in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.ParamBlockAst] }, $true)) {
+                    $binding = @($pb.Attributes | Where-Object { $_.TypeName.Name -eq 'CmdletBinding' })
+                    $ssp = @($binding.NamedArguments | Where-Object {
+                        $_.ArgumentName -eq 'SupportsShouldProcess' -and ($_.ExpressionOmitted -or $_.Argument.Extent.Text -notmatch '^\$?false$')
+                    })
+                    if ($ssp.Count -eq 0) { continue }
+                    foreach ($p in $pb.Parameters) {
+                        if ($p.Name.VariablePath.UserPath -in @('WhatIf', 'Confirm')) { "$($f.Name):$($p.Extent.StartLineNumber) $($p.Name.VariablePath.UserPath)" }
+                    }
+                }
+            })
+            $hits -join "`n" | Should -BeNullOrEmpty -Because 'the duplicate parameter makes every invocation fail at binding'
+        }
+        It 'Invoke-NRGBatchAssessment.ps1 parameter metadata binds (its -WhatIf is reachable)' {
+            # Get-Command reads the script's parameter metadata without running
+            # it (the script's #Requires modules are not needed). A binding
+            # conflict leaves the parameter set empty.
+            $batch = Get-Command -Name (Join-Path $script:RepoRoot 'Invoke-NRGBatchAssessment.ps1') -ErrorAction Stop
+            $batch.Parameters.Keys | Should -Contain 'WhatIf'
+            $batch.Parameters.Keys | Should -Contain 'OnlyClient'
+        }
     }
 
     Context 'A01 — Path Traversal Prevention [Static]' {

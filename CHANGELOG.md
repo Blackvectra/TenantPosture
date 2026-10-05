@@ -504,6 +504,37 @@
   no recorded coverage read Unknown. Tests: `NRG.CallBinding`, `NRG.SignInHonesty`,
   `NRG.DeviceEvidence`, plus additions to `NRG.SignInTriage`.
 
+- **GUI error responses carried Pode's HTML error page, not the body the
+  handler wrote.** `POST /api/scan` (400 `domain is required` / `invalid
+  domain format`), `GET /api/scan/:id/status` (404 `unknown runId`) and
+  `GET /api/runs/:tenant/:id/report` (400 `Invalid path segment.` / 404
+  `Report not found.`) called `Set-PodeResponseStatus` and then
+  `Write-PodeJsonResponse` / `Write-PodeTextResponse`.
+  `Set-PodeResponseStatus` renders Pode's error page immediately, so the
+  client received the right status and content type and a body of the page's
+  first N bytes (N = the handler body's length): `<html
+  style='background-color: #0`. The UI shows the scan body verbatim, so the
+  operator read "Could not start scan: <html style=...". The status now
+  rides on the write (`-StatusCode`) on all five paths. Pinned by new
+  assertions in the live-server context of `NRG.WebServer.Tests.ps1`, which
+  boots a real server (Pode 2.10+ required; skipped where it is absent) and
+  checks status, content type and the body: JSON with the expected `error`
+  for the scan routes, the exact handler text for the report route (its 400
+  is reached with an encoded backslash, `%5C`); each fails against the old
+  handlers. No tenant call is made, the server stays loopback-only, and no
+  scan is started.
+
+- **`Invoke-NRGBatchAssessment.ps1` could not start.** It declared
+  `[CmdletBinding(SupportsShouldProcess)]` and its own `[switch] $WhatIf`;
+  PowerShell adds `-WhatIf` itself for `SupportsShouldProcess`, so every
+  invocation, `-WhatIf` included, failed at binding with "A parameter with
+  the name 'WhatIf' was defined multiple times". It is now
+  `[CmdletBinding()]`; the script's own `-WhatIf` (list the clients and
+  exit) is unchanged, and the unused `-Confirm` goes with it. Found in #107.
+  `NRG.Security.Tests.ps1` now fails on any script or function that declares
+  `WhatIf`/`Confirm` beside `SupportsShouldProcess`, and reads the batch
+  runner's parameter metadata.
+
 - **Defects found by the first live baseline validation (NRGTS, 2026-09-29),
   fixed without touching a single verdict.** DNS collection ran only inside
   the Exchange branch of the entry point, so an Exchange connection failure
