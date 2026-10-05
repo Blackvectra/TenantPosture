@@ -742,6 +742,13 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
                 '11e16614922618fac053edc9ee0644b94a64e63edf590a0cb8539494450d510b'
                 '1714c4a4da0f3ae69c9510b45fb0bb68df4b5a93fbf4eb17b3f7a11d4b0b0e25'
                 '0d8112db2b6e124be99af9f39e9edd525b9c301b5cf66d3c1706fce1d436175a'
+                # A legacy Exchange address splits an organization name into /o= and /ou=
+                # segments, so its parts and the staff surnames a live-run fixture carried
+                # are listed too.
+                '4065564387a662fe5f1aa27eade986a7fc8961eab59d1c204b219158185ca86e'
+                '0d86beeaed2940c73f110ffd0f1a1afff9e696450aa5efcc5d02ca8f7295453b'
+                '069857ed758920516e40903416412ae015caa99e368d3fa38f12d26f1fddb430'
+                'd88ed6a2f14f012cf2d2427cb0fcecf05290761afdf4f98eddb1c841da50cc09'
             )
             $sha = [System.Security.Cryptography.SHA256]::Create()
             $hashOf = @{}
