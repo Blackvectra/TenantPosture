@@ -342,6 +342,8 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
     Context 'DNS-1.3 — DMARC Policy at Quarantine or Reject' {
 
         It 'p=reject at 100% is verified, but with no approved NRG reporting address the verdict is not assessed (never Satisfied)' {
+            # Pins the 'no approved list' scenario: the shipped lists are approved, so the file is replaced for this test.
+            Mock -ModuleName NRG-Assessment Get-NRGStandards { [ordered]@{ DmarcReportingAddresses = @(); CommonAttachmentFileTypes = @(); PriorityUsers = @(); RequiredConditionalAccessTemplates = @() } }
             Set-NRGRawData -Key 'DNS-EmailRecords' -Data (NewRaw 'DNS' @{
                 DomainCount = 1
                 Domains     = @{ 'contoso.com' = [pscustomobject]@{
@@ -351,6 +353,28 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
             $v = GetVerdict 'Test-NRGControlDNSDMARC' 'DNS-1.3'
             $v.State  | Should -Be 'NotApplicable'
             $v.Detail | Should -Match '^Verified: contoso.com DMARC p=reject'
+        }
+
+        It 'with the SHIPPED approved reporting address in rua, p=reject at 100% is Satisfied' {
+            Set-NRGRawData -Key 'DNS-EmailRecords' -Data (NewRaw 'DNS' @{
+                DomainCount = 1
+                Domains     = @{ 'contoso.com' = [pscustomobject]@{
+                    DMARC = 'v=DMARC1; p=reject; rua=mailto:dmarc@nrgtechservices.com'
+                    DMARCPolicy = 'reject'; DMARCPct = 100 } }
+            })
+            (GetVerdict 'Test-NRGControlDNSDMARC' 'DNS-1.3').State | Should -Be 'Satisfied'
+        }
+
+        It 'with the SHIPPED approved reporting address missing from rua, p=reject at 100% is a shortfall that names the address' {
+            Set-NRGRawData -Key 'DNS-EmailRecords' -Data (NewRaw 'DNS' @{
+                DomainCount = 1
+                Domains     = @{ 'contoso.com' = [pscustomobject]@{
+                    DMARC = 'v=DMARC1; p=reject; rua=mailto:dmarc@contoso.com'
+                    DMARCPolicy = 'reject'; DMARCPct = 100 } }
+            })
+            $v = GetVerdict 'Test-NRGControlDNSDMARC' 'DNS-1.3'
+            $v.State  | Should -Be 'Partial'
+            $v.Detail | Should -Match 'dmarc@nrgtechservices.com'
         }
 
         It 'Partial when p=reject is only partially enforced (pct < 100)' {

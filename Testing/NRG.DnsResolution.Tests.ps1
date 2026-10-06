@@ -615,6 +615,8 @@ Describe 'DNS evaluators — a failed lookup never scores as an absent record' {
     }
 
     It 'still reports Satisfied on a correctly configured domain' {
+        # Pins the 'no approved list' scenario: the shipped lists are approved, so the file is replaced for this test.
+        Mock -ModuleName NRG-Assessment Get-NRGStandards { [ordered]@{ DmarcReportingAddresses = @(); CommonAttachmentFileTypes = @(); PriorityUsers = @(); RequiredConditionalAccessTemplates = @() } }
         script:DnsFixture @{
             Domain = 'example.com'
             SPF    = 'v=spf1 include:spf.protection.outlook.com -all'
