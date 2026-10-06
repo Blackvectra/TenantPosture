@@ -181,7 +181,8 @@ param(
     # sprawl per run.
     # -AllFiles restores every sidecar deliverable as its own file (Markdown
     # summary, engineer playbook + executive summary, playbook HTML, standalone
-    # remediation .ps1, XLSX matrix, delta). Batch mode passes this for parity.
+    # remediation .ps1, XLSX matrix, delta, NIST matrix, SSP, HIPAA readiness).
+    # Batch mode passes this for parity.
     # -JsonOnly emits only the JSON (unchanged).
     [switch] $AllFiles,
 
@@ -230,6 +231,13 @@ param(
     # are answered by the client in Config/ssp/<client>.psd1 and render as open
     # questions until they are. Markdown + HTML + XLSX. Implied by -AllFiles.
     [switch] $SSP,
+
+    # HIPAA Security Rule readiness (45 CFR 164 Subpart C): every standard and
+    # implementation specification, Required or Addressable, with what this
+    # assessment evidenced for it and what needs documents, interviews or a
+    # walkthrough. Not a risk analysis and not a compliance determination; the
+    # report says so on page one. Markdown + HTML. Implied by -AllFiles.
+    [switch] $HIPAA,
 
     # Explicit path to the SSP answers file. Without it, -SSP looks for
     # Config/ssp/<tenant-domain>.psd1 and renders the plan with every narrative
@@ -1399,6 +1407,27 @@ if (-not $JsonOnly) {
                 Write-Host "      $openCount of 110 requirements still need a written answer — see 'Still to answer'." -ForegroundColor Yellow
             }
         } catch { Write-Warning "SSP publish failed: $($_.Exception.Message)" }
+    }
+
+    # HIPAA Security Rule readiness view. A view over the findings like the SSP:
+    # it creates no finding and moves no score.
+    if (($HIPAA -or $AllFiles) -and (Get-Command Publish-NRGHipaaReadiness -ErrorAction SilentlyContinue)) {
+        $hipaaPath = Join-Path $OutputPath "$baseName-hipaa-readiness.md"
+        try {
+            $hipaaPosture = Get-NRGHipaaReadiness -Findings $findings
+            Publish-NRGHipaaReadiness -Posture $hipaaPosture -Metadata $reportMetadata -OutputPath $hipaaPath
+            if (Test-Path -LiteralPath $hipaaPath) {
+                Write-NRGReportFile 'HIPAA readiness (md)' $hipaaPath
+                Set-NRGSensitiveFileAcl -Path $hipaaPath -ErrorAction SilentlyContinue
+                $hipaaHtml = [System.IO.Path]::ChangeExtension($hipaaPath, '.html')
+                if (Test-Path -LiteralPath $hipaaHtml) {
+                    Write-NRGReportFile 'HIPAA readiness (html)' $hipaaHtml
+                    Set-NRGSensitiveFileAcl -Path $hipaaHtml -ErrorAction SilentlyContinue
+                }
+                $hs = $hipaaPosture['Summary']
+                Write-Host "      $($hs['AttestationRequired']) of $($hs['Total']) HIPAA Security Rule items have no evidence from the tenant and need documents, interviews or a walkthrough." -ForegroundColor Yellow
+            }
+        } catch { Write-Warning "HIPAA readiness publish failed: $($_.Exception.Message)" }
     }
 
     # SSP questionnaire — the manual-evidence half of the SSP, as a document a

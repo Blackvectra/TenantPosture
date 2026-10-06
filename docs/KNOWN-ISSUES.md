@@ -141,6 +141,21 @@ Found on a real workstation on 2026-10-04; each fix is its own change.
 - **The Microsoft Store build of PowerShell.** The Exchange Online module failed to import from it;
   launch "PowerShell 7 (x64)" (the MSI build) instead. The entry point warns about it.
 
+## HIPAA citations in `controls.json`
+
+Found while building the HIPAA readiness view. The view does not count them as evidence, but the
+compliance matrix still shows them. Correcting them is a change to `controls.json` for the owner to
+approve.
+
+- Eight tenant- and federation-isolation controls (TMS-1.1, TMS-1.5, PPL-1.1, EXO-2.5, SPO-2.8,
+  PVW-2.3, AAD-11.6, TMS-4.3) cite 164.308(a)(4)(ii)(A), "Isolating health care clearinghouse
+  functions", which applies only to a clearinghouse that is part of a larger organization.
+- DEF-4.4 and EXO-5.2 (priority accounts) cite 164.308(a)(5)(ii)(A), "Security reminders", a
+  workforce training activity.
+- Six log-retention controls (PVW-1.2, PVW-2.5, EXO-4.1, TMS-4.1, PVW-4.2, PVW-4.4) cite
+  164.316(b)(2)(i), the six-year retention of Security Rule documentation, which is not audit log
+  retention.
+
 ## Pending changes that address an item here
 
 - **The web GUI items above** (run list for command-line runs, report-site link, `-ScriptDir`

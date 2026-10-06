@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **HIPAA Security Rule readiness view (`-HIPAA`, implied by `-AllFiles`).** Every standard and
+  implementation specification of 45 CFR 164 Subpart C (63 items: 22 standards, 19 Required,
+  22 Addressable), parsed with its text from the eCFR, joined to the findings through the
+  `References.HIPAA` citation every control already carries. Markdown and self-contained HTML
+  (`<base>-hipaa-readiness.md` / `.html`). An item no control evidences is "Attestation required",
+  never met; "Met in Microsoft 365" needs every cited control satisfied; page one says it is not a
+  risk analysis and not a compliance determination, and that Addressable is not optional. 36 of the
+  63 items have no tenant evidence. Sixteen items are documents, processes or organizational
+  arrangements; a control citing one is shown as cited, not counted, which keeps eight
+  tenant-isolation controls from "meeting" the health care clearinghouse specification they cite in
+  error (citation corrections are a separate change). `frameworks.json` now labels the rule
+  `2013 (as amended)` instead of `2024`: eCFR shows no change to its text since 2013.
+
 - **A third-party EDR declaration no longer erases an assigned ASR policy's shortfall (INT-2.2).**
   With the approved ASR rule set, INT-2.2 reports a `Shortfall:` when an assigned policy was read
   and a required rule is not in Block mode. `Set-NRGThirdPartyEdr` rewrote every non-passing

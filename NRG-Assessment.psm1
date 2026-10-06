@@ -172,6 +172,7 @@ $script:ExportedFunctions = @(
     'Get-NRGNIST171RequirementIdsFromCmmc', 'Get-NRGOperationalImpactCatalog',
     'Get-NRGControlOperationalImpact', 'Publish-NRGSSP', 'Group-NRGSSPImpact', 'Get-NRGSSPImpactLabel',
     'Get-NRGSSPQuestionnaireItems', 'Publish-NRGSSPQuestionnaire',
+    'Get-NRGHipaaReadiness', 'Get-NRGHipaaCatalog', 'Get-NRGHipaaCitationsFromText', 'Publish-NRGHipaaReadiness',
     'ConvertTo-NRGSSPClientSlug', 'ConvertTo-NRGSSPAnswerPsd1', 'ConvertTo-NRGSSPPsd1String',
     'Get-NRGManualReviewItems', 'Get-NRGManualReviewAnswers',
     'ConvertTo-NRGManualReviewAnswerPsd1', 'Publish-NRGManualReviewQuestionnaire',

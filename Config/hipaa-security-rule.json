@@ -1,0 +1,664 @@
+{
+  "version": "1.0",
+  "framework": "HIPAA Security Rule, 45 CFR Part 164 Subpart C",
+  "source": "Electronic Code of Federal Regulations (eCFR), 45 CFR Part 164 Subpart C, issue of 2026-10-02, https://www.ecfr.gov/current/title-45/subtitle-A/subchapter-C/part-164/subpart-C",
+  "amendments": "Per the eCFR source note under each section, sections 164.308, 164.310, 164.312 and 164.316 were last amended at 78 FR 5694-5695 (January 25, 2013), and section 164.314 at 78 FR 34266 (June 7, 2013). A proposed change to the Security Rule is not part of this catalog unless and until it is final; re-check the eCFR text when one is.",
+  "purpose": "Every standard and implementation specification of the Security Rule, with whether it is Required or Addressable, so the HIPAA readiness view can show, one row at a time, which ones this Microsoft 365 assessment produced evidence for and which need documents, interviews or a walkthrough.",
+  "note": "Addressable does not mean optional (45 CFR 164.306(d)(3)): the covered entity or business associate must assess whether the specification is reasonable and appropriate, implement it if so, and otherwise document why not and implement an equivalent alternative measure if reasonable and appropriate. Text is quoted from the regulation and is in the public domain.",
+  "safeguards": {
+    "Administrative": "45 CFR 164.308",
+    "Physical": "45 CFR 164.310",
+    "Technical": "45 CFR 164.312",
+    "Organizational": "45 CFR 164.314",
+    "Policies and documentation": "45 CFR 164.316"
+  },
+  "items": [
+    {
+      "Citation": "164.308(a)(1)(i)",
+      "Name": "Security management process",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.308(a)(1)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Implement policies and procedures to prevent, detect, contain, and correct security violations.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(1)(ii)(A)",
+      "Name": "Risk analysis",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.308(a)(1)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Conduct an accurate and thorough assessment of the potential risks and vulnerabilities to the confidentiality, integrity, and availability of electronic protected health information held by the covered entity or business associate.",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "A risk analysis is an assessment the organization performs and documents; tenant configuration cannot show one was done."
+    },
+    {
+      "Citation": "164.308(a)(1)(ii)(B)",
+      "Name": "Risk management",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.308(a)(1)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Implement security measures sufficient to reduce risks and vulnerabilities to a reasonable and appropriate level to comply with § 164.306(a).",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(1)(ii)(C)",
+      "Name": "Sanction policy",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.308(a)(1)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Apply appropriate sanctions against workforce members who fail to comply with the security policies and procedures of the covered entity or business associate.",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "A sanction policy is a workforce policy applied by the organization."
+    },
+    {
+      "Citation": "164.308(a)(1)(ii)(D)",
+      "Name": "Information system activity review",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.308(a)(1)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Implement procedures to regularly review records of information system activity, such as audit logs, access reports, and security incident tracking reports.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(2)",
+      "Name": "Assigned security responsibility",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.308(a)(2)",
+      "Safeguard": "Administrative",
+      "Text": "Identify the security official who is responsible for the development and implementation of the policies and procedures required by this subpart for the covered entity or business associate.",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "Naming a security official is an organizational assignment."
+    },
+    {
+      "Citation": "164.308(a)(3)(i)",
+      "Name": "Workforce security",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.308(a)(3)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Implement policies and procedures to ensure that all members of its workforce have appropriate access to electronic protected health information, as provided under paragraph (a)(4) of this section, and to prevent those workforce members who do not have access under paragraph (a)(4) of this section from obtaining access to electronic protected health information.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(3)(ii)(A)",
+      "Name": "Authorization and/or supervision",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.308(a)(3)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Implement procedures for the authorization and/or supervision of workforce members who work with electronic protected health information or in locations where it might be accessed.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(3)(ii)(B)",
+      "Name": "Workforce clearance procedure",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.308(a)(3)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Implement procedures to determine that the access of a workforce member to electronic protected health information is appropriate.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(3)(ii)(C)",
+      "Name": "Termination procedures",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.308(a)(3)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Implement procedures for terminating access to electronic protected health information when the employment of, or other arrangement with, a workforce member ends or as required by determinations made as specified in paragraph (a)(3)(ii)(B) of this section.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(4)(i)",
+      "Name": "Information access management",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.308(a)(4)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Implement policies and procedures for authorizing access to electronic protected health information that are consistent with the applicable requirements of subpart E of this part.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(4)(ii)(A)",
+      "Name": "Isolating health care clearinghouse functions",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.308(a)(4)(i)",
+      "Safeguard": "Administrative",
+      "Text": "If a health care clearinghouse is part of a larger organization, the clearinghouse must implement policies and procedures that protect the electronic protected health information of the clearinghouse from unauthorized access by the larger organization.",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "Applies only to a health care clearinghouse that is part of a larger organization, which must protect its ePHI from the larger organization; tenant or federation isolation settings are not this."
+    },
+    {
+      "Citation": "164.308(a)(4)(ii)(B)",
+      "Name": "Access authorization",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.308(a)(4)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Implement policies and procedures for granting access to electronic protected health information, for example, through access to a workstation, transaction, program, process, or other mechanism.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(4)(ii)(C)",
+      "Name": "Access establishment and modification",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.308(a)(4)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Implement policies and procedures that, based upon the covered entity's or the business associate's access authorization policies, establish, document, review, and modify a user's right of access to a workstation, transaction, program, or process.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(5)(i)",
+      "Name": "Security awareness and training",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.308(a)(5)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Implement a security awareness and training program for all members of its workforce (including management).",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(5)(ii)(A)",
+      "Name": "Security reminders",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.308(a)(5)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Periodic security updates.",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "Security reminders are periodic security updates to the workforce, a training activity."
+    },
+    {
+      "Citation": "164.308(a)(5)(ii)(B)",
+      "Name": "Protection from malicious software",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.308(a)(5)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Procedures for guarding against, detecting, and reporting malicious software.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(5)(ii)(C)",
+      "Name": "Log-in monitoring",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.308(a)(5)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Procedures for monitoring log-in attempts and reporting discrepancies.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(5)(ii)(D)",
+      "Name": "Password management",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.308(a)(5)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Procedures for creating, changing, and safeguarding passwords.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(6)(i)",
+      "Name": "Security incident procedures",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.308(a)(6)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Implement policies and procedures to address security incidents.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(6)(ii)",
+      "Name": "Response and reporting",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.308(a)(6)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Identify and respond to suspected or known security incidents; mitigate, to the extent practicable, harmful effects of security incidents that are known to the covered entity or business associate; and document security incidents and their outcomes.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(7)(i)",
+      "Name": "Contingency plan",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.308(a)(7)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Establish (and implement as needed) policies and procedures for responding to an emergency or other occurrence (for example, fire, vandalism, system failure, and natural disaster) that damages systems that contain electronic protected health information.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(7)(ii)(A)",
+      "Name": "Data backup plan",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.308(a)(7)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Establish and implement procedures to create and maintain retrievable exact copies of electronic protected health information.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(7)(ii)(B)",
+      "Name": "Disaster recovery plan",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.308(a)(7)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Establish (and implement as needed) procedures to restore any loss of data.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(7)(ii)(C)",
+      "Name": "Emergency mode operation plan",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.308(a)(7)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Establish (and implement as needed) procedures to enable continuation of critical business processes for protection of the security of electronic protected health information while operating in emergency mode.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(7)(ii)(D)",
+      "Name": "Testing and revision procedures",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.308(a)(7)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Implement procedures for periodic testing and revision of contingency plans.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(7)(ii)(E)",
+      "Name": "Applications and data criticality analysis",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.308(a)(7)(i)",
+      "Safeguard": "Administrative",
+      "Text": "Assess the relative criticality of specific applications and data in support of other contingency plan components.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(a)(8)",
+      "Name": "Evaluation",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.308(a)(8)",
+      "Safeguard": "Administrative",
+      "Text": "Perform a periodic technical and nontechnical evaluation, based initially upon the standards implemented under this rule and, subsequently, in response to environmental or operational changes affecting the security of electronic protected health information, that establishes the extent to which a covered entity's or business associate's security policies and procedures meet the requirements of this subpart.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.308(b)(1)",
+      "Name": "Business associate contracts and other arrangements",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.308(b)(1)",
+      "Safeguard": "Administrative",
+      "Text": "A covered entity may permit a business associate to create, receive, maintain, or transmit electronic protected health information on the covered entity's behalf only if the covered entity obtains satisfactory assurances, in accordance with § 164.314(a), that the business associate will appropriately safeguard the information. A covered entity is not required to obtain such satisfactory assurances from a business associate that is a subcontractor.",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "Satisfactory assurances from business associates are contractual."
+    },
+    {
+      "Citation": "164.308(b)(3)",
+      "Name": "Written contract or other arrangement",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.308(b)(1)",
+      "Safeguard": "Administrative",
+      "Text": "Document the satisfactory assurances required by paragraph (b)(1) or (b)(2) of this section through a written contract or other arrangement with the business associate that meets the applicable requirements of § 164.314(a).",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "A written business associate contract or other arrangement is a document."
+    },
+    {
+      "Citation": "164.310(a)(1)",
+      "Name": "Facility access controls",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.310(a)(1)",
+      "Safeguard": "Physical",
+      "Text": "Implement policies and procedures to limit physical access to its electronic information systems and the facility or facilities in which they are housed, while ensuring that properly authorized access is allowed.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.310(a)(2)(i)",
+      "Name": "Contingency operations",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.310(a)(1)",
+      "Safeguard": "Physical",
+      "Text": "Establish (and implement as needed) procedures that allow facility access in support of restoration of lost data under the disaster recovery plan and emergency mode operations plan in the event of an emergency.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.310(a)(2)(ii)",
+      "Name": "Facility security plan",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.310(a)(1)",
+      "Safeguard": "Physical",
+      "Text": "Implement policies and procedures to safeguard the facility and the equipment therein from unauthorized physical access, tampering, and theft.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.310(a)(2)(iii)",
+      "Name": "Access control and validation procedures",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.310(a)(1)",
+      "Safeguard": "Physical",
+      "Text": "Implement procedures to control and validate a person's access to facilities based on their role or function, including visitor control, and control of access to software programs for testing and revision.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.310(a)(2)(iv)",
+      "Name": "Maintenance records",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.310(a)(1)",
+      "Safeguard": "Physical",
+      "Text": "Implement policies and procedures to document repairs and modifications to the physical components of a facility which are related to security (for example, hardware, walls, doors, and locks).",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.310(b)",
+      "Name": "Workstation use",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.310(b)",
+      "Safeguard": "Physical",
+      "Text": "Implement policies and procedures that specify the proper functions to be performed, the manner in which those functions are to be performed, and the physical attributes of the surroundings of a specific workstation or class of workstation that can access electronic protected health information.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.310(c)",
+      "Name": "Workstation security",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.310(c)",
+      "Safeguard": "Physical",
+      "Text": "Implement physical safeguards for all workstations that access electronic protected health information, to restrict access to authorized users.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.310(d)(1)",
+      "Name": "Device and media controls",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.310(d)(1)",
+      "Safeguard": "Physical",
+      "Text": "Implement policies and procedures that govern the receipt and removal of hardware and electronic media that contain electronic protected health information into and out of a facility, and the movement of these items within the facility.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.310(d)(2)(i)",
+      "Name": "Disposal",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.310(d)(1)",
+      "Safeguard": "Physical",
+      "Text": "Implement policies and procedures to address the final disposition of electronic protected health information, and/or the hardware or electronic media on which it is stored.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.310(d)(2)(ii)",
+      "Name": "Media re-use",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.310(d)(1)",
+      "Safeguard": "Physical",
+      "Text": "Implement procedures for removal of electronic protected health information from electronic media before the media are made available for re-use.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.310(d)(2)(iii)",
+      "Name": "Accountability",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.310(d)(1)",
+      "Safeguard": "Physical",
+      "Text": "Maintain a record of the movements of hardware and electronic media and any person responsible therefore.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.310(d)(2)(iv)",
+      "Name": "Data backup and storage",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.310(d)(1)",
+      "Safeguard": "Physical",
+      "Text": "Create a retrievable, exact copy of electronic protected health information, when needed, before movement of equipment.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.312(a)(1)",
+      "Name": "Access control",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.312(a)(1)",
+      "Safeguard": "Technical",
+      "Text": "Implement technical policies and procedures for electronic information systems that maintain electronic protected health information to allow access only to those persons or software programs that have been granted access rights as specified in § 164.308(a)(4).",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.312(a)(2)(i)",
+      "Name": "Unique user identification",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.312(a)(1)",
+      "Safeguard": "Technical",
+      "Text": "Assign a unique name and/or number for identifying and tracking user identity.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.312(a)(2)(ii)",
+      "Name": "Emergency access procedure",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.312(a)(1)",
+      "Safeguard": "Technical",
+      "Text": "Establish (and implement as needed) procedures for obtaining necessary electronic protected health information during an emergency.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.312(a)(2)(iii)",
+      "Name": "Automatic logoff",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.312(a)(1)",
+      "Safeguard": "Technical",
+      "Text": "Implement electronic procedures that terminate an electronic session after a predetermined time of inactivity.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.312(a)(2)(iv)",
+      "Name": "Encryption and decryption",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.312(a)(1)",
+      "Safeguard": "Technical",
+      "Text": "Implement a mechanism to encrypt and decrypt electronic protected health information.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.312(b)",
+      "Name": "Audit controls",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.312(b)",
+      "Safeguard": "Technical",
+      "Text": "Implement hardware, software, and/or procedural mechanisms that record and examine activity in information systems that contain or use electronic protected health information.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.312(c)(1)",
+      "Name": "Integrity",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.312(c)(1)",
+      "Safeguard": "Technical",
+      "Text": "Implement policies and procedures to protect electronic protected health information from improper alteration or destruction.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.312(c)(2)",
+      "Name": "Mechanism to authenticate electronic protected health information",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.312(c)(1)",
+      "Safeguard": "Technical",
+      "Text": "Implement electronic mechanisms to corroborate that electronic protected health information has not been altered or destroyed in an unauthorized manner.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.312(d)",
+      "Name": "Person or entity authentication",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.312(d)",
+      "Safeguard": "Technical",
+      "Text": "Implement procedures to verify that a person or entity seeking access to electronic protected health information is the one claimed.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.312(e)(1)",
+      "Name": "Transmission security",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.312(e)(1)",
+      "Safeguard": "Technical",
+      "Text": "Implement technical security measures to guard against unauthorized access to electronic protected health information that is being transmitted over an electronic communications network.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.312(e)(2)(i)",
+      "Name": "Integrity controls",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.312(e)(1)",
+      "Safeguard": "Technical",
+      "Text": "Implement security measures to ensure that electronically transmitted electronic protected health information is not improperly modified without detection until disposed of.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.312(e)(2)(ii)",
+      "Name": "Encryption",
+      "Kind": "Implementation specification",
+      "Requirement": "Addressable",
+      "Standard": "164.312(e)(1)",
+      "Safeguard": "Technical",
+      "Text": "Implement a mechanism to encrypt electronic protected health information whenever deemed appropriate.",
+      "TenantEvidence": "Possible"
+    },
+    {
+      "Citation": "164.314(a)(1)",
+      "Name": "Business associate contracts or other arrangements",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.314(a)(1)",
+      "Safeguard": "Organizational",
+      "Text": "The contract or other arrangement required by § 164.308(b)(3) must meet the requirements of paragraph (a)(2)(i), (a)(2)(ii), or (a)(2)(iii) of this section, as applicable.",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "Business associate contract terms are contractual."
+    },
+    {
+      "Citation": "164.314(a)(2)",
+      "Name": "Business associate contract requirements",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.314(a)(1)",
+      "Safeguard": "Organizational",
+      "Text": "(i) Business associate contracts. The contract must provide that the business associate will—",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "Business associate contract terms are contractual."
+    },
+    {
+      "Citation": "164.314(b)(1)",
+      "Name": "Requirements for group health plans",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.314(b)(1)",
+      "Safeguard": "Organizational",
+      "Text": "Except when the only electronic protected health information disclosed to a plan sponsor is disclosed pursuant to § 164.504(f)(1)(ii) or (iii), or as authorized under § 164.508, a group health plan must ensure that its plan documents provide that the plan sponsor will reasonably and appropriately safeguard electronic protected health information created, received, maintained, or transmitted to or by the plan sponsor on behalf of the group health plan.",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "Group health plan document provisions are contractual."
+    },
+    {
+      "Citation": "164.314(b)(2)",
+      "Name": "Plan document requirements",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.314(b)(1)",
+      "Safeguard": "Organizational",
+      "Text": "The plan documents of the group health plan must be amended to incorporate provisions to require the plan sponsor to—",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "Group health plan document provisions are contractual."
+    },
+    {
+      "Citation": "164.316(a)",
+      "Name": "Policies and procedures",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.316(a)",
+      "Safeguard": "Policies and documentation",
+      "Text": "Implement reasonable and appropriate policies and procedures to comply with the standards, implementation specifications, or other requirements of this subpart, taking into account those factors specified in § 164.306(b)(2)(i), (ii), (iii), and (iv). This standard is not to be construed to permit or excuse an action that violates any other standard, implementation specification, or other requirements of this subpart. A covered entity or business associate may change its policies and procedures at any time, provided that the changes are documented and are implemented in accordance with this subpart.",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "Written policies and procedures are documents."
+    },
+    {
+      "Citation": "164.316(b)(1)",
+      "Name": "Documentation",
+      "Kind": "Standard",
+      "Requirement": "Standard",
+      "Standard": "164.316(b)(1)",
+      "Safeguard": "Policies and documentation",
+      "Text": "(i) Maintain the policies and procedures implemented to comply with this subpart in written (which may be electronic) form; and",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "Documentation of policies, procedures and required actions is a records requirement."
+    },
+    {
+      "Citation": "164.316(b)(2)(i)",
+      "Name": "Time limit",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.316(b)(1)",
+      "Safeguard": "Policies and documentation",
+      "Text": "Retain the documentation required by paragraph (b)(1) of this section for 6 years from the date of its creation or the date when it last was in effect, whichever is later.",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "Retaining the Security Rule documentation for six years; log retention settings are not this documentation."
+    },
+    {
+      "Citation": "164.316(b)(2)(ii)",
+      "Name": "Availability",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.316(b)(1)",
+      "Safeguard": "Policies and documentation",
+      "Text": "Make documentation available to those persons responsible for implementing the procedures to which the documentation pertains.",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "Making the documentation available to the people who implement it."
+    },
+    {
+      "Citation": "164.316(b)(2)(iii)",
+      "Name": "Updates",
+      "Kind": "Implementation specification",
+      "Requirement": "Required",
+      "Standard": "164.316(b)(1)",
+      "Safeguard": "Policies and documentation",
+      "Text": "Review documentation periodically, and update as needed, in response to environmental or operational changes affecting the security of the electronic protected health information.",
+      "TenantEvidence": "None",
+      "TenantEvidenceReason": "Reviewing and updating the documentation periodically."
+    }
+  ],
+  "tenantEvidenceNote": "TenantEvidence 'None' marks an item whose requirement is a document, a process or an organizational arrangement that Microsoft 365 configuration cannot show. A control that cites such an item is listed as cited but not counted, never as evidence for it."
+}
