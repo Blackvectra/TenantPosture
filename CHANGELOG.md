@@ -20,7 +20,9 @@
   Minimum controls; the rest are listed as not compared with the tier that
   required them. If the two runs used different baseline versions the report says
   the standard changed and compares only controls whose required tier and
-  expected state are the same in both files. Each control is classified from
+  expected state are the same in both files; a missing expected state under a
+  different or unknown version is NotComparable (`DefinitionNotEstablished`),
+  never compared on the assumption that the definitions agree. Each control is classified from
   `ObservedState` and `ReasonCode`: BothSatisfied, BothFailed, DiffersASatisfied,
   DiffersBSatisfied, or NotComparable. NotComparable covers NotVerified,
   NotApplicable, LicenseBlocked and ThirdPartyHandled on either side, plus a state

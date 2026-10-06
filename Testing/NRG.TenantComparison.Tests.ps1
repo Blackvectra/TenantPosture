@@ -467,13 +467,37 @@ Describe 'Tenant comparison: baseline version' {
         $c.Counts.SamePosture | Should -Be 1
     }
 
-    It 'a missing expected state on one side (an older file) does not stop a control being compared' {
+    It 'a missing expected state under a different version is NotComparable (definition not established), never compared' {
         $rowsA = @(& $script:NewRow 'AAD-1.1' 'Satisfied' -Expected 'Some wording.')
         $rowB = & $script:NewRow 'AAD-1.1' 'Satisfied'
         $rowB.PSObject.Properties.Remove('ExpectedState')
         $c = & $script:Compare (& $script:NewResults -Domain 'a.example' -Version '1.0' -Rows $rowsA) (& $script:NewResults -Domain 'b.example' -Version '1.1' -Rows @($rowB))
-        $c.Counts.Compared | Should -Be 1
+        $c.Counts.Compared         | Should -Be 1
+        $c.Counts.Verified         | Should -Be 0 -Because 'nothing establishes that the two rows describe the same requirement'
+        $c.Counts.SamePosture      | Should -Be 0
+        $c.Counts.NotComparable    | Should -Be 1
         $c.Counts.DefinitionDiffers | Should -Be 0
+        $c.NotComparableBy.B['DefinitionNotEstablished'] | Should -Be 1
+        $c.NotComparableBy.A.Contains('DefinitionNotEstablished') | Should -BeFalse
+    }
+
+    It 'a missing expected state on both sides under an unknown version is NotComparable for both' {
+        $rowA = & $script:NewRow 'AAD-1.1' 'Failed'; $rowA.PSObject.Properties.Remove('ExpectedState')
+        $rowB = & $script:NewRow 'AAD-1.1' 'Failed'; $rowB.PSObject.Properties.Remove('ExpectedState')
+        $c = & $script:Compare (& $script:NewResults -Domain 'a.example' -Version '' -Rows @($rowA)) (& $script:NewResults -Domain 'b.example' -Version '1.0' -Rows @($rowB))
+        $c.Counts.BothFailed    | Should -Be 0
+        $c.Counts.NotComparable | Should -Be 1
+        $c.NotComparableBy.A['DefinitionNotEstablished'] | Should -Be 1
+        $c.NotComparableBy.B['DefinitionNotEstablished'] | Should -Be 1
+    }
+
+    It 'the same baseline version establishes the definition even when an expected state is missing' {
+        $rowsA = @(& $script:NewRow 'AAD-1.1' 'Satisfied')
+        $rowB = & $script:NewRow 'AAD-1.1' 'Satisfied'
+        $rowB.PSObject.Properties.Remove('ExpectedState')
+        $c = & $script:Compare (& $script:NewResults -Domain 'a.example' -Version '1.0' -Rows $rowsA) (& $script:NewResults -Domain 'b.example' -Version '1.0' -Rows @($rowB))
+        $c.Counts.BothSatisfied | Should -Be 1
+        $c.Counts.NotComparable | Should -Be 0
     }
 
     It 'the same version draws no standard-changed warning' {

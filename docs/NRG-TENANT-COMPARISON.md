@@ -96,7 +96,10 @@ assessed at, and lists every control left out with the tier that required it.
 If the two runs used different baseline versions the report says the standard
 changed. It then compares only controls whose required tier and expected state
 are the same in both files, and lists the rest as not compared. A version missing
-from a file is stated, never assumed equal.
+from a file is stated, never assumed equal. A control whose expected state is
+missing from either file, when the versions differ or one is unknown, is **not
+comparable** (cause `DefinitionNotEstablished`): nothing shows the two rows
+describe the same requirement. The same version establishes it.
 
 ## Other things the report shows
 

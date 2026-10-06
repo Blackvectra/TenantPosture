@@ -35,6 +35,11 @@
 #     DiffersBSatisfied, or NotComparable. NotComparable covers NotVerified,
 #     NotApplicable, LicenseBlocked and ThirdPartyHandled on either side (and
 #     a state that contradicts its own reason code), and is NEVER a match.
+#   - The two definitions must be established as the same: the same baseline
+#     version, or an identical expected state on both rows. A row with no
+#     expected state under a different or unknown version is NotComparable
+#     (cause DefinitionNotEstablished); different expected states are
+#     DefinitionDiffers and not compared.
 #   - The headline is a count of controls both tenants verified. There is no
 #     score, no ranking and no "compliant".
 #   - An approved exception is a disposition shown beside the observed state;
@@ -552,6 +557,13 @@ function Get-NRGBaselineTenantComparison {
     $notCompared = [System.Collections.Generic.List[object]]::new()
     $byCause = @{ A = @{}; B = @{} }
     $excA = 0; $excB = 0
+    # Two rows describe the same requirement only when that is established:
+    # both runs used the same baseline version (the same definition file), or
+    # both rows carry an expected state and the two are identical. A missing
+    # expected state on either side, under different or unknown versions,
+    # proves nothing, so the control is NotComparable — never compared on the
+    # assumption that the definitions agree.
+    $sameDefinitionFile = ($sideA.BaselineVersion -and $sideB.BaselineVersion -and ($sideA.BaselineVersion -ceq $sideB.BaselineVersion))
 
     foreach ($id in @($rowsA.Keys)) {
         $a = $rowsA[$id]
@@ -574,7 +586,9 @@ function Get-NRGBaselineTenantComparison {
         }
 
         $va = $a.Verdict; $vb = $b.Verdict
-        $cls = if ($va.Verdict -eq 'Satisfied' -and $vb.Verdict -eq 'Satisfied') { 'BothSatisfied' }
+        $definitionKnown = $sameDefinitionFile -or ($a.ExpectedState -and $b.ExpectedState)
+        $cls = if (-not $definitionKnown) { 'NotComparable' }
+               elseif ($va.Verdict -eq 'Satisfied' -and $vb.Verdict -eq 'Satisfied') { 'BothSatisfied' }
                elseif ($va.Verdict -eq 'Failed' -and $vb.Verdict -eq 'Failed') { 'BothFailed' }
                elseif ($va.Verdict -eq 'Satisfied' -and $vb.Verdict -eq 'Failed') { 'DiffersASatisfied' }
                elseif ($va.Verdict -eq 'Failed' -and $vb.Verdict -eq 'Satisfied') { 'DiffersBSatisfied' }
@@ -601,11 +615,20 @@ function Get-NRGBaselineTenantComparison {
             'DiffersBSatisfied' { $differences.Add($row) }
             default {
                 $notComp.Add($row)
-                # What each side lacked: its recognized reason code, else its state.
-                foreach ($pair in @(@('A', $va), @('B', $vb))) {
-                    if ($pair[1].Verdict -ne 'None') { continue }
-                    $key = if ($codeSet.Contains($pair[1].ReasonCode)) { $pair[1].ReasonCode } else { $pair[1].State }
-                    if ($byCause[$pair[0]].ContainsKey($key)) { $byCause[$pair[0]][$key]++ } else { $byCause[$pair[0]][$key] = 1 }
+                # What each side lacked: the expected state that would establish
+                # the definition, else its recognized reason code, else its state.
+                if (-not $definitionKnown) {
+                    foreach ($pair in @(@('A', $a), @('B', $b))) {
+                        if ($pair[1].ExpectedState) { continue }
+                        $key = 'DefinitionNotEstablished'
+                        if ($byCause[$pair[0]].ContainsKey($key)) { $byCause[$pair[0]][$key]++ } else { $byCause[$pair[0]][$key] = 1 }
+                    }
+                } else {
+                    foreach ($pair in @(@('A', $va), @('B', $vb))) {
+                        if ($pair[1].Verdict -ne 'None') { continue }
+                        $key = if ($codeSet.Contains($pair[1].ReasonCode)) { $pair[1].ReasonCode } else { $pair[1].State }
+                        if ($byCause[$pair[0]].ContainsKey($key)) { $byCause[$pair[0]][$key]++ } else { $byCause[$pair[0]][$key] = 1 }
+                    }
                 }
             }
         }
