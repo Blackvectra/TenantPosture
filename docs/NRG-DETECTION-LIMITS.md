@@ -43,12 +43,16 @@ components kept in the Detail. Nothing narrows the baseline requirement.
 | AAD-2.1 CA policies | Three coverage tracks **and** every template in `RequiredConditionalAccessTemplates` Enforced (report-only, narrower or missing policies do not count) | The approved template list is empty until NRG approves it: tracks verified, set **not assessed** |
 | DEF-2.2 ZAP | Spam, phishing **and malware** ZAP in every policy in force | Malware ZAP off is a shortfall; malware policies or `ZapEnabled` not read is not assessed (the collector now reads `ZapEnabled`) |
 | DEF-2.3 Common attachments | Filter on in every malware policy in force **and** every approved file type blocked | `CommonAttachmentFileTypes` empty: filter verified, list **not assessed** |
-| DNS-1.3 DMARC | p=quarantine/reject, pct, sp **and** the approved reporting address in `rua` | `DmarcReportingAddresses` empty: enforcement verified, reporting address **not assessed** |
+| DNS-1.3 DMARC | p=quarantine/reject, pct, sp **and** the approved reporting address in `rua` | `DmarcReportingAddresses` empty (not the case since 2026-10-02): enforcement verified, reporting address **not assessed** |
 | EXO-1.5 Impersonation | Organization-domain and mailbox-intelligence protection acting **and** the approved priority users listed with user protection on and an action | `PriorityUsers` empty: priority users **not assessed** |
 | INT-1.5 Antivirus | An assigned Defender Antivirus policy **and** real-time, cloud-delivered and PUA protection read as on | A setting off or audit-only is a shortfall; settings not read, not set by any policy, or an unrecognized value is not assessed |
 
-The approved lists live in `Config/nrg-standards.json` and **ship empty on purpose**: the
-tool does not invent NRG's standard. Until a list is approved, the control that needs it
+The approved lists live in `Config/nrg-standards.json` and `Config/asr-required-rules.json`.
+The tool does not invent NRG's standard: a list holds only values the owner approved (on
+2026-10-02: the DMARC reporting address, Microsoft's default common-attachment file types, five
+core Conditional Access templates, and Microsoft's three standard-protection ASR rules).
+`PriorityUsers` is still empty, because priority users differ per tenant and the file is shared.
+While a list is empty, the control that needs it
 reports the approved-list component as not assessed, and the report files it under
 "Verified in part — an NRG standard is not approved or configured" (scope bucket
 `StandardNotApproved`, baseline reason code `StandardNotApproved`), never under "data did not

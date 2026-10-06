@@ -12,6 +12,24 @@
   and an account still reached by one or two policies is named with them. Results collected
   before this change replay with their previous verdict.
 
+- **A third-party EDR declaration no longer erases an assigned ASR policy's shortfall (INT-2.2).**
+  With the approved ASR rule set, INT-2.2 reports a `Shortfall:` when an assigned policy was read
+  and a required rule is not in Block mode. `Set-NRGThirdPartyEdr` rewrote every non-passing
+  INT-2.2 to "declared, not verified", so a client with Cortex XDR declared had a deployed,
+  misconfigured Defender policy removed from the score. The declaration now explains only absent
+  Defender configuration: the shortfall keeps its verdict and gains a note asking which devices run
+  Defender actively. No policy assigned, or rules not read, is still excused.
+
+- **NRG standards approved.** The owner approved, on 2026-10-02: DNS-1.3's reporting address
+  (`dmarc@nrgtechservices.com`), DEF-2.3's blocked file types (Microsoft's 53 default common
+  attachments filter types), AAD-2.1's required Conditional Access templates (`block-legacy-auth`,
+  `mfa-all-users`, `mfa-admins`, `mfa-azure-mgmt`, `block-device-code`), and INT-2.2's required ASR rules
+  (Microsoft's three standard protection rules, keyed as a real tenant read reports them).
+  `PriorityUsers` (EXO-1.5) stays empty on purpose: priority users differ per tenant and the file is
+  shared by every client. Expect the next run to judge those components instead of "not assessed",
+  so scores and the baseline's not-verified count move: a tenant missing a template, a blocked type or
+  the reporting address now reads as a shortfall. Tests pin the approved values and their invariants.
+
 - **Web GUI: command-line runs are listed, the report site is linked, the server
   starts without `-ScriptDir`, and it only answers requests meant for it.**
   Three recorded gaps, and the hardening that serving more tenant data called for.

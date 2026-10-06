@@ -125,6 +125,8 @@ Describe 'Defender, Purview and Power Platform verdicts' {
             $v.Detail | Should -Match 'filter is off in: Default'
         }
         It 'the default policy in force with the filter on is verified; with no approved blocked-type list it is not assessed, never Satisfied' {
+            # Pins the 'no approved list' scenario: the shipped lists are approved, so the file is replaced for this test.
+            Mock -ModuleName NRG-Assessment Get-NRGStandards { [ordered]@{ DmarcReportingAddresses = @(); CommonAttachmentFileTypes = @(); PriorityUsers = @(); RequiredConditionalAccessTemplates = @() } }
             Clear-NRGState
             Set-NRGRawData -Key 'Defender-Policies' -Data (Bag @{ MalwareFilter = @{ Available = $true; FileFilterEnabledCount = 1
                 Policies = @(@{ Name = 'Default'; IsDefault = $true; EnableFileFilter = $true }); Rules = @() } })

@@ -32,13 +32,25 @@ Describe 'Baseline controls judge every component of the expected state' {
     AfterAll { Clear-NRGState; Remove-Module 'NRG-Assessment' -Force -ErrorAction SilentlyContinue }
     BeforeEach { Clear-NRGState }
 
-    Context 'The approved standards ship empty' {
-        It 'every list in Config/nrg-standards.json is empty, and the loader returns all four' {
+    Context 'The approved standards' {
+        It 'the shipped lists are the approved ones, PriorityUsers stays empty because it is tenant-specific, and the loader returns all four' {
             $s = Get-NRGStandards -Path (Join-Path $script:Root 'Config' 'nrg-standards.json')
-            foreach ($k in 'DmarcReportingAddresses', 'CommonAttachmentFileTypes', 'PriorityUsers', 'RequiredConditionalAccessTemplates') {
-                $s.Contains($k) | Should -BeTrue
-                @($s[$k]).Count | Should -Be 0
-            }
+            foreach ($k in 'DmarcReportingAddresses', 'CommonAttachmentFileTypes', 'PriorityUsers', 'RequiredConditionalAccessTemplates') { $s.Contains($k) | Should -BeTrue }
+            @($s.DmarcReportingAddresses) | Should -Be @('dmarc@nrgtechservices.com')
+            @($s.RequiredConditionalAccessTemplates) | Should -Be @('block-legacy-auth', 'mfa-all-users', 'mfa-admins', 'mfa-azure-mgmt', 'block-device-code')
+            @($s.PriorityUsers).Count | Should -Be 0 -Because 'priority users differ per tenant; one shared list cannot be right for more than one client'
+        }
+        It 'the attachment list is Microsoft''s 53 default types: lower-case, no dot, no duplicates' {
+            $t = @((Get-NRGStandards -Path (Join-Path $script:Root 'Config' 'nrg-standards.json')).CommonAttachmentFileTypes)
+            $t.Count | Should -Be 53
+            @($t | Select-Object -Unique).Count | Should -Be 53
+            @($t | Where-Object { $_ -cnotmatch '^[a-z0-9]+$' }) | Should -BeNullOrEmpty
+            foreach ($must in 'exe', 'iso', 'lnk', 'vbs', 'docm', 'hta') { $t | Should -Contain $must }
+        }
+        It 'every required Conditional Access template id exists in the baseline catalog' {
+            $cat = Get-Content -LiteralPath (Join-Path $script:Root 'Config' 'conditional-access-baseline.json') -Raw | ConvertFrom-Json
+            $ids = @($cat.Templates | ForEach-Object { $_.Id })
+            foreach ($id in @((Get-NRGStandards -Path (Join-Path $script:Root 'Config' 'nrg-standards.json')).RequiredConditionalAccessTemplates)) { $ids | Should -Contain $id }
         }
         It 'a missing or unreadable file means not approved, never met' {
             $s = Get-NRGStandards -Path (Join-Path $TestDrive 'nope.json')
