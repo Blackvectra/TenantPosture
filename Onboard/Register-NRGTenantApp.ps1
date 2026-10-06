@@ -264,7 +264,7 @@ function Register-NRGTenantApp {
     # NonExportable: only the public cert bytes ($cert.RawData, used below for
     # the app's keyCredential) need to leave the store. An exportable private
     # key lets anyone who can read the operator's CurrentUser store export a
-    # credential that authenticates app-only — no MFA, no Conditional Access —
+    # credential that authenticates app-only — with no MFA prompt —
     # to every client tenant this cert was registered against.
     $cert = New-SelfSignedCertificate `
         -Subject "CN=$DisplayName" `

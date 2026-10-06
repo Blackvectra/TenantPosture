@@ -99,15 +99,15 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
             (Run $t 'Test-NRGControlDNSSPF' 'DNS-1.1').State | Should -Be 'Satisfied'
         }
         It 'DMARC: whitespace in tags, quarantine meets the control, two records apply nothing, sp=none is part-way' {
-            (Run @{ '_dmarc.shape.test|TXT' = & $A @('v=DMARC1; p = reject; pct = 100') } 'Test-NRGControlDNSDMARC' 'DNS-1.3').State | Should -Be 'Satisfied'
-            (Run @{ '_dmarc.shape.test|TXT' = & $A @('v=DMARC1; p=quarantine') } 'Test-NRGControlDNSDMARC' 'DNS-1.3').State | Should -Be 'Satisfied'
+            (Run @{ '_dmarc.shape.test|TXT' = & $A @('v=DMARC1; p = reject; pct = 100') } 'Test-NRGControlDNSDMARC' 'DNS-1.3').Detail | Should -Match '^Verified: .*DMARC p=(reject|quarantine)'
+            (Run @{ '_dmarc.shape.test|TXT' = & $A @('v=DMARC1; p=quarantine') } 'Test-NRGControlDNSDMARC' 'DNS-1.3').Detail | Should -Match '^Verified: .*DMARC p=(reject|quarantine)'
             (Run @{ '_dmarc.shape.test|TXT' = & $A @('v=DMARC1; p=reject', 'v=DMARC1; p=none') } 'Test-NRGControlDNSDMARC' 'DNS-1.3').State | Should -Be 'Gap'
             (Run @{ '_dmarc.shape.test|TXT' = & $A @('v=DMARC1; p=reject; sp=none') } 'Test-NRGControlDNSDMARC' 'DNS-1.3').State | Should -Be 'Partial'
             (Run @{ '_dmarc.shape.test|TXT' = & $A @('v=dmarc1; p=reject') } 'Test-NRGControlDNSDMARC' 'DNS-1.3').State | Should -Be 'Gap' -Because 'the version must be exactly DMARC1 (RFC 7489 §6.3)'
         }
         It 'DMARC / DNSSEC / CAA: a subdomain inherits its parent''s record where the RFCs say it does' {
             $t = @{ '_dmarc.shape.test|TXT' = & $A @('v=DMARC1; p=reject'); 'shape.test|DS' = & $A @('2371 13 2 1F98'); 'shape.test|CAA' = & $A @('0 issue "digicert.com"') }
-            (Run $t 'Test-NRGControlDNSDMARC'  'DNS-1.3' 'mail.shape.test').State | Should -Be 'Satisfied'
+            (Run $t 'Test-NRGControlDNSDMARC'  'DNS-1.3' 'mail.shape.test').Detail | Should -Match '^Verified: .*DMARC p=(reject|quarantine)'
             (Run $t 'Test-NRGControlDNSDNSSEC' 'DNS-1.6' 'mail.shape.test').State | Should -Be 'Satisfied'
             (Run $t 'Test-NRGControlDNSCAA'    'DNS-2.2' 'mail.shape.test').State | Should -Be 'Satisfied'
             # A delegated subdomain (its own NS) needs its own DS.

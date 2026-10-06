@@ -51,7 +51,7 @@
     - OWASP A04: TLS 1.2/1.3 enforced at entry
 #>
 
-[CmdletBinding(SupportsShouldProcess)]
+[CmdletBinding()]
 param(
     [ValidateScript({
         if ([string]::IsNullOrEmpty($_)) { return $true }

@@ -59,6 +59,33 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
         }
     }
 
+    Context 'Tenant input and run list' {
+        It 'a user name typed in the tenant box is reduced to its domain, and the refusal message says what to enter' {
+            $js = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Web' 'static' 'app.js') -Raw
+            $js | Should -Match 'function normalizeDomain'
+            $js | Should -Match "lastIndexOf\('@'\)"
+            $js | Should -Match 'Enter the tenant domain, for example'
+            $js | Should -Not -Match "setStatus\('Invalid domain format'\)"
+        }
+        It 'the run list excludes incident-response mailbox results' {
+            $src = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib' 'Start-NRGWebServer.ps1') -Raw
+            $src | Should -Match '-email-results'
+        }
+    }
+
+    Context 'A scan started from the page signs in through the supported default path' {
+        It 'the scan job sets no NRG_DISABLE_WAM and Connect-NRGServices writes no Graph options' {
+            # Set-MgGraphOption -DisableLoginByWAM only takes effect with a custom ClientId (the tool
+            # uses the default client) and writes a settings file to the operator's profile, so the
+            # GUI must not use it. Sign-in from the GUI is a documented known limitation instead.
+            $web = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib' 'Start-NRGWebServer.ps1') -Raw
+            $web | Should -Not -Match 'NRG_DISABLE_WAM'
+            $conn = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib' 'Connect-NRGServices.ps1') -Raw
+            $conn | Should -Not -Match 'NRG_DISABLE_WAM'
+            $conn | Should -Not -Match 'Set-MgGraphOption'
+        }
+    }
+
     Context 'Server bind + CSP posture' {
         BeforeAll {
             $script:ServerSrc = Get-Content -LiteralPath $script:ServerPath -Raw
@@ -242,8 +269,20 @@ Set-StrictMode -Version Latest
 Start-NRGWebServer -Port $($script:Port) -ScriptDir '$($script:RepoRoot)' -NoBrowser
 "@ | Set-Content -LiteralPath $boot -Encoding utf8
 
+            # The server reads ./output relative to its working directory: seed one assessment run
+            # and one incident-response run in a temp directory so the run list can be checked.
+            $script:WebWork = Join-Path ([System.IO.Path]::GetTempPath()) ("nrgweb-work-{0}" -f ([Guid]::NewGuid().ToString('N')))
+            $seed = Join-Path $script:WebWork 'output' 'contoso.com'
+            New-Item -ItemType Directory -Path $seed -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $seed 'contoso-20261002-114907-results.json') -Value '{}' -Encoding utf8
+            Set-Content -LiteralPath (Join-Path $seed 'contoso-20261002-114907-assessment.html') -Value '<html></html>' -Encoding utf8
+            $ir = Join-Path $script:WebWork 'output' 'Administrator_contoso.com'
+            New-Item -ItemType Directory -Path $ir -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $ir '20261002-122037-email-results.json') -Value '{}' -Encoding utf8
+
             $pwshExe = (Get-Process -Id $PID).Path
             $script:Proc = Start-Process -FilePath $pwshExe `
+                -WorkingDirectory $script:WebWork `
                 -ArgumentList @('-NoProfile', '-File', $boot) `
                 -RedirectStandardOutput $script:LogFile `
                 -RedirectStandardError  "$($script:LogFile).err" `
@@ -270,6 +309,7 @@ Start-NRGWebServer -Port $($script:Port) -ScriptDir '$($script:RepoRoot)' -NoBro
             foreach ($f in @($script:BootFile, $script:LogFile, "$($script:LogFile).err")) {
                 if ($f) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
             }
+            if ($script:WebWork) { Remove-Item -LiteralPath $script:WebWork -Recurse -Force -ErrorAction SilentlyContinue }
         }
 
         It 'comes up and serves the index page' {
@@ -295,6 +335,14 @@ Start-NRGWebServer -Port $($script:Port) -ScriptDir '$($script:RepoRoot)' -NoBro
             $r.Content.Trim() | Should -Not -Be 'null'
         }
 
+        It 'lists the assessment run and not the incident-response mailbox run' {
+            $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/api/runs" -TimeoutSec 5 -UseBasicParsing
+            $runs = @($r.Content | ConvertFrom-Json)
+            $runs.Count | Should -Be 1
+            $runs[0].tenant | Should -Be 'contoso.com'
+            $runs[0].hasReport | Should -BeTrue
+        }
+
         It 'emits the strict CSP header on a real response' {
             $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/" -TimeoutSec 5 -UseBasicParsing
             ([string]$r.Headers['Content-Security-Policy']) | Should -Match "default-src 'none'"
@@ -303,6 +351,81 @@ Start-NRGWebServer -Port $($script:Port) -ScriptDir '$($script:RepoRoot)' -NoBro
         It 'serves the static assets the page references' {
             $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/static/app.js" -TimeoutSec 5 -UseBasicParsing
             $r.StatusCode | Should -Be 200
+        }
+
+        Context 'Error responses carry the body the handler wrote' {
+            # Set-PodeResponseStatus renders Pode's own HTML error page
+            # immediately. A Write-Pode*Response after it sets Content-Length
+            # from the handler's body but the page bytes are what get sent, so
+            # a 400 arrived with Content-Type: application/json and a body of
+            # '<html style=...' cut off at the JSON's length -- and app.js
+            # shows that body verbatim ('Could not start scan: <html
+            # style='). The status has to ride on the same call:
+            # Write-PodeJsonResponse / Write-PodeTextResponse -StatusCode.
+            #
+            # Every request here is rejected before the handler reaches
+            # Start-Job or reads a report, so no scan starts and no tenant is
+            # contacted. A VALID POST /api/scan is deliberately not made: that
+            # would launch a child pwsh and a Microsoft sign-in.
+            BeforeAll {
+                $script:Send = {
+                    param([string]$Method, [string]$Path, [string]$Body)
+                    $p = @{
+                        Uri                = "http://127.0.0.1:$($script:Port)$Path"
+                        Method             = $Method
+                        TimeoutSec         = 5
+                        UseBasicParsing    = $true
+                        SkipHttpErrorCheck = $true   # 4xx must come back as a response, not throw
+                    }
+                    if ($PSBoundParameters.ContainsKey('Body')) {
+                        $p.Body        = $Body
+                        $p.ContentType = 'application/json'
+                    }
+                    Invoke-WebRequest @p
+                }
+            }
+
+            It 'POST /api/scan <Name> returns 400 with a JSON error body' -ForEach @(
+                @{ Name = 'with no domain';          Body = '{}';                          Expected = 'domain is required'    }
+                @{ Name = 'with a blank domain';     Body = '{"domain":"   "}';            Expected = 'domain is required'    }
+                @{ Name = 'with a malformed domain'; Body = '{"domain":"bad domain!"}';    Expected = 'invalid domain format' }
+                @{ Name = 'with a traversal domain'; Body = '{"domain":"../../etc/passwd"}'; Expected = 'invalid domain format' }
+            ) {
+                $r = & $script:Send 'Post' '/api/scan' $Body
+                $r.StatusCode | Should -Be 400
+                ([string]($r.Headers['Content-Type'] | Select-Object -First 1)) | Should -Match '^application/json'
+                $r.Content | Should -Not -Match '<html' -Because "the body must be the handler's JSON, not Pode's error page"
+                $script:parsed = $null
+                { $script:parsed = $r.Content | ConvertFrom-Json -ErrorAction Stop } | Should -Not -Throw -Because "the body was: $($r.Content)"
+                $script:parsed.error | Should -Be $Expected
+            }
+
+            It 'GET /api/scan/:id/status for an unknown runId returns 404 with a JSON error body' {
+                $r = & $script:Send 'Get' '/api/scan/doesnotexist/status'
+                $r.StatusCode | Should -Be 404
+                ([string]($r.Headers['Content-Type'] | Select-Object -First 1)) | Should -Match '^application/json'
+                $r.Content | Should -Not -Match '<html' -Because "the body must be the handler's JSON, not Pode's error page"
+                $script:parsed = $null
+                { $script:parsed = $r.Content | ConvertFrom-Json -ErrorAction Stop } | Should -Not -Throw -Because "the body was: $($r.Content)"
+                $script:parsed.error | Should -Be 'unknown runId'
+            }
+
+            # The report route answers in plain text, not JSON. The 400 is
+            # reachable over HTTP with an encoded backslash (%5C): it is not a
+            # route separator, so Pode hands it to the handler, whose guard
+            # rejects it. An encoded slash (%2F) never gets that far -- Pode's
+            # own router 404s it -- so it is not exercised here.
+            It 'GET /api/runs/:tenant/:id/report <Name> returns <Code> with the handler text' -ForEach @(
+                @{ Name = 'with a backslash in :tenant'; Path = '/api/runs/a%5Cb/x/report';              Code = 400; Expected = 'Invalid path segment.' }
+                @{ Name = 'with a backslash in :id';     Path = '/api/runs/a/x%5Cy/report';              Code = 400; Expected = 'Invalid path segment.' }
+                @{ Name = 'for a report that is absent'; Path = '/api/runs/nosuch-tenant/nosuch-run/report'; Code = 404; Expected = 'Report not found.' }
+            ) {
+                $r = & $script:Send 'Get' $Path
+                $r.StatusCode | Should -Be $Code
+                ([string]($r.Headers['Content-Type'] | Select-Object -First 1)) | Should -Match '^text/plain'
+                $r.Content | Should -Not -Match '<html' -Because "the body must be the handler's text, not Pode's error page"
+                $r.Content | Should -BeExactly $Expected
+            }
         }
     }
 }

@@ -24,7 +24,7 @@ GitHub: [Blackvectra/NRG-Assessment-Tool](https://github.com/Blackvectra/NRG-Ass
 
 ## What It Does
 
-> **New here, or back after a while?** [`docs/WHAT-CAN-I-RUN.md`](docs/WHAT-CAN-I-RUN.md) lists every entry point, what it needs, and what it produces — including what this tool deliberately does *not* cover.
+> **New here, or back after a while?** [`docs/WHAT-CAN-I-RUN.md`](docs/WHAT-CAN-I-RUN.md) lists every entry point, what it needs, and what it produces — including what this tool deliberately does *not* cover. Known issues and what has not yet been run against a live tenant are in [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md).
 
 Connects to a Microsoft 365 tenant via delegated auth (or GDAP for MSP batch runs), collects raw configuration data across all M365 services, evaluates **204 security controls with license-aware scoring**, and produces client-ready HTML and Markdown reports with citations into six frameworks (CIS M365, CISA SCuBA, NIST 800-53r5, CMMC 2.0, ISO 27001, MITRE ATT&CK) plus CIS Controls v8.1.
 
@@ -132,6 +132,7 @@ Every run now classifies the tenant into a **Tenant Security Maturity Tier** (In
 | `-SkipTeams`, `-SkipSharePoint`, `-SkipIntune`, `-SkipPowerPlatform`, `-SkipDNS` | Skip that workload; its controls report "not assessed" (neither a pass nor a failure), and the scope section says which flag skipped them. |
 | `-DnsDomains` | Domains for the email-authentication DNS checks. Default: the tenant's accepted (or verified) domains. |
 | `-DeviceResults` | Folder of endpoint results from `Device\Invoke-NRGDeviceCompliance.ps1`; adds the DEV-* controls. |
+| `-MonitoringAddress` | The NRG monitoring address(es) alert policies should notify (an address, or `@domain`). DEF-3.4 and EXO-3.3 compare each enabled policy's recipients with it; without one, routing to NRG is reported as not assessed. Also read from the client's `MonitoringAddresses` in `Config/clients.json`, then `MonitoringAddresses` in `Config/branding.psd1`. |
 | `-ThirdPartyEDR` | A non-Microsoft EDR such as `'Cortex XDR'`. The Defender endpoint checks report as covered by it (declared, not verified) and leave the score. |
 | `-Quick` | Critical and High controls only. |
 | `-OutputPath` | Output folder. Default `.\output`. |
@@ -152,6 +153,8 @@ Every run now classifies the tenant into a **Tenant Security Maturity Tier** (In
 | `-MonthlyReport`, `-MonthlyDeltaPath`, `-MonthlyPriorPath` | Monthly MSP report. Work state comes from the delta `.psd1`, the trend from last month's JSON. |
 | `-FromResults` | Republish every report from a saved results JSON, without signing in. |
 | `-BaselineResults` | Compare with a prior results JSON (delta report). |
+| `-ScubaResultsPath` | A ScubaGear `ScubaResults.csv` or `ScubaResults_<id>.json` (one file, not the folder). A file that is not a ScubaGear result is reported and skipped; the site is still built. The report site shows each mapped result beside the NRG control as an independent comparison (a separate standard, never a score). |
+| `-SkipReportSite` | The multi-page report site (`<base>-report/`: landing page, one page per workload, `ActionPlan.csv`) is written automatically with every run that writes reports and with `-FromResults`; this turns it off. |
 | `-FailOnCritical`, `-FailOnHigh`, `-FailOnScoreBelow` | Exit 10, 11 or 12 when the threshold is crossed; 0 (default) turns it off. |
 | `-NonInteractive` | Never prompts. Missing modules end the run with exit code 1 instead of an install prompt. |
 | `-WhatIfConnections` | Connects, prints the connection table, and stops before collecting anything. |
@@ -260,7 +263,7 @@ Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 Compare-NRGTenantBaseline.ps1     ← Offline two-tenant baseline comparison (connects to nothing)
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (351 exports, dependency declarations)
+NRG-Assessment.psd1               ← Module manifest (389 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -301,9 +304,9 @@ Config/
   frameworks.json                 CIS, SCuBA, NIST, CMMC, MITRE metadata
   clients.json                    MSP client registry (TenantId + GDAP config)
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
-  framework-baselines/            Authoritative SCuBA v1.8.0 + CIS Controls v8.1 ID lists (CI-enforced)
+  framework-baselines/            Authoritative SCuBA (ScubaGear v2.0.0) + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          81 Pester suites — the FULL suite gates every PR
+Testing/                          96 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -332,7 +335,7 @@ Testing/                          81 Pester suites — the FULL suite gates ever
 
 **Severity distribution:** 11 Critical · 92 High · 65 Medium · 27 Low
 
-**Framework citations per control:** CIS M365 Foundations v6.0.1 · CISA SCuBA (ScubaGear v1.8.0 policy IDs) · NIST SP 800-53 Rev 5 · CMMC 2.0 · ISO/IEC 27001:2022 · MITRE ATT&CK — plus CIS Controls v8.1 safeguards, SOC 2, HIPAA, and PCI DSS references. Controls whose license requirement the tenant doesn't meet are routed to an Upgrade Unlocks section instead of dragging the score down.
+**Framework citations per control:** CIS M365 Foundations v6.0.1 · CISA SCuBA (ScubaGear v2.0.0 policy IDs) · NIST SP 800-53 Rev 5 · CMMC 2.0 · ISO/IEC 27001:2022 · MITRE ATT&CK — plus CIS Controls v8.1 safeguards, SOC 2, HIPAA, and PCI DSS references. Controls whose license requirement the tenant doesn't meet are routed to an Upgrade Unlocks section instead of dragging the score down.
 
 ### NIST SP 800-53 Rev 5 — family rollup
 
@@ -536,7 +539,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **81 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **96 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -588,14 +591,14 @@ Six GitHub Actions workflows cover the repository. All run automatically on push
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (81 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (96 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
 | **Scorecard** | OpenSSF Scorecard supply-chain posture, weekly |
 | **Release** | On `v*` tags: CycloneDX SBOM generation + Authenticode signature/integrity verification |
 
-The framework-accuracy suite validates every SCuBA citation against the bundled ScubaGear v1.8.0 policy list, every CIS Controls citation against the v8.1 safeguard list, CMMC domain/level correctness, and ISO 27001:2022 Annex-A ranges — a wrong citation fails the PR, not the client report.
+The framework-accuracy suite validates every SCuBA citation against the bundled ScubaGear v2.0.0 policy list, every CIS Controls citation against the v8.1 safeguard list, CMMC domain/level correctness, and ISO 27001:2022 Annex-A ranges — a wrong citation fails the PR, not the client report.
 
 ---
 
@@ -607,4 +610,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 351 exported functions · full Pester suite (81 suites) gating CI*
+*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 389 exported functions · full Pester suite (96 suites) gating CI*

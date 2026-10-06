@@ -229,7 +229,7 @@ $reportMetadata = [ordered]@{
     ThreatIntelEnabled = [bool]$EnableThreatIntel
     HomeState          = $HomeState
     HomeCountry        = $HomeCountry
-    ToolVersion       = $script:NRGAssessmentVersion
+    ToolVersion       = $(if (Get-Variable -Name NRGAssessmentVersion -ErrorAction SilentlyContinue) { [string]$NRGAssessmentVersion } else { 'unknown' })
     Brand             = $NRGBrand
 }
 
@@ -240,6 +240,14 @@ try {
     $reportMetadata['TenantId']       = $ctx.TenantId
 } catch {
     Write-Host "  [!] Connection failed: $($_.Exception.Message)" -ForegroundColor Red
+    # The first line is often all a credential error carries; the cause (a closed or hidden
+    # sign-in window, a consent or Conditional Access refusal) sits in the inner exceptions.
+    $inner = $_.Exception.InnerException
+    while ($inner) {
+        if ($inner.Message) { Write-Host ("      caused by: {0}" -f (($inner.Message -split "`r?`n")[0])) -ForegroundColor Red }
+        $inner = $inner.InnerException
+    }
+    Write-Host '      If the window never appeared or closed, retry in a NEW PowerShell 7 window; the sign-in window can open behind other windows.' -ForegroundColor Yellow
     exit 1
 }
 
@@ -265,6 +273,10 @@ try {
         'Test-NRGSignInControlRiskyUsers'
     )
     if ($EnableThreatIntel) { $triageEvaluators += 'Test-NRGSignInControlIPIntel' }
+    # A detector that throws or is missing produced no verdict. It is recorded
+    # as an assessment-health gap, never only a warning, so a missing detector
+    # cannot look like a clean result.
+    $evaluatorFailures = [System.Collections.Generic.List[string]]::new()
     foreach ($fn in $triageEvaluators) {
         if (Get-Command $fn -ErrorAction SilentlyContinue) {
             try {
@@ -272,7 +284,10 @@ try {
                 Write-Host "  [+] $fn" -ForegroundColor Green
             } catch {
                 Write-Warning "$fn failed: $($_.Exception.Message)"
+                $evaluatorFailures.Add("$fn did not finish: $($_.Exception.Message)")
             }
+        } else {
+            $evaluatorFailures.Add("$fn was not available to run")
         }
     }
 
@@ -285,6 +300,7 @@ try {
             Write-Host "  [+] Test-NRGSignInControlGeoAnomaly" -ForegroundColor Green
         } catch {
             Write-Warning "Test-NRGSignInControlGeoAnomaly failed: $($_.Exception.Message)"
+            $evaluatorFailures.Add("Test-NRGSignInControlGeoAnomaly did not finish: $($_.Exception.Message)")
         }
     }
 
@@ -295,6 +311,7 @@ try {
             Write-Host "  [+] Test-NRGSignInControlRankUsers" -ForegroundColor Green
         } catch {
             Write-Warning "Test-NRGSignInControlRankUsers failed: $($_.Exception.Message)"
+            $evaluatorFailures.Add("Test-NRGSignInControlRankUsers did not finish: $($_.Exception.Message)")
         }
     }
 
@@ -317,36 +334,72 @@ try {
         Write-Host ''
         Write-Host "[-] Phase 1 — deep-diving top $($rankedUsers.Count) user(s)..." -ForegroundColor Cyan
         $divedUsers = @()
+        # One record per flagged user: the evidence that user's findings rest on
+        # is kept HERE, because each dive overwrites the shared raw-data keys.
+        $deepDives = [System.Collections.Generic.List[object]]::new()
+        $deepDiveKeys = @('IR-MailboxProfile','IR-MailboxSentItems','IR-MailboxInbox','IR-MailboxRecoverable','IR-MailboxRules','IR-MailboxForwarding','IR-UserConsents','IR-UserAuthMethods')
         foreach ($u in $rankedUsers) {
             $upn = $u.UserPrincipalName
+            $findingsBefore = @(Get-NRGFindings).Count
             Write-Host ''
             Write-Host "  >>> $upn (IoC score $($u.Score)): $($u.Reasons -join '; ')" -ForegroundColor Cyan
             # IMPORTANT: clear raw-data keys between users so each user's mailbox
             # data doesn't bleed into the next user's evaluation.
-            foreach ($key in 'IR-MailboxProfile','IR-MailboxSentItems','IR-MailboxInbox','IR-MailboxRecoverable','IR-MailboxRules','IR-MailboxForwarding','IR-UserConsents','IR-UserAuthMethods') {
+            foreach ($key in $deepDiveKeys) {
                 Set-NRGRawData -Key $key -Data @{ CollectorId=$key; Success=$false; Data=$null }
             }
+            # Steps of THIS dive that did not finish. A detector that threw produced
+            # no verdict for this user, so the dive is Incomplete, not clean.
+            $diveFailures = [System.Collections.Generic.List[string]]::new()
             try {
                 Invoke-NRGEmailCollectMailbox -WindowDays $WindowDays -TargetUpn $upn
                 # v4.12.1: OAuth consents + auth methods — the two persistence
                 # surfaces a mailbox read can't see (illicit consent grants
                 # survive password resets; attacker-added MFA methods survive
                 # session revocation).
-                try { Invoke-NRGEmailCollectUserSecurity -TargetUpn $upn } catch { Write-Warning "User-security collection for $upn failed: $($_.Exception.Message)" }
+                try { Invoke-NRGEmailCollectUserSecurity -TargetUpn $upn } catch { Write-Warning "User-security collection for $upn failed: $($_.Exception.Message)"; $diveFailures.Add("user-security collection did not finish: $($_.Exception.Message)") }
                 foreach ($fn in @('Test-NRGEmailControlInboxRules','Test-NRGEmailControlForwarding','Test-NRGEmailControlOutboundActivity','Test-NRGEmailControlPhishOrigin','Test-NRGEmailControlOAuthConsents','Test-NRGEmailControlAuthMethods')) {
-                    try { & $fn } catch { Write-Warning "$fn for $upn failed: $($_.Exception.Message)" }
+                    try { & $fn } catch { Write-Warning "$fn for $upn failed: $($_.Exception.Message)"; $diveFailures.Add("$fn did not finish: $($_.Exception.Message)") }
                 }
+                # Say whose these findings are and what they rest on, BEFORE the
+                # next user's dive replaces the raw data.
+                $evidence = Get-NRGDeepDiveEvidence
+                $null = Set-NRGFindingSubject -Since $findingsBefore -Subject $upn -Evidence $evidence
+                $snapshot = [ordered]@{}
+                foreach ($key in $deepDiveKeys) { $snapshot[$key] = Get-NRGRawData -Key $key }
+                $deepDives.Add([ordered]@{ UserPrincipalName = $upn; Score = $u.Score; Reasons = @($u.Reasons); Status = $(if ($evidence.Complete -and $diveFailures.Count -eq 0) { 'Completed' } else { 'Incomplete' }); Failures = @($diveFailures); Evidence = $evidence; RawData = $snapshot })
                 $divedUsers += $upn
-                Write-Host "  [+] Deep-dive complete: $upn" -ForegroundColor Green
+                # The same combined health decision as the recorded Status: a dive whose
+                # evidence was read but whose detectors did not finish is not complete.
+                $diveOk = ($evidence.Complete -and $diveFailures.Count -eq 0)
+                $diveWhy = @(@($evidence.RequiredMissing | ForEach-Object { "missing $_" }) + @($evidence.RequiredPartial | ForEach-Object { "partial $_" }) + @($evidence.OptionalTruncated | ForEach-Object { "partial $_" }) + @($diveFailures))
+                Write-Host "  [+] Deep-dive $(if ($diveOk) { 'complete' } else { "incomplete ($($diveWhy -join '; '))" }): $upn" -ForegroundColor $(if ($diveOk) { 'Green' } else { 'Yellow' })
             } catch {
                 Write-Warning "Deep-dive collection failed for ${upn}: $($_.Exception.Message)"
+                $deepDives.Add([ordered]@{ UserPrincipalName = $upn; Score = $u.Score; Reasons = @($u.Reasons); Status = 'Failed'; Error = $_.Exception.Message; Evidence = $null; RawData = $null })
             }
         }
         $reportMetadata['DeepDivedUsers'] = $divedUsers
+        $reportMetadata['DeepDives'] = @($deepDives | ForEach-Object { [ordered]@{ UserPrincipalName = $_.UserPrincipalName; Status = $_.Status } })
     }
 
     $findings = @(Get-NRGFindings)
-    $rawData  = Get-NRGRawData -AllKeys
+    $rawData  = Get-NRGRawData
+    $rawDataOut = [ordered]@{}
+    foreach ($k in @($rawData.Keys)) { if ($k -notmatch '^IR-(Mailbox|User)') { $rawDataOut[$k] = $rawData[$k] } }
+    # What the verdict may claim depends on what was actually read.
+    $comp = Get-NRGSignInCollectionCompleteness
+    $ddGaps = @()
+    if ((Get-Variable -Name deepDives -ErrorAction SilentlyContinue) -and $deepDives) {
+        $ddGaps = @($deepDives | Where-Object { $_.Status -ne 'Completed' } | ForEach-Object {
+            $fl = @(Get-NRGObjectField -Item $_ -Key 'Failures' -Default @())
+            "deep-dive for $($_.UserPrincipalName) was $($_.Status.ToLowerInvariant())$(if ($fl.Count -gt 0) { ': ' + ($fl -join '; ') })" })
+    }
+    $evalGaps = @(if ((Get-Variable -Name evaluatorFailures -ErrorAction SilentlyContinue) -and $evaluatorFailures) { $evaluatorFailures })
+    $reportMetadata['CollectionComplete'] = ([bool]$comp.Complete -and $ddGaps.Count -eq 0 -and $evalGaps.Count -eq 0)
+    $reportMetadata['CollectionGaps']     = @(@($comp.Reasons) + $ddGaps + $evalGaps)
+    $reportMetadata['EvaluatorFailures']  = @($evalGaps)
+    $reportMetadata['EventsRead']         = [int]$comp.EventsRead
 
     # ── Publish ──────────────────────────────────────────────────────────────
     Write-Host ''
@@ -360,7 +413,10 @@ try {
     $jsonPayload = [ordered]@{
         Metadata   = $reportMetadata
         Findings   = $findings
-        RawData    = $rawData
+        # Per-mailbox keys are kept per user under DeepDives; left in RawData they
+        # would hold only the LAST user's mailbox and read as nobody's.
+        RawData    = $rawDataOut
+        DeepDives  = @($(if ((Get-Variable -Name deepDives -ErrorAction SilentlyContinue) -and $deepDives) { $deepDives } else { @() }))
         Exceptions = @(Get-NRGExceptions)
     } | ConvertTo-Json -Depth 10
     Set-NRGSensitiveFileContent -Path $jsonPath -Content $jsonPayload
@@ -392,17 +448,27 @@ try {
     Write-Host "  Critical IoCs      : $($crits.Count)" -ForegroundColor $(if ($crits.Count -gt 0) {'Red'} else {'Green'})
     Write-Host "  High IoCs          : $($highs.Count)" -ForegroundColor $(if ($highs.Count -gt 0) {'Yellow'} else {'Green'})
     Write-Host "  Users deep-dived   : $(@($reportMetadata['DeepDivedUsers']).Count)" -ForegroundColor White
+    if (-not $reportMetadata['CollectionComplete']) {
+        Write-Host '  NOT CLEARED: part of the evidence could not be read or checked:' -ForegroundColor Yellow
+        foreach ($g in @($reportMetadata['CollectionGaps'])) { Write-Host "    - $g" -ForegroundColor Yellow }
+    }
     Write-Host ''
     if ($crits.Count -gt 0) {
         Write-Host '  ╔══════════════════════════════════════════════════╗' -ForegroundColor Red
-        Write-Host '  ║   CRITICAL IoCs found — likely compromise.       ║' -ForegroundColor Red
+        Write-Host '  ║   CRITICAL indicators found — investigate.       ║' -ForegroundColor Red
         Write-Host '  ║   Review the triage report and take action       ║' -ForegroundColor Red
         Write-Host '  ║   on each flagged user immediately.              ║' -ForegroundColor Red
         Write-Host '  ╚══════════════════════════════════════════════════╝' -ForegroundColor Red
         Write-Host ''
     }
 
-    if ($findings.Count -eq 0) { $script:NRGSITriageSuccessExitCode = 2 }
+    # Exit-code precedence (highest first): 4 fatal error, 10 Critical indicator,
+    # 3 evidence incomplete or a required check did not finish, 2 no findings,
+    # 0 complete. Incomplete outranks "no findings": a run whose detectors failed
+    # has no findings because nothing evaluated, not because nothing was wrong.
+    # A Critical still exits 10, and the report and console say NOT CLEARED too.
+    if (-not $reportMetadata['CollectionComplete']) { $script:NRGSITriageSuccessExitCode = 3 }
+    elseif ($findings.Count -eq 0) { $script:NRGSITriageSuccessExitCode = 2 }
     else { $script:NRGSITriageSuccessExitCode = 0 }
     if ($crits.Count -gt 0) { $script:NRGSITriageThresholdExitCode = 10 }
 } catch {

@@ -108,10 +108,20 @@
     $('progress-log').textContent = '';
   }
 
+  // The scan is pinned to a tenant DOMAIN. People type the account they sign in with, so a user
+  // name (admin@contoso.com) is reduced to its domain instead of being refused.
+  function normalizeDomain(value) {
+    let v = String(value || '').trim().toLowerCase();
+    const at = v.lastIndexOf('@');
+    if (at >= 0) v = v.slice(at + 1);
+    return v;
+  }
+
   async function triggerScan(domain, displayName) {
+    domain = normalizeDomain(domain);
     if (!domain) { setStatus('Enter a tenant domain first'); return; }
-    if (!/^[A-Za-z0-9.\-]+$/.test(domain)) {
-      setStatus('Invalid domain format');
+    if (!/^[a-z0-9.\-]+$/.test(domain)) {
+      setStatus('Enter the tenant domain, for example contoso.com (letters, numbers, dots and hyphens only)');
       return;
     }
     if (!confirm('Run a full assessment of ' + (displayName || domain) + '?')) return;

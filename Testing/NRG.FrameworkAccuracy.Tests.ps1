@@ -7,11 +7,11 @@
 # Author: Matthew Levorson
 # Purpose: Validate every framework crosswalk ID in controls.json against an
 #          authoritative, bug-worked-out reference. Today: SCuBA IDs vs the
-#          bundled CISA ScubaGear v1.8.0 baseline. Catches typos, nonexistent
+#          bundled CISA ScubaGear 2.0.0 baseline. Catches typos, nonexistent
 #          IDs, and version drift (e.g. MS.AAD.3.3v1 -> v2) in CI instead of at
 #          client-report time.
 #
-# Consumes: Config/controls.json, Config/framework-baselines/scuba-ids-v1.8.0.txt
+# Consumes: Config/controls.json, Config/framework-baselines/scuba-ids-v2.0.0.txt
 # Sets:     nothing.
 
 Describe 'Framework crosswalk accuracy' {
@@ -21,7 +21,7 @@ Describe 'Framework crosswalk accuracy' {
         $script:Controls = (Get-Content -LiteralPath $controlsPath -Raw | ConvertFrom-Json)
         if ($script:Controls.PSObject.Properties['controls']) { $script:Controls = $script:Controls.controls }
 
-        $scubaPath = Join-Path $script:RepoRoot 'Config' 'framework-baselines' 'scuba-ids-v1.8.0.txt'
+        $scubaPath = Join-Path $script:RepoRoot 'Config' 'framework-baselines' 'scuba-ids-v2.0.0.txt'
         $script:AuthScuba = @(Get-Content -LiteralPath $scubaPath |
             Where-Object { $_ -and -not $_.StartsWith('#') } |
             ForEach-Object { $_.Trim() })
@@ -32,7 +32,7 @@ Describe 'Framework crosswalk accuracy' {
             ForEach-Object { ($_ -split '\s+', 2)[0] })
     }
 
-    Context 'SCuBA references vs authoritative ScubaGear v1.8.0 baseline' {
+    Context 'SCuBA references vs authoritative ScubaGear 2.0.0 baseline' {
         It 'Bundled authoritative baseline is non-empty' {
             $script:AuthScuba.Count | Should -BeGreaterThan 100
         }
@@ -52,7 +52,7 @@ Describe 'Framework crosswalk accuracy' {
                     }
                 }
             }
-            $bad -join "`n" | Should -BeNullOrEmpty -Because 'every SCuBA ID must be a real ScubaGear v1.8.0 policy (regenerate the baseline file on version upgrade)'
+            $bad -join "`n" | Should -BeNullOrEmpty -Because 'every SCuBA ID must be a real ScubaGear 2.0.0 policy (regenerate the baseline file on version upgrade)'
         }
 
         It 'Every prose SCuBA citation matches the control''s SCuBA reference' {

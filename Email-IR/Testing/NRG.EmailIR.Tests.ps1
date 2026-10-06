@@ -109,25 +109,164 @@ Describe 'NRG Email IR — evaluators against synthetic fixtures' {
             $f[0].Detail    | Should -Match 'attacker@protonmail.com'
         }
 
-        It 'Allows benign rules' {
+        It 'a newsletter folder move is routine: not flagged, and the finding is Satisfied about the rules read' {
             Set-NRGRawData -Key 'IR-MailboxRules' -Data (NewBag 'IR-Mailbox-Rules' @{
                 Count = 1
-                Rules = @(@{
-                    displayName = 'Move newsletter to Newsletters'
-                    isEnabled   = $true
-                    actions     = @{
-                        moveToFolder = 'Newsletters'
-                    }
-                    conditions = @{ subjectContains = @('newsletter') }
-                })
+                Rules = @(@{ displayName = 'Move newsletter to Newsletters'; isEnabled = $true
+                             actions = @{ moveToFolder = 'Newsletters' }; conditions = @{ subjectContains = @('newsletter') } })
             })
             Test-NRGEmailControlInboxRules
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-1.1')
-            # Move-to-folder with conditions IS still flagged (covers-tracks
-            # pattern), but no forward-external. The current detector flags
-            # any move-to-folder; document that and assert it lands as Gap
-            # with severity Critical — the operator triages.
-            $f.Count | Should -Be 1
+            $f.Count    | Should -Be 1
+            $f[0].State | Should -Be 'Satisfied'
+            $f[0].Detail | Should -Match 'describes the rules read'
+        }
+
+        Context 'destination, state and combination decide the verdict' {
+            BeforeEach {
+                Set-NRGRawData -Key 'IR-MailboxProfile' -Data (NewBag 'IR-Mailbox-Profile' @{ UserPrincipalName = 'alice@corp.com' })
+            }
+            It 'expected internal forwarding (same domain) is not flagged' {
+                Set-NRGRawData -Key 'IR-MailboxRules' -Data (NewBag 'IR-Mailbox-Rules' @{ Count = 1; Rules = @(@{
+                    displayName = 'To my assistant'; isEnabled = $true
+                    actions = @{ forwardTo = @(@{ emailAddress = @{ address = 'bob@corp.com' } }) }; conditions = @{ fromAddresses = @('ceo@corp.com') } }) })
+                Test-NRGEmailControlInboxRules
+                @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-1.1')[0].State | Should -Be 'Satisfied'
+            }
+            It 'a DISABLED external-forward rule is kept as historical evidence, Medium, never current persistence' {
+                Set-NRGRawData -Key 'IR-MailboxRules' -Data (NewBag 'IR-Mailbox-Rules' @{ Count = 1; Rules = @(@{
+                    displayName = 'Old forward'; isEnabled = $false
+                    actions = @{ forwardTo = @(@{ emailAddress = @{ address = 'someone@gmail.com' } }) }; conditions = @{ subjectContains = @('report') } }) })
+                Test-NRGEmailControlInboxRules
+                $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-1.1')[0]
+                $f.State    | Should -Be 'Gap'
+                $f.Severity | Should -Be 'Medium'
+                $f.Detail   | Should -Match 'DISABLED: historical, not acting now'
+                @($f.AffectedObjects)[0].Enabled | Should -BeFalse
+            }
+            It 'an enabled external forward alone is High with Medium confidence, not Critical' {
+                Set-NRGRawData -Key 'IR-MailboxRules' -Data (NewBag 'IR-Mailbox-Rules' @{ Count = 1; Rules = @(@{
+                    displayName = 'Forward invoices'; isEnabled = $true
+                    actions = @{ forwardTo = @(@{ emailAddress = @{ address = 'someone@gmail.com' } }) }; conditions = @{ subjectContains = @('invoice') } }) })
+                Test-NRGEmailControlInboxRules
+                $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-1.1')[0]
+                $f.Severity | Should -Be 'High'
+                $f.Detail   | Should -Match 'confidence Medium'
+                $f.Detail   | Should -Match 'may be another domain of the same organization'
+            }
+            It 'an enabled hidden-name rule that forwards out to everything and deletes is Critical, high confidence' {
+                Set-NRGRawData -Key 'IR-MailboxRules' -Data (NewBag 'IR-Mailbox-Rules' @{ Count = 1; Rules = @(@{
+                    displayName = '.'; isEnabled = $true
+                    actions = @{ forwardTo = @(@{ emailAddress = @{ address = 'attacker@protonmail.com' } }); delete = $true }; conditions = @{} }) })
+                Test-NRGEmailControlInboxRules
+                $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-1.1')[0]
+                $f.Severity | Should -Be 'Critical'
+                $f.Detail   | Should -Match 'confidence High'
+            }
+            It 'a destination that cannot be compared is stated as such and lowers confidence' {
+                Set-NRGRawData -Key 'IR-MailboxRules' -Data (NewBag 'IR-Mailbox-Rules' @{ Count = 1; Rules = @(@{
+                    displayName = 'Route'; isEnabled = $true
+                    actions = @{ forwardTo = @(@{ emailAddress = @{ address = '/o=ExchangeLabs/ou=x/cn=y' } }) }; conditions = @{ subjectContains = @('x') } }) })
+                Test-NRGEmailControlInboxRules
+                $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-1.1')[0]
+                $f.Detail | Should -Match 'could not be compared with the mailbox'
+                $f.Detail | Should -Match 'confidence Low'
+            }
+        }
+    }
+
+    Context 'Phish leads are leads, not findings of cause (EMAIL-3.1, A10)' {
+        BeforeEach {
+            Set-NRGRawData -Key 'IR-MailboxProfile' -Data (NewBag 'IR-Mailbox-Profile' @{ UserPrincipalName = 'alice@corp.com' })
+        }
+        BeforeAll {
+            function script:Msg($id, $subject, $from, $fromName, $urls = @()) {
+                [ordered]@{ Id = $id; Subject = $subject; ReceivedDateTime = (Get-Date).AddDays(-2).ToString('o'); FromAddress = $from; FromName = $fromName; BodyURLs = @($urls); BodyPreviewLen = 120 }
+            }
+            function script:Run($inbox, $recov = @()) {
+                Set-NRGRawData -Key 'IR-MailboxInbox' -Data (NewBag 'IR-Mailbox-Inbox' @{ WindowDays = 30; Count = @($inbox).Count; Truncated = $false; Messages = @($inbox) })
+                Set-NRGRawData -Key 'IR-MailboxRecoverable' -Data (NewBag 'IR-Mailbox-Recoverable' @{ Count = @($recov).Count; Messages = @($recov) })
+                Test-NRGEmailControlPhishOrigin
+                @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-3.1')[0]
+            }
+        }
+        It 'a legitimate vendor message that was deleted is not a lead on the strength of being deleted' {
+            $m = Msg 'v1' 'Statement for September' 'billing@vendor.example' 'Vendor Billing'
+            $f = Run @() @($m)
+            $f.State | Should -Be 'NotApplicable'
+        }
+        It 'a Microsoft Loop digest from sharepointonline.com is not a lead (a Microsoft domain)' {
+            $m = Msg 'm1' 'Start your day by getting in the Loop' 'no-reply@sharepointonline.com' 'Microsoft Loop'
+            (Run @($m)).State | Should -Be 'NotApplicable'
+        }
+        It 'a partner or distributor whose display name says Microsoft is a weaker lead, Medium, never a High indicator' {
+            $m = Msg 'm2' 'Microsoft SPLA Reporting Reminder' 'Microsoft-SPLA@ingrammicro.example' 'Microsoft-SPLA'
+            $f = Run @($m)
+            $f.State    | Should -Be 'Gap'
+            $f.Severity | Should -Be 'Medium'
+            $f.Detail   | Should -Match 'weaker lead: a display name alone'
+            $f.Detail   | Should -Match 'No lead carries a strong phishing signal'
+        }
+        It 'one display name counts once: the Microsoft claim does not also fire the brand-spoof signal' {
+            $m = Msg 'm3' 'Course enrollment' 'DoNotReply@training.example' 'LevelUp for Microsoft'
+            $f = Run @($m)
+            $f.Detail | Should -Not -Match "claims 'microsoft'"
+            $f.Detail | Should -Match 'Rank score 45'
+        }
+        It 'a typo-squatted Microsoft domain is a strong lead and stays High' {
+            $m = Msg 'm4' 'Notice' 'noreply@microsft-support.example' 'Support'
+            $f = Run @($m)
+            $f.Severity | Should -Be 'High'
+            $f.Detail   | Should -Match 'sending domain'
+        }
+        It 'a strong lead outranks a weaker lead with a higher score' {
+            $weak   = Msg 'm5' 'Hello' 'a@vendor.example' 'Microsoft Partner Network'
+            $strong = Msg 'm6' 'Verify your account now' 'x@other.example' 'Account Team'
+            $f = Run @($weak, $strong)
+            $f.Severity | Should -Be 'High'
+            $f.Detail.IndexOf('x@other.example') | Should -BeLessThan $f.Detail.IndexOf('a@vendor.example')
+        }
+        It 'a genuine DocuSign message from a DocuSign domain is not called a brand spoof' {
+            $m = Msg 'd1' 'Please review: contract for signature' 'dse@docusign.net' 'DocuSign'
+            $f = Run @($m)
+            $f.State | Should -Be 'NotApplicable'
+        }
+        It 'the same display name from an unrelated domain is a brand-spoof lead' {
+            $m = Msg 'd2' 'Please review: docusign request' 'dse@docusign-secure.example' 'DocuSign'
+            $f = Run @($m)
+            $f.State | Should -Be 'Gap'
+            $f.Detail | Should -Match "claims 'docusign'"
+        }
+        It 'a compromised internal sender with urgency and a sign-in link is kept, marked lower confidence' {
+            $m = Msg 'i1' 'Urgent action: verify now' 'colleague@corp.com' 'A Colleague' @('https://evil.example/login/verify')
+            $f = Run @($m)
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'lower confidence: sender inside the mailbox domain'
+        }
+        It 'an internal sender with only one weak signal is not a lead' {
+            $m = Msg 'i2' 'Urgent action: lunch?' 'colleague@corp.com' 'A Colleague'
+            (Run @($m)).State | Should -Be 'NotApplicable'
+        }
+        It 'a real external credential-harvest lure is a lead, and Recoverable Items never assigns the deletion to an actor' {
+            $m = Msg 'p1' 'Your password expires in 24 hours - verify now' 'admin@microsft-onlne.com' 'Microsoft Account Team' @('https://microsft-onlne.com/login/auth')
+            $f = Run @($m) @($m)
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'who deleted it is not known'
+            $f.Detail | Should -Not -Match 'attacker deleted|most-likely original phish'
+            $f.Detail | Should -Match 'investigative leads'
+        }
+        It 'every result states what was read: folders, window, and that links come from the preview only' {
+            $m = Msg 'p2' 'Verify your account now' 'x@badco.example' 'Account Team'
+            $f = Run @($m)
+            $f.Detail | Should -Match 'message preview only'
+            $f.Detail | Should -Match 'last 30 days'
+        }
+        It 'a truncated inbox read is said to be partial in the scope statement' {
+            $m = Msg 'p3' 'Verify your account now' 'x@badco.example' 'Account Team'
+            Set-NRGRawData -Key 'IR-MailboxInbox' -Data (NewBag 'IR-Mailbox-Inbox' @{ WindowDays = 30; Count = 1; Truncated = $true; Messages = @($m) })
+            Set-NRGRawData -Key 'IR-MailboxRecoverable' -Data (NewBag 'IR-Mailbox-Recoverable' @{ Count = 0; Messages = @() })
+            Test-NRGEmailControlPhishOrigin
+            @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-3.1')[0].Detail | Should -Match 'stopped at its page cap'
         }
     }
 
@@ -252,7 +391,7 @@ Describe 'NRG Email IR — evaluators against synthetic fixtures' {
             })
             Test-NRGEmailControlPhishOrigin
             $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-3.1')
-            $f[0].Detail | Should -Match 'RECOVERED from Deletions'
+            $f[0].Detail | Should -Match 'found in Recoverable Items'
             # otherbad.com (the recovered one) should appear first
             $idxOther = $f[0].Detail.IndexOf('otherbad.com')
             $idxBad   = $f[0].Detail.IndexOf('badco.com')
@@ -430,6 +569,21 @@ Describe 'NRG Email IR — EMAIL-4.1 OAuth consent grants' {
         $f[0].Detail   | Should -Match 'UNVERIFIED publisher'
         $f[0].Detail   | Should -Match 'Mail\.Send'
         $f[0].Detail   | Should -Not -Match 'Teams'
+    }
+
+    It 'a write-scope grant whose app was never identified is High, never labeled UNVERIFIED, and says how to identify it' {
+        Set-NRGRawData -Key 'IR-UserConsents' -Data (NewBag 'c' @{
+            Count = 1
+            Grants = @([ordered]@{ GrantId='g1'; ClientSpId='sp-unknown'; App=$null; ConsentType='Principal'; Scope='Mail.ReadWrite openid profile offline_access' })
+        })
+        Test-NRGEmailControlOAuthConsents
+        $f = @(Get-NRGFindings | Where-Object ControlId -eq 'EMAIL-4.1')
+        $f[0].State    | Should -Be 'Gap'
+        $f[0].Severity | Should -Be 'High' -Because 'an unidentified app may be an ordinary Microsoft one; Critical needs an identified app'
+        $f[0].Detail   | Should -Match 'app not identified'
+        $f[0].Detail   | Should -Match 'publisher not checked'
+        $f[0].Detail   | Should -Not -Match 'UNVERIFIED'
+        $f[0].Detail   | Should -Match 'Identify each app first'
     }
 
     It 'Read-only mail scope lands as Partial (verify with user), not Gap' {

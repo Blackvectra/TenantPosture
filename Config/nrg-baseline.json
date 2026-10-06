@@ -160,7 +160,7 @@
         "AAD-IdentityGovernance"
       ],
       "EvidenceSource": "Graph: PIM role policies, consent settings, app-registration settings (Invoke-NRGCollectAADIdentityGovernance)",
-      "ExpectedState": "Users cannot consent to applications; consent goes through the admin consent workflow.",
+      "ExpectedState": "Users cannot freely consent to applications: user consent is disabled, or limited to low-impact permissions from verified publishers.",
       "SlaClass": "Critical",
       "DependsOn": [],
       "FreshnessClass": "Daily",
@@ -172,7 +172,7 @@
       },
       "Reason": "Illicit consent grants survive password resets and MFA re-enrollment.",
       "WhyNrgOwnsThis": "Consent phishing is the persistence route NRG sees most after BEC; users must not be able to grant it.",
-      "Notes": "Pair with the admin consent workflow (AAD-6.3) so legitimate requests still have a path; otherwise engineers will loosen it."
+      "Notes": "The admin consent workflow (AAD-6.3) gives legitimate requests a path so engineers do not loosen this setting. It is a separate control: it is shown here as related context and never decides this verdict."
     },
     {
       "ControlId": "AAD-7.2",

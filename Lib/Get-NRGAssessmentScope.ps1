@@ -114,6 +114,7 @@ function Get-NRGAssessmentScope {
         CollectionIncomplete = @()
         NoProgrammaticCheck  = @()
         ThirdPartyAttested   = @()
+        StandardNotApproved  = @()
         NotApplicableToTenant = @()
         NotEvaluatedThisMode = @()
         SkippedByOperator    = @()
@@ -238,11 +239,18 @@ function Get-NRGAssessmentScope {
                     '403|Forbidden|consent'
     # An evaluator that declares itself advisory is authoritative about itself.
     $advisoryRx   = 'requires manual verification|manual review required|no programmatic check'
+    # An NRG standard the operator has not approved or configured (an empty approved list,
+    # no monitoring address). The evidence WAS read; the standard to judge it against is
+    # missing, which is a different fix from a collection fault. Keyed on the evaluators'
+    # own sentence ('because none is approved', 'because no list is approved',
+    # 'because no monitoring address is configured'); change both together.
+    $standardRx   = 'because (none|no [^,.;]*?) (is|are) (approved|configured)'
 
     # ── Classify every control in the catalogue ──────────────────────────────
     $licenceBlocked = [System.Collections.Generic.List[object]]::new()
     $collectionGap  = [System.Collections.Generic.List[object]]::new()
     $thirdParty     = [System.Collections.Generic.List[object]]::new()
+    $stdNotApproved = [System.Collections.Generic.List[object]]::new()
     $advisory       = [System.Collections.Generic.List[object]]::new()
     $notForTenant   = [System.Collections.Generic.List[object]]::new()
     $notThisMode    = [System.Collections.Generic.List[object]]::new()
@@ -387,6 +395,14 @@ function Get-NRGAssessmentScope {
             }
         }
 
+        # 2b. An NRG standard that is not approved: the half of the expected state that
+        #     needs it cannot be judged, whatever the collectors returned. Checked after
+        #     hard evidence, so a collector that failed is still named as the cause.
+        if ($detail -match $standardRx) {
+            $stdNotApproved.Add([pscustomobject]$row)
+            continue
+        }
+
         # 3. License gated — POSITIVE evidence only. Either the evaluator said
         #    so explicitly, or we hold real SKU data and it says the tenant
         #    lacks the licence. "No SKU data" is not evidence of anything.
@@ -451,6 +467,9 @@ function Get-NRGAssessmentScope {
     if ($collectionGap.Count -gt 0) {
         $limitations.Add("$($collectionGap.Count) control(s) could not be assessed because the underlying data did not collect. These are NOT passes. Re-run once the cause is resolved before treating them as anything.")
     }
+    if ($stdNotApproved.Count -gt 0) {
+        $limitations.Add("$($stdNotApproved.Count) control(s) were verified in part only: the evidence was read, but an NRG standard they are judged against (an approved list or monitoring address) is not approved or configured, so that half is not assessed. These are NOT passes. Approve the standard in Config/nrg-standards.json (or supply the monitoring address) and re-run.")
+    }
     if ($skippedByOp.Count -gt 0) {
         $limitations.Add("$($skippedByOp.Count) control(s) were not assessed because the operator skipped their workload for this run (a -Skip flag such as -SkipPurview). They are neither passes nor failures. Run without the flag to assess them.")
     }
@@ -503,6 +522,7 @@ function Get-NRGAssessmentScope {
         CollectionIncomplete = @($collectionGap)
         NoProgrammaticCheck  = @($advisory)
         ThirdPartyAttested   = @($thirdParty)
+        StandardNotApproved  = @($stdNotApproved)
         NotApplicableToTenant = @($notForTenant)
         NotEvaluatedThisMode = @($notThisMode)
         SkippedByOperator    = @($skippedByOp)

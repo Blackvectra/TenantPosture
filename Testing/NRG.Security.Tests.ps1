@@ -89,6 +89,36 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
             })
             $hits -join "`n" | Should -BeNullOrEmpty -Because 'write ${name}: — a bare $name: is a scope qualifier'
         }
+        # SupportsShouldProcess adds -WhatIf and -Confirm itself. A script that
+        # also declares its own $WhatIf parses, but fails at binding with "A
+        # parameter with the name 'WhatIf' was defined multiple times", so
+        # every invocation fails. Invoke-NRGBatchAssessment.ps1 shipped that
+        # way and no test launched it.
+        It 'no script or function declares its own WhatIf or Confirm beside SupportsShouldProcess' {
+            $hits = @(foreach ($f in $script:PsFiles) {
+                $t = $null; $e = $null
+                $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$t, [ref]$e)
+                foreach ($pb in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.ParamBlockAst] }, $true)) {
+                    $binding = @($pb.Attributes | Where-Object { $_.TypeName.Name -eq 'CmdletBinding' })
+                    $ssp = @($binding.NamedArguments | Where-Object {
+                        $_.ArgumentName -eq 'SupportsShouldProcess' -and ($_.ExpressionOmitted -or $_.Argument.Extent.Text -notmatch '^\$?false$')
+                    })
+                    if ($ssp.Count -eq 0) { continue }
+                    foreach ($p in $pb.Parameters) {
+                        if ($p.Name.VariablePath.UserPath -in @('WhatIf', 'Confirm')) { "$($f.Name):$($p.Extent.StartLineNumber) $($p.Name.VariablePath.UserPath)" }
+                    }
+                }
+            })
+            $hits -join "`n" | Should -BeNullOrEmpty -Because 'the duplicate parameter makes every invocation fail at binding'
+        }
+        It 'Invoke-NRGBatchAssessment.ps1 parameter metadata binds (its -WhatIf is reachable)' {
+            # Get-Command reads the script's parameter metadata without running
+            # it (the script's #Requires modules are not needed). A binding
+            # conflict leaves the parameter set empty.
+            $batch = Get-Command -Name (Join-Path $script:RepoRoot 'Invoke-NRGBatchAssessment.ps1') -ErrorAction Stop
+            $batch.Parameters.Keys | Should -Contain 'WhatIf'
+            $batch.Parameters.Keys | Should -Contain 'OnlyClient'
+        }
     }
 
     Context 'A01 — Path Traversal Prevention [Static]' {
@@ -698,6 +728,50 @@ Describe 'NRG-Assessment Security Invariants — OWASP / ASVS v5' {
                 Select-String -Path $_.FullName -Pattern 'Export-Clixml' -ErrorAction SilentlyContinue
             }
             $hits | Should -BeNullOrEmpty
+        }
+
+        # Client identifiers stay out of the repository. A real client's
+        # domain reached a GUI help string, test fixtures and CHANGELOG
+        # entries, and a live tenant ID sat in two test files; the secret
+        # scanners look for credentials, not names. The list holds SHA-256
+        # hashes of lower-cased identifiers, so the test does not itself
+        # publish them; add a hash when a new client identifier must never
+        # appear. Failures name the file and line, never the value.
+        It 'No known client identifier appears in a tracked text file' {
+            $clientIdHashes = @(
+                '11e16614922618fac053edc9ee0644b94a64e63edf590a0cb8539494450d510b'
+                '1714c4a4da0f3ae69c9510b45fb0bb68df4b5a93fbf4eb17b3f7a11d4b0b0e25'
+                '0d8112db2b6e124be99af9f39e9edd525b9c301b5cf66d3c1706fce1d436175a'
+                # A legacy Exchange address splits an organization name into /o= and /ou=
+                # segments, so its parts and the staff surnames a live-run fixture carried
+                # are listed too.
+                '4065564387a662fe5f1aa27eade986a7fc8961eab59d1c204b219158185ca86e'
+                '0d86beeaed2940c73f110ffd0f1a1afff9e696450aa5efcc5d02ca8f7295453b'
+                '069857ed758920516e40903416412ae015caa99e368d3fa38f12d26f1fddb430'
+                'd88ed6a2f14f012cf2d2427cb0fcecf05290761afdf4f98eddb1c841da50cc09'
+            )
+            $sha = [System.Security.Cryptography.SHA256]::Create()
+            $hashOf = @{}
+            $textExt = @('.ps1', '.psm1', '.psd1', '.md', '.json', '.js', '.html', '.css', '.yml', '.yaml', '.txt', '.csv', '.py', '.toml', '.xml')
+            $files = Get-ChildItem -LiteralPath $script:RepoRoot -Recurse -File |
+                Where-Object { $_.Extension -in $textExt -and $_.FullName -notmatch '[/\\](\.git|output|node_modules)[/\\]' }
+            $hits = @(foreach ($f in $files) {
+                $n = 0
+                foreach ($line in [System.IO.File]::ReadLines($f.FullName)) {
+                    $n++
+                    foreach ($m in [regex]::Matches($line.ToLowerInvariant(), '[a-z0-9][a-z0-9._\-]*[a-z0-9]')) {
+                        # The whole token (a domain, a GUID) and each part of it.
+                        foreach ($t in @($m.Value) + @($m.Value -split '[._\-]')) {
+                            if ($t.Length -lt 3) { continue }
+                            if (-not $hashOf.ContainsKey($t)) {
+                                $hashOf[$t] = -join ($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($t)) | ForEach-Object { $_.ToString('x2') })
+                            }
+                            if ($hashOf[$t] -in $clientIdHashes) { "$($f.FullName.Substring($script:RepoRoot.Length + 1)):$n"; break }
+                        }
+                    }
+                }
+            })
+            $hits -join "`n" | Should -BeNullOrEmpty -Because 'client names, domains and tenant IDs are client data; use example.com / contoso.com and synthetic GUIDs'
         }
     }
 

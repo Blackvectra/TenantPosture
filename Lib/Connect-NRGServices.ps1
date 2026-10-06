@@ -114,6 +114,37 @@ function Get-NRGExoConnectHint {
             'then remove the other version and open a new window.') -f $v, $psv, $range
 }
 
+# A module file under a OneDrive-synced Documents folder can be an "online-only"
+# placeholder. When OneDrive is not running or not signed in, Windows refuses to read it
+# ("The cloud file provider is not running") and the module cannot load. The failure
+# names a file, not the cause, so say the cause beside it.
+function Get-NRGCloudFileHint {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] [AllowEmptyString()] [string] $Message)
+    if ([string]::IsNullOrEmpty($Message)) { return '' }
+    if ($Message -notmatch '(?i)cloud file provider is not running|cloud operation (was|is) (unsuccessful|invalid)|cloud sync root|the cloud file') { return '' }
+    return ('A PowerShell module file is a OneDrive online-only placeholder and OneDrive is not running or not signed in, so Windows cannot read it. ' +
+            'Start OneDrive and wait for it to sign in, or right-click the PowerShell\Modules folder and choose "Always keep on this device". ' +
+            'To stop it recurring, keep modules out of OneDrive: in an elevated PowerShell 7 window run .\Install-NRGPrerequisites.ps1 (it installs for all users when Documents is OneDrive-synced) and Repair-NRGModuleHealth -WhatIf, then open a new window.')
+}
+
+# "Method not found ... WithLogging" / "WithBroker" and "Could not load file or assembly
+# Microsoft.Identity.Client" mean a different version of MSAL is already loaded in THIS PowerShell
+# window (from an earlier run, a repair, or another module), and a loaded assembly cannot be
+# unloaded or replaced. Fixing the installed modules does not help until a new window is opened.
+# The error text never says that, so say it.
+function Get-NRGMsalConflictHint {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] [AllowEmptyString()] [string] $Message)
+    if ([string]::IsNullOrEmpty($Message)) { return '' }
+    if ($Message -notmatch '(?i)Method not found.*Microsoft\.Identity\.Client|WithLogging|WithBroker|Could not load file or assembly .?Microsoft\.Identity\.Client') { return '' }
+    return ('A different version of Microsoft.Identity.Client (MSAL) is already loaded in this PowerShell window, and a loaded assembly cannot be replaced. ' +
+            'Close this window, open a NEW PowerShell 7 window, and run the assessment first thing in it (before importing or signing in to any other Microsoft module). ' +
+            'Installing, repairing or removing modules does not take effect in a window that was already open.')
+}
+
 # A connection failure recorded as a bare message ("You cannot call a method
 # on a null-valued expression") cannot be diagnosed from the results JSON: the
 # first live run of v4.14.3 produced exactly that for Exchange and Purview,
@@ -443,6 +474,10 @@ function Connect-NRGServices {
         }
     } catch {
         Write-Host "  [!] Graph: $($_.Exception.Message)" -ForegroundColor Yellow
+        $cloudHint = Get-NRGCloudFileHint -Message $_.Exception.Message
+        if ($cloudHint) { Write-Host "      $cloudHint" -ForegroundColor Yellow }
+        $msalHint = Get-NRGMsalConflictHint -Message $_.Exception.Message
+        if ($msalHint) { Write-Host "      $msalHint" -ForegroundColor Yellow }
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
             Register-NRGException -Source 'Connect-Graph' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
         }
@@ -519,6 +554,8 @@ function Connect-NRGServices {
         }
     } catch {
         Write-Host "  [!] EXO: $($_.Exception.Message)" -ForegroundColor Yellow
+        $msalHintExo = Get-NRGMsalConflictHint -Message $_.Exception.Message
+        if ($msalHintExo) { Write-Host "      $msalHintExo" -ForegroundColor Yellow }
         $exoHint = Get-NRGExoConnectHint -Message $_.Exception.Message
         if ($exoHint) { Write-Host "      $exoHint" -ForegroundColor Yellow }
         if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
@@ -638,6 +675,8 @@ function Connect-NRGServices {
             Write-Host "  [+] Teams connected" -ForegroundColor Green
         } catch {
             Write-Host "  [!] Teams: $($_.Exception.Message)" -ForegroundColor Yellow
+            $cloudHint = Get-NRGCloudFileHint -Message $_.Exception.Message
+            if ($cloudHint) { Write-Host "      $cloudHint" -ForegroundColor Yellow }
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Connect-Teams' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
             }
@@ -709,6 +748,8 @@ function Connect-NRGServices {
             }
         } catch {
             Write-Host "  [!] SharePoint: $($_.Exception.Message)" -ForegroundColor Yellow
+            $cloudHint = Get-NRGCloudFileHint -Message $_.Exception.Message
+            if ($cloudHint) { Write-Host "      $cloudHint" -ForegroundColor Yellow }
             if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                 Register-NRGException -Source 'Connect-SPO' -Message (Get-NRGConnectErrorText -ErrorRecord $_)
             }

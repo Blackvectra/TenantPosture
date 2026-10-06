@@ -110,6 +110,8 @@ function Invoke-NRGCollectPurview {
                             # space. Untrimmed, ' EndpointDevices' never matched: DEF-4.5 said
                             # 'No Endpoint DLP' and PVW-2.5 called covered workloads missing.
                             Workloads  = @(if ($_.Workload) { @(([string]$_.Workload) -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) })
+                            # Who each workload is scoped to (All, or named mailboxes/sites/teams) and what is excluded.
+                            Locations  = (Get-NRGDlpLocationScope -Policy $_)
                         }
                     })
                 }
@@ -131,17 +133,14 @@ function Invoke-NRGCollectPurview {
                     # ContentContainsSensitiveInformation is an array of hashtables,
                     # each naming one SIT. Read every field through Get-NRGObjectField:
                     # rule shape varies by workload and StrictMode is active.
-                    $sits = @(Get-NRGObjectField -Item $r -Key 'ContentContainsSensitiveInformation' -Default @())
-                    $sitNames = @($sits | ForEach-Object {
-                        $one = $_
-                        $n = Get-NRGObjectField -Item $one -Key 'name' -Default ''
-                        if (-not $n) { $n = Get-NRGObjectField -Item $one -Key 'Name' -Default '' }
-                        if ($n) { [string]$n }
-                    } | Where-Object { $_ })
+                    # Flat entries AND grouped conditions (template rules such as HIPAA nest the types).
+                    $sitNames = @(Get-NRGDlpSensitiveTypeNames -Conditions (Get-NRGObjectField -Item $r -Key 'ContentContainsSensitiveInformation' -Default @()))
                     @{
                         Name             = [string](Get-NRGObjectField -Item $r -Key 'Name'             -Default '')
                         ParentPolicyName = [string](Get-NRGObjectField -Item $r -Key 'ParentPolicyName' -Default '')
                         Disabled         = [bool]  (Get-NRGObjectField -Item $r -Key 'Disabled'         -Default $false)
+                        # Enforcement: $null when the property is not returned (never assumed to block).
+                        BlockAccess      = $(if ($null -eq (Get-NRGObjectField -Item $r -Key 'BlockAccess' -Default $null)) { $null } else { [bool](Get-NRGObjectField -Item $r -Key 'BlockAccess' -Default $false) })
                         SensitiveInfoTypes = @($sitNames)
                     }
                 })
@@ -250,7 +249,11 @@ function Invoke-NRGCollectPurview {
                 $result.Data.SectionStatus[$Section] = 'Failed'
                 if (Get-Command Register-NRGException -ErrorAction SilentlyContinue) {
                     $why = if (-not $cmd.Command) { 'is not available' } else { 'resolved only to the Exchange Online session' }
-                    Register-NRGException -Source "Purview-$Section" -Message "$Cmdlet $why in the Security & Compliance session, so $Section was not collected."
+                    # Microsoft exposes each Security & Compliance cmdlet only to accounts holding the role that
+                    # grants it, so when the session works (other sections collected) a single absent cmdlet
+                    # usually means a missing Purview role, not a tool fault. Stated as a likely cause, not proven.
+                    $hint = if (-not $cmd.Command) { ' The session itself works if other Purview sections collected; Microsoft exposes each cmdlet only to accounts holding the role that grants it, so this usually means the signed-in account lacks that Purview role (for example Information Protection or Compliance Administrator). Check with: Get-Command ' + $Cmdlet + ' in the Security & Compliance session.' } else { '' }
+                    Register-NRGException -Source "Purview-$Section" -Message "$Cmdlet $why in the Security & Compliance session, so $Section was not collected.$hint"
                 }
                 return
             }
