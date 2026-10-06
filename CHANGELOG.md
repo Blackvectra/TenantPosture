@@ -4,17 +4,22 @@
 
 - **HIPAA Security Rule readiness view (`-HIPAA`, implied by `-AllFiles`).** Every standard and
   implementation specification of 45 CFR 164 Subpart C (63 items: 22 standards, 19 Required,
-  22 Addressable), parsed with its text from the eCFR, joined to the findings through the
-  `References.HIPAA` citation every control already carries. Markdown and self-contained HTML
-  (`<base>-hipaa-readiness.md` / `.html`). An item no control evidences is "Attestation required",
-  never met; "Met in Microsoft 365" needs every cited control satisfied; page one says it is not a
-  risk analysis and not a compliance determination, and that Addressable is not optional. 36 of the
-  63 items have no tenant evidence. Sixteen items are documents, processes or organizational
-  arrangements; a control citing one is shown as cited, not counted, which keeps eight
-  tenant-isolation controls from "meeting" the health care clearinghouse specification they cite in
-  error (citation corrections are a separate change). `frameworks.json` now labels the rule
-  `2013 (as amended)` instead of `2024`: eCFR shows no change to its text since 2013.
-
+  22 Addressable), parsed with its text from the eCFR issue of 2026-10-02 (catalog version 1.1),
+  joined to the findings through the `References.HIPAA` citation every control already carries.
+  Markdown and self-contained HTML (`<base>-hipaa-readiness.md` / `.html`). Statuses report
+  technical checks, never regulatory fulfillment: the strongest is "Mapped technical checks
+  satisfied" (every check mapped to the item passed; a mapping is not proof the checks cover the
+  whole requirement). A standard is reviewed separately from its implementation specifications,
+  so a standard whose own checks passed beside an open specification reads "Mapped checks
+  satisfied, specifications open". Items mapped to checks and items with evidence collected this
+  run are counted separately. Every finding's detail is kept, a passing one's included. An item no
+  check maps to is "Attestation required". Page one says it is not a risk analysis or a compliance
+  determination, that Addressable is not optional, and that the decision on each Addressable
+  specification is documented. Sixteen items are documents, processes or organizational
+  arrangements; a control citing one is shown as cited, not counted. `frameworks.json` labels the
+  rule `2013 (as amended)` instead of `2024`, after the source notes' last cited amendments
+  (78 FR 5694-5695 and 78 FR 34266, 2013); the catalog records the eCFR version-history entries the
+  source notes do not cite.
 - **A third-party EDR declaration no longer erases an assigned ASR policy's shortfall (INT-2.2).**
   With the approved ASR rule set, INT-2.2 reports a `Shortfall:` when an assigned policy was read
   and a required rule is not in Block mode. `Set-NRGThirdPartyEdr` rewrote every non-passing

@@ -1,8 +1,10 @@
 {
-  "version": "1.0",
+  "version": "1.1",
+  "sourceSnapshot": "2026-10-02",
+  "sourceRetrieved": "2026-10-06",
   "framework": "HIPAA Security Rule, 45 CFR Part 164 Subpart C",
-  "source": "Electronic Code of Federal Regulations (eCFR), 45 CFR Part 164 Subpart C, issue of 2026-10-02, https://www.ecfr.gov/current/title-45/subtitle-A/subchapter-C/part-164/subpart-C",
-  "amendments": "Per the eCFR source note under each section, sections 164.308, 164.310, 164.312 and 164.316 were last amended at 78 FR 5694-5695 (January 25, 2013), and section 164.314 at 78 FR 34266 (June 7, 2013). A proposed change to the Security Rule is not part of this catalog unless and until it is final; re-check the eCFR text when one is.",
+  "source": "Electronic Code of Federal Regulations (eCFR), 45 CFR Part 164 Subpart C, as published in the issue dated 2026-10-02 and retrieved 2026-10-06, https://www.ecfr.gov/current/title-45/subtitle-A/subchapter-C/part-164/subpart-C",
+  "amendments": "The source note under each section cites its last amending document: 78 FR 5694-5695 (January 25, 2013) for sections 164.308, 164.310, 164.312 and 164.316, and 78 FR 34266 (June 7, 2013) for section 164.314. The eCFR version history also lists later dated entries for these sections (2016-12-30, and 2020-11-24 for 164.314) that no source note cites; this catalog takes its text from the 2026-10-02 issue and does not characterize those entries. Re-check the text against eCFR when a change to the Security Rule is published.",
   "purpose": "Every standard and implementation specification of the Security Rule, with whether it is Required or Addressable, so the HIPAA readiness view can show, one row at a time, which ones this Microsoft 365 assessment produced evidence for and which need documents, interviews or a walkthrough.",
   "note": "Addressable does not mean optional (45 CFR 164.306(d)(3)): the covered entity or business associate must assess whether the specification is reasonable and appropriate, implement it if so, and otherwise document why not and implement an equivalent alternative measure if reasonable and appropriate. Text is quoted from the regulation and is in the public domain.",
   "safeguards": {

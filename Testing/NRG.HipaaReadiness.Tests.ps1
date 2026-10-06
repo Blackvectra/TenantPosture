@@ -115,7 +115,9 @@ Describe 'HIPAA Security Rule readiness view' {
                 $r['Confidence'] | Should -Be 'Attestation only'
             }
             (Row $p '164.308(a)(1)(ii)(A)')['Status'] | Should -Be 'Attestation required' -Because 'no tenant setting is a risk analysis'
-            $p['Summary']['Met'] | Should -Be $p['Summary']['Evidenced']
+            # Every mapped item passed its checks; standards with an open
+            # specification are held back, so satisfied + open = mapped.
+            ($p['Summary']['ChecksSatisfied'] + $p['Summary']['SpecificationsOpen']) | Should -Be $p['Summary']['Mapped']
             $p['Summary']['AttestationRequired'] | Should -BeGreaterThan 30
         }
 
@@ -150,7 +152,56 @@ Describe 'HIPAA Security Rule readiness view' {
             $none = Get-NRGHipaaReadiness -Findings @()
             $cid = @((Row $none '164.312(b)')['Evidence'])[0]['ControlId']
             $f = @($script:AllPass | Where-Object { $_.ControlId -ne $cid }) + @((F $cid 'Satisfied'), (F $cid 'Gap'))
-            (Row (Get-NRGHipaaReadiness -Findings $f) '164.312(b)')['Status'] | Should -Be 'Shortfall found'
+            (Row (Get-NRGHipaaReadiness -Findings $f) '164.312(b)')['Status'] | Should -Be 'Technical check shortfall'
+        }
+
+        It 'no status states regulatory fulfillment; the strongest says the mapped checks were satisfied' {
+            $names = @((& (Get-Module NRG-Assessment) { Get-NRGHipaaStatusNames }).Values)
+            $names | Should -Contain 'Mapped technical checks satisfied'
+            foreach ($n in $names) { $n | Should -Not -Match '(?i)\bmet\b|complian' -Because $n }
+            $p = Get-NRGHipaaReadiness -Findings $script:AllPass
+            foreach ($r in $p['Items']) { $names | Should -Contain $r['Status'] }
+        }
+
+        It 'keeps the detail of every finding, a passing one included' {
+            $none = Get-NRGHipaaReadiness -Findings @()
+            $cid = @((Row $none '164.312(d)')['Evidence'])[0]['ControlId']
+            $f = @(F $cid 'Satisfied' 'Verified: policy read. Not assessed: one exclusion group not resolved.')
+            $e = @((Row (Get-NRGHipaaReadiness -Findings $f) '164.312(d)')['Evidence'] | Where-Object { $_['ControlId'] -eq $cid })[0]
+            $e['Detail'] | Should -Be 'Verified: policy read. Not assessed: one exclusion group not resolved.'
+        }
+
+        It 'distinguishes items mapped to checks from items with evidence collected' {
+            $none = Get-NRGHipaaReadiness -Findings @()
+            $none['Summary']['Mapped']            | Should -BeGreaterThan 0
+            $none['Summary']['EvidenceCollected'] | Should -Be 0 -Because 'no check ran, so a mapping is not evidence'
+            $all = Get-NRGHipaaReadiness -Findings $script:AllPass
+            $all['Summary']['EvidenceCollected'] | Should -Be $all['Summary']['Mapped']
+            $sg = @($none['Safeguards'] | Where-Object { $_['Name'] -eq 'Technical' })[0]
+            $sg['Mapped'] | Should -BeGreaterThan $sg['EvidenceCollected']
+        }
+
+        It 'reviews a standard separately: its own checks passing does not cover an open specification' {
+            $p = Get-NRGHipaaReadiness -Findings $script:AllPass
+            # 164.308(a)(4)(i) is cited directly, and its clearinghouse specification is attestation only.
+            $std = Row $p '164.308(a)(4)(i)'
+            $std['MappedControls'] | Should -BeGreaterThan 0
+            $std['Status']         | Should -Be 'Mapped checks satisfied, specifications open'
+            $std['Specifications']['Total'] | Should -Be 3
+            $std['Specifications']['Attestation required'] | Should -Be 1
+            # A standard whose specifications are all satisfied may read satisfied.
+            (Row $p '164.312(a)(1)')['Status'] | Should -Be 'Mapped technical checks satisfied'
+            # A specification is never rolled up from its parent's citation.
+            (Row $p '164.308(a)(4)(ii)(A)')['Status'] | Should -Be 'Attestation required'
+        }
+
+        It 'records the catalog version and the source snapshot date, and one amendment history' {
+            $p = Get-NRGHipaaReadiness -Findings @()
+            $p['CatalogVersion'] | Should -Match '^\d+\.\d+$'
+            $p['SourceSnapshot'] | Should -Match '^\d{4}-\d{2}-\d{2}$'
+            $p['SourceRetrieved'] | Should -Match '^\d{4}-\d{2}-\d{2}$'
+            $p['Amendments'] | Should -Match '78 FR 34266'
+            $p['Amendments'] | Should -Not -Match 'no later change' -Because 'eCFR lists later dated entries; the catalog must not claim there are none'
         }
 
         It 'is a view: it changes no finding' {
@@ -176,6 +227,16 @@ Describe 'HIPAA Security Rule readiness view' {
                 $t | Should -Match 'not a risk analysis'
                 $t | Should -Match 'not a determination of HIPAA compliance'
                 $t | Should -Match 'Addressable does not mean optional'
+            }
+        }
+
+        It 'separates technical results from regulatory fulfillment, and explains documenting Addressable decisions' {
+            foreach ($t in @($script:MdText, $script:HtmlText)) {
+                $t | Should -Match 'Statuses report technical checks, not regulatory fulfillment'
+                $t | Should -Match 'documenting why'
+                $t | Should -Match '164\.316\(b\)'
+                $t | Should -Not -Match 'Met in Microsoft 365'
+                $t | Should -Match 'catalog version|Catalog:\*\* version'
             }
         }
 

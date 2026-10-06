@@ -16,8 +16,12 @@
 #   - Page one says this is not a risk analysis (45 CFR 164.308(a)(1)(ii)(A))
 #     and not a determination of HIPAA compliance, and that Addressable does
 #     not mean optional.
-#   - No row and no sentence says "compliant". 'Met in Microsoft 365' is the
-#     strongest status and means every cited control passed.
+#   - No row and no sentence says "compliant" or states that a requirement is
+#     met. The strongest status is 'Mapped technical checks satisfied': the
+#     checks mapped to the item passed, which is not proof they cover all of
+#     it. Technical results and regulatory fulfillment are kept apart.
+#   - Every finding's detail is shown, a passing one's included.
+#   - The source snapshot date and catalog version are printed.
 #   - A control citing an item it cannot evidence is shown as cited, not
 #     counted, never as evidence.
 #   - Every value is escaped; the HTML carries a Content-Security-Policy that
@@ -52,6 +56,7 @@ function Publish-NRGHipaaReadiness {
     function EscMd { param([object]$v) ([string]$v) -replace '\|', '\|' -replace '[\r\n]+', ' ' }
     function Esc   { param([object]$v) ConvertTo-NRGHtmlSafe $v }
 
+    $st    = Get-NRGHipaaStatusNames
     $items = @($Posture['Items'])
     $sgs   = @($Posture['Safeguards'])
     $sum   = $Posture['Summary']
@@ -66,12 +71,20 @@ function Publish-NRGHipaaReadiness {
     $notice = @(
         'This is not a risk analysis (45 CFR 164.308(a)(1)(ii)(A)) and not a determination of HIPAA compliance. It lists every Security Rule standard and implementation specification and shows which ones this Microsoft 365 assessment produced evidence for.'
         "Evidence covers only the part of each item that lives in the Microsoft 365 tenant. $($sum['AttestationRequired']) of $($sum['Total']) items have no evidence from the tenant and need documents, interviews or a walkthrough; $($sum['NoTenantEvidence']) of them are documents, processes or organizational arrangements that tenant configuration cannot show at all."
-        'Addressable does not mean optional (45 CFR 164.306(d)(3)): each Addressable specification must be assessed, and implemented if reasonable and appropriate, or the reason documented and an equivalent measure implemented if reasonable and appropriate.'
+        'Addressable does not mean optional (45 CFR 164.306(d)(3)). Each Addressable specification must be assessed. If it is reasonable and appropriate it must be implemented; if not, the regulation requires documenting why and implementing an equivalent alternative measure if that is reasonable and appropriate. Record the assessment and the decision for every Addressable specification, including any alternative measure, with the rest of the Security Rule documentation (45 CFR 164.316(b)).'
+        "Statuses report technical checks, not regulatory fulfillment. '$($st.Satisfied)' means every check this tool maps to the item passed; a mapping shows the check bears on the item, not that it covers all of it. A standard is reviewed separately from its implementation specifications."
     )
 
     $sgOrder = @($sgs | ForEach-Object { [string]$_['Name'] })
     $attest = @($items | Where-Object { $_['MappedControls'] -eq 0 })
-    $short  = @($items | Where-Object { $_['Status'] -eq 'Shortfall found' })
+    $short  = @($items | Where-Object { $_['Status'] -eq $st.Shortfall })
+    $tallyText = {
+        param($t)
+        $parts = @("$($t['Total']) in all")
+        foreach ($k in @($t.Keys | Where-Object { $_ -ne 'Total' })) { if ($t[$k] -gt 0) { $parts += "$($t[$k]) $($k.ToLowerInvariant())" } }
+        $parts -join ', '
+    }
+    $sourceLine = "Regulation text: $($Posture['Source']). Catalog version $($Posture['CatalogVersion']), eCFR issue $($Posture['SourceSnapshot']), retrieved $($Posture['SourceRetrieved'])." 
 
     # ── Markdown ─────────────────────────────────────────────────────────────
     $sb = [System.Text.StringBuilder]::new()
@@ -80,20 +93,21 @@ function Publish-NRGHipaaReadiness {
     $null = $sb.AppendLine("**Framework:** $(EscMd $Posture['Framework'])  ")
     if ($tenant) { $null = $sb.AppendLine("**Tenant:** $(EscMd $tenant)  ") }
     $null = $sb.AppendLine("**Assessed by:** $(EscMd $company)  ")
-    $null = $sb.AppendLine("**Date:** $(EscMd $date)")
+    $null = $sb.AppendLine("**Date:** $(EscMd $date)  ")
+    $null = $sb.AppendLine("**Catalog:** version $(EscMd $Posture['CatalogVersion']), eCFR issue $(EscMd $Posture['SourceSnapshot'])")
     $null = $sb.AppendLine()
     foreach ($n in $notice) { $null = $sb.AppendLine("> $(EscMd $n)"); $null = $sb.AppendLine('>') }
     $null = $sb.AppendLine()
     $null = $sb.AppendLine('## Summary')
     $null = $sb.AppendLine()
-    $null = $sb.AppendLine('| Items | Standards | Required | Addressable | With tenant evidence | Attestation required | Met in Microsoft 365 | Shortfall found | Not assessed |')
-    $null = $sb.AppendLine('|---:|---:|---:|---:|---:|---:|---:|---:|---:|')
-    $null = $sb.AppendLine("| $($sum['Total']) | $($sum['Standards']) | $($sum['Required']) | $($sum['Addressable']) | $($sum['Evidenced']) | $($sum['AttestationRequired']) | $($sum['Met']) | $($sum['Shortfall']) | $($sum['NotAssessed']) |")
+    $null = $sb.AppendLine('| Items | Standards | Required | Addressable | Mapped to checks | Evidence collected | Attestation required | Checks satisfied | Satisfied, specifications open | Check shortfall | Not assessed |')
+    $null = $sb.AppendLine('|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|')
+    $null = $sb.AppendLine("| $($sum['Total']) | $($sum['Standards']) | $($sum['Required']) | $($sum['Addressable']) | $($sum['Mapped']) | $($sum['EvidenceCollected']) | $($sum['AttestationRequired']) | $($sum['ChecksSatisfied']) | $($sum['SpecificationsOpen']) | $($sum['Shortfall']) | $($sum['NotAssessed']) |")
     $null = $sb.AppendLine()
-    $null = $sb.AppendLine('| Safeguard | Items | With tenant evidence | Attestation required | Met | Shortfall | Not assessed |')
-    $null = $sb.AppendLine('|---|---:|---:|---:|---:|---:|---:|')
+    $null = $sb.AppendLine('| Safeguard | Items | Mapped to checks | Evidence collected | Attestation required | Checks satisfied | Specifications open | Check shortfall | Not assessed |')
+    $null = $sb.AppendLine('|---|---:|---:|---:|---:|---:|---:|---:|---:|')
     foreach ($s in $sgs) {
-        $null = $sb.AppendLine("| $(EscMd $s['Name']) | $($s['Total']) | $($s['Evidenced']) | $($s['AttestationRequired']) | $($s['Met']) | $($s['Shortfall']) | $($s['NotAssessed']) |")
+        $null = $sb.AppendLine("| $(EscMd $s['Name']) | $($s['Total']) | $($s['Mapped']) | $($s['EvidenceCollected']) | $($s['AttestationRequired']) | $($s['ChecksSatisfied']) | $($s['SpecificationsOpen']) | $($s['Shortfall']) | $($s['NotAssessed']) |")
     }
     $null = $sb.AppendLine()
 
@@ -109,6 +123,10 @@ function Publish-NRGHipaaReadiness {
             if ($r['Text']) { $null = $sb.AppendLine("_$(EscMd $r['Text'])_"); $null = $sb.AppendLine() }
             if ($r['TenantEvidence'] -eq 'None') {
                 $null = $sb.AppendLine("Not shown by tenant configuration: $(EscMd $r['TenantEvidenceReason'])")
+                $null = $sb.AppendLine()
+            }
+            if ($r['Specifications']) {
+                $null = $sb.AppendLine("Implementation specifications, reviewed separately: $(EscMd (& $tallyText $r['Specifications'])).")
                 $null = $sb.AppendLine()
             }
             if (@($r['CitedNotCounted']).Count -gt 0) {
@@ -138,7 +156,7 @@ function Publish-NRGHipaaReadiness {
     }
     $null = $sb.AppendLine('---')
     $null = $sb.AppendLine()
-    $null = $sb.AppendLine("_Prepared by $(EscMd $company). Regulation text: $(EscMd $Posture['Source']). $(EscMd $Posture['Amendments'])_")
+    $null = $sb.AppendLine("_Prepared by $(EscMd $company). $(EscMd $sourceLine) $(EscMd $Posture['Amendments'])_")
 
     if (Get-Command Set-NRGSensitiveFileContent -ErrorAction SilentlyContinue) {
         Set-NRGSensitiveFileContent -Path $OutputPath -Content $sb.ToString()
@@ -147,7 +165,7 @@ function Publish-NRGHipaaReadiness {
     }
 
     # ── HTML ─────────────────────────────────────────────────────────────────
-    $cls = { param($s) switch ($s) { 'Met in Microsoft 365' { 'ok' } 'Shortfall found' { 'gap' } 'Not assessed' { 'open' } default { 'att' } } }
+    $cls = { param($s) if ($s -eq $st.Satisfied) { 'ok' } elseif ($s -eq $st.Shortfall) { 'gap' } elseif ($s -eq $st.NotAssessed -or $s -eq $st.SpecsOpen) { 'open' } else { 'att' } }
     $h = [System.Text.StringBuilder]::new()
     $null = $h.Append(@"
 <!DOCTYPE html>
@@ -175,18 +193,18 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
 @media print{body{background:#fff}.card{box-shadow:none;border:1px solid #e5e7eb}}
 </style></head><body>
 <header><div class="wrap"><h1>$(Esc $title)</h1>
-<div class="meta">$(Esc $Posture['Framework']) &middot; Assessed by $(Esc $company) &middot; $(Esc $date)</div></div></header>
+<div class="meta">$(Esc $Posture['Framework']) &middot; Assessed by $(Esc $company) &middot; $(Esc $date) &middot; catalog version $(Esc $Posture['CatalogVersion']), eCFR issue $(Esc $Posture['SourceSnapshot'])</div></div></header>
 <div class="wrap">
 <div class="card">
 "@)
     foreach ($n in $notice) { $null = $h.Append("<div class=`"warn`">$(Esc $n)</div>") }
     $null = $h.Append(@"
-<table><tr><th>Items</th><th>Standards</th><th>Required</th><th>Addressable</th><th>With tenant evidence</th><th>Attestation required</th><th>Met in Microsoft 365</th><th>Shortfall found</th><th>Not assessed</th></tr>
-<tr><td class="n">$($sum['Total'])</td><td class="n">$($sum['Standards'])</td><td class="n">$($sum['Required'])</td><td class="n">$($sum['Addressable'])</td><td class="n">$($sum['Evidenced'])</td><td class="n">$($sum['AttestationRequired'])</td><td class="n">$($sum['Met'])</td><td class="n">$($sum['Shortfall'])</td><td class="n">$($sum['NotAssessed'])</td></tr></table>
-<table><tr><th>Safeguard</th><th>Items</th><th>With tenant evidence</th><th>Attestation required</th><th>Met</th><th>Shortfall</th><th>Not assessed</th></tr>
+<table><tr><th>Items</th><th>Standards</th><th>Required</th><th>Addressable</th><th>Mapped to checks</th><th>Evidence collected</th><th>Attestation required</th><th>Checks satisfied</th><th>Satisfied, specifications open</th><th>Check shortfall</th><th>Not assessed</th></tr>
+<tr><td class="n">$($sum['Total'])</td><td class="n">$($sum['Standards'])</td><td class="n">$($sum['Required'])</td><td class="n">$($sum['Addressable'])</td><td class="n">$($sum['Mapped'])</td><td class="n">$($sum['EvidenceCollected'])</td><td class="n">$($sum['AttestationRequired'])</td><td class="n">$($sum['ChecksSatisfied'])</td><td class="n">$($sum['SpecificationsOpen'])</td><td class="n">$($sum['Shortfall'])</td><td class="n">$($sum['NotAssessed'])</td></tr></table>
+<table><tr><th>Safeguard</th><th>Items</th><th>Mapped to checks</th><th>Evidence collected</th><th>Attestation required</th><th>Checks satisfied</th><th>Specifications open</th><th>Check shortfall</th><th>Not assessed</th></tr>
 "@)
     foreach ($s in $sgs) {
-        $null = $h.Append("<tr><td>$(Esc $s['Name'])</td><td class=`"n`">$($s['Total'])</td><td class=`"n`">$($s['Evidenced'])</td><td class=`"n`">$($s['AttestationRequired'])</td><td class=`"n`">$($s['Met'])</td><td class=`"n`">$($s['Shortfall'])</td><td class=`"n`">$($s['NotAssessed'])</td></tr>")
+        $null = $h.Append("<tr><td>$(Esc $s['Name'])</td><td class=`"n`">$($s['Total'])</td><td class=`"n`">$($s['Mapped'])</td><td class=`"n`">$($s['EvidenceCollected'])</td><td class=`"n`">$($s['AttestationRequired'])</td><td class=`"n`">$($s['ChecksSatisfied'])</td><td class=`"n`">$($s['SpecificationsOpen'])</td><td class=`"n`">$($s['Shortfall'])</td><td class=`"n`">$($s['NotAssessed'])</td></tr>")
     }
     $null = $h.Append('</table></div>')
 
@@ -201,6 +219,7 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
                 $null = $ev.Append('</div>')
             }
             if ($r['TenantEvidence'] -eq 'None') { $null = $ev.Append("<div class=`"small`">Not shown by tenant configuration: $(Esc $r['TenantEvidenceReason'])</div>") }
+            if ($r['Specifications']) { $null = $ev.Append("<div class=`"small`">Implementation specifications, reviewed separately: $(Esc (& $tallyText $r['Specifications'])).</div>") }
             if (@($r['CitedNotCounted']).Count -gt 0) { $null = $ev.Append("<div class=`"small`">Cited by $(Esc (@($r['CitedNotCounted']) -join ', ')), not counted as evidence for this item.</div>") }
             $rowCls = if ($r['Kind'] -eq 'Standard') { ' class="std"' } else { '' }
             $null = $h.Append("<tr$rowCls><td class=`"cit`">$(Esc $r['Citation'])</td><td>$(Esc $r['Name'])<div class=`"small`">$(Esc $r['Text'])</div></td><td>$(Esc $req)</td><td class=`"$(& $cls $r['Status'])`">$(Esc $r['Status'])<div class=`"small`">$(Esc $r['Confidence'])</div></td><td>$($ev.ToString())</td></tr>")
@@ -214,7 +233,7 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
     if (@($sum['OutsideSecurityRule']).Count -gt 0) {
         $null = $h.Append("<p class=`"small`">These controls also cite Privacy Rule sections, which this view does not cover: $(Esc (@($sum['OutsideSecurityRule']) -join '; ')).</p>")
     }
-    $null = $h.Append("<p class=`"small`">Prepared by $(Esc $company). Regulation text: $(Esc $Posture['Source']). $(Esc $Posture['Amendments'])</p></div>")
+    $null = $h.Append("<p class=`"small`">Prepared by $(Esc $company). $(Esc $sourceLine) $(Esc $Posture['Amendments'])</p></div>")
     $null = $h.Append('</div></body></html>')
 
     $htmlPath = [System.IO.Path]::ChangeExtension($OutputPath, '.html')

@@ -34,8 +34,14 @@
 #              (164.308(a)(1)(ii)(A)) included, and every surface says so.
 #            * A cited control that produced no finding, or an Error, is
 #              NotRun and counts in neither direction.
-#            * 'Met' needs EVERY cited control Satisfied, and even then means
-#              met as far as Microsoft 365 can show; Confidence records that.
+#            * The strongest status is 'Mapped technical checks satisfied': every
+#              check mapped to the item passed. A citation is not proof that
+#              the checks cover the whole requirement, and no such review is
+#              recorded, so the view never states regulatory fulfillment.
+#            * A standard is reviewed separately from its implementation
+#              specifications: its own checks passing while a specification
+#              is open reads 'Mapped checks satisfied, specifications open'.
+#            * Every finding's Detail is kept, Satisfied included.
 #            * This is a VIEW: no findings, no score, no module state written.
 #
 # Inputs:  -Findings    assessment findings (shape-agnostic).
@@ -48,6 +54,23 @@
 #
 
 $script:NRGHipaaCatalog = $null
+
+# The row statuses, in one place: the publisher, the entry point and the tests
+# read these rather than repeating the strings. None of them states regulatory
+# fulfillment.
+$script:NRGHipaaStatus = [ordered]@{
+    Satisfied   = 'Mapped technical checks satisfied'
+    SpecsOpen   = 'Mapped checks satisfied, specifications open'
+    Shortfall   = 'Technical check shortfall'
+    NotAssessed = 'Not assessed'
+    Attestation = 'Attestation required'
+}
+
+function Get-NRGHipaaStatusNames {
+    [CmdletBinding()]
+    param()
+    return $script:NRGHipaaStatus
+}
 
 function Get-NRGHipaaCatalog {
     [CmdletBinding()]
@@ -110,7 +133,8 @@ function Get-NRGHipaaReadiness {
         Items = @(); Safeguards = @()
         Summary = [ordered]@{
             Total = 0; Standards = 0; Specifications = 0; Required = 0; Addressable = 0
-            Evidenced = 0; AttestationRequired = 0; Met = 0; Shortfall = 0; NotAssessed = 0
+            Mapped = 0; EvidenceCollected = 0; AttestationRequired = 0; ChecksSatisfied = 0
+            SpecificationsOpen = 0; Shortfall = 0; NotAssessed = 0
             ToolVerified = 0; OutsideSecurityRule = @(); UnmatchedCitations = @()
             NoTenantEvidence = 0; CitedNotCounted = @()
         }
@@ -222,7 +246,10 @@ function Get-NRGHipaaReadiness {
                 ControlId   = $cid
                 Title       = [string]$meta[$cid]['Title']
                 State       = $st
-                Detail      = $(if ($st -ne 'Satisfied') { $why } else { '' })
+                # Kept for every state, Satisfied included: a passing finding's
+                # Detail carries its qualifications (what was and was not read,
+                # partial scope), which a readiness reader must see.
+                Detail      = $why
                 Remediation = $(if ($st -in @('Gap', 'Partial')) { [string]$meta[$cid]['Remediation'] } else { '' })
             })
         }
@@ -242,15 +269,17 @@ function Get-NRGHipaaReadiness {
             elseif ($notRun -gt 0 -or $na -gt 0) { 'Partial evidence' }
             else                                 { 'Tool-verified' }
 
-        # Never a claim of HIPAA compliance: 'Met in Microsoft 365' says what
-        # was checked, and only from every cited control passing.
+        # A technical result, never a regulatory one. A citation says a check
+        # bears on the item; it does not say the checks cover all of it, and no
+        # coverage review has been recorded, so the strongest status is that the
+        # MAPPED checks passed. Regulatory fulfillment is kept out of this view.
         $status =
             switch ($evidenceStatus) {
-                'None'            { 'Attestation required' }
-                'Met'             { 'Met in Microsoft 365' }
-                'Partial'         { 'Shortfall found' }
-                'Gap'             { 'Shortfall found' }
-                default           { 'Not assessed' }
+                'None'            { $script:NRGHipaaStatus.Attestation }
+                'Met'             { $script:NRGHipaaStatus.Satisfied }
+                'Partial'         { $script:NRGHipaaStatus.Shortfall }
+                'Gap'             { $script:NRGHipaaStatus.Shortfall }
+                default           { $script:NRGHipaaStatus.NotAssessed }
             }
 
         $rows.Add([ordered]@{
@@ -269,8 +298,28 @@ function Get-NRGHipaaReadiness {
             Confidence     = $confidence
             Status         = $status
             MappedControls = $ctlIds.Count
+            EvidenceCollected = ($assessed -gt 0)
             Satisfied = $sat; Partial = $part; Gap = $gap; NA = $na; NotRun = $notRun
+            Specifications = $null
         })
+    }
+
+    # ── Standards are reviewed separately from their specifications ──────────
+    # A control citing a parent standard bears on the standard as a whole and
+    # says nothing about each implementation specification under it. A standard
+    # whose own checks passed while any of its specifications is not
+    # 'Mapped technical checks satisfied' is reported as such, never as
+    # satisfied, and every standard carries its specifications' tally.
+    foreach ($r in $rows) {
+        if ($r['Kind'] -ne 'Standard') { continue }
+        $specs = @($rows | Where-Object { $_['Kind'] -ne 'Standard' -and $_['Standard'] -eq $r['Citation'] })
+        if ($specs.Count -eq 0) { continue }
+        $tally = [ordered]@{ Total = $specs.Count }
+        foreach ($st in @($script:NRGHipaaStatus.Values)) { $tally[$st] = @($specs | Where-Object { $_['Status'] -eq $st }).Count }
+        $r['Specifications'] = $tally
+        if ($r['Status'] -eq $script:NRGHipaaStatus.Satisfied -and $tally[$script:NRGHipaaStatus.Satisfied] -lt $specs.Count) {
+            $r['Status'] = $script:NRGHipaaStatus.SpecsOpen
+        }
     }
 
     $safeguards = [System.Collections.Generic.List[object]]::new()
@@ -279,11 +328,13 @@ function Get-NRGHipaaReadiness {
         $safeguards.Add([ordered]@{
             Name                = $sg
             Total               = $sr.Count
-            Evidenced           = @($sr | Where-Object { $_['MappedControls'] -gt 0 }).Count
+            Mapped              = @($sr | Where-Object { $_['MappedControls'] -gt 0 }).Count
+            EvidenceCollected   = @($sr | Where-Object { $_['EvidenceCollected'] }).Count
             AttestationRequired = @($sr | Where-Object { $_['MappedControls'] -eq 0 }).Count
-            Met                 = @($sr | Where-Object { $_['Status'] -eq 'Met in Microsoft 365' }).Count
-            Shortfall           = @($sr | Where-Object { $_['Status'] -eq 'Shortfall found' }).Count
-            NotAssessed         = @($sr | Where-Object { $_['Status'] -eq 'Not assessed' }).Count
+            ChecksSatisfied     = @($sr | Where-Object { $_['Status'] -eq $script:NRGHipaaStatus.Satisfied }).Count
+            SpecificationsOpen  = @($sr | Where-Object { $_['Status'] -eq $script:NRGHipaaStatus.SpecsOpen }).Count
+            Shortfall           = @($sr | Where-Object { $_['Status'] -eq $script:NRGHipaaStatus.Shortfall }).Count
+            NotAssessed         = @($sr | Where-Object { $_['Status'] -eq $script:NRGHipaaStatus.NotAssessed }).Count
         })
     }
 
@@ -293,11 +344,16 @@ function Get-NRGHipaaReadiness {
         Specifications      = @($rows | Where-Object { $_['Kind'] -ne 'Standard' }).Count
         Required            = @($rows | Where-Object { $_['Requirement'] -eq 'Required' }).Count
         Addressable         = @($rows | Where-Object { $_['Requirement'] -eq 'Addressable' }).Count
-        Evidenced           = @($rows | Where-Object { $_['MappedControls'] -gt 0 }).Count
+        # Mapped: a check bears on the item. EvidenceCollected: at least one of
+        # those checks produced a verdict this run. A skipped or failed
+        # collection leaves an item mapped and without evidence.
+        Mapped              = @($rows | Where-Object { $_['MappedControls'] -gt 0 }).Count
+        EvidenceCollected   = @($rows | Where-Object { $_['EvidenceCollected'] }).Count
         AttestationRequired = @($rows | Where-Object { $_['MappedControls'] -eq 0 }).Count
-        Met                 = @($rows | Where-Object { $_['Status'] -eq 'Met in Microsoft 365' }).Count
-        Shortfall           = @($rows | Where-Object { $_['Status'] -eq 'Shortfall found' }).Count
-        NotAssessed         = @($rows | Where-Object { $_['Status'] -eq 'Not assessed' }).Count
+        ChecksSatisfied     = @($rows | Where-Object { $_['Status'] -eq $script:NRGHipaaStatus.Satisfied }).Count
+        SpecificationsOpen  = @($rows | Where-Object { $_['Status'] -eq $script:NRGHipaaStatus.SpecsOpen }).Count
+        Shortfall           = @($rows | Where-Object { $_['Status'] -eq $script:NRGHipaaStatus.Shortfall }).Count
+        NotAssessed         = @($rows | Where-Object { $_['Status'] -eq $script:NRGHipaaStatus.NotAssessed }).Count
         ToolVerified        = @($rows | Where-Object { $_['Confidence'] -eq 'Tool-verified' }).Count
         OutsideSecurityRule = @($outside)
         UnmatchedCitations  = @($unmatched)
@@ -312,6 +368,9 @@ function Get-NRGHipaaReadiness {
         Framework  = [string](Get-NRGObjectField -Item $cat -Key 'framework'  -Default 'HIPAA Security Rule')
         Source     = [string](Get-NRGObjectField -Item $cat -Key 'source'     -Default '')
         Amendments = [string](Get-NRGObjectField -Item $cat -Key 'amendments' -Default '')
+        CatalogVersion   = [string](Get-NRGObjectField -Item $cat -Key 'version'          -Default '')
+        SourceSnapshot   = [string](Get-NRGObjectField -Item $cat -Key 'sourceSnapshot'   -Default '')
+        SourceRetrieved  = [string](Get-NRGObjectField -Item $cat -Key 'sourceRetrieved'  -Default '')
         Note       = [string](Get-NRGObjectField -Item $cat -Key 'note'       -Default '')
         Available  = $true
     }
