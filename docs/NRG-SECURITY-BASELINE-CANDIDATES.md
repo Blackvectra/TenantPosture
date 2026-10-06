@@ -579,7 +579,7 @@ The 204 tenant controls contain no vulnerability-management control, because Mic
 
 The device build standard's item IDs are pinned to the `DB-n.n` shape by `NRG.DeviceBaseline.Tests.ps1`, which is why the two new items are DB-4.7 and DB-4.8 rather than DB-4.2A and VM-VERIFY-01; VM-VERIFY-01 is the standard's name for DB-4.8 and will be the control ID in `nrg-baseline.json`'s vulnerability domain.
 
-The 35 `DEV-*` endpoint checks are not listed here: they are already governed by the device build standard's Mandatory flag (25 of 29 items), and a `DEV-*` check enters the NRG baseline through the DB item that names it in `VerifiedBy`.
+The 39 `DEV-*` endpoint checks are not listed here: they are already governed by the device build standard's Mandatory flag (25 of 29 items), and a `DEV-*` check enters the NRG baseline through the DB item that names it in `VerifiedBy`.
 
 ## Logging and observability: the composite control to add in v1.1
 

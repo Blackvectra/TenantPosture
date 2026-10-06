@@ -544,7 +544,7 @@ The tenant half of the assessment reads Intune **policy**. This reads device **s
     -DeviceResults .\collected\clientname\ -NISTMatrix
 ```
 
-**35 checks** across encryption and boot integrity, malware defense, network exposure, accounts and privilege, patch state, session lock, legacy surface and audit policy. Each maps to an 800-53 control, so device findings land in the same report, the same score, and the same NIST family rollup as everything else.
+**39 checks** across encryption and boot integrity, malware defense, network exposure, accounts and privilege, patch state, session lock, legacy surface, audit policy and event logging. Each maps to an 800-53 control, so device findings land in the same report, the same score, and the same NIST family rollup as everything else.
 
 Three properties, all enforced by test:
 

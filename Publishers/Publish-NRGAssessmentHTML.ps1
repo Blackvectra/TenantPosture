@@ -914,7 +914,7 @@ $regHtml
                      @(Get-NRGObjectField -Item $scope -Key 'SkippedByOperator' -Default @()).Count
         # "Controls assessed" is the tenant controls that produced a finding
         # (scored + not scored). It counted distinct ControlIds across ALL
-        # findings, including the 35 endpoint checks that report "no endpoint
+        # findings, including the 39 endpoint checks that report "no endpoint
         # results supplied" on every run without -DeviceResults, so the
         # header read "37 controls assessed · 2 scored · 0 not applicable".
         $distinctControlsAssessed = $hdrScored + $hdrNA

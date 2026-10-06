@@ -23,8 +23,8 @@
     construct here fails on the exact machines it is meant to run on.
     Testing/NRG.DeviceCompliance.Tests.ps1 enforces that statically.
 
-    ELEVATION HONESTY. BitLocker, TPM, Secure Boot and the audit policy cannot
-    be read without administrative rights. Run non-elevated, those cmdlets
+    ELEVATION HONESTY. BitLocker, TPM, Secure Boot, the audit policy and the
+    event log configuration cannot be read without administrative rights. Run non-elevated, those cmdlets
     return nothing — which is indistinguishable from "not configured" unless the
     script says so. Every such check reports NotAssessed, never Pass and never
     Fail, and the result file records Elevated:false so the ingesting side can
@@ -46,6 +46,14 @@
 
 .PARAMETER MaxInactivitySeconds
     Machine inactivity lock limit above this fails DEV-6.1. Default 900 (15 min).
+
+.PARAMETER MinSecurityLogSizeKB
+    Security event log maximum size below this fails DEV-8.3. Default 196608
+    (192 MB), the minimum TrustedSec recommends.
+
+.PARAMETER MinEventLogSizeKB
+    Application, Setup and System event log maximum size below this fails
+    DEV-8.3. Default 32768 (32 MB).
 
 .EXAMPLE
     .\Invoke-NRGDeviceCompliance.ps1
@@ -78,13 +86,21 @@ param(
 
     [Parameter(Mandatory = $false)]
     [ValidateRange(60, 86400)]
-    [int] $MaxInactivitySeconds = 900
+    [int] $MaxInactivitySeconds = 900,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateRange(1024, 4194304)]
+    [int] $MinSecurityLogSizeKB = 196608,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateRange(1024, 4194304)]
+    [int] $MinEventLogSizeKB = 32768
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$script:ScriptVersion = '1.0.0'
+$script:ScriptVersion = '1.1.0'
 $script:Schema        = 'nrg-device-compliance/1.0'
 $script:Checks        = New-Object System.Collections.ArrayList
 
@@ -151,7 +167,7 @@ function Get-RegValue {
 function Invoke-Check {
     <#
         Runs one check body inside its own try/catch. A single broken check must
-        never take the other thirty-four with it — a run that dies halfway
+        never take the others with it — a run that dies halfway
         produces a partial file that looks like a complete one.
     #>
     param(
@@ -169,6 +185,89 @@ function Invoke-Check {
     } catch {
         Add-Check -Id $Id -Result 'Error' -Detail $_.Exception.Message
     }
+}
+
+function Get-EventLogSizeVerdict {
+    <#
+        Judges event log maximum sizes. Pure: takes what Get-WinEvent -ListLog
+        returned (objects with LogName and MaximumSizeInBytes) so the judgement
+        can be tested without a Windows event log. A log that was not read is
+        never assumed big enough: a shortfall on a log that WAS read is a Fail,
+        otherwise an unread log makes the check NotAssessed.
+    #>
+    param(
+        [Parameter(Mandatory = $false)] [object[]] $Logs = @(),
+        [Parameter(Mandatory = $true)]  [hashtable] $MinimumKB
+    )
+    $observed = @(); $short = @(); $unread = @()
+    foreach ($name in @($MinimumKB.Keys | Sort-Object)) {
+        $log = $null
+        foreach ($l in @($Logs)) {
+            if ($null -ne $l -and [string]$l.LogName -eq $name) { $log = $l; break }
+        }
+        if ($null -eq $log -or $null -eq $log.MaximumSizeInBytes) { $unread += $name; continue }
+        $kb = [long][math]::Floor([double]$log.MaximumSizeInBytes / 1024)
+        $observed += "$name=$kb KB"
+        if ($kb -lt [long]$MinimumKB[$name]) { $short += "$name $kb KB (minimum $($MinimumKB[$name]) KB)" }
+    }
+    $result = 'Pass'
+    $detail = 'A log that is too small rolls over before anyone collects it, and the evidence of an intrusion is overwritten first.'
+    if ($short.Count -gt 0) {
+        $result = 'Fail'
+        $detail = "Below the minimum: $($short -join '; ')." + $(if ($unread.Count -gt 0) { " Not read: $($unread -join ', ')." } else { '' })
+    } elseif ($unread.Count -gt 0) {
+        $result = 'NotAssessed'
+        $detail = "Not read: $($unread -join ', '). A log that was not read is not assumed to be large enough."
+    }
+    return [PSCustomObject]@{ Result = $result; Observed = ($observed -join '; '); Detail = $detail }
+}
+
+function Get-EventLogModeVerdict {
+    <#
+        Judges what each log does when it is full. Retain ("do not overwrite
+        events") stops recording new events once the log fills, so whoever
+        fills it switches logging off; Circular and AutoBackup keep recording.
+        Pure, like Get-EventLogSizeVerdict. An unknown mode is not a pass.
+    #>
+    param(
+        [Parameter(Mandatory = $false)] [object[]] $Logs = @(),
+        [Parameter(Mandatory = $true)]  [string[]] $LogNames
+    )
+    $observed = @(); $stops = @(); $unread = @()
+    foreach ($name in @($LogNames | Sort-Object)) {
+        $log = $null
+        foreach ($l in @($Logs)) {
+            if ($null -ne $l -and [string]$l.LogName -eq $name) { $log = $l; break }
+        }
+        if ($null -eq $log -or $null -eq $log.LogMode -or [string]$log.LogMode -eq '') { $unread += $name; continue }
+        $mode = [string]$log.LogMode
+        $observed += "$name=$mode"
+        if ($mode -eq 'Retain') { $stops += $name }
+        elseif ($mode -ne 'Circular' -and $mode -ne 'AutoBackup') { $unread += "$name ($mode)" }
+    }
+    $result = 'Pass'
+    $detail = 'Each log keeps recording when it is full.'
+    if ($stops.Count -gt 0) {
+        $result = 'Fail'
+        $detail = "Stops recording new events when full: $($stops -join ', '). Filling the log then switches logging off."
+    } elseif ($unread.Count -gt 0) {
+        $result = 'NotAssessed'
+        $detail = "Not read or not recognized: $($unread -join ', ')."
+    }
+    return [PSCustomObject]@{ Result = $result; Observed = ($observed -join '; '); Detail = $detail }
+}
+
+function Get-EventLogConfig {
+    <#
+        Reads the event log configuration for the named logs. A log that cannot
+        be read is left out; the verdict functions report it as not read.
+    #>
+    param([Parameter(Mandatory = $true)] [string[]] $LogNames)
+    $logs = @()
+    foreach ($n in $LogNames) {
+        try { $logs += Get-WinEvent -ListLog $n -ErrorAction Stop } catch { }
+    }
+    return ,$logs
 }
 
 $script:IsElevated = Test-Elevated
@@ -738,6 +837,61 @@ try {
             -Expected 'Process Creation auditing includes Success'
     }
 
+    # The four classic logs. Sizes and full-log behavior come from the log's own
+    # configuration (what Windows applies), not from the policy registry key,
+    # which a local change can override. Reading the Security log needs admin.
+    $classicLogs = @('Application', 'Security', 'Setup', 'System')
+
+    Invoke-Check -Id 'DEV-8.3' -NeedsElevation -Body {
+        $v = Get-EventLogSizeVerdict -Logs (Get-EventLogConfig -LogNames $classicLogs) -MinimumKB @{
+            Application = $MinEventLogSizeKB; Security = $MinSecurityLogSizeKB; Setup = $MinEventLogSizeKB; System = $MinEventLogSizeKB
+        }
+        Add-Check -Id 'DEV-8.3' -Result $v.Result -Observed $v.Observed `
+            -Expected "Security at least $MinSecurityLogSizeKB KB; Application, Setup and System at least $MinEventLogSizeKB KB" -Detail $v.Detail
+    }
+
+    Invoke-Check -Id 'DEV-8.4' -NeedsElevation -Body {
+        $v = Get-EventLogModeVerdict -Logs (Get-EventLogConfig -LogNames $classicLogs) -LogNames $classicLogs
+        Add-Check -Id 'DEV-8.4' -Result $v.Result -Observed $v.Observed `
+            -Expected 'Circular or AutoBackup (keeps recording when full), never Retain' -Detail $v.Detail
+    }
+
+    Invoke-Check -Id 'DEV-8.5' -Body {
+        # Microsoft documents the default as Enabled (1): an absent value is the
+        # default, and only an explicit 0 lets category-level audit policy
+        # override the subcategory settings DEV-8.2 depends on.
+        $force = Get-RegValue -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'SCENoApplyLegacyAuditPolicy'
+        $observed = 'SCENoApplyLegacyAuditPolicy not set (default: enabled)'
+        $ok = $true
+        if ($null -ne $force) {
+            $observed = "SCENoApplyLegacyAuditPolicy=$force"
+            $ok = ([string]$force -eq '1')
+        }
+        Add-Check -Id 'DEV-8.5' -Result $(if ($ok) { 'Pass' } else { 'Fail' }) `
+            -Observed $observed -Expected '1 or not set (subcategory settings override category settings)' `
+            -Detail 'With it off, a category-level audit setting from Group Policy can silently replace the subcategory settings, such as Process Creation.'
+    }
+
+    Invoke-Check -Id 'DEV-8.6' -NeedsElevation -Body {
+        # Inventory only. Sysmon is one way to collect this telemetry; an EDR
+        # agent is another, so absence is recorded, never failed, and nothing
+        # here judges whether the Sysmon configuration is any good.
+        $channel = $null
+        try { $channel = Get-WinEvent -ListLog 'Microsoft-Windows-Sysmon/Operational' -ErrorAction Stop } catch { }
+        $services = @()
+        foreach ($n in @('Sysmon64', 'Sysmon')) {
+            $svc = Get-Service -Name $n -ErrorAction SilentlyContinue
+            if ($svc) { $services += "$n $($svc.Status)" }
+        }
+        $chan = 'absent'
+        if ($null -ne $channel) { $chan = $(if ($channel.IsEnabled) { 'present, enabled' } else { 'present, disabled' }) }
+        $svcText = 'not found under its default names'
+        if ($services.Count -gt 0) { $svcText = $services -join ', ' }
+        Add-Check -Id 'DEV-8.6' -Result 'Info' `
+            -Observed "Sysmon event channel: $chan; service: $svcText" `
+            -Detail 'Recorded for review, not judged. A renamed Sysmon service still registers the same event channel.'
+    }
+
     # ── Assemble and write ───────────────────────────────────────────────────
     $counts = [ordered]@{
         Pass          = @($script:Checks | Where-Object { $_.Result -eq 'Pass' }).Count
@@ -777,7 +931,7 @@ try {
     Write-Output "NRG device compliance: $($counts.Pass) pass, $($counts.Fail) fail, $($counts.NotAssessed) not assessed."
     Write-Output "Written to $OutputPath"
     if (-not $script:IsElevated) {
-        Write-Warning 'Not elevated — encryption, TPM, Secure Boot and audit-policy checks could not run. Results are PARTIAL.'
+        Write-Warning 'Not elevated — encryption, TPM, Secure Boot, audit-policy and event log checks could not run. Results are PARTIAL.'
     }
 
     if ($PassThru) { Write-Output $result }

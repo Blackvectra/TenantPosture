@@ -50,6 +50,7 @@
     "AU-2": "Event Logging",
     "AU-3": "Content of Audit Records",
     "AU-4": "Audit Log Storage Capacity",
+    "AU-5": "Response to Audit Logging Process Failures",
     "AU-6": "Audit Record Review, Analysis, and Reporting",
     "AU-9": "Protection of Audit Information",
     "AU-11": "Audit Record Retention",

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **Four endpoint logging checks (DEV-8.3 to DEV-8.6), from TrustedSec's "Logging Is a
+  Discipline, Not a Switch".** DEV-8.3: the Security event log holds at least 196,608 KB and
+  Application, Setup and System at least 32,768 KB (`-MinSecurityLogSizeKB` /
+  `-MinEventLogSizeKB`). DEV-8.4: no classic log is set to stop recording when full (`Retain`),
+  which lets whoever fills it switch logging off. DEV-8.5: audit policy subcategory settings take
+  precedence over category settings; an absent value is Microsoft's documented default (Enabled),
+  so only an explicit 0 fails. DEV-8.6: whether Sysmon is installed, recorded as inventory and
+  never failed, because an EDR agent collects the same telemetry. Sizes and full-log behavior
+  are read from the log's own configuration and need elevation; an unread log is not assessed,
+  never assumed compliant. NIST citations: AU-4, AU-5 (added to the catalog with its Rev 5 title,
+  checked against NIST's OSCAL catalog), AU-2, AU-12, SI-4. Endpoint script version 1.1.0;
+  older result files simply lack the four checks, which the evaluator already reports per device.
+
 - **A third-party EDR declaration no longer erases an assigned ASR policy's shortfall (INT-2.2).**
   With the approved ASR rule set, INT-2.2 reports a `Shortfall:` when an assigned policy was read
   and a required rule is not in Block mode. `Set-NRGThirdPartyEdr` rewrote every non-passing

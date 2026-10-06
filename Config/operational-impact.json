@@ -462,7 +462,11 @@
     "DEV-7.3": "legacy-client-break",
     "DEV-7.4": "device-config-change",
     "DEV-8.1": "device-config-change",
-    "DEV-8.2": "device-config-change"
+    "DEV-8.2": "device-config-change",
+    "DEV-8.3": "device-config-change",
+    "DEV-8.4": "device-config-change",
+    "DEV-8.5": "device-config-change",
+    "DEV-8.6": "inventory-only"
   },
   "overrides": {
     "AAD-7.2": {
