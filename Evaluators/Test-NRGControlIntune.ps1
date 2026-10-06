@@ -351,8 +351,8 @@ function Test-NRGControlIntuneASR {
     if ($st.Assigned.Count -gt 0) {
         # The expected state is the approved NRG ASR rule set, every rule in Block
         # mode. The policy existing is verified; the rule modes come from the settings
-        # read (collector), and the REQUIRED list is an operator-approved file that
-        # ships empty. Nothing is inferred: an unread mode is unknown, never Block.
+        # read (collector), and the REQUIRED list is an operator-approved file (an empty
+        # list means no standard is approved). Nothing is inferred: an unread mode is unknown, never Block.
         $asrPolicies = @($st.Assigned)
         $read   = @($asrPolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'AsrSettingsStatus' -Default '') -eq 'Read' })
         $modeMaps = @($read | ForEach-Object { Get-NRGObjectField -Item $_ -Key 'AsrRuleModes' -Default $null } | Where-Object { $null -ne $_ })

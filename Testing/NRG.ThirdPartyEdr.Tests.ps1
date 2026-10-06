@@ -50,6 +50,26 @@ Describe 'Third-party EDR declaration' {
         @(Get-NRGFindings | Where-Object { $_.Detail -match '^Third-party EDR declared:' -and $_.State -ne 'NotApplicable' }) | Should -BeNullOrEmpty
     }
 
+    It 'does not excuse an assigned ASR policy read as falling short (INT-2.2 Shortfall)' {
+        Add-Finding 'INT-2.2' 'Partial' 'Verified: 1 assigned Attack Surface Reduction Rules policy(ies). Shortfall: 1 of 3 required ASR rule(s) are not in Block mode: Block persistence through WMI event subscription (Audit).'
+        Add-Finding 'INT-2.1' 'Gap' 'No EDR policy deployed.'
+        (Set-NRGThirdPartyEdr -Product 'Cortex XDR') | Should -Be 1 -Because 'only the INT-2.1 absence is rewritten'
+        $f = Get-One 'INT-2.2'
+        $f.State  | Should -Be 'Partial' -Because 'a deployed Defender policy read as misconfigured is evidence, not something a declaration explains'
+        $f.Detail | Should -Match '^Verified: ' -Because 'the evaluator verdict leads; the note is appended'
+        $f.Detail | Should -Match 'Not excused by the third-party EDR declaration'
+        $f.Detail | Should -Match 'Cortex XDR'
+        # Idempotent: a second application (for example -FromResults over a rewritten file) adds nothing.
+        Set-NRGThirdPartyEdr -Product 'Cortex XDR' | Out-Null
+        ([regex]::Matches((Get-One 'INT-2.2').Detail, 'Not excused by')).Count | Should -Be 1
+    }
+
+    It 'still excuses INT-2.2 when no ASR policy is assigned or the rules were not read' {
+        Add-Finding 'INT-2.2' 'Gap' 'No assigned Attack Surface Reduction Rules policy in Intune.'
+        Set-NRGThirdPartyEdr -Product 'Cortex XDR' | Out-Null
+        (Get-One 'INT-2.2').State | Should -Be 'NotApplicable'
+    }
+
     It 'touches only the Defender endpoint checks' {
         Add-Finding 'AAD-1.1' 'Gap'
         Add-Finding 'DEF-1.1' 'Gap' -Detail 'Safe Attachments off.'

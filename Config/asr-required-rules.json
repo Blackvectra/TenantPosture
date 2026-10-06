@@ -1,4 +1,17 @@
 {
-  "_comment": "The Attack Surface Reduction rules NRG requires, every one in Block mode. SHIPS EMPTY ON PURPOSE: the tool does not invent NRG's standard. Add entries as { \"Id\": \"<rule key or a distinctive part of it, lower-case>\", \"Name\": \"<display name>\" }. The Id is matched against the rule key read from the Settings Catalog policy (the setting definition id after 'attacksurfacereductionrules_'). Until this list is approved, INT-2.2 reports the modes read and leaves the rule-set half not assessed.",
-  "Rules": []
+  "_comment": "The Attack Surface Reduction rules NRG requires, every one in Block mode. Approved 2026-10-02: Microsoft's three standard protection rules, which Microsoft says can be enabled in Block mode without Audit-mode testing. Each Id is the rule key read from the Settings Catalog policy (the setting definition id after 'attacksurfacereductionrules_'), as seen in a real tenant read. An EMPTY list means no standard is approved and INT-2.2 leaves the rule-set half not assessed.",
+  "Rules": [
+    {
+      "Id": "blockabuseofexploitedvulnerablesigneddrivers",
+      "Name": "Block abuse of exploited vulnerable signed drivers (Device)"
+    },
+    {
+      "Id": "blockcredentialstealingfromwindowslocalsecurityauthoritysubsystem",
+      "Name": "Block credential stealing from the Windows local security authority subsystem"
+    },
+    {
+      "Id": "blockpersistencethroughwmieventsubscription",
+      "Name": "Block persistence through WMI event subscription"
+    }
+  ]
 }

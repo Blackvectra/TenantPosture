@@ -173,9 +173,14 @@ Describe 'Expected state: every mandatory component, each half kept visible' {
             Set-NRGRawData -Key 'Intune-EndpointSecurity' -Data (& $script:Es 'Read' ([ordered]@{ rule_a = 'Audit' }))
             (& $script:Verdict 'Test-NRGControlIntuneASR' 'INT-2.2').State | Should -Be 'Gap'
         }
-        It 'the shipped required-rule list is empty: the tool does not invent NRG''s standard' {
+        It 'the shipped required-rule list is the approved one: Microsoft''s three standard protection rules, keyed as the Settings Catalog reports them' {
             $j = Get-Content -LiteralPath (Join-Path $script:Root 'Config/asr-required-rules.json') -Raw | ConvertFrom-Json
-            @($j.Rules).Count | Should -Be 0
+            @($j.Rules).Count | Should -Be 3
+            @($j.Rules | ForEach-Object { $_.Id }) | Should -Be @(
+                'blockabuseofexploitedvulnerablesigneddrivers',
+                'blockcredentialstealingfromwindowslocalsecurityauthoritysubsystem',
+                'blockpersistencethroughwmieventsubscription')
+            foreach ($r in @($j.Rules)) { $r.Id | Should -MatchExactly '^[a-z0-9]+$'; $r.Name | Should -Not -BeNullOrEmpty }
         }
     }
 
