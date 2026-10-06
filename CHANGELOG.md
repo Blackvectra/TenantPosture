@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **AAD-7.2 names the policies that keep a break-glass account from qualifying.** The requirement
+  is unchanged: a cloud-only Global Administrator counts only when it is excluded from every
+  enabled Conditional Access policy that reaches it, because Microsoft says to exclude emergency
+  access accounts from policies that block or restrict sign-in, and a session-only policy can
+  restrict (sign-in frequency, token protection, app control). Report-only policies are not
+  counted. New: an account excluded from every policy with a grant control but still reached by
+  session-only policies is reported as a candidate (Partial, not Gap) with those policies named,
+  and an account still reached by one or two policies is named with them. Results collected
+  before this change replay with their previous verdict.
+
 - **Review of this release (2026-10-04): failed, truncated or unread evidence no longer produces a
   clean or failed verdict, and severities match the evidence.** Four reviewers checked the PR head
   `9eeb60b`; every confirmed defect below has a regression test that fails on that head (61 such
