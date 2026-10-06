@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **HIPAA citations corrected on sixteen controls** (`docs/HIPAA-CITATION-CORRECTIONS.md` records each
+  control's previous citation, what its evaluator checks, and the change). Eight tenant-isolation
+  controls cited 164.308(a)(4)(ii)(A), which applies only to a health care clearinghouse within a
+  larger organization; two priority-account controls cited security reminders, a training activity;
+  six log-retention controls cited 164.316(b)(2)(i), the six-year retention of Security Rule
+  documentation, which is not audit log retention. Thirteen controls keep the citations they already
+  carried; AAD-11.6 now cites person or entity authentication (164.312(d)) and TMS-4.3 transmission
+  security (164.312(e)(1)), each because the requirement describes the check itself; PVW-2.3, DEF-4.4
+  and EXO-5.2 are left uncited rather than given a stretched citation, listed with reasons in
+  `Config/hipaa-uncited-controls.json`, the only controls the coverage test lets go uncited. The test
+  also fails if any control cites the three specifications again. The earlier audit's pin of
+  164.316(b)(2)(i) on PVW-4.2 now expects 164.312(b).
+
 - **A third-party EDR declaration no longer erases an assigned ASR policy's shortfall (INT-2.2).**
   With the approved ASR rule set, INT-2.2 reports a `Shortfall:` when an assigned policy was read
   and a required rule is not in Block mode. `Set-NRGThirdPartyEdr` rewrote every non-passing

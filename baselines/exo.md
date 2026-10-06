@@ -326,7 +326,7 @@ Enable in M365 admin center > Settings > Security & privacy > Customer Lockbox. 
 | CMMC 2.0 | PE.L1-3.10.1 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.16 |
 | SOC 2 | CC6.1, CC6.6 |
-| HIPAA | §164.308(a)(4)(ii)(A), §164.312(b) |
+| HIPAA | §164.312(b) |
 | PCI DSS | Req 7.2.5 |
 | MITRE ATT&CK | T1078.004 |
 
@@ -547,7 +547,7 @@ Get-Mailbox -ResultSize Unlimited | Set-Mailbox -AuditLogAgeLimit 180
 | CMMC 2.0 | AU.L2-3.3.2 |
 | ISO/IEC 27001:2022 | A.8.15 |
 | SOC 2 | CC7.2, A1.2 |
-| HIPAA | §164.312(b), §164.316(b)(2)(i) |
+| HIPAA | §164.312(b) |
 | PCI DSS | Req 10.5 |
 | MITRE ATT&CK | T1070.008 |
 
@@ -707,7 +707,7 @@ Set-AntiPhishPolicy > TargetedUsersToProtect — add executive UPNs. Enable Enab
 | CMMC 2.0 | SI.L1-3.14.2 |
 | ISO/IEC 27001:2022 | A.8.2 |
 | SOC 2 | CC6.1 |
-| HIPAA | §164.308(a)(5)(ii)(A) |
+| HIPAA | Not cited: no Security Rule specification matches what this control checks (docs/HIPAA-CITATION-CORRECTIONS.md) |
 | PCI DSS | Req 7.2.4 |
 | MITRE ATT&CK | T1566, T1036.005 |
 

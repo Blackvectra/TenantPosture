@@ -43,7 +43,7 @@ Set-CsTenantFederationConfiguration -AllowFederatedUsers $false, or restrict to 
 | CMMC 2.0 | AC.L1-3.1.2 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.22 |
 | SOC 2 | CC6.6 |
-| HIPAA | §164.308(a)(4)(ii)(A), §164.312(e)(1) |
+| HIPAA | §164.312(e)(1) |
 | PCI DSS | Req 1.4 |
 | MITRE ATT&CK | T1566, T1534 |
 
@@ -168,7 +168,7 @@ Ensure Purview retention policies cover SharePoint to capture Teams recording da
 | CMMC 2.0 | AU.L2-3.3.1 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.10 |
 | SOC 2 | CC6.7, C1.1 |
-| HIPAA | §164.308(a)(4)(ii)(A), §164.310(d)(2)(ii) |
+| HIPAA | §164.310(d)(2)(ii) |
 | PCI DSS | Req 3.5.1 |
 | MITRE ATT&CK | T1213 |
 
@@ -607,7 +607,7 @@ Set-CsTeamsMeetingPolicy -Identity Global -NewMeetingRecordingExpirationDays 60.
 | CMMC 2.0 | AU.L2-3.3.1 |
 | ISO/IEC 27001:2022 | A.5.33, A.8.10 |
 | SOC 2 | A1.2, C1.1 |
-| HIPAA | §164.316(b)(2)(i), §164.502 |
+| HIPAA | §164.502 |
 | PCI DSS | Req 3.2.1 |
 | MITRE ATT&CK | T1113 |
 
@@ -671,7 +671,7 @@ Teams Admin Center > External access > Allow only specific external domains. Add
 | CMMC 2.0 | AC.L1-3.1.2 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.22 |
 | SOC 2 | CC6.6 |
-| HIPAA | §164.308(a)(4)(ii)(A) |
+| HIPAA | §164.312(e)(1) |
 | PCI DSS | Req 1.4 |
 | MITRE ATT&CK | T1566, T1534 |
 
