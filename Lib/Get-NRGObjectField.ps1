@@ -68,3 +68,60 @@ function Get-NRGObjectField {
         return $Default
     }
 }
+
+function Get-NRGRuleList {
+    <#
+    .SYNOPSIS
+        Reads a rule LIST field keeping an empty list distinct from an unread one.
+    .DESCRIPTION
+        Get-NRGObjectField hands an empty array back through the pipeline, so the
+        caller receives $null: indistinguishable from "the rules were not
+        collected". Get-NRGInForcePolicies reads $null as "cannot tell, keep every
+        custom policy", which counted a policy that applies to nobody as in force.
+        Here $null still means the field is absent or was not read, and an empty
+        collected list stays an empty list.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowNull()] [object] $Item,
+        [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $Key
+    )
+    if ($null -eq $Item) { return $null }
+    $v = $null
+    if ($Item -is [System.Collections.IDictionary]) {
+        if ($Item.Contains($Key)) { $v = $Item[$Key] }
+    } else {
+        $p = $Item.PSObject.Properties[$Key]
+        if ($p) { $v = $p.Value }
+    }
+    if ($null -eq $v) { return $null }
+    return , @($v)
+}
+
+# Reads a timestamp from API or replayed data without depending on the
+# workstation's culture. Graph JSON can arrive as a [datetime] (already parsed)
+# or as an ISO 8601 string; older results files hold the invariant-culture
+# string a [string] cast produced ("09/25/2026 10:00:00"). A bare
+# [datetime]::Parse uses the CURRENT culture, so under en-GB that string throws
+# on any day above 12 and swaps day and month below it. Returns a UTC
+# [datetime], or $null when the value is absent or unparseable (unknown, never
+# a throw). A value with no zone is taken as UTC, which is what Graph sends.
+function ConvertTo-NRGUtcDateTime {
+    [CmdletBinding()]
+    [OutputType([datetime])]
+    param(
+        [Parameter(Mandatory = $false, Position = 0)]
+        [AllowNull()]
+        [object] $Value
+    )
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [datetimeoffset]) { return $Value.UtcDateTime }
+    $parsed = [datetime]::MinValue
+    if ($Value -is [datetime]) {
+        $parsed = $Value
+    } elseif (-not [datetime]::TryParse([string]$Value, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsed)) {
+        return $null
+    }
+    if ($parsed.Kind -eq [System.DateTimeKind]::Unspecified) { return [datetime]::SpecifyKind($parsed, [System.DateTimeKind]::Utc) }
+    return $parsed.ToUniversalTime()
+}

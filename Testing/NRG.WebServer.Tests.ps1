@@ -73,11 +73,11 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
         #     CLITENANT-20261002-114907-assessment.html
         #     CLITENANT-20261002-114907-report\           index.html AAD.html ActionPlan.csv
         #                                                 + notes.txt raw.json (not servable)
-        #     METAFIRST / NOMETA / BROKEN / HOSTILE / FLATNDACO   flat runs, other label cases
+        #     METAFIRST / NOMETA / BROKEN / HOSTILE / FLATFABRIKAM   flat runs, other label cases
         #     JOINED / ORGONLY / HCLIENT                  flat runs whose label comes from clients.json
         #     joined.com\JOINEDGUI-*                      the same client's GUI-layout run
-        #     ndaco.org\NDACO-20261002-100000-*           GUI-layout run
-        #     Administrator_ndaco.org\...-email-results.json     IR run (never listed)
+        #     fabrikam.org\FABRIKAM-20261002-100000-*           GUI-layout run
+        #     Administrator_fabrikam.org\...-email-results.json     IR run (never listed)
         #     *-signin-triage.json, *-signin-triage-results.json (never listed)
         #     _flat\RESERVED-*                            a real folder with the reserved name
         #     outside.html                                a file next to, not in, the report folder
@@ -120,7 +120,7 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             & $put (Join-Path $out 'NOMETA-20261001-090000-results.json')    '{}'
             & $put (Join-Path $out 'BROKEN-20261001-080000-results.json')    '{not json'
             & $put (Join-Path $out 'HOSTILE-20261001-070000-results.json')   '{"Metadata":{"TenantDomain":"<img src=x onerror=alert(1)>"}}'
-            & $put (Join-Path $out 'FLATNDACO-20261002-090000-results.json') '{"Metadata":{"TenantDomain":"ndaco.org"}}'
+            & $put (Join-Path $out 'FLATFABRIKAM-20261002-090000-results.json') '{"Metadata":{"TenantDomain":"fabrikam.org"}}'
 
             & $put (Join-Path $out 'JOINED-20261002-070500-results.json')    '{"Metadata":{"TenantDomain":"joined.onmicrosoft.com","TenantId":"11111111-2222-3333-4444-555555555555"}}'
             & $put (Join-Path $out 'ORGONLY-20261002-070400-results.json')   '{"Metadata":{"TenantDomain":"orgonly.onmicrosoft.com"}}'
@@ -136,20 +136,20 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
                 @{ ClientName = 'Upn Co';    TenantDomain = 'upn.com';     TenantId = 'AAAAAAAA-0000-0000-0000-000000000001'; DelegatedOrg = 'upn.onmicrosoft.com' }
                 @{ ClientName = 'Hostile';   TenantDomain = '<b>x</b>';    TenantId = '99999999-8888-7777-6666-555555555555'; DelegatedOrg = 'hostile.onmicrosoft.com' }
             ) } | ConvertTo-Json -Depth 4)
-            & $put (Join-Path $out 'ndaco.org\NDACO-20261002-100000-results.json')    '{}'
-            & $put (Join-Path $out 'ndaco.org\NDACO-20261002-100000-assessment.html') '<html>FOLDER-REPORT-MARKER</html>'
+            & $put (Join-Path $out 'fabrikam.org\FABRIKAM-20261002-100000-results.json')    '{}'
+            & $put (Join-Path $out 'fabrikam.org\FABRIKAM-20261002-100000-assessment.html') '<html>FOLDER-REPORT-MARKER</html>'
 
-            & $put (Join-Path $out 'Administrator_ndaco.org\20261002-122037-email-results.json') '{}'
+            & $put (Join-Path $out 'Administrator_fabrikam.org\20261002-122037-email-results.json') '{}'
             & $put (Join-Path $out '20261002-130000-signin-triage.json')         '{}'
             & $put (Join-Path $out '20261002-130001-signin-triage-results.json') '{}'
             & $put (Join-Path $out '_flat\RESERVED-20261002-110000-results.json')    '{}'
             & $put (Join-Path $out '_flat\RESERVED-20261002-110000-assessment.html') '<html>RESERVED-MARKER</html>'
 
-            # Newest first: CLITENANT, NDACO, FLATNDACO, METAFIRST, NOMETA, BROKEN,
+            # Newest first: CLITENANT, FABRIKAM, FLATFABRIKAM, METAFIRST, NOMETA, BROKEN,
             # HOSTILE, JOINED, ORGONLY, HCLIENT, UPNFALL, JOINEDGUI.
             $base = [datetime]'2026-10-02T12:00:00'
             $order = @(
-                "$id-results.json", 'ndaco.org\NDACO-20261002-100000-results.json', 'FLATNDACO-20261002-090000-results.json',
+                "$id-results.json", 'fabrikam.org\FABRIKAM-20261002-100000-results.json', 'FLATFABRIKAM-20261002-090000-results.json',
                 'METAFIRST-20261002-080000-results.json', 'NOMETA-20261001-090000-results.json',
                 'BROKEN-20261001-080000-results.json', 'HOSTILE-20261001-070000-results.json',
                 'JOINED-20261002-070500-results.json', 'ORGONLY-20261002-070400-results.json',
@@ -612,10 +612,10 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             }
 
             It 'lists the GUI-layout run under its tenant folder' {
-                $hit = @($script:Runs | Where-Object { $_.id -eq 'NDACO-20261002-100000' })
+                $hit = @($script:Runs | Where-Object { $_.id -eq 'FABRIKAM-20261002-100000' })
                 $hit.Count | Should -Be 1
-                $hit[0].tenant | Should -Be 'ndaco.org'
-                $hit[0].folder | Should -Be 'ndaco.org'
+                $hit[0].tenant | Should -Be 'fabrikam.org'
+                $hit[0].folder | Should -Be 'fabrikam.org'
                 $hit[0].layout | Should -Be 'tenant-folder'
                 $hit[0].hasReport | Should -BeTrue
                 $hit[0].hasSite | Should -BeFalse -Because 'that run has no -report folder'
@@ -623,7 +623,7 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
 
             It 'lists exactly the assessment runs, newest first, and nothing else' {
                 $ids = @($script:Runs | ForEach-Object { $_.id })
-                $stamped = @($script:Id, 'NDACO-20261002-100000', 'FLATNDACO-20261002-090000', 'METAFIRST-20261002-080000',
+                $stamped = @($script:Id, 'FABRIKAM-20261002-100000', 'FLATFABRIKAM-20261002-090000', 'METAFIRST-20261002-080000',
                     'NOMETA-20261001-090000', 'BROKEN-20261001-080000', 'HOSTILE-20261001-070000',
                     'JOINED-20261002-070500', 'ORGONLY-20261002-070400', 'HCLIENT-20261002-070300', 'UPNFALL-20261002-070100', 'JOINEDGUI-20261002-070200')
                 $expected = @($stamped)
@@ -644,9 +644,9 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             }
 
             It 'the same tenant from both layouts is two rows with two different addresses' {
-                $rows = @($script:Runs | Where-Object { $_.tenant -eq 'ndaco.org' })
+                $rows = @($script:Runs | Where-Object { $_.tenant -eq 'fabrikam.org' })
                 $rows.Count | Should -Be 2
-                @($rows | ForEach-Object { $_.folder } | Sort-Object) | Should -Be @('_flat', 'ndaco.org')
+                @($rows | ForEach-Object { $_.folder } | Sort-Object) | Should -Be @('_flat', 'fabrikam.org')
             }
 
             It 'reads the tenant label whatever the order of the keys in the results file' {
@@ -770,7 +770,7 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
 
         Context 'the segment whitelist' {
             It 'accepts a real tenant folder, run id and page name: <_>' -ForEach @(
-                'CLITENANT-20261002-114907', 'ndaco.org', '_flat', 'Administrator_ndaco.org', 'a.b-c_d', 'ActionPlan.csv', 'index.html', '20261002-122037') {
+                'CLITENANT-20261002-114907', 'fabrikam.org', '_flat', 'Administrator_fabrikam.org', 'a.b-c_d', 'ActionPlan.csv', 'index.html', '20261002-122037') {
                 Test-NRGWebSegment -Value $_ | Should -BeTrue
             }
 
@@ -836,7 +836,7 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             # is written once.
             BeforeDiscovery {
                 $script:acceptedNames = @(
-                    'contoso.com', 'a-b.example.com', 'ndaco.org', 'tenant.onmicrosoft.com', 'JOINED.COM', 'a.co',
+                    'contoso.com', 'a-b.example.com', 'fabrikam.org', 'tenant.onmicrosoft.com', 'JOINED.COM', 'a.co',
                     '1.example.org', 'xn--bcher-kva.example', 'x.y.z.example.com', (('a' * 63) + '.com'),
                     ((('a' * 63) + '.') * 3 + ('d' * 57) + '.com'))
                 $script:rejectedCases = @(
@@ -859,7 +859,7 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
                     @{ Label = 'trailing CRLF';                Value = "a.com`r`n" }
                     @{ Label = 'leading space';                Value = ' a.com' }
                     @{ Label = 'NUL';                          Value = "a.com`0" }
-                    @{ Label = 'Kelvin sign in the TLD';       Value = ('ndaco.or' + [char]0x212A) }
+                    @{ Label = 'Kelvin sign in the TLD';       Value = ('fabrikam.co' + [char]0x212A) }
                     @{ Label = 'fullwidth full stop';          Value = ('a' + [char]0xFF0E + 'com') }
                     @{ Label = 'slash';                        Value = 'a/b.com' }
                     @{ Label = 'backslash';                    Value = 'a\b.com' }
@@ -1014,10 +1014,10 @@ Describe 'NRG-Assessment Web GUI invariants — Lib/Start-NRGWebServer.ps1 + Web
             }
 
             It 'serves a tenant-folder run only through its own folder' {
-                (& $script:Resolve 'ndaco.org' 'NDACO-20261002-100000' 'Report' '').Status | Should -Be 'Ok'
-                (& $script:Resolve '_flat' 'NDACO-20261002-100000' 'Report' '').Status | Should -Be 'NotFound' `
+                (& $script:Resolve 'fabrikam.org' 'FABRIKAM-20261002-100000' 'Report' '').Status | Should -Be 'Ok'
+                (& $script:Resolve '_flat' 'FABRIKAM-20261002-100000' 'Report' '').Status | Should -Be 'NotFound' `
                     -Because 'the reserved segment is the output folder itself, not a way into a tenant folder'
-                (& $script:Resolve 'ndaco.org' $script:Id 'Report' '').Status | Should -Be 'NotFound' `
+                (& $script:Resolve 'fabrikam.org' $script:Id 'Report' '').Status | Should -Be 'NotFound' `
                     -Because 'a flat run is not under a tenant folder'
             }
 
@@ -1623,7 +1623,7 @@ Start-NRGWebServer $($parts -join ' ') -NoBrowser
             }
 
             It 'lists the GUI-layout run too, and not the incident-response or triage files' {
-                @($script:RunList | Where-Object { $_.id -eq 'NDACO-20261002-100000' }).Count | Should -Be 1
+                @($script:RunList | Where-Object { $_.id -eq 'FABRIKAM-20261002-100000' }).Count | Should -Be 1
                 @($script:RunList | Where-Object { $_.id -match 'email|signin|^2026\d{4}-\d{6}$' }) | Should -BeNullOrEmpty
                 $expected = if ($script:Fx.LinksMade) { 13 } else { 12 }
                 $script:RunList.Count | Should -Be $expected
@@ -1633,14 +1633,14 @@ Start-NRGWebServer $($parts -join ' ') -NoBrowser
                 $flat = & $script:Get "/api/runs/_flat/$($script:Id)/report"
                 $flat.StatusCode | Should -Be 200
                 $flat.Content | Should -Match 'FLAT-REPORT-MARKER'
-                $folder = & $script:Get '/api/runs/ndaco.org/NDACO-20261002-100000/report'
+                $folder = & $script:Get '/api/runs/fabrikam.org/FABRIKAM-20261002-100000/report'
                 $folder.StatusCode | Should -Be 200
                 $folder.Content | Should -Match 'FOLDER-REPORT-MARKER'
             }
 
             It 'a run is only reachable through its own layout' {
-                (& $script:Get '/api/runs/ndaco.org/CLITENANT-20261002-114907/report').StatusCode | Should -Be 404
-                (& $script:Get '/api/runs/_flat/NDACO-20261002-100000/report').StatusCode | Should -Be 404
+                (& $script:Get '/api/runs/fabrikam.org/CLITENANT-20261002-114907/report').StatusCode | Should -Be 404
+                (& $script:Get '/api/runs/_flat/FABRIKAM-20261002-100000/report').StatusCode | Should -Be 404
             }
         }
 
@@ -1885,7 +1885,7 @@ Start-NRGWebServer $($parts -join ' ') -NoBrowser
 
             It 'refuses a domain the one rule refuses with 400 InvalidDomain and a fixed sentence: <Label>' -ForEach @(
                 @{ Label = 'a..b.com (the entry script accepted it)';       Body = '{"domain":"a..b.com"}';        Echo = 'a..b' }
-                @{ Label = 'a trailing line feed (a $ anchor accepted it)'; Body = '{"domain":"ndaco.org\n"}';    Echo = 'ndaco' }
+                @{ Label = 'a trailing line feed (a $ anchor accepted it)'; Body = '{"domain":"fabrikam.org\n"}';    Echo = 'fabrikam' }
                 @{ Label = 'a space and a bang';                           Body = '{"domain":"bad domain!"}';     Echo = 'bad domain' }
                 @{ Label = 'one label';                                    Body = '{"domain":"localhost"}';       Echo = 'localhost' }
                 @{ Label = 'a leading hyphen';                             Body = '{"domain":"-x.com"}';          Echo = '-x.com' }

@@ -18,8 +18,8 @@ Describe 'Resolve-NRGTenantId' {
     }
     It 'returns the tenant GUID from the OpenID issuer' {
         Mock -CommandName Invoke-RestMethod -ModuleName NRG-Assessment -MockWith {
-            [pscustomobject]@{ issuer = 'https://login.microsoftonline.com/375E7ED2-25CC-4BEC-BC68-890DC9095311/v2.0' } }
-        Resolve-NRGTenantId -Domain 'contoso.com' | Should -Be '375e7ed2-25cc-4bec-bc68-890dc9095311'
+            [pscustomobject]@{ issuer = 'https://login.microsoftonline.com/ABCDEF01-2345-4678-9ABC-DEF012345678/v2.0' } }
+        Resolve-NRGTenantId -Domain 'contoso.com' | Should -Be 'abcdef01-2345-4678-9abc-def012345678'
     }
     It 'returns $null, never a guess, when the domain is unknown' {
         Mock -CommandName Invoke-RestMethod -ModuleName NRG-Assessment -MockWith { throw '400 Bad Request' }
@@ -46,7 +46,7 @@ Describe 'Connect-NRGServices refuses a session for the wrong tenant' {
     }
     It 'marks Graph unusable when the signed-in tenant is not the expected one' {
         $r = & $script:Mod {
-            Connect-NRGServices -ExpectedTenantId '375e7ed2-25cc-4bec-bc68-890dc9095311' -SkipTeams -SkipPurview -SkipSharePoint 6>$null 3>$null
+            Connect-NRGServices -ExpectedTenantId 'abcdef01-2345-4678-9abc-def012345678' -SkipTeams -SkipPurview -SkipSharePoint 6>$null 3>$null
         } | Where-Object { $_ -is [hashtable] } | Select-Object -Last 1
         $r.Graph | Should -BeFalse
         $r.EXO   | Should -BeFalse -Because 'the Exchange session is also for the wrong tenant'

@@ -56,8 +56,8 @@ function Invoke-NRGCollectAADIdentityGovernance {
             $result.Data.SSPRPolicy = @{
                 RegistrationEnforcementState = [string](Get-NRGNestedProperty -Object $sspr -Path 'registrationEnforcement.authenticationMethodsRegistrationCampaign.state' -Default 'unknown')
                 SnoozeDays                   = [int](Get-NRGNestedProperty -Object $sspr -Path 'registrationEnforcement.authenticationMethodsRegistrationCampaign.snoozeDurationInDays' -Default 0)
-                MethodsConfigured            = @($sspr.authenticationMethodConfigurations ?? @() | ForEach-Object {
-                    @{ Id = [string]$_.id; State = [string]$_.state }
+                MethodsConfigured            = @(@(Get-NRGObjectField -Item $sspr -Key 'authenticationMethodConfigurations' -Default @()) | ForEach-Object {
+                    @{ Id = [string](Get-NRGObjectField -Item $_ -Key 'id' -Default ''); State = [string](Get-NRGObjectField -Item $_ -Key 'state' -Default '') }
                 })
             }
             $result.Data.SectionStatus.SSPRPolicy = 'Collected'
@@ -100,15 +100,15 @@ function Invoke-NRGCollectAADIdentityGovernance {
                 # Not returned is unknown, never "everyone" (that default scored
                 # a Gap on tenants whose read simply lacked the field).
                 AllowInvitesFrom             = [string](Get-NRGObjectField -Item $extCollab -Key 'allowInvitesFrom' -Default '')
-                AllowedToSignUpEmailBased    = [bool]($extCollab.allowedToSignUpEmailBasedSubscriptions ?? $true)
-                GuestUserRoleId              = [string]($extCollab.guestUserRoleId ?? '')
+                AllowedToSignUpEmailBased    = [bool](Get-NRGObjectField -Item $extCollab -Key 'allowedToSignUpEmailBasedSubscriptions' -Default $true)
+                GuestUserRoleId              = [string](Get-NRGObjectField -Item $extCollab -Key 'guestUserRoleId' -Default '')
                 DefaultUserRolePermissions   = @{
                     AllowedToCreateApps      = [bool](Get-NRGNestedProperty -Object $extCollab -Path 'defaultUserRolePermissions.allowedToCreateApps' -Default $true)
                     AllowedToCreateGroups    = [bool](Get-NRGNestedProperty -Object $extCollab -Path 'defaultUserRolePermissions.allowedToCreateGroups' -Default $true)
                     AllowedToCreateTenants   = [bool](Get-NRGNestedProperty -Object $extCollab -Path 'defaultUserRolePermissions.allowedToCreateTenants' -Default $true)
                 }
                 PermissionGrantPolicies      = $permGrant
-                BlockMsolPowerShell          = $extCollab.blockMsolPowerShell
+                BlockMsolPowerShell          = (Get-NRGObjectField -Item $extCollab -Key 'blockMsolPowerShell' -Default $null)
             }
             $result.Data.SectionStatus.ExternalCollab = 'Collected'
         } catch {
@@ -124,9 +124,9 @@ function Invoke-NRGCollectAADIdentityGovernance {
                 -Uri 'https://graph.microsoft.com/v1.0/policies/adminConsentRequestPolicy' `
                 -ErrorAction Stop
             $result.Data.ConsentPolicy = @{
-                IsEnabled = [bool]($consentPol.isEnabled ?? $false)
-                Version   = [int]($consentPol.version ?? 0)
-                Reviewers = @($consentPol.reviewers ?? @())
+                IsEnabled = [bool](Get-NRGObjectField -Item $consentPol -Key 'isEnabled' -Default $false)
+                Version   = [int](Get-NRGObjectField -Item $consentPol -Key 'version' -Default 0)
+                Reviewers = @(Get-NRGObjectField -Item $consentPol -Key 'reviewers' -Default @())
             }
             $result.Data.SectionStatus.ConsentPolicy = 'Collected'
         } catch {

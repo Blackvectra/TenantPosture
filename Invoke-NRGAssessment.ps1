@@ -71,6 +71,14 @@ param(
     [ValidatePattern('^$|^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$')]
     [string] $ThirdPartyEDR,
 
+    # The NRG monitoring address(es) alert policies should notify (an address,
+    # or @domain for a whole domain). DEF-3.4 and EXO-3.3 compare each enabled
+    # policy's recipients with this list; without one, "alerts reach NRG" is
+    # not assessed (the recipients-exist half still is). Also read from the
+    # client's MonitoringAddresses in Config/clients.json, then from
+    # MonitoringAddresses in Config/branding.psd1.
+    [string[]] $MonitoringAddress,
+
     # Cloud environment
     [ValidateSet('commercial','gcc','gcchigh','dod')]
     [string] $Environment = 'commercial',
@@ -116,6 +124,19 @@ param(
         return $true
     })]
     [string] $BaselineResults,
+
+    # Independent comparison: a ScubaGear ScubaResults.csv. The report site places each
+    # mapped result beside the NRG control as a separate standard, never as a score.
+    [ValidateScript({
+        if ([string]::IsNullOrEmpty($_)) { return $true }
+        if ($_ -match '\.\.[\\/]') { throw "Path traversal not allowed in ScubaResultsPath." }
+        if (-not (Test-Path -LiteralPath $_ -PathType Leaf)) { throw "ScubaResultsPath file not found: $_" }
+        return $true
+    })]
+    [string] $ScubaResultsPath,
+    # The multi-page report site is written with every run that writes reports.
+    # This switch turns that off.
+    [switch] $SkipReportSite,
 
     # ── Monthly compliance report (v4.11.0) ─────────────────────────────────
     # When -MonthlyReport is set, Publish-NRGMonthlyReport emits a recurring
@@ -464,6 +485,10 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
     if (-not $ThirdPartyEDR -and $clientRec -and $clientRec.PSObject.Properties['ThirdPartyEDR'] -and "$($clientRec.ThirdPartyEDR)") {
         $ThirdPartyEDR = [string]$clientRec.ThirdPartyEDR
     }
+    if (-not $MonitoringAddress -and $clientRec -and $clientRec.PSObject.Properties['MonitoringAddresses'] -and @($clientRec.MonitoringAddresses).Count -gt 0) {
+        $MonitoringAddress = @($clientRec.MonitoringAddresses | ForEach-Object { [string]$_ })
+        $monitoringSource = 'clients.json'
+    }
     if (-not $BaselineTier -and $clientRec -and $clientRec.PSObject.Properties['BaselineTier'] -and "$($clientRec.BaselineTier)" -in @('Minimum', 'Standard', 'Hardened')) {
         $BaselineTier = [string]$clientRec.BaselineTier
     }
@@ -517,8 +542,31 @@ if (-not $ThirdPartyEDR) {
 # clients") and the batch orchestrator (Invoke-NRGBatchAssessment.ps1:216).
 Clear-NRGState
 
+# The monitoring-address list, recorded as raw data AFTER the state reset so the
+# alert-routing checks (DEF-3.4, EXO-3.3) can read it. Precedence: the parameter,
+# the client's clients.json entry (already folded into $MonitoringAddress above),
+# then the MSP-wide default in branding.psd1.
+if (-not (Get-Variable -Name monitoringSource -ErrorAction SilentlyContinue)) { $monitoringSource = '' }
+if ($MonitoringAddress -and -not $monitoringSource) { $monitoringSource = 'parameter' }
+if (-not $MonitoringAddress) {
+    $brandFileMon = Join-Path $scriptDir 'Config' 'branding.psd1'
+    if (Test-Path -LiteralPath $brandFileMon) {
+        try {
+            $brandMon = Import-PowerShellDataFile -LiteralPath $brandFileMon
+            if ($brandMon.ContainsKey('MonitoringAddresses') -and @($brandMon['MonitoringAddresses']).Count -gt 0) {
+                $MonitoringAddress = @($brandMon['MonitoringAddresses'] | ForEach-Object { [string]$_ })
+                $monitoringSource = 'branding.psd1'
+            }
+        } catch { Write-Verbose "branding.psd1 MonitoringAddresses not read: $($_.Exception.Message)" }
+    }
+}
+$monitoringSet = @(Set-NRGMonitoringAddresses -Addresses $MonitoringAddress -Source $monitoringSource)
+
 # OWASP ASVS V7.3.2 — wrap the entire run in try/finally so service sessions
 # always disconnect, even if a collector / evaluator / publisher throws.
+# $skipCollection is read by the finally block, so it must exist before any early
+# exit (a failed prerequisite check) would otherwise run the finally with it unset.
+$skipCollection = $false
 try {
 
 # ── Module prerequisite check ─────────────────────────────────────────────────
@@ -657,6 +705,11 @@ if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
     # than the original run.
     if ($priorData.Contains('Coverage') -and $priorData.Coverage) {
         $restored = 0
+        # Every status Register-NRGCoverage accepts, read from its own ValidateSet so the two
+        # cannot drift. 'Skipped' (a -Skip flag) must survive: dropping it filed every
+        # operator-skipped control as a collection failure on the republish.
+        $validCoverage = @((Get-Command Register-NRGCoverage).Parameters['Status'].Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] } | ForEach-Object { $_.ValidValues })
         foreach ($famKey in @($priorData.Coverage.Keys)) {
             $entry  = $priorData.Coverage[$famKey]
             $status = [string](Get-NRGObjectField -Item $entry -Key 'Status' -Default '')
@@ -664,7 +717,7 @@ if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
             # Register-NRGCoverage validates Status; a baseline written by a
             # future version could carry a value this build does not know, and
             # that must not abort the republish.
-            if ($status -notin @('Collected','Partial','NotCollected','Failed')) { continue }
+            if ($status -notin $validCoverage) { continue }
             try { Register-NRGCoverage -Family ([string]$famKey) -Status $status -Note $note; $restored++ } catch { }
         }
         if ($restored -gt 0) { Write-Host "  [+] Restored coverage for $restored collector(s)" -ForegroundColor Green }
@@ -762,6 +815,16 @@ if (-not $skipCollection) {
         throw [System.InvalidOperationException]::new('Authentication failure: no Graph or EXO session available.')
     }
     if (-not $conn.ContainsKey('SharePoint')) { $conn['SharePoint'] = $false }
+    # A run with Exchange but no Graph is valid and honest (every control that needs Graph
+    # reads "not assessed"), but it is not the assessment the operator meant to run and it can
+    # take half an hour to find that out. Say it now, before collection, not in the report.
+    if (-not $conn.Graph) {
+        Write-Host ""
+        Write-Host "  [!] Microsoft Graph is NOT connected. Identity (Entra ID), Conditional Access, Intune, users, roles and" -ForegroundColor Red
+        Write-Host "      application controls cannot be assessed in this run; they will read 'not assessed', not 'passed'." -ForegroundColor Red
+        Write-Host "      Fix the Graph error shown above and re-run if you meant a full assessment (Ctrl+C to stop now)." -ForegroundColor Red
+        Write-Host ""
+    }
 
     # A -Skip flag is an operator choice. Recording it lets the scope section
     # file the workload's controls as "not assessed" instead of as data that
@@ -1424,6 +1487,23 @@ if (-not $JsonOnly) {
         } catch { Write-Warning "Improvement plan publish failed: $($_.Exception.Message)" }
     }
 
+    # Multi-page report site (landing page, one page per workload, ActionPlan.csv):
+    # observed configuration, the NRG baseline verdict and the independent comparison
+    # kept apart. A VIEW over the findings: it changes no verdict. Written with every
+    # run that writes reports, into its own folder beside the other files.
+    if (-not $SkipReportSite -and (Get-Command Publish-NRGReportSite -ErrorAction SilentlyContinue)) {
+        $siteDir = Join-Path $OutputPath "$baseName-report"
+        try {
+            $null = Publish-NRGReportSite -Metadata $reportMetadata -Findings $findings -OutputPath $siteDir `
+                -BaselineCompliance $baselineCompliance -Coverage (Get-NRGCoverage) -ScubaResultsPath $ScubaResultsPath
+            Write-NRGReportFile 'Report site (index.html)' (Join-Path $siteDir 'index.html')
+            Write-NRGReportFile 'Action plan (csv)' (Join-Path $siteDir 'ActionPlan.csv')
+            foreach ($f in @(Get-ChildItem -LiteralPath $siteDir -File -ErrorAction SilentlyContinue)) {
+                Set-NRGSensitiveFileAcl -Path $f.FullName -ErrorAction SilentlyContinue
+            }
+        } catch { Write-Warning "Report site publish failed: $($_.Exception.Message)" }
+    }
+
     # Delta report (if baseline provided)
     if ($BaselineResults -and (Test-Path -LiteralPath $BaselineResults) -and (Get-Command Publish-NRGDeltaReport -ErrorAction SilentlyContinue)) {
         $deltaPath = Join-Path $OutputPath "$baseName-delta.md"
@@ -1509,6 +1589,12 @@ Write-Host "================================================================" -F
 Write-Host "  Satisfied      $($s.Satisfied)"                                  -ForegroundColor Green
 Write-Host "  Partial        $($s.Partial)"                                    -ForegroundColor Yellow
 Write-Host "  Gap            $($s.Gap)"                                        -ForegroundColor Red
+if ($s.Gap -gt 0) {
+    try {
+        $gs = Get-NRGGapSummary -Findings $findings
+        Write-Host "                 = $($gs.DistinctDeficiencies) distinct requirement(s) + $(@($gs.NamedViews).Count) named-object view(s) of a control that already reports the shortfall; $($gs.FoldedControls) more control(s) share a setting and are already counted once" -ForegroundColor DarkGray
+    } catch { Write-Verbose "Gap summary skipped: $($_.Exception.Message)" }
+}
 Write-Host "  Not Applicable $($s.NA)"                                         -ForegroundColor DarkGray
 if ($s.Error -gt 0) {
     Write-Host "  Error          $($s.Error) (collector failures — excluded from score)" -ForegroundColor Magenta

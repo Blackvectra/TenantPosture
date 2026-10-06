@@ -1,0 +1,19 @@
+{
+  "_comment": "NRG standards the tool must not invent. EVERY LIST SHIPS EMPTY ON PURPOSE. Until a list is approved, the control that depends on it verifies the components it can and reports the approved-list component as not assessed (never as a pass). Fill in only approved values.",
+  "DmarcReportingAddresses": {
+    "_help": "Addresses or @domains that must appear in every managed domain's DMARC rua (for example the DMARCian address). DNS-1.3.",
+    "Values": []
+  },
+  "CommonAttachmentFileTypes": {
+    "_help": "File extensions (no dot, lower-case) that must be in the malware policy's blocked common-attachment list. DEF-2.3.",
+    "Values": []
+  },
+  "PriorityUsers": {
+    "_help": "User addresses that must be in TargetedUsersToProtect of the anti-phishing policy in force. EXO-1.5.",
+    "Values": []
+  },
+  "RequiredConditionalAccessTemplates": {
+    "_help": "Ids from Config/conditional-access-baseline.json that NRG requires Enforced (for example block-legacy-auth, mfa-all-users). AAD-2.1.",
+    "Values": []
+  }
+}

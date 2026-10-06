@@ -292,7 +292,7 @@ function Get-NRGBaselineCompliance {
     } catch { Write-Verbose "Scope classification unavailable for the baseline view: $($_.Exception.Message)" }
     $bucketOf = @{}
     if ($scope -and $scope.Available) {
-        foreach ($b in @('LicenceBlocked', 'CollectionIncomplete', 'NoProgrammaticCheck', 'ThirdPartyAttested', 'NotApplicableToTenant', 'NotEvaluatedThisMode', 'SkippedByOperator', 'NoResult', 'Errors')) {
+        foreach ($b in @('LicenceBlocked', 'CollectionIncomplete', 'StandardNotApproved', 'NoProgrammaticCheck', 'ThirdPartyAttested', 'NotApplicableToTenant', 'NotEvaluatedThisMode', 'SkippedByOperator', 'NoResult', 'Errors')) {
             foreach ($row in @(Get-NRGObjectField -Item $scope -Key $b -Default @())) {
                 $rid = [string](Get-NRGObjectField -Item $row -Key 'ControlId' -Default '')
                 if ($rid -and -not $bucketOf.ContainsKey($rid)) { $bucketOf[$rid] = @{ Bucket = $b; Reason = [string](Get-NRGObjectField -Item $row -Key 'Reason' -Default '') } }
@@ -454,6 +454,7 @@ function Get-NRGBaselineCompliance {
                     $r.Reason = if ($bucket -and $bucket.Reason) { $bucket.Reason } elseif ($detail) { $detail } else { 'Reported not applicable without a reason the baseline can classify.' }
                     $r.NotVerifiedCause = if ($b -eq 'SkippedByOperator') { 'Skipped by operator' }
                                           elseif ($b -eq 'NoProgrammaticCheck' -or $detail -match 'requires manual verification|manual review required') { 'Manual verification' }
+                                          elseif ($b -eq 'StandardNotApproved') { 'Standard not approved' }
                                           elseif ($detail -match 'was not read|not read\b') { 'Evidence not read' }
                                           # The collector ran and succeeded, but the evaluator still had no
                                           # evidence (a section or a second source, such as the SharePoint
@@ -519,7 +520,27 @@ function Get-NRGBaselineCompliance {
                 } elseif ($devStates -contains 'Gap' -or $devStates -contains 'Partial') {
                     $r.EffectivenessState = 'Ineffective'; $r.EffectivenessDetail = "Endpoint checks $($devIds -join ', ') report failing devices."
                 } elseif (@($devStates | Where-Object { $_ -ne 'Satisfied' }).Count -eq 0) {
-                    $r.EffectivenessState = 'Effective'; $r.EffectivenessDetail = "Endpoint checks $($devIds -join ', ') pass on every device that reported."
+                    # All-pass is only Effective when the results cover the fleet
+                    # and are current. A pass from 3 of 38 devices, or from scans
+                    # months old, says nothing about the fleet today. Coverage
+                    # comes from the endpoint evaluator; results with none (older
+                    # JSON) cannot show completeness.
+                    $covProblems = [System.Collections.Generic.List[string]]::new()
+                    foreach ($d in $devIds) {
+                        if (-not $byControl.ContainsKey($d)) { continue }
+                        $cov = Get-NRGObjectField -Item (& $worst @($byControl[$d])) -Key 'Coverage' -Default $null
+                        if ($null -eq $cov) { $covProblems.Add("$d has no recorded coverage"); continue }
+                        if (-not [bool](Get-NRGObjectField -Item $cov -Key 'Complete' -Default $false)) {
+                            $why = @(Get-NRGObjectField -Item $cov -Key 'Reasons' -Default @()) -join '; '
+                            $covProblems.Add("$d`: $(if ($why) { $why } else { 'coverage incomplete' })")
+                        }
+                    }
+                    if ($covProblems.Count -gt 0) {
+                        $r.EffectivenessState = 'Unknown'
+                        $r.EffectivenessDetail = "Endpoint checks $($devIds -join ', ') pass on the devices that reported, but the results do not cover the fleet or are not current, so effectiveness is not shown: $($covProblems -join ' | ')."
+                    } else {
+                        $r.EffectivenessState = 'Effective'; $r.EffectivenessDetail = "Endpoint checks $($devIds -join ', ') pass on every device in the expected fleet, with current results."
+                    }
                 } else {
                     $r.EffectivenessState = 'Unknown'; $r.EffectivenessDetail = "Endpoint checks $($devIds -join ', ') did not all reach a verdict."
                 }

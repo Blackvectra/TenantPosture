@@ -183,3 +183,30 @@ Describe 'Test-NRGSectionCollected' {
         { Test-NRGSectionCollected ([pscustomobject]@{}) 'A' }       | Should -Not -Throw
     }
 }
+
+Describe 'Wording: not scored is not "does not apply", and application risk is stated per permission' {
+    BeforeAll { $script:Root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path } }
+
+    It 'the executive legend does not say every NotApplicable control does not apply' {
+        $t = Get-Content -LiteralPath (Join-Path $script:Root 'Publishers/Publish-NRGRemediationPlaybook.ps1') -Raw
+        $t | Should -Not -Match 'Control does not apply to this environment'
+        $t | Should -Match 'could not be assessed'
+    }
+    It 'the Markdown summary says not scored is not compliant' {
+        $t = Get-Content -LiteralPath (Join-Path $script:Root 'Publishers/Publish-NRGAssessmentSummary.ps1') -Raw
+        $t | Should -Not -Match 'These controls did not apply to this tenant'
+        $t | Should -Match 'Not scored is not the same as compliant'
+    }
+    It 'application-permission findings do not claim Conditional Access never applies, or that every grant reaches every outcome' {
+        foreach ($f in 'Evaluators/Test-NRGControlAppPermissions.ps1', 'Evaluators/Test-NRGControlAppCredentials.ps1') {
+            $t = Get-Content -LiteralPath (Join-Path $script:Root $f) -Raw
+            $t | Should -Not -Match 'no Conditional Access policy applies to it'
+            $t | Should -Not -Match 'Any one of these can be used to obtain Global Administrator'
+            $t | Should -Not -Match 'confer tenant takeover'
+        }
+    }
+    It 'the MFA-registration risk text does not assert a stolen password alone compromises the account' {
+        $c = (Get-Content -LiteralPath (Join-Path $script:Root 'Config/controls.json') -Raw | ConvertFrom-Json -Depth 10).controls | Where-Object { $_.ControlId -eq 'AAD-12.1' }
+        $c.BusinessRisk | Should -Not -Match 'can be compromised with a stolen password alone'
+    }
+}

@@ -87,6 +87,539 @@
   and a test fails if one does. The GUI shows the `message` field. Outside `/api/`
   (static files, the report site) a refusal is still a plain-text sentence.
 
+- **Review of this release (2026-10-04): failed, truncated or unread evidence no longer produces a
+  clean or failed verdict, and severities match the evidence.** Four reviewers checked the PR head
+  `9eeb60b`; every confirmed defect below has a regression test that fails on that head (61 such
+  failures across `Testing/NRG.Review106CA/DLP/Site.Tests.ps1`,
+  `Email-IR/Testing/NRG.Review106IR.Tests.ps1` and new cases in `NRG.IREntryPoints.Tests.ps1`).
+  - Conditional Access: a policy for "Any device" (`includePlatforms` `all`) is no longer read as
+    limited to some platforms (it had made AAD-1.1 Partial and affected AAD-1.2, 1.3, 11.1 and
+    EXO-1.6); `excludePlatforms` is now collected, and `all` with exclusions is narrowing. AAD-2.1
+    leaves `mfa-admins` / `admin-phish-resistant-mfa` not assessed when the role catalog was not read,
+    instead of scoring them Missing.
+  - DLP and Defender: a failed DLP policy read, or a policy whose Mode is empty or unrecognized,
+    leaves DEF-4.1, DEF-4.2 and PVW-3.4 not assessed instead of a Gap (only `Enable` enforces; only
+    the documented test and off modes are "not enforcing"); test-mode-only DLP is a Gap, never
+    Partial; DEF-2.1 leaves unread accepted domains not assessed instead of a shortfall.
+  - Incident response: an anonymous-IP or travel read derived from a failed recent read is not a
+    successful read; SIGNIN-1.2, 1.3, 1.5 and 1.6 and EMAIL-4.1 no longer conclude "nothing found" from
+    a failed or truncated read (an optional source that stopped at its page cap now makes the dive
+    incomplete); the batch sign-in triage reports a client that was not cleared, failed to sign in
+    or errored as such and exits non-zero (10 critical, then 4, 1, 3). Both real entry points are
+    proven end to end in child processes with every read failing (429) and with truncated reads.
+  - Incident-response reliability: the IP owner lookup reads RDAP fields safely (it failed on every
+    ARIN address) and takes the owner only from the registrant (it had judged a RIPE contact's name);
+    SIGNIN-1.2 is Critical only for a successful anonymous-IP sign-in, SIGNIN-1.6 only for a
+    successful sign-in from another country, EMAIL-4.1 only for an identified app with no publisher
+    name; each distinct reason scores once per user; timestamps are kept as ISO 8601 and parsed with
+    the invariant culture (EMAIL-4.2 threw on a non-US workstation).
+  - Report site: a run with no findings, and a results file with an empty findings list, build an
+    empty site; unscored controls take their category from `Get-NRGAssessmentScope`, so skipped
+    workloads read "skipped by the operator" and get no "re-collect" row; an errored check reads
+    "Not assessed (the check errored)", is counted apart from Gaps and is told to re-run, not to
+    remediate; `-FromResults` keeps `Skipped` coverage on restore.
+  - Items confirmed but left as follow-ups are listed in `docs/KNOWN-ISSUES.md`.
+
+- **The first email assessment on a real mailbox raised two false indicators.** (1) EMAIL-4.1 printed
+  "UNVERIFIED publisher" for every OAuth grant whose app lookup failed; that lookup needs
+  Directory.Read.All, which a delegated user sign-in never has, so Microsoft's own apps were
+  reported as unverified and the finding was Critical. It now says "app not identified" and
+  "publisher not checked", is High until an app is identified, stays Critical only when an identified
+  app holds a write scope, and says how to identify the app. (2) EMAIL-3.1 ranked Microsoft Loop, an
+  Ingram Micro reminder and a LevelUp course as the "most likely phish": a display name saying
+  "Microsoft" from a non-Microsoft domain counted as a strong signal, and the same display name
+  was counted twice (impersonation and brand claim). A display-name claim is now one weak signal;
+  strong signals are urgency wording, a sign-in link to a non-Microsoft host, and a typo-squatted
+  sending domain. Leads resting on a display name alone are still listed (nothing is hidden) but rank
+  below strong leads, are labeled, and make the finding Medium, not a High indicator.
+  `sharepointonline.com` and `microsoft365.com` are Microsoft domains. Six new tests in
+  `NRG.EmailIR.Tests.ps1`, all failing on the old code.
+
+- **A scan started from the web GUI still cannot sign in to Graph (known limitation).** The GUI runs
+  the assessment in a hidden child process and Graph's Windows broker sign-in (WAM) needs a window.
+  A first attempt (`NRG_DISABLE_WAM` plus `Set-MgGraphOption -DisableLoginByWAM`) was removed in the
+  review below: the SDK honors that option only for a custom client id, and the cmdlet writes a
+  settings file to the operator's profile on every call. Run the assessment from a PowerShell window;
+  see `docs/KNOWN-ISSUES.md`.
+
+- **Web GUI, first run on a real workstation.** Two defects showed on screen: a user name typed in
+  the tenant box (`admin@contoso.com`) was refused as "Invalid domain format" and the message did not
+  say what to enter; and the run list showed the incident-response mailbox run (a folder named after
+  a user) as an assessment run. The box now reduces a user name to its domain and the refusal says
+  "Enter the tenant domain, for example contoso.com"; `*-email-results.json` is no longer listed as a
+  run. The server-side domain check is unchanged. The test that starts a real server now seeds an
+  assessment run and a mailbox run and checks the list (it runs only where Pode is installed, so CI
+  skips it; run it locally).
+
+- **SIGNIN-1.4 no longer counts users already reviewed as safe.** The risky-user read removes
+  dismissed and remediated users but not `confirmedSafe`, and the evaluator reported every returned
+  user as "FOUND N risky" (a High Gap) and scored each 15 points: on the first live run one at-risk user
+  appeared as five, and four confirmed-safe users entered the triage ranking. Confirmed-safe,
+  dismissed and remediated users are now listed as "not counted" (named, never silently dropped);
+  an unrecognized risk state stays active (unknown is not safe); only active users are scored and
+  ranked, and a tenant whose only entries were reviewed gets Satisfied. Pinned in
+  `NRG.SignInTriage.Tests.ps1` (two of the four new tests fail on the old evaluator).
+
+- **First live runs of the incident-response entry points.** On the first live run, the account's mailbox
+  reads answered NotFound and the sign-in reads answered BadRequest, and three console lines were
+  misleading or silent: (1) the email assessment printed "Mailbox data collected" while every
+  required mailbox read had failed; it now says "Mailbox data NOT read", names the sources, and
+  states that NotFound likely means the account has no Exchange Online mailbox (unconfirmed);
+  (2) the recent sign-in read (`/auditLogs/signIns` with a long `$select`) was rejected with
+  BadRequest and the whole section was lost; the collector now logs the Graph error body, retries
+  the same window without the property list, and records `SelectFallback` in the data; (3) a
+  failed Graph sign-in printed only the first line of the error; the inner exceptions are now
+  printed with a hint to retry in a new window. Verdicts were already honest (NOT CLEARED); these
+  make the reason visible. Pinned by `NRG.IREntryPoints.Tests.ps1`.
+
+- **ScubaGear alignment corrected from the second independent scan.** EXO-6.1, EXO-7.1 and EXO-7.2
+  read mailbox and inbox-rule forwarding; ScubaGear MS.EXO.1.1v2 reads the remote-domain setting
+  (NRG's EXO-1.3 reads that one), so their relation is now Unsupported ("different requirement,
+  context only") instead of Partial, and the report site no longer lists them as a disagreement.
+  EXO-1.4 (NRG also requires a 2048-bit DKIM key) moves from Equivalent to Partial and DEF-1.2 (NRG
+  also judges recipients covered only by the built-in protection policy) gains a note: both say
+  NRG is stricter than the ScubaGear rule. Verdicts and scores are unchanged.
+
+- **A ScubaGear results file that is not the CSV no longer fails the report site.** The site read
+  `-ScubaResultsPath` only as CSV, so the `ScubaResults_<id>.json` from the same run threw "The
+  property 'Control ID' cannot be found" and the whole site was skipped (found on the first run
+  with a real scan). `Read-NRGScubaResults` now accepts the CSV or the JSON, and a file that is not
+  a ScubaGear result (or has no Control ID / Result) is reported as "ScubaGear results not used"
+  while the site is still built without the comparison. `NRG.ReportSite.Tests.ps1` pins JSON, CSV,
+  a foreign JSON and a CSV without the columns. The same live run exposed a second defect: a
+  relative `-OutputPath` (`.\output\site`) was created by .NET against the shell's start folder,
+  not the current PowerShell location, so the page writes failed; the publisher now resolves the
+  path through the session first (pinned by a test that changes location before publishing).
+
+- **Tor Project host name removed from every shipped file.** The header comment in
+  `Email-IR/Lib/Get-NRGIPThreatIntel.ps1` now says only that the helper calls rdap.org and does no
+  Tor-exit detection; `docs/EDR-TOR-ALERT.md` and `Testing/NRG.NetworkEgress.Tests.ps1` no longer
+  contain the host name (the test builds its pattern from pieces and still fails on any non-comment
+  line that names it). An EDR keyword scan of the folder no longer matches. Behavior is unchanged.
+
+- **The report separates total Gap controls from distinct deficiencies.** 69 Gap controls are not 69
+  exposures. `Get-NRGGapSummary` / `Format-NRGGapSummary` report the scored Gap controls, how many
+  are a named-object view of a control that already reports the shortfall (new `Views` in
+  `Config/control-links.json`: AAD-12.1 of AAD-1.2, EXO-6.4 and EXO-7.4 of EXO-1.2), how many
+  further controls read the same setting as a Gap control and are already counted once, and the
+  distinct requirements left, with the caution that distinct requirements can still share a root
+  cause. The sentence appears on the console, in the Markdown summary and on the report-site
+  landing page; `ActionPlan.csv` gains a "Relationship to other controls" column. Two same-setting
+  pairs the first full run exposed are now linked for scoring so one setting costs once: SPO-1.4 /
+  SPO-3.4 (guest-access expiration) and SPO-2.6 / SPO-2.7 (email attestation); on the first full run's data the Gap
+  count drops from 69 to 67. `NRG.GapSummary.Tests.ps1` pins Total = Distinct + Views and
+  that a view of a control with no shortfall stays distinct.
+
+- **The DEF-4.1 / DEF-4.5 disagreement with ScubaGear is explained: a different standard, not a detection fault.**
+  ScubaGear's raw data from the September 30 scan holds the same DLP policies NRG read (same modes, same "All"
+  locations, no command failed), so the scan did see them. Its rule MS.SECURITYSUITE.3.2v1 is met only when ONE
+  enabled rule, in an Enable-mode policy, matches all three of U.S. Social Security Number, U.S. Individual Taxpayer
+  Identification Number and Credit Card Number, applied to All of each workload. On the tenant, the enforcing PII
+  policy covers all four workloads and matches SSN and ITIN but not credit cards; credit cards are matched only by
+  a policy in test mode, so no rule qualifies and ScubaGear reports every location as not covered. NRG DEF-4.1
+  judges workload coverage by enforcing policies whatever the types, so the two differ on the requirement. The
+  alignment relation for DEF-4.1 is now Partial (it was Equivalent) and both notes say what 3.2 requires.
+
+- **AAD-1.4 / AAD-1.5: report-only is Partial only when the policy is otherwise complete.** Report-only
+  collects evaluation data and enforces nothing. A risk policy in report-only mode is now Partial only when it
+  meets every requirement (AAD-1.5: high user risk; AAD-1.4: high and medium sign-in risk; a responding grant;
+  all users and all applications; no platform, location, device-filter or application-exclusion narrowing) and
+  is a Gap otherwise (absent, disabled, wrong level, wrong grant or narrower scope), with the staged policies
+  named in the Detail. Partial is still a failed baseline requirement. When the Conditional Access list could not
+  be proven complete (`PolicyCompleteness` Failed) and no enforced qualifying policy was read, both controls are
+  Not assessed and filed as a collection gap, never a Gap; results collected before that field existed replay
+  unchanged. The INT-1.1 "Not established: configured non-compliance actions." note now also appears in the
+  Markdown report's control detail and in the remediation playbook (Markdown and HTML), and stays out of the
+  executive summary.
+
+- **INT-1.1's evidence boundary is documented and shown with the control.** The assessment verifies that
+  compliance policies are assigned and cover each enrolled platform; it never reads the configured
+  non-compliance actions, so it cannot prove noncompliant devices lose access. INT-1.1 does not return
+  Satisfied (Gap, Partial or Not assessed; the verified components stay in the Detail), and a test pins
+  every branch. The limit is recorded in `Config/evidence-limits.json` (read by `Get-NRGEvidenceLimitNote`),
+  and the main HTML report (priority actions, roadmap, all findings) and the report site now show "Not
+  established: configured non-compliance actions." wherever INT-1.1 appears. `docs/NRG-DETECTION-LIMITS.md`
+  gains a section for it. Add an entry to the data file in the same change as any new permanent limit.
+
+- **The Tor Project host name no longer appears in shipped source or the Email-IR README.** A client's
+  XDR flagged two evaluator files and a Tor-browser download on the operator's machine on the day the
+  folder was extracted (the tool contacts no Tor host and downloads no executable; a CI test pins
+  that). The only remaining mentions were a removal note in a code comment and the Email-IR README;
+  both now describe the old behavior without the host name, so a keyword scan of the folder finds it
+  only in `docs/EDR-TOR-ALERT.md` and the egress test, which need the literal to do their job.
+
+- **The Conditional Access collector now keeps policies the v1.0 list withholds.** An independent
+  ScubaGear scan of the same tenant (raw Graph data, beta endpoint) listed 17 Conditional Access
+  policies; NRG's two live runs listed 15, with the same states and exclusions on every shared
+  policy. The two it missed were user-risk (risk remediation) policies in report-only mode, so the
+  policy inventory and "every policy's true state" were incomplete, and an ENABLED policy withheld
+  the same way would have produced a false Gap. The collector now reads the beta list in full,
+  projects any policy only it returns with the same code, marks it `Source = 'beta'`, and records
+  `PoliciesOnlyInBeta` and `SectionStatus.PolicyCompleteness`; if the beta list cannot be read the
+  v1.0 policies stay and completeness is `Failed` (not proven complete). AAD-1.4 and AAD-1.5 stay Gap
+  without an enabled risk policy but now name the report-only ones ("Report-only (audit mode, not
+  enforcing): ..."), so an administrator who already has one staged is told to review and enforce
+  it, not that none exists. Everything else shared with the scan matched: all 15 policies' state and
+  exclusion counts, the legacy-auth policy that targets application "None", guest invitations open to
+  everyone, guests at member-level permissions, and no user consent to apps.
+
+- **AAD-6.2 and AAD-6.3 are two independent verdicts; one disabled workflow is one baseline failure.**
+  AAD-6.2 (User Consent to Apps Restricted) had been requiring the admin consent workflow as well as
+  restricted user consent, so a disabled workflow cost two baseline failures (AAD-6.2 Partial and
+  AAD-6.3 Gap) on the first full run. AAD-6.2 now judges only whether users can freely consent
+  (disabled, or limited to low-impact permissions from verified publishers); AAD-6.3 owns the
+  workflow. The workflow appears in the AAD-6.2 Detail as "Related (judged under another control, not
+  part of this verdict)" through a new `-Context` on `Add-NRGExpectedStateFinding`. Catalog
+  description, baseline expected state and notes, the ScubaGear alignment note, the detection-limits
+  table and the tests follow; a matrix test covers restricted/unrestricted consent against workflow
+  enabled/disabled/unread.
+
+- **First full-tenant run (Graph connected): two reader-facing fixes.** (1) The report site showed
+  "Independent scan: Pass" beside an NRG Gap for AAD-12.4, AAD-15.1 and AAD-15.2, although the mapping
+  records ScubaGear's MS.AAD.5.2 as a different requirement; it now says "Different requirement
+  (context only, not compared)" and such a rule is never listed as a disagreement. Same-requirement
+  and overlapping rules (for example DMARC quarantine against reject) are still flagged. (2) EXO-7.2
+  said "2 rule(s) forward to a recipient that could not be resolved" without naming them; it now names
+  each mailbox, rule and unresolved recipient (display name, not the legacy DN) in the Detail and in
+  `AffectedObjects`, so the manual review starts from the rules themselves.
+
+- **A MSAL version already loaded in the window is named as the cause.** After the modules were
+  cleaned up, the next run in the same window still failed Graph with "Method not found ...
+  WithLogging": a different `Microsoft.Identity.Client` was already loaded in that window, and a
+  loaded assembly cannot be replaced. The error never says so. `Get-NRGMsalConflictHint` now prints,
+  beside a Graph or Exchange connect failure of that shape, that a NEW PowerShell 7 window is the
+  only fix. The repair-fallback comment and entry above now give the real cause of the failed first
+  repair: `Uninstall-PSResource` defaults to the current-user scope and the copies were in the
+  all-users folder.
+
+- **`Repair-NRGModuleHealth` now removes a duplicate that the package manager cannot find.** The first
+  live repair removed nothing: `Uninstall-PSResource` answered "version 2.9.1 ... does not exist" for a
+  copy PowerShell 7 still lists and loads (the copy was in the all-users folder and the call searched the current-user scope).
+  When the package manager fails, the repair now removes the exact version folder `Get-Module` reports,
+  but only after `Test-NRGSafeModuleVersionPath` confirms the path is `<PSModulePath entry>\<module>\<version>`
+  for that module and version; any other path keeps the package manager's error. Still opt-in and
+  `-WhatIf`-able, still never called from the assessment path.
+
+- **Report site layout: columns no longer collapse, and a passing control shows what it observed.**
+  The first live view of the site (1637 px wide) broke "Control" into "Con trol" and "Informational"
+  into "Infor mati onal": every cell allowed a break anywhere, so the narrow columns shrank to one
+  character. Identifier, verdict, risk, check type and evidence cells no longer wrap, the prose
+  columns keep a readable minimum width, and the page is wider. The Observed cell was blank for
+  controls whose evaluator left `CurrentValue` empty (20 of 48 passing controls); it now shows the
+  Detail sentence, shortened, with the full text under Evidence. Pinned in `NRG.ReportSite.Tests.ps1`.
+
+- **A OneDrive online-only module is named as the cause, and a run without Graph says so up front.**
+  The first work-computer run failed to connect Graph with "The cloud file provider is not running"
+  (a `Microsoft.Graph.Reports` file in the OneDrive-synced `Documents\PowerShell\Modules` folder
+  was an online-only placeholder and OneDrive was not running). The error named a file, not the
+  cause; `Get-NRGCloudFileHint` now prints the cause and the fix beside the Graph, Teams and
+  SharePoint connect errors. A run that connects Exchange but not Graph now prints, before any
+  collection, that identity, Conditional Access, Intune and application controls will read
+  "not assessed". No verdict logic changed.
+
+- **The report site is built automatically.** Every run that writes reports (and every
+  `-FromResults` republish) now writes `<base>-report/` (landing page, one page per workload,
+  `ActionPlan.csv`) beside the other files; before, it needed a separate `New-NRGReportSite.ps1`
+  command. `-ScubaResultsPath <ScubaResults.csv>` places an independent ScubaGear scan beside the
+  mapped controls (a separate standard, never a score); `-SkipReportSite` turns the site off;
+  `-JsonOnly` still writes only the JSON. The smoke test asserts the site exists after a live run
+  and after a republish. `New-NRGReportSite.ps1` remains for rebuilding from an old results file.
+  Reorganizing the single-page `assessment.html` into the same layout is a separate change.
+
+- **A smoke test that runs the real entry point end to end, and the three defects it found.**
+  `NRG.SmokeRun.Tests.ps1` launches `Invoke-NRGAssessment.ps1` in a fresh process against stand-in
+  Microsoft Graph, Exchange and Teams modules that answer with empty tenants, then republishes the
+  results with `-FromResults` and builds the report site. It asserts a reported result (exit 0 or
+  3), no publisher failure, every `-Skip` flag recorded as Skipped, and no StrictMode failure in
+  the Exceptions array. It found: (1) a failed prerequisite check crashed in the `finally` block
+  with an unrelated "variable has not been set" error because `$skipCollection` was assigned
+  later; (2) the remediation playbook threw on `.Count` when a run had no Partial findings;
+  (3) five Graph policy reads (authentication methods, SSPR, external collaboration, both
+  consent policies) used direct property reads on API objects that may omit them. All fixed, with
+  the playbook case pinned on its own. CI runs it with the rest of `./Testing`.
+
+- **Fixes from the first live run of the updated collectors (NRGTS, 2026-09-30 17:47).** The
+  new evidence arrived: preset exclusion identities (the `careers@` group is excluded from both
+  presets), DLP `BlockAccess` (0 of 2 enforcing rules block), antivirus settings and malware
+  `ZapEnabled` (INT-1.5 and DEF-2.2 now reach a verdict from read values). It also showed two
+  detector defects, both fixed: (1) **a preset rule with no conditions and no exceptions applies
+  to everyone** (Microsoft: empty conditions mean no recipient restrictions), so DEF-2.1 no
+  longer reports the scope as unknown when the collector read the exception fields; it now
+  reports the excluded group as an exception. An older result without those fields still says
+  not established. (2) **DLP**: a workload named on a policy was taken as the workload covered,
+  although the policy may be scoped to a few mailboxes, sites or teams (ScubaGear said the
+  sensitive-information policy was not applied to Exchange, OneDrive, SharePoint or Teams); the
+  collector now stores each workload's location scope (`Get-NRGDlpLocationScope`) and DEF-4.1
+  requires whole-workload scope (All, no exclusions) and says so, or says it could not tell. The
+  HIPAA rule returned no sensitive information types because template rules nest them under
+  groups; `Get-NRGDlpSensitiveTypeNames` now reads flat and grouped shapes (the grouped shape
+  is unverified live until the next run).
+
+- **A multi-page report site, organized the way an assessor navigates, built from existing results.**
+  `New-NRGReportSite.ps1 -ResultsPath <results.json> -OutputPath <folder> [-ScubaResultsPath
+  ScubaResults.csv]` (connects to nothing) writes a landing page (tenant identity, run time, tool
+  and baseline versions, workload summaries with links, limitations kept distinct), one page per
+  workload grouped by security topic, and `ActionPlan.csv`. Each control row keeps requirement,
+  observed configuration, NRG verdict and the independent comparison apart; requirement strength
+  (SHALL/SHOULD, from the mapped ScubaGear rule) apart from risk severity; and the Automated /
+  Manual / Declaration badge apart from the verdict. Evidence, exclusions, affected objects and the
+  limitation (collection failure, licensing, manual check, operator declaration, unapproved NRG
+  standard) are expandable. A difference from the independent scan is listed as something to
+  investigate, never as a score. The action plan carries owner, target date, resolution status and
+  evidence columns (blank to fill) and neutralizes spreadsheet formulas. Self-contained (no script,
+  no external asset), NRG-branded, no finding changed. Verified on the real NRGTS results: all 249
+  findings, their text and verdict counts are present. `NRG.ReportSite.Tests.ps1` pins it.
+
+- **SCuBA citations re-checked against ScubaGear 2.0.0 and its official migration file.**
+  14 of the rule ids NRG cited no longer existed in ScubaGear 2.0.0 (3 version renames, 11
+  Defender-era ids that became `MS.SECURITYSUITE.*`). `Config/scuba-alignment.json` records, for
+  every citation, the current id, the relation (Equivalent 27 / Partial 42 / Manual 3 /
+  Unsupported 15), the rule's SHALL/SHOULD strength and the versions checked (ScubaGear 2.0.0,
+  the migration file's SHA-256); `docs/NRG-SCUBA-ALIGNMENT.md` explains each and lists the 55
+  ScubaGear rules no NRG control is aligned to. **A migrated citation does not establish
+  equivalence**: where the migration maps a rule to a range or to nothing, the rule the evaluator
+  actually covers was chosen per requirement, and 9 obsolete references with no equivalent were
+  removed while NRG's independent controls stay (DEF-1.3, DEF-2.1, DEF-2.6, DEF-4.3, DEF-4.4,
+  EXO-3.5, EXO-4.1, EXO-4.4, PVW-4.1). The bundled authoritative id list is now
+  `scuba-ids-v2.0.0.txt`. `NRG.ScubaAlignment.Tests.ps1` keeps controls.json and the alignment in
+  step. No verdict changes; 78 of 204 controls now cite a SCuBA rule (was 87).
+
+- **Coverage is judged on who is protected, not on which policies exist.** Found by running an
+  independent ScubaGear scan on the same tenant and replaying the current code against the stored
+  NRG results. Reproduced and fixed: (1) **Conditional Access exclusions were ignored**: AAD-1.1,
+  AAD-11.1, AAD-1.2 and AAD-1.3 passed a policy that excluded users, and AAD-11.1 passed
+  one scoped to some users, applications or conditions. They now judge combined coverage
+  (`Get-NRGExclusionCoverage` / `Get-NRGCAEffectiveCoverage`): a policy must cover all users and
+  all applications with no extra condition to count; an exclusion is not a gap when another
+  qualifying policy covers those users, is reported as an exception when the same principals are
+  excluded from every qualifying policy, and is unproven (not assessed) when different policies
+  exclude different groups whose membership is not resolved. AAD-1.3 also requires a role-scoped
+  policy to cover every privileged role in this tenant's own role catalog (not assessed when the
+  catalog was not read). MFA registration, MFA enforcement and phishing resistance stay three
+  separate judgments; phishing resistance comes from the strength's allowed methods, never from
+  a policy name. (2) **DEF-2.1 said "preset turned on" without asking who it covers**: it now
+  judges recipient scope, exclusions (the collector now stores their identities) and fallback
+  across Standard and Strict combined. (3) **DLP counted policies in test mode**: DEF-4.1, DEF-4.2
+  and PVW-3.4 credited workloads and sensitive information types from a policy in
+  `TestWithNotifications`; only enforcing policies (Mode Enable) count now, test-mode ones are
+  reported, and whether rules block is stated only as far as `BlockAccess` was read
+  (`Get-NRGDlpRuleStates`). `NRG.CoverageTruth.Tests.ps1` pins all of it with sanitized fixtures.
+  Observed configuration, baseline judgment and independent comparison are kept apart: the
+  verdict is NRG's baseline; an independent scan is evidence to challenge it, never a target.
+
+- **AAD-1.1 no longer credits a legacy-authentication block that applies to no application.**
+  Found by comparing a ScubaGear 2.0.0 run with NRG on the same tenant: a policy with all
+  users, the `other` client type and a block grant but an application scope of `None`
+  blocks nothing, yet was named as the blocker. AAD-1.1, the legacy-block test EXO-1.6 relies
+  on, and AAD-2.1's legacy-auth track now require the policy to cover all applications too;
+  one scoped to some users, groups or applications is Partial. A Satisfied also says when every
+  qualifying policy excludes a user or group.
+
+- **The seven "Satisfied with limits" controls now judge every component.** AAD-6.2 (user
+  consent; since corrected, see the AAD-6.2 / AAD-6.3 entry above), AAD-2.1 (the approved Conditional Access template
+  set), DEF-2.2 (malware ZAP beside spam and phishing), DEF-2.3 (the approved blocked-type
+  list), DNS-1.3 (the approved DMARC reporting address), EXO-1.5 (approved priority users) and
+  INT-1.5 (real-time, cloud-delivered and PUA settings read from the antivirus policy) share
+  one verdict helper, `Add-NRGExpectedStateFinding`: an established shortfall is always
+  reported, an unestablished component leaves the control not assessed with the verified
+  parts in the Detail, and Satisfied needs every component. NRG standards live in
+  `Config/nrg-standards.json` (`Get-NRGStandards`) and **ship empty**; the tool does not invent
+  them. A control waiting on one is filed under the new scope bucket `StandardNotApproved`
+  ("verified in part") and baseline reason code `StandardNotApproved`, not under "data did not
+  collect". A lower score from this is the tool being honest, not a regression. Also: the
+  baseline reason for a Partial now shows its shortfall and for an unread verdict what was
+  not established (it showed the verified half); the XLSX workbook now carries each finding's
+  Detail (it computed the column and dropped it); EXO-1.6 states that a password being accepted
+  is not established while Exchange authentication policies are unread.
+  `NRG.ComponentVerdicts.Tests.ps1` and `NRG.OutputParity.Tests.ps1` (one verdict and its
+  limitation must read the same in the JSON, HTML, Markdown and workbook) pin these.
+
+- **Review of Satisfied baseline controls against their expected state; detection limits documented.**
+  `docs/NRG-DETECTION-LIMITS.md` states, per control, what a verdict proves and what it does
+  not (seven Satisfied controls verify less than their expected state; four NRG standards the
+  tool does not know are named). Fixes from the review: policies-in-force judgment read an
+  EMPTY rule list as "rules not collected" and kept every custom policy in force, including
+  ones that apply to nobody (17 evaluators; `Get-NRGRuleList` keeps an empty collected list
+  distinct from an unread one); DEF-2.3 is now judged over the malware policies in force
+  (the collector also reads the malware filter rules) instead of "any policy has the filter
+  on"; INT-1.1 checks an assigned compliance policy per enrolled platform (a Windows policy
+  no longer covers iOS) and does not credit the non-compliance action, which is not read.
+
+- **EXO-1.6 no longer equates SMTP AUTH with passwords; INT-2.2 reads ASR rule modes.**
+  SMTP AUTH carries OAuth as well as passwords and a mailbox can override an
+  organization-level disable, so EXO-1.6 now judges password availability from the
+  SMTP AUTH switch plus its per-mailbox overrides plus the tenant's legacy-authentication
+  block (`Get-NRGLegacyAuthBlockState`): Satisfied when the block is in place or SMTP is
+  closed with no override, Partial when SMTP is available and nothing blocks passwords
+  (authentication policies are not read, and it says so), not assessed when the evidence
+  is missing. INT-2.2's collector now reads each assigned ASR policy's rule modes
+  (Settings Catalog settings, parsed generically; an unrecognized mode is Unknown, never
+  Block) and judges them against `Config/asr-required-rules.json`, which ships empty until
+  an NRG required-rule list is approved; with no list the modes are reported and the
+  rule-set half stays not assessed. The settings shape is parsed from documented
+  Settings Catalog structure and is unverified against a live tenant.
+
+- **Baseline evidence checks now verify the whole expected state.** A control is
+  Satisfied only when every mandatory component is supported; an established
+  shortfall is Partial, a component that cannot be read is not assessed, and each
+  verified half stays in the Detail. EXO-1.6: OAuth on AND SMTP AUTH disabled
+  organization-wide (OAuth alone is now Partial or not assessed). EXO-1.1: the
+  auditing switch AND no account in the audit bypass list (the EXO-6.3 evidence).
+  DEF-3.4 and EXO-3.3: recipients exist AND at least one is a configured NRG
+  monitoring address; the address list comes from `-MonitoringAddress`, the client's
+  `MonitoringAddresses` in `Config/clients.json`, or `MonitoringAddresses` in
+  `Config/branding.psd1` (entries are an address or `@domain`; none is hardcoded),
+  and with no list the routing half is reported as not assessed. INT-2.2: an
+  assigned ASR policy verifies existence only; the rule set and Block mode are not
+  read, so it reports not assessed instead of Satisfied (listed in
+  `Config/coverage-exceptions.psd1` as `ImplementationPending`). These lower the
+  Standard baseline's Satisfied count on the same tenant by design. The IR entry
+  points document exit-code precedence (4 fatal, 10 Critical, 3 incomplete,
+  2 no findings, 0 complete): incomplete now outranks "no findings", the triage
+  console's per-dive "complete" uses the same combined health decision as the JSON,
+  and a Critical beside incomplete evidence says both in the report.
+
+- **Completeness contract for the incident-response entry points, proved by running them.**
+  `Email-IR/Testing/NRG.IREntryPoints.Tests.ps1` launches the real
+  `Invoke-NRGEmailAssessment.ps1` and `Invoke-NRGSignInTriage.ps1` in fresh child
+  processes against a stub Microsoft Graph module and asserts the verdict, the JSON
+  health block, the HTML and Markdown wording, report generation and the exit code
+  for complete benign evidence, a failed required read, a read that stopped at its
+  page cap, a required evaluator that throws (by fault injection into a copy of
+  the tool) and two flagged users. Running them found three defects the in-process
+  suite could not: both entry points threw right after the module loaded
+  (`$script:NRGAssessmentVersion` is not set in script scope; the module exports
+  `$NRGAssessmentVersion`), the inbox-rule evaluator threw on any real rule that
+  did not carry every action property (Graph omits unset ones), and the
+  mailbox-settings read threw on absent settings. Health now covers evaluation as
+  well as collection: a required evaluator that throws or is missing, or a dive
+  step that did not finish, is recorded (`EvaluatorFailures`, per-dive `Failures`),
+  makes the run NOT CLEARED and exits 3, in both entry points. The standalone
+  email report takes its verdict from health as well as severity, and no longer
+  says "LIKELY COMPROMISED" for a Critical (it is "CRITICAL INDICATORS —
+  INVESTIGATE", stated as heuristic). The sign-in collector's coverage record now
+  uses the same completeness helper as the report, so anonymous-IP truncation
+  cannot read "Collected" beside an incomplete conclusion. Known limitation kept
+  explicit: same-domain inbox-rule forwarding is judged against the mailbox's own
+  domain only, so forwarding between two domains of one organization can still be
+  flagged for review until accepted-domain evidence is read.
+
+- **Remaining incident-response audit findings (A03, A05, A06, A07, A10) and two review gaps.**
+  A07: an IP lookup that failed or returned no owner is `Failed` / `NoOwnerData`,
+  never a clean negative; SIGNIN-1.5 is not assessed when no lookup completed, is
+  not cleared when some failed, says how many resolved, and describes a
+  registrant-name match as context, not a malicious-IP verdict; failed lookups
+  are no longer cached. A06: inbox rules are scored on what they do (hidden name,
+  forwarding to a different domain, no filter, delete), a folder move or
+  same-domain forward is routine, and a disabled rule is kept as historical
+  evidence (Medium), never current persistence. A05: failed-then-success counts
+  credential failures only (wrong password, smart lockout), ignores unknown
+  status, and grades confidence by how the success source lines up with the
+  failure sources (same address / same /24 / different source); it is called a
+  suspicious correlation, not a successful attack. A03: anonymous-IP, sent,
+  inbox, recoverable and consent reads record `Truncated` (next link or page cap
+  left) and the range observed; a required source that stopped at its cap makes
+  the deep-dive evidence incomplete, so the verdict is not cleared; mailbox and
+  user-security coverage is registered at the end from what completed. A10:
+  phishing candidates are leads, a deletion in Recoverable Items adds a little
+  rank and never names who deleted it and cannot qualify a message alone,
+  brands (DocuSign, Adobe, Dropbox) are judged against their own domains,
+  internal senders are kept as lower-confidence leads, and every result states
+  the folders, window, completeness and that links come from the preview only.
+  R1: AAD-12.1's finding no longer says "one stolen password away from a full
+  mailbox compromise". R2: a result dated beyond a 15-minute clock-skew allowance
+  in the future is not a current endpoint result. Not done: recent sign-ins are
+  not re-ordered newest-first (the Graph `$orderby` support was not verified),
+  and none of this has had a controlled live run.
+
+- **Second review pass.** Endpoint completeness now also requires a usable,
+  unique identity for every managed Windows device: an unnamed device, two
+  devices sharing a short host name, or two result files sharing one leave
+  coverage unproven, and inventory names that do not account for every managed
+  Windows device are not Complete. Wording: the executive legend and Markdown
+  summary no longer say every not-scored control "does not apply" (some could
+  not be assessed); AAD-12.1 no longer asserts a stolen password alone
+  compromises an account it may be covered by policy for; and the
+  application-permission findings state the risk per permission and say
+  Conditional Access reaches an app only through a workload-identity policy on
+  an eligible single-tenant service principal, instead of "no Conditional
+  Access applies".
+
+- **Review fixes on the accuracy PR.** Endpoint completeness is now judged by
+  device identity, not count: the Intune collector records the managed Windows
+  device names, and a fleet is Complete only when every one has a current
+  result (a current result for a removed machine no longer stands in for a
+  missing one; without names it is never Complete). `Get-NRGControlStatus`
+  reports an `Error` finding as Not assessed, not Open. The email assessment's
+  attribution fallback uses the requested mailbox.
+
+- **`Get-NRGControlStatus.ps1`: check tickets against a results file.** Give it
+  control IDs (`AAD-1.4`) and/or workload prefixes (`TMS`) and a results JSON;
+  it says per control whether the configuration is In place, Open, Partly in
+  place, Not assessed (with the reason: unlicensed, third-party EDR, manual,
+  could not be read) or No result. Only Satisfied is "In place"; a control the
+  run could not assess is never reported as fixed. Reads the results file and
+  `Config/controls.json` only. `-ControlIdFile` and `-OutputPath` (CSV) are
+  supported. `Get-NRGControlStatus` is the exported function behind it.
+
+- **Detection accuracy: whose activity, what evidence, how complete.** From an
+  independent source audit of `main`. (1) Both incident-response entry points
+  called `Get-NRGRawData -AllKeys`, a parameter that does not exist, so each
+  stopped after all collection and evaluation and before any report; the suite
+  stayed green because no test launches those scripts.
+  `NRG.CallBinding.Tests.ps1` now parses every repo script and checks that each
+  call to a module-defined function names only parameters it has. (2) Sign-in
+  triage could say "Tenant looks clean" when reads had failed or stopped at the
+  event cap: SIGNIN-2.1 is now "Not cleared" without complete reads, the report
+  verdict is `NOT CLEARED — EVIDENCE INCOMPLETE` rather than the green one, and
+  the collector registers coverage from what completed instead of `Collected`
+  before any query ran. (3) Any Critical finding rendered as `CONFIRMED
+  COMPROMISE`; it is now `CRITICAL INDICATORS — INVESTIGATE` and says it is
+  heuristic. (4) Flagged-IP scoring (SIGNIN-1.5) tracked success per IP, so on a
+  shared address one user's success scored users who only failed; it is now per
+  user, and the detail shows users seen and users who succeeded. (5) Triage
+  deep-dive findings carried no account and the JSON kept only the last user's
+  mailbox data; findings are now tagged with the account and an Evidence
+  summary, the JSON carries a `DeepDives` record per user, and a failed dive
+  makes the verdict not cleared. (6) An all-pass endpoint result could be
+  labeled Effective from stale scans or a fraction of the fleet; results older
+  than 8 days (or with no readable date) are no longer counted, each endpoint
+  finding records `Coverage` (verdicts, could-not-run, stale, expected fleet
+  from Intune), and Effective requires complete, current coverage. Results with
+  no recorded coverage read Unknown. Tests: `NRG.CallBinding`, `NRG.SignInHonesty`,
+  `NRG.DeviceEvidence`, plus additions to `NRG.SignInTriage`.
+
+- **GUI error responses carried Pode's HTML error page, not the body the
+  handler wrote.** `POST /api/scan` (400 `domain is required` / `invalid
+  domain format`), `GET /api/scan/:id/status` (404 `unknown runId`) and
+  `GET /api/runs/:tenant/:id/report` (400 `Invalid path segment.` / 404
+  `Report not found.`) called `Set-PodeResponseStatus` and then
+  `Write-PodeJsonResponse` / `Write-PodeTextResponse`.
+  `Set-PodeResponseStatus` renders Pode's error page immediately, so the
+  client received the right status and content type and a body of the page's
+  first N bytes (N = the handler body's length): `<html
+  style='background-color: #0`. The UI shows the scan body verbatim, so the
+  operator read "Could not start scan: <html style=...". The status now
+  rides on the write (`-StatusCode`) on all five paths. Pinned by new
+  assertions in the live-server context of `NRG.WebServer.Tests.ps1`, which
+  boots a real server (Pode 2.10+ required; skipped where it is absent) and
+  checks status, content type and the body: JSON with the expected `error`
+  for the scan routes, the exact handler text for the report route (its 400
+  is reached with an encoded backslash, `%5C`); each fails against the old
+  handlers. No tenant call is made, the server stays loopback-only, and no
+  scan is started.
+
+- **`Invoke-NRGBatchAssessment.ps1` could not start.** It declared
+  `[CmdletBinding(SupportsShouldProcess)]` and its own `[switch] $WhatIf`;
+  PowerShell adds `-WhatIf` itself for `SupportsShouldProcess`, so every
+  invocation, `-WhatIf` included, failed at binding with "A parameter with
+  the name 'WhatIf' was defined multiple times". It is now
+  `[CmdletBinding()]`; the script's own `-WhatIf` (list the clients and
+  exit) is unchanged, and the unused `-Confirm` goes with it. Found in #107.
+  `NRG.Security.Tests.ps1` now fails on any script or function that declares
+  `WhatIf`/`Confirm` beside `SupportsShouldProcess`, and reads the batch
+  runner's parameter metadata.
+
 - **Defects found by the first live baseline validation (NRGTS, 2026-09-29),
   fixed without touching a single verdict.** DNS collection ran only inside
   the Exchange branch of the entry point, so an Exchange connection failure
@@ -1761,9 +2294,9 @@ Patch release closing the correctness sweep defined in `docs/CORRECTNESS-SWEEP-v
 
 ### Security / privacy
 
-- **`.gitignore` now excludes `output/`.** NRG had the same gap as NLS (only `Reports/` was excluded); NRG never had real client data committed because the port excluded `output/` at copy time, but future `Invoke-NRGAssessment` runs would have started tracking output files.
+- **`.gitignore` now excludes `output/`.** NRG had the same gap as NLS (only `Reports/` was excluded); future `Invoke-NRGAssessment` runs would have started tracking output files. (Correction, 2026-10-04: this entry said NRG never had real client data committed. That was wrong: client assessment output was uploaded to `output/` on 2026-05-12 and 2026-05-18, removed from the tree on 2026-05-19 and 2026-05-26, and remains in git history.)
 - **Sample HTML sanitization.** `sample-report/example-assessment.html` had 7 occurrences of real personal domain `mattlevorson.com` (secondary domain on the source tenant) and 2 admin display names rendered as `NRG Technology Services / NextLayerSec LLC` (collision from `Matthew Levorson → NRG Technology Services / NextLayerSec LLC` sanitization). Replaced with `example2.com` / `Admin 2` / `Admin 3`.
-- **Branding/PII leaks** in initial NRG port surfaced and fixed: NRG phone number in `branding.psd1`, "North Dakota" geographic identifier in CLAUDE.md, real client names NDACo / Dunn County in sample configs.
+- **Branding/PII leaks** in initial NRG port surfaced and fixed: NRG phone number in `branding.psd1`, "North Dakota" geographic identifier in CLAUDE.md, real client names in sample configs.
 
 ### Release engineering
 

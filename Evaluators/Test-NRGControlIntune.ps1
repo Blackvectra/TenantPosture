@@ -75,8 +75,40 @@ function Test-NRGControlIntune {
         $all = @($d.CompliancePolicies)
         $assigned = @(Select-NRGAssignedPolicies $all)
         if ($assigned.Count -gt 0) {
-            Add-NRGFinding -ControlId 'INT-1.1' -State 'Satisfied' -Category 'Endpoint' -Title $c.Title -Severity 'Informational' -FrameworkIds (& $cit 'INT-1.1') `
-                -CurrentValue "$($assigned.Count) assigned compliance policy(ies)" -RequiredValue 'At least one assigned compliance policy'
+            # The expected state is an assigned compliance policy PER enrolled platform,
+            # each with a non-compliance action. One assigned policy covers one platform,
+            # not the fleet, so coverage is judged per platform from the enrolled-device
+            # counts; the non-compliance action is not read, so it is never credited.
+            $plats = @(
+                @{ Name = 'Windows'; Device = '^Windows';     Policy = '(?i)windows' }
+                @{ Name = 'iOS/iPadOS'; Device = '^(iOS|iPadOS)'; Policy = '(?i)\bios|ipados' }
+                @{ Name = 'Android'; Device = '^Android';     Policy = '(?i)android' }
+                @{ Name = 'macOS'; Device = '^macOS';         Policy = '(?i)macos' }
+            )
+            $unread = $null -eq (Get-NRGEnrolledPlatformCount -Raw $dc -Pattern '.')
+            $covered = @(); $uncovered = @()
+            if (-not $unread) {
+                foreach ($pl in $plats) {
+                    $n = [int](Get-NRGEnrolledPlatformCount -Raw $dc -Pattern $pl.Device)
+                    if ($n -le 0) { continue }
+                    $has = @($assigned | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'Platform' -Default '') -match $pl.Policy }).Count -gt 0
+                    if ($has) { $covered += "$($pl.Name) ($n device(s))" } else { $uncovered += "$($pl.Name) ($n device(s))" }
+                }
+            }
+            $verified = "Verified: $($assigned.Count) assigned compliance policy(ies)."
+            if ($unread) {
+                Add-NRGFinding -ControlId 'INT-1.1' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.1') `
+                    -Detail "$verified Not assessed: whether every enrolled platform has one, because the enrolled-device platform counts were not read; and each policy's non-compliance action is not read." `
+                    -CurrentValue "$($assigned.Count) assigned compliance policy(ies); platform coverage not read" -RequiredValue 'An assigned compliance policy per enrolled platform, each with a non-compliance action'
+            } elseif ($uncovered.Count -gt 0) {
+                Add-NRGFinding -ControlId 'INT-1.1' -State 'Partial' -Category 'Endpoint' -Title $c.Title -Severity 'Medium' -FrameworkIds (& $cit 'INT-1.1') `
+                    -Detail "$verified$(if ($covered.Count) { " Covered: $($covered -join ', ')." }) Shortfall: no assigned compliance policy for $($uncovered -join ', '), so those devices are not held to any baseline." `
+                    -CurrentValue "Covered: $($covered -join ', '); not covered: $($uncovered -join ', ')" -RequiredValue 'An assigned compliance policy per enrolled platform, each with a non-compliance action' -Remediation $c.Remediation
+            } else {
+                Add-NRGFinding -ControlId 'INT-1.1' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.1') `
+                    -Detail "$verified Every enrolled platform has an assigned compliance policy ($($covered -join ', ')). Not assessed: each policy's non-compliance action; it is not read, so the action half of the requirement is not established." `
+                    -CurrentValue "Platforms covered: $($covered -join ', '); non-compliance action not read" -RequiredValue 'An assigned compliance policy per enrolled platform, each with a non-compliance action'
+            }
         } else {
             $why = if ($all.Count) { "$($all.Count) compliance policy(ies) exist but none is assigned to any user or device." } else { 'No device compliance policies configured.' }
             Add-NRGFinding -ControlId 'INT-1.1' -State 'Gap' -Category 'Endpoint' -Title $c.Title -Severity $c.Severity -FrameworkIds (& $cit 'INT-1.1') `
@@ -182,8 +214,31 @@ function Test-NRGControlIntune {
     } elseif ($c) {
         $av = @(Select-NRGAssignedPolicies @($d.EndpointSecurityPolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'TemplateType') -eq 'Antivirus' }))
         if ($av.Count -gt 0) {
-            Add-NRGFinding -ControlId 'INT-1.5' -State 'Satisfied' -Category 'Endpoint' -Title $c.Title -Severity 'Informational' -FrameworkIds (& $cit 'INT-1.5') `
-                -Detail "$($av.Count) assigned Microsoft Defender Antivirus policy(ies)." -CurrentValue "$($av.Count) AV policies assigned"
+            # The expected state is that an assigned policy CONFIGURES Defender Antivirus:
+            # real-time protection, cloud-delivered protection and PUA protection. The
+            # policy existing is verified; the settings come from the collector's read.
+            $read = @($av | Where-Object { (Get-NRGObjectField -Item $_ -Key 'AvSettingsStatus' -Default '') -eq 'Read' })
+            $maps = @($read | ForEach-Object { Get-NRGObjectField -Item $_ -Key 'AvSettings' -Default $null } | Where-Object { $null -ne $_ })
+            $verified = @("$($av.Count) assigned Microsoft Defender Antivirus policy(ies).")
+            $short = @(); $unknown = @()
+            if ($read.Count -lt $av.Count) {
+                $unknown += "the antivirus settings of $($av.Count - $read.Count) of $($av.Count) assigned policy(ies) could not be read, so real-time, cloud-delivered and PUA protection are not established."
+            }
+            if ($maps.Count -gt 0) {
+                $label = @{ RealTimeProtection = 'Real-time protection'; CloudProtection = 'Cloud-delivered protection'; PuaProtection = 'PUA protection' }
+                foreach ($row in @(Test-NRGAvSettingSet -SettingMaps $maps)) {
+                    $l = $label[$row.Setting]
+                    switch -Wildcard ($row.Value) {
+                        'On'            { $verified += "$l is on."; break }
+                        'Audit'         { $short += "$l is in audit mode only."; break }
+                        'Off'           { $short += "$l is turned off."; break }
+                        'NotConfigured' { if ($read.Count -eq $av.Count) { $unknown += "$l is not set by any assigned policy (the platform default may apply; the policy does not establish it)." }; break }
+                        default         { $unknown += "$l has a value this tool does not recognize ($($row.Value))." }
+                    }
+                }
+            }
+            Add-NRGExpectedStateFinding -ControlId 'INT-1.5' -Control $c -FrameworkIds (& $cit 'INT-1.5') -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+                -CurrentValue "$($av.Count) AV policies assigned" -RequiredValue 'An assigned Defender Antivirus policy with real-time, cloud-delivered and PUA protection on'
         } else {
             Add-NRGFinding -ControlId 'INT-1.5' -State 'Gap' -Category 'Endpoint' -Title $c.Title -Severity $c.Severity -FrameworkIds (& $cit 'INT-1.5') `
                 -Detail 'No assigned Microsoft Defender Antivirus policy in Intune endpoint security. Devices have no managed antivirus configuration baseline.' -Remediation $c.Remediation
@@ -294,7 +349,42 @@ function Test-NRGControlIntuneASR {
     }
     $st = Get-NRGIntuneBucketState -Raw $int -Section 'ASRPolicies'
     if ($st.Assigned.Count -gt 0) {
-        Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($st.Assigned.Count) assigned Attack Surface Reduction Rules policy(ies).$($st.Note) (Whether each rule is in Block rather than Audit mode is not read.)"
+        # The expected state is the approved NRG ASR rule set, every rule in Block
+        # mode. The policy existing is verified; the rule modes come from the settings
+        # read (collector), and the REQUIRED list is an operator-approved file that
+        # ships empty. Nothing is inferred: an unread mode is unknown, never Block.
+        $asrPolicies = @($st.Assigned)
+        $read   = @($asrPolicies | Where-Object { (Get-NRGObjectField -Item $_ -Key 'AsrSettingsStatus' -Default '') -eq 'Read' })
+        $modeMaps = @($read | ForEach-Object { Get-NRGObjectField -Item $_ -Key 'AsrRuleModes' -Default $null } | Where-Object { $null -ne $_ })
+        $allModes = @($modeMaps | ForEach-Object { @($_.Values) })
+        $modeSummary = if ($allModes.Count -gt 0) { ($allModes | Group-Object | Sort-Object Name | ForEach-Object { "$($_.Count) in $($_.Name)" }) -join ', ' } else { '' }
+        $required = @(Get-NRGAsrRequiredRules)
+        $verified = "Verified: $($st.Assigned.Count) assigned Attack Surface Reduction Rules policy(ies).$($st.Note)"
+        if ($read.Count -lt $asrPolicies.Count) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+                -Detail "$verified Not assessed: the rule settings of $($asrPolicies.Count - $read.Count) of $($asrPolicies.Count) assigned policy(ies) could not be read, so which rules are configured and in what mode is not established.$(if ($modeSummary) { " Read so far: $modeSummary." })" `
+                -CurrentValue "$($st.Assigned.Count) assigned ASR policy(ies); rule settings not fully read" `
+                -RequiredValue 'The approved NRG ASR rule set with every rule in Block mode'
+        } elseif ($required.Count -eq 0) {
+            Add-NRGFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+                -Detail "$verified Rule modes read: $(if ($modeSummary) { $modeSummary } else { 'no ASR rule settings found in the assigned policies' }). Not assessed: whether the approved NRG rule set is in Block mode, because no required rule list is approved (Config/asr-required-rules.json is empty)." `
+                -CurrentValue "$($st.Assigned.Count) assigned ASR policy(ies); $(if ($modeSummary) { $modeSummary } else { 'no rule settings found' })" `
+                -RequiredValue 'The approved NRG ASR rule set with every rule in Block mode'
+        } else {
+            $judge = Test-NRGAsrRuleSet -RuleModeMaps $modeMaps -Required $required
+            if ($judge.NotBlock.Count -eq 0) {
+                Add-NRGFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+                    -Detail "All $($judge.Required) required ASR rule(s) are in Block mode in the assigned policy(ies).$($st.Note)"
+            } else {
+                $list = ($judge.NotBlock | ForEach-Object { "$($_.Name) ($($_.Mode))" }) -join '; '
+                $state = if ($judge.Blocking -gt 0) { 'Partial' } else { 'Gap' }
+                Add-NRGFinding -ControlId $cid -State $state -Category $ctrl.Category -Title $ctrl.Title -Severity $(if ($state -eq 'Gap') { $ctrl.Severity } else { 'Medium' }) -FrameworkIds $cit `
+                    -Detail "$verified Shortfall: $($judge.Required - $judge.Blocking) of $($judge.Required) required ASR rule(s) are not in Block mode: $list." `
+                    -CurrentValue "$($judge.Blocking) of $($judge.Required) required rules in Block mode" `
+                    -RequiredValue 'Every approved NRG ASR rule in Block mode' -Remediation $ctrl.Remediation `
+                    -AffectedObjects @($judge.NotBlock | ForEach-Object { [ordered]@{ Rule = $_.Name; Mode = $_.Mode } })
+            }
+        }
     } else {
         Add-NRGFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "No assigned Attack Surface Reduction Rules policy in Intune (Device Control, Exploit Protection and other templates in the same family are not ASR rules).$($st.Note) ASR rules block commodity malware delivery such as Office macro abuse and credential theft." -Remediation $ctrl.Remediation
     }

@@ -231,17 +231,20 @@ function Test-NRGControlAADMFA {
             -Remediation 'Create a Conditional Access policy requiring MFA (or an authentication strength) for All users on All cloud apps, excluding only break-glass accounts. Stage it in report-only first.'
         return
     }
-    $names = ($enforcing | ForEach-Object { $_.DisplayName } | Select-Object -First 3) -join ', '
-    if ($unregisteredCnt -eq 0) {
-        Add-NRGFinding -ControlId 'AAD-1.2' -State 'Satisfied' -Category 'Identity' -Title 'MFA Required for All Users' -Severity 'Critical' -FrameworkIds $cit `
-            -CurrentValue "MFA required by: $names. 100% registered ($totalEnabled/$totalEnabled enabled members)." -RequiredValue $req
-    } else {
-        # Enforced, but unregistered users will be asked to register at their
-        # next sign-in — whoever holds the password then enrolls the second
-        # factor. Part-way, and not a lock-out.
-        Add-NRGFinding -ControlId 'AAD-1.2' -State 'Partial' -Category 'Identity' -Title 'MFA Required for All Users' -Severity 'Critical' -FrameworkIds $cit `
-            -Detail "MFA is required ($names), but $unregisteredCnt of $totalEnabled enabled member(s) have not registered a method. They will be asked to register at their next sign-in, so whoever holds their password can enroll the second factor — or they are excluded from the policy.$syncNote" `
-            -CurrentValue "$registeredPct% registered. Sample: $sample" -RequiredValue $req `
-            -Remediation 'Run an MFA registration campaign or issue Temporary Access Passes so every enabled user registers; check that unregistered accounts are not excluded from the MFA policy.'
+    # Three separate questions, kept apart: is MFA REQUIRED (enforcement, judged across
+    # every qualifying policy so exclusions are combined, not ignored), are users
+    # REGISTERED (registration), and is the method phishing-resistant (AAD-1.3, not
+    # inferred here). Each verified half stays in the Detail.
+    $cov = Get-NRGCAEffectiveCoverage -Policies $enforcing
+    $cv  = Get-NRGCACoverageVerdict -Coverage $cov -What 'MFA is required'
+    $verified = @($cv.Verified); $short = @($cv.Shortfalls); $unknown = @($cv.NotEstablished)
+    if ($cov.Kind -eq 'None') {
+        # Every enforcing policy is narrower than all users on all apps.
+        $short += "MFA is required only under narrower scope: $(($cov.Narrowed | ForEach-Object { "$($_.Name) ($($_.Why))" }) -join '; ')."
     }
+    if ($unregisteredCnt -eq 0) { $verified += "All $totalEnabled enabled member account(s) have registered an MFA method.$syncNote" }
+    else { $short += "$unregisteredCnt of $totalEnabled enabled member(s) have not registered a method. They will be asked to register at their next sign-in, so whoever holds their password can enroll the second factor - or they are excluded from the policy. Sample: $sample.$syncNote" }
+    Add-NRGExpectedStateFinding -ControlId 'AAD-1.2' -Control ([pscustomobject]@{ Category = 'Identity'; Title = 'MFA Required for All Users'; Severity = 'Critical'; Remediation = 'Require MFA (or an authentication strength) for All users on All cloud apps, excluding only emergency access accounts, and run an MFA registration campaign so every enabled user registers.' }) `
+        -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+        -CurrentValue "MFA enforcement: $($cov.Kind); $registeredPct% registered ($($totalEnabled - $unregisteredCnt)/$totalEnabled)" -RequiredValue $req
 }

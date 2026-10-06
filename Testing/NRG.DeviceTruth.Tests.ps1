@@ -15,6 +15,10 @@ Describe 'Endpoint compliance results are read truthfully' {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
         Import-Module (Join-Path $script:RepoRoot 'NRG-Assessment.psm1') -Force -ErrorAction Stop
         $script:Endpoint = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Device/Invoke-NRGDeviceCompliance.ps1') -Raw
+        # Relative to now: an endpoint result older than the freshness window is not
+        # counted, so fixed calendar dates would turn these tests stale on their own.
+        $script:Recent = (Get-Date).ToUniversalTime().AddDays(-1).ToString('o')
+        $script:Old    = (Get-Date).ToUniversalTime().AddDays(-200).ToString('o')
         function script:Result { param([string] $Name, [string] $At, [object[]] $Checks)
             [ordered]@{ Schema = 'nrg-device-compliance/1'; CollectedAt = $At; Elevated = $true; Device = @{ Hostname = $Name }; Checks = $Checks } | ConvertTo-Json -Depth 5 }
         function script:Verdict { param([string] $Cid) Test-NRGControlDevice | Out-Null; @(Get-NRGFindings | Where-Object { $_.ControlId -eq $Cid })[0] }
@@ -24,9 +28,9 @@ Describe 'Endpoint compliance results are read truthfully' {
 
     It 'keeps only the latest result per device (a fixed laptop was still counted as failing)' {
         $dir = Join-Path $TestDrive 'dupes'; New-Item -ItemType Directory -Path $dir | Out-Null
-        Result 'LAPTOP-01' '2026-03-02T10:00:00Z' @(@{ Id = 'DEV-1.1'; Result = 'Fail'; Observed = 'off' }) | Set-Content (Join-Path $dir 'LAPTOP-01-march.json')
-        Result 'laptop-01' '2026-09-20T10:00:00Z' @(@{ Id = 'DEV-1.1'; Result = 'Pass'; Observed = 'on' })  | Set-Content (Join-Path $dir 'LAPTOP-01-sept.json')
-        Result 'LAPTOP-02' '2026-09-20T10:00:00Z' @(@{ Id = 'DEV-1.1'; Result = 'Pass'; Observed = 'on' })  | Set-Content (Join-Path $dir 'LAPTOP-02.json')
+        Result 'LAPTOP-01' $script:Old @(@{ Id = 'DEV-1.1'; Result = 'Fail'; Observed = 'off' }) | Set-Content (Join-Path $dir 'LAPTOP-01-march.json')
+        Result 'laptop-01' $script:Recent @(@{ Id = 'DEV-1.1'; Result = 'Pass'; Observed = 'on' })  | Set-Content (Join-Path $dir 'LAPTOP-01-sept.json')
+        Result 'LAPTOP-02' $script:Recent @(@{ Id = 'DEV-1.1'; Result = 'Pass'; Observed = 'on' })  | Set-Content (Join-Path $dir 'LAPTOP-02.json')
         Invoke-NRGCollectDeviceCompliance -ResultsPath $dir | Out-Null
         $raw = Get-NRGRawData -Key 'Device-Compliance'
         $raw.Data.DeviceCount | Should -Be 2
@@ -36,7 +40,7 @@ Describe 'Endpoint compliance results are read truthfully' {
 
     It 'inventory checks (local administrators, OS build) are never a pass, even from older results that said Pass' {
         $dir = Join-Path $TestDrive 'inv'; New-Item -ItemType Directory -Path $dir | Out-Null
-        Result 'PC1' '2026-09-20T10:00:00Z' @(@{ Id = 'DEV-4.1'; Result = 'Pass'; Observed = '2 member(s)' }, @{ Id = 'DEV-5.1'; Result = 'Info'; Observed = 'Windows 11 24H2' }) | Set-Content (Join-Path $dir 'PC1.json')
+        Result 'PC1' $script:Recent @(@{ Id = 'DEV-4.1'; Result = 'Pass'; Observed = '2 member(s)' }, @{ Id = 'DEV-5.1'; Result = 'Info'; Observed = 'Windows 11 24H2' }) | Set-Content (Join-Path $dir 'PC1.json')
         Invoke-NRGCollectDeviceCompliance -ResultsPath $dir | Out-Null
         foreach ($cid in 'DEV-4.1','DEV-5.1') {
             $f = Verdict $cid

@@ -92,8 +92,8 @@
         },
         "SCuBA": {
           "type": "string",
-          "pattern": "^$|^MS\\.(AAD|EXO|DEFENDER|SHAREPOINT|TEAMS|POWERPLATFORM)\\.\\d+\\.\\d+v\\d+$",
-          "description": "Optional CISA ScubaGear policy ID (empty string = no SCuBA equivalent). Semantic match to the baseline text is guarded by Testing/NRG.FrameworkAccuracy.Tests.ps1 against Config/framework-baselines/scuba-ids-v1.8.0.txt."
+          "pattern": "^$|^MS\\.(AAD|EXO|DEFENDER|SECURITYSUITE|SHAREPOINT|TEAMS|POWERPLATFORM|POWERBI)\\.\\d+\\.\\d+v\\d+$",
+          "description": "Optional CISA ScubaGear policy ID (empty string = no SCuBA equivalent). Semantic match to the baseline text is guarded by Testing/NRG.FrameworkAccuracy.Tests.ps1 against Config/framework-baselines/scuba-ids-v2.0.0.txt."
         },
         "NIST": { "type": "string" },
         "CMMC": { "type": "string" },
