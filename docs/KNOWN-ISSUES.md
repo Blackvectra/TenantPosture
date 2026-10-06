@@ -144,8 +144,8 @@ Found on a real workstation on 2026-10-04; each fix is its own change.
 ## HIPAA citations in `controls.json`
 
 Found while building the HIPAA readiness view. The view does not count them as evidence, but the
-compliance matrix still shows them. Correcting them is a change to `controls.json` for the owner to
-approve.
+compliance matrix still shows them. Pull request #122 corrects them and records each change in
+`docs/HIPAA-CITATION-CORRECTIONS.md`; remove this entry when it merges.
 
 - Eight tenant- and federation-isolation controls (TMS-1.1, TMS-1.5, PPL-1.1, EXO-2.5, SPO-2.8,
   PVW-2.3, AAD-11.6, TMS-4.3) cite 164.308(a)(4)(ii)(A), "Isolating health care clearinghouse
