@@ -5,9 +5,10 @@
 # Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC
 # Purpose: Read the operator-approved NRG standards (Config/nrg-standards.json) and
 #          emit findings for controls whose expected state has several components.
-#          Every list ships empty: the tool does not invent NRG's standard. An
-#          empty list means the component that needs it is reported as not
-#          assessed, never as a pass.
+#          A list holds only values the owner approved: the tool does not invent
+#          NRG's standard. An empty list (PriorityUsers is one, deliberately)
+#          means the component that needs it is reported as not assessed,
+#          never as a pass.
 #
 # Data consumed: none.  Graph scopes / cmdlets: none (parsing only).
 

@@ -2,6 +2,109 @@
 
 ## Unreleased
 
+- **A third-party EDR declaration no longer erases an assigned ASR policy's shortfall (INT-2.2).**
+  With the approved ASR rule set, INT-2.2 reports a `Shortfall:` when an assigned policy was read
+  and a required rule is not in Block mode. `Set-NRGThirdPartyEdr` rewrote every non-passing
+  INT-2.2 to "declared, not verified", so a client with Cortex XDR declared had a deployed,
+  misconfigured Defender policy removed from the score. The declaration now explains only absent
+  Defender configuration: the shortfall keeps its verdict and gains a note asking which devices run
+  Defender actively. No policy assigned, or rules not read, is still excused.
+
+- **NRG standards approved.** The owner approved, on 2026-10-02: DNS-1.3's reporting address
+  (`dmarc@nrgtechservices.com`), DEF-2.3's blocked file types (Microsoft's 53 default common
+  attachments filter types), AAD-2.1's required Conditional Access templates (`block-legacy-auth`,
+  `mfa-all-users`, `mfa-admins`, `mfa-azure-mgmt`, `block-device-code`), and INT-2.2's required ASR rules
+  (Microsoft's three standard protection rules, keyed as a real tenant read reports them).
+  `PriorityUsers` (EXO-1.5) stays empty on purpose: priority users differ per tenant and the file is
+  shared by every client. Expect the next run to judge those components instead of "not assessed",
+  so scores and the baseline's not-verified count move: a tenant missing a template, a blocked type or
+  the reporting address now reads as a shortfall. Tests pin the approved values and their invariants.
+
+- **Web GUI: command-line runs are listed, the report site is linked, the server
+  starts without `-ScriptDir`, and it only answers requests meant for it.**
+  Three recorded gaps, and the hardening that serving more tenant data called for.
+  (1) `/api/runs` listed only `output\<domain>\*-results.json`, so a command-line
+  run (flat `output\<tenant>-<yyyyMMdd-HHmmss>-results.json`) never appeared. Both
+  layouts are listed, once each. The server also read `(Get-Location)\output`
+  while the command line and batch runner write to `<script dir>\output`, so it
+  found nothing unless started from the repository root; it now defaults to
+  `<ScriptDir>\output` (`-OutputRoot`, which `Invoke-NRGAssessment.ps1 -Web`
+  sets from `-OutputPath`). A flat run is named the way its client is in
+  `Config/clients.json`, found by tenant id and then by routing domain: a results
+  file records the tenant's INITIAL domain (`Connect-NRGServices` prefers
+  `isInitial`) and, when Graph cannot answer, the signed-in account's domain,
+  which under GDAP is the MSP's own, so the same client was two names or the
+  wrong one. Without a match it is the recorded domain, then the file name. Only
+  `Metadata` is parsed (0.1 s against 6 s for `ConvertFrom-Json` on a 15 MB file;
+  cached per file). Incident-response mailbox runs and sign-in triage results are
+  excluded. A run is addressed by `(folder, id)`, never a client-supplied path:
+  `folder` is the tenant folder, or the reserved segment `_flat` for the output
+  folder itself, and `tenant` is only a display label. (2) The multi-page report
+  site (`<base>-report\`) is linked: a **Report site** link opens it in a new tab
+  through `/site/:tenant/:id/:page`, which serves only `.html` and `.csv` directly
+  inside that run's `-report` folder. The GUI serves the folder; it does not
+  build it. The pages are self-contained (inline `<style>`, no script, no
+  external asset), so they need nothing the CSP does not already allow; the CSP
+  is unchanged, set in one place, and a test asserts the site's responses carry
+  the identical header. The action plan is sent byte for byte: it is written with
+  a UTF-8 byte-order mark so Excel does not read it as ANSI, and reading it as
+  text dropped the mark. (3) `Start-NRGWebServer` defaulted `-ScriptDir` to
+  `Split-Path -Parent $PSCommandPath`, which is `Lib`, so a direct call threw
+  "Web asset directory not found"; it now defaults to the repository root.
+  **Who the server answers.** Binding to `127.0.0.1` keeps the network out, not a
+  web page in the operator's own browser. Any `Host` header was accepted, so DNS
+  rebinding let a page read reports, the run list and the report site, and a
+  cross-site form POST was parsed by `/api/scan`. Now `Test-NRGWebRequestAllowed`
+  (a pure function, tested without a server) refuses with 403 any request whose
+  `Host` is not `127.0.0.1:<port>` / `localhost:<port>` (`-AllowedHost` adds a
+  tunnel's name), and for anything but GET/HEAD requires `application/json`, this
+  server's own `Origin` when the browser sends one, and a Fetch-Metadata site of
+  `same-origin` or `none`. A refusal carries the same headers as an answer, which
+  now include `Cache-Control: no-store` (reports no longer land in the browser's
+  disk cache) and `Cross-Origin-Resource-Policy: same-origin`; no CORS headers are
+  ever sent. Checked in headless Chromium against an attacker page on another
+  origin (script embed, cross-origin read and JSON POST, auto-submitted form, and a
+  host-resolver rule simulating rebinding): every one refused, and the GUI's own
+  requests unaffected.
+  **Structure.** The path guard (`Lib/Resolve-NRGWebRunPath.ps1`), the run listing
+  (`Lib/Get-NRGWebRunIndex.ps1`), the request policy
+  (`Lib/Test-NRGWebRequestAllowed.ps1`), the domain-name rule and the error table
+  are separate files of pure functions,
+  loaded into Pode's route runspaces with `Use-PodeScript` (those runspaces start
+  from a default session state, so module functions are not visible), which also
+  lets CI test them although it skips the real-server context. Segments are an
+  ASCII whitelist anchored with `\z` (`$` also matches before a final line feed);
+  the boundary is pinned inside the output folder before the file is pinned inside
+  the boundary; a symbolic link or junction in the report folder is refused by
+  `LinkType` (`LinkTarget` is .NET 6+ and would fail open on an older runtime), an
+  item that cannot be inspected is refused rather than served, and a hard link is
+  not refused (it reports `HardLink` for both names). The new routes send status
+  and body in one `Write-PodeTextResponse -StatusCode` call:
+  `Set-PodeResponseStatus` renders Pode's own error page and a body written after
+  it is replaced by a slice of that page.
+  **One domain rule, one failure contract.** The scan route accepted any string of
+  letters, digits, dots and hyphens (including `a..b.com` and a trailing line
+  feed, since `$` also matches before one), `Invoke-NRGAssessment.ps1
+  -TenantDomain` accepted `a..b.com` too, and the path guard refuses any name
+  holding `..`: a scan could be started for a folder the GUI could never open.
+  `Test-NRGDomainName` (`Lib/Test-NRGDomainName.ps1`) is now the only definition
+  (a fully qualified hostname: at most 253 characters, at least two labels of 1-63
+  letters, digits and inner hyphens, a final label of two or more letters, no
+  trailing dot), used by the scan route and the run listing; the entry script's
+  `-TenantDomain` attribute carries a copy of the same pattern (a parameter
+  attribute binds before any module loads) with `Options = 'None'` so it is
+  case-sensitive, and a test fails if the copy differs or binds differently. A test
+  also proves, over every string of up to six characters from a five-character
+  alphabet, that an accepted name is always a valid path segment. Every refusal
+  under `/api/` is now JSON, `{ "error": "<Code>", "message": "<fixed sentence>" }`,
+  from one table (`Lib/Get-NRGWebApiError.ps1`): `DomainRequired`, `InvalidDomain`,
+  `UnknownRunId`, `InvalidPath`, `NotFound`, `Forbidden`, each with its status and
+  none echoing the request. `POST /api/scan` and `GET /api/scan/:id/status` used
+  `Set-PodeResponseStatus` and returned Pode's error page cut to the body's length
+  (`<html style='background-color: #0`) instead of their JSON; no route does now,
+  and a test fails if one does. The GUI shows the `message` field. Outside `/api/`
+  (static files, the report site) a refusal is still a plain-text sentence.
+
 - **Review of this release (2026-10-04): failed, truncated or unread evidence no longer produces a
   clean or failed verdict, and severities match the evidence.** Four reviewers checked the PR head
   `9eeb60b`; every confirmed defect below has a regression test that fails on that head (61 such

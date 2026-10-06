@@ -54,7 +54,12 @@ param(
     # Convenience: look up a previously-onboarded tenant's ClientId + cert
     # thumbprint from Config/clients.json by domain, so unattended scans don't
     # need the GUIDs pasted every time. Also the target for -RegisterApp.
-    [ValidatePattern('^$|^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$')]
+    # The pattern is Get-NRGDomainNamePattern (Lib/Test-NRGDomainName.ps1), the
+    # one definition of a domain name the web GUI's scan route and run listing
+    # use too; a parameter attribute binds before any module loads, so it is a
+    # copy and NRG.WebServer.Tests.ps1 fails if the two differ. Options = None
+    # makes it case-sensitive (the default admits the Kelvin sign as a letter).
+    [ValidatePattern('\A\z|\A(?=.{1,253}\z)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}\z', Options = 'None')]
     [string] $TenantDomain,
 
     # The client's endpoint protection is a third-party EDR (e.g. 'Cortex XDR'),
@@ -431,7 +436,7 @@ try {
 # and report viewing in a browser. The server binds to 127.0.0.1 only —
 # never exposed to the network — and exits cleanly on Ctrl+C.
 if ($Web) {
-    Start-NRGWebServer -Port $WebPort -ScriptDir $scriptDir
+    Start-NRGWebServer -Port $WebPort -ScriptDir $scriptDir -OutputRoot $OutputPath
     exit 0
 }
 

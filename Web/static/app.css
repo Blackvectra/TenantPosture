@@ -142,19 +142,39 @@ button.secondary:hover { background: var(--bg); }
   max-height: 400px;
   overflow-y: auto;
 }
+/* One run = a clickable area (opens the report) and, when the run has one, a
+   sibling link to the report site. Border and hover live on the row. */
+.run-row {
+  /* A fixed second track, so the time and size columns line up whether or not
+     a run has a site link. */
+  display: grid;
+  grid-template-columns: 1fr 5.5rem;
+  align-items: center;
+  border-bottom: 1px solid var(--bdr);
+  transition: background 0.1s;
+}
+.run-row:hover { background: #f7f9fc; }
+.run-row:last-child { border-bottom: 0; }
 .run-item {
   display: grid;
   grid-template-columns: 1fr auto auto;
   gap: 0.75rem;
   align-items: center;
   padding: 0.55rem 0.5rem;
-  border-bottom: 1px solid var(--bdr);
   cursor: pointer;
-  transition: background 0.1s;
 }
-.run-item:hover { background: #f7f9fc; }
-.run-item:last-child { border-bottom: 0; }
+.run-site {
+  margin: 0 0.5rem;
+  text-align: right;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--A);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.run-site:hover, .run-site:focus-visible { text-decoration: underline; }
 .run-tenant { font-weight: 500; font-size: 0.9rem; }
+.run-origin { font-weight: 400; font-size: 0.78rem; color: var(--mut); }
 .run-time { font-size: 0.8rem; color: var(--mut); font-variant-numeric: tabular-nums; }
 .run-size { font-size: 0.75rem; color: var(--mut); }
 .runs:empty::before {
@@ -208,9 +228,21 @@ button.secondary:hover { background: var(--bg); }
 .report-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.75rem;
   margin-bottom: 0.75rem;
 }
+.report-header h2 { margin-right: auto; }
+.report-site-link {
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--A);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.report-site-link:hover, .report-site-link:focus-visible { text-decoration: underline; }
+/* display above would otherwise override the hidden attribute. */
+.report-site-link[hidden] { display: none; }
 #report-frame {
   width: 100%;
   height: 78vh;
