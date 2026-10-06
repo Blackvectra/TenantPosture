@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **A third-party EDR declaration no longer erases an assigned ASR policy's shortfall (INT-2.2).**
+  With the approved ASR rule set, INT-2.2 reports a `Shortfall:` when an assigned policy was read
+  and a required rule is not in Block mode. `Set-NRGThirdPartyEdr` rewrote every non-passing
+  INT-2.2 to "declared, not verified", so a client with Cortex XDR declared had a deployed,
+  misconfigured Defender policy removed from the score. The declaration now explains only absent
+  Defender configuration: the shortfall keeps its verdict and gains a note asking which devices run
+  Defender actively. No policy assigned, or rules not read, is still excused.
+
 - **NRG standards approved.** The owner approved, on 2026-10-02: DNS-1.3's reporting address
   (`dmarc@nrgtechservices.com`), DEF-2.3's blocked file types (Microsoft's 53 default common
   attachments filter types), AAD-2.1's required Conditional Access templates (`block-legacy-auth`,
