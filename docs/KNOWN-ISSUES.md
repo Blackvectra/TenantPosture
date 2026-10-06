@@ -122,11 +122,43 @@ Not defects in this tool, but they stop it or its companions from running.
 - **Run in a new window.** A PowerShell window that already loaded another version of the Microsoft
   sign-in library (MSAL) cannot load a different one; open a new window.
 
-## Planned follow-ups (separate changes)
+## Installer (`Install-NRGPrerequisites.ps1`)
 
-- A single-page `assessment.html` report in the ScubaGear layout.
-- A private PowerShell module bundle, so the tool does not depend on the operator's module folders.
-- An offline comparison of two saved results files to show whether two tenants meet the same
-  baseline (internal use; any tier, stating the tier each used).
-- The web GUI items above (run list for command-line runs, report-site link, `-ScriptDir` default).
-- The NLS twin has not received these fixes.
+Found on a real workstation on 2026-10-04; each fix is its own change.
+
+- **It accepts Microsoft.Graph.Authentication 2.0 or later.** The module manifest requires 2.20.0
+  to 2.99.99, so a machine holding only an older 2.x (2.9.1 was seen) passes the installer and the
+  module then fails to load. Install the supported range with
+  `Install-PSResource Microsoft.Graph.Authentication -Version '[2.20.0, 3.0.0)'` and remove the
+  older version.
+- **The Microsoft Store `python` alias counts as Python.** On Windows, `python.exe` under
+  `WindowsApps` is a stub that opens the Store; the installer reports "Python found" and the
+  openpyxl step fails. Install Python from python.org or `winget install Python.Python.3.12`.
+- **The duplicate MSAL check needs a module function it has not loaded.** The installer
+  dot-sources `Lib/Repair-NRGModuleHealth.ps1`, which calls `Get-NRGObjectField` from the module,
+  so the check cannot complete before the module is imported. Run `Repair-NRGModuleHealth
+  -PlanOnly` after `Import-Module`.
+- **The Microsoft Store build of PowerShell.** The Exchange Online module failed to import from it;
+  launch "PowerShell 7 (x64)" (the MSI build) instead. The entry point warns about it.
+
+## Pending changes that address an item here
+
+- **The web GUI items above** (run list for command-line runs, report-site link, `-ScriptDir`
+  default): pull request #112, which also adds request filtering.
+- **A private PowerShell module bundle,** so the tool does not depend on the operator's module
+  folders: pull request #108 (scaffold, not active).
+- **An offline comparison of two saved results files** (whether two tenants meet the same
+  baseline, stating the tier each used): pull request #109.
+- **AAD-7.2 and break-glass accounts:** pull request #119 changes which Conditional Access
+  policies count against a break-glass account and is held for review.
+
+## Not started
+
+- A single-page report in the ScubaGear layout (today's single page is `*-assessment.html`; the
+  ScubaGear-style layout is the multi-page report site).
+
+## NLS-Assessment
+
+NLS-Assessment carries the fixes through v4.14.3 and none since. It is not receiving further
+ports: the plan is to run NRG and NLS from one codebase as configuration profiles. Until that
+lands, an NLS run does not include the changes recorded here.
