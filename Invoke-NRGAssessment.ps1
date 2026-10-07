@@ -1074,7 +1074,7 @@ if (-not $skipCollection) {
                 $highSevEvaluators[$ctrl.EvaluatorFunction] = $true
             }
         }
-        # Test-NRGControlDevice owns the 35 DEV-* endpoint checks (3 Critical,
+        # Test-NRGControlDevice owns the 39 DEV-* endpoint checks (3 Critical,
         # 20 High) defined in Config/device-controls.json, NOT controls.json, so
         # the loop above never sees it and -Quick silently dropped every
         # endpoint finding even when -DeviceResults was supplied. Keep it in
