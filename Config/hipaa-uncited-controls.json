@@ -5,6 +5,7 @@
   "controls": {
     "PVW-2.3": "Checks the Information Barriers mode. Its previous citation, 164.308(a)(4)(ii)(A), applies only to a health care clearinghouse within a larger organization, which the tool cannot establish; no other specification describes segmenting communication between internal groups.",
     "DEF-4.4": "Checks that accounts are tagged as priority accounts in Defender for Office 365. Tagging is a prerequisite for differentiated protection and alerting, not itself a safeguard the Security Rule names; its previous citation, security reminders (164.308(a)(5)(ii)(A)), is workforce training.",
-    "EXO-5.2": "Checks that tagged priority accounts are protected by targeted user impersonation protection in the anti-phishing policy. Impersonation protection is not protection from malicious software (164.308(a)(5)(ii)(B)), and its previous citation, security reminders, is workforce training."
+    "EXO-5.2": "Checks that tagged priority accounts are protected by targeted user impersonation protection in the anti-phishing policy. Impersonation protection is not protection from malicious software (164.308(a)(5)(ii)(B)), and its previous citation, security reminders, is workforce training.",
+    "TMS-1.5": "Checks that Teams meeting recordings are stored in SharePoint/OneDrive under the organization's retention. Its remaining citation, 164.310(d)(2)(ii) media re-use, covers removing ePHI from electronic media before the media is reused, which the check does not examine (found by review of PR #121, 2026-10-07); no other specification describes where recordings are stored."
   }
 }

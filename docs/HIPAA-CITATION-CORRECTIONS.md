@@ -30,7 +30,7 @@ and were not re-reviewed in this change.
 | Control | Previous citation | What the evaluator checks | New citation | Reason |
 |---|---|---|---|---|
 | TMS-1.1 | 164.308(a)(4)(ii)(A), 164.312(e)(1) | Teams federation is not open to every external domain | 164.312(e)(1) | Clearinghouse citation removed; the other citation kept. |
-| TMS-1.5 | 164.308(a)(4)(ii)(A), 164.310(d)(2)(ii) | Meeting recordings are stored in SharePoint/OneDrive under the organization's retention | 164.310(d)(2)(ii) | Clearinghouse citation removed; the other citation kept. |
+| TMS-1.5 | 164.308(a)(4)(ii)(A), 164.310(d)(2)(ii) | Meeting recordings are stored in SharePoint/OneDrive under the organization's retention | none | Both removed. Clearinghouse as above; media re-use (removing ePHI from media before reuse) is not what the check examines (found by review of PR #121). Listed in `Config/hipaa-uncited-controls.json`. |
 | PPL-1.1 | 164.308(a)(4)(ii)(A), 164.312(a)(1) | Power Platform tenant isolation restricts cross-tenant connections | 164.312(a)(1) | Clearinghouse citation removed; the other citation kept. |
 | EXO-2.5 | 164.308(a)(4)(ii)(A), 164.312(b) | Customer Lockbox requires approval before Microsoft support can access tenant data | 164.312(b) | Clearinghouse citation removed; the other citation kept. |
 | SPO-2.8 | 164.308(a)(4)(ii)(A), 164.310(d)(1) | OneDrive sync is restricted to the organization's tenant IDs | 164.310(d)(1) | Clearinghouse citation removed; the other citation kept. |
@@ -54,11 +54,16 @@ and were not re-reviewed in this change.
   covers the Security Rule only, so it is listed rather than changed.
 - **TMS-4.1 cites 164.502** with no paragraph, the Privacy Rule's general rule on uses and
   disclosures. Recording expiry is not a use or disclosure rule; also listed rather than changed.
-- The citations kept beside the removed ones were not re-reviewed.
+- The citations kept beside the removed ones were reviewed on 2026-10-07 after review of PR #121
+  found TMS-1.5's media re-use citation (removed above). Two are kept but debatable: **EXO-2.5**
+  (Customer Lockbox) cites audit controls, 164.312(b), where access control, 164.312(a)(1), may fit
+  better; **PVW-2.5** (retention policies cover the key workloads) cites the data backup plan,
+  164.308(a)(7)(ii)(A), and retention policies preserve content but are not a backup. Neither is
+  changed without a decision.
 
 ## How it is held
 
-- `Config/hipaa-uncited-controls.json` lists the three controls left without a HIPAA citation, each
+- `Config/hipaa-uncited-controls.json` lists the four controls left without a HIPAA citation, each
   with its reason. `NRG.FrameworkCoverage.Tests.ps1` accepts an empty HIPAA citation only for a listed
   control, and fails if a listed control gains one without leaving the list.
 - The same test fails if any control cites 164.308(a)(4)(ii)(A), 164.308(a)(5)(ii)(A) or

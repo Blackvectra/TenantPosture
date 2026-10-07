@@ -6,12 +6,13 @@
   control's previous citation, what its evaluator checks, and the change). Eight tenant-isolation
   controls cited 164.308(a)(4)(ii)(A), which applies only to a health care clearinghouse within a
   larger organization; two priority-account controls cited security reminders, a training activity;
-  PVW-3.2 (eDiscovery) cited the bare section 164.316, which names no standard; and
+  PVW-3.2 (eDiscovery) cited the bare section 164.316, which names no standard; TMS-1.5
+  (recording storage) also cited media re-use, 164.310(d)(2)(ii), and is now uncited; and
   six log-retention controls cited 164.316(b)(2)(i), the six-year retention of Security Rule
   documentation, which is not audit log retention. Fourteen controls keep the citations they already
   carried; AAD-11.6 now cites person or entity authentication (164.312(d)) and TMS-4.3 transmission
-  security (164.312(e)(1)), each because the requirement describes the check itself; PVW-2.3, DEF-4.4
-  and EXO-5.2 are left uncited rather than given a stretched citation, listed with reasons in
+  security (164.312(e)(1)), each because the requirement describes the check itself; PVW-2.3, DEF-4.4,
+  EXO-5.2 and TMS-1.5 are left uncited rather than given a stretched citation, listed with reasons in
   `Config/hipaa-uncited-controls.json`, the only controls the coverage test lets go uncited. The test
   also fails if any control cites the three specifications again. The earlier audit's pin of
   164.316(b)(2)(i) on PVW-4.2 now expects 164.312(b).

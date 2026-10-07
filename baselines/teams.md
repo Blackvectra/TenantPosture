@@ -168,7 +168,7 @@ Ensure Purview retention policies cover SharePoint to capture Teams recording da
 | CMMC 2.0 | AU.L2-3.3.1 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.10 |
 | SOC 2 | CC6.7, C1.1 |
-| HIPAA | §164.310(d)(2)(ii) |
+| HIPAA | Not cited: no Security Rule specification matches what this control checks (docs/HIPAA-CITATION-CORRECTIONS.md) |
 | PCI DSS | Req 3.5.1 |
 | MITRE ATT&CK | T1213 |
 
