@@ -240,6 +240,34 @@ Describe 'HIPAA Security Rule readiness view' {
             (Get-Content -LiteralPath $md2 -Raw) | Should -Match ("$($s['Mapped']) have mapped checks that produced no evidence this run")
         }
 
+        It 'a shortfall beside an errored instance keeps its status but is not tool-verified (Codex review of #122)' {
+            $base = @($script:AllPass | Where-Object { $_.ControlId -ne 'DNS-1.1' })
+            $f = $base + @(
+                @{ ControlId = 'DNS-1.1'; Instance = 'a.example'; State = 'Gap';   Detail = 'No SPF.'; Title = 't' }
+                @{ ControlId = 'DNS-1.1'; Instance = 'b.example'; State = 'Error'; Detail = 'threw';   Title = 't' }
+            )
+            $r = Row (Get-NRGHipaaReadiness -Findings $f) '164.312(e)(1)'
+            $r['Status']     | Should -Be 'Technical check shortfall'
+            $r['Confidence'] | Should -Be 'Partial evidence'
+            $g = $base + @(F 'DNS-1.1' 'Gap' 'No SPF.')
+            (Row (Get-NRGHipaaReadiness -Findings $g) '164.312(e)(1)')['Confidence'] | Should -Not -Be 'Partial evidence'
+        }
+
+        It 'escapes Markdown link and image syntax from tenant data (Codex review of #122)' {
+            $f = @($script:AllPass | Where-Object { $_.ControlId -ne 'DNS-1.1' }) + @(
+                @{ ControlId = 'DNS-1.1'; State = 'Gap'; Detail = 'see ![p](https://attacker.example/pixel) and [l](https://x.example) `code`'; Title = 't' })
+            $md = Join-Path $script:Tmp 'mdlink.md'
+            Publish-NRGHipaaReadiness -Posture (Get-NRGHipaaReadiness -Findings $f) -OutputPath $md -Metadata @{ TenantDomain = 'example.com' } | Out-Null
+            $txt = Get-Content -LiteralPath $md -Raw
+            $txt | Should -Not -Match '!\[p\]\('
+            $txt | Should -Not -Match '(?<!\\)\[l\]\('
+            $txt | Should -Match ([regex]::Escape('!\[p\](https://attacker.example/pixel)'))
+        }
+
+        It 'states the subcontractor assurance duty, 164.308(b)(2), in the business associate standard (Codex review of #122)' {
+            ($script:Items | Where-Object Citation -eq '164.308(b)(1)').Text | Should -Match '\(2\) A business associate may permit a business associate that is a subcontractor'
+        }
+
         It 'one pass beside a not-applicable control is not met' {
             $none = Get-NRGHipaaReadiness -Findings @()
             $ids = @((Row $none '164.312(d)')['Evidence'] | ForEach-Object { $_['ControlId'] })

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **HIPAA readiness view follow-ups (review of PR #122).** The Markdown report also escapes the
+  bracket and code-span syntax in tenant-derived text, so `![x](https://...)` in a finding detail
+  is shown as text rather than fetched by a Markdown viewer. An item whose shortfall stands beside
+  an instance that produced no verdict (one domain errored) keeps "Technical check shortfall" but
+  reads "Partial evidence", not "Tool-verified". The 164.308(b)(1) standard now carries paragraph
+  (b)(2), the business associate's subcontractor assurance duty, which the catalog had left out.
+
 - **HIPAA Security Rule readiness view (`-HIPAA`, implied by `-AllFiles`).** Every standard and
   implementation specification of 45 CFR 164 Subpart C (63 items: 22 standards, 19 Required,
   22 Addressable), parsed with its text from the eCFR issue of 2026-10-02 (catalog version 1.1),
