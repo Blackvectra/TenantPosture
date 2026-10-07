@@ -7,6 +7,7 @@
   "amendments": "The source note under each section cites its last amending document: 78 FR 5694-5695 (January 25, 2013) for sections 164.308, 164.310, 164.312 and 164.316, and 78 FR 34266 (June 7, 2013) for section 164.314. The eCFR version history also lists later dated entries for these sections (2016-12-30, and 2020-11-24 for 164.314) that no source note cites; this catalog takes its text from the 2026-10-02 issue and does not characterize those entries. Re-check the text against eCFR when a change to the Security Rule is published.",
   "purpose": "Every standard and implementation specification of the Security Rule, with whether it is Required or Addressable, so the HIPAA readiness view can show, one row at a time, which ones this Microsoft 365 assessment produced evidence for and which need documents, interviews or a walkthrough.",
   "note": "Addressable does not mean optional (45 CFR 164.306(d)(3)): the covered entity or business associate must assess whether the specification is reasonable and appropriate, implement it if so, and otherwise document why not and implement an equivalent alternative measure if reasonable and appropriate. Text is quoted from the regulation and is in the public domain.",
+  "ruleStatus": "The Security Rule currently in effect. The changes HHS proposed in its Security Rule notice of proposed rulemaking are not implemented; the existing rule remains in effect while that rulemaking continues.",
   "safeguards": {
     "Administrative": "45 CFR 164.308",
     "Physical": "45 CFR 164.310",

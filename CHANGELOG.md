@@ -14,8 +14,10 @@
   satisfied, specifications open". Items mapped to checks and items with evidence collected this
   run are counted separately. Every finding's detail is kept, a passing one's included. An item no
   check maps to is "Attestation required". Page one says it is not a risk analysis or a compliance
-  determination, that Addressable is not optional, and that the decision on each Addressable
-  specification is documented. Sixteen items are documents, processes or organizational
+  determination, that Addressable is not optional, that the regulation expressly requires
+  documenting why an Addressable specification is not implemented (recording every decision is
+  labeled recommended practice), and that the catalog is the rule currently in effect, not the
+  changes proposed in HHS's pending Security Rule rulemaking. Sixteen items are documents, processes or organizational
   arrangements; a control citing one is shown as cited, not counted. `frameworks.json` labels the
   rule `2013 (as amended)` instead of `2024`, after the source notes' last cited amendments
   (78 FR 5694-5695 and 78 FR 34266, 2013); the catalog records the eCFR version-history entries the
