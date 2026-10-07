@@ -21,6 +21,15 @@
     # Microsoft Defender for Endpoint is the EDR.
     EdrStack       = ''
 
+    # Optional: the phishing simulation / security awareness training platform
+    # standardized across your clients (e.g. 'KnowBe4'). It is the default for
+    # every client that does not set ThirdPartyAwareness in clients.json or
+    # pass -ThirdPartyAwareness. DEF-4.6 (Microsoft Attack Simulation
+    # Training) is then reported as run on that platform — declared, not
+    # verified — and left out of the score. Leave '' if Microsoft Attack
+    # Simulation Training is the platform.
+    AwarenessStack = ''
+
     # Optional: the NRG monitoring address(es) security alert policies should
     # notify, for example @('alerts@your-domain.com') or a whole domain
     # '@your-domain.com'. DEF-3.4 and EXO-3.3 compare every enabled alert

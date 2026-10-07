@@ -203,7 +203,7 @@ function Publish-NRGAssessmentSummary {
             $null = $sb.AppendLine("| Not assessed — workload skipped by the operator | $(@(Get-NRGObjectField -Item $scope -Key 'SkippedByOperator' -Default @()).Count) |")
             $null = $sb.AppendLine("| Produced no result at all | $($scope.NoResult.Count) |")
             $null = $sb.AppendLine("| Manual review required (no automated test, or no automated verdict) | $($scope.NoProgrammaticCheck.Count) |")
-            $null = $sb.AppendLine("| Covered by a declared third-party EDR — not verified | $(@(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()).Count) |")
+            $null = $sb.AppendLine("| Covered by a declared third-party product — not verified | $(@(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()).Count) |")
             $null = $sb.AppendLine("| Checked, not applicable to this tenant (reason stated) | $(@(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()).Count) |")
             $null = $sb.AppendLine("| License gated | $($scope.LicenceBlocked.Count) |")
             $null = $sb.AppendLine()
@@ -220,7 +220,7 @@ function Publish-NRGAssessmentSummary {
                 @{ Label = 'Not assessed — workload skipped by the operator (a -Skip flag)'; Items = @(Get-NRGObjectField -Item $scope -Key 'SkippedByOperator' -Default @()) }
                 @{ Label = 'Produced no result at all'; Items = $scope.NoResult }
                 @{ Label = 'Manual review required — no automated test, or no automated verdict'; Items = $scope.NoProgrammaticCheck }
-                @{ Label = 'Covered by a declared third-party EDR — not verified'; Items = @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()) }
+                @{ Label = 'Covered by a declared third-party product — not verified'; Items = @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()) }
                 @{ Label = 'Checked, not applicable to this tenant'; Items = @(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()) }
             )) {
                 $items = @($grp.Items)

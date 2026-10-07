@@ -334,7 +334,8 @@ function Get-NRGAssessmentScope {
         # 0. The assessor declared a third-party tool covers this check
         #    (Set-NRGThirdPartyEdr). Declared, not verified: its own bucket,
         #    never mixed into "no automated test" or "could not collect".
-        if ($detail.StartsWith($script:NRGThirdPartyEdrMarker)) {
+        #    Set-NRGThirdPartyAwareness (phishing simulation) shares the bucket.
+        if ($detail.StartsWith($script:NRGThirdPartyEdrMarker) -or $detail.StartsWith($script:NRGThirdPartyAwarenessMarker)) {
             $thirdParty.Add([pscustomobject]$row)
             continue
         }
@@ -497,6 +498,11 @@ function Get-NRGAssessmentScope {
         ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'ControlId' -Default '') } | Where-Object { $_ } | Sort-Object -Unique)
     if ($declaredIds.Count -gt 0) {
         $limitations.Add("$($declaredIds.Count) Microsoft Defender endpoint check(s) were not scored because the assessor declared a third-party EDR provides endpoint protection for this client. Microsoft 365 cannot see that product, so this coverage is declared, not verified; confirm it in that product's console.")
+    }
+    $awarenessIds = @(@($Findings) | Where-Object { $null -ne $_ -and ([string](Get-NRGObjectField -Item $_ -Key 'Detail' -Default '')).StartsWith($script:NRGThirdPartyAwarenessMarker) } |
+        ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'ControlId' -Default '') } | Where-Object { $_ } | Sort-Object -Unique)
+    if ($awarenessIds.Count -gt 0) {
+        $limitations.Add("$($awarenessIds.Count) Microsoft Attack Simulation Training check(s) were not scored because the assessor declared a third-party platform runs phishing simulation and security awareness training for this client. Microsoft 365 cannot see that platform, so the program is declared, not verified; keep its campaign reports as evidence.")
     }
     if ($licenceBlocked.Count -gt 0) {
         $limitations.Add("$($licenceBlocked.Count) control(s) require licensing this tenant does not hold. They are excluded from the score rather than counted against it, and are itemized under licensing.")

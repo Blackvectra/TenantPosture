@@ -187,6 +187,7 @@ $script:ExportedFunctions = @(
     'Resolve-NRGDns',
     'Resolve-NRGTenantId',
     'Set-NRGThirdPartyEdr',
+    'Set-NRGThirdPartyAwareness',
     'Set-NRGLicenseGating',
     'Get-NRGBaselineDefinition', 'Get-NRGBaselineRequiredControls', 'ConvertTo-NRGBaselineClientSlug',
     'Get-NRGBaselineExceptions', 'Get-NRGBaselineCompliance', 'Get-NRGBaselineRegressions',
