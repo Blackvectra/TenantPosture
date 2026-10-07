@@ -239,6 +239,25 @@ function Invoke-NRGCollectAADIdentityGovernance {
                 # used to count, so an admin excluded from a single pilot
                 # policy was reported as an emergency access path.
                 $gaRoleId = '62e90394-69f5-4237-9190-012177145e10'
+                # Microsoft: exclude emergency access accounts from policies
+                # that block OR RESTRICT sign-in; report-only policies need no
+                # exclusion. So the requirement is every ENABLED policy that
+                # reaches the account, whatever its controls (CAExcluded,
+                # NotExcludedFrom). A session-only policy can still restrict
+                # (sign-in frequency, token protection, app control), so it is
+                # never assumed harmless. Separately, an account excluded from
+                # every policy with a GRANT control (block, MFA, device,
+                # strength, terms of use) is recorded as a candidate
+                # (BlockingExcluded) so the finding can say "this looks like
+                # the break-glass account; these session policies still reach
+                # it" instead of "no emergency access path".
+                $hasGrant = {
+                    param($p)
+                    $n = @(@(Get-NRGNestedProperty -Object $p -Path 'GrantControls.BuiltInControls' -Default @()) | Where-Object { $_ }).Count
+                    $n += @(@(Get-NRGNestedProperty -Object $p -Path 'GrantControls.TermsOfUse' -Default @()) | Where-Object { $_ }).Count
+                    $n += @(@(Get-NRGNestedProperty -Object $p -Path 'GrantControls.CustomControls' -Default @()) | Where-Object { $_ }).Count
+                    ($n -gt 0) -or [bool][string](Get-NRGNestedProperty -Object $p -Path 'GrantControls.AuthStrengthId' -Default '')
+                }
                 $reaching = @()
                 if ($caPolicies -and $caPolicies.Success) {
                     $reaching = @(@($caPolicies.Data.Policies) | Where-Object {
@@ -247,24 +266,36 @@ function Invoke-NRGCollectAADIdentityGovernance {
                             @(Get-NRGNestedProperty -Object $_ -Path 'Conditions.Users.IncludeRoles' -Default @()) -contains $gaRoleId)
                     })
                 }
+                $reachingGrant = @($reaching | Where-Object { & $hasGrant $_ })
                 foreach ($ga in $gaAccounts) {
                     $isExcluded = $false
+                    $blockingExcluded = $false
+                    # Every enabled policy that reaches this account and does
+                    # not exclude it, and the subset with a grant control.
+                    $notExcludedFrom  = [System.Collections.Generic.List[string]]::new()
+                    $grantNotExcluded = [System.Collections.Generic.List[string]]::new()
                     if ($caPolicies -and $caPolicies.Success) {
-                        $allExcluded = $true; $unknown = $false
+                        $unknown = $false; $grantUnknown = $false
                         foreach ($policy in $reaching) {
-                            $excludeUsers  = @($policy.Conditions.Users.ExcludeUsers  ?? @())
-                            $excludeGroups = @($policy.Conditions.Users.ExcludeGroups ?? @())
+                            $excludeUsers  = @(Get-NRGNestedProperty -Object $policy -Path 'Conditions.Users.ExcludeUsers'  -Default @())
+                            $excludeGroups = @(Get-NRGNestedProperty -Object $policy -Path 'Conditions.Users.ExcludeGroups' -Default @())
                             if ($excludeUsers -contains $ga.PrincipalId) { continue }
-                            $matched = $false
+                            $matched = $false; $groupUnknown = $false
                             foreach ($gid in $excludeGroups) {
                                 $members = & $resolveGroupMembers $gid
-                                if ($null -eq $members) { $unknown = $true; continue }
+                                if ($null -eq $members) { $groupUnknown = $true; continue }
                                 if ($members -contains $ga.PrincipalId) { $matched = $true; break }
                             }
-                            if (-not $matched) { $allExcluded = $false; break }
+                            if ($matched) { continue }
+                            $isGrant = & $hasGrant $policy
+                            if ($groupUnknown) { $unknown = $true; if ($isGrant) { $grantUnknown = $true }; continue }
+                            $name = [string](Get-NRGObjectField -Item $policy -Key 'DisplayName' -Default '(unnamed policy)')
+                            $notExcludedFrom.Add($name)
+                            if ($isGrant) { $grantNotExcluded.Add($name) }
                         }
                         # $null = could not tell (a group membership was unreadable).
-                        $isExcluded = if ($allExcluded -and $reaching.Count -gt 0) { $true } elseif ($unknown) { $null } else { $false }
+                        $isExcluded = if ($notExcludedFrom.Count -gt 0) { $false } elseif ($unknown) { $null } elseif ($reaching.Count -gt 0) { $true } else { $false }
+                        $blockingExcluded = if ($grantNotExcluded.Count -gt 0) { $false } elseif ($grantUnknown) { $null } elseif ($reachingGrant.Count -gt 0) { $true } else { $false }
                     }
                     $breakGlass += @{
                         PrincipalId  = [string]$ga.PrincipalId
@@ -273,6 +304,9 @@ function Invoke-NRGCollectAADIdentityGovernance {
                         CAExcluded   = $isExcluded
                         Synced       = $ga.OnPremisesSyncEnabled -eq $true
                         Source       = [string]($ga.Source ?? 'permanent')
+                        NotExcludedFrom  = [string[]]@($notExcludedFrom)
+                        BlockingExcluded = $blockingExcluded
+                        GrantNotExcludedFrom = [string[]]@($grantNotExcluded)
                     }
                 }
             }
