@@ -294,6 +294,17 @@ function Invoke-NRGCollectDNSEmailRecords {
                     RotateOnDate    = $null
                     KeyAgeDays      = $null
                     RotationStatus  = $null  # 'OK' | 'Due' | 'Overdue' | 'Unknown'
+                    # Date the current key was created (yyyy-MM-dd, UTC), the
+                    # per-selector key sizes and the selector signing after
+                    # RotateOnDate, from Get-DkimSigningConfig.
+                    LastRotated       = $null
+                    Selector1KeySize  = $null
+                    Selector2KeySize  = $null
+                    ActiveSelector    = $null
+                    # The published key behind each selector CNAME: its n=
+                    # creation timestamp and key size. A cross-check on
+                    # Exchange's date; informational, never scored.
+                    KeyRecords        = @()
                 }
                 DMARC   = $null
                 MTASTS  = @{ DNSRecord = $null; Policy = $null; Mode = $null; PolicyFetchError = $null; PolicyHostMissing = $false }
@@ -368,35 +379,35 @@ function Invoke-NRGCollectDNSEmailRecords {
                 $dkimConfig = @($exoRaw.Data.DkimSigningConfigs ?? @()) |
                     Where-Object { $_.Domain -eq $domain } | Select-Object -First 1
                 if ($dkimConfig) {
-                    if ($dkimConfig.Selector1) { $dkimSelectors += $dkimConfig.Selector1 }
-                    if ($dkimConfig.Selector2) { $dkimSelectors += $dkimConfig.Selector2 }
+                    $cfgSel1 = [string](Get-NRGObjectField -Item $dkimConfig -Key 'Selector1' -Default '')
+                    $cfgSel2 = [string](Get-NRGObjectField -Item $dkimConfig -Key 'Selector2' -Default '')
+                    if ($cfgSel1) { $dkimSelectors += $cfgSel1 }
+                    if ($cfgSel2) { $dkimSelectors += $cfgSel2 }
                     $dkimSelectors = @($dkimSelectors | Select-Object -Unique)
 
                     # DKIM rotation age — NIST 800-53 SC-12 expects cryptographic
                     # material to be rotated on a documented cadence. Microsoft
                     # rotates DKIM only when the customer opts in; many tenants
                     # have keys older than two years which weakens DKIM's value.
-                    $d.DKIM.KeySize         = $dkimConfig.KeySize
-                    $d.DKIM.KeyCreationTime = [string]$dkimConfig.KeyCreationTime
-                    $d.DKIM.RotateOnDate    = [string]$dkimConfig.RotateOnDate
-                    if ($dkimConfig.KeyCreationTime) {
-                        try {
-                            # InvariantCulture: Exchange returns timestamps in a fixed
-                            # format; relying on current culture's parser allows weird
-                            # parses on non-en-US hosts (e.g. dd/MM/yyyy). v4.6.3 P2 fix.
-                            $kct = [datetime]::Parse([string]$dkimConfig.KeyCreationTime, [cultureinfo]::InvariantCulture)
-                            $age = [int]([datetime]::UtcNow - $kct.ToUniversalTime()).TotalDays
-                            $d.DKIM.KeyAgeDays = $age
-                            # Industry guidance: rotate at most every 365 days,
-                            # alert at 270 ("Due"), fail at 365+ ("Overdue").
-                            $d.DKIM.RotationStatus = if ($age -lt 270) { 'OK' }
-                                                     elseif ($age -lt 365) { 'Due' }
-                                                     else { 'Overdue' }
-                        } catch {
-                            $d.DKIM.RotationStatus = 'Unknown'
-                        }
-                    } else {
-                        $d.DKIM.RotationStatus = 'Unknown'
+                    $d.DKIM.KeySize          = Get-NRGObjectField -Item $dkimConfig -Key 'KeySize' -Default $null
+                    $d.DKIM.Selector1KeySize = Get-NRGObjectField -Item $dkimConfig -Key 'Selector1KeySize' -Default $null
+                    $d.DKIM.Selector2KeySize = Get-NRGObjectField -Item $dkimConfig -Key 'Selector2KeySize' -Default $null
+                    $d.DKIM.ActiveSelector   = [string](Get-NRGObjectField -Item $dkimConfig -Key 'SelectorAfterRotateOnDate' -Default '')
+                    $d.DKIM.KeyCreationTime  = [string](Get-NRGObjectField -Item $dkimConfig -Key 'KeyCreationTime' -Default '')
+                    $d.DKIM.RotateOnDate     = [string](Get-NRGObjectField -Item $dkimConfig -Key 'RotateOnDate' -Default '')
+                    $d.DKIM.RotationStatus   = 'Unknown'
+                    # InvariantCulture: Exchange returns a fixed format, and the
+                    # current culture's parser misreads it on non-en-US hosts.
+                    $kct = [datetime]::MinValue
+                    if ($d.DKIM.KeyCreationTime -and [datetime]::TryParse($d.DKIM.KeyCreationTime, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal, [ref]$kct)) {
+                        $age = [int][math]::Floor(([datetime]::UtcNow - $kct).TotalDays)
+                        $d.DKIM.KeyAgeDays  = $age
+                        $d.DKIM.LastRotated = $kct.ToString('yyyy-MM-dd', [cultureinfo]::InvariantCulture)
+                        # The same bands DNS-2.1 scores: within the 365-day
+                        # rotation interval, within two years, older.
+                        $d.DKIM.RotationStatus = if ($age -le 365) { 'OK' }
+                                                 elseif ($age -le 730) { 'Due' }
+                                                 else { 'Overdue' }
                     }
                 }
             }
@@ -454,6 +465,41 @@ function Invoke-NRGCollectDNSEmailRecords {
                 }
                 $dkimSelectorOutcomes += $selOutcome
             }
+            # The published key behind each Microsoft 365 selector CNAME. Its
+            # n= tag carries the key's creation time (Unix seconds), which is
+            # the independent cross-check on Exchange's KeyCreationTime. The
+            # inactive selector's target is routinely absent after a rotation,
+            # so an absent target is recorded, never an error, and nothing
+            # here touches LookupStatus or any verdict.
+            foreach ($pair in @(@('selector1', $d.DKIM.Selector1), @('selector2', $d.DKIM.Selector2))) {
+                $selName = $pair[0]; $target = [string]$pair[1]
+                if (-not $target -or $target -match '(^|;)\s*p=') { continue }
+                $target = $target.Trim().TrimEnd('.')
+                $rec = [ordered]@{ Selector = $selName; Target = $target; Lookup = 'LookupFailed'; KeyCreated = $null; KeyBits = $null }
+                try {
+                    $kOutcome = ''; $kReason = ''
+                    $txt = @(Resolve-NRGDns -Name $target -Type TXT -Outcome ([ref]$kOutcome) -Reason ([ref]$kReason)) |
+                        ForEach-Object { ([string]$_) -replace '"\s*"', '' -replace '"', '' } |
+                        Where-Object { $_ -match '(^|;)\s*p=' } | Select-Object -First 1
+                    $rec.Lookup = if ($txt) { 'Answered' } elseif ($kOutcome -in @('Answered', 'NoRecord')) { 'NoRecord' } else { 'LookupFailed' }
+                    if ($txt) {
+                        if ($txt -match '(?:^|;)\s*n=(\d{9,11})\s*(?:;|$)') {
+                            $rec.KeyCreated = [DateTimeOffset]::FromUnixTimeSeconds([long]$Matches[1]).UtcDateTime.ToString('yyyy-MM-dd', [cultureinfo]::InvariantCulture)
+                        }
+                        if ($txt -match '(?:^|;)\s*p=([A-Za-z0-9+/=\s]+)') {
+                            try {
+                                $rsa = [System.Security.Cryptography.RSA]::Create()
+                                $read = 0
+                                $rsa.ImportSubjectPublicKeyInfo([Convert]::FromBase64String(($Matches[1] -replace '\s', '')), [ref]$read)
+                                $rec.KeyBits = $rsa.KeySize
+                                $rsa.Dispose()
+                            } catch { Write-Verbose "[$domain] DKIM ${selName}: published key not parsed: $($_.Exception.Message)" }
+                        }
+                    }
+                } catch { Write-Verbose "[$domain] DKIM ${selName}: published key not read: $($_.Exception.Message)" }
+                $d.DKIM.KeyRecords += $rec
+            }
+
             $d.LookupStatus['DKIM'] = if ($dkimSelectorOutcomes -contains 'LookupFailed') { 'LookupFailed' }
                                        elseif ($dkimSelectorOutcomes -contains 'Answered') { 'Answered' }
                                        else { 'NoRecord' }
