@@ -9,7 +9,7 @@
   PVW-3.2 (eDiscovery) cited the bare section 164.316, which names no standard; TMS-1.5
   (recording storage) also cited media re-use, 164.310(d)(2)(ii), and is now uncited; and
   six log-retention controls cited 164.316(b)(2)(i), the six-year retention of Security Rule
-  documentation, which is not audit log retention. Fourteen controls keep the citations they already
+  documentation, which is not audit log retention. Thirteen controls keep the citations they already
   carried; AAD-11.6 now cites person or entity authentication (164.312(d)) and TMS-4.3 transmission
   security (164.312(e)(1)), each because the requirement describes the check itself; PVW-2.3, DEF-4.4,
   EXO-5.2 and TMS-1.5 are left uncited rather than given a stretched citation, listed with reasons in
