@@ -2,7 +2,7 @@
 #
 # Get-NRGHipaaReadiness.ps1
 # Dependencies: Get-NRGObjectField, Get-NRGControlDefinitions,
-#               Get-NRGSSPConfigFile, Get-NRGStateSeverityRank,
+#               Get-NRGSSPConfigFile,
 #               Config/hipaa-security-rule.json
 #
 # Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC
@@ -18,7 +18,9 @@
 #          "§164.312(d), §164.308(a)(4)(ii)(B)"). A citation of a standard
 #          written without its "(i)" (164.308(a)(4) for the standard at
 #          164.308(a)(4)(i)) means that standard. A citation outside Subpart C
-#          (the Privacy Rule, 164.5xx) is counted and named, never mapped.
+#          (Breach Notification 164.4xx, Privacy 164.5xx) is counted and
+#          named, never mapped; a bare Security Rule section (164.316) is
+#          listed as unmatched.
 #
 #          The SSP's honesty rules, applied to HIPAA:
 #            * An item whose requirement is a document, a process or an
@@ -109,7 +111,11 @@ function Get-NRGHipaaCitationsFromText {
 
     if ([string]::IsNullOrWhiteSpace($Citation)) { return @() }
     $ids = [System.Collections.Generic.List[string]]::new()
-    foreach ($m in [regex]::Matches($Citation, '164\.\d{3}(?:\([0-9A-Za-z]{1,4}\))+')) {
+    # A section-level citation (164.402, 164.316) is a citation too: it is
+    # reported as outside the Security Rule or unmatched, never dropped. The
+    # lookahead rejects a longer number (164.3081) rather than truncating it;
+    # a malformed short one (164.3) never matches.
+    foreach ($m in [regex]::Matches($Citation, '164\.\d{3}(?![\d.])(?:\([0-9A-Za-z]{1,4}\))*')) {
         if (-not $ids.Contains($m.Value)) { $ids.Add($m.Value) }
     }
     return @($ids)
@@ -141,6 +147,7 @@ function Get-NRGHipaaReadiness {
         }
         Framework = ''; Source = ''; Amendments = ''
         Available = $false
+        UnavailableReason = 'hipaa-security-rule.json missing or empty'
     }
 
     $cat = if ($ConfigPath) { Get-NRGHipaaCatalog -ConfigPath $ConfigPath } else { Get-NRGHipaaCatalog }
@@ -170,8 +177,17 @@ function Get-NRGHipaaReadiness {
     $outside = [System.Collections.Generic.List[string]]::new()
     $unmatched = [System.Collections.Generic.List[string]]::new()
 
+    # Fail closed: without the control definitions every item would read
+    # "Attestation required", a plausible report built on nothing.
     $defs = @()
-    try { $defs = @(Get-NRGControlDefinitions) } catch { Write-Verbose "controls.json unavailable to the HIPAA view: $($_.Exception.Message)" }
+    try { $defs = @(Get-NRGControlDefinitions) } catch {
+        $empty['UnavailableReason'] = "controls.json could not be loaded: $($_.Exception.Message)"
+        return $empty
+    }
+    if (@($defs | Where-Object { $null -ne $_ }).Count -eq 0) {
+        $empty['UnavailableReason'] = 'controls.json returned no control definitions'
+        return $empty
+    }
     foreach ($d in $defs) {
         $cid = [string](Get-NRGObjectField -Item $d -Key 'ControlId' -Default '')
         if (-not $cid) { continue }
@@ -202,19 +218,30 @@ function Get-NRGHipaaReadiness {
         }
     }
 
-    # ── Findings by control id, worst state wins ─────────────────────────────
-    $stateRank = Get-NRGStateSeverityRank
-    $byId = @{}
+    # ── Findings by control id: every instance kept ─────────────────────────
+    # A control can report once per instance (DNS once per domain). Every
+    # instance stays in the evidence, and the control's state for this view is
+    # judged from all of them: any Gap or Partial instance is a known
+    # shortfall and is never hidden behind another instance that could not be
+    # evaluated (an Error is no verdict); otherwise any instance without a
+    # verdict leaves the control without one; otherwise any NotApplicable;
+    # Satisfied only when every instance passed.
+    $byId = [ordered]@{}
     foreach ($f in @($Findings)) {
         if ($null -eq $f) { continue }
         $cid = [string](Get-NRGObjectField -Item $f -Key 'ControlId' -Default '')
         if (-not $cid) { continue }
-        if (-not $byId.ContainsKey($cid)) { $byId[$cid] = $f; continue }
-        $state     = [string](Get-NRGObjectField -Item $f          -Key 'State' -Default '')
-        $prevState = [string](Get-NRGObjectField -Item $byId[$cid] -Key 'State' -Default '')
-        $rank     = if ($stateRank.ContainsKey($state))     { $stateRank[$state] }     else { -1 }
-        $prevRank = if ($stateRank.ContainsKey($prevState)) { $stateRank[$prevState] } else { -1 }
-        if ($rank -gt $prevRank) { $byId[$cid] = $f }
+        if (-not $byId.Contains($cid)) { $byId[$cid] = [System.Collections.Generic.List[object]]::new() }
+        $byId[$cid].Add($f)
+    }
+    $controlState = {
+        param($list)
+        $states = @($list | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'State' -Default '') })
+        if ($states -contains 'Gap')     { return 'Gap' }
+        if ($states -contains 'Partial') { return 'Partial' }
+        if (@($states | Where-Object { $_ -notin @('Satisfied', 'NotApplicable') }).Count -gt 0) { return 'NotRun' }
+        if ($states -contains 'NotApplicable') { return 'NotApplicable' }
+        return 'Satisfied'
     }
 
     $rows = [System.Collections.Generic.List[object]]::new()
@@ -230,29 +257,39 @@ function Get-NRGHipaaReadiness {
         $evidence = [System.Collections.Generic.List[object]]::new()
         $sat = 0; $part = 0; $gap = 0; $na = 0; $notRun = 0
         foreach ($cid in $ctlIds) {
-            $st = 'NotRun'; $why = ''
-            if ($byId.ContainsKey($cid)) {
-                $st  = [string](Get-NRGObjectField -Item $byId[$cid] -Key 'State'  -Default '')
-                $why = [string](Get-NRGObjectField -Item $byId[$cid] -Key 'Detail' -Default '')
-            }
+            $instances = @()
+            if ($byId.Contains($cid)) { $instances = @($byId[$cid]) }
+            $st = if ($instances.Count -gt 0) { & $controlState $instances } else { 'NotRun' }
             switch ($st) {
                 'Satisfied'     { $sat++ }
                 'Partial'       { $part++ }
                 'Gap'           { $gap++ }
                 'NotApplicable' { $na++ }
                 # Error, absent or unrecognized: no verdict, counted in neither direction.
-                default         { $notRun++; if (-not $st) { $st = 'NotRun' } }
+                default         { $notRun++ }
             }
-            $evidence.Add([ordered]@{
-                ControlId   = $cid
-                Title       = [string]$meta[$cid]['Title']
-                State       = $st
-                # Kept for every state, Satisfied included: a passing finding's
-                # Detail carries its qualifications (what was and was not read,
-                # partial scope), which a readiness reader must see.
-                Detail      = $why
-                Remediation = $(if ($st -in @('Gap', 'Partial')) { [string]$meta[$cid]['Remediation'] } else { '' })
-            })
+            if ($instances.Count -eq 0) {
+                $evidence.Add([ordered]@{
+                    ControlId = $cid; Instance = ''; Title = [string]$meta[$cid]['Title']
+                    State = 'NotRun'; Detail = ''; Remediation = ''
+                })
+            }
+            foreach ($f in $instances) {
+                $ist = [string](Get-NRGObjectField -Item $f -Key 'State' -Default '')
+                if (-not $ist) { $ist = 'NotRun' }
+                $evidence.Add([ordered]@{
+                    ControlId   = $cid
+                    Instance    = [string](Get-NRGObjectField -Item $f -Key 'Instance' -Default '')
+                    Title       = [string]$meta[$cid]['Title']
+                    State       = $ist
+                    # Kept for every state and every instance, Satisfied included:
+                    # a passing finding's Detail carries its qualifications (what
+                    # was and was not read, partial scope), which a readiness
+                    # reader must see.
+                    Detail      = [string](Get-NRGObjectField -Item $f -Key 'Detail' -Default '')
+                    Remediation = $(if ($ist -in @('Gap', 'Partial')) { [string]$meta[$cid]['Remediation'] } else { '' })
+                })
+            }
         }
 
         $assessed = $sat + $part + $gap

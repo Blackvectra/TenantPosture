@@ -96,8 +96,11 @@ Describe 'HIPAA Security Rule readiness view' {
 
         It 'resolves every Security Rule citation in controls.json, and names the Privacy Rule ones instead of mapping them' {
             $p = Get-NRGHipaaReadiness -Findings @()
-            @($p['Summary']['UnmatchedCitations']) | Should -BeNullOrEmpty -Because 'a citation that matches no item would silently drop its evidence'
-            @($p['Summary']['OutsideSecurityRule'] | Where-Object { $_ -notmatch '\(164\.5\d\d' }) | Should -BeNullOrEmpty
+            # Anything unmatched must be a bare section citation (164.316) that
+            # names no standard: listed in the report, never silently dropped.
+            # Every citation that names a standard or specification resolves.
+            @($p['Summary']['UnmatchedCitations'] | Where-Object { $_ -notmatch '\(164\.3\d\d\)$' }) | Should -BeNullOrEmpty -Because 'a citation that matches no item would silently drop its evidence'
+            @($p['Summary']['OutsideSecurityRule'] | Where-Object { $_ -notmatch '\(164\.[45]\d\d' }) | Should -BeNullOrEmpty
         }
 
         It 'a citation of a standard without its "(i)" means that standard' {
@@ -149,6 +152,105 @@ Describe 'HIPAA Security Rule readiness view' {
             $ids = @((Row $none '164.312(d)')['Evidence'] | ForEach-Object { $_['ControlId'] })
             $err = Get-NRGHipaaReadiness -Findings @($ids | ForEach-Object { F $_ 'Error' })
             (Row $err '164.312(d)')['Status'] | Should -Be 'Not assessed'
+        }
+
+        It 'a known shortfall on one instance is not hidden by an Error on another (Codex review)' {
+            # DNS-1.1 cites 164.312(e)(1) and reports once per domain.
+            $base = @($script:AllPass | Where-Object { $_.ControlId -ne 'DNS-1.1' })
+            $f = $base + @(
+                @{ ControlId = 'DNS-1.1'; Instance = 'a.example'; State = 'Partial'; Detail = 'SPF soft fail on a.example.'; Title = 't' }
+                @{ ControlId = 'DNS-1.1'; Instance = 'b.example'; State = 'Error';   Detail = 'evaluator threw on b.example'; Title = 't' }
+            )
+            (Row (Get-NRGHipaaReadiness -Findings $f) '164.312(e)(1)')['Status'] | Should -Be 'Technical check shortfall'
+            # An Error beside passes is still no verdict.
+            $g = $base + @(
+                @{ ControlId = 'DNS-1.1'; Instance = 'a.example'; State = 'Satisfied'; Detail = 'ok'; Title = 't' }
+                @{ ControlId = 'DNS-1.1'; Instance = 'b.example'; State = 'Error';     Detail = 'threw'; Title = 't' }
+            )
+            (Row (Get-NRGHipaaReadiness -Findings $g) '164.312(e)(1)')['Status'] | Should -Not -Be 'Mapped technical checks satisfied'
+        }
+
+        It 'keeps every instance finding of a control in the evidence (Codex review)' {
+            $base = @($script:AllPass | Where-Object { $_.ControlId -ne 'DNS-1.1' })
+            $f = $base + @(
+                @{ ControlId = 'DNS-1.1'; Instance = 'a.example'; State = 'Gap';       Detail = 'No SPF on a.example.'; Title = 't' }
+                @{ ControlId = 'DNS-1.1'; Instance = 'b.example'; State = 'Gap';       Detail = 'No SPF on b.example.'; Title = 't' }
+                @{ ControlId = 'DNS-1.1'; Instance = 'c.example'; State = 'Satisfied'; Detail = 'SPF -all on c.example.'; Title = 't' }
+            )
+            $p = Get-NRGHipaaReadiness -Findings $f
+            $ev = @((Row $p '164.312(e)(1)')['Evidence'] | Where-Object { $_['ControlId'] -eq 'DNS-1.1' })
+            $ev.Count | Should -Be 3
+            @($ev | ForEach-Object { $_['Instance'] }) | Should -Be @('a.example', 'b.example', 'c.example')
+            @($ev | ForEach-Object { $_['Detail'] }) | Should -Contain 'No SPF on b.example.'
+            # The control counts once toward the item, not once per domain.
+            (Row $p '164.312(e)(1)')['MappedControls'] | Should -Be (Row (Get-NRGHipaaReadiness -Findings $script:AllPass) '164.312(e)(1)')['MappedControls']
+            $md = Join-Path $script:Tmp 'instances.md'
+            Publish-NRGHipaaReadiness -Posture $p -OutputPath $md -Metadata @{ TenantDomain = 'example.com' } | Out-Null
+            $txt = Get-Content -LiteralPath $md -Raw
+            $txt | Should -Match 'DNS-1\.1 \(b\.example\)'
+            (Get-Content -LiteralPath ([IO.Path]::ChangeExtension($md, '.html')) -Raw) | Should -Match 'DNS-1\.1 \(b\.example\)'
+        }
+
+        It 'reads a section-level citation instead of dropping it (Codex review)' {
+            $ids = @(& (Get-Module NRG-Assessment) { Get-NRGHipaaCitationsFromText -Citation '§164.402, §164.316, §164.312(a)(2)(iv), 164.3, 164.3081' })
+            $ids | Should -Be @('164.402', '164.316', '164.312(a)(2)(iv)')
+            $p = Get-NRGHipaaReadiness -Findings $script:AllPass
+            # controls.json cites 164.402 / 164.502 at section level today.
+            $outside = @($p['Summary']['OutsideSecurityRule']) -join ' '
+            $cited = @($script:Controls | Where-Object { [string]$_.References.HIPAA -match '164\.(402|502|524)(?![\d(])' } | ForEach-Object { $_.ControlId })
+            foreach ($c in $cited) { $outside | Should -Match ([regex]::Escape($c)) }
+        }
+
+        It 'fails closed when the control definitions cannot be loaded (Codex review)' {
+            Mock -ModuleName 'NRG-Assessment' Get-NRGControlDefinitions { throw 'controls.json is malformed' }
+            $p = Get-NRGHipaaReadiness -Findings $script:AllPass
+            $p['Available'] | Should -BeFalse
+            $p['UnavailableReason'] | Should -Match 'controls.json could not be loaded'
+            Mock -ModuleName 'NRG-Assessment' Get-NRGControlDefinitions { @() }
+            (Get-NRGHipaaReadiness -Findings $script:AllPass)['Available'] | Should -BeFalse
+        }
+
+        It 'prints the full grouped regulation text, never a stem ending in a dash (Codex review)' {
+            foreach ($it in $script:Items) {
+                $it.Text.TrimEnd() | Should -Not -Match '(—|; and|:)$' -Because "$($it.Citation) must carry its whole text"
+            }
+            ($script:Items | Where-Object Citation -eq '164.314(a)(2)').Text | Should -Match '\(iii\) Business associate contracts with subcontractors'
+            ($script:Items | Where-Object Citation -eq '164.314(b)(2)').Text | Should -Match '\(iv\) Report to the group health plan any security incident'
+            ($script:Items | Where-Object Citation -eq '164.316(b)(1)').Text | Should -Match '\(ii\) If an action, activity or assessment is required'
+        }
+
+        It 'encodes markup from tenant data in the Markdown report (Codex review)' {
+            $f = @($script:AllPass | Where-Object { $_.ControlId -ne 'DNS-1.1' }) + @(
+                @{ ControlId = 'DNS-1.1'; State = 'Gap'; Detail = 'Policy <img src=x onerror=alert(1)> & co'; Title = 't' })
+            $md = Join-Path $script:Tmp 'markup.md'
+            Publish-NRGHipaaReadiness -Posture (Get-NRGHipaaReadiness -Findings $f) -OutputPath $md -Metadata @{ TenantDomain = 'example.com' } | Out-Null
+            $txt = Get-Content -LiteralPath $md -Raw
+            $txt | Should -Not -Match '<img'
+            $txt | Should -Match '&lt;img src=x onerror=alert\(1\)&gt; &amp; co'
+            # Unmatched citations are rendered, never only counted.
+            $un = @((Get-NRGHipaaReadiness -Findings $f)['Summary']['UnmatchedCitations'])
+            if ($un.Count -gt 0) { $txt | Should -Match ([regex]::Escape(($un[0] -replace '[<>&|]', ''))) }
+        }
+
+        It 'renders the remediation for a shortfall, and counts every evidence-free item on page one (Codex review)' {
+            $f = @($script:AllPass | Where-Object { $_.ControlId -ne 'DNS-1.1' }) + @(F 'DNS-1.1' 'Gap' 'No SPF.')
+            $p = Get-NRGHipaaReadiness -Findings $f
+            $rem = [string](@($script:Controls | Where-Object ControlId -eq 'DNS-1.1')[0].Remediation)
+            $md = Join-Path $script:Tmp 'remediation.md'
+            Publish-NRGHipaaReadiness -Posture $p -OutputPath $md -Metadata @{ TenantDomain = 'example.com' } | Out-Null
+            $txt  = Get-Content -LiteralPath $md -Raw
+            $html = Get-Content -LiteralPath ([IO.Path]::ChangeExtension($md, '.html')) -Raw
+            $probe = ($rem -split '[<>&|]')[0].Substring(0, [Math]::Min(40, ($rem -split '[<>&|]')[0].Length))
+            $txt  | Should -Match ([regex]::Escape($probe))
+            $html | Should -Match 'Remediation:</b>'
+            # A run where nothing produced evidence: every item is evidence-free,
+            # not only the unmapped ones.
+            $none = Get-NRGHipaaReadiness -Findings @()
+            $md2 = Join-Path $script:Tmp 'none.md'
+            Publish-NRGHipaaReadiness -Posture $none -OutputPath $md2 -Metadata @{ TenantDomain = 'example.com' } | Out-Null
+            $s = $none['Summary']
+            (Get-Content -LiteralPath $md2 -Raw) | Should -Match ("$($s['Total']) of $($s['Total']) items have no evidence from this run")
+            (Get-Content -LiteralPath $md2 -Raw) | Should -Match ("$($s['Mapped']) have mapped checks that produced no evidence this run")
         }
 
         It 'one pass beside a not-applicable control is not met' {

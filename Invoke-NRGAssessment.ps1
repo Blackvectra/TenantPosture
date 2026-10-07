@@ -1461,7 +1461,7 @@ if (-not $JsonOnly) {
                     Set-NRGSensitiveFileAcl -Path $hipaaHtml -ErrorAction SilentlyContinue
                 }
                 $hs = $hipaaPosture['Summary']
-                Write-Host "      $($hs['AttestationRequired']) of $($hs['Total']) HIPAA Security Rule items have no evidence from the tenant and need documents, interviews or a walkthrough." -ForegroundColor Yellow
+                Write-Host "      $($hs['Total'] - $hs['EvidenceCollected']) of $($hs['Total']) HIPAA Security Rule items have no evidence from this run: $($hs['AttestationRequired']) have no mapped tenant check and need documents, interviews or a walkthrough; $($hs['Mapped'] - $hs['EvidenceCollected']) have mapped checks that produced none." -ForegroundColor Yellow
             }
         } catch { Write-Warning "HIPAA readiness publish failed: $($_.Exception.Message)" }
     }
