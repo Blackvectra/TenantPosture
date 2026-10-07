@@ -247,6 +247,13 @@ Describe 'HIPAA Security Rule readiness view' {
             foreach ($t in @($script:MdText, $script:HtmlText)) {
                 $t | Should -Match 'Statuses report technical checks, not regulatory fulfillment'
                 $t | Should -Match 'documenting why'
+                # 164.306(d)(3) expressly requires documentation only when a
+                # specification is not implemented; the rest is a recommendation.
+                $t | Should -Match 'Recommended practice: record the assessment and decision for every Addressable specification'
+                $t | Should -Match 'expressly requires documenting why when the specification is not implemented'
+                $t | Should -Not -Match '(?<!practice: )\bRecord the assessment and the decision for every Addressable'
+                $t | Should -Match 'currently in effect'
+                $t | Should -Match 'does not implement the Security Rule changes HHS proposed'
                 $t | Should -Match '164\.316\(b\)'
                 $t | Should -Not -Match 'Met in Microsoft 365'
                 $t | Should -Match 'catalog version|Catalog:\*\* version'
