@@ -96,8 +96,11 @@ Describe 'HIPAA Security Rule readiness view' {
 
         It 'resolves every Security Rule citation in controls.json, and names the Privacy Rule ones instead of mapping them' {
             $p = Get-NRGHipaaReadiness -Findings @()
-            @($p['Summary']['UnmatchedCitations']) | Should -BeNullOrEmpty -Because 'a citation that matches no item would silently drop its evidence'
-            @($p['Summary']['OutsideSecurityRule'] | Where-Object { $_ -notmatch '\(164\.5\d\d' }) | Should -BeNullOrEmpty
+            # Anything unmatched must be a bare section citation (164.316) that
+            # names no standard: listed in the report, never silently dropped.
+            # Every citation that names a standard or specification resolves.
+            @($p['Summary']['UnmatchedCitations'] | Where-Object { $_ -notmatch '\(164\.3\d\d\)$' }) | Should -BeNullOrEmpty -Because 'a citation that matches no item would silently drop its evidence'
+            @($p['Summary']['OutsideSecurityRule'] | Where-Object { $_ -notmatch '\(164\.[45]\d\d' }) | Should -BeNullOrEmpty
         }
 
         It 'a citation of a standard without its "(i)" means that standard' {
@@ -173,6 +176,47 @@ Describe 'HIPAA Security Rule readiness view' {
             $txt = Get-Content -LiteralPath $md -Raw
             $txt | Should -Match 'DNS-1\.1 \(b\.example\)'
             (Get-Content -LiteralPath ([IO.Path]::ChangeExtension($md, '.html')) -Raw) | Should -Match 'DNS-1\.1 \(b\.example\)'
+        }
+
+        It 'reads a section-level citation instead of dropping it (Codex review)' {
+            $ids = @(& (Get-Module NRG-Assessment) { Get-NRGHipaaCitationsFromText -Citation '§164.402, §164.316, §164.312(a)(2)(iv), 164.3, 164.3081' })
+            $ids | Should -Be @('164.402', '164.316', '164.312(a)(2)(iv)')
+            $p = Get-NRGHipaaReadiness -Findings $script:AllPass
+            # controls.json cites 164.402 / 164.502 at section level today.
+            $outside = @($p['Summary']['OutsideSecurityRule']) -join ' '
+            $cited = @($script:Controls | Where-Object { [string]$_.References.HIPAA -match '164\.(402|502|524)(?![\d(])' } | ForEach-Object { $_.ControlId })
+            foreach ($c in $cited) { $outside | Should -Match ([regex]::Escape($c)) }
+        }
+
+        It 'fails closed when the control definitions cannot be loaded (Codex review)' {
+            Mock -ModuleName 'NRG-Assessment' Get-NRGControlDefinitions { throw 'controls.json is malformed' }
+            $p = Get-NRGHipaaReadiness -Findings $script:AllPass
+            $p['Available'] | Should -BeFalse
+            $p['UnavailableReason'] | Should -Match 'controls.json could not be loaded'
+            Mock -ModuleName 'NRG-Assessment' Get-NRGControlDefinitions { @() }
+            (Get-NRGHipaaReadiness -Findings $script:AllPass)['Available'] | Should -BeFalse
+        }
+
+        It 'prints the full grouped regulation text, never a stem ending in a dash (Codex review)' {
+            foreach ($it in $script:Items) {
+                $it.Text.TrimEnd() | Should -Not -Match '(—|; and|:)$' -Because "$($it.Citation) must carry its whole text"
+            }
+            ($script:Items | Where-Object Citation -eq '164.314(a)(2)').Text | Should -Match '\(iii\) Business associate contracts with subcontractors'
+            ($script:Items | Where-Object Citation -eq '164.314(b)(2)').Text | Should -Match '\(iv\) Report to the group health plan any security incident'
+            ($script:Items | Where-Object Citation -eq '164.316(b)(1)').Text | Should -Match '\(ii\) If an action, activity or assessment is required'
+        }
+
+        It 'encodes markup from tenant data in the Markdown report (Codex review)' {
+            $f = @($script:AllPass | Where-Object { $_.ControlId -ne 'DNS-1.1' }) + @(
+                @{ ControlId = 'DNS-1.1'; State = 'Gap'; Detail = 'Policy <img src=x onerror=alert(1)> & co'; Title = 't' })
+            $md = Join-Path $script:Tmp 'markup.md'
+            Publish-NRGHipaaReadiness -Posture (Get-NRGHipaaReadiness -Findings $f) -OutputPath $md -Metadata @{ TenantDomain = 'example.com' } | Out-Null
+            $txt = Get-Content -LiteralPath $md -Raw
+            $txt | Should -Not -Match '<img'
+            $txt | Should -Match '&lt;img src=x onerror=alert\(1\)&gt; &amp; co'
+            # Unmatched citations are rendered, never only counted.
+            $un = @((Get-NRGHipaaReadiness -Findings $f)['Summary']['UnmatchedCitations'])
+            if ($un.Count -gt 0) { $txt | Should -Match ([regex]::Escape(($un[0] -replace '[<>&|]', ''))) }
         }
 
         It 'one pass beside a not-applicable control is not met' {

@@ -49,11 +49,14 @@ function Publish-NRGHipaaReadiness {
     $ErrorActionPreference = 'Stop'
 
     if (-not $Posture['Available']) {
-        Write-Warning 'HIPAA readiness view unavailable (hipaa-security-rule.json missing or empty): not generated.'
+        $why = [string](Get-NRGObjectField -Item $Posture -Key 'UnavailableReason' -Default 'hipaa-security-rule.json missing or empty')
+        Write-Warning "HIPAA readiness view unavailable ($why): not generated."
         return
     }
 
-    function EscMd { param([object]$v) ([string]$v) -replace '\|', '\|' -replace '[\r\n]+', ' ' }
+    # Tenant-derived text (finding details, policy names) can carry markup;
+    # Markdown renderers pass inline HTML through, so encode it here too.
+    function EscMd { param([object]$v) ([string]$v) -replace '&', '&amp;' -replace '<', '&lt;' -replace '>', '&gt;' -replace '\|', '\|' -replace '[\r\n]+', ' ' }
     function Esc   { param([object]$v) ConvertTo-NRGHtmlSafe $v }
 
     $st    = Get-NRGHipaaStatusNames
@@ -154,7 +157,13 @@ function Publish-NRGHipaaReadiness {
     if (@($sum['OutsideSecurityRule']).Count -gt 0) {
         $null = $sb.AppendLine('## Citations outside the Security Rule')
         $null = $sb.AppendLine()
-        $null = $sb.AppendLine("These controls also cite Privacy Rule sections, which this view does not cover: $(EscMd (@($sum['OutsideSecurityRule']) -join '; ')).")
+        $null = $sb.AppendLine("These controls also cite sections outside the Security Rule (the Breach Notification Rule, 164.4xx, and the Privacy Rule, 164.5xx), which this view does not cover: $(EscMd (@($sum['OutsideSecurityRule']) -join '; ')).")
+        $null = $sb.AppendLine()
+    }
+    if (@($sum['UnmatchedCitations']).Count -gt 0) {
+        $null = $sb.AppendLine('## Citations not mapped')
+        $null = $sb.AppendLine()
+        $null = $sb.AppendLine("These controls cite the Security Rule without naming a standard or implementation specification this view lists, so the citation is not mapped to an item: $(EscMd (@($sum['UnmatchedCitations']) -join '; ')).")
         $null = $sb.AppendLine()
     }
     $null = $sb.AppendLine('---')
@@ -236,7 +245,10 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
     foreach ($r in $attest) { $null = $h.Append("<li><span class=`"cit`">$(Esc $r['Citation'])</span> $(Esc $r['Name'])</li>") }
     $null = $h.Append('</ul>')
     if (@($sum['OutsideSecurityRule']).Count -gt 0) {
-        $null = $h.Append("<p class=`"small`">These controls also cite Privacy Rule sections, which this view does not cover: $(Esc (@($sum['OutsideSecurityRule']) -join '; ')).</p>")
+        $null = $h.Append("<p class=`"small`">These controls also cite sections outside the Security Rule (the Breach Notification Rule, 164.4xx, and the Privacy Rule, 164.5xx), which this view does not cover: $(Esc (@($sum['OutsideSecurityRule']) -join '; ')).</p>")
+    }
+    if (@($sum['UnmatchedCitations']).Count -gt 0) {
+        $null = $h.Append("<p class=`"small`">These controls cite the Security Rule without naming a standard or implementation specification this view lists, so the citation is not mapped to an item: $(Esc (@($sum['UnmatchedCitations']) -join '; ')).</p>")
     }
     $null = $h.Append("<p class=`"small`">Prepared by $(Esc $company). $(Esc $sourceLine) $(Esc $Posture['Amendments'])</p></div>")
     $null = $h.Append('</div></body></html>')

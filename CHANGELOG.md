@@ -14,7 +14,12 @@
   satisfied, specifications open". Items mapped to checks and items with evidence collected this
   run are counted separately. Every finding's detail is kept, a passing one's included, and every
   instance of a per-instance control (DNS once per domain) is listed; a Gap or Partial instance is a
-  shortfall even beside an instance that errored, which is no verdict. An item no
+  shortfall even beside an instance that errored, which is no verdict. Section-level citations
+  (`§164.402`, `§164.316`) are read: outside the Security Rule they are named with the Privacy and
+  Breach Notification citations, and a bare Security Rule section is listed as not mapped instead of
+  being dropped. The grouped text of 164.314(a)(2), 164.314(b)(2) and 164.316(b)(1) is complete. The
+  view reports itself unavailable when the control definitions cannot be loaded, and the Markdown
+  encodes markup from tenant data. An item no
   check maps to is "Attestation required". Page one says it is not a risk analysis or a compliance
   determination, that Addressable is not optional, that the regulation expressly requires
   documenting why an Addressable specification is not implemented (recording every decision is
