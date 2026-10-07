@@ -74,7 +74,7 @@ Configure custom retention policies in Purview Compliance > Audit > Retention po
 | CMMC 2.0 | AU.L2-3.3.2 |
 | ISO/IEC 27001:2022 | A.8.15 |
 | SOC 2 | CC7.2, A1.2 |
-| HIPAA | §164.312(b), §164.316(b)(2)(i) |
+| HIPAA | §164.312(b) |
 | PCI DSS | Req 10.5 |
 | MITRE ATT&CK | T1562.008 |
 
@@ -229,7 +229,7 @@ Set-PolicyConfig -InformationBarrierMode MultiSegment. Requires E5 Compliance.
 | CMMC 2.0 | AC.L2-3.1.3 |
 | ISO/IEC 27001:2022 | A.5.18, A.8.3 |
 | SOC 2 | C1.1, CC6.1 |
-| HIPAA | §164.308(a)(4)(ii)(A) |
+| HIPAA | Not cited: no Security Rule specification matches what this control checks (docs/HIPAA-CITATION-CORRECTIONS.md) |
 | PCI DSS | Req 7.2.4 |
 | MITRE ATT&CK | T1048 |
 
@@ -291,7 +291,7 @@ Purview > Data lifecycle management > Retention policies. Create policies for Ex
 | CMMC 2.0 | AU.L2-3.3.2 |
 | ISO/IEC 27001:2022 | A.8.10, A.8.13 |
 | SOC 2 | A1.2, CC2.1 |
-| HIPAA | §164.316(b)(2)(i), §164.308(a)(7)(ii)(A) |
+| HIPAA | §164.308(a)(7)(ii)(A) |
 | PCI DSS | Req 10.5 |
 | MITRE ATT&CK | T1070.008 |
 
@@ -385,7 +385,7 @@ Purview > Roles & scopes > eDiscovery Manager. Assign eDiscovery Manager role to
 | CMMC 2.0 | IR.L2-3.6.1 |
 | ISO/IEC 27001:2022 | A.5.33 |
 | SOC 2 | CC7.4 |
-| HIPAA | §164.316, §164.524 |
+| HIPAA | §164.524 |
 | PCI DSS | Req 12.10.5 |
 | MITRE ATT&CK | T1114 |
 
@@ -510,7 +510,7 @@ Purview > Audit > Audit log retention policies > New retention policy. Priority:
 | CMMC 2.0 | AU.L2-3.3.2 |
 | ISO/IEC 27001:2022 | A.8.15 |
 | SOC 2 | CC7.2, A1.2 |
-| HIPAA | §164.316(b)(2)(i), §164.312(b) |
+| HIPAA | §164.312(b) |
 | PCI DSS | Req 10.5.1 |
 | MITRE ATT&CK | T1562.008, T1070.008 |
 
@@ -572,7 +572,7 @@ Purview > Records management > Labels > Create record label with retention actio
 | CMMC 2.0 | IR.L2-3.6.1 |
 | ISO/IEC 27001:2022 | A.5.33, A.8.13 |
 | SOC 2 | A1.2, C1.1 |
-| HIPAA | §164.316(b)(2)(i), §164.530(j) |
+| HIPAA | §164.530(j) |
 | PCI DSS | Req 10.5 |
 | MITRE ATT&CK | T1070.008 |
 

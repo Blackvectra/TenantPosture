@@ -417,7 +417,7 @@ Set-SPOTenant -AllowedDomainGuidsForSyncApp (Get-SPOTenant).TenantId
 | CMMC 2.0 | MP.L2-3.8.1 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.1 |
 | SOC 2 | CC6.6, CC6.7 |
-| HIPAA | §164.308(a)(4)(ii)(A), §164.310(d)(1) |
+| HIPAA | §164.310(d)(1) |
 | PCI DSS | Req 7.2.4 |
 | MITRE ATT&CK | T1005 |
 

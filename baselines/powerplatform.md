@@ -43,7 +43,7 @@ Power Platform Admin Center > Policies > Tenant Isolation: enable and configure 
 | CMMC 2.0 | SC.L1-3.13.1 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.22 |
 | SOC 2 | CC6.6 |
-| HIPAA | §164.308(a)(4)(ii)(A), §164.312(a)(1) |
+| HIPAA | §164.312(a)(1) |
 | PCI DSS | Req 1.4 |
 | MITRE ATT&CK | T1048, T1567 |
 
