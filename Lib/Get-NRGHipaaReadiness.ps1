@@ -255,6 +255,10 @@ function Get-NRGHipaaReadiness {
 
         $evidence = [System.Collections.Generic.List[object]]::new()
         $sat = 0; $part = 0; $gap = 0; $na = 0; $notRun = 0
+        # Controls whose shortfall verdict stands beside an instance with no
+        # verdict (an errored or not-applicable domain): the item keeps its
+        # shortfall status, but the evidence behind it is incomplete.
+        $incomplete = 0
         foreach ($cid in $ctlIds) {
             $instances = @()
             if ($byId.Contains($cid)) { $instances = @($byId[$cid]) }
@@ -266,6 +270,10 @@ function Get-NRGHipaaReadiness {
                 'NotApplicable' { $na++ }
                 # Error, absent or unrecognized: no verdict, counted in neither direction.
                 default         { $notRun++ }
+            }
+            if ($st -in @('Gap', 'Partial') -and
+                @($instances | Where-Object { [string](Get-NRGObjectField -Item $_ -Key 'State' -Default '') -notin @('Satisfied', 'Partial', 'Gap') }).Count -gt 0) {
+                $incomplete++
             }
             if ($instances.Count -eq 0) {
                 $evidence.Add([ordered]@{
@@ -303,7 +311,7 @@ function Get-NRGHipaaReadiness {
         $confidence =
             if ($ctlIds.Count -eq 0)             { 'Attestation only' }
             elseif ($assessed -eq 0)             { 'No evidence collected' }
-            elseif ($notRun -gt 0 -or $na -gt 0) { 'Partial evidence' }
+            elseif ($notRun -gt 0 -or $na -gt 0 -or $incomplete -gt 0) { 'Partial evidence' }
             else                                 { 'Tool-verified' }
 
         # A technical result, never a regulatory one. A citation says a check
