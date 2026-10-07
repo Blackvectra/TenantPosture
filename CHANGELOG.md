@@ -15,6 +15,28 @@
   checked against NIST's OSCAL catalog), AU-2, AU-12, SI-4. Endpoint script version 1.1.0;
   older result files simply lack the four checks, which the evaluator already reports per device.
 
+- **Third-party security awareness declaration (`-ThirdPartyAwareness`, clients.json
+  `ThirdPartyAwareness`, branding.psd1 `AwarenessStack`).** A client phishing-tested through
+  KnowBe4 read as "users are never phishing-tested" on DEF-4.6, or, without Defender for Office 365
+  Plan 2, as a license upgrade it does not need: Microsoft 365 cannot see the platform.
+  `Set-NRGThirdPartyAwareness` follows the EDR declaration's contract: a non-passing DEF-4.6 becomes
+  NotApplicable, declared by the assessor, NOT verified, out of the score, naming the campaign
+  reports to keep and keeping the original result; a pass stays a pass. It runs before license
+  gating, and on `-FromResults` it unwraps a gated finding so the upgrade-opportunity marker never
+  survives. The scope section files it in the existing declared-third-party bucket (now labeled
+  for both kinds) with its own limitation sentence. DEF-4.6 is not in `nrg-baseline.json`, so the
+  baseline view is unchanged.
+
+- **AAD-7.2 names the policies that keep a break-glass account from qualifying.** The requirement
+  is unchanged: a cloud-only Global Administrator counts only when it is excluded from every
+  enabled Conditional Access policy that reaches it, because Microsoft says to exclude emergency
+  access accounts from policies that block or restrict sign-in, and a session-only policy can
+  restrict (sign-in frequency, token protection, app control). Report-only policies are not
+  counted. New: an account excluded from every policy with a grant control but still reached by
+  session-only policies is reported as a candidate (Partial, not Gap) with those policies named,
+  and an account still reached by one or two policies is named with them. Results collected
+  before this change replay with their previous verdict.
+
 - **A third-party EDR declaration no longer erases an assigned ASR policy's shortfall (INT-2.2).**
   With the approved ASR rule set, INT-2.2 reports a `Shortfall:` when an assigned policy was read
   and a required rule is not in Block mode. `Set-NRGThirdPartyEdr` rewrote every non-passing

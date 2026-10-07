@@ -133,6 +133,7 @@ Every run now classifies the tenant into a **Tenant Security Maturity Tier** (In
 | `-DeviceResults` | Folder of endpoint results from `Device\Invoke-NRGDeviceCompliance.ps1`; adds the DEV-* controls. |
 | `-MonitoringAddress` | The NRG monitoring address(es) alert policies should notify (an address, or `@domain`). DEF-3.4 and EXO-3.3 compare each enabled policy's recipients with it; without one, routing to NRG is reported as not assessed. Also read from the client's `MonitoringAddresses` in `Config/clients.json`, then `MonitoringAddresses` in `Config/branding.psd1`. |
 | `-ThirdPartyEDR` | A non-Microsoft EDR such as `'Cortex XDR'`. The Defender endpoint checks report as covered by it (declared, not verified) and leave the score. |
+| `-ThirdPartyAwareness` | A non-Microsoft phishing simulation / security awareness platform such as `'KnowBe4'`. DEF-4.6 (Attack Simulation Training) reports as run on it (declared, not verified) and leaves the score instead of scoring as a gap or a license upgrade. |
 | `-Quick` | Critical and High controls only. |
 | `-OutputPath` | Output folder. Default `.\output`. |
 | `-AllFiles` | Every deliverable as its own file (Markdown summary, playbooks, XLSX matrix, remediation script, NIST matrix, SSP, improvement plan). The default is the HTML report plus the results JSON. |
@@ -332,7 +333,7 @@ are tested without a server, so CI runs those.
 Invoke-NRGAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-NRGBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 NRG-Assessment.psm1               ← Module loader (recursive dot-source, path traversal check)
-NRG-Assessment.psd1               ← Module manifest (387 exports, dependency declarations)
+NRG-Assessment.psd1               ← Module manifest (388 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-NRGFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -374,7 +375,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA (ScubaGear v2.0.0) + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          95 Pester suites — the FULL suite gates every PR
+Testing/                          96 Pester suites — the FULL suite gates every PR
   NRG.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   NRG.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   NRG.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -607,7 +608,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **95 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **96 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -634,6 +635,7 @@ Edit `Config\clients.json` to add tenants:
   "SkipPowerPlatform": true,
   "SkipDNS":           false,
   "ThirdPartyEDR":     "Cortex XDR",
+  "ThirdPartyAwareness": "KnowBe4",
   "Collectors":        { "SharePointShell": true },
   "Notes":             "Business Standard tenant — Purview and Power Platform skipped.",
   "Active":            true
@@ -647,6 +649,8 @@ GDAP relationships must be active in Partner Center before the batch runner can 
 
 `ThirdPartyEDR` is optional. Set it when the client's endpoint protection is not Microsoft Defender (the same as `-ThirdPartyEDR 'Cortex XDR'` on a single run, including a `-FromResults` republish). The Microsoft Defender endpoint checks (INT-1.5, INT-2.1, INT-2.2 and the DEV-2.x endpoint checks) are then reported as covered by that product, **declared, not verified**, and left out of the score instead of scoring as gaps. A Defender check that actually passed keeps its result.
 
+`ThirdPartyAwareness` is optional too, and works the same way for phishing simulation: set it (or `-ThirdPartyAwareness 'KnowBe4'`, or `AwarenessStack` in `Config/branding.psd1` for every client) when campaigns run on a platform other than Microsoft Attack Simulation Training. DEF-4.6 is then reported as run on that platform, **declared, not verified**, and left out of the score; keep the platform's campaign reports as the evidence. A Microsoft simulation check that passed keeps its result.
+
 **One-time per client tenant:** AAD-8.2, AAD-11.3 and DEF-4.6 need Graph permissions that each tenant must consent to. Until then they report exactly which one is missing. A Global Administrator runs `.\Grant-NRGGraphConsent.ps1 -TenantDomain client.com` once and accepts the prompt for the organization.
 
 **Power Platform (PPL-\*)** needs no module. The assessment signs in to the Power Platform admin API inside the same PowerShell session (one extra browser sign-in, usually completed automatically by your existing session) and reads it over REST. No child process is started. The account needs the Power Platform Administrator (or Global Administrator) role; app-only runs skip it.
@@ -659,7 +663,7 @@ Six GitHub Actions workflows cover the repository. All run automatically on push
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (95 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (96 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -678,4 +682,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 387 exported functions · full Pester suite (95 suites) gating CI*
+*NRG-Assessment v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 388 exported functions · full Pester suite (96 suites) gating CI*

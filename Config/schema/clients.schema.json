@@ -87,6 +87,11 @@
           "pattern": "^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$",
           "description": "Optional. The client's endpoint protection when it is not Microsoft Defender (e.g. \"Cortex XDR\"). The Defender endpoint checks are then reported as covered by it (declared, not verified) and not scored."
         },
+        "ThirdPartyAwareness": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$",
+          "description": "Optional. The client's phishing simulation / security awareness training platform when it is not Microsoft Attack Simulation Training (e.g. \"KnowBe4\"). DEF-4.6 is then reported as run on it (declared, not verified) and not scored."
+        },
         "ClientId": {
           "type": "string",
           "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
