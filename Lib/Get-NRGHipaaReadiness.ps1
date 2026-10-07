@@ -25,9 +25,10 @@
 #              organizational arrangement (catalog TenantEvidence 'None', with
 #              the reason from the regulation text) takes no evidence from a
 #              control: a citation to it is listed as cited but not counted.
-#              Eight tenant-isolation controls cite the clearinghouse
-#              specification, 164.308(a)(4)(ii)(A); counting them would print
-#              "met" for a requirement they have nothing to do with.
+#              Eight tenant-isolation controls used to cite the clearinghouse
+#              specification, 164.308(a)(4)(ii)(A) (corrected; see
+#              docs/HIPAA-CITATION-CORRECTIONS.md); counting such a citation
+#              would print "met" for a requirement it has nothing to do with.
 #            * An item no control cites is NEVER derived as met. It reports
 #              'Attestation required'. That is most of the administrative,
 #              physical and organizational items, the risk analysis

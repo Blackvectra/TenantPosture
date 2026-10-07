@@ -122,6 +122,19 @@ Describe 'HIPAA Security Rule readiness view' {
         }
 
         It 'a control citing the clearinghouse specification is cited, not counted' {
+            # controls.json no longer cites a document-only item
+            # (docs/HIPAA-CITATION-CORRECTIONS.md), so the rule is exercised
+            # with one definition rewritten to the citation it used to carry.
+            $real = @(Get-NRGControlDefinitions)
+            Mock -ModuleName 'NRG-Assessment' Get-NRGControlDefinitions {
+                foreach ($d in $real) {
+                    if ($d.ControlId -eq 'TMS-1.1') {
+                        $c = $d | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+                        $c.References.HIPAA = '§164.308(a)(4)(ii)(A)'
+                        $c
+                    } else { $d }
+                }
+            }.GetNewClosure()
             $p = Get-NRGHipaaReadiness -Findings $script:AllPass
             $r = Row $p '164.308(a)(4)(ii)(A)'
             $r['MappedControls'] | Should -Be 0
