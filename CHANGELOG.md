@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Third-party security awareness declaration (`-ThirdPartyAwareness`, clients.json
+  `ThirdPartyAwareness`, branding.psd1 `AwarenessStack`).** A client phishing-tested through
+  KnowBe4 read as "users are never phishing-tested" on DEF-4.6, or, without Defender for Office 365
+  Plan 2, as a license upgrade it does not need: Microsoft 365 cannot see the platform.
+  `Set-NRGThirdPartyAwareness` follows the EDR declaration's contract: a non-passing DEF-4.6 becomes
+  NotApplicable, declared by the assessor, NOT verified, out of the score, naming the campaign
+  reports to keep and keeping the original result; a pass stays a pass. It runs before license
+  gating, and on `-FromResults` it unwraps a gated finding so the upgrade-opportunity marker never
+  survives. The scope section files it in the existing declared-third-party bucket (now labeled
+  for both kinds) with its own limitation sentence. DEF-4.6 is not in `nrg-baseline.json`, so the
+  baseline view is unchanged.
+
 - **AAD-7.2 names the policies that keep a break-glass account from qualifying.** The requirement
   is unchanged: a cloud-only Global Administrator counts only when it is excluded from every
   enabled Conditional Access policy that reaches it, because Microsoft says to exclude emergency
