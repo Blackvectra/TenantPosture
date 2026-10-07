@@ -59,7 +59,7 @@
     {
       "Id": "HIPAA",
       "FullName": "HIPAA Security Rule (45 CFR Part 164)",
-      "Version": "2024",
+      "Version": "2013 (as amended)",
       "Publisher": "U.S. Department of Health and Human Services",
       "URL": "https://www.hhs.gov/hipaa/for-professionals/security/index.html",
       "Applicable": "Covered entities and business associates handling Protected Health Information (PHI)"

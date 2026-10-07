@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **HIPAA Security Rule readiness view (`-HIPAA`, implied by `-AllFiles`).** Every standard and
+  implementation specification of 45 CFR 164 Subpart C (63 items: 22 standards, 19 Required,
+  22 Addressable), parsed with its text from the eCFR issue of 2026-10-02 (catalog version 1.1),
+  joined to the findings through the `References.HIPAA` citation every control already carries.
+  Markdown and self-contained HTML (`<base>-hipaa-readiness.md` / `.html`). Statuses report
+  technical checks, never regulatory fulfillment: the strongest is "Mapped technical checks
+  satisfied" (every check mapped to the item passed; a mapping is not proof the checks cover the
+  whole requirement). A standard is reviewed separately from its implementation specifications,
+  so a standard whose own checks passed beside an open specification reads "Mapped checks
+  satisfied, specifications open". Items mapped to checks and items with evidence collected this
+  run are counted separately. Every finding's detail is kept, a passing one's included, and every
+  instance of a per-instance control (DNS once per domain) is listed; a Gap or Partial instance is a
+  shortfall even beside an instance that errored, which is no verdict. Section-level citations
+  (`§164.402`, `§164.316`) are read: outside the Security Rule they are named with the Privacy and
+  Breach Notification citations, and a bare Security Rule section is listed as not mapped instead of
+  being dropped. The grouped text of 164.314(a)(2), 164.314(b)(2) and 164.316(b)(1) is complete. The
+  view reports itself unavailable when the control definitions cannot be loaded, and the Markdown
+  encodes markup from tenant data. An item no
+  check maps to is "Attestation required". Page one says it is not a risk analysis or a compliance
+  determination, that Addressable is not optional, that the regulation expressly requires
+  documenting why an Addressable specification is not implemented (recording every decision is
+  labeled recommended practice), and that the catalog is the rule currently in effect, not the
+  changes proposed in HHS's pending Security Rule rulemaking. Sixteen items are documents, processes or organizational
+  arrangements; a control citing one is shown as cited, not counted. `frameworks.json` labels the
+  rule `2013 (as amended)` instead of `2024`, after the source notes' last cited amendments
+  (78 FR 5694-5695 and 78 FR 34266, 2013); the catalog records the eCFR version-history entries the
+  source notes do not cite.
+
 - **Four endpoint logging checks (DEV-8.3 to DEV-8.6), from TrustedSec's "Logging Is a
   Discipline, Not a Switch".** DEV-8.3: the Security event log holds at least 196,608 KB and
   Application, Setup and System at least 32,768 KB (`-MinSecurityLogSizeKB` /
