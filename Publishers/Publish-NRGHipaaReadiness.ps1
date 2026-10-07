@@ -138,7 +138,9 @@ function Publish-NRGHipaaReadiness {
                 $null = $sb.AppendLine('| Control | Title | Result | Detail |')
                 $null = $sb.AppendLine('|---|---|---|---|')
                 foreach ($e in @($r['Evidence'])) {
-                    $null = $sb.AppendLine("| $(EscMd $e['ControlId']) | $(EscMd $e['Title']) | $(EscMd $e['State']) | $(EscMd $e['Detail']) |")
+                    $inst = [string](Get-NRGObjectField -Item $e -Key 'Instance' -Default '')
+                    $cidText = if ($inst) { "$($e['ControlId']) ($inst)" } else { [string]$e['ControlId'] }
+                    $null = $sb.AppendLine("| $(EscMd $cidText) | $(EscMd $e['Title']) | $(EscMd $e['State']) | $(EscMd $e['Detail']) |")
                 }
                 $null = $sb.AppendLine()
             }
@@ -215,7 +217,9 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
             $req = if ($r['Kind'] -eq 'Standard') { 'Standard' } else { [string]$r['Requirement'] }
             $ev = [System.Text.StringBuilder]::new()
             foreach ($e in @($r['Evidence'])) {
-                $null = $ev.Append("<div><span class=`"cit`">$(Esc $e['ControlId'])</span> $(Esc $e['Title']): <b>$(Esc $e['State'])</b>")
+                $inst = [string](Get-NRGObjectField -Item $e -Key 'Instance' -Default '')
+                $cidText = if ($inst) { "$($e['ControlId']) ($inst)" } else { [string]$e['ControlId'] }
+                $null = $ev.Append("<div><span class=`"cit`">$(Esc $cidText)</span> $(Esc $e['Title']): <b>$(Esc $e['State'])</b>")
                 if ($e['Detail']) { $null = $ev.Append(" <span class=`"small`">$(Esc $e['Detail'])</span>") }
                 $null = $ev.Append('</div>')
             }

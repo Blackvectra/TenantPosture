@@ -2,7 +2,7 @@
 #
 # Get-NRGHipaaReadiness.ps1
 # Dependencies: Get-NRGObjectField, Get-NRGControlDefinitions,
-#               Get-NRGSSPConfigFile, Get-NRGStateSeverityRank,
+#               Get-NRGSSPConfigFile,
 #               Config/hipaa-security-rule.json
 #
 # Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC
@@ -201,19 +201,30 @@ function Get-NRGHipaaReadiness {
         }
     }
 
-    # ── Findings by control id, worst state wins ─────────────────────────────
-    $stateRank = Get-NRGStateSeverityRank
-    $byId = @{}
+    # ── Findings by control id: every instance kept ─────────────────────────
+    # A control can report once per instance (DNS once per domain). Every
+    # instance stays in the evidence, and the control's state for this view is
+    # judged from all of them: any Gap or Partial instance is a known
+    # shortfall and is never hidden behind another instance that could not be
+    # evaluated (an Error is no verdict); otherwise any instance without a
+    # verdict leaves the control without one; otherwise any NotApplicable;
+    # Satisfied only when every instance passed.
+    $byId = [ordered]@{}
     foreach ($f in @($Findings)) {
         if ($null -eq $f) { continue }
         $cid = [string](Get-NRGObjectField -Item $f -Key 'ControlId' -Default '')
         if (-not $cid) { continue }
-        if (-not $byId.ContainsKey($cid)) { $byId[$cid] = $f; continue }
-        $state     = [string](Get-NRGObjectField -Item $f          -Key 'State' -Default '')
-        $prevState = [string](Get-NRGObjectField -Item $byId[$cid] -Key 'State' -Default '')
-        $rank     = if ($stateRank.ContainsKey($state))     { $stateRank[$state] }     else { -1 }
-        $prevRank = if ($stateRank.ContainsKey($prevState)) { $stateRank[$prevState] } else { -1 }
-        if ($rank -gt $prevRank) { $byId[$cid] = $f }
+        if (-not $byId.Contains($cid)) { $byId[$cid] = [System.Collections.Generic.List[object]]::new() }
+        $byId[$cid].Add($f)
+    }
+    $controlState = {
+        param($list)
+        $states = @($list | ForEach-Object { [string](Get-NRGObjectField -Item $_ -Key 'State' -Default '') })
+        if ($states -contains 'Gap')     { return 'Gap' }
+        if ($states -contains 'Partial') { return 'Partial' }
+        if (@($states | Where-Object { $_ -notin @('Satisfied', 'NotApplicable') }).Count -gt 0) { return 'NotRun' }
+        if ($states -contains 'NotApplicable') { return 'NotApplicable' }
+        return 'Satisfied'
     }
 
     $rows = [System.Collections.Generic.List[object]]::new()
@@ -229,29 +240,39 @@ function Get-NRGHipaaReadiness {
         $evidence = [System.Collections.Generic.List[object]]::new()
         $sat = 0; $part = 0; $gap = 0; $na = 0; $notRun = 0
         foreach ($cid in $ctlIds) {
-            $st = 'NotRun'; $why = ''
-            if ($byId.ContainsKey($cid)) {
-                $st  = [string](Get-NRGObjectField -Item $byId[$cid] -Key 'State'  -Default '')
-                $why = [string](Get-NRGObjectField -Item $byId[$cid] -Key 'Detail' -Default '')
-            }
+            $instances = @()
+            if ($byId.Contains($cid)) { $instances = @($byId[$cid]) }
+            $st = if ($instances.Count -gt 0) { & $controlState $instances } else { 'NotRun' }
             switch ($st) {
                 'Satisfied'     { $sat++ }
                 'Partial'       { $part++ }
                 'Gap'           { $gap++ }
                 'NotApplicable' { $na++ }
                 # Error, absent or unrecognized: no verdict, counted in neither direction.
-                default         { $notRun++; if (-not $st) { $st = 'NotRun' } }
+                default         { $notRun++ }
             }
-            $evidence.Add([ordered]@{
-                ControlId   = $cid
-                Title       = [string]$meta[$cid]['Title']
-                State       = $st
-                # Kept for every state, Satisfied included: a passing finding's
-                # Detail carries its qualifications (what was and was not read,
-                # partial scope), which a readiness reader must see.
-                Detail      = $why
-                Remediation = $(if ($st -in @('Gap', 'Partial')) { [string]$meta[$cid]['Remediation'] } else { '' })
-            })
+            if ($instances.Count -eq 0) {
+                $evidence.Add([ordered]@{
+                    ControlId = $cid; Instance = ''; Title = [string]$meta[$cid]['Title']
+                    State = 'NotRun'; Detail = ''; Remediation = ''
+                })
+            }
+            foreach ($f in $instances) {
+                $ist = [string](Get-NRGObjectField -Item $f -Key 'State' -Default '')
+                if (-not $ist) { $ist = 'NotRun' }
+                $evidence.Add([ordered]@{
+                    ControlId   = $cid
+                    Instance    = [string](Get-NRGObjectField -Item $f -Key 'Instance' -Default '')
+                    Title       = [string]$meta[$cid]['Title']
+                    State       = $ist
+                    # Kept for every state and every instance, Satisfied included:
+                    # a passing finding's Detail carries its qualifications (what
+                    # was and was not read, partial scope), which a readiness
+                    # reader must see.
+                    Detail      = [string](Get-NRGObjectField -Item $f -Key 'Detail' -Default '')
+                    Remediation = $(if ($ist -in @('Gap', 'Partial')) { [string]$meta[$cid]['Remediation'] } else { '' })
+                })
+            }
         }
 
         $assessed = $sat + $part + $gap

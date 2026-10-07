@@ -138,6 +138,43 @@ Describe 'HIPAA Security Rule readiness view' {
             (Row $err '164.312(d)')['Status'] | Should -Be 'Not assessed'
         }
 
+        It 'a known shortfall on one instance is not hidden by an Error on another (Codex review)' {
+            # DNS-1.1 cites 164.312(e)(1) and reports once per domain.
+            $base = @($script:AllPass | Where-Object { $_.ControlId -ne 'DNS-1.1' })
+            $f = $base + @(
+                @{ ControlId = 'DNS-1.1'; Instance = 'a.example'; State = 'Partial'; Detail = 'SPF soft fail on a.example.'; Title = 't' }
+                @{ ControlId = 'DNS-1.1'; Instance = 'b.example'; State = 'Error';   Detail = 'evaluator threw on b.example'; Title = 't' }
+            )
+            (Row (Get-NRGHipaaReadiness -Findings $f) '164.312(e)(1)')['Status'] | Should -Be 'Technical check shortfall'
+            # An Error beside passes is still no verdict.
+            $g = $base + @(
+                @{ ControlId = 'DNS-1.1'; Instance = 'a.example'; State = 'Satisfied'; Detail = 'ok'; Title = 't' }
+                @{ ControlId = 'DNS-1.1'; Instance = 'b.example'; State = 'Error';     Detail = 'threw'; Title = 't' }
+            )
+            (Row (Get-NRGHipaaReadiness -Findings $g) '164.312(e)(1)')['Status'] | Should -Not -Be 'Mapped technical checks satisfied'
+        }
+
+        It 'keeps every instance finding of a control in the evidence (Codex review)' {
+            $base = @($script:AllPass | Where-Object { $_.ControlId -ne 'DNS-1.1' })
+            $f = $base + @(
+                @{ ControlId = 'DNS-1.1'; Instance = 'a.example'; State = 'Gap';       Detail = 'No SPF on a.example.'; Title = 't' }
+                @{ ControlId = 'DNS-1.1'; Instance = 'b.example'; State = 'Gap';       Detail = 'No SPF on b.example.'; Title = 't' }
+                @{ ControlId = 'DNS-1.1'; Instance = 'c.example'; State = 'Satisfied'; Detail = 'SPF -all on c.example.'; Title = 't' }
+            )
+            $p = Get-NRGHipaaReadiness -Findings $f
+            $ev = @((Row $p '164.312(e)(1)')['Evidence'] | Where-Object { $_['ControlId'] -eq 'DNS-1.1' })
+            $ev.Count | Should -Be 3
+            @($ev | ForEach-Object { $_['Instance'] }) | Should -Be @('a.example', 'b.example', 'c.example')
+            @($ev | ForEach-Object { $_['Detail'] }) | Should -Contain 'No SPF on b.example.'
+            # The control counts once toward the item, not once per domain.
+            (Row $p '164.312(e)(1)')['MappedControls'] | Should -Be (Row (Get-NRGHipaaReadiness -Findings $script:AllPass) '164.312(e)(1)')['MappedControls']
+            $md = Join-Path $script:Tmp 'instances.md'
+            Publish-NRGHipaaReadiness -Posture $p -OutputPath $md -Metadata @{ TenantDomain = 'example.com' } | Out-Null
+            $txt = Get-Content -LiteralPath $md -Raw
+            $txt | Should -Match 'DNS-1\.1 \(b\.example\)'
+            (Get-Content -LiteralPath ([IO.Path]::ChangeExtension($md, '.html')) -Raw) | Should -Match 'DNS-1\.1 \(b\.example\)'
+        }
+
         It 'one pass beside a not-applicable control is not met' {
             $none = Get-NRGHipaaReadiness -Findings @()
             $ids = @((Row $none '164.312(d)')['Evidence'] | ForEach-Object { $_['ControlId'] })

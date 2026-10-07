@@ -12,7 +12,9 @@
   whole requirement). A standard is reviewed separately from its implementation specifications,
   so a standard whose own checks passed beside an open specification reads "Mapped checks
   satisfied, specifications open". Items mapped to checks and items with evidence collected this
-  run are counted separately. Every finding's detail is kept, a passing one's included. An item no
+  run are counted separately. Every finding's detail is kept, a passing one's included, and every
+  instance of a per-instance control (DNS once per domain) is listed; a Gap or Partial instance is a
+  shortfall even beside an instance that errored, which is no verdict. An item no
   check maps to is "Attestation required". Page one says it is not a risk analysis or a compliance
   determination, that Addressable is not optional, that the regulation expressly requires
   documenting why an Addressable specification is not implemented (recording every decision is
