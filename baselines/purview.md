@@ -385,7 +385,7 @@ Purview > Roles & scopes > eDiscovery Manager. Assign eDiscovery Manager role to
 | CMMC 2.0 | IR.L2-3.6.1 |
 | ISO/IEC 27001:2022 | A.5.33 |
 | SOC 2 | CC7.4 |
-| HIPAA | §164.316, §164.524 |
+| HIPAA | §164.524 |
 | PCI DSS | Req 12.10.5 |
 | MITRE ATT&CK | T1114 |
 

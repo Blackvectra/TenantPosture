@@ -89,6 +89,13 @@ Describe 'controls.json — framework citation coverage' {
                 $hits | Should -BeNullOrEmpty -Because "$bad does not describe what any tenant evaluator checks"
             }
         }
+
+        It 'no control cites a bare Security Rule section, which names no standard' {
+            # PVW-3.2 (eDiscovery) cited bare 164.316 (policies and documentation);
+            # removed 2026-10-07. A bare section cannot map to a readiness item.
+            $hits = @($script:Controls | Where-Object { [string]$_.References.HIPAA -match '164\.3\d\d(?![\d(])' } | ForEach-Object ControlId)
+            $hits | Should -BeNullOrEmpty
+        }
     }
 
     Context 'Citations match each framework''s reference shape' {

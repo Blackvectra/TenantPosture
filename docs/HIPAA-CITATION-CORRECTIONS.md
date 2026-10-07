@@ -1,7 +1,8 @@
 # HIPAA citation corrections (2026-10-06)
 
 Sixteen controls in `Config/controls.json` cited one of three HIPAA Security Rule implementation
-specifications that do not describe what their evaluators check. Building the HIPAA readiness view
+specifications that do not describe what their evaluators check, and a seventeenth (PVW-3.2) cited
+the bare section 164.316. Building the HIPAA readiness view
 surfaced them: a readiness row would have read "satisfied" for a requirement the check has nothing
 to do with.
 
@@ -44,6 +45,7 @@ and were not re-reviewed in this change.
 | TMS-4.1 | 164.316(b)(2)(i), 164.502 | Meeting recordings expire after 60 to 90 days | 164.502 | Time-limit citation removed; the Privacy Rule citation kept (see below). |
 | PVW-4.2 | 164.316(b)(2)(i), 164.312(b) | A custom audit log retention policy of at least one year | 164.312(b) | Time-limit citation removed; audit controls kept. An earlier audit had pinned 164.316(b)(2)(i) on this control; the pin now expects 164.312(b). |
 | PVW-4.4 | 164.316(b)(2)(i), 164.530(j) | Records management retention labels exist for regulated content | 164.530(j) | Time-limit citation removed; the Privacy Rule citation kept (see below). |
+| PVW-3.2 | 164.316, 164.524 | eDiscovery roles are assigned and cases can be opened | 164.524 | Bare 164.316 (policies and procedures and documentation) removed: it names no standard, and eDiscovery case management is not a documentation requirement. Found when the readiness view started reading section-level citations (review of PR #121). The Privacy Rule citation is kept. |
 
 ## Not changed here, for review
 
@@ -61,4 +63,4 @@ and were not re-reviewed in this change.
   control, and fails if a listed control gains one without leaving the list.
 - The same test fails if any control cites 164.308(a)(4)(ii)(A), 164.308(a)(5)(ii)(A) or
   164.316(b)(2)(i) again.
-- The `baselines/*.md` framework tables were updated for the sixteen controls.
+- The `baselines/*.md` framework tables were updated for the seventeen controls.
