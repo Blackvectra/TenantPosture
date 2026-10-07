@@ -147,6 +147,16 @@ Found on a real workstation on 2026-10-04; each fix is its own change.
 - **The Microsoft Store build of PowerShell.** The Exchange Online module failed to import from it;
   launch "PowerShell 7 (x64)" (the MSI build) instead. The entry point warns about it.
 
+## HIPAA citation judgments not yet decided
+
+Kept unchanged by the citation corrections (PR #122) and recorded in
+`docs/HIPAA-CITATION-CORRECTIONS.md`; each needs an owner decision.
+
+- **EXO-2.5 (Customer Lockbox)** cites audit controls, 164.312(b). Customer Lockbox gates Microsoft
+  support access behind an approval, which is closer to access control, 164.312(a)(1).
+- **PVW-2.5 (retention policies cover the key workloads)** cites the data backup plan,
+  164.308(a)(7)(ii)(A). Retention policies preserve content against deletion; they are not a backup.
+
 ## Pending changes that address an item here
 
 - **The web GUI items above** (run list for command-line runs, report-site link, `-ScriptDir`
