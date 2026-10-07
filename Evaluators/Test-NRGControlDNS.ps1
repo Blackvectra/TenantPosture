@@ -489,11 +489,65 @@ function Test-NRGControlDNSDNSSEC {
 }
 
 # ── DNS-2.1 DKIM Key Rotation Cadence ───────────────────────────────────────
-# Reads $d.DKIM.KeyAgeDays populated by the collector from
-# Get-DkimSigningConfig.KeyCreationTime. Microsoft does not auto-rotate DKIM
-# keys for customer-managed domains, so many tenants run 2+ year old keys.
-# NIST SP 800-57 Part 1 §5.3.6 recommends a documented cryptoperiod for
-# signing keys; 1y is industry standard, 2y is the outer bound.
+# Reads the DKIM block the DNS collector builds from Get-DkimSigningConfig
+# (KeyCreationTime, per-selector key sizes) and from the published key behind
+# each selector CNAME (its n= creation timestamp). Every domain's finding
+# states the date the key was last rotated, so the report answers "when was
+# DKIM last rotated" per domain. The 365-day interval is this assessment's
+# rotation cadence; NIST SP 800-57 Part 1 gives private signature keys a
+# cryptoperiod of one to three years. Key size is EXO-1.4's verdict and is
+# shown here as context only. Microsoft rotates DKIM only when asked.
+function Get-NRGDkimRotationFacts {
+    [CmdletBinding()]
+    param([AllowNull()] $Dkim)
+
+    $f = [ordered]@{ AgeDays = $null; LastRotated = ''; Source = ''; Context = @() }
+    if ($null -eq $Dkim) { return $f }
+    $age = Get-NRGObjectField -Item $Dkim -Key 'KeyAgeDays' -Default $null
+    $last = [string](Get-NRGObjectField -Item $Dkim -Key 'LastRotated' -Default '')
+    if ($null -ne $age) {
+        $f.AgeDays = [int]$age
+        $f.LastRotated = $last
+        $f.Source = 'Exchange'
+    }
+
+    $sizes = @()
+    foreach ($n in 1, 2) {
+        $bits = Get-NRGObjectField -Item $Dkim -Key "Selector${n}KeySize" -Default $null
+        if ($null -ne $bits -and "$bits") { $sizes += "selector$n $bits-bit" }
+    }
+    if ($sizes.Count) { $f.Context += "Key sizes: $($sizes -join ', ')." }
+    $active = [string](Get-NRGObjectField -Item $Dkim -Key 'ActiveSelector' -Default '')
+    if ($active) { $f.Context += "Signing selector: $active." }
+
+    $published = @(@(Get-NRGObjectField -Item $Dkim -Key 'KeyRecords' -Default @()) | Where-Object { $null -ne $_ })
+    $dated = @()
+    foreach ($r in $published) {
+        $sel     = [string](Get-NRGObjectField -Item $r -Key 'Selector'   -Default '')
+        $created = [string](Get-NRGObjectField -Item $r -Key 'KeyCreated' -Default '')
+        $bits    = Get-NRGObjectField -Item $r -Key 'KeyBits' -Default $null
+        $lookup  = [string](Get-NRGObjectField -Item $r -Key 'Lookup' -Default '')
+        if ($created) {
+            $dated += $created
+            $f.Context += "Published $sel key created $created$(if ($bits) { ", $bits-bit" }) (DKIM n= timestamp)."
+        } elseif ($lookup -eq 'NoRecord') {
+            $f.Context += "Published $sel key: no record at the CNAME target (normal for the inactive selector after a rotation)."
+        }
+    }
+    $newest = @($dated | Sort-Object -Descending | Select-Object -First 1)
+    if ($null -eq $f.AgeDays -and $newest.Count) {
+        $dt = [datetime]::MinValue
+        if ([datetime]::TryParseExact($newest[0], 'yyyy-MM-dd', [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal, [ref]$dt)) {
+            $f.AgeDays = [int][math]::Floor(([datetime]::UtcNow - $dt).TotalDays)
+            $f.LastRotated = $newest[0]
+            $f.Source = 'DNS'
+        }
+    } elseif ($f.Source -eq 'Exchange' -and $f.LastRotated -and $newest.Count -and $newest[0] -ne $f.LastRotated) {
+        $f.Context += "The newest published key timestamp ($($newest[0])) differs from Exchange's key creation date ($($f.LastRotated)); confirm in the Defender portal which key is signing."
+    }
+    return $f
+}
+
 function Test-NRGControlDNSDkimRotation {
     [CmdletBinding()] param()
 
@@ -513,49 +567,46 @@ function Test-NRGControlDNSDkimRotation {
     $dnsDomainMap = Get-NRGNestedProperty -Object $dnsData -Path 'Data.Domains' -Default @{}
     foreach ($domain in @($dnsDomainMap.Keys)) {
         $d = $dnsDomainMap[$domain]
+        $facts = Get-NRGDkimRotationFacts -Dkim (Get-NRGObjectField -Item $d -Key 'DKIM' -Default $null)
+        $context = if ($facts.Context.Count) { ' ' + ($facts.Context -join ' ') } else { '' }
 
-        # Defensive: DKIM block may be missing on older collector data
-        $age = $null
-        if ($d.PSObject.Properties['DKIM'] -or ($d -is [System.Collections.IDictionary] -and $d.Contains('DKIM'))) {
-            $dkim = $d.DKIM
-            if ($dkim) {
-                if ($dkim -is [System.Collections.IDictionary] -and $dkim.Contains('KeyAgeDays')) {
-                    $age = $dkim['KeyAgeDays']
-                } elseif ($dkim.PSObject.Properties['KeyAgeDays']) {
-                    $age = $dkim.KeyAgeDays
-                }
-            }
-        }
-
-        if ($null -eq $age) {
+        if ($null -eq $facts.AgeDays) {
             Add-NRGFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$domain DKIM rotation age unknown — selector not found or M365 default key (no customer-managed KeyCreationTime)." `
-                -CurrentValue 'KeyAgeDays: unknown'
+                -Detail "$domain DKIM last rotation date unknown: Exchange returned no key creation time for this domain and no published key carried a timestamp.$context" `
+                -CurrentValue 'Last rotated: unknown'
             continue
         }
 
-        $ageInt = [int]$age
+        $ageInt = $facts.AgeDays
+        # Results replayed from before this change carry an age but no date.
+        if ($facts.LastRotated) {
+            $when = "$domain DKIM key last rotated $($facts.LastRotated) ($ageInt days ago$(if ($facts.Source -eq 'DNS') { ', from the published key timestamp' }))"
+            $current = "Last rotated $($facts.LastRotated) ($ageInt days)"
+        } else {
+            $when = "$domain DKIM key is $ageInt days old (the rotation date is not in this results file)"
+            $current = "Key age $ageInt days"
+        }
         if ($ageInt -le 365) {
             Add-NRGFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$domain DKIM key age is $ageInt days — within the 365-day cryptoperiod recommended by NIST SP 800-57." `
-                -CurrentValue "KeyAgeDays: $ageInt"
+                -Detail "$when, within the 365-day rotation interval this assessment uses.$context" `
+                -CurrentValue $current
         } elseif ($ageInt -le 730) {
             Add-NRGFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$domain DKIM key is $ageInt days old — over 1 year, rotation recommended (NIST SP 800-57 cryptoperiod guidance)." `
-                -CurrentValue "KeyAgeDays: $ageInt" -RequiredValue 'KeyAgeDays <= 365' `
+                -Detail "$when, past the 365-day rotation interval this assessment uses.$context" `
+                -CurrentValue $current -RequiredValue 'Rotated within the last 365 days' `
                 -Remediation $control.Remediation
         } else {
             Add-NRGFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$domain DKIM key is $ageInt days old — over 2 years, significant rotation gap. Long-lived signing keys increase the impact of a key-compromise event." `
-                -CurrentValue "KeyAgeDays: $ageInt" -RequiredValue 'KeyAgeDays <= 365' `
+                -Detail "$when, more than two years ago. A signing key in use that long has had that long to be exposed, and a compromised key lets anyone sign mail as the domain until it is rotated.$context" `
+                -CurrentValue $current -RequiredValue 'Rotated within the last 365 days' `
                 -Remediation $control.Remediation
         }
     }
