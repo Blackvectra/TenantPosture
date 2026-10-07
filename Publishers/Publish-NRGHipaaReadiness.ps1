@@ -73,7 +73,7 @@ function Publish-NRGHipaaReadiness {
 
     $notice = @(
         'This is not a risk analysis (45 CFR 164.308(a)(1)(ii)(A)) and not a determination of HIPAA compliance. It lists every Security Rule standard and implementation specification and shows which ones this Microsoft 365 assessment produced evidence for.'
-        "Evidence covers only the part of each item that lives in the Microsoft 365 tenant. $($sum['AttestationRequired']) of $($sum['Total']) items have no evidence from the tenant and need documents, interviews or a walkthrough; $($sum['NoTenantEvidence']) of them are documents, processes or organizational arrangements that tenant configuration cannot show at all."
+        "Evidence covers only the part of each item that lives in the Microsoft 365 tenant. $($sum['Total'] - $sum['EvidenceCollected']) of $($sum['Total']) items have no evidence from this run: $($sum['AttestationRequired']) have no mapped tenant check and need documents, interviews or a walkthrough ($($sum['NoTenantEvidence']) of them are documents, processes or organizational arrangements that tenant configuration cannot show at all), and $($sum['Mapped'] - $sum['EvidenceCollected']) have mapped checks that produced no evidence this run."
         'Addressable does not mean optional (45 CFR 164.306(d)(3)). Each Addressable specification must be assessed. If it is reasonable and appropriate it must be implemented; if not, the regulation requires documenting why and implementing an equivalent alternative measure if that is reasonable and appropriate. Recommended practice: record the assessment and decision for every Addressable specification, including any alternative measure, with the organization''s Security Rule documentation (45 CFR 164.316(b)). The regulation expressly requires documenting why when the specification is not implemented.'
         'This catalog is the Security Rule currently in effect. It does not implement the Security Rule changes HHS proposed in its notice of proposed rulemaking; the existing rule remains in effect while that rulemaking continues.'
         "Statuses report technical checks, not regulatory fulfillment. '$($st.Satisfied)' means every check this tool maps to the item passed; a mapping shows the check bears on the item, not that it covers all of it. A standard is reviewed separately from its implementation specifications."
@@ -138,12 +138,12 @@ function Publish-NRGHipaaReadiness {
                 $null = $sb.AppendLine()
             }
             if (@($r['Evidence']).Count -gt 0) {
-                $null = $sb.AppendLine('| Control | Title | Result | Detail |')
-                $null = $sb.AppendLine('|---|---|---|---|')
+                $null = $sb.AppendLine('| Control | Title | Result | Detail | Remediation |')
+                $null = $sb.AppendLine('|---|---|---|---|---|')
                 foreach ($e in @($r['Evidence'])) {
                     $inst = [string](Get-NRGObjectField -Item $e -Key 'Instance' -Default '')
                     $cidText = if ($inst) { "$($e['ControlId']) ($inst)" } else { [string]$e['ControlId'] }
-                    $null = $sb.AppendLine("| $(EscMd $cidText) | $(EscMd $e['Title']) | $(EscMd $e['State']) | $(EscMd $e['Detail']) |")
+                    $null = $sb.AppendLine("| $(EscMd $cidText) | $(EscMd $e['Title']) | $(EscMd $e['State']) | $(EscMd $e['Detail']) | $(EscMd (Get-NRGObjectField -Item $e -Key 'Remediation' -Default '')) |")
                 }
                 $null = $sb.AppendLine()
             }
@@ -230,6 +230,8 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
                 $cidText = if ($inst) { "$($e['ControlId']) ($inst)" } else { [string]$e['ControlId'] }
                 $null = $ev.Append("<div><span class=`"cit`">$(Esc $cidText)</span> $(Esc $e['Title']): <b>$(Esc $e['State'])</b>")
                 if ($e['Detail']) { $null = $ev.Append(" <span class=`"small`">$(Esc $e['Detail'])</span>") }
+                $rem = [string](Get-NRGObjectField -Item $e -Key 'Remediation' -Default '')
+                if ($rem) { $null = $ev.Append("<div class=`"small`"><b>Remediation:</b> $(Esc $rem)</div>") }
                 $null = $ev.Append('</div>')
             }
             if ($r['TenantEvidence'] -eq 'None') { $null = $ev.Append("<div class=`"small`">Not shown by tenant configuration: $(Esc $r['TenantEvidenceReason'])</div>") }

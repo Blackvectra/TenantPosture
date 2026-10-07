@@ -219,6 +219,27 @@ Describe 'HIPAA Security Rule readiness view' {
             if ($un.Count -gt 0) { $txt | Should -Match ([regex]::Escape(($un[0] -replace '[<>&|]', ''))) }
         }
 
+        It 'renders the remediation for a shortfall, and counts every evidence-free item on page one (Codex review)' {
+            $f = @($script:AllPass | Where-Object { $_.ControlId -ne 'DNS-1.1' }) + @(F 'DNS-1.1' 'Gap' 'No SPF.')
+            $p = Get-NRGHipaaReadiness -Findings $f
+            $rem = [string](@($script:Controls | Where-Object ControlId -eq 'DNS-1.1')[0].Remediation)
+            $md = Join-Path $script:Tmp 'remediation.md'
+            Publish-NRGHipaaReadiness -Posture $p -OutputPath $md -Metadata @{ TenantDomain = 'example.com' } | Out-Null
+            $txt  = Get-Content -LiteralPath $md -Raw
+            $html = Get-Content -LiteralPath ([IO.Path]::ChangeExtension($md, '.html')) -Raw
+            $probe = ($rem -split '[<>&|]')[0].Substring(0, [Math]::Min(40, ($rem -split '[<>&|]')[0].Length))
+            $txt  | Should -Match ([regex]::Escape($probe))
+            $html | Should -Match 'Remediation:</b>'
+            # A run where nothing produced evidence: every item is evidence-free,
+            # not only the unmapped ones.
+            $none = Get-NRGHipaaReadiness -Findings @()
+            $md2 = Join-Path $script:Tmp 'none.md'
+            Publish-NRGHipaaReadiness -Posture $none -OutputPath $md2 -Metadata @{ TenantDomain = 'example.com' } | Out-Null
+            $s = $none['Summary']
+            (Get-Content -LiteralPath $md2 -Raw) | Should -Match ("$($s['Total']) of $($s['Total']) items have no evidence from this run")
+            (Get-Content -LiteralPath $md2 -Raw) | Should -Match ("$($s['Mapped']) have mapped checks that produced no evidence this run")
+        }
+
         It 'one pass beside a not-applicable control is not met' {
             $none = Get-NRGHipaaReadiness -Findings @()
             $ids = @((Row $none '164.312(d)')['Evidence'] | ForEach-Object { $_['ControlId'] })
