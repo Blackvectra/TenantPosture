@@ -105,6 +105,7 @@
         'Resolve-NRGDns',
         'Resolve-NRGTenantId',
         'Set-NRGThirdPartyEdr',
+        'Set-NRGThirdPartyAwareness',
         'Set-NRGLicenseGating',
         'Get-NRGBaselineDefinition',
         'Get-NRGBaselineRequiredControls',

@@ -91,8 +91,8 @@ because stock Windows does not have 7.
 .\Invoke-NRGDeviceCompliance.ps1     # -> C:\ProgramData\NRG\device-compliance.json
 ```
 
-35 checks: encryption and boot integrity, malware defense, network exposure,
-accounts, patch state, session lock, legacy surface, audit policy.
+39 checks: encryption and boot integrity, malware defense, network exposure,
+accounts, patch state, session lock, legacy surface, audit policy, event logging.
 
 **Run it elevated.** Nine checks need administrative rights; run without and they
 report `NotAssessed` — never a pass, never a failure — and the run is flagged
@@ -263,7 +263,7 @@ docs/            this file, and the policy docs
 |---|---|
 | `clients.json` | Your client list — TenantId, DelegatedOrg, skip flags |
 | `controls.json` | The 202 tenant controls and every framework citation |
-| `device-controls.json` | The 35 endpoint checks (`DEV-*`) |
+| `device-controls.json` | The 39 endpoint checks (`DEV-*`) |
 | `device-baseline.json` | The 29-item build standard |
 | `nist-physical.json` | The 31 physical / media / device controls |
 | `nist-800-53-catalog.json` | Official 800-53 Rev 5 titles |
@@ -291,5 +291,5 @@ Worth knowing so you do not promise it:
 - **Physical and environmental controls are never scored** — locked rooms, badge
   logs, certificates of destruction. They appear in the device guide as
   attestation items and are deliberately never claimed as compliant.
-- **Nothing here is a CIS benchmark scanner.** The 35 endpoint checks are a
+- **Nothing here is a CIS benchmark scanner.** The 39 endpoint checks are a
   NIST-mapped subset, not the several hundred recommendations in a CIS Benchmark.

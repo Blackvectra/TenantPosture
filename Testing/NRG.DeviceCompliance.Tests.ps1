@@ -160,7 +160,7 @@ Describe 'Endpoint device compliance' {
         It 'gates every elevation-dependent check behind the elevation switch' {
             # These four cannot be read without admin rights and silently return
             # nothing when they are not available.
-            foreach ($id in 'DEV-1.1', 'DEV-1.4', 'DEV-1.5', 'DEV-8.2') {
+            foreach ($id in 'DEV-1.1', 'DEV-1.4', 'DEV-1.5', 'DEV-8.2', 'DEV-8.3', 'DEV-8.4', 'DEV-8.6') {
                 $script:AgentSrc | Should -Match ([regex]::Escape("Invoke-Check -Id '$id' -NeedsElevation")) `
                     -Because "$id reads state that requires administrative rights"
             }
@@ -168,6 +168,79 @@ Describe 'Endpoint device compliance' {
 
         It 'records whether it ran elevated' {
             $script:AgentSrc | Should -Match 'Elevated\s*=\s*\$script:IsElevated'
+        }
+    }
+
+    Context 'Event log and audit-policy checks (DEV-8.3 to DEV-8.6)' {
+
+        BeforeAll {
+            # The verdicts are pure functions in the endpoint script, so they can
+            # run here without a Windows event log. Taken from the parsed file,
+            # not copied, so the test exercises the code that ships.
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:AgentPath, [ref]$null, [ref]$null)
+            foreach ($name in 'Get-EventLogSizeVerdict', 'Get-EventLogModeVerdict') {
+                $fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
+                Set-Item -Path "function:script:$name" -Value $fn.Body.GetScriptBlock()
+            }
+            $script:Min = @{ Application = 32768; Security = 196608; Setup = 32768; System = 32768 }
+            function script:L([string] $Name, $Bytes, $Mode = 'Circular') {
+                [pscustomobject]@{ LogName = $Name; MaximumSizeInBytes = $Bytes; LogMode = $Mode }
+            }
+            $script:Good = @((L 'Application' 33554432), (L 'Security' 201326592), (L 'Setup' 33554432), (L 'System' 33554432))
+        }
+
+        It 'DEV-8.3 passes at the minimums and fails a Security log below 192 MB' {
+            (Get-EventLogSizeVerdict -Logs $script:Good -MinimumKB $script:Min).Result | Should -Be 'Pass'
+            $small = @($script:Good | Where-Object LogName -ne 'Security') + (L 'Security' 20971520)
+            $v = Get-EventLogSizeVerdict -Logs $small -MinimumKB $script:Min
+            $v.Result   | Should -Be 'Fail'
+            $v.Detail   | Should -Match 'Security 20480 KB \(minimum 196608 KB\)'
+            $v.Observed | Should -Match 'Security=20480 KB'
+        }
+
+        It 'DEV-8.3 never assumes an unread log is large enough' {
+            $v = Get-EventLogSizeVerdict -Logs @($script:Good | Where-Object LogName -ne 'Setup') -MinimumKB $script:Min
+            $v.Result | Should -Be 'NotAssessed' -Because 'a log that was not read is unknown, not compliant'
+            $v.Detail | Should -Match 'Not read: Setup'
+            (Get-EventLogSizeVerdict -Logs @() -MinimumKB $script:Min).Result | Should -Be 'NotAssessed'
+            # A shortfall on a log that WAS read is still a failure, and the unread one is named.
+            $mixed = @((L 'Security' 1048576), (L 'System' 33554432))
+            $v = Get-EventLogSizeVerdict -Logs $mixed -MinimumKB $script:Min
+            $v.Result | Should -Be 'Fail'
+            $v.Detail | Should -Match 'Not read: Application, Setup'
+        }
+
+        It 'DEV-8.4 fails a log that stops recording when full, and passes Circular or AutoBackup' {
+            $names = @('Application', 'Security', 'Setup', 'System')
+            (Get-EventLogModeVerdict -Logs $script:Good -LogNames $names).Result | Should -Be 'Pass'
+            $auto = @($script:Good | Where-Object LogName -ne 'Security') + (L 'Security' 201326592 'AutoBackup')
+            (Get-EventLogModeVerdict -Logs $auto -LogNames $names).Result | Should -Be 'Pass'
+            $retain = @($script:Good | Where-Object LogName -ne 'Security') + (L 'Security' 201326592 'Retain')
+            $v = Get-EventLogModeVerdict -Logs $retain -LogNames $names
+            $v.Result | Should -Be 'Fail'
+            $v.Detail | Should -Match 'Stops recording new events when full: Security'
+        }
+
+        It 'DEV-8.4 reports an unread or unrecognized mode as not assessed, never a pass' {
+            $names = @('Application', 'Security', 'Setup', 'System')
+            (Get-EventLogModeVerdict -Logs @($script:Good | Where-Object LogName -ne 'System') -LogNames $names).Result | Should -Be 'NotAssessed'
+            $odd = @($script:Good | Where-Object LogName -ne 'System') + (L 'System' 33554432 'Something')
+            (Get-EventLogModeVerdict -Logs $odd -LogNames $names).Result | Should -Be 'NotAssessed'
+        }
+
+        It 'DEV-8.5 treats an absent value as the documented default (enabled) and fails only an explicit 0' {
+            $body = [regex]::Match($script:AgentSrc, "(?s)Invoke-Check -Id 'DEV-8\.5'.*?\n    \}").Value
+            $body | Should -Match ([regex]::Escape("'SCENoApplyLegacyAuditPolicy'"))
+            $body | Should -Match ([regex]::Escape('$ok = $true')) -Because 'Microsoft documents the default as Enabled'
+            $body | Should -Match ([regex]::Escape("([string]`$force -eq '1')"))
+        }
+
+        It 'DEV-8.6 is inventory: it records Info and is never a pass or a fail' {
+            $def = @($script:Defs | Where-Object ControlId -eq 'DEV-8.6')[0]
+            [bool]$def.Inventory | Should -BeTrue
+            $body = [regex]::Match($script:AgentSrc, "(?s)Invoke-Check -Id 'DEV-8\.6'.*?\n    \}").Value
+            $body | Should -Match "-Result 'Info'"
+            $body | Should -Not -Match "'Pass'|'Fail'"
         }
     }
 

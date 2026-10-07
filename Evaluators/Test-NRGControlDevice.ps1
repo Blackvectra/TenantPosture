@@ -7,7 +7,7 @@
 #          the fleet.
 #
 #          One finding per DEV control, not one per device. An assessment report
-#          with 60 laptops x 35 checks is 2,100 rows nobody reads; what an
+#          with 60 laptops x 39 checks is 2,340 rows nobody reads; what an
 #          operator needs is "DEV-1.1 BitLocker: 41 of 60 failing" with the
 #          hostnames attached, which is what AffectedObjects carries.
 #

@@ -71,6 +71,15 @@ param(
     [ValidatePattern('^$|^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$')]
     [string] $ThirdPartyEDR,
 
+    # The client's phishing simulation and security awareness training run on
+    # a third-party platform (e.g. 'KnowBe4'), not Microsoft Attack Simulation
+    # Training. DEF-4.6 is then reported as run on that platform — declared,
+    # not verified — and excluded from the score instead of scoring as a gap
+    # or a license upgrade. Also read from the client's ThirdPartyAwareness
+    # field in Config/clients.json, then AwarenessStack in Config/branding.psd1.
+    [ValidatePattern('^$|^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$')]
+    [string] $ThirdPartyAwareness,
+
     # The NRG monitoring address(es) alert policies should notify (an address,
     # or @domain for a whole domain). DEF-3.4 and EXO-3.3 compare each enabled
     # policy's recipients with this list; without one, "alerts reach NRG" is
@@ -493,6 +502,9 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
     if (-not $ThirdPartyEDR -and $clientRec -and $clientRec.PSObject.Properties['ThirdPartyEDR'] -and "$($clientRec.ThirdPartyEDR)") {
         $ThirdPartyEDR = [string]$clientRec.ThirdPartyEDR
     }
+    if (-not $ThirdPartyAwareness -and $clientRec -and $clientRec.PSObject.Properties['ThirdPartyAwareness'] -and "$($clientRec.ThirdPartyAwareness)") {
+        $ThirdPartyAwareness = [string]$clientRec.ThirdPartyAwareness
+    }
     if (-not $MonitoringAddress -and $clientRec -and $clientRec.PSObject.Properties['MonitoringAddresses'] -and @($clientRec.MonitoringAddresses).Count -gt 0) {
         $MonitoringAddress = @($clientRec.MonitoringAddresses | ForEach-Object { [string]$_ })
         $monitoringSource = 'clients.json'
@@ -537,6 +549,20 @@ if (-not $ThirdPartyEDR) {
             if ($edr -match '^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$') { $ThirdPartyEDR = $edr }
             elseif ($edr) { Write-Warning "Ignoring EdrStack '$edr' in branding.psd1: use a plain product name such as 'Cortex XDR'." }
         } catch { Write-Verbose "branding.psd1 EdrStack not read: $($_.Exception.Message)" }
+    }
+}
+# Same rule for AwarenessStack: the phishing-simulation platform every client
+# uses unless -ThirdPartyAwareness or clients.json ThirdPartyAwareness says
+# otherwise. Declared, never verified: DEF-4.6 goes out of the score.
+if (-not $ThirdPartyAwareness) {
+    $brandFile = Join-Path $scriptDir 'Config' 'branding.psd1'
+    if (Test-Path -LiteralPath $brandFile) {
+        try {
+            $brandData = Import-PowerShellDataFile -LiteralPath $brandFile
+            $sat = if ($brandData.ContainsKey('AwarenessStack')) { "$($brandData['AwarenessStack'])".Trim() } else { '' }
+            if ($sat -match '^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$') { $ThirdPartyAwareness = $sat }
+            elseif ($sat) { Write-Warning "Ignoring AwarenessStack '$sat' in branding.psd1: use a plain product name such as 'KnowBe4'." }
+        } catch { Write-Verbose "branding.psd1 AwarenessStack not read: $($_.Exception.Message)" }
     }
 }
 
@@ -745,6 +771,11 @@ if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
         $edrCount = Set-NRGThirdPartyEdr -Product $ThirdPartyEDR -Findings $findings
         $reportMetadata['ThirdPartyEDR'] = $ThirdPartyEDR
         Write-Host "  [i] $edrCount Defender endpoint check(s) reported as covered by $ThirdPartyEDR (declared, not verified; not scored)" -ForegroundColor DarkGray
+    }
+    if ($ThirdPartyAwareness) {
+        $satCount = Set-NRGThirdPartyAwareness -Product $ThirdPartyAwareness -Findings $findings
+        $reportMetadata['ThirdPartyAwareness'] = $ThirdPartyAwareness
+        Write-Host "  [i] $satCount phishing-simulation check(s) reported as run on $ThirdPartyAwareness (declared, not verified; not scored)" -ForegroundColor DarkGray
     }
     # Same rule on republish (the license profile comes from the restored
     # AAD-Inventory raw data; without it nothing is moved).
@@ -1051,7 +1082,7 @@ if (-not $skipCollection) {
                 $highSevEvaluators[$ctrl.EvaluatorFunction] = $true
             }
         }
-        # Test-NRGControlDevice owns the 35 DEV-* endpoint checks (3 Critical,
+        # Test-NRGControlDevice owns the 39 DEV-* endpoint checks (3 Critical,
         # 20 High) defined in Config/device-controls.json, NOT controls.json, so
         # the loop above never sees it and -Quick silently dropped every
         # endpoint finding even when -DeviceResults was supplied. Keep it in
@@ -1070,7 +1101,11 @@ if (-not $skipCollection) {
         $edrCount = Set-NRGThirdPartyEdr -Product $ThirdPartyEDR
         Write-Host "  [i] $edrCount Defender endpoint check(s) reported as covered by $ThirdPartyEDR (declared, not verified; not scored)" -ForegroundColor DarkGray
     }
-    # After the EDR declaration, so a Cortex client is not pitched Defender
+    if ($ThirdPartyAwareness) {
+        $satCount = Set-NRGThirdPartyAwareness -Product $ThirdPartyAwareness
+        Write-Host "  [i] $satCount phishing-simulation check(s) reported as run on $ThirdPartyAwareness (declared, not verified; not scored)" -ForegroundColor DarkGray
+    }
+    # After the EDR and awareness declarations, so a Cortex client is not pitched Defender
     # for Endpoint licenses for checks it does not need.
     $licGated = Set-NRGLicenseGating
     if ($licGated -gt 0) {
@@ -1099,6 +1134,7 @@ if (-not $skipCollection) {
         Brand          = $NRGBrand
         QuickScan      = [bool]$Quick
         ThirdPartyEDR  = [string]$ThirdPartyEDR
+        ThirdPartyAwareness = [string]$ThirdPartyAwareness
     }
 }
 
