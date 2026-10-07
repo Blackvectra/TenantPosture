@@ -1205,7 +1205,7 @@ Entra ID > External Identities > Cross-tenant access settings > Default settings
 | CMMC 2.0 | AC.L1-3.1.2 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.22 |
 | SOC 2 | CC6.6 |
-| HIPAA | §164.308(a)(4)(ii)(A) |
+| HIPAA | §164.312(d) |
 | PCI DSS | Req 1.4 |
 | MITRE ATT&CK | T1078, T1110 |
 

@@ -27,6 +27,12 @@ Describe 'controls.json — framework citation coverage' {
         $script:JsonPath = Join-Path $script:RepoRoot 'Config\controls.json'
         $script:Data     = Get-Content -LiteralPath $script:JsonPath -Raw -Encoding utf8 | ConvertFrom-Json
         $script:Controls = @($script:Data.controls)
+        # Controls deliberately left without a HIPAA citation, each with the
+        # reason (Config/hipaa-uncited-controls.json). A stretched citation is
+        # worse than none, so the coverage gate accepts these and only these.
+        $script:HipaaUncited = @{}
+        $unc = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config/hipaa-uncited-controls.json') -Raw -Encoding utf8 | ConvertFrom-Json
+        foreach ($p in $unc.controls.PSObject.Properties) { $script:HipaaUncited[$p.Name] = [string]$p.Value }
     }
 
     It 'controls.json exists and parses' {
@@ -53,10 +59,42 @@ Describe 'controls.json — framework citation coverage' {
                 }
                 # MITRE may be a string OR an array; empty array also fails
                 if ($val -is [array]) { return $val.Count -eq 0 }
+                if ($fw -eq 'HIPAA' -and $script:HipaaUncited.ContainsKey($_.ControlId)) { return $false }
                 [string]::IsNullOrWhiteSpace([string]$val)
             } | ForEach-Object { $_.ControlId })
 
             $offenders | Should -BeNullOrEmpty -Because "$fw must be cited for every control — this gate exists because the MSP product depends on it"
+        }
+    }
+
+    Context 'Controls deliberately left without a HIPAA citation' {
+
+        It 'every listed control exists, has an empty HIPAA citation, and states why' {
+            $ids = @($script:Controls | ForEach-Object { $_.ControlId })
+            foreach ($cid in $script:HipaaUncited.Keys) {
+                $ids | Should -Contain $cid
+                $c = @($script:Controls | Where-Object ControlId -eq $cid)[0]
+                [string]$c.References.HIPAA | Should -BeNullOrEmpty -Because "$cid is listed as uncited; remove it from Config/hipaa-uncited-controls.json when a reviewed citation is added"
+                $script:HipaaUncited[$cid].Length | Should -BeGreaterThan 40 -Because "$cid needs a stated reason"
+            }
+        }
+
+        It 'no control cites a Security Rule item that tenant configuration cannot show as evidence for it' {
+            # Corrected 2026-10-06 (docs/HIPAA-CITATION-CORRECTIONS.md): the
+            # clearinghouse specification, security reminders and the
+            # documentation time limit describe an entity structure, a training
+            # activity and policy-document retention, not a tenant setting.
+            foreach ($bad in '164.308(a)(4)(ii)(A)', '164.308(a)(5)(ii)(A)', '164.316(b)(2)(i)') {
+                $hits = @($script:Controls | Where-Object { ([string]$_.References.HIPAA).Contains($bad) } | ForEach-Object ControlId)
+                $hits | Should -BeNullOrEmpty -Because "$bad does not describe what any tenant evaluator checks"
+            }
+        }
+
+        It 'no control cites a bare Security Rule section, which names no standard' {
+            # PVW-3.2 (eDiscovery) cited bare 164.316 (policies and documentation);
+            # removed 2026-10-07. A bare section cannot map to a readiness item.
+            $hits = @($script:Controls | Where-Object { [string]$_.References.HIPAA -match '164\.3\d\d(?![\d(])' } | ForEach-Object ControlId)
+            $hits | Should -BeNullOrEmpty
         }
     }
 
@@ -115,7 +153,11 @@ Describe 'controls.json — framework citation coverage' {
             @{ id = 'INT-4.3'; expected = '§164.308(a)(1)(ii)(B)' }
             @{ id = 'PVW-1.1'; expected = '§164.312(b)' }
             @{ id = 'PVW-2.4'; expected = '§164.308(a)(6)' }
-            @{ id = 'PVW-4.2'; expected = '§164.316(b)(2)(i)' }
+            # Was 164.316(b)(2)(i) after the earlier audit; corrected 2026-10-06
+            # (docs/HIPAA-CITATION-CORRECTIONS.md): that specification is the
+            # six-year retention of Security Rule documentation, not of audit
+            # logs. The audit-controls citation it already carried remains.
+            @{ id = 'PVW-4.2'; expected = '§164.312(b)' }
             @{ id = 'PVW-4.3'; expected = '§164.502(b)' }
         )
         It '<id> HIPAA citation still references <expected>' -TestCases $hipaaCases {
