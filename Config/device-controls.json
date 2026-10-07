@@ -580,6 +580,69 @@
         "3.3.1",
         "3.3.2"
       ]
+    },
+    {
+      "ControlId": "DEV-8.3",
+      "Title": "Event Log Sizes Meet Minimums",
+      "Severity": "Medium",
+      "Workload": "DEV",
+      "Nist": [
+        "AU-4"
+      ],
+      "RequiresElevation": true,
+      "Remediation": "Raise the maximum event log sizes by policy (Computer Configuration > Administrative Templates > Windows Components > Event Log Service): Security to at least 196,608 KB and Application, Setup and System to at least 32,768 KB, or to whatever holds the window your log collection needs.",
+      "BusinessRisk": "A log that is too small rolls over before anyone collects it, and the oldest events, usually the start of an intrusion, are the first ones lost.",
+      "Group": "Logging",
+      "Nist171": [
+        "3.3.1"
+      ]
+    },
+    {
+      "ControlId": "DEV-8.4",
+      "Title": "Event Logs Keep Recording When Full",
+      "Severity": "Medium",
+      "Workload": "DEV",
+      "Nist": [
+        "AU-5",
+        "AU-4"
+      ],
+      "RequiresElevation": true,
+      "Remediation": "Set 'Control Event Log behavior when the log file reaches its maximum size' to Disabled for the Application, Security, Setup and System logs, so a full log overwrites its oldest events instead of stopping.",
+      "BusinessRisk": "A log set to stop when full can be switched off by anyone who fills it, which is a known way to blind an investigation.",
+      "Group": "Logging",
+      "Nist171": []
+    },
+    {
+      "ControlId": "DEV-8.5",
+      "Title": "Audit Policy Subcategory Settings Take Precedence",
+      "Severity": "Medium",
+      "Workload": "DEV",
+      "Nist": [
+        "AU-2",
+        "AU-12"
+      ],
+      "RequiresElevation": false,
+      "Remediation": "Set 'Audit: Force audit policy subcategory settings (Windows Vista or later) to override audit policy category settings' to Enabled, or remove the value that sets it to 0.",
+      "BusinessRisk": "With it off, a category-level audit setting from Group Policy can silently replace the subcategory settings the other audit checks rely on, such as Process Creation.",
+      "Group": "Logging",
+      "Nist171": [
+        "3.3.1"
+      ]
+    },
+    {
+      "ControlId": "DEV-8.6",
+      "Title": "Sysmon Presence Recorded",
+      "Severity": "Informational",
+      "Workload": "DEV",
+      "Nist": [
+        "SI-4"
+      ],
+      "RequiresElevation": true,
+      "Remediation": "No action required by this check. It records whether Sysmon is installed. If the endpoint telemetry it provides (process hashes, network connections, image loads) is not collected some other way, such as by the EDR agent, consider deploying Sysmon with a tuned configuration.",
+      "BusinessRisk": "Native Windows auditing does not record process hashes, network connections or image loads; without Sysmon or an EDR that collects them, an investigation has less to work with.",
+      "Group": "Logging",
+      "Nist171": [],
+      "Inventory": true
     }
   ]
 }

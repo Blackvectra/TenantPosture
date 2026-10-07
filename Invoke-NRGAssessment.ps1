@@ -71,6 +71,15 @@ param(
     [ValidatePattern('^$|^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$')]
     [string] $ThirdPartyEDR,
 
+    # The client's phishing simulation and security awareness training run on
+    # a third-party platform (e.g. 'KnowBe4'), not Microsoft Attack Simulation
+    # Training. DEF-4.6 is then reported as run on that platform — declared,
+    # not verified — and excluded from the score instead of scoring as a gap
+    # or a license upgrade. Also read from the client's ThirdPartyAwareness
+    # field in Config/clients.json, then AwarenessStack in Config/branding.psd1.
+    [ValidatePattern('^$|^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$')]
+    [string] $ThirdPartyAwareness,
+
     # The NRG monitoring address(es) alert policies should notify (an address,
     # or @domain for a whole domain). DEF-3.4 and EXO-3.3 compare each enabled
     # policy's recipients with this list; without one, "alerts reach NRG" is
@@ -181,7 +190,8 @@ param(
     # sprawl per run.
     # -AllFiles restores every sidecar deliverable as its own file (Markdown
     # summary, engineer playbook + executive summary, playbook HTML, standalone
-    # remediation .ps1, XLSX matrix, delta). Batch mode passes this for parity.
+    # remediation .ps1, XLSX matrix, delta, NIST matrix, SSP, HIPAA readiness).
+    # Batch mode passes this for parity.
     # -JsonOnly emits only the JSON (unchanged).
     [switch] $AllFiles,
 
@@ -230,6 +240,13 @@ param(
     # are answered by the client in Config/ssp/<client>.psd1 and render as open
     # questions until they are. Markdown + HTML + XLSX. Implied by -AllFiles.
     [switch] $SSP,
+
+    # HIPAA Security Rule readiness (45 CFR 164 Subpart C): every standard and
+    # implementation specification, Required or Addressable, with what this
+    # assessment evidenced for it and what needs documents, interviews or a
+    # walkthrough. Not a risk analysis and not a compliance determination; the
+    # report says so on page one. Markdown + HTML. Implied by -AllFiles.
+    [switch] $HIPAA,
 
     # Explicit path to the SSP answers file. Without it, -SSP looks for
     # Config/ssp/<tenant-domain>.psd1 and renders the plan with every narrative
@@ -485,6 +502,9 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
     if (-not $ThirdPartyEDR -and $clientRec -and $clientRec.PSObject.Properties['ThirdPartyEDR'] -and "$($clientRec.ThirdPartyEDR)") {
         $ThirdPartyEDR = [string]$clientRec.ThirdPartyEDR
     }
+    if (-not $ThirdPartyAwareness -and $clientRec -and $clientRec.PSObject.Properties['ThirdPartyAwareness'] -and "$($clientRec.ThirdPartyAwareness)") {
+        $ThirdPartyAwareness = [string]$clientRec.ThirdPartyAwareness
+    }
     if (-not $MonitoringAddress -and $clientRec -and $clientRec.PSObject.Properties['MonitoringAddresses'] -and @($clientRec.MonitoringAddresses).Count -gt 0) {
         $MonitoringAddress = @($clientRec.MonitoringAddresses | ForEach-Object { [string]$_ })
         $monitoringSource = 'clients.json'
@@ -529,6 +549,20 @@ if (-not $ThirdPartyEDR) {
             if ($edr -match '^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$') { $ThirdPartyEDR = $edr }
             elseif ($edr) { Write-Warning "Ignoring EdrStack '$edr' in branding.psd1: use a plain product name such as 'Cortex XDR'." }
         } catch { Write-Verbose "branding.psd1 EdrStack not read: $($_.Exception.Message)" }
+    }
+}
+# Same rule for AwarenessStack: the phishing-simulation platform every client
+# uses unless -ThirdPartyAwareness or clients.json ThirdPartyAwareness says
+# otherwise. Declared, never verified: DEF-4.6 goes out of the score.
+if (-not $ThirdPartyAwareness) {
+    $brandFile = Join-Path $scriptDir 'Config' 'branding.psd1'
+    if (Test-Path -LiteralPath $brandFile) {
+        try {
+            $brandData = Import-PowerShellDataFile -LiteralPath $brandFile
+            $sat = if ($brandData.ContainsKey('AwarenessStack')) { "$($brandData['AwarenessStack'])".Trim() } else { '' }
+            if ($sat -match '^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$') { $ThirdPartyAwareness = $sat }
+            elseif ($sat) { Write-Warning "Ignoring AwarenessStack '$sat' in branding.psd1: use a plain product name such as 'KnowBe4'." }
+        } catch { Write-Verbose "branding.psd1 AwarenessStack not read: $($_.Exception.Message)" }
     }
 }
 
@@ -737,6 +771,11 @@ if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
         $edrCount = Set-NRGThirdPartyEdr -Product $ThirdPartyEDR -Findings $findings
         $reportMetadata['ThirdPartyEDR'] = $ThirdPartyEDR
         Write-Host "  [i] $edrCount Defender endpoint check(s) reported as covered by $ThirdPartyEDR (declared, not verified; not scored)" -ForegroundColor DarkGray
+    }
+    if ($ThirdPartyAwareness) {
+        $satCount = Set-NRGThirdPartyAwareness -Product $ThirdPartyAwareness -Findings $findings
+        $reportMetadata['ThirdPartyAwareness'] = $ThirdPartyAwareness
+        Write-Host "  [i] $satCount phishing-simulation check(s) reported as run on $ThirdPartyAwareness (declared, not verified; not scored)" -ForegroundColor DarkGray
     }
     # Same rule on republish (the license profile comes from the restored
     # AAD-Inventory raw data; without it nothing is moved).
@@ -1043,7 +1082,7 @@ if (-not $skipCollection) {
                 $highSevEvaluators[$ctrl.EvaluatorFunction] = $true
             }
         }
-        # Test-NRGControlDevice owns the 35 DEV-* endpoint checks (3 Critical,
+        # Test-NRGControlDevice owns the 39 DEV-* endpoint checks (3 Critical,
         # 20 High) defined in Config/device-controls.json, NOT controls.json, so
         # the loop above never sees it and -Quick silently dropped every
         # endpoint finding even when -DeviceResults was supplied. Keep it in
@@ -1062,7 +1101,11 @@ if (-not $skipCollection) {
         $edrCount = Set-NRGThirdPartyEdr -Product $ThirdPartyEDR
         Write-Host "  [i] $edrCount Defender endpoint check(s) reported as covered by $ThirdPartyEDR (declared, not verified; not scored)" -ForegroundColor DarkGray
     }
-    # After the EDR declaration, so a Cortex client is not pitched Defender
+    if ($ThirdPartyAwareness) {
+        $satCount = Set-NRGThirdPartyAwareness -Product $ThirdPartyAwareness
+        Write-Host "  [i] $satCount phishing-simulation check(s) reported as run on $ThirdPartyAwareness (declared, not verified; not scored)" -ForegroundColor DarkGray
+    }
+    # After the EDR and awareness declarations, so a Cortex client is not pitched Defender
     # for Endpoint licenses for checks it does not need.
     $licGated = Set-NRGLicenseGating
     if ($licGated -gt 0) {
@@ -1091,6 +1134,7 @@ if (-not $skipCollection) {
         Brand          = $NRGBrand
         QuickScan      = [bool]$Quick
         ThirdPartyEDR  = [string]$ThirdPartyEDR
+        ThirdPartyAwareness = [string]$ThirdPartyAwareness
     }
 }
 
@@ -1399,6 +1443,27 @@ if (-not $JsonOnly) {
                 Write-Host "      $openCount of 110 requirements still need a written answer — see 'Still to answer'." -ForegroundColor Yellow
             }
         } catch { Write-Warning "SSP publish failed: $($_.Exception.Message)" }
+    }
+
+    # HIPAA Security Rule readiness view. A view over the findings like the SSP:
+    # it creates no finding and moves no score.
+    if (($HIPAA -or $AllFiles) -and (Get-Command Publish-NRGHipaaReadiness -ErrorAction SilentlyContinue)) {
+        $hipaaPath = Join-Path $OutputPath "$baseName-hipaa-readiness.md"
+        try {
+            $hipaaPosture = Get-NRGHipaaReadiness -Findings $findings
+            Publish-NRGHipaaReadiness -Posture $hipaaPosture -Metadata $reportMetadata -OutputPath $hipaaPath
+            if (Test-Path -LiteralPath $hipaaPath) {
+                Write-NRGReportFile 'HIPAA readiness (md)' $hipaaPath
+                Set-NRGSensitiveFileAcl -Path $hipaaPath -ErrorAction SilentlyContinue
+                $hipaaHtml = [System.IO.Path]::ChangeExtension($hipaaPath, '.html')
+                if (Test-Path -LiteralPath $hipaaHtml) {
+                    Write-NRGReportFile 'HIPAA readiness (html)' $hipaaHtml
+                    Set-NRGSensitiveFileAcl -Path $hipaaHtml -ErrorAction SilentlyContinue
+                }
+                $hs = $hipaaPosture['Summary']
+                Write-Host "      $($hs['AttestationRequired']) of $($hs['Total']) HIPAA Security Rule items have no evidence from the tenant and need documents, interviews or a walkthrough." -ForegroundColor Yellow
+            }
+        } catch { Write-Warning "HIPAA readiness publish failed: $($_.Exception.Message)" }
     }
 
     # SSP questionnaire — the manual-evidence half of the SSP, as a document a

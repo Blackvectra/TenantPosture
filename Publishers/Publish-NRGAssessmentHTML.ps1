@@ -677,7 +677,7 @@ function Publish-NRGAssessmentHTML {
                 @{ Label = 'Controls not assessed — workload skipped by the operator (a -Skip flag)'; Items = @(Get-NRGObjectField -Item $scope -Key 'SkippedByOperator' -Default @()) }
                 @{ Label = 'Controls that produced no result at all'; Items = $scope.NoResult }
                 @{ Label = 'Controls requiring manual review — no automated test, or no automated verdict'; Items = $scope.NoProgrammaticCheck }
-                @{ Label = 'Defender endpoint checks covered by a declared third-party EDR — not verified'; Items = @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()) }
+                @{ Label = 'Checks covered by a declared third-party product (EDR, security awareness) — not verified'; Items = @(Get-NRGObjectField -Item $scope -Key 'ThirdPartyAttested' -Default @()) }
                 @{ Label = 'Checked and not applicable to this tenant — reason stated in each finding'; Items = @(Get-NRGObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()) }
             )) {
                 $items = @($grp.Items)
@@ -914,7 +914,7 @@ $regHtml
                      @(Get-NRGObjectField -Item $scope -Key 'SkippedByOperator' -Default @()).Count
         # "Controls assessed" is the tenant controls that produced a finding
         # (scored + not scored). It counted distinct ControlIds across ALL
-        # findings, including the 35 endpoint checks that report "no endpoint
+        # findings, including the 39 endpoint checks that report "no endpoint
         # results supplied" on every run without -DeviceResults, so the
         # header read "37 controls assessed · 2 scored · 0 not applicable".
         $distinctControlsAssessed = $hdrScored + $hdrNA
