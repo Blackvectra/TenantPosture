@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **AAD-7.2 names the policies that keep a break-glass account from qualifying.** The requirement
+  is unchanged: a cloud-only Global Administrator counts only when it is excluded from every
+  enabled Conditional Access policy that reaches it, because Microsoft says to exclude emergency
+  access accounts from policies that block or restrict sign-in, and a session-only policy can
+  restrict (sign-in frequency, token protection, app control). Report-only policies are not
+  counted. New: an account excluded from every policy with a grant control but still reached by
+  session-only policies is reported as a candidate (Partial, not Gap) with those policies named,
+  and an account still reached by one or two policies is named with them. Results collected
+  before this change replay with their previous verdict.
+
 - **A third-party EDR declaration no longer erases an assigned ASR policy's shortfall (INT-2.2).**
   With the approved ASR rule set, INT-2.2 reports a `Shortfall:` when an assigned policy was read
   and a required rule is not in Block mode. `Set-NRGThirdPartyEdr` rewrote every non-passing
