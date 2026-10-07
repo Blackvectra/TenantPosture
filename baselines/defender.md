@@ -643,7 +643,7 @@ Defender portal > Settings > Email & collaboration > User tags > Global Settings
 | CMMC 2.0 | SI.L1-3.14.2 |
 | ISO/IEC 27001:2022 | A.8.2 |
 | SOC 2 | CC6.1 |
-| HIPAA | §164.308(a)(5)(ii)(A) |
+| HIPAA | Not cited: no Security Rule specification matches what this control checks (docs/HIPAA-CITATION-CORRECTIONS.md) |
 | PCI DSS | Req 7.2.4 |
 | MITRE ATT&CK | T1566, T1078 |
 
