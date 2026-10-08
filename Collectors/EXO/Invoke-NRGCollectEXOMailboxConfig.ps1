@@ -299,6 +299,10 @@ function Invoke-NRGCollectEXOMailboxConfig {
                     # Microsoft auto-rotates DKIM but only if explicitly enabled.
                     KeyCreationTime = [string](Get-NRGObjectField -Item $_ -Key 'KeyCreationTime' -Default '')
                     RotateOnDate    = [string](Get-NRGObjectField -Item $_ -Key 'RotateOnDate' -Default '')
+                    # Which selector signs before and after RotateOnDate, so
+                    # the report can say which key is active.
+                    SelectorBeforeRotateOnDate = [string](Get-NRGObjectField -Item $_ -Key 'SelectorBeforeRotateOnDate' -Default '')
+                    SelectorAfterRotateOnDate  = [string](Get-NRGObjectField -Item $_ -Key 'SelectorAfterRotateOnDate' -Default '')
                 }
             })
             $result.Data.SectionStatus.DkimSigningConfigs = 'Collected'

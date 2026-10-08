@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **DKIM: every domain's finding says when its key was last rotated (DNS-2.1).** The finding
+  used to give only an age ("3906 days old"). It now states the date the current key was created,
+  from `Get-DkimSigningConfig` `KeyCreationTime`, plus the key size of each selector and the selector
+  signing after `RotateOnDate`. It also reads the published key behind each selector CNAME, recording
+  its `n=` creation timestamp and key size as a cross-check. On a real tenant the two agreed to the
+  second, for a key created 2016-01-22. When they disagree, the finding says so, and when Exchange
+  returns no date the published timestamp is used and labeled. The inactive selector's key being
+  absent is normal after a rotation and is not an error; the published-key read never changes the
+  DKIM lookup status or any verdict. The text no longer attributes the 365-day interval to NIST
+  SP 800-57, which gives signing keys a one-to-three-year cryptoperiod; 365 days is this
+  assessment's rotation cadence. `KeyCreationTime` is parsed with `TryParse` and the invariant
+  culture, and the collector's selector reads go through `Get-NRGObjectField`.
+
 - **HIPAA citations corrected on seventeen controls** (`docs/HIPAA-CITATION-CORRECTIONS.md` records each
   control's previous citation, what its evaluator checks, and the change). Eight tenant-isolation
   controls cited 164.308(a)(4)(ii)(A), which applies only to a health care clearinghouse within a
