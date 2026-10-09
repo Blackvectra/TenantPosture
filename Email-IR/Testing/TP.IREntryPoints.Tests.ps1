@@ -114,7 +114,7 @@ function Invoke-MgGraphRequest {
         foreach ($rel in @(@('Email-IR', 'Evaluators', 'Test-TPEmailControls.ps1'), @('Email-IR', 'Evaluators', 'Test-TPSignInControls.ps1'))) {
             $f = Join-Path $script:FaultyAll @rel
             $text = Get-Content -LiteralPath $f -Raw
-            $names = [regex]::Matches($text, '(?m)^function (Test-NRG(?:EmailControl|SignInControl)\w+)') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+            $names = [regex]::Matches($text, '(?m)^function (Test-TP(?:EmailControl|SignInControl)\w+)') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
             $over = ($names | ForEach-Object { "`nfunction $_ { [CmdletBinding()] param([Parameter(ValueFromRemainingArguments)] `$Rest) throw 'injected evaluator fault' }" }) -join ''
             Set-Content -LiteralPath $f -Encoding utf8 -Value ($text + "`n" + $over)
         }

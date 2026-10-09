@@ -912,7 +912,7 @@ Describe 'TenantPosture Security Invariants — OWASP / ASVS v5' {
                 $text = Get-Content -LiteralPath $f.FullName -Raw
 
                 # Build function-range index for this file
-                $fnMatches = [regex]::Matches($text, '(?m)^function\s+(Test-NRG[A-Za-z0-9_-]+)\s*\{')
+                $fnMatches = [regex]::Matches($text, '(?m)^function\s+(Test-TP[A-Za-z0-9_-]+)\s*\{')
                 $fnRanges = foreach ($fm in $fnMatches) {
                     [PSCustomObject]@{ Name = $fm.Groups[1].Value; Start = $fm.Index }
                 }
