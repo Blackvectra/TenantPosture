@@ -5,7 +5,7 @@
     # (Gap/Partial) from tenant data — i.e. it does not genuinely discriminate.
     #
     # Every such control MUST be listed here with a Kind and a Reason. The CI
-    # honesty-gate (Testing/NRG.CoverageHonesty.Tests.ps1) fails the build if:
+    # honesty-gate (Testing/TP.CoverageHonesty.Tests.ps1) fails the build if:
     #   * a non-discriminating Automated control is NOT listed here, or
     #   * a listed control has STARTED discriminating (stale entry — delete it), or
     #   * an entry is missing its Kind or Reason.
@@ -20,7 +20,7 @@
     #     Automatable with an existing or near-term API/cmdlet — tracked coverage
     #     debt to convert from advisory to a real discriminating check.
     #
-    # Verified against the evaluator ASTs via Get-NRGControlAutomationAudit.
+    # Verified against the evaluator ASTs via Get-TPControlAutomationAudit.
 
     Exceptions = @(
         # ── Manual: no supported read surface ────────────────────────────────

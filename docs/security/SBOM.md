@@ -1,4 +1,4 @@
-# Software Bill of Materials — NRG-Assessment v4.5.5
+# Software Bill of Materials — TenantPosture v4.5.5
 
 ## Runtime Dependencies
 
@@ -31,7 +31,7 @@ Install-PSResource -Name Pester                        -Version 5.6.1  -TrustRep
 
 ## CycloneDX SBOM
 
-A machine-readable CycloneDX SBOM (`nrg-assessment.cdx.json`) is generated automatically on GitHub release via the `cdxgen` step in `.github/workflows/security.yml`.
+A machine-readable CycloneDX SBOM (`tp-assessment.cdx.json`) is generated automatically on GitHub release via the `cdxgen` step in `.github/workflows/security.yml`.
 
 ## Version Pinning Rationale
 

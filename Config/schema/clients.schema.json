@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://blackvectra.com/schemas/nrg-clients-v1.schema.json",
+  "$id": "https://blackvectra.com/schemas/tp-clients-v1.schema.json",
   "title": "NRG Assessment Tool — Batch Client List Schema v1.0",
-  "description": "Validates Config/clients.json (the GDAP batch client list read by Invoke-NRGBatchAssessment). Enforced in CI (ci.yml, Schema Validation step). A malformed client row previously failed only at run time, mid-batch — schema validation moves that failure to the pull request. Mirrors the ScubaGear practice of machine-validating tool configuration before use.",
+  "description": "Validates Config/clients.json (the GDAP batch client list read by Invoke-TPBatchAssessment). Enforced in CI (ci.yml, Schema Validation step). A malformed client row previously failed only at run time, mid-batch — schema validation moves that failure to the pull request. Mirrors the ScubaGear practice of machine-validating tool configuration before use.",
   "type": "object",
   "additionalProperties": false,
   "required": [

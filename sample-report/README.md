@@ -1,6 +1,6 @@
 # Sample Report
 
-This directory contains an example HTML assessment report so you can see what NRG-Assessment produces without having to run it against a real tenant.
+This directory contains an example HTML assessment report so you can see what TenantPosture produces without having to run it against a real tenant.
 
 The sample demonstrates the output format including:
 - Executive summary with score breakdown

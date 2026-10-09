@@ -3,12 +3,12 @@
 # Copy to Config/manual-review/<client-domain>.psd1 and fill in. The file
 # name is the client name slugged, the same rule Config/ssp/*.psd1 uses:
 # example.com -> example.com.psd1, "Acme Widgets" -> acme-widgets.psd1.
-# Publish-NRGManualReviewQuestionnaire finds it automatically from
+# Publish-TPManualReviewQuestionnaire finds it automatically from
 # -ClientName.
 #
 # This file holds the human half of the controls.json manual-review
 # questionnaire — the answer for every control that has no automated test
-# (Get-NRGAssessmentScope's NoProgrammaticCheck bucket) or that this run
+# (Get-TPAssessmentScope's NoProgrammaticCheck bucket) or that this run
 # could not collect data for (its CollectionIncomplete bucket). It is the
 # controls.json counterpart to Config/ssp/*.psd1, which does the same job
 # for the 69-of-110 NIST 800-171 requirements the tenant scan cannot reach.

@@ -64,7 +64,7 @@ and were not re-reviewed in this change.
 ## How it is held
 
 - `Config/hipaa-uncited-controls.json` lists the four controls left without a HIPAA citation, each
-  with its reason. `NRG.FrameworkCoverage.Tests.ps1` accepts an empty HIPAA citation only for a listed
+  with its reason. `TP.FrameworkCoverage.Tests.ps1` accepts an empty HIPAA citation only for a listed
   control, and fails if a listed control gains one without leaving the list.
 - The same test fails if any control cites 164.308(a)(4)(ii)(A), 164.308(a)(5)(ii)(A) or
   164.316(b)(2)(i) again.

@@ -1,4 +1,4 @@
-# Releasing NRG-Assessment
+# Releasing TenantPosture
 
 How to cut a release. The release pipeline (`.github/workflows/release.yml`)
 fires **only on tags matching `v*`** — e.g. `v4.13.0`. Tags without the `v`
@@ -12,7 +12,7 @@ or checksummed assets.
    green (full Pester suite, PSScriptAnalyzer, schema validation, secret scan).
 
 2. **Update the version trio in one commit:**
-   - `NRG-Assessment.psd1` → `ModuleVersion`
+   - `TenantPosture.psd1` → `ModuleVersion`
    - `CLAUDE.md` header → `**Version:**`
    - `CHANGELOG.md` → move `## Unreleased` content under the new
      `## vX.Y.Z (YYYY-MM-DD)` heading
@@ -29,7 +29,7 @@ or checksummed assets.
    |---|---|
    | `sbom` | Generates the CycloneDX SBOM |
    | `authenticode` | Verifies integrity manifest + Authenticode status (fails on tamper signals) |
-   | `package` | Builds `NRG-Assessment-vX.Y.Z.zip`, writes `SHA256SUMS`, creates a **draft** GitHub Release with auto-generated categorized notes, attaches zip + checksums + SBOM |
+   | `package` | Builds `TenantPosture-vX.Y.Z.zip`, writes `SHA256SUMS`, creates a **draft** GitHub Release with auto-generated categorized notes, attaches zip + checksums + SBOM |
 
 5. **Review the draft release** on GitHub — check the generated notes
    (categories come from `.github/release.yml` labels), then **Publish**.
@@ -43,7 +43,7 @@ or checksummed assets.
 Ship the `SHA256SUMS` line with any zip you hand to a client:
 
 ```powershell
-(Get-FileHash .\NRG-Assessment-v4.13.0.zip -Algorithm SHA256).Hash
+(Get-FileHash .\TenantPosture-v4.13.0.zip -Algorithm SHA256).Hash
 # must match the value in SHA256SUMS
 ```
 

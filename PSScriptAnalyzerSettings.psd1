@@ -1,5 +1,5 @@
 @{
-    # PSScriptAnalyzer settings for NRG-Assessment-Tool CI
+    # PSScriptAnalyzer settings for TenantPosture CI
     #
     # Severity = Error      → fails CI (must fix or exclude)
     # Severity = Warning    → reports in CI log only (does not fail)
@@ -26,7 +26,7 @@
 
         # This is a strictly READ-ONLY assessment tool. No function changes
         # tenant state, so ShouldProcess / -WhatIf / -Confirm boilerplate would
-        # be noise. The future Apply-NRGBaseline.ps1 write component (Phase 4)
+        # be noise. The future Apply-TPBaseline.ps1 write component (Phase 4)
         # will need ShouldProcess — when that lands, drop this exclusion.
         'PSUseShouldProcessForStateChangingFunctions',
 
@@ -36,7 +36,7 @@
         'PSReviewUnusedParameter',
 
         # The module exports plural-noun functions intentionally
-        # (Get-NRGFindings returns a collection, Clear-NRGFindings clears all).
+        # (Get-TPFindings returns a collection, Clear-TPFindings clears all).
         # The plural form better reflects the collection semantics than the
         # analyzer's singular-noun convention.
         'PSUseSingularNouns',
@@ -65,14 +65,14 @@
         # this codebase ever has to support PS 5.1 again (it won't).
         'PSUseBOMForUnicodeEncodedFile',
 
-        # The 6 Apply-NRG* write-mode functions (Apply-NRGAADLegacyAuth,
-        # Apply-NRGAADMFA, Apply-NRGEXOMailboxAudit, Apply-NRGEXOSmtpAuth,
-        # Apply-NRGEXOAutoForward, Apply-NRGDefenderPreset) use the unapproved
+        # The 6 Apply-TP* write-mode functions (Apply-TPAADLegacyAuth,
+        # Apply-TPAADMFA, Apply-TPEXOMailboxAudit, Apply-TPEXOSmtpAuth,
+        # Apply-TPEXOAutoForward, Apply-TPDefenderPreset) use the unapproved
         # "Apply" verb. "Apply-" is the deliberate verb chosen for the write-
         # mode remediation surface because it pairs naturally with the
         # operator workflow ("apply the baseline to a tenant") and the
-        # existing Apply-NRGBaseline.ps1 orchestrator. Renaming to
-        # Set-NRGBaselineAAD* / Set-NRGBaselineEXO* would break operator
+        # existing Apply-TPBaseline.ps1 orchestrator. Renaming to
+        # Set-TPBaselineAAD* / Set-TPBaselineEXO* would break operator
         # documentation, training material, and muscle memory built up across
         # multiple client engagements. Rename is deferred to v5.0 where it
         # can ship alongside the other breaking changes already planned for

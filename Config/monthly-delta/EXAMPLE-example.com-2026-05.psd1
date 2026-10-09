@@ -6,7 +6,7 @@
 # the most sensitive shape this data takes, and git history is permanent.
 # Real per-tenant files are gitignored; see the pattern in .gitignore.
 #
-# This file is the operator's per-month edit. The Publish-NRGMonthlyReport
+# This file is the operator's per-month edit. The Publish-TPMonthlyReport
 # publisher reads it and renders the Work Completed / In Progress / Queued
 # tables in the monthly HTML.
 #
@@ -18,7 +18,7 @@
 # After the report runs, save the matching <name>.json output as the next
 # month's -PriorMonthPath input so trend deltas render correctly. The
 # tool wires this automatically when run via:
-#     Invoke-NRGAssessment.ps1 -MonthlyReport \
+#     Invoke-TPAssessment.ps1 -MonthlyReport \
 #         -DeltaPath  ./Config/monthly-delta/<tenant>-<YYYY-MM>.psd1 \
 #         -PriorMonth ./output/<tenant>/monthly/<tenant>-<prior YYYY-MM>.json
 #

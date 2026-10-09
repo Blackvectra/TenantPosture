@@ -2,7 +2,7 @@
 
 **Status:** Design. No code yet. Companion to `docs/ROADMAP-v4.9.0.md`. The v4.9.0 roadmap defines new features for the PowerShell tool; this doc defines a parallel **product surface** — a multi-tenant web portal that lets customer admins consent once, then lets any user in that tenant view assessment results (RBAC-gated).
 
-**Scope:** NRG-Assessment-Tool only. The sibling NLS-Assessment repo is the open-source CLI rebrand; a hosted SaaS portal is an NRG-commercial decision and is intentionally not mirrored.
+**Scope:** TenantPosture only. The sibling NLS-Assessment repo is the open-source CLI rebrand; a hosted SaaS portal is an NRG-commercial decision and is intentionally not mirrored.
 
 **Author:** Matthew Levorson · NRG Technology Services / NextLayerSec LLC.
 
@@ -81,7 +81,7 @@ The role check happens client-side on token claims AND server-side on every API 
                   │                                                       │
                   │  Scan runner:                                         │
                   │    child_process.spawn('pwsh', ['-File',              │
-                  │      './Invoke-NRGAssessment.ps1', '-TenantId', ...]) │
+                  │      './Invoke-TPAssessment.ps1', '-TenantId', ...]) │
                   │    - stdout streamed via SSE to browser               │
                   │    - on completion: results uploaded to Blob,         │
                   │      metadata + index row to Cosmos                   │
@@ -114,7 +114,7 @@ The role check happens client-side on token claims AND server-side on every API 
 | Backend framework | Fastify 5 | Better than Express for our case: built-in JSON schema validation on every route, ~4× throughput, native plugin model for the JWT + RBAC middleware. |
 | Backend hosting | Azure Container Apps | Needed because pwsh subprocess + scan duration (5–15 min). Functions Consumption tops out at 10 min; Container Apps scale-to-zero is cheaper than Premium Functions. |
 | Container base | `mcr.microsoft.com/azure-powershell:debian-bookworm-7.4` + Node added | Microsoft-maintained pwsh image; we add Node for the API layer. Single container is simpler than two-container compositions. |
-| Scan invocation | `child_process.spawn('pwsh', [...])` | Reuses 100 % of existing NRG-Assessment module code with zero rewrites. The PS module already exports the entry point we need. |
+| Scan invocation | `child_process.spawn('pwsh', [...])` | Reuses 100 % of existing TenantPosture module code with zero rewrites. The PS module already exports the entry point we need. |
 | Real-time progress | Server-Sent Events | Simpler than WebSockets for one-way data; works through corporate proxies; survives connection drops. |
 | Identity / auth | MSAL Node + MSAL Browser | Microsoft-supported libraries handle multi-tenant audience, refresh tokens, PKCE. Token validation uses `jwks-rsa` against Entra's metadata endpoint. |
 | Reports + raw JSON | Azure Blob Storage | Cheap for the ~500 KB–2 MB JSON+HTML per scan. Per-tenant container with SAS-token access (issued server-side per request, ≤15 min lifetime). |
@@ -374,7 +374,7 @@ Scales roughly linearly with tenant count up to ~100 tenants; past that, move Co
 - Multi-tenant Entra app reg with admin consent flow.
 - One-time admin onboarding ceremony.
 - Routine sign-in for any user (any role); permissions computed from directory roles.
-- Trigger scan (admin path only); reuses existing `Invoke-NRGAssessment.ps1` via pwsh subprocess.
+- Trigger scan (admin path only); reuses existing `Invoke-TPAssessment.ps1` via pwsh subprocess.
 - Live scan progress via SSE.
 - Dashboard view: score, gaps by severity, latest scan timestamp.
 - History view: list of past runs, drill-in to report.
@@ -405,10 +405,10 @@ Scales roughly linearly with tenant count up to ~100 tenants; past that, move Co
 
 ## Repository structure
 
-A new repo `nrg-portal` (separate from `NRG-Assessment-Tool`) keeps concerns clean. The portal **consumes** the CLI tool as a git submodule pinned to a known release tag. CLI updates land in `NRG-Assessment-Tool`; the portal bumps its submodule pointer deliberately.
+A new repo `tp-portal` (separate from `TenantPosture`) keeps concerns clean. The portal **consumes** the CLI tool as a git submodule pinned to a known release tag. CLI updates land in `TenantPosture`; the portal bumps its submodule pointer deliberately.
 
 ```
-nrg-portal/
+tp-portal/
 ├── README.md
 ├── SECURITY.md
 ├── docs/
@@ -448,7 +448,7 @@ nrg-portal/
 │   ├── svelte.config.js
 │   ├── vite.config.ts
 │   └── package.json
-├── nrg-assessment-tool/          ← submodule pinned to a release tag
+├── tp-assessment-tool/          ← submodule pinned to a release tag
 └── .github/
     ├── workflows/
     │   ├── ci.yml                ← lint, type-check, tests (mirrors CLI repo style)
@@ -466,11 +466,11 @@ nrg-portal/
 
 1. **Entra app registration.** Multi-tenant, application permissions for: `Directory.Read.All`, `Policy.Read.All`, `AuditLog.Read.All`, `SecurityEvents.Read.All`, `Reports.Read.All`, `Group.Read.All`, `Application.Read.All`, `RoleManagement.Read.All`, `User.Read.All`, `IdentityRiskyUser.Read.All`. Cert credential (not secret); 90-day rotation.
 2. **Azure subscription with budget alert at $50/mo.** Prevents runaway billing surprises.
-3. **Resource group `nrg-portal-prod`** (and `nrg-portal-staging` for the PR-preview backend).
+3. **Resource group `tp-portal-prod`** (and `tp-portal-staging` for the PR-preview backend).
 4. **Custom domain `portal.nrgtechservices.com`** — CNAME to Static Web Apps default URL.
 5. **Privacy policy + DPA template** published at `nrgtechservices.com/legal`.
 6. **Status page** (Azure Status hosted or third-party like Statuspage). Customers expect one once you're a SaaS.
-7. **Branch protection on `nrg-portal/main`** — same posture as the CLI repos: require PR, status checks, signed commits, no force-push.
+7. **Branch protection on `tp-portal/main`** — same posture as the CLI repos: require PR, status checks, signed commits, no force-push.
 8. **Monitoring dashboard in Azure Monitor** — scan success rate, p50/p95 scan duration, error rate by tenant, Cosmos RU consumption.
 
 ---
@@ -480,7 +480,7 @@ nrg-portal/
 | # | Question | Default if not answered |
 |---|---|---|
 | 1 | What additional Graph scopes are needed for the Defender / Purview / Intune collectors? Inventory before app reg, since adding scopes later requires every customer to re-consent. | Land MVP with the AAD/EXO/DNS subset; defer the rest to a v1.1 with scheduled re-consent campaign. |
-| 2 | Does the CLI's existing `Invoke-NRGAssessment.ps1` accept an application-permission token, or only interactive sign-in? | Audit at scaffolding time; may need a thin auth-adapter layer in the portal that minted an EXO token from the app cert via `New-MgUserAccessToken` equivalent. |
+| 2 | Does the CLI's existing `Invoke-TPAssessment.ps1` accept an application-permission token, or only interactive sign-in? | Audit at scaffolding time; may need a thin auth-adapter layer in the portal that minted an EXO token from the app cert via `New-MgUserAccessToken` equivalent. |
 | 3 | Cosmos serverless caps at 1 TB; what's the per-tenant data growth assumption? | ~10 MB per scan × ~50 scans/yr × 100 tenants = 50 GB/yr. Comfortably under serverless cap for years. |
 | 4 | Scan parallelism. One scan at a time per tenant, or allow concurrent scans across tenants? | Concurrent across tenants (one per Container App replica); serial within a tenant (queue). |
 | 5 | How does the portal handle a tenant whose Global Admin who consented later leaves the company? | The app's consent stays valid until explicitly revoked in Entra. Document this in the customer-facing onboarding guide; add a quarterly "still authorized?" email. |
@@ -492,7 +492,7 @@ nrg-portal/
 
 ## Implementation order (post-design)
 
-Each row is its own PR against `nrg-portal`. Numbers correspond to the deliverable, not effort.
+Each row is its own PR against `tp-portal`. Numbers correspond to the deliverable, not effort.
 
 | Wave | What lands | Why this order |
 |---|---|---|
@@ -527,4 +527,4 @@ The portal is considered ready for first paying customer when:
 
 ---
 
-*Design owner: Matthew Levorson — NRG Technology Services / NextLayerSec LLC. Next step (per the design conversation): scaffold the `nrg-portal` repo with Wave 0 + Wave 1, in a separate session.*
+*Design owner: Matthew Levorson — TenantPosture. Next step (per the design conversation): scaffold the `tp-portal` repo with Wave 0 + Wave 1, in a separate session.*

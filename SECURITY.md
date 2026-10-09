@@ -1,15 +1,15 @@
-# Security Policy — NRG-Assessment
+# Security Policy — TenantPosture
 
 ## Read-Only Posture
 
 This tool is **read-only by design.** No cmdlets that write, modify, or delete tenant data are executed during an assessment run. The evaluators contain remediation command strings as documentation only — they are never executed.
 
-Enforced by: CI static analysis (`Read-Only Posture` test in `NRG.Security.Tests.ps1`) verifies no tenant write cmdlets appear outside of `-Remediation` strings in any production file.
+Enforced by: CI static analysis (`Read-Only Posture` test in `TP.Security.Tests.ps1`) verifies no tenant write cmdlets appear outside of `-Remediation` strings in any production file.
 
 Two sanctioned write paths ship in this repository. Neither executes during an assessment run:
 
-1. `Register-NRGTenantApp` — optional onboarding helper that creates a read-only enterprise app in a customer tenant. Gated behind `-RegisterApp` + `SupportsShouldProcess` (`-WhatIf` / `-Confirm`).
-2. `Apply-NRGBaseline.ps1` and the scripts it dot-sources from `Apply/` — the explicit write-mode remediation tool, which modifies tenant configuration by design. It is a separate entry point, never invoked by `Invoke-NRGAssessment.ps1`, and carries mandatory `-WhatIf` support with `-Confirm` on auth-policy and admin-role changes.
+1. `Register-TPTenantApp` — optional onboarding helper that creates a read-only enterprise app in a customer tenant. Gated behind `-RegisterApp` + `SupportsShouldProcess` (`-WhatIf` / `-Confirm`).
+2. `Apply-TPBaseline.ps1` and the scripts it dot-sources from `Apply/` — the explicit write-mode remediation tool, which modifies tenant configuration by design. It is a separate entry point, never invoked by `Invoke-TPAssessment.ps1`, and carries mandatory `-WhatIf` support with `-Confirm` on auth-policy and admin-role changes.
 
 ---
 
@@ -19,15 +19,15 @@ We follow a **coordinated vulnerability disclosure** model aligned to NIST SP 80
 
 ### How to report
 
-**Preferred (private):** Open a private security advisory via the repository's [Security tab → "Report a vulnerability"](https://github.com/Blackvectra/NRG-Assessment-Tool/security/advisories/new). This routes the report directly to the maintainers, keeps it private until coordinated disclosure, and produces a CVE if applicable.
+**Preferred (private):** Open a private security advisory via the repository's [Security tab → "Report a vulnerability"](https://github.com/Blackvectra/TenantPosture/security/advisories/new). This routes the report directly to the maintainers, keeps it private until coordinated disclosure, and produces a CVE if applicable.
 
-**Alternative (email):** `security@nrgtechservices.com` — please encrypt with our public PGP key if the issue is sensitive (key fingerprint published at `https://www.nrgtechservices.com/.well-known/security.txt`). Subject line: `[NRG-Assessment SECURITY] <one-line summary>`.
+**Alternative (email):** `security@nrgtechservices.com` — please encrypt with our public PGP key if the issue is sensitive (key fingerprint published at `https://www.nrgtechservices.com/.well-known/security.txt`). Subject line: `[TenantPosture SECURITY] <one-line summary>`.
 
 **Do NOT** open a public GitHub issue, post in a forum, or disclose on social media until the coordinated-disclosure window has closed.
 
 ### What to include
 
-- Affected version(s) — output of `Get-Module NRG-Assessment | Select-Object Version`
+- Affected version(s) — output of `Get-Module TenantPosture | Select-Object Version`
 - Affected component — file path, function name, control ID, or evaluator
 - Reproducer — minimal PowerShell snippet, command sequence, or step-by-step instructions
 - Impact — what an attacker can achieve, what data is exposed, what assumptions must hold
@@ -57,12 +57,12 @@ If 90 days elapse from triage without a fix, we will publish the advisory with t
 
 ### What's in scope
 
-- The PowerShell module (`NRG-Assessment.psm1`, `Lib/`, `Collectors/`, `Evaluators/`, `Publishers/`, `Email-IR/`) and all entry scripts (`Invoke-NRGAssessment.ps1`, `Invoke-NRGBatchAssessment.ps1`, `Invoke-NRGSignInTriage.ps1`, `Invoke-NRGBatchSignInTriage.ps1`, `Invoke-NRGEmailAssessment.ps1`, `Install-NRGPrerequisites.ps1`)
-- The write-mode remediation tool (`Apply-NRGBaseline.ps1` and `Apply/`) — the only code in this repository that modifies tenant configuration
+- The PowerShell module (`TenantPosture.psm1`, `Lib/`, `Collectors/`, `Evaluators/`, `Publishers/`, `Email-IR/`) and all entry scripts (`Invoke-TPAssessment.ps1`, `Invoke-TPBatchAssessment.ps1`, `Invoke-TPSignInTriage.ps1`, `Invoke-TPBatchSignInTriage.ps1`, `Invoke-TPEmailAssessment.ps1`, `Install-TPPrerequisites.ps1`)
+- The write-mode remediation tool (`Apply-TPBaseline.ps1` and `Apply/`) — the only code in this repository that modifies tenant configuration
 - The HTML/Markdown/XLSX/JSON report artifacts (XSS, injection, sensitive-data leakage in output)
 - The control definition pipeline (`Config/controls.json`, schema validation, framework citations)
-- The local web GUI (`Lib/Start-NRGWebServer.ps1`, `Web/`) — loopback-only by design
-- The tenant onboarding helper (`Onboard/Register-NRGTenantApp.ps1`, outside the module)
+- The local web GUI (`Lib/Start-TPWebServer.ps1`, `Web/`) — loopback-only by design
+- The tenant onboarding helper (`Onboard/Register-TPTenantApp.ps1`, outside the module)
 - CI/CD workflows (`.github/workflows/`)
 - Sample reports, sample data, documentation that could mislead operators
 - Supply-chain integrity (Authenticode signing, SBOM, dependency pinning)
@@ -100,7 +100,7 @@ Researchers who comply with this policy will be acknowledged in the advisory (wi
 |---|---|
 | A01 — Broken Access Control | `-LiteralPath` on all file ops; path traversal checks on `OutputPath`, `ClientsFile`, config files; tenantTag sanitized before use in output paths |
 | A02 — Cryptographic Failures | TLS 1.2/1.3 enforced at entry; process-scoped MSAL token cache; no credential serialization |
-| A03 — Injection | `[ValidatePattern]`/`[ValidateSet]`/`[ValidateScript]` on all parameters; controls.json content validated against allowlists; HTML output through `ConvertTo-NRGHtmlSafe` |
+| A03 — Injection | `[ValidatePattern]`/`[ValidateSet]`/`[ValidateScript]` on all parameters; controls.json content validated against allowlists; HTML output through `ConvertTo-TPHtmlSafe` |
 | A04 — Insecure Design | Read-only architecture; fail-closed on missing security helpers; session cleanup in `finally` |
 | A07 — Auth Failures | `try/finally` guarantees EXO/Graph disconnect; process-scoped MSAL prevents cross-session token leakage |
 | A08 — Supply Chain | No `Install-Module` in production code; `PSResourceGet` with version pinning recommended; Gitleaks + TruffleHog in CI |
@@ -112,7 +112,7 @@ Researchers who comply with this policy will be acknowledged in the advisory (wi
 | Control | Implementation |
 |---|---|
 | V5.1.3 — Input Validation | All parameters validated; controls.json content validated against allowlists |
-| V7.3.2 — Session Termination | `finally` block guarantees `Disconnect-NRGServices` runs |
+| V7.3.2 — Session Termination | `finally` block guarantees `Disconnect-TPServices` runs |
 | V11.2.2 — TLS | `[Net.ServicePointManager]::SecurityProtocol = Tls12 -bor Tls13` at entry |
 | V12.3.1 — Path Traversal | `-LiteralPath` universally; `GetFullPath()` origin checks on all config files |
 | V16.2.3 — Output Encoding | `-Encoding utf8` on all `Out-File` calls |
@@ -179,7 +179,7 @@ See `docs/security/THREAT-MODEL.md` for the full threat model including:
 
 ## Secure Development Framework Alignment
 
-NRG-Assessment self-attests to NIST SP 800-218 (SSDF) practices. See [`docs/SECURE-DEVELOPMENT.md`](docs/SECURE-DEVELOPMENT.md) for the per-task mapping (PO, PS, PW, RV practice families) and the evidence trail.
+TenantPosture self-attests to NIST SP 800-218 (SSDF) practices. See [`docs/SECURE-DEVELOPMENT.md`](docs/SECURE-DEVELOPMENT.md) for the per-task mapping (PO, PS, PW, RV practice families) and the evidence trail.
 
 OpenSSF Best Practices self-assessment is tracked in [`docs/OPENSSF-BEST-PRACTICES.md`](docs/OPENSSF-BEST-PRACTICES.md).
 
@@ -191,4 +191,4 @@ If you suspect a credential leak, malicious dependency, signed-release tamper, o
 
 ---
 
-*NRG-Assessment v4.12.1 · Hardened against OWASP Top 10:2021, ASVS v5, CVE-2025-54100 · NIST SP 800-218 (SSDF) aligned · CISA BOD 20-01 VDP compliant*
+*TenantPosture v4.12.1 · Hardened against OWASP Top 10:2021, ASVS v5, CVE-2025-54100 · NIST SP 800-218 (SSDF) aligned · CISA BOD 20-01 VDP compliant*

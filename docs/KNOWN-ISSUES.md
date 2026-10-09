@@ -15,7 +15,7 @@ workstation (see CHANGELOG).
   Graph is not connected. An attempted fix (`Set-MgGraphOption -DisableLoginByWAM`) was removed: the
   Graph PowerShell SDK honors that option only for a custom client id (the tool uses the default
   one), and the cmdlet writes a settings file to the operator's profile on every call. **Workaround:
-  run the assessment from a PowerShell window (`Invoke-NRGAssessment.ps1`), which is the supported
+  run the assessment from a PowerShell window (`Invoke-TPAssessment.ps1`), which is the supported
   path.** A proper fix needs evidence of how the installed SDK behaves first (for example a visible
   console for the child, or a custom client id) and is a separate change.
 
@@ -25,20 +25,20 @@ workstation (see CHANGELOG).
   output folder instead.
 - **The report site is not linked.** The GUI opens the single-page `*-assessment.html` report only.
   The multi-page report site (`<base>-report\`) is in the output folder; the GUI does not link to it.
-- **Calling `Start-NRGWebServer` directly needs `-ScriptDir`.** Its default points at `Lib`, where
-  the `Web` folder does not exist. `Invoke-NRGAssessment.ps1 -Web` passes the right folder, so normal
+- **Calling `Start-TPWebServer` directly needs `-ScriptDir`.** Its default points at `Lib`, where
+  the `Web` folder does not exist. `Invoke-TPAssessment.ps1 -Web` passes the right folder, so normal
   use is not affected.
 - **Pode is a separate install.** `Install-Module Pode` fails on a machine whose PowerShellGet or
   NuGet layer is broken; `Install-PSResource` or `Save-PSResource` works without NuGet.
 - **The tests that start a real server run only where Pode is installed.** CI skips them. Run
-  `Testing/NRG.WebServer.Tests.ps1` locally with Pode installed.
+  `Testing/TP.WebServer.Tests.ps1` locally with Pode installed.
 
 ## Not yet run against a live tenant
 
 Covered by tests against stubbed or mock data only: the batch runners, the triage deep-dive of other
 users' mailboxes, the email assessment on an account that has a mailbox, endpoint compliance
 collection (`Device/` and `-DeviceResults`), delta and monthly reports from two real runs, the SSP
-answers file and questionnaire import, `Apply-NRGBaseline.ps1`, the tenant app registration and
+answers file and questionnaire import, `Apply-TPBaseline.ps1`, the tenant app registration and
 consent scripts, and the Settings Catalog parsers. Issue #98 (the authentication strength read that
 returned a 400 on 2026-09-24) still needs a live confirmation that it no longer recurs.
 
@@ -55,8 +55,8 @@ returned a 400 on 2026-09-24) still needs a live confirmation that it no longer 
 
 Confirmed by the 2026-10-04 review; none of them produces a clean conclusion from a failed read.
 
-- **Three classifiers decide "not scored".** `Get-NRGAssessmentScope`, the report site and
-  `Get-NRGControlStatus` each classify unscored controls; the report site now takes the scope's
+- **Three classifiers decide "not scored".** `Get-TPAssessmentScope`, the report site and
+  `Get-TPControlStatus` each classify unscored controls; the report site now takes the scope's
   bucket, but the control-status helper still has its own chain.
 - **Incident-response "empty is clean" checks are written per evaluator.** The false-clean paths
   found are fixed and pinned; one shared helper would close the class.
@@ -67,20 +67,20 @@ Confirmed by the 2026-10-04 review; none of them produces a clean conclusion fro
   Warning, and the report site counts only Pass and Fail as a direction difference.
 - **A mistyped `-ScubaResultsPath` is ignored silently** when the file does not exist.
 - **AAD-6.2's baseline reason** quotes the related AAD-6.3 sentence instead of its own shortfall.
-- **The console's Gap line** is built separately from `Format-NRGGapSummary` and words it
+- **The console's Gap line** is built separately from `Format-TPGapSummary` and words it
   differently.
 - **Sign-in triage scoring:** SIGNIN-1.6 reasons include the city, so two cities in the same
   neighboring state score twice; ARIN answers carry no top-level country, so the IP country stays
   empty for North American addresses; EMAIL-4.1's Critical rule rests on `publisherName` (the
   publishing tenant's name), not Microsoft's publisher verification.
-- **Two lists of DLP policy modes** (`Get-NRGDlpRuleStates` and DEF-4.1) must change together if
+- **Two lists of DLP policy modes** (`Get-TPDlpRuleStates` and DEF-4.1) must change together if
   Microsoft adds a mode.
 - **`-FromResults` on a results file without a `Connections` key** throws (files the tool writes
   always carry it).
-- **Structure:** `Invoke-NRGAssessment.ps1` is about 1,730 lines; the report-site builder is one
-  long function; one Intune read hand-rolls paging instead of `Get-NRGGraphAllPages`;
+- **Structure:** `Invoke-TPAssessment.ps1` is about 1,730 lines; the report-site builder is one
+  long function; one Intune read hand-rolls paging instead of `Get-TPGraphAllPages`;
   `Config/branding.psd1` is read twice in a row. PSScriptAnalyzer reports
-  `PSUseDeclaredVarsMoreThanAssignments` for `$monitoringSet` in `Invoke-NRGAssessment.ps1`
+  `PSUseDeclaredVarsMoreThanAssignments` for `$monitoringSet` in `Invoke-TPAssessment.ps1`
   (present before the review; CI does not fail on it).
 
 ## Not yet confirmed on a live run
@@ -104,7 +104,7 @@ These fixes passed their tests but have not been seen working against a real ten
   (script detections and a Tor-browser download block). Nothing shows the tool caused any of them;
   the process behind the download event has not been identified. The Tor Project host name was
   removed from every shipped file as a precaution, and a test fails if a live reference returns.
-- **INT-1.1 non-compliance actions** are not read, by design; see `NRG-DETECTION-LIMITS.md`.
+- **INT-1.1 non-compliance actions** are not read, by design; see `TP-DETECTION-LIMITS.md`.
 - **Markdown escaping in the other report publishers.** The NIST matrix, SSP, improvement plan,
   device guide and device baseline publishers escape only pipes and line breaks in Markdown, so
   markup inside tenant-derived text (a policy or app display name) reaches the `.md` file as raw
@@ -124,11 +124,11 @@ Not defects in this tool, but they stop it or its companions from running.
   `C:` in Windows PowerShell 5.1 worked. ScubaGear's own sign-in also failed in PowerShell 7 (an
   embedded-browser error from the borrowed MSAL) and worked in 5.1.
 - **OneDrive-redirected module folders.** A module file can become an online-only placeholder and
-  fail to load. Keep modules out of OneDrive (see `Install-NRGPrerequisites.ps1`).
+  fail to load. Keep modules out of OneDrive (see `Install-TPPrerequisites.ps1`).
 - **Run in a new window.** A PowerShell window that already loaded another version of the Microsoft
   sign-in library (MSAL) cannot load a different one; open a new window.
 
-## Installer (`Install-NRGPrerequisites.ps1`)
+## Installer (`Install-TPPrerequisites.ps1`)
 
 Found on a real workstation on 2026-10-04; each fix is its own change.
 
@@ -141,8 +141,8 @@ Found on a real workstation on 2026-10-04; each fix is its own change.
   `WindowsApps` is a stub that opens the Store; the installer reports "Python found" and the
   openpyxl step fails. Install Python from python.org or `winget install Python.Python.3.12`.
 - **The duplicate MSAL check needs a module function it has not loaded.** The installer
-  dot-sources `Lib/Repair-NRGModuleHealth.ps1`, which calls `Get-NRGObjectField` from the module,
-  so the check cannot complete before the module is imported. Run `Repair-NRGModuleHealth
+  dot-sources `Lib/Repair-TPModuleHealth.ps1`, which calls `Get-TPObjectField` from the module,
+  so the check cannot complete before the module is imported. Run `Repair-TPModuleHealth
   -PlanOnly` after `Import-Module`.
 - **The Microsoft Store build of PowerShell.** The Exchange Online module failed to import from it;
   launch "PowerShell 7 (x64)" (the MSI build) instead. The entry point warns about it.

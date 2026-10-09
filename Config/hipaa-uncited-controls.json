@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "purpose": "Controls deliberately left without a HIPAA citation. Each was reviewed on 2026-10-06: its previous citation did not describe what the evaluator checks, and no Security Rule standard or implementation specification is a close enough match to cite instead. An empty citation is more accurate than a stretched one. NRG.FrameworkCoverage.Tests.ps1 accepts an empty HIPAA citation only for a control listed here, and fails if a listed control gains one (remove it from this list when a reviewed citation is added).",
+  "purpose": "Controls deliberately left without a HIPAA citation. Each was reviewed on 2026-10-06: its previous citation did not describe what the evaluator checks, and no Security Rule standard or implementation specification is a close enough match to cite instead. An empty citation is more accurate than a stretched one. TP.FrameworkCoverage.Tests.ps1 accepts an empty HIPAA citation only for a control listed here, and fails if a listed control gains one (remove it from this list when a reviewed citation is added).",
   "record": "docs/HIPAA-CITATION-CORRECTIONS.md",
   "controls": {
     "PVW-2.3": "Checks the Information Barriers mode. Its previous citation, 164.308(a)(4)(ii)(A), applies only to a health care clearinghouse within a larger organization, which the tool cannot establish; no other specification describes segmenting communication between internal groups.",

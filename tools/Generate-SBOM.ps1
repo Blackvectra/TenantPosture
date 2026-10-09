@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Generates a CycloneDX 1.5 SBOM for NRG-Assessment.
+    Generates a CycloneDX 1.5 SBOM for TenantPosture.
 
 .DESCRIPTION
     Enumerates the PowerShell module dependencies declared in the manifest and emits
@@ -11,7 +11,7 @@
 
 [CmdletBinding()]
 param(
-    [string] $OutputPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'sbom\nrg-assessment.cdx.json'),
+    [string] $OutputPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'sbom\tp-assessment.cdx.json'),
     [string] $RepoRoot   = (Split-Path -Parent $PSScriptRoot),
     # Audit fix (v4.6.x LOW): default Version is read from the module manifest
     # at runtime instead of being a hardcoded constant that drifts every
@@ -20,7 +20,7 @@ param(
 )
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
-    $manifestPath = Join-Path $RepoRoot 'NRG-Assessment.psd1'
+    $manifestPath = Join-Path $RepoRoot 'TenantPosture.psd1'
     if (Test-Path -LiteralPath $manifestPath) {
         try {
             $manifestData = Import-PowerShellDataFile -LiteralPath $manifestPath -ErrorAction Stop
@@ -68,8 +68,8 @@ $bom = [ordered]@{
         )
         component = [ordered]@{
             type    = 'application'
-            'bom-ref' = "pkg:nrg-assessment@$Version"
-            name    = 'NRG-Assessment'
+            'bom-ref' = "pkg:tp-assessment@$Version"
+            name    = 'TenantPosture'
             version = $Version
             description = 'Read-only Microsoft 365 security assessment tool'
             licenses = @(
@@ -97,7 +97,7 @@ $bom = [ordered]@{
     })
     dependencies = @(
         [ordered]@{
-            ref = "pkg:nrg-assessment@$Version"
+            ref = "pkg:tp-assessment@$Version"
             dependsOn = @($dependencies | ForEach-Object { "pkg:powershell/$($_.Name)@$($_.Version)" })
         }
     )

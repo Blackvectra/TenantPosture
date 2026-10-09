@@ -1,5 +1,5 @@
 {
-  "_comment": "Controls that read the SAME tenant setting. Each group is assessed and reported under every control ID (their framework citations differ), but counts ONCE in the score, the roadmap and the improvement plan: fixing the setting satisfies every control in the group, and a tenant is not docked twice for one setting. Primary is the ID the merged entry is reported under; it is the higher-severity control, or the policy control over its named-list companion. Only link controls whose evaluators read the same fields; NRG.ControlLinks.Tests.ps1 checks the IDs.",
+  "_comment": "Controls that read the SAME tenant setting. Each group is assessed and reported under every control ID (their framework citations differ), but counts ONCE in the score, the roadmap and the improvement plan: fixing the setting satisfies every control in the group, and a tenant is not docked twice for one setting. Primary is the ID the merged entry is reported under; it is the higher-severity control, or the policy control over its named-list companion. Only link controls whose evaluators read the same fields; TP.ControlLinks.Tests.ps1 checks the IDs.",
   "groups": [
     {
       "Primary": "EXO-2.6",
@@ -103,5 +103,5 @@
       "Reason": "Reads per-user SMTP AUTH overrides of the organization-level SMTP AUTH setting scored under EXO-1.2."
     }
   ],
-  "_viewsComment": "Views: a control that lists the objects behind, or restates, a shortfall another control already reports. It stays in the report with its own verdict and is NOT removed from the score here (the score only merges controls that read the same setting, under 'groups'); the Gap summary counts it as a view of the other control instead of a separate deficiency. Record a view only when the Of control reads the same data; NRG.GapSummary.Tests.ps1 checks the IDs."
+  "_viewsComment": "Views: a control that lists the objects behind, or restates, a shortfall another control already reports. It stays in the report with its own verdict and is NOT removed from the score here (the score only merges controls that read the same setting, under 'groups'); the Gap summary counts it as a view of the other control instead of a separate deficiency. Record a view only when the Of control reads the same data; TP.GapSummary.Tests.ps1 checks the IDs."
 }

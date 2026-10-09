@@ -1,7 +1,7 @@
-// NRG-Assessment GUI frontend.
+// TenantPosture GUI frontend.
 // Vanilla JS. No frameworks, no bundler. CSP-friendly (no eval, no inline
 // handlers, all wiring via addEventListener). Tested against the CSP
-// emitted by Lib/Start-NRGWebServer.ps1.
+// emitted by Lib/Start-TPWebServer.ps1.
 
 (function () {
   'use strict';

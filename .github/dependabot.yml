@@ -10,7 +10,7 @@
 #   actions/upload-artifact).
 #
 #   PowerShell module versions for runtime dependencies (Microsoft.Graph,
-#   ExchangeOnlineManagement) are pinned in NRG-Assessment.psd1 and
+#   ExchangeOnlineManagement) are pinned in TenantPosture.psd1 and
 #   bumped deliberately — Dependabot can't help there. CI module versions
 #   (Pester, PSScriptAnalyzer) are pinned in ci.yml on closed ranges
 #   ([5.5.0,5.99.99] etc.) and also bumped deliberately.

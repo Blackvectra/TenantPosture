@@ -10,7 +10,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADLegacyAuth",
+      "EvaluatorFunction": "Test-TPControlAADLegacyAuth",
       "Remediation": "Create a CA policy: All Users, Client apps = Other clients + Exchange ActiveSync, Grant = Block access.",
       "References": {
         "CISControls": [
@@ -42,7 +42,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies,AAD-AuthPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADMFA",
+      "EvaluatorFunction": "Test-TPControlAADMFA",
       "Remediation": "CA policy: Users = All, Apps = All cloud apps, Grant = Require MFA. Without Microsoft Entra ID P1, enable Security Defaults, which meets this control in part (MFA at every sign-in for 16 administrator roles; other users when Microsoft decides).",
       "References": {
         "CISControls": [
@@ -74,7 +74,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADPhishResistantMFA",
+      "EvaluatorFunction": "Test-TPControlAADPhishResistantMFA",
       "Remediation": "CA policy targeting privileged roles with Authentication Strength = Phishing-resistant MFA. Must cover Global Administrator at minimum.",
       "References": {
         "CISControls": [
@@ -106,7 +106,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADCA",
+      "EvaluatorFunction": "Test-TPControlAADCA",
       "Remediation": "Deploy at minimum: (1) block legacy auth, (2) require MFA all users, (3) phishing-resistant MFA for admin roles.",
       "References": {
         "CISControls": [
@@ -138,7 +138,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-DirectoryRoles",
-      "EvaluatorFunction": "Test-NRGControlAADPrivAccess",
+      "EvaluatorFunction": "Test-TPControlAADPrivAccess",
       "Remediation": "Reduce GA count to 2-8 break-glass accounts. Remove GA from any on-premises synced accounts and assign to cloud-only accounts.",
       "References": {
         "CISControls": [
@@ -170,7 +170,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOMailboxAudit",
+      "EvaluatorFunction": "Test-TPControlEXOMailboxAudit",
       "Remediation": "Set-OrganizationConfig -AuditDisabled $false",
       "References": {
         "CISControls": [
@@ -202,7 +202,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOSmtpAuth",
+      "EvaluatorFunction": "Test-TPControlEXOSmtpAuth",
       "Remediation": "Set-TransportConfig -SmtpClientAuthenticationDisabled $true",
       "References": {
         "CISControls": [
@@ -233,7 +233,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOAutoForward",
+      "EvaluatorFunction": "Test-TPControlEXOAutoForward",
       "Remediation": "Set-HostedOutboundSpamFilterPolicy -Identity Default -AutoForwardingMode Off. Set-RemoteDomain -Identity Default -AutoForwardEnabled $false",
       "References": {
         "CISControls": [
@@ -263,7 +263,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXODKIM",
+      "EvaluatorFunction": "Test-TPControlEXODKIM",
       "Remediation": "Enable-DkimSigningConfig -Identity domain.com. Publish the CNAME records from M365 admin center.",
       "References": {
         "CISControls": [
@@ -294,7 +294,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlEXOAntiPhish",
+      "EvaluatorFunction": "Test-TPControlEXOAntiPhish",
       "Remediation": "In every anti-phishing policy in force (Defender portal > Policies & rules > Threat policies > Anti-phishing), turn on \"Enable domains to protect\" including your own domains and \"Enable mailbox intelligence\" with \"Enable intelligence for impersonation protection\", and set each action to Quarantine or Move to Junk rather than Don't apply any action. Or: Set-AntiPhishPolicy -Identity <policy> -EnableOrganizationDomainsProtection $true -TargetedDomainProtectionAction Quarantine -EnableMailboxIntelligence $true -EnableMailboxIntelligenceProtection $true -MailboxIntelligenceProtectionAction MoveToJmf. The Standard or Strict preset security policy sets all of this.",
       "References": {
         "CISControls": [
@@ -326,7 +326,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOModernAuth",
+      "EvaluatorFunction": "Test-TPControlEXOModernAuth",
       "Remediation": "Set-OrganizationConfig -OAuth2ClientProfileEnabled $true",
       "References": {
         "CISControls": [
@@ -356,7 +356,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlEXOHonorDMARC",
+      "EvaluatorFunction": "Test-TPControlEXOHonorDMARC",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -HonorDmarcPolicy $true",
       "References": {
         "CISControls": [
@@ -386,7 +386,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "DNS-EmailRecords",
-      "EvaluatorFunction": "Test-NRGControlDNSSPF",
+      "EvaluatorFunction": "Test-TPControlDNSSPF",
       "Remediation": "Publish: v=spf1 include:spf.protection.outlook.com -all. Add include: for all third-party senders before the -all qualifier.",
       "References": {
         "CISControls": [
@@ -417,7 +417,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "DNS-EmailRecords",
-      "EvaluatorFunction": "Test-NRGControlDNSDKIM",
+      "EvaluatorFunction": "Test-TPControlDNSDKIM",
       "Remediation": "Enable DKIM in M365 admin center for each domain. Publish the two CNAME records provided.",
       "References": {
         "CISControls": [
@@ -448,7 +448,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "DNS-EmailRecords",
-      "EvaluatorFunction": "Test-NRGControlDNSDMARC",
+      "EvaluatorFunction": "Test-TPControlDNSDMARC",
       "Remediation": "Start with p=none and rua= reporting. Advance to p=quarantine then p=reject as all legitimate senders pass alignment. Target: v=DMARC1; p=reject; pct=100; rua=mailto:dmarc@domain.com",
       "References": {
         "CISControls": [
@@ -479,7 +479,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "DNS-EmailRecords",
-      "EvaluatorFunction": "Test-NRGControlDNSMTASTS",
+      "EvaluatorFunction": "Test-TPControlDNSMTASTS",
       "Remediation": "Publish _mta-sts TXT record and host policy file at https://mta-sts.domain.com/.well-known/mta-sts.txt with mode: enforce.",
       "References": {
         "CISControls": [
@@ -509,7 +509,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "DNS-EmailRecords",
-      "EvaluatorFunction": "Test-NRGControlDNSTLSRPT",
+      "EvaluatorFunction": "Test-TPControlDNSTLSRPT",
       "Remediation": "Publish: _smtp._tls.domain.com TXT 'v=TLSRPTv1; rua=mailto:tlsrpt@domain.com'",
       "References": {
         "CISControls": [
@@ -539,7 +539,7 @@
       "Category": "Network",
       "Automated": true,
       "CollectorDependency": "DNS-EmailRecords",
-      "EvaluatorFunction": "Test-NRGControlDNSDNSSEC",
+      "EvaluatorFunction": "Test-TPControlDNSDNSSEC",
       "Remediation": "Enable DNSSEC at your registrar. GoDaddy: Domains > DNS > DNSSEC > Enable. Free for up to 5 domains.",
       "References": {
         "CISControls": [],
@@ -568,7 +568,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "DNS-EmailRecords",
-      "EvaluatorFunction": "Test-NRGControlDNSDkimRotation",
+      "EvaluatorFunction": "Test-TPControlDNSDkimRotation",
       "Remediation": "Rotate DKIM keys: Rotate-DkimSigningConfig -Identity domain.com -KeySize 2048. Plan a 12-month cadence and document rotation in the change record.",
       "References": {
         "CISControls": [
@@ -599,7 +599,7 @@
       "Category": "Network",
       "Automated": true,
       "CollectorDependency": "DNS-EmailRecords",
-      "EvaluatorFunction": "Test-NRGControlDNSCAA",
+      "EvaluatorFunction": "Test-TPControlDNSCAA",
       "Remediation": "Publish CAA records at the registrar naming approved CAs. Example: 'domain.com. IN CAA 0 issue \"digicert.com\"' and 'domain.com. IN CAA 0 issuewild \";\"' to deny wildcard issuance. Include 'iodef' contact email for mis-issuance reports.",
       "References": {
         "CISControls": [
@@ -630,7 +630,7 @@
       "Category": "Network",
       "Automated": true,
       "CollectorDependency": "DNS-EmailRecords",
-      "EvaluatorFunction": "Test-NRGControlDNSTLSCertExpiry",
+      "EvaluatorFunction": "Test-TPControlDNSTLSCertExpiry",
       "Remediation": "Renew TLS certs at least 30 days before expiry. Automate renewal via ACME (Let's Encrypt) or your registrar's managed cert service. Alert when DaysUntilExpiry drops below 30.",
       "References": {
         "CISControls": [
@@ -661,7 +661,7 @@
       "Category": "Network",
       "Automated": true,
       "CollectorDependency": "DNS-EmailRecords",
-      "EvaluatorFunction": "Test-NRGControlDNSCertTransparency",
+      "EvaluatorFunction": "Test-TPControlDNSCertTransparency",
       "Remediation": "Review crt.sh entries for the domain. Confirm each unrecognized issuer corresponds to an approved third-party (CDN, SaaS subdomain). Add the approved CA to CAA. Subscribe to CT log monitoring (e.g., Cert Spotter) for ongoing mis-issuance detection.",
       "References": {
         "CISControls": [
@@ -692,7 +692,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlDefender",
+      "EvaluatorFunction": "Test-TPControlDefender",
       "Remediation": "Defender portal > Policies > Safe Attachments > Create policy for all recipients with Action = Block. Requires Defender for Office 365 Plan 1.",
       "References": {
         "CISControls": [
@@ -724,7 +724,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlDefender",
+      "EvaluatorFunction": "Test-TPControlDefender",
       "Remediation": "Create Safe Links policy with AllowClickThrough=$false, TrackClicks=$true, EnableForInternalSenders=$true. Requires Defender for Office 365 Plan 1.",
       "References": {
         "CISControls": [
@@ -755,7 +755,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlDefender",
+      "EvaluatorFunction": "Test-TPControlDefender",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -EnableSpoofIntelligence $true",
       "References": {
         "CISControls": [
@@ -785,7 +785,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlDefender",
+      "EvaluatorFunction": "Test-TPControlDefender",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -HonorDmarcPolicy $true",
       "References": {
         "CISControls": [
@@ -815,7 +815,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlDefender",
+      "EvaluatorFunction": "Test-TPControlDefender",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -PhishThresholdLevel 2",
       "References": {
         "CISControls": [
@@ -844,7 +844,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlDefender",
+      "EvaluatorFunction": "Test-TPControlDefender",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -EnableFirstContactSafetyTips $true",
       "References": {
         "CISControls": [
@@ -873,7 +873,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSharePoint",
+      "EvaluatorFunction": "Test-TPControlSharePoint",
       "Remediation": "Set-SPOTenant -SharingCapability ExistingExternalUserSharingOnly",
       "References": {
         "CISControls": [
@@ -904,7 +904,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSharePoint",
+      "EvaluatorFunction": "Test-TPControlSharePoint",
       "Remediation": "Set-SPOTenant -DefaultSharingLinkType Internal",
       "References": {
         "CISControls": [
@@ -934,7 +934,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSharePoint",
+      "EvaluatorFunction": "Test-TPControlSharePoint",
       "Remediation": "Set-SPOTenant -LegacyAuthProtocolsEnabled $false",
       "References": {
         "CISControls": [],
@@ -962,7 +962,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSharePoint",
+      "EvaluatorFunction": "Test-TPControlSharePoint",
       "Remediation": "Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60",
       "References": {
         "CISControls": [
@@ -992,7 +992,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSharePoint",
+      "EvaluatorFunction": "Test-TPControlSharePoint",
       "Remediation": "Set-SPOTenant -ConditionalAccessPolicy AllowLimitedAccess",
       "References": {
         "CISControls": [
@@ -1022,7 +1022,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeams",
+      "EvaluatorFunction": "Test-TPControlTeams",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowFederatedUsers $false, or restrict to an allowlist of trusted domains.",
       "References": {
         "CISControls": [
@@ -1054,7 +1054,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeams",
+      "EvaluatorFunction": "Test-TPControlTeams",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowTeamsConsumer $false -AllowTeamsConsumerInbound $false",
       "References": {
         "CISControls": [
@@ -1084,7 +1084,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeams",
+      "EvaluatorFunction": "Test-TPControlTeams",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowAnonymousUsersToJoinMeeting $false",
       "References": {
         "CISControls": [
@@ -1113,7 +1113,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeams",
+      "EvaluatorFunction": "Test-TPControlTeams",
       "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -AllowExternalParticipantGiveRequestControl $false",
       "References": {
         "CISControls": [
@@ -1143,7 +1143,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlTeamsRecordingRetention",
+      "EvaluatorFunction": "Test-TPControlTeamsRecordingRetention",
       "Remediation": "Meeting recordings are saved to the organizer's OneDrive and channel meeting recordings to the team's SharePoint site. Apply a Purview retention policy covering both OneDrive accounts and SharePoint sites (Purview > Data lifecycle management > Retention policies) so recordings are retained per policy rather than deletable at will.",
       "References": {
         "CISControls": [
@@ -1172,7 +1172,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeams",
+      "EvaluatorFunction": "Test-TPControlTeams",
       "Remediation": "Either turn off Teams guest access (Set-CsTeamsClientConfiguration -Identity Global -AllowGuestUser $false) or limit who can invite guests to admins and the Guest Inviter role (Entra ID > External Identities > External collaboration settings > Guest invite settings).",
       "References": {
         "CISControls": [
@@ -1201,7 +1201,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurview",
+      "EvaluatorFunction": "Test-TPControlPurview",
       "Remediation": "Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true",
       "References": {
         "CISControls": [
@@ -1232,7 +1232,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurview",
+      "EvaluatorFunction": "Test-TPControlPurview",
       "Remediation": "Audit (Standard) keeps records for 180 days in every plan once the Unified Audit Log is on. Remove or lengthen any audit retention policy under 90 days (Purview > Audit > Audit retention policies). Audit (Premium, E5 or add-on) extends retention to one year.",
       "References": {
         "CISControls": [
@@ -1262,7 +1262,7 @@
       "Category": "Data",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurview",
+      "EvaluatorFunction": "Test-TPControlPurview",
       "Remediation": "Create DLP policies in Purview > Data loss prevention using Microsoft-provided templates (Financial, PII, Health) across Exchange, SharePoint, Teams.",
       "References": {
         "CISControls": [
@@ -1293,7 +1293,7 @@
       "Category": "Data",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurview",
+      "EvaluatorFunction": "Test-TPControlPurview",
       "Remediation": "Create labels in Purview > Information protection. Publish via label policies. Minimum tiers: Internal, Confidential, Highly Confidential.",
       "References": {
         "CISControls": [
@@ -1323,7 +1323,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-DeviceCompliance",
-      "EvaluatorFunction": "Test-NRGControlIntune",
+      "EvaluatorFunction": "Test-TPControlIntune",
       "Remediation": "Create compliance policies per platform in Intune > Devices > Compliance. Require encryption, password, and OS version minimums.",
       "References": {
         "CISControls": [
@@ -1354,7 +1354,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-DeviceCompliance,AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlIntune",
+      "EvaluatorFunction": "Test-TPControlIntune",
       "Remediation": "Create CA policy: require compliant device or hybrid join for all cloud apps.",
       "References": {
         "CISControls": [
@@ -1384,7 +1384,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-DeviceCompliance",
-      "EvaluatorFunction": "Test-NRGControlIntune",
+      "EvaluatorFunction": "Test-TPControlIntune",
       "Remediation": "Intune compliance policy for Windows: Device Health > Require BitLocker = Require.",
       "References": {
         "CISControls": [
@@ -1415,7 +1415,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-AppProtection",
-      "EvaluatorFunction": "Test-NRGControlIntune",
+      "EvaluatorFunction": "Test-TPControlIntune",
       "Remediation": "Create app protection policies in Intune > Apps > App protection policies for iOS and Android targeting Office apps.",
       "References": {
         "CISControls": [
@@ -1446,7 +1446,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-EndpointSecurity",
-      "EvaluatorFunction": "Test-NRGControlIntune",
+      "EvaluatorFunction": "Test-TPControlIntune",
       "Remediation": "Create Endpoint Security > Antivirus policy in Intune. Set CloudBlockLevel = High, enable real-time protection and tamper protection.",
       "References": {
         "CISControls": [
@@ -1477,7 +1477,7 @@
       "Category": "Data",
       "Automated": true,
       "CollectorDependency": "PowerPlatform",
-      "EvaluatorFunction": "Test-NRGControlPowerPlatform",
+      "EvaluatorFunction": "Test-TPControlPowerPlatform",
       "Remediation": "Power Platform Admin Center > Policies > Tenant Isolation: enable and configure inbound/outbound restrictions.",
       "References": {
         "CISControls": [
@@ -1508,7 +1508,7 @@
       "Category": "Data",
       "Automated": true,
       "CollectorDependency": "PowerPlatform",
-      "EvaluatorFunction": "Test-NRGControlPowerPlatform",
+      "EvaluatorFunction": "Test-TPControlPowerPlatform",
       "Remediation": "Power Platform Admin Center > Policies > Data policies: create environment policy. Move business connectors to Business group, block consumer connectors.",
       "References": {
         "CISControls": [
@@ -1538,7 +1538,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "PowerPlatform",
-      "EvaluatorFunction": "Test-NRGControlPowerPlatform",
+      "EvaluatorFunction": "Test-TPControlPowerPlatform",
       "Remediation": "Power Platform Admin Center > Settings: restrict environment creation to admins only.",
       "References": {
         "CISControls": [
@@ -1568,7 +1568,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOPop3",
+      "EvaluatorFunction": "Test-TPControlEXOPop3",
       "Remediation": "Disable for newly licensed mailboxes: Get-CASMailboxPlan -Filter {PopEnabled -eq $true} | Set-CASMailboxPlan -PopEnabled $false. Disable for existing mailboxes: Get-CASMailbox -ResultSize Unlimited | Set-CASMailbox -PopEnabled $false",
       "References": {
         "CISControls": [
@@ -1598,7 +1598,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOImap",
+      "EvaluatorFunction": "Test-TPControlEXOImap",
       "Remediation": "Disable for newly licensed mailboxes: Get-CASMailboxPlan -Filter {ImapEnabled -eq $true} | Set-CASMailboxPlan -ImapEnabled $false. Disable for existing mailboxes: Get-CASMailbox -ResultSize Unlimited | Set-CASMailbox -ImapEnabled $false",
       "References": {
         "CISControls": [
@@ -1628,7 +1628,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOCustomerLockbox",
+      "EvaluatorFunction": "Test-TPControlEXOCustomerLockbox",
       "Remediation": "Enable in M365 admin center > Settings > Security & privacy > Customer Lockbox. Requires E5 or E5 Compliance add-on.",
       "References": {
         "CISControls": [
@@ -1657,7 +1657,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
-      "EvaluatorFunction": "Test-NRGControlEXOSharedMailbox",
+      "EvaluatorFunction": "Test-TPControlEXOSharedMailbox",
       "Remediation": "Get-Mailbox -ResultSize Unlimited -RecipientTypeDetails SharedMailbox | ForEach-Object { Update-MgUser -UserId $_.ExternalDirectoryObjectId -AccountEnabled:$false }",
       "References": {
         "CISControls": [
@@ -1687,7 +1687,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADSignInRisk",
+      "EvaluatorFunction": "Test-TPControlAADSignInRisk",
       "Remediation": "CA policy: Condition = Sign-in risk high/medium, Grant = Require MFA or Block. Requires Entra P2.",
       "References": {
         "CISControls": [
@@ -1718,7 +1718,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADUserRisk",
+      "EvaluatorFunction": "Test-TPControlAADUserRisk",
       "Remediation": "CA policy: Condition = User risk high, Grant = Require password change. Requires Entra P2.",
       "References": {
         "CISControls": [
@@ -1749,7 +1749,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADNamedLocations",
+      "EvaluatorFunction": "Test-TPControlAADNamedLocations",
       "Remediation": "Entra ID > Security > Named locations > Add IP ranges location. Mark office and VPN IP ranges as trusted.",
       "References": {
         "CISControls": [],
@@ -1777,7 +1777,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADDeviceComplianceCA",
+      "EvaluatorFunction": "Test-TPControlAADDeviceComplianceCA",
       "Remediation": "CA policy: Grant = Require device to be marked as compliant, or Require Microsoft Entra hybrid joined device.",
       "References": {
         "CISControls": [
@@ -1807,7 +1807,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-PIMSchedules,AAD-DirectoryRoles",
-      "EvaluatorFunction": "Test-NRGControlAADNoPermanentAdmins",
+      "EvaluatorFunction": "Test-TPControlAADNoPermanentAdmins",
       "Remediation": "Convert permanent role assignments to PIM eligible. Keep only break-glass accounts as permanent GA.",
       "References": {
         "CISControls": [
@@ -1839,7 +1839,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-IdentityGovernance",
-      "EvaluatorFunction": "Test-NRGControlAADPIMMFA",
+      "EvaluatorFunction": "Test-TPControlAADPIMMFA",
       "Remediation": "PIM > Roles > Select role > Settings > Require MFA on activation.",
       "References": {
         "CISControls": [
@@ -1869,7 +1869,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-IdentityGovernance",
-      "EvaluatorFunction": "Test-NRGControlAADPIMJustification",
+      "EvaluatorFunction": "Test-TPControlAADPIMJustification",
       "Remediation": "PIM > Roles > Select role > Settings > Require justification on activation.",
       "References": {
         "CISControls": [
@@ -1898,7 +1898,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-IdentityGovernance",
-      "EvaluatorFunction": "Test-NRGControlAADPIMApproval",
+      "EvaluatorFunction": "Test-TPControlAADPIMApproval",
       "Remediation": "PIM > Global Administrator > Settings > Require approval > Add approvers.",
       "References": {
         "CISControls": [
@@ -1928,7 +1928,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-IdentityGovernance",
-      "EvaluatorFunction": "Test-NRGControlAADPIMDuration",
+      "EvaluatorFunction": "Test-TPControlAADPIMDuration",
       "Remediation": "PIM > Roles > Select role > Settings > Maximum activation duration = 8 hours.",
       "References": {
         "CISControls": [
@@ -1957,7 +1957,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-IdentityGovernance",
-      "EvaluatorFunction": "Test-NRGControlAADGuestInvite",
+      "EvaluatorFunction": "Test-TPControlAADGuestInvite",
       "Remediation": "Entra ID > External Identities > External collaboration settings > Guest invite settings = Admins and users in the Guest Inviter role.",
       "References": {
         "CISControls": [
@@ -1987,7 +1987,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-IdentityGovernance",
-      "EvaluatorFunction": "Test-NRGControlAADExternalCollab",
+      "EvaluatorFunction": "Test-TPControlAADExternalCollab",
       "Remediation": "Entra ID > User settings > Restrict non-admin users from creating tenants. Block MSOL PowerShell via authorization policy.",
       "References": {
         "CISControls": [
@@ -2016,7 +2016,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-IdentityGovernance",
-      "EvaluatorFunction": "Test-NRGControlAADGuestPermissions",
+      "EvaluatorFunction": "Test-TPControlAADGuestPermissions",
       "Remediation": "Entra ID > External Identities > External collaboration settings > Guest user access = Most restricted.",
       "References": {
         "CISControls": [
@@ -2047,7 +2047,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-AuthPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADSSPR",
+      "EvaluatorFunction": "Test-TPControlAADSSPR",
       "Remediation": "Entra ID > Password reset > Properties > Self service password reset enabled = All or Selected.",
       "References": {
         "CISControls": [],
@@ -2075,7 +2075,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-IdentityGovernance",
-      "EvaluatorFunction": "Test-NRGControlAADSSPRMethods",
+      "EvaluatorFunction": "Test-TPControlAADSSPRMethods",
       "Remediation": "Entra ID > Password reset > Authentication methods > Number of methods required = 2.",
       "References": {
         "CISControls": [],
@@ -2103,7 +2103,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-IdentityGovernance",
-      "EvaluatorFunction": "Test-NRGControlAADUserAppReg",
+      "EvaluatorFunction": "Test-TPControlAADUserAppReg",
       "Remediation": "Entra ID > User settings > App registrations > Users can register applications = No.",
       "References": {
         "CISControls": [
@@ -2134,7 +2134,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-IdentityGovernance",
-      "EvaluatorFunction": "Test-NRGControlAADUserConsent",
+      "EvaluatorFunction": "Test-TPControlAADUserConsent",
       "Remediation": "Entra ID > Enterprise apps > Consent and permissions > User consent settings = Do not allow user consent.",
       "References": {
         "CISControls": [
@@ -2165,7 +2165,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-IdentityGovernance",
-      "EvaluatorFunction": "Test-NRGControlAADAdminConsentWorkflow",
+      "EvaluatorFunction": "Test-TPControlAADAdminConsentWorkflow",
       "Remediation": "Entra ID > Enterprise apps > Consent and permissions > Admin consent requests > Yes + configure reviewers.",
       "References": {
         "CISControls": [
@@ -2195,7 +2195,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-AuthPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADPasswordProtection",
+      "EvaluatorFunction": "Test-TPControlAADPasswordProtection",
       "Remediation": "Entra ID > Security > Authentication methods > Password protection > Lockout threshold ≤10.",
       "References": {
         "CISControls": [],
@@ -2223,7 +2223,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-IdentityGovernance",
-      "EvaluatorFunction": "Test-NRGControlAADBreakGlass",
+      "EvaluatorFunction": "Test-TPControlAADBreakGlass",
       "Remediation": "Create two cloud-only GA accounts with strong random passwords, exclude from all CA policies, store credentials in secure offline location. Monitor for sign-in activity.",
       "References": {
         "CISControls": [
@@ -2252,7 +2252,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlDefenderPresetPolicies",
+      "EvaluatorFunction": "Test-TPControlDefenderPresetPolicies",
       "Remediation": "Defender portal > Email & Collaboration > Policies > Preset security policies > Apply Standard or Strict protection.",
       "References": {
         "CISControls": [
@@ -2281,7 +2281,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlDefenderZAP",
+      "EvaluatorFunction": "Test-TPControlDefenderZAP",
       "Remediation": "Set-HostedContentFilterPolicy -ZapEnabled $true",
       "References": {
         "CISControls": [
@@ -2312,7 +2312,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlDefenderCommonAttachments",
+      "EvaluatorFunction": "Test-TPControlDefenderCommonAttachments",
       "Remediation": "Set-MalwareFilterPolicy -Identity Default -EnableFileFilter $true",
       "References": {
         "CISControls": [
@@ -2343,7 +2343,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlDefenderQuarantine",
+      "EvaluatorFunction": "Test-TPControlDefenderQuarantine",
       "Remediation": "Set-HostedContentFilterPolicy -PhishSpamAction Quarantine",
       "References": {
         "CISControls": [
@@ -2372,7 +2372,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlDefenderHCSpam",
+      "EvaluatorFunction": "Test-TPControlDefenderHCSpam",
       "Remediation": "Set-HostedContentFilterPolicy -HighConfidenceSpamAction Quarantine",
       "References": {
         "CISControls": [
@@ -2402,7 +2402,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlDefenderBulkThreshold",
+      "EvaluatorFunction": "Test-TPControlDefenderBulkThreshold",
       "Remediation": "Set-HostedContentFilterPolicy -BulkThreshold 6",
       "References": {
         "CISControls": [
@@ -2431,7 +2431,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-ConnectionFilter",
-      "EvaluatorFunction": "Test-NRGControlEXOConnectionFilter",
+      "EvaluatorFunction": "Test-TPControlEXOConnectionFilter",
       "Remediation": "Set-HostedConnectionFilterPolicy -Identity Default -EnableSafeList $false",
       "References": {
         "CISControls": [
@@ -2461,7 +2461,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOOutboundLimits",
+      "EvaluatorFunction": "Test-TPControlEXOOutboundLimits",
       "Remediation": "Keep the default alert policy \"User restricted from sending email\" enabled with an administrator recipient (Defender portal > Policies & rules > Alert policy), or set NotifyOutboundSpam $true with NotifyOutboundSpamRecipients on every outbound spam policy in force: Set-HostedOutboundSpamFilterPolicy -Identity <policy> -NotifyOutboundSpam $true -NotifyOutboundSpamRecipients <admin>.",
       "References": {
         "CISControls": [
@@ -2492,7 +2492,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlEXOAlertForwarding",
+      "EvaluatorFunction": "Test-TPControlEXOAlertForwarding",
       "Remediation": "Defender portal > Policies > Alert policies > Enable: Email forwarding activities.",
       "References": {
         "CISControls": [
@@ -2523,7 +2523,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlEXOAlertVolume",
+      "EvaluatorFunction": "Test-TPControlEXOAlertVolume",
       "Remediation": "Defender portal > Policies > Alert policies > Enable: Unusual increase in email reported as phish.",
       "References": {
         "CISControls": [
@@ -2554,7 +2554,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOTransportAudit",
+      "EvaluatorFunction": "Test-TPControlEXOTransportAudit",
       "Remediation": "Turn on audit log ingestion so Exchange admin actions, including transport rule changes, are recorded and searchable: Purview portal > Audit > Start recording user and admin activity, or in Exchange Online PowerShell Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true",
       "References": {
         "CISControls": [
@@ -2585,7 +2585,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSPOOneDriveSync",
+      "EvaluatorFunction": "Test-TPControlSPOOneDriveSync",
       "Remediation": "Set-SPOTenant -AllowedDomainGuidsForSyncApp @('your-tenant-guid')",
       "References": {
         "CISControls": [
@@ -2615,7 +2615,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSPOLinkExpiration",
+      "EvaluatorFunction": "Test-TPControlSPOLinkExpiration",
       "Remediation": "Set-SPOTenant -RequireAnonymousLinksExpireInDays 30",
       "References": {
         "CISControls": [
@@ -2645,7 +2645,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSPOAppsFromStore",
+      "EvaluatorFunction": "Test-TPControlSPOAppsFromStore",
       "Remediation": "SharePoint Admin Center > Settings > Apps > disable apps from the SharePoint store.",
       "References": {
         "CISControls": [
@@ -2675,7 +2675,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSPOCustomScript",
+      "EvaluatorFunction": "Test-TPControlSPOCustomScript",
       "Remediation": "Set-SPOSite -DenyAddAndCustomizePages 1 (applies to all sites)",
       "References": {
         "CISControls": [
@@ -2704,7 +2704,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlSPO3PStorage",
+      "EvaluatorFunction": "Test-TPControlSPO3PStorage",
       "Remediation": "Disable the connectors: Set-CsTeamsClientConfiguration -Identity Global -AllowDropBox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false. Then confirm the separate Microsoft 365 admin center setting: admin.microsoft.com > Settings > Org settings > Services > Third-party storage services > off.",
       "References": {
         "CISControls": [
@@ -2735,7 +2735,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSPOEmailAttestation",
+      "EvaluatorFunction": "Test-TPControlSPOEmailAttestation",
       "Remediation": "Set-SPOTenant -EmailAttestationRequired $true -EmailAttestationReAuthDays 30",
       "References": {
         "CISControls": [
@@ -2765,7 +2765,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSPOReauth",
+      "EvaluatorFunction": "Test-TPControlSPOReauth",
       "Remediation": "Set-SPOTenant -EmailAttestationReAuthDays 30",
       "References": {
         "CISControls": [
@@ -2795,7 +2795,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSPODomainSync",
+      "EvaluatorFunction": "Test-TPControlSPODomainSync",
       "Remediation": "Set-SPOTenant -AllowedDomainGuidsForSyncApp (Get-SPOTenant).TenantId",
       "References": {
         "CISControls": [
@@ -2826,7 +2826,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeamsSkype",
+      "EvaluatorFunction": "Test-TPControlTeamsSkype",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowPublicUsers $false",
       "References": {
         "CISControls": [
@@ -2856,7 +2856,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeamsUnverifiedApps",
+      "EvaluatorFunction": "Test-TPControlTeamsUnverifiedApps",
       "Remediation": "Teams Admin Center > Teams apps > Permission policies > Block all apps from unknown publishers.",
       "References": {
         "CISControls": [
@@ -2886,7 +2886,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeams3PStorage",
+      "EvaluatorFunction": "Test-TPControlTeams3PStorage",
       "Remediation": "Set-CsTeamsClientConfiguration -Identity Global -AllowDropBox $false -AllowBox $false -AllowGoogleDrive $false -AllowShareFile $false -AllowEgnyte $false",
       "References": {
         "CISControls": [
@@ -2917,7 +2917,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeamsEmailIntegration",
+      "EvaluatorFunction": "Test-TPControlTeamsEmailIntegration",
       "Remediation": "Set-CsTeamsClientConfiguration -Identity Global -AllowEmailIntoChannel $false",
       "References": {
         "CISControls": [
@@ -2947,7 +2947,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeamsRecordingExternal",
+      "EvaluatorFunction": "Test-TPControlTeamsRecordingExternal",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowCloudRecordingForCalls $false for externally-scoped policies",
       "References": {
         "CISControls": [
@@ -2977,7 +2977,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeamsBroadChannel",
+      "EvaluatorFunction": "Test-TPControlTeamsBroadChannel",
       "Remediation": "Review AllowChannelMeetingScheduling in meeting policy — restrict if channels have broad guest membership.",
       "References": {
         "CISControls": [
@@ -3007,7 +3007,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeamsExternalChat",
+      "EvaluatorFunction": "Test-TPControlTeamsExternalChat",
       "Remediation": "Set-CsTenantFederationConfiguration -AllowFederatedUsers $false or restrict to allowlist.",
       "References": {
         "CISControls": [
@@ -3038,7 +3038,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeamsPSTN",
+      "EvaluatorFunction": "Test-TPControlTeamsPSTN",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowPSTNUsersToBypassLobby $false",
       "References": {
         "CISControls": [
@@ -3068,7 +3068,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurviewAuditSearch",
+      "EvaluatorFunction": "Test-TPControlPurviewAuditSearch",
       "Remediation": "Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true",
       "References": {
         "CISControls": [
@@ -3098,7 +3098,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurviewCommCompliance",
+      "EvaluatorFunction": "Test-TPControlPurviewCommCompliance",
       "Remediation": "Purview > Communication compliance > Create policy. Requires E5 Compliance.",
       "References": {
         "CISControls": [
@@ -3128,7 +3128,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurviewInfoBarriers",
+      "EvaluatorFunction": "Test-TPControlPurviewInfoBarriers",
       "Remediation": "Set-PolicyConfig -InformationBarrierMode MultiSegment. Requires E5 Compliance.",
       "References": {
         "CISControls": [
@@ -3158,7 +3158,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurviewInsiderRisk",
+      "EvaluatorFunction": "Test-TPControlPurviewInsiderRisk",
       "Remediation": "Purview > Insider risk management > Create policy (Departing user data theft, Data leaks). Requires E5 Compliance.",
       "References": {
         "CISControls": [
@@ -3189,7 +3189,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurviewRetention",
+      "EvaluatorFunction": "Test-TPControlPurviewRetention",
       "Remediation": "Purview > Data lifecycle management > Retention policies. Create policies for Exchange, SharePoint, OneDrive, Teams.",
       "References": {
         "CISControls": [
@@ -3219,7 +3219,7 @@
       "Category": "Data",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurviewAutoLabel",
+      "EvaluatorFunction": "Test-TPControlPurviewAutoLabel",
       "Remediation": "Purview > Information protection > Auto-labeling > Create policy for sensitive info types (SSN, credit card, etc.).",
       "References": {
         "CISControls": [
@@ -3248,7 +3248,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-EndpointSecurity",
-      "EvaluatorFunction": "Test-NRGControlIntuneEDR",
+      "EvaluatorFunction": "Test-TPControlIntuneEDR",
       "Remediation": "Intune > Endpoint security > Endpoint detection and response > Create policy for Windows.",
       "References": {
         "CISControls": [
@@ -3280,7 +3280,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-EndpointSecurity",
-      "EvaluatorFunction": "Test-NRGControlIntuneASR",
+      "EvaluatorFunction": "Test-TPControlIntuneASR",
       "Remediation": "Intune > Endpoint security > Attack surface reduction > Create ASR rules policy. Enable at minimum: Block Office macros, Block credential stealing, Block JS/VBS launching executables.",
       "References": {
         "CISControls": [
@@ -3311,7 +3311,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-EndpointSecurity",
-      "EvaluatorFunction": "Test-NRGControlIntuneFirewall",
+      "EvaluatorFunction": "Test-TPControlIntuneFirewall",
       "Remediation": "Intune > Endpoint security > Firewall > Create Windows Firewall policy. Enable domain, private, and public profiles.",
       "References": {
         "CISControls": [
@@ -3342,7 +3342,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-DeviceCompliance",
-      "EvaluatorFunction": "Test-NRGControlIntuneMacEncryption",
+      "EvaluatorFunction": "Test-TPControlIntuneMacEncryption",
       "Remediation": "Intune > Devices > Compliance > macOS > Create policy > System Security > Require encryption = Require.",
       "References": {
         "CISControls": [
@@ -3373,7 +3373,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-DeviceCompliance",
-      "EvaluatorFunction": "Test-NRGControlIntuneWindowsUpdate",
+      "EvaluatorFunction": "Test-TPControlIntuneWindowsUpdate",
       "Remediation": "Intune > Devices > Windows update rings > Create update ring with feature and quality update schedules.",
       "References": {
         "CISControls": [
@@ -3404,7 +3404,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-PIMSchedules",
-      "EvaluatorFunction": "Test-NRGControlAADPIMAlerts",
+      "EvaluatorFunction": "Test-TPControlAADPIMAlerts",
       "Remediation": "PIM > Alerts > Review and enable: Roles assigned outside PIM, Redundant assignments, Stale assignments, Too many GA admins.",
       "References": {
         "CISControls": [
@@ -3434,7 +3434,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-PIMSchedules",
-      "EvaluatorFunction": "Test-NRGControlAADAccessReviews",
+      "EvaluatorFunction": "Test-TPControlAADAccessReviews",
       "Remediation": "PIM > Microsoft Entra roles > Access reviews > Create recurring quarterly review for Global Admin, Privileged Role Admin, Security Admin.",
       "References": {
         "CISControls": [
@@ -3463,7 +3463,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-AuthPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADAuthenticatorNumberMatch",
+      "EvaluatorFunction": "Test-TPControlAADAuthenticatorNumberMatch",
       "Remediation": "Entra ID > Security > Authentication methods > Microsoft Authenticator > Configure > Require number matching = Enabled.",
       "References": {
         "CISControls": [
@@ -3493,7 +3493,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-AuthPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADPasswordless",
+      "EvaluatorFunction": "Test-TPControlAADPasswordless",
       "Remediation": "Entra ID > Security > Authentication methods > FIDO2 security key > Enable. Consider Windows Hello for Business via Intune policy.",
       "References": {
         "CISControls": [
@@ -3525,7 +3525,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADIdentityProtection",
+      "EvaluatorFunction": "Test-TPControlAADIdentityProtection",
       "Remediation": "CA policy: Condition = User risk = High, Grant = Require password change. Requires Entra P2.",
       "References": {
         "CISControls": [
@@ -3556,7 +3556,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-DirectoryRoles",
-      "EvaluatorFunction": "Test-NRGControlAADPrivCloudOnly",
+      "EvaluatorFunction": "Test-TPControlAADPrivCloudOnly",
       "Remediation": "Create dedicated .admin or .onmicrosoft.com accounts for all privileged role holders. Remove privileged roles from on-premises synced accounts.",
       "References": {
         "CISControls": [
@@ -3586,7 +3586,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-IdentityGovernance",
-      "EvaluatorFunction": "Test-NRGControlAADBreakGlassMonitoring",
+      "EvaluatorFunction": "Test-TPControlAADBreakGlassMonitoring",
       "Remediation": "Create a Sentinel or Defender XDR alert rule for sign-in from break-glass account UPNs. Notify SOC immediately on any sign-in.",
       "References": {
         "CISControls": [
@@ -3615,7 +3615,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADSignInFrequency",
+      "EvaluatorFunction": "Test-TPControlAADSignInFrequency",
       "Remediation": "CA policy: Session controls > Sign-in frequency > set to 1 hour for privileged users, 8 hours for standard users.",
       "References": {
         "CISControls": [
@@ -3646,7 +3646,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOAuditAgeLimit",
+      "EvaluatorFunction": "Test-TPControlEXOAuditAgeLimit",
       "Remediation": "Keep mailbox auditing (Set-OrganizationConfig -AuditDisabled $false) and audit log ingestion (Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true) on; records are then retained 180 days, or one year for E5 / Audit (Premium) users. Retention is managed in Purview > Audit > Audit retention policies — the per-mailbox AuditLogAgeLimit no longer applies.",
       "References": {
         "CISControls": [
@@ -3675,7 +3675,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOAdminAudit",
+      "EvaluatorFunction": "Test-TPControlEXOAdminAudit",
       "Remediation": "Set-AdminAuditLogConfig -AdminAuditLogEnabled $true",
       "References": {
         "CISControls": [
@@ -3706,7 +3706,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlEXOSafeAttachmentsSPO",
+      "EvaluatorFunction": "Test-TPControlEXOSafeAttachmentsSPO",
       "Remediation": "Defender portal > Policies & rules > Threat policies > Safe Attachments > Global settings > turn on Defender for Office 365 for SharePoint, OneDrive, and Microsoft Teams. Or: Set-AtpPolicyForO365 -EnableATPForSPOTeamsODB $true",
       "References": {
         "CISControls": [
@@ -3738,7 +3738,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOAntiSpamInbound",
+      "EvaluatorFunction": "Test-TPControlEXOAntiSpamInbound",
       "Remediation": "Set-HostedContentFilterPolicy -Identity Default -SpamAction MoveToJmf -BulkThreshold 6 -ZapEnabled $true",
       "References": {
         "CISControls": [
@@ -3767,7 +3767,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlDefenderUnauthSender",
+      "EvaluatorFunction": "Test-TPControlDefenderUnauthSender",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -EnableUnauthenticatedSender $true",
       "References": {
         "CISControls": [
@@ -3797,7 +3797,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlDefenderViaTag",
+      "EvaluatorFunction": "Test-TPControlDefenderViaTag",
       "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -EnableViaTag $true",
       "References": {
         "CISControls": [
@@ -3827,7 +3827,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlDefenderMDCA",
+      "EvaluatorFunction": "Test-TPControlDefenderMDCA",
       "Remediation": "Defender XDR > Settings > Cloud Apps > Connected apps > Office 365 > Connect.",
       "References": {
         "CISControls": [
@@ -3858,7 +3858,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlDefenderAlertNotification",
+      "EvaluatorFunction": "Test-TPControlDefenderAlertNotification",
       "Remediation": "Defender portal > Settings > Email notifications > Create notification rule for High and Critical severity alerts.",
       "References": {
         "CISControls": [
@@ -3889,7 +3889,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSPOSiteAdmins",
+      "EvaluatorFunction": "Test-TPControlSPOSiteAdmins",
       "Remediation": "Review site admins: Get-SPOSite -Limit ALL | ForEach-Object { Get-SPOUser -Site $_.Url -Group 'Site Collection Administrators' }",
       "References": {
         "CISControls": [
@@ -3920,7 +3920,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSPOSharingNotifications",
+      "EvaluatorFunction": "Test-TPControlSPOSharingNotifications",
       "Remediation": "Set-SPOTenant -NotifyOwnersWhenItemsReshared $true",
       "References": {
         "CISControls": [
@@ -3950,7 +3950,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSPOVersionHistory",
+      "EvaluatorFunction": "Test-TPControlSPOVersionHistory",
       "Remediation": "Verify via SharePoint Admin Center > Settings that versioning is enabled and version limits are adequate (≥100 versions).",
       "References": {
         "CISControls": [
@@ -3981,7 +3981,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSPOGuestExpiry",
+      "EvaluatorFunction": "Test-TPControlSPOGuestExpiry",
       "Remediation": "Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60",
       "References": {
         "CISControls": [
@@ -4011,7 +4011,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeamsWatermarks",
+      "EvaluatorFunction": "Test-TPControlTeamsWatermarks",
       "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -AllowWatermarkForScreenSharing $true (and -AllowWatermarkForCameraVideo $true). Watermarks require Teams Premium for meeting organizers; enforce them for sensitive meetings with a sensitivity label or meeting template.",
       "References": {
         "CISControls": [
@@ -4041,7 +4041,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeamsAutoAdmit",
+      "EvaluatorFunction": "Test-TPControlTeamsAutoAdmit",
       "Remediation": "Set-CsTeamsMeetingPolicy -AutoAdmittedUsers EveryoneInCompanyExcludingGuests",
       "References": {
         "CISControls": [
@@ -4071,7 +4071,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeamsMeetingChat",
+      "EvaluatorFunction": "Test-TPControlTeamsMeetingChat",
       "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -MeetingChatEnabledType EnabledExceptAnonymous",
       "References": {
         "CISControls": [
@@ -4101,7 +4101,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlTeamsChatCopy",
+      "EvaluatorFunction": "Test-TPControlTeamsChatCopy",
       "Remediation": "Purview > DLP > Create policy targeting Teams with sensitive info types to restrict copy/paste of protected content.",
       "References": {
         "CISControls": [
@@ -4131,7 +4131,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurviewSIEMExport",
+      "EvaluatorFunction": "Test-TPControlPurviewSIEMExport",
       "Remediation": "Connect Microsoft Sentinel M365 data connector, or use Defender XDR > Settings > Microsoft Defender XDR > Audit log export.",
       "References": {
         "CISControls": [
@@ -4162,7 +4162,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurviewEDiscovery",
+      "EvaluatorFunction": "Test-TPControlPurviewEDiscovery",
       "Remediation": "Purview > Roles & scopes > eDiscovery Manager. Assign eDiscovery Manager role to compliance team members.",
       "References": {
         "CISControls": [
@@ -4192,7 +4192,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurviewComplianceScore",
+      "EvaluatorFunction": "Test-TPControlPurviewComplianceScore",
       "Remediation": "compliance.microsoft.com > Compliance Manager > Improvement actions > Assign to owners and set target dates.",
       "References": {
         "CISControls": [],
@@ -4220,7 +4220,7 @@
       "Category": "Data",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurviewSensitiveInfoTypes",
+      "EvaluatorFunction": "Test-TPControlPurviewSensitiveInfoTypes",
       "Remediation": "Purview > DLP > Create or edit policies > Add conditions using sensitive information types (SSN, credit card, health info, etc.).",
       "References": {
         "CISControls": [
@@ -4252,7 +4252,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-DeviceCompliance",
-      "EvaluatorFunction": "Test-NRGControlIntuneEnrollmentRestrictions",
+      "EvaluatorFunction": "Test-TPControlIntuneEnrollmentRestrictions",
       "Remediation": "Intune > Devices > Enrollment > Enrollment restrictions > Create policy restricting to managed platforms and minimum OS versions.",
       "References": {
         "CISControls": [
@@ -4282,7 +4282,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-AppProtection",
-      "EvaluatorFunction": "Test-NRGControlIntuneAppConfig",
+      "EvaluatorFunction": "Test-TPControlIntuneAppConfig",
       "Remediation": "Intune > Apps > App configuration policies > Create policy for iOS/Android targeting Outlook, Teams, Edge.",
       "References": {
         "CISControls": [
@@ -4312,7 +4312,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-AppProtection",
-      "EvaluatorFunction": "Test-NRGControlIntuneConditionalLaunch",
+      "EvaluatorFunction": "Test-TPControlIntuneConditionalLaunch",
       "Remediation": "Intune > Apps > App protection policies > Conditional launch > Add: Jailbroken/rooted devices = Block, Min OS version = current-1.",
       "References": {
         "CISControls": [
@@ -4342,7 +4342,7 @@
       "Category": "Data",
       "Automated": true,
       "CollectorDependency": "PowerPlatform",
-      "EvaluatorFunction": "Test-NRGControlPPLConnectorClassification",
+      "EvaluatorFunction": "Test-TPControlPPLConnectorClassification",
       "Remediation": "Power Platform Admin Center > Data policies > Edit existing policy > Review all connectors and assign to Business or Blocked groups.",
       "References": {
         "CISControls": [
@@ -4372,7 +4372,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "PowerPlatform",
-      "EvaluatorFunction": "Test-NRGControlPPLAutomate",
+      "EvaluatorFunction": "Test-TPControlPPLAutomate",
       "Remediation": "Power Platform Admin Center > Tenant settings > Power Automate > Disable for guests.",
       "References": {
         "CISControls": [
@@ -4403,7 +4403,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "PowerPlatform",
-      "EvaluatorFunction": "Test-NRGControlPPLPowerApps",
+      "EvaluatorFunction": "Test-TPControlPPLPowerApps",
       "Remediation": "Power Platform Admin Center > Settings > Power Apps > Disable portal creation by non-admins.",
       "References": {
         "CISControls": [
@@ -4434,7 +4434,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-AuthPolicies,AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADDeviceCode",
+      "EvaluatorFunction": "Test-TPControlAADDeviceCode",
       "Remediation": "CA policy: Conditions > Authentication flows > Device code flow, Grant = Block. Applies to all users.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
@@ -4465,7 +4465,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-DirectoryRoles",
-      "EvaluatorFunction": "Test-NRGControlAADNoGuestInPrivRoles",
+      "EvaluatorFunction": "Test-TPControlAADNoGuestInPrivRoles",
       "Remediation": "Remove guest accounts from all privileged roles. Use cloud-only member accounts for all administrative functions.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -4496,7 +4496,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-AuthPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADRiskyServicePrincipals",
+      "EvaluatorFunction": "Test-TPControlAADRiskyServicePrincipals",
       "Remediation": "Entra ID > Identity Protection > Risky workload identities. Investigate and remediate flagged service principals. Disable or rotate credentials for compromised identities. Requires Entra ID P2 Workload Identities.",
       "LicenseRequirement": "Entra ID P2 + Workload Identities add-on",
       "References": {
@@ -4526,7 +4526,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADTokenProtection",
+      "EvaluatorFunction": "Test-TPControlAADTokenProtection",
       "Remediation": "CA policy: Session controls > Token protection. Enable for Exchange Online and SharePoint Online at minimum. Requires Entra ID P1+. Note: may cause issues with non-compliant clients — test in report-only mode first.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
@@ -4555,7 +4555,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADContinuousAccess",
+      "EvaluatorFunction": "Test-TPControlAADContinuousAccess",
       "Remediation": "CA policy > Session controls > Customize continuous access evaluation > Strict enforcement.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
@@ -4585,7 +4585,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-AuthPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADCrossTenantAccess",
+      "EvaluatorFunction": "Test-TPControlAADCrossTenantAccess",
       "Remediation": "Entra ID > External Identities > Cross-tenant access settings > Default settings > Inbound trust. Disable 'Trust MFA from Microsoft Entra tenants' and 'Trust compliant devices' unless specific B2B partner trust is required.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -4615,7 +4615,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADPrivilegedWorkstation",
+      "EvaluatorFunction": "Test-TPControlAADPrivilegedWorkstation",
       "Remediation": "CA policy: Target admin roles > Require compliant device or Hybrid AD join. Alternatively define a named device group as a PAW group and require membership.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1 + Intune",
       "References": {
@@ -4644,7 +4644,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADTermsOfUse",
+      "EvaluatorFunction": "Test-TPControlAADTermsOfUse",
       "Remediation": "Entra ID > Security > Conditional Access > Terms of use > Create ToU document. Add to CA policy: Grant > Require terms of use.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
@@ -4672,7 +4672,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
-      "EvaluatorFunction": "Test-NRGControlAADWorkloadIdentityCA",
+      "EvaluatorFunction": "Test-TPControlAADWorkloadIdentityCA",
       "Remediation": "CA policy > Users > Select Workload identities > Apply conditions and access controls to high-privilege service principals. Requires Entra Workload Identities Premium add-on.",
       "LicenseRequirement": "Entra Workload Identities Premium (add-on)",
       "References": {
@@ -4703,7 +4703,7 @@
       "Category": "Data",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlDefenderDLPWorkloads",
+      "EvaluatorFunction": "Test-TPControlDefenderDLPWorkloads",
       "Remediation": "Purview > DLP > Create or edit policy > Choose where to apply > Enable Exchange, SharePoint, OneDrive, Teams, Devices simultaneously.",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
@@ -4734,7 +4734,7 @@
       "Category": "Data",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlDefenderDLPSITs",
+      "EvaluatorFunction": "Test-TPControlDefenderDLPSITs",
       "Remediation": "Purview > DLP > Edit policy > Add condition > Content contains > Sensitive info types.",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
@@ -4765,7 +4765,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlDefenderRiskyAppAlerts",
+      "EvaluatorFunction": "Test-TPControlDefenderRiskyAppAlerts",
       "Remediation": "Defender portal > Email & collaboration > Policies & rules > Alert policy: create an alert policy on the consent and application-permission activities (for example \"Consent to application\", \"Add delegated permission grant\", \"Add app role assignment to service principal\") that notifies the security team. Single-event alert policies are available in every plan; Defender for Cloud Apps OAuth app policies add risk scoring but are a separate license and are not what this check reads.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -4795,7 +4795,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlDefenderPriorityAccounts",
+      "EvaluatorFunction": "Test-TPControlDefenderPriorityAccounts",
       "Remediation": "Defender portal > Settings > Email & collaboration > User tags > Global Settings > Priority account protection. Tag executives and admins as priority accounts.",
       "LicenseRequirement": "Defender for Office 365 Plan 2 (M365 E5 or add-on)",
       "References": {
@@ -4823,7 +4823,7 @@
       "Category": "Data",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlDefenderEndpointDLP",
+      "EvaluatorFunction": "Test-TPControlDefenderEndpointDLP",
       "Remediation": "Purview > DLP > Create policy > Devices location > Enable. Requires Defender for Endpoint onboarding + Microsoft 365 E5 or Microsoft 365 E5 Compliance.",
       "LicenseRequirement": "M365 E5 or E5 Compliance add-on",
       "References": {
@@ -4854,7 +4854,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlDefenderAttackSim",
+      "EvaluatorFunction": "Test-TPControlDefenderAttackSim",
       "Remediation": "Defender portal > Email & collaboration > Attack simulation training > Simulations > Launch simulation. Schedule recurring simulations covering credential harvest, link in attachment, drive-by URL techniques. Requires Defender for Office 365 Plan 2.",
       "LicenseRequirement": "Defender for Office 365 Plan 2 (M365 E5 or add-on)",
       "References": {
@@ -4884,7 +4884,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlDefenderSafeLinksOffice",
+      "EvaluatorFunction": "Test-TPControlDefenderSafeLinksOffice",
       "Remediation": "Set-SafeLinksPolicy -Identity <PolicyName> -EnableSafeLinksForOffice $true. Or via Defender portal > Policies > Safe links > Enable Office 365 apps protection.",
       "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)",
       "References": {
@@ -4915,7 +4915,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOPerUserAudit",
+      "EvaluatorFunction": "Test-TPControlEXOPerUserAudit",
       "Remediation": "Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false } | Set-Mailbox -AuditEnabled $true.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -4947,7 +4947,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
-      "EvaluatorFunction": "Test-NRGControlEXOPriorityAccountProtection",
+      "EvaluatorFunction": "Test-TPControlEXOPriorityAccountProtection",
       "Remediation": "Set-AntiPhishPolicy > TargetedUsersToProtect — add executive UPNs. Enable EnableTargetedUserProtection.",
       "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)",
       "References": {
@@ -4979,7 +4979,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
-      "EvaluatorFunction": "Test-NRGControlEXOSafeSenderOverride",
+      "EvaluatorFunction": "Test-TPControlEXOSafeSenderOverride",
       "Remediation": "Set-HostedContentFilterPolicy -Identity Default -AllowedSenderDomains @() — remove all allowed sender domains. Use mail flow rules for legitimate trusted partner exemptions with scoped conditions instead.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5009,7 +5009,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeamsMeetingRecordingScope",
+      "EvaluatorFunction": "Test-TPControlTeamsMeetingRecordingScope",
       "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -NewMeetingRecordingExpirationDays 60.",
       "LicenseRequirement": "Included (M365 Business Standard+)",
       "References": {
@@ -5038,7 +5038,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeamsAnonymousStart",
+      "EvaluatorFunction": "Test-TPControlTeamsAnonymousStart",
       "Remediation": "Set-CsTeamsMeetingPolicy -AllowAnonymousUsersToStartMeeting $false.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5068,7 +5068,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeamsFederationAllowlist",
+      "EvaluatorFunction": "Test-TPControlTeamsFederationAllowlist",
       "Remediation": "Teams Admin Center > External access > Allow only specific external domains. Add business partner domains only.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5100,7 +5100,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "Teams",
-      "EvaluatorFunction": "Test-NRGControlTeamsLiveEvents",
+      "EvaluatorFunction": "Test-TPControlTeamsLiveEvents",
       "Remediation": "Set-CsTeamsEventsPolicy -Identity Global -EventAccessType EveryoneInCompanyExcludingGuests -TownhallEventAttendeeAccess EveryoneInOrganizationAndGuests (or -AllowWebinars Disabled / -AllowTownhalls Disabled). Grant a separate policy to the few organizers who genuinely run public events.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5129,7 +5129,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-EndpointSecurity",
-      "EvaluatorFunction": "Test-NRGControlIntuneWindowsLAPS",
+      "EvaluatorFunction": "Test-TPControlIntuneWindowsLAPS",
       "Remediation": "Intune > Endpoint security > Account protection > Create Windows LAPS policy. Configure: Admin account managed = Yes, Password age = 30 days, Password complexity = Large letters + small letters + numbers + special characters.",
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
@@ -5161,7 +5161,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-DeviceCompliance",
-      "EvaluatorFunction": "Test-NRGControlIntuneWindowsHello",
+      "EvaluatorFunction": "Test-TPControlIntuneWindowsHello",
       "Remediation": "Intune > Devices > Windows > Windows enrollment > Windows Hello for Business settings. Or deploy via endpoint protection policy: Use Windows Hello for Business = Enabled.",
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
@@ -5190,7 +5190,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-DeviceCompliance",
-      "EvaluatorFunction": "Test-NRGControlIntuneUpdateCompliance",
+      "EvaluatorFunction": "Test-TPControlIntuneUpdateCompliance",
       "Remediation": "Intune > Devices > Compliance policies > Create policy > OS minimum version = latest-1. Review noncompliant devices report and address outliers.",
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
@@ -5221,7 +5221,7 @@
       "Category": "Endpoint",
       "Automated": true,
       "CollectorDependency": "Intune-DeviceCompliance",
-      "EvaluatorFunction": "Test-NRGControlIntuneMobilePIN",
+      "EvaluatorFunction": "Test-TPControlIntuneMobilePIN",
       "Remediation": "Intune > Devices > Compliance > iOS/Android policy > System security > Require password = Require. Set minimum length = 6, complexity = Numeric + symbols.",
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
@@ -5253,7 +5253,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurviewAuditPremium",
+      "EvaluatorFunction": "Test-TPControlPurviewAuditPremium",
       "Remediation": "Assign Microsoft 365 E5 or E5 Compliance license to users, then enable Audit Premium: Purview > Audit > Audit log retention policies. Verify MailItemsAccessed events appear in audit search.",
       "LicenseRequirement": "M365 E5 or E5 Compliance add-on",
       "References": {
@@ -5283,7 +5283,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurviewAuditRetention",
+      "EvaluatorFunction": "Test-TPControlPurviewAuditRetention",
       "Remediation": "Purview > Audit > Audit log retention policies > New retention policy. Priority: All activities, Users: All, Duration: 1 year or longer. Requires Audit Premium.",
       "LicenseRequirement": "M365 E5 or E5 Compliance add-on",
       "References": {
@@ -5314,7 +5314,7 @@
       "Category": "Data",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurviewLabelsPublished",
+      "EvaluatorFunction": "Test-TPControlPurviewLabelsPublished",
       "Remediation": "Purview > Information protection > Sensitivity labels > Create label hierarchy (Public, Internal, Confidential, Highly Confidential). Create label policy and publish to all users.",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
@@ -5344,7 +5344,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "Purview",
-      "EvaluatorFunction": "Test-NRGControlPurviewRecordsManagement",
+      "EvaluatorFunction": "Test-TPControlPurviewRecordsManagement",
       "Remediation": "Purview > Records management > Labels > Create record label with retention action. Publish via label policy. Required for healthcare (HIPAA), government, and financial organizations.",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
@@ -5374,7 +5374,7 @@
       "Category": "Data",
       "Automated": true,
       "CollectorDependency": "M365Copilot",
-      "EvaluatorFunction": "Test-NRGControlAICopilotSensitivityLabels",
+      "EvaluatorFunction": "Test-TPControlAICopilotSensitivityLabels",
       "Remediation": "Purview > Information protection > Labels > Create/verify labels with Files & emails scope. Enable Copilot integration in label settings. Reference: Microsoft Copilot security baseline.",
       "LicenseRequirement": "M365 Business Premium or E3+ (Copilot requires M365 Copilot add-on)",
       "References": {
@@ -5404,7 +5404,7 @@
       "Category": "Data",
       "Automated": true,
       "CollectorDependency": "M365Copilot",
-      "EvaluatorFunction": "Test-NRGControlAICopilotDLP",
+      "EvaluatorFunction": "Test-TPControlAICopilotDLP",
       "Remediation": "Purview > DLP > Create policy > Locations: Include Microsoft 365 Copilot. Add sensitive info types as conditions. Requires M365 E5 Compliance or equivalent.",
       "LicenseRequirement": "M365 E5 Compliance add-on",
       "References": {
@@ -5435,7 +5435,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "M365Copilot",
-      "EvaluatorFunction": "Test-NRGControlAICopilotLicensedOnly",
+      "EvaluatorFunction": "Test-TPControlAICopilotLicensedOnly",
       "Remediation": "M365 Admin Center > Settings > Microsoft 365 Copilot > Control access. Assign licenses only to approved users with a documented business need.",
       "LicenseRequirement": "M365 Copilot add-on license",
       "References": {
@@ -5465,7 +5465,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "M365Copilot",
-      "EvaluatorFunction": "Test-NRGControlAICopilotStudio",
+      "EvaluatorFunction": "Test-TPControlAICopilotStudio",
       "Remediation": "Power Platform Admin Center > Copilot Studio > Policies > Require admin approval for agent publishing. Apply DLP policies to Copilot Studio environment connectors.",
       "LicenseRequirement": "Power Platform + Copilot Studio license",
       "References": {
@@ -5496,7 +5496,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "M365Copilot",
-      "EvaluatorFunction": "Test-NRGControlAICopilotInteractionData",
+      "EvaluatorFunction": "Test-TPControlAICopilotInteractionData",
       "Remediation": "Ensure Unified Audit Log is enabled (Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true). Copilot interactions are searchable in Purview > Content explorer and Audit > Search.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5528,7 +5528,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-Users",
-      "EvaluatorFunction": "Test-NRGControlInventoryMFAUsers",
+      "EvaluatorFunction": "Test-TPControlInventoryMFAUsers",
       "Remediation": "Entra ID > Users > [select user] > Authentication methods > Add method. For bulk: Get-MgUser | where MFA not registered → require combined registration via CA policy targeted at these users.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5559,7 +5559,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-Inventory",
-      "EvaluatorFunction": "Test-NRGControlInventoryStaleGuests",
+      "EvaluatorFunction": "Test-TPControlInventoryStaleGuests",
       "Remediation": "Entra ID > External Identities > All users > Filter by guest, sort by last sign-in. Disable or delete accounts inactive 90+ days. Implement access reviews: PIM > Access reviews > Create review for guest users.",
       "LicenseRequirement": "Included (all plans) — Access Reviews require Entra P2",
       "References": {
@@ -5588,7 +5588,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-Inventory",
-      "EvaluatorFunction": "Test-NRGControlInventoryStaleMembers",
+      "EvaluatorFunction": "Test-TPControlInventoryStaleMembers",
       "Remediation": "Verify each account represents an active user. Disable accounts for departed employees immediately. Revoke all active sessions. Remove assigned licenses. Review for any recent inbox rules or forwarding.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5618,7 +5618,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-Inventory",
-      "EvaluatorFunction": "Test-NRGControlInventoryOAuthApps",
+      "EvaluatorFunction": "Test-TPControlInventoryOAuthApps",
       "Remediation": "Entra ID > Enterprise applications > All applications > Filter by permissions. Review each AllPrincipals grant. Revoke unnecessary grants: Remove-MgOAuth2PermissionGrant -OAuth2PermissionGrantId <id>.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5649,7 +5649,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
-      "EvaluatorFunction": "Test-NRGControlInventoryExternalForwarding",
+      "EvaluatorFunction": "Test-TPControlInventoryExternalForwarding",
       "Remediation": "For each listed mailbox: verify the forwarding is intentional and business-justified. Remove unauthorized: Set-Mailbox -Identity <upn> -ForwardingSmtpAddress $null. Also set transport rule to block auto-forward and create an alert policy for new forwarding rules.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5680,7 +5680,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
-      "EvaluatorFunction": "Test-NRGControlInventorySharedMailboxSignIn",
+      "EvaluatorFunction": "Test-TPControlInventorySharedMailboxSignIn",
       "Remediation": "Update-MgUser -UserId <guid> -AccountEnabled:$false for each shared mailbox account. Or in M365 Admin: Active users > select user > Block sign-in. Verify delegates can still access via Outlook.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5709,7 +5709,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
-      "EvaluatorFunction": "Test-NRGControlInventoryMailboxAuditDisabled",
+      "EvaluatorFunction": "Test-TPControlInventoryMailboxAuditDisabled",
       "Remediation": "Find accounts exempt from mailbox auditing: Get-MailboxAuditBypassAssociation -ResultSize Unlimited | Where-Object AuditBypassEnabled. Remove each exemption: Set-MailboxAuditBypassAssociation -Identity <account> -AuditBypassEnabled $false. Keep organization-wide mailbox auditing on (Set-OrganizationConfig -AuditDisabled $false); a mailbox's AuditEnabled flag is ignored while it is.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5741,7 +5741,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
-      "EvaluatorFunction": "Test-NRGControlInventorySMTPAuthUsers",
+      "EvaluatorFunction": "Test-TPControlInventorySMTPAuthUsers",
       "Remediation": "For each listed user: Set-CASMailbox -Identity <upn> -SmtpClientAuthenticationDisabled $true. If SMTP AUTH is required (printer, scanner, legacy app) use a dedicated service account with a strong password and IP restriction.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5772,7 +5772,7 @@
       "Category": "Governance",
       "Automated": true,
       "CollectorDependency": "AAD-Inventory",
-      "EvaluatorFunction": "Test-NRGControlInventorySecureScore",
+      "EvaluatorFunction": "Test-TPControlInventorySecureScore",
       "Remediation": "Review Microsoft Secure Score improvement actions at security.microsoft.com > Secure Score. Prioritize Identity and Email improvement actions first.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5800,7 +5800,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
-      "EvaluatorFunction": "Test-NRGControlEXOMailboxForwarding",
+      "EvaluatorFunction": "Test-TPControlEXOMailboxForwarding",
       "Remediation": "Get-Mailbox -ResultSize Unlimited -Filter \"ForwardingSmtpAddress -ne `$null\" | Set-Mailbox -ForwardingSmtpAddress $null -ForwardingAddress $null -DeliverToMailboxAndForward $false. Also block at transport layer: Set-RemoteDomain Default -AutoForwardEnabled $false.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5831,7 +5831,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
-      "EvaluatorFunction": "Test-NRGControlEXOInboxRulesForwarding",
+      "EvaluatorFunction": "Test-TPControlEXOInboxRulesForwarding",
       "Remediation": "Audit: foreach ($m in Get-Mailbox -ResultSize Unlimited) { Get-InboxRule -Mailbox $m.UserPrincipalName | Where-Object { $_.ForwardTo -or $_.RedirectTo -or $_.ForwardAsAttachmentTo } }. Disable: Disable-InboxRule -Mailbox <UPN> -Identity <RuleName>. Block at transport: Set-RemoteDomain Default -AutoForwardEnabled $false.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5862,7 +5862,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
-      "EvaluatorFunction": "Test-NRGControlEXOAuditDisabledMailboxes",
+      "EvaluatorFunction": "Test-TPControlEXOAuditDisabledMailboxes",
       "Remediation": "Find accounts exempt from mailbox auditing: Get-MailboxAuditBypassAssociation -ResultSize Unlimited | Where-Object AuditBypassEnabled. Remove each exemption: Set-MailboxAuditBypassAssociation -Identity <account> -AuditBypassEnabled $false. Keep organization-wide mailbox auditing on (Set-OrganizationConfig -AuditDisabled $false); a mailbox's AuditEnabled flag is ignored while it is.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5893,7 +5893,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
-      "EvaluatorFunction": "Test-NRGControlEXOSmtpAuthExceptions",
+      "EvaluatorFunction": "Test-TPControlEXOSmtpAuthExceptions",
       "Remediation": "For each affected mailbox: Set-CASMailbox -Identity <UPN> -SmtpClientAuthenticationDisabled $true. Migrate senders to OAuth-based SMTP (Microsoft Graph sendMail API) or App Passwords with MFA. For multifunction devices/scanners, prefer SMTP relay via on-prem connector with IP allowlist, or Direct Send (anonymous) — neither requires basic auth.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -5924,7 +5924,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
-      "EvaluatorFunction": "Test-NRGControlEXOMailFlowConnectors",
+      "EvaluatorFunction": "Test-TPControlEXOMailFlowConnectors",
       "Remediation": "Exchange admin center > Mail flow > Connectors. Review every enabled connector against a known list. Delete any nobody recognizes. On inbound connectors set RequireTls $true and scope to specific SenderIPAddresses or SenderDomains. On outbound connectors set TlsSettings to EncryptionOnly or better and avoid a * recipient domain unless a smart host genuinely handles all mail.",
       "References": {
         "CIS": "6.2.2",
@@ -5956,7 +5956,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
-      "EvaluatorFunction": "Test-NRGControlEXOTransportRuleContents",
+      "EvaluatorFunction": "Test-TPControlEXOTransportRuleContents",
       "Remediation": "Exchange admin center > Mail flow > Rules. Inspect every enabled rule for RedirectMessageTo, BlindCopyTo and CopyTo actions with recipients outside your accepted domains. Remove any not documented and approved. Also review rules setting SCL -1, which bypass spam filtering for whatever they match.",
       "References": {
         "CIS": "6.2.1",
@@ -5988,7 +5988,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-Inventory",
-      "EvaluatorFunction": "Test-NRGControlAADAppCredentialExpiry",
+      "EvaluatorFunction": "Test-TPControlAADAppCredentialExpiry",
       "Remediation": "Entra admin center > App registrations > Certificates and secrets. Remove expired credentials rather than leaving them in place. Reissue anything with a lifetime beyond 180 days at a shorter term and record the rotation date. Prefer certificate credentials or workload identity federation over client secrets where the application supports them.",
       "References": {
         "CIS": "1.3.4",
@@ -6020,7 +6020,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-AppPermissions",
-      "EvaluatorFunction": "Test-NRGControlAppPermTenantTakeover",
+      "EvaluatorFunction": "Test-TPControlAppPermTenantTakeover",
       "Remediation": "Entra ID > Enterprise applications > select the application > Permissions. Review each application permission and remove any that are not required: Remove-MgServicePrincipalAppRoleAssignment -ServicePrincipalId <spId> -AppRoleAssignmentId <id>. Where the app genuinely needs broad access, scope it down (for Exchange, replace full_access_as_app with an application access policy limiting the app to a mail-enabled security group).",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -6053,7 +6053,7 @@
       "Category": "Identity",
       "Automated": true,
       "CollectorDependency": "AAD-AppPermissions",
-      "EvaluatorFunction": "Test-NRGControlAppPermDataAccess",
+      "EvaluatorFunction": "Test-TPControlAppPermDataAccess",
       "Remediation": "Entra ID > Enterprise applications > All applications > Permissions. For each application permission, record a business owner and a reason, or revoke it: Remove-MgServicePrincipalAppRoleAssignment -ServicePrincipalId <spId> -AppRoleAssignmentId <id>. For Exchange and SharePoint, constrain the app with an application access policy or site-level permission rather than a tenant-wide grant.",
       "LicenseRequirement": "Included (all plans)",
       "References": {
@@ -6085,7 +6085,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
-      "EvaluatorFunction": "Test-NRGControlDefenderTenantAllowBlockList",
+      "EvaluatorFunction": "Test-TPControlDefenderTenantAllowBlockList",
       "Remediation": "Defender portal > Policies & rules > Threat policies > Tenant Allow/Block Lists. Review every allow entry. Remove any whose reason no longer applies, and set an expiry date on the rest — Microsoft caps allow entries at 30 or 90 days for exactly this reason. Block entries may remain permanent.",
       "References": {
         "CIS": "2.1.6",
@@ -6117,7 +6117,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
-      "EvaluatorFunction": "Test-NRGControlEXOMailboxHoldCoverage",
+      "EvaluatorFunction": "Test-TPControlEXOMailboxHoldCoverage",
       "Remediation": "Apply a Purview retention policy scoped to all Exchange mailboxes (Purview > Data lifecycle management > Retention policies), or enable litigation hold per mailbox: Set-Mailbox -Identity <UPN> -LitigationHoldEnabled $true -LitigationHoldDuration <days>. A tenant-wide retention policy is the maintainable option; per-mailbox litigation hold does not follow new starters.",
       "References": {
         "CIS": "6.1.4",
@@ -6149,7 +6149,7 @@
       "Category": "Email",
       "Automated": true,
       "CollectorDependency": "EXO-Inventory",
-      "EvaluatorFunction": "Test-NRGControlEXODeletedItemRetention",
+      "EvaluatorFunction": "Test-TPControlEXODeletedItemRetention",
       "Remediation": "Set-Mailbox -Identity <UPN> -RetainDeletedItemsFor 30. Apply tenant-wide with: Get-Mailbox -ResultSize Unlimited | Set-Mailbox -RetainDeletedItemsFor 30. 30 days is the maximum; beyond it requires a hold (EXO-9.1).",
       "References": {
         "CIS": "6.1.5",
@@ -6179,7 +6179,7 @@
       "Category": "Collaboration",
       "Automated": true,
       "CollectorDependency": "SharePoint",
-      "EvaluatorFunction": "Test-NRGControlSPODepartedUserRetention",
+      "EvaluatorFunction": "Test-TPControlSPODepartedUserRetention",
       "Remediation": "Set-SPOTenant -DeletedUserPersonalSiteRetentionPeriodInDays 365 (maximum 3650). Pair it with an offboarding step that reassigns ownership of the OneDrive before the account is deleted, so retention is a safety net rather than the plan.",
       "References": {
         "CIS": "7.2.10",

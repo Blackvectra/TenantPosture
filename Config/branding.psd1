@@ -1,8 +1,8 @@
 @{
-    CompanyName    = 'NRG Technology Services'
-    Phone          = '(701) 250-9400'
-    Website        = 'https://www.nrgtechservices.com'
-    Email          = 'security@nrgtechservices.com'
+    CompanyName    = 'TenantPosture'
+    Phone          = ''
+    Website        = ''
+    Email          = ''
     Address        = ''
     CityStateZip   = ''
 
@@ -11,6 +11,17 @@
     AccentColor    = '#4a7ba6'
 
     LogoUrl        = ''
+
+    # Which framework cards the HTML report shows when -Framework is not
+    # given: NIST, CIS, SCuBA, CMMC or All. Presentation only: every framework
+    # is still scored and the results JSON is unchanged.
+    DefaultFramework = 'All'
+
+    # The reporting address(es) or @domains that must appear in every managed
+    # domain's DMARC rua (DNS-1.3), for example a DMARC analytics mailbox. This
+    # is your own address, so it lives in the profile, not in the shared
+    # Config/tp-standards.json. Empty means that component is not assessed.
+    DmarcReportingAddresses = @()
 
     # Optional: the third-party EDR standardized across your clients (e.g.
     # 'Cortex XDR', 'CrowdStrike Falcon', 'SentinelOne'). It is the default
@@ -30,17 +41,17 @@
     # Simulation Training is the platform.
     AwarenessStack = ''
 
-    # Optional: the NRG monitoring address(es) security alert policies should
+    # Optional: your monitoring address(es) security alert policies should
     # notify, for example @('alerts@your-domain.com') or a whole domain
     # '@your-domain.com'. DEF-3.4 and EXO-3.3 compare every enabled alert
     # policy's recipients with this list. Leave empty and those two controls
-    # report that routing to NRG was not assessed (recipients existing still is).
+    # report that routing to you was not assessed (recipients existing still is).
     # Override per client with MonitoringAddresses in clients.json or per run
     # with -MonitoringAddress.
     MonitoringAddresses = @()
 
-    HourlyRate     = 185
-    AssessmentFee  = 2500
-    RegulatedFee   = 3500
-    GovernanceFee  = 1500
+    HourlyRate     = 0
+    AssessmentFee  = 0
+    RegulatedFee   = 0
+    GovernanceFee  = 0
 }

@@ -1,0 +1,430 @@
+#Requires -Version 7.0
+#
+# Publish-TPReportSite.ps1
+#
+# Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC
+# Purpose: A multi-page HTML report organized the way an assessor navigates it: one landing
+#          page with workload summaries and links, one page per workload grouped by security
+#          topic, and an action-plan CSV. Each control row keeps FOUR things apart:
+#            requirement   what the control asks for
+#            observed      what the tenant is configured to do
+#            NRG verdict   the baseline judgment (Satisfied / Partial / Gap / Not assessed ...)
+#            independent   how an independent scan (ScubaGear) judged the mapped rule, when a
+#                          results file is supplied. A difference is something to investigate,
+#                          never a score to match.
+#          Requirement strength (ScubaGear's SHALL / SHOULD) is shown apart from risk severity,
+#          and the Automated / Manual / Declaration badge is separate from the verdict. Evidence,
+#          exclusions, affected objects and collection limitations are expandable.
+#
+#          A VIEW over existing results: it computes no verdict, changes no finding and moves no
+#          score. Self-contained HTML (inline CSS, no script, no external assets).
+#
+# Data consumed: findings, metadata, baseline compliance rows, scan results (all passed in).
+# Graph scopes / cmdlets: none.
+
+$script:TPSiteWorkloadNames = [ordered]@{
+    AAD = 'Identity (Entra ID)'; EXO = 'Exchange Online'; DNS = 'Email authentication (DNS)'; DEF = 'Defender for Office 365'
+    TMS = 'Microsoft Teams'; SPO = 'SharePoint and OneDrive'; PVW = 'Purview (compliance)'; INT = 'Intune (devices)'
+    PPL = 'Power Platform'; DEV = 'Endpoint checks'
+}
+
+function Get-TPFindingLimitKind {
+    <#
+    .SYNOPSIS
+        Presentation classification of WHY a finding is not a verdict, from the evaluator's own
+        wording. Distinguishes a collection failure, a licensing limit, a manual check, an operator
+        declaration and an unapproved NRG standard. Changes nothing.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] $Finding)
+    $state  = [string](Get-TPObjectField -Item $Finding -Key 'State' -Default '')
+    if ($state -ne 'NotApplicable') { return 'Verdict' }
+    $detail = [string](Get-TPObjectField -Item $Finding -Key 'Detail' -Default '')
+    if ($detail.StartsWith('Third-party EDR declared:')) { return 'Declaration' }
+    if ($detail -match 'requires manual verification|manual review required|no programmatic check') { return 'Manual' }
+    if ($detail -match 'because (none|no [^,.;]*?) (is|are) (approved|configured)') { return 'StandardNotApproved' }
+    if ($detail -match 'upgrade opportunity') { return 'Licensing' }
+    if ($detail -match 'not collected|was not collected|did not complete|did not run|not assessed|unavailable|could not be retrieved|could not be determined|no data returned|produced data|not returned|not found in collected data|not available|was not read|not read\b|403|Forbidden|consent') { return 'Collection' }
+    return 'NotApplicable'
+}
+
+# The site's label for each Get-TPAssessmentScope bucket. The scope is the one classifier of
+# why a control was not scored (the HTML scope section and the Markdown summary use it), so the
+# site takes its category from there rather than classifying the Detail text a second way.
+$script:TPSiteScopeBucketKind = [ordered]@{
+    SkippedByOperator     = 'Skipped'
+    ThirdPartyAttested    = 'Declaration'
+    NoProgrammaticCheck   = 'Manual'
+    CollectionIncomplete  = 'Collection'
+    StandardNotApproved   = 'StandardNotApproved'
+    LicenceBlocked        = 'Licensing'
+    NotApplicableToTenant = 'NotApplicable'
+}
+
+function Get-TPSiteScopeKind {
+    <#
+    .SYNOPSIS
+        ControlId -> site limitation kind, from Get-TPAssessmentScope over the findings given, with
+        the run's coverage, raw data and license profile. Empty when the scope is unavailable.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([AllowNull()] [AllowEmptyCollection()] [object[]] $Findings, [hashtable] $ScopeArgs = @{})
+    $map = @{}
+    if (-not (Get-Command Get-TPAssessmentScope -ErrorAction SilentlyContinue)) { return $map }
+    $scope = $null
+    try { $scope = Get-TPAssessmentScope -Findings @($Findings) @ScopeArgs } catch { Write-Verbose "Report site: assessment scope unavailable: $($_.Exception.Message)"; return $map }
+    if (-not $scope -or -not $scope.Available) { return $map }
+    foreach ($bucket in $script:TPSiteScopeBucketKind.Keys) {
+        foreach ($c in @($scope[$bucket])) { if ($null -ne $c) { $map[[string]$c.ControlId] = $script:TPSiteScopeBucketKind[$bucket] } }
+    }
+    return $map
+}
+
+function Get-TPSiteVerdict {
+    [CmdletBinding()]
+    param([AllowNull()] $Finding, [string] $Kind)
+    $state = [string](Get-TPObjectField -Item $Finding -Key 'State' -Default '')
+    switch ($state) {
+        'Satisfied' { return @{ Label = 'Satisfied'; Css = 'ok' } }
+        'Partial'   { return @{ Label = 'Partial'; Css = 'part' } }
+        'Gap'       { return @{ Label = 'Gap'; Css = 'gap' } }
+        # The check did not reach a verdict: not assessed, never a Gap (as Get-TPControlStatus says).
+        'Error'     { return @{ Label = 'Not assessed (the check errored)'; Css = 'unk' } }
+    }
+    switch ($Kind) {
+        'Declaration'         { return @{ Label = 'Declared, not verified'; Css = 'na' } }
+        'Skipped'             { return @{ Label = 'Not assessed (skipped by the operator)'; Css = 'unk' } }
+        'Licensing'           { return @{ Label = 'Not licensed (not scored)'; Css = 'na' } }
+        'NotApplicable'       { return @{ Label = 'Not applicable'; Css = 'na' } }
+        default               { return @{ Label = 'Not assessed'; Css = 'unk' } }
+    }
+}
+
+function ConvertTo-TPCsvCell {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] $Value)
+    $s = if ($null -eq $Value) { '' } elseif ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) { (@($Value) | ForEach-Object { [string]$_ }) -join '; ' } else { [string]$Value }
+    $s = ($s -replace '[\r\n]+', ' ').Trim()
+    # A cell starting with = + - @ is read as a formula by a spreadsheet; tenant-controlled text must not be.
+    if ($s -match '^[=+\-@\t]') { $s = "'" + $s }
+    return $s
+}
+
+function Read-TPScubaResults {
+    # Reads a ScubaGear result file (ScubaResults.csv, or the ScubaResults_<id>.json
+    # beside it) into @{ 'MS.EXO.1.1v2' = 'Fail'; ... }. Anything that is not a
+    # ScubaGear result is an error that names what was expected.
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)] [string] $Path)
+    $map = @{}
+    $ext = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+    if ($ext -eq '.json') {
+        $doc = Get-Content -LiteralPath $Path -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
+        $results = Get-TPObjectField -Item $doc -Key 'Results' -Default $null
+        if ($null -eq $results) { throw "'$Path' is JSON but has no 'Results' section; pass ScubaResults.csv or ScubaResults_<id>.json from a ScubaGear run." }
+        foreach ($product in @($results.PSObject.Properties)) {
+            foreach ($group in @($product.Value)) {
+                foreach ($c in @(Get-TPObjectField -Item $group -Key 'Controls' -Default @())) {
+                    $id = [string](Get-TPObjectField -Item $c -Key 'Control ID' -Default '')
+                    if ($id) { $map[$id] = [string](Get-TPObjectField -Item $c -Key 'Result' -Default '') }
+                }
+            }
+        }
+    } else {
+        $rows = @(Import-Csv -LiteralPath $Path -Encoding utf8)
+        foreach ($r in $rows) {
+            $id = [string](Get-TPObjectField -Item $r -Key 'Control ID' -Default '')
+            if ($id) { $map[$id] = [string](Get-TPObjectField -Item $r -Key 'Result' -Default '') }
+        }
+    }
+    if ($map.Count -eq 0) { throw "No ScubaGear control results were found in '$Path' (expected a 'Control ID' and 'Result' for each rule)." }
+    $map
+}
+
+function Get-TPSiteRows {
+    <#
+    .SYNOPSIS
+        One row per finding, joined to its control definition, baseline row, SCuBA alignment and
+        (optionally) the independent scan's result.
+    #>
+    [CmdletBinding()]
+    param([AllowNull()] [object[]] $Findings, [AllowNull()] $BaselineCompliance, [AllowNull()] $Scuba, [hashtable] $ScopeArgs = @{})
+    $ctl = @{}
+    $cpath = Join-Path (Split-Path -Parent $PSScriptRoot) 'Config' 'controls.json'
+    if (Test-Path -LiteralPath $cpath) {
+        foreach ($c in @((Get-Content -LiteralPath $cpath -Raw -Encoding utf8 | ConvertFrom-Json -Depth 30).controls)) { $ctl[[string]$c.ControlId] = $c }
+    }
+    $base = @{}
+    foreach ($b in @(Get-TPObjectField -Item $BaselineCompliance -Key 'Controls' -Default @())) { $base[[string](Get-TPObjectField -Item $b -Key 'ControlId' -Default '')] = $b }
+    $al = Get-TPScubaAlignment
+    $linkMap = Get-TPControlLinkMap
+    $viewMap = Get-TPControlViewMap
+    $present = @($Findings | Where-Object { $null -ne $_ })
+    $scopeKind = Get-TPSiteScopeKind -Findings $present -ScopeArgs $ScopeArgs
+    $perControl = @{}
+    foreach ($f in $present) { $k = [string](Get-TPObjectField -Item $f -Key 'ControlId' -Default ''); $perControl[$k] = 1 + [int]$perControl[$k] }
+    foreach ($f in $present) {
+        $cid  = [string](Get-TPObjectField -Item $f -Key 'ControlId' -Default '')
+        $c    = $ctl[$cid]
+        $kind = Get-TPFindingLimitKind -Finding $f
+        if ($kind -ne 'Verdict') {
+            # Not scored: the category is the scope's. A control with several instance findings is
+            # classified per instance (the scope's control-level answer describes its worst one).
+            $sk = if ($perControl[$cid] -gt 1) { (Get-TPSiteScopeKind -Findings @($f) -ScopeArgs $ScopeArgs)[$cid] } else { $scopeKind[$cid] }
+            if ($sk) { $kind = $sk }
+        }
+        $v    = Get-TPSiteVerdict -Finding $f -Kind $kind
+        $prefix = ($cid -split '-')[0]
+        # The prefix names a page file and goes into a link on the landing page; a control ID read
+        # from a results file is input, so anything but a plain word is filed under 'Other'.
+        if ($prefix -notmatch '^[A-Za-z]{1,12}$') { $prefix = 'Other' }
+        $b    = $base[$cid]
+        $disp = [string](Get-TPObjectField -Item $b -Key 'Disposition' -Default '')
+        $autoFlag = if ($c) { (Get-TPObjectField -Item $c -Key 'Automated' -Default $true) -eq $true } else { $true }
+        $type = if ($kind -eq 'Declaration' -or $disp -eq 'ApprovedException') { 'Declaration' } elseif ($kind -eq 'Manual' -or -not $autoFlag) { 'Manual' } else { 'Automated' }
+        $m = $null; if ($al.Available -and $al.Mappings.Contains($cid)) { $m = $al.Mappings[$cid] }
+        $scubaId = if ($m) { [string](Get-TPObjectField -Item $m -Key 'Current' -Default '') } else { '' }
+        $indep = if ($scubaId -and $Scuba -and $Scuba.ContainsKey($scubaId)) { [string]$Scuba[$scubaId] } else { '' }
+        [pscustomobject]@{
+            ControlId = $cid; Instance = [string](Get-TPObjectField -Item $f -Key 'Instance' -Default '')
+            Relationship = $(if ($viewMap.ContainsKey($cid)) { "Named view of $($viewMap[$cid].Of)" } elseif ($linkMap.ContainsKey($cid) -and $linkMap[$cid].Primary -ne $cid) { "Same setting as $($linkMap[$cid].Primary) (counted once in the score)" } elseif ($linkMap.ContainsKey($cid)) { "Same setting as $((@($linkMap[$cid].Members | Where-Object { $_ -ne $cid })) -join ', ') (counted once in the score)" } else { '' })
+            Workload = $prefix; Topic = [string](Get-TPObjectField -Item $f -Key 'Category' -Default 'General')
+            Title = [string](Get-TPObjectField -Item $f -Key 'Title' -Default ''); State = [string](Get-TPObjectField -Item $f -Key 'State' -Default '')
+            Kind = $kind; VerdictLabel = $v.Label; VerdictCss = $v.Css; Type = $type
+            RiskSeverity = [string](Get-TPObjectField -Item $f -Key 'Severity' -Default '')
+            Tier = [string](Get-TPObjectField -Item $b -Key 'RequiredTier' -Default '')
+            Owner = [string](Get-TPObjectField -Item $b -Key 'Owner' -Default '')
+            Detail = [string](Get-TPObjectField -Item $f -Key 'Detail' -Default '')
+            Observed = [string](Get-TPObjectField -Item $f -Key 'CurrentValue' -Default '')
+            Required = [string](Get-TPObjectField -Item $f -Key 'RequiredValue' -Default '')
+            Remediation = [string](Get-TPObjectField -Item $f -Key 'Remediation' -Default '')
+            Affected = @(Get-TPObjectField -Item $f -Key 'AffectedObjects' -Default @())
+            Frameworks = [string](Get-TPObjectField -Item $f -Key 'FrameworkIds' -Default '')
+            ScubaId = $scubaId; ScubaRelation = $(if ($m) { [string](Get-TPObjectField -Item $m -Key 'Relation' -Default '') } else { '' })
+            ScubaStrength = $(if ($m) { [string](Get-TPObjectField -Item $m -Key 'RequirementStrength' -Default '') } else { '' })
+            ScubaNote = $(if ($m) { [string](Get-TPObjectField -Item $m -Key 'Note' -Default '') } else { '' })
+            IndependentResult = $indep
+            ReasonCode = [string](Get-TPObjectField -Item $b -Key 'ReasonCode' -Default '')
+        }
+    }
+}
+
+function Publish-TPActionPlan {
+    <#
+    .SYNOPSIS
+        Action-plan CSV: one row per finding that needs an action (a shortfall to fix, a
+        component to verify, or an NRG standard to decide), with blank owner, target date,
+        resolution status and evidence fields for the team to fill in.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Rows, [Parameter(Mandatory)] [string] $Path)
+    $need = @($Rows | Where-Object { $_.State -in @('Gap', 'Partial', 'Error') -or ($_.State -eq 'NotApplicable' -and $_.Kind -in @('Collection', 'StandardNotApproved', 'Manual')) })
+    $out = foreach ($r in $need) {
+        $action = if ($r.State -eq 'Error') { 'Re-run or investigate the check' } elseif ($r.State -in @('Gap', 'Partial')) { 'Remediate' } elseif ($r.Kind -eq 'StandardNotApproved') { 'Approve the NRG standard' } elseif ($r.Kind -eq 'Manual') { 'Verify manually' } else { 'Re-collect and verify' }
+        [ordered]@{
+            'Control ID' = $r.ControlId; 'Instance' = $r.Instance; 'Workload' = $r.Workload; 'Security topic' = $r.Topic; 'Control' = $r.Title
+            'NRG verdict' = $r.VerdictLabel; 'Risk severity' = $r.RiskSeverity; 'Check type' = $r.Type; 'Action type' = $action; 'Relationship to other controls' = $r.Relationship
+            'Observed' = $r.Observed; 'Required' = $r.Required; 'Why (verified / shortfall / not assessed)' = $r.Detail; 'Remediation' = $r.Remediation
+            'Suggested owner area' = $r.Owner; 'Owner' = ''; 'Target date' = ''; 'Resolution status' = 'Open'; 'Evidence of resolution' = ''; 'Notes' = ''
+        }
+    }
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $hdr = @('Control ID','Instance','Workload','Security topic','Control','NRG verdict','Risk severity','Check type','Action type','Relationship to other controls','Observed','Required','Why (verified / shortfall / not assessed)','Remediation','Suggested owner area','Owner','Target date','Resolution status','Evidence of resolution','Notes')
+    $lines.Add(($hdr | ForEach-Object { '"' + ($_ -replace '"', '""') + '"' }) -join ',')
+    foreach ($o in @($out)) { $lines.Add((($hdr | ForEach-Object { '"' + ((ConvertTo-TPCsvCell $o[$_]) -replace '"', '""') + '"' }) -join ',')) }
+    # Owner-only before any content lands (Set-TPSensitiveFileContent), with the byte-order mark Excel needs.
+    $csv = ($lines -join [Environment]::NewLine) + [Environment]::NewLine
+    Set-TPSensitiveFileContent -Path $Path -Content $csv -Encoding ([System.Text.UTF8Encoding]::new($true))
+    return @($out).Count
+}
+
+function Publish-TPReportSite {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [hashtable] $Metadata,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Findings,
+        [Parameter(Mandatory)] [string] $OutputPath,
+        [AllowNull()] $BaselineCompliance = $null,
+        [AllowNull()] $Coverage = $null,
+        # Optional: the run's raw data and license profile for the scope classifier; module state
+        # (as the HTML report and the Markdown summary read it) when omitted.
+        [AllowNull()] $RawData = $null,
+        [AllowNull()] $LicenseProfile = $null,
+        [string] $ScubaResultsPath
+    )
+    foreach ($req in 'ConvertTo-TPHtmlSafe', 'Get-TPObjectField', 'Get-TPScubaAlignment', 'Set-TPSensitiveFileContent') {
+        if (-not (Get-Command $req -ErrorAction SilentlyContinue)) { throw "$req not loaded: refusing to generate the report site without it." }
+    }
+    if ($OutputPath -match '\.\.[\\/]') { throw 'Path traversal not allowed in OutputPath.' }
+    # A relative path must resolve against the PowerShell location: .NET resolves it against the
+    # process start folder, which Set-Location does not change.
+    $OutputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
+    $null = [System.IO.Directory]::CreateDirectory($OutputPath)
+    $hx = { param($v) ConvertTo-TPHtmlSafe $v }
+
+    $brand = @{ CompanyName = 'NRG Technology Services'; PrimaryColor = '#1a3a6b'; SecondaryColor = '#e87722'; AccentColor = '#4a7ba6'; Website = '' }
+    $bp = Join-Path (Split-Path -Parent $PSScriptRoot) 'Config' 'branding.psd1'
+    if (Test-Path -LiteralPath $bp) { try { $b = Import-PowerShellDataFile -LiteralPath $bp; foreach ($k in @($brand.Keys)) { if ($b.ContainsKey($k) -and $b[$k]) { $brand[$k] = [string]$b[$k] } } } catch { Write-Verbose "Branding unreadable: $($_.Exception.Message)" } }
+    # Colors are interpolated into CSS: accept only a #rrggbb value.
+    foreach ($k in 'PrimaryColor', 'SecondaryColor', 'AccentColor') { if ($brand[$k] -notmatch '^#[0-9a-fA-F]{6}$') { $brand[$k] = @{ PrimaryColor = '#1a3a6b'; SecondaryColor = '#e87722'; AccentColor = '#4a7ba6' }[$k] } }
+
+    $scuba = $null
+    if ($ScubaResultsPath -and (Test-Path -LiteralPath $ScubaResultsPath)) {
+        # An unreadable or foreign file costs the independent comparison only,
+        # never the site.
+        try { $scuba = Read-TPScubaResults -Path $ScubaResultsPath }
+        catch { Write-Warning "ScubaGear results not used: $($_.Exception.Message)"; $scuba = $null }
+    }
+    # The not-scored category of each control comes from Get-TPAssessmentScope, given the same
+    # coverage (a -Skip flag), raw data (the hard-evidence step) and license profile.
+    $scopeArgs = @{ QuickScan = [bool](Get-TPObjectField -Item $Metadata -Key 'QuickScan' -Default $false) }
+    if ($Coverage -is [System.Collections.IDictionary]) { $cv = @{}; foreach ($k in @($Coverage.Keys)) { $cv[[string]$k] = $Coverage[$k] }; $scopeArgs.Coverage = $cv }
+    if ($null -ne $RawData) { $scopeArgs.RawData = $RawData }
+    if ($null -eq $LicenseProfile -and (Get-Command Get-TPTenantLicenseProfile -ErrorAction SilentlyContinue)) { try { $LicenseProfile = Get-TPTenantLicenseProfile } catch { $LicenseProfile = $null } }
+    $scopeArgs.LicenseProfile = $LicenseProfile
+    $rows = @(Get-TPSiteRows -Findings $Findings -BaselineCompliance $BaselineCompliance -Scuba $scuba -ScopeArgs $scopeArgs)
+
+    $css = @"
+:root{--p:$($brand.PrimaryColor);--s:$($brand.SecondaryColor);--a:$($brand.AccentColor);--bg:#f5f7fa;--fg:#1f2937;--mut:#6b7280;--card:#fff;--line:#e5e7eb}
+@media (prefers-color-scheme:dark){:root{--bg:#0f172a;--fg:#e5e7eb;--mut:#9ca3af;--card:#1e293b;--line:#334155}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
+header{background:var(--p);color:#fff;padding:18px 24px;border-bottom:4px solid var(--s)}header h1{margin:0;font-size:1.25rem}header .sub{opacity:.85;font-size:.9rem}
+nav{padding:10px 24px;background:var(--card);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px 16px}nav a{color:var(--a);text-decoration:none;font-weight:600}
+main{max-width:1500px;margin:0 auto;padding:20px 16px 48px}h2{margin:28px 0 8px;font-size:1.1rem;border-bottom:2px solid var(--s);padding-bottom:4px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:12px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{text-align:center;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--card)}.stat b{display:block;font-size:1.5rem}
+table{width:100%;border-collapse:collapse;table-layout:auto;background:var(--card);font-size:.88rem}th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.scroll{overflow-x:auto}th{background:var(--p);color:#fff;position:sticky;top:0}
+.pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:.78rem;font-weight:700;color:#fff;white-space:nowrap}.ok{background:#15803d}.part{background:#b45309}.gap{background:#b91c1c}.unk{background:#475569}.na{background:#64748b}
+.badge{display:inline-block;padding:0 7px;border:1px solid var(--a);color:var(--a);border-radius:4px;font-size:.74rem;font-weight:700}.badge.m{border-color:#7c3aed;color:#7c3aed}.badge.d{border-color:#0e7490;color:#0e7490}
+.mut{color:var(--mut)}.strength{font-size:.74rem;font-weight:700;color:var(--mut);border:1px solid var(--line);padding:0 6px;border-radius:4px}
+details{margin:2px 0}summary{cursor:pointer;color:var(--a);font-weight:600}.ev{padding:8px 4px;font-size:.86rem}.ev dt{font-weight:700;margin-top:6px}.ev dd{margin:0 0 0 0}
+.diff{border-left:4px solid var(--s);padding-left:10px}code{font-size:.85em}.note{font-size:.85rem;color:var(--mut)}
+.badge{white-space:nowrap}
+/* Findings tables: identifiers, verdicts, risk, check type and the evidence toggle never wrap (a cell may
+   not shrink below its content); the three prose columns wrap and keep a readable minimum width. */
+table.ft th:nth-child(1),table.ft td:nth-child(1),table.ft th:nth-child(3),table.ft td:nth-child(3),table.ft th:nth-child(4),table.ft td:nth-child(4),table.ft th:nth-child(5),table.ft td:nth-child(5),table.ft th:nth-child(8),table.ft td:nth-child(8){white-space:nowrap}
+table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nth-child(6){min-width:14rem;overflow-wrap:anywhere}table.ft td:nth-child(7){min-width:11rem;overflow-wrap:break-word}
+@media print{nav{display:none}details{display:block}details>summary{display:none}}
+@media(max-width:700px){th:nth-child(n+5),td:nth-child(n+5){display:none}}
+"@
+
+    # Metadata may come from a replayed results file that lacks a key; read every key safely.
+    $mv = { param($k) [string](Get-TPObjectField -Item $Metadata -Key $k -Default '') }
+    $tenant = & $hx (& $mv 'TenantDomain')
+    $runAtRaw = & $mv 'AssessmentTime'; if (-not $runAtRaw) { $runAtRaw = & $mv 'AssessmentDate' }
+    $runAt  = & $hx $runAtRaw
+    $toolVer = & $hx (& $mv 'ToolVersion')
+    $tenantId = & $hx (& $mv 'TenantId')
+    $shell = {
+        param($Title, $Body, $Active)
+        $navLinks = "<a href='index.html'>Overview</a>" + ((@($rows | ForEach-Object { $_.Workload } | Sort-Object -Unique) | ForEach-Object { $n = $script:TPSiteWorkloadNames[$_]; if ($n) { "<a href='$_.html'>$(& $hx $n)</a>" } }) -join '')
+        "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>$(& $hx $Title) - $(& $hx $brand.CompanyName)</title><style>$css</style></head><body><header><h1>$(& $hx $brand.CompanyName) &middot; Microsoft 365 security assessment</h1><div class='sub'>$tenant &middot; run $runAt &middot; TenantPosture $toolVer</div></header><nav>$navLinks</nav><main>$Body</main></body></html>"
+    }
+
+    # ── Per-workload pages ────────────────────────────────────────────────────
+    $written = [System.Collections.Generic.List[string]]::new()
+    $counts = [ordered]@{}
+    foreach ($wl in @($rows | ForEach-Object { $_.Workload } | Sort-Object -Unique)) {
+        $wrows = @($rows | Where-Object { $_.Workload -eq $wl })
+        $name = $script:TPSiteWorkloadNames[$wl]; if (-not $name) { $name = $wl }
+        $counts[$wl] = [ordered]@{ Name = $name; Total = $wrows.Count
+            Satisfied = @($wrows | Where-Object { $_.State -eq 'Satisfied' }).Count; Partial = @($wrows | Where-Object { $_.State -eq 'Partial' }).Count
+            Gap = @($wrows | Where-Object { $_.State -eq 'Gap' }).Count
+            Errored = @($wrows | Where-Object { $_.State -eq 'Error' }).Count
+            NotAssessed = @($wrows | Where-Object { $_.State -eq 'NotApplicable' -and $_.Kind -in @('Collection', 'StandardNotApproved', 'Manual', 'Skipped') }).Count
+            Other = @($wrows | Where-Object { $_.State -eq 'NotApplicable' -and $_.Kind -in @('Licensing', 'Declaration', 'NotApplicable') }).Count }
+        $body = "<h2>$(& $hx $name)</h2><p class='note'>Grouped by security topic. The verdict is NRG's baseline judgment; the badge says how the check was made (automated, manual, or an operator declaration) and is not a verdict. Risk severity is NRG's; requirement strength (SHALL / SHOULD) is the independent baseline's and is shown only where a rule is mapped.</p>"
+        foreach ($topic in @($wrows | ForEach-Object { $_.Topic } | Sort-Object -Unique)) {
+            $trows = @($wrows | Where-Object { $_.Topic -eq $topic } | Sort-Object ControlId, Instance)
+            $body += "<h2 style='font-size:1rem'>$(& $hx $topic)</h2><div class='scroll'><table class='ft'><thead><tr><th>Control</th><th>Requirement</th><th>NRG verdict</th><th>Risk</th><th>Check</th><th>Observed</th><th>Independent comparison</th><th>Evidence</th></tr></thead><tbody>"
+            foreach ($r in $trows) {
+                $inst = if ($r.Instance) { " <span class='mut'>($(& $hx $r.Instance))</span>" } else { '' }
+                $badgeCss = switch ($r.Type) { 'Manual' { 'badge m' } 'Declaration' { 'badge d' } default { 'badge' } }
+                $req = "<b>$(& $hx $r.Title)</b>$(if ($r.Required) { "<div class='mut'>Required: $(& $hx $r.Required)</div>" })$(if (Get-TPEvidenceLimitNote -ControlId $r.ControlId) { "<div class='mut'><em>$(& $hx (Get-TPEvidenceLimitNote -ControlId $r.ControlId))</em></div>" })"
+                $cmp = if ($r.ScubaId) {
+                    $ind = if ($r.IndependentResult) { "<div>Independent scan: <b>$(& $hx $r.IndependentResult)</b></div>" } else { '' }
+                    $diff = ''
+                    # A direction difference is a prompt only when both rules judge the same configuration (same or overlapping
+                    # requirement, e.g. DMARC quarantine vs reject). For a different requirement the result is shown for
+                    # context and said so.
+                    $relText = switch ([string]$r.ScubaRelation) {
+                        'Equivalent'  { 'Same requirement' }
+                        'Partial'     { 'Overlaps, not identical' }
+                        'Unsupported' { 'Different requirement (context only, not compared)' }
+                        'Manual'      { 'Manual in the independent scan' }
+                        default       { [string]$r.ScubaRelation }
+                    }
+                    if ($r.IndependentResult -and $r.ScubaRelation -in @('Equivalent', 'Partial')) {
+                        if (($r.State -eq 'Satisfied' -and $r.IndependentResult -eq 'Fail') -or ($r.State -in @('Gap', 'Partial') -and $r.IndependentResult -eq 'Pass')) { $diff = " class='diff'" }
+                    }
+                    "<div$diff><code>$(& $hx $r.ScubaId)</code> <span class='strength'>$(& $hx $r.ScubaStrength)</span> &middot; $(& $hx $relText)$ind</div>"
+                } else { "<span class='mut'>no mapped rule</span>" }
+                $ev = "<dl class='ev'><dt>Detail</dt><dd>$(& $hx $r.Detail)</dd>"
+                if ($r.Observed) { $ev += "<dt>Observed</dt><dd>$(& $hx $r.Observed)</dd>" }
+                if ($r.State -eq 'Error') { $ev += "<dt>Limitation</dt><dd>The check errored and did not reach a verdict: re-run or investigate it. Neither a pass nor a failure.</dd>" }
+                if ($r.Kind -ne 'Verdict') { $ev += "<dt>Limitation</dt><dd>$(& $hx @{ Collection = 'Collection: the evidence was not read'; Manual = 'Manual check: no automated test'; Declaration = 'Operator declaration: not verified by this assessment'; Licensing = 'Licensing: not scored'; StandardNotApproved = 'An NRG standard is not approved or configured'; NotApplicable = 'Reported not applicable'; Skipped = 'Skipped by the operator: this workload was not assessed this run' }[$r.Kind])</dd>" }
+                if (@($r.Affected).Count -gt 0) {
+                    $aff = @($r.Affected | Select-Object -First 25 | ForEach-Object { if ($_ -is [System.Collections.IDictionary]) { ($_.GetEnumerator() | ForEach-Object { "$($_.Key): $($_.Value)" }) -join ', ' } elseif ($_ -isnot [string] -and @($_.PSObject.Properties).Count -gt 0 -and $_ -isnot [ValueType]) { ($_.PSObject.Properties | ForEach-Object { "$($_.Name): $($_.Value)" }) -join ', ' } else { [string]$_ } })
+                    $ev += "<dt>Affected objects ($(@($r.Affected).Count))</dt><dd>$((@($aff | ForEach-Object { & $hx $_ }) -join '<br>'))$(if (@($r.Affected).Count -gt 25) { '<br>...' })</dd>"
+                }
+                if ($r.Remediation -and $r.State -ne 'Satisfied') { $ev += "<dt>Remediation</dt><dd>$(& $hx $r.Remediation)</dd>" }
+                if ($r.ScubaNote) { $ev += "<dt>How the independent rule relates</dt><dd>$(& $hx $r.ScubaNote)</dd>" }
+                if ($r.Frameworks) { $ev += "<dt>Framework citations</dt><dd>$(& $hx $r.Frameworks)</dd>" }
+                $ev += '</dl>'
+                # Many evaluators put what they observed in the Detail sentence and leave CurrentValue empty
+                # (20 of 48 passing controls in the first live run). Show that sentence, shortened, rather than
+                # a blank cell; the full text stays under Evidence. The action-plan CSV is not changed.
+                $obsShown = [string]$r.Observed
+                if (-not $obsShown -and $r.Detail) { $obsShown = [string]$r.Detail; if ($obsShown.Length -gt 220) { $obsShown = $obsShown.Substring(0, 217) + '...' } }
+                $body += "<tr><td><b>$(& $hx $r.ControlId)</b>$inst$(if ($r.Tier) { "<div class='mut'>$(& $hx $r.Tier) tier</div>" })</td><td>$req</td><td><span class='pill $($r.VerdictCss)'>$(& $hx $r.VerdictLabel)</span></td><td>$(& $hx $r.RiskSeverity)</td><td><span class='$badgeCss'>$(& $hx $r.Type)</span></td><td>$(& $hx $obsShown)</td><td>$cmp</td><td><details><summary>Evidence</summary>$ev</details></td></tr>"
+            }
+            $body += '</tbody></table></div>'
+        }
+        $f = Join-Path $OutputPath "$wl.html"
+        # Every page carries tenant findings: owner-only before the content is written, on every caller.
+        Set-TPSensitiveFileContent -Path $f -Content (& $shell $name $body $wl)
+        $written.Add($f)
+    }
+
+    # ── Landing page ──────────────────────────────────────────────────────────
+    $tot = @{ Satisfied = 0; Partial = 0; Gap = 0; Errored = 0; NotAssessed = 0; Other = 0 }
+    foreach ($c in $counts.Values) { foreach ($k in @($tot.Keys)) { $tot[$k] += $c[$k] } }
+    $bl = $BaselineCompliance
+    $blText = if ($bl -and (Get-TPObjectField -Item $bl -Key 'Available' -Default $false)) { "NRG Security Baseline $(& $hx (Get-TPObjectField -Item $bl -Key 'BaselineVersion' -Default '')), target tier $(& $hx (Get-TPObjectField -Item $bl -Key 'TargetTier' -Default ''))" } else { 'NRG Security Baseline: not resolved for this run' }
+    $al = Get-TPScubaAlignment
+    $alText = if ($al.Available) { "Independent baseline mapping: $(& $hx $al.Source.Tool) $(& $hx $al.Source.ToolVersion), checked $(& $hx $al.Source.CheckedOn)" } else { 'Independent baseline mapping: not available' }
+    $landing = "<h2>Tenant and run</h2><div class='card'><table><tbody><tr><th style='width:220px'>Tenant</th><td>$tenant</td></tr><tr><th>Tenant ID</th><td>$tenantId</td></tr><tr><th>Run time</th><td>$runAt</td></tr><tr><th>Tool version</th><td>TenantPosture $toolVer</td></tr><tr><th>Baseline versions</th><td>$blText<br>$alText$(if ($scuba) { '<br>Independent scan results supplied: shown beside each mapped control' })</td></tr></tbody></table></div>"
+    $landing += "<h2>Summary</h2><div class='grid'><div class='stat'><b>$($tot.Satisfied)</b>Satisfied</div><div class='stat'><b>$($tot.Partial)</b>Partial</div><div class='stat'><b>$($tot.Gap)</b>Gap</div><div class='stat'><b>$($tot.Errored)</b>Not assessed (the check errored)</div><div class='stat'><b>$($tot.NotAssessed)</b>Not assessed</div><div class='stat'><b>$($tot.Other)</b>Not scored (licensing, declared, not applicable)</div></div><p class='note'>These are counts of findings, not a compliance percentage. Not assessed means the tool could not establish the answer (evidence not read, a manual check, an NRG standard that is not approved, or a workload the operator skipped); it is neither a pass nor a failure. A check that errored did not reach a verdict and is counted on its own, not as a Gap.</p>"
+    $landing += "<h2>Workloads</h2><table><thead><tr><th>Workload</th><th>Satisfied</th><th>Partial</th><th>Gap</th><th>Errored</th><th>Not assessed</th><th>Not scored</th></tr></thead><tbody>"
+    foreach ($wl in $counts.Keys) { $c = $counts[$wl]; $landing += "<tr><td><a href='$wl.html'><b>$(& $hx $c.Name)</b></a> <span class='mut'>($($c.Total) findings)</span></td><td>$($c.Satisfied)</td><td>$($c.Partial)</td><td>$($c.Gap)</td><td>$($c.Errored)</td><td>$($c.NotAssessed)</td><td>$($c.Other)</td></tr>" }
+    $landing += '</tbody></table>'
+    $gapSummary = Get-TPGapSummary -Findings $Findings
+    if ($gapSummary.GapControls -gt 0) {
+        $landing += "<h2>Gap controls and underlying deficiencies</h2><div class='card'><p>$(& $hx (Format-TPGapSummary -Summary $gapSummary))</p>"
+        if (@($gapSummary.NamedViews).Count -gt 0) { $landing += '<p><b>Named-object views of another Gap control</b></p><ul>' + ((@($gapSummary.NamedViews | ForEach-Object { "<li><b>$(& $hx $_.Control)</b> is a view of <b>$(& $hx $_.Of)</b>: $(& $hx $_.Reason)</li>" })) -join '') + '</ul>' }
+        if (@($gapSummary.FoldedSameSetting).Count -gt 0) { $landing += '<p><b>Controls that read the same setting (counted once in the score)</b></p><ul>' + ((@($gapSummary.FoldedSameSetting | ForEach-Object { "<li><b>$(& $hx $_.Primary)</b> also covers $(& $hx (@($_.AlsoCounted) -join ', '))</li>" })) -join '') + '</ul>' }
+        $landing += '</div>'
+    }
+    $kinds = [ordered]@{ Collection = 'Collection failures (evidence not read)'; Licensing = 'Licensing limits (not scored)'; Manual = 'Manual checks (no automated test)'; Declaration = 'Operator declarations (not verified)'; StandardNotApproved = 'NRG standards not approved or configured'; Skipped = 'Workloads skipped by the operator (not assessed)' }
+    $landing += "<h2>Limitations, kept distinct</h2><div class='card'><ul>"
+    foreach ($k in $kinds.Keys) { $n = @($rows | Where-Object { $_.Kind -eq $k }).Count; $landing += "<li><b>$n</b> $(& $hx $kinds[$k])$(if ($n -gt 0) { ': ' + ((@($rows | Where-Object { $_.Kind -eq $k } | Select-Object -First 12 | ForEach-Object { $_.ControlId } | Sort-Object -Unique) -join ', ') -replace '&', '&amp;') + $(if ($n -gt 12) { ', ...' }) })</li>" }
+    $landing += "</ul></div>"
+    if ($scuba) {
+        $cmpRows = @($rows | Where-Object { $_.IndependentResult })
+        # Only rules that judge the same configuration (same or overlapping requirement) can differ; a different rule is context.
+        $diffs = @($cmpRows | Where-Object { $_.ScubaRelation -in @('Equivalent', 'Partial') -and (($_.State -eq 'Satisfied' -and $_.IndependentResult -eq 'Fail') -or ($_.State -in @('Gap', 'Partial') -and $_.IndependentResult -eq 'Pass')) })
+        $landing += "<h2>Independent comparison</h2><div class='card'><p>$($cmpRows.Count) findings map to a rule in the supplied independent scan. <b>$($diffs.Count)</b> differ in direction (NRG satisfied where the scan failed, or NRG found a gap where the scan passed) among rules that judge the same or an overlapping requirement; a rule for a different requirement is shown beside its control for context and is not counted here. A difference is a prompt to investigate the configuration, collection time, scope and requirement wording; it is not a score to match, and the two tools may judge the same configuration against different standards.</p>"
+        if ($diffs.Count -gt 0) { $landing += '<ul>' + ((@($diffs | Sort-Object ControlId | ForEach-Object { "<li><b>$(& $hx $_.ControlId)</b> NRG $(& $hx $_.VerdictLabel) &middot; $(& $hx $_.ScubaId) independent $(& $hx $_.IndependentResult) &middot; $(& $hx $_.ScubaRelation)</li>" })) -join '') + '</ul>' }
+        $landing += '</div>'
+    }
+    $landing += "<h2>Action plan</h2><div class='card'><p><a href='ActionPlan.csv'>ActionPlan.csv</a>: every shortfall to fix, component to verify and standard to approve, with blank owner, target date, resolution status and evidence columns.</p></div>"
+    $lf = Join-Path $OutputPath 'index.html'
+    Set-TPSensitiveFileContent -Path $lf -Content (& $shell 'Overview' $landing '')
+    $written.Add($lf)
+    $planCount = Publish-TPActionPlan -Rows $rows -Path (Join-Path $OutputPath 'ActionPlan.csv')
+    $written.Add((Join-Path $OutputPath 'ActionPlan.csv'))
+    return [ordered]@{ Files = @($written); Findings = $rows.Count; ActionPlanRows = $planCount; Workloads = @($counts.Keys) }
+}

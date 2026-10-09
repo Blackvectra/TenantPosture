@@ -2,7 +2,7 @@
 #
 # Copy to Config/ssp/<client-domain>.psd1 and fill in. The file name is the
 # client name slugged: example.com -> example.com.psd1, "Acme Widgets" ->
-# acme-widgets.psd1. Publish-NRGSSP finds it automatically from -ClientName.
+# acme-widgets.psd1. Publish-TPSSP finds it automatically from -ClientName.
 #
 # This file holds the part of a System Security Plan that no scan can produce.
 # The assessment evidences 41 of the 110 NIST SP 800-171 Rev 2 requirements

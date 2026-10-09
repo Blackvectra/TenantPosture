@@ -1,8 +1,8 @@
-# Secure Development Framework Alignment — NRG-Assessment
+# Secure Development Framework Alignment — TenantPosture
 
 **Self-attestation against NIST SP 800-218 (Secure Software Development Framework, SSDF) version 1.1.**
 
-NIST SSDF organizes secure-development practices into four families: **PO** (Prepare the Organization), **PS** (Protect Software), **PW** (Produce Well-Secured Software), **RV** (Respond to Vulnerabilities). This document maps each NRG-Assessment practice to the SSDF task it implements, with evidence in the form of file paths, workflow names, and policy links so the attestation is verifiable from the repository itself.
+NIST SSDF organizes secure-development practices into four families: **PO** (Prepare the Organization), **PS** (Protect Software), **PW** (Produce Well-Secured Software), **RV** (Respond to Vulnerabilities). This document maps each TenantPosture practice to the SSDF task it implements, with evidence in the form of file paths, workflow names, and policy links so the attestation is verifiable from the repository itself.
 
 This matches the structure CISA expects in the [Secure Software Development Attestation Form](https://www.cisa.gov/resources-tools/resources/secure-software-development-attestation-form) (CISA Form 1.0) that federal-software vendors must file.
 
@@ -30,7 +30,7 @@ This matches the structure CISA expects in the [Secure Software Development Atte
 
 | Task | Evidence |
 |---|---|
-| PO.3.1 — Specify which tools or tool types must / should / shall not be used | `Install-NRGPrerequisites.ps1` pins module versions; `PSScriptAnalyzerSettings.psd1` defines linting policy; `.github/dependabot.yml` automates updates |
+| PO.3.1 — Specify which tools or tool types must / should / shall not be used | `Install-TPPrerequisites.ps1` pins module versions; `PSScriptAnalyzerSettings.psd1` defines linting policy; `.github/dependabot.yml` automates updates |
 | PO.3.2 — Follow recommended security practices for each tool | All third-party GitHub Actions are SHA-pinned; PSResourceGet used over `Install-Module` for supply-chain verification |
 | PO.3.3 — Configure tools to generate artifacts of their support | PSScriptAnalyzer emits SARIF; Pester emits NUnit XML; both upload as workflow artifacts |
 
@@ -38,7 +38,7 @@ This matches the structure CISA expects in the [Secure Software Development Atte
 
 | Task | Evidence |
 |---|---|
-| PO.4.1 — Define criteria for software security checks | `Testing/NRG.Security.Tests.ps1` (100+ OWASP/ASVS invariants); `Testing/NRG.FrameworkCoverage.Tests.ps1`; `Testing/NRG.MaturityTier.Tests.ps1` |
+| PO.4.1 — Define criteria for software security checks | `Testing/TP.Security.Tests.ps1` (100+ OWASP/ASVS invariants); `Testing/TP.FrameworkCoverage.Tests.ps1`; `Testing/TP.MaturityTier.Tests.ps1` |
 | PO.4.2 — Implement processes, mechanisms, etc. to gather information used in security checks | CI workflows (`ci.yml`, `codeql.yml`, `secret-scan.yml`) automate all checks on every push |
 
 ### PO.5 — Implement and Maintain Secure Environments for Software Development
@@ -100,7 +100,7 @@ This matches the structure CISA expects in the [Secure Software Development Atte
 
 | Task | Evidence |
 |---|---|
-| PW.5.1 — Follow secure-coding practices appropriate to the language | `Set-StrictMode -Version Latest`; `$ErrorActionPreference = 'Stop'`; `-LiteralPath` on all file ops; `[ValidatePattern]` / `[ValidateSet]` / `[ValidateScript]` on every parameter; `ConvertTo-NRGHtmlSafe` on all HTML output; XSS / injection / SSRF mitigations enumerated in `SECURITY.md` |
+| PW.5.1 — Follow secure-coding practices appropriate to the language | `Set-StrictMode -Version Latest`; `$ErrorActionPreference = 'Stop'`; `-LiteralPath` on all file ops; `[ValidatePattern]` / `[ValidateSet]` / `[ValidateScript]` on every parameter; `ConvertTo-TPHtmlSafe` on all HTML output; XSS / injection / SSRF mitigations enumerated in `SECURITY.md` |
 
 ### PW.6 — Configure the Compilation, Interpreter, and Build Processes to Improve Executable Security
 
@@ -120,7 +120,7 @@ This matches the structure CISA expects in the [Secure Software Development Atte
 
 | Task | Evidence |
 |---|---|
-| PW.8.1 — Determine whether executable code testing should be performed | Yes — `Testing/NRG.Security.Tests.ps1` and 4 other Pester suites |
+| PW.8.1 — Determine whether executable code testing should be performed | Yes — `Testing/TP.Security.Tests.ps1` and 4 other Pester suites |
 | PW.8.2 — Scope the testing | OWASP Top 10:2025, ASVS v5 controls, framework-coverage invariants, finding-shape contracts |
 
 ### PW.9 — Configure Software to Have Secure Settings by Default
@@ -128,7 +128,7 @@ This matches the structure CISA expects in the [Secure Software Development Atte
 | Task | Evidence |
 |---|---|
 | PW.9.1 — Define a secure baseline by determining how to configure each setting | Fail-closed defaults: missing license helper → label as "requires license"; missing finding fields → skip not crash; missing Maturity → CI gate is INOPERATIVE (loud warning); read-only invariant enforced by tests |
-| PW.9.2 — Implement the default settings | `Connect-NRGServices` always disconnects in `finally`; TLS 1.2/1.3 enforced before any network I/O; WAM broker disabled before any module loads |
+| PW.9.2 — Implement the default settings | `Connect-TPServices` always disconnects in `finally`; TLS 1.2/1.3 enforced before any network I/O; WAM broker disabled before any module loads |
 
 ---
 
@@ -176,4 +176,4 @@ Everything here is grounded in this repository:
 |---|---|---|
 | 2026-05-31 | NRG Technology Services / NextLayerSec LLC security engineering | Initial publication. Coverage: 22 of 22 SSDF tasks attested. |
 
-*NRG-Assessment SSDF self-attestation v1.0 · NIST SP 800-218 v1.1 · CISA Secure Software Development Attestation Form 1.0 aligned*
+*TenantPosture SSDF self-attestation v1.0 · NIST SP 800-218 v1.1 · CISA Secure Software Development Attestation Form 1.0 aligned*

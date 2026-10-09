@@ -1,5 +1,5 @@
 {
-  "_comment": "Recommended Conditional Access baseline, read by Lib/Get-NRGConditionalAccessView.ps1. ADVISORY ONLY: nothing here is scored and no finding is emitted from it — it is a view, like Get-NRGAssessmentScope. Every entry is one of Microsoft's own documented Conditional Access policy templates (https://learn.microsoft.com/entra/identity/conditional-access/concept-conditional-access-policy-common), fetched 2026-09-25. Matching logic lives in the Lib file, keyed on Id; this file holds only display metadata so a citation or a name can be corrected without touching code.",
+  "_comment": "Recommended Conditional Access baseline, read by Lib/Get-TPConditionalAccessView.ps1. ADVISORY ONLY: nothing here is scored and no finding is emitted from it — it is a view, like Get-TPAssessmentScope. Every entry is one of Microsoft's own documented Conditional Access policy templates (https://learn.microsoft.com/entra/identity/conditional-access/concept-conditional-access-policy-common), fetched 2026-09-25. Matching logic lives in the Lib file, keyed on Id; this file holds only display metadata so a citation or a name can be corrected without touching code.",
   "templates": [
     {
       "Id": "block-legacy-auth",

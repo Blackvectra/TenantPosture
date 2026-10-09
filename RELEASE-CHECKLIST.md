@@ -1,4 +1,4 @@
-# Release Checklist — NRG-Assessment
+# Release Checklist — TenantPosture
 
 Every patch release follows this checklist. It exists so that "security + bugs + polish, every release" is a verifiable contract instead of an aspiration.
 
@@ -8,7 +8,7 @@ Run on the branch before merging the release PR.
 
 - [ ] **OWASP Top 10:2021 delta walk.** Re-read `docs/CORRECTNESS-SWEEP-v4.6.5.md` § OWASP. For each of A01–A10, note in the CHANGELOG entry whether the new release changed the posture (better / same / new gap opened). Don't ship a release that *worsens* any category without an explicit note.
 - [ ] **`simplify` skill code-review pass** on the PR diff. Apply confirmed findings; document refuted findings + intentional skips in the PR body.
-- [ ] **Publisher output safety.** `Invoke-Pester ./Testing/NRG.HtmlReport.Tests.ps1 ./Testing/NRG.GoldenFixtures.Tests.ps1` passes. Confirms no new HTML / MD / PS injection vectors in the diff. (A dedicated adversarial-fixture suite, `NRG.PublisherSafety.Tests.ps1`, is not yet written.)
+- [ ] **Publisher output safety.** `Invoke-Pester ./Testing/TP.HtmlReport.Tests.ps1 ./Testing/TP.GoldenFixtures.Tests.ps1` passes. Confirms no new HTML / MD / PS injection vectors in the diff. (A dedicated adversarial-fixture suite, `TP.PublisherSafety.Tests.ps1`, is not yet written.)
 - [ ] **All standing CI green:** PSScriptAnalyzer, Pester Tests, Module Manifest + controls.json. Optional Copilot reviewer comments triaged.
 - [ ] **One real-tenant run** against an internal tenant. Confirm:
   - Zero `WARNING: Evaluator ... cannot be found on this object`
@@ -35,9 +35,9 @@ For the in-house workflow (free, self-signed). For an external release with a pa
 
 **One-time per workstation** (skip if you've done it before):
 ```powershell
-.\Build\New-NRGCodeSigningCert.ps1 -SaveThumbprintForBuild
+.\Build\New-TPCodeSigningCert.ps1 -SaveThumbprintForBuild
 # Generates a self-signed cert, adds it to TrustedPublisher + Root,
-# and stashes the thumbprint at ~/.nrg-assessment/signing-thumbprint.txt
+# and stashes the thumbprint at ~/.tp-assessment/signing-thumbprint.txt
 ```
 
 **Per release:**
@@ -56,7 +56,7 @@ git tag -s "vX.Y.Z" -m "vX.Y.Z — release notes here"
 git push origin "vX.Y.Z"
 ```
 
-If the operator workstation doesn't have the cert (e.g., a different engineer is releasing), run `New-NRGCodeSigningCert.ps1` first. The signature won't verify on workstations that don't trust the cert — that's the point. For internal-only releases, install the cert into TrustedPublisher on every workstation that runs the tool.
+If the operator workstation doesn't have the cert (e.g., a different engineer is releasing), run `New-TPCodeSigningCert.ps1` first. The signature won't verify on workstations that don't trust the cert — that's the point. For internal-only releases, install the cert into TrustedPublisher on every workstation that runs the tool.
 
 ## Post-release
 

@@ -5,7 +5,7 @@
     "A rule is a list of groups; every group must be satisfied, and a group is satisfied by ANY one of its plans (AND of ORs).",
     "Plans are matched against Graph /subscribedSkus servicePlans with provisioningStatus 'Success', case-insensitively.",
     "'controls' overrides 'requirements' for one control: several controls share a requirement string but need different features (Customer Lockbox and Endpoint DLP are both 'M365 E5 or E5 Compliance add-on').",
-    "Why this matters: Set-NRGLicenseGating takes a control out of the score when its requirement is NOT met, so a rule that misses a plan the tenant holds hides a real gap. Match the plan that delivers the feature, never the product name.",
+    "Why this matters: Set-TPLicenseGating takes a control out of the score when its requirement is NOT met, so a rule that misses a plan the tenant holds hides a real gap. Match the plan that delivers the feature, never the product name.",
     "The two 'E5 Compliance' requirement strings are the whole bundle (every feature their controls use); each control's own rule in 'controls' is what gating and the report use."
   ],
   "requirements": {
