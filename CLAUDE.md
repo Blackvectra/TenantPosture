@@ -1,6 +1,6 @@
 # TenantPosture Tool — Claude Code Project Context
 
-**Author:** NRG Technology Services — nrgtechservices.com
+**Author:** Matthew Levorson — NextLayerSec LLC (support@nextlayersec.dev)
 **GitHub:** https://github.com/Blackvectra/TenantPosture
 **Version:** 4.14.3
 **Language:** PowerShell 7.0+
