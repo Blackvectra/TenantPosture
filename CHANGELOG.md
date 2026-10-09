@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **HIPAA readiness view follow-ups (review of PR #122).** The Markdown report also escapes the
+  bracket and code-span syntax in tenant-derived text, so `![x](https://...)` in a finding detail
+  is shown as text rather than fetched by a Markdown viewer. An item whose shortfall stands beside
+  an instance that produced no verdict (one domain errored) keeps "Technical check shortfall" but
+  reads "Partial evidence", not "Tool-verified". The 164.308(b)(1) standard now carries paragraph
+  (b)(2), the business associate's subcontractor assurance duty, which the catalog had left out.
+
 - **OSS Scanner enrollment files (`.oss-scanner/`).** A `Dockerfile` that builds the module and runs
   the full Pester suite offline (PowerShell 7.5 on Ubuntu 24.04, Pester, PSScriptAnalyzer, openpyxl,
   yamllint), a `threat_model.md` naming where untrusted input enters and how findings are rated, and
