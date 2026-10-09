@@ -676,6 +676,15 @@ The framework-accuracy suite validates every SCuBA citation against the bundled 
 
 ---
 
+## Security scanning (OSS Scanner)
+
+`.oss-scanner/` holds the enrollment for Anthropic's [OSS Scanner](https://red.anthropic.com/oss-scanner/): a `Dockerfile` that installs PowerShell 7.5, Pester, PSScriptAnalyzer and openpyxl, imports the module and runs the full test suite with no network, and a `threat_model.md` that tells the scanner where untrusted input enters (tenant data rendered into reports, DNS answers, replayed files, the local web GUI) and how to rate what it finds. `project.yaml` is the record submitted to the scanner's repository. The Dockerfile doubles as a reproducible test environment:
+
+```powershell
+docker build -f .oss-scanner/Dockerfile -t tenantposture .
+docker run --rm --network none tenantposture pwsh -NoProfile -Command 'Invoke-Pester -Path ./Testing, ./Email-IR/Testing'
+```
+
 ## License
 
 Licensed under the [Apache License, Version 2.0](LICENSE). Copyright 2026 Matthew Levorson / NextLayerSec LLC; see [NOTICE](NOTICE).
