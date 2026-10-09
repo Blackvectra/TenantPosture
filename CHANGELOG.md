@@ -11,8 +11,11 @@
   selected with `-Profile <name>` / `TP_PROFILE` (`nrg.psd1` and `nls.psd1` ship). The entry point
   no longer defaults `-Framework` to NIST; the profile's `DefaultFramework` decides (NRG: NIST; NLS
   and neutral: All). `Config/tp-standards.json` no longer carries a DMARC reporting address; the
-  profile supplies it. Prose that names NRG as the operating MSP in comments, finding text and docs
-  is unchanged in this step and is the next pass.
+  profile supplies it. `New-TPProfile` creates a profile from validated parameters (name, company,
+  contact, colors, default framework, DMARC reporting address, declared platforms, rates), written as
+  data and re-read before it replaces anything; `Get-TPProfile` lists them and marks the loaded one.
+  Prose that names NRG as the operating MSP in comments, finding text and docs is unchanged in this
+  step and is the next pass.
 
 - **DKIM: every domain's finding says when its key was last rotated (DNS-2.1).** The finding
   used to give only an age ("3906 days old"). It now states the date the current key was created,

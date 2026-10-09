@@ -209,6 +209,8 @@ $script:ExportedFunctions = @(
     'Resolve-TPTenantId',
     'Set-TPThirdPartyEdr',
     'Set-TPThirdPartyAwareness',
+    'New-TPProfile',
+    'Get-TPProfile',
     'Set-TPLicenseGating',
     'Get-TPBaselineDefinition', 'Get-TPBaselineRequiredControls', 'ConvertTo-TPBaselineClientSlug',
     'Get-TPBaselineExceptions', 'Get-TPBaselineCompliance', 'Get-TPBaselineRegressions',

@@ -139,7 +139,7 @@ Every run now classifies the tenant into a **Tenant Security Maturity Tier** (In
 | `-AllFiles` | Every deliverable as its own file (Markdown summary, playbooks, XLSX matrix, remediation script, NIST matrix, SSP, improvement plan). The default is the HTML report plus the results JSON. |
 | `-JsonOnly` | The results JSON only. |
 | `-Framework` | Framework cards the report shows: `NIST`, `CIS`, `SCuBA`, `CMMC` or `All`; the active profile's `DefaultFramework` when not given (NRG profile: NIST; NLS and neutral: All). Presentation only; every framework is still scored. |
-| `-Profile` | The profile to run with: `Config/profiles/<name>.psd1` (company, colors, default framework, DMARC reporting address, declared EDR and awareness platforms, monitoring addresses). Without it, `Config/branding.psd1`. Same as `TP_PROFILE` in the environment, which every entry point reads. `nrg` and `nls` ship. |
+| `-Profile` | The profile to run with: `Config/profiles/<name>.psd1` (company, colors, default framework, DMARC reporting address, declared EDR and awareness platforms, monitoring addresses). Without it, `Config/branding.psd1`. Same as `TP_PROFILE` in the environment, which every entry point reads. `nrg` and `nls` ship. Make your own with `New-TPProfile -Name acme -CompanyName 'Acme Managed IT' …` (validated, written as data); `Get-TPProfile` lists them. |
 | `-BaselineTier` | NRG Security Baseline tier the client is held to: `Minimum`, `Standard` (default) or `Hardened`. Read from the client's `BaselineTier` in `clients.json` with `-TenantDomain`. A view over the findings: it changes no verdict and no framework score. |
 | `-BaselineResults` + plan | Before connecting, the entry point prints the NRG baseline plan: how each required control is expected to resolve (automatic, manual, third-party handled, optional collector, skipped, license blocked, or licensing unknown until connection). With `-BaselineResults`, licensing comes from that prior run. After the run the results JSON carries `BaselinePlan` and `BaselinePlanComparison`. Standalone, connecting to nothing: `.\Get-TPBaselinePlan.ps1 -TenantDomain client.com -BaselineTier Standard [-ResultsPath prior.json]`. |
 | Reason contract | Every baseline row in the results JSON, the HTML and the Markdown carries `ReasonCode` (a stable code from an ordered catalog: `ManualVerificationRequired`, `SkippedByOperator`, `ThirdPartyHandled`, `OptionalCollectorRequired`, `LicenseBlocked`, `LicensingUnknown`, `CollectorUnavailable`, `EvidenceStale`, `EvidenceNotRead`, `EvaluationError`, `ControlFailed`, `Satisfied`, `NotApplicable`, `Automatic`) and a one-sentence `Reason`. The catalog itself is written as `BaselineCompliance.ReasonCodes`, so a consumer keys on the code and never parses prose. |
@@ -335,7 +335,7 @@ are tested without a server, so CI runs those.
 Invoke-TPAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-TPBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 TenantPosture.psm1               ← Module loader (recursive dot-source, path traversal check)
-TenantPosture.psd1               ← Module manifest (392 exports, dependency declarations)
+TenantPosture.psd1               ← Module manifest (394 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-TPFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -377,7 +377,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA (ScubaGear v2.0.0) + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          98 Pester suites — the FULL suite gates every PR
+Testing/                          99 Pester suites — the FULL suite gates every PR
   TP.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   TP.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   TP.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -610,7 +610,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **98 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **99 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -665,7 +665,7 @@ Six GitHub Actions workflows cover the repository. All run automatically on push
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (98 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (99 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -684,4 +684,4 @@ This is not open-source software. No right to use, copy, modify, redistribute or
 
 ---
 
-*TenantPosture v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 392 exported functions · full Pester suite (98 suites) gating CI*
+*TenantPosture v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 394 exported functions · full Pester suite (99 suites) gating CI*

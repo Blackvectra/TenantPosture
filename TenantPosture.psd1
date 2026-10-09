@@ -106,6 +106,8 @@
         'Resolve-TPTenantId',
         'Set-TPThirdPartyEdr',
         'Set-TPThirdPartyAwareness',
+        'New-TPProfile',
+        'Get-TPProfile',
         'Set-TPLicenseGating',
         'Get-TPBaselineDefinition',
         'Get-TPBaselineRequiredControls',
