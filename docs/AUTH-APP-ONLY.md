@@ -1,4 +1,4 @@
-# App-Only Authentication — NRG-Assessment
+# App-Only Authentication — TenantPosture
 
 > **Current status:** The tool currently uses interactive/delegated auth (browser prompt).  
 > App-only certificate authentication is the next feature to add for unattended/scheduled runs.  
@@ -22,7 +22,7 @@
 ```powershell
 # In the target tenant
 # Entra ID > App registrations > New registration
-# Name: NRG-Assessment
+# Name: TenantPosture
 # Supported account types: This org directory only
 # Redirect URI: none
 ```
@@ -53,23 +53,23 @@ Microsoft Graph:
 ```powershell
 # Self-signed for testing (use CA-issued cert in production)
 $cert = New-SelfSignedCertificate `
-    -Subject "CN=NRG-Assessment" `
+    -Subject "CN=TenantPosture" `
     -CertStoreLocation "Cert:\CurrentUser\My" `
     -KeyExportPolicy Exportable `
     -KeySpec Signature `
     -NotAfter (Get-Date).AddYears(2)
 
 # Export public key for upload to Entra
-Export-Certificate -Cert $cert -FilePath "NRG-Assessment.cer"
+Export-Certificate -Cert $cert -FilePath "TenantPosture.cer"
 ```
 
-Upload `NRG-Assessment.cer` to: App registration > Certificates & secrets > Certificates > Upload certificate
+Upload `TenantPosture.cer` to: App registration > Certificates & secrets > Certificates > Upload certificate
 
 ### 4. Run with App-Only Auth
 
 ```powershell
-# Not yet implemented — placeholder for future Connect-NRGServices update
-.\Invoke-NRGAssessment.ps1 `
+# Not yet implemented — placeholder for future Connect-TPServices update
+.\Invoke-TPAssessment.ps1 `
     -AppOnly `
     -ClientId   "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
     -TenantId   "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
@@ -84,7 +84,7 @@ Until app-only is implemented, use **device code flow** for headless environment
 
 ```powershell
 # Device code prompts in console — open URL on another device to authenticate
-.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com
+.\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com
 # When prompted: open https://microsoft.com/devicelogin and enter the code shown
 ```
 

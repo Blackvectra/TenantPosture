@@ -1,19 +1,19 @@
-# NRG-Assessment — Email-IR Mode (v4.12.0+)
+# TenantPosture — Email-IR Mode (v4.12.0+)
 
-The **Email Account Assessment** is a focused variant of the NRG-Assessment tool that targets ONE user's mailbox instead of the whole tenant. Use it during a suspected compromise — BEC, phish-stolen credentials, attacker-installed inbox rules, mass outbound to external — when you have the user's credentials (or guide the user through running it themselves) but may not have full tenant-admin access.
+The **Email Account Assessment** is a focused variant of the TenantPosture tool that targets ONE user's mailbox instead of the whole tenant. Use it during a suspected compromise — BEC, phish-stolen credentials, attacker-installed inbox rules, mass outbound to external — when you have the user's credentials (or guide the user through running it themselves) but may not have full tenant-admin access.
 
 ## When to use
 
 | Scenario | Tool |
 |---|---|
-| Tenant-wide posture (CIS, SCuBA, NIST, CMMC) | `Invoke-NRGAssessment.ps1` (admin scope, 21 Graph scopes) |
-| Monthly recurring deliverable | `Invoke-NRGAssessment.ps1 -MonthlyReport` |
-| **Suspect compromise, don't yet know which user(s)** | **`Invoke-NRGSignInTriage.ps1` — admin-scope sign-in triage** |
-| **Compromised user account already known** | **`Invoke-NRGEmailAssessment.ps1` — per-user mailbox IR** |
+| Tenant-wide posture (CIS, SCuBA, NIST, CMMC) | `Invoke-TPAssessment.ps1` (admin scope, 21 Graph scopes) |
+| Monthly recurring deliverable | `Invoke-TPAssessment.ps1 -MonthlyReport` |
+| **Suspect compromise, don't yet know which user(s)** | **`Invoke-TPSignInTriage.ps1` — admin-scope sign-in triage** |
+| **Compromised user account already known** | **`Invoke-TPEmailAssessment.ps1` — per-user mailbox IR** |
 
 The two IR tools are the two halves of one workflow: triage finds the suspect users from the tenant's sign-in logs, then you deep-dive each one's mailbox.
 
-For MSP fleets, `Invoke-NRGBatchSignInTriage.ps1` (v4.12.1) loops the triage across every active client in `Config/clients.json` and writes a batch summary with compromised clients sorted to the top.
+For MSP fleets, `Invoke-TPBatchSignInTriage.ps1` (v4.12.1) loops the triage across every active client in `Config/clients.json` and writes a batch summary with compromised clients sorted to the top.
 
 ## Two workflows
 
@@ -21,7 +21,7 @@ For MSP fleets, `Invoke-NRGBatchSignInTriage.ps1` (v4.12.1) loops the triage acr
 
 ```powershell
 # Admin signs in once; triage + auto deep-dive top 5 flagged users
-.\Invoke-NRGSignInTriage.ps1 -DeepDive 5
+.\Invoke-TPSignInTriage.ps1 -DeepDive 5
 ```
 
 One admin login (requests `Mail.Read.All` for the deep-dive). Triage scores
@@ -33,13 +33,13 @@ report.
 
 ```powershell
 # 1. Admin triage only — no Mail.Read.All consent
-.\Invoke-NRGSignInTriage.ps1 -SkipMailDive
+.\Invoke-TPSignInTriage.ps1 -SkipMailDive
 
 # 2. For each flagged user, issue a Temporary Access Pass in
 #    Microsoft Entra > Users > [user] > Authentication methods >
 #    Add authentication method > Temporary Access Pass.
 #    Sign in as the user with the TAP, then:
-.\Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@corp.com
+.\Invoke-TPEmailAssessment.ps1 -UserPrincipalName alice@corp.com
 ```
 
 Use B when the client BAA prohibits the assessment tool reading mailboxes
@@ -51,7 +51,7 @@ issue the TAP yourself in the Admin Center.
 
 ## Phase 0 — Sign-in triage (admin scope)
 
-`Invoke-NRGSignInTriage.ps1` reads tenant-wide sign-in logs (admin scopes:
+`Invoke-TPSignInTriage.ps1` reads tenant-wide sign-in logs (admin scopes:
 `AuditLog.Read.All`, `IdentityRiskyUser.Read.All`, `Directory.Read.All`,
 `User.Read.All`, plus `Mail.Read.All` + `MailboxSettings.Read.All` +
 `UserAuthenticationMethod.Read.All` unless
@@ -105,13 +105,13 @@ Delegated user-scope reads (no admin required, workflow B):
 
 ```powershell
 # Basic
-.\Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@corp.com
+.\Invoke-TPEmailAssessment.ps1 -UserPrincipalName alice@corp.com
 
 # Wider outbound window + threat intel
-.\Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@corp.com -WindowDays 14 -EnableThreatIntel
+.\Invoke-TPEmailAssessment.ps1 -UserPrincipalName alice@corp.com -WindowDays 14 -EnableThreatIntel
 
 # Non-interactive (for CI/SOAR/Task Scheduler)
-.\Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@corp.com -NonInteractive -FailOnCriticalIoC
+.\Invoke-TPEmailAssessment.ps1 -UserPrincipalName alice@corp.com -NonInteractive -FailOnCriticalIoC
 ```
 
 ## Output
@@ -122,7 +122,7 @@ Per-user output directory `output/<user>/`:
 - `<timestamp>-email-incident.html` — incident report (HTML, self-contained)
 - `<timestamp>-email-incident.md` — Markdown summary
 
-All output files self-hardened via `Set-NRGSensitiveFileContent` (v4.11.3 publisher self-hardening pattern). On Windows, ACLs restrict to the operator + Administrators before tenant data lands.
+All output files self-hardened via `Set-TPSensitiveFileContent` (v4.11.3 publisher self-hardening pattern). On Windows, ACLs restrict to the operator + Administrators before tenant data lands.
 
 ## Exit codes
 
@@ -140,20 +140,20 @@ All output files self-hardened via `Set-NRGSensitiveFileContent` (v4.11.3 publis
 ```
 Email-IR/
 ├── Lib/
-│   ├── Connect-NRGEmailServices.ps1   delegated 3-scope Graph connection
-│   └── Get-NRGThreatIntel.ps1          WHOIS + DNS helpers (no API key needed)
+│   ├── Connect-TPEmailServices.ps1   delegated 3-scope Graph connection
+│   └── Get-TPThreatIntel.ps1          WHOIS + DNS helpers (no API key needed)
 ├── Collectors/
-│   └── Invoke-NRGEmailCollectMailbox.ps1   sent + inbox + recoverable + rules + forwarding
+│   └── Invoke-TPEmailCollectMailbox.ps1   sent + inbox + recoverable + rules + forwarding
 ├── Evaluators/
-│   └── Test-NRGEmailControls.ps1       5 IoC checks
+│   └── Test-TPEmailControls.ps1       5 IoC checks
 ├── Publishers/
-│   └── Publish-NRGEmailIncidentReport.ps1  HTML + Markdown incident report
+│   └── Publish-TPEmailIncidentReport.ps1  HTML + Markdown incident report
 ├── Testing/
-│   └── NRG.EmailIR.Tests.ps1           Pester suite (heuristic regression pins)
+│   └── TP.EmailIR.Tests.ps1           Pester suite (heuristic regression pins)
 └── README.md                            (this file)
 ```
 
-Auto-loaded by `NRG-Assessment.psm1` via the `$loadOrder` array — no separate import required. Drop into the same NRG-Assessment install.
+Auto-loaded by `TenantPosture.psm1` via the `$loadOrder` array — no separate import required. Drop into the same TenantPosture install.
 
 ## Privacy + scope notes
 
@@ -198,7 +198,7 @@ commands; the operator runs them and issues the TAP in the Admin Center.
 ## Tests
 
 ```powershell
-Invoke-Pester ./Email-IR/Testing/NRG.EmailIR.Tests.ps1 -Output Detailed
+Invoke-Pester ./Email-IR/Testing/TP.EmailIR.Tests.ps1 -Output Detailed
 ```
 
 The suite pins the IoC scoring + phish-ranker heuristics against synthetic fixtures — a future refactor of scoring weights can't silently change verdicts.

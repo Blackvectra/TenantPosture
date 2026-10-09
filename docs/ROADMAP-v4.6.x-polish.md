@@ -1,6 +1,6 @@
 # Polish Roadmap — v4.6.6 → v4.6.9
 
-**Goal.** Twenty small tweaks across four patch releases that compound to make NRG-Assessment best-in-class. Each item is independently shippable; nothing in a later release depends on something in an earlier release.
+**Goal.** Twenty small tweaks across four patch releases that compound to make TenantPosture best-in-class. Each item is independently shippable; nothing in a later release depends on something in an earlier release.
 
 **Sequencing principle.** Visible wins early (operator feels the difference on the next run), infrastructure middle (resilience + perceived speed), credibility late (output quality the auditor leans on). Each release groups items that share an editing surface so the diffs stay tight and reviewable.
 
@@ -18,9 +18,9 @@ Five items chosen so an operator who upgrades from v4.6.5 → v4.6.6 sees a diff
 | 2 | **Final summary emoji line** — `🟢 73 satisfied · 🟡 32 partial · 🔴 45 gap · 1h 47m · output: ...` | 15 min | Operator eyeballs status in one line. Replaces the multi-line summary block as the final-final output. |
 | 3 | **Output filename collision guard** — append a 3-char hash before `.json` so two runs in the same minute don't overwrite each other | 30 min | I've seen this cause real bugs. Trivial fix. |
 | 4 | **Assessor self-check banner at startup** — runs 5 controls against the operator's own account (MFA enrolled, phishing-resistant method present, recent sign-in from unusual IP) and prints a 3-line banner | 1 day | No competitor self-validates. Powerful trust signal: "the tool that's auditing you, audits itself first." Failures are warnings, never blocking. |
-| 5 | **`Test-NRGEnvironment`** cmdlet — pre-flight checker | ½ day | Verifies PS 7+, the 4 required modules at correct versions, network reachability to login.microsoftonline.com, write permission to `./output/`. Names specific fix command for each missing item. Beats Maester's silence-then-crash model. |
+| 5 | **`Test-TPEnvironment`** cmdlet — pre-flight checker | ½ day | Verifies PS 7+, the 4 required modules at correct versions, network reachability to login.microsoftonline.com, write permission to `./output/`. Names specific fix command for each missing item. Beats Maester's silence-then-crash model. |
 
-**Total effort:** ~2 days. **New CLI surface:** `-Open` flag on `Invoke-NRGAssessment.ps1`; new `Test-NRGEnvironment` cmdlet.
+**Total effort:** ~2 days. **New CLI surface:** `-Open` flag on `Invoke-TPAssessment.ps1`; new `Test-TPEnvironment` cmdlet.
 
 ---
 
@@ -30,8 +30,8 @@ Five items so long-running batch jobs feel responsive and recover gracefully whe
 
 | # | Item | Effort | Rationale |
 |---|---|---|---|
-| 6 | **Live finding emission during evaluators** — stream each finding's `ControlId + State` as `Add-NRGFinding` is called | ½ day | Today: silent until "203 findings evaluated" prints at the end. New: operator sees each finding fly past as evaluators run. Perceived speed jump; nobody else does this. |
-| 7 | **Run-state checkpointing** — write the collector-phase `RawData` to a temp JSON before any publisher runs | 1 day | Today: if `Publish-NRGComplianceMatrix` fails (Python missing, etc.), the 5-min collection cost is wasted. New: collection result persisted to `./output/.checkpoint-<baseName>.json`; if publishers fail, operator re-runs with `-FromCheckpoint` and skips collection entirely. |
+| 6 | **Live finding emission during evaluators** — stream each finding's `ControlId + State` as `Add-TPFinding` is called | ½ day | Today: silent until "203 findings evaluated" prints at the end. New: operator sees each finding fly past as evaluators run. Perceived speed jump; nobody else does this. |
+| 7 | **Run-state checkpointing** — write the collector-phase `RawData` to a temp JSON before any publisher runs | 1 day | Today: if `Publish-TPComplianceMatrix` fails (Python missing, etc.), the 5-min collection cost is wasted. New: collection result persisted to `./output/.checkpoint-<baseName>.json`; if publishers fail, operator re-runs with `-FromCheckpoint` and skips collection entirely. |
 | 8 | **`-Quiet` mode** — suppress every `Write-Host` that isn't an error. Return exit code only | 2 hours | Required for cron / CI scheduling. Most assessment tools have noisy console output that breaks pipelines. |
 | 9 | **Run metadata in JSON output** — `PowerShellVersion`, `OS`, `OperatorIPEgress`, `ModuleVersions`, `ElapsedSeconds` in the `Metadata` block | 30 min | Helps reproduce bugs when client says "it worked on Bob's machine." Free debug evidence. |
 | 10 | **CA-policy diagnostic at connect** — startup probe that names the blocking CA policy if scope is silently dropped | 1 day | Most-painful failure mode: `Connect-MgGraph` succeeds, `Get-MgUser` returns empty because operator's tenant has a CA policy that blocks the assessor scopes from their location. Today: silent. New: tool names the policy and tells the operator exactly what to fix. |
@@ -46,7 +46,7 @@ Five items that make the client-facing report harder to challenge in an auditor 
 
 | # | Item | Effort | Rationale |
 |---|---|---|---|
-| 11 | **Reproducibility evidence per finding** — every finding gets a `ReproduceQuery` field with the exact Graph URI / EXO cmdlet that produced this result | 1 day per workload (drop-in helper at `Add-NRGFinding`) | Auditor catnip. Client pushes back on a finding; operator pastes the query, runs it themselves, sees the same result. Nobody does this. |
+| 11 | **Reproducibility evidence per finding** — every finding gets a `ReproduceQuery` field with the exact Graph URI / EXO cmdlet that produced this result | 1 day per workload (drop-in helper at `Add-TPFinding`) | Auditor catnip. Client pushes back on a finding; operator pastes the query, runs it themselves, sees the same result. Nobody does this. |
 | 12 | **Confidence indicator per finding** — `Confidence: HighAPIConfirmed / MediumInferred / LowHeuristic` | ½ day | Today every gap reads equally certain; some are heuristics. Surfacing the difference protects the operator from over-claiming on heuristic findings. |
 | 13 | **Severity rationale per control** — one-line "why this severity" derived from `BusinessRisk` field, surfaced inline next to the severity badge | ½ day | Auditors ask "why is this Critical not Medium?" — answer is in the report. |
 | 14 | **Per-finding `RemediationTimeMinutes` field** — replaces flat 15–30 min default in playbook with an evidence-grounded estimate per control | ½ day | Today: playbook says "15–30 min" for everything from "publish a CAA record" (5 min) to "deploy LAPS to 500 endpoints" (1 day). New: per-control honest estimate. Better Phase 1 time math. |
@@ -81,7 +81,7 @@ Five items for experienced operators who iterate, compare, and debug.
 Each v4.6.x release ships with:
 1. The 5 items above
 2. Updated `CHANGELOG.md` entry with one bullet per item
-3. Updated `Testing/NRG.Polish.Tests.ps1` — at least one Pester test per item asserting the new behavior
+3. Updated `Testing/TP.Polish.Tests.ps1` — at least one Pester test per item asserting the new behavior
 4. Updated `CLAUDE.md` if the item changes a public CLI surface or schema field
 5. Lockstep diff in the sibling repo (NRG ↔ NRG)
 
@@ -92,20 +92,20 @@ These items belong to other roadmaps and are intentionally NOT in v4.6.x:
 - **Signing scaffolding (soft mode)** — own track, lands in v4.6.6 alongside polish
 - **Adversarial fixture test suite** — own track, lands in v4.6.6 alongside polish
 - **Supply-chain CI (Dependabot + Gitleaks + CodeQL)** — own track, lands in v4.6.6 alongside polish
-- **Batch auto-discovery cmdlet (`Add-NRGClient`)** — own track, lands in v4.6.6 alongside polish
+- **Batch auto-discovery cmdlet (`Add-TPClient`)** — own track, lands in v4.6.6 alongside polish
 - **v4.7 features** (Maturity Model, Incident Likelihood, Privileged Baseline, Thread Hijack, Responsibility Map, Regression Alerting, Self-Service Portal, Supply Chain Risk, Culture Signals, License Waste) — separate ROADMAP
 - **v4.8 features** (IG1/IG2 grouping, attestation, portfolio HTML, Maester eval) — separate ROADMAP
 
 ## Future track — HAWK-style incident response
 
-The operator is interested in **HAWK** ([T0pCyber/hawk](https://github.com/T0pCyber/hawk)) — M365 incident response (BEC investigation, EXO transport log analysis, suspicious sign-in pattern detection). This is a **different problem class** from NRG-Assessment (posture vs forensics) and warrants its own repo, not an integration into this one.
+The operator is interested in **HAWK** ([T0pCyber/hawk](https://github.com/T0pCyber/hawk)) — M365 incident response (BEC investigation, EXO transport log analysis, suspicious sign-in pattern detection). This is a **different problem class** from TenantPosture (posture vs forensics) and warrants its own repo, not an integration into this one.
 
 Proposed: **`NRG-IncidentResponse`** (separate repo). Same Collectors / Evaluators / Publishers pipeline, different evaluator focus:
 - **Collectors:** EXO transport logs, Unified Audit Log, MailItemsAccessed events, sign-in logs filtered by suspicious-activity heuristics
 - **Evaluators:** BEC indicators (mailbox rule + external forwarding + DKIM bypass), credential theft chains (impossible travel + new device + privilege escalation), data exfiltration patterns (mass download + external sharing + sync)
 - **Publishers:** Forensic timeline HTML, IOC export (STIX 2.1), Sentinel incident JSON
 
-Either fork HAWK's logic into the new repo (faster but requires license review) or rebuild on top of NRG-Assessment's existing architecture (slower but cleaner integration). **Recommend rebuild** — HAWK's PowerShell is functional but pre-dates `Set-StrictMode -Version Latest` and modern Graph SDK patterns.
+Either fork HAWK's logic into the new repo (faster but requires license review) or rebuild on top of TenantPosture's existing architecture (slower but cleaner integration). **Recommend rebuild** — HAWK's PowerShell is functional but pre-dates `Set-StrictMode -Version Latest` and modern Graph SDK patterns.
 
 Scoped as a v5.x project track, not v4.6.x.
 

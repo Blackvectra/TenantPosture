@@ -1,4 +1,4 @@
-# NRG-Assessment v4.5.5 — Deployment Guide
+# TenantPosture v4.5.5 — Deployment Guide
 
 ## Prerequisites
 
@@ -59,24 +59,24 @@ Teams Administrator (read-only)
 ## Single Tenant Run
 
 ```powershell
-cd NRG-Assessment-Tool
+cd TenantPosture
 
 # Standard run — all workloads
-.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com
+.\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com
 
 # Skip specific workloads (e.g. client doesn't have Purview/PPL)
-.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com `
+.\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com `
     -SkipPurview -SkipPowerPlatform
 
 # Explicit DNS domains (overrides EXO accepted domains)
-.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com `
+.\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com `
     -DnsDomains @('client.com','mail.client.com')
 
 # JSON output only (no HTML/Markdown)
-.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -JsonOnly
+.\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com -JsonOnly
 
 # Custom output path
-.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com `
+.\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com `
     -OutputPath 'C:\Reports\example'
 ```
 
@@ -123,13 +123,13 @@ output\<TenantDomain>\
 
 ```powershell
 # All active clients — one browser login, no per-client prompts
-.\Invoke-NRGBatchAssessment.ps1
+.\Invoke-TPBatchAssessment.ps1
 
 # Single client
-.\Invoke-NRGBatchAssessment.ps1 -OnlyClient example.com
+.\Invoke-TPBatchAssessment.ps1 -OnlyClient example.com
 
 # Preview only
-.\Invoke-NRGBatchAssessment.ps1 -WhatIf
+.\Invoke-TPBatchAssessment.ps1 -WhatIf
 ```
 
 **Output:**
@@ -147,7 +147,7 @@ output\
 Run before any production deployment:
 
 ```powershell
-Invoke-Pester ./Testing/NRG.Security.Tests.ps1 -Output Detailed
+Invoke-Pester ./Testing/TP.Security.Tests.ps1 -Output Detailed
 ```
 
 **Expected:** 77 tests pass. 1 expected skip (Pester test file self-reference false positive).
@@ -160,7 +160,7 @@ Runtime tests (marked `[Runtime]`) require the module to be loaded with M365 mod
 
 **"Module not found" on import**
 
-Verify all required modules are installed at the pinned versions. The module manifest (`NRG-Assessment.psd1`) declares `RequiredModules` — if any are missing, `Import-Module` will fail with a clear error.
+Verify all required modules are installed at the pinned versions. The module manifest (`TenantPosture.psd1`) declares `RequiredModules` — if any are missing, `Import-Module` will fail with a clear error.
 
 **"controls.json content validation failed"**
 
@@ -187,8 +187,8 @@ Expected for tenants without Entra ID P2 licensing. The PIM collector probes for
 3. Fill in `TenantId` and `DelegatedOrg`
 4. Set `Active: true`
 5. Set skip flags appropriate for their license tier
-6. Run: `.\Invoke-NRGBatchAssessment.ps1 -OnlyClient newclient.com` to validate
+6. Run: `.\Invoke-TPBatchAssessment.ps1 -OnlyClient newclient.com` to validate
 
 ---
 
-*NRG-Assessment v4.5.5 · NRG Technology Services / NextLayerSec LLC*
+*TenantPosture v4.5.5 · NRG Technology Services / NextLayerSec LLC*

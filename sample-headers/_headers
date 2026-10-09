@@ -1,5 +1,5 @@
 # Netlify / Cloudflare Pages _headers file
-# Apply these headers when serving NRG-Assessment HTML reports from a web portal.
+# Apply these headers when serving TenantPosture HTML reports from a web portal.
 # This provides the full Content-Security-Policy enforcement (including frame-ancestors,
 # which is NOT enforced by the bundled meta-tag CSP per MDN/W3C CSP3).
 

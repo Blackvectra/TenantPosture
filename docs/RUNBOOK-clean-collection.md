@@ -66,7 +66,7 @@ Install-Module ExchangeOnlineManagement -RequiredVersion 3.5.1 -Scope CurrentUse
 Import-Module ExchangeOnlineManagement
 
 # 3. Then run the assessment (its Connect logic loads Graph after):
-.\Invoke-NRGAssessment.ps1 -TenantDomain <customer-tenant> -DnsDomains <customer-tenant>
+.\Invoke-TPAssessment.ps1 -TenantDomain <customer-tenant> -DnsDomains <customer-tenant>
 ```
 
 If the conflict persists on this workstation, the bulletproof isolation is to run
@@ -82,7 +82,7 @@ domains** — and EXO was dead. Public DNS records (SPF/DMARC/DNSSEC/MTA-STS) do
 always pass the domain(s) directly and they'll resolve even if EXO fails:
 
 ```powershell
-.\Invoke-NRGAssessment.ps1 -TenantDomain <customer-tenant> -DnsDomains '<customer-tenant>'
+.\Invoke-TPAssessment.ps1 -TenantDomain <customer-tenant> -DnsDomains '<customer-tenant>'
 # multiple: -DnsDomains '<customer-primary-domain>','<customer-secondary-domain>'
 ```
 
@@ -120,7 +120,7 @@ Invoke-SCuBA -ProductNames aad,sharepoint,teams,powerplatform -OPPath .\ScubaOut
 Then run the crosswalk (uses each NRG control's `References.SCuBA` field):
 
 ```powershell
-# See tools/Compare-NRGToScubaGear.ps1 (companion PR) — joins NRG results.json against
+# See tools/Compare-TPToScubaGear.ps1 (companion PR) — joins NRG results.json against
 # ScubaResults.json and reports AGREE / NRG-FALSE-GAP / NRG-MISSED per control.
 ```
 

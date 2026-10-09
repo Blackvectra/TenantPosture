@@ -1,6 +1,6 @@
 # Baselines
 
-Security baseline documentation for each Microsoft 365 product assessed by NRG-Assessment. Each document lists the controls evaluated, their severity, business risk, remediation and framework mappings.
+Security baseline documentation for each Microsoft 365 product assessed by TenantPosture. Each document lists the controls evaluated, their severity, business risk, remediation and framework mappings.
 
 These files are **generated from `Config/controls.json`** — the single source of truth for the control set. Do not edit them by hand; change the control definition and regenerate. `Testing/*.BaselineDocs.Tests.ps1` fails the build if a generated document disagrees with `controls.json`.
 

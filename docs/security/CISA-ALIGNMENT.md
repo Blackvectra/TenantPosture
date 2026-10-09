@@ -1,8 +1,8 @@
-# CISA Alignment — NRG-Assessment v4.5.5
+# CISA Alignment — TenantPosture v4.5.5
 
 ## CISA SCuBA Coverage
 
-NRG-Assessment evaluates controls that directly map to CISA's Secure Cloud Business Applications (SCuBA) baselines for Microsoft 365.
+TenantPosture evaluates controls that directly map to CISA's Secure Cloud Business Applications (SCuBA) baselines for Microsoft 365.
 
 **SCuBA version referenced:** ScubaGear v1.7.1 (February 2026)
 
@@ -29,7 +29,7 @@ Some SCuBA controls require manual verification or out-of-scope data sources:
 
 ## CISA BOD 18-01 Relevance
 
-BOD 18-01 mandates DMARC, DKIM, SPF, and HTTPS for federal executive branch domains. NRG-Assessment DNS evaluators (DNS-1.1 through DNS-1.6) directly assess BOD 18-01 requirements and can be used as compliance leverage when engaging government IT teams (state IT agencies, county governments) on email authentication enforcement.
+BOD 18-01 mandates DMARC, DKIM, SPF, and HTTPS for federal executive branch domains. TenantPosture DNS evaluators (DNS-1.1 through DNS-1.6) directly assess BOD 18-01 requirements and can be used as compliance leverage when engaging government IT teams (state IT agencies, county governments) on email authentication enforcement.
 
 **DNS controls mapped to BOD 18-01:**
 - DNS-1.1 — SPF published (BOD 18-01 §2.a)
@@ -57,4 +57,4 @@ NRG Technology Services / NextLayerSec LLC is not a signatory to the CISA Secure
 
 ---
 
-*NRG-Assessment v4.12.1 · NRG Technology Services / NextLayerSec LLC*
+*TenantPosture v4.12.1 · NRG Technology Services / NextLayerSec LLC*

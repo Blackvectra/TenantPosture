@@ -1,13 +1,13 @@
 # Microsoft Purview Baseline
 
-**NRG-Assessment — Baseline Documentation**
+**TenantPosture — Baseline Documentation**
 *Product: Microsoft Purview*
 
 ---
 
 ## Introduction
 
-This baseline lists the 18 Microsoft Purview controls evaluated by NRG-Assessment. Each control produces a finding of **Satisfied**, **Partial**, **Gap**, **Not Applicable** or **Error**.
+This baseline lists the 18 Microsoft Purview controls evaluated by TenantPosture. Each control produces a finding of **Satisfied**, **Partial**, **Gap**, **Not Applicable** or **Error**.
 
 This file is generated from `Config/controls.json`, which is the single source of truth for control IDs, titles, severities, remediation and framework citations. Do not edit it by hand — change the control definition and regenerate, or the two will disagree. `Testing/*.BaselineDocs.Tests.ps1` fails the build if they do.
 

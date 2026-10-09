@@ -1,4 +1,4 @@
-<!-- Thanks for contributing to NRG-Assessment. Fill out the relevant sections; delete the ones that don't apply. -->
+<!-- Thanks for contributing to TenantPosture. Fill out the relevant sections; delete the ones that don't apply. -->
 
 ## Summary
 
@@ -31,10 +31,10 @@ Required for every PR. Tick what applies, explain anything skipped.
 
 - [ ] **Read-only invariant intact.** No new tenant-write cmdlets in production paths (collectors / evaluators / publishers). `Apply-*` scripts are the sole sanctioned exception.
 - [ ] **Input validation.** Every new parameter has `[ValidatePattern]` / `[ValidateSet]` / `[ValidateScript]` / `[ValidateRange]` as appropriate.
-- [ ] **No new tenant data in plaintext logs.** Verified that `Write-Host` / `Write-Warning` lines don't echo UPNs, tokens, or PII beyond what `ConvertTo-NRGHtmlSafe` already handles.
+- [ ] **No new tenant data in plaintext logs.** Verified that `Write-Host` / `Write-Warning` lines don't echo UPNs, tokens, or PII beyond what `ConvertTo-TPHtmlSafe` already handles.
 - [ ] **`-LiteralPath` on file ops.** No `-Path` wildcards on user-supplied input.
 - [ ] **`-Encoding utf8`** on every `Out-File` / `Set-Content` that touches disk.
-- [ ] **Errors surface, not swallowed.** New `try/catch` blocks either re-throw, register via `Register-NRGException`, or write a `Write-Warning` declaring the consequence (don't silent-no-op a CI gate).
+- [ ] **Errors surface, not swallowed.** New `try/catch` blocks either re-throw, register via `Register-TPException`, or write a `Write-Warning` declaring the consequence (don't silent-no-op a CI gate).
 - [ ] **StrictMode-safe field access.** New code that reads from findings / metadata uses hashtable `.Contains(key)` or PSObject `.PSObject.Properties[key]` rather than bare `.Property` access that throws under StrictMode.
 - [ ] **No hardcoded GUIDs / domains / secrets.** Permissions and tenant IDs resolved at runtime; secrets read from Cert: store or env vars.
 

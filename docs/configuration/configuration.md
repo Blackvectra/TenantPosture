@@ -1,6 +1,6 @@
 # Configuration
 
-The NRG Assessment Tool is configured via parameters passed to `Invoke-NRGAssessment.ps1`. No config file is required for a standard run.
+The NRG Assessment Tool is configured via parameters passed to `Invoke-TPAssessment.ps1`. No config file is required for a standard run.
 
 ---
 
@@ -39,7 +39,7 @@ Use skip flags for tenants without specific licenses:
 
 ```powershell
 # Business Standard tenant — no Purview DLP, no Teams Phone
-.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com `
+.\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com `
     -SkipPurview -SkipPowerPlatform -SkipIntune
 ```
 

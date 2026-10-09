@@ -1,8 +1,8 @@
-# Threat Model — NRG-Assessment v4.5.5
+# Threat Model — TenantPosture v4.5.5
 
 ## Scope
 
-This threat model covers the NRG-Assessment PowerShell module and its execution environment. It does not cover the M365 tenants being assessed — that is what the tool assesses.
+This threat model covers the TenantPosture PowerShell module and its execution environment. It does not cover the M365 tenants being assessed — that is what the tool assesses.
 
 ---
 
@@ -26,11 +26,11 @@ This threat model covers the NRG-Assessment PowerShell module and its execution 
 
 ### T1: Tenant Data Injection (XSS via HTML Report)
 **Vector:** Tenant admin creates a display name, domain, or policy name containing `<script>alert(1)</script>`  
-**Mitigated by:** All tenant-sourced strings pass through `ConvertTo-NRGHtmlSafe` before HTML rendering. `hx()` wrapper enforces this in the publisher. Publisher fails closed if `ConvertTo-NRGHtmlSafe` is not loaded.  
+**Mitigated by:** All tenant-sourced strings pass through `ConvertTo-TPHtmlSafe` before HTML rendering. `hx()` wrapper enforces this in the publisher. Publisher fails closed if `ConvertTo-TPHtmlSafe` is not loaded.  
 **Residual:** None — defense-in-depth at both collection (typed PS objects) and publication (HTML escaping) layers.
 
 ### T2: Path Traversal via OutputPath
-**Vector:** `.\Invoke-NRGAssessment.ps1 -OutputPath '../../etc/evil'`  
+**Vector:** `.\Invoke-TPAssessment.ps1 -OutputPath '../../etc/evil'`  
 **Mitigated by:** `[ValidateScript]` on `OutputPath` rejects `../` sequences. Runtime check verifies resolved path stays within intended output directory before writing files.  
 **Residual:** None within the tool's code path.
 
@@ -75,7 +75,7 @@ This threat model covers the NRG-Assessment PowerShell module and its execution 
 | ExchangeOnlineManagement | 3.4.0 | PSResourceGet SHAsum |
 | MicrosoftTeams | 6.4.0 | PSResourceGet SHAsum |
 | Pester | 5.6.1 | PSResourceGet SHAsum |
-| NRG-Assessment itself | v4.5.5 git tag | CycloneDX SBOM on release |
+| TenantPosture itself | v4.5.5 git tag | CycloneDX SBOM on release |
 
 Gitleaks and TruffleHog run on every push to detect accidentally committed credentials.
 

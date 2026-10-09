@@ -9,9 +9,9 @@
     Cert source options (any of):
       - Microsoft Trusted Signing / Sectigo / DigiCert (paid, public-CA-issued) — best for
         external distribution because the cert chain validates without local trust.
-      - Self-signed cert from Build/New-NRGCodeSigningCert.ps1 — perfect for in-house use
+      - Self-signed cert from Build/New-TPCodeSigningCert.ps1 — perfect for in-house use
         where the operator workstations trust the cert locally. Signature still serves
-        integrity (Verify-Integrity.ps1) and policy (Apply-NRGBaseline.ps1 -RequireSignedCode)
+        integrity (Verify-Integrity.ps1) and policy (Apply-TPBaseline.ps1 -RequireSignedCode)
         purposes. Upgrade to a paid cert later by passing a different -CertificateThumbprint;
         no other change required.
 
@@ -23,12 +23,12 @@
       http://timestamp.digicert.com
       http://timestamp.sectigo.com
 
-    The resulting NRG-Assessment.cat is verified at orchestrator startup via Test-FileCatalog
+    The resulting TenantPosture.cat is verified at orchestrator startup via Test-FileCatalog
     unless -SkipCatalogCheck is passed.
 
 .PARAMETER CertificateThumbprint
     SHA-1 thumbprint of the code-signing certificate. If omitted, reads from
-    ~/.nrg-assessment/signing-thumbprint.txt (written by New-NRGCodeSigningCert.ps1
+    ~/.tp-assessment/signing-thumbprint.txt (written by New-TPCodeSigningCert.ps1
     when invoked with -SaveThumbprintForBuild).
 
 .PARAMETER TimestampServer
@@ -39,7 +39,7 @@
 
 .EXAMPLE
     # In-house, self-signed (one-time setup):
-    .\Build\New-NRGCodeSigningCert.ps1 -SaveThumbprintForBuild
+    .\Build\New-TPCodeSigningCert.ps1 -SaveThumbprintForBuild
     .\Build\Sign-Release.ps1   # picks up the saved thumbprint
 
 .EXAMPLE
@@ -68,14 +68,14 @@ if (-not (Test-Path -LiteralPath $RepoRoot)) {
 }
 
 # Resolve thumbprint: explicit param wins; otherwise pick up the one
-# New-NRGCodeSigningCert.ps1 stashed in the operator's profile.
+# New-TPCodeSigningCert.ps1 stashed in the operator's profile.
 if (-not $CertificateThumbprint) {
-    $thumbFile = Join-Path $env:USERPROFILE '.nrg-assessment/signing-thumbprint.txt'
+    $thumbFile = Join-Path $env:USERPROFILE '.tp-assessment/signing-thumbprint.txt'
     if (Test-Path -LiteralPath $thumbFile) {
         $CertificateThumbprint = (Get-Content -LiteralPath $thumbFile -Raw).Trim()
         Write-Verbose "Loaded thumbprint from $thumbFile"
     } else {
-        throw "No -CertificateThumbprint supplied and no saved thumbprint at $thumbFile. Run Build/New-NRGCodeSigningCert.ps1 -SaveThumbprintForBuild first, or pass -CertificateThumbprint explicitly."
+        throw "No -CertificateThumbprint supplied and no saved thumbprint at $thumbFile. Run Build/New-TPCodeSigningCert.ps1 -SaveThumbprintForBuild first, or pass -CertificateThumbprint explicitly."
     }
 }
 
@@ -104,7 +104,7 @@ $isSelfSigned = ($cert.Issuer -eq $cert.Subject)
 if ($isSelfSigned) {
     Write-Host "  Mode:           Self-signed (in-house)" -ForegroundColor Yellow
     Write-Host "                  Operators must trust the cert in their workstation's TrustedPublisher / Root stores." -ForegroundColor DarkGray
-    Write-Host "                  Build/New-NRGCodeSigningCert.ps1 does this for the workstation that generated the cert." -ForegroundColor DarkGray
+    Write-Host "                  Build/New-TPCodeSigningCert.ps1 does this for the workstation that generated the cert." -ForegroundColor DarkGray
 } else {
     Write-Host "  Mode:           CA-issued" -ForegroundColor Green
 }
@@ -161,7 +161,7 @@ if ($failed -gt 0) {
 }
 
 # Generate catalog
-$catalogPath = Join-Path $RepoRoot 'NRG-Assessment.cat'
+$catalogPath = Join-Path $RepoRoot 'TenantPosture.cat'
 Write-Host "[-] Generating catalog $catalogPath..." -ForegroundColor Cyan
 
 try {

@@ -98,7 +98,7 @@ jobs:
         shell: pwsh
         run: |
           # Run the ENTIRE Testing/ suite. This previously ran only
-          # NRG.Security.Tests.ps1, which meant the framework-accuracy guards
+          # TP.Security.Tests.ps1, which meant the framework-accuracy guards
           # (SCuBA/CIS/CMMC/ISO citation validation), the Graph-shape tests,
           # and the reader-helper tests existed but never gated a merge — the
           # 70-citation SCuBA mis-mapping shipped precisely because these
@@ -173,7 +173,7 @@ jobs:
         run: |
           Import-Module Pester -MinimumVersion 5.5.0 -Force
           $config = New-PesterConfiguration
-          $config.Run.Path = @('./Testing/NRG.WebServer.Tests.ps1')
+          $config.Run.Path = @('./Testing/TP.WebServer.Tests.ps1')
           $config.Run.Exit = $true
           $config.Run.Throw = $false
           $config.Output.Verbosity = 'Detailed'
@@ -386,7 +386,7 @@ jobs:
           # aren't installed in CI (Microsoft.Graph / EXO / Teams = 500MB and
           # ~3 min to install). Use Import-PowerShellDataFile instead: catches
           # syntax errors and lets us assert the structural fields directly.
-          $m = Import-PowerShellDataFile -LiteralPath ./NRG-Assessment.psd1 -ErrorAction Stop
+          $m = Import-PowerShellDataFile -LiteralPath ./TenantPosture.psd1 -ErrorAction Stop
 
           $required = @('ModuleVersion','GUID','Author','RootModule','FunctionsToExport','PowerShellVersion','CompatiblePSEditions')
           $missing = $required | Where-Object { -not $m.ContainsKey($_) }

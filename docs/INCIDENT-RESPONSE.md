@@ -54,7 +54,7 @@ This is the highest-blast-radius asset for this tool. The app reads Graph on eve
 
 **Customer notification:**
 - If audit logs show unexpected use against a client tenant, notify them within your contract's breach window (commonly 24–72h).
-- Tell them: time window, source IPs, what data the app could read. For NRG-Assessment that's tenant config, user list, sampled mailbox audit config — no message bodies, no files.
+- Tell them: time window, source IPs, what data the app could read. For TenantPosture that's tenant config, user list, sampled mailbox audit config — no message bodies, no files.
 
 **Recover:**
 - Rotate this secret on a 90-day calendar reminder.
@@ -67,7 +67,7 @@ This is the highest-blast-radius asset for this tool. The app reads Graph on eve
 **Triggers:** Dependabot alert, OSSF Scorecard score drop, CodeQL flag, unexpected CI behavior, action repo gets archived or transferred.
 
 **Contain (30 min):**
-1. https://github.com/Blackvectra/NRG-Assessment-Tool/actions → identify the workflow that uses the bad action → "…" → **Disable workflow**.
+1. https://github.com/Blackvectra/TenantPosture/actions → identify the workflow that uses the bad action → "…" → **Disable workflow**.
 2. If the malicious step already ran: every secret referenced in that workflow is leaked. Cross-trigger Scenario 1 or 2 as applicable.
 
 **Eradicate (GitHub Action case):**
@@ -77,28 +77,28 @@ This is the highest-blast-radius asset for this tool. The app reads Graph on eve
 
 **Eradicate (PSGallery module case — Microsoft.Graph, ExchangeOnlineManagement, Pester, PSScriptAnalyzer):**
 1. On every workstation that ran the bad version: `Uninstall-PSResource -Name <Name> -Version <Bad>`.
-2. Pin to a verified earlier version in `NRG-Assessment.psd1` and `.github/workflows/ci.yml`.
+2. Pin to a verified earlier version in `TenantPosture.psd1` and `.github/workflows/ci.yml`.
 3. Re-run an assessment against a known-good tenant; diff the JSON against a prior snapshot to confirm clean output.
 
 ---
 
 ## Scenario 4 — In-house code-signing cert compromised
 
-The cert sits in `Cert:\CurrentUser\My` on operator workstations and is referenced by `Sign-Release.ps1`. Loss of the private key lets an attacker sign malicious PS1s that pass `Test-NRGSignatureStatus`.
+The cert sits in `Cert:\CurrentUser\My` on operator workstations and is referenced by `Sign-Release.ps1`. Loss of the private key lets an attacker sign malicious PS1s that pass `Test-TPSignatureStatus`.
 
 **Contain (30 min) — on every operator workstation that had the cert:**
 ```powershell
-$tp = (Get-Content "$env:USERPROFILE\.nrg-assessment\signing-thumbprint.txt").Trim()
+$tp = (Get-Content "$env:USERPROFILE\.tp-assessment\signing-thumbprint.txt").Trim()
 foreach ($store in @('My','Root','TrustedPublisher')) {
     Get-ChildItem -Path "Cert:\CurrentUser\$store\$tp" -ErrorAction SilentlyContinue | Remove-Item
 }
-Remove-Item -LiteralPath "$env:USERPROFILE\.nrg-assessment\signing-thumbprint.txt" -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath "$env:USERPROFILE\.tp-assessment\signing-thumbprint.txt" -ErrorAction SilentlyContinue
 ```
 
 **Eradicate:**
 - Yank every GitHub Release signed with the old cert (delete the release; keep the tag for forensics).
 - Add a `SECURITY ADVISORY` block to README pinning the issue + old thumbprint.
-- Generate a fresh cert: `.\Build\New-NRGCodeSigningCert.ps1 -SaveThumbprintForBuild`.
+- Generate a fresh cert: `.\Build\New-TPCodeSigningCert.ps1 -SaveThumbprintForBuild`.
 - Re-sign current main from the fresh cert; cut a new release.
 
 **Notify:**

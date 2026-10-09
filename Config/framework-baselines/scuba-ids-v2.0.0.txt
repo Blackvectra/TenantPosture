@@ -1,6 +1,6 @@
 # Authoritative CISA ScubaGear policy IDs — baseline reference for SCuBA crosswalk validation.
 # Source: ScubaGear 2.0.0 (aad, exo, powerbi, powerplatform, securitysuite, sharepoint, teams), taken from the rule ids of a full run on 2026-09-30.
-# Every References.SCuBA value in controls.json MUST appear in this list (enforced by Testing/NRG.FrameworkAccuracy.Tests.ps1).
+# Every References.SCuBA value in controls.json MUST appear in this list (enforced by Testing/TP.FrameworkAccuracy.Tests.ps1).
 # Regenerate when upgrading the ScubaGear version you compare against; version suffixes (v1/v2/v3) drift between releases, and the official migration file (scuba-baseline-policy-migrations.csv) records where rules moved.
 # Last synced: ScubaGear v2.0.0
 MS.AAD.1.1v1

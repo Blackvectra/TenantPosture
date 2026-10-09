@@ -9,6 +9,38 @@
   reads "Partial evidence", not "Tool-verified". The 164.308(b)(1) standard now carries paragraph
   (b)(2), the business associate's subcontractor assurance duty, which the catalog had left out.
 
+- **Renamed to TenantPosture; practice-specific data moved to profiles.** Every `NRG` identifier,
+  file name and config key is now `TP` / `TenantPosture` (`Invoke-TPAssessment.ps1`, `Get-TPFindings`,
+  `TenantPosture.psm1`, `Config/tp-baseline.json`, `TP.*.Tests.ps1`); the baseline field
+  `WhyNrgOwnsThis` is `WhyMspOwnsThis`. The company name, contact, colors, default report
+  framework, DMARC reporting address, declared EDR and awareness platforms, monitoring addresses and
+  rates live in a profile: `Config/branding.psd1` (shipped neutral) or `Config/profiles/<name>.psd1`
+  selected with `-Profile <name>` / `TP_PROFILE` (`nrg.psd1` and `nls.psd1` ship). The entry point
+  no longer defaults `-Framework` to NIST; the profile's `DefaultFramework` decides (NRG: NIST; NLS
+  and neutral: All). `Config/tp-standards.json` no longer carries a DMARC reporting address; the
+  profile supplies it. `New-TPProfile` creates a profile from validated parameters (name, company,
+  contact, colors, default framework, DMARC reporting address, declared platforms, rates), written as
+  data and re-read before it replaces anything; `Get-TPProfile` lists them and marks the loaded one.
+  Prose that names NRG as the operating MSP in comments, finding text and docs is unchanged in this
+  step and is the next pass.
+
+- **Licensed under the Apache License, Version 2.0.** The proprietary LICENSE is replaced by the
+  canonical Apache 2.0 text, a NOTICE file carries the copyright, and the README, manifest and
+  CONTRIBUTING say so. Contributions are accepted under the same license (Apache 2.0 section 5).
+
+- **DKIM: every domain's finding says when its key was last rotated (DNS-2.1).** The finding
+  used to give only an age ("3906 days old"). It now states the date the current key was created,
+  from `Get-DkimSigningConfig` `KeyCreationTime`, plus the key size of each selector and the selector
+  signing after `RotateOnDate`. It also reads the published key behind each selector CNAME, recording
+  its `n=` creation timestamp and key size as a cross-check. On a real tenant the two agreed to the
+  second, for a key created 2016-01-22. When they disagree, the finding says so, and when Exchange
+  returns no date the published timestamp is used and labeled. The inactive selector's key being
+  absent is normal after a rotation and is not an error; the published-key read never changes the
+  DKIM lookup status or any verdict. The text no longer attributes the 365-day interval to NIST
+  SP 800-57, which gives signing keys a one-to-three-year cryptoperiod; 365 days is this
+  assessment's rotation cadence. `KeyCreationTime` is parsed with `TryParse` and the invariant
+  culture, and the collector's selector reads go through `Get-TPObjectField`.
+
 - **HIPAA citations corrected on seventeen controls** (`docs/HIPAA-CITATION-CORRECTIONS.md` records each
   control's previous citation, what its evaluator checks, and the change). Eight tenant-isolation
   controls cited 164.308(a)(4)(ii)(A), which applies only to a health care clearinghouse within a
@@ -69,12 +101,12 @@
   `ThirdPartyAwareness`, branding.psd1 `AwarenessStack`).** A client phishing-tested through
   KnowBe4 read as "users are never phishing-tested" on DEF-4.6, or, without Defender for Office 365
   Plan 2, as a license upgrade it does not need: Microsoft 365 cannot see the platform.
-  `Set-NRGThirdPartyAwareness` follows the EDR declaration's contract: a non-passing DEF-4.6 becomes
+  `Set-TPThirdPartyAwareness` follows the EDR declaration's contract: a non-passing DEF-4.6 becomes
   NotApplicable, declared by the assessor, NOT verified, out of the score, naming the campaign
   reports to keep and keeping the original result; a pass stays a pass. It runs before license
   gating, and on `-FromResults` it unwraps a gated finding so the upgrade-opportunity marker never
   survives. The scope section files it in the existing declared-third-party bucket (now labeled
-  for both kinds) with its own limitation sentence. DEF-4.6 is not in `nrg-baseline.json`, so the
+  for both kinds) with its own limitation sentence. DEF-4.6 is not in `tp-baseline.json`, so the
   baseline view is unchanged.
 
 - **AAD-7.2 names the policies that keep a break-glass account from qualifying.** The requirement
@@ -89,7 +121,7 @@
 
 - **A third-party EDR declaration no longer erases an assigned ASR policy's shortfall (INT-2.2).**
   With the approved ASR rule set, INT-2.2 reports a `Shortfall:` when an assigned policy was read
-  and a required rule is not in Block mode. `Set-NRGThirdPartyEdr` rewrote every non-passing
+  and a required rule is not in Block mode. `Set-TPThirdPartyEdr` rewrote every non-passing
   INT-2.2 to "declared, not verified", so a client with Cortex XDR declared had a deployed,
   misconfigured Defender policy removed from the score. The declaration now explains only absent
   Defender configuration: the shortfall keeps its verdict and gains a note asking which devices run
@@ -113,10 +145,10 @@
   layouts are listed, once each. The server also read `(Get-Location)\output`
   while the command line and batch runner write to `<script dir>\output`, so it
   found nothing unless started from the repository root; it now defaults to
-  `<ScriptDir>\output` (`-OutputRoot`, which `Invoke-NRGAssessment.ps1 -Web`
+  `<ScriptDir>\output` (`-OutputRoot`, which `Invoke-TPAssessment.ps1 -Web`
   sets from `-OutputPath`). A flat run is named the way its client is in
   `Config/clients.json`, found by tenant id and then by routing domain: a results
-  file records the tenant's INITIAL domain (`Connect-NRGServices` prefers
+  file records the tenant's INITIAL domain (`Connect-TPServices` prefers
   `isInitial`) and, when Graph cannot answer, the signed-in account's domain,
   which under GDAP is the MSP's own, so the same client was two names or the
   wrong one. Without a match it is the recorded domain, then the file name. Only
@@ -133,13 +165,13 @@
   is unchanged, set in one place, and a test asserts the site's responses carry
   the identical header. The action plan is sent byte for byte: it is written with
   a UTF-8 byte-order mark so Excel does not read it as ANSI, and reading it as
-  text dropped the mark. (3) `Start-NRGWebServer` defaulted `-ScriptDir` to
+  text dropped the mark. (3) `Start-TPWebServer` defaulted `-ScriptDir` to
   `Split-Path -Parent $PSCommandPath`, which is `Lib`, so a direct call threw
   "Web asset directory not found"; it now defaults to the repository root.
   **Who the server answers.** Binding to `127.0.0.1` keeps the network out, not a
   web page in the operator's own browser. Any `Host` header was accepted, so DNS
   rebinding let a page read reports, the run list and the report site, and a
-  cross-site form POST was parsed by `/api/scan`. Now `Test-NRGWebRequestAllowed`
+  cross-site form POST was parsed by `/api/scan`. Now `Test-TPWebRequestAllowed`
   (a pure function, tested without a server) refuses with 403 any request whose
   `Host` is not `127.0.0.1:<port>` / `localhost:<port>` (`-AllowedHost` adds a
   tunnel's name), and for anything but GET/HEAD requires `application/json`, this
@@ -151,9 +183,9 @@
   origin (script embed, cross-origin read and JSON POST, auto-submitted form, and a
   host-resolver rule simulating rebinding): every one refused, and the GUI's own
   requests unaffected.
-  **Structure.** The path guard (`Lib/Resolve-NRGWebRunPath.ps1`), the run listing
-  (`Lib/Get-NRGWebRunIndex.ps1`), the request policy
-  (`Lib/Test-NRGWebRequestAllowed.ps1`), the domain-name rule and the error table
+  **Structure.** The path guard (`Lib/Resolve-TPWebRunPath.ps1`), the run listing
+  (`Lib/Get-TPWebRunIndex.ps1`), the request policy
+  (`Lib/Test-TPWebRequestAllowed.ps1`), the domain-name rule and the error table
   are separate files of pure functions,
   loaded into Pode's route runspaces with `Use-PodeScript` (those runspaces start
   from a default session state, so module functions are not visible), which also
@@ -169,10 +201,10 @@
   it is replaced by a slice of that page.
   **One domain rule, one failure contract.** The scan route accepted any string of
   letters, digits, dots and hyphens (including `a..b.com` and a trailing line
-  feed, since `$` also matches before one), `Invoke-NRGAssessment.ps1
+  feed, since `$` also matches before one), `Invoke-TPAssessment.ps1
   -TenantDomain` accepted `a..b.com` too, and the path guard refuses any name
   holding `..`: a scan could be started for a folder the GUI could never open.
-  `Test-NRGDomainName` (`Lib/Test-NRGDomainName.ps1`) is now the only definition
+  `Test-TPDomainName` (`Lib/Test-TPDomainName.ps1`) is now the only definition
   (a fully qualified hostname: at most 253 characters, at least two labels of 1-63
   letters, digits and inner hyphens, a final label of two or more letters, no
   trailing dot), used by the scan route and the run listing; the entry script's
@@ -182,7 +214,7 @@
   also proves, over every string of up to six characters from a five-character
   alphabet, that an accepted name is always a valid path segment. Every refusal
   under `/api/` is now JSON, `{ "error": "<Code>", "message": "<fixed sentence>" }`,
-  from one table (`Lib/Get-NRGWebApiError.ps1`): `DomainRequired`, `InvalidDomain`,
+  from one table (`Lib/Get-TPWebApiError.ps1`): `DomainRequired`, `InvalidDomain`,
   `UnknownRunId`, `InvalidPath`, `NotFound`, `Forbidden`, each with its status and
   none echoing the request. `POST /api/scan` and `GET /api/scan/:id/status` used
   `Set-PodeResponseStatus` and returned Pode's error page cut to the body's length
@@ -193,8 +225,8 @@
 - **Review of this release (2026-10-04): failed, truncated or unread evidence no longer produces a
   clean or failed verdict, and severities match the evidence.** Four reviewers checked the PR head
   `9eeb60b`; every confirmed defect below has a regression test that fails on that head (61 such
-  failures across `Testing/NRG.Review106CA/DLP/Site.Tests.ps1`,
-  `Email-IR/Testing/NRG.Review106IR.Tests.ps1` and new cases in `NRG.IREntryPoints.Tests.ps1`).
+  failures across `Testing/TP.Review106CA/DLP/Site.Tests.ps1`,
+  `Email-IR/Testing/TP.Review106IR.Tests.ps1` and new cases in `TP.IREntryPoints.Tests.ps1`).
   - Conditional Access: a policy for "Any device" (`includePlatforms` `all`) is no longer read as
     limited to some platforms (it had made AAD-1.1 Partial and affected AAD-1.2, 1.3, 11.1 and
     EXO-1.6); `excludePlatforms` is now collected, and `all` with exclusions is narrowing. AAD-2.1
@@ -217,7 +249,7 @@
     name; each distinct reason scores once per user; timestamps are kept as ISO 8601 and parsed with
     the invariant culture (EMAIL-4.2 threw on a non-US workstation).
   - Report site: a run with no findings, and a results file with an empty findings list, build an
-    empty site; unscored controls take their category from `Get-NRGAssessmentScope`, so skipped
+    empty site; unscored controls take their category from `Get-TPAssessmentScope`, so skipped
     workloads read "skipped by the operator" and get no "re-collect" row; an errored check reads
     "Not assessed (the check errored)", is counted apart from Gaps and is told to re-run, not to
     remediate; `-FromResults` keeps `Skipped` coverage on restore.
@@ -236,11 +268,11 @@
   sending domain. Leads resting on a display name alone are still listed (nothing is hidden) but rank
   below strong leads, are labeled, and make the finding Medium, not a High indicator.
   `sharepointonline.com` and `microsoft365.com` are Microsoft domains. Six new tests in
-  `NRG.EmailIR.Tests.ps1`, all failing on the old code.
+  `TP.EmailIR.Tests.ps1`, all failing on the old code.
 
 - **A scan started from the web GUI still cannot sign in to Graph (known limitation).** The GUI runs
   the assessment in a hidden child process and Graph's Windows broker sign-in (WAM) needs a window.
-  A first attempt (`NRG_DISABLE_WAM` plus `Set-MgGraphOption -DisableLoginByWAM`) was removed in the
+  A first attempt (`TP_DISABLE_WAM` plus `Set-MgGraphOption -DisableLoginByWAM`) was removed in the
   review below: the SDK honors that option only for a custom client id, and the cmdlet writes a
   settings file to the operator's profile on every call. Run the assessment from a PowerShell window;
   see `docs/KNOWN-ISSUES.md`.
@@ -261,7 +293,7 @@
   dismissed and remediated users are now listed as "not counted" (named, never silently dropped);
   an unrecognized risk state stays active (unknown is not safe); only active users are scored and
   ranked, and a tenant whose only entries were reviewed gets Satisfied. Pinned in
-  `NRG.SignInTriage.Tests.ps1` (two of the four new tests fail on the old evaluator).
+  `TP.SignInTriage.Tests.ps1` (two of the four new tests fail on the old evaluator).
 
 - **First live runs of the incident-response entry points.** On the first live run, the account's mailbox
   reads answered NotFound and the sign-in reads answered BadRequest, and three console lines were
@@ -273,7 +305,7 @@
   the same window without the property list, and records `SelectFallback` in the data; (3) a
   failed Graph sign-in printed only the first line of the error; the inner exceptions are now
   printed with a hint to retry in a new window. Verdicts were already honest (NOT CLEARED); these
-  make the reason visible. Pinned by `NRG.IREntryPoints.Tests.ps1`.
+  make the reason visible. Pinned by `TP.IREntryPoints.Tests.ps1`.
 
 - **ScubaGear alignment corrected from the second independent scan.** EXO-6.1, EXO-7.1 and EXO-7.2
   read mailbox and inbox-rule forwarding; ScubaGear MS.EXO.1.1v2 reads the remote-domain setting
@@ -286,22 +318,22 @@
 - **A ScubaGear results file that is not the CSV no longer fails the report site.** The site read
   `-ScubaResultsPath` only as CSV, so the `ScubaResults_<id>.json` from the same run threw "The
   property 'Control ID' cannot be found" and the whole site was skipped (found on the first run
-  with a real scan). `Read-NRGScubaResults` now accepts the CSV or the JSON, and a file that is not
+  with a real scan). `Read-TPScubaResults` now accepts the CSV or the JSON, and a file that is not
   a ScubaGear result (or has no Control ID / Result) is reported as "ScubaGear results not used"
-  while the site is still built without the comparison. `NRG.ReportSite.Tests.ps1` pins JSON, CSV,
+  while the site is still built without the comparison. `TP.ReportSite.Tests.ps1` pins JSON, CSV,
   a foreign JSON and a CSV without the columns. The same live run exposed a second defect: a
   relative `-OutputPath` (`.\output\site`) was created by .NET against the shell's start folder,
   not the current PowerShell location, so the page writes failed; the publisher now resolves the
   path through the session first (pinned by a test that changes location before publishing).
 
 - **Tor Project host name removed from every shipped file.** The header comment in
-  `Email-IR/Lib/Get-NRGIPThreatIntel.ps1` now says only that the helper calls rdap.org and does no
-  Tor-exit detection; `docs/EDR-TOR-ALERT.md` and `Testing/NRG.NetworkEgress.Tests.ps1` no longer
+  `Email-IR/Lib/Get-TPIPThreatIntel.ps1` now says only that the helper calls rdap.org and does no
+  Tor-exit detection; `docs/EDR-TOR-ALERT.md` and `Testing/TP.NetworkEgress.Tests.ps1` no longer
   contain the host name (the test builds its pattern from pieces and still fails on any non-comment
   line that names it). An EDR keyword scan of the folder no longer matches. Behavior is unchanged.
 
 - **The report separates total Gap controls from distinct deficiencies.** 69 Gap controls are not 69
-  exposures. `Get-NRGGapSummary` / `Format-NRGGapSummary` report the scored Gap controls, how many
+  exposures. `Get-TPGapSummary` / `Format-TPGapSummary` report the scored Gap controls, how many
   are a named-object view of a control that already reports the shortfall (new `Views` in
   `Config/control-links.json`: AAD-12.1 of AAD-1.2, EXO-6.4 and EXO-7.4 of EXO-1.2), how many
   further controls read the same setting as a Gap control and are already counted once, and the
@@ -310,7 +342,7 @@
   landing page; `ActionPlan.csv` gains a "Relationship to other controls" column. Two same-setting
   pairs the first full run exposed are now linked for scoring so one setting costs once: SPO-1.4 /
   SPO-3.4 (guest-access expiration) and SPO-2.6 / SPO-2.7 (email attestation); on the first full run's data the Gap
-  count drops from 69 to 67. `NRG.GapSummary.Tests.ps1` pins Total = Distinct + Views and
+  count drops from 69 to 67. `TP.GapSummary.Tests.ps1` pins Total = Distinct + Views and
   that a view of a control with no shortfall stays distinct.
 
 - **The DEF-4.1 / DEF-4.5 disagreement with ScubaGear is explained: a different standard, not a detection fault.**
@@ -339,9 +371,9 @@
   compliance policies are assigned and cover each enrolled platform; it never reads the configured
   non-compliance actions, so it cannot prove noncompliant devices lose access. INT-1.1 does not return
   Satisfied (Gap, Partial or Not assessed; the verified components stay in the Detail), and a test pins
-  every branch. The limit is recorded in `Config/evidence-limits.json` (read by `Get-NRGEvidenceLimitNote`),
+  every branch. The limit is recorded in `Config/evidence-limits.json` (read by `Get-TPEvidenceLimitNote`),
   and the main HTML report (priority actions, roadmap, all findings) and the report site now show "Not
-  established: configured non-compliance actions." wherever INT-1.1 appears. `docs/NRG-DETECTION-LIMITS.md`
+  established: configured non-compliance actions." wherever INT-1.1 appears. `docs/TP-DETECTION-LIMITS.md`
   gains a section for it. Add an entry to the data file in the same change as any new permanent limit.
 
 - **The Tor Project host name no longer appears in shipped source or the Email-IR README.** A client's
@@ -372,7 +404,7 @@
   AAD-6.3 Gap) on the first full run. AAD-6.2 now judges only whether users can freely consent
   (disabled, or limited to low-impact permissions from verified publishers); AAD-6.3 owns the
   workflow. The workflow appears in the AAD-6.2 Detail as "Related (judged under another control, not
-  part of this verdict)" through a new `-Context` on `Add-NRGExpectedStateFinding`. Catalog
+  part of this verdict)" through a new `-Context` on `Add-TPExpectedStateFinding`. Catalog
   description, baseline expected state and notes, the ScubaGear alignment note, the detection-limits
   table and the tests follow; a matrix test covers restricted/unrestricted consent against workflow
   enabled/disabled/unread.
@@ -389,17 +421,17 @@
 - **A MSAL version already loaded in the window is named as the cause.** After the modules were
   cleaned up, the next run in the same window still failed Graph with "Method not found ...
   WithLogging": a different `Microsoft.Identity.Client` was already loaded in that window, and a
-  loaded assembly cannot be replaced. The error never says so. `Get-NRGMsalConflictHint` now prints,
+  loaded assembly cannot be replaced. The error never says so. `Get-TPMsalConflictHint` now prints,
   beside a Graph or Exchange connect failure of that shape, that a NEW PowerShell 7 window is the
   only fix. The repair-fallback comment and entry above now give the real cause of the failed first
   repair: `Uninstall-PSResource` defaults to the current-user scope and the copies were in the
   all-users folder.
 
-- **`Repair-NRGModuleHealth` now removes a duplicate that the package manager cannot find.** The first
+- **`Repair-TPModuleHealth` now removes a duplicate that the package manager cannot find.** The first
   live repair removed nothing: `Uninstall-PSResource` answered "version 2.9.1 ... does not exist" for a
   copy PowerShell 7 still lists and loads (the copy was in the all-users folder and the call searched the current-user scope).
   When the package manager fails, the repair now removes the exact version folder `Get-Module` reports,
-  but only after `Test-NRGSafeModuleVersionPath` confirms the path is `<PSModulePath entry>\<module>\<version>`
+  but only after `Test-TPSafeModuleVersionPath` confirms the path is `<PSModulePath entry>\<module>\<version>`
   for that module and version; any other path keeps the package manager's error. Still opt-in and
   `-WhatIf`-able, still never called from the assessment path.
 
@@ -409,28 +441,28 @@
   character. Identifier, verdict, risk, check type and evidence cells no longer wrap, the prose
   columns keep a readable minimum width, and the page is wider. The Observed cell was blank for
   controls whose evaluator left `CurrentValue` empty (20 of 48 passing controls); it now shows the
-  Detail sentence, shortened, with the full text under Evidence. Pinned in `NRG.ReportSite.Tests.ps1`.
+  Detail sentence, shortened, with the full text under Evidence. Pinned in `TP.ReportSite.Tests.ps1`.
 
 - **A OneDrive online-only module is named as the cause, and a run without Graph says so up front.**
   The first work-computer run failed to connect Graph with "The cloud file provider is not running"
   (a `Microsoft.Graph.Reports` file in the OneDrive-synced `Documents\PowerShell\Modules` folder
   was an online-only placeholder and OneDrive was not running). The error named a file, not the
-  cause; `Get-NRGCloudFileHint` now prints the cause and the fix beside the Graph, Teams and
+  cause; `Get-TPCloudFileHint` now prints the cause and the fix beside the Graph, Teams and
   SharePoint connect errors. A run that connects Exchange but not Graph now prints, before any
   collection, that identity, Conditional Access, Intune and application controls will read
   "not assessed". No verdict logic changed.
 
 - **The report site is built automatically.** Every run that writes reports (and every
   `-FromResults` republish) now writes `<base>-report/` (landing page, one page per workload,
-  `ActionPlan.csv`) beside the other files; before, it needed a separate `New-NRGReportSite.ps1`
+  `ActionPlan.csv`) beside the other files; before, it needed a separate `New-TPReportSite.ps1`
   command. `-ScubaResultsPath <ScubaResults.csv>` places an independent ScubaGear scan beside the
   mapped controls (a separate standard, never a score); `-SkipReportSite` turns the site off;
   `-JsonOnly` still writes only the JSON. The smoke test asserts the site exists after a live run
-  and after a republish. `New-NRGReportSite.ps1` remains for rebuilding from an old results file.
+  and after a republish. `New-TPReportSite.ps1` remains for rebuilding from an old results file.
   Reorganizing the single-page `assessment.html` into the same layout is a separate change.
 
 - **A smoke test that runs the real entry point end to end, and the three defects it found.**
-  `NRG.SmokeRun.Tests.ps1` launches `Invoke-NRGAssessment.ps1` in a fresh process against stand-in
+  `TP.SmokeRun.Tests.ps1` launches `Invoke-TPAssessment.ps1` in a fresh process against stand-in
   Microsoft Graph, Exchange and Teams modules that answer with empty tenants, then republishes the
   results with `-FromResults` and builds the report site. It asserts a reported result (exit 0 or
   3), no publisher failure, every `-Skip` flag recorded as Skipped, and no StrictMode failure in
@@ -452,14 +484,14 @@
   not established. (2) **DLP**: a workload named on a policy was taken as the workload covered,
   although the policy may be scoped to a few mailboxes, sites or teams (ScubaGear said the
   sensitive-information policy was not applied to Exchange, OneDrive, SharePoint or Teams); the
-  collector now stores each workload's location scope (`Get-NRGDlpLocationScope`) and DEF-4.1
+  collector now stores each workload's location scope (`Get-TPDlpLocationScope`) and DEF-4.1
   requires whole-workload scope (All, no exclusions) and says so, or says it could not tell. The
   HIPAA rule returned no sensitive information types because template rules nest them under
-  groups; `Get-NRGDlpSensitiveTypeNames` now reads flat and grouped shapes (the grouped shape
+  groups; `Get-TPDlpSensitiveTypeNames` now reads flat and grouped shapes (the grouped shape
   is unverified live until the next run).
 
 - **A multi-page report site, organized the way an assessor navigates, built from existing results.**
-  `New-NRGReportSite.ps1 -ResultsPath <results.json> -OutputPath <folder> [-ScubaResultsPath
+  `New-TPReportSite.ps1 -ResultsPath <results.json> -OutputPath <folder> [-ScubaResultsPath
   ScubaResults.csv]` (connects to nothing) writes a landing page (tenant identity, run time, tool
   and baseline versions, workload summaries with links, limitations kept distinct), one page per
   workload grouped by security topic, and `ActionPlan.csv`. Each control row keeps requirement,
@@ -471,20 +503,20 @@
   investigate, never as a score. The action plan carries owner, target date, resolution status and
   evidence columns (blank to fill) and neutralizes spreadsheet formulas. Self-contained (no script,
   no external asset), NRG-branded, no finding changed. Verified on the real NRGTS results: all 249
-  findings, their text and verdict counts are present. `NRG.ReportSite.Tests.ps1` pins it.
+  findings, their text and verdict counts are present. `TP.ReportSite.Tests.ps1` pins it.
 
 - **SCuBA citations re-checked against ScubaGear 2.0.0 and its official migration file.**
   14 of the rule ids NRG cited no longer existed in ScubaGear 2.0.0 (3 version renames, 11
   Defender-era ids that became `MS.SECURITYSUITE.*`). `Config/scuba-alignment.json` records, for
   every citation, the current id, the relation (Equivalent 27 / Partial 42 / Manual 3 /
   Unsupported 15), the rule's SHALL/SHOULD strength and the versions checked (ScubaGear 2.0.0,
-  the migration file's SHA-256); `docs/NRG-SCUBA-ALIGNMENT.md` explains each and lists the 55
+  the migration file's SHA-256); `docs/TP-SCUBA-ALIGNMENT.md` explains each and lists the 55
   ScubaGear rules no NRG control is aligned to. **A migrated citation does not establish
   equivalence**: where the migration maps a rule to a range or to nothing, the rule the evaluator
   actually covers was chosen per requirement, and 9 obsolete references with no equivalent were
   removed while NRG's independent controls stay (DEF-1.3, DEF-2.1, DEF-2.6, DEF-4.3, DEF-4.4,
   EXO-3.5, EXO-4.1, EXO-4.4, PVW-4.1). The bundled authoritative id list is now
-  `scuba-ids-v2.0.0.txt`. `NRG.ScubaAlignment.Tests.ps1` keeps controls.json and the alignment in
+  `scuba-ids-v2.0.0.txt`. `TP.ScubaAlignment.Tests.ps1` keeps controls.json and the alignment in
   step. No verdict changes; 78 of 204 controls now cite a SCuBA rule (was 87).
 
 - **Coverage is judged on who is protected, not on which policies exist.** Found by running an
@@ -492,7 +524,7 @@
   NRG results. Reproduced and fixed: (1) **Conditional Access exclusions were ignored**: AAD-1.1,
   AAD-11.1, AAD-1.2 and AAD-1.3 passed a policy that excluded users, and AAD-11.1 passed
   one scoped to some users, applications or conditions. They now judge combined coverage
-  (`Get-NRGExclusionCoverage` / `Get-NRGCAEffectiveCoverage`): a policy must cover all users and
+  (`Get-TPExclusionCoverage` / `Get-TPCAEffectiveCoverage`): a policy must cover all users and
   all applications with no extra condition to count; an exclusion is not a gap when another
   qualifying policy covers those users, is reported as an exception when the same principals are
   excluded from every qualifying policy, and is unproven (not assessed) when different policies
@@ -506,7 +538,7 @@
   and PVW-3.4 credited workloads and sensitive information types from a policy in
   `TestWithNotifications`; only enforcing policies (Mode Enable) count now, test-mode ones are
   reported, and whether rules block is stated only as far as `BlockAccess` was read
-  (`Get-NRGDlpRuleStates`). `NRG.CoverageTruth.Tests.ps1` pins all of it with sanitized fixtures.
+  (`Get-TPDlpRuleStates`). `TP.CoverageTruth.Tests.ps1` pins all of it with sanitized fixtures.
   Observed configuration, baseline judgment and independent comparison are kept apart: the
   verdict is NRG's baseline; an independent scan is evidence to challenge it, never a target.
 
@@ -523,10 +555,10 @@
   set), DEF-2.2 (malware ZAP beside spam and phishing), DEF-2.3 (the approved blocked-type
   list), DNS-1.3 (the approved DMARC reporting address), EXO-1.5 (approved priority users) and
   INT-1.5 (real-time, cloud-delivered and PUA settings read from the antivirus policy) share
-  one verdict helper, `Add-NRGExpectedStateFinding`: an established shortfall is always
+  one verdict helper, `Add-TPExpectedStateFinding`: an established shortfall is always
   reported, an unestablished component leaves the control not assessed with the verified
   parts in the Detail, and Satisfied needs every component. NRG standards live in
-  `Config/nrg-standards.json` (`Get-NRGStandards`) and **ship empty**; the tool does not invent
+  `Config/tp-standards.json` (`Get-TPStandards`) and **ship empty**; the tool does not invent
   them. A control waiting on one is filed under the new scope bucket `StandardNotApproved`
   ("verified in part") and baseline reason code `StandardNotApproved`, not under "data did not
   collect". A lower score from this is the tool being honest, not a regression. Also: the
@@ -534,15 +566,15 @@
   not established (it showed the verified half); the XLSX workbook now carries each finding's
   Detail (it computed the column and dropped it); EXO-1.6 states that a password being accepted
   is not established while Exchange authentication policies are unread.
-  `NRG.ComponentVerdicts.Tests.ps1` and `NRG.OutputParity.Tests.ps1` (one verdict and its
+  `TP.ComponentVerdicts.Tests.ps1` and `TP.OutputParity.Tests.ps1` (one verdict and its
   limitation must read the same in the JSON, HTML, Markdown and workbook) pin these.
 
 - **Review of Satisfied baseline controls against their expected state; detection limits documented.**
-  `docs/NRG-DETECTION-LIMITS.md` states, per control, what a verdict proves and what it does
+  `docs/TP-DETECTION-LIMITS.md` states, per control, what a verdict proves and what it does
   not (seven Satisfied controls verify less than their expected state; four NRG standards the
   tool does not know are named). Fixes from the review: policies-in-force judgment read an
   EMPTY rule list as "rules not collected" and kept every custom policy in force, including
-  ones that apply to nobody (17 evaluators; `Get-NRGRuleList` keeps an empty collected list
+  ones that apply to nobody (17 evaluators; `Get-TPRuleList` keeps an empty collected list
   distinct from an unread one); DEF-2.3 is now judged over the malware policies in force
   (the collector also reads the malware filter rules) instead of "any policy has the filter
   on"; INT-1.1 checks an assigned compliance policy per enrolled platform (a Windows policy
@@ -552,7 +584,7 @@
   SMTP AUTH carries OAuth as well as passwords and a mailbox can override an
   organization-level disable, so EXO-1.6 now judges password availability from the
   SMTP AUTH switch plus its per-mailbox overrides plus the tenant's legacy-authentication
-  block (`Get-NRGLegacyAuthBlockState`): Satisfied when the block is in place or SMTP is
+  block (`Get-TPLegacyAuthBlockState`): Satisfied when the block is in place or SMTP is
   closed with no override, Partial when SMTP is available and nothing blocks passwords
   (authentication policies are not read, and it says so), not assessed when the evidence
   is missing. INT-2.2's collector now reads each assigned ASR policy's rule modes
@@ -583,16 +615,16 @@
   and a Critical beside incomplete evidence says both in the report.
 
 - **Completeness contract for the incident-response entry points, proved by running them.**
-  `Email-IR/Testing/NRG.IREntryPoints.Tests.ps1` launches the real
-  `Invoke-NRGEmailAssessment.ps1` and `Invoke-NRGSignInTriage.ps1` in fresh child
+  `Email-IR/Testing/TP.IREntryPoints.Tests.ps1` launches the real
+  `Invoke-TPEmailAssessment.ps1` and `Invoke-TPSignInTriage.ps1` in fresh child
   processes against a stub Microsoft Graph module and asserts the verdict, the JSON
   health block, the HTML and Markdown wording, report generation and the exit code
   for complete benign evidence, a failed required read, a read that stopped at its
   page cap, a required evaluator that throws (by fault injection into a copy of
   the tool) and two flagged users. Running them found three defects the in-process
   suite could not: both entry points threw right after the module loaded
-  (`$script:NRGAssessmentVersion` is not set in script scope; the module exports
-  `$NRGAssessmentVersion`), the inbox-rule evaluator threw on any real rule that
+  (`$script:TPAssessmentVersion` is not set in script scope; the module exports
+  `$TPAssessmentVersion`), the inbox-rule evaluator threw on any real rule that
   did not carry every action property (Graph omits unset ones), and the
   mailbox-settings read threw on absent settings. Health now covers evaluation as
   well as collection: a required evaluator that throws or is missing, or a dive
@@ -652,25 +684,25 @@
   device identity, not count: the Intune collector records the managed Windows
   device names, and a fleet is Complete only when every one has a current
   result (a current result for a removed machine no longer stands in for a
-  missing one; without names it is never Complete). `Get-NRGControlStatus`
+  missing one; without names it is never Complete). `Get-TPControlStatus`
   reports an `Error` finding as Not assessed, not Open. The email assessment's
   attribution fallback uses the requested mailbox.
 
-- **`Get-NRGControlStatus.ps1`: check tickets against a results file.** Give it
+- **`Get-TPControlStatus.ps1`: check tickets against a results file.** Give it
   control IDs (`AAD-1.4`) and/or workload prefixes (`TMS`) and a results JSON;
   it says per control whether the configuration is In place, Open, Partly in
   place, Not assessed (with the reason: unlicensed, third-party EDR, manual,
   could not be read) or No result. Only Satisfied is "In place"; a control the
   run could not assess is never reported as fixed. Reads the results file and
   `Config/controls.json` only. `-ControlIdFile` and `-OutputPath` (CSV) are
-  supported. `Get-NRGControlStatus` is the exported function behind it.
+  supported. `Get-TPControlStatus` is the exported function behind it.
 
 - **Detection accuracy: whose activity, what evidence, how complete.** From an
   independent source audit of `main`. (1) Both incident-response entry points
-  called `Get-NRGRawData -AllKeys`, a parameter that does not exist, so each
+  called `Get-TPRawData -AllKeys`, a parameter that does not exist, so each
   stopped after all collection and evaluation and before any report; the suite
   stayed green because no test launches those scripts.
-  `NRG.CallBinding.Tests.ps1` now parses every repo script and checks that each
+  `TP.CallBinding.Tests.ps1` now parses every repo script and checks that each
   call to a module-defined function names only parameters it has. (2) Sign-in
   triage could say "Tenant looks clean" when reads had failed or stopped at the
   event cap: SIGNIN-2.1 is now "Not cleared" without complete reads, the report
@@ -689,8 +721,8 @@
   than 8 days (or with no readable date) are no longer counted, each endpoint
   finding records `Coverage` (verdicts, could-not-run, stale, expected fleet
   from Intune), and Effective requires complete, current coverage. Results with
-  no recorded coverage read Unknown. Tests: `NRG.CallBinding`, `NRG.SignInHonesty`,
-  `NRG.DeviceEvidence`, plus additions to `NRG.SignInTriage`.
+  no recorded coverage read Unknown. Tests: `TP.CallBinding`, `TP.SignInHonesty`,
+  `TP.DeviceEvidence`, plus additions to `TP.SignInTriage`.
 
 - **GUI error responses carried Pode's HTML error page, not the body the
   handler wrote.** `POST /api/scan` (400 `domain is required` / `invalid
@@ -704,7 +736,7 @@
   style='background-color: #0`. The UI shows the scan body verbatim, so the
   operator read "Could not start scan: <html style=...". The status now
   rides on the write (`-StatusCode`) on all five paths. Pinned by new
-  assertions in the live-server context of `NRG.WebServer.Tests.ps1`, which
+  assertions in the live-server context of `TP.WebServer.Tests.ps1`, which
   boots a real server (Pode 2.10+ required; skipped where it is absent) and
   checks status, content type and the body: JSON with the expected `error`
   for the scan routes, the exact handler text for the report route (its 400
@@ -712,14 +744,14 @@
   handlers. No tenant call is made, the server stays loopback-only, and no
   scan is started.
 
-- **`Invoke-NRGBatchAssessment.ps1` could not start.** It declared
+- **`Invoke-TPBatchAssessment.ps1` could not start.** It declared
   `[CmdletBinding(SupportsShouldProcess)]` and its own `[switch] $WhatIf`;
   PowerShell adds `-WhatIf` itself for `SupportsShouldProcess`, so every
   invocation, `-WhatIf` included, failed at binding with "A parameter with
   the name 'WhatIf' was defined multiple times". It is now
   `[CmdletBinding()]`; the script's own `-WhatIf` (list the clients and
   exit) is unchanged, and the unused `-Confirm` goes with it. Found in #107.
-  `NRG.Security.Tests.ps1` now fails on any script or function that declares
+  `TP.Security.Tests.ps1` now fails on any script or function that declares
   `WhatIf`/`Confirm` beside `SupportsShouldProcess`, and reads the batch
   runner's parameter metadata.
 
@@ -752,16 +784,16 @@
   carries MSAL 4.82.0 and ExchangeOnlineManagement 3.10.1 carries 4.83.1,
   so with Teams first both `Connect-ExchangeOnline` and
   `Connect-IPPSSession` failed before any prompt, every run.
-  `Connect-NRGServices` now connects Graph, Exchange, Purview, then Teams,
+  `Connect-TPServices` now connects Graph, Exchange, Purview, then Teams,
   and proves the Teams session with `Get-CsTenant` before reporting it
   connected (a Connect that returns cleanly can still leave every cmdlet
   failing with "You must call the Connect-MicrosoftTeams cmdlet").
-  `NRG.WorkloadSkip.Tests.ps1` pins the order.
+  `TP.WorkloadSkip.Tests.ps1` pins the order.
 
 - **Per-client collector flags.** A `Collectors` block on a `clients.json`
   record declares opt-in collectors for that client, keyed by the
   optional-collector catalog id (`SharePointShell` today; the schema allows
-  exactly the catalog ids). `Get-NRGClientCollectorFlags` reads it; the
+  exactly the catalog ids). `Get-TPClientCollectorFlags` reads it; the
   entry point turns the collector on by `-TenantDomain`, the batch runner
   passes the switch explicitly, and the standalone plan reads it. A flag is
   an operator expectation, never truth: it changes what the plan expects
@@ -770,8 +802,8 @@
   key is warned about and ignored.
 
 - **Exception cmdlets: the right thing easier than hand-editing PSD1.**
-  `New-`, `Get-`, `Set-` and `Remove-NRGBaselineException`
-  (`Lib/Set-NRGBaselineException.ps1`) manage
+  `New-`, `Get-`, `Set-` and `Remove-TPBaselineException`
+  (`Lib/Set-TPBaselineException.ps1`) manage
   `Config/baseline-exceptions/<tenant>.psd1` for one client. New refuses a
   control that is not in the baseline (an assessment-only control needs no
   exception), a review date that is not in the future, an expiry before the
@@ -789,7 +821,7 @@
   disposition only, never the observed state, and never `BaselineVersion`.
 
 - **Evidence coverage and effectiveness coverage, apart from each other
-  and from the score.** `Get-NRGBaselineCoverage` derives both from the
+  and from the score.** `Get-TPBaselineCoverage` derives both from the
   reason contract. Evidence coverage: of the applicable required controls
   (NotApplicable outside the denominator), how many have usable evidence —
   Satisfied, ControlFailed and ThirdPartyHandled (attested, not verified);
@@ -809,13 +841,13 @@
   reads effectiveness.
 
 - **One explanation contract for every baseline row: `ReasonCode` +
-  `Reason`.** `Lib/Get-NRGBaselineReason.ps1` holds an ordered catalog of
+  `Reason`.** `Lib/Get-TPBaselineReason.ps1` holds an ordered catalog of
   stable codes (`ManualVerificationRequired`, `SkippedByOperator`,
   `ThirdPartyHandled`, `OptionalCollectorRequired`, `LicenseBlocked`,
   `LicensingUnknown`, `CollectorUnavailable`, `EvidenceStale`,
   `EvidenceNotRead`, `EvaluationError`, `ControlFailed`, `Satisfied`,
   `NotApplicable`, `Automatic`) and one resolver,
-  `Resolve-NRGBaselineReason`, that the compliance view calls once per row
+  `Resolve-TPBaselineReason`, that the compliance view calls once per row
   after the state is settled. The precedence is deterministic: a skipped
   collector never reads as license-blocked and a third-party declaration
   never reads as manual. The plan rows, the plan-versus-run comparison, the
@@ -823,11 +855,11 @@
   as `BaselineCompliance.ReasonCodes` and a `ByReasonCode` summary) and both
   reports carry the same pair, so a downstream consumer keys on the code
   and never parses prose. The long prose a row was derived from is kept as
-  `Detail`. `NRG.BaselineReason.Tests.ps1` pins the catalog order, the
+  `Detail`. `TP.BaselineReason.Tests.ps1` pins the catalog order, the
   precedence cases, the plan and comparison codes, and both renderers.
 
 - **Baseline plan: what a run is expected to verify, before it runs
-  (`Get-NRGBaselinePlan`).** The front door for running the v1.0 standard
+  (`Get-TPBaselinePlan`).** The front door for running the v1.0 standard
   against another client without rethinking it each time. For the target
   tier it says how many controls are required, which connections the run
   needs, and how each required control is expected to resolve: automatic,
@@ -835,13 +867,13 @@
   required (the SharePoint shell, from `Config/optional-collectors.json`),
   skipped by operator, license blocked (only when a license profile shows
   it), or licensing unknown until connection — never guessed. The
-  standalone `Get-NRGBaselinePlan.ps1` connects to nothing and can take
-  licensing from a prior results JSON; `Invoke-NRGAssessment.ps1` prints
+  standalone `Get-TPBaselinePlan.ps1` connects to nothing and can take
+  licensing from a prior results JSON; `Invoke-TPAssessment.ps1` prints
   the plan before connecting, writes `BaselinePlan` to the results JSON,
   and after the run writes `BaselinePlanComparison` (which NotVerified rows
   were expected, which were not, with their cause) and renders it in the
   baseline section. `BaselineVersion` stays 1.0; no tier, control or
-  standard changes. `NRG.BaselinePlan.Tests.ps1` pins the buckets, the
+  standard changes. `TP.BaselinePlan.Tests.ps1` pins the buckets, the
   licensing honesty, the catalog against the evaluators, and the no-network
   contract.
 
@@ -862,9 +894,9 @@
   `SectionStatus.SharedMailboxes` read `Failed`, and the evaluator reported
   "28 shared mailbox(es) found — none have direct sign-in enabled" because
   it consulted the section status only when the mailbox list was empty. The
-  collector reads both license fields through `Get-NRGObjectField`, and
+  collector reads both license fields through `Get-TPObjectField`, and
   EXO-2.6 and EXO-6.2 now report not assessed whenever the section did not
-  complete, whatever the list holds. `NRG.ExchangeTruth.Tests.ps1` replays
+  complete, whatever the list holds. `TP.ExchangeTruth.Tests.ps1` replays
   the live shape. The validation tool notes every Satisfied row whose
   collector reported a failed section, for the operator to confirm the
   evaluator does not read it.
@@ -875,8 +907,8 @@
   3.7.2 minimum, and `Connect-ExchangeOnline` then failed inside the module
   ("You cannot call a method on a null-valued expression"). Microsoft's
   support table pairs 3.10.0+ with 7.6 and 3.5.0–3.9.2 with 7.4/7.5.
-  `Get-NRGExoModuleFloor` now returns the range for the running PowerShell,
-  and the installer, the entry point's preflight and `Get-NRGModuleHealth`
+  `Get-TPExoModuleFloor` now returns the range for the running PowerShell,
+  and the installer, the entry point's preflight and `Get-TPModuleHealth`
   read it; a version above the ceiling is warned about at preflight. The
   Microsoft Store (MSIX) build of PowerShell is recognized by its
   `WindowsApps` home and the MSI build recommended, because the Exchange
@@ -884,7 +916,7 @@
   `$psVer:` parse error is fixed and every script is now parse-tested.
 
 - **NRG Security Baseline v1.0 — candidate controls for editorial review**
-  (`docs/NRG-SECURITY-BASELINE-CANDIDATES.md`). The assessment measures
+  (`docs/TP-SECURITY-BASELINE-CANDIDATES.md`). The assessment measures
   posture against 204 controls; the baseline will say which of them NRG
   requires of every managed client. This document is the editorial pass,
   not configuration: every control with its severity, license requirement,
@@ -895,8 +927,8 @@
   Minimum + Standard). Applicability is per client (licensing, third-party
   EDR, a per-client exceptions file), never per control, and the future
   compliance view keeps observed state, license constraint and exception
-  disposition separate. `Config/nrg-baseline.json` and
-  `Get-NRGBaselineCompliance` follow once v1.0 is locked. Second editorial
+  disposition separate. `Config/tp-baseline.json` and
+  `Get-TPBaselineCompliance` follow once v1.0 is locked. Second editorial
   pass adds seven governance fields per tiered control: owner, evidence
   source (derived from the collector), expected state, SLA class (a label;
   the day counts live elsewhere), dependencies, an effectiveness check
@@ -907,7 +939,7 @@
   (manual-only Minimum controls, inverted dependencies, and the 61 of 67
   effectiveness checks that need telemetry the tool does not collect).
 - **NRG Security Baseline v1.0 is implemented as a desired-state layer**
-  (`Config/nrg-baseline.json`, `Lib/Get-NRGBaseline.ps1`, `-BaselineTier`).
+  (`Config/tp-baseline.json`, `Lib/Get-TPBaseline.ps1`, `-BaselineTier`).
   A view over the findings: no new finding, no changed finding, no moved
   framework score. Per required control the results JSON carries
   ObservedState, Constraint, Disposition, EffectivenessState, dependency
@@ -922,7 +954,7 @@
   `-BaselineResults` only under the same baseline version and tier. The
   HTML and Markdown reports gain an NRG Security Baseline section with
   configuration compliance and effectiveness visibility as separate
-  blocks. `NRG.Baseline.Tests.ps1` pins every invariant and the
+  blocks. `TP.Baseline.Tests.ps1` pins every invariant and the
   document-to-config tier agreement.
 - **Device build standard v1.1: patch policy, delivery and effectiveness
   are three requirements.** DB-4.2 is now the patch policy (within a
@@ -948,7 +980,7 @@ AAD-1.4 / 1.5 scoring decision, and a short mechanical sweep.
   `?` in a variable name, so it read the unset variable `$cid?` (StrictMode
   throws), the per-app `catch` fell back to the ID, and no app was ever named.
   It also looked up only the first 30. The URL now uses `${cid}` and every
-  app is looked up. `NRG.ExternalShapes.Tests.ps1` fails on any variable name
+  app is looked up. `TP.ExternalShapes.Tests.ps1` fails on any variable name
   containing `?` in a module file.
 - **AAD-1.4 and AAD-1.5 credited any risk level.** A Conditional Access risk
   policy applies only to the levels it selects, and both controls accepted
@@ -965,7 +997,7 @@ AAD-1.4 / 1.5 scoring decision, and a short mechanical sweep.
   those controls report the missing property as not assessed. SPO-3.3 still
   passes a limit of 100 or more versions when trimming was not read.
 - **The OAuth consent grant list** logged its page cap and still reported the
-  truncated list as collected; it now reads through `Get-NRGGraphAllPages`.
+  truncated list as collected; it now reads through `Get-TPGraphAllPages`.
 - **Purview is assessed by default.** It was skipped unless `-IncludePurview`
   was given, because ExchangeOnlineManagement 3.4.0 (October 2023) crashed in
   the WAM broker, and the batch runner never passed the switch, so every
@@ -974,20 +1006,20 @@ AAD-1.4 / 1.5 scoring decision, and a short mechanical sweep.
   Security & Compliance sign-ins now pass when the installed module has it
   (the sign-in is not weaker: MSAL uses the system browser with the same MFA
   and Conditional Access). The module floor is 3.7.2 with no pin, and
-  `Install-NRGPrerequisites.ps1` caps the version by the PowerShell in use
+  `Install-TPPrerequisites.ps1` caps the version by the PowerShell in use
   (3.5–3.9.x need 7.4, 3.10+ needs 7.6) instead of downgrading to 3.2.0.
   `-IncludePurview` still parses and does nothing; `-SkipPurview` opts out.
-- **A skipped workload reads "not assessed".** `Register-NRGCoverage` rejected
+- **A skipped workload reads "not assessed".** `Register-TPCoverage` rejected
   the `Skipped` status the scope classifier looked for, and the entry point
   never recorded a `-Skip` flag, so the controls of a workload the operator
   skipped on purpose were reported as "could not be assessed — data did not
   collect ... re-run once the cause is resolved". Each `-Skip*` flag is now
   recorded, and those controls land in a new "Not assessed — workload skipped
   by the operator" group in the HTML report and the Markdown summary.
-- **README.** 27 of `Invoke-NRGAssessment.ps1`'s 45 parameters
+- **README.** 27 of `Invoke-TPAssessment.ps1`'s 45 parameters
   (`-IncludePurview`, `-IncludeSharePointShell`, the `-Skip*` switches,
   `-JsonOnly`, app-only sign-in, …) appeared nowhere in it; it now has a
-  parameter table that `NRG.DocAccuracy.Tests.ps1` keeps equal to the real
+  parameter table that `TP.DocAccuracy.Tests.ps1` keeps equal to the real
   parameter list. README and CLAUDE.md gave the output location as a
   per-timestamp or per-tenant folder; files are written flat to `.\output\`
   as `<tenant>-<yyyyMMdd-HHmmss>-…`.
@@ -1006,8 +1038,8 @@ AAD-1.4 / 1.5 scoring decision, and a short mechanical sweep.
   anything past the first page was dropped and the rest reported as the whole
   list. A trusted named location on page two made AAD-2.2 report none marked
   as trusted, and a simulation history longer than one page could count no
-  launched campaign (DEF-4.6). New `Get-NRGGraphAllPages`
-  (`Lib/Invoke-NRGGraphRequest.ps1`) follows `@odata.nextLink` and throws,
+  launched campaign (DEF-4.6). New `Get-TPGraphAllPages`
+  (`Lib/Invoke-TPGraphRequest.ps1`) follows `@odata.nextLink` and throws,
   leaving the section unread, when a response carries no `value` collection
   or the page cap is reached, instead of returning a partial list.
 - **AAD-13.1 claimed a peer group it did not use.** Below the all-tenants
@@ -1018,14 +1050,14 @@ AAD-1.4 / 1.5 scoring decision, and a short mechanical sweep.
 - **AAD-7.1's not-collected message** said the read "requires beta endpoint
   access"; the collector has read `/v1.0/groupSettings` since v4.6.4.
 
-Tests: `NRG.GraphRequest.Tests.ps1` pins the paging helper (every page,
+Tests: `TP.GraphRequest.Tests.ps1` pins the paging helper (every page,
 headers on every page, empty is empty, a malformed or capped read throws);
-`NRG.IdentityTruth.Tests.ps1` drives the real CA and password-rule collectors
+`TP.IdentityTruth.Tests.ps1` drives the real CA and password-rule collectors
 with a two-page named-location response and True, False and unreadable
-setting values; `NRG.SecureScore.Tests.ps1` pins the benchmark wording and
-the missing maximum; `NRG.SharePointSettings.Tests.ps1` drives the real
+setting values; `TP.SecureScore.Tests.ps1` pins the benchmark wording and
+the missing maximum; `TP.SharePointSettings.Tests.ps1` drives the real
 SharePoint collector with an older `Get-SPOTenant` shape and each shell
-control with one property missing; `NRG.IdentityTruth.Tests.ps1` also pins the
+control with one property missing; `TP.IdentityTruth.Tests.ps1` also pins the
 risk levels and the named consented apps. Each new bug test fails on the code
 before this change.
 
@@ -1062,8 +1094,8 @@ carry a Conditional Access section:
   catalog marks privileged), and targets all resources with no exclusion; a
   narrower, report-only, or weaker policy shows as Partly in place, never
   Enforced.
-- New `Lib/Get-NRGConditionalAccessView.ps1` (`Config/conditional-access-baseline.json`
-  holds the template catalog). A view, like `Get-NRGAssessmentScope`: it
+- New `Lib/Get-TPConditionalAccessView.ps1` (`Config/conditional-access-baseline.json`
+  holds the template catalog). A view, like `Get-TPAssessmentScope`: it
   emits no findings and moves no score.
 - Two bugs caught while building this, both regression-tested: a policy
   scoped to one app matched the "require MFA for admins" template, because
@@ -1132,7 +1164,7 @@ verdict, a verdict with no reason, or a console line that said nothing.
   with status, time and what was found, and a summary line; the
   restricted-character warning at module load is gone (14 Email-IR function
   names had a second hyphen and were renamed, e.g.
-  `Test-NRGEmailControlAuthMethods`); the Graph WAM notice is one line; the
+  `Test-TPEmailControlAuthMethods`); the Graph WAM notice is one line; the
   missing-permission line printed `System.Object[]` and now names the
   permissions and the controls they block; report files are listed by name
   under the output folder; the footer counts controls and says when there are
@@ -1162,7 +1194,7 @@ verdict, a verdict with no reason, or a console line that said nothing.
     that finding is not scored, like any unlicensed control. License gating,
     the scope section, the roadmap, the improvement plan, the playbook, the
     remediation script, the compliance matrix and the HTML report all pass
-    the finding to `Test-NRGLicenseRequirementMet -Finding`.
+    the finding to `Test-TPLicenseRequirementMet -Finding`.
   - AAD-1.2 needs the MFA registration report, which Microsoft documents as
     requiring Microsoft Entra ID P1 or P2, so on a Security Defaults tenant
     without either it is not assessed (it used to pass without reading
@@ -1229,7 +1261,7 @@ different, than the tenant actually is.
   verified) and leaves them out of the score instead of scoring them as gaps.
   A Defender check that passed keeps its verdict. Works on `-FromResults`.
 - **Consent.** AAD-8.2, AAD-11.3 and DEF-4.6 now name the Graph permission
-  the tenant has not consented to. New `Grant-NRGGraphConsent.ps1` does the
+  the tenant has not consented to. New `Grant-TPGraphConsent.ps1` does the
   one-time consent (sign-in only). App-only onboarding requests all three.
 - **Power Platform actually collects.** The admin module is Windows
   PowerShell 5.1 only and the old fallback called a cmdlet that does not
@@ -1243,7 +1275,7 @@ different, than the tenant actually is.
 - **Not configured is a Gap; unlicensed is not scored.** Controls that
   scored Partial (half credit) when nothing was configured now score Gap
   when the tenant holds the license, and are moved out of the score as an
-  upgrade opportunity when it does not (Set-NRGLicenseGating). The license
+  upgrade opportunity when it does not (Set-TPLicenseGating). The license
   profile no longer reads Microsoft 365 Business Standard
   (O365_BUSINESS_PREMIUM) as Business Premium, and E3 tenants now satisfy
   "Business Premium or E3+".
@@ -1536,7 +1568,7 @@ Earlier in this cycle:
   `full_access_as_app` takes full control of all of them;
   `RoleManagement.ReadWrite.Directory` makes the app Global Administrator;
   `Domain.ReadWrite.All` adds a federated domain and forges tokens for anyone.
-  `Collectors/AAD/Invoke-NRGCollectAADAppPermissions.ps1` asks each high-value
+  `Collectors/AAD/Invoke-TPCollectAADAppPermissions.ps1` asks each high-value
   RESOURCE who holds a role on it (Microsoft Graph, Exchange Online,
   SharePoint) rather than asking every principal what it holds — three paged
   queries instead of hundreds. **No new Graph scope is required**, so there is
@@ -1552,16 +1584,16 @@ Earlier in this cycle:
   a verdict: Exchange is where `full_access_as_app` lives, so scoring Graph
   alone and calling it clean would miss the worst grant in the product.
   Caught while building it: `@odata.nextLink` read through
-  `Get-NRGNestedProperty` never resolves, because that helper splits its path
+  `Get-TPNestedProperty` never resolves, because that helper splits its path
   on `.` and looks for `@odata` then `nextLink`. Paging stopped silently after
   page one, which would have reported a partial list as a full enumeration on
-  any tenant large enough to page. It now reads through `Get-NRGObjectField`,
+  any tenant large enough to page. It now reads through `Get-TPObjectField`,
   and a test pins that a second page is followed.
   26 tests added; control count 202 -> 204.
 
 - **The scope section misclassified its own blind spots.** A code review of the
   section added one commit earlier found five defects, all real. The worst:
-  `Test-NRGLicenseRequirementMet` returns `$false` when there is **no SKU data**
+  `Test-TPLicenseRequirementMet` returns `$false` when there is **no SKU data**
   (deliberately — Upgrade Unlocks should over-report an upgrade need rather
   than hide one), and the classifier inverted it. So "we cannot tell how this
   tenant is licensed" became "licence gated, benign", and on any run where the
@@ -1594,23 +1626,23 @@ Earlier in this cycle:
   high-consequence bug this tool has had (the omitted `signInActivity`
   property, the missing PIM `SectionStatus`, the DNS lookup read as an absent
   record). In each case the score looked fine and nothing in the deliverable
-  said the control had gone quiet. `Lib/Get-NRGAssessmentScope.ps1` sorts all
+  said the control had gone quiet. `Lib/Get-TPAssessmentScope.ps1` sorts all
   202 controls into exactly one bucket — scored, licence-gated, collection
   failed, no automated test, or **no result at all** (the set difference
   `controls.json − findings`, which nothing computed before) — and renders as
   an **Assessment Scope and Limitations** section directly under the score in
   the HTML report (`id="scope"`) and in the Markdown summary, with
   plain-language limitations written for whoever signs the report rather than
-  for the operator. It is a view, not a verdict: `NRG.AssessmentScope.Tests.ps1`
+  for the operator. It is a view, not a verdict: `TP.AssessmentScope.Tests.ps1`
   (17 tests) pins that it emits no findings and moves no score, that the
   buckets sum with no control counted twice, that a 403/consent failure is
   classified as a collection failure rather than as advisory, that the worst
   state wins for multi-instance controls, that replayed result JSON classifies
   identically, and that the limitations text never says anything is compliant.
 
-- **Export List Sync now exists in NRG.** `NRG.EvaluatorWiring.Tests.ps1` had
+- **Export List Sync now exists in NRG.** `TP.EvaluatorWiring.Tests.ps1` had
   said since it was written that "Export List Sync checks psd1<->psm1"; the
-  twin repo had that check and this one did not. `Testing/NRG.ExportSync.Tests.ps1`
+  twin repo had that check and this one did not. `Testing/TP.ExportSync.Tests.ps1`
   pins `FunctionsToExport` (psd1) to `$script:ExportedFunctions` (psm1) as a set
   comparison in both directions with a duplicate check, requires every exported
   name to be DEFINED somewhere under `Lib/`, `Collectors/`, `Evaluators/`,
@@ -1626,7 +1658,7 @@ Earlier in this cycle:
   checked against the psm1 count before the real file is touched. Mutation
   tests confirmed the suite fails on a dropped psd1 entry and on an exported
   name with no definition.
-- **A failed DNS lookup was reported as an absent record.** `Resolve-NRGDns`
+- **A failed DNS lookup was reported as an absent record.** `Resolve-TPDns`
   returned `@()` for any DoH response lacking an `Answer` and never read
   `Status` — but Cloudflare returns SERVFAIL as HTTP 200 with `Status: 2` and no
   `Answer`, so a failing resolver was indistinguishable from NXDOMAIN. Worse,
@@ -1639,7 +1671,7 @@ Earlier in this cycle:
   authoritative "no record"; anything else falls through to the next provider.
   The resolver gained an optional `-Outcome` returning
   `Answered` / `NoRecord` / `LookupFailed`, the collector records it per record
-  type in `LookupStatus`, and `Add-NRGDnsLookupFailedFinding` gates the seven
+  type in `LookupStatus`, and `Add-TPDnsLookupFailedFinding` gates the seven
   evaluators that score absence (SPF, DKIM, DMARC, MTA-STS, TLS-RPT, DNSSEC,
   CAA) so a failed lookup reports `NotApplicable`, with the control's NIST
   citations so the finding still reaches the family rollup. Review of the first
@@ -1666,7 +1698,7 @@ Earlier in this cycle:
   Exceptions" pointed at an empty array; and the outcome was written
   unvalidated, so a blank would have replaced the fail-closed default and
   opened the gate. All three closed and pinned by a new
-  `NRG.DnsCollector.Tests.ps1`, which drives the collector through a mocked
+  `TP.DnsCollector.Tests.ps1`, which drives the collector through a mocked
   resolver injected into module scope — the first test to exercise the
   collector at all. An adversarial-input pass over the resolver then closed
   one more false verdict: the `Resolve-DnsName` fallback rendered CAA and DS
@@ -1697,7 +1729,7 @@ Earlier in this cycle:
   never-signed-in guest, which is nearly all of them. Silently non-functional
   rather than falsely clean, and nothing surfaced it, because `NotApplicable` is
   excluded from the score's denominator. All nested API reads now go through
-  `Get-NRGNestedProperty`, enforced statically. Sign-in timestamps now parse with
+  `Get-TPNestedProperty`, enforced statically. Sign-in timestamps now parse with
   `TryParse` + `InvariantCulture` + `RoundtripKind` rather than a bare `[datetime]`
   cast, which was culture-sensitive on whatever workstation the tool runs from.
 - **AAD-3.2 claimed "No permanent privileged role assignments" without the role
@@ -1718,7 +1750,7 @@ Earlier in this cycle:
   each publisher in a `try/catch` that degrades to a warning, the deliverable
   just did not exist, with one line in console output and no other signal. Six
   publishers carried the pattern; all now read metadata through
-  `Get-NRGObjectField`, and a static test fails on any new occurrence.
+  `Get-TPObjectField`, and a static test fails on any new occurrence.
 - **The summary sheets did not account for Error findings.** Errors are scored
   as failures and sit in the denominator, but the NIST matrix Summary (XLSX and
   Markdown) and the compliance-matrix Summary listed only met / partial / gaps /
@@ -1737,7 +1769,7 @@ Earlier in this cycle:
   `@`. EXO-7.2 therefore reported a clean bill of health on tenants with live
   external forwarding rules: the sweep ran, `SectionStatus` said `Collected`, and
   every honesty guard passed — the list was not empty-from-failure, it was
-  empty-from-wrong-answer. Extracted to `Lib/Get-NRGRecipientClass.ps1` with a
+  empty-from-wrong-answer. Extracted to `Lib/Get-TPRecipientClass.ps1` with a
   dedicated suite covering the real shapes, because the old parser had **no test
   coverage at all**: every fixture fed the evaluators a pre-computed
   `IsExternal` flag and never exercised it.
@@ -1769,7 +1801,7 @@ Earlier in this cycle:
   nowhere. They are now collected as `UnparseableRules` and EXO-7.2 degrades to
   `NotApplicable` instead of claiming clean. Mailboxes whose rule query threw are
   counted too.
-- **NIST-first reporting.** `Invoke-NRGAssessment.ps1 -Framework <NIST|CIS|SCuBA|CMMC|All>`
+- **NIST-first reporting.** `Invoke-TPAssessment.ps1 -Framework <NIST|CIS|SCuBA|CMMC|All>`
   selects which framework cards the HTML report presents. **NRG defaults to
   NIST; NLS defaults to All** — the one deliberate behavioral difference
   between the twins, pinned in each repo by its own test because a careless
@@ -1791,7 +1823,7 @@ Earlier in this cycle:
 
 - **Endpoint device compliance scanner (`DEV-*`, 35 checks).** The tenant half of
   the assessment reads Intune POLICY; this reads device STATE. `Device/
-  Invoke-NRGDeviceCompliance.ps1` runs on the endpoint (RMM-deployed, as SYSTEM),
+  Invoke-TPDeviceCompliance.ps1` runs on the endpoint (RMM-deployed, as SYSTEM),
   writes one JSON result, and `-DeviceResults <folder>` on the assessment ingests
   a folder of them. Findings aggregate per control with failing hostnames in
   AffectedObjects — one row saying "41 of 60 failing", not 2,100 rows nobody
@@ -1827,9 +1859,9 @@ Earlier in this cycle:
   guide answers "what does 800-53 require"; this answers "what do I do to this
   laptop, and in what order". 27 requirements across five lifecycle stages —
   procurement, provisioning, hardening, in service, offboarding — of which 23
-  are mandatory. Rendered by `Publish-NRGDeviceBaseline.ps1` as a printable
+  are mandatory. Rendered by `Publish-TPDeviceBaseline.ps1` as a printable
   checklist plus the reasoning underneath, and emitted alongside the guide by
-  `New-NRGDeviceGuide.ps1`. Same no-network contract, statically enforced.
+  `New-TPDeviceGuide.ps1`. Same no-network contract, statically enforced.
   Every requirement states why it exists, how to do it, the 800-53 control it
   satisfies, and whether the assessment can verify it — roughly a third cannot
   be checked from a tenant (BIOS passwords, firmware settings, certificates of
@@ -1844,7 +1876,7 @@ Earlier in this cycle:
   file was worse — a backslash is not a PowerShell escape, so it terminated the
   string and broke the parse.
 
-- **Device guide — reference material, no scanning (`New-NRGDeviceGuide.ps1`).**
+- **Device guide — reference material, no scanning (`New-TPDeviceGuide.ps1`).**
   Not everything is a scan. This renders `Config/nist-physical.json` into a
   printable NIST device and endpoint guide — 31 controls across five areas with
   98 implementation options, as Markdown plus self-contained HTML with print
@@ -1854,7 +1886,7 @@ Earlier in this cycle:
   conversation, and on a site with nothing open. `-ResultsPath` optionally
   annotates it with a prior run's verdicts.
   Two invariants are enforced by test, because both are easy to break by
-  accident: a static guard fails the build if `Invoke-NRGGraphRequest`,
+  accident: a static guard fails the build if `Invoke-TPGraphRequest`,
   `Connect-MgGraph`, `Invoke-RestMethod` or friends ever appear in either file;
   and supplying findings may change what the guide reports as *already done* but
   never what it *recommends* — a test diffs the rendered options with and
@@ -1873,14 +1905,14 @@ Earlier in this cycle:
 
 - **Standalone NIST SP 800-53 Rev 5 matrix (`-NISTMatrix`).** Clients assessed
   against 800-53 should not have to read their posture out of a multi-framework
-  report. `Publish-NRGNISTMatrix.ps1` emits a single-framework deliverable from
+  report. `Publish-TPNISTMatrix.ps1` emits a single-framework deliverable from
   the same run — Markdown always, XLSX when openpyxl is present — across six
   sheets: Summary, Control Matrix (one row per 800-53 control and the tenant
   control evidencing it), By Control, By Family, Physical & Device, and Not
   Assessed. Official Rev 5 titles come from a new
   `Config/nist-800-53-catalog.json`, because a row reading `AC-6(9)  Gap` is not
   something an auditor can work from. `-AllFiles` implies the switch.
-  **Strictly additive:** `Publish-NRGComplianceMatrix` keeps all ten frameworks,
+  **Strictly additive:** `Publish-TPComplianceMatrix` keeps all ten frameworks,
   no existing output changes, and a test asserts that publishing the NIST matrix
   does not move the CIS, SCuBA or CMMC score by a point.
 - **The matrix refuses to overstate its scope.** The score is labeled as
@@ -1905,9 +1937,9 @@ Earlier in this cycle:
   FedRAMP, or CMMC assessment nothing about WHICH families are weak — every other
   view groups by M365 workload, the engineer's lens rather than the auditor's.
   All 195 controls already carried a `References.NIST` citation, so only the
-  rollup was missing. `Lib/Get-NRGNISTFamilyCoverage.ps1` groups findings by
+  rollup was missing. `Lib/Get-TPNISTFamilyCoverage.ps1` groups findings by
   family (12 families, 57 distinct 800-53 controls) and by individual control,
-  reusing `Get-NRGCoverageScore` so family scores use the identical formula and
+  reusing `Get-TPCoverageScore` so family scores use the identical formula and
   denominator rules as every other score in the tool. Renders in the HTML report
   (`id="nist-families"`), the Markdown summary, and a `NIST Families` sheet in
   the XLSX matrix. A finding citing controls in two families counts in each — so
@@ -1937,7 +1969,7 @@ Earlier in this cycle:
 - **A Copilot tenant could be told, on its own report, that it needs to buy
   Copilot.** LicenseRequirement matching is exact and the controls.json string
   lost its price suffix while the suppression set kept the bare form.
-  `Test-NRGLicenseRequirementMet` now retries once with a trailing price
+  `Test-TPLicenseRequirementMet` now retries once with a trailing price
   parenthetical stripped — narrowly, requiring a currency amount inside it, so
   qualifiers like "(add-on)" that distinguish real requirements are never
   collapsed.
@@ -2018,11 +2050,11 @@ Port of NLS-Assessment v4.12.1 (security fixes + EMAIL-4.x persistence checks + 
 - Email-IR report CSP tightened: script-src 'none' (no scripts exist in these reports; browser now enforces it).
 
 ### Added
-- `Invoke-NRGEmailCollectUserSecurity` collector — per-user OAuth2 grants + registered auth methods (`IR-UserConsents` / `IR-UserAuthMethods`), GET-only, -TargetUpn admin/delegated pivot.
-- `EMAIL-4.1 Test-NRGEmailControl-OAuthConsents` — illicit-consent persistence (survives password reset + MFA re-enrollment); Critical for mail/file write-or-send scopes.
-- `EMAIL-4.2 Test-NRGEmailControl-AuthMethods` — attacker-added MFA detection; full method inventory for the containment call; flags >1 phone + methods registered in last 14 days.
-- `UserAuthenticationMethod.Read.All` added to `Connect-NRGEmailAdminServices` (grouped with mail scopes; -SkipMailDive doesn't prompt for it).
-- `Invoke-NRGBatchSignInTriage.ps1` — the "morning sweep": triage every active clients.json tenant, batch summary with CRITICAL-IOCS clients first, exit 10 on any critical IoCs.
+- `Invoke-TPEmailCollectUserSecurity` collector — per-user OAuth2 grants + registered auth methods (`IR-UserConsents` / `IR-UserAuthMethods`), GET-only, -TargetUpn admin/delegated pivot.
+- `EMAIL-4.1 Test-TPEmailControl-OAuthConsents` — illicit-consent persistence (survives password reset + MFA re-enrollment); Critical for mail/file write-or-send scopes.
+- `EMAIL-4.2 Test-TPEmailControl-AuthMethods` — attacker-added MFA detection; full method inventory for the containment call; flags >1 phone + methods registered in last 14 days.
+- `UserAuthenticationMethod.Read.All` added to `Connect-TPEmailAdminServices` (grouped with mail scopes; -SkipMailDive doesn't prompt for it).
+- `Invoke-TPBatchSignInTriage.ps1` — the "morning sweep": triage every active clients.json tenant, batch summary with CRITICAL-IOCS clients first, exit 10 on any critical IoCs.
 - 7 new Pester cases. ModuleVersion 4.12.0 -> 4.12.1; exports 252 -> 255 (psd1+psm1 in sync).
 
 ## v4.12.0 (2026-06-11)
@@ -2037,38 +2069,38 @@ Port of NLS-Assessment v4.12.0 — Email Account Assessment mode (Email-IR/ subt
 
 New recurring MSP deliverable, distinct from the one-shot assessment HTML. HIPAA-framed, designed for Business Associate documentation trail and client-facing monthly status reporting.
 
-- **`Publishers/Publish-NRGMonthlyReport.ps1`** — emits a self-contained HTML monthly report + sibling JSON state file. Sections: Posture Snapshot (score ring + state bars + baseline/trend note), Work Completed This Period, In Progress, Queued / Roadmap, Residual Risk Statement (Critical/High/Total open + license-blocked callout), HIPAA Defensibility Note (§164.308(a)(1) ongoing risk-management documentation).
+- **`Publishers/Publish-TPMonthlyReport.ps1`** — emits a self-contained HTML monthly report + sibling JSON state file. Sections: Posture Snapshot (score ring + state bars + baseline/trend note), Work Completed This Period, In Progress, Queued / Roadmap, Residual Risk Statement (Critical/High/Total open + license-blocked callout), HIPAA Defensibility Note (§164.308(a)(1) ongoing risk-management documentation).
 - **`Config/monthly-delta/`** — per-month per-tenant operator-maintained `.psd1` files driving the three status tables. Each row maps to a control via ControlId; HIPAA safeguard citation auto-pulled from `controls.json` `FrameworkIds` (HIPAA-prefixed entry).
 - **`Config/monthly-delta/EXAMPLE-example.com-2026-05.psd1`** — reference delta showing supported shape.
-- **CLI flags on `Invoke-NRGAssessment.ps1`**: `-MonthlyReport`, `-MonthlyDeltaPath`, `-MonthlyPriorPath` (optional, omit on baseline). Path-traversal + missing-file `ValidateScript` guards match `-FromResults` pattern.
-- **`Testing/NRG.MonthlyReport.Tests.ps1`** — 12-case Pester suite. Pins baseline-vs-trend rendering, JSON state shape (next month's input), score formula via `Get-NRGCoverageScore -ErrorHandling Gap`, defensive input handling (missing file, path traversal, malformed delta), empty-arrays graceful render, XSS escaping on operator-supplied delta strings.
-- **Module exports**: `Publish-NRGMonthlyReport` added (count 230 → 231).
+- **CLI flags on `Invoke-TPAssessment.ps1`**: `-MonthlyReport`, `-MonthlyDeltaPath`, `-MonthlyPriorPath` (optional, omit on baseline). Path-traversal + missing-file `ValidateScript` guards match `-FromResults` pattern.
+- **`Testing/TP.MonthlyReport.Tests.ps1`** — 12-case Pester suite. Pins baseline-vs-trend rendering, JSON state shape (next month's input), score formula via `Get-TPCoverageScore -ErrorHandling Gap`, defensive input handling (missing file, path traversal, malformed delta), empty-arrays graceful render, XSS escaping on operator-supplied delta strings.
+- **Module exports**: `Publish-TPMonthlyReport` added (count 230 → 231).
 
 Design notes:
 
 - Self-contained — no external tracking system dependency. State lives in two artifacts the operator manages: the per-month delta `.psd1` + the previous month's output JSON (auto-produced).
 - Score uses `-ErrorHandling Gap` to match the HTML assessment report's score ring (so monthly score never silently disagrees with the main HTML deliverable).
-- XSS guard via `ConvertTo-NRGHtmlSafe` (or inline fallback when the helper isn't loaded). Every operator-supplied string flows through.
+- XSS guard via `ConvertTo-TPHtmlSafe` (or inline fallback when the helper isn't loaded). Every operator-supplied string flows through.
 - HIPAA citation lookup is best-effort; missing citations render as '—' rather than blocking the row.
 
 ### Fixed — real bug (v4.11.1)
 
-- **`Publishers/Publish-NRGMonthlyReport.ps1` license callout had a dead `$controlsWord` variable** — the singular/plural switch was assigned (`if (1) {'control'} else {'controls'}`) but never interpolated into the rendered text. On tenants with exactly 1 license-blocked control, the callout would have read "1 of the open gaps cannot be remediated" (grammar-correct by accident only because the original wording said "of the open gaps" generically). Reworked the sentence to actually use the singular/plural word: "1 control cannot be remediated" vs "N controls cannot be remediated".
+- **`Publishers/Publish-TPMonthlyReport.ps1` license callout had a dead `$controlsWord` variable** — the singular/plural switch was assigned (`if (1) {'control'} else {'controls'}`) but never interpolated into the rendered text. On tenants with exactly 1 license-blocked control, the callout would have read "1 of the open gaps cannot be remediated" (grammar-correct by accident only because the original wording said "of the open gaps" generically). Reworked the sentence to actually use the singular/plural word: "1 control cannot be remediated" vs "N controls cannot be remediated".
 
 ### Fixed — runspace scope warning (v4.11.1)
 
-- **`Lib/Start-NRGWebServer.ps1` browser auto-launch ScriptBlock** flagged by `PSUseUsingScopeModifierInNewRunspaces`. The `param($u)/-ArgumentList $url` pattern works but is non-idiomatic and the warning was real (PSA couldn't see the param binding through the ScriptBlock boundary in some edge cases). Switched to `$using:url` — same behavior, drops the warning, more idiomatic PS7. Also added a `Write-Verbose` to the inner catch so a failed `Start-Process` surfaces under `-Verbose`.
+- **`Lib/Start-TPWebServer.ps1` browser auto-launch ScriptBlock** flagged by `PSUseUsingScopeModifierInNewRunspaces`. The `param($u)/-ArgumentList $url` pattern works but is non-idiomatic and the warning was real (PSA couldn't see the param binding through the ScriptBlock boundary in some edge cases). Switched to `$using:url` — same behavior, drops the warning, more idiomatic PS7. Also added a `Write-Verbose` to the inner catch so a failed `Start-Process` surfaces under `-Verbose`.
 
 ### Cleanup — dead-code removal (11 sites, v4.11.1)
 
 Removed 11 unused-variable assignments left over from prior refactors. None changed observable behavior; all were `$x = <expr>` followed by zero reads:
 
-- `Invoke-NRGAssessment.ps1:194` — `$resolvedOutput` (replaced with `$null = ...` to preserve the side-effecting path-format validation while making the discard explicit; restoring the intended bounds-check is a future-PR concern).
-- `Evaluators/Test-NRGControlDefender.ps1` — `$sl`, `$sa` (Safe Links / Safe Attachments raw reads, leftover from a refactor that moved those into separate evaluators), `$ca` (MDCA-via-CA-policy proxy that became advisory-only).
-- `Collectors/AAD/Invoke-NRGCollectAADPIM.ps1:30` — `$testResp` (probe response value never inspected; only the absence of a thrown exception matters; replaced with `$null = Invoke-MgGraphRequest ...` to make the intentional discard explicit).
-- `Publishers/Publish-NRGAssessmentSummary.ps1:69` + `Publish-NRGRemediationPlaybook.ps1:294` — `$scored` (extracted in v4.10.1 alongside the other coverage values but never referenced; only `$total` and `$score` make it into the rendered output).
-- `Publishers/Publish-NRGDeltaReport.ps1:247` — `$toolVer` (escaped via `EscMdStrict` but the resulting variable was never used).
-- `Publishers/Publish-NRGRemediationScript.ps1:54-56,245` — `$date`, `$version`, `$opUPN`, `$titleL` (header-block remnants from an earlier rendering pass).
+- `Invoke-TPAssessment.ps1:194` — `$resolvedOutput` (replaced with `$null = ...` to preserve the side-effecting path-format validation while making the discard explicit; restoring the intended bounds-check is a future-PR concern).
+- `Evaluators/Test-TPControlDefender.ps1` — `$sl`, `$sa` (Safe Links / Safe Attachments raw reads, leftover from a refactor that moved those into separate evaluators), `$ca` (MDCA-via-CA-policy proxy that became advisory-only).
+- `Collectors/AAD/Invoke-TPCollectAADPIM.ps1:30` — `$testResp` (probe response value never inspected; only the absence of a thrown exception matters; replaced with `$null = Invoke-MgGraphRequest ...` to make the intentional discard explicit).
+- `Publishers/Publish-TPAssessmentSummary.ps1:69` + `Publish-TPRemediationPlaybook.ps1:294` — `$scored` (extracted in v4.10.1 alongside the other coverage values but never referenced; only `$total` and `$score` make it into the rendered output).
+- `Publishers/Publish-TPDeltaReport.ps1:247` — `$toolVer` (escaped via `EscMdStrict` but the resulting variable was never used).
+- `Publishers/Publish-TPRemediationScript.ps1:54-56,245` — `$date`, `$version`, `$opUPN`, `$titleL` (header-block remnants from an earlier rendering pass).
 
 ### PSScriptAnalyzer suppressions added (v4.11.1)
 
@@ -2088,7 +2120,7 @@ Both suppressions list a "re-evaluate when…" condition so they're explicit tec
 
 - All changed files parse cleanly (0 syntax errors).
 - PSScriptAnalyzer: **0 Errors, 0 Warnings** (target state for the polish release).
-- Helper smoke test passes: `Publish-NRGMonthlyReport` runs against the example delta file and produces valid HTML + JSON outputs.
+- Helper smoke test passes: `Publish-TPMonthlyReport` runs against the example delta file and produces valid HTML + JSON outputs.
 - ModuleVersion: 4.10.1 → 4.11.1 (jumps past 4.11.0 since both v4.11.0 and v4.11.1 land in this combined release).
 
 ## v4.10.1 (2026-05-31)
@@ -2097,32 +2129,32 @@ Both suppressions list a "re-evaluate when…" condition so they're explicit tec
 
 ### Added
 
-- **`Lib/Get-NRGCoverageScore.ps1`** — canonical coverage-score helper. Returns `[ordered]@{Satisfied,Partial,Gap,NA,Error,Unknown,Total,Scored,Score}` from a single foreach pass over findings. Supports `-Workload` (ControlId-prefix filter), `-FrameworkId` (FrameworkIds prefix filter), and `-ErrorHandling Exclude|Gap` (Exclude = canonical Maturity semantics, drops Error from denominator; Gap = preserves the historical publisher semantics where Error deflates the score). Now exported via `NRG-Assessment.psm1`/`.psd1` (export #229).
-- **`Lib/Get-NRGObjectField.ps1`** — shape-agnostic field reader for hashtables, OrderedDictionaries, PSCustomObjects (incl. `ConvertFrom-Json` output), and Synchronized hashtables. Never throws on missing keys under StrictMode. Returns the supplied `-Default` for misses. Exported as #230. Documented in its header why a new helper instead of extending `Get-NRGSafeProperty` (the existing helper is property-only; six+ evaluators depend on that property-only behavior).
-- **`Testing/NRG.CoverageScore.Tests.ps1`** — new Pester suite pinning every documented behavior of `Get-NRGCoverageScore`: state counting, `-ErrorHandling` variants, score rounding at half-integer boundaries, `-Workload` + `-FrameworkId` filters, PSCustomObject inputs, missing-FrameworkIds StrictMode safety.
-- **`Testing/NRG.ObjectField.Tests.ps1`** — new Pester suite pinning every shape branch of `Get-NRGObjectField` (hashtable, ordered, PSCustomObject, Synchronized hashtable, ConvertFrom-Json output, null input).
-- **Per-state counts on `Get-NRGMaturityTier` return** — added `Satisfied`, `Partial`, `Gap`, `NotApplicable`, `Total` keys alongside the existing 9. Lets the orchestrator's summary banner (and future callers) read counts from one source instead of re-deriving with `Where-Object`.
+- **`Lib/Get-TPCoverageScore.ps1`** — canonical coverage-score helper. Returns `[ordered]@{Satisfied,Partial,Gap,NA,Error,Unknown,Total,Scored,Score}` from a single foreach pass over findings. Supports `-Workload` (ControlId-prefix filter), `-FrameworkId` (FrameworkIds prefix filter), and `-ErrorHandling Exclude|Gap` (Exclude = canonical Maturity semantics, drops Error from denominator; Gap = preserves the historical publisher semantics where Error deflates the score). Now exported via `TenantPosture.psm1`/`.psd1` (export #229).
+- **`Lib/Get-TPObjectField.ps1`** — shape-agnostic field reader for hashtables, OrderedDictionaries, PSCustomObjects (incl. `ConvertFrom-Json` output), and Synchronized hashtables. Never throws on missing keys under StrictMode. Returns the supplied `-Default` for misses. Exported as #230. Documented in its header why a new helper instead of extending `Get-TPSafeProperty` (the existing helper is property-only; six+ evaluators depend on that property-only behavior).
+- **`Testing/TP.CoverageScore.Tests.ps1`** — new Pester suite pinning every documented behavior of `Get-TPCoverageScore`: state counting, `-ErrorHandling` variants, score rounding at half-integer boundaries, `-Workload` + `-FrameworkId` filters, PSCustomObject inputs, missing-FrameworkIds StrictMode safety.
+- **`Testing/TP.ObjectField.Tests.ps1`** — new Pester suite pinning every shape branch of `Get-TPObjectField` (hashtable, ordered, PSCustomObject, Synchronized hashtable, ConvertFrom-Json output, null input).
+- **Per-state counts on `Get-TPMaturityTier` return** — added `Satisfied`, `Partial`, `Gap`, `NotApplicable`, `Total` keys alongside the existing 9. Lets the orchestrator's summary banner (and future callers) read counts from one source instead of re-deriving with `Where-Object`.
 
 ### Changed — deduplication
 
-- **Score formula extracted from 5 sites** to one canonical helper. Sites now delegating to `Get-NRGCoverageScore`:
-  - `Lib/Get-NRGMaturityTier.ps1` (variant: `-ErrorHandling Exclude`, the documented "Error doesn't tank CI gates" rule)
-  - `Publishers/Publish-NRGAssessmentHTML.ps1` × 3 (tenant-wide ring score, per-workload scores, per-framework scores — all use `-ErrorHandling Gap` to preserve historical numbers)
-  - `Publishers/Publish-NRGAssessmentSummary.ps1`
-  - `Publishers/Publish-NRGRemediationPlaybook.ps1`
-  - `Publishers/Publish-NRGDeltaReport.ps1` (deleted nested `Get-Score` function)
-- **Shape-agnostic field reader extracted** from `Get-NRGMaturityTier.ps1` (nested `Read-FindingField` deleted) and `Publish-NRGDeltaReport.ps1` (`$getBag` scriptblock + DMARC-regression block — 5 inline shape-switches removed).
-- **Orchestrator summary banner** now reads counts from `$reportMetadata['Maturity']` (precomputed at line 583) instead of 5× `Where-Object` over `$findings`. Fail-soft fallback: if Maturity is unavailable (helper threw, or a `-FromResults` baseline pre-dating v4.10.1), banner falls back to one `Get-NRGCoverageScore` call. Banner always renders.
+- **Score formula extracted from 5 sites** to one canonical helper. Sites now delegating to `Get-TPCoverageScore`:
+  - `Lib/Get-TPMaturityTier.ps1` (variant: `-ErrorHandling Exclude`, the documented "Error doesn't tank CI gates" rule)
+  - `Publishers/Publish-TPAssessmentHTML.ps1` × 3 (tenant-wide ring score, per-workload scores, per-framework scores — all use `-ErrorHandling Gap` to preserve historical numbers)
+  - `Publishers/Publish-TPAssessmentSummary.ps1`
+  - `Publishers/Publish-TPRemediationPlaybook.ps1`
+  - `Publishers/Publish-TPDeltaReport.ps1` (deleted nested `Get-Score` function)
+- **Shape-agnostic field reader extracted** from `Get-TPMaturityTier.ps1` (nested `Read-FindingField` deleted) and `Publish-TPDeltaReport.ps1` (`$getBag` scriptblock + DMARC-regression block — 5 inline shape-switches removed).
+- **Orchestrator summary banner** now reads counts from `$reportMetadata['Maturity']` (precomputed at line 583) instead of 5× `Where-Object` over `$findings`. Fail-soft fallback: if Maturity is unavailable (helper threw, or a `-FromResults` baseline pre-dating v4.10.1), banner falls back to one `Get-TPCoverageScore` call. Banner always renders.
 
 ### Fixed — bugs surfaced during the extraction
 
-- **`Publishers/Publish-NRGRemediationPlaybook.ps1` executive-summary `$posture`** was a `switch ($true) { … }` with no `break` statements. Switch-fallthrough meant `$posture` was secretly an array — `@('Strong','Moderate','At Risk')` for any tenant scoring ≥ 85, `@('Moderate','At Risk')` for any tenant scoring 65-84. Visible bug in every executive markdown for any tenant scoring above 40. Rewritten as `if/elseif` (same pattern the Summary publisher already used).
-- **`Publishers/Publish-NRGDeltaReport.ps1` `$getBag`** had latent StrictMode bugs at `$bag.Success` and `$bag.Data`: when called with a `PSCustomObject` bag that didn't have those properties (e.g., a baseline JSON from a tool version that named the collector result differently), the access would throw rather than gracefully returning `@()`. Same fix on the DMARC-regression block at `$bd.DMARCPolicy` / `$cd.DMARCPolicy`. Now flow through `Get-NRGObjectField` with explicit `-Default` values.
+- **`Publishers/Publish-TPRemediationPlaybook.ps1` executive-summary `$posture`** was a `switch ($true) { … }` with no `break` statements. Switch-fallthrough meant `$posture` was secretly an array — `@('Strong','Moderate','At Risk')` for any tenant scoring ≥ 85, `@('Moderate','At Risk')` for any tenant scoring 65-84. Visible bug in every executive markdown for any tenant scoring above 40. Rewritten as `if/elseif` (same pattern the Summary publisher already used).
+- **`Publishers/Publish-TPDeltaReport.ps1` `$getBag`** had latent StrictMode bugs at `$bag.Success` and `$bag.Data`: when called with a `PSCustomObject` bag that didn't have those properties (e.g., a baseline JSON from a tool version that named the collector result differently), the access would throw rather than gracefully returning `@()`. Same fix on the DMARC-regression block at `$bd.DMARCPolicy` / `$cd.DMARCPolicy`. Now flow through `Get-TPObjectField` with explicit `-Default` values.
 
 ### Internal contract notes
 
-- **`Get-NRGCoverageScore -ErrorHandling Exclude` (Maturity) vs `Gap` (publishers)** — the helper exposes both variants instead of forcing convergence. The HTML score ring (uses `Gap`) and the Maturity badge (uses `Exclude`) on the same report will still differ slightly on tenants with `Error` findings — by design. Reconciliation is a separate decision for a future release; today's release prioritizes "zero user-visible score shift" over "one global score."
-- **Behavior preservation verified by**: the existing `Testing/NRG.MaturityTier.Tests.ps1` suite (all assertions pass against the refactored helper; the canary that pinned v4.10.0 behavior); 32-case manual regression suite covering both helpers' edge cases (StrictMode, $null-skip, typo'd states, PSCustomObject input, filter composition).
+- **`Get-TPCoverageScore -ErrorHandling Exclude` (Maturity) vs `Gap` (publishers)** — the helper exposes both variants instead of forcing convergence. The HTML score ring (uses `Gap`) and the Maturity badge (uses `Exclude`) on the same report will still differ slightly on tenants with `Error` findings — by design. Reconciliation is a separate decision for a future release; today's release prioritizes "zero user-visible score shift" over "one global score."
+- **Behavior preservation verified by**: the existing `Testing/TP.MaturityTier.Tests.ps1` suite (all assertions pass against the refactored helper; the canary that pinned v4.10.0 behavior); 32-case manual regression suite covering both helpers' edge cases (StrictMode, $null-skip, typo'd states, PSCustomObject input, filter composition).
 
 ## v4.10.0 (2026-05-31)
 
@@ -2185,28 +2217,28 @@ Why this matters operationally: government / regulated-industry MSP buyers (NRG 
 - **`-FromResults` path crashed on every invocation.** Line 360 did `@{} + $priorData.Metadata`, but `ConvertFrom-Json` returns `PSCustomObject`, not `Hashtable` → `A hash table can only be added to another hash table`. Switched to `ConvertFrom-Json -AsHashtable` and explicit `[hashtable]` casts so `Maturity` / threshold lookups work on the re-published metadata.
 - **Maturity helper crashed on empty findings.** Mandatory `[object[]]` without `[AllowEmptyCollection()]` rejected `@()` — tenants with all `Skip*` flags silently lost the badge AND silently disabled `-FailOnScoreBelow`. Added `[AllowEmptyCollection()]` and an explicit zero-score / Tier 1 result.
 - **Maturity helper crashed on malformed findings under StrictMode.** `Where-Object State -eq 'X'` simple syntax throws `PropertyNotFoundException` on items missing `State`. Replaced with a single shape-agnostic pass that handles both `Hashtable` and `PSCustomObject` (FromResults shape), tolerates missing fields, and skips `$null` entries.
-- **`State='Error'` findings deflated the maturity score.** `Add-NRGFinding` accepts `State='Error'` for collector failures (transient throttling, partial collection). The old denominator counted these as gaps, producing false `-FailOnScoreBelow` CI alarms on flaky tenants. Now excluded from the denominator and surfaced as `ErrorFindings` in the result.
+- **`State='Error'` findings deflated the maturity score.** `Add-TPFinding` accepts `State='Error'` for collector failures (transient throttling, partial collection). The old denominator counted these as gaps, producing false `-FailOnScoreBelow` CI alarms on flaky tenants. Now excluded from the denominator and surfaced as `ErrorFindings` in the result.
 - **`-FailOnScoreBelow` silently no-op'd when Maturity classification failed.** The old guard `Contains('Maturity')` returned false on any helper exception, skipping the CI gate without notification. Now logs a `Write-Warning` declaring the gate INOPERATIVE for that run, and the summary banner shows `Maturity unavailable (<reason>)`.
-- **Quick mode swallowed `Get-NRGControlDefinitions` failure → 0 evaluators → exit 2.** A corrupted `controls.json` produced an "empty assessment" that CI read as a benign signal. Now fails closed via the outer fatal-exit path.
+- **Quick mode swallowed `Get-TPControlDefinitions` failure → 0 evaluators → exit 2.** A corrupted `controls.json` produced an "empty assessment" that CI read as a benign signal. Now fails closed via the outer fatal-exit path.
 - **Quick mode + FromResults silently ignored the switch.** Now emits a `Write-Warning` explaining the user must re-run against the live tenant.
-- **Threshold exit codes (10/11/12) hijacked `$NRGFatalExitCode`.** A real crash that occurred after a threshold breach masqueraded as a graceful policy trip; a graceful trip looked like a fatal crash. Moved to `$script:NRGThresholdExitCode` with explicit precedence (fatal > threshold > success) at the final exit-resolution block.
+- **Threshold exit codes (10/11/12) hijacked `$TPFatalExitCode`.** A real crash that occurred after a threshold breach masqueraded as a graceful policy trip; a graceful trip looked like a fatal crash. Moved to `$script:TPThresholdExitCode` with explicit precedence (fatal > threshold > success) at the final exit-resolution block.
 - **Threshold counts re-derived from `$findings`** were now read from `$reportMetadata.Maturity.CriticalGaps` / `.HighGaps` so the badge and the CI gate can never disagree.
 - **Maturity recompute lifted out of the `if (-not $skipCollection)` guard** so `-FromResults` runs always re-classify against the current findings stream rather than using stale baseline metadata.
 - **Windows guard `-not $IsWindows -and $env:OS -ne 'Windows_NT'`** was over-permissive — any non-Windows shell with that env var inherited bypassed the guard and crashed mid-onboarding. Simplified to `-not $IsWindows` (PS7's authoritative variable); skips the throw under `-WhatIf` so MSP techs can preview the call from a Mac.
-- **`Set-StrictMode` / `$ErrorActionPreference = 'Stop'` moved out of file scope and into the function body** in `Get-NRGMaturityTier.ps1`, matching the convention used by every other Lib helper. The previous file-scope assignment leaked into module session state during dot-source.
+- **`Set-StrictMode` / `$ErrorActionPreference = 'Stop'` moved out of file scope and into the function body** in `Get-TPMaturityTier.ps1`, matching the convention used by every other Lib helper. The previous file-scope assignment leaked into module session state during dot-source.
 
-New Pester coverage in `Testing/NRG.MaturityTier.Tests.ps1` for the empty-findings path, Error exclusion, PSCustomObject inputs, and missing-property survival under StrictMode.
+New Pester coverage in `Testing/TP.MaturityTier.Tests.ps1` for the empty-findings path, Error exclusion, PSCustomObject inputs, and missing-property survival under StrictMode.
 
 ### Added — automation features: Maturity tier, threshold exit codes, Quick scan
 
 Four operator-facing features for CI/automation pipelines and quick triage:
 
-- **`Lib/Get-NRGMaturityTier.ps1`** (new, roadmap F1) — derives a 1–5 tier (Initial / Developing / Defined / Managed / Optimizing) from the final findings stream. Tier rules combine score % and absolute Critical/High gap counts so the badge can never disagree with the score ring. Embedded in `$reportMetadata.Maturity` so every publisher (HTML, JSON, Markdown, Playbook, Delta) sees the same classification. Score formula matches the existing HTML publisher: `round(100 * (Satisfied + 0.5*Partial) / ScoredControls)`.
-- **`-Quick` switch** on `Invoke-NRGAssessment.ps1` — filters the evaluator set to only those that score Critical + High controls. Same collectors run; only the scoring pass is short-circuited. Useful for "give me a 60-second triage" runs. Metadata now records `QuickScan = $true` so downstream consumers can flag that the report intentionally skipped Medium / Low.
+- **`Lib/Get-TPMaturityTier.ps1`** (new, roadmap F1) — derives a 1–5 tier (Initial / Developing / Defined / Managed / Optimizing) from the final findings stream. Tier rules combine score % and absolute Critical/High gap counts so the badge can never disagree with the score ring. Embedded in `$reportMetadata.Maturity` so every publisher (HTML, JSON, Markdown, Playbook, Delta) sees the same classification. Score formula matches the existing HTML publisher: `round(100 * (Satisfied + 0.5*Partial) / ScoredControls)`.
+- **`-Quick` switch** on `Invoke-TPAssessment.ps1` — filters the evaluator set to only those that score Critical + High controls. Same collectors run; only the scoring pass is short-circuited. Useful for "give me a 60-second triage" runs. Metadata now records `QuickScan = $true` so downstream consumers can flag that the report intentionally skipped Medium / Low.
 - **`-FailOnCritical N`, `-FailOnHigh N`, `-FailOnScoreBelow N`** — opt-in threshold exit codes (default 0 = disabled). Distinct exit-code range (10/11/12) so CI callers can disambiguate "no findings" (code 2) from "too many Critical gaps" (code 10). First-match wins, most severe signal lands.
-- **`-BaselineResults <path>`** — already implemented (`Publishers/Publish-NRGDeltaReport.ps1`, 473 lines covering score delta, finding regressions, CA drift, role drift, OAuth drift, DMARC drift). Now surfaced in README so operators discover it.
+- **`-BaselineResults <path>`** — already implemented (`Publishers/Publish-TPDeltaReport.ps1`, 473 lines covering score delta, finding regressions, CA drift, role drift, OAuth drift, DMARC drift). Now surfaced in README so operators discover it.
 
-New Pester suite `Testing/NRG.MaturityTier.Tests.ps1` pins all five tier transitions, the half-credit Partial scoring, NotApplicable exclusion, and the output-shape contract.
+New Pester suite `Testing/TP.MaturityTier.Tests.ps1` pins all five tier transitions, the half-credit Partial scoring, NotApplicable exclusion, and the output-shape contract.
 
 ### Added — HIPAA / SOC 2 / PCI DSS / ISO 27001 citations to every control
 
@@ -2238,38 +2270,38 @@ This release lands citations for all four frameworks across every one of the 195
 | PCI DSS | 17 / 195 (9%) | **195 / 195 (100%)** |
 | ISO 27001 | 72 / 195 (37%) | **195 / 195 (100%)** |
 
-**New Pester invariant** (`Testing/NRG.FrameworkCoverage.Tests.ps1`) pins the contract for future PRs: every control must carry a non-empty citation for all 8 frameworks, each in the right shape (HIPAA `§164.*`, SOC 2 TSC codes, PCI `Req N.N`, ISO `A.[5-8].N`), and the 10 HIPAA fixes are pinned by control ID so a future edit cannot regress them silently.
+**New Pester invariant** (`Testing/TP.FrameworkCoverage.Tests.ps1`) pins the contract for future PRs: every control must carry a non-empty citation for all 8 frameworks, each in the right shape (HIPAA `§164.*`, SOC 2 TSC codes, PCI `Req N.N`, ISO `A.[5-8].N`), and the 10 HIPAA fixes are pinned by control ID so a future edit cannot regress them silently.
 
 ### Added — app-only tenant onboarding (`-RegisterApp`) (ported into v4.10.0)
 
 A one-time onboarding flow that registers a read-only enterprise app + certificate in a customer tenant, so subsequent scans run **app-only** — no device-code prompts, and immune to Conditional Access "Authentication Flows" policies (the `AADSTS530036` block that prevents the Teams/EXO device-code sign-in on hardened tenants).
 
-- **`Lib/Register-NRGTenantApp.ps1`** (new) — generates a self-signed client-auth cert in `Cert:\CurrentUser\My`, creates the app registration, creates its service principal, and either auto-grants admin consent (`-GrantConsent`, operator must be Global Admin) or emits an admin-consent URL for a Global Admin. Records `ClientId` / `TenantId` / `CertThumbprint` in `Config/clients.json`.
+- **`Lib/Register-TPTenantApp.ps1`** (new) — generates a self-signed client-auth cert in `Cert:\CurrentUser\My`, creates the app registration, creates its service principal, and either auto-grants admin consent (`-GrantConsent`, operator must be Global Admin) or emits an admin-consent URL for a Global Admin. Records `ClientId` / `TenantId` / `CertThumbprint` in `Config/clients.json`.
 - **Permission GUIDs are resolved at runtime** from the target tenant's own Microsoft Graph service principal — never hardcoded. Permissions with no application-permission equivalent are reported and skipped.
 - **The app it creates is read-only** (all requested Graph permissions are `*.Read.All`). The onboarding step is the one sanctioned directory write, isolated in this function and gated behind `-RegisterApp` + `SupportsShouldProcess`/`-WhatIf`.
-- **Entry-script wiring** (`Invoke-NRGAssessment.ps1`):
+- **Entry-script wiring** (`Invoke-TPAssessment.ps1`):
   - `-RegisterApp -TenantDomain <domain>` — connects interactively with write scopes, runs onboarding, exits.
   - `-TenantDomain <domain>` on a normal scan — looks up the onboarded `ClientId` + cert thumbprint from `clients.json` and runs app-only with zero typed GUIDs. Falls back to interactive with a hint if the tenant isn't onboarded.
 - Exchange Online app-only needs one manual follow-up (assign the app the **Global Reader** directory role); the function prints the instruction.
 - `clients.json` gains `ClientId`, `CertThumbprint`, `AuthMode`, `OnboardedAt` fields; the file's ACL is restricted on write.
 
-**Note:** the connection side (`Connect-NRGServices` AppOnly parameter set) already supported cert auth; this release adds the missing onboarding + auto-lookup.
+**Note:** the connection side (`Connect-TPServices` AppOnly parameter set) already supported cert auth; this release adds the missing onboarding + auto-lookup.
 
 ## v4.9.0 (2026-05-29) — local web GUI
 
 ### Added — local web GUI
 
-New `-Web` flag on `Invoke-NRGAssessment.ps1` launches a local Pode-backed web server (loopback only, `127.0.0.1:8765` by default) and opens the operator's browser to a single-page GUI. The GUI is a thin shell over the existing module:
+New `-Web` flag on `Invoke-TPAssessment.ps1` launches a local Pode-backed web server (loopback only, `127.0.0.1:8765` by default) and opens the operator's browser to a single-page GUI. The GUI is a thin shell over the existing module:
 
 - **Tenant list** is read from `Config/clients.json`; ad-hoc domains can be entered directly.
-- **Click a tenant** → confirm prompt → kicks off `Invoke-NRGAssessment.ps1` as a child job. The operator authorizes Microsoft Graph / EXO in the child's auth-popup browser window the same way they would for a CLI run.
+- **Click a tenant** → confirm prompt → kicks off `Invoke-TPAssessment.ps1` as a child job. The operator authorizes Microsoft Graph / EXO in the child's auth-popup browser window the same way they would for a CLI run.
 - **Live progress** — the server polls the child job's stdout and the GUI updates a progress bar and log tail every second.
 - **History** sidebar lists prior runs from `./output/` (per-tenant subfolders, latest first).
 - **View report inline** — clicking a run loads the existing CSP-hardened `<tenant>-assessment.html` into a sandboxed iframe (`sandbox="allow-same-origin"`); the report's own strict CSP still applies inside the frame.
 
 Files added:
 
-- `Lib/Start-NRGWebServer.ps1` (303 lines) — server entry point + 5 routes.
+- `Lib/Start-TPWebServer.ps1` (303 lines) — server entry point + 5 routes.
 - `Web/index.html`, `Web/static/app.css`, `Web/static/app.js` — vanilla HTML/CSS/JS; no framework, no bundler, CSP-friendly (all DOM wiring via `addEventListener`, no inline handlers).
 
 Security posture:
@@ -2284,7 +2316,7 @@ Prerequisites for `-Web`:
 
 - `Install-Module Pode -MinimumVersion 2.10.0 -Scope CurrentUser` (one-time, free, MIT).
 
-Module exports updated in both `NRG-Assessment.psd1` `FunctionsToExport` and `NRG-Assessment.psm1` `$script:ExportedFunctions` to include `Start-NRGWebServer`.
+Module exports updated in both `TenantPosture.psd1` `FunctionsToExport` and `TenantPosture.psm1` `$script:ExportedFunctions` to include `Start-TPWebServer`.
 
 ## v4.6.7 (2026-05-27) — polished release
 
@@ -2292,17 +2324,17 @@ Polish-and-correctness bundle covering everything surfaced by the v4.6.6 review 
 
 ### Fixed — correctness
 
-- **Six StrictMode property-access NREs in `Test-NRGControlIntune.ps1`.** The user's clientc.example run printed `The property 'ConditionalLaunchSettings' cannot be found on this object.` for `INT-3.3`. Same unguarded pattern surfaced at five more sites:
+- **Six StrictMode property-access NREs in `Test-TPControlIntune.ps1`.** The user's clientc.example run printed `The property 'ConditionalLaunchSettings' cannot be found on this object.` for `INT-3.3`. Same unguarded pattern surfaced at five more sites:
   - `INT-3.3`  ConditionalLaunchSettings (line 290)
   - `INT-1.2`  TemplateType (line 129)
   - `INT-3.1`  Platform (line 205) + SystemIntegrityProtectionEnabled / StorageRequireEncryption (line 210)
   - `INT-4.4`  Platform (line 371) + PasswordRequired / RequirePassword (line 375)
   
-  All six switched to `Get-NRGSafeProperty -Object $_ -Property '<name>' -Default <safe>` — the same canonical pattern already used at line 84 (INT-1.3 BitLocker). The `??` null-coalescing operator only handles `$null` values; under StrictMode a missing property throws before `??` can coalesce.
+  All six switched to `Get-TPSafeProperty -Object $_ -Property '<name>' -Default <safe>` — the same canonical pattern already used at line 84 (INT-1.3 BitLocker). The `??` null-coalescing operator only handles `$null` values; under StrictMode a missing property throws before `??` can coalesce.
 
-- **EOM downgrade fails on OneDrive-synced PowerShell module paths.** The user's run showed `Cannot remove package path C:\Users\…\OneDrive - …\Documents\PowerShell\Modules\ExchangeOnlineManagement\3.2.0` because OneDrive holds file locks on every file in the synced tree. `Invoke-NRGAssessment.ps1` now detects a OneDrive-synced `ModuleBase` BEFORE calling `Uninstall-PSResource` and prints an actionable message ("pause OneDrive sync on Documents OR move PowerShell modules out of OneDrive") instead of letting the uninstall fail mid-sweep.
+- **EOM downgrade fails on OneDrive-synced PowerShell module paths.** The user's run showed `Cannot remove package path C:\Users\…\OneDrive - …\Documents\PowerShell\Modules\ExchangeOnlineManagement\3.2.0` because OneDrive holds file locks on every file in the synced tree. `Invoke-TPAssessment.ps1` now detects a OneDrive-synced `ModuleBase` BEFORE calling `Uninstall-PSResource` and prints an actionable message ("pause OneDrive sync on Documents OR move PowerShell modules out of OneDrive") instead of letting the uninstall fail mid-sweep.
 
-- **EXO "more results available" warning recurrence.** `Collectors/EXO/Invoke-NRGCollectEXOMailboxConfig.ps1:122` deliberately samples 10 user mailboxes for audit-config inspection — but EXO emits a `WARNING: There are more results available...` line on every call. Operators reading the warning assumed the v4.6.5 ResultSize sweep had regressed. The sampling call now passes `-WarningAction SilentlyContinue` and the inline comment explains the intent.
+- **EXO "more results available" warning recurrence.** `Collectors/EXO/Invoke-TPCollectEXOMailboxConfig.ps1:122` deliberately samples 10 user mailboxes for audit-config inspection — but EXO emits a `WARNING: There are more results available...` line on every call. Operators reading the warning assumed the v4.6.5 ResultSize sweep had regressed. The sampling call now passes `-WarningAction SilentlyContinue` and the inline comment explains the intent.
 
 ### Fixed — UI / browser
 
@@ -2312,13 +2344,13 @@ Polish-and-correctness bundle covering everything surfaced by the v4.6.6 review 
 
 - **CSP now explicitly sets `frame-ancestors 'none'` and `object-src 'none'`.** Per CSP spec, neither directive inherits from `default-src 'none'` — without explicit declarations the assessment report was embeddable in cross-origin iframes (clickjacking surface) and could load `<object>`/`<embed>` plugin content. The sibling playbook publisher already set `frame-ancestors 'none'`; assessment.html was the only outlier.
 
-- **CSP integrity self-check at publish time.** `Publish-NRGAssessmentHTML.ps1` now re-derives the SHA-256 of the inline `<script>` body actually written into `$html` and throws if it disagrees with the `script-src 'sha256-...'` claim baked into the CSP. Catches the exact regression we fixed in v4.6.6.1 (interpolation drift between hashed source and emitted body) at publish time rather than in the operator's browser.
+- **CSP integrity self-check at publish time.** `Publish-TPAssessmentHTML.ps1` now re-derives the SHA-256 of the inline `<script>` body actually written into `$html` and throws if it disagrees with the `script-src 'sha256-...'` claim baked into the CSP. Catches the exact regression we fixed in v4.6.6.1 (interpolation drift between hashed source and emitted body) at publish time rather than in the operator's browser.
 
-- **Self-signed code-signing cert explicit non-CA constraint.** `Build/New-NRGCodeSigningCert.ps1` now passes `-TextExtension '2.5.29.19={text}cA=false'` so even though the cert is installed in `CurrentUser\Root` (required for self-signed chain validation), it cannot issue certs for arbitrary subjects. Loss of the private key enables impersonation of THIS publisher only, not arbitrary code signing. Banner now states this explicitly.
+- **Self-signed code-signing cert explicit non-CA constraint.** `Build/New-TPCodeSigningCert.ps1` now passes `-TextExtension '2.5.29.19={text}cA=false'` so even though the cert is installed in `CurrentUser\Root` (required for self-signed chain validation), it cannot issue certs for arbitrary subjects. Loss of the private key enables impersonation of THIS publisher only, not arbitrary code signing. Banner now states this explicitly.
 
 ### Fixed — cosmetic
 
-- **`Publish-NRGRemediationPlaybook.ps1` fallback `?? '4.5.5'`** now falls back to `$script:NRGAssessmentVersion` (current module version) and only to the string `'unknown'` if even that is unavailable. Previously, generated playbooks could print v4.5.5 in their footer if the entry script forgot to populate `$Metadata.ToolVersion`.
+- **`Publish-TPRemediationPlaybook.ps1` fallback `?? '4.5.5'`** now falls back to `$script:TPAssessmentVersion` (current module version) and only to the string `'unknown'` if even that is unavailable. Previously, generated playbooks could print v4.5.5 in their footer if the entry script forgot to populate `$Metadata.ToolVersion`.
 
 - **Sanitized `sample-report/example-assessment.html` regenerated** with the current publisher. The previous sample contained stale `onclick=` and the OLD `function goto` / `function toggle` JS body, which would either silently fail under CSP or mislead reviewers into thinking inline-onclick was supported.
 
@@ -2358,14 +2390,14 @@ The v4.6.7 line also brought the repo's GitHub-side security posture up to match
 A documentation-drift audit caught several stale claims, now corrected:
 
 - **`SECURITY.md` CI/CD section rewritten to match reality.** It previously listed Gitleaks, TruffleHog, CycloneDX SBOM, and an Authenticode catalog check as running CI steps when no workflow implemented them, and omitted the CodeQL / Scorecard / Dependency Review / Dependabot steps that *do* run. The four claimed-but-missing steps are now actually implemented (above), and the section names the workflow file behind each step so it can be verified against `.github/workflows/`.
-- **Version strings reconciled to 4.6.7** in the `NRG-Assessment.psm1` header banner, `CLAUDE.md`, and the `SECURITY.md` footer (all had lagged at 4.5.5 / 4.6.5 while the manifest and `$script:NRGAssessmentVersion` were already 4.6.7).
+- **Version strings reconciled to 4.6.7** in the `TenantPosture.psm1` header banner, `CLAUDE.md`, and the `SECURITY.md` footer (all had lagged at 4.5.5 / 4.6.5 while the manifest and `$script:TPAssessmentVersion` were already 4.6.7).
 - **`SECURITY.md` "35 production files"** claim replaced with a count-free phrasing to stop the number drifting out of sync.
 
 ## v4.6.6.1 (2026-05-27) — HTML report CSP hotfix
 
 ### Fixed
 
-- **Interactive buttons silently broken in HTML assessment report.** The CSP emitted by `Publishers/Publish-NRGAssessmentHTML.ps1` was `script-src 'sha256-...'` — correctly authorizing the inline `<script>` block, but with no `'unsafe-inline'` or `'unsafe-hashes'`. Every `onclick="goto(...)"` on the header nav and every `onclick='toggle(this)'` on the expandable finding rows was therefore blocked by the browser, with no visible error to the operator. Nav links and row expanders rendered as cursor-pointer but did nothing on click.
+- **Interactive buttons silently broken in HTML assessment report.** The CSP emitted by `Publishers/Publish-TPAssessmentHTML.ps1` was `script-src 'sha256-...'` — correctly authorizing the inline `<script>` block, but with no `'unsafe-inline'` or `'unsafe-hashes'`. Every `onclick="goto(...)"` on the header nav and every `onclick='toggle(this)'` on the expandable finding rows was therefore blocked by the browser, with no visible error to the operator. Nav links and row expanders rendered as cursor-pointer but did nothing on click.
 
   Fix: removed all inline `onclick=` attributes. Nav spans now use `data-goto="<id>"`; expandable rows are identified by their existing `class="exp"`. Handlers are attached via `addEventListener` inside the existing CSP-hashed `<script>` block, so the SHA-256 hash covers them automatically — no CSP relaxation needed.
 
@@ -2378,8 +2410,8 @@ Two latent bugs surfaced when an operator unboxed v4.6.5 from a fresh GitHub zip
 ### Fixed
 
 - **`New-Item -LiteralPath ... -ItemType Directory` doesn't work** — `-LiteralPath` is not in `New-Item`'s parameter set even on PS 7. Five sites switched to `[void][System.IO.Directory]::CreateDirectory($path)`:
-  - `Invoke-NRGAssessment.ps1`, `Invoke-NRGBatchAssessment.ps1`, `Apply-NRGBaseline.ps1`, `Build/New-NRGCodeSigningCert.ps1`, `tools/Generate-SBOM.ps1`
-- **`MicrosoftTeams` demoted from `RequiredModules` to soft dependency.** Module no longer fails to load on workstations without Teams. `Connect-NRGServices` already handles on-demand load.
+  - `Invoke-TPAssessment.ps1`, `Invoke-TPBatchAssessment.ps1`, `Apply-TPBaseline.ps1`, `Build/New-TPCodeSigningCert.ps1`, `tools/Generate-SBOM.ps1`
+- **`MicrosoftTeams` demoted from `RequiredModules` to soft dependency.** Module no longer fails to load on workstations without Teams. `Connect-TPServices` already handles on-demand load.
 
 ## v4.6.5 (2026-05-27)
 
@@ -2387,25 +2419,25 @@ Patch release closing the correctness sweep defined in `docs/CORRECTNESS-SWEEP-v
 
 ### Fixed
 
-- **Per-tenant remediation script dispatch (Critical).** Generated `<tenant>-remediation.ps1` files called `Apply-NRG* -ErrorAction Stop` with no `-Finding` argument. Every `Apply-NRG*` function declares `[Parameter(Mandatory)] [object] $Finding`, so every dispatched call would have failed at runtime. The generated script now loads its sibling `<baseName>-results.json`, builds `$findingsByCtrl`, and passes `-Finding $fnd` per dispatch. The JSON-load runs BEFORE `Connect-NRGServices` so a missing or corrupt JSON fails fast without paying the Graph/EXO authentication cost. `ConvertFrom-Json` is wrapped in try/catch with a diagnostic message. `$assessment.Findings` is null-checked so an unexpected JSON shape produces an actionable error rather than silent zero-iteration.
+- **Per-tenant remediation script dispatch (Critical).** Generated `<tenant>-remediation.ps1` files called `Apply-NRG* -ErrorAction Stop` with no `-Finding` argument. Every `Apply-NRG*` function declares `[Parameter(Mandatory)] [object] $Finding`, so every dispatched call would have failed at runtime. The generated script now loads its sibling `<baseName>-results.json`, builds `$findingsByCtrl`, and passes `-Finding $fnd` per dispatch. The JSON-load runs BEFORE `Connect-TPServices` so a missing or corrupt JSON fails fast without paying the Graph/EXO authentication cost. `ConvertFrom-Json` is wrapped in try/catch with a diagnostic message. `$assessment.Findings` is null-checked so an unexpected JSON shape produces an actionable error rather than silent zero-iteration.
 - **14 StrictMode property-access NREs** across AAD, Defender, EXO, Intune evaluators (PR #2, #4). Each was silently dropping one or more findings from real-tenant reports.
 - **`Get-Mailbox -ResultSize 1000` undercount.** Five EXO collector calls capped at 1000 mailboxes. Switched to `-ResultSize Unlimited` for population-counting calls.
 - **HTML playbook alias collision.** `function H` collided with the built-in `h` alias (= `Get-History -Id [long]`). Renamed to `EscHtml`.
-- **XLSX compliance matrix `'PCIDSS'` NRE.** All 10 framework-reference accesses now use `Get-NRGNestedProperty`. Also fixed the `PCIDASSS` column header typo.
-- **HTML entity leakage in markdown publishers.** `ConvertTo-NRGHtmlSafe` was being applied to markdown source. Markdown `EscMd` now escapes only characters that break markdown table/code-span structure.
+- **XLSX compliance matrix `'PCIDSS'` NRE.** All 10 framework-reference accesses now use `Get-TPNestedProperty`. Also fixed the `PCIDASSS` column header typo.
+- **HTML entity leakage in markdown publishers.** `ConvertTo-TPHtmlSafe` was being applied to markdown source. Markdown `EscMd` now escapes only characters that break markdown table/code-span structure.
 - **Findings-table sort under malformed enum values.** Defensive `?? 99` coerces unknown values to a sortable tail.
 
 ### Security / privacy
 
-- **`.gitignore` now excludes `output/`.** NRG had the same gap as NLS (only `Reports/` was excluded); future `Invoke-NRGAssessment` runs would have started tracking output files. (Correction, 2026-10-04: this entry said NRG never had real client data committed. That was wrong: client assessment output was uploaded to `output/` on 2026-05-12 and 2026-05-18, removed from the tree on 2026-05-19 and 2026-05-26, and remains in git history.)
+- **`.gitignore` now excludes `output/`.** NRG had the same gap as NLS (only `Reports/` was excluded); future `Invoke-TPAssessment` runs would have started tracking output files. (Correction, 2026-10-04: this entry said NRG never had real client data committed. That was wrong: client assessment output was uploaded to `output/` on 2026-05-12 and 2026-05-18, removed from the tree on 2026-05-19 and 2026-05-26, and remains in git history.)
 - **Sample HTML sanitization.** `sample-report/example-assessment.html` had 7 occurrences of real personal domain `mattlevorson.com` (secondary domain on the source tenant) and 2 admin display names rendered as `NRG Technology Services / NextLayerSec LLC` (collision from `Matthew Levorson → NRG Technology Services / NextLayerSec LLC` sanitization). Replaced with `example2.com` / `Admin 2` / `Admin 3`.
 - **Branding/PII leaks** in initial NRG port surfaced and fixed: NRG phone number in `branding.psd1`, "North Dakota" geographic identifier in CLAUDE.md, real client names in sample configs.
 
 ### Release engineering
 
-- **In-house signing scaffolding (soft mode, $0 cost).** New `Build/New-NRGCodeSigningCert.ps1` generates a self-signed Authenticode cert on the operator workstation, installs it into `TrustedPublisher` + `Root`, and stashes the thumbprint at `~/.nrg-assessment/signing-thumbprint.txt`. `Build/Sign-Release.ps1` treats self-signed as first-class for in-house use. Upgrade path to a paid cert is one parameter.
-- **`Apply-NRGBaseline.ps1 -RequireSignedCode`** (new switch, default `$false`). Soft warning by default; hard refusal when set. Future v5.0 may flip the default.
-- **`Lib/Test-NRGSignatureStatus.ps1`** (new exported function). Wraps `Get-AuthenticodeSignature` with friendlier status mapping and self-signed chain resolution.
+- **In-house signing scaffolding (soft mode, $0 cost).** New `Build/New-TPCodeSigningCert.ps1` generates a self-signed Authenticode cert on the operator workstation, installs it into `TrustedPublisher` + `Root`, and stashes the thumbprint at `~/.tp-assessment/signing-thumbprint.txt`. `Build/Sign-Release.ps1` treats self-signed as first-class for in-house use. Upgrade path to a paid cert is one parameter.
+- **`Apply-TPBaseline.ps1 -RequireSignedCode`** (new switch, default `$false`). Soft warning by default; hard refusal when set. Future v5.0 may flip the default.
+- **`Lib/Test-TPSignatureStatus.ps1`** (new exported function). Wraps `Get-AuthenticodeSignature` with friendlier status mapping and self-signed chain resolution.
 - **`RELEASE-CHECKLIST.md`** (new). Codifies the per-release contract: pre-release OWASP delta walk, code-review pass, adversarial fixtures, real-tenant run; release-time signing + integrity-manifest generation; post-release SBOM + smoke test.
 
 ### Documentation
@@ -2450,11 +2482,11 @@ Major architectural change: rebuilt on the v4.5.0 baseline pattern to eliminate 
 - **FromResults regeneration** — rebuild reports from prior JSON without re-collecting.
 - **BaselineResults delta comparison**.
 - **Module prerequisite check with auto-install prompt**.
-- **GDAP batch runner** (Invoke-NRGBatchAssessment.ps1) for MSP multi-tenant runs.
+- **GDAP batch runner** (Invoke-TPBatchAssessment.ps1) for MSP multi-tenant runs.
 
 ### Changed
 - **`-SkipPurview` defaults to `$true`** — EOM v3.4 IPPSSession WAM crash. Use `-IncludePurview` to opt in.
-- **Evaluator discovery dynamic** — orchestrator enumerates `Test-NRGControl*` from loaded module rather than hardcoded list.
+- **Evaluator discovery dynamic** — orchestrator enumerates `Test-TPControl*` from loaded module rather than hardcoded list.
 - **Disconnect at end of run** — no try/finally chain that fires on every error.
 
 ## v4.5.0 (Baseline)

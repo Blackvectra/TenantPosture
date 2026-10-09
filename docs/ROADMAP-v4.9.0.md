@@ -4,11 +4,11 @@
 
 **Why combined.** The original v4.7 / v4.8 split was sequencing convenience, but the features tightly couple in practice: the Maturity Model (F1) wants IG coverage as an input, the Portfolio dashboard (F13) wants Maturity and Incident-Likelihood as columns, and Attestation (F12) and Responsibility Map (F5) are both schema migrations on the same `controls.json` rows. Shipping together = **one** baseline jump, **one** tenant scope-grant cycle, **one** CHANGELOG entry, **one** documentation update for clients.
 
-**Scope:** Both `NRG-Assessment` and the sibling `NRG-Assessment` repo land each feature in lockstep — same control IDs, same finding shapes, identical baseline JSON entries. Branding only.
+**Scope:** Both `TenantPosture` and the sibling `TenantPosture` repo land each feature in lockstep — same control IDs, same finding shapes, identical baseline JSON entries. Branding only.
 
 **Principles** (inherited; unchanged):
 - Read-only invariant holds. Every new collector uses GET-only Graph and read-only EXO cmdlets.
-- Every new evaluator follows the `Add-NRGFinding` contract.
+- Every new evaluator follows the `Add-TPFinding` contract.
 - Every new control gets one row in `Config/controls.json` and one entry in the relevant baseline JSON.
 - Every new feature ships at least one Pester test.
 - Module manifest exports stay in sync between psm1 and psd1.
@@ -17,7 +17,7 @@
 
 ## Scope boundary (the principle, not a feature)
 
-`NRG-Assessment` is a **Microsoft tenant cloud assessment tool**. It collects through Graph, EXO, Teams, SharePoint, Intune, Purview, Defender for O365, and Power Platform APIs plus authoritative DNS. It is **not**, and will not become:
+`TenantPosture` is a **Microsoft tenant cloud assessment tool**. It collects through Graph, EXO, Teams, SharePoint, Intune, Purview, Defender for O365, and Power Platform APIs plus authoritative DNS. It is **not**, and will not become:
 
 - An endpoint hardening scanner. No per-device WMI/registry reads. No `Get-HotFix`, `manage-bde -status`, `Get-LocalUser`, `Get-LocalGroupMember`, autorun-policy, PS-logging-policy, or exploit-protection registry checks.
 - A third-party EDR connector. No Cortex XDR API, no MDR-platform integrations we don't own.
@@ -62,55 +62,55 @@ What stays in scope from CIS IG1/IG2: identity & MFA & CA & role assignments & S
 
 ### F5 — Shared Responsibility Map
 
-`controls.json` schema: required `Responsibility` field per control. Allowed values: `MSP`, `ClientIT`, `Vendor`, `Microsoft`, `Shared`. New helper `Lib/Get-NRGFindingResponsibility.ps1` returns the value with baseline-JSON overrides allowed for client-specific deviations. Publisher gets a new "Accountability Matrix" HTML section grouping gaps by responsible party. One-time migration: populate all 188 existing controls (DNS-* → Shared; PPL-* Copilot → ClientIT; Defender preset / CA creation → MSP; license decisions → ClientIT; platform defaults → Microsoft).
+`controls.json` schema: required `Responsibility` field per control. Allowed values: `MSP`, `ClientIT`, `Vendor`, `Microsoft`, `Shared`. New helper `Lib/Get-TPFindingResponsibility.ps1` returns the value with baseline-JSON overrides allowed for client-specific deviations. Publisher gets a new "Accountability Matrix" HTML section grouping gaps by responsible party. One-time migration: populate all 188 existing controls (DNS-* → Shared; PPL-* Copilot → ClientIT; Defender preset / CA creation → MSP; license decisions → ClientIT; platform defaults → Microsoft).
 
 ### F11 — IG1/IG2 grouping on existing controls
 
-`controls.json` schema: required `ImplementationGroup` field per control. Allowed values: `IG1`, `IG2`, `IG3`, `NotMapped`. Mapping source: CIS Controls v8.1 IG matrix in `baselines/cis-ig-matrix.json` (frozen reference). New helper `Lib/Get-NRGIGScore.ps1` returns `@{ IG; Total; Satisfied; Gap; CoveragePct; CriticalGaps }`. Publisher gets three IG scorecard tiles next to the existing license-tier card. JSON output gets a top-level `IGScores` block.
+`controls.json` schema: required `ImplementationGroup` field per control. Allowed values: `IG1`, `IG2`, `IG3`, `NotMapped`. Mapping source: CIS Controls v8.1 IG matrix in `baselines/cis-ig-matrix.json` (frozen reference). New helper `Lib/Get-TPIGScore.ps1` returns `@{ IG; Total; Satisfied; Gap; CoveragePct; CriticalGaps }`. Publisher gets three IG scorecard tiles next to the existing license-tier card. JSON output gets a top-level `IGScores` block.
 
 ### F10 — Licensing Waste / Right-Sizing
 
-New evaluator `Test-NRGControlLicenseWaste.ps1`. Composes from existing `AAD-Inventory.SubscribedSkus` plus per-workload deployment state already collected. Match table: Defender O365 P1/P2 → Safe Attachments + Safe Links deployed; Intune (any) → at least one compliance policy + enrolled devices; Purview/E5 Compliance → ≥1 DLP policy active; Entra P1 → ≥1 enabled CA policy; Entra P2 → PIM eligibility used. Five new controls `LIC-1.1..1.5`. New workload code `LIC` — add to `Get-NRGControlDefinitions.ps1` and the workload scorecard grid.
+New evaluator `Test-TPControlLicenseWaste.ps1`. Composes from existing `AAD-Inventory.SubscribedSkus` plus per-workload deployment state already collected. Match table: Defender O365 P1/P2 → Safe Attachments + Safe Links deployed; Intune (any) → at least one compliance policy + enrolled devices; Purview/E5 Compliance → ≥1 DLP policy active; Entra P1 → ≥1 enabled CA policy; Entra P2 → PIM eligibility used. Five new controls `LIC-1.1..1.5`. New workload code `LIC` — add to `Get-TPControlDefinitions.ps1` and the workload scorecard grid.
 
 ### F4 — Thread Hijack Composite Risk
 
-New evaluator `Test-NRGControlEXOThreadHijackComposite.ps1`. No new collector; composes `EXO-MailboxConfig` (forwarding, transport rules), `DNS-Summary` (DMARC), `Defender-Policies` (Safe Links), `EXO-MailboxConfig.MailboxPermissions` (FullAccess delegations). Risk score 0–100; threshold map <30 Low, 30–60 Medium, 60+ High. Detail field renders an explicit attack-path narrative for the executive summary.
+New evaluator `Test-TPControlEXOThreadHijackComposite.ps1`. No new collector; composes `EXO-MailboxConfig` (forwarding, transport rules), `DNS-Summary` (DMARC), `Defender-Policies` (Safe Links), `EXO-MailboxConfig.MailboxPermissions` (FullAccess delegations). Risk score 0–100; threshold map <30 Low, 30–60 Medium, 60+ High. Detail field renders an explicit attack-path narrative for the executive summary.
 
 ### F8 — Vendor & Supply Chain Risk
 
-New evaluator `Test-NRGControlAADSupplyChainRisk.ps1`. No new mandatory collector; composes `AAD-Inventory` (service principals + delegated permissions), `AAD-Users` (guests by external domain), `AAD-DirectoryRoles` (role assignments to guests). Three new controls `AAD-15.1..15.3`. Optional opt-in `-IncludeGDAPReview` flag pulls GDAP relationships via Partner Center API for partner-managed tenants.
+New evaluator `Test-TPControlAADSupplyChainRisk.ps1`. No new mandatory collector; composes `AAD-Inventory` (service principals + delegated permissions), `AAD-Users` (guests by external domain), `AAD-DirectoryRoles` (role assignments to guests). Three new controls `AAD-15.1..15.3`. Optional opt-in `-IncludeGDAPReview` flag pulls GDAP relationships via Partner Center API for partner-managed tenants.
 
 ### F1 — Tenant Security Maturity Model
 
-Tiers: Initial (1) → Developing (2) → Defined (3) → Managed (4) → Optimizing (5). Classification rule combines coverage % of license-applicable controls, critical-gap count, and sustained-period history. New helper `Lib/Get-NRGMaturityTier.ps1`. Publisher: maturity badge above the score ring, tier-ladder visualization, trajectory arrow vs last assessment. JSON output: top-level `Maturity` block. **History store:** `output/<tenant>/maturity-history.json`, append-only, fields covered by the existing signed integrity manifest.
+Tiers: Initial (1) → Developing (2) → Defined (3) → Managed (4) → Optimizing (5). Classification rule combines coverage % of license-applicable controls, critical-gap count, and sustained-period history. New helper `Lib/Get-TPMaturityTier.ps1`. Publisher: maturity badge above the score ring, tier-ladder visualization, trajectory arrow vs last assessment. JSON output: top-level `Maturity` block. **History store:** `output/<tenant>/maturity-history.json`, append-only, fields covered by the existing signed integrity manifest.
 
 ### F2 — Incident Likelihood Scoring
 
-Per-incident-type probability and expected annual loss anchored to Verizon DBIR base rates and IBM Cost of a Data Breach loss curves (both 2025 editions). `controls.json` schema: optional `IncidentRiskMultipliers` per control. New `baselines/incident-anchors.json` (frozen at release; verify redistribution terms — see open questions). New helper `Lib/Get-NRGIncidentLikelihood.ps1`. Publisher: new "Financial Risk Forecast" HTML section above Attack Scenario Analysis. Renders four cards (BEC, Ransomware, Data exfiltration, Credential compromise) with probability bar and dollar figure.
+Per-incident-type probability and expected annual loss anchored to Verizon DBIR base rates and IBM Cost of a Data Breach loss curves (both 2025 editions). `controls.json` schema: optional `IncidentRiskMultipliers` per control. New `baselines/incident-anchors.json` (frozen at release; verify redistribution terms — see open questions). New helper `Lib/Get-TPIncidentLikelihood.ps1`. Publisher: new "Financial Risk Forecast" HTML section above Attack Scenario Analysis. Renders four cards (BEC, Ransomware, Data exfiltration, Credential compromise) with probability bar and dollar figure.
 
 ### F12 — Governance Attestation Form
 
-Two new entry points at repo root: `Invoke-NRGAttestation.ps1` (interactive CLI walks operator through items; writes `output/<tenant>/attestation-<year>.json`) and `Publish-NRGAttestationForm.ps1` (standalone static HTML form, strict CSP, self-contained, exports to JSON). Item set defined in `Config/attestation-items.json`; initial ~12–15 items (IR plan exists, IR plan tested, pentest within 12 months, security awareness training, phishing simulation, vendor security clauses, PAW use, post-incident reviews, restore tested, RACI documented, data classification policy, change-management policy, access review cadence, vulnerability disclosure process). Orchestrator folds the most recent attestation file into the findings stream — `Satisfied` / `Gap` / `Stale`. New evaluator `Test-NRGControlAttested.ps1` emits one finding per mapped CIS Control safeguard.
+Two new entry points at repo root: `Invoke-TPAttestation.ps1` (interactive CLI walks operator through items; writes `output/<tenant>/attestation-<year>.json`) and `Publish-TPAttestationForm.ps1` (standalone static HTML form, strict CSP, self-contained, exports to JSON). Item set defined in `Config/attestation-items.json`; initial ~12–15 items (IR plan exists, IR plan tested, pentest within 12 months, security awareness training, phishing simulation, vendor security clauses, PAW use, post-incident reviews, restore tested, RACI documented, data classification policy, change-management policy, access review cadence, vulnerability disclosure process). Orchestrator folds the most recent attestation file into the findings stream — `Satisfied` / `Gap` / `Stale`. New evaluator `Test-TPControlAttested.ps1` emits one finding per mapped CIS Control safeguard.
 
 ### F9 — Security Culture Signals
 
-Composite signal — does the org *engage* with security as a practice? Inputs: voluntary MFA registration rate (excluding CA-forced), Attack Simulator campaign in last 180 days, evidence of admin role reviews (PIM access reviews or role-assignment changes in last 90 days), audit-log activity from non-Global-Admin security operators in last 30 days. New collector `Invoke-NRGCollectAttackSim.ps1`. **Requires new Graph scope `AttackSimulation.Read.All`** — this is the only new scope in v4.9.0; needs re-consent in every client tenant on rollout. One new control `AAD-16.1` (Informational severity, composite Culture Score 0–100). Degrade gracefully when scope not granted (emits `NotApplicable` with operator-facing note).
+Composite signal — does the org *engage* with security as a practice? Inputs: voluntary MFA registration rate (excluding CA-forced), Attack Simulator campaign in last 180 days, evidence of admin role reviews (PIM access reviews or role-assignment changes in last 90 days), audit-log activity from non-Global-Admin security operators in last 30 days. New collector `Invoke-TPCollectAttackSim.ps1`. **Requires new Graph scope `AttackSimulation.Read.All`** — this is the only new scope in v4.9.0; needs re-consent in every client tenant on rollout. One new control `AAD-16.1` (Informational severity, composite Culture Score 0–100). Degrade gracefully when scope not granted (emits `NotApplicable` with operator-facing note).
 
 ### F3 — Privileged Account Behavioral Baseline
 
-New collector `Invoke-NRGCollectAADAdminSignInTelemetry.ps1`. Pulls last 30 days of sign-in logs filtered to users with active privileged role assignments. Persists timestamp, IP, country, ASN, device ID, app ID, CA result. Reuses existing `AuditLog.Read.All`. New evaluator splits the window into `baseline` (days 8–30) and `recent` (days 1–7); detects three anomaly classes: new country, new ASN, new sign-in hour window outside admin's historical distribution. One new control `AAD-14.1`. Highest-volume data change in this release.
+New collector `Invoke-TPCollectAADAdminSignInTelemetry.ps1`. Pulls last 30 days of sign-in logs filtered to users with active privileged role assignments. Persists timestamp, IP, country, ASN, device ID, app ID, CA result. Reuses existing `AuditLog.Read.All`. New evaluator splits the window into `baseline` (days 8–30) and `recent` (days 1–7); detects three anomaly classes: new country, new ASN, new sign-in hour window outside admin's historical distribution. One new control `AAD-14.1`. Highest-volume data change in this release.
 
 ### F6 — Security Regression Alerting
 
-New entry point `Invoke-NRGRegressionCheck.ps1` at repo root. Loads the most recent full-assessment JSON for the tenant; re-runs only Critical and High evaluators against the live tenant; any control that was `Satisfied` in baseline and is now `Gap` or `Partial` is a regression. Outputs stdout table, `output/<tenant>/regression-<timestamp>.json`, optional webhook POST (Slack/Teams format). Exit codes: 0 = no regressions, 1 = regressions present, 2 = baseline not found. Designed for Task Scheduler / cron / Azure Automation.
+New entry point `Invoke-TPRegressionCheck.ps1` at repo root. Loads the most recent full-assessment JSON for the tenant; re-runs only Critical and High evaluators against the live tenant; any control that was `Satisfied` in baseline and is now `Gap` or `Partial` is a regression. Outputs stdout table, `output/<tenant>/regression-<timestamp>.json`, optional webhook POST (Slack/Teams format). Exit codes: 0 = no regressions, 1 = regressions present, 2 = baseline not found. Designed for Task Scheduler / cron / Azure Automation.
 
 ### F7 — Client Self-Service Portal — Phase 1
 
-New flag on `Publish-NRGAssessmentHTML.ps1`: `-SelfServiceMode`. Strips MSP-only content (pricing, hourly rate, services pitch, internal notes). Adds prominent "Last assessment: YYYY-MM-DD" banner and simple client-side findings search/filter (vanilla JS, CSP-safe with the existing sha256-hash strategy). Embeds findings as `<script type="application/json">` for the filter widget. Output: `<tenant>-self-service.html` — single self-contained file. **Phase 2** (hosted multi-tenant portal with per-client login) is explicitly out of scope here and tracked separately.
+New flag on `Publish-TPAssessmentHTML.ps1`: `-SelfServiceMode`. Strips MSP-only content (pricing, hourly rate, services pitch, internal notes). Adds prominent "Last assessment: YYYY-MM-DD" banner and simple client-side findings search/filter (vanilla JS, CSP-safe with the existing sha256-hash strategy). Embeds findings as `<script type="application/json">` for the filter widget. Output: `<tenant>-self-service.html` — single self-contained file. **Phase 2** (hosted multi-tenant portal with per-client login) is explicitly out of scope here and tracked separately.
 
 ### F13 — Portfolio HTML Dashboard
 
-New publisher `Publish-NRGPortfolioHTML.ps1`. Called from `Invoke-NRGBatchAssessment.ps1` at end of batch run; consumes `$batchResults` plus each client's `results.json`. Output: `output/portfolio-<timestamp>.html` — single self-contained file. Sections: header strip (timestamp, client count, average score); sortable client table (name, score, maturity tier from F1, IG1 %, IG2 %, critical gaps, high gaps, delta since last run, report link); workload heatmap (clients × workloads cells colored by per-workload coverage); top-10 risk roll-up across all clients; client-name search + score range slider + "show only critical." All tenant data through `ConvertTo-NRGHtmlSafe`. Strict CSP identical to per-client report.
+New publisher `Publish-TPPortfolioHTML.ps1`. Called from `Invoke-TPBatchAssessment.ps1` at end of batch run; consumes `$batchResults` plus each client's `results.json`. Output: `output/portfolio-<timestamp>.html` — single self-contained file. Sections: header strip (timestamp, client count, average score); sortable client table (name, score, maturity tier from F1, IG1 %, IG2 %, critical gaps, high gaps, delta since last run, report link); workload heatmap (clients × workloads cells colored by per-workload coverage); top-10 risk roll-up across all clients; client-name search + score range slider + "show only critical." All tenant data through `ConvertTo-TPHtmlSafe`. Strict CSP identical to per-client report.
 
 ### F14 — Maester Integration Evaluation
 
@@ -158,11 +158,11 @@ Each wave is one PR per repo, lockstep across both repos.
 **New workload code:** `LIC` for F10. Add to control prefix validation list and HTML workload scorecard.
 
 **Tests** — one Pester file per feature, all in `Testing/`:
-`NRG.Responsibility.Tests.ps1` · `NRG.IGScoring.Tests.ps1` · `NRG.LicenseWaste.Tests.ps1` · `NRG.ThreadHijack.Tests.ps1` · `NRG.SupplyChain.Tests.ps1` · `NRG.Maturity.Tests.ps1` · `NRG.IncidentLikelihood.Tests.ps1` · `NRG.Attestation.Tests.ps1` · `NRG.Culture.Tests.ps1` · `NRG.AdminBaseline.Tests.ps1` · `NRG.Regression.Tests.ps1` · `NRG.SelfService.Tests.ps1` · `NRG.Portfolio.Tests.ps1`.
+`TP.Responsibility.Tests.ps1` · `TP.IGScoring.Tests.ps1` · `TP.LicenseWaste.Tests.ps1` · `TP.ThreadHijack.Tests.ps1` · `TP.SupplyChain.Tests.ps1` · `TP.Maturity.Tests.ps1` · `TP.IncidentLikelihood.Tests.ps1` · `TP.Attestation.Tests.ps1` · `TP.Culture.Tests.ps1` · `TP.AdminBaseline.Tests.ps1` · `TP.Regression.Tests.ps1` · `TP.SelfService.Tests.ps1` · `TP.Portfolio.Tests.ps1`.
 
 **Tooling** — `tools/Validate-Baselines.ps1` (new, small) ensures every control has the new required fields populated before commits land. Wired into CI as part of the existing Module Manifest job.
 
-**Module manifest** — every new function exported by Wave 2+ must appear in both `NRG-Assessment.psd1 FunctionsToExport` and `NRG-Assessment.psm1 $script:ExportedFunctions`.
+**Module manifest** — every new function exported by Wave 2+ must appear in both `TenantPosture.psd1 FunctionsToExport` and `TenantPosture.psm1 $script:ExportedFunctions`.
 
 **CHANGELOG** — one consolidated v4.9.0 entry rolled up at the end of Wave 10 (or as we ship). Sub-sections per wave.
 
@@ -189,7 +189,7 @@ A v4.9.0 release is considered ready when:
 - All 14 features land per implementation order, each with its own merged PR and green CI.
 - `Config/controls.json` validates clean under the v4.9 schema (all 188 + 11 new = 199 controls have `Responsibility` and `ImplementationGroup`; new controls have `IncidentRiskMultipliers` where applicable).
 - New Graph scope `AttackSimulation.Read.All` is granted in at least the NRG sandbox tenant and at least one client tenant for testing.
-- `Test-NRGEnvironment` (carryover polish item) reports green for an operator workstation with the full module loaded.
+- `Test-TPEnvironment` (carryover polish item) reports green for an operator workstation with the full module loaded.
 - Re-run of the most recent real-tenant assessment produces a report whose top-line score is within ±5% of the v4.6.7 baseline (the v4.6.7 baseline assessment is included in `output/baseline-v4.6.7-<tenant>.json` as a regression anchor).
 - The runbook (`docs/INCIDENT-RESPONSE.md`) has a stanza added for "attestation file leak" since attestation JSON contains client governance claims.
 - A v4.9.0 entry in CHANGELOG.md covers every wave.
