@@ -37,8 +37,8 @@ Install-Module Microsoft.Online.SharePoint.PowerShell -Scope CurrentUser -Force 
 ## Step 3 — Clone or Download the Repository
 
 ```bash
-git clone https://github.com/Blackvectra/NRG-Assessment-Tool.git
-cd NRG-Assessment-Tool
+git clone https://github.com/Blackvectra/TenantPosture.git
+cd TenantPosture
 ```
 
 Or download the ZIP from GitHub → Code → Download ZIP.
@@ -50,7 +50,7 @@ Or download the ZIP from GitHub → Code → Download ZIP.
 Before running a full assessment, verify connections:
 
 ```powershell
-pwsh -ExecutionPolicy RemoteSigned -File .\Invoke-NRGAssessment.ps1 `
+pwsh -ExecutionPolicy RemoteSigned -File .\Invoke-TPAssessment.ps1 `
      -UserPrincipalName admin@client.com -WhatIfConnections
 ```
 
@@ -61,7 +61,7 @@ A browser window will open for each service. Sign in with an account that has th
 ## Step 5 — Run Assessment
 
 ```powershell
-pwsh -ExecutionPolicy RemoteSigned -File .\Invoke-NRGAssessment.ps1 `
+pwsh -ExecutionPolicy RemoteSigned -File .\Invoke-TPAssessment.ps1 `
      -UserPrincipalName admin@client.com
 ```
 
@@ -81,7 +81,7 @@ Reports are written to `.\output\<TenantDomain>\<Timestamp>-*`.
 ## Updating
 
 ```powershell
-cd NRG-Assessment-Tool
+cd TenantPosture
 git pull origin main
 ```
 

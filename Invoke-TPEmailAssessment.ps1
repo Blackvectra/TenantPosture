@@ -1,0 +1,388 @@
+#Requires -Version 7.0
+
+<#
+.SYNOPSIS
+    Email-IR mailbox deep-dive — assess ONE user's mailbox during a suspected
+    account compromise (BEC, stolen credentials, attacker inbox rules).
+
+.DESCRIPTION
+    The single-mailbox incident-response variant of TenantPosture. Instead of
+    the full 195-control tenant sweep, it focuses on one user's email account
+    and looks for the fingerprints of a compromise: malicious/hidden inbox rules,
+    external auto-forwarding, mass or anomalous outbound activity, the origin of
+    a phishing message, weak or missing authentication methods, and risky OAuth
+    app consents.
+
+    Runs with the user's OWN delegated credentials — NO admin scope is required,
+    so a helpdesk technician (or the affected user, guided) can run it. Point it
+    at a mailbox, sign in, and read the incident report.
+
+    Use this when you ALREADY know which mailbox is suspect. If you suspect
+    compromise but don't know which user, use Invoke-TPSignInTriage.ps1, which
+    ranks likely-compromised users tenant-wide first.
+
+.PARAMETER UserPrincipalName
+    The mailbox to assess, as a UPN (e.g. alice@corp.com). Mandatory.
+
+.PARAMETER OutputPath
+    Output directory. Defaults to .\output\<upn>\.
+
+.PARAMETER TenantId
+    Optional explicit tenant GUID. Useful when the browser has a stale session
+    for a different tenant — the connect step refuses a mismatched login.
+
+.PARAMETER WindowDays
+    How far back to scan SENT items, in days (1-90, default 7). The INBOX window
+    is always 30 days, because the original phish often predates the first
+    outbound IoC by days or weeks.
+
+.PARAMETER EnableThreatIntel
+    Opt-in enrichment: look up sender-domain registration age via public RDAP.
+    This submits the queried domains to a public service — leave off if your
+    data-handling policy prohibits it.
+
+.PARAMETER FailOnCriticalIoC
+    Exit non-zero (10) when any Critical IoC is found. For CI / SOAR pipelines
+    that file a ticket on detection.
+
+.PARAMETER NonInteractive
+    Skip the confirmation pause so the script runs unattended (cron / Task
+    Scheduler / SOAR).
+
+.EXAMPLE
+    .\Invoke-TPEmailAssessment.ps1 -UserPrincipalName alice@corp.com
+
+    Assess Alice's mailbox with the default 7-day sent-items window.
+
+.EXAMPLE
+    .\Invoke-TPEmailAssessment.ps1 -UserPrincipalName alice@corp.com -WindowDays 14 -EnableThreatIntel
+
+    Widen the outbound window to 14 days and enrich sender domains with RDAP
+    registration-age lookups.
+
+.EXAMPLE
+    .\Invoke-TPEmailAssessment.ps1 -UserPrincipalName alice@corp.com -NonInteractive -FailOnCriticalIoC
+
+    Unattended run for a SOAR playbook: no prompts, exit code 10 if a Critical
+    IoC is detected.
+
+.OUTPUTS
+    .\output\<upn>\<timestamp>-email-incident.html   interactive incident report
+    .\output\<upn>\<timestamp>-email-incident.md     markdown summary
+    .\output\<upn>\<timestamp>-email-results.json    raw collected data
+
+.NOTES
+    NRG Technology Services / NextLayerSec LLC — nrgtechservices.com
+    Read-only: all Graph and Exchange calls are GET/read-only.
+    Exit codes: 0 success | 1 auth failure | 2 no findings |
+                3 partial collection | 4 fatal error | 10 critical IoC found.
+#>
+
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9._%+-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$')]
+    [string] $UserPrincipalName,
+
+    [string] $OutputPath,
+
+    # Optional explicit tenant — useful when the operator runs against
+    # multiple tenants and the browser has a stale session for a different
+    # one. Connect-TPEmailServices will refuse a mismatched login.
+    [string] $TenantId,
+
+    # How far back to scan the SENT items. Inbox window is always 30 days
+    # because the original phish often predates the first outbound IoC by
+    # days or weeks.
+    [ValidateRange(1, 90)]
+    [int] $WindowDays = 7,
+
+    # Opt-in threat-intel enrichment: looks up sender-domain registration
+    # age via public RDAP. Submits the queried domains to a public service —
+    # operator's data-handling policy may require this stay disabled.
+    [switch] $EnableThreatIntel,
+
+    # Exit non-zero when any Critical IoC is found. Useful for CI / SOAR
+    # integrations that want to file a ticket on detection.
+    [switch] $FailOnCriticalIoC,
+
+    # Non-interactive mode: skip the "press enter to confirm" pause that
+    # would otherwise interrupt cron / Task Scheduler runs.
+    [switch] $NonInteractive
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$script:TPEmailFatalExitCode     = $null
+$script:TPEmailSuccessExitCode   = $null
+$script:TPEmailThresholdExitCode = $null
+
+try {
+    [Net.ServicePointManager]::SecurityProtocol =
+        [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+} catch {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+}
+
+# ── Resolve paths + load module ─────────────────────────────────────────────
+$scriptDir = $PSScriptRoot
+if (-not $scriptDir) { $scriptDir = (Get-Location).Path }
+if (-not $OutputPath) {
+    $sanitizedUser = $UserPrincipalName -replace '[^a-zA-Z0-9._-]', '_'
+    $OutputPath = Join-Path $scriptDir (Join-Path 'output' $sanitizedUser)
+}
+$null = [System.IO.Directory]::CreateDirectory($OutputPath)
+$resolvedOutput = [System.IO.Path]::GetFullPath($OutputPath)
+$null = $resolvedOutput
+
+Write-Host ''
+Write-Host '═══════════════════════════════════════════════════════════' -ForegroundColor Cyan
+Write-Host ' NRG Email Account Assessment — Incident Response Mode'    -ForegroundColor Cyan
+Write-Host '═══════════════════════════════════════════════════════════' -ForegroundColor Cyan
+Write-Host ''
+Write-Host "  Target user      : $UserPrincipalName" -ForegroundColor White
+Write-Host "  Outbound window  : $WindowDays days"   -ForegroundColor White
+Write-Host "  Inbox window     : 30 days (fixed)"    -ForegroundColor White
+Write-Host "  Output           : $OutputPath"        -ForegroundColor White
+Write-Host "  Threat intel     : $(if ($EnableThreatIntel) {'ENABLED (queries rdap.org for sender-domain age)'} else {'disabled'})" -ForegroundColor White
+Write-Host ''
+
+if (-not $NonInteractive) {
+    Write-Host '  This tool will:' -ForegroundColor Yellow
+    Write-Host '    1. Sign in as the COMPROMISED user (browser prompt)' -ForegroundColor Yellow
+    Write-Host "    2. Read $UserPrincipalName's mailbox (sent items, inbox, rules, forwarding, deleted)" -ForegroundColor Yellow
+    Write-Host '    3. Score IoCs, rank likely original phish, produce incident report' -ForegroundColor Yellow
+    Write-Host '    4. NOT modify the mailbox — read-only Graph scopes only' -ForegroundColor Yellow
+    if ($EnableThreatIntel) {
+        Write-Host '    5. Submit external sender domains to rdap.org for registration-age lookup' -ForegroundColor Yellow
+    }
+    Write-Host ''
+}
+
+# Load module
+$manifestPath = Join-Path $scriptDir 'TenantPosture.psd1'
+Write-Host '[-] Loading TenantPosture module...' -ForegroundColor Cyan
+try {
+    Import-Module $manifestPath -Force -ErrorAction Stop
+    Write-Host '  [+] Module loaded' -ForegroundColor Green
+} catch {
+    Write-Host "  [!] Module load failed: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}
+
+# Clear state from any prior run in this session
+if (Get-Command Clear-TPState -ErrorAction SilentlyContinue) {
+    Clear-TPState
+}
+
+$reportMetadata = [ordered]@{
+    AssessmentDate    = (Get-Date -Format 'MMMM dd, yyyy HH:mm UTC')
+    AssessmentMode    = 'EmailIncidentResponse'
+    UserPrincipalName = $UserPrincipalName
+    WindowDays        = $WindowDays
+    InboxWindowDays   = 30
+    ToolVersion       = $(if (Get-Variable -Name TPAssessmentVersion -ErrorAction SilentlyContinue) { [string]$TPAssessmentVersion } else { 'unknown' })
+    Brand             = $TPBrand
+    ThreatIntelEnabled = [bool]$EnableThreatIntel
+}
+
+# ── Connect ──────────────────────────────────────────────────────────────────
+try {
+    $ctx = Connect-TPEmailServices -UserPrincipalName $UserPrincipalName -TenantId $TenantId
+    $reportMetadata['ConnectedAccount'] = $ctx.Account
+    $reportMetadata['TenantId']         = $ctx.TenantId
+} catch {
+    Write-Host "  [!] Connection failed: $($_.Exception.Message)" -ForegroundColor Red
+    # The first line is often all a credential error carries; the cause (a closed or hidden
+    # sign-in window, a consent or Conditional Access refusal) sits in the inner exceptions.
+    $inner = $_.Exception.InnerException
+    while ($inner) {
+        if ($inner.Message) { Write-Host ("      caused by: {0}" -f (($inner.Message -split "`r?`n")[0])) -ForegroundColor Red }
+        $inner = $inner.InnerException
+    }
+    Write-Host '      If the window never appeared or closed, retry in a NEW PowerShell 7 window; the sign-in window can open behind other windows.' -ForegroundColor Yellow
+    exit 1
+}
+
+try {
+    # ── Collect ──────────────────────────────────────────────────────────────
+    Write-Host ''
+    Write-Host '[-] Collecting mailbox data...' -ForegroundColor Cyan
+    # What stopped a required step. A throw here or in an evaluator is not just
+    # a warning: it decides whether the result may say "nothing found".
+    $healthGaps = [System.Collections.Generic.List[string]]::new()
+    $evaluatorFailures = [System.Collections.Generic.List[string]]::new()
+    try {
+        Invoke-TPEmailCollectMailbox -WindowDays $WindowDays
+        # "Collected" only when the required reads came back; the collector fails soft per source,
+        # so reaching this line does not mean the mailbox was read.
+        $mailMissing = @((Get-TPDeepDiveEvidence).RequiredMissing)
+        if ($mailMissing.Count -eq 0) {
+            Write-Host '  [+] Mailbox data collected' -ForegroundColor Green
+        } else {
+            Write-Host ("  [!] Mailbox data NOT read: {0} required source(s) missing ({1}); the result will be NOT CLEARED" -f $mailMissing.Count, ($mailMissing -join ', ')) -ForegroundColor Yellow
+            $notFound = @(Get-TPExceptions | Where-Object { [string]$_.Source -like 'IR-Mailbox-*' -and [string]$_.Message -match 'NotFound|404|MailboxNotEnabled' })
+            if ($notFound.Count -gt 0) {
+                Write-Host '      Graph answered NotFound for the mailbox reads. A likely cause is that this account has no Exchange Online mailbox (for example an unlicensed admin account); not confirmed.' -ForegroundColor Yellow
+            }
+        }
+    } catch {
+        Write-Warning "Mailbox collection failed: $($_.Exception.Message)"
+        $healthGaps.Add("mailbox collection stopped: $($_.Exception.Message)")
+    }
+    # v4.12.1: OAuth consents + auth methods. Under the delegated 3-scope
+    # connection these Graph reads usually 403 — the collector fails soft
+    # and EMAIL-4.x registers NotApplicable with the admin-context
+    # equivalent, same pattern as EMAIL-1.2. Full coverage comes from the
+    # admin triage deep-dive.
+    try {
+        Invoke-TPEmailCollectUserSecurity
+        Write-Host '  [+] User-security data collected (OAuth grants + auth methods)' -ForegroundColor Green
+    } catch {
+        Write-Warning "User-security collection failed: $($_.Exception.Message)"
+        $healthGaps.Add("user-security collection stopped: $($_.Exception.Message)")
+    }
+
+    # ── Evaluate ─────────────────────────────────────────────────────────────
+    Write-Host ''
+    Write-Host '[-] Running incident response evaluators...' -ForegroundColor Cyan
+
+    $evaluators = @(
+        'Test-TPEmailControlInboxRules'
+        'Test-TPEmailControlForwarding'
+        'Test-TPEmailControlOutboundActivity'
+        'Test-TPEmailControlPhishOrigin'
+        'Test-TPEmailControlOAuthConsents'
+        'Test-TPEmailControlAuthMethods'
+    )
+    if ($EnableThreatIntel) { $evaluators += 'Test-TPEmailControlThreatIntel' }
+
+    $findingsBefore = @(Get-TPFindings).Count
+    foreach ($fn in $evaluators) {
+        if (Get-Command $fn -ErrorAction SilentlyContinue) {
+            try {
+                & $fn
+                Write-Host "  [+] $fn" -ForegroundColor Green
+            } catch {
+                Write-Warning "$fn failed: $($_.Exception.Message)"
+                $evaluatorFailures.Add("$fn did not finish: $($_.Exception.Message)")
+                if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                    Register-TPException -Source $fn -Message $_.Exception.Message
+                }
+            }
+        } else {
+            Write-Warning "Evaluator $fn not exported"
+            $evaluatorFailures.Add("$fn was not available to run")
+        }
+    }
+
+    # Name the mailbox these findings describe and what they rest on.
+    $profileBag = Get-TPRawData -Key 'IR-MailboxProfile'
+    $subjectUpn = if ($profileBag -and $profileBag.Success -and $profileBag.Data.UserPrincipalName) { [string]$profileBag.Data.UserPrincipalName } else { [string]$UserPrincipalName }
+    if ($subjectUpn) { $null = Set-TPFindingSubject -Since $findingsBefore -Subject $subjectUpn -Evidence (Get-TPDeepDiveEvidence) }
+    $findings = @(Get-TPFindings)
+    $rawData  = Get-TPRawData
+    $reportMetadata['FindingCount'] = $findings.Count
+
+    # Assessment health: collection AND evaluation. Successful collection is not
+    # enough: a required detector that threw produced no verdict, and its absence
+    # must not read as a clean one.
+    $evidence = Get-TPDeepDiveEvidence
+    foreach ($m in @($evidence.RequiredMissing)) { $healthGaps.Add("required source $m was not read") }
+    foreach ($p in @($evidence.RequiredPartial)) { $healthGaps.Add("required source $p") }
+    foreach ($p in @($evidence.OptionalTruncated)) { $healthGaps.Add("source $p") }
+    foreach ($f in $evaluatorFailures) { $healthGaps.Add($f) }
+    $reportMetadata['CollectionComplete'] = ($healthGaps.Count -eq 0)
+    $reportMetadata['CollectionGaps']     = @($healthGaps)
+    $reportMetadata['EvaluatorFailures']  = @($evaluatorFailures)
+    $reportMetadata['Evidence']           = $evidence
+
+    # ── Publish ──────────────────────────────────────────────────────────────
+    Write-Host ''
+    Write-Host '[-] Generating incident report...' -ForegroundColor Cyan
+
+    $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $jsonPath  = Join-Path $OutputPath "$timestamp-email-results.json"
+    $htmlPath  = Join-Path $OutputPath "$timestamp-email-incident.html"
+    $mdPath    = Join-Path $OutputPath "$timestamp-email-incident.md"
+
+    $jsonPayload = [ordered]@{
+        Metadata   = $reportMetadata
+        Findings   = $findings
+        RawData    = $rawData
+        Exceptions = @(Get-TPExceptions)
+    } | ConvertTo-Json -Depth 10
+    Set-TPSensitiveFileContent -Path $jsonPath -Content $jsonPayload
+    Write-Host "  [+] JSON:     $jsonPath" -ForegroundColor Green
+
+    if (Get-Command Publish-TPEmailIncidentReport -ErrorAction SilentlyContinue) {
+        try {
+            Publish-TPEmailIncidentReport `
+                -Metadata $reportMetadata `
+                -Findings $findings `
+                -OutputPath $htmlPath `
+                -MarkdownPath $mdPath
+            Write-Host "  [+] HTML:     $htmlPath" -ForegroundColor Green
+            Write-Host "  [+] Markdown: $mdPath"   -ForegroundColor Green
+        } catch {
+            Write-Warning "Report generation failed: $($_.Exception.Message)"
+        }
+    }
+
+    # ── Summary banner ───────────────────────────────────────────────────────
+    $crits = @($findings | Where-Object { $_.Severity -eq 'Critical' -and $_.State -eq 'Gap' })
+    $highs = @($findings | Where-Object { $_.Severity -eq 'High'     -and $_.State -eq 'Gap' })
+
+    Write-Host ''
+    Write-Host '════════════════════════════════════════════════════════════' -ForegroundColor Cyan
+    Write-Host ' Email IR Summary' -ForegroundColor Cyan
+    Write-Host '════════════════════════════════════════════════════════════' -ForegroundColor Cyan
+    Write-Host "  Total checks       : $($findings.Count)"   -ForegroundColor White
+    Write-Host "  Critical IoCs      : $($crits.Count)" -ForegroundColor $(if ($crits.Count -gt 0) {'Red'} else {'Green'})
+    Write-Host "  High IoCs          : $($highs.Count)" -ForegroundColor $(if ($highs.Count -gt 0) {'Yellow'} else {'Green'})
+    Write-Host "  Output             : $OutputPath"   -ForegroundColor White
+    if (-not $reportMetadata['CollectionComplete']) {
+        Write-Host '  NOT CLEARED: part of the evidence could not be read or checked:' -ForegroundColor Yellow
+        foreach ($g in @($reportMetadata['CollectionGaps'])) { Write-Host "    - $g" -ForegroundColor Yellow }
+    }
+    Write-Host ''
+    if ($crits.Count -gt 0) {
+        Write-Host '  ╔══════════════════════════════════════════════════╗' -ForegroundColor Red
+        Write-Host '  ║   CRITICAL indicators found — investigate.       ║' -ForegroundColor Red
+        Write-Host '  ║   Review the incident report and take action     ║' -ForegroundColor Red
+        Write-Host '  ║   (revoke sessions, reset password, force MFA).  ║' -ForegroundColor Red
+        Write-Host '  ╚══════════════════════════════════════════════════╝' -ForegroundColor Red
+        Write-Host ''
+    }
+
+    # Exit-code precedence (highest first): 4 fatal error, 10 Critical indicator
+    # (only with -FailOnCriticalIoC), 3 evidence incomplete, a required check did
+    # not finish, or exceptions were recorded, 2 no findings, 0 complete. Incomplete
+    # outranks "no findings": a run whose detectors failed has no findings because
+    # nothing evaluated, not because nothing was wrong.
+    if (-not $reportMetadata['CollectionComplete']) {
+        $script:TPEmailSuccessExitCode = 3
+    } elseif ($findings.Count -eq 0) {
+        $script:TPEmailSuccessExitCode = 2
+    } elseif (@(Get-TPExceptions).Count -gt 0) {
+        $script:TPEmailSuccessExitCode = 3
+    } else {
+        $script:TPEmailSuccessExitCode = 0
+    }
+    if ($FailOnCriticalIoC -and $crits.Count -gt 0) {
+        $script:TPEmailThresholdExitCode = 10
+        Write-Host "[!] Threshold breached: $($crits.Count) Critical IoC(s) — exiting 10" -ForegroundColor Red
+    }
+} catch {
+    Write-Host "[!] Fatal error: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "    Stack: $($_.ScriptStackTrace)" -ForegroundColor DarkGray
+    $script:TPEmailFatalExitCode = 4
+} finally {
+    try { Disconnect-TPEmailServices } catch { }
+}
+
+if ($script:TPEmailFatalExitCode)     { exit $script:TPEmailFatalExitCode }
+if ($script:TPEmailThresholdExitCode) { exit $script:TPEmailThresholdExitCode }
+if ($null -ne $script:TPEmailSuccessExitCode) { exit $script:TPEmailSuccessExitCode }
+exit 0

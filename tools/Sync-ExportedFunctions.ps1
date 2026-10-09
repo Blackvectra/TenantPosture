@@ -1,22 +1,22 @@
 #Requires -Version 7.0
 #
 # Sync-ExportedFunctions.ps1
-# NRG Technology Services / NextLayerSec LLC
+# TenantPosture
 # Author: Matthew Levorson
 #
-# Validates that FunctionsToExport in NRG-Assessment.psd1 matches
-# $script:ExportedFunctions in NRG-Assessment.psm1, and optionally rewrites the
+# Validates that FunctionsToExport in TenantPosture.psd1 matches
+# $script:ExportedFunctions in TenantPosture.psm1, and optionally rewrites the
 # psd1 list from the psm1 (the single source of truth).
 #
 # Sets:     nothing (read-only unless -Fix)
-# Consumes: NRG-Assessment.psm1, NRG-Assessment.psd1
+# Consumes: TenantPosture.psm1, TenantPosture.psd1
 # Cmdlets:  none against any tenant
 #
 # Usage:
 #   ./tools/Sync-ExportedFunctions.ps1 -Validate   # CI: exit 1 if out of sync
 #   ./tools/Sync-ExportedFunctions.ps1 -Fix        # rewrite the psd1 list
 #
-# Testing/NRG.ExportSync.Tests.ps1 pins the same invariant in Pester; this
+# Testing/TP.ExportSync.Tests.ps1 pins the same invariant in Pester; this
 # script is the operator-facing form with a -Fix mode.
 
 [CmdletBinding()]
@@ -32,15 +32,15 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
-$psm1Path = Join-Path $repoRoot 'NRG-Assessment.psm1'
-$psd1Path = Join-Path $repoRoot 'NRG-Assessment.psd1'
+$psm1Path = Join-Path $repoRoot 'TenantPosture.psm1'
+$psd1Path = Join-Path $repoRoot 'TenantPosture.psd1'
 
 # ── $script:ExportedFunctions from the psm1 ──────────────────────────────────
 $psm1Content = Get-Content -LiteralPath $psm1Path -Raw
 if ($psm1Content -match '(?s)\$script:ExportedFunctions\s*=\s*@\((.*?)\)') {
     $psm1Block = $Matches[1]
 } else {
-    throw 'Could not find $script:ExportedFunctions = @(...) in NRG-Assessment.psm1'
+    throw 'Could not find $script:ExportedFunctions = @(...) in TenantPosture.psm1'
 }
 $psm1Functions = @([regex]::Matches($psm1Block, "'([^']+)'") | ForEach-Object { $_.Groups[1].Value })
 
@@ -81,7 +81,7 @@ if ($Fix) {
     # old list dangling after the new block and a psd1 that no longer parsed.
     $blockRx = [regex]'(?ms)^(?<indent>[ \t]*)FunctionsToExport\s*=\s*@\(.*?^\k<indent>\)[ \t]*$'
     $m = $blockRx.Match($psd1Content)
-    if (-not $m.Success) { throw 'Could not locate the FunctionsToExport = @( ... ) block in NRG-Assessment.psd1' }
+    if (-not $m.Success) { throw 'Could not locate the FunctionsToExport = @( ... ) block in TenantPosture.psd1' }
     $indent     = $m.Groups['indent'].Value
     $newEntries = ($psm1Functions | ForEach-Object { "$indent    '$_'" }) -join ",`n"
     $newBlock   = "${indent}FunctionsToExport = @(`n$newEntries`n${indent})"
@@ -89,7 +89,7 @@ if ($Fix) {
 
     # Never write a manifest that does not parse: prove the result on a
     # temporary file first, then replace the real one.
-    $tmp = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "NRG-Assessment.$([guid]::NewGuid().ToString('N')).psd1")
+    $tmp = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "TenantPosture.$([guid]::NewGuid().ToString('N')).psd1")
     try {
         Set-Content -LiteralPath $tmp -Value $updated -Encoding utf8NoBOM -NoNewline
         $check = Import-PowerShellDataFile -LiteralPath $tmp

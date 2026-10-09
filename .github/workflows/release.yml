@@ -34,18 +34,18 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          ./tools/Generate-SBOM.ps1 -OutputPath ./sbom/nrg-assessment.cdx.json
-          if (-not (Test-Path -LiteralPath ./sbom/nrg-assessment.cdx.json)) {
+          ./tools/Generate-SBOM.ps1 -OutputPath ./sbom/tp-assessment.cdx.json
+          if (-not (Test-Path -LiteralPath ./sbom/tp-assessment.cdx.json)) {
               throw 'SBOM generation produced no output file.'
           }
-          $sbom = Get-Content -LiteralPath ./sbom/nrg-assessment.cdx.json -Raw | ConvertFrom-Json
+          $sbom = Get-Content -LiteralPath ./sbom/tp-assessment.cdx.json -Raw | ConvertFrom-Json
           Write-Host ('SBOM OK: {0} components, format {1}' -f @($sbom.components).Count, $sbom.bomFormat)
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: sbom-cyclonedx
-          path: sbom/nrg-assessment.cdx.json
+          path: sbom/tp-assessment.cdx.json
           if-no-files-found: error
 
   package:
@@ -73,7 +73,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $tag  = '${{ github.ref_name }}'
-          $name = "NRG-Assessment-$tag"
+          $name = "TenantPosture-$tag"
           # Stage everything a client/operator needs; exclude repo plumbing.
           $exclude = @('.git', '.github', 'output', 'Testing')
           New-Item -ItemType Directory -Path "./$name" | Out-Null
@@ -81,7 +81,7 @@ jobs:
               $_.Name -ne $name -and $exclude -notcontains $_.Name
           } | Copy-Item -Destination "./$name" -Recurse
           Compress-Archive -Path "./$name" -DestinationPath "./$name.zip"
-          $sums = foreach ($f in @("./$name.zip", './sbom/nrg-assessment.cdx.json')) {
+          $sums = foreach ($f in @("./$name.zip", './sbom/tp-assessment.cdx.json')) {
               if (Test-Path -LiteralPath $f) {
                   $h = (Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash.ToLower()
                   '{0}  {1}' -f $h, (Split-Path $f -Leaf)
@@ -102,10 +102,10 @@ jobs:
           # with auto-generated notes categorized by .github/release.yml.
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
-              gh release create $tag --title "NRG-Assessment $tag" --generate-notes --draft
+              gh release create $tag --title "TenantPosture $tag" --generate-notes --draft
           }
-          $assets = @("NRG-Assessment-$tag.zip", 'SHA256SUMS')
-          if (Test-Path -LiteralPath ./sbom/nrg-assessment.cdx.json) { $assets += './sbom/nrg-assessment.cdx.json' }
+          $assets = @("TenantPosture-$tag.zip", 'SHA256SUMS')
+          if (Test-Path -LiteralPath ./sbom/tp-assessment.cdx.json) { $assets += './sbom/tp-assessment.cdx.json' }
           gh release upload $tag @assets --clobber
           Write-Host "Assets uploaded to release $tag (draft until published)."
 

@@ -11,28 +11,28 @@ coming back to this after six months, start here.
 
 | I want to… | Run this |
 |---|---|
-| Assess one client's tenant | `Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com` |
-| Assess every client | `Invoke-NRGBatchAssessment.ps1` |
+| Assess one client's tenant | `Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com` |
+| Assess every client | `Invoke-TPBatchAssessment.ps1` |
 | Include their laptops | Add `-DeviceResults .\collected\client\` |
 | Hand a client a NIST document | Add `-NISTMatrix` |
 | Get closer to NIST, in order | Add `-ImprovementPlan` |
 | Build a CMMC / 800-171 plan | Add `-SSP` |
-| Find out who got phished | `Invoke-NRGSignInTriage.ps1` |
-| Investigate one mailbox | `Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@client.com` |
-| Print device guidance (no scan) | `New-NRGDeviceGuide.ps1` |
-| Set up a new machine | `Install-NRGPrerequisites.ps1` |
-| Actually change tenant settings | `Apply-NRGBaseline.ps1` — the only one that writes |
+| Find out who got phished | `Invoke-TPSignInTriage.ps1` |
+| Investigate one mailbox | `Invoke-TPEmailAssessment.ps1 -UserPrincipalName alice@client.com` |
+| Print device guidance (no scan) | `New-TPDeviceGuide.ps1` |
+| Set up a new machine | `Install-TPPrerequisites.ps1` |
+| Actually change tenant settings | `Apply-TPBaseline.ps1` — the only one that writes |
 
 ---
 
 ## Posture assessment
 
-### `Invoke-NRGAssessment.ps1` — the main one
+### `Invoke-TPAssessment.ps1` — the main one
 
 One tenant, 204 controls, client-ready report. Everything else orbits this.
 
 ```powershell
-.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com
+.\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com
 ```
 
 **Needs:** a browser sign-in (or app-only cert — see `-AppId`/`-CertificateThumbprint`).
@@ -61,14 +61,14 @@ Parameters worth knowing:
 | `-FailOnCritical / -FailOnHigh / -FailOnScoreBelow` | Non-zero exit for CI or Task Scheduler. |
 | `-JsonOnly` | Machine record only, no report. |
 
-### `Invoke-NRGBatchAssessment.ps1` — every client, one login
+### `Invoke-TPBatchAssessment.ps1` — every client, one login
 
 Loops `Config\clients.json` using GDAP. One browser sign-in covers all tenants.
 
 ```powershell
-.\Invoke-NRGBatchAssessment.ps1              # all active clients
-.\Invoke-NRGBatchAssessment.ps1 -OnlyClient example.com
-.\Invoke-NRGBatchAssessment.ps1 -WhatIf      # preview, connects to nothing
+.\Invoke-TPBatchAssessment.ps1              # all active clients
+.\Invoke-TPBatchAssessment.ps1 -OnlyClient example.com
+.\Invoke-TPBatchAssessment.ps1 -WhatIf      # preview, connects to nothing
 ```
 
 Per-client reports plus `output\batch-summary-<timestamp>.md`.
@@ -79,7 +79,7 @@ Per-client reports plus `output\batch-summary-<timestamp>.md`.
 
 ## Endpoints
 
-### `Device\Invoke-NRGDeviceCompliance.ps1` — runs ON the laptop, not here
+### `Device\Invoke-TPDeviceCompliance.ps1` — runs ON the laptop, not here
 
 This one is different: you do not run it on your machine. It is pushed to
 endpoints by ConnectWise RMM (or an Intune platform script) and runs **as
@@ -88,7 +88,7 @@ because stock Windows does not have 7.
 
 ```powershell
 # On the endpoint, via RMM
-.\Invoke-NRGDeviceCompliance.ps1     # -> C:\ProgramData\NRG\device-compliance.json
+.\Invoke-TPDeviceCompliance.ps1     # -> C:\ProgramData\NRG\device-compliance.json
 ```
 
 39 checks: encryption and boot integrity, malware defense, network exposure,
@@ -101,7 +101,7 @@ partial.
 Then collect the JSONs and feed them back in:
 
 ```powershell
-.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com `
+.\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com `
     -DeviceResults .\collected\client\ -NISTMatrix
 ```
 
@@ -114,7 +114,7 @@ reading "41 of 60 failing", not 2,100 rows.
 
 Separate from posture assessment. These are for when something has *happened*.
 
-### `Invoke-NRGSignInTriage.ps1` — "who got popped?"
+### `Invoke-TPSignInTriage.ps1` — "who got popped?"
 
 You suspect compromise but do not know who. Pulls tenant sign-in logs, scores
 every user for IoCs (failed→success bursts, anonymous IP / Tor, impossible
@@ -123,16 +123,16 @@ the same session.
 
 **Needs:** admin sign-in. **Gives you:** `output\IR-Triage\`.
 
-`Invoke-NRGBatchSignInTriage.ps1` runs the same sweep across every GDAP client —
+`Invoke-TPBatchSignInTriage.ps1` runs the same sweep across every GDAP client —
 the morning check.
 
-### `Invoke-NRGEmailAssessment.ps1` — one mailbox, deep
+### `Invoke-TPEmailAssessment.ps1` — one mailbox, deep
 
 You already know which user. Inbox rules, forwarding, outbound activity, phish
 origin, auth methods, OAuth consents.
 
 ```powershell
-.\Invoke-NRGEmailAssessment.ps1 -UserPrincipalName alice@client.com
+.\Invoke-TPEmailAssessment.ps1 -UserPrincipalName alice@client.com
 ```
 
 **Runs with the user's own credentials — no admin scope needed.** That matters
@@ -150,7 +150,7 @@ The one that moves the number. Everything else here reports a position; this
 reports a route.
 
 ```powershell
-.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -ImprovementPlan
+.\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com -ImprovementPlan
 ```
 
 Ordered steps against NIST 800-53 Rev 5, each with the **exact** projected
@@ -184,7 +184,7 @@ Security Plan against all 110 NIST SP 800-171 Rev 2 requirements, as Markdown,
 HTML and an XLSX working copy.
 
 ```powershell
-.\Invoke-NRGAssessment.ps1 -UserPrincipalName admin@client.com -SSP `
+.\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com -SSP `
     -SSPAnswers .\Config\ssp\client.com.psd1
 ```
 
@@ -202,14 +202,14 @@ Answers survive between assessments instead of being retyped every year.
 A status you assert in the answers file renders stamped *client-attested* and
 never counts as tool-verified. That is deliberate and not adjustable.
 
-### `New-NRGDeviceGuide.ps1` — connects to nothing
+### `New-TPDeviceGuide.ps1` — connects to nothing
 
 Reference material for devices. No sign-in, no Graph, no endpoint access — so it
 works before a tenant is attached, during a sales conversation, or on a site with
 nothing open.
 
 ```powershell
-.\New-NRGDeviceGuide.ps1 -ClientName 'Example Client'
+.\New-TPDeviceGuide.ps1 -ClientName 'Example Client'
 ```
 
 Produces two documents:
@@ -227,7 +227,7 @@ It never changes what the guide *recommends* — only what it reports as done.
 
 ## Setup and write mode
 
-### `Install-NRGPrerequisites.ps1`
+### `Install-TPPrerequisites.ps1`
 
 Run once on a fresh machine. Installs and pins the modules (EOM at 3.2.0),
 sets execution policy, unblocks files, optionally installs Python + openpyxl for
@@ -236,7 +236,7 @@ XLSX output.
 Run it **elevated** if your PowerShell module path is inside OneDrive — it will
 tell you if it is.
 
-### `Apply-NRGBaseline.ps1` — ⚠ the only script that writes
+### `Apply-TPBaseline.ps1` — ⚠ the only script that writes
 
 Everything else in this repo is read-only without exception. This one changes
 tenant configuration. Mandatory `-WhatIf` support, `-Confirm` on auth-policy and

@@ -53,7 +53,7 @@ Create a dedicated assessment account per tenant:
 
 ```
 display name:  NRG Assessment (Read-Only)
-UPN:           nrg-assessment@<tenant>.onmicrosoft.com
+UPN:           tp-assessment@<tenant>.onmicrosoft.com
 license:       None required (cloud-only service account)
 roles:         Security Reader (Entra ID + Defender)
                View-Only Organization Management (Exchange)

@@ -550,7 +550,7 @@
       "Current": "MS.SECURITYSUITE.2.1v1",
       "Relation": "Partial",
       "RequirementStrength": "SHOULD",
-      "Note": "SCuBA requires impersonation protection for a sensitive-user list. NRG verifies domain and mailbox-intelligence protection and judges approved priority users only when NRG approves a list (Config/nrg-standards.json)."
+      "Note": "SCuBA requires impersonation protection for a sensitive-user list. NRG verifies domain and mailbox-intelligence protection and judges approved priority users only when NRG approves a list (Config/tp-standards.json)."
     },
     {
       "Control": "EXO-3.3",

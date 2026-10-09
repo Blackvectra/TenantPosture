@@ -4,13 +4,13 @@
 
 **Status:** Design. No code yet. Sibling of `docs/ROADMAP-v4.7.md`. v4.7 covers analytics features; v4.8 covers scoping clarity, the IG1/IG2 view onto existing 188 controls, the governance-attestation hole, and the cross-client surface.
 
-**Scope:** Both `NRG-Assessment` and the sibling repo land each feature in lockstep — same control IDs, same finding shapes, identical baseline JSON entries. Branding is the only diff.
+**Scope:** Both `TenantPosture` and the sibling repo land each feature in lockstep — same control IDs, same finding shapes, identical baseline JSON entries. Branding is the only diff.
 
 ---
 
 ## Scope boundary (this section is the principle, not a feature)
 
-`NRG-Assessment` is a **Microsoft tenant cloud assessment tool**. It collects through Graph, EXO, Teams, SharePoint, Intune, Purview, Defender for O365, and Power Platform APIs plus authoritative DNS. It is **not**, and will not become:
+`TenantPosture` is a **Microsoft tenant cloud assessment tool**. It collects through Graph, EXO, Teams, SharePoint, Intune, Purview, Defender for O365, and Power Platform APIs plus authoritative DNS. It is **not**, and will not become:
 
 - An endpoint hardening scanner. No per-device WMI/registry reads. No `Get-HotFix`, `manage-bde -status`, `Get-LocalUser`, `Get-LocalGroupMember`, autorun-policy, PS-logging-policy, or exploit-protection registry checks.
 - A third-party EDR connector. No Cortex XDR API, no MDR-platform integrations we don't manage.
@@ -34,7 +34,7 @@ What stays in scope from CIS IG1/IG2:
 **Architecture.**
 - `Config/controls.json` schema extension: required `ImplementationGroup` field per control. Allowed values: `IG1`, `IG2`, `IG3`, `NotMapped`.
 - Mapping source: CIS Controls v8.1 IG matrix (frozen reference embedded in `baselines/cis-ig-matrix.json`). One-time mapping pass populates every control. Controls that don't map cleanly to a CIS Control safeguard get `NotMapped`.
-- New: `Lib/Get-NRGIGScore.ps1` — `Get-NRGIGScore -Findings $f -ImplementationGroup 'IG1'` returns `@{ IG=1; Total=N; Satisfied=S; Gap=G; CoveragePct=P; CriticalGaps=C }`.
+- New: `Lib/Get-TPIGScore.ps1` — `Get-TPIGScore -Findings $f -ImplementationGroup 'IG1'` returns `@{ IG=1; Total=N; Satisfied=S; Gap=G; CoveragePct=P; CriticalGaps=C }`.
 - Publisher: new HTML scorecard tiles — three IG cards (IG1, IG2, IG3) next to existing license-tier card. Each shows score + gap count + critical count.
 - JSON output: new top-level `IGScores` block with `IG1`, `IG2`, `IG3` entries.
 - Backwards compatibility: framework citations table unchanged. Adds one column (IG) to the existing All Findings table.
@@ -53,15 +53,15 @@ What stays in scope from CIS IG1/IG2:
 
 **Architecture.**
 - Two new entry points at repo root:
-  - `Invoke-NRGAttestation.ps1` — interactive prompt-driven CLI form. Walks the operator through the attestation items, writes `output/<tenant>/attestation-<year>.json`.
-  - `Publish-NRGAttestationForm.ps1` — generates a standalone static HTML form that an operator (or the client) can open in a browser, fill in, and *export to JSON*. Single self-contained file with strict CSP (consistent with the existing report security model). No backend.
+  - `Invoke-TPAttestation.ps1` — interactive prompt-driven CLI form. Walks the operator through the attestation items, writes `output/<tenant>/attestation-<year>.json`.
+  - `Publish-TPAttestationForm.ps1` — generates a standalone static HTML form that an operator (or the client) can open in a browser, fill in, and *export to JSON*. Single self-contained file with strict CSP (consistent with the existing report security model). No backend.
 - Attestation items defined in `Config/attestation-items.json`. Each item: `Id`, `Question`, `Category`, `EvidenceField` (free text), `LastReviewed` (date), `NextReviewDue` (auto-calculated), `MappedControls` (array of CIS Control safeguards), `Required` (bool).
 - Initial item set (target ~12–15 items): IR plan, IR plan tested, pentest within 12 months, security awareness training completed for all users, phishing simulation in last 6 months, vendor security clauses present, PAW used for admin tasks, post-incident reviews on all material incidents, backup restore tested, RACI documented, data classification policy, change management policy, access review cadence, vulnerability disclosure process.
-- The orchestrator (`Invoke-NRGAssessment.ps1`) reads the most recent `attestation-<year>.json` if present and folds attested items into the findings stream with state `Satisfied`, `Gap` (item answered No), or `Stale` (item not attested this year). Detail field includes the attestation date and operator name.
-- A new evaluator `Evaluators/Test-NRGControlAttested.ps1` reads the attestation file and emits one finding per mapped CIS Control.
+- The orchestrator (`Invoke-TPAssessment.ps1`) reads the most recent `attestation-<year>.json` if present and folds attested items into the findings stream with state `Satisfied`, `Gap` (item answered No), or `Stale` (item not attested this year). Detail field includes the attestation date and operator name.
+- A new evaluator `Evaluators/Test-TPControlAttested.ps1` reads the attestation file and emits one finding per mapped CIS Control.
 
 **Security.**
-- Attestation JSON is sensitive (records what client claims about their governance). `Set-NRGSensitiveFileAcl` applied on write.
+- Attestation JSON is sensitive (records what client claims about their governance). `Set-TPSensitiveFileAcl` applied on write.
 - Attestation HTML form enforces same strict CSP as the main report (Trusted Types, no inline event handlers, nonce on script blocks).
 - Attestation entries include `AttestedBy` (operator UPN) and `AttestedAt` (timestamp). No PII beyond the operator identity.
 
@@ -76,8 +76,8 @@ What stays in scope from CIS IG1/IG2:
 **Problem.** Current batch run produces per-client HTML + a flat `batch-summary-<timestamp>.md` markdown table. There's no interactive cross-client surface. Quarterly MSP reviews want one pane showing every tenant's score, critical-gap count, maturity tier, IG1/IG2 coverage, and delta-since-last-quarter.
 
 **Architecture.**
-- New publisher: `Publishers/Publish-NRGPortfolioHTML.ps1`.
-- Called from `Invoke-NRGBatchAssessment.ps1` at the end of the batch run, after all per-client assessments complete.
+- New publisher: `Publishers/Publish-TPPortfolioHTML.ps1`.
+- Called from `Invoke-TPBatchAssessment.ps1` at the end of the batch run, after all per-client assessments complete.
 - Consumes the `$batchResults` array already accumulated by the batch runner plus each client's `results.json`.
 - Output: `output/portfolio-<timestamp>.html` — single self-contained file, no external assets, openable in any browser.
 - Sections:
@@ -86,7 +86,7 @@ What stays in scope from CIS IG1/IG2:
   - Workload heatmap: rows = clients, columns = workloads (AAD, EXO, DEF, etc.), cells colored red/yellow/green by per-workload coverage.
   - Top risk roll-up: ten most common Critical/High gaps across all clients (with count of affected tenants).
   - Quick filter: client name search, score range slider, "show only clients with critical gaps."
-- All client tenant data passes through `ConvertTo-NRGHtmlSafe` before render. No client data ever leaves the operator workstation.
+- All client tenant data passes through `ConvertTo-TPHtmlSafe` before render. No client data ever leaves the operator workstation.
 - CSP enforcement identical to per-client report (strict CSP via `<meta>` plus Trusted Types).
 
 **No new controls.** Publisher-only addition.
@@ -132,7 +132,7 @@ v4.7 and v4.8 land independently. If v4.7 F1 (maturity) is in by the time F13 sh
 
 ## Cross-cutting changes
 
-- **Module manifest.** Each new function exported by F11/F12/F13 must appear in both `NRG-Assessment.psd1` and `NRG-Assessment.psm1` exports list.
+- **Module manifest.** Each new function exported by F11/F12/F13 must appear in both `TenantPosture.psd1` and `TenantPosture.psm1` exports list.
 - **CHANGELOG.** v4.8.0 entry on implementation begin.
 - **Read-only invariant.** F11 schema migration is config-only. F12 attestation writes to the operator's `output/` directory (not to tenant). F13 portfolio is pure render. No tenant writes anywhere.
 - **No new Graph scopes.** Everything reuses what's already requested.

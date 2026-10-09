@@ -4,14 +4,14 @@
 
 **Status:** Design. No code yet. This document defines architecture, control IDs, data shapes, and publisher impact for the v4.7 feature wave. Implementation tracked in [#TBD] once this design is approved.
 
-**Scope:** Both `NRG-Assessment` (this repo) and the sibling repo land each feature in lockstep — same control IDs, same finding shapes, identical baseline JSON entries. Branding is the only diff.
+**Scope:** Both `TenantPosture` (this repo) and the sibling repo land each feature in lockstep — same control IDs, same finding shapes, identical baseline JSON entries. Branding is the only diff.
 
 **Principles:**
 - Read-only invariant holds. Every new collector uses GET-only Graph and read-only EXO cmdlets.
-- Every new evaluator follows the `Add-NRGFinding` contract (ControlId, State, Category, Title, Severity, Detail, FrameworkIds, CurrentValue, RequiredValue, Remediation).
+- Every new evaluator follows the `Add-TPFinding` contract (ControlId, State, Category, Title, Severity, Detail, FrameworkIds, CurrentValue, RequiredValue, Remediation).
 - Every new control gets one row in `Config/controls.json` and one `Configuration` entry in exactly one `baselines/nls-baseline-*.json` tier file.
 - Every new feature includes a Pester test in `Testing/`.
-- Module manifest exports stay in sync between `NRG-Assessment.psm1` and `NRG-Assessment.psd1`.
+- Module manifest exports stay in sync between `TenantPosture.psm1` and `TenantPosture.psd1`.
 
 ---
 
@@ -32,10 +32,10 @@
 | Optimizing   | ≥ 90%                                   | 0 critical, 0 high | ≥ 3 consecutive assessments at Managed |
 
 **Architecture.**
-- New: `Lib/Get-NRGMaturityTier.ps1` — `Get-NRGMaturityTier -CurrentFindings $f -HistoricalResults $hist` returns `@{ Tier=4; TierName='Managed'; CoveragePct=82; CriticalGaps=0; HighGaps=2; Trajectory='Improving' }`.
-- Publisher addition in `Publish-NRGAssessmentHTML.ps1`: maturity badge above the score ring, ladder visualization, trajectory arrow vs last assessment.
+- New: `Lib/Get-TPMaturityTier.ps1` — `Get-TPMaturityTier -CurrentFindings $f -HistoricalResults $hist` returns `@{ Tier=4; TierName='Managed'; CoveragePct=82; CriticalGaps=0; HighGaps=2; Trajectory='Improving' }`.
+- Publisher addition in `Publish-TPAssessmentHTML.ps1`: maturity badge above the score ring, ladder visualization, trajectory arrow vs last assessment.
 - JSON output: top-level `Maturity` block with tier, name, coverage, gap counts, trajectory.
-- Delta report integration: tier movement highlighted in `Publish-NRGDeltaReport.ps1`.
+- Delta report integration: tier movement highlighted in `Publish-TPDeltaReport.ps1`.
 
 **No new controls.** Maturity is derived, not evaluated.
 
@@ -60,7 +60,7 @@ P(incident) = BaseRate(industry, size)
 Each relevant control has a published `IncidentRiskMultiplier` per incident type in `Config/controls.json`. Sum is bounded to `[0, 1)`.
 
 **Architecture.**
-- New: `Lib/Get-NRGIncidentLikelihood.ps1` — `Get-NRGIncidentLikelihood -Findings $f -TenantProfile $p` returns array of `@{ IncidentType; ProbabilityPct; ExpectedAnnualLossUSD; ContributingControlIds; DBIRAnchor; CoDBAnchor }`.
+- New: `Lib/Get-TPIncidentLikelihood.ps1` — `Get-TPIncidentLikelihood -Findings $f -TenantProfile $p` returns array of `@{ IncidentType; ProbabilityPct; ExpectedAnnualLossUSD; ContributingControlIds; DBIRAnchor; CoDBAnchor }`.
 - New embedded data: `baselines/incident-anchors.json` — DBIR base rates and CoDB loss curves (frozen at release).
 - `Config/controls.json` schema extension: new optional `IncidentRiskMultipliers = @{ BEC=0.15; Ransomware=0.02; ... }` per control.
 - Publisher: new "Financial Risk Forecast" HTML section before Attack Scenario Analysis. Renders 4 cards, one per incident type, with probability bar and dollar figure.
@@ -74,11 +74,11 @@ Each relevant control has a published `IncidentRiskMultiplier` per incident type
 **Problem.** Microsoft's risky-sign-in is anchored to global threat intel, not per-tenant norms. An admin who has never signed in from outside the operator's local region at 2am is a meaningful tenant-specific signal.
 
 **Architecture.**
-- New collector: `Collectors/AAD/Invoke-NRGCollectAADAdminSignInTelemetry.ps1`.
+- New collector: `Collectors/AAD/Invoke-TPCollectAADAdminSignInTelemetry.ps1`.
   - Pulls last 30 days of sign-in logs filtered to users with active privileged role assignments.
   - Captures per sign-in: UTC timestamp, IP, country, ASN, device ID, app ID, conditional-access result.
   - Persists to a new raw-data key `AAD-AdminSignInTelemetry`.
-- New evaluator: `Evaluators/Test-NRGControlAADAdminBehavioralBaseline.ps1`.
+- New evaluator: `Evaluators/Test-TPControlAADAdminBehavioralBaseline.ps1`.
   - Splits the 30-day window into `baseline` (days 8–30) and `recent` (days 1–7).
   - Detects three anomaly classes: new country, new ASN, new sign-in hour window outside admin's historical distribution.
   - Emits one finding per anomalous admin with the deviation list in `Detail`.
@@ -97,7 +97,7 @@ Each relevant control has a published `IncidentRiskMultiplier` per incident type
 **Problem.** Thread hijacking is the most damaging BEC variant. It is enabled by the *combination* of external forwarding rules, weak DMARC, absent Safe Links, and mailbox delegation patterns. Reporting each gap individually undersells the composite risk.
 
 **Architecture.**
-- New evaluator: `Evaluators/Test-NRGControlEXOThreadHijackComposite.ps1`.
+- New evaluator: `Evaluators/Test-TPControlEXOThreadHijackComposite.ps1`.
 - No new collector — composes findings from existing raw data:
   - `EXO-MailboxConfig` (auto-forwarding, transport rules)
   - `DNS-Summary` (DMARC policy state per domain)
@@ -120,8 +120,8 @@ Each relevant control has a published `IncidentRiskMultiplier` per incident type
 
 **Architecture.**
 - `Config/controls.json` schema extension: required `Responsibility` field per control. Allowed values: `MSP`, `ClientIT`, `Vendor`, `Microsoft`, `Shared`.
-- `Add-NRGFinding` accepts the field from the control definition (no API change to callers — pulled from `Get-NRGControlById`).
-- New: `Lib/Get-NRGFindingResponsibility.ps1` — returns responsibility for a finding, with overrides allowed via baseline JSON for client-specific deviations (e.g., a client where DNS is managed by a third party).
+- `Add-TPFinding` accepts the field from the control definition (no API change to callers — pulled from `Get-TPControlById`).
+- New: `Lib/Get-TPFindingResponsibility.ps1` — returns responsibility for a finding, with overrides allowed via baseline JSON for client-specific deviations (e.g., a client where DNS is managed by a third party).
 - Publisher: new HTML section "Accountability Matrix" — table of all gaps grouped by responsible party.
 - One-time migration: populate `Responsibility` on all 188 existing controls. Default mapping:
   - DNS-* → `Shared` (MSP recommends, client DNS provider executes)
@@ -139,7 +139,7 @@ Each relevant control has a published `IncidentRiskMultiplier` per incident type
 **Problem.** A quarterly assessment misses drift between runs. A lightweight scheduled check that detects Critical/High `Satisfied → Gap` transitions catches configuration drift before it becomes an incident.
 
 **Architecture.**
-- New entry point: `Invoke-NRGRegressionCheck.ps1` at repo root.
+- New entry point: `Invoke-TPRegressionCheck.ps1` at repo root.
 - Loads the most recent full-assessment JSON for the tenant from `./output/<tenant>/`.
 - Re-runs only the Critical and High evaluators (no Medium, no Low) against the live tenant.
 - Compares results: any control that was `Satisfied` in the baseline JSON and is now `Gap` or `Partial` is a regression.
@@ -159,7 +159,7 @@ Each relevant control has a published `IncidentRiskMultiplier` per incident type
 **Problem.** Clients ask for ad-hoc status updates between assessments. Generating a new report each time is high-touch and slow.
 
 **Phase 1 scope (this release).**
-- New flag on `Publish-NRGAssessmentHTML.ps1`: `-SelfServiceMode`.
+- New flag on `Publish-TPAssessmentHTML.ps1`: `-SelfServiceMode`.
 - Strips MSP-only content: pricing, hourly rate, services pitch, internal notes.
 - Adds: prominent "Last assessment: YYYY-MM-DD" banner, simple client-side search/filter on findings (vanilla JS, no framework, CSP-safe with nonce).
 - Embeds the findings JSON as a `<script type="application/json">` block for the filter widget to read.
@@ -178,12 +178,12 @@ Each relevant control has a published `IncidentRiskMultiplier` per incident type
 **Problem.** Supply chain compromise increasingly enters through MSP and vendor relationships. Government and regulated clients are starting to ask explicitly.
 
 **Architecture.**
-- New evaluator: `Evaluators/Test-NRGControlAADSupplyChainRisk.ps1`.
+- New evaluator: `Evaluators/Test-TPControlAADSupplyChainRisk.ps1`.
 - No new collector — composes from existing raw data:
   - `AAD-Inventory` (service principals + delegated permissions)
   - `AAD-Users` (guests filtered by external domain)
   - `AAD-DirectoryRoles` (role assignments to guests)
-- Optional new collector: `Collectors/AAD/Invoke-NRGCollectAADGDAPRelationships.ps1` to enumerate GDAP relationships for the tenant via Partner Center API — partner-side, opt-in via `-IncludeGDAPReview` flag.
+- Optional new collector: `Collectors/AAD/Invoke-TPCollectAADGDAPRelationships.ps1` to enumerate GDAP relationships for the tenant via Partner Center API — partner-side, opt-in via `-IncludeGDAPReview` flag.
 
 **New controls.**
 
@@ -206,8 +206,8 @@ Each relevant control has a published `IncidentRiskMultiplier` per incident type
 - Audit log activity from non-Global-Admin security operators in last 30 days.
 
 **Architecture.**
-- New collector: `Collectors/AAD/Invoke-NRGCollectAttackSim.ps1` — pulls Defender Attack Simulator campaigns via Graph (`reports/security/getAttackSimulationSimulationUserCoverage` and related endpoints). Requires `AttackSimulation.Read.All` — **new scope addition** to `Connect-NRGServices.ps1` scope list.
-- New evaluator: `Evaluators/Test-NRGControlAADCultureSignals.ps1` — emits one composite Culture Score finding (0–100).
+- New collector: `Collectors/AAD/Invoke-TPCollectAttackSim.ps1` — pulls Defender Attack Simulator campaigns via Graph (`reports/security/getAttackSimulationSimulationUserCoverage` and related endpoints). Requires `AttackSimulation.Read.All` — **new scope addition** to `Connect-TPServices.ps1` scope list.
+- New evaluator: `Evaluators/Test-TPControlAADCultureSignals.ps1` — emits one composite Culture Score finding (0–100).
 
 **New controls.**
 
@@ -222,7 +222,7 @@ Each relevant control has a published `IncidentRiskMultiplier` per incident type
 **Problem.** Clients paying for premium SKUs but not extracting value. Low-cost remediation opportunity for MSP; demonstrates ROI on existing client spend.
 
 **Architecture.**
-- New evaluator: `Evaluators/Test-NRGControlLicenseWaste.ps1`.
+- New evaluator: `Evaluators/Test-TPControlLicenseWaste.ps1`.
 - No new collector — composes from existing raw data: `AAD-Inventory.SubscribedSkus` + per-workload deployment state already collected by Defender/Intune/Purview collectors.
 - Match table (license → required deployed feature → evaluator data key):
 
@@ -246,7 +246,7 @@ Each relevant control has a published `IncidentRiskMultiplier` per incident type
 | LIC-1.4   | Entra P1 CA policies activated | Medium | Licensing | premium |
 | LIC-1.5   | Entra P2 PIM / Identity Protection activated | Medium | Licensing | premium |
 
-- New workload code: `LIC`. Add to control prefix list in `Get-NRGControlDefinitions.ps1` and the HTML report workload scorecard grid.
+- New workload code: `LIC`. Add to control prefix list in `Get-TPControlDefinitions.ps1` and the HTML report workload scorecard grid.
 
 ---
 
@@ -271,9 +271,9 @@ Sequenced to minimize cross-feature merge conflicts. Each row is its own PR per 
 
 ## Cross-cutting changes
 
-- **Module manifest.** Every feature adds exports to `NRG-Assessment.psd1` `FunctionsToExport` and `NRG-Assessment.psm1` `$script:ExportedFunctions`. The two lists must stay in sync.
+- **Module manifest.** Every feature adds exports to `TenantPosture.psd1` `FunctionsToExport` and `TenantPosture.psm1` `$script:ExportedFunctions`. The two lists must stay in sync.
 - **Tests.** Each feature ships at least one Pester test in `Testing/`:
-  - `NRG.Maturity.Tests.ps1`, `NRG.IncidentLikelihood.Tests.ps1`, `NRG.AdminBaseline.Tests.ps1`, `NRG.ThreadHijack.Tests.ps1`, `NRG.Responsibility.Tests.ps1`, `NRG.Regression.Tests.ps1`, `NRG.SelfService.Tests.ps1`, `NRG.SupplyChain.Tests.ps1`, `NRG.Culture.Tests.ps1`, `NRG.LicenseWaste.Tests.ps1`.
+  - `TP.Maturity.Tests.ps1`, `TP.IncidentLikelihood.Tests.ps1`, `TP.AdminBaseline.Tests.ps1`, `TP.ThreadHijack.Tests.ps1`, `TP.Responsibility.Tests.ps1`, `TP.Regression.Tests.ps1`, `TP.SelfService.Tests.ps1`, `TP.SupplyChain.Tests.ps1`, `TP.Culture.Tests.ps1`, `TP.LicenseWaste.Tests.ps1`.
 - **CHANGELOG.** v4.7.0 entry added when implementation begins, with one bullet per feature.
 - **Graph scope additions** (only one): `AttackSimulation.Read.All` for F9. All other features reuse existing scopes.
 - **Baseline JSON migrations.** F5 (Responsibility), F2 (IncidentRiskMultipliers) add new fields per control. Validation script `tools/Validate-Baselines.ps1` (new, small) ensures every control has the new fields populated before commits land.

@@ -1,4 +1,4 @@
-# OpenSSF Best Practices Self-Assessment — NRG-Assessment
+# OpenSSF Best Practices Self-Assessment — TenantPosture
 
 The [OpenSSF Best Practices Badge Program](https://www.bestpractices.dev/) (formerly Core Infrastructure Initiative) is a free self-attestation framework for open-source projects. It has three tiers — **Passing**, **Silver**, **Gold** — each adding more rigorous criteria.
 
@@ -35,7 +35,7 @@ Each row below names the OpenSSF criterion ID, what we do, and where the evidenc
 | `repo_public` | Source repository publicly readable | ✗ | Private repository. Source is under git version control and distributed to clients under license, but is not public. This criterion is not met. |
 | `repo_track` | Changes tracked between releases | ✓ | `CHANGELOG.md` per release |
 | `repo_distributed` | Distributed VCS used | ✓ | git |
-| `version_unique` | Unique version per release | ✓ | `ModuleVersion` in `NRG-Assessment.psd1`; semver tags `v4.9.0` etc. |
+| `version_unique` | Unique version per release | ✓ | `ModuleVersion` in `TenantPosture.psd1`; semver tags `v4.9.0` etc. |
 | `version_semver` | SemVer recommended | ✓ | semver in use since v3.x |
 | `release_notes` | Release notes provided | ✓ | `CHANGELOG.md` |
 | `release_notes_vulns` | Release notes identify vulnerability fixes | ✓ | `[Security]` tag convention in `CHANGELOG.md` |
@@ -82,7 +82,7 @@ Each row below names the OpenSSF criterion ID, what we do, and where the evidenc
 | `crypto_keylength` | Crypto key lengths meet NIST minimums | ✓ | Self-signed cert generation defaults to RSA 2048 |
 | `crypto_working` | Default crypto is not broken | ✓ | TLS 1.0/1.1 disabled |
 | `crypto_weaknesses` | Default crypto avoids weaknesses | ✓ | SHA-256 manifests; no MD5/SHA-1 in security-critical paths |
-| `crypto_alternatives` | Mechanism for upgrading crypto | ✓ | Configurable via `Set-NRGSensitiveFileAcl` and cert thumbprint params |
+| `crypto_alternatives` | Mechanism for upgrading crypto | ✓ | Configurable via `Set-TPSensitiveFileAcl` and cert thumbprint params |
 | `crypto_pfs` | Perfect forward secrecy in TLS | ✓ | TLS 1.3 supports PFS by default |
 | `crypto_password_storage` | Passwords stored using iterated salted hash | N/A | Tool does not store passwords; auth is OAuth2 + cert |
 | `crypto_random` | All crypto random uses CSPRNG | ✓ | .NET `RandomNumberGenerator` via MSAL |
@@ -130,9 +130,9 @@ Highlights of criteria we already meet:
 - `build_preserve_debug` — Source-distributed; debug symbols not applicable.
 - `build_non_recursive` — N/A.
 - `build_repeatable` — Yes, GitHub Actions reproducible builds.
-- `installation_common` — `Install-NRGPrerequisites.ps1` standardizes installation.
+- `installation_common` — `Install-TPPrerequisites.ps1` standardizes installation.
 - `installation_standard_variables` — N/A.
-- `installation_development_quick` — `git clone && Import-Module ./NRG-Assessment.psd1`.
+- `installation_development_quick` — `git clone && Import-Module ./TenantPosture.psd1`.
 - `external_dependencies` — SBOM publishes all dependencies.
 - `dependency_monitoring` — Dependabot + Dependency Review workflow.
 - `updateable_reused_components` — Module versions pinned but updateable.
@@ -190,4 +190,4 @@ The live badge at [bestpractices.dev/projects/<id>](https://www.bestpractices.de
 
 ---
 
-*NRG-Assessment OpenSSF Best Practices self-assessment v1.0 · Tier: Passing (target Silver Q3 2026)*
+*TenantPosture OpenSSF Best Practices self-assessment v1.0 · Tier: Passing (target Silver Q3 2026)*

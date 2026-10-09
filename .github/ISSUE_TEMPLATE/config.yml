@@ -3,18 +3,18 @@
 blank_issues_enabled: false
 contact_links:
   - name: 🔒 Report a security vulnerability (private)
-    url: https://github.com/Blackvectra/NRG-Assessment-Tool/security/advisories/new
+    url: https://github.com/Blackvectra/TenantPosture/security/advisories/new
     about: |
       Do NOT open a public issue for security vulnerabilities. Use GitHub's
       private security advisory flow so the report stays confidential until
       coordinated disclosure. See SECURITY.md for the full policy + SLA.
   - name: 📋 Vulnerability Disclosure Policy
-    url: https://github.com/Blackvectra/NRG-Assessment-Tool/blob/main/docs/VULNERABILITY-DISCLOSURE-POLICY.md
+    url: https://github.com/Blackvectra/TenantPosture/blob/main/docs/VULNERABILITY-DISCLOSURE-POLICY.md
     about: |
       Our full VDP (CISA BOD 20-01 aligned): scope, safe harbor, SLA,
       what to include in a report, and how we coordinate disclosure.
   - name: 💬 General question
-    url: https://github.com/Blackvectra/NRG-Assessment-Tool/discussions
+    url: https://github.com/Blackvectra/TenantPosture/discussions
     about: |
       For "how do I do X" questions, configuration help, or design discussion,
       please use Discussions rather than Issues.

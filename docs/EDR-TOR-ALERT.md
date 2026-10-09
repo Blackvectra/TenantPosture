@@ -4,7 +4,7 @@
 
 Microsoft Defender **Behavioral Threat Protection** raises
 `malicious_tor_access` against `pwsh.exe` while (or shortly after) running an
-NRG-Assessment sign-in triage or Email-IR job:
+TenantPosture sign-in triage or Email-IR job:
 
 ```
 Component:            Behavioral Threat Protection
@@ -35,7 +35,7 @@ the removal — likely because no packaged release had been cut yet.
    release, which is the first build to ship without the Tor fetch):
 
    ```powershell
-   cd C:\path\to\NRG-Assessment
+   cd C:\path\to\TenantPosture
    git pull                     # if it's a clone
    # — or — replace the extracted folder with a fresh v4.13.0+ download
    ```
@@ -43,7 +43,7 @@ the removal — likely because no packaged release had been cut yet.
 2. **Confirm the installed copy is clean** — this must return nothing.
    (`Select-String` has no `-Recurse` parameter — use `Get-ChildItem -Recurse`
    piped into it. `Testing\` is excluded because
-   `NRG.NetworkEgress.Tests.ps1` — the guard that enforces this — legitimately
+   `TP.NetworkEgress.Tests.ps1` — the guard that enforces this — legitimately
    quotes the pattern it's checking for, in its own `It` description and its
    `-imatch` line; that's the detector, not an offender.)
 
@@ -59,7 +59,7 @@ the removal — likely because no packaged release had been cut yet.
 
 ## Why it can't come back
 
-`Testing/NRG.NetworkEgress.Tests.ps1` (runs in CI on every PR) fails the build
+`Testing/TP.NetworkEgress.Tests.ps1` (runs in CI on every PR) fails the build
 if any non-comment source line references the Tor Project host or its bulk exit list, and
 pins the full allowed-egress host list — a new outbound host is now a
 deliberate, reviewed change.
@@ -68,7 +68,7 @@ deliberate, reviewed change.
 
 Standalone Tor-exit detection (the live exit-list fetch, and the
 local-exit-list-file workaround that briefly replaced it) has been removed
-from the tool entirely — no `-TorExitListPath`, no `Test-NRGIPIsTorExit`.
+from the tool entirely — no `-TorExitListPath`, no `Test-TPIPIsTorExit`.
 Tor sign-ins are still caught for **Entra ID P2 tenants**: Microsoft Identity
 Protection labels them server-side via `anonymizedIPAddress` in
 `riskEventTypes_v2`, and the triage scorer (`SIGNIN-1.2`) consumes that
