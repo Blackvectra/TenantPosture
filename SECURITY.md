@@ -21,7 +21,7 @@ We follow a **coordinated vulnerability disclosure** model aligned to NIST SP 80
 
 **Preferred (private):** Open a private security advisory via the repository's [Security tab → "Report a vulnerability"](https://github.com/Blackvectra/TenantPosture/security/advisories/new). This routes the report directly to the maintainers, keeps it private until coordinated disclosure, and produces a CVE if applicable.
 
-**Alternative (email):** `security@nrgtechservices.com` — please encrypt with our public PGP key if the issue is sensitive (key fingerprint published at `https://www.nrgtechservices.com/.well-known/security.txt`). Subject line: `[TenantPosture SECURITY] <one-line summary>`.
+**Alternative (email):** `mlevorson97@gmail.com`. Subject line: `[TenantPosture SECURITY] <one-line summary>`.
 
 **Do NOT** open a public GitHub issue, post in a forum, or disclose on social media until the coordinated-disclosure window has closed.
 

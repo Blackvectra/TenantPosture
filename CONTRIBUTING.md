@@ -79,7 +79,7 @@ Use the `security:` prefix for any fix that closes a vulnerability — the `[Sec
 
 ## Reporting a security vulnerability
 
-**Do not open a public issue or PR** for a security vulnerability. Use the [private security advisory flow](https://github.com/Blackvectra/TenantPosture/security/advisories/new) or email `security@nrgtechservices.com`. See [`SECURITY.md`](SECURITY.md) for the full coordinated-disclosure policy and SLA.
+**Do not open a public issue or PR** for a security vulnerability. Use the [private security advisory flow](https://github.com/Blackvectra/TenantPosture/security/advisories/new) or email `mlevorson97@gmail.com`. See [`SECURITY.md`](SECURITY.md) for the full coordinated-disclosure policy and SLA.
 
 ## License of contributions
 

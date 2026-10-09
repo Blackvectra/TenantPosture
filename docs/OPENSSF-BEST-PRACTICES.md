@@ -24,7 +24,7 @@ Each row below names the OpenSSF criterion ID, what we do, and where the evidenc
 | ID | Criterion | Status | Evidence |
 |---|---|---|---|
 | `description_good` | Project description provided | ✓ | `README.md` opening paragraph |
-| `interact` | Mechanism to interact / report issues | ✓ | GitHub Issues + Security advisories + `security@nrgtechservices.com` |
+| `interact` | Mechanism to interact / report issues | ✓ | GitHub Issues + Security advisories + `mlevorson97@gmail.com` |
 | `contribution` | Contribution requirements documented | ✓ | `CONTRIBUTING.md` |
 | `contribution_requirements` | Specific contribution requirements | ✓ | `CONTRIBUTING.md` + PR template (`.github/PULL_REQUEST_TEMPLATE.md`) |
 
@@ -50,7 +50,7 @@ Each row below names the OpenSSF criterion ID, what we do, and where the evidenc
 | `enhancement_responses` | Acknowledge enhancement requests | ✓ | Issue templates exist; maintainer responds |
 | `report_archive` | Bug reports + responses archived | ✓ | GitHub retains issues + comments indefinitely |
 | `vulnerability_report_process` | Vulnerability reporting documented | ✓ | `SECURITY.md` |
-| `vulnerability_report_private` | Private reporting channel | ✓ | GitHub Security advisories + `security@nrgtechservices.com` |
+| `vulnerability_report_private` | Private reporting channel | ✓ | GitHub Security advisories + `mlevorson97@gmail.com` |
 | `vulnerability_report_response` | Response within 14 days | ✓ | 3-day acknowledgement SLA |
 
 ### Quality

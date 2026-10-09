@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Project contact is the maintainer's address.** `SECURITY.md`, `CONTRIBUTING.md`, the disclosure
+  policy, the OpenSSF notes, `CLAUDE.md` and `.oss-scanner/project.yaml` name `mlevorson97@gmail.com`
+  as the project's contact in place of an NRG Technology Services mailbox, and the PGP reference to
+  that company's security.txt is gone. The GitHub Security tab stays the preferred report channel.
+  The NRG profile keeps its own addresses; nothing else changes.
+
 - **Tenant-versus-tenant baseline comparison (`Compare-TPTenantBaseline.ps1`).**
   Sets two tenants side by side against the NRG Security Baseline (a prospective
   client against an existing one) from two results JSON files. Standalone and
