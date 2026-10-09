@@ -17,6 +17,7 @@ coming back to this after six months, start here.
 | Hand a client a NIST document | Add `-NISTMatrix` |
 | Get closer to NIST, in order | Add `-ImprovementPlan` |
 | Build a CMMC / 800-171 plan | Add `-SSP` |
+| Harden a client's distribution lists | `Invoke-TPAssessment.ps1 -DistributionListsOnly -UserPrincipalName admin@client.com -TenantDomain client.com` |
 | Find out who got phished | `Invoke-TPSignInTriage.ps1` |
 | Investigate one mailbox | `Invoke-TPEmailAssessment.ps1 -UserPrincipalName alice@client.com` |
 | Print device guidance (no scan) | `New-TPDeviceGuide.ps1` |
@@ -61,6 +62,31 @@ Parameters worth knowing:
 | `-IncludePurview` | Purview is **skipped by default** (EOM WAM crash). Opt in. |
 | `-FailOnCritical / -FailOnHigh / -FailOnScoreBelow` | Non-zero exit for CI or Task Scheduler. |
 | `-JsonOnly` | Machine record only, no report. |
+
+### `-DistributionListsOnly` — harden the distribution lists
+
+DMARC judges only mail that claims your own domain, so it does not make an "all staff"
+list safe: a list can accept mail from anyone, and mail can reach it through a filtering
+bypass. This mode shows, per list, who is in it, its settings, whether mail can reach it
+from outside or through a bypass, and how that compares with a cited recommendation.
+
+```powershell
+.\Invoke-TPAssessment.ps1 -DistributionListsOnly -UserPrincipalName admin@client.com -TenantDomain client.com
+```
+
+**Needs:** an Exchange Online sign-in and nothing else (no Graph, Purview, Teams or SharePoint).
+**Gives you:** `<tenant>-<timestamp>-distribution-lists.txt` and `.csv` in the output folder. For a list
+open to outside mail it also prints, as text, a proposed allowed-senders manual action built from the list's
+current members (external members stay; nothing removes them).
+**Read-only:** it lists members and never changes anything. The commands in the worksheet are
+text for an administrator, and each is a record: a reversible bundle (the state read, a check whose Compare prints
+True, a `-WhatIf` preview, the apply, a verify, and a rollback that restores the state the scan read), a labeled manual
+action with no rollback command (an owner, or an allowed-senders list that was empty), or a withheld record with a reason
+and no command at all. Every other area is not assessed. The read-only access it needs is in
+[`EXCHANGE-RBAC-DISTRIBUTION-LISTS.md`](EXCHANGE-RBAC-DISTRIBUTION-LISTS.md).
+Not yet run against a live tenant. See the README section for what it cannot see.
+
+---
 
 ### `Invoke-TPBatchAssessment.ps1` — every client, one login
 
