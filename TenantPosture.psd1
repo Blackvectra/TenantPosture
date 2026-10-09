@@ -3,7 +3,7 @@
     ModuleVersion     = '4.14.3'
     GUID              = 'f8dff693-11ac-495b-901a-290773371ef5'
     Author            = 'Matthew Levorson'
-    CompanyName       = 'NRG Technology Services / NextLayerSec LLC'
+    CompanyName       = 'TenantPosture'
     Copyright         = '(c) 2026 NRG Technology Services. All rights reserved.'
     Description       = 'Read-only Microsoft 365 security assessment framework for MSPs. Multi-framework, multi-tenant, client-ready reporting.'
 

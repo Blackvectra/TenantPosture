@@ -23,7 +23,7 @@ Lib/Set-TPSensitiveFileAcl.ps1         @Blackvectra
 Lib/Test-TPSignatureStatus.ps1         @Blackvectra
 Lib/Start-TPWebServer.ps1              @Blackvectra
 Build/                                  @Blackvectra
-Testing/NRG.Security.Tests.ps1          @Blackvectra
+Testing/TP.Security.Tests.ps1          @Blackvectra
 docs/VULNERABILITY-DISCLOSURE-POLICY.md @Blackvectra
 docs/SECURE-DEVELOPMENT.md              @Blackvectra
 docs/OPENSSF-BEST-PRACTICES.md          @Blackvectra

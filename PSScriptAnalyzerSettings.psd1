@@ -65,7 +65,7 @@
         # this codebase ever has to support PS 5.1 again (it won't).
         'PSUseBOMForUnicodeEncodedFile',
 
-        # The 6 Apply-NRG* write-mode functions (Apply-TPAADLegacyAuth,
+        # The 6 Apply-TP* write-mode functions (Apply-TPAADLegacyAuth,
         # Apply-TPAADMFA, Apply-TPEXOMailboxAudit, Apply-TPEXOSmtpAuth,
         # Apply-TPEXOAutoForward, Apply-TPDefenderPreset) use the unapproved
         # "Apply" verb. "Apply-" is the deliberate verb chosen for the write-
