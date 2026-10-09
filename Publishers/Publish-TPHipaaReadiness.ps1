@@ -55,8 +55,10 @@ function Publish-TPHipaaReadiness {
     }
 
     # Tenant-derived text (finding details, policy names) can carry markup;
-    # Markdown renderers pass inline HTML through, so encode it here too.
-    function EscMd { param([object]$v) ([string]$v) -replace '&', '&amp;' -replace '<', '&lt;' -replace '>', '&gt;' -replace '\|', '\|' -replace '[\r\n]+', ' ' }
+    # Markdown renderers pass inline HTML through, so encode it here too, and
+    # escape the bracket syntax a link or image needs (![x](https://...) would
+    # otherwise make the viewer fetch an attacker's URL) and code spans.
+    function EscMd { param([object]$v) ([string]$v) -replace '\\', '\\' -replace '&', '&amp;' -replace '<', '&lt;' -replace '>', '&gt;' -replace '([\[\]`])', '\$1' -replace '\|', '\|' -replace '[\r\n]+', ' ' }
     function Esc   { param([object]$v) ConvertTo-TPHtmlSafe $v }
 
     $st    = Get-TPHipaaStatusNames
