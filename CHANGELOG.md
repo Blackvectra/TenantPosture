@@ -17,6 +17,10 @@
   Prose that names NRG as the operating MSP in comments, finding text and docs is unchanged in this
   step and is the next pass.
 
+- **Licensed under the Apache License, Version 2.0.** The proprietary LICENSE is replaced by the
+  canonical Apache 2.0 text, a NOTICE file carries the copyright, and the README, manifest and
+  CONTRIBUTING say so. Contributions are accepted under the same license (Apache 2.0 section 5).
+
 - **DKIM: every domain's finding says when its key was last rotated (DNS-2.1).** The finding
   used to give only an age ("3906 days old"). It now states the date the current key was created,
   from `Get-DkimSigningConfig` `KeyCreationTime`, plus the key size of each selector and the selector

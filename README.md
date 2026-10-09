@@ -678,9 +678,9 @@ The framework-accuracy suite validates every SCuBA citation against the bundled 
 
 ## License
 
-**Proprietary — all rights reserved.** Copyright (c) 2026 Matthew Levorson — TenantPosture. See [LICENSE](LICENSE).
+Licensed under the [Apache License, Version 2.0](LICENSE). Copyright 2026 Matthew Levorson / NextLayerSec LLC; see [NOTICE](NOTICE).
 
-This is not open-source software. No right to use, copy, modify, redistribute or resell it is granted without prior written permission from the owner, and receiving a copy does not itself confer one. Assessment reports produced by running the tool belong to the customer they were produced for.
+You may use, modify and redistribute it under that license, including commercially. Contributions are accepted under the same license. Assessment reports produced by running the tool belong to the organization they were produced for.
 
 ---
 

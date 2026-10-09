@@ -80,3 +80,7 @@ Use the `security:` prefix for any fix that closes a vulnerability — the `[Sec
 ## Reporting a security vulnerability
 
 **Do not open a public issue or PR** for a security vulnerability. Use the [private security advisory flow](https://github.com/Blackvectra/TenantPosture/security/advisories/new) or email `security@nrgtechservices.com`. See [`SECURITY.md`](SECURITY.md) for the full coordinated-disclosure policy and SLA.
+
+## License of contributions
+
+The project is licensed under the [Apache License, Version 2.0](LICENSE). By opening a pull request you agree that your contribution is licensed under the same terms, as section 5 of that license provides. No separate contributor agreement is required.
