@@ -21,6 +21,7 @@ coming back to this after six months, start here.
 | Find out who got phished | `Invoke-TPSignInTriage.ps1` |
 | Investigate one mailbox | `Invoke-TPEmailAssessment.ps1 -UserPrincipalName alice@client.com` |
 | Print device guidance (no scan) | `New-TPDeviceGuide.ps1` |
+| Compare two tenants (a prospect against a client) | `Compare-TPTenantBaseline.ps1 -ResultsA a.json -ResultsB b.json -OutputPath .\out` |
 | Set up a new machine | `Install-TPPrerequisites.ps1` |
 | Actually change tenant settings | `Apply-TPBaseline.ps1` — the only one that writes |
 
@@ -248,6 +249,26 @@ Produces two documents:
 
 `-ResultsPath <results.json>` annotates the guide with a prior run's verdicts.
 It never changes what the guide *recommends* — only what it reports as done.
+
+### `Compare-TPTenantBaseline.ps1` — connects to nothing
+
+Two tenants against the NRG Security Baseline, side by side, from two
+`-results.json` files you already have. Internal: the default output names both
+tenants. See [`TP-TENANT-COMPARISON.md`](TP-TENANT-COMPARISON.md).
+
+```powershell
+.\Compare-TPTenantBaseline.ps1 -ResultsA .\output\prospect-20260930-101500-results.json `
+    -ResultsB .\output\client-20260930-094500-results.json -OutputPath .\output\comparison
+```
+
+**Needs:** two results files that carry a `BaselineCompliance` block. No sign-in.
+**Gives you:** a Markdown, a self-contained HTML and a CSV. `-Anonymize` labels the
+tenants A and B in every output and file name.
+
+Any tier can be compared; only the controls required at both tenants are. A
+control either run could not verify is listed as not comparable and never counts
+as a match. This is **not** the run-over-run comparison: to see one tenant change
+over time, use `-BaselineResults` on `Invoke-TPAssessment.ps1`.
 
 ---
 
