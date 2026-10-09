@@ -18,7 +18,7 @@ GitHub: [Blackvectra/TenantPosture](https://github.com/Blackvectra/TenantPosture
 
 <sub>Workflow badges render for signed-in users with repository access (this repo is private).</sub>
 
-> **Security:** Report vulnerabilities privately via the [GitHub Security tab](https://github.com/Blackvectra/TenantPosture/security/advisories/new) or `security@nrgtechservices.com`. We follow a 7-day Critical / 30-day High fix SLA; see [`SECURITY.md`](SECURITY.md) for the full policy.
+> **Security:** Report vulnerabilities privately via the [GitHub Security tab](https://github.com/Blackvectra/TenantPosture/security/advisories/new) or `mlevorson97@gmail.com`. We follow a 7-day Critical / 30-day High fix SLA; see [`SECURITY.md`](SECURITY.md) for the full policy.
 
 ---
 
