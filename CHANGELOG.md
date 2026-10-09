@@ -9,6 +9,12 @@
   reads "Partial evidence", not "Tool-verified". The 164.308(b)(1) standard now carries paragraph
   (b)(2), the business associate's subcontractor assurance duty, which the catalog had left out.
 
+- **OSS Scanner enrollment files (`.oss-scanner/`).** A `Dockerfile` that builds the module and runs
+  the full Pester suite offline (PowerShell 7.5 on Ubuntu 24.04, Pester, PSScriptAnalyzer, openpyxl,
+  yamllint), a `threat_model.md` naming where untrusted input enters and how findings are rated, and
+  the `project.yaml` submitted to Anthropic's scanner repository. A `.dockerignore` keeps `output/`
+  and `Reports/` out of the image. No tool behavior changes.
+
 - **Renamed to TenantPosture; practice-specific data moved to profiles.** Every `NRG` identifier,
   file name and config key is now `TP` / `TenantPosture` (`Invoke-TPAssessment.ps1`, `Get-TPFindings`,
   `TenantPosture.psm1`, `Config/tp-baseline.json`, `TP.*.Tests.ps1`); the baseline field

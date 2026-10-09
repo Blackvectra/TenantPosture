@@ -1,0 +1,6 @@
+# Build context for .oss-scanner/Dockerfile. Generated reports never belong in
+# the image; the .git folder is kept because the Markdown check lists tracked files.
+output/
+Reports/
+*.html.tmp
+*.bak
