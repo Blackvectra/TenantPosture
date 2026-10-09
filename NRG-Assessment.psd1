@@ -4,7 +4,7 @@
     GUID              = 'f8dff693-11ac-495b-901a-290773371ef5'
     Author            = 'Matthew Levorson'
     CompanyName       = 'NRG Technology Services / NextLayerSec LLC'
-    Copyright         = '(c) 2026 NRG Technology Services. All rights reserved.'
+    Copyright         = '(c) 2026 Matthew Levorson / NextLayerSec LLC. Licensed under the Apache License, Version 2.0.'
     Description       = 'Read-only Microsoft 365 security assessment framework for MSPs. Multi-framework, multi-tenant, client-ready reporting.'
 
     # Runtime requirements
