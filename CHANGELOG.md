@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **[Security] One quoting rule for generated PowerShell, and replayed findings are validated.**
+  PowerShell reads U+2018..U+201B as single-quote delimiters even inside a `'...'` literal, so a
+  value holding a curly quote ended a literal early. The generated remediation script
+  (`Publish-TPRemediationScript`) now quotes through `ConvertTo-TPPsLiteral`, which refuses such a
+  value (the line carries a fixed marker instead), and the operator UPN is quoted as a literal
+  rather than a comment, so an apostrophe in a real UPN no longer breaks the script. Findings
+  replayed with `-FromResults` pass `Select-TPReplayedFinding` first: a ControlId not of the
+  tool's shape, or an unknown State or Severity, is dropped and named in the console and the
+  Exceptions array, never handed to a publisher. The HTML report's per-workload `id` attribute is
+  reduced to letters and digits. Every PSD1 the tool writes (SSP and manual-review answers,
+  profiles, baseline exceptions) quotes through `ConvertTo-TPPsd1String`, which keeps a curly
+  quote as an apostrophe instead of letting it end the string, and both questionnaire importers
+  re-read the generated entries with `Import-PowerShellDataFile` and refuse to write when the id
+  set differs (`Test-TPPsd1EntriesRoundTrip`). Found by the 2026-10-09 security audit.
+
 - **Project contact is NextLayerSec's security address.** `SECURITY.md`, `CONTRIBUTING.md`, the disclosure
   policy, the OpenSSF notes, `CLAUDE.md` and `.oss-scanner/project.yaml` name `support@nextlayersec.dev`
   as the project's contact in place of an NRG Technology Services mailbox, and the PGP reference to

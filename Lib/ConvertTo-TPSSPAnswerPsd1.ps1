@@ -49,7 +49,9 @@ function ConvertTo-TPSSPPsd1String {
     )
     Set-StrictMode -Version Latest
     if ($null -eq $Value) { $Value = '' }
-    "'" + ($Value -replace "'", "''") + "'"
+    # One quoting rule for every PSD1 the tool writes (curly quotes, line separators,
+    # control characters): Lib/ConvertTo-TPPsLiteral.ps1.
+    ConvertTo-TPPsd1String -Value $Value
 }
 
 function ConvertTo-TPSSPAnswerPsd1 {

@@ -802,9 +802,19 @@ if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
     # `@{} + $priorData.Metadata` form threw `A hash table can only be added
     # to another hash table` because ConvertFrom-Json returns PSCustomObject.
     $priorData = Get-Content -LiteralPath $FromResults -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
-    $findings = [object[]]@($priorData.Findings)
-    $conn = if ($priorData.Connections) { [hashtable]$priorData.Connections } else { @{} }
-    $reportMetadata = if ($priorData.Metadata) { [hashtable]$priorData.Metadata } else {
+    # A results file is input: fields Add-TPFinding validated on the live run are
+    # re-validated here, and a finding that fails is dropped and named, never handed
+    # to a publisher or the generated remediation script.
+    $droppedReplay = @()
+    $findings = Select-TPReplayedFinding -Findings @(Get-TPObjectField -Item $priorData -Key 'Findings' -Default @()) -Dropped ([ref]$droppedReplay)
+    if (@($droppedReplay).Count -gt 0) {
+        Write-Warning ("{0} finding(s) in {1} were dropped as malformed: {2}" -f @($droppedReplay).Count, $FromResults, (@($droppedReplay) -join '; '))
+        Register-TPException -Source 'FromResults' -Message ("Dropped {0} malformed finding(s): {1}" -f @($droppedReplay).Count, (@($droppedReplay) -join '; '))
+    }
+    $priorConn = Get-TPObjectField -Item $priorData -Key 'Connections' -Default $null
+    $priorMeta = Get-TPObjectField -Item $priorData -Key 'Metadata' -Default $null
+    $conn = if ($priorConn) { [hashtable]$priorConn } else { @{} }
+    $reportMetadata = if ($priorMeta) { [hashtable]$priorMeta } else {
         @{ TenantDomain='Unknown'; AssessmentDate=(Get-Date -Format 'MMMM dd, yyyy'); ToolVersion=$script:TPAssessmentVersion }
     }
     if ($Quick) {

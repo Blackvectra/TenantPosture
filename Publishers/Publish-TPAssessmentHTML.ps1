@@ -1058,7 +1058,7 @@ $regHtml
         }
 
         $findHtml += @"
-<div class='card mt' id='wl-$wl'>
+<div class='card mt' id='wl-$($wl -replace '[^A-Za-z0-9]', '')'>
   <div class='card-hd'>
     <div class='card-hdl'><span class='card-label'>$wlL</span>$gBadge</div>
     <div class='wsc-pill' style='color:$wc;border-color:${wc}40;background:${wc}0e'>$wsc / 100</div>

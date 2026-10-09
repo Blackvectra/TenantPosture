@@ -48,7 +48,7 @@ function ConvertTo-TPBaselineExceptionPsd1 {
     [CmdletBinding()]
     [OutputType([string])]
     param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Entries)
-    $q = { param([string] $v) "'" + (($v ?? '') -replace "'", "''") + "'" }
+    $q = { param([string] $v) ConvertTo-TPPsd1String -Value ($v ?? '') }
     $sb = [System.Text.StringBuilder]::new()
     $null = $sb.AppendLine('@{')
     $null = $sb.AppendLine('    # NRG Security Baseline — approved exceptions for ONE client.')
