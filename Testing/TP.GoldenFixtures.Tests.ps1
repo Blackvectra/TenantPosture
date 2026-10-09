@@ -355,7 +355,8 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
             $v.Detail | Should -Match '^Verified: contoso.com DMARC p=reject'
         }
 
-        It 'with the SHIPPED approved reporting address in rua, p=reject at 100% is Satisfied' {
+        It 'with the profile''s approved reporting address (the NRG profile) in rua, p=reject at 100% is Satisfied' {
+            Mock -ModuleName TenantPosture Get-TPStandards { [ordered]@{ DmarcReportingAddresses = @('dmarc@nrgtechservices.com'); CommonAttachmentFileTypes = @(); PriorityUsers = @(); RequiredConditionalAccessTemplates = @() } }
             Set-TPRawData -Key 'DNS-EmailRecords' -Data (NewRaw 'DNS' @{
                 DomainCount = 1
                 Domains     = @{ 'contoso.com' = [pscustomobject]@{
@@ -365,7 +366,8 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
             (GetVerdict 'Test-TPControlDNSDMARC' 'DNS-1.3').State | Should -Be 'Satisfied'
         }
 
-        It 'with the SHIPPED approved reporting address missing from rua, p=reject at 100% is a shortfall that names the address' {
+        It 'with the profile''s approved reporting address missing from rua, p=reject at 100% is a shortfall that names the address' {
+            Mock -ModuleName TenantPosture Get-TPStandards { [ordered]@{ DmarcReportingAddresses = @('dmarc@nrgtechservices.com'); CommonAttachmentFileTypes = @(); PriorityUsers = @(); RequiredConditionalAccessTemplates = @() } }
             Set-TPRawData -Key 'DNS-EmailRecords' -Data (NewRaw 'DNS' @{
                 DomainCount = 1
                 Domains     = @{ 'contoso.com' = [pscustomobject]@{

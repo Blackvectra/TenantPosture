@@ -80,7 +80,7 @@ Describe 'Get-TPRecipientClass — bare address forms' {
     }
 
     It 'is case-insensitive on the domain' {
-        Invoke-Classify 'staff@TPTechServices.COM' | Should -Be 'Internal'
+        Invoke-Classify 'staff@NRGTechServices.COM' | Should -Be 'Internal'
         Invoke-Classify 'x@EVIL.TLD'                | Should -Be 'External'
     }
 
