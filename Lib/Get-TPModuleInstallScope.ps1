@@ -115,3 +115,28 @@ function Get-TPExoModuleFloor {
                        Reason = "PowerShell $PSVersion cannot run ExchangeOnlineManagement 3.7.2 or later (the tool's floor, which added -DisableWAM); upgrade PowerShell to 7.4 or later (winget install --id Microsoft.PowerShell)." }
 }
 
+# What to tell the operator before an Exchange Online sign-in, in one place so the full assessment and the
+# distribution-list scan cannot word it differently: the PowerShell is too old, it is the Microsoft Store build,
+# and (when the installed module is given) the module is older or newer than this PowerShell supports. Each
+# note carries a Level: 'Error' means a sign-in cannot succeed, 'Warning' means it may fail inside the module.
+function Get-TPExoPreflightNotes {
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param(
+        [Parameter(Mandatory)] $Floor,
+        [AllowNull()] [version] $InstalledVersion
+    )
+    $notes = [System.Collections.Generic.List[object]]::new()
+    if (-not $Floor.Supported) { $notes.Add([ordered]@{ Level = 'Error'; Text = [string]$Floor.Reason }) }
+    if ($Floor.StoreBuild) {
+        $notes.Add([ordered]@{ Level = 'Warning'; Text = "Microsoft Store build of PowerShell detected (`$PSHOME is under WindowsApps); the Exchange Online module has failed to import from it. Install the MSI build: winget install --id Microsoft.PowerShell --source winget" })
+    }
+    if ($null -ne $InstalledVersion -and $Floor.Supported) {
+        if ($InstalledVersion -lt [version]$Floor.Min) {
+            $notes.Add([ordered]@{ Level = 'Error'; Text = "ExchangeOnlineManagement $InstalledVersion is older than the $($Floor.Min) this PowerShell needs. Run .\Install-TPPrerequisites.ps1, then retry." })
+        } elseif ($Floor.Max -and $InstalledVersion -gt [version]$Floor.Max) {
+            $notes.Add([ordered]@{ Level = 'Warning'; Text = "ExchangeOnlineManagement $InstalledVersion is newer than PowerShell $($PSVersionTable.PSVersion) supports (up to $($Floor.Max)); connecting will fail inside the module. Upgrade PowerShell or install a version in [$($Floor.Min),$($Floor.Max)]." })
+        }
+    }
+    return @($notes)
+}

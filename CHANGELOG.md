@@ -254,6 +254,97 @@
     remediate; `-FromResults` keeps `Skipped` coverage on restore.
   - Items confirmed but left as follow-ups are listed in `docs/KNOWN-ISSUES.md`.
 
+- **Distribution-list scan (`-DistributionListsOnly`).** NRG hardens distribution lists as a service
+  because a list can be reached by spoofed or outside mail even when the domain's DMARC policy is
+  reject: DMARC judges only mail that claims your own domain in the From address, and mail can also
+  reach a list through a filtering bypass. The new mode signs in to Exchange Online only and writes a
+  worksheet (`<tenant>-<time>-distribution-lists.txt` and `.csv`) showing, per list, the members, the
+  current settings, whether mail can reach it from outside or through a bypass, and how that compares
+  with a cited recommendation. **Read-only without exception:** it lists members and never creates,
+  adds, removes or changes a user, group, rule or setting. The commands in the worksheet are text for
+  an administrator to run with `-WhatIf` first; they are built only from a list's primary address,
+  quoted so a tenant-controlled name cannot break out of the command (a typographic quote or line
+  break is refused), and a spy test proves none is ever run.
+  `Collectors/EXO/Invoke-TPCollectDistributionLists.ps1` reads lists, dynamic lists, bounded and
+  throttle-retried member lists (UPN and display name only; a dynamic list's members are the calculated list Microsoft stores on it, or a labeled filter preview when that cmdlet is unavailable), owners, delivery, moderation and join
+  settings, and the tenant-level bypass inputs: SCL -1 mail flow rules **with their conditions**
+  (EXO-Inventory keeps `SetSCL` but not the conditions), the IP Allow List, anti-spam allowed
+  senders and domains, and accepted domains. The collector reuses `EXO-MailboxConfig` and `EXO-ConnectionFilter`
+  when a caller already holds them in module state; the `-DistributionListsOnly` run clears state first and reads everything itself. Every section publishes `SectionStatus`; a list
+  whose members could not be read says so and is never an empty list; a property Exchange omitted is
+  not-read, never the safe value (`RequireSenderAuthenticationEnabled` absent is not "authenticated
+  senders only"); a string `"False"` is parsed, not cast.
+  `Evaluators/Test-TPDistributionLists.ps1` emits the `DL-*` series (not in `controls.json`, so
+  nothing is scored; deliberately not named `Test-TPControl*`, which a full assessment runs).
+  `Config/distribution-list-baseline.json` holds each recommendation with its Microsoft Learn page and
+  the tool's own NIST SP 800-53 Rev 5 mapping, labeled as a mapping and not a quotation of NIST. **No
+  CISA ScubaGear or CIS id is cited**: ScubaGear 2.0.0 has no distribution-list rule and no CIS item
+  was found, so the worksheet prints "no framework item verified". Two NRG judgments (a member cap and
+  a required join setting) are not Microsoft recommendations; they live in
+  `Config/tp-standards.json`, **ship empty**, and read "Not assessed" until the owner approves a value.
+  There is no external-members standard: the owner decided external members stay, so they are shown
+  (DL-2.3 is a context row) and never judged, and no command removes one. For a list open to outside
+  mail the hardening is an allowed-senders list built from its current members: the worksheet prints
+  `Set-DistributionGroup ... -AcceptMessagesOnlyFromSendersOrMembers` with each member's primary SMTP
+  address (text only; a snapshot), and withholds it, with the reason, when it could reject people it
+  should not (members partly read, an address that cannot be quoted safely, an allow list that already
+  exists, and others). A list with external members is held for a business-purpose review before the
+  require-authenticated-senders change.
+  Where Microsoft's own pages disagree it says so rather than choosing: the troubleshooting page says
+  the IP Allow List does not override DMARC failures and the allowlist page says mail from allowed IPs
+  skips SPF, DKIM and DMARC. An own-domain entry on an anti-spam allow list carries Microsoft's
+  September 2022 note that it must pass authentication, so it is Partial, not the Gap an own-domain
+  bypass-rule condition is. Microsoft's Exchange Online page does not name Open as the join default
+  (only the Exchange Server 2013 page does), so the catalog claims none. The files are written through
+  the restricted-file writer; a spreadsheet formula in a list name is neutralized and terminal escapes
+  are stripped. Scope is classic distribution lists only (owner's decision: lists with external users are the target; Microsoft 365 Groups and Teams-connected lists are out of scope for now). The summary counts lists that hold at least one external member (a floor, counted only where members were read) and ranks a list with more external members first among otherwise equal ones; that is an observation, not a verdict. Review follow-up, each pinned by a test that fails without the fix: the worksheet now says when
+  `-MaxLists` left lists out or Exchange returned none (and exits 3 or 2) instead of reading as the whole tenant;
+  `-DistributionListsOnly -TenantDomain` refuses an interactive sign-in whose tenant it cannot confirm, as the full run does;
+  allowed senders are counted once (Microsoft copies each into `AcceptMessagesOnlyFromSendersOrMembers`, so adding the three
+  properties counted every entry two or three times); an SCL -1 rule counts as verified only through the `Authentication-Results`
+  header or a source IP range, and one the scan cannot judge is "Not assessed"; the anti-spam policies that apply are decided in the
+  evaluator through the shared `Get-TPInForcePolicies` (which gained an optional `-AcceptedDomains`), not in the collector;
+  the DL-2.5 command uses the most restrictive approved setting; a removal command is printed only for an IP Allow List entry
+  that is too wide; a list synchronized from on-premises gets no Exchange Online command; the app-only path uses the client's
+  routing domain; the summary counts lists by verdict, and the policy name in a command comes from its own field, instead of both being
+  read back out of rendered text; the rule classification runs once, not once per list; the CSV carries each recommendation's
+  explanation once (`Reference` rows) instead of on every row; the Exchange floor and Store-build wording is one function
+  (`Get-TPExoPreflightNotes`, 396 exports) shared with the full run, and the scan now checks the installed module's version range.
+  **Remediation records.** Every command the worksheet prints is now one of three records (`Lib/New-TPDistributionListRemediation.ps1`).
+  A reversible **bundle** carries the state the scan read (typed, and as JSON in a CSV column), a `Get-*` check with a **Compare** that prints
+  `True` only when the live value equals the captured value, a `-WhatIf` preview that is the apply command plus `-WhatIf` and nothing else, the
+  apply on its own line, a verify Compare against the new value, and a rollback that restores the **captured** value, never a generic inverse,
+  proved by the same Compare (`False` then `$true` then `$false`; `ApprovalRequired` then `Closed` then `ApprovalRequired`; a removed IP Allow
+  List entry is re-added with `@{Add=...}`). **Every bundle has a rollback; none is one-way.** A labeled **manual action** is outside the
+  bundles: an owner for an ownerless list (a list must keep one) and an allowed-senders or moderator list captured empty (restoring it means
+  clearing with `$null`, which Microsoft does not document); it has the check, Compare and preview, a Change step, and says in words how to undo
+  it, with no rollback command. A **withheld** record has a reason and no command. **No captured state, no command:** an unknown original, a
+  value outside Microsoft's documented set, a name that cannot be quoted, or an entry not in the captured list is withheld. Synchronized
+  lists, preset anti-spam policies and ambiguous names are withheld with the reason. A list with external members is held for a
+  **business-purpose review** before "require authenticated senders" (an external member is not an external sender), no longer described as
+  technically unsuitable. A change to every recipient (DL-3.1 to DL-3.3) is stricter: a required **capture of the current configuration** (an
+  inspection the administrator must save, not a backup), `-Confirm` on the apply and the rollback, one bundle per rule or policy so one apply
+  has one rollback, and no record when no rollback can be built; it is never a manual action. Where Exchange returns names or GUIDs the Compare
+  is a count and says so. `TP.DistributionListRemediation.Tests.ps1` pins all of it, and **runs every Compare against stubbed `Get-*` objects**
+  (equal in a different order and case is True; one entry missing or extra is False; `Open` is not an acceptable stand-in for a captured
+  `ApprovalRequired`), plus the apply never sharing a line or a CSV cell with the preview and a fixed command grammar no tenant text can extend.
+  Every Compare starts with `(` or `[`, because a spreadsheet prefixes an apostrophe to a cell starting with `-`, `=`, `+` or `@`, which
+  would break the pasted expression. The catalog's `AdminCommands` and `RuleCommand` became per-control `Remediation` templates; the CSV's
+  `AdminCommand` column is replaced by `Impact`, `Step`, `Command`, `Expect` and `CapturedJson` columns, one row per step (a manual action has
+  its own `Manual action` row type), so a cell never holds two commands. `docs/EXCHANGE-RBAC-DISTRIBUTION-LISTS.md` lists the read-only
+  cmdlets the scan calls, what Microsoft documents about the access they need, and how to verify it in a tenant (`Get-ManagementRole
+  -Cmdlet`), pinned against the collector by `TP.DistributionListRbacDoc.Tests.ps1`; `docs/DL-REMEDIATION-VALIDATION-RUNBOOK.md` is the one
+  controlled test on a disposable cloud-only list that would validate the records, and **has not been run**. A versioned JSON model of the
+  worksheet and an opt-in DMARC enrichment are follow-ups, deliberately not part of this change.
+  A last hardening pass: a value holding an invisible or direction-changing character (a bidirectional override, a zero-width
+  character, the byte order mark, a tag character: "Trojan Source") is refused in a printed command, because every command is reviewed by
+  eye, and is shown as a visible `<U+XXXX>` marker in both files instead of passing through; no scan file may contain one either.
+  9 new exports, 2 new suites (165 tests). 14 deliberate breakages of the code (a safe default for an omitted setting, a failed member read marked collected, a command built from the list name, an unneutralized spreadsheet cell, and four more) were each caught by a test. Review found two real defects in the first version, both fixed and pinned: the command builder substituted placeholders one after another, so a tenant address containing the text `{Member}` could end the quoted literal early (it is now one regex pass); and the guard against typographic quotes was typed with those characters in the source, which PowerShell reads as quote delimiters even inside a single-quoted string, so it silently refused nothing (it is now built from code points, and a static test fails on any such character in a file the scan loads). Adding the allow-list command exposed a third: a `return` inside a `foreach` whose output is captured emits what was gathered so far, so a bad address handed the caller a command holding only the senders before it; the test for "one bad address yields no command, never a partial one" caught it and the builder now uses an explicit loop.
+  **Not yet run against a live tenant** (see `docs/KNOWN-ISSUES.md`); the collector is tested against a
+  stubbed Exchange boundary fed raw cmdlet shapes. Merge note: this edits `Config/tp-standards.json`
+  and `Lib/Get-TPStandards.ps1`, which the standards-approval PR also edits; the conflict is two
+  appended keys and one added line.
+
 - **The first email assessment on a real mailbox raised two false indicators.** (1) EMAIL-4.1 printed
   "UNVERIFIED publisher" for every OAuth grant whose app lookup failed; that lookup needs
   Directory.Read.All, which a delegated user sign-in never has, so Microsoft's own apps were

@@ -18,14 +18,17 @@ function Get-TPStandards {
     .SYNOPSIS
         Returns the approved lists from Config/tp-standards.json as string arrays
         (DmarcReportingAddresses, CommonAttachmentFileTypes, PriorityUsers,
-        RequiredConditionalAccessTemplates). A missing or unreadable file yields
+        RequiredConditionalAccessTemplates, and the two distribution-list
+        standards DistributionListMaxMembers and
+        DistributionListMemberJoinRestriction). A missing or unreadable file yields
         empty lists, which means "not approved", never "nothing required is met".
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
     param([string] $Path)
 
-    $std = [ordered]@{ DmarcReportingAddresses = @(); CommonAttachmentFileTypes = @(); PriorityUsers = @(); RequiredConditionalAccessTemplates = @() }
+    $std = [ordered]@{ DmarcReportingAddresses = @(); CommonAttachmentFileTypes = @(); PriorityUsers = @(); RequiredConditionalAccessTemplates = @()
+                       DistributionListMaxMembers = @(); DistributionListMemberJoinRestriction = @() }
     if (-not $Path) { $Path = Join-Path (Split-Path -Parent $PSScriptRoot) 'Config' 'tp-standards.json' }
     if (-not (Test-Path -LiteralPath $Path)) { return $std }
     try {

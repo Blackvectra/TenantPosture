@@ -75,5 +75,13 @@
       "mfa-azure-mgmt",
       "block-device-code"
     ]
+  },
+  "DistributionListMaxMembers": {
+    "_help": "Distribution-list scan, DL-2.4. A single whole number: the largest member count one list may have, for example [\"500\"]. Empty means no cap is approved and the check is not assessed.",
+    "Values": []
+  },
+  "DistributionListMemberJoinRestriction": {
+    "_help": "Distribution-list scan, DL-2.5. The join settings NRG accepts, any of Open, Closed, ApprovalRequired (for example [\"Closed\", \"ApprovalRequired\"]). Empty means join restriction is not judged.",
+    "Values": []
   }
 }

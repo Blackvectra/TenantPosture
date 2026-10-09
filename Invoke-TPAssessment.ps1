@@ -307,6 +307,25 @@ param(
     # them. Implied by -AllFiles.
     [switch] $ImprovementPlan,
 
+    # The distribution-list scan. Signs in to Exchange Online ONLY (no Graph, Purview, Teams or
+    # SharePoint), lists every distribution list with its members, settings and who can reach it
+    # (including the tenant-wide filtering bypasses that let mail past spam filtering), compares
+    # each setting with a cited recommendation, and writes <tenant>-<time>-distribution-lists.txt
+    # and .csv for an administrator to harden the lists. READ-ONLY: it never creates, adds,
+    # removes or changes a user, group, rule or setting; the commands in the worksheet are text a
+    # human runs. Every other area is not assessed and the worksheet says so. Reuses -UserPrincipalName,
+    # -TenantDomain, and the app-only parameters; -OutputPath applies. Not implied by -AllFiles.
+    [switch] $DistributionListsOnly,
+
+    # Members read per list in the distribution-list scan. A larger list is reported as "more than N",
+    # never as complete.
+    [ValidateRange(1, 50000)]
+    [int] $MaxMembersPerList = 500,
+
+    # Lists read in one distribution-list scan; a tenant with more is reported as truncated.
+    [ValidateRange(1, 100000)]
+    [int] $MaxLists = 5000,
+
     [switch] $WhatIfConnections,
 
     # GDAP batch mode establishes ONE Graph/EXO/Teams/IPPS session meant to be
@@ -556,6 +575,51 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
     }
 }
 
+# -DistributionListsOnly short-circuits the full assessment, like -Web and -RegisterApp above: it needs
+# Exchange Online and nothing else, so it skips the Graph / Teams / Purview prerequisite check and every
+# collector, evaluator and publisher the full run uses. It is READ-ONLY (Get-* cmdlets only) and says in
+# its output that every other area was not assessed.
+if ($DistributionListsOnly) {
+    $exoFloor = Get-TPExoModuleFloor
+    $exoModule = Get-Module -ListAvailable -Name ExchangeOnlineManagement -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
+    # One wording for the PowerShell floor, the Store build and the module's version range (Get-TPExoPreflightNotes), shared with
+    # the full run. A version this PowerShell cannot run fails INSIDE Connect-ExchangeOnline, so an error-level note stops here.
+    $exoNotes = @(Get-TPExoPreflightNotes -Floor $exoFloor -InstalledVersion $(if ($exoModule) { $exoModule.Version } else { $null }))
+    foreach ($n in $exoNotes) { Write-Host "  [!] $($n.Text)" -ForegroundColor $(if ($n.Level -eq 'Error') { 'Red' } else { 'Yellow' }) }
+    if (-not $exoModule) {
+        Write-Host "  [!] ExchangeOnlineManagement is not installed. Run .\Install-TPPrerequisites.ps1, then retry." -ForegroundColor Red
+        exit 1
+    }
+    if (@($exoNotes | Where-Object { $_.Level -eq 'Error' }).Count -gt 0) { exit 1 }
+    $dlAppOnly = [bool]($AppId -and $TenantId -and $CertificateThumbprint)
+    if (-not $TenantDomain) {
+        Write-Host "  [i] No -TenantDomain given: the tool cannot confirm WHICH tenant you signed in to. The worksheet names the connected tenant; check it before you act on it." -ForegroundColor Yellow
+    } elseif (-not $dlAppOnly -and -not $targetTenantId) {
+        # The full run refuses here too. Without the tenant id nothing checks which tenant the interactive sign-in lands in, and the
+        # worksheet would be labeled with the domain that was TYPED: a client's name on another tenant's members and settings.
+        Write-Host "  [!] Could not resolve a tenant ID for $TenantDomain, so the tenant you sign in to cannot be confirmed. Nothing was collected." -ForegroundColor Red
+        Write-Host "      Check the domain, or add the client to Config\clients.json (TenantId and DelegatedOrg)." -ForegroundColor Red
+        exit 1
+    }
+    $dlParams = @{ OutputPath = $OutputPath; MaxMembersPerList = $MaxMembersPerList; MaxLists = $MaxLists }
+    if ($TenantDomain) { $dlParams['TenantDomain'] = $TenantDomain }
+    if ($AppId -and $TenantId -and $CertificateThumbprint) {
+        $dlParams['AppId'] = $AppId; $dlParams['TenantId'] = $TenantId; $dlParams['CertificateThumbprint'] = $CertificateThumbprint
+        # Exchange wants the .onmicrosoft.com routing domain. An onboarded client's TenantDomain is its primary domain, so use the
+        # client's DelegatedOrg when the domain in hand is not a routing domain.
+        $dlOrg = $OrganizationDomain
+        if ($dlOrg -notmatch '\.onmicrosoft\.com$' -and $targetDelegatedOrg) { $dlOrg = $targetDelegatedOrg }
+        if ($dlOrg) { $dlParams['OrganizationDomain'] = $dlOrg }
+    } else {
+        if ($UserPrincipalName)  { $dlParams['UserPrincipalName']  = $UserPrincipalName }
+        if ($targetTenantId)     { $dlParams['ExpectedTenantId']   = $targetTenantId }
+        if ($targetDelegatedOrg) { $dlParams['DelegatedOrganization'] = $targetDelegatedOrg }
+    }
+    if ($KeepSession) { $dlParams['KeepSession'] = $true }
+    $dlResult = Invoke-TPDistributionListScan @dlParams
+    exit ([int]$dlResult.ExitCode)
+}
+
 # MSP-wide default: EdrStack in Config/branding.psd1 declares the third-party
 # EDR every client runs unless -ThirdPartyEDR or the client's clients.json
 # ThirdPartyEDR says otherwise. Declared, never verified: the Defender
@@ -630,10 +694,8 @@ try {
 # to 3.9.x on 7.4/7.5) so the preflight, the installer and Get-TPModuleHealth
 # agree; a version outside that range fails inside the module at connect time.
 $exoFloor = Get-TPExoModuleFloor
-if (-not $exoFloor.Supported) { Write-Host "  [!] $($exoFloor.Reason)" -ForegroundColor Red }
-if ($exoFloor.StoreBuild) {
-    Write-Host "  [!] Microsoft Store build of PowerShell detected (`$PSHOME is under WindowsApps); the Exchange Online module has failed to import from it. Install the MSI build: winget install --id Microsoft.PowerShell --source winget" -ForegroundColor Yellow
-}
+# Floor and Store-build notes only (no installed version): the module range is checked per module below.
+foreach ($n in @(Get-TPExoPreflightNotes -Floor $exoFloor -InstalledVersion $null)) { Write-Host "  [!] $($n.Text)" -ForegroundColor $(if ($n.Level -eq 'Error') { 'Red' } else { 'Yellow' }) }
 $moduleSpecs = @(
     @{ Name='Microsoft.Graph.Authentication'; MinVersion='2.0.0';       PinVersion=$null; MaxVersion=$null }
     @{ Name='ExchangeOnlineManagement';       MinVersion=$exoFloor.Min; PinVersion=$null; MaxVersion=$exoFloor.Max }

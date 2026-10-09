@@ -152,6 +152,8 @@ Every run now classifies the tenant into a **Tenant Security Maturity Tier** (In
 | `-SSPQuestionnaire`, `-SSPQuestionnaireFamily` | Fillable client questionnaire for the SSP requirements the run could not evidence, optionally for one 800-171 family (for example `3.9`). Not included in `-AllFiles`. |
 | `-ManualReviewQuestionnaire`, `-ManualReviewWorkload` | Fillable questionnaire for the controls the run could not assess, optionally for one workload (for example `SPO`). Not included in `-AllFiles`. |
 | `-ImprovementPlan` | Ordered NIST SP 800-53 improvement plan with the projected coverage after each step. |
+| `-DistributionListsOnly` | The distribution-list scan: signs in to Exchange Online only and writes `<tenant>-<time>-distribution-lists.txt` and `.csv` (members, settings, who can reach each list, the recommendation). Read-only; every other area is not assessed. See [Distribution-list scan](#distribution-list-scan--distributionlistsonly). Not part of `-AllFiles`. |
+| `-MaxMembersPerList`, `-MaxLists` | Bounds for the distribution-list scan: members read per list (default 500) and lists read per run (default 5000). A larger list or tenant is reported as truncated, never as complete. |
 | `-MonthlyReport`, `-MonthlyDeltaPath`, `-MonthlyPriorPath` | Monthly MSP report. Work state comes from the delta `.psd1`, the trend from last month's JSON. |
 | `-FromResults` | Republish every report from a saved results JSON, without signing in. |
 | `-BaselineResults` | Compare with a prior results JSON (delta report). |
@@ -335,17 +337,18 @@ are tested without a server, so CI runs those.
 Invoke-TPAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-TPBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 TenantPosture.psm1               ← Module loader (recursive dot-source, path traversal check)
-TenantPosture.psd1               ← Module manifest (394 exports, dependency declarations)
+TenantPosture.psd1               ← Module manifest (403 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-TPFinding.ps1              State management (findings, exceptions, coverage, raw data)
   Connect-TPServices.ps1         Auth (interactive browser MFA / app-only cert; process-scoped MSAL)
   ConvertTo-TPHtmlSafe.ps1       XSS prevention (all tenant data escapes through here)
   Get-TPControlDefinitions.ps1   controls.json loader + content validation
+  Invoke-TPDistributionListScan.ps1  The -DistributionListsOnly run: Exchange Online only, read-only
 
 Collectors/                       READ-ONLY — raw data collection, no scoring
   AAD/    (7 files)               Auth policies, CA, users+MFA, roles, PIM, identity governance, inventory
-  EXO/    (3 files)               Mailbox config, EXO inventory, Defender policies
+  EXO/    (4 files)               Mailbox config, EXO inventory, Defender policies, distribution lists (-DistributionListsOnly)
   DNS/    (1 file)                SPF, DKIM, DMARC, MTA-STS, TLS-RPT, DNSSEC
   Intune/ (3 files)               Device compliance, app protection, endpoint security
   SharePoint/ Teams/ Purview/ PowerPlatform/ AI/   (1 file each)
@@ -373,11 +376,12 @@ Publishers/                       (7 files)
 Config/
   controls.json                   204 control definitions + framework citations
   frameworks.json                 CIS, SCuBA, NIST, CMMC, MITRE metadata
+  distribution-list-baseline.json Distribution-list recommendations, each with its Microsoft Learn source
   clients.json                    MSP client registry (TenantId + GDAP config)
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA (ScubaGear v2.0.0) + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          99 Pester suites — the FULL suite gates every PR
+Testing/                          103 Pester suites — the FULL suite gates every PR
   TP.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   TP.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   TP.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -480,6 +484,27 @@ Family movement is computed by replaying the plan through the same rollup, not b
 **Completing every step does not make an organization 800-53 compliant.** It closes what a Microsoft 365 tenant scan and an endpoint scan can observe — a subset of 800-53, and 14 of the 20 families. The plan states that ceiling on its first page rather than letting a reader infer that 100% means done.
 
 Single framework on purpose: the document names NIST and nothing else. A plan that hedges across four frameworks orders its steps for none of them, and a test greps for the others and fails on any leak.
+
+### Distribution-list scan — `-DistributionListsOnly`
+
+A distribution list is a delivery path DMARC does not protect. DMARC judges mail that claims **your** domain in the From address; it does not make an "all staff" list safe, because a list can accept mail from anyone who finds its address, and mail can reach it through a filtering bypass (a mail flow rule that sets SCL -1, an IP Allow List entry, an allowed sender or domain in an anti-spam policy). `-DistributionListsOnly` shows, per list: **who is in it**, **its current settings**, **whether mail can reach it from outside or through a bypass**, and **how that compares with a cited recommendation**. The output is a worksheet an administrator uses to harden the lists.
+
+```powershell
+.\Invoke-TPAssessment.ps1 -DistributionListsOnly -UserPrincipalName admin@client.com -TenantDomain client.com
+```
+
+It writes `<tenant>-<yyyyMMdd-HHmmss>-distribution-lists.txt` (read it) and `.csv` (filter and sort it: one row per setting, member and bypass, with the verdict, the recommended value, the source and the mapped control) into `-OutputPath`. Both are rendered from one model, so a verdict and a limitation read the same in each. They hold member names and addresses, so they are written through the same restricted-file writer as the results JSON. Internal use only.
+
+- **Read-only, without exception.** It lists members; it never creates, adds, removes or changes a user, group, rule or setting. Every Exchange call is a `Get-*` cmdlet, and a static test fails if any file the scan loads calls anything else. **NRG observes and recommends; an administrator authorizes and executes.** The commands in the worksheet are **text**: never run, never written to a `.ps1`, and built only from the object's own name or address, quoted so tenant-controlled text cannot break out of the command (a typographic quote, a line break, a control or an invisible character is refused, and the object is sent to the portal instead).
+- **Every command is a remediation record, not a lone command, and there are three kinds.** A **reversible bundle** carries the **state this scan read** (typed, and as JSON in the CSV), a **check** to run first (a `Get-*` plus a **Compare** that prints `True` only when the live value equals the captured value; `False` means stop), a **preview** (the apply plus `-WhatIf`, nothing else), the **apply** on its own line (never joined to the preview), a **verify** (a Compare against the new value) and a **rollback that restores the captured value**, proved by the same Compare (`RequireSenderAuthenticationEnabled` read `False`, apply `$true`, rollback `$false`; `MemberJoinRestriction` read `ApprovalRequired`, apply `Closed`, rollback `ApprovalRequired`, not `Open`). **Every bundle has a rollback; none is one-way.** A **manual action** is a change this worksheet cannot offer a validated rollback for, so it is kept outside the bundles and labeled: an owner for an ownerless list (Microsoft: a list must keep at least one owner), and an allowed-senders or moderator list captured empty (restoring it would mean clearing it with `$null`, which Microsoft's cmdlet page does not document). It has the same check, Compare and preview, a Change step instead of an Apply, and says in words how to undo it; it carries no rollback command. A **withheld** record has a reason and no command. **No captured state, no command:** when the original value was not returned, is outside Microsoft's documented set, or cannot be quoted safely, the record is withheld. A change that reaches every recipient (a mail flow rule, an IP Allow List or an anti-spam allow list) is stricter: a **required capture of the current configuration** (`Get-... | Format-List *`: an inspection, not a backup, which you must save before the apply), `-Confirm` on the apply and the rollback, and no record at all when it cannot be rolled back; it is never a manual action. Where Exchange returns names or GUIDs instead of the addresses that were set, the Compare is a count, and says so. A list with external members is held for a **business-purpose review** before the "require authenticated senders" change: an external member is not the same fact as an external sender. The read-only Exchange access the scan needs, and the write roles it does not, are in [`docs/EXCHANGE-RBAC-DISTRIBUTION-LISTS.md`](docs/EXCHANGE-RBAC-DISTRIBUTION-LISTS.md); the one controlled test that would validate the records is in [`docs/DL-REMEDIATION-VALIDATION-RUNBOOK.md`](docs/DL-REMEDIATION-VALIDATION-RUNBOOK.md) and has not been run.
+- **Exchange Online only.** No Graph, Purview, Teams or SharePoint sign-in, and the worksheet says plainly that every other area was not assessed.
+- **Findings are the `DL-*` series**, not controls in `controls.json`, so they never enter a score: `DL-1.1` who can send to the list, `DL-2.x` owner, moderation, member cap and join setting (external members are shown, not judged), `DL-3.x` the tenant-wide bypasses (SCL -1 mail flow rules and their conditions, the IP Allow List, anti-spam allowed senders and domains, an accepted domain on an allow list), `DL-4.1` the lookalike-domain and display-name impersonation DMARC does not cover. Missing evidence is "Not assessed", never "Met": a failed read is a failed section, not "no lists".
+- **Recommendations are Microsoft's documented defaults and guidance**, each with its Microsoft Learn page, in `Config/distribution-list-baseline.json`. NIST SP 800-53 Rev 5 identifiers are NRG's own mapping, not a quotation of NIST. No CISA ScubaGear or CIS item written for distribution lists was found, so none is cited; the worksheet prints "no framework item verified".
+- **NRG's own judgments ship empty.** A maximum member count and a required join setting are not Microsoft recommendations. They are judged only against a value approved in `Config/tp-standards.json` (`DistributionListMaxMembers`, `DistributionListMemberJoinRestriction`); until then each reads "Not assessed", once, at tenant level. **There is no external-members standard**: external members stay, so they are shown and never judged, and no command removes one.
+- **The hardening for a list that must accept outside mail is an allowed-senders list built from its current members.** Microsoft's cmdlet reference says `AcceptMessagesOnlyFromSendersOrMembers` limits who can send to the list and that mail from anyone else is rejected, and its troubleshooting page says to represent each outside sender with a mail contact or mail user and to clear "Require that all senders are authenticated" (`RequireSenderAuthenticationEnabled` False) so they are accepted. For a list that is open to outside mail (`RequireSenderAuthenticationEnabled` False) with no allow list, the worksheet's **Allowed senders** row (DL-1.2) prints, as a text-only remediation bundle (above), `Set-DistributionGroup -Identity '<list>' -AcceptMessagesOnlyFromSendersOrMembers '<member address>','<member address>',...` using each member's primary SMTP address (the identifier Microsoft documents; a UPN is not on its list). It is a **snapshot**: a member added later is not on it, and anyone who sends to the list and is not a member (an owner, a shared mailbox, an application) is rejected unless added. The command is withheld, with the reason on the row, when it could reject people it should not: the members were not read or only partly read (truncated), the list has no members, a member returned no address or has one that cannot be quoted safely (the whole command is withheld, never a version with someone left out), an allow list already exists (it is never replaced), the setting was not returned, the list requires authenticated senders already, it is dynamic, or the command is longer than a spreadsheet cell holds. A list with external members is not given the "require authenticated senders" change until a business-purpose review has decided, because that setting rejects every outside sender and the scan cannot tell which ones legitimately send to the list. An allow list matches the sender's address; it does not authenticate an outside sender.
+- **Scope is classic distribution lists** (including mail-enabled security groups and dynamic lists), because lists with external users are the target. The summary counts the lists that hold at least one external member (a floor: lists whose members were not read are not counted) and ranks a list with more external members first among otherwise equal ones. Counting them is an observation, not a verdict.
+- **A worksheet never reads whole when it is not.** When `-MaxLists` left lists out, or Exchange returned none, the worksheet, its summary and the console say so and the exit code is 3 (lists left out) or 2 (a completed read that returned no list), never a clean 0. A list synchronized from on-premises Active Directory gets no Exchange Online command, because Microsoft says it must be managed there; the worksheet names it and says where to make the change. A mail flow rule that sets SCL -1 counts as verifying its sender only through the `Authentication-Results` header or a source IP range (any other header is text the sender chooses); a rule with conditions the scan cannot judge reads "Not assessed", never "none weak". A removal command is printed only for an IP Allow List entry wider than a /24 and never for a compliant one, and when several join settings are approved the command uses the most restrictive.
+- **What it cannot see:** Microsoft 365 Groups and Teams-connected lists (out of scope for now), Outlook Safe Senders (per mailbox), members of nested groups (listed, not expanded), and a lookalike domain or display-name impersonation. A dynamic list's members are the calculated list Microsoft stores on the group (refreshed about every 24 hours), or a preview of its filter when that cannot be read, so they can differ from who receives mail sent now. `-MaxMembersPerList` and `-MaxLists` bound the read and a result above them is reported as truncated.
 
 ### System Security Plan — NIST 800-171 Rev 2 / CMMC Level 2
 
@@ -610,7 +635,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **99 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **103 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite (same thing CI runs)
@@ -665,7 +690,7 @@ Six GitHub Actions workflows cover the repository. All run automatically on push
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (99 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (103 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -693,4 +718,4 @@ You may use, modify and redistribute it under that license, including commercial
 
 ---
 
-*TenantPosture v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 394 exported functions · full Pester suite (99 suites) gating CI*
+*TenantPosture v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 403 exported functions · full Pester suite (103 suites) gating CI*
