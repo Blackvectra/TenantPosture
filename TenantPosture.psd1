@@ -156,6 +156,8 @@
         'New-TPBaselineException',
         'Set-TPBaselineException',
         'Remove-TPBaselineException',
+        'Get-TPBaselineTenantComparison',
+        'Publish-TPBaselineTenantComparison',
         'Get-TPModuleHealth',
         'Repair-TPModuleHealth',
         'Get-TPModuleInstallScope',
