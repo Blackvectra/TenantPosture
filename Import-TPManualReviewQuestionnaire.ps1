@@ -225,6 +225,9 @@ with open(sys.argv[2], 'w', encoding='utf-8') as fh:
         $entries.Add((ConvertTo-TPManualReviewAnswerPsd1 -ControlId $id -Answer $accepted[$id] -Indent 2))
     }
     $entriesText = ($entries -join "`n`n")
+    # Re-read before writing: a curly quote or stray character in a client answer
+    # must not produce a file that drops every answer or carries an entry nobody wrote.
+    $null = Test-TPPsd1EntriesRoundTrip -EntriesText $entriesText -Block 'Controls' -ExpectedIds @($accepted.Keys)
 
     Write-Host ''
     if (-not (Test-Path -LiteralPath $targetPath)) {

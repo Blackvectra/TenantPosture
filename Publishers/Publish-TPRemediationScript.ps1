@@ -31,9 +31,14 @@ function Publish-TPRemediationScript {
     # literal in the GENERATED script. Without this, a tenant display name like
     # "John's Mailbox" breaks out of '...' and becomes injectable code that the
     # engineer would execute. OWASP A03 / ASVS V5.1.3.
+    # The caller wraps the result in '...'. A value PowerShell could read as a quote
+    # delimiter (U+2018..U+201B), a line break or a control character is replaced by
+    # a fixed marker rather than quoted, because the engineer RUNS this file.
     function EscPs1Literal([object]$v) {
         if ($null -eq $v) { return '' }
-        return ([string]$v) -replace "'", "''"
+        $lit = ConvertTo-TPPsLiteral -Value ([string]$v)
+        if ($null -eq $lit) { return '<withheld: value held characters that cannot be quoted safely>' }
+        return $lit.Substring(1, $lit.Length - 2)
     }
 
     # Escape a value for safe inclusion inside a PowerShell comment in the
@@ -70,6 +75,9 @@ function Publish-TPRemediationScript {
     $dateC    = EscPs1Comment $dateRaw
     $versionC = EscPs1Comment $versionRaw
     $opUPNC   = EscPs1Comment $opUPNRaw
+    # The UPN becomes a literal in a command line, not a comment: an apostrophe is
+    # legal in a UPN and must be doubled, and an unquotable value is not guessed at.
+    $opUPNL   = if ([string]$opUPNRaw -match '^[A-Za-z0-9.!#^~_''-]{1,64}@[A-Za-z0-9.-]{1,255}$') { EscPs1Literal $opUPNRaw } else { $null }
 
     # Tenant stem used in -EXAMPLE help (unquoted in `.\stem-remediation.ps1`).
     # Strip everything but file-name-safe characters to keep the help line valid
@@ -217,7 +225,11 @@ function Publish-TPRemediationScript {
     $null = $sb.AppendLine("# touch — Connect-TPServices figures that out and reuses any existing")
     $null = $sb.AppendLine("# session. Edit the -UserPrincipalName if you'd rather pin to a different")
     $null = $sb.AppendLine("# operator account.")
-    $null = $sb.AppendLine("Connect-TPServices -UserPrincipalName '$opUPNC' -ErrorAction Stop | Out-Null")
+    if ($null -ne $opUPNL) {
+        $null = $sb.AppendLine("Connect-TPServices -UserPrincipalName '$opUPNL' -ErrorAction Stop | Out-Null")
+    } else {
+        $null = $sb.AppendLine("Connect-TPServices -UserPrincipalName (Read-Host 'Operator UPN') -ErrorAction Stop | Out-Null")
+    }
     $null = $sb.AppendLine("")
 
     # Phase-based section header helper

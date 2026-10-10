@@ -43,7 +43,7 @@ function ConvertTo-TPProfilePsd1 {
     [CmdletBinding()]
     [OutputType([string])]
     param([Parameter(Mandatory)] [System.Collections.IDictionary] $Data)
-    $q = { param([string] $v) "'" + (($v ?? '') -replace "'", "''") + "'" }
+    $q = { param([string] $v) ConvertTo-TPPsd1String -Value ($v ?? '') }
     $lit = {
         param($v)
         if ($v -is [int] -or $v -is [long] -or $v -is [double] -or $v -is [decimal]) { return [string]$v }
@@ -86,7 +86,10 @@ function Write-TPProfileFile {
         Set-Content -LiteralPath $tmp -Value $text -Encoding utf8 -NoNewline
         $check = Import-PowerShellDataFile -LiteralPath $tmp -ErrorAction Stop
         $name = [string](Get-TPObjectField -Item $check -Key 'CompanyName' -Default '')
-        if ($name -ne [string]$Data['CompanyName']) { throw "Round-trip check failed: CompanyName read back as '$name'." }
+        # The writer normalizes curly quotes and line breaks, so compare with what it wrote.
+        $wrote = ConvertTo-TPPsd1String -Value ([string]$Data['CompanyName'])
+        $expected = $wrote.Substring(1, $wrote.Length - 2) -replace "''", "'"
+        if ($name -ne $expected) { throw "Round-trip check failed: CompanyName read back as '$name'." }
         Move-Item -LiteralPath $tmp -Destination $Path -Force
     } finally {
         if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
