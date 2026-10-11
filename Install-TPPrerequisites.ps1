@@ -299,15 +299,25 @@ if ($SkipPython) {
         try {
             if (Test-TPPythonModule -Python $pythonCmd -Module 'openpyxl') { $openpyxlOk = $true }
         } catch { }
+        $openpyxlPin = '3.1.5'
         if ($openpyxlOk) {
-            Write-Host "  [+] openpyxl installed — XLSX matrix enabled" -ForegroundColor Green
+            # The pin applies to an existing install too: a different version is
+            # replaced, so the publishers run against the version the tool was tested with.
+            $have = [string](@(Invoke-TPPython -Python $pythonCmd -Script "import openpyxl; print(openpyxl.__version__)") | Select-Object -Last 1)
+            if ($have.Trim() -ne $openpyxlPin) {
+                Write-Host "  [*] openpyxl $($have.Trim()) found; installing the pinned $openpyxlPin..." -ForegroundColor Yellow
+                $openpyxlOk = $false
+            }
+        }
+        if ($openpyxlOk) {
+            Write-Host "  [+] openpyxl $openpyxlPin installed — XLSX matrix enabled" -ForegroundColor Green
         } else {
             Write-Host "  [*] Installing openpyxl..." -ForegroundColor Yellow
             try {
                 # pip runs through the same helper as every other Python call: the
                 # current directory is off sys.path (no planted pip.py) and the user
                 # site stays, so an unelevated install can fall back to --user.
-                $null = Invoke-TPPython -Python $pythonCmd -Script "import sys, runpy; sys.argv = ['pip', 'install', 'openpyxl==3.1.5', '--quiet']; runpy.run_module('pip', run_name='__main__', alter_sys=True)"
+                $null = Invoke-TPPython -Python $pythonCmd -Script "import sys, runpy; sys.argv = ['pip', 'install', 'openpyxl==$openpyxlPin', '--quiet']; runpy.run_module('pip', run_name='__main__', alter_sys=True)"
                 if ($LASTEXITCODE -eq 0 -and (Test-TPPythonModule -Python $pythonCmd -Module 'openpyxl')) {
                     Write-Host "  [+] openpyxl installed" -ForegroundColor Green
                 } elseif ($LASTEXITCODE -eq 0) {

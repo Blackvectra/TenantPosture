@@ -66,8 +66,8 @@ $optional = @(
     @{ Name = 'Microsoft.Online.SharePoint.PowerShell'; Version = '16.0.24720.12000'; Scope = 'optional' }
 )
 $dependencies = @()
-foreach ($r in $required) { $dependencies += @{ Name = $r.Name; Version = $r.Version; Scope = 'required'; License = $(if ($licenseOf.ContainsKey($r.Name)) { $licenseOf[$r.Name] } else { 'NOASSERTION' }) } }
-foreach ($o in $optional) { $dependencies += @{ Name = $o.Name; Version = $o.Version; Scope = 'optional'; License = $(if ($licenseOf.ContainsKey($o.Name)) { $licenseOf[$o.Name] } else { 'NOASSERTION' }) } }
+foreach ($r in $required) { $dependencies += @{ Name = $r.Name; Version = $r.Version; Max = $r.Max; Scope = 'required'; License = $(if ($licenseOf.ContainsKey($r.Name)) { $licenseOf[$r.Name] } else { 'NOASSERTION' }) } }
+foreach ($o in $optional) { $dependencies += @{ Name = $o.Name; Version = $o.Version; Max = ''; Scope = 'optional'; License = $(if ($licenseOf.ContainsKey($o.Name)) { $licenseOf[$o.Name] } else { 'NOASSERTION' }) } }
 
 $bom = [ordered]@{
     bomFormat    = 'CycloneDX'
@@ -106,8 +106,13 @@ $bom = [ordered]@{
             version    = $_.Version
             purl       = "pkg:powershell/$($_.Name)@$($_.Version)"
             scope      = $_.Scope
-            # A minimum version from the manifest: what the tool requires, not
-            # what a particular workstation has installed.
+            # `version` is the declared MINIMUM; the manifest allows a range and
+            # the installed version varies by workstation. The range is recorded
+            # as a property so an inventory tool does not read the floor as exact.
+            properties = @(
+                @{ name = 'tenantposture:version-semantics'; value = $(if ($_.Scope -eq 'required') { 'declared minimum; manifest range in tenantposture:version-range' } else { 'tested version; imported on demand' }) }
+                @{ name = 'tenantposture:version-range'; value = $(if ($_.Max) { "[$($_.Version),$($_.Max)]" } else { "[$($_.Version),)" }) }
+            )
             licenses   = @($(if ($_.License -like 'LicenseRef-*' -or $_.License -eq 'NOASSERTION') { @{ license = @{ name = $_.License } } } else { @{ license = @{ id = $_.License } } }))
             supplier   = @{ name = 'Microsoft Corporation'; url = @('https://www.powershellgallery.com') }
             externalReferences = @(

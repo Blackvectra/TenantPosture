@@ -78,7 +78,14 @@ if (-not $CertificateThumbprint) {
         # create, delete or replace entries in the folder; a repointable file is
         # refused and the thumbprint must be passed explicitly.
         $me = [System.Security.Principal.WindowsIdentity]::GetCurrent()
-        $allowed = @($me.Name, $me.User.Value, 'NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators', 'S-1-5-18', 'S-1-5-32-544')
+        # Compared by SID, never by name: well-known principals render as
+        # localized names on a non-English Windows.
+        $allowedSids = @($me.User.Value, 'S-1-5-18', 'S-1-5-32-544')
+        $sidOf = {
+            param($identity)
+            try { ([System.Security.Principal.NTAccount]$identity).Translate([System.Security.Principal.SecurityIdentifier]).Value }
+            catch { try { ([System.Security.Principal.SecurityIdentifier][string]$identity).Value } catch { [string]$identity } }
+        }
         $changeRights = [System.Security.AccessControl.FileSystemRights]::Write -bor
                         [System.Security.AccessControl.FileSystemRights]::WriteData -bor
                         [System.Security.AccessControl.FileSystemRights]::CreateFiles -bor
@@ -91,9 +98,9 @@ if (-not $CertificateThumbprint) {
         foreach ($target in @($thumbFile, (Split-Path -Parent $thumbFile))) {
             $acl = Get-Acl -LiteralPath $target
             $owner = [string]$acl.Owner
-            if ($owner -notin $allowed) { throw "Refusing to read $thumbFile`: '$target' is owned by $owner, not by you. Pass -CertificateThumbprint explicitly." }
+            if ((& $sidOf $owner) -notin $allowedSids) { throw "Refusing to read $thumbFile`: '$target' is owned by $owner, not by you. Pass -CertificateThumbprint explicitly." }
             $foreign = @($acl.Access | Where-Object {
-                $_.AccessControlType -eq 'Allow' -and (($_.FileSystemRights -band $changeRights) -ne 0) -and ([string]$_.IdentityReference -notin $allowed)
+                $_.AccessControlType -eq 'Allow' -and (($_.FileSystemRights -band $changeRights) -ne 0) -and ((& $sidOf ([string]$_.IdentityReference)) -notin $allowedSids)
             })
             if ($foreign.Count -gt 0) {
                 throw "Refusing to read $thumbFile`: '$target' can be changed by $(@($foreign | ForEach-Object { [string]$_.IdentityReference }) -join ', '). Restrict it to your account or pass -CertificateThumbprint explicitly."

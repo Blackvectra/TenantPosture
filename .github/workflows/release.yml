@@ -25,6 +25,13 @@ on:
 permissions:
   contents: read
 
+env:
+  # The one allowlist of what ships. The package job copies these folders and
+  # the authenticode job judges only them, so a test or maintenance script
+  # outside the archive can never mark a release unsigned.
+  SHIP_DIRS: 'Apply Build Collectors Config Device Email-IR Evaluators Lib Onboard Publishers Web docs'
+  SHIP_ROOT_EXTENSIONS: '.ps1 .psm1 .psd1 .md .txt .cat'
+
 jobs:
   sbom:
     name: CycloneDX SBOM
@@ -98,8 +105,10 @@ jobs:
           $name = "TenantPosture-$tag"
           # Allowlist what ships. Anything not named here (tests, CI, scanner
           # config, the repo's own tooling, output) stays out of the archive.
-          $shipDirs  = @('Apply', 'Build', 'Collectors', 'Config', 'Device', 'Email-IR', 'Evaluators', 'Lib', 'Onboard', 'Publishers', 'Web', 'docs')
-          $shipFiles = @(Get-ChildItem -File | Where-Object { $_.Extension -in '.ps1', '.psm1', '.psd1', '.md', '.txt' -or $_.Name -in 'LICENSE', 'NOTICE', 'CITATION.cff' })
+          $shipDirs  = @($env:SHIP_DIRS -split ' ')
+          $shipExt   = @($env:SHIP_ROOT_EXTENSIONS -split ' ')
+          # .cat: the signed catalog Build/Sign-Release.ps1 writes for Test-FileCatalog.
+          $shipFiles = @(Get-ChildItem -File | Where-Object { $_.Extension -in $shipExt -or $_.Name -in 'LICENSE', 'NOTICE', 'CITATION.cff' })
           $dropInside = '[\\/](Testing|__pycache__)([\\/]|$)'
           New-Item -ItemType Directory -Path "./$name" | Out-Null
           foreach ($d in $shipDirs) {
@@ -225,8 +234,15 @@ jobs:
           EXPECTED_THUMBPRINT: ${{ vars.TP_SIGNING_THUMBPRINT }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $files = Get-ChildItem -Recurse -File -Include '*.ps1','*.psm1','*.psd1' |
-                   Where-Object { $_.FullName -notmatch '[\\/](output|\.git)[\\/]' }
+          # Judge the files that ship (the package job's allowlist), nothing else.
+          $shipDirs = @($env:SHIP_DIRS -split ' ')
+          $dropInside = '[\\/](Testing|__pycache__)([\\/]|$)'
+          $files = @(Get-ChildItem -File -Include '*.ps1','*.psm1','*.psd1')
+          foreach ($d in $shipDirs) {
+              if (Test-Path -LiteralPath "./$d" -PathType Container) {
+                  $files += @(Get-ChildItem -LiteralPath "./$d" -Recurse -File -Include '*.ps1','*.psm1','*.psd1' | Where-Object { $_.FullName -notmatch $dropInside })
+              }
+          }
           $valid = 0; $notSigned = 0; $bad = 0; $pinned = 0
           foreach ($f in $files) {
               $sig = Get-AuthenticodeSignature -LiteralPath $f.FullName
