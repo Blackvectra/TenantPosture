@@ -29,7 +29,7 @@ env:
   # The one allowlist of what ships. The package job copies these folders and
   # the authenticode job judges only them, so a test or maintenance script
   # outside the archive can never mark a release unsigned.
-  SHIP_DIRS: 'Apply Build Collectors Config Device Email-IR Evaluators Lib Onboard Publishers Web baselines docs tools'
+  SHIP_DIRS: 'Apply Build Collectors Config Device Email-IR Evaluators Lib Onboard Publishers Web baselines docs sample-headers sample-report tools'
   SHIP_ROOT_EXTENSIONS: '.ps1 .psm1 .psd1 .md .txt .cat'
 
 jobs:
@@ -154,6 +154,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
           SIGNED: ${{ needs.authenticode.outputs.signed }}
+          SIGNED_VALID: ${{ needs.authenticode.outputs.valid }}
+          SIGNED_NOT: ${{ needs.authenticode.outputs.notsigned }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -170,7 +172,10 @@ jobs:
           gh release upload $tag @assets --clobber
           # The release body states the signing state plainly: an unsigned
           # archive is never described as verified.
-          $note = if ($env:SIGNED -eq 'true') { 'Authenticode: every script in this release carries a valid signature.' } else { '**Unsigned release.** The scripts carry no Authenticode signature; integrity rests on SHA256SUMS, FILES.sha256 inside the archive, and the build provenance attestation (`gh attestation verify TenantPosture-' + $tag + '.zip --owner Blackvectra`).' }
+          $verifyHint = 'integrity rests on SHA256SUMS, FILES.sha256 inside the archive, and the build provenance attestation (`gh attestation verify TenantPosture-' + $tag + '.zip --owner Blackvectra`).'
+          $note = if ($env:SIGNED -eq 'true') { 'Authenticode: every script in this release carries a valid signature.' }
+                  elseif ([int]$env:SIGNED_VALID -gt 0) { '**Partially signed release.** ' + $env:SIGNED_VALID + ' script(s) carry a valid Authenticode signature and ' + $env:SIGNED_NOT + ' do not; ' + $verifyHint }
+                  else { '**Unsigned release.** The scripts carry no Authenticode signature; ' + $verifyHint }
           # Replace any earlier signing paragraph (a rebuilt tag can change the
           # result) rather than appending once and keeping a stale statement.
           # Native output is a line array: join with newlines (a [string] cast joins
@@ -188,6 +193,8 @@ jobs:
     timeout-minutes: 20
     outputs:
       signed: ${{ steps.sig.outputs.signed }}
+      valid: ${{ steps.sig.outputs.valid }}
+      notsigned: ${{ steps.sig.outputs.notsigned }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
@@ -232,9 +239,12 @@ jobs:
         id: sig
         shell: pwsh
         env:
-          # Set the repository variable TP_REQUIRE_SIGNED to 'true' once
-          # releases are signed locally before tagging; the job then fails on
-          # any unsigned script instead of publishing an unsigned release.
+          # This job sees the COMMIT the tag points at, never a working tree,
+          # so a release is "signed" only when the signed files were committed
+          # before tagging (Build/Sign-Release.ps1, then commit, then tag). Set
+          # the repository variable TP_REQUIRE_SIGNED to 'true' once that is the
+          # practice; the job then fails on any unsigned script instead of
+          # publishing an unsigned release.
           REQUIRE_SIGNED: ${{ vars.TP_REQUIRE_SIGNED }}
           # The SHA-1 thumbprint of the in-house signing certificate, when the
           # release is signed with a self-signed cert no runner trusts.
@@ -284,3 +294,5 @@ jobs:
               Write-Host '  [i] Release is unsigned; the release notes will say so. Sign locally with Build/Sign-Release.ps1 before tagging, or set TP_REQUIRE_SIGNED to fail here.' -ForegroundColor Yellow
           }
           "signed=$($signed.ToString().ToLower())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "valid=$valid" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "notsigned=$notSigned" | Out-File -FilePath $env:GITHUB_OUTPUT -Append

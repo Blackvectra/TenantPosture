@@ -66,6 +66,8 @@ if (-not $RepoRoot) {
 if (-not (Test-Path -LiteralPath $RepoRoot)) {
     throw "Repository root not found: $RepoRoot"
 }
+# Absolute, so every path built from it compares with Get-ChildItem's FullName.
+$RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).ProviderPath.TrimEnd('\', '/')
 
 # Resolve thumbprint: explicit param wins; otherwise pick up the one
 # New-TPCodeSigningCert.ps1 stashed in the operator's profile.
@@ -194,6 +196,22 @@ if ($failed -gt 0) {
     throw "Signing failed for $failed file(s)."
 }
 
+# A release archive carries FILES.sha256 (written by the release workflow from
+# the packaged tree). Signing changes every script's bytes, so the manifest is
+# rewritten from the signed tree BEFORE the catalog is built, so the catalog
+# covers the final manifest and Test-FileCatalog stays valid.
+$manifestPath = Join-Path $RepoRoot 'FILES.sha256'
+if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+    Write-Host "[-] Regenerating FILES.sha256 from the signed tree..." -ForegroundColor Cyan
+    $manifest = Get-ChildItem -LiteralPath $RepoRoot -Recurse -File |
+        Where-Object { $_.FullName -ne $manifestPath } |
+        Sort-Object FullName | ForEach-Object {
+            '{0}  {1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower(), [System.IO.Path]::GetRelativePath($RepoRoot, $_.FullName).Replace('\', '/')
+        }
+    [System.IO.File]::WriteAllLines($manifestPath, [string[]]$manifest, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "  [+] FILES.sha256 rewritten ($(@($manifest).Count) entries)." -ForegroundColor Green
+}
+
 # Generate catalog
 $catalogPath = Join-Path $RepoRoot 'TenantPosture.cat'
 Write-Host "[-] Generating catalog $catalogPath..." -ForegroundColor Cyan
@@ -223,22 +241,6 @@ if ($verify.Status -eq 'Valid') {
     Write-Host "  [+] Test-FileCatalog: Valid" -ForegroundColor Green
 } else {
     throw "Test-FileCatalog returned: $($verify.Status)"
-}
-
-# A release archive carries FILES.sha256 (written by the release workflow from
-# the packaged tree). Signing changes every script's bytes, so the manifest is
-# rewritten here from the signed tree; a stale one would report every signed
-# file as modified.
-$manifestPath = Join-Path $RepoRoot 'FILES.sha256'
-if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
-    Write-Host "[-] Regenerating FILES.sha256 from the signed tree..." -ForegroundColor Cyan
-    $manifest = Get-ChildItem -LiteralPath $RepoRoot -Recurse -File |
-        Where-Object { $_.FullName -ne $manifestPath } |
-        Sort-Object FullName | ForEach-Object {
-            '{0}  {1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower(), [System.IO.Path]::GetRelativePath($RepoRoot, $_.FullName).Replace('\', '/')
-        }
-    [System.IO.File]::WriteAllLines($manifestPath, [string[]]$manifest, [System.Text.UTF8Encoding]::new($false))
-    Write-Host "  [+] FILES.sha256 rewritten ($(@($manifest).Count) entries)." -ForegroundColor Green
 }
 
 Write-Host ""

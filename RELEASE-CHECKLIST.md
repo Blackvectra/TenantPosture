@@ -51,7 +51,10 @@ For the in-house workflow (free, self-signed). For an external release with a pa
 # 3. Verify signatures cleanly resolved
 .\tools\Verify-Integrity.ps1        # exits 0 if all manifest entries match
 
-# 4. Tag + push
+# 4. Commit the signed files, then tag + push. The release workflow checks
+#    the commit the tag points at, not your working tree: unsigned committed
+#    scripts make an unsigned release (or a failed one under TP_REQUIRE_SIGNED).
+git add -A && git commit -m "Sign vX.Y.Z"
 git tag -s "vX.Y.Z" -m "vX.Y.Z — release notes here"
 git push origin "vX.Y.Z"
 ```
