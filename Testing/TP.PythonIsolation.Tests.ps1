@@ -91,6 +91,7 @@ Describe 'Python runs through the helper; the sensitive writer never follows a l
         $d = Join-Path $TestDrive 'stage'; New-Item -ItemType Directory -Path $d -Force | Out-Null
         $p = Join-Path $d 'r.json'
         Mock -CommandName Test-TPHandleModeSupported -MockWith { $false } -ModuleName 'TenantPosture'
+        Mock -CommandName Set-TPSensitiveHandleAcl -MockWith { $false } -ModuleName 'TenantPosture'
         Set-TPSensitiveFileContent -Path $p -Content 'staged'
         (Get-Content -LiteralPath $p -Raw) | Should -Be 'staged'
         $mode = if ($IsMacOS) { & stat -f '%Lp' $p } else { & stat -c '%a' $p }

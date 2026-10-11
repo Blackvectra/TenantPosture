@@ -208,8 +208,13 @@ function Set-TPSensitiveFileContent {
         $fs.Write($bytes, 0, $bytes.Length)
         $fs.Flush($true)
         $fs.Dispose(); $fs = $null
+        if (-not $hardened) {
+            # Still inside the owner-only staging folder, so a chmod by name cannot be
+            # raced; it must succeed before the file is published under the target name.
+            & chmod 600 $tmp 2>$null
+            if ($LASTEXITCODE -ne 0) { throw "Set-TPSensitiveFileContent: chmod 600 on the staged file returned exit code $LASTEXITCODE, so '$Path' was not written." }
+        }
         [System.IO.File]::Move($tmp, $Path, $true)
-        if ($stageDir) { & chmod 600 $Path 2>$null; if ($LASTEXITCODE -ne 0) { throw "chmod 600 on '$Path' returned exit code $LASTEXITCODE" } }
     } catch {
         if ($fs) { $fs.Dispose(); $fs = $null }
         Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
