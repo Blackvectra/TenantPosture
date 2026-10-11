@@ -29,7 +29,7 @@ env:
   # The one allowlist of what ships. The package job copies these folders and
   # the authenticode job judges only them, so a test or maintenance script
   # outside the archive can never mark a release unsigned.
-  SHIP_DIRS: 'Apply Build Collectors Config Device Email-IR Evaluators Lib Onboard Publishers Web baselines docs'
+  SHIP_DIRS: 'Apply Build Collectors Config Device Email-IR Evaluators Lib Onboard Publishers Web baselines docs tools'
   SHIP_ROOT_EXTENSIONS: '.ps1 .psm1 .psd1 .md .txt .cat'
 
 jobs:
@@ -173,9 +173,13 @@ jobs:
           $note = if ($env:SIGNED -eq 'true') { 'Authenticode: every script in this release carries a valid signature.' } else { '**Unsigned release.** The scripts carry no Authenticode signature; integrity rests on SHA256SUMS, FILES.sha256 inside the archive, and the build provenance attestation (`gh attestation verify TenantPosture-' + $tag + '.zip --owner Blackvectra`).' }
           # Replace any earlier signing paragraph (a rebuilt tag can change the
           # result) rather than appending once and keeping a stale statement.
-          $body = [string](gh release view $tag --json body --jq .body)
+          # Native output is a line array: join with newlines (a [string] cast joins
+          # with spaces) and pass the notes through a file so nothing is flattened.
+          $body = (@(gh release view $tag --json body --jq .body) -join "`n")
           $body = [regex]::Replace($body, '(?m)^(\*\*Unsigned release\.\*\*|Authenticode:)[^\r\n]*(\r?\n)*', '').TrimEnd()
-          gh release edit $tag --notes ($body + "`n`n" + $note)
+          $notesFile = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          [System.IO.File]::WriteAllText($notesFile, ($body + "`n`n" + $note), [System.Text.UTF8Encoding]::new($false))
+          gh release edit $tag --notes-file $notesFile
           Write-Host "Assets uploaded to release $tag (draft until published)."
 
   authenticode:
@@ -253,16 +257,19 @@ jobs:
               switch ($sig.Status) {
                   'Valid'        { $valid++ }
                   'NotSigned'    { $notSigned++ }
-                  'UnknownError' { $notSigned++ }   # treated as not-signed on this host
-                  'NotTrusted'   {
+                  { $_ -in 'NotTrusted', 'UnknownError' } {
+                      # UnknownError is also what PowerShell reports for a file that IS
+                      # signed by a root this host has never seen; with no signer
+                      # certificate at all it is simply not signed.
                       # A self-signed in-house signer (Build/New-TPCodeSigningCert.ps1) is
                       # trusted only in the operator's own stores, so a fresh runner reports
                       # NotTrusted. It counts as signed only when the signer's thumbprint
                       # equals the repository variable TP_SIGNING_THUMBPRINT: a pinned
                       # expected root, never any untrusted signer.
                       $tp = if ($sig.SignerCertificate) { [string]$sig.SignerCertificate.Thumbprint } else { '' }
-                      if ($tp -and $env:EXPECTED_THUMBPRINT -and $tp -eq $env:EXPECTED_THUMBPRINT) { $valid++; $pinned++ }
-                      else { $bad++; Write-Host ("  [NotTrusted, signer {0} is not the pinned thumbprint] {1}" -f $tp, $f.Name) -ForegroundColor Red }
+                      if (-not $tp -and $sig.Status -eq 'UnknownError') { $notSigned++ }
+                      elseif ($tp -and $env:EXPECTED_THUMBPRINT -and $tp -eq $env:EXPECTED_THUMBPRINT) { $valid++; $pinned++ }
+                      else { $bad++; Write-Host ("  [{0}, signer '{1}' is not the pinned thumbprint] {2}" -f $sig.Status, $tp, $f.Name) -ForegroundColor Red }
                   }
                   default        { $bad++; Write-Host ("  [{0}] {1}" -f $sig.Status, $f.Name) -ForegroundColor Red }
               }
