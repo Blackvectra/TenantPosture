@@ -215,8 +215,7 @@ function Publish-TPManualReviewQuestionnairePdf {
     $pythonCmd = $null
     foreach ($py in @('python3', 'python')) {
         try {
-            $null = & $py -I -c 'import reportlab' 2>&1
-            if ($LASTEXITCODE -eq 0) { $pythonCmd = $py; break }
+                        if (Test-TPPythonModule -Python $py -Module 'reportlab') { $pythonCmd = $py; break }
         } catch { }
     }
     if (-not $pythonCmd) {
@@ -410,7 +409,7 @@ print('Manual review questionnaire PDF saved:', sys.argv[2])
             $null = $pyScript
         }
 
-        $out = $pyScript | & $pythonCmd -I - $tmpJson $pdfPath 2>&1
+        $out = Invoke-TPPython -Python $pythonCmd -Script $pyScript -Arguments @($tmpJson, $pdfPath)
         if ($LASTEXITCODE -ne 0) {
             throw "reportlab helper failed: $out"
         }

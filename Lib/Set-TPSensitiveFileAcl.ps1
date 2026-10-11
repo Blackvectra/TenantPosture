@@ -122,50 +122,31 @@ function Set-TPSensitiveFileContent {
         [System.Text.Encoding] $Encoding = [System.Text.UTF8Encoding]::new($false)
     )
 
-    # Never write through a link: a symbolic link, junction or mount point planted
-    # at a predictable output name would redirect tenant data to a file another
-    # account chose, and the ACL below would then be applied to that target.
-    # An item that cannot be inspected is refused too (fail closed).
-    if (Test-Path -LiteralPath $Path) {
-        $existing = $null
-        try { $existing = Get-Item -LiteralPath $Path -Force -ErrorAction Stop } catch { throw "Set-TPSensitiveFileContent: cannot inspect '$Path' before writing: $($_.Exception.Message)" }
-        $linkType = [string](Get-TPObjectField -Item $existing -Key 'LinkType' -Default '')
-        if ($linkType -and $linkType -ne 'HardLink') { throw "Set-TPSensitiveFileContent: '$Path' is a $linkType and will not be written through." }
-        if ($existing.PSIsContainer) { throw "Set-TPSensitiveFileContent: '$Path' is a directory." }
-    }
-
-    # Pre-create empty file then harden ACL so the ACL is applied BEFORE any
-    # tenant data lands. Without this step, the file inherits the parent
-    # directory's ACL during the Out-File / WriteAllText call, giving a
-    # co-resident process a small window to read the data.
+    # The content is written to a new, randomly named file beside the target
+    # (CreateNew: the handle is ours, never a link someone planted), the ACL is
+    # applied to that file before any tenant data lands in it, and the file is
+    # then moved over the target. The move replaces the target name itself, so a
+    # symbolic link, junction or mount point planted at the output name is
+    # replaced, never followed; there is no inspect-then-open window.
+    if (Test-Path -LiteralPath $Path -PathType Container) { throw "Set-TPSensitiveFileContent: '$Path' is a directory." }
+    $dir = Split-Path -Parent $Path
+    if ([string]::IsNullOrEmpty($dir)) { $dir = (Get-Location).ProviderPath }
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { throw "Set-TPSensitiveFileContent: folder '$dir' does not exist." }
+    $leaf = Split-Path -Leaf $Path
+    $tmp = Join-Path $dir ('.' + $leaf + '.' + [guid]::NewGuid().ToString('N') + '.tmp')
+    $fs = $null
     try {
-        if (Test-Path -LiteralPath $Path -PathType Leaf) {
-            # File already exists — truncate before hardening so leftover content
-            # doesn't bleed across runs.
-            [System.IO.File]::WriteAllText($Path, '', $Encoding)
-        } else {
-            # Create empty file. [System.IO.File]::Create returns a FileStream;
-            # we wrap in try/finally to ensure it's closed before Set-Acl.
-            $fs = $null
-            try {
-                $fs = [System.IO.File]::Create($Path)
-            } finally {
-                if ($fs) { $fs.Dispose() }
-            }
-        }
-    } catch {
-        Write-Warning "Set-TPSensitiveFileContent: could not pre-create '$Path': $($_.Exception.Message)"
-        # Fall through — caller may still want the write to happen even if
-        # pre-creation failed (e.g. parent dir issues). The next step will
-        # re-throw if it fails too.
+        $fs = [System.IO.FileStream]::new($tmp, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+    } finally {
+        if ($fs) { $fs.Dispose() }
     }
-
-    # Harden ACL BEFORE writing tenant data. No-op on non-Windows.
-    Set-TPSensitiveFileAcl -Path $Path
-
-    # Now write the actual content. ACL is in place; tenant data is restricted
-    # the moment it lands on disk.
-    if ($null -ne $Content) {
-        [System.IO.File]::WriteAllText($Path, $Content, $Encoding)
+    try {
+        # Harden ACL BEFORE writing tenant data. 0600 on non-Windows.
+        Set-TPSensitiveFileAcl -Path $tmp
+        [System.IO.File]::WriteAllText($tmp, [string]$Content, $Encoding)
+        [System.IO.File]::Move($tmp, $Path, $true)
+    } catch {
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        throw
     }
 }

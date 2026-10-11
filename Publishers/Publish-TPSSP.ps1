@@ -836,8 +836,7 @@ function Publish-TPSSPXlsx {
     $pythonCmd = $null
     foreach ($py in @('python3', 'python')) {
         try {
-            $null = & $py -I -c 'import openpyxl' 2>&1
-            if ($LASTEXITCODE -eq 0) { $pythonCmd = $py; break }
+                        if (Test-TPPythonModule -Python $py -Module 'openpyxl') { $pythonCmd = $py; break }
         } catch { }
     }
     if (-not $pythonCmd) {
@@ -1122,7 +1121,7 @@ print(f'SSP XLSX saved: {sys.argv[2]}')
             $null = $pyScript
         }
 
-        $out = $pyScript | & $pythonCmd -I - $tmpJson $OutputPath 2>&1
+        $out = Invoke-TPPython -Python $pythonCmd -Script $pyScript -Arguments @($tmpJson, $OutputPath)
         if ($LASTEXITCODE -ne 0) {
             throw "openpyxl helper failed: $out"
         }

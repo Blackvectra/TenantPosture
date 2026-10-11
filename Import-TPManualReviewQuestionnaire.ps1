@@ -99,8 +99,7 @@ try {
     $pythonCmd = $null
     foreach ($py in @('python3', 'python')) {
         try {
-            $null = & $py -I -c 'import pypdf' 2>&1
-            if ($LASTEXITCODE -eq 0) { $pythonCmd = $py; break }
+                        if (Test-TPPythonModule -Python $py -Module 'pypdf') { $pythonCmd = $py; break }
         } catch { }
     }
     if (-not $pythonCmd) {
@@ -128,7 +127,7 @@ with open(sys.argv[2], 'w', encoding='utf-8') as fh:
     json.dump(out, fh)
 '@
         $null = $pyScript
-        $out = $pyScript | & $pythonCmd -I - $PdfPath $tmpOut 2>&1
+        $out = Invoke-TPPython -Python $pythonCmd -Script $pyScript -Arguments @($PdfPath, $tmpOut)
         if ($LASTEXITCODE -ne 0) { throw "pypdf read failed: $out" }
         $fieldValues = Get-Content -LiteralPath $tmpOut -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
     } finally {

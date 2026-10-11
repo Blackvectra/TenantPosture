@@ -2,16 +2,21 @@
 
 ## Unreleased
 
-- **[Security] Python helpers run isolated; the sensitive-file writer refuses links.** The XLSX and
-  PDF publishers and the two questionnaire importers wrote a helper `.py` into the output or temp
-  folder and ran it, and every availability probe ran `python -c` from the current directory. Python
-  puts the script's directory (or the current directory) first on `sys.path`, so a file named
+- **[Security] Python runs through one helper; the sensitive-file writer never follows a link.** The
+  XLSX and PDF publishers and the two questionnaire importers wrote a helper `.py` into the output or
+  temp folder and ran it, and every availability probe ran `python -c` from the current directory.
+  Python puts the script's directory (or the current directory) first on `sys.path`, so a file named
   `openpyxl.py`, `pypdf.py` or `json.py` planted by another local account ran as the operator. Every
-  helper now goes to Python on stdin with `-I` (no script directory, no current directory, no user
-  site), no helper file is written, and every probe passes `-I`. `Set-TPSensitiveFileContent` refuses
-  to write through a symbolic link, junction or mount point (an item it cannot inspect is refused
-  too), so a link planted at a predictable output name cannot redirect tenant data or re-ACL its
-  target. Found by the 2026-10-09 security audit (M6 and the symlink finding).
+  call now goes through `Invoke-TPPython` / `Test-TPPythonModule` (`Lib/Invoke-TPPython.ps1`): the
+  script goes to Python on stdin, no helper file is written, and the script's first line drops the
+  current directory from `sys.path` before anything is imported. The user site and `PYTHONPATH` are
+  kept on purpose (`-I` would hide a non-administrator's `pip install --user openpyxl`), UTF-8 mode is
+  forced so a box-drawing character survives a Windows code page, and the installer runs pip itself
+  with `-I` and re-probes the import after installing. `Set-TPSensitiveFileContent` writes to a new
+  randomly named file beside the target, hardens its ACL, then moves it over the target name, so a
+  symbolic link, junction or mount point planted at a predictable output name is replaced, never
+  followed, with no inspect-then-open window. Found by the 2026-10-09 security audit (M6 and the
+  symlink finding); revised after review.
 
 - **[Security] One Markdown escape for every deliverable; the SSP workbook never writes a formula.**
   Eight Markdown publishers (summary, playbook and executive summary, SSP, NIST matrix, improvement

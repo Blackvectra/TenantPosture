@@ -44,8 +44,7 @@ function Publish-TPComplianceMatrix {
     $pythonCmd = $null
     foreach ($py in @('python3','python')) {
         try {
-            $null = & $py -I -c 'import openpyxl' 2>&1
-            if ($LASTEXITCODE -eq 0) { $pythonCmd = $py; break }
+                        if (Test-TPPythonModule -Python $py -Module 'openpyxl') { $pythonCmd = $py; break }
         } catch { }
     }
     if (-not $pythonCmd) {
@@ -663,7 +662,7 @@ print(f"XLSX saved: {out_path}")
         # cleanup and removes the TEMP-race surface entirely.
         try {
             $null = $pyScript
-            $result = $pyScript | & $pythonCmd -I - $tmpJson $OutputPath 2>&1
+            $result = Invoke-TPPython -Python $pythonCmd -Script $pyScript -Arguments @($tmpJson, $OutputPath)
             if ($LASTEXITCODE -ne 0) {
                 Write-Warning "XLSX generation failed: $result"
             } else {
