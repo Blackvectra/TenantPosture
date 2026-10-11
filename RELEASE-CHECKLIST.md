@@ -42,10 +42,12 @@ For the in-house workflow (free, self-signed). For an external release with a pa
 
 **Per release:**
 ```powershell
-# 1. Generate the integrity manifest
+# 1. Generate the integrity manifest (Sign-Release.ps1 refreshes it after
+#    signing, so step 3 verifies the signed bytes)
 .\tools\Verify-Integrity.ps1 -Update
 
-# 2. Sign every .ps1/.psm1/.psd1
+# 2. Sign every .ps1/.psm1/.psd1 (also rewrites tools/integrity-manifest.txt
+#    and FILES.sha256 when present, then builds and signs the catalog)
 .\Build\Sign-Release.ps1            # auto-loads the saved thumbprint
 
 # 3. Verify signatures cleanly resolved

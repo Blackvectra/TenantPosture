@@ -196,6 +196,17 @@ if ($failed -gt 0) {
     throw "Signing failed for $failed file(s)."
 }
 
+# The committed integrity manifest (tools/integrity-manifest.txt, written by
+# tools/Verify-Integrity.ps1 -Update) hashes the same scripts signing just
+# changed, so it is refreshed here, before the catalog, when it exists.
+$verifyScript = Join-Path $RepoRoot 'tools' 'Verify-Integrity.ps1'
+$integrityManifest = Join-Path $RepoRoot 'tools' 'integrity-manifest.txt'
+if ((Test-Path -LiteralPath $integrityManifest -PathType Leaf) -and (Test-Path -LiteralPath $verifyScript -PathType Leaf)) {
+    Write-Host "[-] Refreshing tools/integrity-manifest.txt from the signed tree..." -ForegroundColor Cyan
+    & $verifyScript -Update
+    if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "Verify-Integrity.ps1 -Update returned exit code $LASTEXITCODE" }
+}
+
 # A release archive carries FILES.sha256 (written by the release workflow from
 # the packaged tree). Signing changes every script's bytes, so the manifest is
 # rewritten from the signed tree BEFORE the catalog is built, so the catalog
