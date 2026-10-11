@@ -190,16 +190,12 @@ $dirty = @($dirty | Where-Object { $_ } | ForEach-Object { $_.Substring(3).Trim(
 if ($dirty.Count -gt 0) {
     throw "Refusing to sign: tracked files differ from the index ($($dirty -join ', ')). Commit or stash them first (git stash push -- <path>); the manifests must describe the tree that will be committed."
 }
-# Untracked scripts and JSON would be signed and hashed into the manifest below
-# (both walk the folder) but are not part of the sign commit, so the tagged tree
-# would lack entries the manifest names. Ignored files (output\) are not listed.
-$global:LASTEXITCODE = 0
-$untracked = @(& $gitCmd.Source -C $RepoRoot -c core.quotepath=off ls-files --others --exclude-standard)
-if ($LASTEXITCODE -ne 0) { throw "git ls-files --others failed in $RepoRoot (exit $LASTEXITCODE)." }
-$stray = @($untracked | Where-Object { $_ -and $_ -notlike 'output/*' -and [System.IO.Path]::GetExtension($_) -in @('.ps1', '.psm1', '.psd1', '.ps1xml', '.json') })
-if ($stray.Count -gt 0) {
-    throw "Refusing to sign: untracked files would be signed or hashed into the manifest but are not part of the commit ($($stray -join ', ')). Commit, remove or ignore them first."
-}
+# Everything below works from the tracked files, never from a folder walk: the
+# sign commit carries nothing else, so an untracked or ignored local script
+# (a secrets.ps1, a scratch file, an ignored .psd1) is neither signed nor
+# hashed into a manifest the tagged tree could not satisfy.
+$tracked = @(Get-TPTrackedFiles)
+$toFull = { param($rel) Join-Path $RepoRoot ($rel -replace '/', [string][System.IO.Path]::DirectorySeparatorChar) }
 
 # Resolve thumbprint: explicit param wins; otherwise pick up the one
 # New-TPCodeSigningCert.ps1 stashed in the operator's profile.
@@ -289,15 +285,10 @@ Write-Host "  Cert expires:   $($cert.NotAfter)" -ForegroundColor Green
 Write-Host "  Timestamp:      $TimestampServer" -ForegroundColor Green
 Write-Host ""
 
-# Find all signable files
+# The signable files: the tracked ones with a signable extension.
 $signableExt = @('.ps1','.psm1','.psd1','.ps1xml')
-$files = Get-ChildItem -Path $RepoRoot -Recurse -File |
-    Where-Object {
-        $_.Extension -in $signableExt -and
-        $_.FullName -notmatch '\\output\\' -and
-        $_.FullName -notmatch '\\\.git\\'
-    } |
-    Sort-Object FullName
+$files = @($tracked | Where-Object { [System.IO.Path]::GetExtension($_) -in $signableExt } |
+    ForEach-Object { Get-Item -LiteralPath (& $toFull $_) } | Sort-Object FullName)
 
 Write-Host "[-] Signing $($files.Count) files..." -ForegroundColor Cyan
 
@@ -375,8 +366,14 @@ if (Test-Path -LiteralPath $verifyScript -PathType Leaf) {
     # would otherwise pass for a result.
     # -ManifestPath names the repository manifest explicitly: with FILES.sha256 at
     # the root (regenerated above when present) the verifier would otherwise take
-    # the tree for an extracted release.
-    & $verifyScript -Update -ManifestPath $integrityManifest
+    # the tree for an extracted release. -Files hands it the tracked files that
+    # fall inside its own filter (the extensions it hashes, outside .github\ and
+    # output\), so no ignored or untracked file enters the manifest.
+    $manifestFiles = @($tracked | Where-Object {
+        [System.IO.Path]::GetExtension($_) -in @('.ps1', '.psm1', '.psd1', '.json') -and
+        $_ -notlike '.github/*' -and $_ -notlike 'output/*' -and $_ -ne 'tools/integrity-manifest.txt'
+    })
+    & $verifyScript -Update -ManifestPath $integrityManifest -Files $manifestFiles
     $global:LASTEXITCODE = 0
     & $verifyScript -ManifestPath $integrityManifest
     if ($LASTEXITCODE -ne 0) { throw "tools/integrity-manifest.txt does not verify against the signed tree it was just generated from (exit $LASTEXITCODE)." }
@@ -387,12 +384,13 @@ if (Test-Path -LiteralPath $verifyScript -PathType Leaf) {
 # rewritten from the signed tree BEFORE the catalog is built, so the catalog
 # covers the final manifest and Test-FileCatalog stays valid.
 if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
-    Write-Host "[-] Regenerating FILES.sha256 from the signed tree..." -ForegroundColor Cyan
-    $manifest = Get-ChildItem -LiteralPath $RepoRoot -Recurse -File |
-        Where-Object { $_.FullName -ne $manifestPath -and $_.FullName -ne (Join-Path $RepoRoot 'TenantPosture.cat') } |   # the catalog is rebuilt and re-signed after this
-        Sort-Object FullName | ForEach-Object {
-            '{0}  {1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower(), [System.IO.Path]::GetRelativePath($RepoRoot, $_.FullName).Replace('\', '/')
-        }
+    Write-Host "[-] Regenerating FILES.sha256 from the signed tracked tree..." -ForegroundColor Cyan
+    # Tracked files plus the integrity manifest just written; never FILES.sha256
+    # itself nor the catalog, which is rebuilt and re-signed after this.
+    $rels = @($tracked) + @(if (Test-Path -LiteralPath $integrityManifest -PathType Leaf) { 'tools/integrity-manifest.txt' })
+    $manifest = @($rels | Sort-Object -Unique | Where-Object { $_ -ne 'FILES.sha256' -and $_ -ne 'TenantPosture.cat' } | ForEach-Object {
+            '{0}  {1}' -f (Get-FileHash -LiteralPath (& $toFull $_) -Algorithm SHA256).Hash.ToLower(), $_
+        })
     [System.IO.File]::WriteAllLines($manifestPath, [string[]]$manifest, [System.Text.UTF8Encoding]::new($false))
     Write-Host "  [+] FILES.sha256 rewritten ($(@($manifest).Count) entries)." -ForegroundColor Green
 }

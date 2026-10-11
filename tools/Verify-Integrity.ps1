@@ -28,6 +28,8 @@
     .\tools\Verify-Integrity.ps1
 .EXAMPLE
     .\tools\Verify-Integrity.ps1 -Update
+.EXAMPLE
+    .\tools\Verify-Integrity.ps1 -Update -Files (git ls-files '*.ps1' '*.psm1' '*.psd1' '*.json')
 #>
 
 [CmdletBinding()]
@@ -38,7 +40,12 @@ param(
     })]
     [string] $ManifestPath = (Join-Path $PSScriptRoot 'integrity-manifest.txt'),
 
-    [switch] $Update
+    [switch] $Update,
+
+    # With -Update only: the repository-relative paths (forward slashes) to hash,
+    # instead of walking the folder. Build/Sign-Release.ps1 passes the tracked
+    # files, so an ignored or untracked local script never enters the manifest.
+    [string[]] $Files
 )
 
 # Terminating throughout: an unreadable file must stop a manifest refresh
@@ -79,6 +86,15 @@ $files = Get-ChildItem -LiteralPath $repoRoot -Recurse -File -ErrorAction Stop |
         $_.FullName -ne $archiveManifest
     } |
     Sort-Object FullName
+
+if ($Files -and -not $Update) { throw '-Files applies to -Update only; verification always walks the folder.' }
+if ($Update -and $Files) {
+    $files = @($Files | Where-Object { $_ } | Sort-Object -Unique | ForEach-Object {
+        $full = Join-Path $repoRoot ($_ -replace '/', [string][System.IO.Path]::DirectorySeparatorChar)
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw "Listed file '$_' does not exist under $repoRoot; the manifest was not written." }
+        Get-Item -LiteralPath $full
+    } | Sort-Object FullName)
+}
 
 if ($Update) {
     Write-Host "Generating integrity manifest..." -ForegroundColor Cyan

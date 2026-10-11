@@ -38,9 +38,9 @@
   one exported copy of the tracked tree (`New-FileCatalog` records only names when given a file
   list) with `-VerifyCatalogOnly` to check a clone the same way; `Apply-TPBaseline -RequireSignedCode`
   verifies `Lib/Test-TPSignatureStatus.ps1` with the built-in cmdlet before loading it; and
-  RELEASING.md says provenance attestation applies to a public repository only. An untracked
-  script or JSON file is refused before signing (it would be signed and hashed without being
-  committed); `-VerifyCatalogOnly` and the signing flow check the catalog's own Authenticode
+  RELEASING.md says provenance attestation applies to a public repository only. Only tracked
+  files are signed and hashed (`tools/Verify-Integrity.ps1 -Update -Files`), so an untracked or
+  ignored local script such as a `secrets.ps1` is left alone and never enters a manifest; `-VerifyCatalogOnly` and the signing flow check the catalog's own Authenticode
   signature (Valid, or the pinned thumbprint) before its hashes count, since `Test-FileCatalog`'s
   Status is the hash comparison only; and `tools/Verify-Integrity.ps1` takes archive mode from the
   presence of `FILES.sha256` alone, so an injected repository manifest cannot switch an extracted

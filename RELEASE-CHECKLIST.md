@@ -56,8 +56,8 @@ to `true` once every release is signed and committed before tagging.
 #    the tagged commit can never satisfy.
 git status --porcelain                           # expect nothing but the files signing writes
 git stash push -- Config/clients.json            # if it is populated locally
-# An untracked .ps1/.psm1/.psd1/.json scratch file is refused too: it would be
-# signed and hashed into the manifest without being part of the commit.
+# Only tracked files are signed and hashed: an untracked or ignored script
+# (a local secrets.ps1, a scratch file) is left alone and never enters a manifest.
 
 # 2. Sign every .ps1/.psm1/.psd1 (writes tools/integrity-manifest.txt and
 #    FILES.sha256 when present from the signed bytes, then builds and signs
