@@ -80,6 +80,7 @@ function Test-TPGloballyRoutableAddress {
     elseif ($b0 -eq 172 -and $b1 -ge 16 -and $b1 -le 31)        { $why = 'RFC 1918 172.16/12' }
     elseif ($b0 -eq 192 -and $b1 -eq 0 -and $b2 -eq 0)          { $why = 'IETF protocol assignments 192.0.0/24' }
     elseif ($b0 -eq 192 -and $b1 -eq 0 -and $b2 -eq 2)          { $why = 'documentation 192.0.2/24' }
+    elseif ($b0 -eq 192 -and $b1 -eq 88 -and $b2 -eq 99)         { $why = '6to4 relay anycast 192.88.99/24 (deprecated; 192.88.99.2 is the 6a44 relay)' }
     elseif ($b0 -eq 192 -and $b1 -eq 168)                       { $why = 'RFC 1918 192.168/16' }
     elseif ($b0 -eq 198 -and ($b1 -eq 18 -or $b1 -eq 19))       { $why = 'benchmarking 198.18/15' }
     elseif ($b0 -eq 198 -and $b1 -eq 51 -and $b2 -eq 100)       { $why = 'documentation 198.51.100/24' }

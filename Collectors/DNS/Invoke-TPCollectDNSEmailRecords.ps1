@@ -652,7 +652,8 @@ function Invoke-TPCollectDNSEmailRecords {
             # MX — DoH returns each answer as 'PREF exchange.' e.g. '10 host.'
             try {
                 $mxOutcome = ''; $mxReason = ''
-                $d.MX = @(@(Resolve-TPDns -Name $domain -Type MX -Outcome ([ref]$mxOutcome) -Reason ([ref]$mxReason)) | ForEach-Object {
+                $mxRows = @(Resolve-TPDns -Name $domain -Type MX -Outcome ([ref]$mxOutcome) -Reason ([ref]$mxReason))
+                $d.MX = @(@($mxRows) | ForEach-Object {
                     $parts = ([string]$_).Trim() -split '\s+', 2
                     # ASCII digits only and TryParse: [int] on an answer throws on overflow or a
                     # Unicode digit and discarded the whole MX set; one bad row is skipped instead.
@@ -661,6 +662,9 @@ function Invoke-TPCollectDNSEmailRecords {
                         @{ Preference = $pref; Exchange = $parts[1].TrimEnd('.') }
                     }
                 } | Where-Object { $_ })
+                # An answer whose every row is unparseable is a malformed provider answer,
+                # never "no MX": the lookup fails rather than scoring an absence.
+                if ($mxOutcome -eq 'Answered' -and $mxRows.Count -gt 0 -and $d.MX.Count -eq 0) { $mxOutcome = 'LookupFailed'; $mxReason = "none of $($mxRows.Count) MX row(s) could be parsed" }
                 & $recordLookup 'MX' $mxOutcome $mxReason
             } catch { & $recordThrow 'MX' $_.Exception.Message }
 
@@ -682,7 +686,10 @@ function Invoke-TPCollectDNSEmailRecords {
                         @{ Flags = $flags; Tag = $m.Groups[2].Value.ToLowerInvariant(); Value = $m.Groups[3].Value.Trim() }
                     }
                 } | Where-Object { $_ }) }
-                $caaParsed = @(& $parseCaa @(Resolve-TPDns -Name $domain -Type CAA -Outcome ([ref]$caaOutcome) -Reason ([ref]$caaReason)))
+                $caaRows = @(Resolve-TPDns -Name $domain -Type CAA -Outcome ([ref]$caaOutcome) -Reason ([ref]$caaReason))
+                $caaParsed = @(& $parseCaa $caaRows)
+                # Same rule as MX: an answer with no parseable row is a failed lookup, not "no CAA".
+                if ($caaOutcome -eq 'Answered' -and $caaRows.Count -gt 0 -and $caaParsed.Count -eq 0) { $caaOutcome = 'LookupFailed'; $caaReason = "none of $($caaRows.Count) CAA row(s) could be parsed" }
                 & $recordLookup 'CAA' $caaOutcome $caaReason
                 # RFC 8659 §3: a CA climbs the tree — with no CAA at the name
                 # itself, the nearest ancestor's CAA set governs issuance. A
