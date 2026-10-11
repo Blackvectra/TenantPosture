@@ -181,10 +181,11 @@ jobs:
           # Native output is a line array: join with newlines (a [string] cast joins
           # with spaces) and pass the notes through a file so nothing is flattened.
           $body = (@(gh release view $tag --json body --jq .body) -join "`n")
-          $body = [regex]::Replace($body, '(?m)^(\*\*Unsigned release\.\*\*|Authenticode:)[^\r\n]*(\r?\n)*', '').TrimEnd()
+          $body = [regex]::Replace($body, '(?m)^(\*\*Unsigned release\.\*\*|\*\*Partially signed release\.\*\*|Authenticode:)[^\r\n]*(\r?\n)*', '').TrimEnd()
           $notesFile = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           [System.IO.File]::WriteAllText($notesFile, ($body + "`n`n" + $note), [System.Text.UTF8Encoding]::new($false))
           gh release edit $tag --notes-file $notesFile
+          if ($LASTEXITCODE -ne 0) { throw "gh release edit failed (exit $LASTEXITCODE); the release notes do not state the signing result." }
           Write-Host "Assets uploaded to release $tag (draft until published)."
 
   authenticode:

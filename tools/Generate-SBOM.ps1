@@ -57,11 +57,20 @@ foreach ($r in @($m.RequiredModules)) {
 if ($required.Count -eq 0) { throw "No RequiredModules found in $manifestPath; refusing to write an SBOM without the hard dependencies." }
 $licenseOf = @{
     'Microsoft.Graph.Authentication'            = 'MIT'
+    'Microsoft.Graph.Reports'                   = 'MIT'
+    'Microsoft.Graph.Identity.Governance'       = 'MIT'
+    'Microsoft.Graph.Identity.SignIns'          = 'MIT'
+    'Microsoft.Graph.Users'                     = 'MIT'
     'ExchangeOnlineManagement'                  = 'LicenseRef-Microsoft-Software-License-Terms'
     'MicrosoftTeams'                            = 'LicenseRef-Microsoft-Software-License-Terms'
     'Microsoft.Online.SharePoint.PowerShell'    = 'LicenseRef-Microsoft-Software-License-Terms'
 }
 $optional = @(
+    # Graph SDK submodules Connect-TPServices imports when present (Lib/Connect-TPServices.ps1).
+    @{ Name = 'Microsoft.Graph.Reports';                Version = '2.20.0';         Scope = 'optional' }
+    @{ Name = 'Microsoft.Graph.Identity.Governance';    Version = '2.20.0';         Scope = 'optional' }
+    @{ Name = 'Microsoft.Graph.Identity.SignIns';       Version = '2.20.0';         Scope = 'optional' }
+    @{ Name = 'Microsoft.Graph.Users';                  Version = '2.20.0';         Scope = 'optional' }
     @{ Name = 'MicrosoftTeams';                         Version = '6.5.0';          Scope = 'optional' }
     @{ Name = 'Microsoft.Online.SharePoint.PowerShell'; Version = '16.0.24720.12000'; Scope = 'optional' }
 )

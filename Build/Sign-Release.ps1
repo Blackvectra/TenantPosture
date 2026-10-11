@@ -204,7 +204,7 @@ $manifestPath = Join-Path $RepoRoot 'FILES.sha256'
 if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     Write-Host "[-] Regenerating FILES.sha256 from the signed tree..." -ForegroundColor Cyan
     $manifest = Get-ChildItem -LiteralPath $RepoRoot -Recurse -File |
-        Where-Object { $_.FullName -ne $manifestPath } |
+        Where-Object { $_.FullName -ne $manifestPath -and $_.FullName -ne (Join-Path $RepoRoot 'TenantPosture.cat') } |   # the catalog is rebuilt and re-signed after this
         Sort-Object FullName | ForEach-Object {
             '{0}  {1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower(), [System.IO.Path]::GetRelativePath($RepoRoot, $_.FullName).Replace('\', '/')
         }
