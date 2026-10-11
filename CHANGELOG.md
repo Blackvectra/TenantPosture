@@ -9,12 +9,16 @@
   (`Lib/Test-TPPublicAddress.ps1`) is now a positive rule, globally routable unicast only, applied
   after unwrapping, and the socket is created for the validated address's own family. The MTA-STS
   policy and crt.sh reads go through `Get-TPBoundedHttpText`: one timeout over the whole transfer
-  (`-TimeoutSec` covered only the headers), no redirect followed, and a byte cap; the MTA-STS mode
+  (`-TimeoutSec` covered only the headers), no redirect followed, a byte cap, and for MTA-STS the
+  request goes to the address the probe validated with the host name carried as the Host header
+  (what the handler uses for TLS), so the name is never resolved a second time; the MTA-STS mode
   is read line by line instead of with a multiline regex that was quadratic on a body of newlines.
   DoH TXT data is joined by `ConvertFrom-TPDnsTxtData` in one pass, and an unterminated quote is a
   provider failure, never an empty record (the regex it replaces was quadratic and read it as "no
-  record"). MX preference and CAA flags are parsed from ASCII digits with `TryParse`, skipping one
-  bad row instead of discarding the record type. The incident-response domain-age enrichment maps
+  record"), and `\DDD` octet escapes are decoded. MX preference (at most 65535) and CAA flags (at
+  most 255) are parsed from ASCII digits with `TryParse`, skipping one bad row instead of discarding
+  the record type. EMAIL-3.2 no longer reports a clean verdict when a sender domain could not be
+  enriched. The incident-response domain-age enrichment maps
   an IDN sender domain to ASCII and reports one the lookup cannot take as not enriched rather than
   failing the evaluator. Found by the 2026-10-09 security audit (M7 and the network Lows).
 

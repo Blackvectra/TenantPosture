@@ -44,6 +44,11 @@ function Test-TPGloballyRoutableAddress {
         if ($a.IsIPv6Multicast -or $b[0] -eq 0xff)          { return @{ Allowed = $false; Reason = "address $ip is IPv6 multicast (ff00::/8)"; Address = $a } }
         if (($b[0] -band 0xFE) -eq 0xFC)                    { return @{ Allowed = $false; Reason = "address $ip is IPv6 unique local (fc00::/7)"; Address = $a } }
         if ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and $b[2] -eq 0x0d -and $b[3] -eq 0xb8) { return @{ Allowed = $false; Reason = "address $ip is documentation (2001:db8::/32)"; Address = $a } }
+        if ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and $b[2] -eq 0 -and $b[3] -eq 2 -and $b[4] -eq 0 -and $b[5] -eq 0) { return @{ Allowed = $false; Reason = "address $ip is benchmarking (2001:2::/48)"; Address = $a } }
+        if ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and $b[2] -eq 0 -and ($b[3] -band 0xF0) -eq 0x10) { return @{ Allowed = $false; Reason = "address $ip is ORCHID (2001:10::/28, deprecated)"; Address = $a } }
+        if ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and $b[2] -eq 0 -and ($b[3] -band 0xF0) -eq 0x20) { return @{ Allowed = $false; Reason = "address $ip is ORCHIDv2 (2001:20::/28)"; Address = $a } }
+        if ($b[0] -eq 0x3f -and $b[1] -eq 0xff -and ($b[2] -band 0xF0) -eq 0) { return @{ Allowed = $false; Reason = "address $ip is documentation (3fff::/20)"; Address = $a } }
+        if ($b[0] -eq 0x5f -and $b[1] -eq 0)                   { return @{ Allowed = $false; Reason = "address $ip is SRv6 SIDs (5f00::/16)"; Address = $a } }
         if (($b[0] -band 0xE0) -ne 0x20)                    { return @{ Allowed = $false; Reason = "address $ip is outside global unicast (2000::/3)"; Address = $a } }
         return @{ Allowed = $true; Reason = ''; Address = $a }
     }
@@ -83,20 +88,35 @@ function Get-TPBoundedHttpText {
     param(
         [Parameter(Mandatory)] [ValidatePattern('^https://')] [string] $Uri,
         [ValidateRange(1, 300)] [int] $TimeoutSeconds = 10,
-        [ValidateRange(1024, 67108864)] [int] $MaxBytes = 65536
+        [ValidateRange(1024, 67108864)] [int] $MaxBytes = 65536,
+        # The address the caller already validated. When given, the request is sent
+        # to that address and the URI's host name travels as the Host header, which
+        # SocketsHttpHandler uses for TLS (SNI and certificate matching), so the name
+        # is never resolved a second time and a short-TTL rebinder cannot hand the
+        # validator a public address and the connection a private one.
+        [System.Net.IPAddress] $Address
     )
     $handler = [System.Net.Http.SocketsHttpHandler]::new()
     $handler.AllowAutoRedirect = $false
     $client = [System.Net.Http.HttpClient]::new($handler)
     $cts = [System.Threading.CancellationTokenSource]::new([timespan]::FromSeconds($TimeoutSeconds))
+    $req = $null
     try {
         $client.DefaultRequestHeaders.UserAgent.ParseAdd('TenantPosture/1.0')
-        $resp = $client.GetAsync($Uri, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead, $cts.Token).GetAwaiter().GetResult()
+        $target = [uri]$Uri
+        $req = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Get, $target)
+        if ($null -ne $Address) {
+            $ub = [System.UriBuilder]::new($target)
+            $ub.Host = $Address.ToString()   # UriBuilder brackets an IPv6 literal itself
+            $req.RequestUri = $ub.Uri
+            $req.Headers.Host = $target.IsDefaultPort ? $target.IdnHost : ('{0}:{1}' -f $target.IdnHost, $target.Port)
+        }
+        $resp = $client.SendAsync($req, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead, $cts.Token).GetAwaiter().GetResult()
         try {
             $code = [int]$resp.StatusCode
             if ($code -ge 300 -and $code -lt 400) { throw "redirect ($code) not followed" }
             if ($code -lt 200 -or $code -ge 300) { throw "HTTP $code" }
-            $stream = $resp.Content.ReadAsStreamAsync($cts.Token).GetAwaiter().GetResult()
+            $stream = $resp.Content.ReadAsStreamAsync().GetAwaiter().GetResult()   # the token on GetAsync and each ReadAsync bounds the I/O
             $ms = [System.IO.MemoryStream]::new()
             $buf = [byte[]]::new(8192)
             while ($true) {
@@ -110,6 +130,7 @@ function Get-TPBoundedHttpText {
     } catch [System.OperationCanceledException] {
         throw "timed out after $TimeoutSeconds s"
     } finally {
+        if ($req) { $req.Dispose() }
         $cts.Dispose(); $client.Dispose(); $handler.Dispose()
     }
 }

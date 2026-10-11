@@ -581,22 +581,18 @@ function Invoke-TPCollectDNSEmailRecords {
                         }
                     }
                 } else {
-                    # DNS rebinding fix (v4.6.3 P2): Invoke-WebRequest would re-resolve
-                    # the hostname; we cannot easily pin the resolved IP through it.
-                    # We accept Invoke-WebRequest's resolution here because the MTA-STS
-                    # policy file is a tenant-published-DNS record — risk is bounded
-                    # to the .well-known/ HTTP fetch and we still gate on the validate-
-                    # time resolution being public. A stricter pin would require a
-                    # custom HttpClient with a SocketsHttpHandler.ConnectCallback. The
-                    # validate-time resolution still rules out the worst case (the
-                    # bare hostname pointing at an internal address at validate time).
+                    # The validated address is passed to the bounded reader, which sends the
+                    # request to it and carries the host name as the Host header (what
+                    # SocketsHttpHandler uses for TLS), so the name is never resolved twice.
                     try {
                         # Validate the domain before constructing URL — already validated above
                         $stsUrl     = "https://$mtaStsHost/.well-known/mta-sts.txt"
                         # RFC 8461 section 3.3 serves the policy at that exact URL, so a
                         # redirect is an unretrievable policy, not one to follow elsewhere;
                         # the whole transfer is under one timeout and a 64 KB cap.
-                        $stsText = Get-TPBoundedHttpText -Uri $stsUrl -TimeoutSeconds 10 -MaxBytes 65536
+                        # The connection is pinned to the address validated above; the host
+                        # name is used only for TLS, so a rebinder's second answer is never used.
+                        $stsText = Get-TPBoundedHttpText -Uri $stsUrl -TimeoutSeconds 10 -MaxBytes 65536 -Address $mtaStsProbe.Address
                         $d.MTASTS.Policy = $stsText
 
                         # Line by line, horizontal whitespace only: the multiline regex it
@@ -661,7 +657,7 @@ function Invoke-TPCollectDNSEmailRecords {
                     # ASCII digits only and TryParse: [int] on an answer throws on overflow or a
                     # Unicode digit and discarded the whole MX set; one bad row is skipped instead.
                     $pref = 0
-                    if ($parts.Count -eq 2 -and $parts[0] -cmatch '^[0-9]{1,5}$' -and [int]::TryParse($parts[0], [System.Globalization.NumberStyles]::None, [cultureinfo]::InvariantCulture, [ref]$pref)) {
+                    if ($parts.Count -eq 2 -and $parts[0] -cmatch '^[0-9]{1,5}$' -and [int]::TryParse($parts[0], [System.Globalization.NumberStyles]::None, [cultureinfo]::InvariantCulture, [ref]$pref) -and $pref -le 65535) {
                         @{ Preference = $pref; Exchange = $parts[1].TrimEnd('.') }
                     }
                 } | Where-Object { $_ })
@@ -682,7 +678,7 @@ function Invoke-TPCollectDNSEmailRecords {
                 $parseCaa = { param($rows) @(@($rows) | ForEach-Object {
                     $m = [regex]::Match([string]$_, '^\s*([0-9]{1,3})\s+([A-Za-z0-9]+)\s+"?([^"]*)"?\s*$')
                     $flags = 0
-                    if ($m.Success -and [int]::TryParse($m.Groups[1].Value, [System.Globalization.NumberStyles]::None, [cultureinfo]::InvariantCulture, [ref]$flags)) {
+                    if ($m.Success -and [int]::TryParse($m.Groups[1].Value, [System.Globalization.NumberStyles]::None, [cultureinfo]::InvariantCulture, [ref]$flags) -and $flags -le 255) {
                         @{ Flags = $flags; Tag = $m.Groups[2].Value.ToLowerInvariant(); Value = $m.Groups[3].Value.Trim() }
                     }
                 } | Where-Object { $_ }) }

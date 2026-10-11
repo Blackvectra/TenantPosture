@@ -314,6 +314,12 @@ function ConvertFrom-TPDnsTxtData {
         }
         if ($c -eq '\') {
             if ($i + 1 -ge $n) { return $null }
+            # RFC 1035 §5.1: \X is the character X; \DDD is the octet with that decimal value.
+            if ($i + 3 -lt $n -and $s.Substring($i + 1, 3) -cmatch '^[0-9]{3}$') {
+                $code = [int]$s.Substring($i + 1, 3)
+                if ($code -gt 255) { return $null }
+                $null = $sb.Append([char]$code); $i += 4; continue
+            }
             $null = $sb.Append($s[$i + 1]); $i += 2; continue
         }
         if ($c -eq '"') { $inQuote = $false; $i++; continue }

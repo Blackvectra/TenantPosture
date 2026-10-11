@@ -694,9 +694,19 @@ function Test-TPEmailControlThreatIntel {
         catch { [ordered]@{ Domain = [string]$d; Registered = $null; AgeDays = $null; Registrar = $null; Error = "not enriched: $($_.Exception.Message)" } }
     }
 
+    $enriched = @($enriched)
     $young = @($enriched | Where-Object { $null -ne $_.AgeDays -and $_.AgeDays -lt 30 })
+    # A domain with no age is not enriched, whatever the reason; it can never support a clean verdict.
+    $unenriched = @($enriched | Where-Object { $null -eq $_.AgeDays })
 
     if ($young.Count -eq 0) {
+        if ($unenriched.Count -gt 0) {
+            $names = @($unenriched | ForEach-Object { "$($_.Domain) ($($_.Error))" }) -join '; '
+            Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+                -Title $title -Severity 'Medium' `
+                -Detail ("Not assessed: $($unenriched.Count) of $($enriched.Count) external sender domain(s) could not be enriched, so no clean verdict is possible. Enriched $($enriched.Count - $unenriched.Count) with no registration in the last 30 days. Not enriched: $names")
+            return
+        }
         Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'Medium' `
             -Detail ("Enriched $($enriched.Count) external sender domain(s). No domains registered in the last 30 days.")

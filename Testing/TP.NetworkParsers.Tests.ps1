@@ -19,7 +19,7 @@ Describe 'Network parsers are bounded' {
 
     Context 'Test-TPGloballyRoutableAddress' {
         It 'refuses every private, special and wrapped-private form and names the reason' {
-            foreach ($s in '::ffff:10.0.0.1', '::ffff:169.254.169.254', '64:ff9b::a00:1', '2002:c0a8:101::', '2001:0:1::1', '::', '0.0.0.0', '100.64.0.1', '127.0.0.1', '10.1.2.3', '172.20.0.1', '192.168.1.1', '169.254.1.1', '224.0.0.1', '255.255.255.255', 'fe80::1', 'fd00::1', 'ff02::1', '2001:db8::1', '192.0.2.1', '198.18.0.1') {
+            foreach ($s in '::ffff:10.0.0.1', '::ffff:169.254.169.254', '64:ff9b::a00:1', '2002:c0a8:101::', '2001:0:1::1', '::', '0.0.0.0', '100.64.0.1', '127.0.0.1', '10.1.2.3', '172.20.0.1', '192.168.1.1', '169.254.1.1', '224.0.0.1', '255.255.255.255', 'fe80::1', 'fd00::1', 'ff02::1', '2001:db8::1', '2001:2::1', '2001:10::1', '2001:20::1', '3fff::1', '5f00::1', '192.0.2.1', '198.18.0.1') {
                 $r = Test-TPGloballyRoutableAddress -Address ([ipaddress]$s)
                 $r.Allowed | Should -BeFalse -Because "$s must be refused"
                 $r.Reason | Should -Not -BeNullOrEmpty
@@ -40,6 +40,8 @@ Describe 'Network parsers are bounded' {
             ConvertFrom-TPDnsTxtData -Data ($q + 'v=spf1 a' + $q + ' ' + $q + ' -all' + $q) | Should -Be 'v=spf1 a -all'
             ConvertFrom-TPDnsTxtData -Data ($q + 'say \' + $q + 'hi\' + $q + ' \\' + $q) | Should -Be ('say ' + $q + 'hi' + $q + ' \')
             ConvertFrom-TPDnsTxtData -Data 'v=spf1 -all' | Should -Be 'v=spf1 -all'
+            ConvertFrom-TPDnsTxtData -Data ($q + 'a\032b\0659' + $q) | Should -Be 'a bA9' -Because '\DDD is a decimal octet; \065 then the literal 9'
+            $null -eq (ConvertFrom-TPDnsTxtData -Data ($q + '\999' + $q)) | Should -BeTrue -Because 'an octet above 255 is malformed'
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
             $null -eq (ConvertFrom-TPDnsTxtData -Data ($q + (('\' + $q) * 25000))) | Should -BeTrue
             $sw.Stop(); $sw.ElapsedMilliseconds | Should -BeLessThan 2000 -Because 'the parser is linear'
@@ -85,8 +87,9 @@ srv.serve_forever()
             # .NET on Linux and macOS reads SSL_CERT_FILE at process start, so the
             # calls run in a child pwsh that trusts the test certificate.
             $script:Call = {
-                param([string] $Path, [int] $Timeout, [int] $Max)
-                $cmd = "Import-Module '$(Join-Path $script:RepoRoot 'TenantPosture.psm1')' -Force; try { `$t = Get-TPBoundedHttpText -Uri 'https://127.0.0.1:$($script:Port)$Path' -TimeoutSeconds $Timeout -MaxBytes $Max; @{ ok = `$true; len = `$t.Length; text = `$t } | ConvertTo-Json -Compress } catch { @{ ok = `$false; err = `$_.Exception.Message } | ConvertTo-Json -Compress }"
+                param([string] $Path, [int] $Timeout, [int] $Max, [string] $Pin = '')
+                $pinArg = if ($Pin) { " -Address ([ipaddress]'$Pin')" } else { '' }
+                $cmd = "Import-Module '$(Join-Path $script:RepoRoot 'TenantPosture.psm1')' -Force; try { `$t = Get-TPBoundedHttpText -Uri 'https://127.0.0.1:$($script:Port)$Path' -TimeoutSeconds $Timeout -MaxBytes $Max$pinArg; @{ ok = `$true; len = `$t.Length; text = `$t } | ConvertTo-Json -Compress } catch { @{ ok = `$false; err = `$_.Exception.Message } | ConvertTo-Json -Compress }"
                 $env:SSL_CERT_FILE = Join-Path $script:Dir 'cert.pem'
                 try { (& pwsh -NoProfile -Command $cmd 2>&1 | Select-Object -Last 1) | ConvertFrom-Json } finally { Remove-Item Env:SSL_CERT_FILE -ErrorAction SilentlyContinue }
             }
@@ -98,6 +101,15 @@ srv.serve_forever()
             $r = & $script:Call '/policy' 10 65536
             $r.ok | Should -BeTrue -Because ($r.err)
             $r.text | Should -Match 'mode: enforce'
+        }
+        It 'connects to the pinned address, not to a second resolution of the name' {
+            if (-not ($script:CertOk -and $script:PyOk -and $script:Srv)) { Set-ItResult -Skipped -Because 'no openssl, python or local server'; return }
+            $r = & $script:Call '/policy' 10 65536 '127.0.0.1'
+            $r.ok | Should -BeTrue -Because ($r.err)
+            $r.text | Should -Match 'mode: enforce'
+            # Pinned to an address nothing listens on, the name (which does resolve to the server) is not used to connect.
+            $r2 = & $script:Call '/policy' 5 65536 '127.0.0.2'
+            $r2.ok | Should -BeFalse -Because 'the connection must go to the pinned address only'
         }
         It 'refuses a redirect instead of following it' {
             if (-not ($script:CertOk -and $script:PyOk -and $script:Srv)) { Set-ItResult -Skipped -Because 'no local server'; return }
