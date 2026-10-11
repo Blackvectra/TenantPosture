@@ -166,6 +166,7 @@ jobs:
           SIGNED: ${{ needs.authenticode.outputs.signed }}
           SIGNED_VALID: ${{ needs.authenticode.outputs.valid }}
           SIGNED_NOT: ${{ needs.authenticode.outputs.notsigned }}
+          ATTESTED: ${{ github.event.repository.private == false }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -183,7 +184,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "gh release upload failed (exit $LASTEXITCODE); --clobber may have removed an earlier asset, so the release is incomplete." }
           # The release body states the signing state plainly: an unsigned
           # archive is never described as verified.
-          $verifyHint = 'integrity rests on SHA256SUMS, FILES.sha256 inside the archive, and the build provenance attestation (`gh attestation verify TenantPosture-' + $tag + '.zip --owner Blackvectra`).'
+          # The attestation step is skipped on a private repository, so the hint
+          # names it only when it was actually produced.
+          $verifyHint = if ($env:ATTESTED -eq 'true') { 'integrity rests on SHA256SUMS, FILES.sha256 inside the archive, and the build provenance attestation (`gh attestation verify TenantPosture-' + $tag + '.zip --owner Blackvectra`).' }
+                        else { 'integrity rests on SHA256SUMS and FILES.sha256 inside the archive (no provenance attestation: the repository is private).' }
           $note = if ($env:SIGNED -eq 'true') { 'Authenticode: every script in this release carries a valid signature.' }
                   elseif ([int]$env:SIGNED_VALID -gt 0) { '**Partially signed release.** ' + $env:SIGNED_VALID + ' script(s) carry a valid Authenticode signature and ' + $env:SIGNED_NOT + ' do not; ' + $verifyHint }
                   else { '**Unsigned release.** The scripts carry no Authenticode signature; ' + $verifyHint }
