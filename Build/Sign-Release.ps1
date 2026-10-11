@@ -366,14 +366,14 @@ if (Test-Path -LiteralPath $verifyScript -PathType Leaf) {
     # would otherwise pass for a result.
     # -ManifestPath names the repository manifest explicitly: with FILES.sha256 at
     # the root (regenerated above when present) the verifier would otherwise take
-    # the tree for an extracted release. -Files hands it the tracked files that
+    # the tree for an extracted release. -PathList hands it the tracked files that
     # fall inside its own filter (the extensions it hashes, outside .github\ and
     # output\), so no ignored or untracked file enters the manifest.
     $manifestFiles = @($tracked | Where-Object {
         [System.IO.Path]::GetExtension($_) -in @('.ps1', '.psm1', '.psd1', '.json') -and
         $_ -notlike '.github/*' -and $_ -notlike 'output/*' -and $_ -ne 'tools/integrity-manifest.txt'
     })
-    & $verifyScript -Update -ManifestPath $integrityManifest -Files $manifestFiles
+    & $verifyScript -Update -ManifestPath $integrityManifest -PathList $manifestFiles
     $global:LASTEXITCODE = 0
     & $verifyScript -ManifestPath $integrityManifest
     if ($LASTEXITCODE -ne 0) { throw "tools/integrity-manifest.txt does not verify against the signed tree it was just generated from (exit $LASTEXITCODE)." }
