@@ -29,7 +29,7 @@ env:
   # The one allowlist of what ships. The package job copies these folders and
   # the authenticode job judges only them, so a test or maintenance script
   # outside the archive can never mark a release unsigned.
-  SHIP_DIRS: 'Apply Build Collectors Config Device Email-IR Evaluators Lib Onboard Publishers Web docs'
+  SHIP_DIRS: 'Apply Build Collectors Config Device Email-IR Evaluators Lib Onboard Publishers Web baselines docs'
   SHIP_ROOT_EXTENSIONS: '.ps1 .psm1 .psd1 .md .txt .cat'
 
 jobs:
@@ -171,8 +171,11 @@ jobs:
           # The release body states the signing state plainly: an unsigned
           # archive is never described as verified.
           $note = if ($env:SIGNED -eq 'true') { 'Authenticode: every script in this release carries a valid signature.' } else { '**Unsigned release.** The scripts carry no Authenticode signature; integrity rests on SHA256SUMS, FILES.sha256 inside the archive, and the build provenance attestation (`gh attestation verify TenantPosture-' + $tag + '.zip --owner Blackvectra`).' }
-          $body = (gh release view $tag --json body --jq .body)
-          if ($body -notlike "*Authenticode:*" -and $body -notlike "*Unsigned release*") { gh release edit $tag --notes ($body + "`n`n" + $note) }
+          # Replace any earlier signing paragraph (a rebuilt tag can change the
+          # result) rather than appending once and keeping a stale statement.
+          $body = [string](gh release view $tag --json body --jq .body)
+          $body = [regex]::Replace($body, '(?m)^(\*\*Unsigned release\.\*\*|Authenticode:)[^\r\n]*(\r?\n)*', '').TrimEnd()
+          gh release edit $tag --notes ($body + "`n`n" + $note)
           Write-Host "Assets uploaded to release $tag (draft until published)."
 
   authenticode:
@@ -237,7 +240,8 @@ jobs:
           # Judge the files that ship (the package job's allowlist), nothing else.
           $shipDirs = @($env:SHIP_DIRS -split ' ')
           $dropInside = '[\\/](Testing|__pycache__)([\\/]|$)'
-          $files = @(Get-ChildItem -File -Include '*.ps1','*.psm1','*.psd1')
+          # Get-ChildItem -Include without -Recurse returns nothing; filter by extension instead.
+          $files = @(Get-ChildItem -File | Where-Object { $_.Extension -in '.ps1', '.psm1', '.psd1' })
           foreach ($d in $shipDirs) {
               if (Test-Path -LiteralPath "./$d" -PathType Container) {
                   $files += @(Get-ChildItem -LiteralPath "./$d" -Recurse -File -Include '*.ps1','*.psm1','*.psd1' | Where-Object { $_.FullName -notmatch $dropInside })
