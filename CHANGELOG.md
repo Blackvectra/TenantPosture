@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **[Security] Python helpers run isolated; the sensitive-file writer refuses links.** The XLSX and
+  PDF publishers and the two questionnaire importers wrote a helper `.py` into the output or temp
+  folder and ran it, and every availability probe ran `python -c` from the current directory. Python
+  puts the script's directory (or the current directory) first on `sys.path`, so a file named
+  `openpyxl.py`, `pypdf.py` or `json.py` planted by another local account ran as the operator. Every
+  helper now goes to Python on stdin with `-I` (no script directory, no current directory, no user
+  site), no helper file is written, and every probe passes `-I`. `Set-TPSensitiveFileContent` refuses
+  to write through a symbolic link, junction or mount point (an item it cannot inspect is refused
+  too), so a link planted at a predictable output name cannot redirect tenant data or re-ACL its
+  target. Found by the 2026-10-09 security audit (M6 and the symlink finding).
+
 - **[Security] One Markdown escape for every deliverable; the SSP workbook never writes a formula.**
   Eight Markdown publishers (summary, playbook and executive summary, SSP, NIST matrix, improvement
   plan, device guide and baseline, the two incident-response reports) escaped only pipes, backticks

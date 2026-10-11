@@ -283,7 +283,7 @@ if ($SkipPython) {
         # Check openpyxl
         $openpyxlOk = $false
         try {
-            $null = & $pythonCmd -c 'import openpyxl' 2>&1
+            $null = & $pythonCmd -I -c 'import openpyxl' 2>&1
             if ($LASTEXITCODE -eq 0) { $openpyxlOk = $true }
         } catch { }
         if ($openpyxlOk) {

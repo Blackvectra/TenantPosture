@@ -215,7 +215,7 @@ function Publish-TPManualReviewQuestionnairePdf {
     $pythonCmd = $null
     foreach ($py in @('python3', 'python')) {
         try {
-            $null = & $py -c 'import reportlab' 2>&1
+            $null = & $py -I -c 'import reportlab' 2>&1
             if ($LASTEXITCODE -eq 0) { $pythonCmd = $py; break }
         } catch { }
     }
@@ -231,7 +231,6 @@ function Publish-TPManualReviewQuestionnairePdf {
     $base    = [System.IO.Path]::GetFileNameWithoutExtension($OutputPath)
     if ([string]::IsNullOrWhiteSpace($base)) { $base = 'manual-review-questionnaire' }
     $tmpJson = Join-Path $outDir "$base-input.json"
-    $pyTmp   = Join-Path $outDir "$base-helper.py"
 
     $manifestItems = [System.Collections.Generic.List[object]]::new()
     $payloadItems  = [System.Collections.Generic.List[object]]::new()
@@ -406,12 +405,12 @@ print('Manual review questionnaire PDF saved:', sys.argv[2])
 '@
 
         if (Get-Command Set-TPSensitiveFileContent -ErrorAction SilentlyContinue) {
-            Set-TPSensitiveFileContent -Path $pyTmp -Content $pyScript
+            # The helper goes to Python on stdin with -I (isolated: no script directory, no current directory, no user site on sys.path), so no folder another local account can write to can plant a module named pypdf, openpyxl or json.
         } else {
-            $pyScript | Out-File -LiteralPath $pyTmp -Encoding utf8
+            $null = $pyScript
         }
 
-        $out = & $pythonCmd $pyTmp $tmpJson $pdfPath 2>&1
+        $out = $pyScript | & $pythonCmd -I - $tmpJson $pdfPath 2>&1
         if ($LASTEXITCODE -ne 0) {
             throw "reportlab helper failed: $out"
         }
@@ -420,7 +419,7 @@ print('Manual review questionnaire PDF saved:', sys.argv[2])
             Set-TPSensitiveFileAcl -Path $manifestPath -ErrorAction SilentlyContinue
         }
     } finally {
-        foreach ($t in @($tmpJson, $pyTmp)) {
+        foreach ($t in @($tmpJson)) {
             if (Test-Path -LiteralPath $t) { Remove-Item -LiteralPath $t -Force -ErrorAction SilentlyContinue }
         }
     }

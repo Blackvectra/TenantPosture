@@ -122,6 +122,18 @@ function Set-TPSensitiveFileContent {
         [System.Text.Encoding] $Encoding = [System.Text.UTF8Encoding]::new($false)
     )
 
+    # Never write through a link: a symbolic link, junction or mount point planted
+    # at a predictable output name would redirect tenant data to a file another
+    # account chose, and the ACL below would then be applied to that target.
+    # An item that cannot be inspected is refused too (fail closed).
+    if (Test-Path -LiteralPath $Path) {
+        $existing = $null
+        try { $existing = Get-Item -LiteralPath $Path -Force -ErrorAction Stop } catch { throw "Set-TPSensitiveFileContent: cannot inspect '$Path' before writing: $($_.Exception.Message)" }
+        $linkType = [string](Get-TPObjectField -Item $existing -Key 'LinkType' -Default '')
+        if ($linkType -and $linkType -ne 'HardLink') { throw "Set-TPSensitiveFileContent: '$Path' is a $linkType and will not be written through." }
+        if ($existing.PSIsContainer) { throw "Set-TPSensitiveFileContent: '$Path' is a directory." }
+    }
+
     # Pre-create empty file then harden ACL so the ACL is applied BEFORE any
     # tenant data lands. Without this step, the file inherits the parent
     # directory's ACL during the Out-File / WriteAllText call, giving a
