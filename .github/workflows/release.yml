@@ -123,6 +123,10 @@ jobs:
               }
           }
           foreach ($f in $shipFiles) { Copy-Item -LiteralPath $f.FullName -Destination "./$name/" }
+          # The committed integrity manifest hashes the whole repository tree (tests
+          # included); inside the archive it would report every omitted file as
+          # missing. FILES.sha256 below is the archive's own record.
+          Remove-Item -LiteralPath "./$name/tools/integrity-manifest.txt" -Force -ErrorAction SilentlyContinue
           # A per-file manifest travels inside the archive: the release's own
           # integrity record, generated from the tree that was packaged.
           $manifest = Get-ChildItem -LiteralPath "./$name" -Recurse -File | Sort-Object FullName | ForEach-Object {
@@ -144,6 +148,10 @@ jobs:
       # THIS commit produced these bytes. Verify with:
       #   gh attestation verify TenantPosture-<tag>.zip --owner Blackvectra
       - name: Attest build provenance
+        # Attestations for private repositories need GitHub Enterprise Cloud;
+        # on a private repo the step is skipped and the release notes still
+        # carry SHA256SUMS and FILES.sha256.
+        if: github.event.repository.private == false
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: |

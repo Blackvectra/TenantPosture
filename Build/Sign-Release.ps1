@@ -205,8 +205,10 @@ $verifyScript = Join-Path $RepoRoot 'tools' 'Verify-Integrity.ps1'
 $integrityManifest = Join-Path $RepoRoot 'tools' 'integrity-manifest.txt'
 if ((Test-Path -LiteralPath $integrityManifest -PathType Leaf) -and (Test-Path -LiteralPath $verifyScript -PathType Leaf)) {
     Write-Host "[-] Refreshing tools/integrity-manifest.txt from the signed tree..." -ForegroundColor Cyan
+    # A PowerShell script, so a failure surfaces as a terminating error under
+    # $ErrorActionPreference = 'Stop'; $LASTEXITCODE is not consulted (it would
+    # carry a stale value from any earlier native command in this session).
     & $verifyScript -Update
-    if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "Verify-Integrity.ps1 -Update returned exit code $LASTEXITCODE" }
 }
 
 # A release archive carries FILES.sha256 (written by the release workflow from
