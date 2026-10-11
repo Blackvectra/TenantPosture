@@ -64,6 +64,13 @@ Describe 'Invoke-TPCollectDNSEmailRecords — what the collector does with the r
                     # A TXT answer that carries no DKIM key is still an ANSWER.
                     if ($Name -like '*._domainkey.*' -and $Type -eq 'TXT') { & $set 'Answered' ''; return @('some unrelated txt') }
                     & $set 'NoRecord' ''; return @() }
+                'CaaParentUnparseable' {
+                    if ($Type -eq 'CAA' -and $Name -eq 'first.test') { & $set 'NoRecord' ''; return @() }
+                    if ($Type -eq 'CAA') { & $set 'Answered' ''; return @('999 issue "ca.example"') }
+                    & $set 'NoRecord' ''; return @() }
+                'CaaUnparseable' {
+                    if ($Type -eq 'CAA') { & $set 'Answered' ''; return @('999 issue "ca.example"', 'garbage') }
+                    & $set 'NoRecord' ''; return @() }
                 'SecondDomainFails' {
                     if ($Name -like '*second.test*') { & $set 'LookupFailed' 'x'; return @() }
                     & $set 'NoRecord' ''; return @() }
@@ -117,6 +124,20 @@ Describe 'Invoke-TPCollectDNSEmailRecords — what the collector does with the r
             $o = Run 'AllNoRecord'
             $o.Coverage.Status | Should -Be 'Collected'
             foreach ($k in $script:Gated) { $o.Domain.LookupStatus[$k] | Should -Be 'NoRecord' -Because $k }
+        }
+    }
+
+    Context 'an answer with no parseable row is a failed lookup' {
+        It 'CAA rows that all fail the parser leave the gate closed, never "no CAA record"' {
+            $o = Run 'CaaUnparseable'
+            $o.Domain.LookupStatus['CAA'] | Should -Be 'LookupFailed'
+            @($o.Domain.Errors -like 'CAA:*parsed*').Count | Should -Be 1
+            Test-TPDnsLookupSucceeded -Domain $o.Domain -Record 'CAA' | Should -BeFalse
+        }
+        It 'an ancestor CAA answer with no parseable row is a failed lookup too' {
+            $o = Run 'CaaParentUnparseable' @('sub.first.test')
+            $o.Domain.LookupStatus['CAA'] | Should -Be 'LookupFailed'
+            Test-TPDnsLookupSucceeded -Domain $o.Domain -Record 'CAA' | Should -BeFalse
         }
     }
 

@@ -684,14 +684,29 @@ function Test-TPEmailControlThreatIntel {
     # Cap at 10 — RDAP is rate-limited and operators don't need 100 lookups
     $topDomains = @($domains | Select-Object -First 10)
 
+    # A sender domain is external text: an IDN is mapped to its ASCII form first,
+    # and one that the lookup cannot take (an underscore, a bracketed literal)
+    # is reported as not enriched rather than failing the evaluator.
     $enriched = foreach ($d in $topDomains) {
-        $age = Get-TPDomainAge -Domain $d
-        $age
+        $ascii = [string]$d
+        try { $ascii = [System.Globalization.IdnMapping]::new().GetAscii([string]$d) } catch { $ascii = [string]$d }
+        try { Get-TPDomainAge -Domain $ascii }
+        catch { [ordered]@{ Domain = [string]$d; Registered = $null; AgeDays = $null; Registrar = $null; Error = "not enriched: $($_.Exception.Message)" } }
     }
 
+    $enriched = @($enriched)
     $young = @($enriched | Where-Object { $null -ne $_.AgeDays -and $_.AgeDays -lt 30 })
+    # A domain with no age is not enriched, whatever the reason; it can never support a clean verdict.
+    $unenriched = @($enriched | Where-Object { $null -eq $_.AgeDays })
 
     if ($young.Count -eq 0) {
+        if ($unenriched.Count -gt 0) {
+            $names = @($unenriched | ForEach-Object { "$($_.Domain) ($($_.Error))" }) -join '; '
+            Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $cat `
+                -Title $title -Severity 'Medium' `
+                -Detail ("Not assessed: $($unenriched.Count) of $($enriched.Count) external sender domain(s) could not be enriched, so no clean verdict is possible. Enriched $($enriched.Count - $unenriched.Count) with no registration in the last 30 days. Not enriched: $names")
+            return
+        }
         Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $cat `
             -Title $title -Severity 'Medium' `
             -Detail ("Enriched $($enriched.Count) external sender domain(s). No domains registered in the last 30 days.")
