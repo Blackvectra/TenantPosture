@@ -55,9 +55,16 @@ function Test-TPGloballyRoutableAddress {
         if ($a.IsIPv6Multicast -or $b[0] -eq 0xff)          { return @{ Allowed = $false; Reason = "address $ip is IPv6 multicast (ff00::/8)"; Address = $a } }
         if (($b[0] -band 0xFE) -eq 0xFC)                    { return @{ Allowed = $false; Reason = "address $ip is IPv6 unique local (fc00::/7)"; Address = $a } }
         if ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and $b[2] -eq 0x0d -and $b[3] -eq 0xb8) { return @{ Allowed = $false; Reason = "address $ip is documentation (2001:db8::/32)"; Address = $a } }
-        if ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and $b[2] -eq 0 -and $b[3] -eq 2 -and $b[4] -eq 0 -and $b[5] -eq 0) { return @{ Allowed = $false; Reason = "address $ip is benchmarking (2001:2::/48)"; Address = $a } }
-        if ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and $b[2] -eq 0 -and ($b[3] -band 0xF0) -eq 0x10) { return @{ Allowed = $false; Reason = "address $ip is ORCHID (2001:10::/28, deprecated)"; Address = $a } }
-        if ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and $b[2] -eq 0 -and ($b[3] -band 0xF0) -eq 0x20) { return @{ Allowed = $false; Reason = "address $ip is ORCHIDv2 (2001:20::/28)"; Address = $a } }
+        if ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and ($b[2] -band 0xFE) -eq 0) {
+            # IANA marks the whole of 2001::/23 not globally reachable except named
+            # carve-outs; the rest (Teredo, benchmarking, ORCHID, unallocated) is refused.
+            $w = ([int]$b[2] -shl 8) -bor $b[3]
+            $ok = ($w -eq 1 -and (($b[4..14] | Measure-Object -Sum).Sum -eq 0) -and ($b[15] -eq 1 -or $b[15] -eq 2)) -or   # 2001:1::1, 2001:1::2 (PCP / DOTS anycast)
+                  ($w -eq 3) -or                                                                               # 2001:3::/32 AMT
+                  ($w -eq 4 -and $b[4] -eq 1 -and $b[5] -eq 0x12) -or                                          # 2001:4:112::/48 AS112
+                  (($w -band 0xFFF0) -eq 0x30)                                                                 # 2001:30::/28 Drone Remote ID
+            if (-not $ok) { return @{ Allowed = $false; Reason = "address $ip is inside 2001::/23 and not a globally reachable carve-out"; Address = $a } }
+        }
         if ($b[0] -eq 0x3f -and $b[1] -eq 0xff -and ($b[2] -band 0xF0) -eq 0) { return @{ Allowed = $false; Reason = "address $ip is documentation (3fff::/20)"; Address = $a } }
         if ($b[0] -eq 0x5f -and $b[1] -eq 0)                   { return @{ Allowed = $false; Reason = "address $ip is SRv6 SIDs (5f00::/16)"; Address = $a } }
         if (($b[0] -band 0xE0) -ne 0x20)                    { return @{ Allowed = $false; Reason = "address $ip is outside global unicast (2000::/3)"; Address = $a } }

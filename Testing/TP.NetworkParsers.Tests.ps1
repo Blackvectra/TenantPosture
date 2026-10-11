@@ -19,14 +19,14 @@ Describe 'Network parsers are bounded' {
 
     Context 'Test-TPGloballyRoutableAddress' {
         It 'refuses every private, special and wrapped-private form and names the reason' {
-            foreach ($s in '::ffff:10.0.0.1', '::ffff:169.254.169.254', '64:ff9b::a00:1', '2002:c0a8:101::', '2001:0:1::1', '::', '0.0.0.0', '100.64.0.1', '127.0.0.1', '10.1.2.3', '172.20.0.1', '192.168.1.1', '169.254.1.1', '224.0.0.1', '255.255.255.255', 'fe80::1', 'fd00::1', 'ff02::1', '2001:db8::1', '2001:2::1', '2001:10::1', '2001:20::1', '3fff::1', '5f00::1', '192.0.2.1', '198.18.0.1') {
+            foreach ($s in '::ffff:10.0.0.1', '::ffff:169.254.169.254', '64:ff9b::a00:1', '2002:c0a8:101::', '2001:0:1::1', '::', '0.0.0.0', '100.64.0.1', '127.0.0.1', '10.1.2.3', '172.20.0.1', '192.168.1.1', '169.254.1.1', '224.0.0.1', '255.255.255.255', 'fe80::1', 'fd00::1', 'ff02::1', '2001:db8::1', '2001:2::1', '2001:10::1', '2001:20::1', '2001:100::1', '2001:1::3', '3fff::1', '5f00::1', '192.0.2.1', '198.18.0.1') {
                 $r = Test-TPGloballyRoutableAddress -Address ([ipaddress]$s)
                 $r.Allowed | Should -BeFalse -Because "$s must be refused"
                 $r.Reason | Should -Not -BeNullOrEmpty
             }
         }
         It 'allows public addresses and hands back the unwrapped form to connect to' {
-            foreach ($s in '1.1.1.1', '8.8.8.8', '2606:4700::1111', '::ffff:8.8.8.8') {
+            foreach ($s in '1.1.1.1', '8.8.8.8', '2606:4700::1111', '::ffff:8.8.8.8', '2001:1::1', '2001:3::1', '2001:4:112::1', '2001:30::1', '2001:200::1') {
                 $r = Test-TPGloballyRoutableAddress -Address ([ipaddress]$s)
                 $r.Allowed | Should -BeTrue -Because "$s is public"
             }
