@@ -116,7 +116,8 @@ function Export-TPCatalogTree {
         compare relative paths.
     #>
     $dest = Join-Path ([System.IO.Path]::GetTempPath()) ("tp-catalog-" + [System.IO.Path]::GetRandomFileName().Replace('.', ''))
-    New-Item -ItemType Directory -Path $dest | Out-Null
+    # [IO.Directory]::CreateDirectory, never New-Item -Path: -Path expands wildcards.
+    $null = [System.IO.Directory]::CreateDirectory($dest)
     $rels = [System.Collections.Generic.List[string]]::new()
     foreach ($rel in (Get-TPTrackedFiles)) { $rels.Add($rel) }
     foreach ($extra in @($integrityManifest, $manifestPath)) {
@@ -131,8 +132,7 @@ function Export-TPCatalogTree {
         if ($src -eq $catalogPath) { continue }
         if (-not (Test-Path -LiteralPath $src -PathType Leaf)) { throw "Tracked file '$rel' is missing from the working tree; the catalog describes the committed tree, so restore or remove it first." }
         $dst = Join-Path $dest ($rel -replace '/', [string][System.IO.Path]::DirectorySeparatorChar)
-        $dir = Split-Path -Parent $dst
-        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        $null = [System.IO.Directory]::CreateDirectory((Split-Path -Parent $dst))
         Copy-Item -LiteralPath $src -Destination $dst
         $count++
     }
