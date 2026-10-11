@@ -31,6 +31,12 @@ Describe 'Network parsers are bounded' {
                 $r.Allowed | Should -BeTrue -Because "$s is public"
             }
             (Test-TPGloballyRoutableAddress -Address ([ipaddress]'::ffff:8.8.8.8')).Address.ToString() | Should -Be '8.8.8.8'
+            foreach ($s in '64:ff9b::808:808', '2002:808:808::1') {
+                $r = Test-TPGloballyRoutableAddress -Address ([ipaddress]$s)
+                $r.Allowed | Should -BeTrue -Because "$s embeds a public IPv4 address"
+                $r.Address.ToString() | Should -Be ([ipaddress]$s).ToString() -Because 'a NAT64 or 6to4 address stays the connection target'
+            }
+            (Test-TPGloballyRoutableAddress -Address ([ipaddress]'64:ff9b::a00:1')).Reason | Should -Match 'NAT64.*10/8'
         }
     }
 

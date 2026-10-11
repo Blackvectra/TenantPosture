@@ -28,12 +28,23 @@ function Test-TPGloballyRoutableAddress {
     $ip = $a.ToString()
     if ($a.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
         $b = $a.GetAddressBytes()
-        if ($a.IsIPv4MappedToIPv6) { $a = $a.MapToIPv4() }
-        elseif ($b[0] -eq 0 -and $b[1] -eq 0x64 -and $b[2] -eq 0xff -and $b[3] -eq 0x9b -and (($b[4..11] | Measure-Object -Sum).Sum -eq 0)) {
-            $a = [System.Net.IPAddress]::new($b[12..15])   # NAT64 64:ff9b::/96 carries an IPv4 address
+        if ($a.IsIPv4MappedToIPv6) { $a = $a.MapToIPv4() }   # a representation of an IPv4 address: connect to the IPv4
+        else {
+            # NAT64 (64:ff9b::/96) and 6to4 (2002::/16) EMBED an IPv4 address: the embedded
+            # address is judged, because a private one inside is the bypass this rule exists
+            # for, but the ORIGINAL IPv6 address stays the connection target. An IPv6-only
+            # host reaches a NAT64 target only through the translator, and a 6to4 address
+            # names an endpoint behind the gateway the embedded IPv4 identifies.
+            $embedded = $null; $form = ''
+            if ($b[0] -eq 0 -and $b[1] -eq 0x64 -and $b[2] -eq 0xff -and $b[3] -eq 0x9b -and (($b[4..11] | Measure-Object -Sum).Sum -eq 0)) { $embedded = [System.Net.IPAddress]::new($b[12..15]); $form = 'NAT64 (64:ff9b::/96)' }
+            elseif ($b[0] -eq 0x20 -and $b[1] -eq 0x02) { $embedded = [System.Net.IPAddress]::new($b[2..5]); $form = '6to4 (2002::/16)' }
+            elseif ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and $b[2] -eq 0 -and $b[3] -eq 0) { return @{ Allowed = $false; Reason = "address $ip is Teredo (2001::/32)"; Address = $Address } }
+            if ($null -ne $embedded) {
+                $inner = Test-TPGloballyRoutableAddress -Address $embedded
+                if (-not $inner.Allowed) { return @{ Allowed = $false; Reason = "address $ip is $form carrying $($inner.Reason)"; Address = $Address } }
+                return @{ Allowed = $true; Reason = ''; Address = $Address }
+            }
         }
-        elseif ($b[0] -eq 0x20 -and $b[1] -eq 0x02) { $a = [System.Net.IPAddress]::new($b[2..5]) }   # 6to4 2002::/16 carries an IPv4 address
-        elseif ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and $b[2] -eq 0 -and $b[3] -eq 0) { return @{ Allowed = $false; Reason = "address $ip is Teredo (2001::/32)"; Address = $Address } }
     }
     if ($a.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
         $b = $a.GetAddressBytes()
