@@ -176,9 +176,22 @@ Write-Host "[-] Loading $($applyScripts.Count) apply function(s)..." -Foreground
 # warning text is useful instead of "Signature: Invalid."
 if (-not (Get-Command Test-TPSignatureStatus -ErrorAction SilentlyContinue)) {
     # Running from an extracted release without the module imported: load the
-    # helper itself rather than silently skipping the check.
+    # helper itself rather than silently skipping the check. Under
+    # -RequireSignedCode the helper is mutable code on the very tree the
+    # requirement guards against, so it is checked with the built-in cmdlet
+    # first and loaded only when its own signature is Valid; a helper that
+    # cannot be verified (including on a host without Authenticode) is refused,
+    # since nothing it reported could be trusted.
     $sigHelper = Join-Path $PSScriptRoot 'Lib' 'Test-TPSignatureStatus.ps1'
-    if (Test-Path -LiteralPath $sigHelper -PathType Leaf) { . $sigHelper }
+    if (Test-Path -LiteralPath $sigHelper -PathType Leaf) {
+        if ($RequireSignedCode) {
+            $helperSig = Get-AuthenticodeSignature -LiteralPath $sigHelper -ErrorAction Stop
+            if ($helperSig.Status -ne 'Valid') {
+                throw "Refusing to dispatch: -RequireSignedCode is set and Lib/Test-TPSignatureStatus.ps1 does not carry a valid Authenticode signature ($($helperSig.Status)), so it cannot be loaded to verify the Apply scripts."
+            }
+        }
+        . $sigHelper
+    }
 }
 if (-not (Get-Command Test-TPSignatureStatus -ErrorAction SilentlyContinue) -and $RequireSignedCode) {
     throw 'Refusing to dispatch: -RequireSignedCode is set but Test-TPSignatureStatus (Lib/Test-TPSignatureStatus.ps1) could not be loaded, so no signature can be verified.'

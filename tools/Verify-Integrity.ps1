@@ -12,7 +12,8 @@
     would report every file the archive omits as missing) but there is FILES.sha256,
     the archive's own record of every packaged file. When the repository manifest is
     absent and FILES.sha256 is present at the root, every file under the root is
-    verified against it (FILES.sha256 itself and output/ excepted).
+    verified against it (FILES.sha256 itself and output/ excepted), and a file the
+    record does not name fails the verification.
 
     Returns exit 0 if all files match, 1 if any mismatch or missing file.
 
@@ -154,11 +155,19 @@ if ($missing) {
     $missing | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
 }
 if ($extras) {
-    Write-Host "EXTRA FILES (on disk, not in manifest):" -ForegroundColor Yellow
-    $extras | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
+    # In an extracted release a file the record does not name is a failure, not a
+    # curiosity: a .ps1 added under Lib/ is dot-sourced by the module on import. In a
+    # repository checkout new files precede the next manifest refresh and are reported.
+    if ($archiveMode) {
+        Write-Host "FILES NOT IN THE RELEASE RECORD (on disk, absent from FILES.sha256; an added file is a failure):" -ForegroundColor Red
+        $extras | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    } else {
+        Write-Host "EXTRA FILES (on disk, not in manifest):" -ForegroundColor Yellow
+        $extras | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
+    }
 }
 
-if ($mismatches.Count -eq 0 -and $missing.Count -eq 0) {
+if ($mismatches.Count -eq 0 -and $missing.Count -eq 0 -and (-not $archiveMode -or $extras.Count -eq 0)) {
     Write-Host "  [+] Integrity verified." -ForegroundColor Green
     exit 0
 } else {

@@ -23,9 +23,17 @@
       http://timestamp.digicert.com
       http://timestamp.sectigo.com
 
+    The tracked tree must be clean before signing (git status --porcelain, untracked files
+    aside): the manifests are computed from the working tree and the "Sign vX.Y.Z" commit
+    carries only the signed scripts and the manifests, so a locally edited tracked file
+    (Config/clients.json on an operator workstation) would be hashed into a manifest the
+    tagged commit cannot satisfy. Stash such edits first.
+
     The resulting TenantPosture.cat is a signed catalog of the COMMITTED tree: the files git
-    tracks plus the manifests this script writes, which the "Sign vX.Y.Z" commit adds. Verify a
-    clone with Test-FileCatalog -CatalogFilePath TenantPosture.cat -Path <the same file list>.
+    tracks plus the manifests this script writes, which the "Sign vX.Y.Z" commit adds. It is
+    built from one exported copy of that tree (New-FileCatalog records only file names when
+    given a list of files, and the tree holds several README.md and example.psd1). Verify a
+    clone with: .\Build\Sign-Release.ps1 -VerifyCatalogOnly   (no certificate needed).
     Nothing in the tool reads it at run time.
 
 .PARAMETER CertificateThumbprint
@@ -58,7 +66,11 @@ param(
     [ValidatePattern('^https?://(timestamp\.digicert\.com|timestamp\.sectigo\.com|timestamp\.globalsign\.com|timestamp\.entrust\.com)(/.*)?$')]
     [string] $TimestampServer = 'http://timestamp.digicert.com',
 
-    [string] $RepoRoot
+    [string] $RepoRoot,
+
+    # Verify an existing TenantPosture.cat against this tree's tracked files
+    # and sign nothing: no certificate, no signing, no manifest refresh.
+    [switch] $VerifyCatalogOnly
 )
 
 # Every failure below is terminating: a signing, normalization or manifest
@@ -73,6 +85,86 @@ if (-not (Test-Path -LiteralPath $RepoRoot)) {
 }
 # Absolute, so every path built from it compares with Get-ChildItem's FullName.
 $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).ProviderPath.TrimEnd('\', '/')
+
+$catalogPath       = Join-Path $RepoRoot 'TenantPosture.cat'
+$verifyScript      = Join-Path $RepoRoot 'tools' 'Verify-Integrity.ps1'
+$integrityManifest = Join-Path $RepoRoot 'tools' 'integrity-manifest.txt'
+$manifestPath      = Join-Path $RepoRoot 'FILES.sha256'
+# The files this script itself (re)writes; the only tracked files allowed to
+# differ from the index before signing, and the ones the sign commit adds.
+$generatedFiles    = @($integrityManifest, $manifestPath, $catalogPath)
+
+$gitCmd = Get-Command git -ErrorAction SilentlyContinue
+if (-not $gitCmd) { throw 'git was not found on PATH; the catalog and the clean-tree check need the tracked file list.' }
+
+function Get-TPTrackedFiles {
+    <# Repository-relative paths of every file git tracks, forward slashes. #>
+    $global:LASTEXITCODE = 0
+    $list = @(& $gitCmd.Source -C $RepoRoot -c core.quotepath=off ls-files)
+    if ($LASTEXITCODE -ne 0 -or $list.Count -eq 0) { throw "git ls-files failed in $RepoRoot (exit $LASTEXITCODE); is it a clone?" }
+    return $list
+}
+
+function Export-TPCatalogTree {
+    <#
+        Copies the committed tree (tracked files, the catalog itself excepted, plus
+        the generated manifests when present) under one new folder, preserving
+        relative paths, and returns that folder. New-FileCatalog and Test-FileCatalog
+        then see one rooted tree, which is the only shape in which they record and
+        compare relative paths.
+    #>
+    $dest = Join-Path ([System.IO.Path]::GetTempPath()) ("tp-catalog-" + [System.IO.Path]::GetRandomFileName().Replace('.', ''))
+    New-Item -ItemType Directory -Path $dest | Out-Null
+    $rels = [System.Collections.Generic.List[string]]::new()
+    foreach ($rel in (Get-TPTrackedFiles)) { $rels.Add($rel) }
+    foreach ($extra in @($integrityManifest, $manifestPath)) {
+        if (Test-Path -LiteralPath $extra -PathType Leaf) {
+            $rel = [System.IO.Path]::GetRelativePath($RepoRoot, $extra).Replace('\', '/')
+            if (-not $rels.Contains($rel)) { $rels.Add($rel) }
+        }
+    }
+    $count = 0
+    foreach ($rel in ($rels | Sort-Object -Unique)) {
+        $src = Join-Path $RepoRoot ($rel -replace '/', [string][System.IO.Path]::DirectorySeparatorChar)
+        if ($src -eq $catalogPath) { continue }
+        if (-not (Test-Path -LiteralPath $src -PathType Leaf)) { throw "Tracked file '$rel' is missing from the working tree; the catalog describes the committed tree, so restore or remove it first." }
+        $dst = Join-Path $dest ($rel -replace '/', [string][System.IO.Path]::DirectorySeparatorChar)
+        $dir = Split-Path -Parent $dst
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        Copy-Item -LiteralPath $src -Destination $dst
+        $count++
+    }
+    Write-Verbose "Exported $count tracked file(s) to $dest"
+    return $dest
+}
+
+if ($VerifyCatalogOnly) {
+    if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) { throw "No catalog at $catalogPath to verify." }
+    $tree = Export-TPCatalogTree
+    try {
+        $verify = Test-FileCatalog -CatalogFilePath $catalogPath -Path $tree -Detailed
+        if ($verify.Status -ne 'Valid') { throw "Test-FileCatalog returned $($verify.Status) for the tracked tree." }
+        Write-Host "  [+] Test-FileCatalog: Valid over the tracked tree." -ForegroundColor Green
+    } finally {
+        Remove-Item -LiteralPath $tree -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    return
+}
+
+# The manifests below hash the working tree and the sign commit carries only
+# the signed scripts and the manifests, so a tracked file edited locally
+# (Config/clients.json on an operator workstation) would be hashed into a
+# manifest the tagged commit can never satisfy. Only the files this script
+# writes may differ from the index.
+$global:LASTEXITCODE = 0
+$dirty = @(& $gitCmd.Source -C $RepoRoot status --porcelain --untracked-files=no)
+if ($LASTEXITCODE -ne 0) { throw "git status failed in $RepoRoot (exit $LASTEXITCODE)." }
+$dirty = @($dirty | Where-Object { $_ } | ForEach-Object { $_.Substring(3).Trim() } | Where-Object {
+    (Join-Path $RepoRoot ($_ -replace '/', [string][System.IO.Path]::DirectorySeparatorChar)) -notin $generatedFiles
+})
+if ($dirty.Count -gt 0) {
+    throw "Refusing to sign: tracked files differ from the index ($($dirty -join ', ')). Commit or stash them first (git stash push -- <path>); the manifests must describe the tree that will be committed."
+}
 
 # Resolve thumbprint: explicit param wins; otherwise pick up the one
 # New-TPCodeSigningCert.ps1 stashed in the operator's profile.
@@ -236,11 +328,10 @@ if ($failed -gt 0) {
 
 # The committed integrity manifest (tools/integrity-manifest.txt, written by
 # tools/Verify-Integrity.ps1 -Update) hashes the same scripts signing just
-# changed, so it is refreshed here, before the catalog, when it exists.
-$verifyScript = Join-Path $RepoRoot 'tools' 'Verify-Integrity.ps1'
-$integrityManifest = Join-Path $RepoRoot 'tools' 'integrity-manifest.txt'
-if ((Test-Path -LiteralPath $integrityManifest -PathType Leaf) -and (Test-Path -LiteralPath $verifyScript -PathType Leaf)) {
-    Write-Host "[-] Refreshing tools/integrity-manifest.txt from the signed tree..." -ForegroundColor Cyan
+# changed, so it is written here, after signing and before the catalog: the
+# release workflow verifies it over the tagged commit.
+if (Test-Path -LiteralPath $verifyScript -PathType Leaf) {
+    Write-Host "[-] Writing tools/integrity-manifest.txt from the signed tree..." -ForegroundColor Cyan
     # The refresh runs under $ErrorActionPreference = 'Stop' (set above and in
     # the script itself), so an unreadable file is a terminating error, never a
     # silently shorter manifest. The refreshed manifest is then verified in the
@@ -257,7 +348,6 @@ if ((Test-Path -LiteralPath $integrityManifest -PathType Leaf) -and (Test-Path -
 # the packaged tree). Signing changes every script's bytes, so the manifest is
 # rewritten from the signed tree BEFORE the catalog is built, so the catalog
 # covers the final manifest and Test-FileCatalog stays valid.
-$manifestPath = Join-Path $RepoRoot 'FILES.sha256'
 if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     Write-Host "[-] Regenerating FILES.sha256 from the signed tree..." -ForegroundColor Cyan
     $manifest = Get-ChildItem -LiteralPath $RepoRoot -Recurse -File |
@@ -269,57 +359,45 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     Write-Host "  [+] FILES.sha256 rewritten ($(@($manifest).Count) entries)." -ForegroundColor Green
 }
 
-# Generate catalog. It describes the COMMITTED tree, so it is built from the
-# files git tracks plus the manifests written above (committed by the same
-# "Sign" commit), never from a folder walk: New-FileCatalog -Path <folder>
-# takes everything underneath, including .git\ (whose index changes on the
-# very commit that adds the catalog) and output\, and such a catalog could
-# never validate a fresh clone. A tracked file missing from the working tree
-# means the tree is not the one that will be committed, so it stops here.
-$catalogPath = Join-Path $RepoRoot 'TenantPosture.cat'
-Write-Host "[-] Generating catalog $catalogPath from the tracked files..." -ForegroundColor Cyan
-$gitCmd = Get-Command git -ErrorAction SilentlyContinue
-if (-not $gitCmd) { throw 'git was not found on PATH; the catalog is built from the tracked files and cannot be generated without it.' }
-$global:LASTEXITCODE = 0
-$tracked = @(& $gitCmd.Source -C $RepoRoot -c core.quotepath=off ls-files)
-if ($LASTEXITCODE -ne 0 -or $tracked.Count -eq 0) { throw "git ls-files failed in $RepoRoot (exit $LASTEXITCODE); is it a clone?" }
-$catalogFiles = [System.Collections.Generic.List[string]]::new()
-foreach ($rel in $tracked) {
-    $full = Join-Path $RepoRoot ($rel -replace '/', [string][System.IO.Path]::DirectorySeparatorChar)
-    if ($full -eq $catalogPath) { continue }
-    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw "Tracked file '$rel' is missing from the working tree; the catalog describes the committed tree, so restore or remove it first." }
-    $catalogFiles.Add($full)
-}
-foreach ($extra in @($integrityManifest, $manifestPath)) {
-    if ((Test-Path -LiteralPath $extra -PathType Leaf) -and -not $catalogFiles.Contains($extra)) { $catalogFiles.Add($extra) }
-}
-$catalogFiles = @($catalogFiles | Sort-Object -Unique)
-
+# Generate catalog. It describes the COMMITTED tree, so it is built from one
+# exported copy of the tracked files plus the manifests written above (which
+# the same "Sign" commit adds), never from the repository folder itself:
+# New-FileCatalog -Path <folder> takes everything underneath, .git\ (whose
+# index changes on the very commit that adds the catalog) and output\
+# included, and such a catalog could never validate a fresh clone; given a
+# list of files it records only their names, and the tree holds several
+# README.md and example.psd1. One rooted export is the shape that works.
+Write-Host "[-] Generating catalog $catalogPath from the tracked tree..." -ForegroundColor Cyan
+$tree = Export-TPCatalogTree
 try {
-    $catResult = New-FileCatalog -Path $catalogFiles -CatalogFilePath $catalogPath `
-                                  -CatalogVersion 2 -ErrorAction Stop
-    Write-Host "  [+] Catalog generated over $($catalogFiles.Count) tracked file(s). Hash entries: $($catResult.Count)" -ForegroundColor Green
-} catch {
-    throw "Catalog generation failed: $($_.Exception.Message)"
-}
+    try {
+        $catResult = New-FileCatalog -Path $tree -CatalogFilePath $catalogPath `
+                                      -CatalogVersion 2 -ErrorAction Stop
+        Write-Host "  [+] Catalog generated. Hash entries: $($catResult.Count)" -ForegroundColor Green
+    } catch {
+        throw "Catalog generation failed: $($_.Exception.Message)"
+    }
 
-# Sign the catalog itself
-Write-Host "[-] Signing catalog..." -ForegroundColor Cyan
-$catSig = Set-AuthenticodeSignature -FilePath $catalogPath -Certificate $cert `
-                                     -TimestampServer $TimestampServer `
-                                     -HashAlgorithm SHA256 -ErrorAction Stop
-if ($catSig.Status -ne 'Valid') {
-    throw "Catalog signature status: $($catSig.Status)"
-}
-Write-Host "  [+] Catalog signed and timestamped." -ForegroundColor Green
+    # Sign the catalog itself
+    Write-Host "[-] Signing catalog..." -ForegroundColor Cyan
+    $catSig = Set-AuthenticodeSignature -FilePath $catalogPath -Certificate $cert `
+                                         -TimestampServer $TimestampServer `
+                                         -HashAlgorithm SHA256 -ErrorAction Stop
+    if ($catSig.Status -ne 'Valid') {
+        throw "Catalog signature status: $($catSig.Status)"
+    }
+    Write-Host "  [+] Catalog signed and timestamped." -ForegroundColor Green
 
-# Verify, over the same file list the catalog was built from.
-Write-Host "[-] Verifying..." -ForegroundColor Cyan
-$verify = Test-FileCatalog -CatalogFilePath $catalogPath -Path $catalogFiles -Detailed
-if ($verify.Status -eq 'Valid') {
-    Write-Host "  [+] Test-FileCatalog: Valid" -ForegroundColor Green
-} else {
-    throw "Test-FileCatalog returned: $($verify.Status)"
+    # Verify, over the same exported tree the catalog was built from.
+    Write-Host "[-] Verifying..." -ForegroundColor Cyan
+    $verify = Test-FileCatalog -CatalogFilePath $catalogPath -Path $tree -Detailed
+    if ($verify.Status -eq 'Valid') {
+        Write-Host "  [+] Test-FileCatalog: Valid" -ForegroundColor Green
+    } else {
+        throw "Test-FileCatalog returned: $($verify.Status)"
+    }
+} finally {
+    Remove-Item -LiteralPath $tree -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host ""

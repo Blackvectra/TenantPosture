@@ -49,16 +49,22 @@ to `true` once every release is signed and committed before tagging.
 
 **Per release:**
 ```powershell
-# 1. Generate the integrity manifest (Sign-Release.ps1 refreshes it after
-#    signing, so step 3 verifies the signed bytes)
-.\tools\Verify-Integrity.ps1 -Update
+# 1. Start from a clean tracked tree. Sign-Release.ps1 refuses to run while a
+#    tracked file differs from the index: the manifests hash the working tree
+#    and the sign commit carries only the signed scripts and the manifests, so
+#    a locally populated Config/clients.json would be hashed into a manifest
+#    the tagged commit can never satisfy.
+git status --porcelain --untracked-files=no      # expect nothing
+git stash push -- Config/clients.json            # if it is populated locally
 
-# 2. Sign every .ps1/.psm1/.psd1 (also rewrites tools/integrity-manifest.txt
-#    and FILES.sha256 when present, then builds and signs the catalog)
+# 2. Sign every .ps1/.psm1/.psd1 (writes tools/integrity-manifest.txt and
+#    FILES.sha256 when present from the signed bytes, then builds and signs
+#    the catalog from one export of the tracked tree)
 .\Build\Sign-Release.ps1            # auto-loads the saved thumbprint
 
 # 3. Verify signatures cleanly resolved
 .\tools\Verify-Integrity.ps1        # exits 0 if all manifest entries match
+.\Build\Sign-Release.ps1 -VerifyCatalogOnly     # the catalog over the tracked tree
 
 # 4. Stage ONLY what signing changed, then commit, tag and push. The release
 #    workflow checks the commit the tag points at, not your working tree:
@@ -77,7 +83,7 @@ git push origin "vX.Y.Z"
 Sign-Release.ps1 writes the signed scripts in the repository's committed form (LF; git
 normalizes CRLF on commit and would otherwise rewrite the signature block after the manifests
 were computed) and re-reads each signature on those bytes, so the manifests describe the bytes
-that are committed.
+that are committed. Restore the stashed `Config/clients.json` after the tag is pushed.
 
 If the operator workstation doesn't have the cert (e.g., a different engineer is releasing), run `New-TPCodeSigningCert.ps1` first. The signature won't verify on workstations that don't trust the cert — that's the point. For internal-only releases, install the cert into TrustedPublisher on every workstation that runs the tool.
 

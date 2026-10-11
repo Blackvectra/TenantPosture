@@ -23,7 +23,8 @@ or checksummed assets.
    first two commands; the release notes will say "Unsigned release".
 
    ```powershell
-   .\Build\Sign-Release.ps1            # signs, refreshes the manifests, builds the catalog
+   git status --porcelain --untracked-files=no   # must print nothing (stash a populated Config/clients.json)
+   .\Build\Sign-Release.ps1            # signs, writes the manifests, builds the catalog
    git add -u -- '*.ps1' '*.psm1' '*.psd1' '*.ps1xml'   # only what signing changed
    git add -- tools/integrity-manifest.txt TenantPosture.cat
    git status --short                  # nothing but signed scripts, the manifest, the catalog
@@ -46,7 +47,7 @@ or checksummed assets.
    |---|---|
    | `sbom` | Generates the CycloneDX SBOM from the manifest's required modules |
    | `authenticode` | Verifies a committed integrity manifest and the Authenticode status of the shipped scripts (fails on tamper signals; unsigned is reported, or fails under `TP_REQUIRE_SIGNED`) |
-   | `package` | Builds `TenantPosture-vX.Y.Z.zip` from the shipped-folder allowlist with `FILES.sha256` inside, writes `SHA256SUMS`, attests the archive, checksums and SBOM, and creates a **draft** GitHub Release (through the `release` environment) whose notes state the signing result |
+   | `package` | Builds `TenantPosture-vX.Y.Z.zip` from the shipped-folder allowlist with `FILES.sha256` inside, writes `SHA256SUMS`, attests the archive, checksums and SBOM on a **public** repository only (on a private repository the attestation step is skipped and the release notes say so; `gh attestation verify` has nothing to check), and creates a **draft** GitHub Release (through the `release` environment) whose notes state the signing result |
 
 5. **Review the draft release** on GitHub — check the generated notes
    (categories come from `.github/release.yml` labels), then **Publish**.
