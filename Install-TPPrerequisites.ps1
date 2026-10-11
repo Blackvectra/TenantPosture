@@ -291,7 +291,10 @@ if ($SkipPython) {
         } else {
             Write-Host "  [*] Installing openpyxl..." -ForegroundColor Yellow
             try {
-                & $pythonCmd -I -m pip install openpyxl --quiet
+                # pip runs through the same helper as every other Python call: the
+                # current directory is off sys.path (no planted pip.py) and the user
+                # site stays, so an unelevated install can fall back to --user.
+                $null = Invoke-TPPython -Python $pythonCmd -Script "import sys, runpy; sys.argv = ['pip', 'install', 'openpyxl', '--quiet']; runpy.run_module('pip', run_name='__main__', alter_sys=True)"
                 if ($LASTEXITCODE -eq 0 -and (Test-TPPythonModule -Python $pythonCmd -Module 'openpyxl')) {
                     Write-Host "  [+] openpyxl installed" -ForegroundColor Green
                 } elseif ($LASTEXITCODE -eq 0) {

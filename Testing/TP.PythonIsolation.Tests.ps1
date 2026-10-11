@@ -28,7 +28,7 @@ Describe 'Python runs through the helper; the sensitive writer never follows a l
             if ($f.Name -eq 'Invoke-TPPython.ps1') { continue }
             $t = Get-Content -LiteralPath $f.FullName -Raw
             foreach ($m in [regex]::Matches($t, '& \$(py|pythonCmd|Python)\b[^\r\n]*')) {
-                if ($m.Value -notmatch '--version' -and $m.Value -notmatch '\s-I -m pip\b') { "$($f.Name): $($m.Value.Trim())" }
+                if ($m.Value -notmatch '--version') { "$($f.Name): $($m.Value.Trim())" }
             }
             if ($t -match '\$pyTmp') { "$($f.Name): still builds a helper file path" }
         }
@@ -45,8 +45,10 @@ Describe 'Python runs through the helper; the sensitive writer never follows a l
             ($out | Out-String) | Should -Match 'ok'
             ($out | Out-String) | Should -Not -Match 'HIJACKED'
             ($out | Out-String) | Should -Match 'site' -Because '-I is not used: a pip install --user library must stay importable'
+            $hadPath = Test-Path Env:\PYTHONPATH; $oldPath = $env:PYTHONPATH
             $env:PYTHONPATH = $d
-            try { $out2 = Invoke-TPPython -Python $script:Py -Script "import json; print('ok2')" } finally { Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue }
+            try { $out2 = Invoke-TPPython -Python $script:Py -Script "import json; print('ok2')" }
+            finally { if ($hadPath) { $env:PYTHONPATH = $oldPath } else { Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue } }
             ($out2 | Out-String) | Should -Match 'ok2' -Because 'PYTHON* variables are ignored (-E)'
             Test-TPPythonModule -Python $script:Py -Module 'json' | Should -BeTrue
             Test-TPPythonModule -Python $script:Py -Module 'tp_no_such_module_x' | Should -BeFalse
@@ -84,6 +86,19 @@ Describe 'Python runs through the helper; the sensitive writer never follows a l
         @(Get-ChildItem -LiteralPath $d -Force -Filter '*.tmp') | Should -BeNullOrEmpty -Because 'no temp file is left behind'
     }
 
+    It 'the sensitive writer stages inside an owner-only folder when the runtime cannot harden a handle' {
+        if ($IsWindows) { Set-ItResult -Skipped -Because 'Windows hardens through the handle'; return }
+        $d = Join-Path $TestDrive 'stage'; New-Item -ItemType Directory -Path $d -Force | Out-Null
+        $p = Join-Path $d 'r.json'
+        Mock -CommandName Test-TPHandleModeSupported -MockWith { $false } -ModuleName 'TenantPosture'
+        Mock -CommandName Set-TPSensitiveHandleAcl -MockWith { $false } -ModuleName 'TenantPosture'
+        Set-TPSensitiveFileContent -Path $p -Content 'staged'
+        (Get-Content -LiteralPath $p -Raw) | Should -Be 'staged'
+        $mode = if ($IsMacOS) { & stat -f '%Lp' $p } else { & stat -c '%a' $p }
+        ([string]$mode).Trim() | Should -Be '600'
+        @(Get-ChildItem -LiteralPath $d -Force) | Where-Object { $_.Name -ne 'r.json' } | Should -BeNullOrEmpty -Because 'the staging folder is removed'
+    }
+
     It 'the installer loads the Python helper before probing' {
         (Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Install-TPPrerequisites.ps1') -Raw) | Should -Match "\. \(Join-Path \`$PSScriptRoot 'Lib/Invoke-TPPython\.ps1'\)"
     }
@@ -94,7 +109,10 @@ Describe 'Python runs through the helper; the sensitive writer never follows a l
         Set-TPSensitiveFileContent -Path $p -Content 'one'
         Set-TPSensitiveFileContent -Path $p -Content 'two'
         (Get-Content -LiteralPath $p -Raw) | Should -Be 'two'
-        if (-not $IsWindows) { (& stat -c '%a' $p).Trim() | Should -Be '600' }
+        if (-not $IsWindows) {
+            $mode = if ($IsMacOS) { & stat -f '%Lp' $p } else { & stat -c '%a' $p }
+            ([string]$mode).Trim() | Should -Be '600'
+        }
         $b = Join-Path $d 'bom.csv'
         Set-TPSensitiveFileContent -Path $b -Content 'a,b' -Encoding ([System.Text.UTF8Encoding]::new($true))
         $bytes = [System.IO.File]::ReadAllBytes($b)

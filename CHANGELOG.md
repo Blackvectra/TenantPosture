@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **[Security] Sensitive-writer and installer follow-ups from the #136 review.** The Unix mode
+  type and the handle overload are resolved at run time (a type literal threw on a runtime without
+  them, refusing every write); where no handle API exists the temp file is staged inside an
+  owner-only folder (`mkdir -m 700`) rather than chmod'ed by path; pip runs through
+  `Invoke-TPPython` so an unelevated install can fall back to the user site; the isolation test
+  restores a pre-existing `PYTHONPATH` and reads the mode with BSD `stat` on macOS.
 - **[Security] Network answers are parsed with bounds.** The TLS-probe guard refused only a
   deny-list of ranges per address family, so an IPv4-mapped, NAT64 or 6to4 IPv6 address carrying a
   private IPv4 address reached the connect step and a hostile tenant's AAAA record could point the
