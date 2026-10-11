@@ -33,8 +33,10 @@
     tracks plus the manifests this script writes, which the "Sign vX.Y.Z" commit adds. It is
     built from one exported copy of that tree (New-FileCatalog records only file names when
     given a list of files, and the tree holds several README.md and example.psd1). Verify a
-    clone with: .\Build\Sign-Release.ps1 -VerifyCatalogOnly   (no certificate needed).
-    Nothing in the tool reads it at run time.
+    clone with: .\Build\Sign-Release.ps1 -VerifyCatalogOnly   (no private key needed;
+    the catalog's own signature must be Valid, or carry the thumbprint passed as
+    -CertificateThumbprint, before its hashes count for anything). Nothing in the tool
+    reads it at run time.
 
 .PARAMETER CertificateThumbprint
     SHA-1 thumbprint of the code-signing certificate. If omitted, reads from
@@ -138,11 +140,34 @@ function Export-TPCatalogTree {
     return $dest
 }
 
+function Assert-TPCatalogSignature {
+    <#
+        Test-FileCatalog's Status is the hash comparison only; the catalog's own
+        Authenticode result is its Signature property. A tree an attacker can write
+        can carry a freshly generated, unsigned catalog whose hashes all match, so
+        the hashes are trusted only once the signature is: Valid on this workstation,
+        or signed by the expected thumbprint (an in-house signer this workstation
+        does not trust reads NotTrusted and is accepted only when pinned).
+    #>
+    param([Parameter(Mandatory)] $Catalog, [AllowNull()] [string] $ExpectedThumbprint)
+    $sig = $Catalog.Signature
+    $status = if ($null -ne $sig) { [string]$sig.Status } else { '' }
+    $tp = if ($null -ne $sig -and $sig.SignerCertificate) { [string]$sig.SignerCertificate.Thumbprint } else { '' }
+    if ($ExpectedThumbprint) {
+        if ($tp -ne $ExpectedThumbprint) { throw "The catalog is signed by '$tp' (status $status), not the expected $ExpectedThumbprint." }
+        if ($status -notin @('Valid', 'NotTrusted')) { throw "The catalog signature does not verify ($status)." }
+    } elseif ($status -ne 'Valid') {
+        throw "The catalog signature is not Valid ($status; signer '$tp'). Pass -CertificateThumbprint to accept the pinned in-house signer on a workstation that does not trust it."
+    }
+    Write-Host "  [+] Catalog signature: $status, signer $tp" -ForegroundColor Green
+}
+
 if ($VerifyCatalogOnly) {
     if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) { throw "No catalog at $catalogPath to verify." }
     $tree = Export-TPCatalogTree
     try {
         $verify = Test-FileCatalog -CatalogFilePath $catalogPath -Path $tree -Detailed
+        Assert-TPCatalogSignature -Catalog $verify -ExpectedThumbprint $CertificateThumbprint
         if ($verify.Status -ne 'Valid') { throw "Test-FileCatalog returned $($verify.Status) for the tracked tree." }
         Write-Host "  [+] Test-FileCatalog: Valid over the tracked tree." -ForegroundColor Green
     } finally {
@@ -164,6 +189,16 @@ $dirty = @($dirty | Where-Object { $_ } | ForEach-Object { $_.Substring(3).Trim(
 })
 if ($dirty.Count -gt 0) {
     throw "Refusing to sign: tracked files differ from the index ($($dirty -join ', ')). Commit or stash them first (git stash push -- <path>); the manifests must describe the tree that will be committed."
+}
+# Untracked scripts and JSON would be signed and hashed into the manifest below
+# (both walk the folder) but are not part of the sign commit, so the tagged tree
+# would lack entries the manifest names. Ignored files (output\) are not listed.
+$global:LASTEXITCODE = 0
+$untracked = @(& $gitCmd.Source -C $RepoRoot -c core.quotepath=off ls-files --others --exclude-standard)
+if ($LASTEXITCODE -ne 0) { throw "git ls-files --others failed in $RepoRoot (exit $LASTEXITCODE)." }
+$stray = @($untracked | Where-Object { $_ -and $_ -notlike 'output/*' -and [System.IO.Path]::GetExtension($_) -in @('.ps1', '.psm1', '.psd1', '.ps1xml', '.json') })
+if ($stray.Count -gt 0) {
+    throw "Refusing to sign: untracked files would be signed or hashed into the manifest but are not part of the commit ($($stray -join ', ')). Commit, remove or ignore them first."
 }
 
 # Resolve thumbprint: explicit param wins; otherwise pick up the one
@@ -338,9 +373,12 @@ if (Test-Path -LiteralPath $verifyScript -PathType Leaf) {
     # same session: $LASTEXITCODE is reset first, because a called script's
     # exit code lands there and a stale value from an earlier native command
     # would otherwise pass for a result.
-    & $verifyScript -Update
+    # -ManifestPath names the repository manifest explicitly: with FILES.sha256 at
+    # the root (regenerated above when present) the verifier would otherwise take
+    # the tree for an extracted release.
+    & $verifyScript -Update -ManifestPath $integrityManifest
     $global:LASTEXITCODE = 0
-    & $verifyScript
+    & $verifyScript -ManifestPath $integrityManifest
     if ($LASTEXITCODE -ne 0) { throw "tools/integrity-manifest.txt does not verify against the signed tree it was just generated from (exit $LASTEXITCODE)." }
 }
 
@@ -388,9 +426,11 @@ try {
     }
     Write-Host "  [+] Catalog signed and timestamped." -ForegroundColor Green
 
-    # Verify, over the same exported tree the catalog was built from.
+    # Verify, over the same exported tree the catalog was built from, and the
+    # catalog's own signature by the certificate that just signed it.
     Write-Host "[-] Verifying..." -ForegroundColor Cyan
     $verify = Test-FileCatalog -CatalogFilePath $catalogPath -Path $tree -Detailed
+    Assert-TPCatalogSignature -Catalog $verify -ExpectedThumbprint $cert.Thumbprint
     if ($verify.Status -eq 'Valid') {
         Write-Host "  [+] Test-FileCatalog: Valid" -ForegroundColor Green
     } else {

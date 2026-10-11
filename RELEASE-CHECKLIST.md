@@ -54,8 +54,10 @@ to `true` once every release is signed and committed before tagging.
 #    and the sign commit carries only the signed scripts and the manifests, so
 #    a locally populated Config/clients.json would be hashed into a manifest
 #    the tagged commit can never satisfy.
-git status --porcelain --untracked-files=no      # expect nothing
+git status --porcelain                           # expect nothing but the files signing writes
 git stash push -- Config/clients.json            # if it is populated locally
+# An untracked .ps1/.psm1/.psd1/.json scratch file is refused too: it would be
+# signed and hashed into the manifest without being part of the commit.
 
 # 2. Sign every .ps1/.psm1/.psd1 (writes tools/integrity-manifest.txt and
 #    FILES.sha256 when present from the signed bytes, then builds and signs
@@ -64,7 +66,7 @@ git stash push -- Config/clients.json            # if it is populated locally
 
 # 3. Verify signatures cleanly resolved
 .\tools\Verify-Integrity.ps1        # exits 0 if all manifest entries match
-.\Build\Sign-Release.ps1 -VerifyCatalogOnly     # the catalog over the tracked tree
+.\Build\Sign-Release.ps1 -VerifyCatalogOnly -CertificateThumbprint <thumbprint>   # the catalog's signature, then its hashes over the tracked tree
 
 # 4. Stage ONLY what signing changed, then commit, tag and push. The release
 #    workflow checks the commit the tag points at, not your working tree:

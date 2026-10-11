@@ -10,10 +10,11 @@
     In an extracted release there is no tools/integrity-manifest.txt (the release
     workflow leaves it out: it hashes the whole repository tree, tests included, and
     would report every file the archive omits as missing) but there is FILES.sha256,
-    the archive's own record of every packaged file. When the repository manifest is
-    absent and FILES.sha256 is present at the root, every file under the root is
-    verified against it (FILES.sha256 itself and output/ excepted), and a file the
-    record does not name fails the verification.
+    the archive's own record of every packaged file. When FILES.sha256 is present at
+    the root and -ManifestPath was not given, every file under the root is verified
+    against it (FILES.sha256 itself and output/ excepted), a file the record does not
+    name fails the verification, and a repository manifest that has appeared beside
+    it is ignored.
 
     Returns exit 0 if all files match, 1 if any mismatch or missing file.
 
@@ -50,15 +51,20 @@ if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
 
 $includeExtensions = @('.ps1', '.psm1', '.psd1', '.json')
 
-# Extracted release: no repository manifest, but the archive's FILES.sha256.
+# Extracted release: the archive's FILES.sha256 is at the root. Its presence alone
+# selects archive mode (unless -ManifestPath was given explicitly): a repository
+# manifest that has appeared beside it does not switch the mode, because in a tree
+# an attacker can write, an injected tools/integrity-manifest.txt (even an empty one)
+# would otherwise turn every packaged file into a tolerated extra and exit 0 without
+# a single hash checked. Build/Sign-Release.ps1 passes -ManifestPath for the
+# repository manifest on purpose.
 $archiveManifest = Join-Path $repoRoot 'FILES.sha256'
 $archiveMode = (-not $PSBoundParameters.ContainsKey('ManifestPath')) -and
-               (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) -and
                (Test-Path -LiteralPath $archiveManifest -PathType Leaf)
 if ($archiveMode) {
     if ($Update) { throw 'FILES.sha256 is written by the release workflow from the packaged tree; -Update regenerates the repository manifest and does not apply to an extracted release.' }
     $ManifestPath = $archiveManifest
-    Write-Host "  [i] No repository manifest here; verifying the extracted release against FILES.sha256 (every packaged file)." -ForegroundColor Cyan
+    Write-Host "  [i] FILES.sha256 is present: verifying the extracted release against it (every packaged file)." -ForegroundColor Cyan
 }
 
 # Separators are matched either way: the repository manifest is read on
