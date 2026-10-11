@@ -211,6 +211,7 @@ $script:ExportedFunctions = @(
     'Set-TPThirdPartyAwareness',
     'New-TPProfile',
     'ConvertTo-TPPsLiteral',
+    'ConvertTo-TPMarkdownSafe',
     'ConvertTo-TPPsd1String',
     'Select-TPReplayedFinding',
     'Test-TPPsLiteralSafe',

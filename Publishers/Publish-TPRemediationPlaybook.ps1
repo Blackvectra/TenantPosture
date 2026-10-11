@@ -41,9 +41,8 @@ function Publish-TPRemediationPlaybook {
         # structure. Do NOT HTML-escape — that produced visible `&gt;` and
         # `&#39;` in playbook/executive output. XSS escaping belongs at the
         # markdown→HTML render boundary, not in the markdown source.
-        $safe = [string]$v
-        $safe = $safe -replace '\|', '\|' -replace '`', '\`' -replace '[\r\n]+', ' '
-        return $safe
+        # One Markdown rule for the whole tool: Lib/ConvertTo-TPMarkdownSafe.ps1.
+        return (ConvertTo-TPMarkdownSafe $v)
     }
 
     # Get-TPObjectField, not dot-access-then-??: see Publish-TPAssessmentSummary.

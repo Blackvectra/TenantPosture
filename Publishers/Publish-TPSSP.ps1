@@ -155,7 +155,7 @@ function Publish-TPSSP {
         return
     }
 
-    function EscMd { param([object]$v) ([string]$v) -replace '\|', '\|' -replace '[\r\n]+', ' ' }
+    function EscMd { param([object]$v) ConvertTo-TPMarkdownSafe $v }
     function Esc   { param([object]$v) ConvertTo-TPHtmlSafe $v }
 
     $reqs     = @($Posture['Requirements'])
@@ -317,7 +317,9 @@ function Publish-TPSSP {
                 foreach ($o in @($r['Objectives'])) {
                     $lbl = [string](Get-TPObjectField -Item $o -Key 'Label' -Default '')
                     $txt = [string](Get-TPObjectField -Item $o -Key 'Text'  -Default '')
-                    $null = $sb.AppendLine("- [ ] **$(EscMd $lbl)** $(EscMd $txt)")
+                    # The label is the catalog's own objective id (3.1.1[a]); it is reduced to that
+                    # shape rather than escaped, so an assessor reads it as the 800-171A id.
+                    $null = $sb.AppendLine("- [ ] **$($lbl -replace '[^A-Za-z0-9.\[\]]', '')** $(EscMd $txt)")
                 }
                 $null = $sb.AppendLine()
             }
@@ -939,6 +941,20 @@ with open(sys.argv[1], encoding='utf-8') as fh:
     d = json.load(fh)
 
 meta, summ = d['Metadata'], d['Summary']
+
+# A cell that starts with = + - @ would be read by Excel as a formula. The
+# answers file is client-authored, so every value is written as text.
+LEAD = ('=', '+', '-', '@')
+def safe(v):
+    if v is None: return ''
+    if isinstance(v, (int, float)) and not isinstance(v, bool): return v
+    s = str(v)
+    return ("'" + s) if s[:1] in LEAD else s
+def put(ws, row, column, value):
+    v = safe(value)
+    c = ws.cell(row=row, column=column, value=v)
+    if isinstance(v, str): c.data_type = 's'
+    return c
 NAVY, ORANGE, WHITE, PURPLE = '0F2544', 'E8621A', 'FFFFFF', '4C1D95'
 GREY, INK, MUTED = 'F1F5F9', '111827', '6B7280'
 ST_BG = {'Implemented':'D1FAE5','Partially implemented':'FEF3C7','Planned':'FEF3C7',
@@ -957,7 +973,7 @@ wb = Workbook()
 
 def head(ws, cols, row=1):
     for i, (label, width) in enumerate(cols, start=1):
-        c = ws.cell(row=row, column=i, value=label)
+        c = put(ws, row, i, label)
         c.font = Font(bold=True, color=WHITE, size=9)
         c.fill = PatternFill('solid', fgColor=NAVY)
         c.alignment = Alignment(wrap_text=True, vertical='center')
@@ -970,9 +986,9 @@ ws = wb.active
 ws.title = 'Summary'
 ws.column_dimensions['A'].width = 46
 ws.column_dimensions['B'].width = 62
-t = ws.cell(row=1, column=1, value='System Security Plan')
+t = put(ws, 1, 1, 'System Security Plan')
 t.font = Font(bold=True, size=16, color=NAVY)
-ws.cell(row=2, column=1, value=meta['Baseline']).font = Font(size=10, color=MUTED)
+put(ws, 2, 1, meta['Baseline']).font = Font(size=10, color=MUTED)
 
 r = 4
 for k, v in [('System', meta['SystemName']), ('Tenant', meta['TenantDomain']),
@@ -980,8 +996,8 @@ for k, v in [('System', meta['SystemName']), ('Tenant', meta['TenantDomain']),
              ('Tool version', meta['ToolVersion'])]:
     if not v:
         continue
-    ws.cell(row=r, column=1, value=k).font = Font(bold=True, size=10)
-    ws.cell(row=r, column=2, value=v).font = Font(size=10)
+    put(ws, r, 1, k).font = Font(bold=True, size=10)
+    put(ws, r, 2, v).font = Font(size=10)
     r += 1
 
 r += 1
@@ -1010,8 +1026,8 @@ for label, val in [('Implemented', summ['Implemented']),
                    ('No automated evidence at all', summ['AttestationOnly']),
                    ('Client-attested statuses', summ['Attested'])]:
     if label:
-        ws.cell(row=r, column=1, value=label).font = Font(size=10)
-        ws.cell(row=r, column=2, value=val).font = Font(bold=True, size=10)
+        put(ws, r, 1, label).font = Font(size=10)
+        put(ws, r, 2, val).font = Font(bold=True, size=10)
     r += 1
 
 # ── Families ─────────────────────────────────────────────────────────────
@@ -1023,7 +1039,7 @@ for i, f in enumerate(d['Families'], start=2):
     vals = [f['Id'], f['Title'], f['Total'], f['Evidenced'], f['Attest'],
             f['Implemented'], f['Partial'], f['NotImplemented'], f['Open']]
     for j, v in enumerate(vals, start=1):
-        c = ws.cell(row=i, column=j, value=v)
+        c = put(ws, i, j, v)
         c.border = box
         c.font = Font(size=9, bold=(j == 1), color=(PURPLE if j == 1 else INK))
         c.alignment = top
@@ -1039,7 +1055,7 @@ for i, q in enumerate(d['Requirements'], start=2):
             q['Evidence'], q['Role'], q['Narrative'] or q['NaReason'] or q['Inherited'],
             q['PoamWeakness'], q['PoamRemedy'], q['PoamOwner'], q['PoamDue']]
     for j, v in enumerate(vals, start=1):
-        c = ws.cell(row=i, column=j, value=v)
+        c = put(ws, i, j, v)
         c.border = box
         c.alignment = wrap
         c.font = Font(size=9, bold=(j == 1), color=(PURPLE if j == 1 else INK))
@@ -1061,13 +1077,13 @@ for q in d['Requirements']:
         continue
     vals = [q['Id'], q['Statement'], q['Status'], q['HowTo'], q['Impact']]
     for j, v in enumerate(vals, start=1):
-        c = ws.cell(row=row, column=j, value=v)
+        c = put(ws, row, j, v)
         c.border = box
         c.alignment = wrap
         c.font = Font(size=9, bold=(j == 1), color=(PURPLE if j == 1 else INK))
     row += 1
 if row == 2:
-    c = ws.cell(row=2, column=1, value='Nothing to close: no mapped control reported a gap or a partial result this run.')
+    c = put(ws, 2, 1, 'Nothing to close: no mapped control reported a gap or a partial result this run.')
     c.font = Font(size=9, italic=True, color=MUTED)
 
 # ── Assessment objectives ────────────────────────────────────────────────
@@ -1075,7 +1091,7 @@ ws = wb.create_sheet('Objectives')
 head(ws, [('Req', 8), ('Status', 20), ('Assessment objectives (SP 800-171A)', 110)])
 for i, q in enumerate(d['Requirements'], start=2):
     for j, v in enumerate([q['Id'], q['Status'], q['Objectives']], start=1):
-        c = ws.cell(row=i, column=j, value=v)
+        c = put(ws, i, j, v)
         c.border = box
         c.alignment = wrap
         c.font = Font(size=9, bold=(j == 1), color=(PURPLE if j == 1 else INK))
@@ -1087,14 +1103,14 @@ head(ws, [('Req', 8), ('Family', 24), ('What it asks', 78),
 open_rows = [q for q in d['Requirements'] if q['NeedsAnswer']]
 for i, q in enumerate(open_rows, start=2):
     for j, v in enumerate([q['Id'], q['FamilyTitle'], q['Statement'], '', ''], start=1):
-        c = ws.cell(row=i, column=j, value=v)
+        c = put(ws, i, j, v)
         c.border = box
         c.alignment = wrap
         c.font = Font(size=9, bold=(j == 1), color=(PURPLE if j == 1 else INK))
         if j >= 4:
             c.fill = PatternFill('solid', fgColor='FFFBEB')
 if not open_rows:
-    c = ws.cell(row=2, column=1, value='Every requirement without automated evidence carries a written answer.')
+    c = put(ws, 2, 1, 'Every requirement without automated evidence carries a written answer.')
     c.font = Font(size=9, italic=True, color=MUTED)
 
 wb.save(sys.argv[2])

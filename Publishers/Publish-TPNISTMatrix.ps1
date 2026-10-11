@@ -51,7 +51,7 @@ function Publish-TPNISTMatrix {
     Set-StrictMode -Version Latest
     $ErrorActionPreference = 'Stop'
 
-    function EscMd { param([object]$v) ([string]$v) -replace '\|', '\|' -replace '[\r\n]+', ' ' }
+    function EscMd { param([object]$v) ConvertTo-TPMarkdownSafe $v }
 
     $tenant = [string](Get-TPObjectField -Item $Metadata -Key 'TenantDomain'   -Default 'Unknown tenant')
     $date   = [string](Get-TPObjectField -Item $Metadata -Key 'AssessmentDate' -Default (Get-Date -Format 'MMMM dd, yyyy'))

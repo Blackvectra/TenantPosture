@@ -221,28 +221,7 @@ function Publish-TPDeltaReport {
     # EscMd to also escape the markdown link/image/emphasis syntax characters
     # that an attacker controlling tenant DisplayNames / publisher strings
     # could otherwise smuggle into the report.
-    function EscMdStrict([object]$v) {
-        if ($null -eq $v -or [string]::IsNullOrEmpty([string]$v)) { return '' }
-        $safe = [string]$v
-        # Collapse CR/LF (and tabs) to a single space so attackers can't break
-        # out of a table row or inject a new Markdown block.
-        $safe = $safe -replace "[\r\n\t]+", ' '
-        # Escape pipe + backtick (table cell + code) and the link/image/
-        # emphasis/header/blockquote syntax characters.
-        $safe = $safe `
-            -replace '\\', '\\' `
-            -replace '\|', '\|' `
-            -replace '`',  '\`' `
-            -replace '\[', '\[' `
-            -replace '\]', '\]' `
-            -replace '\(', '\(' `
-            -replace '\)', '\)' `
-            -replace '\*', '\*' `
-            -replace '_',  '\_' `
-            -replace '#',  '\#' `
-            -replace '>',  '\>'
-        return $safe
-    }
+    function EscMdStrict([object]$v) { return (ConvertTo-TPMarkdownSafe $v) }
 
     # ── Load baseline JSON ──────────────────────────────────────────────────
     # CWE-502 hardening — bounded -Depth caps deserialization so a recursive

@@ -511,8 +511,7 @@ body{font-family:var(--ff);background:var(--bg);color:var(--ink);line-height:1.5
         # Mirrors the EscMd helper already used by Publish-TPAssessmentSummary.
         $EscMd = {
             param([object] $v)
-            if ($null -eq $v -or [string]::IsNullOrEmpty([string]$v)) { return '' }
-            ([string]$v) -replace '\|', '\|' -replace '`', '\`' -replace '[\r\n]+', ' '
+            ConvertTo-TPMarkdownSafe $v
         }
         $md = "# Email Account Assessment — $(& $EscMd $upnRaw)`n`n"
         $md += "**Assessed:** $(& $EscMd $assRaw)  `n"

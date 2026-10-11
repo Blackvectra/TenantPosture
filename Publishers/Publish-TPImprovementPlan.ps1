@@ -81,7 +81,7 @@ function Publish-TPImprovementPlan {
         return
     }
 
-    function EscMd { param([object]$v) ([string]$v) -replace '\|', '\|' -replace '[\r\n]+', ' ' }
+    function EscMd { param([object]$v) ConvertTo-TPMarkdownSafe $v }
     function Esc   { param([object]$v) ConvertTo-TPHtmlSafe $v }
 
     $base   = $Plan['Baseline']

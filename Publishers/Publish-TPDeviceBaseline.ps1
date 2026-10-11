@@ -50,7 +50,7 @@ function Publish-TPDeviceBaseline {
     Set-StrictMode -Version Latest
     $ErrorActionPreference = 'Stop'
 
-    function EscMd { param([object]$v) ([string]$v) -replace '\|', '\|' -replace '[\r\n]+', ' ' }
+    function EscMd { param([object]$v) ConvertTo-TPMarkdownSafe $v }
     function Esc   { param([object]$v) ConvertTo-TPHtmlSafe $v }
 
     $moduleRoot = if ($script:TPModuleRoot) { $script:TPModuleRoot }
