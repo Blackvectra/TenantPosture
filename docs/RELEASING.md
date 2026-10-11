@@ -46,7 +46,7 @@ or checksummed assets.
    | Job | Does |
    |---|---|
    | `sbom` | Generates the CycloneDX SBOM from the manifest's required modules |
-   | `authenticode` | Verifies a committed integrity manifest and the Authenticode status of the shipped scripts (fails on tamper signals; unsigned is reported, or fails under `TP_REQUIRE_SIGNED`) |
+   | `authenticode` | Verifies a committed integrity manifest, the Authenticode status of the shipped scripts (fails on tamper signals; unsigned is reported, or fails under `TP_REQUIRE_SIGNED`) and, when the commit carries `TenantPosture.cat`, the signed catalog over every tracked file, so the JavaScript, HTML and configuration that ship are covered too; under `TP_REQUIRE_SIGNED` the catalog is required |
    | `package` | Builds `TenantPosture-vX.Y.Z.zip` from the shipped-folder allowlist with `FILES.sha256` inside, writes `SHA256SUMS`, attests the archive, checksums and SBOM on a **public** repository only (on a private repository the attestation step is skipped and the release notes say so; `gh attestation verify` has nothing to check), and creates a **draft** GitHub Release (through the `release` environment) whose notes state the signing result |
 
 5. **Review the draft release** on GitHub — check the generated notes

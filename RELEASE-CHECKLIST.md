@@ -45,7 +45,9 @@ For the in-house workflow (free, self-signed). For an external release with a pa
 `New-TPCodeSigningCert.ps1`). A hosted runner trusts no self-signed root, so the
 release workflow accepts an untrusted signature only from that pinned signer;
 rotate the variable when the certificate is renewed. Set `TP_REQUIRE_SIGNED`
-to `true` once every release is signed and committed before tagging.
+to `true` once every release is signed and committed before tagging; it then also
+requires the signed catalog (`TenantPosture.cat`) in the tagged commit, which is what
+covers the shipped JavaScript, HTML and configuration no script signature reaches.
 
 **Per release:**
 ```powershell

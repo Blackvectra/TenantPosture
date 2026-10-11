@@ -131,7 +131,11 @@ if (-not (Test-Path -LiteralPath $ManifestPath)) {
     exit 1
 }
 
-$expected = @{}
+# Ordinal keys: a recorded path is exact. A PowerShell hashtable compares keys
+# without case, so on a case-sensitive file system a file renamed only by case
+# (Lib/Foo.ps1 to lib/foo.ps1) would still match its entry and verify clean
+# while the module could no longer load it.
+$expected = [System.Collections.Generic.Dictionary[string, string]]::new([System.StringComparer]::Ordinal)
 Get-Content -LiteralPath $ManifestPath | Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object {
     $parts = $_ -split '\s+', 2
     if ($parts.Count -eq 2) {

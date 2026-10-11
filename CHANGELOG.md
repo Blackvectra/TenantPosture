@@ -49,7 +49,12 @@
   platform (git normalizes the committed text, and a catalog over CRLF bytes would not describe
   the committed file); an untracked `FILES.sha256` is not cataloged; and the release job counts an
   `UnknownError` signature as a problem even when the signer is the pinned thumbprint, since that
-  status means the signature could not be verified, unlike `NotTrusted`.
+  status means the signature could not be verified, unlike `NotTrusted`. The release job verifies the
+  signed catalog over every tracked file when the commit carries one (the JavaScript, HTML and
+  configuration that ship are reached by no script signature), requires it under `TP_REQUIRE_SIGNED`,
+  and the release notes state "signed" only at the width that was verified. The verifier compares
+  recorded paths with an ordinal comparer, so a file renamed only by case on a case-sensitive file
+  system no longer verifies clean.
 
 - **[Security] Sensitive-writer and installer follow-ups from the #136 review.** The Unix mode
   type and the handle overload are resolved at run time (a type literal threw on a runtime without

@@ -167,6 +167,7 @@ jobs:
           SIGNED: ${{ needs.authenticode.outputs.signed }}
           SIGNED_VALID: ${{ needs.authenticode.outputs.valid }}
           SIGNED_NOT: ${{ needs.authenticode.outputs.notsigned }}
+          CATALOG: ${{ needs.authenticode.outputs.catalog }}
           ATTESTED: ${{ github.event.repository.private == false }}
         shell: pwsh
         run: |
@@ -189,7 +190,10 @@ jobs:
           # names it only when it was actually produced.
           $verifyHint = if ($env:ATTESTED -eq 'true') { 'integrity rests on SHA256SUMS, FILES.sha256 inside the archive, and the build provenance attestation (`gh attestation verify TenantPosture-' + $tag + '.zip --owner Blackvectra`).' }
                         else { 'integrity rests on SHA256SUMS and FILES.sha256 inside the archive (no provenance attestation: the repository is private).' }
-          $note = if ($env:SIGNED -eq 'true') { 'Authenticode: every script in this release carries a valid signature.' }
+          # "Signed" is stated at the width it was verified: scripts by their own
+          # signatures; everything else only when the signed catalog was verified.
+          $note = if ($env:SIGNED -eq 'true' -and $env:CATALOG -eq 'true') { 'Authenticode: every PowerShell script in this release carries a valid signature, and the signed catalog (TenantPosture.cat) was verified over every tracked file, JavaScript, HTML and configuration included.' }
+                  elseif ($env:SIGNED -eq 'true') { 'Authenticode: every PowerShell script in this release carries a valid signature. The commit carries no signed catalog, so JavaScript, HTML and configuration files are covered by FILES.sha256 and the attestation only, not by a signature.' }
                   elseif ([int]$env:SIGNED_VALID -gt 0) { '**Partially signed release.** ' + $env:SIGNED_VALID + ' script(s) carry a valid Authenticode signature and ' + $env:SIGNED_NOT + ' do not; ' + $verifyHint }
                   else { '**Unsigned release.** The scripts carry no Authenticode signature; ' + $verifyHint }
           # Replace any earlier signing paragraph (a rebuilt tag can change the
@@ -214,6 +218,7 @@ jobs:
       signed: ${{ steps.sig.outputs.signed }}
       valid: ${{ steps.sig.outputs.valid }}
       notsigned: ${{ steps.sig.outputs.notsigned }}
+      catalog: ${{ steps.cat.outputs.catalog }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
@@ -333,3 +338,33 @@ jobs:
           "signed=$($signed.ToString().ToLower())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "valid=$valid" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "notsigned=$notSigned" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Signed catalog over every tracked file
+        id: cat
+        shell: pwsh
+        env:
+          REQUIRE_SIGNED: ${{ vars.TP_REQUIRE_SIGNED }}
+          EXPECTED_THUMBPRINT: ${{ vars.TP_SIGNING_THUMBPRINT }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Authenticode covers the PowerShell files only. The archive also ships
+          # JavaScript, HTML and configuration (Web\, Config\) that no script
+          # signature covers, so a commit after the signing commit could change
+          # Web\static\app.js and the scripts would still read as signed. The
+          # signed catalog (Build/Sign-Release.ps1 writes TenantPosture.cat) covers
+          # every tracked file: when the commit carries one it is verified here
+          # over the tracked tree, by the pinned signer when one is configured,
+          # and under TP_REQUIRE_SIGNED it is required.
+          $catalog = 'false'
+          if (Test-Path -LiteralPath ./TenantPosture.cat -PathType Leaf) {
+              $verifyArgs = @('-VerifyCatalogOnly')
+              if ($env:EXPECTED_THUMBPRINT) { $verifyArgs += @('-CertificateThumbprint', $env:EXPECTED_THUMBPRINT) }
+              & ./Build/Sign-Release.ps1 @verifyArgs
+              $catalog = 'true'
+              Write-Host '  [+] TenantPosture.cat verified over every tracked file.' -ForegroundColor Green
+          } elseif ($env:REQUIRE_SIGNED -eq 'true') {
+              throw 'TP_REQUIRE_SIGNED is set and the commit carries no TenantPosture.cat: without the signed catalog the non-PowerShell files that ship (Web\static\app.js, Config\) are covered by no signature. Sign with Build/Sign-Release.ps1 and commit the catalog before tagging.'
+          } else {
+              Write-Host '  [i] No TenantPosture.cat in this commit: the Authenticode result covers the PowerShell files only; JavaScript, HTML and configuration are covered by FILES.sha256 and the attestation, not by a signature.' -ForegroundColor Yellow
+          }
+          "catalog=$catalog" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
