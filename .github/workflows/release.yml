@@ -30,7 +30,7 @@ env:
   # the authenticode job judges only them, so a test or maintenance script
   # outside the archive can never mark a release unsigned.
   SHIP_DIRS: 'Apply Build Collectors Config Device Email-IR Evaluators Lib Onboard Publishers Web baselines docs sample-headers sample-report tools'
-  SHIP_ROOT_EXTENSIONS: '.ps1 .psm1 .psd1 .md .txt .cat'
+  SHIP_ROOT_EXTENSIONS: '.ps1 .psm1 .psd1 .md .txt'
 
 jobs:
   sbom:
@@ -107,7 +107,9 @@ jobs:
           # config, the repo's own tooling, output) stays out of the archive.
           $shipDirs  = @($env:SHIP_DIRS -split ' ')
           $shipExt   = @($env:SHIP_ROOT_EXTENSIONS -split ' ')
-          # .cat: the signed catalog Build/Sign-Release.ps1 writes for Test-FileCatalog.
+          # TenantPosture.cat (Build/Sign-Release.ps1) describes the signed repository
+          # tree, not this archive, so it is not shipped; the archive's own record is
+          # FILES.sha256 plus the provenance attestation.
           $shipFiles = @(Get-ChildItem -File | Where-Object { $_.Extension -in $shipExt -or $_.Name -in 'LICENSE', 'NOTICE', 'CITATION.cff' })
           $dropInside = '[\\/](Testing|__pycache__)([\\/]|$)'
           New-Item -ItemType Directory -Path "./$name" | Out-Null
@@ -170,6 +172,7 @@ jobs:
           $assets = @("TenantPosture-$tag.zip", 'SHA256SUMS')
           if (Test-Path -LiteralPath ./sbom/tp-assessment.cdx.json) { $assets += './sbom/tp-assessment.cdx.json' }
           gh release upload $tag @assets --clobber
+          if ($LASTEXITCODE -ne 0) { throw "gh release upload failed (exit $LASTEXITCODE); --clobber may have removed an earlier asset, so the release is incomplete." }
           # The release body states the signing state plainly: an unsigned
           # archive is never described as verified.
           $verifyHint = 'integrity rests on SHA256SUMS, FILES.sha256 inside the archive, and the build provenance attestation (`gh attestation verify TenantPosture-' + $tag + '.zip --owner Blackvectra`).'

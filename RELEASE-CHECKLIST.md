@@ -40,6 +40,13 @@ For the in-house workflow (free, self-signed). For an external release with a pa
 # and stashes the thumbprint at ~/.tp-assessment/signing-thumbprint.txt
 ```
 
+**Once per signing certificate** (repository settings → Variables): set
+`TP_SIGNING_THUMBPRINT` to the certificate's SHA-1 thumbprint (printed by
+`New-TPCodeSigningCert.ps1`). A hosted runner trusts no self-signed root, so the
+release workflow accepts an untrusted signature only from that pinned signer;
+rotate the variable when the certificate is renewed. Set `TP_REQUIRE_SIGNED`
+to `true` once every release is signed and committed before tagging.
+
 **Per release:**
 ```powershell
 # 1. Generate the integrity manifest (Sign-Release.ps1 refreshes it after

@@ -88,15 +88,17 @@ if (-not $CertificateThumbprint) {
             try { ([System.Security.Principal.NTAccount]$identity).Translate([System.Security.Principal.SecurityIdentifier]).Value }
             catch { try { ([System.Security.Principal.SecurityIdentifier][string]$identity).Value } catch { [string]$identity } }
         }
-        $changeRights = [System.Security.AccessControl.FileSystemRights]::Write -bor
-                        [System.Security.AccessControl.FileSystemRights]::WriteData -bor
-                        [System.Security.AccessControl.FileSystemRights]::CreateFiles -bor
+        # Primitive mutation bits only. Write, Modify and FullControl are composite
+        # masks that also contain read and synchronize bits, so a read-only audit
+        # or backup principal would otherwise be reported as able to repoint the file.
+        $changeRights = [System.Security.AccessControl.FileSystemRights]::WriteData -bor
+                        [System.Security.AccessControl.FileSystemRights]::AppendData -bor
+                        [System.Security.AccessControl.FileSystemRights]::WriteExtendedAttributes -bor
+                        [System.Security.AccessControl.FileSystemRights]::WriteAttributes -bor
                         [System.Security.AccessControl.FileSystemRights]::Delete -bor
                         [System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor
                         [System.Security.AccessControl.FileSystemRights]::ChangePermissions -bor
-                        [System.Security.AccessControl.FileSystemRights]::TakeOwnership -bor
-                        [System.Security.AccessControl.FileSystemRights]::Modify -bor
-                        [System.Security.AccessControl.FileSystemRights]::FullControl
+                        [System.Security.AccessControl.FileSystemRights]::TakeOwnership
         foreach ($target in @($thumbFile, (Split-Path -Parent $thumbFile))) {
             $acl = Get-Acl -LiteralPath $target
             $owner = [string]$acl.Owner

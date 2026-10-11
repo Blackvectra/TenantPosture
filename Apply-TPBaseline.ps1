@@ -174,6 +174,15 @@ Write-Host "[-] Loading $($applyScripts.Count) apply function(s)..." -Foreground
 # SignatureStatus was loaded by the TenantPosture module import above and
 # distinguishes NotSigned / HashMismatch / UntrustedRoot / Expired so the
 # warning text is useful instead of "Signature: Invalid."
+if (-not (Get-Command Test-TPSignatureStatus -ErrorAction SilentlyContinue)) {
+    # Running from an extracted release without the module imported: load the
+    # helper itself rather than silently skipping the check.
+    $sigHelper = Join-Path $PSScriptRoot 'Lib' 'Test-TPSignatureStatus.ps1'
+    if (Test-Path -LiteralPath $sigHelper -PathType Leaf) { . $sigHelper }
+}
+if (-not (Get-Command Test-TPSignatureStatus -ErrorAction SilentlyContinue) -and $RequireSignedCode) {
+    throw 'Refusing to dispatch: -RequireSignedCode is set but Test-TPSignatureStatus (Lib/Test-TPSignatureStatus.ps1) could not be loaded, so no signature can be verified.'
+}
 if (Get-Command Test-TPSignatureStatus -ErrorAction SilentlyContinue) {
     $sigResults = foreach ($s in $applyScripts) {
         Test-TPSignatureStatus -Path $s.FullName
