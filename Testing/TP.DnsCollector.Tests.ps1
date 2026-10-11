@@ -64,6 +64,10 @@ Describe 'Invoke-TPCollectDNSEmailRecords — what the collector does with the r
                     # A TXT answer that carries no DKIM key is still an ANSWER.
                     if ($Name -like '*._domainkey.*' -and $Type -eq 'TXT') { & $set 'Answered' ''; return @('some unrelated txt') }
                     & $set 'NoRecord' ''; return @() }
+                'CaaParentUnparseable' {
+                    if ($Type -eq 'CAA' -and $Name -eq 'first.test') { & $set 'NoRecord' ''; return @() }
+                    if ($Type -eq 'CAA') { & $set 'Answered' ''; return @('999 issue "ca.example"') }
+                    & $set 'NoRecord' ''; return @() }
                 'CaaUnparseable' {
                     if ($Type -eq 'CAA') { & $set 'Answered' ''; return @('999 issue "ca.example"', 'garbage') }
                     & $set 'NoRecord' ''; return @() }
@@ -128,6 +132,11 @@ Describe 'Invoke-TPCollectDNSEmailRecords — what the collector does with the r
             $o = Run 'CaaUnparseable'
             $o.Domain.LookupStatus['CAA'] | Should -Be 'LookupFailed'
             @($o.Domain.Errors -like 'CAA:*parsed*').Count | Should -Be 1
+            Test-TPDnsLookupSucceeded -Domain $o.Domain -Record 'CAA' | Should -BeFalse
+        }
+        It 'an ancestor CAA answer with no parseable row is a failed lookup too' {
+            $o = Run 'CaaParentUnparseable' @('sub.first.test')
+            $o.Domain.LookupStatus['CAA'] | Should -Be 'LookupFailed'
             Test-TPDnsLookupSucceeded -Domain $o.Domain -Record 'CAA' | Should -BeFalse
         }
     }

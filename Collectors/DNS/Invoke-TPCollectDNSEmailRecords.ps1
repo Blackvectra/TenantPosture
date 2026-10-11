@@ -699,7 +699,9 @@ function Invoke-TPCollectDNSEmailRecords {
                     for ($i = 1; $labels.Count - $i -ge 2; $i++) {
                         $parent = ($labels[$i..($labels.Count - 1)]) -join '.'
                         $pOut = ''; $pWhy = ''
-                        $pSet = @(& $parseCaa @(Resolve-TPDns -Name $parent -Type CAA -Outcome ([ref]$pOut) -Reason ([ref]$pWhy)))
+                        $pRows = @(Resolve-TPDns -Name $parent -Type CAA -Outcome ([ref]$pOut) -Reason ([ref]$pWhy))
+                        $pSet = @(& $parseCaa $pRows)
+                        if ($pOut -eq 'Answered' -and $pRows.Count -gt 0 -and $pSet.Count -eq 0) { $pOut = 'LookupFailed'; $pWhy = "none of $($pRows.Count) CAA row(s) could be parsed" }
                         if ($pOut -notin @('Answered','NoRecord')) { & $recordLookup 'CAA' 'LookupFailed' "parent ${parent}: $pWhy"; break }
                         if ($pSet.Count -gt 0) { $caaParsed = $pSet; $d.CAA.InheritedFrom = $parent; break }
                     }
