@@ -51,7 +51,16 @@ function Set-TPSensitiveHandleAcl {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [System.IO.FileStream] $Stream)
     if (-not $IsWindows) {
-        [System.IO.File]::SetUnixFileMode($Stream.SafeFileHandle, ([System.IO.UnixFileMode]::UserRead -bor [System.IO.UnixFileMode]::UserWrite))
+        # File.SetUnixFileMode on a handle exists from .NET 7 (PowerShell 7.3). On an
+        # older runtime chmod is applied to the still-open, randomly named temp file,
+        # and a chmod that fails is an error, never a warning.
+        $setMode = [System.IO.File].GetMethod('SetUnixFileMode', [type[]]@([Microsoft.Win32.SafeHandles.SafeFileHandle], [System.IO.UnixFileMode]))
+        if ($null -ne $setMode) {
+            $null = $setMode.Invoke($null, @($Stream.SafeFileHandle, [System.IO.UnixFileMode]([int]0x180)))   # 0600; a void Invoke still emits $null
+            return
+        }
+        & chmod 600 $Stream.Name 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "chmod 600 returned exit code $LASTEXITCODE" }
         return
     }
     $sec = [System.Security.AccessControl.FileSecurity]::new()
@@ -162,11 +171,12 @@ function Set-TPSensitiveFileContent {
     $fs = $null
     try {
         $fs = [System.IO.FileStream]::new($tmp, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
-        try {
-            Set-TPSensitiveHandleAcl -Stream $fs
-        } catch {
-            Write-Warning "Set-TPSensitiveFileContent: failed to restrict access on '$Path': $($_.Exception.Message). File may be readable by other users on this host — review permissions manually."
-        }
+        # A file that cannot be hardened is not written: tenant data never lands
+        # under the folder's inherited permissions.
+        try { Set-TPSensitiveHandleAcl -Stream $fs }
+        catch { throw "Set-TPSensitiveFileContent: could not restrict access on '$Path', so it was not written: $($_.Exception.Message)" }
+        $pre = $Encoding.GetPreamble()   # the caller's BOM (Excel needs one on the action-plan CSV)
+        if ($pre.Length -gt 0) { $fs.Write($pre, 0, $pre.Length) }
         $bytes = $Encoding.GetBytes([string]$Content)
         $fs.Write($bytes, 0, $bytes.Length)
         $fs.Flush($true)

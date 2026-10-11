@@ -95,6 +95,14 @@ Describe 'Python runs through the helper; the sensitive writer never follows a l
         Set-TPSensitiveFileContent -Path $p -Content 'two'
         (Get-Content -LiteralPath $p -Raw) | Should -Be 'two'
         if (-not $IsWindows) { (& stat -c '%a' $p).Trim() | Should -Be '600' }
+        $b = Join-Path $d 'bom.csv'
+        Set-TPSensitiveFileContent -Path $b -Content 'a,b' -Encoding ([System.Text.UTF8Encoding]::new($true))
+        $bytes = [System.IO.File]::ReadAllBytes($b)
+        @($bytes[0], $bytes[1], $bytes[2]) | Should -Be @(0xEF, 0xBB, 0xBF) -Because 'the requested preamble is written'
+        $bytes.Length | Should -Be 6
+        $n = Join-Path $d 'nobom.json'
+        Set-TPSensitiveFileContent -Path $n -Content 'x'
+        ([System.IO.File]::ReadAllBytes($n)).Length | Should -Be 1 -Because 'the default encoding has no BOM'
         { Set-TPSensitiveFileContent -Path $d -Content 'x' } | Should -Throw -ExpectedMessage '*is a directory*'
     }
 }
