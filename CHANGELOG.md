@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[Honesty] The maturity label is provisional when evidence is incomplete.** `Get-TPMaturityTier`
+  excludes Error and unknown-state findings from the score denominator (by design: a tool failure
+  is not a gap), but it then printed an unqualified tier, so 50 passes beside 50 errored checks
+  read "Optimizing". The tier and the score are still computed over the scored controls; whenever
+  any finding produced no verdict, or no control was scored at all, `EvidenceComplete` is `$false`,
+  `Label` reads `<tier> (provisional: evidence incomplete)`, `ObservedLabel` keeps the bare name
+  and `Qualification` says how many findings the tier claims nothing about. No threshold waives
+  it: one errored check is one control the label says nothing about. The console prints the
+  qualification beside the tier, and a `-FailOn*` gate run on incomplete evidence warns that a
+  clean exit is not a verdict on the unscored controls (exit codes unchanged). Found by the
+  2026-10-11 review.
+
 - **[Security] Sensitive-writer and installer follow-ups from the #136 review.** The Unix mode
   type and the handle overload are resolved at run time (a type literal threw on a runtime without
   them, refusing every write); where no handle API exists the temp file is staged inside an

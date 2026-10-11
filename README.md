@@ -113,7 +113,7 @@ For automation pipelines and fast triage:
     -FailOnCritical 1 -FailOnHigh 5 -FailOnScoreBelow 70
 ```
 
-Every run now classifies the tenant into a **Tenant Security Maturity Tier** (Initial / Developing / Defined / Managed / Optimizing) — the label appears in the console summary and is embedded in the JSON metadata for downstream dashboards.
+Every run now classifies the tenant into a **Tenant Security Maturity Tier** (Initial / Developing / Defined / Managed / Optimizing) — the label appears in the console summary and is embedded in the JSON metadata for downstream dashboards. The tier is computed over the controls that were scored; when any check produced no verdict (an errored evaluator, an unrecognized state) or no control was scored, `Maturity.EvidenceComplete` is false, the label reads `… (provisional: evidence incomplete)` and `Maturity.Qualification` says how many findings the tier claims nothing about.
 
 ### Every `Invoke-TPAssessment.ps1` parameter
 

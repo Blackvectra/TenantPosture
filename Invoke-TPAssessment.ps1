@@ -1768,6 +1768,11 @@ Write-Host "  Output         $OutputPath"                                      -
 if ($reportMetadata.Contains('Maturity') -and $reportMetadata['Maturity']) {
     $m = $reportMetadata['Maturity']
     Write-Host "  Maturity       $($m.Label) (tier $($m.Tier)/5, score $($m.Score)/100)" -ForegroundColor Cyan
+    # A provisional label is one some checks produced no verdict for: the
+    # reason prints beside it, never only in the JSON.
+    if ((Get-TPObjectField -Item $m -Key 'EvidenceComplete' -Default $true) -ne $true) {
+        Write-Host "                 $(Get-TPObjectField -Item $m -Key 'Qualification' -Default 'Evidence incomplete.')" -ForegroundColor Yellow
+    }
 } elseif ($reportMetadata.Contains('MaturityError')) {
     Write-Host "  Maturity       unavailable ($($reportMetadata['MaturityError']))" -ForegroundColor Yellow
 }
@@ -1821,6 +1826,12 @@ if ($FailOnCritical -gt 0 -or $FailOnHigh -gt 0 -or $FailOnScoreBelow -gt 0) {
     else {
         $critGaps = [int]$mat.CriticalGaps
         $highGaps = [int]$mat.HighGaps
+        # The gate reads counts and a score computed over the scored controls only.
+        # When some checks produced no verdict a clean exit covers less than it
+        # looks like, so say so; the exit code itself is unchanged.
+        if ((Get-TPObjectField -Item $mat -Key 'EvidenceComplete' -Default $true) -ne $true) {
+            Write-Warning "Threshold check ran on incomplete evidence: $(Get-TPObjectField -Item $mat -Key 'Qualification' -Default 'some findings produced no verdict.') A clean exit here is not a verdict on the controls that were not scored."
+        }
 
         if ($FailOnCritical -gt 0 -and $critGaps -ge $FailOnCritical) {
             Write-Host "[!] Threshold breached: $critGaps Critical gaps (limit $FailOnCritical) — exiting 10" -ForegroundColor Red
