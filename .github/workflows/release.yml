@@ -125,7 +125,8 @@ jobs:
           foreach ($f in $shipFiles) { Copy-Item -LiteralPath $f.FullName -Destination "./$name/" }
           # The committed integrity manifest hashes the whole repository tree (tests
           # included); inside the archive it would report every omitted file as
-          # missing. FILES.sha256 below is the archive's own record.
+          # missing. FILES.sha256 below is the archive's own record, and the shipped
+          # tools/Verify-Integrity.ps1 verifies against it when this file is absent.
           Remove-Item -LiteralPath "./$name/tools/integrity-manifest.txt" -Force -ErrorAction SilentlyContinue
           # A per-file manifest travels inside the archive: the release's own
           # integrity record, generated from the tree that was packaged.

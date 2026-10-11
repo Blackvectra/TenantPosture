@@ -23,8 +23,10 @@
       http://timestamp.digicert.com
       http://timestamp.sectigo.com
 
-    The resulting TenantPosture.cat is verified at orchestrator startup via Test-FileCatalog
-    unless -SkipCatalogCheck is passed.
+    The resulting TenantPosture.cat is a signed catalog of the COMMITTED tree: the files git
+    tracks plus the manifests this script writes, which the "Sign vX.Y.Z" commit adds. Verify a
+    clone with Test-FileCatalog -CatalogFilePath TenantPosture.cat -Path <the same file list>.
+    Nothing in the tool reads it at run time.
 
 .PARAMETER CertificateThumbprint
     SHA-1 thumbprint of the code-signing certificate. If omitted, reads from
@@ -267,14 +269,36 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     Write-Host "  [+] FILES.sha256 rewritten ($(@($manifest).Count) entries)." -ForegroundColor Green
 }
 
-# Generate catalog
+# Generate catalog. It describes the COMMITTED tree, so it is built from the
+# files git tracks plus the manifests written above (committed by the same
+# "Sign" commit), never from a folder walk: New-FileCatalog -Path <folder>
+# takes everything underneath, including .git\ (whose index changes on the
+# very commit that adds the catalog) and output\, and such a catalog could
+# never validate a fresh clone. A tracked file missing from the working tree
+# means the tree is not the one that will be committed, so it stops here.
 $catalogPath = Join-Path $RepoRoot 'TenantPosture.cat'
-Write-Host "[-] Generating catalog $catalogPath..." -ForegroundColor Cyan
+Write-Host "[-] Generating catalog $catalogPath from the tracked files..." -ForegroundColor Cyan
+$gitCmd = Get-Command git -ErrorAction SilentlyContinue
+if (-not $gitCmd) { throw 'git was not found on PATH; the catalog is built from the tracked files and cannot be generated without it.' }
+$global:LASTEXITCODE = 0
+$tracked = @(& $gitCmd.Source -C $RepoRoot -c core.quotepath=off ls-files)
+if ($LASTEXITCODE -ne 0 -or $tracked.Count -eq 0) { throw "git ls-files failed in $RepoRoot (exit $LASTEXITCODE); is it a clone?" }
+$catalogFiles = [System.Collections.Generic.List[string]]::new()
+foreach ($rel in $tracked) {
+    $full = Join-Path $RepoRoot ($rel -replace '/', [string][System.IO.Path]::DirectorySeparatorChar)
+    if ($full -eq $catalogPath) { continue }
+    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw "Tracked file '$rel' is missing from the working tree; the catalog describes the committed tree, so restore or remove it first." }
+    $catalogFiles.Add($full)
+}
+foreach ($extra in @($integrityManifest, $manifestPath)) {
+    if ((Test-Path -LiteralPath $extra -PathType Leaf) -and -not $catalogFiles.Contains($extra)) { $catalogFiles.Add($extra) }
+}
+$catalogFiles = @($catalogFiles | Sort-Object -Unique)
 
 try {
-    $catResult = New-FileCatalog -Path $RepoRoot -CatalogFilePath $catalogPath `
+    $catResult = New-FileCatalog -Path $catalogFiles -CatalogFilePath $catalogPath `
                                   -CatalogVersion 2 -ErrorAction Stop
-    Write-Host "  [+] Catalog generated. Hash entries: $($catResult.Count)" -ForegroundColor Green
+    Write-Host "  [+] Catalog generated over $($catalogFiles.Count) tracked file(s). Hash entries: $($catResult.Count)" -ForegroundColor Green
 } catch {
     throw "Catalog generation failed: $($_.Exception.Message)"
 }
@@ -289,9 +313,9 @@ if ($catSig.Status -ne 'Valid') {
 }
 Write-Host "  [+] Catalog signed and timestamped." -ForegroundColor Green
 
-# Verify
+# Verify, over the same file list the catalog was built from.
 Write-Host "[-] Verifying..." -ForegroundColor Cyan
-$verify = Test-FileCatalog -CatalogFilePath $catalogPath -Path $RepoRoot -Detailed
+$verify = Test-FileCatalog -CatalogFilePath $catalogPath -Path $catalogFiles -Detailed
 if ($verify.Status -eq 'Valid') {
     Write-Host "  [+] Test-FileCatalog: Valid" -ForegroundColor Green
 } else {

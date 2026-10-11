@@ -5,7 +5,14 @@
 
 .DESCRIPTION
     Computes SHA-256 hashes of every PS1, PSM1, PSD1, and JSON file in the repo
-    (excluding output/, .git/, tools/) and compares against tools/integrity-manifest.txt.
+    (excluding output/, .git/, .github/) and compares against tools/integrity-manifest.txt.
+
+    In an extracted release there is no tools/integrity-manifest.txt (the release
+    workflow leaves it out: it hashes the whole repository tree, tests included, and
+    would report every file the archive omits as missing) but there is FILES.sha256,
+    the archive's own record of every packaged file. When the repository manifest is
+    absent and FILES.sha256 is present at the root, every file under the root is
+    verified against it (FILES.sha256 itself and output/ excepted).
 
     Returns exit 0 if all files match, 1 if any mismatch or missing file.
 
@@ -42,13 +49,27 @@ if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
 
 $includeExtensions = @('.ps1', '.psm1', '.psd1', '.json')
 
+# Extracted release: no repository manifest, but the archive's FILES.sha256.
+$archiveManifest = Join-Path $repoRoot 'FILES.sha256'
+$archiveMode = (-not $PSBoundParameters.ContainsKey('ManifestPath')) -and
+               (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) -and
+               (Test-Path -LiteralPath $archiveManifest -PathType Leaf)
+if ($archiveMode) {
+    if ($Update) { throw 'FILES.sha256 is written by the release workflow from the packaged tree; -Update regenerates the repository manifest and does not apply to an extracted release.' }
+    $ManifestPath = $archiveManifest
+    Write-Host "  [i] No repository manifest here; verifying the extracted release against FILES.sha256 (every packaged file)." -ForegroundColor Cyan
+}
+
+# Separators are matched either way: the repository manifest is read on
+# whatever workstation the operator uses.
 $files = Get-ChildItem -LiteralPath $repoRoot -Recurse -File -ErrorAction Stop |
     Where-Object {
-        $_.Extension -in $includeExtensions -and
-        $_.FullName -notmatch '\\output\\' -and
-        $_.FullName -notmatch '\\\.git\\' -and
-        $_.FullName -notmatch '\\\.github\\' -and
-        $_.FullName -notmatch '\\tools\\integrity-manifest'
+        ($archiveMode -or $_.Extension -in $includeExtensions) -and
+        $_.FullName -notmatch '[\\/]output[\\/]' -and
+        $_.FullName -notmatch '[\\/]\.git[\\/]' -and
+        $_.FullName -notmatch '[\\/]\.github[\\/]' -and
+        $_.FullName -notmatch '[\\/]tools[\\/]integrity-manifest' -and
+        $_.FullName -ne $archiveManifest
     } |
     Sort-Object FullName
 

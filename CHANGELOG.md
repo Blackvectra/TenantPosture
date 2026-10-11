@@ -28,6 +28,10 @@
   `$LASTEXITCODE`; `tools/Verify-Integrity.ps1 -Update` is terminating and re-reads the manifest it
   wrote, so an unreadable file can never leave a shorter manifest; and the release job treats a
   `Valid` signature from a publisher other than `TP_SIGNING_THUMBPRINT` as a problem, not a pass.
+  The catalog is built from the files git tracks plus the manifests the sign commit adds, never a
+  folder walk that took `.git\` and `output\` with it and could not validate a fresh clone; and the
+  shipped `tools/Verify-Integrity.ps1` verifies an extracted release against its `FILES.sha256` when
+  the repository manifest is absent, instead of exiting 1 on the file the archive leaves out.
 
 - **[Security] Sensitive-writer and installer follow-ups from the #136 review.** The Unix mode
   type and the handle overload are resolved at run time (a type literal threw on a runtime without
