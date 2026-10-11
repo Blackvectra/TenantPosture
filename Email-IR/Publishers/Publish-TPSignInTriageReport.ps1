@@ -284,8 +284,7 @@ td{padding:10px 12px;border-bottom:1px solid var(--bdr);vertical-align:top}
         # Publish-TPAssessmentSummary.
         $EscMd = {
             param([object] $v)
-            if ($null -eq $v -or [string]::IsNullOrEmpty([string]$v)) { return '' }
-            ([string]$v) -replace '\|', '\|' -replace '`', '\`' -replace '[\r\n]+', ' '
+            ConvertTo-TPMarkdownSafe $v
         }
         $md = "# Sign-In Triage Report — $(& $EscMd $tidRaw)`n`n"
         $md += "**Admin:** $(& $EscMd $adminRaw)  `n**Assessed:** $(& $EscMd $assRaw)  `n**Window:** $(& $EscMd ([string]$winRaw)) day(s)  `n"

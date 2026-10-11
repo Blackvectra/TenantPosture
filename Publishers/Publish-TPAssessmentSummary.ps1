@@ -40,9 +40,8 @@ function Publish-TPAssessmentSummary {
     # protection belongs at the markdown→HTML render boundary, not here.
     function EscMd([object]$v) {
         if ($null -eq $v -or [string]::IsNullOrEmpty([string]$v)) { return '' }
-        $safe = [string]$v
-        $safe = $safe -replace '\|', '\|' -replace '`', '\`' -replace '[\r\n]+', ' '
-        return $safe
+        # One Markdown rule for the whole tool: Lib/ConvertTo-TPMarkdownSafe.ps1.
+        return (ConvertTo-TPMarkdownSafe $v)
     }
 
     $brand      = $script:TPBrand

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[Security] One Markdown escape for every deliverable; the SSP workbook never writes a formula.**
+  Eight Markdown publishers (summary, playbook and executive summary, SSP, NIST matrix, improvement
+  plan, device guide and baseline, the two incident-response reports) escaped only pipes, backticks
+  and line breaks, so a rule, policy or app name chosen in the tenant reached the file as raw HTML,
+  a link or an image: a viewer that renders HTML would run it, and one that loads images would
+  fetch the attacker's URL when the report was opened. `ConvertTo-TPMarkdownSafe` (`Lib/`) is now
+  the one rule, with the delta report's strict behavior plus the HTML and image characters, and
+  every publisher calls it. The SSP workbook's Python wrote client-authored narratives and POA&M
+  fields straight into cells, so `=HYPERLINK(...)` became a live formula; it now applies the same
+  apostrophe guard and text type the compliance and NIST workbooks use. Found by the 2026-10-09
+  security audit (M2, M3); closes the Markdown item in `docs/KNOWN-ISSUES.md`.
+
 - **[Security] An endpoint result file is bound to a device, not only a host name.** The device
   collector de-duplicated result files by host name, newest first, so a file written on one endpoint
   that claimed another machine's name replaced that machine's result and could turn a failing

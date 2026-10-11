@@ -191,12 +191,9 @@ These fixes passed their tests but have not been seen working against a real ten
   the process behind the download event has not been identified. The Tor Project host name was
   removed from every shipped file as a precaution, and a test fails if a live reference returns.
 - **INT-1.1 non-compliance actions** are not read, by design; see `TP-DETECTION-LIMITS.md`.
-- **Markdown escaping in the other report publishers.** The NIST matrix, SSP, improvement plan,
-  device guide and device baseline publishers escape only pipes and line breaks in Markdown, so
-  markup inside tenant-derived text (a policy or app display name) reaches the `.md` file as raw
-  HTML, which some Markdown viewers render. Their HTML reports are encoded. The HIPAA readiness
-  publisher encodes `&`, `<` and `>` as well (found by review of PR #121); the others follow in a
-  separate PR.
+- **Markdown escaping in the other report publishers.** Resolved: every Markdown publisher now calls
+  `ConvertTo-TPMarkdownSafe` (`Lib/ConvertTo-TPMarkdownSafe.ps1`), which escapes the HTML, link, image,
+  code-span, emphasis, heading and blockquote characters as well as pipes and line breaks.
 
 ## Environment problems on an operator's workstation
 

@@ -58,7 +58,7 @@ function Publish-TPDeviceGuide {
     Set-StrictMode -Version Latest
     $ErrorActionPreference = 'Stop'
 
-    function EscMd { param([object]$v) ([string]$v) -replace '\|', '\|' -replace '[\r\n]+', ' ' }
+    function EscMd { param([object]$v) ConvertTo-TPMarkdownSafe $v }
     function Esc   { param([object]$v) ConvertTo-TPHtmlSafe $v }
 
     # Strip nulls BEFORE counting. @($null).Count is 1, not 0 — so an omitted
