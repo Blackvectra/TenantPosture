@@ -91,6 +91,7 @@ Write-Host "[4/6] Checking PowerShell modules..." -ForegroundColor Cyan
 # OneDrive check at all, silently recreating the exact condition this
 # installer exists to avoid.
 . (Join-Path $PSScriptRoot 'Lib/Get-TPModuleInstallScope.ps1')
+. (Join-Path $PSScriptRoot 'Lib/Invoke-TPPython.ps1')
 $scopeInfo    = Get-TPModuleInstallScope
 $installScope = $scopeInfo.Scope
 

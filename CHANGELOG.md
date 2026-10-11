@@ -10,10 +10,11 @@
   call now goes through `Invoke-TPPython` / `Test-TPPythonModule` (`Lib/Invoke-TPPython.ps1`): the
   script goes to Python on stdin, no helper file is written, and the script's first line drops the
   current directory from `sys.path` before anything is imported. The user site and `PYTHONPATH` are
-  kept on purpose (`-I` would hide a non-administrator's `pip install --user openpyxl`), UTF-8 mode is
-  forced so a box-drawing character survives a Windows code page, and the installer runs pip itself
+  kept on purpose (`-I` would hide a non-administrator's `pip install --user openpyxl`), `PYTHON*`
+  variables are ignored (`-E`), UTF-8 mode is forced so a box-drawing character survives a Windows code page, and the installer runs pip itself
   with `-I` and re-probes the import after installing. `Set-TPSensitiveFileContent` writes to a new
-  randomly named file beside the target, hardens its ACL, then moves it over the target name, so a
+  randomly named file beside the target, hardens it and writes it through that one handle, then moves it
+  over the target name, so a
   symbolic link, junction or mount point planted at a predictable output name is replaced, never
   followed, with no inspect-then-open window. Found by the 2026-10-09 security audit (M6 and the
   symlink finding); revised after review.

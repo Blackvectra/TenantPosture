@@ -30,6 +30,36 @@
 # Invoke-TPAssessment.ps1.
 #
 
+# The three access rules every sensitive file gets on Windows: the current user,
+# SYSTEM and Administrators, full control, nothing else.
+function Get-TPSensitiveFileAccessRules {
+    [CmdletBinding()]
+    param()
+    $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    return @(
+        [System.Security.AccessControl.FileSystemAccessRule]::new($currentUser, 'FullControl', 'Allow')
+        [System.Security.AccessControl.FileSystemAccessRule]::new('NT AUTHORITY\SYSTEM', 'FullControl', 'Allow')
+        [System.Security.AccessControl.FileSystemAccessRule]::new('BUILTIN\Administrators', 'FullControl', 'Allow')
+    )
+}
+
+# Hardens an OPEN file through its own handle, never through its name: on
+# Windows the FileSecurity goes to the handle (FileSystemAclExtensions), on
+# other hosts the mode is set on the handle (File.SetUnixFileMode). Nothing
+# here reopens the path, so no entry swapped in after the open is affected.
+function Set-TPSensitiveHandleAcl {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [System.IO.FileStream] $Stream)
+    if (-not $IsWindows) {
+        [System.IO.File]::SetUnixFileMode($Stream.SafeFileHandle, ([System.IO.UnixFileMode]::UserRead -bor [System.IO.UnixFileMode]::UserWrite))
+        return
+    }
+    $sec = [System.Security.AccessControl.FileSecurity]::new()
+    $sec.SetAccessRuleProtection($true, $false)
+    foreach ($r in (Get-TPSensitiveFileAccessRules)) { $sec.AddAccessRule($r) }
+    [System.IO.FileSystemAclExtensions]::SetAccessControl($Stream, $sec)
+}
+
 function Set-TPSensitiveFileAcl {
     [CmdletBinding()]
     param(
@@ -76,13 +106,7 @@ function Set-TPSensitiveFileAcl {
                 [void]$acl.RemoveAccessRule($existing)
             }
         }
-        $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-        $rules = @(
-            [System.Security.AccessControl.FileSystemAccessRule]::new($currentUser, 'FullControl', 'Allow')
-            [System.Security.AccessControl.FileSystemAccessRule]::new('NT AUTHORITY\SYSTEM', 'FullControl', 'Allow')
-            [System.Security.AccessControl.FileSystemAccessRule]::new('BUILTIN\Administrators', 'FullControl', 'Allow')
-        )
-        foreach ($r in $rules) { $acl.AddAccessRule($r) }
+        foreach ($r in (Get-TPSensitiveFileAccessRules)) { $acl.AddAccessRule($r) }
         Set-Acl -LiteralPath $Path -AclObject $acl
     } catch {
         Write-Warning "Set-TPSensitiveFileAcl: failed to restrict ACL on '$Path': $($_.Exception.Message). File may be readable by other users on this host — review permissions manually."
@@ -122,12 +146,13 @@ function Set-TPSensitiveFileContent {
         [System.Text.Encoding] $Encoding = [System.Text.UTF8Encoding]::new($false)
     )
 
-    # The content is written to a new, randomly named file beside the target
-    # (CreateNew: the handle is ours, never a link someone planted), the ACL is
-    # applied to that file before any tenant data lands in it, and the file is
-    # then moved over the target. The move replaces the target name itself, so a
-    # symbolic link, junction or mount point planted at the output name is
-    # replaced, never followed; there is no inspect-then-open window.
+    # The content is written to a new, randomly named file beside the target,
+    # opened once with CreateNew (the handle is ours, never a link someone
+    # planted), hardened THROUGH THAT HANDLE before any tenant data lands, written
+    # through the same handle, and then moved over the target name. The move
+    # replaces the target name itself, so a symbolic link, junction or mount
+    # point planted at the output name is replaced, never followed; nothing in
+    # between reopens a path.
     if (Test-Path -LiteralPath $Path -PathType Container) { throw "Set-TPSensitiveFileContent: '$Path' is a directory." }
     $dir = Split-Path -Parent $Path
     if ([string]::IsNullOrEmpty($dir)) { $dir = (Get-Location).ProviderPath }
@@ -136,16 +161,19 @@ function Set-TPSensitiveFileContent {
     $tmp = Join-Path $dir ('.' + $leaf + '.' + [guid]::NewGuid().ToString('N') + '.tmp')
     $fs = $null
     try {
-        $fs = [System.IO.FileStream]::new($tmp, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
-    } finally {
-        if ($fs) { $fs.Dispose() }
-    }
-    try {
-        # Harden ACL BEFORE writing tenant data. 0600 on non-Windows.
-        Set-TPSensitiveFileAcl -Path $tmp
-        [System.IO.File]::WriteAllText($tmp, [string]$Content, $Encoding)
+        $fs = [System.IO.FileStream]::new($tmp, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+        try {
+            Set-TPSensitiveHandleAcl -Stream $fs
+        } catch {
+            Write-Warning "Set-TPSensitiveFileContent: failed to restrict access on '$Path': $($_.Exception.Message). File may be readable by other users on this host — review permissions manually."
+        }
+        $bytes = $Encoding.GetBytes([string]$Content)
+        $fs.Write($bytes, 0, $bytes.Length)
+        $fs.Flush($true)
+        $fs.Dispose(); $fs = $null
         [System.IO.File]::Move($tmp, $Path, $true)
     } catch {
+        if ($fs) { $fs.Dispose(); $fs = $null }
         Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
         throw
     }

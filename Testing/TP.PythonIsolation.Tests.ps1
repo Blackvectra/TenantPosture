@@ -45,6 +45,9 @@ Describe 'Python runs through the helper; the sensitive writer never follows a l
             ($out | Out-String) | Should -Match 'ok'
             ($out | Out-String) | Should -Not -Match 'HIJACKED'
             ($out | Out-String) | Should -Match 'site' -Because '-I is not used: a pip install --user library must stay importable'
+            $env:PYTHONPATH = $d
+            try { $out2 = Invoke-TPPython -Python $script:Py -Script "import json; print('ok2')" } finally { Remove-Item Env:\PYTHONPATH -ErrorAction SilentlyContinue }
+            ($out2 | Out-String) | Should -Match 'ok2' -Because 'PYTHON* variables are ignored (-E)'
             Test-TPPythonModule -Python $script:Py -Module 'json' | Should -BeTrue
             Test-TPPythonModule -Python $script:Py -Module 'tp_no_such_module_x' | Should -BeFalse
         } finally { Pop-Location }
@@ -79,6 +82,10 @@ Describe 'Python runs through the helper; the sensitive writer never follows a l
         [string](Get-Item -LiteralPath $link -Force).LinkType | Should -BeNullOrEmpty -Because 'the output name is now an ordinary file'
         (Get-Content -LiteralPath $link -Raw) | Should -Be '{"tenant":"secret"}'
         @(Get-ChildItem -LiteralPath $d -Force -Filter '*.tmp') | Should -BeNullOrEmpty -Because 'no temp file is left behind'
+    }
+
+    It 'the installer loads the Python helper before probing' {
+        (Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Install-TPPrerequisites.ps1') -Raw) | Should -Match "\. \(Join-Path \`$PSScriptRoot 'Lib/Invoke-TPPython\.ps1'\)"
     }
 
     It 'Set-TPSensitiveFileContent still writes an ordinary new or existing file' {

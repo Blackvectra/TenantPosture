@@ -11,8 +11,12 @@
 #   place of the real one. Only `sys` is touched before that line, and `sys` is
 #   built into the interpreter, so nothing on disk can shadow it. The user site
 #   and PYTHONPATH are left alone on purpose: `-I` would discard them, and a
-#   non-administrator's `pip install --user openpyxl` lives there. UTF-8 mode is
-#   forced so a box-drawing character in a script survives a Windows code page.
+#   non-administrator's `pip install --user openpyxl` lives there. `-E` ignores
+#   PYTHON* variables (a PYTHONPATH holding '.' expands to the absolute current
+#   directory, which the filter would not remove, and PYTHONSTARTUP / a planted
+#   sitecustomize on such a path would run before the prologue); `-E` does not
+#   imply `-s`, so the user site stays. UTF-8 mode is forced so a box-drawing
+#   character in a script survives a Windows code page.
 # Data keys: none. Graph / cmdlets: none (one child process).
 
 $script:TPPythonPrologue = "import sys; sys.path[:] = [p for p in sys.path if p not in ('', '.')]`n"
@@ -30,7 +34,7 @@ function Test-TPPythonModule {
         [Parameter(Mandatory)] [ValidatePattern('^[A-Za-z_][A-Za-z0-9_]{0,63}$')] [string] $Module
     )
     try {
-        $null = & $Python -X utf8=1 -c ($script:TPPythonPrologue + "import $Module") 2>&1
+        $null = & $Python -E -X utf8=1 -c ($script:TPPythonPrologue + "import $Module") 2>&1
         return ($LASTEXITCODE -eq 0)
     } catch { return $false }
 }
@@ -49,5 +53,5 @@ function Invoke-TPPython {
         [AllowEmptyCollection()] [string[]] $Arguments = @()
     )
     $full = $script:TPPythonPrologue + $Script
-    return @($full | & $Python -X utf8=1 - @Arguments 2>&1)
+    return @($full | & $Python -E -X utf8=1 - @Arguments 2>&1)
 }
