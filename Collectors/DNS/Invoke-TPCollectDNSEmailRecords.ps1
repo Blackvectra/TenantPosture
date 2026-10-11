@@ -90,31 +90,21 @@ function Test-TPSafeProbeTarget {
         return @{ Refused = $true; Reason = "no addresses returned for '$HostName'" }
     }
 
+    # Every address the name resolves to must be globally routable unicast
+    # (Lib/Test-TPPublicAddress.ps1): an IPv4-mapped, NAT64 or 6to4 IPv6 address
+    # is unwrapped first, because a deny-list that looked only at the address
+    # family let ::ffff:10.1.2.3 through to a host inside the operator's network.
+    $unwrapped = [System.Collections.Generic.List[object]]::new()
     foreach ($addr in $addresses) {
-        $ipStr = $addr.ToString()
-        if ($addr.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork) {
-            # IPv4: block RFC1918, loopback, link-local
-            $bytes = $addr.GetAddressBytes()
-            $b0 = $bytes[0]; $b1 = $bytes[1]
-            if ($b0 -eq 10)                                  { return @{ Refused = $true; Reason = "address $ipStr is RFC1918 10/8" } }
-            if ($b0 -eq 172 -and $b1 -ge 16 -and $b1 -le 31) { return @{ Refused = $true; Reason = "address $ipStr is RFC1918 172.16/12" } }
-            if ($b0 -eq 192 -and $b1 -eq 168)                { return @{ Refused = $true; Reason = "address $ipStr is RFC1918 192.168/16" } }
-            if ($b0 -eq 127)                                 { return @{ Refused = $true; Reason = "address $ipStr is loopback 127/8" } }
-            if ($b0 -eq 169 -and $b1 -eq 254)                { return @{ Refused = $true; Reason = "address $ipStr is link-local 169.254/16" } }
-        } elseif ($addr.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
-            # IPv6: block loopback (::1), link-local (fe80::/10), ULA (fc00::/7)
-            if ([System.Net.IPAddress]::IsLoopback($addr)) { return @{ Refused = $true; Reason = "address $ipStr is IPv6 loopback" } }
-            if ($addr.IsIPv6LinkLocal)                     { return @{ Refused = $true; Reason = "address $ipStr is IPv6 link-local (fe80::/10)" } }
-            $b0 = $addr.GetAddressBytes()[0]
-            # fc00::/7 — high 7 bits are 1111110 (0xFC or 0xFD)
-            if (($b0 -band 0xFE) -eq 0xFC)                 { return @{ Refused = $true; Reason = "address $ipStr is IPv6 ULA (fc00::/7)" } }
-        }
+        $verdict = Test-TPGloballyRoutableAddress -Address $addr
+        if (-not $verdict.Allowed) { return @{ Refused = $true; Reason = $verdict.Reason } }
+        $unwrapped.Add($verdict.Address)
     }
 
     # Pick the first IPv4 (preferred) or fall back to first IPv6. Callers must
     # connect to this IP literal — second resolution would re-open the rebinding race.
-    $picked = $addresses | Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } | Select-Object -First 1
-    if (-not $picked) { $picked = $addresses | Select-Object -First 1 }
+    $picked = $unwrapped | Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } | Select-Object -First 1
+    if (-not $picked) { $picked = $unwrapped | Select-Object -First 1 }
     return @{ Refused = $false; Address = $picked; HostName = $HostName }
 }
 
@@ -603,12 +593,16 @@ function Invoke-TPCollectDNSEmailRecords {
                     try {
                         # Validate the domain before constructing URL — already validated above
                         $stsUrl     = "https://$mtaStsHost/.well-known/mta-sts.txt"
-                        $stsContent = Invoke-WebRequest -Uri $stsUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
-                        $stsText    = $stsContent.Content
+                        # RFC 8461 section 3.3 serves the policy at that exact URL, so a
+                        # redirect is an unretrievable policy, not one to follow elsewhere;
+                        # the whole transfer is under one timeout and a 64 KB cap.
+                        $stsText = Get-TPBoundedHttpText -Uri $stsUrl -TimeoutSeconds 10 -MaxBytes 65536
                         $d.MTASTS.Policy = $stsText
 
-                        $modeMatch = [regex]::Match($stsText, '^\s*mode:\s*(\S+)', [System.Text.RegularExpressions.RegexOptions]::Multiline)
-                        $d.MTASTS.Mode = if ($modeMatch.Success) { $modeMatch.Groups[1].Value.Trim() } else { 'unknown' }
+                        # Line by line, horizontal whitespace only: the multiline regex it
+                        # replaces was quadratic on a body made of newlines.
+                        $modeLine = @($stsText -split '\r?\n' | Where-Object { $_ -match '^[ \t]*mode:[ \t]*(\S+)' } | Select-Object -First 1)
+                        $d.MTASTS.Mode = if ($modeLine.Count -gt 0 -and $modeLine[0] -match '^[ \t]*mode:[ \t]*(\S+)') { $Matches[1].Trim() } else { 'unknown' }
                     } catch {
                         # Not silent: an unread policy file is "not assessed",
                         # never a scored mode of "unknown".
@@ -664,8 +658,11 @@ function Invoke-TPCollectDNSEmailRecords {
                 $mxOutcome = ''; $mxReason = ''
                 $d.MX = @(@(Resolve-TPDns -Name $domain -Type MX -Outcome ([ref]$mxOutcome) -Reason ([ref]$mxReason)) | ForEach-Object {
                     $parts = ([string]$_).Trim() -split '\s+', 2
-                    if ($parts.Count -eq 2) {
-                        @{ Preference = [int]$parts[0]; Exchange = $parts[1].TrimEnd('.') }
+                    # ASCII digits only and TryParse: [int] on an answer throws on overflow or a
+                    # Unicode digit and discarded the whole MX set; one bad row is skipped instead.
+                    $pref = 0
+                    if ($parts.Count -eq 2 -and $parts[0] -cmatch '^[0-9]{1,5}$' -and [int]::TryParse($parts[0], [System.Globalization.NumberStyles]::None, [cultureinfo]::InvariantCulture, [ref]$pref)) {
+                        @{ Preference = $pref; Exchange = $parts[1].TrimEnd('.') }
                     }
                 } | Where-Object { $_ })
                 & $recordLookup 'MX' $mxOutcome $mxReason
@@ -683,9 +680,10 @@ function Invoke-TPCollectDNSEmailRecords {
             try {
                 $caaOutcome = ''; $caaReason = ''
                 $parseCaa = { param($rows) @(@($rows) | ForEach-Object {
-                    $m = [regex]::Match([string]$_, '^\s*(\d+)\s+(\w+)\s+"?([^"]*)"?\s*$')
-                    if ($m.Success) {
-                        @{ Flags = [int]$m.Groups[1].Value; Tag = $m.Groups[2].Value.ToLowerInvariant(); Value = $m.Groups[3].Value.Trim() }
+                    $m = [regex]::Match([string]$_, '^\s*([0-9]{1,3})\s+([A-Za-z0-9]+)\s+"?([^"]*)"?\s*$')
+                    $flags = 0
+                    if ($m.Success -and [int]::TryParse($m.Groups[1].Value, [System.Globalization.NumberStyles]::None, [cultureinfo]::InvariantCulture, [ref]$flags)) {
+                        @{ Flags = $flags; Tag = $m.Groups[2].Value.ToLowerInvariant(); Value = $m.Groups[3].Value.Trim() }
                     }
                 } | Where-Object { $_ }) }
                 $caaParsed = @(& $parseCaa @(Resolve-TPDns -Name $domain -Type CAA -Outcome ([ref]$caaOutcome) -Reason ([ref]$caaReason)))
@@ -778,7 +776,8 @@ function Invoke-TPCollectDNSEmailRecords {
                 $tcpClient = $null
                 $sslStream = $null
                 try {
-                    $tcpClient = [System.Net.Sockets.TcpClient]::new()
+                    # The socket family is the validated address's own, never dual-mode.
+                    $tcpClient = [System.Net.Sockets.TcpClient]::new($ipAddr.AddressFamily)
                     # 5-second connect timeout — many MX hosts block 443.
                     # Connect to the resolved IP (closes the DNS rebinding race
                     # against the connect-time name resolution).
@@ -835,12 +834,13 @@ function Invoke-TPCollectDNSEmailRecords {
                 # URL-encode the domain literal; crt.sh expects %25 (URL-encoded %)
                 # around the domain for wildcard match.
                 $ctUrl = ('https://crt.sh/?q=%25.{0}&output=json' -f [uri]::EscapeDataString($domain))
-                $ctResp = Invoke-WebRequest -Uri $ctUrl -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
+                # One timeout over the whole transfer, no redirect, 4 MB cap.
+                $ctText = Get-TPBoundedHttpText -Uri $ctUrl -TimeoutSeconds 30 -MaxBytes 4194304
                 # CWE-502 — crt.sh is a public service; a hostile response (MITM
                 # downgrade, BGP hijack, compromise) could include a recursive
                 # JSON bomb. -Depth caps deserialization at realistic CT-log
                 # entry nesting (10 is generous).
-                $ctList = $ctResp.Content | ConvertFrom-Json -Depth 10 -ErrorAction Stop
+                $ctList = $ctText | ConvertFrom-Json -Depth 10 -ErrorAction Stop
                 if ($ctList) {
                     $arr = @($ctList)
                     $d.CTLog.TotalCerts = $arr.Count

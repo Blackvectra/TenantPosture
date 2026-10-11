@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **[Security] Network answers are parsed with bounds.** The TLS-probe guard refused only a
+  deny-list of ranges per address family, so an IPv4-mapped, NAT64 or 6to4 IPv6 address carrying a
+  private IPv4 address reached the connect step and a hostile tenant's AAAA record could point the
+  workstation at a host inside the operator's network. `Test-TPGloballyRoutableAddress`
+  (`Lib/Test-TPPublicAddress.ps1`) is now a positive rule, globally routable unicast only, applied
+  after unwrapping, and the socket is created for the validated address's own family. The MTA-STS
+  policy and crt.sh reads go through `Get-TPBoundedHttpText`: one timeout over the whole transfer
+  (`-TimeoutSec` covered only the headers), no redirect followed, and a byte cap; the MTA-STS mode
+  is read line by line instead of with a multiline regex that was quadratic on a body of newlines.
+  DoH TXT data is joined by `ConvertFrom-TPDnsTxtData` in one pass, and an unterminated quote is a
+  provider failure, never an empty record (the regex it replaces was quadratic and read it as "no
+  record"). MX preference and CAA flags are parsed from ASCII digits with `TryParse`, skipping one
+  bad row instead of discarding the record type. The incident-response domain-age enrichment maps
+  an IDN sender domain to ASCII and reports one the lookup cannot take as not enriched rather than
+  failing the evaluator. Found by the 2026-10-09 security audit (M7 and the network Lows).
+
 - **[Security] One Markdown escape for every deliverable; the SSP workbook never writes a formula.**
   Eight Markdown publishers (summary, playbook and executive summary, SSP, NIST matrix, improvement
   plan, device guide and baseline, the two incident-response reports) escaped only pipes, backticks

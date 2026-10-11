@@ -128,6 +128,7 @@ function Resolve-TPDns {
             # valid SPF row in the same Answer.
             $answerProp = $resp.PSObject.Properties['Answer']
             $rows = if ($answerProp -and $null -ne $answerProp.Value) { @($answerProp.Value) } else { @() }
+            $malformed = $false
             $out = @($rows | ForEach-Object {
                 if ($null -eq $_ -or $_ -is [string]) { return }
                 $tp = $_.PSObject.Properties['type']
@@ -144,16 +145,16 @@ function Resolve-TPDns {
                     # embedded quoted token in Google's form is not mistaken
                     # for the only segment. Inside a quoted segment, \" and \\
                     # are RFC 1035 escapes and are unescaped.
-                    if ($data -match '^\s*"') {
-                        $segs = [regex]::Matches($data, '"((?:[^"\\]|\\.)*)"')
-                        -join ($segs | ForEach-Object { $_.Groups[1].Value -replace '\\(["\\])', '$1' })
-                    } else {
-                        $data
-                    }
+                    # One linear pass (ConvertFrom-TPDnsTxtData, below); a value whose quoting
+                    # never closes is a malformed provider answer, not an empty record.
+                    $joined = ConvertFrom-TPDnsTxtData -Data $data
+                    if ($null -eq $joined) { $malformed = $true; return }
+                    $joined
                 } else {
                     $data
                 }
             })
+            if ($malformed) { $failures.Add("${provider}: TXT data with unterminated quoting (not a readable answer)"); continue }
             # An Answer that contained no record of the requested type (e.g. a
             # CNAME-only chain) is still a real answer: no record of this type.
             & $setOutcome $(if (@($out).Count -gt 0) { 'Answered' } else { 'NoRecord' }); & $setReason
@@ -285,4 +286,39 @@ function Resolve-TPDns {
     # Every provider failed.
     & $setOutcome 'LookupFailed'; & $setReason
     return @()
+}
+
+# Kept in this file so a harness that dot-sources the resolver alone still has it.
+function ConvertFrom-TPDnsTxtData {
+    <#
+    .SYNOPSIS
+        Joins the quoted character-strings of a DoH TXT `data` value in one
+        pass, honoring the RFC 1035 escapes \" and \\. Returns $null for a
+        value whose quoting does not close, which the caller treats as a
+        malformed provider answer rather than a record. Linear in the input;
+        the regex it replaces was quadratic on an unterminated string.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] [AllowEmptyString()] [string] $Data)
+    $s = [string]$Data
+    if ($s -notmatch '^\s*"') { return $s }
+    $sb = [System.Text.StringBuilder]::new()
+    $i = 0; $n = $s.Length; $inQuote = $false
+    while ($i -lt $n) {
+        $c = $s[$i]
+        if (-not $inQuote) {
+            if ($c -eq '"') { $inQuote = $true }
+            elseif (-not [char]::IsWhiteSpace($c)) { return $null }   # text outside quotes is not a TXT segment
+            $i++; continue
+        }
+        if ($c -eq '\') {
+            if ($i + 1 -ge $n) { return $null }
+            $null = $sb.Append($s[$i + 1]); $i += 2; continue
+        }
+        if ($c -eq '"') { $inQuote = $false; $i++; continue }
+        $null = $sb.Append($c); $i++
+    }
+    if ($inQuote) { return $null }
+    return $sb.ToString()
 }

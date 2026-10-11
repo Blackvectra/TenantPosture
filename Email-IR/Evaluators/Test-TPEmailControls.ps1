@@ -684,9 +684,14 @@ function Test-TPEmailControlThreatIntel {
     # Cap at 10 — RDAP is rate-limited and operators don't need 100 lookups
     $topDomains = @($domains | Select-Object -First 10)
 
+    # A sender domain is external text: an IDN is mapped to its ASCII form first,
+    # and one that the lookup cannot take (an underscore, a bracketed literal)
+    # is reported as not enriched rather than failing the evaluator.
     $enriched = foreach ($d in $topDomains) {
-        $age = Get-TPDomainAge -Domain $d
-        $age
+        $ascii = [string]$d
+        try { $ascii = [System.Globalization.IdnMapping]::new().GetAscii([string]$d) } catch { $ascii = [string]$d }
+        try { Get-TPDomainAge -Domain $ascii }
+        catch { [ordered]@{ Domain = [string]$d; Registered = $null; AgeDays = $null; Registrar = $null; Error = "not enriched: $($_.Exception.Message)" } }
     }
 
     $young = @($enriched | Where-Object { $null -ne $_.AgeDays -and $_.AgeDays -lt 30 })
