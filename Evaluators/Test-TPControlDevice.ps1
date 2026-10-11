@@ -147,6 +147,16 @@ function Test-TPControlDevice {
         elseif (($now - $ts.ToUniversalTime()).TotalDays -gt $script:TPDeviceResultMaxAgeDays) { $staleAge[$devHost] = [int][math]::Floor(($now - $ts.ToUniversalTime()).TotalDays) }
     }
     $staleCount = $staleAge.Count
+    # Results the collector marked as a host-name conflict (one name, several
+    # serial numbers): none may count as a pass or a failure, because a result
+    # cannot be tied to one machine. Counted by host name, not by file.
+    $conflictHosts = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($d in $devices) {
+        if ([bool](Get-TPObjectField -Item $d -Key 'Conflict' -Default $false)) {
+            $null = $conflictHosts.Add(([string](Get-TPObjectField -Item $d -Key 'Hostname' -Default '')).ToUpperInvariant())
+        }
+    }
+    $conflictCount = $conflictHosts.Count
     # Devices with a current result, by short name, for matching to the inventory.
     $currentHosts = [System.Collections.Generic.HashSet[string]]::new()
     $dupResultHosts = [System.Collections.Generic.List[string]]::new()
@@ -191,11 +201,12 @@ function Test-TPControlDevice {
             if (-not $byCheck.ContainsKey($id)) { $byCheck[$id] = [System.Collections.Generic.List[object]]::new() }
             $hostKey = ([string](Get-TPObjectField -Item $d -Key 'Hostname' -Default '')).ToUpperInvariant()
             $isStale = $staleAge.ContainsKey($hostKey)
+            $isConflict = $conflictHosts.Contains($hostKey)
             $byCheck[$id].Add([ordered]@{
                 Hostname = [string](Get-TPObjectField -Item $d   -Key 'Hostname' -Default '')
-                Result   = $(if ($isStale) { 'NotAssessed' } else { [string](Get-TPObjectField -Item $chk -Key 'Result' -Default '') })
+                Result   = $(if ($isConflict -or $isStale) { 'NotAssessed' } else { [string](Get-TPObjectField -Item $chk -Key 'Result' -Default '') })
                 Observed = [string](Get-TPObjectField -Item $chk -Key 'Observed' -Default '')
-                Detail   = $(if ($isStale) { 'Stale result: not counted as a pass or a failure.' } else { [string](Get-TPObjectField -Item $chk -Key 'Detail' -Default '') })
+                Detail   = $(if ($isConflict) { 'Conflicting results for this host name (serial numbers differ): not counted as a pass or a failure.' } elseif ($isStale) { 'Stale result: not counted as a pass or a failure.' } else { [string](Get-TPObjectField -Item $chk -Key 'Detail' -Default '') })
             })
         }
     }
@@ -248,6 +259,9 @@ function Test-TPControlDevice {
         if ($staleCount -gt 0) {
             $blockedNote += " $staleCount device(s) reported results older than $($script:TPDeviceResultMaxAgeDays) days, dated in the future, or with no readable date and were not counted."
         }
+        if ($conflictCount -gt 0) {
+            $blockedNote += " $conflictCount host name(s) were reported by more than one device (serial numbers differ) and none of their results were counted."
+        }
         if ($missing -gt 0) {
             $blockedNote += " $missing device(s) reported no result for this check — check the endpoint script version."
         }
@@ -259,6 +273,7 @@ function Test-TPControlDevice {
         if ($notAssessed.Count -gt 0) { $reasons.Add("$($notAssessed.Count) device(s) could not run this check") }
         if ($missing -gt 0)           { $reasons.Add("$missing device(s) reported no result for this check") }
         if ($staleCount -gt 0)        { $reasons.Add("$staleCount device(s) reported results older than $($script:TPDeviceResultMaxAgeDays) days, dated in the future, or with no readable date") }
+        if ($conflictCount -gt 0)     { $reasons.Add("$conflictCount host name(s) were reported by more than one device (serial numbers differ), so their results cannot be tied to a machine") }
         if ($null -eq $expectedFleet) { $reasons.Add('the expected fleet size is not known (no Intune managed-device count)') }
         elseif ($null -eq $expectedNames) {
             if ($total -lt $expectedFleet) { $reasons.Add("$total of $expectedFleet managed Windows devices reported") }
@@ -287,6 +302,7 @@ function Test-TPControlDevice {
             NotAssessed   = $notAssessed.Count
             Missing       = $missing
             Stale         = $staleCount
+            Conflicted    = $conflictCount
             ExpectedFleet = $expectedFleet
             Complete      = ($reasons.Count -eq 0)
             Reasons       = @($reasons)

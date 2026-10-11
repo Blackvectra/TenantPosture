@@ -80,7 +80,19 @@ function Invoke-TPCollectDeviceCompliance {
                 $obj = $raw | ConvertFrom-Json -ErrorAction Stop
 
                 $schema = [string](Get-TPObjectField -Item $obj -Key 'Schema' -Default '')
-                if ($schema -notmatch '^tp-device-compliance/') {
+                # The endpoint script's schema, major version 1, under either its current
+                # (tp-) or its earlier (nrg-) name: results an RMM collected before the
+                # rename are still ours. Another major version is refused by name rather
+                # than parsed into checks that may not mean what this version expects.
+                if ($schema -match '^(tp|nrg)-device-compliance/' -and $schema -notmatch '^(tp|nrg)-device-compliance/1(\.\d+)?$') {
+                    $rejected++
+                    if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                        Register-TPException -Source 'Device-Compliance' `
+                            -Message "Skipped $($f.Name): unsupported device-compliance schema version '$schema' (this version reads 1.x)."
+                    }
+                    continue
+                }
+                if ($schema -notmatch '^(tp|nrg)-device-compliance/') {
                     # Not one of ours. Skipped loudly rather than parsed
                     # optimiztically — a stray JSON in the collection folder must
                     # not become a device with no checks, which would read as a
@@ -117,19 +129,50 @@ function Invoke-TPCollectDeviceCompliance {
         # One result per device: the RMM share accumulates a file per run, and
         # counting March's "BitLocker off" beside September's "on" reported a
         # fixed laptop as failing and inflated the device count. The latest
-        # CollectedAt per hostname wins; older files are counted, not scored.
+        # CollectedAt per DEVICE wins; older files are counted, not scored.
+        # A device is its host name AND its serial number: a result file is
+        # written by whatever runs on an endpoint, so a file that merely claims
+        # another machine's host name must not replace that machine's result.
+        # One host name seen with two serial numbers is a conflict, recorded on
+        # every result for that name; the evaluator counts none of them as a
+        # pass or a failure and says why.
         $latest = [ordered]@{}
         foreach ($d in $devices) {
-            $key = ([string]$d.Hostname).ToUpperInvariant()
+            $key = ([string]$d.Hostname).ToUpperInvariant() + '|' + ([string]$d.Serial).Trim().ToUpperInvariant()
             $ts = [datetime]::MinValue
             $null = [datetime]::TryParse([string]$d.CollectedAt, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$ts)
             $d['CollectedAtUtc'] = $ts.ToUniversalTime()
             if (-not $latest.Contains($key) -or $latest[$key]['CollectedAtUtc'] -lt $d['CollectedAtUtc']) { $latest[$key] = $d }
         }
         $superseded = $devices.Count - $latest.Count
+        $serialsByHost = @{}
+        foreach ($v in $latest.Values) {
+            $h = ([string]$v.Hostname).ToUpperInvariant()
+            if (-not $serialsByHost.ContainsKey($h)) { $serialsByHost[$h] = [System.Collections.Generic.HashSet[string]]::new() }
+            $null = $serialsByHost[$h].Add(([string]$v.Serial).Trim().ToUpperInvariant())
+        }
+        $conflictedHosts = [System.Collections.Generic.List[string]]::new()
         $devices = [System.Collections.Generic.List[object]]::new()
-        foreach ($v in $latest.Values) { $d2 = $v; $d2.Remove('CollectedAtUtc'); $devices.Add($d2) }
+        foreach ($v in $latest.Values) {
+            $d2 = $v; $d2.Remove('CollectedAtUtc')
+            $h = ([string]$d2.Hostname).ToUpperInvariant()
+            $conflict = $serialsByHost[$h].Count -gt 1
+            $d2['Conflict'] = $conflict
+            if ($conflict) {
+                $serials = @($serialsByHost[$h] | ForEach-Object { if ($_) { $_ } else { '(none)' } } | Sort-Object)
+                $d2['ConflictReason'] = "host name $($d2.Hostname) was reported by $($serials.Count) devices with different serial numbers ($($serials -join ', '))"
+                if ($h -notin $conflictedHosts) { $conflictedHosts.Add($h) }
+            }
+            $devices.Add($d2)
+        }
+        foreach ($h in $conflictedHosts) {
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'Device-Compliance' `
+                    -Message "Host name $h appears in result files from more than one device (serial numbers differ); none of its results are counted as a pass or a failure."
+            }
+        }
         $result.Data.SupersededFiles = $superseded
+        $result.Data.ConflictedHosts = @($conflictedHosts)
 
         $result.Data.Devices       = $devices.ToArray()
         $result.Data.DeviceCount   = $devices.Count

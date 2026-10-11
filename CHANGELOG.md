@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[Security] An endpoint result file is bound to a device, not only a host name.** The device
+  collector de-duplicated result files by host name, newest first, so a file written on one endpoint
+  that claimed another machine's name replaced that machine's result and could turn a failing
+  BitLocker check into a fleet-wide pass. A device is now its host name AND serial number; one name
+  reported with different serials is a conflict recorded on every such result (`Conflict`,
+  `ConflictReason`, `Data.ConflictedHosts`, an Exceptions entry), and the evaluator counts none of
+  them as a pass or a failure, says so in the Detail and marks the control's coverage incomplete
+  (`Coverage.Conflicted`). The schema is accepted at major version 1 under both its current
+  `tp-device-compliance/` name and the earlier `nrg-device-compliance/` name, so results an RMM
+  collected before the rename still load; another major version is refused by name. Found by the
+  2026-10-09 security audit (M1) and the review of #127.
+
 - **[Security] One quoting rule for generated PowerShell, and replayed findings are validated.**
   PowerShell reads U+2018..U+201B as single-quote delimiters even inside a `'...'` literal, so a
   value holding a curly quote ended a literal early. The generated remediation script
