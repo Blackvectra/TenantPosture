@@ -339,7 +339,7 @@ Invoke-TPAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-TPBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 Compare-TPTenantBaseline.ps1     ← Offline two-tenant baseline comparison (connects to nothing)
 TenantPosture.psm1               ← Module loader (recursive dot-source, path traversal check)
-TenantPosture.psd1               ← Module manifest (411 exports, dependency declarations)
+TenantPosture.psd1               ← Module manifest (413 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-TPFinding.ps1              State management (findings, exceptions, coverage, raw data)
