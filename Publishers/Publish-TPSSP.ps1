@@ -836,8 +836,7 @@ function Publish-TPSSPXlsx {
     $pythonCmd = $null
     foreach ($py in @('python3', 'python')) {
         try {
-            $null = & $py -c 'import openpyxl' 2>&1
-            if ($LASTEXITCODE -eq 0) { $pythonCmd = $py; break }
+                        if (Test-TPPythonModule -Python $py -Module 'openpyxl') { $pythonCmd = $py; break }
         } catch { }
     }
     if (-not $pythonCmd) {
@@ -919,7 +918,6 @@ function Publish-TPSSPXlsx {
     $base = [System.IO.Path]::GetFileNameWithoutExtension($OutputPath)
     if ([string]::IsNullOrWhiteSpace($base)) { $base = 'ssp' }
     $tmpJson = Join-Path $outputDir "$base-ssp-input.json"
-    $pyTmp   = Join-Path $outputDir "$base-ssp-helper.py"
 
     try {
         if (Get-Command Set-TPSensitiveFileContent -ErrorAction SilentlyContinue) {
@@ -1118,12 +1116,12 @@ print(f'SSP XLSX saved: {sys.argv[2]}')
 '@
 
         if (Get-Command Set-TPSensitiveFileContent -ErrorAction SilentlyContinue) {
-            Set-TPSensitiveFileContent -Path $pyTmp -Content $pyScript
+            # The helper goes to Python on stdin with -I (isolated: no script directory, no current directory, no user site on sys.path), so no folder another local account can write to can plant a module named pypdf, openpyxl or json.
         } else {
-            $pyScript | Out-File -LiteralPath $pyTmp -Encoding utf8
+            $null = $pyScript
         }
 
-        $out = & $pythonCmd $pyTmp $tmpJson $OutputPath 2>&1
+        $out = Invoke-TPPython -Python $pythonCmd -Script $pyScript -Arguments @($tmpJson, $OutputPath)
         if ($LASTEXITCODE -ne 0) {
             throw "openpyxl helper failed: $out"
         }
@@ -1133,7 +1131,7 @@ print(f'SSP XLSX saved: {sys.argv[2]}')
     } finally {
         # The JSON carries tenant findings — remove it whether or not the render
         # succeeded, rather than leaving it beside the deliverable.
-        foreach ($t in @($tmpJson, $pyTmp)) {
+        foreach ($t in @($tmpJson)) {
             if (Test-Path -LiteralPath $t) { Remove-Item -LiteralPath $t -Force -ErrorAction SilentlyContinue }
         }
     }

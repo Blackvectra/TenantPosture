@@ -30,6 +30,45 @@
 # Invoke-TPAssessment.ps1.
 #
 
+# The three access rules every sensitive file gets on Windows: the current user,
+# SYSTEM and Administrators, full control, nothing else.
+function Get-TPSensitiveFileAccessRules {
+    [CmdletBinding()]
+    param()
+    $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    return @(
+        [System.Security.AccessControl.FileSystemAccessRule]::new($currentUser, 'FullControl', 'Allow')
+        [System.Security.AccessControl.FileSystemAccessRule]::new('NT AUTHORITY\SYSTEM', 'FullControl', 'Allow')
+        [System.Security.AccessControl.FileSystemAccessRule]::new('BUILTIN\Administrators', 'FullControl', 'Allow')
+    )
+}
+
+# Hardens an OPEN file through its own handle, never through its name: on
+# Windows the FileSecurity goes to the handle (FileSystemAclExtensions), on
+# other hosts the mode is set on the handle (File.SetUnixFileMode). Nothing
+# here reopens the path, so no entry swapped in after the open is affected.
+function Set-TPSensitiveHandleAcl {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [System.IO.FileStream] $Stream)
+    if (-not $IsWindows) {
+        # File.SetUnixFileMode on a handle exists from .NET 7 (PowerShell 7.3). On an
+        # older runtime chmod is applied to the still-open, randomly named temp file,
+        # and a chmod that fails is an error, never a warning.
+        $setMode = [System.IO.File].GetMethod('SetUnixFileMode', [type[]]@([Microsoft.Win32.SafeHandles.SafeFileHandle], [System.IO.UnixFileMode]))
+        if ($null -ne $setMode) {
+            $null = $setMode.Invoke($null, @($Stream.SafeFileHandle, [System.IO.UnixFileMode]([int]0x180)))   # 0600; a void Invoke still emits $null
+            return
+        }
+        & chmod 600 $Stream.Name 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "chmod 600 returned exit code $LASTEXITCODE" }
+        return
+    }
+    $sec = [System.Security.AccessControl.FileSecurity]::new()
+    $sec.SetAccessRuleProtection($true, $false)
+    foreach ($r in (Get-TPSensitiveFileAccessRules)) { $sec.AddAccessRule($r) }
+    [System.IO.FileSystemAclExtensions]::SetAccessControl($Stream, $sec)
+}
+
 function Set-TPSensitiveFileAcl {
     [CmdletBinding()]
     param(
@@ -76,13 +115,7 @@ function Set-TPSensitiveFileAcl {
                 [void]$acl.RemoveAccessRule($existing)
             }
         }
-        $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-        $rules = @(
-            [System.Security.AccessControl.FileSystemAccessRule]::new($currentUser, 'FullControl', 'Allow')
-            [System.Security.AccessControl.FileSystemAccessRule]::new('NT AUTHORITY\SYSTEM', 'FullControl', 'Allow')
-            [System.Security.AccessControl.FileSystemAccessRule]::new('BUILTIN\Administrators', 'FullControl', 'Allow')
-        )
-        foreach ($r in $rules) { $acl.AddAccessRule($r) }
+        foreach ($r in (Get-TPSensitiveFileAccessRules)) { $acl.AddAccessRule($r) }
         Set-Acl -LiteralPath $Path -AclObject $acl
     } catch {
         Write-Warning "Set-TPSensitiveFileAcl: failed to restrict ACL on '$Path': $($_.Exception.Message). File may be readable by other users on this host — review permissions manually."
@@ -122,38 +155,36 @@ function Set-TPSensitiveFileContent {
         [System.Text.Encoding] $Encoding = [System.Text.UTF8Encoding]::new($false)
     )
 
-    # Pre-create empty file then harden ACL so the ACL is applied BEFORE any
-    # tenant data lands. Without this step, the file inherits the parent
-    # directory's ACL during the Out-File / WriteAllText call, giving a
-    # co-resident process a small window to read the data.
+    # The content is written to a new, randomly named file beside the target,
+    # opened once with CreateNew (the handle is ours, never a link someone
+    # planted), hardened THROUGH THAT HANDLE before any tenant data lands, written
+    # through the same handle, and then moved over the target name. The move
+    # replaces the target name itself, so a symbolic link, junction or mount
+    # point planted at the output name is replaced, never followed; nothing in
+    # between reopens a path.
+    if (Test-Path -LiteralPath $Path -PathType Container) { throw "Set-TPSensitiveFileContent: '$Path' is a directory." }
+    $dir = Split-Path -Parent $Path
+    if ([string]::IsNullOrEmpty($dir)) { $dir = (Get-Location).ProviderPath }
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { throw "Set-TPSensitiveFileContent: folder '$dir' does not exist." }
+    $leaf = Split-Path -Leaf $Path
+    $tmp = Join-Path $dir ('.' + $leaf + '.' + [guid]::NewGuid().ToString('N') + '.tmp')
+    $fs = $null
     try {
-        if (Test-Path -LiteralPath $Path -PathType Leaf) {
-            # File already exists — truncate before hardening so leftover content
-            # doesn't bleed across runs.
-            [System.IO.File]::WriteAllText($Path, '', $Encoding)
-        } else {
-            # Create empty file. [System.IO.File]::Create returns a FileStream;
-            # we wrap in try/finally to ensure it's closed before Set-Acl.
-            $fs = $null
-            try {
-                $fs = [System.IO.File]::Create($Path)
-            } finally {
-                if ($fs) { $fs.Dispose() }
-            }
-        }
+        $fs = [System.IO.FileStream]::new($tmp, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+        # A file that cannot be hardened is not written: tenant data never lands
+        # under the folder's inherited permissions.
+        try { Set-TPSensitiveHandleAcl -Stream $fs }
+        catch { throw "Set-TPSensitiveFileContent: could not restrict access on '$Path', so it was not written: $($_.Exception.Message)" }
+        $pre = $Encoding.GetPreamble()   # the caller's BOM (Excel needs one on the action-plan CSV)
+        if ($pre.Length -gt 0) { $fs.Write($pre, 0, $pre.Length) }
+        $bytes = $Encoding.GetBytes([string]$Content)
+        $fs.Write($bytes, 0, $bytes.Length)
+        $fs.Flush($true)
+        $fs.Dispose(); $fs = $null
+        [System.IO.File]::Move($tmp, $Path, $true)
     } catch {
-        Write-Warning "Set-TPSensitiveFileContent: could not pre-create '$Path': $($_.Exception.Message)"
-        # Fall through — caller may still want the write to happen even if
-        # pre-creation failed (e.g. parent dir issues). The next step will
-        # re-throw if it fails too.
-    }
-
-    # Harden ACL BEFORE writing tenant data. No-op on non-Windows.
-    Set-TPSensitiveFileAcl -Path $Path
-
-    # Now write the actual content. ACL is in place; tenant data is restricted
-    # the moment it lands on disk.
-    if ($null -ne $Content) {
-        [System.IO.File]::WriteAllText($Path, $Content, $Encoding)
+        if ($fs) { $fs.Dispose(); $fs = $null }
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        throw
     }
 }

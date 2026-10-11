@@ -91,6 +91,7 @@ Write-Host "[4/6] Checking PowerShell modules..." -ForegroundColor Cyan
 # OneDrive check at all, silently recreating the exact condition this
 # installer exists to avoid.
 . (Join-Path $PSScriptRoot 'Lib/Get-TPModuleInstallScope.ps1')
+. (Join-Path $PSScriptRoot 'Lib/Invoke-TPPython.ps1')
 $scopeInfo    = Get-TPModuleInstallScope
 $installScope = $scopeInfo.Scope
 
@@ -283,17 +284,18 @@ if ($SkipPython) {
         # Check openpyxl
         $openpyxlOk = $false
         try {
-            $null = & $pythonCmd -c 'import openpyxl' 2>&1
-            if ($LASTEXITCODE -eq 0) { $openpyxlOk = $true }
+            if (Test-TPPythonModule -Python $pythonCmd -Module 'openpyxl') { $openpyxlOk = $true }
         } catch { }
         if ($openpyxlOk) {
             Write-Host "  [+] openpyxl installed — XLSX matrix enabled" -ForegroundColor Green
         } else {
             Write-Host "  [*] Installing openpyxl..." -ForegroundColor Yellow
             try {
-                & $pythonCmd -m pip install openpyxl --quiet
-                if ($LASTEXITCODE -eq 0) {
+                & $pythonCmd -I -m pip install openpyxl --quiet
+                if ($LASTEXITCODE -eq 0 -and (Test-TPPythonModule -Python $pythonCmd -Module 'openpyxl')) {
                     Write-Host "  [+] openpyxl installed" -ForegroundColor Green
+                } elseif ($LASTEXITCODE -eq 0) {
+                    Write-Host "  [!] pip reported success but openpyxl still cannot be imported the way the tool imports it (XLSX matrix will be skipped at runtime)" -ForegroundColor Yellow
                 } else {
                     Write-Host "  [!] openpyxl install failed (XLSX matrix will be skipped at runtime)" -ForegroundColor Yellow
                 }

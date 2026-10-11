@@ -99,8 +99,7 @@ try {
     $pythonCmd = $null
     foreach ($py in @('python3', 'python')) {
         try {
-            $null = & $py -c 'import pypdf' 2>&1
-            if ($LASTEXITCODE -eq 0) { $pythonCmd = $py; break }
+                        if (Test-TPPythonModule -Python $py -Module 'pypdf') { $pythonCmd = $py; break }
         } catch { }
     }
     if (-not $pythonCmd) {
@@ -112,7 +111,6 @@ try {
     }
 
     $tmpOut = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "tp-mrq-import-$([guid]::NewGuid().ToString('N')).json")
-    $pyTmp  = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "tp-mrq-import-$([guid]::NewGuid().ToString('N')).py")
     $fieldValues = $null
     try {
         $pyScript = @'
@@ -128,12 +126,12 @@ for name, f in fields.items():
 with open(sys.argv[2], 'w', encoding='utf-8') as fh:
     json.dump(out, fh)
 '@
-        $pyScript | Out-File -LiteralPath $pyTmp -Encoding utf8
-        $out = & $pythonCmd $pyTmp $PdfPath $tmpOut 2>&1
+        $null = $pyScript
+        $out = Invoke-TPPython -Python $pythonCmd -Script $pyScript -Arguments @($PdfPath, $tmpOut)
         if ($LASTEXITCODE -ne 0) { throw "pypdf read failed: $out" }
         $fieldValues = Get-Content -LiteralPath $tmpOut -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
     } finally {
-        foreach ($t in @($tmpOut, $pyTmp)) {
+        foreach ($t in @($tmpOut)) {
             if (Test-Path -LiteralPath $t) { Remove-Item -LiteralPath $t -Force -ErrorAction SilentlyContinue }
         }
     }
