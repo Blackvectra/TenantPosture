@@ -43,6 +43,7 @@
         'Get-TPRemediationRoadmap',
         'Set-TPSensitiveFileAcl',
         'Set-TPSensitiveFileContent',
+        'Invoke-TPPython', 'Test-TPPythonModule',
         'Get-TPTenantLicenseProfile',
         'Test-TPLicenseRequirementMet',
         'Get-TPControlLicenseStatus',

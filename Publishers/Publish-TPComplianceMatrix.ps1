@@ -44,8 +44,7 @@ function Publish-TPComplianceMatrix {
     $pythonCmd = $null
     foreach ($py in @('python3','python')) {
         try {
-            $null = & $py -c 'import openpyxl' 2>&1
-            if ($LASTEXITCODE -eq 0) { $pythonCmd = $py; break }
+                        if (Test-TPPythonModule -Python $py -Module 'openpyxl') { $pythonCmd = $py; break }
         } catch { }
     }
     if (-not $pythonCmd) {
@@ -661,17 +660,15 @@ print(f"XLSX saved: {out_path}")
         # output. The Python source itself isn't tenant-sensitive, but keeping
         # all generation artifacts in one ACL-hardened directory simplifies
         # cleanup and removes the TEMP-race surface entirely.
-        $pyTmp = Join-Path $outputDir "$matrixBase-matrix-helper.py"
         try {
-            $pyScript | Out-File -LiteralPath $pyTmp -Encoding utf8
-            $result = & $pythonCmd $pyTmp $tmpJson $OutputPath 2>&1
+            $null = $pyScript
+            $result = Invoke-TPPython -Python $pythonCmd -Script $pyScript -Arguments @($tmpJson, $OutputPath)
             if ($LASTEXITCODE -ne 0) {
                 Write-Warning "XLSX generation failed: $result"
             } else {
                 Write-Verbose "XLSX: $result"
             }
         } finally {
-            Remove-Item -LiteralPath $pyTmp -ErrorAction SilentlyContinue
         }
     } finally {
         Remove-Item -LiteralPath $tmpJson -ErrorAction SilentlyContinue
