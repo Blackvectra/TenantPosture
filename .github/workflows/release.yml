@@ -283,7 +283,18 @@ jobs:
           foreach ($f in $files) {
               $sig = Get-AuthenticodeSignature -LiteralPath $f.FullName
               switch ($sig.Status) {
-                  'Valid'        { $valid++ }
+                  'Valid' {
+                      # A chain this runner trusts is not yet the signer this release
+                      # expects: with TP_SIGNING_THUMBPRINT set, a Valid signature from
+                      # any other publisher is a problem, not a pass.
+                      $tp = if ($sig.SignerCertificate) { [string]$sig.SignerCertificate.Thumbprint } else { '' }
+                      if ($env:EXPECTED_THUMBPRINT -and $tp -ne $env:EXPECTED_THUMBPRINT) {
+                          $bad++; Write-Host ("  [Valid, but signer '{0}' is not the pinned thumbprint] {1}" -f $tp, $f.Name) -ForegroundColor Red
+                      } else {
+                          $valid++
+                          if ($env:EXPECTED_THUMBPRINT) { $pinned++ }
+                      }
+                  }
                   'NotSigned'    { $notSigned++ }
                   { $_ -in 'NotTrusted', 'UnknownError' } {
                       # UnknownError is also what PowerShell reports for a file that IS

@@ -19,7 +19,15 @@
   write; `Apply-TPBaseline -RequireSignedCode` treats a signature it cannot evaluate as a failure.
   `openpyxl` is pinned; the SBOM lists the modules the manifest actually requires with the
   publishers' real license terms; the deployment docs no longer claim a package-hash verification
-  PSResourceGet does not perform. Audit M8 to M11 and the supply-chain Lows (2026-10-09).
+  PSResourceGet does not perform. Audit M8 to M11 and the supply-chain Lows (2026-10-09). From the Codex review of the branch: the release checklist stages only what signing changed
+  (`git add -u` on the script extensions plus the manifest and the catalog), never `git add -A`, which
+  on an operator workstation would commit `Config/clients.json`; `Sign-Release.ps1` writes each signed
+  script back in the committed LF form and re-reads the signature on those bytes (git normalizes the
+  CRLF signature block on commit, which would have invalidated the manifests), runs under a terminating
+  error preference, and verifies the refreshed integrity manifest in the same session with a reset
+  `$LASTEXITCODE`; `tools/Verify-Integrity.ps1 -Update` is terminating and re-reads the manifest it
+  wrote, so an unreadable file can never leave a shorter manifest; and the release job treats a
+  `Valid` signature from a publisher other than `TP_SIGNING_THUMBPRINT` as a problem, not a pass.
 
 - **[Security] Sensitive-writer and installer follow-ups from the #136 review.** The Unix mode
   type and the handle overload are resolved at run time (a type literal threw on a runtime without

@@ -60,13 +60,24 @@ to `true` once every release is signed and committed before tagging.
 # 3. Verify signatures cleanly resolved
 .\tools\Verify-Integrity.ps1        # exits 0 if all manifest entries match
 
-# 4. Commit the signed files, then tag + push. The release workflow checks
-#    the commit the tag points at, not your working tree: unsigned committed
-#    scripts make an unsigned release (or a failed one under TP_REQUIRE_SIGNED).
-git add -A && git commit -m "Sign vX.Y.Z"
+# 4. Stage ONLY what signing changed, then commit, tag and push. The release
+#    workflow checks the commit the tag points at, not your working tree:
+#    unsigned committed scripts make an unsigned release (or a failed one
+#    under TP_REQUIRE_SIGNED). Never `git add -A` here: on an operator
+#    workstation Config/clients.json and other local edits are tracked files
+#    and would ride into the release commit and its archive.
+git add -u -- '*.ps1' '*.psm1' '*.psd1' '*.ps1xml'
+git add -- tools/integrity-manifest.txt TenantPosture.cat
+git status --short                  # expect signed scripts, the manifest and the catalog; nothing else
+git commit -m "Sign vX.Y.Z"
 git tag -s "vX.Y.Z" -m "vX.Y.Z — release notes here"
 git push origin "vX.Y.Z"
 ```
+
+Sign-Release.ps1 writes the signed scripts in the repository's committed form (LF; git
+normalizes CRLF on commit and would otherwise rewrite the signature block after the manifests
+were computed) and re-reads each signature on those bytes, so the manifests describe the bytes
+that are committed.
 
 If the operator workstation doesn't have the cert (e.g., a different engineer is releasing), run `New-TPCodeSigningCert.ps1` first. The signature won't verify on workstations that don't trust the cert — that's the point. For internal-only releases, install the cert into TrustedPublisher on every workstation that runs the tool.
 

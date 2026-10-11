@@ -24,10 +24,17 @@ or checksummed assets.
 
    ```powershell
    .\Build\Sign-Release.ps1            # signs, refreshes the manifests, builds the catalog
-   git add -A && git commit -m "Sign vX.Y.Z"
+   git add -u -- '*.ps1' '*.psm1' '*.psd1' '*.ps1xml'   # only what signing changed
+   git add -- tools/integrity-manifest.txt TenantPosture.cat
+   git status --short                  # nothing but signed scripts, the manifest, the catalog
+   git commit -m "Sign vX.Y.Z"
    git tag -a vX.Y.Z -m "vX.Y.Z"      # must equal the manifest's ModuleVersion
    git push origin main vX.Y.Z
    ```
+
+   Never `git add -A` for this commit: `Config/clients.json` is a tracked file an
+   operator workstation fills with real tenant data, and it would ride into the
+   release commit and the archive.
 
    Repository variables: `TP_SIGNING_THUMBPRINT` (the self-signed cert's SHA-1
    thumbprint; a hosted runner trusts no self-signed root, so only that pinned

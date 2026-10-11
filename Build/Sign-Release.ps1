@@ -59,6 +59,9 @@ param(
     [string] $RepoRoot
 )
 
+# Every failure below is terminating: a signing, normalization or manifest
+# error must stop the release, never leave a half-signed tree that commits.
+$ErrorActionPreference = 'Stop'
 
 if (-not $RepoRoot) {
     $RepoRoot = Split-Path -Parent $PSScriptRoot
@@ -169,23 +172,54 @@ $files = Get-ChildItem -Path $RepoRoot -Recurse -File |
 
 Write-Host "[-] Signing $($files.Count) files..." -ForegroundColor Cyan
 
+# The committed representation is LF (.gitattributes: text eol=lf), and git
+# normalizes CRLF to LF on commit. Set-AuthenticodeSignature appends its
+# signature block with CRLF line endings (PowerShell issue #3361), so a signed
+# LF file that is committed as-is has its block rewritten by git: the tagged
+# checkout then carries different bytes from the ones the manifests below were
+# computed over, and the release job reports manifest mismatches. So a file
+# that had no CRLF before signing is normalized back to LF after signing, and
+# the signature is read again: it must still verify on the bytes that will be
+# committed, or the release stops here rather than shipping bytes that differ
+# from the commit.
+function Restore-TPLineEndings {
+    param([Parameter(Mandatory)] [string] $Path, [Parameter(Mandatory)] [bool] $HadCrLf)
+    if ($HadCrLf) { return }
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+    $text = [System.Text.UTF8Encoding]::new($false).GetString($bytes, $(if ($hasBom) { 3 } else { 0 }), $bytes.Length - $(if ($hasBom) { 3 } else { 0 }))
+    if (-not $text.Contains("`r`n")) { return }
+    $text = $text.Replace("`r`n", "`n")
+    [System.IO.File]::WriteAllText($Path, $text, [System.Text.UTF8Encoding]::new($hasBom))
+}
+
 $signed = 0
 $failed = 0
 foreach ($f in $files) {
+    $rel = $f.FullName.Substring($RepoRoot.Length + 1)
     try {
+        $before = [System.IO.File]::ReadAllBytes($f.FullName)
+        $hadCrLf = [System.Text.UTF8Encoding]::new($false).GetString($before).Contains("`r`n")
         $result = Set-AuthenticodeSignature -FilePath $f.FullName -Certificate $cert `
                                              -TimestampServer $TimestampServer `
                                              -HashAlgorithm SHA256 -ErrorAction Stop
-        if ($result.Status -eq 'Valid') {
-            $signed++
-            Write-Host "  [+] $($f.FullName.Substring($RepoRoot.Length + 1))" -ForegroundColor Green
-        } else {
+        if ($result.Status -ne 'Valid') {
             $failed++
-            Write-Host "  [!] $($f.FullName.Substring($RepoRoot.Length + 1)) — $($result.Status): $($result.StatusMessage)" -ForegroundColor Yellow
+            Write-Host "  [!] $rel — $($result.Status): $($result.StatusMessage)" -ForegroundColor Yellow
+            continue
         }
+        Restore-TPLineEndings -Path $f.FullName -HadCrLf $hadCrLf
+        $check = Get-AuthenticodeSignature -LiteralPath $f.FullName
+        if ($check.Status -ne 'Valid') {
+            $failed++
+            Write-Host "  [!] $rel — signed, but the signature does not verify once the signature block is normalized to LF, the form git commits ($($check.Status)). The committed file would not carry a valid signature; do not commit it." -ForegroundColor Red
+            continue
+        }
+        $signed++
+        Write-Host "  [+] $rel" -ForegroundColor Green
     } catch {
         $failed++
-        Write-Host "  [X] $($f.FullName.Substring($RepoRoot.Length + 1)) — $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  [X] $rel — $($_.Exception.Message)" -ForegroundColor Red
     }
 }
 
@@ -205,10 +239,16 @@ $verifyScript = Join-Path $RepoRoot 'tools' 'Verify-Integrity.ps1'
 $integrityManifest = Join-Path $RepoRoot 'tools' 'integrity-manifest.txt'
 if ((Test-Path -LiteralPath $integrityManifest -PathType Leaf) -and (Test-Path -LiteralPath $verifyScript -PathType Leaf)) {
     Write-Host "[-] Refreshing tools/integrity-manifest.txt from the signed tree..." -ForegroundColor Cyan
-    # A PowerShell script, so a failure surfaces as a terminating error under
-    # $ErrorActionPreference = 'Stop'; $LASTEXITCODE is not consulted (it would
-    # carry a stale value from any earlier native command in this session).
+    # The refresh runs under $ErrorActionPreference = 'Stop' (set above and in
+    # the script itself), so an unreadable file is a terminating error, never a
+    # silently shorter manifest. The refreshed manifest is then verified in the
+    # same session: $LASTEXITCODE is reset first, because a called script's
+    # exit code lands there and a stale value from an earlier native command
+    # would otherwise pass for a result.
     & $verifyScript -Update
+    $global:LASTEXITCODE = 0
+    & $verifyScript
+    if ($LASTEXITCODE -ne 0) { throw "tools/integrity-manifest.txt does not verify against the signed tree it was just generated from (exit $LASTEXITCODE)." }
 }
 
 # A release archive carries FILES.sha256 (written by the release workflow from

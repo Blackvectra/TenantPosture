@@ -32,13 +32,17 @@ param(
     [switch] $Update
 )
 
+# Terminating throughout: an unreadable file must stop a manifest refresh
+# (a shorter manifest would verify clean against the files it names), and a
+# hash that cannot be computed is a failed verification, not a skipped file.
+$ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $repoRoot) { $repoRoot = (Get-Location).Path }
 
 $includeExtensions = @('.ps1', '.psm1', '.psd1', '.json')
 
-$files = Get-ChildItem -LiteralPath $repoRoot -Recurse -File |
+$files = Get-ChildItem -LiteralPath $repoRoot -Recurse -File -ErrorAction Stop |
     Where-Object {
         $_.Extension -in $includeExtensions -and
         $_.FullName -notmatch '\\output\\' -and
@@ -50,11 +54,13 @@ $files = Get-ChildItem -LiteralPath $repoRoot -Recurse -File |
 
 if ($Update) {
     Write-Host "Generating integrity manifest..." -ForegroundColor Cyan
-    $entries = foreach ($f in $files) {
-        $hash = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash
+    $entries = @(foreach ($f in $files) {
+        $hash = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256 -ErrorAction Stop).Hash
+        if (-not $hash) { throw "No hash was computed for $($f.FullName); the manifest was not written." }
         $relPath = $f.FullName.Substring($repoRoot.Length + 1).Replace('\','/')
         "$hash  $relPath"
-    }
+    })
+    if ($entries.Count -ne $files.Count) { throw "Hashed $($entries.Count) of $($files.Count) files; the manifest was not written." }
     $header = @(
         "# NRG Assessment Tool - Integrity Manifest"
         "# Algorithm: SHA-256"
@@ -63,6 +69,9 @@ if ($Update) {
         "#"
     )
     ($header + $entries) | Out-File -LiteralPath $ManifestPath -Encoding utf8
+    # Read it back: the file on disk must carry every entry, or the refresh failed.
+    $written = @(Get-Content -LiteralPath $ManifestPath -ErrorAction Stop | Where-Object { $_ -and -not $_.StartsWith('#') })
+    if ($written.Count -ne $files.Count) { throw "The manifest at $ManifestPath holds $($written.Count) entries for $($files.Count) files." }
     Write-Host "  [+] Wrote $($files.Count) entries to $ManifestPath" -ForegroundColor Green
     return
 }
@@ -86,7 +95,7 @@ $extras     = @()
 
 foreach ($f in $files) {
     $relPath = $f.FullName.Substring($repoRoot.Length + 1).Replace('\','/')
-    $hash    = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash
+    $hash    = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256 -ErrorAction Stop).Hash
     if (-not $expected.ContainsKey($relPath)) {
         $extras += $relPath
         continue
@@ -96,7 +105,9 @@ foreach ($f in $files) {
     }
     $expected.Remove($relPath)
 }
-$missing = $expected.Keys
+# An array, not the live key collection: an empty collection is still truthy, which printed the
+# MISSING FILES heading under a clean verification.
+$missing = @($expected.Keys)
 
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
