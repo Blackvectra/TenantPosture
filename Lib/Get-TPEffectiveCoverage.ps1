@@ -18,6 +18,15 @@
 #                     all of them by identifier; whether any user sits in all the
 #                     excluded groups was not resolved
 #
+# Client app types: a protection that has to apply to every interactive sign-in
+# (MFA, an authentication strength, a risk response, a device requirement) is
+# narrowed by a policy whose Conditions.ClientAppTypes leaves out 'browser' or
+# 'mobileAppsAndDesktopClients' — a browser-only MFA policy leaves every desktop
+# and mobile client unprompted. Callers state what they require
+# (-RequiredClientAppTypes); the legacy-authentication block requires 'other' and
+# passes that instead. 'all' covers every type. Graph requires clientAppTypes on
+# every policy, so an empty list is not a read value and is not judged.
+#
 # Data consumed: none.  Graph scopes / cmdlets: none (parsing only).
 
 function Get-TPExclusionCoverage {
@@ -49,23 +58,63 @@ function Get-TPExclusionCoverage {
     return $r
 }
 
+function Get-TPCAInteractiveClientAppTypes {
+    <#
+    .SYNOPSIS
+        The client app types every interactive sign-in uses: the browser and the
+        mobile and desktop clients (Microsoft's own MFA and risk templates leave the
+        client-apps condition unset, which is these plus the legacy types). The one
+        copy of the list; MFA, risk and device-requirement checks require it.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param()
+    return @('browser', 'mobileAppsAndDesktopClients')
+}
+
+function Get-TPCAClientAppTypeShortfall {
+    <#
+    .SYNOPSIS
+        Why a policy's client-apps condition leaves some of the required client app
+        types outside it, or '' when every required type is covered ('all', or each
+        type listed). An empty ClientAppTypes list is not a read value (Graph
+        requires the property on every policy) and is not judged; it never counts
+        as 'all'.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] $Policy, [AllowNull()] [string[]] $Required)
+    $req = @($Required | Where-Object { $_ })
+    if ($req.Count -eq 0) { return '' }
+    $types = @(Get-TPNestedProperty -Object $Policy -Path 'Conditions.ClientAppTypes' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
+    if ($types.Count -eq 0 -or $types -contains 'all') { return '' }
+    $missing = @($req | Where-Object { $_ -notin $types })
+    if ($missing.Count -eq 0) { return '' }
+    return "limited to some client app types ($($types -join ', ')), so $($missing -join ' and ') sign-ins are outside it"
+}
+
 function Get-TPCANarrowing {
     <#
     .SYNOPSIS
         Why a Conditional Access policy does NOT cover everyone on everything, beyond
-        user exclusions: a narrower application, platform, location or device scope, or
-        a risk condition. An empty result means the policy's scope is all users and all
-        resources with no extra condition.
+        user exclusions: a narrower application, client-app, platform, location or
+        device scope, or a risk condition. An empty result means the policy's scope is
+        all users and all resources with no extra condition. -RequiredClientAppTypes
+        names the client app types the protection must reach (none by default);
+        -Ignore drops reasons the caller expects (a risk policy applies only at
+        certain risk levels by design).
     #>
     [CmdletBinding()]
     [OutputType([string[]])]
-    param([AllowNull()] $Policy)
+    param([AllowNull()] $Policy, [AllowNull()] [string[]] $RequiredClientAppTypes = @(), [AllowNull()] [string[]] $Ignore = @())
     $why = [System.Collections.Generic.List[string]]::new()
     $inc = @(Get-TPNestedProperty -Object $Policy -Path 'Conditions.Users.IncludeUsers' -Default @())
     if ($inc -notcontains 'All') { $why.Add('applies to only some users, groups or roles') }
     $apps = @(Get-TPNestedProperty -Object $Policy -Path 'Conditions.Applications.Include' -Default @())
     if ($apps -notcontains 'All') { $why.Add($(if ($apps -contains 'None' -or $apps.Count -eq 0) { 'applies to no application' } else { 'applies to only some applications' })) }
     if (@(Get-TPNestedProperty -Object $Policy -Path 'Conditions.Applications.Exclude' -Default @() | Where-Object { $_ }).Count -gt 0) { $why.Add('excludes some applications') }
+    $clientShort = Get-TPCAClientAppTypeShortfall -Policy $Policy -Required $RequiredClientAppTypes
+    if ($clientShort) { $why.Add($clientShort) }
     # Platforms holds Graph's includePlatforms. 'all' is "Any device" and narrows
     # nothing unless platforms are also excluded; a specific list does narrow.
     # Results from before ExcludePlatforms was collected read as no exclusion.
@@ -78,7 +127,8 @@ function Get-TPCANarrowing {
     if ([string](Get-TPNestedProperty -Object $Policy -Path 'Conditions.Devices.FilterMode' -Default '')) { $why.Add('limited by a device filter') }
     if (@(Get-TPNestedProperty -Object $Policy -Path 'Conditions.SignInRiskLevels' -Default @() | Where-Object { $_ }).Count -gt 0 -or
         @(Get-TPNestedProperty -Object $Policy -Path 'Conditions.UserRiskLevels' -Default @() | Where-Object { $_ }).Count -gt 0) { $why.Add('applies only at certain risk levels') }
-    return @($why)
+    $skip = @($Ignore | Where-Object { $_ })
+    return @($why | Where-Object { $_ -notin $skip })
 }
 
 function Get-TPCAPrincipalExclusions {
@@ -100,15 +150,16 @@ function Get-TPCAEffectiveCoverage {
         (right grant, client type or flow); this sorts them into those that cover all
         users on all applications with no extra condition (candidates, judged by their
         exclusions) and those narrowed by scope or condition (reported, never counted).
+        -RequiredClientAppTypes and -Ignore are passed to Get-TPCANarrowing.
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
-    param([AllowNull()] [AllowEmptyCollection()] [object[]] $Policies)
+    param([AllowNull()] [AllowEmptyCollection()] [object[]] $Policies, [AllowNull()] [string[]] $RequiredClientAppTypes = @(), [AllowNull()] [string[]] $Ignore = @())
 
     $cands = @(); $narrowed = @()
     foreach ($p in @($Policies | Where-Object { $null -ne $_ })) {
         $name = [string](Get-TPObjectField -Item $p -Key 'DisplayName' -Default '')
-        $nar  = @(Get-TPCANarrowing -Policy $p)
+        $nar  = @(Get-TPCANarrowing -Policy $p -RequiredClientAppTypes $RequiredClientAppTypes -Ignore $Ignore)
         if ($nar.Count -gt 0) { $narrowed += [pscustomobject]@{ Name = $name; Why = ($nar -join '; ') }; continue }
         $cands += [pscustomobject]@{ Name = $name; Exclusions = @(Get-TPCAPrincipalExclusions -Policy $p) }
     }

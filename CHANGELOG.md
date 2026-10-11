@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- **[Detection] Four paths that produced an unsupported Satisfied, found by the 2026-10-11 review.**
+  AAD-1.4 and AAD-1.5 merged the risk levels of every enabled responding policy whatever its
+  scope, so a pilot-group policy, a policy excluding a group, or one applying to no application
+  counted as tenant-wide protection, and High from one narrow policy beside Medium from another
+  read as complete; each required level is now judged on who the policies selecting it protect
+  (`Get-TPRiskLevelCoverage` over `Get-TPCAEffectiveCoverage`: all users, all applications, every
+  interactive client app type, no platform, location or device-filter narrowing, exclusions
+  combined across the policies selecting the level), with a narrower policy a Gap, a shared
+  exclusion a Partial naming it, and different exclusions not assessed. `Get-TPCANarrowing`
+  never read `Conditions.ClientAppTypes`, so a browser-only MFA policy satisfied AAD-1.2 (and
+  AAD-1.3, and the Conditional Access view's MFA, risk and device templates) while every desktop
+  and mobile client went unprompted; callers now state the client app types the protection must
+  reach (`-RequiredClientAppTypes`, the browser and the mobile and desktop clients for MFA, risk
+  and device requirements; the legacy block keeps requiring `other`), and a policy leaving one out
+  is narrowed. `Get-TPCAGrantAlternatives` left out `GrantControls.CustomControls`, so "MFA OR
+  custom control" read as MFA mandatory; a custom control is now an alternative like any other
+  (AAD-1.2 scores that grant Partial, the view names it). DEF-4.5 passed on any policy listing
+  the Devices location: it now needs a policy in enforcing mode (Mode `Enable`, the same three
+  Mode groups DEF-4.1 reads) with at least one enabled rule (`Get-TPDlpRuleStates`); test mode and
+  Disable are a Gap and reported, an enforcing policy with no enabled rule is a Gap, rules not
+  collected or a Mode not read are not assessed. `TP.FalsePassPaths.Tests.ps1` pins all four.
+
 - **[Security] Sensitive-writer and installer follow-ups from the #136 review.** The Unix mode
   type and the handle overload are resolved at run time (a type literal threw on a runtime without
   them, refusing every write); where no handle API exists the temp file is staged inside an
