@@ -92,6 +92,9 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $tag = $env:RELEASE_TAG
           if ($tag -notmatch '^v\d+\.\d+\.\d+$') { throw "Refusing to package tag '$tag': release tags are v<major>.<minor>.<patch>." }
+          # The archive, the module and the SBOM must agree on one version.
+          $moduleVersion = [string](Import-PowerShellDataFile -LiteralPath ./TenantPosture.psd1).ModuleVersion
+          if ($tag -ne "v$moduleVersion") { throw "Tag '$tag' does not match TenantPosture.psd1 ModuleVersion '$moduleVersion'. Bump the manifest (see docs/RELEASING.md) and re-tag." }
           $name = "TenantPosture-$tag"
           # Allowlist what ships. Anything not named here (tests, CI, scanner
           # config, the repo's own tooling, output) stays out of the archive.
@@ -217,21 +220,34 @@ jobs:
           # releases are signed locally before tagging; the job then fails on
           # any unsigned script instead of publishing an unsigned release.
           REQUIRE_SIGNED: ${{ vars.TP_REQUIRE_SIGNED }}
+          # The SHA-1 thumbprint of the in-house signing certificate, when the
+          # release is signed with a self-signed cert no runner trusts.
+          EXPECTED_THUMBPRINT: ${{ vars.TP_SIGNING_THUMBPRINT }}
         run: |
           $ErrorActionPreference = 'Stop'
           $files = Get-ChildItem -Recurse -File -Include '*.ps1','*.psm1','*.psd1' |
                    Where-Object { $_.FullName -notmatch '[\\/](output|\.git)[\\/]' }
-          $valid = 0; $notSigned = 0; $bad = 0
+          $valid = 0; $notSigned = 0; $bad = 0; $pinned = 0
           foreach ($f in $files) {
               $sig = Get-AuthenticodeSignature -LiteralPath $f.FullName
               switch ($sig.Status) {
                   'Valid'        { $valid++ }
                   'NotSigned'    { $notSigned++ }
                   'UnknownError' { $notSigned++ }   # treated as not-signed on this host
+                  'NotTrusted'   {
+                      # A self-signed in-house signer (Build/New-TPCodeSigningCert.ps1) is
+                      # trusted only in the operator's own stores, so a fresh runner reports
+                      # NotTrusted. It counts as signed only when the signer's thumbprint
+                      # equals the repository variable TP_SIGNING_THUMBPRINT: a pinned
+                      # expected root, never any untrusted signer.
+                      $tp = if ($sig.SignerCertificate) { [string]$sig.SignerCertificate.Thumbprint } else { '' }
+                      if ($tp -and $env:EXPECTED_THUMBPRINT -and $tp -eq $env:EXPECTED_THUMBPRINT) { $valid++; $pinned++ }
+                      else { $bad++; Write-Host ("  [NotTrusted, signer {0} is not the pinned thumbprint] {1}" -f $tp, $f.Name) -ForegroundColor Red }
+                  }
                   default        { $bad++; Write-Host ("  [{0}] {1}" -f $sig.Status, $f.Name) -ForegroundColor Red }
               }
           }
-          Write-Host ('Authenticode summary — Valid: {0}  NotSigned: {1}  Problem: {2}' -f $valid, $notSigned, $bad)
+          Write-Host ('Authenticode summary — Valid: {0} (of which {3} by pinned in-house signer)  NotSigned: {1}  Problem: {2}' -f $valid, $notSigned, $bad, $pinned)
           # HashMismatch / Expired / UntrustedRoot = real tamper/trust signals → fail.
           # NotSigned alone is tolerated (in-house releases sign locally).
           if ($bad -gt 0) { throw "$bad file(s) have a bad Authenticode status (tamper or trust failure)." }

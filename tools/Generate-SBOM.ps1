@@ -45,15 +45,16 @@ if (-not (Test-Path -LiteralPath $outputDir)) {
 # Licenses are the publishers' stated terms: the Microsoft Graph SDK and
 # PnP.PowerShell are MIT; ExchangeOnlineManagement, MicrosoftTeams and the
 # SharePoint Online shell ship under Microsoft's proprietary license terms.
-$manifestPath = Join-Path $PSScriptRoot '..' 'TenantPosture.psd1'
+$manifestPath = Join-Path $RepoRoot 'TenantPosture.psd1'
 $required = @()
-try {
-    $m = Import-PowerShellDataFile -LiteralPath $manifestPath
-    foreach ($r in @($m.RequiredModules)) {
-        if ($r -is [hashtable]) { $required += @{ Name = [string]$r.ModuleName; Version = [string]$r.ModuleVersion; Max = [string]$r.MaximumVersion } }
-        else { $required += @{ Name = [string]$r; Version = ''; Max = '' } }
-    }
-} catch { Write-Warning "Could not read RequiredModules from the manifest: $($_.Exception.Message)" }
+# An SBOM with the required modules missing is wrong, not partial: the release
+# attests it, so an unreadable manifest fails the generation outright.
+$m = Import-PowerShellDataFile -LiteralPath $manifestPath -ErrorAction Stop
+foreach ($r in @($m.RequiredModules)) {
+    if ($r -is [hashtable]) { $required += @{ Name = [string]$r.ModuleName; Version = [string]$r.ModuleVersion; Max = [string]$r.MaximumVersion } }
+    else { $required += @{ Name = [string]$r; Version = ''; Max = '' } }
+}
+if ($required.Count -eq 0) { throw "No RequiredModules found in $manifestPath; refusing to write an SBOM without the hard dependencies." }
 $licenseOf = @{
     'Microsoft.Graph.Authentication'            = 'MIT'
     'ExchangeOnlineManagement'                  = 'LicenseRef-Microsoft-Software-License-Terms'
