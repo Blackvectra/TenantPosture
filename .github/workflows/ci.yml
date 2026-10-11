@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          persist-credentials: false
 
       - name: Install Pester (>= 5.5.0)
         shell: pwsh
@@ -134,6 +136,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          persist-credentials: false
 
       - name: Install Pester (>= 5.5.0) and Pode (>= 2.10.0)
         shell: pwsh
@@ -203,6 +207,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          persist-credentials: false
 
       - name: Install PSScriptAnalyzer
         shell: pwsh
@@ -252,7 +258,17 @@ jobs:
         shell: pwsh
         run: |
           $settings = Resolve-Path ./PSScriptAnalyzerSettings.psd1
-          $results = @(Invoke-ScriptAnalyzer -Path . -Recurse -Settings $settings)
+          # PSScriptAnalyzer occasionally dies inside its own rule engine with
+          # "Object reference not set to an instance of an object" on a first
+          # run and passes on the next; that is the analyzer, not a finding.
+          # Retry the whole scan up to three times; a genuine rule result is
+          # returned as data, never thrown, so only the crash is retried.
+          $results = $null; $lastErr = $null
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+              try { $results = @(Invoke-ScriptAnalyzer -Path . -Recurse -Settings $settings -ErrorAction Stop); $lastErr = $null; break }
+              catch { $lastErr = $_; Write-Host ("Invoke-ScriptAnalyzer attempt {0} crashed: {1}" -f $attempt, $_.Exception.Message); Start-Sleep -Seconds (5 * $attempt) }
+          }
+          if ($lastErr) { throw $lastErr }
 
           $errors   = @($results | Where-Object Severity -eq 'Error')
           $warnings = @($results | Where-Object Severity -eq 'Warning')
@@ -349,6 +365,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          persist-credentials: false
 
       - name: Lint YAML (workflows and config)
         run: |
@@ -365,6 +383,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          persist-credentials: false
 
       - name: Validate export lists in sync
         shell: pwsh
@@ -378,6 +398,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          persist-credentials: false
 
       - name: Validate manifest parses + has required fields
         shell: pwsh

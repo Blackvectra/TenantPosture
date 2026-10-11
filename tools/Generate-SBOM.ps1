@@ -40,17 +40,33 @@ if (-not (Test-Path -LiteralPath $outputDir)) {
     [void][System.IO.Directory]::CreateDirectory($outputDir)
 }
 
-# Known dependencies (matches docs/security/SBOM.md)
-$dependencies = @(
-    @{ Name = 'Microsoft.Graph.Authentication';      Version = '2.26.1'; License = 'MIT' }
-    @{ Name = 'ExchangeOnlineManagement';            Version = '3.7.2';  License = 'MIT' }
-    @{ Name = 'Microsoft.Graph.Reports';             Version = '2.26.1'; License = 'MIT' }
-    @{ Name = 'Microsoft.Graph.Identity.Governance'; Version = '2.26.1'; License = 'MIT' }
-    @{ Name = 'Microsoft.Graph.Identity.SignIns';    Version = '2.26.1'; License = 'MIT' }
-    @{ Name = 'Microsoft.Graph.Users';               Version = '2.26.1'; License = 'MIT' }
-    @{ Name = 'MicrosoftTeams';                      Version = '6.5.0';  License = 'MIT' }
-    @{ Name = 'PnP.PowerShell';                      Version = '3.0.0';  License = 'MIT' }
+# The components are the modules the manifest actually requires (hard
+# dependencies) plus the optional modules the collectors import on demand.
+# Licenses are the publishers' stated terms: the Microsoft Graph SDK and
+# PnP.PowerShell are MIT; ExchangeOnlineManagement, MicrosoftTeams and the
+# SharePoint Online shell ship under Microsoft's proprietary license terms.
+$manifestPath = Join-Path $PSScriptRoot '..' 'TenantPosture.psd1'
+$required = @()
+try {
+    $m = Import-PowerShellDataFile -LiteralPath $manifestPath
+    foreach ($r in @($m.RequiredModules)) {
+        if ($r -is [hashtable]) { $required += @{ Name = [string]$r.ModuleName; Version = [string]$r.ModuleVersion; Max = [string]$r.MaximumVersion } }
+        else { $required += @{ Name = [string]$r; Version = ''; Max = '' } }
+    }
+} catch { Write-Warning "Could not read RequiredModules from the manifest: $($_.Exception.Message)" }
+$licenseOf = @{
+    'Microsoft.Graph.Authentication'            = 'MIT'
+    'ExchangeOnlineManagement'                  = 'LicenseRef-Microsoft-Software-License-Terms'
+    'MicrosoftTeams'                            = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Microsoft.Online.SharePoint.PowerShell'    = 'LicenseRef-Microsoft-Software-License-Terms'
+}
+$optional = @(
+    @{ Name = 'MicrosoftTeams';                         Version = '6.5.0';          Scope = 'optional' }
+    @{ Name = 'Microsoft.Online.SharePoint.PowerShell'; Version = '16.0.24720.12000'; Scope = 'optional' }
 )
+$dependencies = @()
+foreach ($r in $required) { $dependencies += @{ Name = $r.Name; Version = $r.Version; Scope = 'required'; License = $(if ($licenseOf.ContainsKey($r.Name)) { $licenseOf[$r.Name] } else { 'NOASSERTION' }) } }
+foreach ($o in $optional) { $dependencies += @{ Name = $o.Name; Version = $o.Version; Scope = 'optional'; License = $(if ($licenseOf.ContainsKey($o.Name)) { $licenseOf[$o.Name] } else { 'NOASSERTION' }) } }
 
 $bom = [ordered]@{
     bomFormat    = 'CycloneDX'
@@ -73,7 +89,7 @@ $bom = [ordered]@{
             version = $Version
             description = 'Read-only Microsoft 365 security assessment tool'
             licenses = @(
-                @{ license = @{ id = 'MIT' } }
+                @{ license = @{ id = 'Apache-2.0' } }
             )
             supplier = @{
                 name = 'NRG Technology Services / NextLayerSec LLC'
@@ -88,7 +104,10 @@ $bom = [ordered]@{
             name       = $_.Name
             version    = $_.Version
             purl       = "pkg:powershell/$($_.Name)@$($_.Version)"
-            licenses   = @(@{ license = @{ id = $_.License } })
+            scope      = $_.Scope
+            # A minimum version from the manifest: what the tool requires, not
+            # what a particular workstation has installed.
+            licenses   = @($(if ($_.License -like 'LicenseRef-*' -or $_.License -eq 'NOASSERTION') { @{ license = @{ name = $_.License } } } else { @{ license = @{ id = $_.License } } }))
             supplier   = @{ name = 'Microsoft Corporation'; url = @('https://www.powershellgallery.com') }
             externalReferences = @(
                 @{ type = 'distribution'; url = "https://www.powershellgallery.com/packages/$($_.Name)/$($_.Version)" }

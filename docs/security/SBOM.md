@@ -27,7 +27,7 @@ Install-PSResource -Name Microsoft.Online.SharePoint.PowerShell -Version 16.0.24
 Install-PSResource -Name Pester                        -Version 5.6.1  -TrustRepository
 ```
 
-> **Use `Install-PSResource` not `Install-Module`** — PSResourceGet supports SHAsum verification; Install-Module does not.
+> **Use `Install-PSResource` not `Install-Module`** — PSResourceGet supports exact version pinning. Neither verifies a package hash against an independent record; check the publisher's Authenticode signature on the installed module if that matters to you.
 
 ## CycloneDX SBOM
 

@@ -42,8 +42,16 @@ Write-Host "  [+] PowerShell $($PSVersionTable.PSVersion) — OK" -ForegroundCol
 Write-Host ""
 Write-Host "[2/6] Checking execution policy..." -ForegroundColor Cyan
 $policy = Get-ExecutionPolicy -Scope CurrentUser
-if ($policy -in @('Restricted','AllSigned','Undefined')) {
-    Write-Host "  [*] Setting CurrentUser policy to RemoteSigned..." -ForegroundColor Yellow
+$effective = Get-ExecutionPolicy
+if ($policy -eq 'AllSigned' -or $effective -eq 'AllSigned') {
+    # AllSigned is a deliberate choice, often set by policy. The installer
+    # never lowers it: the operator signs the tool (Build/Sign-Release.ps1)
+    # or changes the policy knowingly.
+    Write-Host "  [!] Execution policy is AllSigned (CurrentUser: $policy, effective: $effective). Not changed." -ForegroundColor Yellow
+    Write-Host "      Either sign the tool: Build/New-TPCodeSigningCert.ps1 then Build/Sign-Release.ps1" -ForegroundColor DarkGray
+    Write-Host "      or, if your organization allows it: Set-ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor DarkGray
+} elseif ($policy -in @('Restricted', 'Undefined') -and $effective -in @('Restricted', 'Undefined', 'RemoteSigned', 'Unrestricted', 'Bypass')) {
+    Write-Host "  [*] Setting CurrentUser policy to RemoteSigned (was $policy)..." -ForegroundColor Yellow
     try {
         Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
         Write-Host "  [+] Execution policy set" -ForegroundColor Green
@@ -51,7 +59,7 @@ if ($policy -in @('Restricted','AllSigned','Undefined')) {
         Write-Host "  [!] Failed: $($_.Exception.Message)" -ForegroundColor Red
     }
 } else {
-    Write-Host "  [+] Policy is $policy — OK" -ForegroundColor Green
+    Write-Host "  [+] Policy is $policy (effective $effective) — OK" -ForegroundColor Green
 }
 
 # ── Unblock files ────────────────────────────────────────────────────────────
@@ -59,7 +67,12 @@ Write-Host ""
 Write-Host "[3/6] Unblocking files (Zone.Identifier from downloads)..." -ForegroundColor Cyan
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 try {
-    Get-ChildItem -Path $scriptDir -Recurse -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
+    # Only the tool's own script files, never anything under output/ (tenant
+    # data and generated remediation scripts) or an unrelated file dropped
+    # into the folder.
+    Get-ChildItem -LiteralPath $scriptDir -Recurse -File -Include '*.ps1', '*.psm1', '*.psd1', '*.ps1xml' -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch '[\\/](output|\.git)([\\/]|$)' } |
+        Unblock-File -ErrorAction SilentlyContinue
     Write-Host "  [+] Files unblocked" -ForegroundColor Green
 } catch {
     Write-Host "  [!] Unblock failed: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -294,7 +307,7 @@ if ($SkipPython) {
                 # pip runs through the same helper as every other Python call: the
                 # current directory is off sys.path (no planted pip.py) and the user
                 # site stays, so an unelevated install can fall back to --user.
-                $null = Invoke-TPPython -Python $pythonCmd -Script "import sys, runpy; sys.argv = ['pip', 'install', 'openpyxl', '--quiet']; runpy.run_module('pip', run_name='__main__', alter_sys=True)"
+                $null = Invoke-TPPython -Python $pythonCmd -Script "import sys, runpy; sys.argv = ['pip', 'install', 'openpyxl==3.1.5', '--quiet']; runpy.run_module('pip', run_name='__main__', alter_sys=True)"
                 if ($LASTEXITCODE -eq 0 -and (Test-TPPythonModule -Python $pythonCmd -Module 'openpyxl')) {
                     Write-Host "  [+] openpyxl installed" -ForegroundColor Green
                 } elseif ($LASTEXITCODE -eq 0) {

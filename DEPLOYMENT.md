@@ -29,7 +29,7 @@ Install-PSResource -Name Microsoft.Online.SharePoint.PowerShell -Version 16.0.24
 Install-PSResource -Name Pester                        -Version 5.6.1  -TrustRepository
 ```
 
-> **Why `Install-PSResource`?** It supports exact version pinning and SHAsum verification. `Install-Module` does not support `-RequiredVersion` with hash verification.
+> **Why `Install-PSResource`?** It supports exact version pinning with `-Version`. Neither it nor `Install-Module` verifies a package hash against an independent record; integrity of a PSGallery package rests on the gallery's TLS and the publisher's Authenticode signature on the module, which `Get-AuthenticodeSignature` can check after install.
 
 ### Required Permissions
 

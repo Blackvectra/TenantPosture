@@ -178,7 +178,10 @@ if (Get-Command Test-TPSignatureStatus -ErrorAction SilentlyContinue) {
     $sigResults = foreach ($s in $applyScripts) {
         Test-TPSignatureStatus -Path $s.FullName
     }
-    $unsigned = @($sigResults | Where-Object { $_.Status -ne 'Valid' -and $_.Status -ne 'Unsupported' })
+    # Under -RequireSignedCode a signature that cannot be evaluated (Authenticode
+    # is Windows-only) is a failure, not a pass: the requirement was to run only
+    # signed code, and an unverifiable file is not known to be signed.
+    $unsigned = @($sigResults | Where-Object { $_.Status -ne 'Valid' -and ($RequireSignedCode -or $_.Status -ne 'Unsupported') })
     if ($unsigned.Count -gt 0) {
         if ($RequireSignedCode) {
             Write-Host '' -ForegroundColor Red

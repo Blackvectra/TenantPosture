@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **[Security] CI, release and installer integrity.** The Gitleaks binary CI downloads is verified
+  against the release's published SHA-256 before it runs with the repository token. The release
+  workflow takes the tag through the environment (never interpolated into a script) and accepts only
+  `v<major>.<minor>.<patch>`; packages an allowlist of shipped folders and root files (no tests, CI
+  or scanner configuration); writes a per-file `FILES.sha256` inside the archive; attests the archive,
+  `SHA256SUMS` and the SBOM with `actions/attest-build-provenance` (verify with
+  `gh attestation verify`); publishes through a `release` environment; and states an unsigned release
+  as unsigned in the release notes, failing instead when the repository variable `TP_REQUIRE_SIGNED`
+  is `true`. Every checkout runs with `persist-credentials: false` and the dependency-review
+  `pull-requests: write` grant is scoped to its job. The PSScriptAnalyzer job retries the analyzer's
+  own intermittent crash (an "Object reference" throw, never a rule result). The installer never
+  lowers an `AllSigned` execution policy (it prints the two choices) and unblocks only the tool's own
+  script files, never `output/`. The self-signed signing key is non-exportable unless `-Exportable`
+  is passed; `Build/Sign-Release.ps1` refuses a thumbprint pointer file that another account can
+  write; `Apply-TPBaseline -RequireSignedCode` treats a signature it cannot evaluate as a failure.
+  `openpyxl` is pinned; the SBOM lists the modules the manifest actually requires with the
+  publishers' real license terms; the deployment docs no longer claim a package-hash verification
+  PSResourceGet does not perform. Audit M8 to M11 and the supply-chain Lows (2026-10-09).
+
 - **[Security] Sensitive-writer and installer follow-ups from the #136 review.** The Unix mode
   type and the handle overload are resolved at run time (a type literal threw on a runtime without
   them, refusing every write); where no handle API exists the temp file is staged inside an

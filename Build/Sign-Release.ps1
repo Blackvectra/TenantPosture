@@ -72,6 +72,21 @@ if (-not (Test-Path -LiteralPath $RepoRoot)) {
 if (-not $CertificateThumbprint) {
     $thumbFile = Join-Path $env:USERPROFILE '.tp-assessment/signing-thumbprint.txt'
     if (Test-Path -LiteralPath $thumbFile) {
+        # The pointer decides which key signs the release, so it must not be
+        # writable by anyone but this user, SYSTEM and Administrators; a file
+        # another account could repoint is refused and the thumbprint must be
+        # passed explicitly.
+        $acl = Get-Acl -LiteralPath $thumbFile
+        $me = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        $allowed = @($me.Name, $me.User.Value, 'NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators', 'S-1-5-18', 'S-1-5-32-544')
+        $writers = @($acl.Access | Where-Object {
+            $_.AccessControlType -eq 'Allow' -and
+            ($_.FileSystemRights -band ([System.Security.AccessControl.FileSystemRights]::Write -bor [System.Security.AccessControl.FileSystemRights]::WriteData -bor [System.Security.AccessControl.FileSystemRights]::FullControl -bor [System.Security.AccessControl.FileSystemRights]::Modify)) -and
+            ([string]$_.IdentityReference -notin $allowed)
+        })
+        if ($writers.Count -gt 0) {
+            throw "Refusing to read $thumbFile`: it is writable by $(@($writers | ForEach-Object { [string]$_.IdentityReference }) -join ', '). Restrict it to your account or pass -CertificateThumbprint explicitly."
+        }
         $CertificateThumbprint = (Get-Content -LiteralPath $thumbFile -Raw).Trim()
         Write-Verbose "Loaded thumbprint from $thumbFile"
     } else {

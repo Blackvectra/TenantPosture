@@ -17,14 +17,16 @@ on:
     branches: [ main ]
 permissions:
   contents: read
-  # required to comment on PRs with the findings summary
-  pull-requests: write
 
 jobs:
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      # Only this job comments on the PR with the findings summary.
+      pull-requests: write
     # GitHub Dependency Graph + Dependency Review API requires GitHub
     # Advanced Security on private repos. Skip on private repos so the
     # workflow doesn't surface "configuration error" failures
@@ -34,6 +36,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        with:
+          persist-credentials: false
 
       - name: Dependency Review
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
