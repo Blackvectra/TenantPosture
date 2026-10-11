@@ -81,7 +81,7 @@ git add -- tools/integrity-manifest.txt TenantPosture.cat
 git status --short                  # expect signed scripts, the manifest and the catalog; nothing else
 git commit -m "Sign vX.Y.Z"
 git tag -s "vX.Y.Z" -m "vX.Y.Z — release notes here"
-git push origin "vX.Y.Z"
+git push origin main "vX.Y.Z"      # the signing commit AND the tag: a tag alone leaves main unsigned
 ```
 
 Sign-Release.ps1 writes the signed scripts in the repository's committed form (LF; git
