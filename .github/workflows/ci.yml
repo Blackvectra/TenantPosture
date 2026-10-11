@@ -14,7 +14,9 @@ jobs:
   pester:
     name: Pester Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The full suite takes 15 to 18 minutes on ubuntu-latest; the 15-minute
+    # cap cancelled it on this branch. Keep a ceiling, not a margin of seconds.
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
@@ -252,7 +254,17 @@ jobs:
         shell: pwsh
         run: |
           $settings = Resolve-Path ./PSScriptAnalyzerSettings.psd1
-          $results = @(Invoke-ScriptAnalyzer -Path . -Recurse -Settings $settings)
+          # PSScriptAnalyzer occasionally dies inside its own rule engine ("Object
+          # reference not set", "more than one dynamic module in each dynamic
+          # assembly") on a first run and passes on the next; that is the analyzer,
+          # not a finding. Retry the whole scan up to three times; a genuine rule
+          # result is returned as data, never thrown, so only the crash is retried.
+          $results = $null; $lastErr = $null
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+              try { $results = @(Invoke-ScriptAnalyzer -Path . -Recurse -Settings $settings -ErrorAction Stop); $lastErr = $null; break }
+              catch { $lastErr = $_; Write-Host ("Invoke-ScriptAnalyzer attempt {0} crashed: {1}" -f $attempt, $_.Exception.Message); Start-Sleep -Seconds (5 * $attempt) }
+          }
+          if ($lastErr) { throw $lastErr }
 
           $errors   = @($results | Where-Object Severity -eq 'Error')
           $warnings = @($results | Where-Object Severity -eq 'Warning')
