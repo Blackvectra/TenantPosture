@@ -47,26 +47,41 @@ function Get-TPSensitiveFileAccessRules {
 # Windows the FileSecurity goes to the handle (FileSystemAclExtensions), on
 # other hosts the mode is set on the handle (File.SetUnixFileMode). Nothing
 # here reopens the path, so no entry swapped in after the open is affected.
+# Returns $true when the handle was hardened and $false when this runtime has
+# no handle API (the caller then relies on an owner-only staging directory).
 function Set-TPSensitiveHandleAcl {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [System.IO.FileStream] $Stream)
     if (-not $IsWindows) {
-        # File.SetUnixFileMode on a handle exists from .NET 7 (PowerShell 7.3). On an
-        # older runtime chmod is applied to the still-open, randomly named temp file,
-        # and a chmod that fails is an error, never a warning.
-        $setMode = [System.IO.File].GetMethod('SetUnixFileMode', [type[]]@([Microsoft.Win32.SafeHandles.SafeFileHandle], [System.IO.UnixFileMode]))
-        if ($null -ne $setMode) {
-            $null = $setMode.Invoke($null, @($Stream.SafeFileHandle, [System.IO.UnixFileMode]([int]0x180)))   # 0600; a void Invoke still emits $null
-            return
-        }
-        & chmod 600 $Stream.Name 2>$null
-        if ($LASTEXITCODE -ne 0) { throw "chmod 600 returned exit code $LASTEXITCODE" }
-        return
+        # File.SetUnixFileMode(SafeFileHandle, UnixFileMode) exists from .NET 7
+        # (PowerShell 7.3). Both the enum and the overload are resolved at run
+        # time, because a type literal for an enum an older runtime does not have
+        # throws before any fallback can run. Without the handle overload the
+        # caller has staged the file inside an owner-only directory (see
+        # Set-TPSensitiveFileContent), so no path is chmod'ed here.
+        $modeType = [System.Type]::GetType('System.IO.UnixFileMode', $false)
+        $setMode = if ($null -ne $modeType) { [System.IO.File].GetMethod('SetUnixFileMode', [type[]]@([Microsoft.Win32.SafeHandles.SafeFileHandle], $modeType)) } else { $null }
+        if ($null -eq $setMode) { return $false }
+        $null = $setMode.Invoke($null, @($Stream.SafeFileHandle, [System.Enum]::ToObject($modeType, 0x180)))   # 0600; a void Invoke still emits $null
+        return $true
     }
     $sec = [System.Security.AccessControl.FileSecurity]::new()
     $sec.SetAccessRuleProtection($true, $false)
     foreach ($r in (Get-TPSensitiveFileAccessRules)) { $sec.AddAccessRule($r) }
     [System.IO.FileSystemAclExtensions]::SetAccessControl($Stream, $sec)
+    return $true
+}
+
+# True when this runtime can set a Unix mode through an open handle (so a temp
+# file can be hardened without touching its path); always true on Windows.
+function Test-TPHandleModeSupported {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+    if ($IsWindows) { return $true }
+    $modeType = [System.Type]::GetType('System.IO.UnixFileMode', $false)
+    if ($null -eq $modeType) { return $false }
+    return ($null -ne [System.IO.File].GetMethod('SetUnixFileMode', [type[]]@([Microsoft.Win32.SafeHandles.SafeFileHandle], $modeType)))
 }
 
 function Set-TPSensitiveFileAcl {
@@ -167,24 +182,44 @@ function Set-TPSensitiveFileContent {
     if ([string]::IsNullOrEmpty($dir)) { $dir = (Get-Location).ProviderPath }
     if (-not (Test-Path -LiteralPath $dir -PathType Container)) { throw "Set-TPSensitiveFileContent: folder '$dir' does not exist." }
     $leaf = Split-Path -Leaf $Path
-    $tmp = Join-Path $dir ('.' + $leaf + '.' + [guid]::NewGuid().ToString('N') + '.tmp')
+    # Where the runtime cannot harden through the handle (no File.SetUnixFileMode
+    # overload, PowerShell before 7.3 on Linux/macOS) the temp file is created
+    # inside a fresh owner-only directory (mkdir -m 700), so no other account can
+    # open or replace it between creation and the move; nothing is chmod'ed by path.
+    $stageDir = $null
+    if (-not (Test-TPHandleModeSupported)) {
+        $stageDir = Join-Path $dir ('.' + $leaf + '.' + [guid]::NewGuid().ToString('N') + '.stage')
+        & mkdir -m 700 $stageDir 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $stageDir -PathType Container)) { throw "Set-TPSensitiveFileContent: could not create an owner-only staging folder beside '$Path', so it was not written." }
+    }
+    $tmp = Join-Path ($(if ($stageDir) { $stageDir } else { $dir })) ('.' + $leaf + '.' + [guid]::NewGuid().ToString('N') + '.tmp')
     $fs = $null
     try {
         $fs = [System.IO.FileStream]::new($tmp, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
         # A file that cannot be hardened is not written: tenant data never lands
         # under the folder's inherited permissions.
-        try { Set-TPSensitiveHandleAcl -Stream $fs }
+        $hardened = $false
+        try { $hardened = Set-TPSensitiveHandleAcl -Stream $fs }
         catch { throw "Set-TPSensitiveFileContent: could not restrict access on '$Path', so it was not written: $($_.Exception.Message)" }
+        if (-not $hardened -and -not $stageDir) { throw "Set-TPSensitiveFileContent: this runtime cannot harden '$Path' before writing, so it was not written." }
         $pre = $Encoding.GetPreamble()   # the caller's BOM (Excel needs one on the action-plan CSV)
         if ($pre.Length -gt 0) { $fs.Write($pre, 0, $pre.Length) }
         $bytes = $Encoding.GetBytes([string]$Content)
         $fs.Write($bytes, 0, $bytes.Length)
         $fs.Flush($true)
         $fs.Dispose(); $fs = $null
+        if (-not $hardened) {
+            # Still inside the owner-only staging folder, so a chmod by name cannot be
+            # raced; it must succeed before the file is published under the target name.
+            & chmod 600 $tmp 2>$null
+            if ($LASTEXITCODE -ne 0) { throw "Set-TPSensitiveFileContent: chmod 600 on the staged file returned exit code $LASTEXITCODE, so '$Path' was not written." }
+        }
         [System.IO.File]::Move($tmp, $Path, $true)
     } catch {
         if ($fs) { $fs.Dispose(); $fs = $null }
         Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
         throw
+    } finally {
+        if ($stageDir) { Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue }
     }
 }

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **[Security] Sensitive-writer and installer follow-ups from the #136 review.** The Unix mode
+  type and the handle overload are resolved at run time (a type literal threw on a runtime without
+  them, refusing every write); where no handle API exists the temp file is staged inside an
+  owner-only folder (`mkdir -m 700`) rather than chmod'ed by path; pip runs through
+  `Invoke-TPPython` so an unelevated install can fall back to the user site; the isolation test
+  restores a pre-existing `PYTHONPATH` and reads the mode with BSD `stat` on macOS.
+
 - **[Security] Python runs through one helper; the sensitive-file writer never follows a link.** The
   XLSX and PDF publishers and the two questionnaire importers wrote a helper `.py` into the output or
   temp folder and ran it, and every availability probe ran `python -c` from the current directory.
