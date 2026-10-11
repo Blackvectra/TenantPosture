@@ -120,11 +120,13 @@ function Export-TPCatalogTree {
     $null = [System.IO.Directory]::CreateDirectory($dest)
     $rels = [System.Collections.Generic.List[string]]::new()
     foreach ($rel in (Get-TPTrackedFiles)) { $rels.Add($rel) }
-    foreach ($extra in @($integrityManifest, $manifestPath)) {
-        if (Test-Path -LiteralPath $extra -PathType Leaf) {
-            $rel = [System.IO.Path]::GetRelativePath($RepoRoot, $extra).Replace('\', '/')
-            if (-not $rels.Contains($rel)) { $rels.Add($rel) }
-        }
+    # The integrity manifest is the one generated file the sign commit stages,
+    # so it joins the export when present. FILES.sha256 is a release-archive
+    # record: an untracked copy (from an extracted release, say) is cataloged
+    # only if git tracks it, or a fresh clone could never match the catalog.
+    if (Test-Path -LiteralPath $integrityManifest -PathType Leaf) {
+        $rel = [System.IO.Path]::GetRelativePath($RepoRoot, $integrityManifest).Replace('\', '/')
+        if (-not $rels.Contains($rel)) { $rels.Add($rel) }
     }
     $count = 0
     foreach ($rel in ($rels | Sort-Object -Unique)) {
@@ -391,7 +393,9 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     $manifest = @($rels | Sort-Object -Unique | Where-Object { $_ -ne 'FILES.sha256' -and $_ -ne 'TenantPosture.cat' } | ForEach-Object {
             '{0}  {1}' -f (Get-FileHash -LiteralPath (& $toFull $_) -Algorithm SHA256).Hash.ToLower(), $_
         })
-    [System.IO.File]::WriteAllLines($manifestPath, [string[]]$manifest, [System.Text.UTF8Encoding]::new($false))
+    # LF, whatever the platform: git normalizes text on commit, and a catalog
+    # or hash over CRLF bytes would not describe the committed file.
+    [System.IO.File]::WriteAllText($manifestPath, (($manifest -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
     Write-Host "  [+] FILES.sha256 rewritten ($(@($manifest).Count) entries)." -ForegroundColor Green
 }
 

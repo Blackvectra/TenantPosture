@@ -297,19 +297,26 @@ jobs:
                       }
                   }
                   'NotSigned'    { $notSigned++ }
-                  { $_ -in 'NotTrusted', 'UnknownError' } {
-                      # UnknownError is also what PowerShell reports for a file that IS
-                      # signed by a root this host has never seen; with no signer
-                      # certificate at all it is simply not signed.
+                  'NotTrusted' {
                       # A self-signed in-house signer (Build/New-TPCodeSigningCert.ps1) is
                       # trusted only in the operator's own stores, so a fresh runner reports
-                      # NotTrusted. It counts as signed only when the signer's thumbprint
-                      # equals the repository variable TP_SIGNING_THUMBPRINT: a pinned
-                      # expected root, never any untrusted signer.
+                      # NotTrusted: the signature verified, the publisher is unknown here.
+                      # It counts as signed only when the signer's thumbprint equals the
+                      # repository variable TP_SIGNING_THUMBPRINT: a pinned expected root,
+                      # never any untrusted signer.
                       $tp = if ($sig.SignerCertificate) { [string]$sig.SignerCertificate.Thumbprint } else { '' }
-                      if (-not $tp -and $sig.Status -eq 'UnknownError') { $notSigned++ }
-                      elseif ($tp -and $env:EXPECTED_THUMBPRINT -and $tp -eq $env:EXPECTED_THUMBPRINT) { $valid++; $pinned++ }
+                      if ($tp -and $env:EXPECTED_THUMBPRINT -and $tp -eq $env:EXPECTED_THUMBPRINT) { $valid++; $pinned++ }
                       else { $bad++; Write-Host ("  [{0}, signer '{1}' is not the pinned thumbprint] {2}" -f $sig.Status, $tp, $f.Name) -ForegroundColor Red }
+                  }
+                  'UnknownError' {
+                      # UnknownError is "the signature could not be verified", which
+                      # PowerShell lists beside HashMismatch, not beside NotTrusted; a
+                      # signer certificate attached to it does not make it a verified
+                      # signature, so the pin never applies here. With no signer
+                      # certificate at all the file is simply not signed.
+                      $tp = if ($sig.SignerCertificate) { [string]$sig.SignerCertificate.Thumbprint } else { '' }
+                      if (-not $tp) { $notSigned++ }
+                      else { $bad++; Write-Host ("  [UnknownError: signature by '{0}' could not be verified] {1}" -f $tp, $f.Name) -ForegroundColor Red }
                   }
                   default        { $bad++; Write-Host ("  [{0}] {1}" -f $sig.Status, $f.Name) -ForegroundColor Red }
               }

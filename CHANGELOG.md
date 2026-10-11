@@ -45,7 +45,11 @@
   Status is the hash comparison only; and `tools/Verify-Integrity.ps1` takes archive mode from the
   presence of `FILES.sha256` alone, so an injected repository manifest cannot switch an extracted
   release back to the mode that tolerates extra files (`Sign-Release.ps1` names the repository
-  manifest explicitly).
+  manifest explicitly). The integrity manifest and `FILES.sha256` are written with LF on every
+  platform (git normalizes the committed text, and a catalog over CRLF bytes would not describe
+  the committed file); an untracked `FILES.sha256` is not cataloged; and the release job counts an
+  `UnknownError` signature as a problem even when the signer is the pinned thumbprint, since that
+  status means the signature could not be verified, unlike `NotTrusted`.
 
 - **[Security] Sensitive-writer and installer follow-ups from the #136 review.** The Unix mode
   type and the handle overload are resolved at run time (a type literal threw on a runtime without

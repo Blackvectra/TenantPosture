@@ -114,7 +114,10 @@ if ($Update) {
         "# Files: $($files.Count)"
         "#"
     )
-    ($header + $entries) | Out-File -LiteralPath $ManifestPath -Encoding utf8
+    # LF line endings whatever the platform: Out-File would write CRLF on Windows,
+    # git normalizes the committed text to LF, and a catalog or hash computed over
+    # the CRLF bytes would not describe the file a fresh clone carries.
+    [System.IO.File]::WriteAllText($ManifestPath, ((@($header) + @($entries)) -join "`n") + "`n", [System.Text.UTF8Encoding]::new($false))
     # Read it back: the file on disk must carry every entry, or the refresh failed.
     $written = @(Get-Content -LiteralPath $ManifestPath -ErrorAction Stop | Where-Object { $_ -and -not $_.StartsWith('#') })
     if ($written.Count -ne $files.Count) { throw "The manifest at $ManifestPath holds $($written.Count) entries for $($files.Count) files." }
