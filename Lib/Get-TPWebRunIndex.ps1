@@ -47,6 +47,89 @@ function Test-TPWebRunResultName {
 # order is not stable between runs (hashtable order), so the head of the file
 # cannot be read instead. Unreadable or oversized files return empty values and
 # the caller falls back to the file name.
+# The origin (scheme and host) a brand logo URL would need in the image policy:
+# only an absolute https URL yields one; anything else is '' and allows nothing.
+# One rule for the active profile (Start-TPWebServer) and for the Brand a results
+# file recorded, so a report made under another profile is judged the same way.
+function ConvertTo-TPWebImageOrigin {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter()] [AllowNull()] [AllowEmptyString()] [string] $Url)
+    $uri = $null
+    if ($Url -and [System.Uri]::TryCreate($Url, [System.UriKind]::Absolute, [ref]$uri) -and $uri.Scheme -eq 'https') {
+        # Scheme, host and a non-default port only: a CSP host source has no
+        # userinfo (GetLeftPart(Authority) would keep `user:token@`, an invalid
+        # source that also copied the credential into every policy header).
+        $hostAndPort = $uri.GetComponents([System.UriComponents]::Host -bor [System.UriComponents]::Port, [System.UriFormat]::UriEscaped)
+        if (-not $hostAndPort) { return '' }
+        return ('https://' + $hostAndPort)
+    }
+    return ''
+}
+
+# The img-src value for one served report: the server's own sources plus the
+# origin of the logo that run's results file recorded under Metadata.Brand,
+# when it is not among them already. A report made under another profile, or
+# before the active profile's LogoUrl changed, embeds the URL its own run
+# recorded; a policy built from the active profile alone would block it.
+function Get-TPWebRunImageSources {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)] [string] $ReportPath,
+        [Parameter(Mandatory)] [string] $Id,
+        [Parameter(Mandatory)] [string] $ImgSrc,
+        [Parameter()] [AllowNull()] [hashtable] $Cache
+    )
+    Set-StrictMode -Version Latest
+    # The report sits beside its run's results file: <dir>\<Id>-results.json
+    # for the assessment report, <dir>\<Id>-report\<page> for a site page.
+    $dir = Split-Path -Parent $ReportPath
+    if ((Split-Path -Leaf $dir) -eq ($Id + '-report')) { $dir = Split-Path -Parent $dir }
+    $results = Join-Path $dir ($Id + '-results.json')
+    $origins = [System.Collections.Generic.List[string]]::new()
+    if (Test-Path -LiteralPath $results -PathType Leaf) {
+        $meta = Get-TPWebRunMetadata -File (Get-Item -LiteralPath $results) -Cache $Cache
+        $origin = [string](Get-TPObjectField -Item $meta -Key 'LogoOrigin' -Default '')
+        if ($origin) { $origins.Add($origin) }
+    }
+    # No origin from the metadata (no results file beside the report, or one
+    # the reader does not open: it stops at 128 MB so the listing stays
+    # responsive): the report itself says which logo it embeds. Only the
+    # https origins of <img src> in its first 256 KB, where the header is.
+    if ($origins.Count -eq 0) {
+        foreach ($o in (Get-TPWebReportImageOrigins -Path $ReportPath)) { $origins.Add($o) }
+    }
+    $have = [System.Collections.Generic.List[string]]::new()
+    foreach ($src in @($ImgSrc -split '\s+' | Where-Object { $_ })) { $have.Add($src) }
+    foreach ($o in $origins) { if (-not $have.Contains($o)) { $have.Add($o) } }
+    return ($have -join ' ')
+}
+
+# The https origins of the <img src="..."> tags in the head of a report file,
+# bounded to its first 256 KB. The fallback when a run's metadata gives no
+# logo origin; never anything but an absolute https origin.
+function Get-TPWebReportImageOrigins {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param([Parameter(Mandatory)] [string] $Path)
+    Set-StrictMode -Version Latest
+    $found = [System.Collections.Generic.List[string]]::new()
+    try {
+        $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        try {
+            $buffer = [byte[]]::new(262144)
+            $read = $stream.Read($buffer, 0, $buffer.Length)
+        } finally { $stream.Dispose() }
+        $text = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $read)
+        foreach ($m in [regex]::Matches($text, '<img\b[^>]*?\bsrc\s*=\s*["'']([^"'']+)["'']', 'IgnoreCase')) {
+            $origin = ConvertTo-TPWebImageOrigin -Url $m.Groups[1].Value
+            if ($origin -and -not $found.Contains($origin)) { $found.Add($origin) }
+        }
+    } catch { Write-Verbose "Report image origins not read from $Path : $($_.Exception.Message)" }
+    return $found.ToArray()
+}
+
 function Read-TPWebRunMetadata {
     [CmdletBinding()]
     [OutputType([pscustomobject])]
@@ -54,7 +137,7 @@ function Read-TPWebRunMetadata {
 
     Set-StrictMode -Version Latest
 
-    $empty    = [pscustomobject]@{ TenantDomain = ''; TenantId = '' }
+    $empty    = [pscustomobject]@{ TenantDomain = ''; TenantId = ''; LogoOrigin = '' }
     $maxBytes = 128MB
     try {
         if ((Get-Item -LiteralPath $Path -ErrorAction Stop).Length -gt $maxBytes) { return $empty }
@@ -78,7 +161,11 @@ function Read-TPWebRunMetadata {
         if (-not (Test-TPDomainName -Value $domain)) { $domain = '' }
         $tenantId = [string](Get-TPObjectField -Item $meta -Key 'TenantId' -Default '')
         $tenantId = if ($tenantId -cmatch '\A[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\z') { $tenantId.ToLowerInvariant() } else { '' }
-        return [pscustomobject]@{ TenantDomain = $domain; TenantId = $tenantId }
+        # The brand the run was published with: its logo origin is what the image
+        # policy must allow when this run's report is served.
+        $brand = Get-TPObjectField -Item $meta -Key 'Brand' -Default $null
+        $logoOrigin = ConvertTo-TPWebImageOrigin -Url ([string](Get-TPObjectField -Item $brand -Key 'LogoUrl' -Default ''))
+        return [pscustomobject]@{ TenantDomain = $domain; TenantId = $tenantId; LogoOrigin = $logoOrigin }
     } catch {
         Write-Verbose "Metadata not read from $Path : $($_.Exception.Message)"
         return $empty

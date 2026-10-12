@@ -317,16 +317,18 @@ The codes are `DomainRequired` and `InvalidDomain` (400), `InvalidPath` (400),
 `NotFound` and `UnknownRunId` (404) and `Forbidden` (403). Branch on `error`, never
 on the sentence. Outside `/api/` (the static files and the report site) a refusal
 is a plain-text sentence. A path no route serves, or a method a route does not
-allow, still gets Pode's own error page: that is not under this contract. The
-domain a scan is started for must be a fully qualified hostname (two or more
-labels, no trailing dot); the same rule is applied by `Invoke-TPAssessment.ps1
--TenantDomain`.
+allow, is answered the same way (`NotFound` under `/api/`, `Not found.` elsewhere)
+by a wildcard route registered last, so it carries the security headers and goes
+through the request policy; the only answer Pode still sends on its own is for a
+request it cannot parse at all. The domain a scan is started for must be a fully
+qualified hostname (two or more labels, no trailing dot); the same rule is applied
+by `Invoke-TPAssessment.ps1 -TenantDomain`.
 
 The server is read-only toward tenants: listing runs and serving report files
 makes no Graph or Exchange call (only a scan you start from the page does, in its
 own child process). `Testing/TP.WebServer.Tests.ps1` has a context that starts a
-real server; it runs only where Pode 2.10+ is installed, so CI skips it. Run it
-locally after changing the GUI. The path guard, the run listing, the request
+real server; it runs where Pode 2.10+ is installed, which the Windows CI job is.
+Run it locally after changing the GUI. The path guard, the run listing, the request
 policy, the domain-name rule and the error table are pure functions in `Lib/` and
 are tested without a server, so CI runs those.
 

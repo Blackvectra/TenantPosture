@@ -73,16 +73,19 @@ function Test-TPWebRequestAllowed {
     }
 
     # The names this server answers to. Exact match, case-insensitive: no
-    # wildcards, no suffix match, no trailing-dot variants.
-    $hosts = [System.Collections.Generic.List[string]]::new()
-    $hosts.Add("127.0.0.1:$Port")
-    $hosts.Add("localhost:$Port")
+    # wildcards, no suffix match, no trailing-dot variants. Ordinal comparison,
+    # never -in / -eq: those are culture-aware and ignore characters such as a
+    # soft hyphen or a NUL appended to the header, so a Host that is not ours
+    # compared equal to one that is.
+    $hosts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    [void]$hosts.Add("127.0.0.1:$Port")
+    [void]$hosts.Add("localhost:$Port")
     foreach ($extra in @($AllowedHost)) {
         if ([string]::IsNullOrWhiteSpace($extra)) { continue }
-        $hosts.Add($(if ($extra -match ':\d+\z') { $extra } else { "${extra}:$Port" }))
+        [void]$hosts.Add($(if ($extra -match ':\d+\z') { $extra } else { "${extra}:$Port" }))
     }
 
-    if ([string]::IsNullOrEmpty($HostHeader) -or $HostHeader -notin $hosts) { return (& $deny 'HostNotAllowed') }
+    if ([string]::IsNullOrEmpty($HostHeader) -or -not $hosts.Contains($HostHeader)) { return (& $deny 'HostNotAllowed') }
 
     # Safe methods read; they cannot change anything, and a page that reads them
     # cross-origin is stopped by the Host check above and by the response headers.
@@ -99,13 +102,17 @@ function Test-TPWebRequestAllowed {
     # Absent means a client that is not a browser, which is not a CSRF vector.
     # "null" (a sandboxed frame, a file: page) is never this server.
     if ($Origin) {
-        $origins = @($hosts | ForEach-Object { "${Scheme}://$_" })
-        if ($Origin -notin $origins) { return (& $deny 'OriginNotAllowed') }
+        $origins = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($h in $hosts) { [void]$origins.Add("${Scheme}://$h") }
+        if (-not $origins.Contains($Origin)) { return (& $deny 'OriginNotAllowed') }
     }
 
     # Fetch Metadata, where the browser sends it: only a request from this
     # origin, or one the user started by hand (none), may change state.
-    if ($SecFetchSite -and $SecFetchSite -notin @('same-origin', 'none')) { return (& $deny 'FetchSiteNotSameOrigin') }
+    if ($SecFetchSite) {
+        $sameOrUser = [System.Collections.Generic.HashSet[string]]::new([string[]]@('same-origin', 'none'), [System.StringComparer]::OrdinalIgnoreCase)
+        if (-not $sameOrUser.Contains($SecFetchSite)) { return (& $deny 'FetchSiteNotSameOrigin') }
+    }
 
     return [pscustomobject]@{ Allowed = $true; HttpStatus = 200; Reason = ''; Message = '' }
 }

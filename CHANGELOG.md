@@ -33,6 +33,34 @@
   record, inbox rules, mailbox settings and OAuth consents the JSON also carries, and says that
   `rdap.org` redirects each lookup to the authoritative registry (the regional registry for an
   address, the top-level-domain registry for a domain), which a firewall rule must cover too.
+- **[Security] Web GUI: Pode never answers on its own.** A wildcard route on every method, registered
+  last, answers a path no route serves or a method a route does not allow (`NotFound` JSON under
+  `/api/`, `Not found.` elsewhere), so the answer carries the security headers and goes through the
+  request policy; Pode's own 404/405 pages were sent before any middleware ran. The two assets are
+  explicit routes with fixed file names instead of a static folder, which answered every method and
+  returned Pode's browsable listing of the folder for `/static/..%2F..%2Fx`. Pode's root is pinned
+  to the Web folder (unpinned, a `public\` folder in the operator's current directory was served),
+  the image policy allows `'self'`, `data:` and the configured logo's origin instead of every https
+  host, and the request policy compares Host, Origin and Sec-Fetch-Site ordinally (`-in` is
+  culture-aware and ignored a soft hyphen or a NUL appended to the header). The web Lows of the
+  2026-10-09 audit; the real-server tests cover each. From the Codex review of the branch: the catch-all
+  covers every method Pode routes (Connect, Merge and Trace were left to Pode's own page); the web
+  root is resolved to a canonical path before Pode receives it (Pode resolves a relative root
+  against its own script location, so a relative `-ScriptDir` pointed it at `Lib\Web`); and the
+  image policy for a served report comes from that run's own `Metadata.Brand` logo origin
+  (`Get-TPWebRunImageSources`), since a report published under another profile, or before the
+  active profile's logo changed, embeds the logo its run recorded and the active profile's
+  allowlist alone blocked it. The GUI loads the report through the iframe's `src`, no longer
+  `srcdoc`: a `srcdoc` document inherits the index page's policy and discards the report
+  response's, so no header on the report could have governed the framed document; the report
+  route answers with `frame-ancestors 'self'` (the GUI's own origin may frame it, nothing else may;
+  every other response keeps `'none'`); the frame's load event is the failure check, so a report
+  is transferred once per open, not probed first. A logo origin is scheme, host and non-default
+  port only, never the userinfo a `LogoUrl` might carry. When a run's metadata gives no logo origin (no results
+  file beside the report, or one above the reader's 128 MB cap), the origins of the `<img>` tags
+  in the report's first 256 KB are the fallback. The script directory is resolved before any
+  support-script path is built from it (Pode resolves a relative `Use-PodeScript` path against
+  its root), and a server started with `-ScriptDir .` is part of the real-server test.
 - **[Security] CI, release and installer integrity.** The Gitleaks binary CI downloads is verified
   against the release's published SHA-256 before it runs with the repository token. The release
   workflow takes the tag through the environment (never interpolated into a script) and accepts only

@@ -244,18 +244,36 @@
   async function openReport(run) {
     setStatus('Loading report…');
     const url = '/api/runs/' + encodeURIComponent(run.folder) + '/' + encodeURIComponent(run.id) + '/report';
-    let html;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(res.status);
-      html = await res.text();
-    } catch (e) {
-      setStatus('Could not load report');
-      return;
-    }
     $('panel-report').hidden = false;
     $('report-title').textContent = run.tenant + (run.timestamp ? ' — ' + run.timestamp : '');
-    $('report-frame').srcdoc = html;
+    // Loaded through src, never srcdoc: a srcdoc document inherits THIS page's
+    // policy and discards the report response's, so the per-run image policy
+    // the server sets for the report (its own brand's logo origin) would never
+    // apply. Through src, the response's own headers govern the framed document.
+    // One request only: a refusal (404/400) arrives as JSON, which the frame
+    // (same-origin by its sandbox) shows as a non-HTML document; that is the
+    // failure signal, read on load, instead of a probe that fetched the whole
+    // report a second time.
+    const frame = $('report-frame');
+    frame.removeAttribute('srcdoc');
+    frame.onload = function () {
+      let ok = true;
+      try {
+        const doc = frame.contentDocument;
+        ok = !!doc && doc.contentType === 'text/html';
+      } catch (e) { ok = true; }
+      if (!ok) {
+        // The handler is cleared first: about:blank loads as text/html and
+        // would otherwise run it again and overwrite the message.
+        frame.onload = null;
+        frame.src = 'about:blank';
+        $('panel-report').hidden = true;
+        setStatus('Could not load report');
+        return;
+      }
+      setStatus('Ready');
+    };
+    frame.src = url;
     const site = $('link-report-site');
     if (run.hasSite) {
       site.href = siteUrl(run);
@@ -264,13 +282,14 @@
       site.removeAttribute('href');
       site.hidden = true;
     }
-    setStatus('Ready');
     $('panel-report').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function closeReport() {
     $('panel-report').hidden = true;
-    $('report-frame').srcdoc = '';
+    const frame = $('report-frame');
+    frame.onload = null;
+    frame.src = 'about:blank';
     $('link-report-site').hidden = true;
   }
 
