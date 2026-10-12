@@ -33,6 +33,7 @@ Describe 'Network egress surface' {
             'api.bap.microsoft.com'        # Power Platform admin API
             'service.powerapps.com'        # Power Platform token audience
             'www.powershellgallery.com'    # module install (setup only)
+            'pypi.org'                     # openpyxl install through pip (setup only); also the SBOM's distribution reference
             'rdap.org'                     # IP geolocation / ASN (sign-in triage)
             'crt.sh'                       # Certificate Transparency (DNS checks)
             'cloudflare-dns.com'           # DNS-over-HTTPS resolver (Resolve-TPDns, DNS email-auth)

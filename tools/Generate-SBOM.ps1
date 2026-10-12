@@ -79,7 +79,7 @@ $licenseOf = @{
 # Microsoft module on the PowerShell Gallery.
 $originOf = @{
     'Pode'     = @{ Ecosystem = 'powershell'; Supplier = 'Badgerati (Matthew Kelly)'; SupplierUrl = 'https://github.com/Badgerati/Pode'; Distribution = 'https://www.powershellgallery.com/packages/Pode/{0}' }
-    'openpyxl' = @{ Ecosystem = 'pypi';       Supplier = 'openpyxl contributors';   SupplierUrl = 'https://foss.heptapod.net/openpyxl/openpyxl'; Distribution = 'https://pypi.org/project/openpyxl/{0}/' }
+    'openpyxl' = @{ Ecosystem = 'pypi';       Supplier = 'openpyxl contributors';   SupplierUrl = 'https://pypi.org/project/openpyxl/';   Distribution = 'https://pypi.org/project/openpyxl/{0}/' }
 }
 $defaultOrigin = @{ Ecosystem = 'powershell'; Supplier = 'Microsoft Corporation'; SupplierUrl = 'https://www.powershellgallery.com'; Distribution = 'https://www.powershellgallery.com/packages/{1}/{0}' }
 $optional = @(
