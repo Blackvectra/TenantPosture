@@ -238,10 +238,18 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             # possibly weaker, policy; every Set-PodeHeader must fill the template.
             ([regex]::Matches($script:ServerSrc, 'CspTemplate = \(')).Count | Should -Be 1
             $sets = [regex]::Matches($script:ServerSrc, "Set-PodeHeader -Name 'Content-Security-Policy' -Value \(([^\n]*)")
-            $sets.Count | Should -Be 4
-            # The GUI frames a report through srcdoc, which inherits the index page's
-            # policy: the index allows every listed run's logo origin.
-            $script:ServerSrc | Should -Match 'Get-TPWebIndexImageSources -OutputRoot \$cfg\.OutputRoot'
+            $sets.Count | Should -Be 3
+            # Only the report route lets itself be framed, and only by the GUI's own
+            # origin; everything else stays unframeable.
+            $script:ServerSrc | Should -Match 'frame-ancestors \{1\};'
+            ([regex]::Matches($script:ServerSrc, "-f \`$sources, `"'self'`"")).Count | Should -Be 1
+            ([regex]::Matches($script:ServerSrc, "`"'none'`"")).Count | Should -Be 2
+            # The GUI loads the report through the iframe's src, never srcdoc: a srcdoc
+            # document inherits the index page's policy and discards the response's.
+            $appJs = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Web' 'static' 'app.js') -Raw
+            $appJs | Should -Not -Match '\.srcdoc\s*='
+            $appJs | Should -Match 'frame\.src = url'
+            (Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Web' 'index.html') -Raw) | Should -Not -Match 'srcdoc'
             foreach ($m in $sets) { $m.Groups[1].Value | Should -Match '^\$cfg\.CspTemplate -f ' }
             ([regex]::Matches($script:ServerSrc, "default-src 'none'")).Count | Should -Be 1 -Because 'the policy text exists once, in the template'
         }
@@ -1762,9 +1770,9 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
             It 'the site is served under the same strict CSP, not a relaxed one' {
                 $idx  = (& $script:Get '/').Headers['Content-Security-Policy']
                 $site = (& $script:Get "/site/_flat/$($script:Id)/index.html").Headers['Content-Security-Policy']
-                # The same policy: the index allows every listed run's logo origin (the
-                # framed report inherits it), the site page allows its own run's.
-                [string]$site | Should -Be ([string]$idx)
+                # The same policy, with the one difference a run may add: the origin
+                # of the brand logo its results file recorded (this run's cdn.example).
+                [string]$site | Should -Be (([string]$idx) -replace "img-src 'self' data:;", "img-src 'self' data: https://cdn.example;")
                 [string]$site | Should -Match "default-src 'none'"
                 [string]$site | Should -Match "script-src 'self'(;|$)"
                 [string]$site | Should -Match "frame-ancestors 'none'"
@@ -2028,22 +2036,27 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
                 $r.Headers['content-security-policy'] | Should -Not -Match "img-src [^;]*https:(\s|;)"
             }
 
-            It 'a report made with another brand is served with its own logo origin in the image policy, and the index (which the framed report inherits) allows it too' {
+            It 'a report made with another brand is served with its own logo origin, framable by the GUI alone; the index and the rest stay strict' {
                 # The flat run's results file records Brand.LogoUrl; the server runs with no
-                # profile logo. The report page and the index allow that origin; a CSV
-                # and a run that recorded no brand do not.
+                # profile logo. The report (which the GUI frames through src, so this
+                # response's policy is the framed document's) allows that origin and
+                # frame-ancestors 'self'; a site page allows the origin but no framing; the
+                # index, an asset, a CSV and a run that recorded no brand allow neither.
                 $r = & $script:Raw $script:Port "/api/runs/_flat/$($script:Id)/report"
                 $r.Status | Should -Be 200
                 $r.Headers['content-security-policy'] | Should -Match "img-src 'self' data: https://cdn\.example;"
+                $r.Headers['content-security-policy'] | Should -Match "frame-ancestors 'self';"
                 $site = & $script:Raw $script:Port "/site/_flat/$($script:Id)/index.html"
                 $site.Status | Should -Be 200
                 $site.Headers['content-security-policy'] | Should -Match "img-src 'self' data: https://cdn\.example;"
+                $site.Headers['content-security-policy'] | Should -Match "frame-ancestors 'none';"
                 $csv = & $script:Raw $script:Port "/site/_flat/$($script:Id)/ActionPlan.csv"
                 $csv.Headers['content-security-policy'] | Should -Match "img-src 'self' data:;"
                 $index = & $script:Raw $script:Port '/'
-                $index.Headers['content-security-policy'] | Should -Match "img-src 'self' data: https://cdn\.example;" -Because 'the GUI loads the report through srcdoc, which inherits this policy'
+                $index.Headers['content-security-policy'] | Should -Match "img-src 'self' data:;" -Because 'the framed report carries its own policy; the index needs no origin'
+                $index.Headers['content-security-policy'] | Should -Match "frame-ancestors 'none';"
                 $asset = & $script:Raw $script:Port '/static/app.js'
-                $asset.Headers['content-security-policy'] | Should -Match "img-src 'self' data:;" -Because 'only the index and the report pages need the origin'
+                $asset.Headers['content-security-policy'] | Should -Match "img-src 'self' data:;"
                 $other = & $script:Raw $script:Port '/api/runs/fabrikam.org/FABRIKAM-20261002-100000/report'
                 $other.Status | Should -Be 200
                 $other.Headers['content-security-policy'] | Should -Match "img-src 'self' data:;" -Because 'that run recorded no brand'
@@ -2212,14 +2225,13 @@ Describe 'per-run image policy (Lib/Get-TPWebRunIndex.ps1)' {
         (Read-TPWebRunMetadata -Path (Join-Path $script:Tmp2 'Y-20261002-010000-results.json')).LogoOrigin | Should -Be ''
     }
 
-    It 'the index image sources carry every listed run''s origin once, from both layouts, and nothing for a non-https logo' {
-        $null = New-Item -ItemType Directory -Path (Join-Path $script:Tmp2 'z.example') -Force
-        Set-Content -LiteralPath (Join-Path $script:Tmp2 'z.example' 'Z-20261002-010000-results.json') -Value '{"Metadata":{"TenantDomain":"z.example","Brand":{"LogoUrl":"https://logos.example:8443/z.png"}}}' -Encoding utf8
-        Set-Content -LiteralPath (Join-Path $script:Tmp2 'W-20261002-010000-results.json') -Value '{"Metadata":{"TenantDomain":"w.example","Brand":{"LogoUrl":"https://cdn.example/w.png"}}}' -Encoding utf8
+    It 'with no usable metadata, the origins come from the report''s own img tags (its first 256 KB), https only' {
+        Set-Content -LiteralPath (Join-Path $script:Tmp2 'V-20261002-010000-assessment.html') -Value '<html><head></head><body><img src="https://logos.example/v.png" alt=""><img src=''http://plain.example/p.png''><img src="data:image/png;base64,AA"><IMG SRC="https://logos.example/again.png"></body></html>' -Encoding utf8
         $cache = @{}
-        Get-TPWebIndexImageSources -OutputRoot $script:Tmp2 -ImgSrc "'self' data:" -Cache $cache | Should -Be "'self' data: https://cdn.example https://logos.example:8443"
-        Get-TPWebIndexImageSources -OutputRoot $script:Tmp2 -ImgSrc "'self' data: https://cdn.example" -Cache $cache | Should -Be "'self' data: https://cdn.example https://logos.example:8443"
-        Get-TPWebIndexImageSources -OutputRoot (Join-Path $script:Tmp2 'nosuch') -ImgSrc "'self' data:" -Cache $cache | Should -Be "'self' data:"
+        Get-TPWebRunImageSources -ReportPath (Join-Path $script:Tmp2 'V-20261002-010000-assessment.html') -Id 'V-20261002-010000' -ImgSrc "'self' data:" -Cache $cache | Should -Be "'self' data: https://logos.example"
+        # Metadata wins when it names an origin: the report scan is the fallback only.
+        Set-Content -LiteralPath (Join-Path $script:Tmp2 'X-20261002-010000-assessment.html') -Value '<html><img src="https://other.example/x.png"></html>' -Encoding utf8
+        Get-TPWebRunImageSources -ReportPath (Join-Path $script:Tmp2 'X-20261002-010000-assessment.html') -Id 'X-20261002-010000' -ImgSrc "'self' data:" -Cache $cache | Should -Be "'self' data: https://cdn.example"
     }
 
     It 'the run image sources add the origin once, for the report and for a site page, and never for a run without one' {

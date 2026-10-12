@@ -224,8 +224,12 @@ function Start-TPWebServer {
             Scheme      = 'http'
             AllowedHost = @($AllowedHost)
             ImgSrc      = $imgSrc
-            # The one policy string; {0} is the img-src value. The middleware fills
-            # it with the server's sources, a report route with that run's.
+            # The one policy string; {0} is the img-src value and {1} the
+            # frame-ancestors value. The middleware fills them with the server's
+            # sources and 'none'; the report route with that run's sources and
+            # 'self', because the GUI frames the report (through the iframe's
+            # src, so this response's own policy governs the framed document);
+            # a site page with the run's sources and 'none' (it opens in a tab).
             CspTemplate = ("default-src 'none'; " +
                 "script-src 'self'; " +
                 "style-src 'self' 'unsafe-inline'; " +
@@ -234,7 +238,7 @@ function Start-TPWebServer {
                 "frame-src 'self' data:; " +
                 "base-uri 'none'; " +
                 "form-action 'none'; " +
-                "frame-ancestors 'none'; " +
+                "frame-ancestors {1}; " +
                 "object-src 'none'")
         } | Out-Null
 
@@ -257,7 +261,7 @@ function Start-TPWebServer {
         # script/style/data, no framing, no plugins, no form posts to off-host.
         Add-PodeMiddleware -Name 'SecurityHeaders' -ScriptBlock {
             $cfg = Get-PodeState -Name 'cfg'
-            Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $cfg.ImgSrc)
+            Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $cfg.ImgSrc, "'none'")
             Set-PodeHeader -Name 'X-Content-Type-Options' -Value 'nosniff'
             Set-PodeHeader -Name 'Referrer-Policy' -Value 'no-referrer'
             # Everything served here is tenant data. no-store keeps the browser
@@ -320,11 +324,6 @@ function Start-TPWebServer {
         # Index — single-page UI shell.
         Add-PodeRoute -Method Get -Path '/' -ScriptBlock {
             $cfg = Get-PodeState -Name 'cfg'
-            # The GUI frames a report through srcdoc, and a srcdoc document
-            # inherits THIS page's policy, not the report response's: so the index
-            # allows the logo origin of every run the listing can show.
-            $sources = Get-TPWebIndexImageSources -OutputRoot $cfg.OutputRoot -ImgSrc $cfg.ImgSrc -Cache (Get-PodeState -Name 'runMetadata')
-            Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $sources)
             $indexPath = Join-Path $cfg.WebRoot 'index.html'
             $html = Get-Content -LiteralPath $indexPath -Raw -Encoding utf8
             Write-PodeHtmlResponse -Value $html
@@ -397,14 +396,15 @@ function Start-TPWebServer {
                 Write-PodeJsonResponse -Value $apiError.Body -StatusCode $apiError.HttpStatus
                 return
             }
-            # The image policy for THIS run, for a report opened directly in a tab:
-            # its results file's Brand names the logo the report embeds, which the
-            # active profile's may not be. (Framed by the GUI through srcdoc, the
-            # report inherits the index page's policy instead; see GET /.)
+            # The image policy for THIS run: its results file's Brand names the
+            # logo the report embeds, which the active profile's may not be. The
+            # GUI frames this response through the iframe's src, so this policy is
+            # the framed document's, and frame-ancestors 'self' lets the GUI's own
+            # origin, and nothing else, frame it.
             $cfg = Get-PodeState -Name 'cfg'
             $sources = Get-TPWebRunImageSources -ReportPath $found.Path -Id $WebEvent.Parameters['id'] `
                 -ImgSrc $cfg.ImgSrc -Cache (Get-PodeState -Name 'runMetadata')
-            Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $sources)
+            Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $sources, "'self'")
             $html = Get-Content -LiteralPath $found.Path -Raw -Encoding utf8
             Write-PodeHtmlResponse -Value $html
         }
@@ -444,7 +444,7 @@ function Start-TPWebServer {
                 $cfg = Get-PodeState -Name 'cfg'
                 $sources = Get-TPWebRunImageSources -ReportPath $found.Path -Id $WebEvent.Parameters['id'] `
                     -ImgSrc $cfg.ImgSrc -Cache (Get-PodeState -Name 'runMetadata')
-                Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $sources)
+                Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $sources, "'none'")
                 Write-PodeTextResponse -Bytes $bytes -ContentType 'text/html'
             }
         }

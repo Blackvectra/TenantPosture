@@ -82,47 +82,47 @@ function Get-TPWebRunImageSources {
     $dir = Split-Path -Parent $ReportPath
     if ((Split-Path -Leaf $dir) -eq ($Id + '-report')) { $dir = Split-Path -Parent $dir }
     $results = Join-Path $dir ($Id + '-results.json')
-    if (-not (Test-Path -LiteralPath $results -PathType Leaf)) { return $ImgSrc }
-    $meta = Get-TPWebRunMetadata -File (Get-Item -LiteralPath $results) -Cache $Cache
-    $origin = [string](Get-TPObjectField -Item $meta -Key 'LogoOrigin' -Default '')
-    if (-not $origin) { return $ImgSrc }
-    $have = @($ImgSrc -split '\s+' | Where-Object { $_ })
-    if ($origin -in $have) { return $ImgSrc }
-    return ($ImgSrc + ' ' + $origin)
-}
-
-# The img-src value for the GUI's index page: the server's sources plus the logo
-# origin of every run the listing can show. The GUI loads a report into an
-# iframe through srcdoc, and a srcdoc document inherits the embedding page's
-# policy (CSP, "Inheriting policies"), so the header a report route sets is
-# discarded with the fetch: the index page's own policy is what governs the
-# framed report, and it must allow every listed run's recorded logo origin.
-# Only the two layouts the listing reads: <root>\*-results.json and
-# <root>\<folder>\*-results.json, through the same metadata cache.
-function Get-TPWebIndexImageSources {
-    [CmdletBinding()]
-    [OutputType([string])]
-    param(
-        [Parameter(Mandatory)] [string] $OutputRoot,
-        [Parameter(Mandatory)] [string] $ImgSrc,
-        [Parameter()] [AllowNull()] [hashtable] $Cache
-    )
-    Set-StrictMode -Version Latest
+    $origins = [System.Collections.Generic.List[string]]::new()
+    if (Test-Path -LiteralPath $results -PathType Leaf) {
+        $meta = Get-TPWebRunMetadata -File (Get-Item -LiteralPath $results) -Cache $Cache
+        $origin = [string](Get-TPObjectField -Item $meta -Key 'LogoOrigin' -Default '')
+        if ($origin) { $origins.Add($origin) }
+    }
+    # No origin from the metadata (no results file beside the report, or one
+    # the reader does not open: it stops at 128 MB so the listing stays
+    # responsive): the report itself says which logo it embeds. Only the
+    # https origins of <img src> in its first 256 KB, where the header is.
+    if ($origins.Count -eq 0) {
+        foreach ($o in (Get-TPWebReportImageOrigins -Path $ReportPath)) { $origins.Add($o) }
+    }
     $have = [System.Collections.Generic.List[string]]::new()
     foreach ($src in @($ImgSrc -split '\s+' | Where-Object { $_ })) { $have.Add($src) }
-    if (-not (Test-Path -LiteralPath $OutputRoot -PathType Container)) { return ($have -join ' ') }
-    $files = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
-    foreach ($f in @(Get-ChildItem -LiteralPath $OutputRoot -File -ErrorAction SilentlyContinue)) { $files.Add($f) }
-    foreach ($d in @(Get-ChildItem -LiteralPath $OutputRoot -Directory -ErrorAction SilentlyContinue)) {
-        foreach ($f in @(Get-ChildItem -LiteralPath $d.FullName -File -ErrorAction SilentlyContinue)) { $files.Add($f) }
-    }
-    foreach ($f in $files) {
-        if (-not (Test-TPWebRunResultName -Name $f.Name)) { continue }
-        $meta = Get-TPWebRunMetadata -File $f -Cache $Cache
-        $origin = [string](Get-TPObjectField -Item $meta -Key 'LogoOrigin' -Default '')
-        if ($origin -and -not $have.Contains($origin)) { $have.Add($origin) }
-    }
+    foreach ($o in $origins) { if (-not $have.Contains($o)) { $have.Add($o) } }
     return ($have -join ' ')
+}
+
+# The https origins of the <img src="..."> tags in the head of a report file,
+# bounded to its first 256 KB. The fallback when a run's metadata gives no
+# logo origin; never anything but an absolute https origin.
+function Get-TPWebReportImageOrigins {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param([Parameter(Mandatory)] [string] $Path)
+    Set-StrictMode -Version Latest
+    $found = [System.Collections.Generic.List[string]]::new()
+    try {
+        $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        try {
+            $buffer = [byte[]]::new(262144)
+            $read = $stream.Read($buffer, 0, $buffer.Length)
+        } finally { $stream.Dispose() }
+        $text = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $read)
+        foreach ($m in [regex]::Matches($text, '<img\b[^>]*?\bsrc\s*=\s*["'']([^"'']+)["'']', 'IgnoreCase')) {
+            $origin = ConvertTo-TPWebImageOrigin -Url $m.Groups[1].Value
+            if ($origin -and -not $found.Contains($origin)) { $found.Add($origin) }
+        }
+    } catch { Write-Verbose "Report image origins not read from $Path : $($_.Exception.Message)" }
+    return $found.ToArray()
 }
 
 function Read-TPWebRunMetadata {

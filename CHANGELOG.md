@@ -19,12 +19,15 @@
   image policy for a served report comes from that run's own `Metadata.Brand` logo origin
   (`Get-TPWebRunImageSources`), since a report published under another profile, or before the
   active profile's logo changed, embeds the logo its run recorded and the active profile's
-  allowlist alone blocked it; and because the GUI frames a report through `srcdoc`, which
-  inherits the index page's policy rather than the report response's, the index page allows the
-  logo origin of every run the listing can show (`Get-TPWebIndexImageSources`). The script
-  directory is resolved before any support-script path is built from it (Pode resolves a
-  relative `Use-PodeScript` path against its root), and a server started with `-ScriptDir .` is
-  part of the real-server test.
+  allowlist alone blocked it. The GUI loads the report through the iframe's `src`, no longer
+  `srcdoc`: a `srcdoc` document inherits the index page's policy and discards the report
+  response's, so no header on the report could have governed the framed document; the report
+  route answers with `frame-ancestors 'self'` (the GUI's own origin may frame it, nothing else may;
+  every other response keeps `'none'`). When a run's metadata gives no logo origin (no results
+  file beside the report, or one above the reader's 128 MB cap), the origins of the `<img>` tags
+  in the report's first 256 KB are the fallback. The script directory is resolved before any
+  support-script path is built from it (Pode resolves a relative `Use-PodeScript` path against
+  its root), and a server started with `-ScriptDir .` is part of the real-server test.
 - **[Security] CI, release and installer integrity.** The Gitleaks binary CI downloads is verified
   against the release's published SHA-256 before it runs with the repository token. The release
   workflow takes the tag through the environment (never interpolated into a script) and accepts only
