@@ -74,12 +74,16 @@ $licenseOf = @{
     'Microsoft.Online.SharePoint.PowerShell'    = 'LicenseRef-Microsoft-Software-License-Terms'
     'Pode'                                      = 'MIT'
     'openpyxl'                                  = 'MIT'
+    'pypdf'                                     = 'BSD-3-Clause'   # PyPI license expression
+    'reportlab'                                 = 'BSD-3-Clause'   # PyPI: "BSD license (see license.txt)"; the file is the three-clause text
 }
 # Where a component is published and by whom. Everything not listed here is a
 # Microsoft module on the PowerShell Gallery.
 $originOf = @{
     'Pode'     = @{ Ecosystem = 'powershell'; Supplier = 'Badgerati (Matthew Kelly)'; SupplierUrl = 'https://github.com/Badgerati/Pode'; Distribution = 'https://www.powershellgallery.com/packages/Pode/{0}' }
     'openpyxl' = @{ Ecosystem = 'pypi';       Supplier = 'openpyxl contributors';   SupplierUrl = 'https://pypi.org/project/openpyxl/';   Distribution = 'https://pypi.org/project/openpyxl/{0}/' }
+    'pypdf'    = @{ Ecosystem = 'pypi';       Supplier = 'pypdf contributors';      SupplierUrl = 'https://pypi.org/project/pypdf/';      Distribution = 'https://pypi.org/project/pypdf/{0}' }
+    'reportlab' = @{ Ecosystem = 'pypi';      Supplier = 'ReportLab Inc.';          SupplierUrl = 'https://pypi.org/project/reportlab/';  Distribution = 'https://pypi.org/project/reportlab/{0}' }
 }
 $defaultOrigin = @{ Ecosystem = 'powershell'; Supplier = 'Microsoft Corporation'; SupplierUrl = 'https://www.powershellgallery.com'; Distribution = 'https://www.powershellgallery.com/packages/{1}/{0}' }
 $optional = @(
@@ -94,16 +98,22 @@ $optional = @(
     @{ Name = 'Pode';                                   Version = '2.10.0';         Scope = 'optional'; Semantics = 'declared minimum; imported by -Web on demand' }
     # The XLSX publishers run openpyxl through Lib/Invoke-TPPython.ps1; Install-TPPrerequisites.ps1 pins this version.
     @{ Name = 'openpyxl';                               Version = '3.1.5';          Scope = 'optional'; Semantics = 'pinned by the installer; used by the XLSX publishers on demand' }
+    # The questionnaire importers read AcroForm fields through pypdf and the
+    # questionnaire publishers render the PDF through reportlab; neither is
+    # pinned or installed by the installer (the operator runs pip when the PDF
+    # path is used), so no version is recorded rather than an invented one.
+    @{ Name = 'pypdf';                                  Version = '';               Scope = 'optional'; Semantics = 'not pinned; installed by the operator (pip install pypdf) for the questionnaire PDF import' }
+    @{ Name = 'reportlab';                              Version = '';               Scope = 'optional'; Semantics = 'not pinned; installed by the operator (pip install reportlab) for the questionnaire PDF output' }
 )
 $dependencies = @()
 foreach ($r in $required) { $dependencies += @{ Name = $r.Name; Version = $r.Version; Max = $r.Max; Scope = 'required'; License = $(if ($licenseOf.ContainsKey($r.Name)) { $licenseOf[$r.Name] } else { 'NOASSERTION' }) } }
 foreach ($o in $optional) { $dependencies += @{ Name = $o.Name; Version = $o.Version; Max = ''; Scope = 'optional'; License = $(if ($licenseOf.ContainsKey($o.Name)) { $licenseOf[$o.Name] } else { 'NOASSERTION' }); Semantics = $(if ($o.ContainsKey('Semantics')) { $o.Semantics } else { '' }) } }
 foreach ($d in $dependencies) {
     $origin = if ($originOf.ContainsKey($d.Name)) { $originOf[$d.Name] } else { $defaultOrigin }
-    $d['Purl'] = "pkg:$($origin.Ecosystem)/$($d.Name)@$($d.Version)"
+    $d['Purl'] = if ($d.Version) { "pkg:$($origin.Ecosystem)/$($d.Name)@$($d.Version)" } else { "pkg:$($origin.Ecosystem)/$($d.Name)" }
     $d['Supplier'] = $origin.Supplier
     $d['SupplierUrl'] = $origin.SupplierUrl
-    $d['Distribution'] = ($origin.Distribution -f $d.Version, $d.Name)
+    $d['Distribution'] = ($origin.Distribution -f $d.Version, $d.Name).TrimEnd('/') + $(if ($d.Version) { '/' } else { '' })
 }
 
 $bom = [ordered]@{
@@ -140,7 +150,7 @@ $bom = [ordered]@{
             type       = 'library'
             'bom-ref'  = $_.Purl
             name       = $_.Name
-            version    = $_.Version
+            version    = $(if ($_.Version) { $_.Version } else { $null })
             purl       = $_.Purl
             scope      = $_.Scope
             # `version` is the declared MINIMUM; the manifest allows a range and
@@ -148,7 +158,7 @@ $bom = [ordered]@{
             # as a property so an inventory tool does not read the floor as exact.
             properties = @(
                 @{ name = 'tenantposture:version-semantics'; value = $(if ($_.Scope -eq 'required') { 'declared minimum; manifest range in tenantposture:version-range' } elseif ($_.ContainsKey('Semantics') -and $_.Semantics) { $_.Semantics } else { 'tested version; imported on demand' }) }
-                @{ name = 'tenantposture:version-range'; value = $(if ($_.Max) { "[$($_.Version),$($_.Max)]" } else { "[$($_.Version),)" }) }
+                @{ name = 'tenantposture:version-range'; value = $(if (-not $_.Version) { 'unpinned' } elseif ($_.Max) { "[$($_.Version),$($_.Max)]" } else { "[$($_.Version),)" }) }
             )
             licenses   = @($(if ($_.License -like 'LicenseRef-*' -or $_.License -eq 'NOASSERTION') { @{ license = @{ name = $_.License } } } else { @{ license = @{ id = $_.License } } }))
             supplier   = @{ name = $_.Supplier; url = @($_.SupplierUrl) }

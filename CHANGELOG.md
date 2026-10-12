@@ -85,7 +85,13 @@
   case-insensitively on Windows), and the signing transaction snapshots the integrity manifest,
   `FILES.sha256` and the catalog before it rewrites them and puts each back, bytes or absence, when
   a later step fails, so a failed run never leaves manifests over bytes no longer on disk or a
-  partial catalog in place of a valid one.
+  partial catalog in place of a valid one; that snapshot is taken inside the transaction, so a
+  manifest another process holds restores the signed scripts like any other failure. The catalog
+  and `FILES.sha256` are computed over the bytes git commits (`git ls-files --eol` says which
+  files git normalizes; CRLF becomes LF there), not the working tree, which on a Windows clone
+  with `core.autocrlf=true` carries CRLF in every tracked text file `.gitattributes` does not pin
+  and would have produced a catalog no Linux checkout could validate. The SBOM also lists pypdf
+  and reportlab (the questionnaire PDF import and output; unpinned, so no version is invented).
 - **[Honesty] The maturity label is provisional when evidence is incomplete.** `Get-TPMaturityTier`
   excludes Error and unknown-state findings from the score denominator (by design: a tool failure
   is not a gap), but it then printed an unqualified tier, so 50 passes beside 50 errored checks

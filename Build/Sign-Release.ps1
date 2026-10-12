@@ -107,13 +107,67 @@ function Get-TPTrackedFiles {
     return $list
 }
 
+# The catalog and FILES.sha256 describe the COMMITTED bytes, which are not
+# always the working-tree bytes: on a Windows clone with core.autocrlf=true
+# every tracked text file .gitattributes does not pin (.gitignore, LICENSE,
+# NOTICE, the .txt files) is checked out with CRLF and committed with LF, so a
+# catalog over the working tree could never validate a Linux clone or a
+# Windows clone with other settings. `git ls-files --eol` reports, per file,
+# the line endings in the index and the working tree and the attributes in
+# force; from those, Get-TPCommittedBytes returns what git would store at
+# commit: CRLF normalized to LF where git normalizes (an explicit `text` or
+# `eol` attribute; or text detected under autocrlf with an LF index blob,
+# git's own safety rule), the bytes as they are otherwise.
+function Get-TPGitEolTable {
+    <# Repository-relative path -> index eol, working-tree eol, attributes, from git ls-files --eol. #>
+    $global:LASTEXITCODE = 0
+    $lines = @(& $gitCmd.Source -C $RepoRoot -c core.quotepath=off ls-files --eol)
+    if ($LASTEXITCODE -ne 0) { throw "git ls-files --eol failed in $RepoRoot (exit $LASTEXITCODE)." }
+    $table = @{}
+    foreach ($line in $lines) {
+        if ($line -match '^i/(\S+)\s+w/(\S+)\s+attr/([^\t]*)\t(.+)$') {
+            $table[$Matches[4]] = @{ Index = $Matches[1]; Work = $Matches[2]; Attr = $Matches[3].Trim() }
+        }
+    }
+    return $table
+}
+$script:gitEolTable = $null
+$script:gitAutoCrlf = $null
+function Get-TPCommittedBytes {
+    <# The bytes git would commit for a tracked file: the working-tree bytes, CRLF normalized to LF where git normalizes. #>
+    param([Parameter(Mandatory)] [string] $Rel)
+    if ($null -eq $script:gitEolTable) {
+        $script:gitEolTable = Get-TPGitEolTable
+        $global:LASTEXITCODE = 0
+        $cfg = [string](& $gitCmd.Source -C $RepoRoot config --get core.autocrlf 2>$null)
+        $global:LASTEXITCODE = 0
+        $script:gitAutoCrlf = ($cfg.Trim().ToLowerInvariant() -in @('true', 'input'))
+    }
+    $full = Join-Path $RepoRoot ($Rel -replace '/', [string][System.IO.Path]::DirectorySeparatorChar)
+    $bytes = [System.IO.File]::ReadAllBytes($full)
+    $e = $script:gitEolTable[$Rel]
+    if ($null -eq $e) { return $bytes }   # not tracked (a generated manifest): written LF by this script
+    $attr = [string]$e.Attr
+    $normalize = $false
+    if ($attr -match '(^|\s)-text(\s|$)') { $normalize = $false }
+    elseif ($attr -match '(^|\s)text(\s|$)' -or $attr -match '(^|\s)eol=') { $normalize = $true }
+    elseif ($attr -match '(^|\s)text=auto(\s|$)' -or ($script:gitAutoCrlf -and $attr -eq '')) { $normalize = ($e.Index -eq 'lf') }
+    if (-not $normalize -or $e.Work -notin @('crlf', 'mixed')) { return $bytes }
+    $out = [System.Collections.Generic.List[byte]]::new($bytes.Length)
+    for ($i = 0; $i -lt $bytes.Length; $i++) {
+        if ($bytes[$i] -eq 13 -and $i + 1 -lt $bytes.Length -and $bytes[$i + 1] -eq 10) { continue }
+        $out.Add($bytes[$i])
+    }
+    return $out.ToArray()
+}
+
 function Export-TPCatalogTree {
     <#
-        Copies the committed tree (tracked files, the catalog itself excepted, plus
-        the generated manifests when present) under one new folder, preserving
-        relative paths, and returns that folder. New-FileCatalog and Test-FileCatalog
-        then see one rooted tree, which is the only shape in which they record and
-        compare relative paths.
+        Writes the committed tree (tracked files as git would commit them, the
+        catalog itself excepted, plus the generated manifests when present) under
+        one new folder, preserving relative paths, and returns that folder.
+        New-FileCatalog and Test-FileCatalog then see one rooted tree, which is
+        the only shape in which they record and compare relative paths.
     #>
     $dest = Join-Path ([System.IO.Path]::GetTempPath()) ("tp-catalog-" + [System.IO.Path]::GetRandomFileName().Replace('.', ''))
     # [IO.Directory]::CreateDirectory, never New-Item -Path: -Path expands wildcards.
@@ -135,7 +189,7 @@ function Export-TPCatalogTree {
         if (-not (Test-Path -LiteralPath $src -PathType Leaf)) { throw "Tracked file '$rel' is missing from the working tree; the catalog describes the committed tree, so restore or remove it first." }
         $dst = Join-Path $dest ($rel -replace '/', [string][System.IO.Path]::DirectorySeparatorChar)
         $null = [System.IO.Directory]::CreateDirectory((Split-Path -Parent $dst))
-        Copy-Item -LiteralPath $src -Destination $dst
+        [System.IO.File]::WriteAllBytes($dst, (Get-TPCommittedBytes -Rel $rel))
         $count++
     }
     Write-Verbose "Exported $count tracked file(s) to $dest"
@@ -408,8 +462,12 @@ function Restore-TPGeneratedFiles {
     }
     return $restored
 }
-$generatedSnapshot = Save-TPGeneratedFiles -Paths $generatedFiles
+# The snapshot is taken INSIDE the transaction: a manifest or catalog that
+# cannot be read (another process holding it) must restore the scripts just
+# signed like any other failure, not leave them signed outside the catch.
+$generatedSnapshot = $null
 try {
+$generatedSnapshot = Save-TPGeneratedFiles -Paths $generatedFiles
 
 # The committed integrity manifest (tools/integrity-manifest.txt, written by
 # tools/Verify-Integrity.ps1 -Update) hashes the same scripts signing just
@@ -447,8 +505,12 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     # Tracked files plus the integrity manifest just written; never FILES.sha256
     # itself nor the catalog, which is rebuilt and re-signed after this.
     $rels = @($tracked) + @(if (Test-Path -LiteralPath $integrityManifest -PathType Leaf) { 'tools/integrity-manifest.txt' })
+    # Hashed over the bytes git commits (Get-TPCommittedBytes), as the catalog
+    # is, so a Windows checkout with autocrlf records the same hashes a Linux
+    # checkout of the tagged commit verifies.
     $manifest = @($rels | Sort-Object -Unique | Where-Object { $_ -ne 'FILES.sha256' -and $_ -ne 'TenantPosture.cat' } | ForEach-Object {
-            '{0}  {1}' -f (Get-FileHash -LiteralPath (& $toFull $_) -Algorithm SHA256).Hash.ToLower(), $_
+            $hash = [System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData((Get-TPCommittedBytes -Rel $_))).ToLowerInvariant()
+            '{0}  {1}' -f $hash, $_
         })
     # LF, whatever the platform: git normalizes text on commit, and a catalog
     # or hash over CRLF bytes would not describe the committed file.
@@ -501,7 +563,7 @@ try {
 
 } catch {
     $restored = Restore-TPUnsignedBytes -Map $originals
-    $restoredGenerated = Restore-TPGeneratedFiles -Snapshot $generatedSnapshot
+    $restoredGenerated = if ($null -ne $generatedSnapshot) { Restore-TPGeneratedFiles -Snapshot $generatedSnapshot } else { 0 }
     throw "Release signing failed after the scripts were signed ($($_.Exception.Message)); the unsigned bytes of $restored file(s) and the prior state of $restoredGenerated generated file(s) (integrity manifest, FILES.sha256, catalog) were restored, so the tree is as it was and the run can be repeated."
 }
 
