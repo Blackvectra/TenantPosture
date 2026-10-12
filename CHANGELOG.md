@@ -26,7 +26,10 @@
   as a browser reads it, so a second `@` cannot hide a password; a wrapped target that is
   relative or network-path is read like an absolute one, a chain nested deeper than the reader
   follows is redacted whole rather than stored unread, and a matrix parameter in the path
-  (`;jsessionid=`) is judged by the same name rule. SECURITY.md lists the mailbox
+  (`;jsessionid=`) is judged by the same name rule; a structured name (`auth[token]`) is judged
+  by its bracketed components, a wrapped target is decoded through up to three encoding layers
+  (and put back as it came) or redacted whole when still encoded after that, and the userinfo of
+  a network-path target (`//user:pass@host`) is redacted like an absolute URL's. SECURITY.md lists the mailbox
   record, inbox rules, mailbox settings and OAuth consents the JSON also carries, and says that
   `rdap.org` redirects each lookup to the authoritative registry (the regional registry for an
   address, the top-level-domain registry for a domain), which a firewall rule must cover too.

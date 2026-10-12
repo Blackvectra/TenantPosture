@@ -52,10 +52,14 @@ function Test-TPSensitiveUrlParameterName {
     if ([string]::IsNullOrEmpty($Name)) { return $false }
     $decoded = $Name
     try { $decoded = [System.Uri]::UnescapeDataString($Name) } catch { $decoded = $Name }
-    $n = $decoded.Trim().ToLowerInvariant()
-    if ($n -in $script:TPSensitiveUrlParameters) { return $true }
-    foreach ($suffix in $script:TPSensitiveUrlParameterSuffixes) {
-        if ($n.Length -gt $suffix.Length -and $n.EndsWith($suffix, [System.StringComparison]::Ordinal)) { return $true }
+    # A structured name (auth[token], token[], user[auth][key]) is judged by
+    # each of its bracketed components, not by the string with the brackets on.
+    $components = @($decoded.Trim().ToLowerInvariant() -split '[\[\]]' | Where-Object { $_ })
+    foreach ($n in $components) {
+        if ($n -in $script:TPSensitiveUrlParameters) { return $true }
+        foreach ($suffix in $script:TPSensitiveUrlParameterSuffixes) {
+            if ($n.Length -gt $suffix.Length -and $n.EndsWith($suffix, [System.StringComparison]::Ordinal)) { return $true }
+        }
     }
     return $false
 }
@@ -99,20 +103,46 @@ function Protect-TPUrlParameterValue {
         [Parameter()] [int] $Depth = 0
     )
     if ([string]::IsNullOrEmpty($Value)) { return $Value }
-    $decoded = $Value
-    try { $decoded = [System.Uri]::UnescapeDataString($Value.Replace('+', '%2B')) } catch { $decoded = $Value }
+    # Decode through up to three layers (a redirector that decodes its own
+    # parameter receives a doubly encoded target as an actionable URL); each
+    # layer peeled is put back on the way out. A value still encoded after
+    # that is not read further and is not stored.
     # A URL reference of any form: absolute, network-path (//host/...), a
     # relative path, or anything that carries parameters (?, # or ; before an
     # =). A plain value (a date, a word) is none of these and stays as it is.
-    $isReference = ($decoded -match '^[A-Za-z][A-Za-z0-9+.-]*://') -or ($decoded -match '^//') -or ($decoded -match '^/') -or ($decoded -match '[?#;][^=]*=')
-    if (-not $isReference) { return $Value }
+    $isRef = { param($t) ($t -match '^[A-Za-z][A-Za-z0-9+.-]*://') -or ($t -match '^//') -or ($t -match '^/') -or ($t -match '[?#;][^=]*=') }
+    $decoded = $Value
+    $layers = 0
+    $isReference = $false
+    for ($i = 0; $i -lt 3; $i++) {
+        $next = $decoded
+        try { $next = [System.Uri]::UnescapeDataString($decoded.Replace('+', '%2B')) } catch { $next = $decoded }
+        if ($next -eq $decoded) { break }
+        $decoded = $next
+        $layers++
+        # One layer is the usual case; the reference's own parameters, encoded
+        # once more inside it, are read when it is redacted below. Only a value
+        # that is NOT yet a reference is peeled further (a redirector that
+        # decodes its own parameter receives a doubly encoded target).
+        if (& $isRef $decoded) { $isReference = $true; break }
+    }
+    # A value that arrived unencoded is judged as it is.
+    if (-not $isReference -and (& $isRef $decoded)) { $isReference = $true }
+    if (-not $isReference) {
+        # Still encoded after the layers read: not read further, not stored.
+        $probe = $decoded
+        try { $probe = [System.Uri]::UnescapeDataString($decoded) } catch { $probe = $decoded }
+        if ($probe -ne $decoded) { return '[redacted]' }
+        return $Value
+    }
     # Fail closed at the nesting limit: a chain deeper than this is not read
     # any further, and what is not read is not stored.
     if ($Depth -ge 4) { return '[redacted]' }
     $inner = ConvertTo-TPRedactedUrl -Url $decoded -Depth ($Depth + 1)
     if ($inner -eq $decoded) { return $Value }
-    if ($Value -ne $decoded) { return [System.Uri]::EscapeDataString($inner) }
-    return $inner
+    $result = $inner
+    for ($i = 0; $i -lt $layers; $i++) { $result = [System.Uri]::EscapeDataString($result) }
+    return $result
 }
 
 function ConvertTo-TPRedactedUrl {
@@ -138,7 +168,9 @@ function ConvertTo-TPRedactedUrl {
     # LAST @ before the path, query or fragment is the authority delimiter (that
     # is how a browser reads a userinfo holding a second @, a mailbox address
     # before the password, say), so everything up to it is the userinfo.
-    $out = [regex]::Replace($Url, '^(?<scheme>[A-Za-z][A-Za-z0-9+.-]*://)(?<userinfo>[^/?#\s]*@)', '${scheme}[redacted]@')
+    # An absolute URL or a network-path reference (//user:pass@host, which a
+    # wrapper may carry) both hold their userinfo before the host.
+    $out = [regex]::Replace($Url, '^(?<scheme>(?:[A-Za-z][A-Za-z0-9+.-]*:)?//)(?<userinfo>[^/?#\s]*@)', '${scheme}[redacted]@')
     # Split once into: everything before the first ? or # (never touched), the
     # query (after ? up to #), and the fragment (after #).
     $cut = [regex]::Match($out, '[?#]')

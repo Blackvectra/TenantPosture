@@ -121,6 +121,40 @@ Describe 'IR data contract' {
             $out | Should -Not -Match 'SECRET123'
         }
 
+        It 'judges a structured parameter name by its bracketed components (<Name>)' -ForEach @(
+            @{ Name = 'auth[token]' }, @{ Name = 'token[]' }, @{ Name = 'user[auth][key]' }, @{ Name = 'auth%5Btoken%5D' }, @{ Name = 'data[oobCode]' }) {
+            $out = ConvertTo-TPRedactedUrl "https://app.example/reset?$Name=SECRET123&lang=en"
+            $out | Should -Be "https://app.example/reset?$Name=[redacted]&lang=en"
+        }
+
+        It 'leaves a structured name whose components are benign alone' {
+            ConvertTo-TPRedactedUrl 'https://app.example/list?filter[page]=2&ids[]=5' | Should -Be 'https://app.example/list?filter[page]=2&ids[]=5'
+        }
+
+        It 'decodes a multiply encoded wrapped target before judging it and puts the layers back (<Label>)' -ForEach @(
+            @{ Label = 'double';  Url = 'https://safe.example/?url=https%253A%252F%252Fapp.example%252Freset%253Ftoken%253DSECRET123';
+                                  Expected = 'https://safe.example/?url=https%253A%252F%252Fapp.example%252Freset%253Ftoken%253D%255Bredacted%255D' }
+            @{ Label = 'triple';  Url = 'https://safe.example/?url=https%25253A%25252F%25252Fapp.example%25252Fr%25253Fsig%25253DSECRET123';
+                                  Expected = 'https://safe.example/?url=https%25253A%25252F%25252Fapp.example%25252Fr%25253Fsig%25253D%2525255Bredacted%2525255D' }) {
+            $out = ConvertTo-TPRedactedUrl $Url
+            $out | Should -Not -Match 'SECRET123'
+            [System.Uri]::UnescapeDataString([System.Uri]::UnescapeDataString($out)) | Should -Match 'token%3D%5Bredacted%5D|sig|redacted'
+        }
+
+        It 'fails closed on a value still encoded after three layers' {
+            $v = 'https://z.example/?token=SECRET123'
+            foreach ($i in 1..4) { $v = [System.Uri]::EscapeDataString($v) }
+            $out = ConvertTo-TPRedactedUrl ('https://safe.example/?url=' + $v)
+            $out | Should -Be 'https://safe.example/?url=[redacted]'
+        }
+
+        It 'redacts the userinfo of a network-path wrapped target' {
+            $wrapped = 'https://safe.example/?url=' + [System.Uri]::EscapeDataString('//' + 'alice:SECRET123' + '@evil.example/p')
+            $out = ConvertTo-TPRedactedUrl $wrapped
+            $out | Should -Be 'https://safe.example/?url=%2F%2F%5Bredacted%5D%40evil.example%2Fp'
+            ConvertTo-TPRedactedUrl ('//' + 'bob:SECRET123' + '@h.example/x?a=1') | Should -Be '//[redacted]@h.example/x?a=1'
+        }
+
         It 'fails closed at the nesting limit: a chain deeper than it is redacted whole' {
             $inner = 'https://z.example/?token=SECRET123'
             $u = $inner
@@ -153,7 +187,8 @@ Describe 'IR data contract' {
                            'https://a.example/?a=1#x?token=SECRET', 'https://a.example/?oobCode=SECRET', 'https://a.example/?a=1#/r?lang=en;oobCode=SECRET',
                            'https://a.example/?u=https%3A%2F%2Fb.example%2F%3Fsig%3DSECRET', 'https://a.example/?u=https://b.example/#access_token=SECRET',
                            ('https://' + 'x:SECRET' + '@a.example/'), ('https://' + 'x@y:SECRET' + '@a.example/?u=https%3A%2F%2Fb.example%2F%3Fcode%3DSECRET'),
-                           'https://a.example/p;jsessionid=SECRET', 'https://a.example/?u=%2Fr%3Fotp%3DSECRET', 'https://a.example/?u=%2F%2Fb.example%2F%23access_token%3DSECRET') {
+                           'https://a.example/p;jsessionid=SECRET', 'https://a.example/?u=%2Fr%3Fotp%3DSECRET', 'https://a.example/?u=%2F%2Fb.example%2F%23access_token%3DSECRET',
+                           'https://a.example/?auth[token]=SECRET', 'https://a.example/?u=https%253A%252F%252Fb.example%252F%253Fcode%253DSECRET', ('https://a.example/?u=' + [System.Uri]::EscapeDataString('//' + 'x:SECRET' + '@b.example/'))) {
                 ConvertTo-TPRedactedUrl $u | Should -Not -Match 'SECRET' -Because $u
             }
         }
