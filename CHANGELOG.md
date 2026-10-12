@@ -23,7 +23,10 @@
   only their state, audience, schedule and whether a text is set. A destination URL a rewriting
   wrapper carries percent-encoded in an ordinary parameter (a Safe Links `url=`) is redacted
   inside the value and put back encoded; the userinfo is read up to the LAST `@` before the path,
-  as a browser reads it, so a second `@` cannot hide a password. SECURITY.md lists the mailbox
+  as a browser reads it, so a second `@` cannot hide a password; a wrapped target that is
+  relative or network-path is read like an absolute one, a chain nested deeper than the reader
+  follows is redacted whole rather than stored unread, and a matrix parameter in the path
+  (`;jsessionid=`) is judged by the same name rule. SECURITY.md lists the mailbox
   record, inbox rules, mailbox settings and OAuth consents the JSON also carries, and says that
   `rdap.org` redirects each lookup to the authoritative registry (the regional registry for an
   address, the top-level-domain registry for a domain), which a firewall rule must cover too.

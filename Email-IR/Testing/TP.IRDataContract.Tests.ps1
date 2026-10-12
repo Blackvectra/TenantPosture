@@ -111,6 +111,35 @@ Describe 'IR data contract' {
             $out | Should -Not -Match 'SECRET123'
         }
 
+        It 'redacts a credential in a relative or network-path wrapped target (<Label>)' -ForEach @(
+            @{ Label = 'relative path';  Url = 'https://safe.example/?url=%2Freset%3Ftoken%3DSECRET123';        Expected = 'https://safe.example/?url=%2Freset%3Ftoken%3D%5Bredacted%5D' }
+            @{ Label = 'network path';   Url = 'https://safe.example/?url=%2F%2Fapp.example%2Fr%3Fsig%3DSECRET123'; Expected = 'https://safe.example/?url=%2F%2Fapp.example%2Fr%3Fsig%3D%5Bredacted%5D' }
+            @{ Label = 'bare query';     Url = 'https://safe.example/?next=%3Fcode%3DSECRET123%26x%3D1';           Expected = 'https://safe.example/?next=%3Fcode%3D%5Bredacted%5D%26x%3D1' }
+            @{ Label = 'a plain value';  Url = 'https://safe.example/?date=2026-01-01&n=a%2Fb';                   Expected = 'https://safe.example/?date=2026-01-01&n=a%2Fb' }) {
+            $out = ConvertTo-TPRedactedUrl $Url
+            $out | Should -Be $Expected
+            $out | Should -Not -Match 'SECRET123'
+        }
+
+        It 'fails closed at the nesting limit: a chain deeper than it is redacted whole' {
+            $inner = 'https://z.example/?token=SECRET123'
+            $u = $inner
+            foreach ($i in 1..6) { $u = 'https://w' + $i + '.example/?u=' + [System.Uri]::EscapeDataString($u) }
+            $out = ConvertTo-TPRedactedUrl $u
+            $out | Should -Not -Match 'SECRET123'
+            $out | Should -Match '^https://w6\.example/\?u='
+        }
+
+        It 'redacts a sensitive matrix parameter in the path and leaves the rest (<Label>)' -ForEach @(
+            @{ Label = 'servlet session'; Url = 'https://app.example/account;jsessionid=SECRET123/view?x=1'; Expected = 'https://app.example/account;jsessionid=[redacted]/view?x=1' }
+            @{ Label = 'two segments';    Url = 'https://app.example/a;v=2/b;token=SECRET123';            Expected = 'https://app.example/a;v=2/b;token=[redacted]' }
+            @{ Label = 'no query at all'; Url = 'https://app.example/x;sig=SECRET123';                     Expected = 'https://app.example/x;sig=[redacted]' }
+            @{ Label = 'authority untouched'; Url = 'https://app.example/p;lang=en';                      Expected = 'https://app.example/p;lang=en' }) {
+            $out = ConvertTo-TPRedactedUrl $Url
+            $out | Should -Be $Expected
+            $out | Should -Not -Match 'SECRET123'
+        }
+
         It 'redacts the whole userinfo up to the last @ before the path' {
             $u = 'https://' + 'alice@example.com:SECRET123' + '@evil.example/p?x=1'
             ConvertTo-TPRedactedUrl $u | Should -Be 'https://[redacted]@evil.example/p?x=1'
@@ -123,7 +152,8 @@ Describe 'IR data contract' {
             foreach ($u in 'https://a.example/?a=1&token=SECRET', 'https://a.example/?a=1;token=SECRET', 'https://a.example/#token=SECRET',
                            'https://a.example/?a=1#x?token=SECRET', 'https://a.example/?oobCode=SECRET', 'https://a.example/?a=1#/r?lang=en;oobCode=SECRET',
                            'https://a.example/?u=https%3A%2F%2Fb.example%2F%3Fsig%3DSECRET', 'https://a.example/?u=https://b.example/#access_token=SECRET',
-                           ('https://' + 'x:SECRET' + '@a.example/'), ('https://' + 'x@y:SECRET' + '@a.example/?u=https%3A%2F%2Fb.example%2F%3Fcode%3DSECRET')) {
+                           ('https://' + 'x:SECRET' + '@a.example/'), ('https://' + 'x@y:SECRET' + '@a.example/?u=https%3A%2F%2Fb.example%2F%3Fcode%3DSECRET'),
+                           'https://a.example/p;jsessionid=SECRET', 'https://a.example/?u=%2Fr%3Fotp%3DSECRET', 'https://a.example/?u=%2F%2Fb.example%2F%23access_token%3DSECRET') {
                 ConvertTo-TPRedactedUrl $u | Should -Not -Match 'SECRET' -Because $u
             }
         }

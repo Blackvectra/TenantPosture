@@ -41,7 +41,7 @@ $script:TPSensitiveUrlParameters = @(
 # A name ENDING in one of these is redacted too: oobCode, verificationCode,
 # authKey, X-Amz-Signature, oauth_token, ... A benign name that happens to end
 # the same way (zipcode, sortkey) loses one value; that is the accepted cost.
-$script:TPSensitiveUrlParameterSuffixes = @('token', 'secret', 'password', 'passwd', 'signature', 'credential', 'code', 'key', 'nonce', 'assertion', 'otp', 'pin', 'ticket', 'session', 'auth')
+$script:TPSensitiveUrlParameterSuffixes = @('token', 'secret', 'password', 'passwd', 'signature', 'credential', 'code', 'key', 'nonce', 'assertion', 'otp', 'pin', 'ticket', 'session', 'sessionid', 'sessid', 'auth')
 
 function Test-TPSensitiveUrlParameterName {
     [CmdletBinding()]
@@ -98,10 +98,17 @@ function Protect-TPUrlParameterValue {
         [Parameter()] [AllowNull()] [AllowEmptyString()] [string] $Value,
         [Parameter()] [int] $Depth = 0
     )
-    if ([string]::IsNullOrEmpty($Value) -or $Depth -ge 4) { return $Value }
+    if ([string]::IsNullOrEmpty($Value)) { return $Value }
     $decoded = $Value
     try { $decoded = [System.Uri]::UnescapeDataString($Value.Replace('+', '%2B')) } catch { $decoded = $Value }
-    if ($decoded -notmatch '^[A-Za-z][A-Za-z0-9+.-]*://') { return $Value }
+    # A URL reference of any form: absolute, network-path (//host/...), a
+    # relative path, or anything that carries parameters (?, # or ; before an
+    # =). A plain value (a date, a word) is none of these and stays as it is.
+    $isReference = ($decoded -match '^[A-Za-z][A-Za-z0-9+.-]*://') -or ($decoded -match '^//') -or ($decoded -match '^/') -or ($decoded -match '[?#;][^=]*=')
+    if (-not $isReference) { return $Value }
+    # Fail closed at the nesting limit: a chain deeper than this is not read
+    # any further, and what is not read is not stored.
+    if ($Depth -ge 4) { return '[redacted]' }
     $inner = ConvertTo-TPRedactedUrl -Url $decoded -Depth ($Depth + 1)
     if ($inner -eq $decoded) { return $Value }
     if ($Value -ne $decoded) { return [System.Uri]::EscapeDataString($inner) }
@@ -135,8 +142,11 @@ function ConvertTo-TPRedactedUrl {
     # Split once into: everything before the first ? or # (never touched), the
     # query (after ? up to #), and the fragment (after #).
     $cut = [regex]::Match($out, '[?#]')
-    if (-not $cut.Success) { return $out }
-    $head = $out.Substring(0, $cut.Index)
+    $head = if ($cut.Success) { $out.Substring(0, $cut.Index) } else { $out }
+    # Matrix parameters ride in the PATH (`/account;jsessionid=...`): every
+    # `;name=value` in the head is judged by the same name rule.
+    $head = Protect-TPUrlPathParameters -Head $head
+    if (-not $cut.Success) { return $head }
     $rest = $out.Substring($cut.Index)
     $query = ''; $fragment = ''
     if ($rest.StartsWith('?')) {
@@ -159,6 +169,29 @@ function ConvertTo-TPRedactedUrl {
         $result += '#' + $fragment
     }
     return $result
+}
+
+# The part of a URL before any ? or #: the scheme, authority and path. A path
+# segment may carry matrix parameters (`;name=value`, servlet session ids among
+# them); each one's value is redacted when its name is sensitive. The authority
+# (up to the first / after ://) is never touched.
+function Protect-TPUrlPathParameters {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter()] [AllowNull()] [AllowEmptyString()] [string] $Head)
+    if ([string]::IsNullOrEmpty($Head) -or -not $Head.Contains(';')) { return $Head }
+    $pathStart = 0
+    $authority = [regex]::Match($Head, '^[A-Za-z][A-Za-z0-9+.-]*://[^/]*')
+    if ($authority.Success) { $pathStart = $authority.Length }
+    elseif ($Head.StartsWith('//')) { $slash = $Head.IndexOf('/', 2); $pathStart = $(if ($slash -ge 0) { $slash } else { $Head.Length }) }
+    $prefix = $Head.Substring(0, $pathStart)
+    $path = $Head.Substring($pathStart)
+    $evaluator = [System.Text.RegularExpressions.MatchEvaluator]{
+        param($m)
+        if (Test-TPSensitiveUrlParameterName -Name $m.Groups[1].Value) { ';' + $m.Groups[1].Value + '=[redacted]' } else { $m.Value }
+    }
+    $path = [regex]::Replace($path, ';([^;/=]+)=([^;/]*)', $evaluator)
+    return $prefix + $path
 }
 
 function ConvertTo-TPMaskedPhone {
