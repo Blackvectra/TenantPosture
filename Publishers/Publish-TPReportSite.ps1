@@ -265,9 +265,14 @@ function Publish-TPReportSite {
     $null = [System.IO.Directory]::CreateDirectory($OutputPath)
     $hx = { param($v) ConvertTo-TPHtmlSafe $v }
 
-    $brand = @{ CompanyName = 'NRG Technology Services'; PrimaryColor = '#1a3a6b'; SecondaryColor = '#e87722'; AccentColor = '#4a7ba6'; Website = '' }
-    $bp = Join-Path (Split-Path -Parent $PSScriptRoot) 'Config' 'branding.psd1'
-    if (Test-Path -LiteralPath $bp) { try { $b = Import-PowerShellDataFile -LiteralPath $bp; foreach ($k in @($brand.Keys)) { if ($b.ContainsKey($k) -and $b[$k]) { $brand[$k] = [string]$b[$k] } } } catch { Write-Verbose "Branding unreadable: $($_.Exception.Message)" } }
+    # The loaded profile ($script:TPBrand: Config/profiles/<name>.psd1, else Config/branding.psd1, else the
+    # neutral defaults), not a second read of branding.psd1, which ignored the profile.
+    $brand = @{ CompanyName = 'TenantPosture'; PrimaryColor = '#1a3a6b'; SecondaryColor = '#e87722'; AccentColor = '#4a7ba6'; Website = '' }
+    $loaded = if (Get-Variable -Name TPBrand -Scope Script -ErrorAction SilentlyContinue) { $script:TPBrand } else { $null }
+    foreach ($k in @($brand.Keys)) {
+        $v = Get-TPObjectField -Item $loaded -Key $k -Default $null
+        if ($v) { $brand[$k] = [string]$v }
+    }
     # Colors are interpolated into CSS: accept only a #rrggbb value.
     foreach ($k in 'PrimaryColor', 'SecondaryColor', 'AccentColor') { if ($brand[$k] -notmatch '^#[0-9a-fA-F]{6}$') { $brand[$k] = @{ PrimaryColor = '#1a3a6b'; SecondaryColor = '#e87722'; AccentColor = '#4a7ba6' }[$k] } }
 

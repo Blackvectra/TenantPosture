@@ -57,9 +57,10 @@ Describe 'Report framework default' {
             $TPBrand['ProfileName'] | Should -Be 'nrg'
             $TPBrand['CompanyName'] | Should -Be 'NRG Technology Services'
             @((Get-TPStandards).DmarcReportingAddresses) | Should -Be @('dmarc@nrgtechservices.com')
+            # A name that is not a profile is an error, not a quiet fall back to the neutral
+            # defaults (a wrong-practice run that looks like any other).
             $env:TP_PROFILE = '../branding'
-            Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop -WarningAction SilentlyContinue 3>$null
-            $TPBrand['ProfileName'] | Should -Be 'branding'
+            { Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop } | Should -Throw '*not a name*'
         } finally {
             $env:TP_PROFILE = $saved
             Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop

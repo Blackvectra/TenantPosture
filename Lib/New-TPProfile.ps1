@@ -19,7 +19,7 @@
 # a short lower-case token, never a path: the loader in TenantPosture.psm1
 # builds the path from the name, so nothing here may let a name carry one.
 
-$script:TPProfileNamePattern = '\A[a-z0-9][a-z0-9-]{0,31}\z'
+# The profile-name rule is defined once, as Get-TPProfileNamePattern, in Lib/Resolve-TPProfilePath.ps1.
 $script:TPProfileKeys = @(
     'CompanyName', 'Phone', 'Website', 'Email', 'Address', 'CityStateZip',
     'PrimaryColor', 'SecondaryColor', 'AccentColor', 'LogoUrl',
@@ -210,7 +210,7 @@ function Get-TPProfile {
     $active = if ((Get-Variable -Name TPProfileName -Scope Script -ErrorAction SilentlyContinue)) { [string]$script:TPProfileName } else { '' }
     $rows = foreach ($f in @(Get-ChildItem -LiteralPath $dir -Filter '*.psd1' -File | Sort-Object Name)) {
         $n = $f.BaseName
-        if ($n -cnotmatch $script:TPProfileNamePattern) { continue }
+        if ($n -cnotmatch (Get-TPProfileNamePattern)) { continue }
         if ($Name -and $n -ne $Name) { continue }
         $d = $null
         try { $d = Import-PowerShellDataFile -LiteralPath $f.FullName -ErrorAction Stop } catch { Write-Verbose "Profile $n unreadable: $($_.Exception.Message)" }

@@ -29,6 +29,9 @@ function Get-TPStandards {
 
     $std = [ordered]@{ DmarcReportingAddresses = @(); CommonAttachmentFileTypes = @(); PriorityUsers = @(); RequiredConditionalAccessTemplates = @()
                        DistributionListMaxMembers = @(); DistributionListMemberJoinRestriction = @() }
+    # An explicit -Path is the whole truth for that call; only the shared default file is
+    # completed by the active profile below.
+    $usingDefaultFile = -not $Path
     if (-not $Path) { $Path = Join-Path (Split-Path -Parent $PSScriptRoot) 'Config' 'tp-standards.json' }
     if (-not (Test-Path -LiteralPath $Path)) { return $std }
     try {
@@ -44,7 +47,7 @@ function Get-TPStandards {
     # (DmarcReportingAddresses in Config/branding.psd1 or Config/profiles/
     # <name>.psd1) supplies it when it names one; the shared file ships none.
     $brand = if (Get-Variable -Name TPBrand -Scope Script -ErrorAction SilentlyContinue) { $script:TPBrand } else { $null }
-    if ($brand) {
+    if ($brand -and $usingDefaultFile) {
         $fromProfile = @(@(Get-TPObjectField -Item $brand -Key 'DmarcReportingAddresses' -Default @()) |
             Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { ([string]$_).Trim() })
         if ($fromProfile.Count -gt 0) { $std.DmarcReportingAddresses = $fromProfile }

@@ -76,7 +76,7 @@ param(
     # Training. DEF-4.6 is then reported as run on that platform — declared,
     # not verified — and excluded from the score instead of scoring as a gap
     # or a license upgrade. Also read from the client's ThirdPartyAwareness
-    # field in Config/clients.json, then AwarenessStack in Config/branding.psd1.
+    # field in Config/clients.json, then AwarenessStack in the active profile.
     [ValidatePattern('^$|^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$')]
     [string] $ThirdPartyAwareness,
 
@@ -85,7 +85,7 @@ param(
     # policy's recipients with this list; without one, "alerts reach NRG" is
     # not assessed (the recipients-exist half still is). Also read from the
     # client's MonitoringAddresses in Config/clients.json, then from
-    # MonitoringAddresses in Config/branding.psd1.
+    # MonitoringAddresses in the active profile.
     [string[]] $MonitoringAddress,
 
     # Cloud environment
@@ -224,7 +224,7 @@ param(
     # default framework, DMARC reporting address, declared EDR and awareness
     # platforms). Without it, Config/branding.psd1. Same as TP_PROFILE in the
     # environment, which every entry point reads.
-    [ValidatePattern('^$|^[a-z0-9][a-z0-9-]{0,31}$', Options = 'None')]
+    [ValidatePattern('\A(?:|[a-z0-9][a-z0-9-]{0,31})\z', Options = 'None')]
     [string] $Profile,
 
     # The NRG Security Baseline tier this client is held to
@@ -450,9 +450,30 @@ $null = $resolvedOutput
 # ── Import module ─────────────────────────────────────────────────────────────
 Write-Host "[-] Loading TenantPosture module..." -ForegroundColor Cyan
 $manifestPath = Join-Path $scriptDir 'TenantPosture.psd1'
+# The profile name is resolved by the one resolver the module itself uses, BEFORE the
+# import: a name that is not a profile is fatal (exit 4), never a quiet fallback to
+# the neutral defaults, which would run a different practice than the one asked for.
+. (Join-Path $scriptDir 'Lib' 'Resolve-TPProfilePath.ps1')
+$wantedProfile = if ($Profile) { $Profile } else { [string]$env:TP_PROFILE }
+$profileCheck = Resolve-TPProfilePath -Root $scriptDir -Name $wantedProfile
+if ($profileCheck.Status -in @('BadName', 'NotFound')) {
+    Write-Host "  [!] Profile '$wantedProfile': $($profileCheck.Message)" -ForegroundColor Red
+    exit 4
+}
+# TP_PROFILE is the module's only way to learn the profile, and the import reads it once.
+# It is set for the import and put back afterwards, so a later run in the same console
+# without -Profile does not silently keep this run's practice.
+$profileEnvBefore = $env:TP_PROFILE
 if ($Profile) { $env:TP_PROFILE = $Profile }
 try {
-    Import-Module $manifestPath -Force -ErrorAction Stop
+    try {
+        Import-Module $manifestPath -Force -ErrorAction Stop
+    } finally {
+        if ($Profile) {
+            if ($null -eq $profileEnvBefore) { Remove-Item -LiteralPath Env:TP_PROFILE -ErrorAction SilentlyContinue }
+            else { $env:TP_PROFILE = $profileEnvBefore }
+        }
+    }
     Write-Host "  [+] Module loaded (v$($TPAssessmentVersion); profile $($TPBrand['ProfileName']))" -ForegroundColor Green
     # The report's framework default comes from the profile; 'All' when it
     # sets none or an unknown value. Presentation only (see -Framework).
@@ -620,34 +641,20 @@ if ($DistributionListsOnly) {
     exit ([int]$dlResult.ExitCode)
 }
 
-# MSP-wide default: EdrStack in Config/branding.psd1 declares the third-party
-# EDR every client runs unless -ThirdPartyEDR or the client's clients.json
-# ThirdPartyEDR says otherwise. Declared, never verified: the Defender
-# endpoint checks go out of the score, they are not passed.
+# MSP-wide default: EdrStack in the active profile (Config/profiles/<name>.psd1, else
+# Config/branding.psd1) declares the third-party EDR every client runs unless
+# -ThirdPartyEDR or the client's clients.json ThirdPartyEDR says otherwise. Declared,
+# never verified: the Defender endpoint checks go out of the score, they are not passed.
+# Read from $TPBrand, the profile the module loaded: a second read of branding.psd1 here
+# ignored the profile and applied (or dropped) the wrong practice's declarations.
 if (-not $ThirdPartyEDR) {
-    $brandFile = Join-Path $scriptDir 'Config' 'branding.psd1'
-    if (Test-Path -LiteralPath $brandFile) {
-        try {
-            $brandData = Import-PowerShellDataFile -LiteralPath $brandFile
-            $edr = if ($brandData.ContainsKey('EdrStack')) { "$($brandData['EdrStack'])".Trim() } else { '' }
-            if ($edr -match '^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$') { $ThirdPartyEDR = $edr }
-            elseif ($edr) { Write-Warning "Ignoring EdrStack '$edr' in branding.psd1: use a plain product name such as 'Cortex XDR'." }
-        } catch { Write-Verbose "branding.psd1 EdrStack not read: $($_.Exception.Message)" }
-    }
+    $ThirdPartyEDR = Get-TPProfileDeclaration -Brand $TPBrand -Key EdrStack -Example 'Cortex XDR'
 }
 # Same rule for AwarenessStack: the phishing-simulation platform every client
 # uses unless -ThirdPartyAwareness or clients.json ThirdPartyAwareness says
 # otherwise. Declared, never verified: DEF-4.6 goes out of the score.
 if (-not $ThirdPartyAwareness) {
-    $brandFile = Join-Path $scriptDir 'Config' 'branding.psd1'
-    if (Test-Path -LiteralPath $brandFile) {
-        try {
-            $brandData = Import-PowerShellDataFile -LiteralPath $brandFile
-            $sat = if ($brandData.ContainsKey('AwarenessStack')) { "$($brandData['AwarenessStack'])".Trim() } else { '' }
-            if ($sat -match '^[A-Za-z0-9][A-Za-z0-9 .&()+/-]{1,59}$') { $ThirdPartyAwareness = $sat }
-            elseif ($sat) { Write-Warning "Ignoring AwarenessStack '$sat' in branding.psd1: use a plain product name such as 'KnowBe4'." }
-        } catch { Write-Verbose "branding.psd1 AwarenessStack not read: $($_.Exception.Message)" }
-    }
+    $ThirdPartyAwareness = Get-TPProfileDeclaration -Brand $TPBrand -Key AwarenessStack -Example 'KnowBe4'
 }
 
 # CWE-665 — full state reset between runs. Clear-TPFindings only resets the
@@ -663,19 +670,15 @@ Clear-TPState
 # The monitoring-address list, recorded as raw data AFTER the state reset so the
 # alert-routing checks (DEF-3.4, EXO-3.3) can read it. Precedence: the parameter,
 # the client's clients.json entry (already folded into $MonitoringAddress above),
-# then the MSP-wide default in branding.psd1.
+# then the MSP-wide default in the active profile.
 if (-not (Get-Variable -Name monitoringSource -ErrorAction SilentlyContinue)) { $monitoringSource = '' }
 if ($MonitoringAddress -and -not $monitoringSource) { $monitoringSource = 'parameter' }
 if (-not $MonitoringAddress) {
-    $brandFileMon = Join-Path $scriptDir 'Config' 'branding.psd1'
-    if (Test-Path -LiteralPath $brandFileMon) {
-        try {
-            $brandMon = Import-PowerShellDataFile -LiteralPath $brandFileMon
-            if ($brandMon.ContainsKey('MonitoringAddresses') -and @($brandMon['MonitoringAddresses']).Count -gt 0) {
-                $MonitoringAddress = @($brandMon['MonitoringAddresses'] | ForEach-Object { [string]$_ })
-                $monitoringSource = 'branding.psd1'
-            }
-        } catch { Write-Verbose "branding.psd1 MonitoringAddresses not read: $($_.Exception.Message)" }
+    $fromProfile = @(@(Get-TPObjectField -Item $TPBrand -Key 'MonitoringAddresses' -Default @()) |
+        Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { ([string]$_).Trim() })
+    if ($fromProfile.Count -gt 0) {
+        $MonitoringAddress = $fromProfile
+        $monitoringSource = "profile $($TPBrand['ProfileName'])"
     }
 }
 $monitoringSet = @(Set-TPMonitoringAddresses -Addresses $MonitoringAddress -Source $monitoringSource)

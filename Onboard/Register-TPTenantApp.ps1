@@ -119,13 +119,22 @@ function Register-TPTenantApp {
 
     # ── Resolve display name from branding if not supplied ───────────────────
     if (-not $DisplayName) {
-        # Not in the module any more, so the module's $script:TPBrand is not
-        # in scope here; read the branding file directly.
+        # This file is not in the module, so the module's $script:TPBrand is not in scope here. The
+        # entry point has imported the module by now and its exported $TPBrand is the active
+        # profile; used standalone, the name rule is the module's own (Resolve-TPProfilePath).
         $brandCo = 'TP'
-        $brandFile = Join-Path (Split-Path -Parent $PSScriptRoot) 'Config' 'branding.psd1'
-        if (Test-Path -LiteralPath $brandFile) {
-            try { $b = Import-PowerShellDataFile -LiteralPath $brandFile; if ($b['CompanyName']) { $brandCo = [string]$b['CompanyName'] } } catch { }
+        $activeBrand = if (Get-Variable -Name TPBrand -ErrorAction SilentlyContinue) { $TPBrand } else { $null }
+        if ($null -eq $activeBrand) {
+            $root = Split-Path -Parent $PSScriptRoot
+            $resolver = Join-Path $root 'Lib' 'Resolve-TPProfilePath.ps1'
+            if (Test-Path -LiteralPath $resolver) {
+                . $resolver
+                $res = Resolve-TPProfilePath -Root $root -Name ([string]$env:TP_PROFILE)
+                if ($res.Status -in @('BadName', 'NotFound')) { throw "TP_PROFILE '$($env:TP_PROFILE)': $($res.Message)" }
+                if (Test-Path -LiteralPath $res.Path) { try { $activeBrand = Import-PowerShellDataFile -LiteralPath $res.Path } catch { Write-Verbose "Profile unreadable: $($_.Exception.Message)" } }
+            }
         }
+        if ($activeBrand -and $activeBrand['CompanyName']) { $brandCo = [string]$activeBrand['CompanyName'] }
         $DisplayName = "$brandCo-Assessment-Scanner"
     }
 
