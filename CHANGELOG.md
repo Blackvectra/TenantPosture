@@ -73,7 +73,10 @@
   a chain the workstation trusts signed the file, which a script planted in a tampered archive and
   signed by any publisher the workstation happens to trust has too, so a file is unblocked only when
   its signer is the signer of the installer's own valid signature, the one the operator already
-  relied on to run it; an installer that carries no valid signature unblocks nothing and says so,
+  relied on to run it, and only when the release record (`FILES.sha256`, else the committed
+  manifest, read before anything is unblocked) names the file, since a script copied from another
+  signed release carries the same signer and the module loader would run it; an installer that
+  carries no valid signature, or sits beside no record, unblocks nothing and says so,
   and it stops before dot-sourcing its two helpers when the execution policy would refuse them
   (an unsigned release whose operator unblocked only the installer used to fail half-way with a
   policy error and nothing installed), naming the files to review. The SBOM lists every optional

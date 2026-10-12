@@ -95,46 +95,62 @@ try {
             $pin = [string]$selfSig.SignerCertificate.Thumbprint
         }
     }
-    $unblocked = 0; $kept = @()
-    foreach ($f in $scripts) {
-        $sig = Get-AuthenticodeSignature -LiteralPath $f.FullName -ErrorAction SilentlyContinue
-        $status = if ($sig) { [string]$sig.Status } else { 'unreadable' }
-        $tp = if ($sig -and $sig.SignerCertificate) { [string]$sig.SignerCertificate.Thumbprint } else { '' }
-        if ($pin -and $status -eq 'Valid' -and $tp -eq $pin) {
-            Unblock-File -LiteralPath $f.FullName -ErrorAction SilentlyContinue
-            $unblocked++
-        } elseif ($pin -and $status -eq 'Valid') {
-            $kept += "$($f.FullName.Substring($scriptDir.Length + 1)) [Valid, signer $tp is not the release signer]"
-        } else {
-            $kept += "$($f.FullName.Substring($scriptDir.Length + 1)) [$status]"
-        }
-    }
-    if ($pin) {
-        Write-Host "  [+] $unblocked script file(s) signed by the release signer ($pin, the signer of this installer) unblocked" -ForegroundColor Green
-    } else {
-        Write-Host "  [i] This installer carries no valid Authenticode signature ($selfStatus), so it cannot vouch for any file: nothing was unblocked." -ForegroundColor Yellow
-    }
-    if ($kept.Count -gt 0) {
-        $shown = if ($kept.Count -le 12) { $kept -join ', ' } else { (($kept | Select-Object -First 12) -join ', ') + ", and $($kept.Count - 12) more" }
-        Write-Host "  [i] Left as downloaded ($($kept.Count) file(s) not signed by the release signer, or with no signature this workstation verifies): $shown" -ForegroundColor Yellow
-        Write-Host "      An in-house signature verifies once the signing certificate is in this workstation's TrustedPublisher and Root stores (Build/New-TPCodeSigningCert.ps1 does that where it ran). For an unsigned release, review the files, then: Get-ChildItem -Recurse -Include *.ps1,*.psm1,*.psd1,*.ps1xml | Unblock-File" -ForegroundColor DarkGray
-    }
-    # Files no release record names are never part of the release; they are named
-    # so the operator sees them, never unblocked.
+    # The release record (FILES.sha256 inside an archive, else the committed
+    # manifest) is read BEFORE anything is unblocked: a script the record does
+    # not name is never part of this release, so it keeps its mark even when
+    # the release signer signed it (a script copied from another signed release
+    # into Lib\ would otherwise be unblocked, and the module loader dot-sources
+    # every *.ps1 under its folders on import). The record's hashes are not
+    # what gates here (whoever changed the archive rewrites them); its names
+    # are, beside the signer pin. With no record nothing can be told apart, so
+    # nothing is unblocked.
     $record = $null
     foreach ($candidate in @((Join-Path $scriptDir 'FILES.sha256'), (Join-Path $scriptDir 'tools' 'integrity-manifest.txt'))) {
         if (Test-Path -LiteralPath $candidate -PathType Leaf) { $record = $candidate; break }
     }
+    $recorded = $null
     if ($record) {
         $recorded = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
         foreach ($line in (Get-Content -LiteralPath $record | Where-Object { $_ -and -not $_.StartsWith('#') })) {
             $parts = $line -split '\s+', 2
             if ($parts.Count -eq 2) { [void]$recorded.Add((Join-Path $scriptDir ($parts[1].Trim() -replace '/', [string][System.IO.Path]::DirectorySeparatorChar))) }
         }
-        $stray = @($scripts | Where-Object { -not $recorded.Contains($_.FullName) })
-        if ($stray.Count -gt 0) {
-            Write-Host "  [!] Not in the release record $(Split-Path -Leaf $record) (the module would load them on import; remove what you did not put there): $(($stray | ForEach-Object { $_.FullName.Substring($scriptDir.Length + 1) }) -join ', ')" -ForegroundColor Red
+    }
+    $unblocked = 0; $kept = @(); $stray = @()
+    foreach ($f in $scripts) {
+        $sig = Get-AuthenticodeSignature -LiteralPath $f.FullName -ErrorAction SilentlyContinue
+        $status = if ($sig) { [string]$sig.Status } else { 'unreadable' }
+        $tp = if ($sig -and $sig.SignerCertificate) { [string]$sig.SignerCertificate.Thumbprint } else { '' }
+        $rel = $f.FullName.Substring($scriptDir.Length + 1)
+        $inRecord = ($null -ne $recorded -and $recorded.Contains($f.FullName))
+        if (-not $inRecord) { $stray += $rel }
+        if ($pin -and $status -eq 'Valid' -and $tp -eq $pin -and $inRecord) {
+            Unblock-File -LiteralPath $f.FullName -ErrorAction SilentlyContinue
+            $unblocked++
+        } elseif ($pin -and $status -eq 'Valid' -and $tp -eq $pin) {
+            $kept += "$rel [signed by the release signer but not named by the release record]"
+        } elseif ($pin -and $status -eq 'Valid') {
+            $kept += "$rel [Valid, signer $tp is not the release signer]"
+        } else {
+            $kept += "$rel [$status]"
         }
+    }
+    if (-not $record) {
+        Write-Host "  [i] No release record (FILES.sha256 or tools\integrity-manifest.txt) is beside this installer, so nothing was unblocked: a file the release does not name is never unblocked, and without the record none can be told apart." -ForegroundColor Yellow
+    } elseif ($pin) {
+        Write-Host "  [+] $unblocked script file(s) named by $(Split-Path -Leaf $record) and signed by the release signer ($pin, the signer of this installer) unblocked" -ForegroundColor Green
+    } else {
+        Write-Host "  [i] This installer carries no valid Authenticode signature ($selfStatus), so it cannot vouch for any file: nothing was unblocked." -ForegroundColor Yellow
+    }
+    if ($kept.Count -gt 0) {
+        $shown = if ($kept.Count -le 12) { $kept -join ', ' } else { (($kept | Select-Object -First 12) -join ', ') + ", and $($kept.Count - 12) more" }
+        Write-Host "  [i] Left as downloaded ($($kept.Count) file(s) not named by the release record, not signed by the release signer, or with no signature this workstation verifies): $shown" -ForegroundColor Yellow
+        Write-Host "      An in-house signature verifies once the signing certificate is in this workstation's TrustedPublisher and Root stores (Build/New-TPCodeSigningCert.ps1 does that where it ran). For an unsigned release, review the files, then: Get-ChildItem -Recurse -Include *.ps1,*.psm1,*.psd1,*.ps1xml | Unblock-File" -ForegroundColor DarkGray
+    }
+    # Files no release record names are never part of the release; they were
+    # never unblocked above, and they are named so the operator removes them.
+    if ($record -and $stray.Count -gt 0) {
+        Write-Host "  [!] Not in the release record $(Split-Path -Leaf $record) (the module would load them on import; left blocked, remove what you did not put there): $($stray -join ', ')" -ForegroundColor Red
     }
 } catch {
     Write-Host "  [!] Unblock step failed: $($_.Exception.Message)" -ForegroundColor Yellow
