@@ -46,6 +46,32 @@ function Get-TPWebDefaultScriptDir {
     return (Split-Path -Parent $PSScriptRoot)
 }
 
+function Get-TPWebLogoOrigin {
+    <#
+    .SYNOPSIS
+        The origin (scheme and host) of the brand logo the assessment report embeds,
+        read as data from the active profile (Config/profiles/<TP_PROFILE>.psd1) or
+        Config/branding.psd1; '' when none is set or it is not an absolute https URL.
+        The GUI and the report site carry no image of their own, so this is the one
+        image origin the content-security policy has to allow beside 'self' and data:.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [string] $ScriptDir)
+    $file = Join-Path $ScriptDir 'Config' 'branding.psd1'
+    $name = [string]$env:TP_PROFILE
+    # A profile name is a name, never a path (the same rule the entry point applies).
+    if ($name -and $name -cmatch '\A[a-z0-9-]{1,64}\z') {
+        $candidate = Join-Path $ScriptDir 'Config' 'profiles' "$name.psd1"
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { $file = $candidate }
+    }
+    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { return '' }
+    try { $data = Import-PowerShellDataFile -LiteralPath $file -ErrorAction Stop } catch { return '' }
+    $logo = if ($data -is [System.Collections.IDictionary] -and $data.Contains('LogoUrl')) { [string]$data['LogoUrl'] } else { '' }
+    # The same rule the run listing applies to a results file's Brand (an absolute https URL, or nothing).
+    return (ConvertTo-TPWebImageOrigin -Url $logo)
+}
+
 function Start-TPWebServer {
     [CmdletBinding()]
     param(
@@ -97,15 +123,26 @@ function Start-TPWebServer {
     Import-Module Pode -ErrorAction Stop
 
     # ── Locate static assets and config ───────────────────────────────────
+    # Canonical before anything is built from it: Pode resolves a relative path
+    # (its root, a Use-PodeScript file) against its own root, not the caller's
+    # current directory, so a relative -ScriptDir would have passed the checks
+    # here and had Pode look for Web\Lib\*.ps1.
+    if (-not (Test-Path -LiteralPath $ScriptDir -PathType Container)) { throw "Script directory not found: $ScriptDir" }
+    $ScriptDir = (Resolve-Path -LiteralPath $ScriptDir).ProviderPath
     $webRoot = Join-Path $ScriptDir 'Web'
     if (-not (Test-Path -LiteralPath $webRoot)) {
         throw "Web asset directory not found: $webRoot"
     }
+    # Canonical, never relative: Pode resolves a relative -RootPath against its
+    # own script location, not the caller's, so a relative -ScriptDir would have
+    # passed this check here and pointed Pode at Lib\Web.
+    $webRoot = (Resolve-Path -LiteralPath $webRoot).ProviderPath
     $clientsFile = Join-Path $ScriptDir 'Config\clients.json'
     # Relative means relative to where the operator is in PowerShell, not to the
     # process start folder that .NET would use.
     $outputRoot  = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputRoot)
     [void][System.IO.Directory]::CreateDirectory($outputRoot)
+
 
     # The path guard, the run listing, the request policy, the domain-name rule
     # and the error table, loaded into Pode's runspaces below. Route bodies and middleware run in runspaces built
@@ -124,6 +161,18 @@ function Start-TPWebServer {
             throw "Web server support script not found: $podeScript"
         }
     }
+    # The same files in THIS scope too: registration-time code below (the logo
+    # origin, through ConvertTo-TPWebImageOrigin) uses them, and this script
+    # runs dot-sourced on its own as well as through the module.
+    foreach ($podeScript in $podeScripts) { . $podeScript }
+
+    # Image sources the policy allows: the GUI and the report site have none, and
+    # the assessment report embeds the brand logo only from the LogoUrl the active
+    # profile sets, so that one origin is allowed, never every https host; a served
+    # report adds the origin its own run recorded (Get-TPWebRunImageSources).
+    $imgSrc = "'self' data:"
+    $logoOrigin = Get-TPWebLogoOrigin -ScriptDir $ScriptDir
+    if ($logoOrigin) { $imgSrc += " $logoOrigin" }
 
     # ── Auto-open browser after a small delay so the server is listening ─
     if (-not $NoBrowser) {
@@ -174,6 +223,23 @@ function Start-TPWebServer {
             Port        = $Port
             Scheme      = 'http'
             AllowedHost = @($AllowedHost)
+            ImgSrc      = $imgSrc
+            # The one policy string; {0} is the img-src value and {1} the
+            # frame-ancestors value. The middleware fills them with the server's
+            # sources and 'none'; the report route with that run's sources and
+            # 'self', because the GUI frames the report (through the iframe's
+            # src, so this response's own policy governs the framed document);
+            # a site page with the run's sources and 'none' (it opens in a tab).
+            CspTemplate = ("default-src 'none'; " +
+                "script-src 'self'; " +
+                "style-src 'self' 'unsafe-inline'; " +
+                "img-src {0}; " +
+                "connect-src 'self'; " +
+                "frame-src 'self' data:; " +
+                "base-uri 'none'; " +
+                "form-action 'none'; " +
+                "frame-ancestors {1}; " +
+                "object-src 'none'")
         } | Out-Null
 
         # Shared in-memory state — same machinery, so the status-poll handler
@@ -194,18 +260,8 @@ function Start-TPWebServer {
         # report publisher: deny everything by default, allow same-origin
         # script/style/data, no framing, no plugins, no form posts to off-host.
         Add-PodeMiddleware -Name 'SecurityHeaders' -ScriptBlock {
-            Set-PodeHeader -Name 'Content-Security-Policy' -Value (
-                "default-src 'none'; " +
-                "script-src 'self'; " +
-                "style-src 'self' 'unsafe-inline'; " +
-                "img-src 'self' data: https:; " +
-                "connect-src 'self'; " +
-                "frame-src 'self' data:; " +
-                "base-uri 'none'; " +
-                "form-action 'none'; " +
-                "frame-ancestors 'none'; " +
-                "object-src 'none'"
-            )
+            $cfg = Get-PodeState -Name 'cfg'
+            Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $cfg.ImgSrc, "'none'")
             Set-PodeHeader -Name 'X-Content-Type-Options' -Value 'nosniff'
             Set-PodeHeader -Name 'Referrer-Policy' -Value 'no-referrer'
             # Everything served here is tenant data. no-store keeps the browser
@@ -250,13 +306,25 @@ function Start-TPWebServer {
         }
 
         # ── Static assets ────────────────────────────────────────────────
-        Add-PodeStaticRoute -Path '/static' -Source (Join-Path $webRoot 'static')
+        # Two explicit routes, never a Pode static folder: a static route answers
+        # every method, and for a path that resolves back to the folder itself
+        # (/static/..%2F..%2Fx) Pode returned its browsable listing of it. Each
+        # route names its own file; nothing from the request reaches the file system.
+        Add-PodeRoute -Method Get -Path '/static/app.js' -ScriptBlock {
+            $bytes = [System.IO.File]::ReadAllBytes((Join-Path (Get-PodeState -Name 'cfg').WebRoot 'static' 'app.js'))
+            Write-PodeTextResponse -Bytes $bytes -ContentType 'text/javascript'
+        }
+        Add-PodeRoute -Method Get -Path '/static/app.css' -ScriptBlock {
+            $bytes = [System.IO.File]::ReadAllBytes((Join-Path (Get-PodeState -Name 'cfg').WebRoot 'static' 'app.css'))
+            Write-PodeTextResponse -Bytes $bytes -ContentType 'text/css'
+        }
 
         # ── Routes ───────────────────────────────────────────────────────
 
         # Index — single-page UI shell.
         Add-PodeRoute -Method Get -Path '/' -ScriptBlock {
-            $indexPath = Join-Path (Get-PodeState -Name 'cfg').WebRoot 'index.html'
+            $cfg = Get-PodeState -Name 'cfg'
+            $indexPath = Join-Path $cfg.WebRoot 'index.html'
             $html = Get-Content -LiteralPath $indexPath -Raw -Encoding utf8
             Write-PodeHtmlResponse -Value $html
         }
@@ -328,6 +396,15 @@ function Start-TPWebServer {
                 Write-PodeJsonResponse -Value $apiError.Body -StatusCode $apiError.HttpStatus
                 return
             }
+            # The image policy for THIS run: its results file's Brand names the
+            # logo the report embeds, which the active profile's may not be. The
+            # GUI frames this response through the iframe's src, so this policy is
+            # the framed document's, and frame-ancestors 'self' lets the GUI's own
+            # origin, and nothing else, frame it.
+            $cfg = Get-PodeState -Name 'cfg'
+            $sources = Get-TPWebRunImageSources -ReportPath $found.Path -Id $WebEvent.Parameters['id'] `
+                -ImgSrc $cfg.ImgSrc -Cache (Get-PodeState -Name 'runMetadata')
+            Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $sources, "'self'")
             $html = Get-Content -LiteralPath $found.Path -Raw -Encoding utf8
             Write-PodeHtmlResponse -Value $html
         }
@@ -363,6 +440,11 @@ function Start-TPWebServer {
                 Set-PodeHeader -Name 'Content-Disposition' -Value ('attachment; filename="{0}"' -f [System.IO.Path]::GetFileName($found.Path))
                 Write-PodeTextResponse -Bytes $bytes -ContentType 'text/csv'
             } else {
+                # A site page may embed the run's brand logo too: the same per-run policy.
+                $cfg = Get-PodeState -Name 'cfg'
+                $sources = Get-TPWebRunImageSources -ReportPath $found.Path -Id $WebEvent.Parameters['id'] `
+                    -ImgSrc $cfg.ImgSrc -Cache (Get-PodeState -Name 'runMetadata')
+                Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $sources, "'none'")
                 Write-PodeTextResponse -Bytes $bytes -ContentType 'text/html'
             }
         }
@@ -560,7 +642,28 @@ function Start-TPWebServer {
                 resultId    = $row.runIdOnDisk
             }
         }
+
+        # ── Everything else ──────────────────────────────────────────────
+        # Registered last. Pode answered a path no route serves, or a method a
+        # route does not allow, with its own error page BEFORE any middleware ran,
+        # so that page carried no security headers and skipped the Host check. A
+        # wildcard route on every method makes those requests ordinary ones: the
+        # headers are set, the request policy applies, and the answer follows the
+        # contract (JSON under /api/, a fixed sentence elsewhere, never the request).
+        # Every method Pode routes (Connect, Merge and Trace included): a method
+        # the list left out went back to Pode's own page, without the headers.
+        Add-PodeRoute -Method Connect, Delete, Get, Head, Merge, Options, Patch, Post, Put, Trace -Path '/*' -ScriptBlock {
+            if ($WebEvent.Path -clike '/api/*') {
+                $apiError = Get-TPWebApiError -Code NotFound
+                Write-PodeJsonResponse -Value $apiError.Body -StatusCode $apiError.HttpStatus
+            } else {
+                Write-PodeTextResponse -Value 'Not found.' -StatusCode 404
+            }
+        }
     }.GetNewClosure()
 
-    Start-PodeServer -Threads 4 -ScriptBlock $serverBlock
+    # -RootPath pins Pode's own root to the Web folder: unpinned, Pode serves a
+    # public\ folder found under its default root, which can be the operator's
+    # current directory.
+    Start-PodeServer -Threads 4 -ScriptBlock $serverBlock -RootPath $webRoot
 }
