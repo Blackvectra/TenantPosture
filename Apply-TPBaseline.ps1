@@ -174,11 +174,36 @@ Write-Host "[-] Loading $($applyScripts.Count) apply function(s)..." -Foreground
 # SignatureStatus was loaded by the TenantPosture module import above and
 # distinguishes NotSigned / HashMismatch / UntrustedRoot / Expired so the
 # warning text is useful instead of "Signature: Invalid."
+if (-not (Get-Command Test-TPSignatureStatus -ErrorAction SilentlyContinue)) {
+    # Running from an extracted release without the module imported: load the
+    # helper itself rather than silently skipping the check. Under
+    # -RequireSignedCode the helper is mutable code on the very tree the
+    # requirement guards against, so it is checked with the built-in cmdlet
+    # first and loaded only when its own signature is Valid; a helper that
+    # cannot be verified (including on a host without Authenticode) is refused,
+    # since nothing it reported could be trusted.
+    $sigHelper = Join-Path $PSScriptRoot 'Lib' 'Test-TPSignatureStatus.ps1'
+    if (Test-Path -LiteralPath $sigHelper -PathType Leaf) {
+        if ($RequireSignedCode) {
+            $helperSig = Get-AuthenticodeSignature -LiteralPath $sigHelper -ErrorAction Stop
+            if ($helperSig.Status -ne 'Valid') {
+                throw "Refusing to dispatch: -RequireSignedCode is set and Lib/Test-TPSignatureStatus.ps1 does not carry a valid Authenticode signature ($($helperSig.Status)), so it cannot be loaded to verify the Apply scripts."
+            }
+        }
+        . $sigHelper
+    }
+}
+if (-not (Get-Command Test-TPSignatureStatus -ErrorAction SilentlyContinue) -and $RequireSignedCode) {
+    throw 'Refusing to dispatch: -RequireSignedCode is set but Test-TPSignatureStatus (Lib/Test-TPSignatureStatus.ps1) could not be loaded, so no signature can be verified.'
+}
 if (Get-Command Test-TPSignatureStatus -ErrorAction SilentlyContinue) {
     $sigResults = foreach ($s in $applyScripts) {
         Test-TPSignatureStatus -Path $s.FullName
     }
-    $unsigned = @($sigResults | Where-Object { $_.Status -ne 'Valid' -and $_.Status -ne 'Unsupported' })
+    # Under -RequireSignedCode a signature that cannot be evaluated (Authenticode
+    # is Windows-only) is a failure, not a pass: the requirement was to run only
+    # signed code, and an unverifiable file is not known to be signed.
+    $unsigned = @($sigResults | Where-Object { $_.Status -ne 'Valid' -and ($RequireSignedCode -or $_.Status -ne 'Unsupported') })
     if ($unsigned.Count -gt 0) {
         if ($RequireSignedCode) {
             Write-Host '' -ForegroundColor Red

@@ -53,7 +53,12 @@ param(
     # AllSigned policy will accept scripts signed by this cert without
     # prompting. Skip if you want to install the trust manually.
     [Parameter()]
-    [switch] $SkipTrust
+    [switch] $SkipTrust,
+
+    # The private key is non-exportable unless asked: an exportable key lets any
+    # process running as this user copy it and sign its own script. Pass
+    # -Exportable only when the certificate must move to another workstation.
+    [switch] $Exportable
 )
 
 Set-StrictMode -Version Latest
@@ -86,10 +91,9 @@ if (-not $PSCmdlet.ShouldProcess($Subject, 'Generate self-signed code-signing ce
 }
 
 # Type CodeSigningCert sets the right EKU (1.3.6.1.5.5.7.3.3) so
-# Authenticode tooling accepts it. KeyExportPolicy NonExportable is best
-# practice for production but blocks the operator from moving the cert to
-# another workstation. Default to Exportable for in-house multi-machine
-# operator scenarios; tighten manually if the threat model warrants.
+# Authenticode tooling accepts it. The key is NonExportable by default:
+# same-user code must not be able to lift it and sign its own script.
+# -Exportable is the explicit opt-in for moving the cert to another machine.
 #
 # Explicit BasicConstraints `cA=false` and KeyUsage DigitalSignature only:
 # even though this cert ends up in the operator's CurrentUser\Root store
@@ -100,7 +104,7 @@ $cert = New-SelfSignedCertificate `
     -Type CodeSigningCert `
     -Subject $Subject `
     -CertStoreLocation 'Cert:\CurrentUser\My' `
-    -KeyExportPolicy Exportable `
+    -KeyExportPolicy $(if ($Exportable) { 'Exportable' } else { 'NonExportable' }) `
     -KeyUsage DigitalSignature `
     -TextExtension @('2.5.29.19={text}cA=false') `
     -NotAfter $notAfter

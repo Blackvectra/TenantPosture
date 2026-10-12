@@ -14,6 +14,99 @@
   culture-aware and ignored a soft hyphen or a NUL appended to the header). The web Lows of the
   2026-10-09 audit; the real-server tests cover each.
 
+- **[Security] CI, release and installer integrity.** The Gitleaks binary CI downloads is verified
+  against the release's published SHA-256 before it runs with the repository token. The release
+  workflow takes the tag through the environment (never interpolated into a script) and accepts only
+  `v<major>.<minor>.<patch>`; packages an allowlist of shipped folders and root files (no tests, CI
+  or scanner configuration); writes a per-file `FILES.sha256` inside the archive; attests the archive,
+  `SHA256SUMS` and the SBOM with `actions/attest-build-provenance` (verify with
+  `gh attestation verify`); publishes through a `release` environment; and states an unsigned release
+  as unsigned in the release notes, failing instead when the repository variable `TP_REQUIRE_SIGNED`
+  is `true`. Every checkout runs with `persist-credentials: false` and the dependency-review
+  `pull-requests: write` grant is scoped to its job. The PSScriptAnalyzer job retries the analyzer's
+  own intermittent crash (an "Object reference" throw, never a rule result). The installer never
+  lowers an `AllSigned` execution policy (it prints the two choices) and unblocks only the tool's own
+  script files, never `output/`. The self-signed signing key is non-exportable unless `-Exportable`
+  is passed; `Build/Sign-Release.ps1` refuses a thumbprint pointer file that another account can
+  write; `Apply-TPBaseline -RequireSignedCode` treats a signature it cannot evaluate as a failure.
+  `openpyxl` is pinned; the SBOM lists the modules the manifest actually requires with the
+  license each package publishes (ExchangeOnlineManagement and MicrosoftTeams are MIT by their own
+  license files, not Microsoft's proprietary terms); the deployment docs no longer claim a package-hash verification
+  PSResourceGet does not perform. Audit M8 to M11 and the supply-chain Lows (2026-10-09). From the Codex review of the branch: the release checklist stages only what signing changed
+  (`git add -u` on the script extensions plus the manifest and the catalog), never `git add -A`, which
+  on an operator workstation would commit `Config/clients.json`; `Sign-Release.ps1` writes each signed
+  script back in the committed LF form and re-reads the signature on those bytes (git normalizes the
+  CRLF signature block on commit, which would have invalidated the manifests), runs under a terminating
+  error preference, and verifies the refreshed integrity manifest in the same session with a reset
+  `$LASTEXITCODE`; `tools/Verify-Integrity.ps1 -Update` is terminating and re-reads the manifest it
+  wrote, so an unreadable file can never leave a shorter manifest; and the release job treats a
+  `Valid` signature from a publisher other than `TP_SIGNING_THUMBPRINT` as a problem, not a pass.
+  The catalog is built from the files git tracks plus the manifests the sign commit adds, never a
+  folder walk that took `.git\` and `output\` with it and could not validate a fresh clone; and the
+  shipped `tools/Verify-Integrity.ps1` verifies an extracted release against its `FILES.sha256` when
+  the repository manifest is absent, instead of exiting 1 on the file the archive leaves out, and
+  fails there on any file the record does not name. `Sign-Release.ps1` refuses a tracked tree that
+  differs from the index (a populated `Config/clients.json` would be hashed into a manifest the
+  tagged commit cannot satisfy), writes the integrity manifest itself, and builds the catalog from
+  one exported copy of the tracked tree (`New-FileCatalog` records only names when given a file
+  list) with `-VerifyCatalogOnly` to check a clone the same way; `Apply-TPBaseline -RequireSignedCode`
+  verifies `Lib/Test-TPSignatureStatus.ps1` with the built-in cmdlet before loading it; and
+  RELEASING.md says provenance attestation applies to a public repository only. Only tracked
+  files are signed and hashed (`tools/Verify-Integrity.ps1 -Update -PathList`), so an untracked or
+  ignored local script such as a `secrets.ps1` is left alone and never enters a manifest; `-VerifyCatalogOnly` and the signing flow check the catalog's own Authenticode
+  signature (Valid, or the pinned thumbprint) before its hashes count, since `Test-FileCatalog`'s
+  Status is the hash comparison only; and `tools/Verify-Integrity.ps1` takes archive mode from the
+  presence of `FILES.sha256` alone, so an injected repository manifest cannot switch an extracted
+  release back to the mode that tolerates extra files (`Sign-Release.ps1` names the repository
+  manifest explicitly). The integrity manifest and `FILES.sha256` are written with LF on every
+  platform (git normalizes the committed text, and a catalog over CRLF bytes would not describe
+  the committed file); an untracked `FILES.sha256` is not cataloged; and the release job counts an
+  `UnknownError` signature as a problem even when the signer is the pinned thumbprint, since that
+  status means the signature could not be verified, unlike `NotTrusted`. The release job verifies the
+  signed catalog over every tracked file when the commit carries one (the JavaScript, HTML and
+  configuration that ship are reached by no script signature), requires it under `TP_REQUIRE_SIGNED`,
+  and the release notes state "signed" only at the width that was verified. The verifier compares
+  recorded paths with an ordinal comparer, so a file renamed only by case on a case-sensitive file
+  system no longer verifies clean. The release job calls the catalog check with a hashtable splat (an
+  array splat passes its entries positionally, so the switch would have bound to the thumbprint
+  parameter), and signing is transactional: a failure midway restores every file's unsigned bytes
+  so the run can be repeated, and the manifest and catalog steps after it are in the same
+  transaction. The installer unblocks only script files the release's own record names
+  (`FILES.sha256`, else the committed manifest) and whose bytes still match it, naming any script
+  on disk the record does not know, since the module dot-sources every `.ps1` under its folders on
+  import; with no record it unblocks nothing and says what to review. The verifier leaves out only
+  the manifest it reads, by exact path. RELEASING.md and the checklist give the unsigned release
+  its own two commands instead of a signing block to half-skip. The installer unblocks only script
+  files whose Authenticode signature verifies on the workstation (a hash record inside the archive
+  proves nothing: whoever changed the archive rewrites it; the record only names files that are not
+  part of the release), and the verifier's archive mode leaves out only the root `output\` folder,
+  so a script planted under `Lib\output\` or `Lib\.github\`, where the module loader runs it,
+  reaches the extra-file check. The installer also pins the signer: a `Valid` status says only that
+  a chain the workstation trusts signed the file, which a script planted in a tampered archive and
+  signed by any publisher the workstation happens to trust has too, so a file is unblocked only when
+  its signer is the signer of the installer's own valid signature, the one the operator already
+  relied on to run it, and only when the release record (`FILES.sha256`, else the committed
+  manifest, read before anything is unblocked) names the file, since a script copied from another
+  signed release carries the same signer and the module loader would run it; an installer that
+  carries no valid signature, or sits beside no record, unblocks nothing and says so,
+  and it stops before dot-sourcing its two helpers when the execution policy would refuse them
+  (an unsigned release whose operator unblocked only the installer used to fail half-way with a
+  policy error and nothing installed), naming the files to review. The SBOM lists every optional
+  runtime dependency a shipped feature imports, Pode (the `-Web` GUI, MIT, PowerShell Gallery) and
+  openpyxl (the XLSX publishers, MIT, PyPI, the installer's pin) included, each with its own purl,
+  supplier and license, so a release no longer attests an inventory that leaves out two supported
+  features. The verifier compares its manifest exclusions the way the file system does (ordinally
+  on Linux and macOS, where a planted `files.sha256` is a second file that must be reported;
+  case-insensitively on Windows), and the signing transaction snapshots the integrity manifest,
+  `FILES.sha256` and the catalog before it rewrites them and puts each back, bytes or absence, when
+  a later step fails, so a failed run never leaves manifests over bytes no longer on disk or a
+  partial catalog in place of a valid one; that snapshot is taken inside the transaction, so a
+  manifest another process holds restores the signed scripts like any other failure. The catalog
+  and `FILES.sha256` are computed over the bytes git commits (`git ls-files --eol` says which
+  files git normalizes; CRLF becomes LF there), not the working tree, which on a Windows clone
+  with `core.autocrlf=true` carries CRLF in every tracked text file `.gitattributes` does not pin
+  and would have produced a catalog no Linux checkout could validate. The SBOM also lists pypdf
+  and reportlab (the questionnaire PDF import and output; unpinned, so no version is invented).
 - **[Honesty] The maturity label is provisional when evidence is incomplete.** `Get-TPMaturityTier`
   excludes Error and unknown-state findings from the score denominator (by design: a tool failure
   is not a gap), but it then printed an unqualified tier, so 50 passes beside 50 errored checks
