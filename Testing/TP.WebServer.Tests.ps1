@@ -57,6 +57,7 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
         $script:DomainLib  = Join-Path $script:RepoRoot 'Lib\Test-TPDomainName.ps1'
         $script:ApiErrorLib = Join-Path $script:RepoRoot 'Lib\Get-TPWebApiError.ps1'
         $script:FieldLib   = Join-Path $script:RepoRoot 'Lib\Get-TPObjectField.ps1'
+        $script:ProfileLib = Join-Path $script:RepoRoot 'Lib\Resolve-TPProfilePath.ps1'
         $script:WebRoot    = Join-Path $script:RepoRoot 'Web'
         $script:IndexHtml  = Join-Path $script:WebRoot  'index.html'
         $script:AppJs      = Join-Path $script:WebRoot  'static\app.js'
@@ -1594,7 +1595,7 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
             $script:FxB = & $script:NewFixture $script:Install
             Copy-Item -LiteralPath $script:WebRoot -Destination (Join-Path $script:Install 'Web') -Recurse
             $null = New-Item -ItemType Directory -Path (Join-Path $script:Install 'Lib') -Force
-            foreach ($f in $script:FieldLib, $script:PathLib, $script:IndexLib, $script:RequestLib, $script:DomainLib, $script:ApiErrorLib) {
+            foreach ($f in $script:FieldLib, $script:PathLib, $script:IndexLib, $script:RequestLib, $script:DomainLib, $script:ApiErrorLib, $script:ProfileLib) {
                 Copy-Item -LiteralPath $f -Destination (Join-Path $script:Install 'Lib')
             }
             $script:PortB = Get-Random -Minimum 23001 -Maximum 26000

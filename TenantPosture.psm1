@@ -61,18 +61,17 @@ $script:TPRawData    = [System.Collections.Hashtable]::Synchronized(@{})
 # neutral defaults. A profile is data only (Import-PowerShellDataFile), never
 # executed. The NRG and NLS practices ship as profiles; the neutral default is
 # what the public tool runs with.
-$brandPath = Join-Path $PSScriptRoot 'Config' 'branding.psd1'
-$script:TPProfileName = 'branding'
-$envProfile = [string]$env:TP_PROFILE
-if ($envProfile) {
-    if ($envProfile -cmatch '\A[a-z0-9][a-z0-9-]{0,31}\z') {
-        $candidate = Join-Path $PSScriptRoot 'Config' 'profiles' "$envProfile.psd1"
-        if (Test-Path -LiteralPath $candidate) { $brandPath = $candidate; $script:TPProfileName = $envProfile }
-        else { Write-Warning "TP_PROFILE '$envProfile' has no Config/profiles/$envProfile.psd1; using Config/branding.psd1." }
-    } else {
-        Write-Warning "TP_PROFILE is not a profile name (lower-case letters, digits and hyphens only); using Config/branding.psd1."
-    }
+# The resolver is the one definition of which file a profile name selects; the
+# entry point dot-sources the same file before it imports this module.
+. (Join-Path $PSScriptRoot 'Lib' 'Resolve-TPProfilePath.ps1')
+$profileResolution = Resolve-TPProfilePath -Root $PSScriptRoot -Name ([string]$env:TP_PROFILE)
+# A name that is not a profile is an ERROR, never a silent fallback to the
+# neutral defaults: a wrong-practice run looks like any other run.
+if ($profileResolution.Status -in @('BadName', 'NotFound')) {
+    throw "TP_PROFILE '$($env:TP_PROFILE)': $($profileResolution.Message)"
 }
+$brandPath = $profileResolution.Path
+$script:TPProfileName = $profileResolution.Name
 $script:TPBrand = if (Test-Path -LiteralPath $brandPath) {
     try {
         Import-PowerShellDataFile -LiteralPath $brandPath -ErrorAction Stop
@@ -221,6 +220,7 @@ $script:ExportedFunctions = @(
     'Test-TPPsLiteralSafe',
     'Test-TPPsd1EntriesRoundTrip',
     'Get-TPProfile',
+    'Get-TPProfileDeclaration',
     'Set-TPLicenseGating',
     'Get-TPBaselineDefinition', 'Get-TPBaselineRequiredControls', 'ConvertTo-TPBaselineClientSlug',
     'Get-TPBaselineExceptions', 'Get-TPBaselineCompliance', 'Get-TPBaselineRegressions',
