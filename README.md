@@ -341,7 +341,7 @@ Invoke-TPAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-TPBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 Compare-TPTenantBaseline.ps1     ← Offline two-tenant baseline comparison (connects to nothing)
 TenantPosture.psm1               ← Module loader (recursive dot-source, path traversal check)
-TenantPosture.psd1               ← Module manifest (416 exports, dependency declarations)
+TenantPosture.psd1               ← Module manifest (418 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-TPFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -723,4 +723,4 @@ You may use, modify and redistribute it under that license, including commercial
 
 ---
 
-*TenantPosture v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 416 exported functions · full Pester suite (110 suites) gating CI*
+*TenantPosture v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 418 exported functions · full Pester suite (110 suites) gating CI*

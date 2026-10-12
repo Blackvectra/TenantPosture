@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- **[Security] The incident-response data contract.** The IR mode's results JSON carries sign-in
+  addresses, geolocation and message metadata by design (they are the indicators), and the audit of
+  2026-10-09 found two things in it that are not: every registered phone method's full number, and
+  the credential-bearing query string of a URL found in a message body (a SharePoint or Storage SAS
+  `sig=`, an `access_token=`), which a results file must never hold. The mailbox collectors now store
+  each URL through `ConvertTo-TPRedactedUrl` (host, path and ordinary parameters kept; a
+  credential-bearing value and any userinfo replaced by `[redacted]`), and the user-security
+  collector masks a phone number to its country code and last two digits (`ConvertTo-TPMaskedPhone`),
+  enough to ask the user whether the number ending in 34 is theirs. SECURITY.md ("Data the Tool
+  Writes"), the OSS-scanner threat model, the Email-IR README and CLAUDE.md state the exception, the
+  two `rdap.org` lookups and the opt-out, which `Invoke-TPBatchSignInTriage.ps1` already forwards.
+  `Email-IR/Testing/TP.IRDataContract.Tests.ps1` drives the real collectors. Audit item 8
+  (2026-10-09); the SBOM and DEPLOYMENT.md claims it also named were corrected in #139. From the
+  Codex review of the branch: the redactor reads parameters delimited by `;` as well as `&`, reads
+  them inside the fragment too (a hash-routed reset link after an outer query, an implicit-flow
+  `#access_token=`), and treats one-time codes and assertions (`oobCode`, `nonce`, `SAMLResponse`,
+  a name ending in `code`, `key`, `otp`, ...) as credentials; and the mailbox collector no longer
+  stores the automatic-reply texts from `mailboxSettings` (an out-of-office body is a message body),
+  only their state, audience, schedule and whether a text is set. A destination URL a rewriting
+  wrapper carries percent-encoded in an ordinary parameter (a Safe Links `url=`) is redacted
+  inside the value and put back encoded; the userinfo is read up to the LAST `@` before the path,
+  as a browser reads it, so a second `@` cannot hide a password; a wrapped target that is
+  relative or network-path is read like an absolute one, a chain nested deeper than the reader
+  follows is redacted whole rather than stored unread, and a matrix parameter in the path
+  (`;jsessionid=`) is judged by the same name rule; a structured name (`auth[token]`) is judged
+  by its bracketed components, a wrapped target is decoded through up to three encoding layers
+  (and put back as it came) or redacted whole when still encoded after that, and the userinfo of
+  a network-path target (`//user:pass@host`) is redacted like an absolute URL's. SECURITY.md lists the mailbox
+  record, inbox rules, mailbox settings and OAuth consents the JSON also carries, and says that
+  `rdap.org` redirects each lookup to the authoritative registry (the regional registry for an
+  address, the top-level-domain registry for a domain), which a firewall rule must cover too.
 - **[Security] Web GUI: Pode never answers on its own.** A wildcard route on every method, registered
   last, answers a path no route serves or a method a route does not allow (`NotFound` JSON under
   `/api/`, `Not found.` elsewhere), so the answer carries the security headers and goes through the

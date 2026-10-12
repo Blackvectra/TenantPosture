@@ -57,8 +57,16 @@ Most:
 - Anything that builds a file path from a name: output file naming in the entry
   points, `TenantPosture.psm1` profile loading, `Lib/Set-TPBaselineException.ps1`,
   `Lib/New-TPProfile.ps1`, `Lib/Get-TPSSPAnswers.ps1`.
-- The results JSON writer: it must never contain tokens, credentials or user data
-  beyond UPN and display name.
+- The results JSON writer: it must never contain tokens or credentials, and no
+  user data beyond UPN and display name. The incident-response mode (`Email-IR/`)
+  is the documented exception: its JSON carries the indicators it was run for
+  (sign-in IP addresses and geolocation, message senders, recipients, subjects
+  and URLs), and there the contract is that a phone number is masked to its
+  country code and last two digits and a URL's credential-bearing query values
+  are redacted at collection (`Email-IR/Lib/ConvertTo-TPRedactedUrl.ps1`);
+  SECURITY.md, "Data the Tool Writes", states the full list. A path by which a
+  full phone number, a `sig=` or `token=` value, or a message body reaches that
+  JSON is a finding.
 
 In scope but secondary: evaluators (`Evaluators/`), which decide verdicts. A
 wrong verdict is a correctness bug, not a vulnerability, unless an attacker in

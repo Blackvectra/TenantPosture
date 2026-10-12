@@ -13,6 +13,24 @@ Two sanctioned write paths ship in this repository. Neither executes during an a
 
 ---
 
+## Data the Tool Writes
+
+An assessment's results JSON and reports carry tenant configuration, verdicts and, where a finding names an object, that object's UPN or display name — nothing more about a person, and never a token or a credential. Every results file is written through `Set-TPSensitiveFileContent`, which restricts the file's ACL to the operator.
+
+The incident-response mode (`Invoke-TPSignInTriage.ps1`, `Invoke-TPBatchSignInTriage.ps1`, `Invoke-TPEmailAssessment.ps1`) is the documented exception, because its indicators are the data. For the window it reads, its JSON and reports carry:
+
+- each sign-in's source IP address, Microsoft's geolocation of it (city, state, country and the coordinates Graph records), client application, device details, risk state, Conditional Access result and authentication details, with the account's UPN and display name;
+- each registered authentication method's type, registration time and display value — a phone number is masked at collection to its country code and last two digits (`ConvertTo-TPMaskedPhone`: `+1 2065550100` is stored as `+1 ********00`), enough to ask the user whether the number ending in 00 is theirs;
+- the mailbox's own record: the account's id, display name, mail address and UPN; every inbox rule as Graph returns it (name, conditions, actions, forwarding and redirect addresses, enabled state), because a rule is the indicator; the mailbox settings' language, time zone, working hours, delegate delivery option and automatic-reply state;
+- every OAuth consent the account granted: the grant id, the client service principal id, the application's display name, application id and publisher, the consent type and the scopes;
+- for each message read, the sender, recipients, subject, attachment count and the URLs found in the first ~250 characters of the body, each stored through `ConvertTo-TPRedactedUrl`: the host, path and ordinary parameters stay (the link is the indicator), and the value of a credential-bearing parameter (`sig=`, `token=`, `access_token=`, `code=`, `key=`, a name ending in `token`, `secret`, `password`, `signature` or `credential`) and any `user:password@` before the host are replaced by `[redacted]`. Message bodies are never retained, and neither are the automatic-reply texts a mailbox may have configured (only their state, audience, schedule and whether a text is set).
+
+Treat `output\IR-Triage\` and `output\<user>\` as incident evidence: hand them to the client or the incident lead, keep them under the client's retention rule and delete them when the case closes. `Email-IR/Testing/TP.IRDataContract.Tests.ps1` drives the real collectors and fails if a full phone number or a credential-bearing query value reaches the raw data.
+
+Two lookups leave the workstation, both through `rdap.org` and both carrying only the value looked up, nothing about the tenant: the sign-in triage submits each flagged sign-in IP address for its registrant and ASN (on by default; `-EnableThreatIntel:$false` on `Invoke-TPSignInTriage.ps1` or `Invoke-TPBatchSignInTriage.ps1` sends nothing), and the mailbox assessment submits external sender domains for their registration age only when `-EnableThreatIntel` is passed. `rdap.org` is a redirector: it answers with a redirect to the authoritative RDAP server, which the request follows, so an IP address is also disclosed to the regional registry responsible for it (ARIN, RIPE NCC, APNIC, LACNIC or AFRINIC) and a domain to its top-level-domain registry's RDAP service. A firewall rule or a data-handling review must cover those destinations, not only `rdap.org`. Confirm the client's data-handling policy permits the lookups before running with them on.
+
+---
+
 ## Reporting a Vulnerability
 
 We follow a **coordinated vulnerability disclosure** model aligned to NIST SP 800-218 (SSDF), CISA's Secure-by-Design pledge, and CISA Binding Operational Directive 20-01 ("Develop and Publish a Vulnerability Disclosure Policy"). Researchers who report in good faith are protected by the [Safe Harbor](#safe-harbor) clause below.
