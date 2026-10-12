@@ -118,6 +118,7 @@
         'Test-TPPsLiteralSafe',
         'Test-TPPsd1EntriesRoundTrip',
         'Get-TPProfile',
+        'Get-TPProfileDeclaration',
         'Set-TPLicenseGating',
         'Get-TPBaselineDefinition',
         'Get-TPBaselineRequiredControls',

@@ -58,12 +58,14 @@ function Get-TPWebLogoOrigin {
     [CmdletBinding()]
     [OutputType([string])]
     param([Parameter(Mandatory)] [string] $ScriptDir)
+    # The active profile, by the module's own rule (Resolve-TPProfilePath): the name the module
+    # loaded when it is in scope, else TP_PROFILE. An unusable name gives no logo origin; the
+    # entry point has already stopped on it.
     $file = Join-Path $ScriptDir 'Config' 'branding.psd1'
-    $name = [string]$env:TP_PROFILE
-    # A profile name is a name, never a path (the same rule the entry point applies).
-    if ($name -and $name -cmatch '\A[a-z0-9-]{1,64}\z') {
-        $candidate = Join-Path $ScriptDir 'Config' 'profiles' "$name.psd1"
-        if (Test-Path -LiteralPath $candidate -PathType Leaf) { $file = $candidate }
+    $name = if (Get-Variable -Name TPProfileName -Scope Script -ErrorAction SilentlyContinue) { [string]$script:TPProfileName } else { [string]$env:TP_PROFILE }
+    if ($name -and $name -ne 'branding') {
+        $res = Resolve-TPProfilePath -Root $ScriptDir -Name $name
+        if ($res.Status -eq 'Ok') { $file = $res.Path } else { return '' }
     }
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { return '' }
     try { $data = Import-PowerShellDataFile -LiteralPath $file -ErrorAction Stop } catch { return '' }
@@ -165,11 +167,14 @@ function Start-TPWebServer {
     # origin, through ConvertTo-TPWebImageOrigin) uses them, and this script
     # runs dot-sourced on its own as well as through the module.
     foreach ($podeScript in $podeScripts) { . $podeScript }
+    # The profile resolver (the module's own rule for a profile name), for the logo origin below.
+    . (Join-Path $ScriptDir 'Lib\Resolve-TPProfilePath.ps1')
 
     # Image sources the policy allows: the GUI and the report site have none, and
     # the assessment report embeds the brand logo only from the LogoUrl the active
     # profile sets, so that one origin is allowed, never every https host; a served
     # report adds the origin its own run recorded (Get-TPWebRunImageSources).
+    $activeProfileName = if ((Get-Variable -Name TPProfileName -Scope Script -ErrorAction SilentlyContinue) -and [string]$script:TPProfileName -ne 'branding') { [string]$script:TPProfileName } elseif ($env:TP_PROFILE) { [string]$env:TP_PROFILE } else { '' }
     $imgSrc = "'self' data:"
     $logoOrigin = Get-TPWebLogoOrigin -ScriptDir $ScriptDir
     if ($logoOrigin) { $imgSrc += " $logoOrigin" }
@@ -224,6 +229,8 @@ function Start-TPWebServer {
             Scheme      = 'http'
             AllowedHost = @($AllowedHost)
             ImgSrc      = $imgSrc
+            # The active profile's name for the scan child ('' = Config/branding.psd1).
+            ProfileName = $activeProfileName
             # The one policy string; {0} is the img-src value and {1} the
             # frame-ancestors value. The middleware fills them with the server's
             # sources and 'none'; the report route with that run's sources and
@@ -512,7 +519,7 @@ function Start-TPWebServer {
             # the operator must be able to complete interactive auth in the
             # child's auth-popup browser window.
             $jobScript = {
-                param($scriptDir, $domain, $outputPath)
+                param($scriptDir, $domain, $outputPath, $profileName)
                 Set-Location $scriptDir
                 $entryScript = Join-Path $scriptDir 'Invoke-TPAssessment.ps1'
                 # Run the entry script as its own CHILD PROCESS rather than
@@ -534,14 +541,17 @@ function Start-TPWebServer {
                 # else the domain's OpenID metadata) and aborts if the sign-in
                 # lands anywhere else. The fake UPN only pre-filled the sign-in
                 # prompt with an account that does not exist.
-                & $pwshPath -NoLogo -File $entryScript -TenantDomain $domain -OutputPath $outputPath *>&1
+                # The profile travels as an argument: the entry point no longer leaves TP_PROFILE
+                # set in the process, so the child cannot inherit it from the environment.
+                $profileArgs = if ($profileName) { @('-Profile', $profileName) } else { @() }
+                & $pwshPath -NoLogo -File $entryScript -TenantDomain $domain -OutputPath $outputPath @profileArgs *>&1
                 # *>&1 above (not 2>&1) merges the information stream too —
                 # Write-Host output goes to the job's Information stream, not
                 # the output stream the status handler iterates, so 2>&1
                 # alone left the log always empty until the job ended.
                 [pscustomobject]@{ TPScanExitCode = $LASTEXITCODE }
             }
-            $job = Start-Job -ScriptBlock $jobScript -ArgumentList $cfg.ScriptDir, $domain, $scanOutputPath
+            $job = Start-Job -ScriptBlock $jobScript -ArgumentList $cfg.ScriptDir, $domain, $scanOutputPath, $cfg.ProfileName
             $stateRow.jobId  = $job.Id
             $stateRow.status = 'running'
 

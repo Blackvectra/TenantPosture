@@ -12,6 +12,21 @@
   `~/.nrg-assessment` when there is none at the new location, with the same ownership and ACL checks and a notice
   to move it. (The collector already accepts the earlier `nrg-device-compliance` schema tag at major version one,
   and `TP.DeviceIdentity.Tests.ps1` pins it.)
+- **[Fix] A profile is honored everywhere, and a name that is not a profile stops the run.** From the
+  review of the rename (#127). The entry point read `EdrStack`, `AwarenessStack` and
+  `MonitoringAddresses` from `Config/branding.psd1` a second time, so `-Profile nrg` dropped the
+  profile's declared EDR (the Defender endpoint checks stayed in the score) and the monitoring-address
+  checks read "not assessed"; they now come from the loaded profile (`Get-TPProfileDeclaration`), and
+  so do the report site and tenant onboarding (which named the app after the neutral company). A
+  misspelled `-Profile` or `TP_PROFILE` warned and ran with the neutral defaults, a wrong-practice run
+  that looked like any other; it is now fatal (exit 4 from the entry point, a refused import from the
+  module), naming the profiles that exist, and `Resolve-TPProfilePath` is the one place a name is
+  judged. `TP_PROFILE` is put back after the import, so a later run in the same console without
+  `-Profile` no longer keeps the previous practice (the web server hands `-Profile` to the scan it
+  launches instead). `Get-TPStandards` no longer lays the profile's DMARC address over an explicit
+  `-Path`, and `-Profile` is validated with `\A...\z`. **A profile run can change results**: with the
+  declarations applied, controls the profile says another product covers leave the score, and a
+  monitoring address in the profile satisfies the alert-routing checks it previously failed to reach.
 - **[Security] The incident-response data contract.** The IR mode's results JSON carries sign-in
   addresses, geolocation and message metadata by design (they are the indicators), and the audit of
   2026-10-09 found two things in it that are not: every registered phone method's full number, and

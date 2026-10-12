@@ -119,10 +119,12 @@ Describe 'Third-party security awareness declaration' {
         { Set-TPThirdPartyAwareness -Product '<script>alert(1)</script>' } | Should -Throw
     }
 
-    It 'the entry point reads it from clients.json and branding.psd1, and records it in the metadata' {
+    It 'the entry point reads it from clients.json and the loaded profile, and records it in the metadata' {
         $entry = Get-Content (Join-Path $script:RepoRoot 'Invoke-TPAssessment.ps1') -Raw
         $entry | Should -Match "PSObject\.Properties\['ThirdPartyAwareness'\]"
-        $entry | Should -Match "ContainsKey\('AwarenessStack'\)"
+        # From the profile the module loaded ($TPBrand), through the one validating helper,
+        # never from a second read of branding.psd1 (which ignored -Profile).
+        $entry | Should -Match ([regex]::Escape('Get-TPProfileDeclaration -Brand $TPBrand -Key AwarenessStack'))
         $entry | Should -Match 'ThirdPartyAwareness = \[string\]\$ThirdPartyAwareness'
         (Import-PowerShellDataFile (Join-Path $script:RepoRoot 'Config/branding.psd1')).ContainsKey('AwarenessStack') | Should -BeTrue
         $schema = Get-Content (Join-Path $script:RepoRoot 'Config/schema/clients.schema.json') -Raw | ConvertFrom-Json
