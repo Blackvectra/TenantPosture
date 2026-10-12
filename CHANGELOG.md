@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[Security] Web GUI: Pode never answers on its own.** A wildcard route on every method, registered
+  last, answers a path no route serves or a method a route does not allow (`NotFound` JSON under
+  `/api/`, `Not found.` elsewhere), so the answer carries the security headers and goes through the
+  request policy; Pode's own 404/405 pages were sent before any middleware ran. The two assets are
+  explicit routes with fixed file names instead of a static folder, which answered every method and
+  returned Pode's browsable listing of the folder for `/static/..%2F..%2Fx`. Pode's root is pinned
+  to the Web folder (unpinned, a `public\` folder in the operator's current directory was served),
+  the image policy allows `'self'`, `data:` and the configured logo's origin instead of every https
+  host, and the request policy compares Host, Origin and Sec-Fetch-Site ordinally (`-in` is
+  culture-aware and ignored a soft hyphen or a NUL appended to the header). The web Lows of the
+  2026-10-09 audit; the real-server tests cover each.
+
 - **[Honesty] The maturity label is provisional when evidence is incomplete.** `Get-TPMaturityTier`
   excludes Error and unknown-state findings from the score denominator (by design: a tool failure
   is not a gap), but it then printed an unqualified tier, so 50 passes beside 50 errored checks

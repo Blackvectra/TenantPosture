@@ -46,6 +46,35 @@ function Get-TPWebDefaultScriptDir {
     return (Split-Path -Parent $PSScriptRoot)
 }
 
+function Get-TPWebLogoOrigin {
+    <#
+    .SYNOPSIS
+        The origin (scheme and host) of the brand logo the assessment report embeds,
+        read as data from the active profile (Config/profiles/<TP_PROFILE>.psd1) or
+        Config/branding.psd1; '' when none is set or it is not an absolute https URL.
+        The GUI and the report site carry no image of their own, so this is the one
+        image origin the content-security policy has to allow beside 'self' and data:.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [string] $ScriptDir)
+    $file = Join-Path $ScriptDir 'Config' 'branding.psd1'
+    $name = [string]$env:TP_PROFILE
+    # A profile name is a name, never a path (the same rule the entry point applies).
+    if ($name -and $name -cmatch '\A[a-z0-9-]{1,64}\z') {
+        $candidate = Join-Path $ScriptDir 'Config' 'profiles' "$name.psd1"
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { $file = $candidate }
+    }
+    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { return '' }
+    try { $data = Import-PowerShellDataFile -LiteralPath $file -ErrorAction Stop } catch { return '' }
+    $logo = if ($data -is [System.Collections.IDictionary] -and $data.Contains('LogoUrl')) { [string]$data['LogoUrl'] } else { '' }
+    $uri = $null
+    if ($logo -and [System.Uri]::TryCreate($logo, [System.UriKind]::Absolute, [ref]$uri) -and $uri.Scheme -eq 'https') {
+        return $uri.GetLeftPart([System.UriPartial]::Authority)
+    }
+    return ''
+}
+
 function Start-TPWebServer {
     [CmdletBinding()]
     param(
@@ -106,6 +135,13 @@ function Start-TPWebServer {
     # process start folder that .NET would use.
     $outputRoot  = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputRoot)
     [void][System.IO.Directory]::CreateDirectory($outputRoot)
+
+    # Image sources the policy allows: the GUI and the report site have none, and
+    # the assessment report embeds the brand logo only from the LogoUrl the active
+    # profile sets, so that one origin is allowed, never every https host.
+    $imgSrc = "'self' data:"
+    $logoOrigin = Get-TPWebLogoOrigin -ScriptDir $ScriptDir
+    if ($logoOrigin) { $imgSrc += " $logoOrigin" }
 
     # The path guard, the run listing, the request policy, the domain-name rule
     # and the error table, loaded into Pode's runspaces below. Route bodies and middleware run in runspaces built
@@ -174,6 +210,7 @@ function Start-TPWebServer {
             Port        = $Port
             Scheme      = 'http'
             AllowedHost = @($AllowedHost)
+            ImgSrc      = $imgSrc
         } | Out-Null
 
         # Shared in-memory state — same machinery, so the status-poll handler
@@ -194,11 +231,12 @@ function Start-TPWebServer {
         # report publisher: deny everything by default, allow same-origin
         # script/style/data, no framing, no plugins, no form posts to off-host.
         Add-PodeMiddleware -Name 'SecurityHeaders' -ScriptBlock {
+            $cfg = Get-PodeState -Name 'cfg'
             Set-PodeHeader -Name 'Content-Security-Policy' -Value (
                 "default-src 'none'; " +
                 "script-src 'self'; " +
                 "style-src 'self' 'unsafe-inline'; " +
-                "img-src 'self' data: https:; " +
+                "img-src $($cfg.ImgSrc); " +
                 "connect-src 'self'; " +
                 "frame-src 'self' data:; " +
                 "base-uri 'none'; " +
@@ -250,7 +288,18 @@ function Start-TPWebServer {
         }
 
         # ── Static assets ────────────────────────────────────────────────
-        Add-PodeStaticRoute -Path '/static' -Source (Join-Path $webRoot 'static')
+        # Two explicit routes, never a Pode static folder: a static route answers
+        # every method, and for a path that resolves back to the folder itself
+        # (/static/..%2F..%2Fx) Pode returned its browsable listing of it. Each
+        # route names its own file; nothing from the request reaches the file system.
+        Add-PodeRoute -Method Get -Path '/static/app.js' -ScriptBlock {
+            $bytes = [System.IO.File]::ReadAllBytes((Join-Path (Get-PodeState -Name 'cfg').WebRoot 'static' 'app.js'))
+            Write-PodeTextResponse -Bytes $bytes -ContentType 'text/javascript'
+        }
+        Add-PodeRoute -Method Get -Path '/static/app.css' -ScriptBlock {
+            $bytes = [System.IO.File]::ReadAllBytes((Join-Path (Get-PodeState -Name 'cfg').WebRoot 'static' 'app.css'))
+            Write-PodeTextResponse -Bytes $bytes -ContentType 'text/css'
+        }
 
         # ── Routes ───────────────────────────────────────────────────────
 
@@ -560,7 +609,26 @@ function Start-TPWebServer {
                 resultId    = $row.runIdOnDisk
             }
         }
+
+        # ── Everything else ──────────────────────────────────────────────
+        # Registered last. Pode answered a path no route serves, or a method a
+        # route does not allow, with its own error page BEFORE any middleware ran,
+        # so that page carried no security headers and skipped the Host check. A
+        # wildcard route on every method makes those requests ordinary ones: the
+        # headers are set, the request policy applies, and the answer follows the
+        # contract (JSON under /api/, a fixed sentence elsewhere, never the request).
+        Add-PodeRoute -Method Get, Post, Put, Delete, Patch, Options, Head -Path '/*' -ScriptBlock {
+            if ($WebEvent.Path -clike '/api/*') {
+                $apiError = Get-TPWebApiError -Code NotFound
+                Write-PodeJsonResponse -Value $apiError.Body -StatusCode $apiError.HttpStatus
+            } else {
+                Write-PodeTextResponse -Value 'Not found.' -StatusCode 404
+            }
+        }
     }.GetNewClosure()
 
-    Start-PodeServer -Threads 4 -ScriptBlock $serverBlock
+    # -RootPath pins Pode's own root to the Web folder: unpinned, Pode serves a
+    # public\ folder found under its default root, which can be the operator's
+    # current directory.
+    Start-PodeServer -Threads 4 -ScriptBlock $serverBlock -RootPath $webRoot
 }

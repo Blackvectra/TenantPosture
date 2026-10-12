@@ -286,9 +286,36 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
                 -Because 'a route that joins a request parameter onto a path skips the guards'
         }
 
-        It 'the only static route is /static (the output folder is never served as a folder)' {
-            $routes = [regex]::Matches($script:ServerSrc, "Add-PodeStaticRoute\s+-Path\s+'([^']+)'") | ForEach-Object { $_.Groups[1].Value }
-            @($routes) | Should -Be @('/static')
+        It 'no folder is served as a Pode static route; the two assets are explicit routes with fixed file names' {
+            # A static route answers every method and, for a path that resolves
+            # back to the folder (/static/..%2F..%2Fx), returned Pode's browsable
+            # listing of it. Each asset route names its own file.
+            $script:ServerSrc | Should -Not -Match 'Add-PodeStaticRoute'
+            $script:ServerSrc | Should -Match 'Add-PodeRoute -Method Get -Path ''/static/app\.js'' -ScriptBlock \{\s*\$bytes = \[System\.IO\.File\]::ReadAllBytes\(\(Join-Path \(Get-PodeState -Name ''cfg''\)\.WebRoot ''static'' ''app\.js''\)\)'
+            $script:ServerSrc | Should -Match 'Add-PodeRoute -Method Get -Path ''/static/app\.css'' -ScriptBlock \{\s*\$bytes = \[System\.IO\.File\]::ReadAllBytes\(\(Join-Path \(Get-PodeState -Name ''cfg''\)\.WebRoot ''static'' ''app\.css''\)\)'
+        }
+
+        It 'a wildcard route on every method is registered last, so Pode never answers on its own without the middleware' {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:ServerPath, [ref]$null, [ref]$null)
+            $routes = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Add-PodeRoute' }, $true))
+            $last = $routes[-1]
+            $text = $last.Extent.Text
+            $text | Should -Match "-Path '/\*'"
+            foreach ($m in 'Get', 'Post', 'Put', 'Delete', 'Patch', 'Options', 'Head') { $text | Should -Match "\b$m\b" }
+            $text | Should -Match "Get-TPWebApiError -Code NotFound"
+            $text | Should -Match "Write-PodeTextResponse -Value 'Not found\.' -StatusCode 404"
+        }
+
+        It "pins Pode's root to the Web folder, so a public folder in the current directory is never served" {
+            $script:ServerSrc | Should -Match 'Start-PodeServer\s+-Threads\s+4\s+-ScriptBlock\s+\$serverBlock\s+-RootPath\s+\$webRoot'
+        }
+
+        It "allows images from 'self', data: and the configured logo origin only, never every https host" {
+            $script:ServerSrc | Should -Not -Match "img-src [^;]*https:"
+            $script:ServerSrc | Should -Match 'img-src \$\(\$cfg\.ImgSrc\);'
+            $script:ServerSrc | Should -Match '\$imgSrc = "''self'' data:"'
+            $script:ServerSrc | Should -Match 'Get-TPWebLogoOrigin -ScriptDir \$ScriptDir'
+            $script:ServerSrc | Should -Match '\$uri\.Scheme -eq .https.'
         }
 
         It 'POST /api/scan validates the domain with the one domain-name rule, and keeps no pattern of its own' {
@@ -1277,6 +1304,20 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
                 (& $script:Policy @{ Method = 'HEAD'; HostHeader = '127.0.0.1:8765' }).Allowed | Should -BeTrue
             }
 
+            It 'compares the headers ordinally: an ignorable character appended to a Host, Origin or Sec-Fetch-Site value never matches: <Label>' -ForEach @(
+                @{ Label = 'soft hyphen';  Ch = [char]0x00AD }
+                @{ Label = 'zero width';   Ch = [char]0x200B }
+                @{ Label = 'NUL';          Ch = [char]0x0000 }
+                @{ Label = 'BOM';          Ch = [char]0xFEFF }) {
+                # PowerShell's -in and -eq are culture-aware and ignore these, so a
+                # Host that is not ours used to compare equal to one that is.
+                (& $script:Policy @{ HostHeader = "127.0.0.1:8765$Ch" }).Reason | Should -Be 'HostNotAllowed'
+                $o = & $script:Policy ($script:Json + @{ Origin = "http://127.0.0.1:8765$Ch" })
+                $o.Reason | Should -Be 'OriginNotAllowed'
+                $f = & $script:Policy ($script:Json + @{ SecFetchSite = "same-origin$Ch" })
+                $f.Reason | Should -Be 'FetchSiteNotSameOrigin'
+            }
+
             It 'refuses a request whose Host header is not one of ours (DNS rebinding): <Label>' -ForEach @(
                 @{ Label = 'a name the attacker owns';          HostName = 'evil.example.com:8765' }
                 @{ Label = 'the attacker name, no port';        HostName = 'evil.example.com' }
@@ -1494,6 +1535,10 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
             $tmp = [System.IO.Path]::GetTempPath()
             $script:Elsewhere = Join-Path $tmp ("nrgweb-cwd-{0}" -f ([Guid]::NewGuid().ToString('N')))
             $null = New-Item -ItemType Directory -Path $script:Elsewhere -Force
+            # Pode serves a public\ folder under its root; unpinned, that root could be
+            # this current directory. Every server below runs from here.
+            $null = New-Item -ItemType Directory -Path (Join-Path $script:Elsewhere 'public') -Force
+            Set-Content -LiteralPath (Join-Path $script:Elsewhere 'public' 'leak.txt') -Value 'PUBLIC-FROM-CWD' -Encoding utf8
 
             $script:Work = Join-Path $tmp ("nrgweb-work-{0}" -f ([Guid]::NewGuid().ToString('N')))
             $script:Fx   = & $script:NewFixture $script:Work
@@ -1868,6 +1913,77 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
 
             It 'refusing leaves no scan behind: the status route knows no run' {
                 (& $script:Raw $script:Port '/api/scan/does-not-exist/status').Status | Should -Be 404
+            }
+        }
+
+        Context 'what Pode used to answer on its own now carries the headers and follows the contract' {
+            # Pode's own 404 and 405 pages were sent before any middleware ran: no
+            # security headers, no Host check, and a static folder served its own
+            # browsable listing for a path that resolved back to it.
+            It 'a traversal under /static is a plain 404 with the headers, never a folder listing: <Label>' -ForEach @(
+                @{ Label = 'encoded slashes';  Target = '/static/..%2F..%2FREADME.md' }
+                @{ Label = 'literal dots';     Target = '/static/../../README.md' }
+                @{ Label = 'the folder';       Target = '/static/' }
+                @{ Label = 'another file';     Target = '/static/other.js' }) {
+                $r = & $script:Raw $script:Port $Target
+                $r.Status | Should -Be 404
+                $r.Headers['content-security-policy'] | Should -Not -BeNullOrEmpty
+                $r.Headers['cache-control'] | Should -Be 'no-store'
+                $r.Body | Should -Not -Match '<html' -Because "Pode's listing or error page is not the answer"
+                $r.Body | Should -Be 'Not found.'
+            }
+
+            It 'the two assets are served by their routes with their media types' {
+                $js = & $script:Raw $script:Port '/static/app.js'
+                $js.Status | Should -Be 200
+                $js.Headers['content-type'] | Should -Match '^text/javascript'
+                $css = & $script:Raw $script:Port '/static/app.css'
+                $css.Status | Should -Be 200
+                $css.Headers['content-type'] | Should -Match '^text/css'
+            }
+
+            It 'a path no route serves is a 404 that carries the headers: <Label>' -ForEach @(
+                @{ Label = 'outside /api';           Target = '/nosuch';      Json = $false }
+                @{ Label = 'a reflected path';       Target = '/nosuch%3Cb%3Ex%3C%2Fb%3E'; Json = $false }
+                @{ Label = 'under /api';             Target = '/api/nosuch';  Json = $true }) {
+                $r = & $script:Raw $script:Port $Target
+                $r.Status | Should -Be 404
+                $r.Headers['content-security-policy'] | Should -Not -BeNullOrEmpty
+                $r.Headers['cache-control'] | Should -Be 'no-store'
+                $r.Headers['cross-origin-resource-policy'] | Should -Be 'same-origin'
+                $r.Body | Should -Not -Match '<html|nosuch'
+                if ($Json) {
+                    $r.Headers['content-type'] | Should -Match '^application/json'
+                    $j = $r.Body | ConvertFrom-Json
+                    $j.error | Should -BeExactly 'NotFound'
+                } else {
+                    $r.Body | Should -Be 'Not found.'
+                }
+            }
+
+            It 'a method a route does not allow goes through the request policy and the headers: <Label>' -ForEach @(
+                @{ Label = 'POST to the index (not JSON: refused by the policy)'; Target = '/'; Headers = @{}; Status = 403 }
+                @{ Label = 'POST to an asset as JSON (no route: 404)'; Target = '/static/app.js'; Headers = @{ 'Content-Type' = 'application/json' }; Status = 404 }
+                @{ Label = 'OPTIONS preflight to the scan route (refused, no CORS header)'; Target = '/api/scan'; Headers = @{ 'Origin' = 'http://evil.example'; 'Access-Control-Request-Method' = 'POST' }; Status = 403 }) {
+                $r = & $script:Raw $script:Port $Target $(if ($Label -like 'OPTIONS*') { 'OPTIONS' } else { 'POST' }) $Headers
+                $r.Status | Should -Be $Status
+                $r.Headers['content-security-policy'] | Should -Not -BeNullOrEmpty
+                $r.Headers.ContainsKey('access-control-allow-origin') | Should -BeFalse
+                $r.Body | Should -Not -Match '<html'
+            }
+
+            It "a public folder in the server's current directory is not served" {
+                foreach ($t in '/public/leak.txt', '/leak.txt') {
+                    $r = & $script:Raw $script:Port $t
+                    $r.Status | Should -Be 404
+                    $r.Body | Should -Not -Match 'PUBLIC-FROM-CWD'
+                }
+            }
+
+            It 'the image policy names no blanket https source' {
+                $r = & $script:Raw $script:Port '/'
+                $r.Headers['content-security-policy'] | Should -Match "img-src 'self' data:(;| )"
+                $r.Headers['content-security-policy'] | Should -Not -Match "img-src [^;]*https:"
             }
         }
 
