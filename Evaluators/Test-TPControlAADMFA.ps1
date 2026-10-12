@@ -234,8 +234,10 @@ function Test-TPControlAADMFA {
     # Three separate questions, kept apart: is MFA REQUIRED (enforcement, judged across
     # every qualifying policy so exclusions are combined, not ignored), are users
     # REGISTERED (registration), and is the method phishing-resistant (AAD-1.3, not
-    # inferred here). Each verified half stays in the Detail.
-    $cov = Get-TPCAEffectiveCoverage -Policies $enforcing
+    # inferred here). Each verified half stays in the Detail. MFA has to reach every
+    # interactive sign-in: a policy limited to the browser leaves the desktop and
+    # mobile clients unprompted and is narrower scope, not all-user coverage.
+    $cov = Get-TPCAEffectiveCoverage -Policies $enforcing -RequiredClientAppTypes (Get-TPCAInteractiveClientAppTypes)
     $cv  = Get-TPCACoverageVerdict -Coverage $cov -What 'MFA is required'
     $verified = @($cv.Verified); $short = @($cv.Shortfalls); $unknown = @($cv.NotEstablished)
     if ($cov.Kind -eq 'None') {

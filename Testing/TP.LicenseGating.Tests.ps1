@@ -121,8 +121,12 @@ Describe 'License gating and the not-configured rule' {
             Test-TPControlDefenderEndpointDLP | Out-Null
             (One 'DEF-4.5').State | Should -Be 'Gap'
             Clear-TPState
-            # The collector's trimmed projection of Workload 'Exchange, SharePoint, EndpointDevices'.
-            Set-TPRawData -Key 'Purview' -Data (Bag @{ DLPPolicies = @(@{ Name = 'p'; Workloads = @('Exchange','SharePoint','EndpointDevices') }); SectionStatus = @{ DLPPolicies = 'Collected' } })
+            # The collector's trimmed projection of Workload 'Exchange, SharePoint, EndpointDevices'. The
+            # policy must be enforcing (Mode Enable) with an enabled rule: the Devices label alone is not
+            # protection (TP.FalsePassPaths.Tests.ps1).
+            Set-TPRawData -Key 'Purview' -Data (Bag @{ DLPPolicies = @(@{ Name = 'p'; Mode = 'Enable'; Workloads = @('Exchange','SharePoint','EndpointDevices') })
+                                                        DLPRules = @(@{ Name = 'r'; ParentPolicyName = 'p'; Disabled = $false; BlockAccess = $true; SensitiveInfoTypes = @('Credit Card Number') })
+                                                        SectionStatus = @{ DLPPolicies = 'Collected'; DLPRules = 'Collected' } })
             Test-TPControlDefenderEndpointDLP | Out-Null
             (One 'DEF-4.5').State | Should -Be 'Satisfied'
         }
