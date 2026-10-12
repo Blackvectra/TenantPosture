@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **[Fix] An upgrade from the NRG-named version keeps working.** From the review of the rename (#127).
+  The endpoint script wrote its result to `ProgramData\TP` while the RMM job on an already-deployed machine
+  reads `ProgramData\NRG`, so after the script was updated the job would collect a stale file forever with
+  nothing to say so; with no `-OutputPath`, a machine that has an `NRG` folder and no `TP` folder beside it keeps
+  writing to `NRG` (`Get-DefaultOutputDirectory`, tested against a temp ProgramData), and a new machine uses `TP`.
+  The README, the command reference and the script's own help named the old folder while the script wrote the
+  new one; they agree now. `Build/Sign-Release.ps1` finds the signing thumbprint an earlier version saved under
+  `~/.nrg-assessment` when there is none at the new location, with the same ownership and ACL checks and a notice
+  to move it. (The collector already accepts the earlier `nrg-device-compliance` schema tag at major version one,
+  and `TP.DeviceIdentity.Tests.ps1` pins it.)
 - **[Security] The incident-response data contract.** The IR mode's results JSON carries sign-in
   addresses, geolocation and message metadata by design (they are the indicators), and the audit of
   2026-10-09 found two things in it that are not: every registered phone method's full number, and

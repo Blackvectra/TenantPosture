@@ -41,7 +41,8 @@
 .PARAMETER CertificateThumbprint
     SHA-1 thumbprint of the code-signing certificate. If omitted, reads from
     ~/.tp-assessment/signing-thumbprint.txt (written by New-TPCodeSigningCert.ps1
-    when invoked with -SaveThumbprintForBuild).
+    when invoked with -SaveThumbprintForBuild), else the file an earlier version
+    saved at ~/.nrg-assessment/signing-thumbprint.txt, with a notice to move it.
 
 .PARAMETER TimestampServer
     URL of an RFC 3161 timestamp server. Defaults to DigiCert.
@@ -257,6 +258,15 @@ $toFull = { param($rel) Join-Path $RepoRoot ($rel -replace '/', [string][System.
 # New-TPCodeSigningCert.ps1 stashed in the operator's profile.
 if (-not $CertificateThumbprint) {
     $thumbFile = Join-Path $env:USERPROFILE '.tp-assessment/signing-thumbprint.txt'
+    # The earlier version saved it under .nrg-assessment. A workstation that was set up then
+    # has no file at the new place; the same checks below apply to whichever file is used.
+    if (-not (Test-Path -LiteralPath $thumbFile)) {
+        $earlierThumb = Join-Path $env:USERPROFILE '.nrg-assessment/signing-thumbprint.txt'
+        if (Test-Path -LiteralPath $earlierThumb) {
+            $thumbFile = $earlierThumb
+            Write-Warning "Using the signing thumbprint an earlier version saved at $earlierThumb. Move it to ~/.tp-assessment/signing-thumbprint.txt (or run Build/New-TPCodeSigningCert.ps1 -SaveThumbprintForBuild) so this notice goes away."
+        }
+    }
     if (Test-Path -LiteralPath $thumbFile) {
         # The pointer decides which key signs the release. It is trusted only
         # when this user owns both the file and its folder and no other

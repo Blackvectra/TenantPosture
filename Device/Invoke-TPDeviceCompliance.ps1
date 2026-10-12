@@ -32,8 +32,10 @@
     the bug class this tool exists to avoid.
 
 .PARAMETER OutputPath
-    Where to write the JSON. Defaults to
-    C:\ProgramData\NRG\device-compliance.json.
+    Where to write the JSON. Defaults to C:\ProgramData\TP\device-compliance.json.
+    A machine that an earlier version already ran on keeps writing to
+    C:\ProgramData\NRG\device-compliance.json (the folder the RMM job reads)
+    until a TP folder exists beside it.
 
 .PARAMETER PassThru
     Also emit the result object to the pipeline, for interactive use.
@@ -57,7 +59,8 @@
 
 .EXAMPLE
     .\Invoke-TPDeviceCompliance.ps1
-    Writes C:\ProgramData\NRG\device-compliance.json.
+    Writes C:\ProgramData\TP\device-compliance.json (or the earlier NRG folder, when that
+    is the one already in use on this machine).
 
 .EXAMPLE
     .\Invoke-TPDeviceCompliance.ps1 -OutputPath D:\collect\%COMPUTERNAME%.json
@@ -103,6 +106,22 @@ $ErrorActionPreference = 'Stop'
 $script:ScriptVersion = '1.1.0'
 $script:Schema        = 'tp-device-compliance/1.0'
 $script:Checks        = New-Object System.Collections.ArrayList
+
+# Where the result goes when no -OutputPath is given. New installs use ProgramData\TP. A machine
+# an earlier version already ran on has ProgramData\NRG, and the RMM job that collects the file
+# reads THAT folder: writing somewhere else after an upgrade would leave it collecting a stale
+# result forever, with nothing to say so. So an existing NRG folder with no TP folder beside it
+# keeps being used; once a TP folder exists (a new job reads it), TP wins. A pure function of
+# the ProgramData root, so it can be tested without touching the real one.
+function Get-DefaultOutputDirectory {
+    param([Parameter(Mandatory = $true)] [string] $ProgramDataRoot)
+    $current = Join-Path $ProgramDataRoot 'TP'
+    $earlier = Join-Path $ProgramDataRoot 'NRG'
+    if ((Test-Path -LiteralPath $earlier -PathType Container) -and -not (Test-Path -LiteralPath $current -PathType Container)) {
+        return $earlier
+    }
+    return $current
+}
 
 # ── Result vocabulary ────────────────────────────────────────────────────────
 #   Pass          the check ran and the device meets the requirement
@@ -912,7 +931,7 @@ try {
     }
 
     if (-not $OutputPath) {
-        $dir = Join-Path $env:ProgramData 'TP'
+        $dir = Get-DefaultOutputDirectory -ProgramDataRoot $env:ProgramData
         if (-not (Test-Path -LiteralPath $dir)) {
             $null = [System.IO.Directory]::CreateDirectory($dir)
         }
