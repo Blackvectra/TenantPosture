@@ -63,7 +63,12 @@
   on disk the record does not know, since the module dot-sources every `.ps1` under its folders on
   import; with no record it unblocks nothing and says what to review. The verifier leaves out only
   the manifest it reads, by exact path. RELEASING.md and the checklist give the unsigned release
-  its own two commands instead of a signing block to half-skip.
+  its own two commands instead of a signing block to half-skip. The installer unblocks only script
+  files whose Authenticode signature verifies on the workstation (a hash record inside the archive
+  proves nothing: whoever changed the archive rewrites it; the record only names files that are not
+  part of the release), and the verifier's archive mode leaves out only the root `output\` folder,
+  so a script planted under `Lib\output\` or `Lib\.github\`, where the module loader runs it,
+  reaches the extra-file check.
 - **[Honesty] The maturity label is provisional when evidence is incomplete.** `Get-TPMaturityTier`
   excludes Error and unknown-state findings from the score denominator (by design: a tool failure
   is not a gap), but it then printed an unqualified tier, so 50 passes beside 50 errored checks

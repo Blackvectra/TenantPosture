@@ -81,14 +81,29 @@ if ($archiveMode) {
 # out, by its exact path: a prefix match would also have hidden a planted
 # tools\integrity-manifest-evil.ps1 from the extra-file check.
 $manifestFull = if (Test-Path -LiteralPath $ManifestPath) { (Resolve-Path -LiteralPath $ManifestPath).ProviderPath } else { $ManifestPath }
-$files = Get-ChildItem -LiteralPath $repoRoot -Recurse -File -ErrorAction Stop |
+# Archive mode leaves out only the root output\ folder (what the tool itself
+# writes) and the manifests, never a folder by name anywhere in the tree: the
+# module loader runs every *.ps1 under Lib, Collectors, Evaluators and
+# Publishers, so a script planted at Lib\output\evil.ps1 or Lib\.github\x.ps1
+# must reach the extra-file check. The repository mode keeps its folder
+# exclusions: there, extras are reported, not failed.
+# -Force: PowerShell treats a dot-prefixed name as hidden on Linux and macOS,
+# and a hidden folder is where a planted script would hide from a walk.
+$rootOutput = (Join-Path $repoRoot 'output') + [string][System.IO.Path]::DirectorySeparatorChar
+$files = Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Force -ErrorAction Stop |
     Where-Object {
-        ($archiveMode -or $_.Extension -in $includeExtensions) -and
-        $_.FullName -notmatch '[\\/]output[\\/]' -and
-        $_.FullName -notmatch '[\\/]\.git[\\/]' -and
-        $_.FullName -notmatch '[\\/]\.github[\\/]' -and
-        $_.FullName -ne $manifestFull -and
-        $_.FullName -ne $archiveManifest
+        if ($archiveMode) {
+            (-not $_.FullName.StartsWith($rootOutput, [System.StringComparison]::Ordinal)) -and
+            $_.FullName -ne $manifestFull -and
+            $_.FullName -ne $archiveManifest
+        } else {
+            $_.Extension -in $includeExtensions -and
+            $_.FullName -notmatch '[\\/]output[\\/]' -and
+            $_.FullName -notmatch '[\\/]\.git[\\/]' -and
+            $_.FullName -notmatch '[\\/]\.github[\\/]' -and
+            $_.FullName -ne $manifestFull -and
+            $_.FullName -ne $archiveManifest
+        }
     } |
     Sort-Object FullName
 

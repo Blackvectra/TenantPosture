@@ -130,7 +130,8 @@ jobs:
           Remove-Item -LiteralPath "./$name/tools/integrity-manifest.txt" -Force -ErrorAction SilentlyContinue
           # A per-file manifest travels inside the archive: the release's own
           # integrity record, generated from the tree that was packaged.
-          $manifest = Get-ChildItem -LiteralPath "./$name" -Recurse -File | Sort-Object FullName | ForEach-Object {
+          # -Force: the verifier walks hidden entries too, so the record must name them.
+          $manifest = Get-ChildItem -LiteralPath "./$name" -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
               '{0}  {1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower(), [System.IO.Path]::GetRelativePath("./$name", $_.FullName).Replace('\', '/')
           }
           $manifest | Out-File -FilePath "./$name/FILES.sha256" -Encoding utf8NoBOM
