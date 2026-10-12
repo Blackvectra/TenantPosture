@@ -179,7 +179,11 @@ function Get-TPPIMScopedPolicies {
 # ── Conditional Access reading helpers ───────────────────────────────────────
 # A grant with operator OR is satisfied by ANY of its controls, so "requires
 # MFA" holds only when every alternative is MFA (or an authentication
-# strength). "compliantDevice OR mfa" requires neither.
+# strength). "compliantDevice OR mfa" requires neither. A custom control
+# (grantControls.customAuthenticationFactors, a third-party MFA provider) is
+# an alternative like any other: "mfa OR custom control" lets the custom
+# provider satisfy the grant, so it does not require Entra MFA; left out of
+# this list, that grant read as MFA mandatory.
 function Get-TPCAGrantAlternatives {
     [CmdletBinding()]
     param([AllowNull()] $Policy)
@@ -188,6 +192,7 @@ function Get-TPCAGrantAlternatives {
     foreach ($b in $builtIn) { $alts.Add($b) }
     if ([string](Get-TPNestedProperty -Object $Policy -Path 'GrantControls.AuthStrengthId' -Default '')) { $alts.Add('authStrength') }
     foreach ($t in @(Get-TPNestedProperty -Object $Policy -Path 'GrantControls.TermsOfUse' -Default @() | Where-Object { $_ })) { $alts.Add('termsOfUse') }
+    foreach ($c in @(Get-TPNestedProperty -Object $Policy -Path 'GrantControls.CustomControls' -Default @() | Where-Object { $_ })) { $alts.Add('customControl') }
     $op = [string](Get-TPNestedProperty -Object $Policy -Path 'GrantControls.Operator' -Default '')
     [pscustomobject]@{ Operator = $(if ($alts.Count -le 1) { 'AND' } else { $op.ToUpperInvariant() }); Controls = @($alts) }
 }
@@ -438,7 +443,9 @@ function Test-TPControlAADPhishResistantMFA {
         $cands = @(); $narrowed = @(); $roleUnverified = @()
         foreach ($p in $phishResistantPolicies) {
             $nm = [string]$p.DisplayName
-            $nar = @(Get-TPCANarrowing -Policy $p | Where-Object { $_ -ne 'applies to only some users, groups or roles' })
+            # Role scope is judged below; a policy that reaches only the browser (or
+            # only the desktop clients) leaves the other sign-ins unprotected.
+            $nar = @(Get-TPCANarrowing -Policy $p -RequiredClientAppTypes (Get-TPCAInteractiveClientAppTypes) -Ignore @('applies to only some users, groups or roles'))
             if (-not (Test-TPCAAllUsers $p)) {
                 $rc = Get-TPCAAdminRoleCoverage -Policy $p -PrivRoleIds $privIds
                 if ($null -eq $rc) { $roleUnverified += $nm }
@@ -509,24 +516,29 @@ function Test-TPControlAADSignInRisk {
         (Test-TPCAGrantRequires -Policy $_ -Any @('mfa','authStrength','block'))
     })
     # Risk levels are discrete: a policy applies only to the levels it
-    # selects. Microsoft's template selects High and Medium; the levels are
-    # combined across every enabled policy that responds.
+    # selects. Microsoft's template selects High and Medium. Each level is
+    # judged on WHO the policies selecting it protect (Get-TPRiskLevelCoverage):
+    # all users on all applications, every interactive client app type, no
+    # platform, location or device-filter narrowing, with exclusions combined
+    # across the policies that select the level. Merging the levels of every
+    # enabled policy, whatever its scope, credited a pilot-group policy and a
+    # policy excluding a group with tenant-wide protection.
     $levels = @($riskPolicies | ForEach-Object { @($_.Conditions.SignInRiskLevels) } | ForEach-Object { [string]$_ } | Sort-Object -Unique)
-    $high = $levels -contains 'high'; $medium = $levels -contains 'medium'
     $names = (@($riskPolicies | ForEach-Object { [string]$_.DisplayName }) -join ', ')
+    $perLevel = Get-TPRiskLevelCoverage -Policies $riskPolicies -Condition 'SignInRiskLevels' -RequiredLevels @('high', 'medium')
+    $fullLevels = @($perLevel.Keys | Where-Object { $perLevel[$_].Kind -eq 'Full' })
     $ro14 = Get-TPRiskReportOnlyPolicies -Policies $ca.Data['Policies'] -Condition 'SignInRiskLevels' -RequiredLevels @('high','medium') -GrantAny @('mfa','authStrength','block')
-    if (-not ($high -and $medium) -and (Get-TPPolicyListIncomplete -CA $ca)) {
+    if ($fullLevels.Count -lt 2 -and (Get-TPPolicyListIncomplete -CA $ca)) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
             -Detail "Not assessed: the Conditional Access policy list could not be read in full (the beta list failed and the v1.0 list withholds some policies), so whether a complete sign-in risk policy exists was not established.$(if ($names) { " Enabled sign-in risk policies read: $names." })"
         return
     }
-    if ($high -and $medium) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Sign-in risk Conditional Access in force for high and medium risk: $names"
-    } elseif ($high -or $medium) {
-        $missing = if ($high) { 'medium' } else { 'high' }
-        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "The enabled sign-in risk policies ($names) apply to $(if ($high) { 'high' } else { 'medium' })-risk sign-ins only. A policy applies only to the risk levels it selects, so a $missing-risk sign-in is let through without a challenge; Microsoft's template selects High and Medium." `
-            -CurrentValue "signInRiskLevels = $($levels -join ', ')" -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
+    if ($riskPolicies.Count -gt 0 -and @($perLevel.Keys | Where-Object { @($perLevel[$_].Selecting).Count -gt 0 }).Count -gt 0) {
+        $cv = Get-TPRiskCoverageVerdict -PerLevel $perLevel -Noun 'sign-in risk' -Consequence 'is let through without a challenge'
+        Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
+            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished `
+            -CurrentValue "signInRiskLevels = $($levels -join ', '); all-user coverage: $(($perLevel.Keys | ForEach-Object { "$_ $($perLevel[$_].Kind)" }) -join ', ')" `
+            -RequiredValue 'CA policy in force for all users on all applications: signInRiskLevels = high/medium + require MFA'
     } elseif ($riskPolicies.Count -eq 0 -and @($ro14.Qualifying).Count -gt 0) {
         Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
             -Detail "A sign-in risk policy meets every requirement (high and medium sign-in risk, all users and applications, a responding control) but is in report-only mode, which collects evaluation data and enforces nothing: $(@($ro14.Qualifying) -join ', '). Until it is turned on, a risky sign-in is let through without a challenge; Partial is still a failed baseline requirement.$(Get-TPRiskReportOnlyNote -ReportOnly $ro14)" `
@@ -571,7 +583,7 @@ function Get-TPRiskReportOnlyPolicies {
         $missing = @($RequiredLevels | Where-Object { $_ -notin $levels })
         if ($missing.Count -gt 0) { $why.Add("does not select $($missing -join '/') risk") }
         if (-not (Test-TPCAGrantRequires -Policy $pol -Any $GrantAny)) { $why.Add('does not require a responding control') }
-        foreach ($n in @(Get-TPCANarrowing -Policy $pol | Where-Object { $_ -ne 'applies only at certain risk levels' })) { $why.Add($n) }
+        foreach ($n in @(Get-TPCANarrowing -Policy $pol -RequiredClientAppTypes (Get-TPCAInteractiveClientAppTypes) -Ignore @('applies only at certain risk levels'))) { $why.Add($n) }
         if ($why.Count -eq 0) { $qualifying.Add($name) } else { $other.Add("$name ($($why -join '; '))") }
     }
     [pscustomobject]@{ Qualifying = @($qualifying); Other = @($other) }
@@ -583,6 +595,55 @@ function Get-TPRiskReportOnlyNote {
     param([AllowNull()] $ReportOnly)
     if ($null -eq $ReportOnly -or @($ReportOnly.Other).Count -eq 0) { return '' }
     return " Report-only (audit mode, not enforcing) and not meeting the full requirement: $(@($ReportOnly.Other) -join '; ')."
+}
+
+function Get-TPRiskLevelCoverage {
+    <#
+    .SYNOPSIS
+        Per required risk level, the combined coverage (Get-TPCAEffectiveCoverage) of the
+        enabled, responding policies that select that level: a policy counts for a level
+        only when it selects it AND covers all users on all applications and every
+        interactive client app type with no platform, location or device-filter
+        narrowing; exclusions are judged across the policies selecting the level. The
+        risk condition itself is expected and not a narrowing. Each entry also carries
+        Selecting, the names of the policies that select the level at all.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param([AllowNull()] [AllowEmptyCollection()] [object[]] $Policies, [Parameter(Mandatory)] [ValidateSet('SignInRiskLevels', 'UserRiskLevels')] [string] $Condition,
+          [Parameter(Mandatory)] [string[]] $RequiredLevels)
+    $out = [ordered]@{}
+    foreach ($lvl in $RequiredLevels) {
+        $sel = @($Policies | Where-Object { $null -ne $_ -and (@(Get-TPNestedProperty -Object $_ -Path "Conditions.$Condition" -Default @() | ForEach-Object { [string]$_ }) -contains $lvl) })
+        $cov = Get-TPCAEffectiveCoverage -Policies $sel -RequiredClientAppTypes (Get-TPCAInteractiveClientAppTypes) -Ignore @('applies only at certain risk levels')
+        $cov['Selecting'] = @($sel | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'DisplayName' -Default '') })
+        $out[$lvl] = $cov
+    }
+    return $out
+}
+
+function Get-TPRiskCoverageVerdict {
+    <#
+    .SYNOPSIS
+        Verified / Shortfalls / NotEstablished statements for a per-level coverage map
+        (Get-TPRiskLevelCoverage). A level no enabled policy selects is a shortfall; a
+        level selected only by narrower policies, or excluded for the same principals
+        everywhere, is a shortfall (Get-TPCACoverageVerdict); different exclusions leave
+        it not established.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $PerLevel, [Parameter(Mandatory)] [string] $Noun, [Parameter(Mandatory)] [string] $Consequence)
+    $v = @(); $s = @(); $u = @()
+    foreach ($lvl in @($PerLevel.Keys)) {
+        $cov = $PerLevel[$lvl]
+        if (@($cov.Selecting).Count -eq 0) {
+            $s += "No enabled policy responds to $lvl $Noun; a policy applies only to the risk levels it selects, so a $lvl-risk sign-in $Consequence."
+            continue
+        }
+        $cv = Get-TPCACoverageVerdict -Coverage $cov -What "A responding policy applies to $lvl $Noun"
+        $v += @($cv.Verified); $s += @($cv.Shortfalls); $u += @($cv.NotEstablished)
+    }
+    return [ordered]@{ Verified = $v; Shortfalls = $s; NotEstablished = $u }
 }
 
 # ── AAD-1.5 User Risk CA Policy ───────────────────────────────────────────────
@@ -609,19 +670,26 @@ function Test-TPControlAADUserRisk {
         (Test-TPCAGrantRequires -Policy $_ -Any @('mfa','authStrength','passwordChange','riskRemediation','unknownFutureValue','block'))
     })
     # Microsoft's template is "Require password change for high-risk users":
-    # a policy without the High level never applies to those accounts.
+    # a policy without the High level never applies to those accounts, and
+    # one that selects High is judged on who it protects (Get-TPRiskLevelCoverage),
+    # as for AAD-1.4.
     $levels = @($riskPolicies | ForEach-Object { @($_.Conditions.UserRiskLevels) } | ForEach-Object { [string]$_ } | Sort-Object -Unique)
     $names = (@($riskPolicies | ForEach-Object { [string]$_.DisplayName }) -join ', ')
+    $perLevel = Get-TPRiskLevelCoverage -Policies $riskPolicies -Condition 'UserRiskLevels' -RequiredLevels @('high')
     $ro15 = Get-TPRiskReportOnlyPolicies -Policies $ca.Data['Policies'] -Condition 'UserRiskLevels' -RequiredLevels @('high') -GrantAny @('mfa','authStrength','passwordChange','riskRemediation','unknownFutureValue','block')
     # Microsoft's v1.0 list withholds some policies (the risk-remediation ones were withheld on the first full
     # run), so with the beta list unread, "no qualifying policy" is not a conclusion the evidence supports.
-    if ($levels -notcontains 'high' -and (Get-TPPolicyListIncomplete -CA $ca)) {
+    if ($perLevel['high'].Kind -ne 'Full' -and (Get-TPPolicyListIncomplete -CA $ca)) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
             -Detail "Not assessed: the Conditional Access policy list could not be read in full (the beta list failed and the v1.0 list withholds some policies), so whether a user risk policy exists was not established.$(if ($names) { " Enabled user risk policies read: $names." })"
         return
     }
-    if ($levels -contains 'high') {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "User risk Conditional Access in force for high-risk users: $names"
+    if (@($perLevel['high'].Selecting).Count -gt 0) {
+        $cv = Get-TPRiskCoverageVerdict -PerLevel $perLevel -Noun 'user risk' -Consequence 'is not forced to change its password or blocked'
+        Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
+            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished `
+            -CurrentValue "userRiskLevels = $($levels -join ', '); all-user coverage for high: $($perLevel['high'].Kind)" `
+            -RequiredValue 'CA policy in force for all users on all applications: userRiskLevels = high + require password change or risk remediation'
     } elseif ($riskPolicies.Count -eq 0 -and @($ro15.Qualifying).Count -gt 0) {
         Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
             -Detail "A user risk policy meets every requirement (high user risk, all users and applications, a responding control) but is in report-only mode, which collects evaluation data and enforces nothing: $(@($ro15.Qualifying) -join ', '). Until it is turned on, an account Identity Protection rates high risk is not forced to change its password or blocked; Partial is still a failed baseline requirement.$(Get-TPRiskReportOnlyNote -ReportOnly $ro15)" `

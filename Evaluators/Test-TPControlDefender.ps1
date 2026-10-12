@@ -945,11 +945,65 @@ function Test-TPControlDefenderEndpointDLP {
         return
     }
     $endpointDLP = @($pvw.Data['DLPPolicies'] ?? @() | Where-Object { $_.Workloads -contains 'Devices' -or $_.Workloads -contains 'EndpointDevices' })
-    if ($endpointDLP.Count -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($endpointDLP.Count) Endpoint DLP policy(ies) active. Sensitive data actions on endpoints (copy to USB, print, upload) are monitored or blocked."
-    } else {
+    if ($endpointDLP.Count -eq 0) {
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No Endpoint DLP policies detected. Users can copy sensitive files to USB drives, personal cloud storage, or print them without policy controls. Requires Defender for Endpoint + E5 Compliance or Microsoft 365 E5.' -Remediation $ctrl.Remediation
+        return
     }
+    # A policy that names the Devices location is not a policy that protects it. Only
+    # Mode Enable enforces (the same three Mode groups DEF-4.1 reads: test mode and
+    # Disable enforce nothing, an empty or unrecognized Mode is unknown), and an
+    # enforcing policy applies only its enabled rules (Get-TPDlpRuleStates), so one
+    # with no enabled rule monitors and blocks nothing. "Any policy listing Devices"
+    # reported a disabled or test-mode Endpoint DLP policy as active protection.
+    $knownOff  = @('TestWithNotifications', 'TestWithoutNotifications', 'Disable', 'PendingDeletion')
+    $modeOf    = { param($p) [string](Get-TPObjectField -Item $p -Key 'Mode' -Default '') }
+    $nameOf    = { param($p) [string](Get-TPObjectField -Item $p -Key 'Name' -Default '?') }
+    $labelOf   = { param($l) (@($l) | ForEach-Object { "$(& $nameOf $_) [$(if (& $modeOf $_) { & $modeOf $_ } else { 'mode not read' })]" }) -join '; ' }
+    $enforcing    = @($endpointDLP | Where-Object { (& $modeOf $_) -eq 'Enable' })
+    $notEnforcing = @($endpointDLP | Where-Object { (& $modeOf $_) -in $knownOff })
+    $unknownMode  = @($endpointDLP | Where-Object { (& $modeOf $_) -ne 'Enable' -and (& $modeOf $_) -notin $knownOff })
+    $verified = @(); $short = @(); $unknown = @()
+    if ($enforcing.Count -gt 0) {
+        $enfNames = (@($enforcing | ForEach-Object { & $nameOf $_ }) -join ', ')
+        $plural = if ($enforcing.Count -eq 1) { 'y' } else { 'ies' }
+        if (-not (Test-TPSectionCollected $pvw 'DLPRules')) {
+            $unknown += "whether the enforcing Endpoint DLP polic$plural ($enfNames) has an enabled rule, because DLP rules were not collected; an enforcing policy with no enabled rule monitors and blocks nothing."
+        } else {
+            $states = @(Get-TPDlpRuleStates -Policies $enforcing -Rules @($pvw.Data['DLPRules'] ?? @()))
+            $live   = @($states | Where-Object { $_.State -eq 'Enforcing' })
+            $off    = @($states | Where-Object { $_.State -eq 'Disabled' })
+            if ($live.Count -gt 0) {
+                $blocks = @($live | Where-Object { $_.Blocks -eq $true }).Count
+                $notify = @($live | Where-Object { $_.Blocks -eq $false }).Count
+                $unread = @($live | Where-Object { $null -eq $_.Blocks }).Count
+                $how = @()
+                if ($blocks) { $how += "$blocks block$(if ($blocks -ne 1) { '' } else { 's' }) access" }
+                if ($notify) { $how += "$notify audit or notify only" }
+                if ($unread) { $how += "$unread with the block action not read" }
+                $verified += "$($enforcing.Count) Endpoint DLP polic$plural in enforcing mode (Mode Enable) with $($live.Count) enabled rule(s) applying to the Devices location: $(($live | ForEach-Object { "$($_.Rule) [$($_.Policy)]" }) -join ', ') ($($how -join '; ')). Sensitive data actions on endpoints (copy to USB, print, upload) are monitored or blocked by those rules."
+            } else {
+                $short += "The Endpoint DLP polic$plural $enfNames $(if ($enforcing.Count -eq 1) { 'is' } else { 'are' }) in enforcing mode (Mode Enable) but $(if ($enforcing.Count -eq 1) { 'has' } else { 'have' }) no enabled rule ($($off.Count) disabled), so no sensitive data action on endpoints is monitored or blocked."
+            }
+        }
+    }
+    # No enforcing policy and no unknown mode: the verdict sentence first, then the policies it rests on.
+    if ($enforcing.Count -eq 0 -and $unknownMode.Count -eq 0) {
+        $short += 'No Endpoint DLP policy is in enforcing mode (Mode Enable), so no sensitive data action on endpoints is monitored or blocked.'
+    }
+    # A policy in test mode or turned off is reported, never credited, and never a shortfall beside a
+    # verified or unresolved enforcing policy: it changes nothing about what that policy does.
+    if ($notEnforcing.Count -gt 0) {
+        $note = "Not counted (not enforcing; test mode monitors matches and enforces nothing, Disable does nothing): $(& $labelOf $notEnforcing)."
+        if ($verified.Count -gt 0) { $verified += $note } elseif ($unknown.Count -gt 0) { $unknown += $note } else { $short += $note }
+    }
+    if ($unknownMode.Count -gt 0) {
+        $um = & $labelOf $unknownMode
+        if ($verified.Count -gt 0) { $verified += "Not counted (mode not read): $um." }
+        else { $unknown += "whether $um enforces, because its Mode was empty or not recognized." }
+    }
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+        -CurrentValue "Endpoint DLP policies: $(& $labelOf $endpointDLP)" `
+        -RequiredValue 'At least one Endpoint DLP policy in enforcing mode (Mode Enable) with an enabled rule, scoped to the Devices location'
 }
 
 # ── DEF-4.6 Attack Simulation Training Active ─────────────────────────────────

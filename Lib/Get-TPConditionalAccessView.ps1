@@ -138,6 +138,7 @@ function Get-TPCAPolicyDescription {
                 'domainJoinedDevice' { 'a Microsoft Entra hybrid joined device' }
                 'authStrength'    { 'an authentication strength' }
                 'termsOfUse'      { 'terms of use' }
+                'customControl'   { 'a custom control (third-party provider)' }
                 'passwordChange'  { 'a password change' }
                 'compliantApplication' { 'an approved client app' }
                 default           { [string]$_ }
@@ -154,7 +155,17 @@ function Get-TPCAPolicyDescription {
 # Each returns 'Enforced' | 'Similar' | 'NoMatch'. 'Enforced' is only ever
 # returned for a policy that is State 'enabled': callers gate on state first,
 # so a report-only or disabled policy that would otherwise match is always
-# 'Similar', never 'Enforced'.
+# 'Similar', never 'Enforced'. A policy whose client-apps condition leaves out
+# the browser or the mobile and desktop clients reaches only some sign-ins, so
+# the MFA, risk and device templates (the same rule the scored evaluators
+# apply through Get-TPCANarrowing) are 'Similar' for it, never 'Enforced'.
+
+function Test-TPCAInteractiveClientApps {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)] $Policy)
+    return ([string](Get-TPCAClientAppTypeShortfall -Policy $Policy -Required (Get-TPCAInteractiveClientAppTypes)) -eq '')
+}
 
 function Test-TPCAAllResourcesNoExclusion {
     [CmdletBinding()]
@@ -239,7 +250,7 @@ function Test-TPCATemplateMatch {
             if (-not (Test-TPCAAllUsers -Policy $Policy)) { return 'NoMatch' }
             $needsMfa = Test-TPCAGrantRequires -Policy $Policy -Any @('mfa', 'authStrength')
             if (-not $needsMfa) { return 'NoMatch' }
-            if ($isOn -and (Test-TPCAAllResourcesNoExclusion -Policy $Policy)) { return 'Enforced' }
+            if ($isOn -and (Test-TPCAAllResourcesNoExclusion -Policy $Policy) -and (Test-TPCAInteractiveClientApps -Policy $Policy)) { return 'Enforced' }
             return 'Similar'
         }
         'mfa-admins' {
@@ -248,7 +259,7 @@ function Test-TPCATemplateMatch {
             if ($null -eq $cov -or $cov.CoveredCount -eq 0) { return 'NoMatch' }
             $needsMfa = Test-TPCAGrantRequires -Policy $Policy -Any @('mfa', 'authStrength')
             if (-not $needsMfa) { return 'NoMatch' }
-            if ($isOn -and $cov.CoveredCount -eq $cov.TotalPriv) { return 'Enforced' }
+            if ($isOn -and $cov.CoveredCount -eq $cov.TotalPriv -and (Test-TPCAInteractiveClientApps -Policy $Policy)) { return 'Enforced' }
             return 'Similar'
         }
         'admin-phish-resistant-mfa' {
@@ -257,7 +268,7 @@ function Test-TPCATemplateMatch {
             if ($null -eq $cov -or $cov.CoveredCount -eq 0) { return 'NoMatch' }
             $phish = Test-TPAuthStrengthPhishResistant -GrantControls (Get-TPNestedProperty -Object $Policy -Path 'GrantControls' -Default $null)
             if ($phish -ne $true) { return 'NoMatch' }
-            if ($isOn -and $cov.CoveredCount -eq $cov.TotalPriv) { return 'Enforced' }
+            if ($isOn -and $cov.CoveredCount -eq $cov.TotalPriv -and (Test-TPCAInteractiveClientApps -Policy $Policy)) { return 'Enforced' }
             return 'Similar'
         }
         'mfa-azure-mgmt' {
@@ -273,7 +284,7 @@ function Test-TPCATemplateMatch {
             if (-not $targetsAzureMgmt) { return 'NoMatch' }
             $needsMfa = Test-TPCAGrantRequires -Policy $Policy -Any @('mfa', 'authStrength')
             if (-not $needsMfa) { return 'NoMatch' }
-            if ($isOn -and (Test-TPCAAllUsers -Policy $Policy)) { return 'Enforced' }
+            if ($isOn -and (Test-TPCAAllUsers -Policy $Policy) -and (Test-TPCAInteractiveClientApps -Policy $Policy)) { return 'Enforced' }
             return 'Similar'
         }
         'block-device-code' {
@@ -299,7 +310,7 @@ function Test-TPCATemplateMatch {
             if (-not ($high -or $medium)) { return 'NoMatch' }
             $responds = Test-TPCAGrantRequires -Policy $Policy -Any @('mfa', 'authStrength', 'block')
             if (-not $responds) { return 'NoMatch' }
-            if ($isOn -and $high -and $medium -and (Test-TPCAAllUsers -Policy $Policy)) { return 'Enforced' }
+            if ($isOn -and $high -and $medium -and (Test-TPCAAllUsers -Policy $Policy) -and (Test-TPCAInteractiveClientApps -Policy $Policy)) { return 'Enforced' }
             return 'Similar'
         }
         'user-risk' {
@@ -310,7 +321,7 @@ function Test-TPCATemplateMatch {
             if ($levels -notcontains 'high') { return 'NoMatch' }
             $responds = Test-TPCAGrantRequires -Policy $Policy -Any @('mfa', 'authStrength', 'passwordChange', 'riskRemediation', 'unknownFutureValue', 'block')
             if (-not $responds) { return 'NoMatch' }
-            if ($isOn -and (Test-TPCAAllUsers -Policy $Policy)) { return 'Enforced' }
+            if ($isOn -and (Test-TPCAAllUsers -Policy $Policy) -and (Test-TPCAInteractiveClientApps -Policy $Policy)) { return 'Enforced' }
             return 'Similar'
         }
         'device-compliance-all-users' {
@@ -318,7 +329,7 @@ function Test-TPCATemplateMatch {
             if (-not (Test-TPCAAllUsers -Policy $Policy)) { return 'NoMatch' }
             $requiresDevice = Test-TPCAGrantRequires -Policy $Policy -Any @('compliantDevice', 'domainJoinedDevice')
             if (-not $requiresDevice) { return 'NoMatch' }
-            if ($isOn -and (Test-TPCAAllResourcesNoExclusion -Policy $Policy)) { return 'Enforced' }
+            if ($isOn -and (Test-TPCAAllResourcesNoExclusion -Policy $Policy) -and (Test-TPCAInteractiveClientApps -Policy $Policy)) { return 'Enforced' }
             return 'Similar'
         }
         'compliant-hybrid-or-mfa-all-users' {
@@ -328,7 +339,7 @@ function Test-TPCATemplateMatch {
             $hasDevice = @($grant.Controls | Where-Object { $_ -in @('compliantDevice', 'domainJoinedDevice') }).Count -gt 0
             $hasMfa = @($grant.Controls | Where-Object { $_ -in @('mfa', 'authStrength') }).Count -gt 0
             if (-not ($grant.Operator -eq 'OR' -and $hasDevice -and $hasMfa)) { return 'NoMatch' }
-            if ($isOn) { return 'Enforced' }
+            if ($isOn -and (Test-TPCAInteractiveClientApps -Policy $Policy)) { return 'Enforced' }
             return 'Similar'
         }
         'persistent-browser' {
@@ -372,7 +383,7 @@ function Get-TPConditionalAccessView {
         $result.UnavailableReason = 'The Conditional Access baseline catalog (Config/conditional-access-baseline.json) could not be read.'
         return $result
     }
-    foreach ($req in @('Get-TPCAGrantAlternatives', 'Test-TPCAAllUsers', 'Test-TPCAAllApps', 'Test-TPAuthStrengthPhishResistant', 'Get-TPSecurityDefaultsState')) {
+    foreach ($req in @('Get-TPCAGrantAlternatives', 'Test-TPCAAllUsers', 'Test-TPCAAllApps', 'Test-TPAuthStrengthPhishResistant', 'Get-TPSecurityDefaultsState', 'Get-TPCAClientAppTypeShortfall')) {
         if (-not (Get-Command $req -ErrorAction SilentlyContinue)) {
             $result.UnavailableReason = "Required helper '$req' is not loaded."
             return $result
