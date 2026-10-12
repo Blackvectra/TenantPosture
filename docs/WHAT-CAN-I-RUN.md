@@ -96,7 +96,11 @@ Loops `Config\clients.json` using GDAP. One browser sign-in covers all tenants.
 .\Invoke-TPBatchAssessment.ps1              # all active clients
 .\Invoke-TPBatchAssessment.ps1 -OnlyClient example.com
 .\Invoke-TPBatchAssessment.ps1 -WhatIf      # preview, connects to nothing
+.\Invoke-TPBatchAssessment.ps1 -ClientsFile ~/tp-clients.json   # a file kept outside the repo
 ```
+
+`-WhatIf` lists each client with the `Profile`, `ThirdPartyEDR` and `ThirdPartyAwareness` its record sets (`-` means the
+record sets nothing; a profile's own declaration still applies). Each assessment reads the same file the batch was given.
 
 Per-client reports plus `output\batch-summary-<timestamp>.md`.
 

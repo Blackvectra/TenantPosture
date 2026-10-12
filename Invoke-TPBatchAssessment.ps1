@@ -25,7 +25,11 @@
     Batch summary:     output\batch-summary-<timestamp>.md
 
 .PARAMETER ClientsFile
-    Path to clients.json. Defaults to Config\clients.json.
+    Path to clients.json. Defaults to Config\clients.json. Each assessment reads its client's record
+    (declared EDR and awareness products, monitoring addresses, baseline tier, collectors) from this same
+    file, so it can live outside the repository. A client record may also name a Profile
+    (Config\profiles\<name>.psd1), so clients of different practices can share one batch; without one the
+    run uses TP_PROFILE, else Config\branding.psd1. -WhatIf lists each client with what its record sets.
 
 .PARAMETER OutputRoot
     Root directory for all client reports. Defaults to .\output\
@@ -98,6 +102,9 @@ $env:MSAL_ALLOW_BROKER = '0'
 
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
+. (Join-Path $scriptDir 'Lib' 'Resolve-TPProfilePath.ps1')
+. (Join-Path $scriptDir 'Lib' 'Get-TPClientRecord.ps1')
+
 if (-not $ClientsFile) { $ClientsFile = Join-Path $scriptDir 'Config' 'clients.json' }
 if (-not $OutputRoot)  { $OutputRoot  = Join-Path $scriptDir 'output' }
 
@@ -144,6 +151,24 @@ foreach ($c in $clients) {
         Write-Host "[!] ${cName}: DelegatedOrg '$cOrg' is missing or not a valid FQDN. Set it to the tenant's .onmicrosoft.com domain in clients.json." -ForegroundColor Red
         exit 1
     }
+    # A client's Profile and declared products are checked now, before any sign-in: a misspelled profile
+    # would otherwise stop that client's run after the whole batch had authenticated, and a product name
+    # the declaration rejects would stop it only after the assessment had run.
+    $cProfile = if ($c.PSObject.Properties['Profile']) { [string]$c.Profile } else { '' }
+    if ($cProfile) {
+        $pc = Resolve-TPProfilePath -Root $scriptDir -Name $cProfile
+        if ($pc.Status -in @('BadName', 'NotFound')) {
+            Write-Host "[!] ${cName}: Profile '$cProfile': $($pc.Message)" -ForegroundColor Red
+            exit 1
+        }
+    }
+    foreach ($declName in @('ThirdPartyEDR', 'ThirdPartyAwareness')) {
+        $declValue = if ($c.PSObject.Properties[$declName]) { [string]$c.$declName } else { '' }
+        if ($declValue -and $declValue -cnotmatch (Get-TPProductNamePattern)) {
+            Write-Host "[!] ${cName}: $declName '$declValue' is not a product name (letters, digits, spaces and . & ( ) + / - only, 2 to 60 characters). Fix it in clients.json." -ForegroundColor Red
+            exit 1
+        }
+    }
 }
 
 # ── Banner ────────────────────────────────────────────────────────────────────
@@ -152,8 +177,12 @@ Write-Host '================================================================' -F
 Write-Host " TenantPosture Batch  —  $($clients.Count) tenant(s)" -ForegroundColor Cyan
 Write-Host ' Auth: GDAP (one login covers all)' -ForegroundColor Cyan
 Write-Host '================================================================' -ForegroundColor Cyan
+# Each client with what ITS RECORD sets: a "-" means the record sets nothing, and whatever the profile
+# declares (EdrStack, AwarenessStack) still applies to that run.
+$recordField = { param($o, $n) if ($o.PSObject.Properties[$n] -and "$($o.$n)") { [string]$o.$n } else { '-' } }
 foreach ($c in $clients) {
     Write-Host "  $($c.ClientName) — $($c.TenantDomain)" -ForegroundColor White
+    Write-Host "      profile: $(& $recordField $c 'Profile')   EDR: $(& $recordField $c 'ThirdPartyEDR')   awareness: $(& $recordField $c 'ThirdPartyAwareness')" -ForegroundColor DarkGray
 }
 Write-Host ''
 
@@ -292,7 +321,9 @@ foreach ($client in $clients) {
             # Compliance (Purview) with -DelegatedOrganization. -KeepSession
             # leaves the shared GDAP Graph session up for the next client;
             # this loop tears down the per-client sessions itself.
-            $params = @{ OutputPath = $clientOut; TenantDomain = $client.TenantDomain; KeepSession = $true }
+            $params = @{ OutputPath = $clientOut; TenantDomain = $client.TenantDomain; KeepSession = $true; ClientsFile = $resolvedCfg }
+            # The client's own profile when its record names one (validated above); otherwise the child uses TP_PROFILE.
+            if ($client.PSObject.Properties['Profile'] -and "$($client.Profile)") { $params['Profile'] = [string]$client.Profile }
             if ($client.UserPrincipalName) { $params['UserPrincipalName'] = $client.UserPrincipalName }
             if ($client.SkipPurview)       { $params['SkipPurview']       = $true }
             if ($client.SkipTeams)         { $params['SkipTeams']         = $true }

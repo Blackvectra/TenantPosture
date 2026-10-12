@@ -73,8 +73,9 @@ Describe 'Entry points pin the scan to the requested tenant' {
         $iCollect = $script:Entry.IndexOf('[-] Running collectors')
         $iAbort | Should -BeLessThan $iCollect
     }
-    It 'reads clients.json through its { "clients": [...] } wrapper' {
-        $script:Entry | Should -Match "PSObject\.Properties\['clients'\]"
+    It 'reads clients.json through its { "clients": [...] } wrapper, in the one reader the entry point calls' {
+        $script:Entry | Should -Match 'Get-TPClientRecord -Path'
+        (Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib/Get-TPClientRecord.ps1') -Raw) | Should -Match "PSObject\.Properties\['clients'\]"
     }
 }
 
