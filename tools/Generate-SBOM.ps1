@@ -47,10 +47,12 @@ if (-not (Test-Path -LiteralPath $outputDir)) {
 # and openpyxl (the XLSX publishers, through Lib/Invoke-TPPython.ps1; the
 # installer pins 3.1.5). An optional dependency left out of the SBOM is a
 # release attesting an incomplete inventory, so a downstream scanner cannot
-# report exposure in a supported feature. Licenses are the publishers' stated
-# terms: the Microsoft Graph SDK, Pode and openpyxl are MIT; ExchangeOnlineManagement,
-# MicrosoftTeams and the SharePoint Online shell ship under Microsoft's
-# proprietary license terms.
+# report exposure in a supported feature. Licenses are what each package
+# publishes, read at the gallery, never assumed from the publisher: the
+# Microsoft Graph SDK, ExchangeOnlineManagement (its license.txt from 3.7.2
+# on), MicrosoftTeams (likewise), Pode and openpyxl are MIT; the SharePoint
+# Online Management Shell publishes no license file in its gallery package
+# and ships under Microsoft's license terms.
 $manifestPath = Join-Path $RepoRoot 'TenantPosture.psd1'
 $required = @()
 # An SBOM with the required modules missing is wrong, not partial: the release
@@ -67,8 +69,8 @@ $licenseOf = @{
     'Microsoft.Graph.Identity.Governance'       = 'MIT'
     'Microsoft.Graph.Identity.SignIns'          = 'MIT'
     'Microsoft.Graph.Users'                     = 'MIT'
-    'ExchangeOnlineManagement'                  = 'LicenseRef-Microsoft-Software-License-Terms'
-    'MicrosoftTeams'                            = 'LicenseRef-Microsoft-Software-License-Terms'
+    'ExchangeOnlineManagement'                  = 'MIT'
+    'MicrosoftTeams'                            = 'MIT'
     'Microsoft.Online.SharePoint.PowerShell'    = 'LicenseRef-Microsoft-Software-License-Terms'
     'Pode'                                      = 'MIT'
     'openpyxl'                                  = 'MIT'

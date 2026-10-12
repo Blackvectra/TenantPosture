@@ -18,7 +18,8 @@
   is passed; `Build/Sign-Release.ps1` refuses a thumbprint pointer file that another account can
   write; `Apply-TPBaseline -RequireSignedCode` treats a signature it cannot evaluate as a failure.
   `openpyxl` is pinned; the SBOM lists the modules the manifest actually requires with the
-  publishers' real license terms; the deployment docs no longer claim a package-hash verification
+  license each package publishes (ExchangeOnlineManagement and MicrosoftTeams are MIT by their own
+  license files, not Microsoft's proprietary terms); the deployment docs no longer claim a package-hash verification
   PSResourceGet does not perform. Audit M8 to M11 and the supply-chain Lows (2026-10-09). From the Codex review of the branch: the release checklist stages only what signing changed
   (`git add -u` on the script extensions plus the manifest and the catalog), never `git add -A`, which
   on an operator workstation would commit `Config/clients.json`; `Sign-Release.ps1` writes each signed
@@ -79,7 +80,12 @@
   runtime dependency a shipped feature imports, Pode (the `-Web` GUI, MIT, PowerShell Gallery) and
   openpyxl (the XLSX publishers, MIT, PyPI, the installer's pin) included, each with its own purl,
   supplier and license, so a release no longer attests an inventory that leaves out two supported
-  features.
+  features. The verifier compares its manifest exclusions the way the file system does (ordinally
+  on Linux and macOS, where a planted `files.sha256` is a second file that must be reported;
+  case-insensitively on Windows), and the signing transaction snapshots the integrity manifest,
+  `FILES.sha256` and the catalog before it rewrites them and puts each back, bytes or absence, when
+  a later step fails, so a failed run never leaves manifests over bytes no longer on disk or a
+  partial catalog in place of a valid one.
 - **[Honesty] The maturity label is provisional when evidence is incomplete.** `Get-TPMaturityTier`
   excludes Error and unknown-state findings from the score denominator (by design: a tool failure
   is not a gap), but it then printed an unqualified tier, so 50 passes beside 50 errored checks

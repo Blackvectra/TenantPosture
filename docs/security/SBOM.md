@@ -2,13 +2,16 @@
 
 ## Runtime Dependencies
 
-| Package | Version | Source | Purpose |
-|---|---|---|---|
-| Microsoft.Graph.Authentication | 2.20.0 | PSGallery | Graph API authentication |
-| ExchangeOnlineManagement | 3.4.0 | PSGallery | Exchange Online cmdlets |
-| MicrosoftTeams | 6.4.0 | PSGallery | Teams policy collection |
-| Microsoft.Online.SharePoint.PowerShell | 16.0.24720.12000 | PSGallery | SharePoint collection |
-| PowerShell | 7.4+ | Microsoft | Runtime |
+| Package | Version | Source | License | Purpose |
+|---|---|---|---|---|
+| Microsoft.Graph.Authentication | 2.20.0 | PSGallery | MIT | Graph API authentication |
+| ExchangeOnlineManagement | 3.7.2 or later (see the manifest's range) | PSGallery | MIT (the package's license.txt) | Exchange Online cmdlets |
+| MicrosoftTeams | 6.5.0 | PSGallery | MIT (the package's license.txt) | Teams policy collection |
+| Microsoft.Online.SharePoint.PowerShell | 16.0.24720.12000 | PSGallery | Microsoft license terms (no license file in the package) | SharePoint collection |
+| PowerShell | 7.4+ | Microsoft | MIT | Runtime |
+
+The license column is what each package publishes, read at the gallery when the
+SBOM generator's table was last checked, not what its publisher's name suggests.
 
 ## Optional Runtime Dependencies
 

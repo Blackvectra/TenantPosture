@@ -90,19 +90,25 @@ $manifestFull = if (Test-Path -LiteralPath $ManifestPath) { (Resolve-Path -Liter
 # -Force: PowerShell treats a dot-prefixed name as hidden on Linux and macOS,
 # and a hidden folder is where a planted script would hide from a walk.
 $rootOutput = (Join-Path $repoRoot 'output') + [string][System.IO.Path]::DirectorySeparatorChar
+# Paths are compared the way the file system does: case-insensitively on
+# Windows, where FILES.sha256 and files.sha256 are the same file, and ordinally
+# elsewhere, where they are two files and a case-variant copy of a manifest
+# must reach the extra-file check. PowerShell's -eq ignores case everywhere,
+# which on Linux and macOS would have excluded such a copy from verification.
+$pathComparison = if ($IsWindows) { [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }
 $files = Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Force -ErrorAction Stop |
     Where-Object {
         if ($archiveMode) {
-            (-not $_.FullName.StartsWith($rootOutput, [System.StringComparison]::Ordinal)) -and
-            $_.FullName -ne $manifestFull -and
-            $_.FullName -ne $archiveManifest
+            (-not $_.FullName.StartsWith($rootOutput, $pathComparison)) -and
+            (-not [string]::Equals($_.FullName, $manifestFull, $pathComparison)) -and
+            (-not [string]::Equals($_.FullName, $archiveManifest, $pathComparison))
         } else {
             $_.Extension -in $includeExtensions -and
             $_.FullName -notmatch '[\\/]output[\\/]' -and
             $_.FullName -notmatch '[\\/]\.git[\\/]' -and
             $_.FullName -notmatch '[\\/]\.github[\\/]' -and
-            $_.FullName -ne $manifestFull -and
-            $_.FullName -ne $archiveManifest
+            (-not [string]::Equals($_.FullName, $manifestFull, $pathComparison)) -and
+            (-not [string]::Equals($_.FullName, $archiveManifest, $pathComparison))
         }
     } |
     Sort-Object FullName

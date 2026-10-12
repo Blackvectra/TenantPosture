@@ -378,6 +378,37 @@ if ($failed -gt 0) {
 # transaction: a failure there restores the unsigned bytes too, so a
 # timestamp outage during catalog signing or a manifest that does not verify
 # never leaves a half-done tree that the clean-tree check would then refuse.
+# The generated files are part of it as well: the integrity manifest and
+# FILES.sha256 are rewritten from the signed bytes and the catalog is
+# rebuilt, so restoring the scripts alone would leave manifests that hash
+# bytes no longer on disk and could replace a valid catalog with a partial
+# one. Each is snapshotted here, bytes or absence, and put back on failure.
+function Save-TPGeneratedFiles {
+    <# Snapshot of each generated file: its bytes, or $null when it does not exist. #>
+    param([Parameter(Mandatory)] [string[]] $Paths)
+    $snapshot = [ordered]@{}
+    foreach ($path in $Paths) {
+        $snapshot[$path] = if (Test-Path -LiteralPath $path -PathType Leaf) { [System.IO.File]::ReadAllBytes($path) } else { $null }
+    }
+    return $snapshot
+}
+function Restore-TPGeneratedFiles {
+    <# Puts each generated file back as snapshotted: its bytes, or removed when it did not exist. Returns how many it restored. #>
+    param([Parameter(Mandatory)] $Snapshot)
+    $restored = 0
+    foreach ($path in @($Snapshot.Keys)) {
+        try {
+            if ($null -eq $Snapshot[$path]) {
+                if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path -Force -ErrorAction Stop }
+            } else {
+                [System.IO.File]::WriteAllBytes($path, $Snapshot[$path])
+            }
+            $restored++
+        } catch { Write-Host "  [!] Could not restore $path`: $($_.Exception.Message)" -ForegroundColor Red }
+    }
+    return $restored
+}
+$generatedSnapshot = Save-TPGeneratedFiles -Paths $generatedFiles
 try {
 
 # The committed integrity manifest (tools/integrity-manifest.txt, written by
@@ -470,7 +501,8 @@ try {
 
 } catch {
     $restored = Restore-TPUnsignedBytes -Map $originals
-    throw "Release signing failed after the scripts were signed ($($_.Exception.Message)); the unsigned bytes of $restored file(s) were restored, so the tree is as it was and the run can be repeated."
+    $restoredGenerated = Restore-TPGeneratedFiles -Snapshot $generatedSnapshot
+    throw "Release signing failed after the scripts were signed ($($_.Exception.Message)); the unsigned bytes of $restored file(s) and the prior state of $restoredGenerated generated file(s) (integrity manifest, FILES.sha256, catalog) were restored, so the tree is as it was and the run can be repeated."
 }
 
 Write-Host ""
