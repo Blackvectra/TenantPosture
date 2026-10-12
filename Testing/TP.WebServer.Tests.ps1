@@ -238,7 +238,10 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             # possibly weaker, policy; every Set-PodeHeader must fill the template.
             ([regex]::Matches($script:ServerSrc, 'CspTemplate = \(')).Count | Should -Be 1
             $sets = [regex]::Matches($script:ServerSrc, "Set-PodeHeader -Name 'Content-Security-Policy' -Value \(([^\n]*)")
-            $sets.Count | Should -Be 3
+            $sets.Count | Should -Be 4
+            # The GUI frames a report through srcdoc, which inherits the index page's
+            # policy: the index allows every listed run's logo origin.
+            $script:ServerSrc | Should -Match 'Get-TPWebIndexImageSources -OutputRoot \$cfg\.OutputRoot'
             foreach ($m in $sets) { $m.Groups[1].Value | Should -Match '^\$cfg\.CspTemplate -f ' }
             ([regex]::Matches($script:ServerSrc, "default-src 'none'")).Count | Should -Be 1 -Because 'the policy text exists once, in the template'
         }
@@ -316,6 +319,9 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             # Canonical before Pode sees it: Pode resolves a relative root against its
             # own script location, so a relative -ScriptDir would have pointed it at Lib\Web.
             $script:ServerSrc | Should -Match '\$webRoot = \(Resolve-Path -LiteralPath \$webRoot\)\.ProviderPath'
+            # And the script directory itself, before any support-script path is built
+            # from it: Use-PodeScript resolves a relative path against Pode's root.
+            $script:ServerSrc | Should -Match '\$ScriptDir = \(Resolve-Path -LiteralPath \$ScriptDir\)\.ProviderPath'
         }
 
         It "allows images from 'self', data: and the configured logo origin only, never every https host" {
@@ -1581,6 +1587,12 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
             $script:PortB = Get-Random -Minimum 23001 -Maximum 26000
             $script:B = & $script:Boot @{ Cwd = $script:Elsewhere; Port = $script:PortB; ScriptDir = $script:Install }
 
+            # Server D: the install folder again, addressed RELATIVELY (-ScriptDir '.')
+            # from inside it, which once had Pode resolve the support scripts and its
+            # root against Web\ and abort before listening.
+            $script:PortD = Get-Random -Minimum 29001 -Maximum 31000
+            $script:D = & $script:Boot @{ Cwd = $script:Install; Port = $script:PortD; ScriptDir = '.' }
+
             # Server C: extra names for a tunnel.
             $script:PortC = Get-Random -Minimum 26001 -Maximum 29000
             $script:C = & $script:Boot @{ Cwd = $script:Elsewhere; Port = $script:PortC; OutputRoot = $script:Fx.Out; Extra = "-AllowedHost 'tunnel.test:9000','alias.test'" }
@@ -1593,7 +1605,7 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
         }
 
         AfterAll {
-            foreach ($s in @($script:A, $script:B, $script:C)) {
+            foreach ($s in @($script:A, $script:B, $script:C, $script:D)) {
                 if ($s -and $s.Proc -and -not $s.Proc.HasExited) {
                     Stop-Process -Id $s.Proc.Id -Force -ErrorAction SilentlyContinue
                 }
@@ -1750,9 +1762,9 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
             It 'the site is served under the same strict CSP, not a relaxed one' {
                 $idx  = (& $script:Get '/').Headers['Content-Security-Policy']
                 $site = (& $script:Get "/site/_flat/$($script:Id)/index.html").Headers['Content-Security-Policy']
-                # The same policy, with the one difference a run may add: the origin
-                # of the brand logo its results file recorded (this run's cdn.example).
-                [string]$site | Should -Be (([string]$idx) -replace "img-src 'self' data:;", "img-src 'self' data: https://cdn.example;")
+                # The same policy: the index allows every listed run's logo origin (the
+                # framed report inherits it), the site page allows its own run's.
+                [string]$site | Should -Be ([string]$idx)
                 [string]$site | Should -Match "default-src 'none'"
                 [string]$site | Should -Match "script-src 'self'(;|$)"
                 [string]$site | Should -Match "frame-ancestors 'none'"
@@ -1989,6 +2001,17 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
                 $r.Body | Should -Not -Match '<html'
             }
 
+            It 'a server started with a relative -ScriptDir from inside the install serves the GUI and its runs' {
+                $script:D.Up | Should -BeTrue -Because 'Pode must not resolve the support scripts against its root'
+                $r = & $script:Raw $script:PortD '/'
+                $r.Status | Should -Be 200
+                $r.Headers['content-security-policy'] | Should -Not -BeNullOrEmpty
+                $runs = @((Invoke-WebRequest -Uri "http://127.0.0.1:$($script:PortD)/api/runs" -TimeoutSec 8 -UseBasicParsing).Content | ConvertFrom-Json)
+                $runs.Count | Should -BeGreaterThan 0
+                $js = & $script:Raw $script:PortD '/static/app.js'
+                $js.Status | Should -Be 200
+            }
+
             It "a public folder in the server's current directory is not served" {
                 foreach ($t in '/public/leak.txt', '/leak.txt') {
                     $r = & $script:Raw $script:Port $t
@@ -2000,12 +2023,15 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
             It 'the image policy names no blanket https source' {
                 $r = & $script:Raw $script:Port '/'
                 $r.Headers['content-security-policy'] | Should -Match "img-src 'self' data:(;| )"
-                $r.Headers['content-security-policy'] | Should -Not -Match "img-src [^;]*https:"
+                # A named origin (https://cdn.example, from a listed run) is allowed; the bare
+                # scheme source `https:` (every host) is what must never appear.
+                $r.Headers['content-security-policy'] | Should -Not -Match "img-src [^;]*https:(\s|;)"
             }
 
-            It 'a report made with another brand is served with its own logo origin in the image policy, the index without it' {
+            It 'a report made with another brand is served with its own logo origin in the image policy, and the index (which the framed report inherits) allows it too' {
                 # The flat run's results file records Brand.LogoUrl; the server runs with no
-                # profile logo. The report page allows that origin, nothing else does.
+                # profile logo. The report page and the index allow that origin; a CSV
+                # and a run that recorded no brand do not.
                 $r = & $script:Raw $script:Port "/api/runs/_flat/$($script:Id)/report"
                 $r.Status | Should -Be 200
                 $r.Headers['content-security-policy'] | Should -Match "img-src 'self' data: https://cdn\.example;"
@@ -2015,7 +2041,9 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
                 $csv = & $script:Raw $script:Port "/site/_flat/$($script:Id)/ActionPlan.csv"
                 $csv.Headers['content-security-policy'] | Should -Match "img-src 'self' data:;"
                 $index = & $script:Raw $script:Port '/'
-                $index.Headers['content-security-policy'] | Should -Not -Match 'cdn\.example'
+                $index.Headers['content-security-policy'] | Should -Match "img-src 'self' data: https://cdn\.example;" -Because 'the GUI loads the report through srcdoc, which inherits this policy'
+                $asset = & $script:Raw $script:Port '/static/app.js'
+                $asset.Headers['content-security-policy'] | Should -Match "img-src 'self' data:;" -Because 'only the index and the report pages need the origin'
                 $other = & $script:Raw $script:Port '/api/runs/fabrikam.org/FABRIKAM-20261002-100000/report'
                 $other.Status | Should -Be 200
                 $other.Headers['content-security-policy'] | Should -Match "img-src 'self' data:;" -Because 'that run recorded no brand'
@@ -2182,6 +2210,16 @@ Describe 'per-run image policy (Lib/Get-TPWebRunIndex.ps1)' {
     It 'the metadata reader records the logo origin, and nothing for a non-https logo or no brand' {
         (Read-TPWebRunMetadata -Path (Join-Path $script:Tmp2 'X-20261002-010000-results.json')).LogoOrigin | Should -Be 'https://cdn.example'
         (Read-TPWebRunMetadata -Path (Join-Path $script:Tmp2 'Y-20261002-010000-results.json')).LogoOrigin | Should -Be ''
+    }
+
+    It 'the index image sources carry every listed run''s origin once, from both layouts, and nothing for a non-https logo' {
+        $null = New-Item -ItemType Directory -Path (Join-Path $script:Tmp2 'z.example') -Force
+        Set-Content -LiteralPath (Join-Path $script:Tmp2 'z.example' 'Z-20261002-010000-results.json') -Value '{"Metadata":{"TenantDomain":"z.example","Brand":{"LogoUrl":"https://logos.example:8443/z.png"}}}' -Encoding utf8
+        Set-Content -LiteralPath (Join-Path $script:Tmp2 'W-20261002-010000-results.json') -Value '{"Metadata":{"TenantDomain":"w.example","Brand":{"LogoUrl":"https://cdn.example/w.png"}}}' -Encoding utf8
+        $cache = @{}
+        Get-TPWebIndexImageSources -OutputRoot $script:Tmp2 -ImgSrc "'self' data:" -Cache $cache | Should -Be "'self' data: https://cdn.example https://logos.example:8443"
+        Get-TPWebIndexImageSources -OutputRoot $script:Tmp2 -ImgSrc "'self' data: https://cdn.example" -Cache $cache | Should -Be "'self' data: https://cdn.example https://logos.example:8443"
+        Get-TPWebIndexImageSources -OutputRoot (Join-Path $script:Tmp2 'nosuch') -ImgSrc "'self' data:" -Cache $cache | Should -Be "'self' data:"
     }
 
     It 'the run image sources add the origin once, for the report and for a site page, and never for a run without one' {

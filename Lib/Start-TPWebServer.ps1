@@ -123,6 +123,12 @@ function Start-TPWebServer {
     Import-Module Pode -ErrorAction Stop
 
     # ── Locate static assets and config ───────────────────────────────────
+    # Canonical before anything is built from it: Pode resolves a relative path
+    # (its root, a Use-PodeScript file) against its own root, not the caller's
+    # current directory, so a relative -ScriptDir would have passed the checks
+    # here and had Pode look for Web\Lib\*.ps1.
+    if (-not (Test-Path -LiteralPath $ScriptDir -PathType Container)) { throw "Script directory not found: $ScriptDir" }
+    $ScriptDir = (Resolve-Path -LiteralPath $ScriptDir).ProviderPath
     $webRoot = Join-Path $ScriptDir 'Web'
     if (-not (Test-Path -LiteralPath $webRoot)) {
         throw "Web asset directory not found: $webRoot"
@@ -313,7 +319,13 @@ function Start-TPWebServer {
 
         # Index — single-page UI shell.
         Add-PodeRoute -Method Get -Path '/' -ScriptBlock {
-            $indexPath = Join-Path (Get-PodeState -Name 'cfg').WebRoot 'index.html'
+            $cfg = Get-PodeState -Name 'cfg'
+            # The GUI frames a report through srcdoc, and a srcdoc document
+            # inherits THIS page's policy, not the report response's: so the index
+            # allows the logo origin of every run the listing can show.
+            $sources = Get-TPWebIndexImageSources -OutputRoot $cfg.OutputRoot -ImgSrc $cfg.ImgSrc -Cache (Get-PodeState -Name 'runMetadata')
+            Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $sources)
+            $indexPath = Join-Path $cfg.WebRoot 'index.html'
             $html = Get-Content -LiteralPath $indexPath -Raw -Encoding utf8
             Write-PodeHtmlResponse -Value $html
         }
@@ -385,8 +397,10 @@ function Start-TPWebServer {
                 Write-PodeJsonResponse -Value $apiError.Body -StatusCode $apiError.HttpStatus
                 return
             }
-            # The image policy for THIS run: its results file's Brand names the logo
-            # the report embeds, which the active profile's may not be.
+            # The image policy for THIS run, for a report opened directly in a tab:
+            # its results file's Brand names the logo the report embeds, which the
+            # active profile's may not be. (Framed by the GUI through srcdoc, the
+            # report inherits the index page's policy instead; see GET /.)
             $cfg = Get-PodeState -Name 'cfg'
             $sources = Get-TPWebRunImageSources -ReportPath $found.Path -Id $WebEvent.Parameters['id'] `
                 -ImgSrc $cfg.ImgSrc -Cache (Get-PodeState -Name 'runMetadata')

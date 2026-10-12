@@ -91,6 +91,40 @@ function Get-TPWebRunImageSources {
     return ($ImgSrc + ' ' + $origin)
 }
 
+# The img-src value for the GUI's index page: the server's sources plus the logo
+# origin of every run the listing can show. The GUI loads a report into an
+# iframe through srcdoc, and a srcdoc document inherits the embedding page's
+# policy (CSP, "Inheriting policies"), so the header a report route sets is
+# discarded with the fetch: the index page's own policy is what governs the
+# framed report, and it must allow every listed run's recorded logo origin.
+# Only the two layouts the listing reads: <root>\*-results.json and
+# <root>\<folder>\*-results.json, through the same metadata cache.
+function Get-TPWebIndexImageSources {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)] [string] $OutputRoot,
+        [Parameter(Mandatory)] [string] $ImgSrc,
+        [Parameter()] [AllowNull()] [hashtable] $Cache
+    )
+    Set-StrictMode -Version Latest
+    $have = [System.Collections.Generic.List[string]]::new()
+    foreach ($src in @($ImgSrc -split '\s+' | Where-Object { $_ })) { $have.Add($src) }
+    if (-not (Test-Path -LiteralPath $OutputRoot -PathType Container)) { return ($have -join ' ') }
+    $files = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
+    foreach ($f in @(Get-ChildItem -LiteralPath $OutputRoot -File -ErrorAction SilentlyContinue)) { $files.Add($f) }
+    foreach ($d in @(Get-ChildItem -LiteralPath $OutputRoot -Directory -ErrorAction SilentlyContinue)) {
+        foreach ($f in @(Get-ChildItem -LiteralPath $d.FullName -File -ErrorAction SilentlyContinue)) { $files.Add($f) }
+    }
+    foreach ($f in $files) {
+        if (-not (Test-TPWebRunResultName -Name $f.Name)) { continue }
+        $meta = Get-TPWebRunMetadata -File $f -Cache $Cache
+        $origin = [string](Get-TPObjectField -Item $meta -Key 'LogoOrigin' -Default '')
+        if ($origin -and -not $have.Contains($origin)) { $have.Add($origin) }
+    }
+    return ($have -join ' ')
+}
+
 function Read-TPWebRunMetadata {
     [CmdletBinding()]
     [OutputType([pscustomobject])]
