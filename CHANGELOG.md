@@ -68,7 +68,11 @@
   proves nothing: whoever changed the archive rewrites it; the record only names files that are not
   part of the release), and the verifier's archive mode leaves out only the root `output\` folder,
   so a script planted under `Lib\output\` or `Lib\.github\`, where the module loader runs it,
-  reaches the extra-file check.
+  reaches the extra-file check. The installer also pins the signer: a `Valid` status says only that
+  a chain the workstation trusts signed the file, which a script planted in a tampered archive and
+  signed by any publisher the workstation happens to trust has too, so a file is unblocked only when
+  its signer is the signer of the installer's own valid signature, the one the operator already
+  relied on to run it; an installer that carries no valid signature unblocks nothing and says so.
 - **[Honesty] The maturity label is provisional when evidence is incomplete.** `Get-TPMaturityTier`
   excludes Error and unknown-state findings from the score denominator (by design: a tool failure
   is not a gap), but it then printed an unqualified tier, so 50 passes beside 50 errored checks

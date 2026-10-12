@@ -70,29 +70,53 @@ $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 # RemoteSigned above, that mark is what stops a downloaded script from running,
 # and the module dot-sources every *.ps1 under Lib, Collectors, Evaluators and
 # Publishers on import. So only a script whose Authenticode signature verifies
-# on this workstation is unblocked. A hash record that travels inside the
-# archive (FILES.sha256, the integrity manifest) proves nothing here: whoever
-# changed the archive rewrites it. It is used only to name files that are not
-# part of the release. An unsigned release keeps its marks, and the operator is
-# told how to clear them after a review; a git clone carries none.
+# on this workstation AND was made by the release signer is unblocked. A Valid
+# status alone is not that: it says a chain this workstation trusts signed the
+# file, and a script planted in a tampered archive and signed by any publisher
+# the workstation happens to trust is Valid too. The release signer is pinned
+# to the signer of this installer's own signature, which the operator already
+# relied on to run it; an installer that does not carry a valid signature
+# cannot vouch for any file, so nothing is unblocked. A hash record that
+# travels inside the archive (FILES.sha256, the integrity manifest) proves
+# nothing here: whoever changed the archive rewrites it. It is used only to
+# name files that are not part of the release. An unsigned release keeps its
+# marks, and the operator is told how to clear them after a review; a git
+# clone carries none.
 $scriptExt = @('.ps1', '.psm1', '.psd1', '.ps1xml')
 try {
     $scripts = @(Get-ChildItem -LiteralPath $scriptDir -Recurse -File -Force -ErrorAction SilentlyContinue |
         Where-Object { $_.Extension -in $scriptExt -and $_.FullName -notmatch '[\\/](output|\.git)([\\/]|$)' })
+    $pin = ''
+    $selfStatus = 'not on disk'
+    if ($PSCommandPath -and (Test-Path -LiteralPath $PSCommandPath -PathType Leaf)) {
+        $selfSig = Get-AuthenticodeSignature -LiteralPath $PSCommandPath -ErrorAction SilentlyContinue
+        $selfStatus = if ($selfSig) { [string]$selfSig.Status } else { 'unreadable' }
+        if ($selfSig -and $selfSig.Status -eq 'Valid' -and $selfSig.SignerCertificate) {
+            $pin = [string]$selfSig.SignerCertificate.Thumbprint
+        }
+    }
     $unblocked = 0; $kept = @()
     foreach ($f in $scripts) {
         $sig = Get-AuthenticodeSignature -LiteralPath $f.FullName -ErrorAction SilentlyContinue
-        if ($sig -and $sig.Status -eq 'Valid') {
+        $status = if ($sig) { [string]$sig.Status } else { 'unreadable' }
+        $tp = if ($sig -and $sig.SignerCertificate) { [string]$sig.SignerCertificate.Thumbprint } else { '' }
+        if ($pin -and $status -eq 'Valid' -and $tp -eq $pin) {
             Unblock-File -LiteralPath $f.FullName -ErrorAction SilentlyContinue
             $unblocked++
+        } elseif ($pin -and $status -eq 'Valid') {
+            $kept += "$($f.FullName.Substring($scriptDir.Length + 1)) [Valid, signer $tp is not the release signer]"
         } else {
-            $kept += "$($f.FullName.Substring($scriptDir.Length + 1)) [$(if ($sig) { $sig.Status } else { 'unreadable' })]"
+            $kept += "$($f.FullName.Substring($scriptDir.Length + 1)) [$status]"
         }
     }
-    Write-Host "  [+] $unblocked script file(s) with a valid Authenticode signature unblocked" -ForegroundColor Green
+    if ($pin) {
+        Write-Host "  [+] $unblocked script file(s) signed by the release signer ($pin, the signer of this installer) unblocked" -ForegroundColor Green
+    } else {
+        Write-Host "  [i] This installer carries no valid Authenticode signature ($selfStatus), so it cannot vouch for any file: nothing was unblocked." -ForegroundColor Yellow
+    }
     if ($kept.Count -gt 0) {
         $shown = if ($kept.Count -le 12) { $kept -join ', ' } else { (($kept | Select-Object -First 12) -join ', ') + ", and $($kept.Count - 12) more" }
-        Write-Host "  [i] Left as downloaded ($($kept.Count) file(s) with no signature this workstation verifies): $shown" -ForegroundColor Yellow
+        Write-Host "  [i] Left as downloaded ($($kept.Count) file(s) not signed by the release signer, or with no signature this workstation verifies): $shown" -ForegroundColor Yellow
         Write-Host "      An in-house signature verifies once the signing certificate is in this workstation's TrustedPublisher and Root stores (Build/New-TPCodeSigningCert.ps1 does that where it ran). For an unsigned release, review the files, then: Get-ChildItem -Recurse -Include *.ps1,*.psm1,*.psd1,*.ps1xml | Unblock-File" -ForegroundColor DarkGray
     }
     # Files no release record names are never part of the release; they are named
