@@ -171,6 +171,53 @@ Describe 'Endpoint device compliance' {
         }
     }
 
+    Context 'Default output folder (upgrade compatibility)' {
+
+        BeforeAll {
+            # A pure function of the ProgramData root, taken from the parsed script so the
+            # test runs the code that ships, against a temp folder and not the real one.
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:AgentPath, [ref]$null, [ref]$null)
+            $fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-DefaultOutputDirectory' }, $true)
+            Set-Item -Path 'function:script:Get-DefaultOutputDirectory' -Value $fn.Body.GetScriptBlock()
+        }
+
+        It 'a new machine writes to ProgramData\TP' {
+            $root = Join-Path $TestDrive 'pd-new'; New-Item -ItemType Directory -Path $root -Force | Out-Null
+            Get-DefaultOutputDirectory -ProgramDataRoot $root | Should -Be (Join-Path $root 'TP')
+        }
+
+        It 'a machine an earlier version ran on keeps writing to ProgramData\NRG, the folder its RMM job reads' {
+            $root = Join-Path $TestDrive 'pd-old'; New-Item -ItemType Directory -Path (Join-Path $root 'NRG') -Force | Out-Null
+            Get-DefaultOutputDirectory -ProgramDataRoot $root | Should -Be (Join-Path $root 'NRG')
+        }
+
+        It 'once a TP folder exists beside it, TP wins' {
+            $root = Join-Path $TestDrive 'pd-both'
+            New-Item -ItemType Directory -Path (Join-Path $root 'NRG') -Force | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $root 'TP') -Force | Out-Null
+            Get-DefaultOutputDirectory -ProgramDataRoot $root | Should -Be (Join-Path $root 'TP')
+        }
+
+        It 'a file named NRG is not the earlier folder' {
+            $root = Join-Path $TestDrive 'pd-file'; New-Item -ItemType Directory -Path $root -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $root 'NRG') -Value 'x'
+            Get-DefaultOutputDirectory -ProgramDataRoot $root | Should -Be (Join-Path $root 'TP')
+        }
+
+        It 'the script, its help and the documentation say the same thing about where the result goes' {
+            # The raw file, not the tokenized code: the help text is comments.
+            $help = Get-Content -LiteralPath $script:AgentPath -Raw
+            $help | Should -Match 'Get-DefaultOutputDirectory -ProgramDataRoot \$env:ProgramData'
+            $help | Should -Match 'C:\\ProgramData\\TP\\device-compliance\.json'
+            $help | Should -Not -Match 'Writes C:\\ProgramData\\NRG\\device-compliance\.json'
+            foreach ($doc in 'README.md', 'docs/WHAT-CAN-I-RUN.md') {
+                $text = Get-Content -LiteralPath (Join-Path $script:RepoRoot $doc) -Raw
+                $text | Should -Not -Match '# -> C:\\ProgramData\\NRG\\device-compliance\.json\s*$' -Because "$doc must not name the folder the script no longer defaults to"
+                $text | Should -Match 'ProgramData\\TP\\device-compliance\.json'
+            }
+        }
+    }
+
     Context 'Event log and audit-policy checks (DEV-8.3 to DEV-8.6)' {
 
         BeforeAll {

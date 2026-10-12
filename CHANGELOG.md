@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **[Fix] An upgrade from the NRG-named version keeps working.** From the review of the rename (#127).
+  The endpoint script wrote its result to `ProgramData\TP` while the RMM job on an already-deployed machine
+  reads `ProgramData\NRG`, so after the script was updated the job would collect a stale file forever with
+  nothing to say so; with no `-OutputPath`, a machine that has an `NRG` folder and no `TP` folder beside it keeps
+  writing to `NRG` (`Get-DefaultOutputDirectory`, tested against a temp ProgramData), and a new machine uses `TP`.
+  The README, the command reference and the script's own help named the old folder while the script wrote the
+  new one; they agree now. `Build/Sign-Release.ps1` finds the signing thumbprint an earlier version saved under
+  `~/.nrg-assessment` when there is none at the new location, with the same ownership and ACL checks and a notice
+  to move it. (The collector already accepts the earlier `nrg-device-compliance` schema tag at major version one,
+  and `TP.DeviceIdentity.Tests.ps1` pins it.)
 - **[Fix] A profile is honored everywhere, and a name that is not a profile stops the run.** From the
   review of the rename (#127). The entry point read `EdrStack`, `AwarenessStack` and
   `MonitoringAddresses` from `Config/branding.psd1` a second time, so `-Profile nrg` dropped the

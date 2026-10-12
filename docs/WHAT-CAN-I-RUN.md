@@ -115,7 +115,7 @@ because stock Windows does not have 7.
 
 ```powershell
 # On the endpoint, via RMM
-.\Invoke-TPDeviceCompliance.ps1     # -> C:\ProgramData\NRG\device-compliance.json
+.\Invoke-TPDeviceCompliance.ps1     # -> C:\ProgramData\TP\device-compliance.json (an existing ProgramData\NRG folder keeps being used)
 ```
 
 39 checks: encryption and boot integrity, malware defense, network exposure,
