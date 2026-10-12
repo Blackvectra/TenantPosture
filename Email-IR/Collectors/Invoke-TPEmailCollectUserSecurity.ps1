@@ -133,7 +133,14 @@ function Invoke-TPEmailCollectUserSecurity {
                 } elseif ($m.PSObject -and ($m.PSObject.Properties.Name -contains $fld)) {
                     $v = $m.$fld
                 }
-                if ($v) { $display = [string]$v; break }
+                if ($v) {
+                    # The number itself is not recorded: the country code and
+                    # the last two digits are enough to ask the user "is the
+                    # number ending in 34 yours?", which is all the operator
+                    # needs, and the results JSON must not carry the rest.
+                    $display = if ($fld -eq 'phoneNumber') { ConvertTo-TPMaskedPhone ([string]$v) } else { [string]$v }
+                    break
+                }
             }
             [ordered]@{
                 Id              = [string]$m.id

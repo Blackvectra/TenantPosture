@@ -422,6 +422,8 @@
         'Get-TPDeepDiveEvidenceKeys',
         'Get-TPDeepDiveEvidence',
         'Set-TPFindingSubject',
+        'ConvertTo-TPRedactedUrl',
+        'ConvertTo-TPMaskedPhone',
         'Test-TPSignInControlFailedToSuccess',
         'Test-TPSignInControlAnonymousIp',
         'Test-TPSignInControlImpossibleTravel',

@@ -97,12 +97,14 @@ function Invoke-TPEmailCollectMailbox {
         $sentTruncated = [bool]$uri
 
         # Sanitize: extract URLs from bodyPreview (the first ~250 chars), don't
-        # retain bodies. Subject and recipients stay (they're the IoCs).
+        # retain bodies. Subject and recipients stay (they're the IoCs). A URL
+        # is kept for its host and path; a credential-bearing query value (a
+        # SAS `sig=`, an `access_token=`) is redacted before it is stored.
         $normalized = foreach ($m in $sentItems) {
             $urls = @()
             if ($m.bodyPreview) {
                 $urlMatches = [regex]::Matches([string]$m.bodyPreview, 'https?://[^\s"''<>)]+')
-                foreach ($mm in $urlMatches) { $urls += $mm.Value }
+                foreach ($mm in $urlMatches) { $urls += ConvertTo-TPRedactedUrl $mm.Value }
             }
             $recipients = @()
             # emailAddress is an optional nested object on a recipient row —
@@ -171,7 +173,7 @@ function Invoke-TPEmailCollectMailbox {
             $bodyPreview = [string](Get-TPObjectField -Item $m -Key 'bodyPreview' -Default '')
             if ($bodyPreview) {
                 $urlMatches = [regex]::Matches($bodyPreview, 'https?://[^\s"''<>)]+')
-                foreach ($mm in $urlMatches) { $urls += $mm.Value }
+                foreach ($mm in $urlMatches) { $urls += ConvertTo-TPRedactedUrl $mm.Value }
             }
             # from.emailAddress is an optional nested object — a bare chained
             # read throws under StrictMode at the first absent intermediate.
@@ -246,7 +248,7 @@ function Invoke-TPEmailCollectMailbox {
                 $bodyPreview = [string](Get-TPObjectField -Item $m -Key 'bodyPreview' -Default '')
                 if ($bodyPreview) {
                     $urlMatches = [regex]::Matches($bodyPreview, 'https?://[^\s"''<>)]+')
-                    foreach ($mm in $urlMatches) { $urls += $mm.Value }
+                    foreach ($mm in $urlMatches) { $urls += ConvertTo-TPRedactedUrl $mm.Value }
                 }
                 # from.emailAddress is an optional nested object — a bare
                 # chained read throws under StrictMode at the first absent
@@ -305,9 +307,25 @@ function Invoke-TPEmailCollectMailbox {
     }
     try {
         $settings = Invoke-TPGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/$userPrefix/mailboxSettings" -ErrorAction Stop
+        # The automatic-replies setting carries the reply TEXTS
+        # (internalReplyMessage, externalReplyMessage): an out-of-office body,
+        # a signature, whatever the user typed. The results JSON retains no
+        # message body, so only the state, audience and schedule are kept.
+        $autoRaw = Get-TPObjectField -Item $settings -Key 'automaticRepliesSetting' -Default $null
+        $autoReplies = if ($null -ne $autoRaw) {
+            [ordered]@{
+                status                 = Get-TPObjectField -Item $autoRaw -Key 'status' -Default $null
+                externalAudience       = Get-TPObjectField -Item $autoRaw -Key 'externalAudience' -Default $null
+                scheduledStartDateTime = Get-TPObjectField -Item $autoRaw -Key 'scheduledStartDateTime' -Default $null
+                scheduledEndDateTime   = Get-TPObjectField -Item $autoRaw -Key 'scheduledEndDateTime' -Default $null
+                # Whether a text is set is an indicator (an attacker's reply); its content is not stored.
+                hasInternalReplyMessage = [bool](Get-TPObjectField -Item $autoRaw -Key 'internalReplyMessage' -Default '')
+                hasExternalReplyMessage = [bool](Get-TPObjectField -Item $autoRaw -Key 'externalReplyMessage' -Default '')
+            }
+        } else { $null }
         $settingsOut.Data = [ordered]@{
             DelegateMeetingMessageDeliveryOptions = Get-TPObjectField -Item $settings -Key 'delegateMeetingMessageDeliveryOptions' -Default $null
-            AutomaticRepliesSetting               = Get-TPObjectField -Item $settings -Key 'automaticRepliesSetting' -Default $null
+            AutomaticRepliesSetting               = $autoReplies
             # Server-side forwarding lives in the Outlook setting object
             # which Graph exposes only partially via mailboxSettings; the
             # forwarding rule itself comes through messageRules. Graph omits
