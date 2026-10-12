@@ -98,7 +98,7 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             $stamp = { param($Path, [datetime] $When) [System.IO.File]::SetLastWriteTime($Path, $When) }
 
             $id = 'CLITENANT-20261002-114907'
-            & $put (Join-Path $out "$id-results.json")    '{"RawData":{"k":[1,2,3]},"Findings":[],"Metadata":{"TenantDomain":"cli-tenant.example","ToolVersion":"4.14.3"}}'
+            & $put (Join-Path $out "$id-results.json")    '{"RawData":{"k":[1,2,3]},"Findings":[],"Metadata":{"TenantDomain":"cli-tenant.example","ToolVersion":"4.14.3","Brand":{"LogoUrl":"https://cdn.example/logo.png"}}}'
             & $put (Join-Path $out "$id-assessment.html") '<!doctype html><html><body>FLAT-REPORT-MARKER</body></html>'
             $site = Join-Path $out "$id-report"
             & $put (Join-Path $site 'index.html')      '<!doctype html><html><head><meta charset="utf-8"><style>b{color:red}</style></head><body>SITE-INDEX-MARKER <a href="AAD.html">AAD</a> <a href="ActionPlan.csv">plan</a></body></html>'
@@ -231,12 +231,16 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             $script:ServerSrc | Should -Match "script-src 'self'"
         }
 
-        It 'Sets the CSP header in exactly one place (a route cannot relax it for the report site)' {
-            # The report site needs nothing beyond what the one policy already
-            # allows (inline <style>; no script, no external asset), so no route
-            # has a reason to set its own. A second Set-PodeHeader would be a
-            # second, possibly weaker, policy.
-            ([regex]::Matches($script:ServerSrc, 'Content-Security-Policy')).Count | Should -Be 1
+        It 'Sets the CSP header from one template only (a route can add a run''s image origin, never relax the policy)' {
+            # One policy string ($cfg.CspTemplate), filled with the server's image
+            # sources by the middleware and with the run's by the two report routes.
+            # A route writing a policy string of its own would be a second,
+            # possibly weaker, policy; every Set-PodeHeader must fill the template.
+            ([regex]::Matches($script:ServerSrc, 'CspTemplate = \(')).Count | Should -Be 1
+            $sets = [regex]::Matches($script:ServerSrc, "Set-PodeHeader -Name 'Content-Security-Policy' -Value \(([^\n]*)")
+            $sets.Count | Should -Be 3
+            foreach ($m in $sets) { $m.Groups[1].Value | Should -Match '^\$cfg\.CspTemplate -f ' }
+            ([regex]::Matches($script:ServerSrc, "default-src 'none'")).Count | Should -Be 1 -Because 'the policy text exists once, in the template'
         }
 
         It 'every response is no-store and refuses cross-origin embedding' {
@@ -301,21 +305,32 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             $last = $routes[-1]
             $text = $last.Extent.Text
             $text | Should -Match "-Path '/\*'"
-            foreach ($m in 'Get', 'Post', 'Put', 'Delete', 'Patch', 'Options', 'Head') { $text | Should -Match "\b$m\b" }
+            # Every method Pode routes: one left out goes back to Pode's own page without the headers.
+            foreach ($m in 'Connect', 'Delete', 'Get', 'Head', 'Merge', 'Options', 'Patch', 'Post', 'Put', 'Trace') { $text | Should -Match "\b$m\b" }
             $text | Should -Match "Get-TPWebApiError -Code NotFound"
             $text | Should -Match "Write-PodeTextResponse -Value 'Not found\.' -StatusCode 404"
         }
 
         It "pins Pode's root to the Web folder, so a public folder in the current directory is never served" {
             $script:ServerSrc | Should -Match 'Start-PodeServer\s+-Threads\s+4\s+-ScriptBlock\s+\$serverBlock\s+-RootPath\s+\$webRoot'
+            # Canonical before Pode sees it: Pode resolves a relative root against its
+            # own script location, so a relative -ScriptDir would have pointed it at Lib\Web.
+            $script:ServerSrc | Should -Match '\$webRoot = \(Resolve-Path -LiteralPath \$webRoot\)\.ProviderPath'
         }
 
         It "allows images from 'self', data: and the configured logo origin only, never every https host" {
             $script:ServerSrc | Should -Not -Match "img-src [^;]*https:"
-            $script:ServerSrc | Should -Match 'img-src \$\(\$cfg\.ImgSrc\);'
+            # One policy string, filled with the server's sources by the middleware and
+            # with the run's own sources by the two routes that serve a report.
+            $script:ServerSrc | Should -Match 'img-src \{0\};'
+            $script:ServerSrc | Should -Match '\$cfg\.CspTemplate -f \$cfg\.ImgSrc'
+            ([regex]::Matches($script:ServerSrc, 'Get-TPWebRunImageSources -ReportPath \$found\.Path')).Count | Should -Be 2 -Because 'the assessment report and a site page each set the policy for their own run'
             $script:ServerSrc | Should -Match '\$imgSrc = "''self'' data:"'
             $script:ServerSrc | Should -Match 'Get-TPWebLogoOrigin -ScriptDir \$ScriptDir'
-            $script:ServerSrc | Should -Match '\$uri\.Scheme -eq .https.'
+            # One rule for a logo URL, in the run-index library, used for the active
+            # profile and for the Brand a results file recorded.
+            $script:ServerSrc | Should -Match 'ConvertTo-TPWebImageOrigin -Url \$logo'
+            (Get-Content -LiteralPath $script:IndexLib -Raw) | Should -Match '\$uri\.Scheme -eq .https.'
         }
 
         It 'POST /api/scan validates the domain with the one domain-name rule, and keeps no pattern of its own' {
@@ -1735,7 +1750,9 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
             It 'the site is served under the same strict CSP, not a relaxed one' {
                 $idx  = (& $script:Get '/').Headers['Content-Security-Policy']
                 $site = (& $script:Get "/site/_flat/$($script:Id)/index.html").Headers['Content-Security-Policy']
-                [string]$site | Should -Be ([string]$idx)
+                # The same policy, with the one difference a run may add: the origin
+                # of the brand logo its results file recorded (this run's cdn.example).
+                [string]$site | Should -Be (([string]$idx) -replace "img-src 'self' data:;", "img-src 'self' data: https://cdn.example;")
                 [string]$site | Should -Match "default-src 'none'"
                 [string]$site | Should -Match "script-src 'self'(;|$)"
                 [string]$site | Should -Match "frame-ancestors 'none'"
@@ -1985,6 +2002,33 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
                 $r.Headers['content-security-policy'] | Should -Match "img-src 'self' data:(;| )"
                 $r.Headers['content-security-policy'] | Should -Not -Match "img-src [^;]*https:"
             }
+
+            It 'a report made with another brand is served with its own logo origin in the image policy, the index without it' {
+                # The flat run's results file records Brand.LogoUrl; the server runs with no
+                # profile logo. The report page allows that origin, nothing else does.
+                $r = & $script:Raw $script:Port "/api/runs/_flat/$($script:Id)/report"
+                $r.Status | Should -Be 200
+                $r.Headers['content-security-policy'] | Should -Match "img-src 'self' data: https://cdn\.example;"
+                $site = & $script:Raw $script:Port "/site/_flat/$($script:Id)/index.html"
+                $site.Status | Should -Be 200
+                $site.Headers['content-security-policy'] | Should -Match "img-src 'self' data: https://cdn\.example;"
+                $csv = & $script:Raw $script:Port "/site/_flat/$($script:Id)/ActionPlan.csv"
+                $csv.Headers['content-security-policy'] | Should -Match "img-src 'self' data:;"
+                $index = & $script:Raw $script:Port '/'
+                $index.Headers['content-security-policy'] | Should -Not -Match 'cdn\.example'
+                $other = & $script:Raw $script:Port '/api/runs/fabrikam.org/FABRIKAM-20261002-100000/report'
+                $other.Status | Should -Be 200
+                $other.Headers['content-security-policy'] | Should -Match "img-src 'self' data:;" -Because 'that run recorded no brand'
+            }
+
+            It 'a method only Pode knew about is answered through the policy and the headers: <Method>' -ForEach @(
+                @{ Method = 'TRACE' }, @{ Method = 'MERGE' }, @{ Method = 'CONNECT' }) {
+                $r = & $script:Raw $script:Port '/nosuch' $Method
+                $r.Status | Should -BeIn @(403, 404)
+                $r.Headers['content-security-policy'] | Should -Not -BeNullOrEmpty
+                $r.Headers['cache-control'] | Should -Be 'no-store'
+                $r.Body | Should -Not -Match '<html'
+            }
         }
 
         Context 'a refusal under /api/ is JSON with a stable code; outside /api/ it is text' {
@@ -2105,5 +2149,48 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
             $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/static/app.js" -TimeoutSec 5 -UseBasicParsing
             $r.StatusCode | Should -Be 200
         }
+    }
+}
+
+Describe 'per-run image policy (Lib/Get-TPWebRunIndex.ps1)' {
+    BeforeAll {
+        $script:RepoRoot2 = Split-Path -Parent $PSScriptRoot
+        # The support files as the server loads them, never the module: the
+        # functions under test are not exported.
+        foreach ($lib in 'Get-TPObjectField.ps1', 'Test-TPDomainName.ps1', 'Get-TPWebRunIndex.ps1') { . (Join-Path $script:RepoRoot2 'Lib' $lib) }
+        $script:Tmp2 = Join-Path ([System.IO.Path]::GetTempPath()) ("nrgweb-img-{0}" -f ([Guid]::NewGuid().ToString('N')))
+        $null = New-Item -ItemType Directory -Path (Join-Path $script:Tmp2 'X-20261002-010000-report') -Force
+        Set-Content -LiteralPath (Join-Path $script:Tmp2 'X-20261002-010000-results.json') -Value '{"Metadata":{"TenantDomain":"x.example","Brand":{"LogoUrl":"https://cdn.example/a/logo.png?v=2"}}}' -Encoding utf8
+        Set-Content -LiteralPath (Join-Path $script:Tmp2 'X-20261002-010000-assessment.html') -Value '<html></html>' -Encoding utf8
+        Set-Content -LiteralPath (Join-Path $script:Tmp2 'X-20261002-010000-report' 'index.html') -Value '<html></html>' -Encoding utf8
+        Set-Content -LiteralPath (Join-Path $script:Tmp2 'Y-20261002-010000-results.json') -Value '{"Metadata":{"TenantDomain":"y.example","Brand":{"LogoUrl":"http://plain.example/logo.png"}}}' -Encoding utf8
+        Set-Content -LiteralPath (Join-Path $script:Tmp2 'Y-20261002-010000-assessment.html') -Value '<html></html>' -Encoding utf8
+    }
+    AfterAll { Remove-Item -LiteralPath $script:Tmp2 -Recurse -Force -ErrorAction SilentlyContinue }
+
+    It 'an origin comes only from an absolute https URL (<Label>)' -ForEach @(
+        @{ Label = 'https with path and query'; Url = 'https://cdn.example/a/logo.png?v=2'; Expected = 'https://cdn.example' }
+        @{ Label = 'https with port';           Url = 'https://cdn.example:8443/l.png';  Expected = 'https://cdn.example:8443' }
+        @{ Label = 'http';                      Url = 'http://cdn.example/l.png';        Expected = '' }
+        @{ Label = 'data URL';                  Url = 'data:image/png;base64,AAAA';      Expected = '' }
+        @{ Label = 'relative';                  Url = 'logo.png';                        Expected = '' }
+        @{ Label = 'javascript';                Url = 'javascript:alert(1)';             Expected = '' }
+        @{ Label = 'empty';                     Url = '';                                Expected = '' }) {
+        ConvertTo-TPWebImageOrigin -Url $Url | Should -Be $Expected
+    }
+
+    It 'the metadata reader records the logo origin, and nothing for a non-https logo or no brand' {
+        (Read-TPWebRunMetadata -Path (Join-Path $script:Tmp2 'X-20261002-010000-results.json')).LogoOrigin | Should -Be 'https://cdn.example'
+        (Read-TPWebRunMetadata -Path (Join-Path $script:Tmp2 'Y-20261002-010000-results.json')).LogoOrigin | Should -Be ''
+    }
+
+    It 'the run image sources add the origin once, for the report and for a site page, and never for a run without one' {
+        $cache = @{}
+        $x = Join-Path $script:Tmp2 'X-20261002-010000-assessment.html'
+        Get-TPWebRunImageSources -ReportPath $x -Id 'X-20261002-010000' -ImgSrc "'self' data:" -Cache $cache | Should -Be "'self' data: https://cdn.example"
+        Get-TPWebRunImageSources -ReportPath (Join-Path $script:Tmp2 'X-20261002-010000-report' 'index.html') -Id 'X-20261002-010000' -ImgSrc "'self' data:" -Cache $cache | Should -Be "'self' data: https://cdn.example"
+        Get-TPWebRunImageSources -ReportPath $x -Id 'X-20261002-010000' -ImgSrc "'self' data: https://cdn.example" -Cache $cache | Should -Be "'self' data: https://cdn.example" -Because 'the active profile may already allow it'
+        Get-TPWebRunImageSources -ReportPath (Join-Path $script:Tmp2 'Y-20261002-010000-assessment.html') -Id 'Y-20261002-010000' -ImgSrc "'self' data:" -Cache $cache | Should -Be "'self' data:"
+        Get-TPWebRunImageSources -ReportPath (Join-Path $script:Tmp2 'Z-20261002-010000-assessment.html') -Id 'Z-20261002-010000' -ImgSrc "'self' data:" -Cache $cache | Should -Be "'self' data:" -Because 'no results file beside it'
     }
 }

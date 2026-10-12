@@ -12,8 +12,14 @@
   the image policy allows `'self'`, `data:` and the configured logo's origin instead of every https
   host, and the request policy compares Host, Origin and Sec-Fetch-Site ordinally (`-in` is
   culture-aware and ignored a soft hyphen or a NUL appended to the header). The web Lows of the
-  2026-10-09 audit; the real-server tests cover each.
-
+  2026-10-09 audit; the real-server tests cover each. From the Codex review of the branch: the catch-all
+  covers every method Pode routes (Connect, Merge and Trace were left to Pode's own page); the web
+  root is resolved to a canonical path before Pode receives it (Pode resolves a relative root
+  against its own script location, so a relative `-ScriptDir` pointed it at `Lib\Web`); and the
+  image policy for a served report comes from that run's own `Metadata.Brand` logo origin
+  (`Get-TPWebRunImageSources`), since a report published under another profile, or before the
+  active profile's logo changed, embeds the logo its run recorded and the active profile's
+  allowlist alone blocked it.
 - **[Security] CI, release and installer integrity.** The Gitleaks binary CI downloads is verified
   against the release's published SHA-256 before it runs with the repository token. The release
   workflow takes the tag through the environment (never interpolated into a script) and accepts only

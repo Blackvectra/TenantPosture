@@ -47,6 +47,50 @@ function Test-TPWebRunResultName {
 # order is not stable between runs (hashtable order), so the head of the file
 # cannot be read instead. Unreadable or oversized files return empty values and
 # the caller falls back to the file name.
+# The origin (scheme and host) a brand logo URL would need in the image policy:
+# only an absolute https URL yields one; anything else is '' and allows nothing.
+# One rule for the active profile (Start-TPWebServer) and for the Brand a results
+# file recorded, so a report made under another profile is judged the same way.
+function ConvertTo-TPWebImageOrigin {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter()] [AllowNull()] [AllowEmptyString()] [string] $Url)
+    $uri = $null
+    if ($Url -and [System.Uri]::TryCreate($Url, [System.UriKind]::Absolute, [ref]$uri) -and $uri.Scheme -eq 'https') {
+        return $uri.GetLeftPart([System.UriPartial]::Authority)
+    }
+    return ''
+}
+
+# The img-src value for one served report: the server's own sources plus the
+# origin of the logo that run's results file recorded under Metadata.Brand,
+# when it is not among them already. A report made under another profile, or
+# before the active profile's LogoUrl changed, embeds the URL its own run
+# recorded; a policy built from the active profile alone would block it.
+function Get-TPWebRunImageSources {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)] [string] $ReportPath,
+        [Parameter(Mandatory)] [string] $Id,
+        [Parameter(Mandatory)] [string] $ImgSrc,
+        [Parameter()] [AllowNull()] [hashtable] $Cache
+    )
+    Set-StrictMode -Version Latest
+    # The report sits beside its run's results file: <dir>\<Id>-results.json
+    # for the assessment report, <dir>\<Id>-report\<page> for a site page.
+    $dir = Split-Path -Parent $ReportPath
+    if ((Split-Path -Leaf $dir) -eq ($Id + '-report')) { $dir = Split-Path -Parent $dir }
+    $results = Join-Path $dir ($Id + '-results.json')
+    if (-not (Test-Path -LiteralPath $results -PathType Leaf)) { return $ImgSrc }
+    $meta = Get-TPWebRunMetadata -File (Get-Item -LiteralPath $results) -Cache $Cache
+    $origin = [string](Get-TPObjectField -Item $meta -Key 'LogoOrigin' -Default '')
+    if (-not $origin) { return $ImgSrc }
+    $have = @($ImgSrc -split '\s+' | Where-Object { $_ })
+    if ($origin -in $have) { return $ImgSrc }
+    return ($ImgSrc + ' ' + $origin)
+}
+
 function Read-TPWebRunMetadata {
     [CmdletBinding()]
     [OutputType([pscustomobject])]
@@ -54,7 +98,7 @@ function Read-TPWebRunMetadata {
 
     Set-StrictMode -Version Latest
 
-    $empty    = [pscustomobject]@{ TenantDomain = ''; TenantId = '' }
+    $empty    = [pscustomobject]@{ TenantDomain = ''; TenantId = ''; LogoOrigin = '' }
     $maxBytes = 128MB
     try {
         if ((Get-Item -LiteralPath $Path -ErrorAction Stop).Length -gt $maxBytes) { return $empty }
@@ -78,7 +122,11 @@ function Read-TPWebRunMetadata {
         if (-not (Test-TPDomainName -Value $domain)) { $domain = '' }
         $tenantId = [string](Get-TPObjectField -Item $meta -Key 'TenantId' -Default '')
         $tenantId = if ($tenantId -cmatch '\A[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\z') { $tenantId.ToLowerInvariant() } else { '' }
-        return [pscustomobject]@{ TenantDomain = $domain; TenantId = $tenantId }
+        # The brand the run was published with: its logo origin is what the image
+        # policy must allow when this run's report is served.
+        $brand = Get-TPObjectField -Item $meta -Key 'Brand' -Default $null
+        $logoOrigin = ConvertTo-TPWebImageOrigin -Url ([string](Get-TPObjectField -Item $brand -Key 'LogoUrl' -Default ''))
+        return [pscustomobject]@{ TenantDomain = $domain; TenantId = $tenantId; LogoOrigin = $logoOrigin }
     } catch {
         Write-Verbose "Metadata not read from $Path : $($_.Exception.Message)"
         return $empty
