@@ -357,8 +357,11 @@ jobs:
           # and under TP_REQUIRE_SIGNED it is required.
           $catalog = 'false'
           if (Test-Path -LiteralPath ./TenantPosture.cat -PathType Leaf) {
-              $verifyArgs = @('-VerifyCatalogOnly')
-              if ($env:EXPECTED_THUMBPRINT) { $verifyArgs += @('-CertificateThumbprint', $env:EXPECTED_THUMBPRINT) }
+              # A hashtable, never an array: array splatting passes its entries as
+              # positional VALUES, so '-VerifyCatalogOnly' would bind to the script's
+              # first parameter (-CertificateThumbprint) and fail its validation.
+              $verifyArgs = @{ VerifyCatalogOnly = $true }
+              if ($env:EXPECTED_THUMBPRINT) { $verifyArgs['CertificateThumbprint'] = $env:EXPECTED_THUMBPRINT }
               & ./Build/Sign-Release.ps1 @verifyArgs
               $catalog = 'true'
               Write-Host '  [+] TenantPosture.cat verified over every tracked file.' -ForegroundColor Green

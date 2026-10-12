@@ -315,12 +315,20 @@ function Restore-TPLineEndings {
     [System.IO.File]::WriteAllText($Path, $text, [System.Text.UTF8Encoding]::new($hasBom))
 }
 
+# Signing is transactional: the unsigned bytes of every file are kept until the
+# whole set is signed, and any failure (a timestamp request that times out,
+# a signature that does not survive normalization) restores all of them, so
+# the tree is as it was and the run can simply be repeated. Without that, a
+# failure midway left the earlier scripts signed, and the clean-tree check
+# above then refused every retry.
+$originals = [ordered]@{}
 $signed = 0
 $failed = 0
 foreach ($f in $files) {
     $rel = $f.FullName.Substring($RepoRoot.Length + 1)
     try {
         $before = [System.IO.File]::ReadAllBytes($f.FullName)
+        $originals[$f.FullName] = $before
         $hadCrLf = [System.Text.UTF8Encoding]::new($false).GetString($before).Contains("`r`n")
         $result = Set-AuthenticodeSignature -FilePath $f.FullName -Certificate $cert `
                                              -TimestampServer $TimestampServer `
@@ -351,7 +359,12 @@ Write-Host "  Failed:  $failed" -ForegroundColor $(if ($failed) { 'Red' } else {
 Write-Host ""
 
 if ($failed -gt 0) {
-    throw "Signing failed for $failed file(s)."
+    $restored = 0
+    foreach ($path in @($originals.Keys)) {
+        try { [System.IO.File]::WriteAllBytes($path, $originals[$path]); $restored++ }
+        catch { Write-Host "  [!] Could not restore $path`: $($_.Exception.Message)" -ForegroundColor Red }
+    }
+    throw "Signing failed for $failed file(s); the unsigned bytes of $restored file(s) were restored, so the tree is as it was and the run can be repeated."
 }
 
 # The committed integrity manifest (tools/integrity-manifest.txt, written by

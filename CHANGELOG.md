@@ -54,7 +54,10 @@
   configuration that ship are reached by no script signature), requires it under `TP_REQUIRE_SIGNED`,
   and the release notes state "signed" only at the width that was verified. The verifier compares
   recorded paths with an ordinal comparer, so a file renamed only by case on a case-sensitive file
-  system no longer verifies clean.
+  system no longer verifies clean. The release job calls the catalog check with a hashtable splat (an
+  array splat passes its entries positionally, so the switch would have bound to the thumbprint
+  parameter), and signing is transactional: a failure midway restores every file's unsigned bytes
+  so the run can be repeated.
 - **[Detection] Four paths that produced an unsupported Satisfied, found by the 2026-10-11 review.**
   AAD-1.4 and AAD-1.5 merged the risk levels of every enabled responding policy whatever its
   scope, so a pilot-group policy, a policy excluding a group, or one applying to no application
