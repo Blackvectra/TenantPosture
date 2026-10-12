@@ -62,6 +62,21 @@ param(
     [ValidatePattern('\A\z|\A(?=.{1,253}\z)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}\z', Options = 'None')]
     [string] $TenantDomain,
 
+    # The clients file this run reads the client's record from (declared EDR and awareness
+    # products, monitoring addresses, baseline tier, opt-in collectors, routing domain, onboarding).
+    # Default: Config/clients.json beside this script. The batch runner passes the file it was
+    # given, so one file serves the whole batch. Read only together with -TenantDomain; a file that
+    # is missing or is not valid JSON stops the run (exit 4) before anything connects, because a
+    # run that quietly read no record would lose every declaration in it.
+    [ValidateScript({
+        if ([string]::IsNullOrEmpty($_)) { return $true }
+        if ($_ -match '\.\.[/\\]' -or $_ -match '[/\\]\.\.' -or $_ -match '^\.\.') {
+            throw "Path traversal not allowed in ClientsFile."
+        }
+        return $true
+    })]
+    [string] $ClientsFile,
+
     # The client's endpoint protection is a third-party EDR (e.g. 'Cortex XDR'),
     # not Microsoft Defender. The Defender endpoint checks (INT-1.5, INT-2.1,
     # INT-2.2, DEV-2.x) are then reported as covered by that product —
@@ -463,6 +478,26 @@ if ($profileCheck.Status -in @('BadName', 'NotFound')) {
 # TP_PROFILE is the module's only way to learn the profile, and the import reads it once.
 # It is set for the import and put back afterwards, so a later run in the same console
 # without -Profile does not silently keep this run's practice.
+# The clients file is checked here too, before anything connects. A file named with -ClientsFile that
+# is missing or unreadable is fatal (exit 4); the default Config/clients.json is allowed to be absent
+# (a first run has none), but one that exists and cannot be read is said so, not skipped.
+. (Join-Path $scriptDir 'Lib' 'Get-TPClientRecord.ps1')
+$clientsPath = if ($ClientsFile) { [System.IO.Path]::GetFullPath($ClientsFile) } else { Join-Path $scriptDir 'Config' 'clients.json' }
+$clientLookup = $null
+if ($ClientsFile -and -not $TenantDomain) {
+    Write-Host "  [!] -ClientsFile is read together with -TenantDomain, which names the client; without it the file is not used." -ForegroundColor Yellow
+}
+if ($TenantDomain) {
+    $clientLookup = Get-TPClientRecord -Path $clientsPath -TenantDomain $TenantDomain
+    # -RegisterApp may name a file that does not exist yet (onboarding creates it); every other run needs the file to be there.
+    if ($ClientsFile -and ($clientLookup.Status -eq 'Unreadable' -or ($clientLookup.Status -eq 'NoFile' -and -not $RegisterApp))) {
+        Write-Host "  [!] $($clientLookup.Message) Nothing was run." -ForegroundColor Red
+        exit 4
+    }
+    if (-not $ClientsFile -and $clientLookup.Status -eq 'Unreadable') {
+        Write-Host "  [!] $($clientLookup.Message) It is ignored for this run, so no declared EDR, awareness product or other client setting in it applies." -ForegroundColor Yellow
+    }
+}
 $profileEnvBefore = $env:TP_PROFILE
 if ($Profile) { $env:TP_PROFILE = $Profile }
 try {
@@ -520,6 +555,7 @@ if ($RegisterApp) {
     }
     $regParams = @{ TenantDomain = $TenantDomain }
     if ($GrantConsent) { $regParams['GrantConsent'] = $true }
+    if ($ClientsFile) { $regParams['ClientsFile'] = $clientsPath }
     # Onboarding writes to the tenant, so it is not in the read-only module:
     # load it only for this path.
     . (Join-Path $scriptDir 'Onboard' 'Register-TPTenantApp.ps1')
@@ -535,19 +571,7 @@ if ($RegisterApp) {
 $targetTenantId      = $null
 $targetDelegatedOrg  = $null
 if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint)) {
-    $clientsPath = Join-Path $scriptDir 'Config' 'clients.json'
-    $clientRec = $null
-    if (Test-Path -LiteralPath $clientsPath) {
-        try {
-            # clients.json is { "clients": [ ... ] } (what the batch runner
-            # and the GUI read); a bare array is accepted too. Reading the
-            # wrapper as the list meant this lookup could never match.
-            $rawClients = Get-Content -LiteralPath $clientsPath -Raw -Encoding utf8 | ConvertFrom-Json
-            $list = if ($rawClients.PSObject.Properties['clients']) { @($rawClients.clients) } else { @($rawClients) }
-            $clientRec = $list | Where-Object { $_.PSObject.Properties['TenantDomain'] -and $_.TenantDomain -eq $TenantDomain } |
-                         Select-Object -First 1
-        } catch { $clientRec = $null }
-    }
+    $clientRec = if ($clientLookup -and $clientLookup.Status -eq 'Found') { $clientLookup.Record } else { $null }
     # The tenant this run must assess. Interactive sign-in otherwise lands on
     # whatever tenant the account belongs to, and nothing checked that it was
     # the one asked for.
@@ -564,6 +588,14 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
     }
     if (-not $ThirdPartyAwareness -and $clientRec -and $clientRec.PSObject.Properties['ThirdPartyAwareness'] -and "$($clientRec.ThirdPartyAwareness)") {
         $ThirdPartyAwareness = [string]$clientRec.ThirdPartyAwareness
+    }
+    # A product name taken from the record is judged by the same rule as the parameter, now: Set-TPThirdPartyEdr
+    # would otherwise reject it only after the whole assessment had run.
+    foreach ($declared in @(@{ Name = 'ThirdPartyEDR'; Value = $ThirdPartyEDR }, @{ Name = 'ThirdPartyAwareness'; Value = $ThirdPartyAwareness })) {
+        if ($declared.Value -and $declared.Value -cnotmatch (Get-TPProductNamePattern)) {
+            Write-Host "  [!] $($declared.Name) '$($declared.Value)' in the client record for $TenantDomain is not a product name (letters, digits, spaces and . & ( ) + / - only, 2 to 60 characters). Nothing was run." -ForegroundColor Red
+            exit 4
+        }
     }
     if (-not $MonitoringAddress -and $clientRec -and $clientRec.PSObject.Properties['MonitoringAddresses'] -and @($clientRec.MonitoringAddresses).Count -gt 0) {
         $MonitoringAddress = @($clientRec.MonitoringAddresses | ForEach-Object { [string]$_ })

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[Fix] The batch runner's clients file reaches every assessment, and a client can name its own profile.**
+  `Invoke-TPBatchAssessment.ps1 -ClientsFile` read the file it was given, but each assessment it launched read
+  `Config/clients.json` beside the script, so a batch run from a file kept anywhere else lost each client's
+  declared EDR and awareness product, monitoring addresses, baseline tier, opt-in collectors and routing domain
+  without a word (the run only looked like a client with more gaps). `Invoke-TPAssessment.ps1` takes `-ClientsFile`
+  and the batch passes it down; `Get-TPClientRecord` is the one reader of a client record. A named file that is
+  missing or not valid JSON stops the run (exit 4) before anything connects, and a default file that exists but
+  cannot be read now says so. A client record may set `Profile`, so clients of different practices share one batch
+  (without it the run uses `TP_PROFILE`, as before). A profile or product name that is not valid now stops the
+  batch before any sign-in, where a bad product name used to stop a client only after its whole assessment had run.
+  `-WhatIf` lists each client with the profile and the declared EDR and awareness product its record sets.
+  `-RegisterApp` records into the named file. `TP.BatchClientsFile.Tests.ps1` pins each.
 - **[Fix] An upgrade from the NRG-named version keeps working.** From the review of the rename (#127).
   The endpoint script wrote its result to `ProgramData\TP` while the RMM job on an already-deployed machine
   reads `ProgramData\NRG`, so after the script was updated the job would collect a stale file forever with
