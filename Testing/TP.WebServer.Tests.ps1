@@ -252,6 +252,8 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             # One request per open: the frame's load event is the failure check, not a probe GET.
             $appJs | Should -Not -Match 'await fetch\(url\)'
             $appJs | Should -Match 'frame\.onload = function'
+            # The handler is cleared before any about:blank navigation, which would run it again.
+            ([regex]::Matches($appJs, 'frame\.onload = null;\s*\n\s*frame\.src = ''about:blank''')).Count | Should -Be 2
             (Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Web' 'index.html') -Raw) | Should -Not -Match 'srcdoc'
             foreach ($m in $sets) { $m.Groups[1].Value | Should -Match '^\$cfg\.CspTemplate -f ' }
             ([regex]::Matches($script:ServerSrc, "default-src 'none'")).Count | Should -Be 1 -Because 'the policy text exists once, in the template'

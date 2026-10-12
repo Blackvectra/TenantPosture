@@ -263,6 +263,9 @@
         ok = !!doc && doc.contentType === 'text/html';
       } catch (e) { ok = true; }
       if (!ok) {
+        // The handler is cleared first: about:blank loads as text/html and
+        // would otherwise run it again and overwrite the message.
+        frame.onload = null;
         frame.src = 'about:blank';
         $('panel-report').hidden = true;
         setStatus('Could not load report');
@@ -284,7 +287,9 @@
 
   function closeReport() {
     $('panel-report').hidden = true;
-    $('report-frame').src = 'about:blank';
+    const frame = $('report-frame');
+    frame.onload = null;
+    frame.src = 'about:blank';
     $('link-report-site').hidden = true;
   }
 
