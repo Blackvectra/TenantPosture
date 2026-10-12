@@ -41,10 +41,16 @@ if (-not (Test-Path -LiteralPath $outputDir)) {
 }
 
 # The components are the modules the manifest actually requires (hard
-# dependencies) plus the optional modules the collectors import on demand.
-# Licenses are the publishers' stated terms: the Microsoft Graph SDK and
-# PnP.PowerShell are MIT; ExchangeOnlineManagement, MicrosoftTeams and the
-# SharePoint Online shell ship under Microsoft's proprietary license terms.
+# dependencies) plus every optional runtime dependency a shipped feature
+# imports on demand: the Graph submodules and the Teams and SharePoint shells
+# (collectors), Pode (the -Web GUI, Lib/Start-TPWebServer.ps1, 2.10 or later)
+# and openpyxl (the XLSX publishers, through Lib/Invoke-TPPython.ps1; the
+# installer pins 3.1.5). An optional dependency left out of the SBOM is a
+# release attesting an incomplete inventory, so a downstream scanner cannot
+# report exposure in a supported feature. Licenses are the publishers' stated
+# terms: the Microsoft Graph SDK, Pode and openpyxl are MIT; ExchangeOnlineManagement,
+# MicrosoftTeams and the SharePoint Online shell ship under Microsoft's
+# proprietary license terms.
 $manifestPath = Join-Path $RepoRoot 'TenantPosture.psd1'
 $required = @()
 # An SBOM with the required modules missing is wrong, not partial: the release
@@ -64,7 +70,16 @@ $licenseOf = @{
     'ExchangeOnlineManagement'                  = 'LicenseRef-Microsoft-Software-License-Terms'
     'MicrosoftTeams'                            = 'LicenseRef-Microsoft-Software-License-Terms'
     'Microsoft.Online.SharePoint.PowerShell'    = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Pode'                                      = 'MIT'
+    'openpyxl'                                  = 'MIT'
 }
+# Where a component is published and by whom. Everything not listed here is a
+# Microsoft module on the PowerShell Gallery.
+$originOf = @{
+    'Pode'     = @{ Ecosystem = 'powershell'; Supplier = 'Badgerati (Matthew Kelly)'; SupplierUrl = 'https://github.com/Badgerati/Pode'; Distribution = 'https://www.powershellgallery.com/packages/Pode/{0}' }
+    'openpyxl' = @{ Ecosystem = 'pypi';       Supplier = 'openpyxl contributors';   SupplierUrl = 'https://foss.heptapod.net/openpyxl/openpyxl'; Distribution = 'https://pypi.org/project/openpyxl/{0}/' }
+}
+$defaultOrigin = @{ Ecosystem = 'powershell'; Supplier = 'Microsoft Corporation'; SupplierUrl = 'https://www.powershellgallery.com'; Distribution = 'https://www.powershellgallery.com/packages/{1}/{0}' }
 $optional = @(
     # Graph SDK submodules Connect-TPServices imports when present (Lib/Connect-TPServices.ps1).
     @{ Name = 'Microsoft.Graph.Reports';                Version = '2.20.0';         Scope = 'optional' }
@@ -73,10 +88,21 @@ $optional = @(
     @{ Name = 'Microsoft.Graph.Users';                  Version = '2.20.0';         Scope = 'optional' }
     @{ Name = 'MicrosoftTeams';                         Version = '6.5.0';          Scope = 'optional' }
     @{ Name = 'Microsoft.Online.SharePoint.PowerShell'; Version = '16.0.24720.12000'; Scope = 'optional' }
+    # The -Web GUI (Lib/Start-TPWebServer.ps1) imports Pode and requires 2.10.0 or later.
+    @{ Name = 'Pode';                                   Version = '2.10.0';         Scope = 'optional'; Semantics = 'declared minimum; imported by -Web on demand' }
+    # The XLSX publishers run openpyxl through Lib/Invoke-TPPython.ps1; Install-TPPrerequisites.ps1 pins this version.
+    @{ Name = 'openpyxl';                               Version = '3.1.5';          Scope = 'optional'; Semantics = 'pinned by the installer; used by the XLSX publishers on demand' }
 )
 $dependencies = @()
 foreach ($r in $required) { $dependencies += @{ Name = $r.Name; Version = $r.Version; Max = $r.Max; Scope = 'required'; License = $(if ($licenseOf.ContainsKey($r.Name)) { $licenseOf[$r.Name] } else { 'NOASSERTION' }) } }
-foreach ($o in $optional) { $dependencies += @{ Name = $o.Name; Version = $o.Version; Max = ''; Scope = 'optional'; License = $(if ($licenseOf.ContainsKey($o.Name)) { $licenseOf[$o.Name] } else { 'NOASSERTION' }) } }
+foreach ($o in $optional) { $dependencies += @{ Name = $o.Name; Version = $o.Version; Max = ''; Scope = 'optional'; License = $(if ($licenseOf.ContainsKey($o.Name)) { $licenseOf[$o.Name] } else { 'NOASSERTION' }); Semantics = $(if ($o.ContainsKey('Semantics')) { $o.Semantics } else { '' }) } }
+foreach ($d in $dependencies) {
+    $origin = if ($originOf.ContainsKey($d.Name)) { $originOf[$d.Name] } else { $defaultOrigin }
+    $d['Purl'] = "pkg:$($origin.Ecosystem)/$($d.Name)@$($d.Version)"
+    $d['Supplier'] = $origin.Supplier
+    $d['SupplierUrl'] = $origin.SupplierUrl
+    $d['Distribution'] = ($origin.Distribution -f $d.Version, $d.Name)
+}
 
 $bom = [ordered]@{
     bomFormat    = 'CycloneDX'
@@ -110,29 +136,29 @@ $bom = [ordered]@{
     components = @($dependencies | ForEach-Object {
         [ordered]@{
             type       = 'library'
-            'bom-ref'  = "pkg:powershell/$($_.Name)@$($_.Version)"
+            'bom-ref'  = $_.Purl
             name       = $_.Name
             version    = $_.Version
-            purl       = "pkg:powershell/$($_.Name)@$($_.Version)"
+            purl       = $_.Purl
             scope      = $_.Scope
             # `version` is the declared MINIMUM; the manifest allows a range and
             # the installed version varies by workstation. The range is recorded
             # as a property so an inventory tool does not read the floor as exact.
             properties = @(
-                @{ name = 'tenantposture:version-semantics'; value = $(if ($_.Scope -eq 'required') { 'declared minimum; manifest range in tenantposture:version-range' } else { 'tested version; imported on demand' }) }
+                @{ name = 'tenantposture:version-semantics'; value = $(if ($_.Scope -eq 'required') { 'declared minimum; manifest range in tenantposture:version-range' } elseif ($_.ContainsKey('Semantics') -and $_.Semantics) { $_.Semantics } else { 'tested version; imported on demand' }) }
                 @{ name = 'tenantposture:version-range'; value = $(if ($_.Max) { "[$($_.Version),$($_.Max)]" } else { "[$($_.Version),)" }) }
             )
             licenses   = @($(if ($_.License -like 'LicenseRef-*' -or $_.License -eq 'NOASSERTION') { @{ license = @{ name = $_.License } } } else { @{ license = @{ id = $_.License } } }))
-            supplier   = @{ name = 'Microsoft Corporation'; url = @('https://www.powershellgallery.com') }
+            supplier   = @{ name = $_.Supplier; url = @($_.SupplierUrl) }
             externalReferences = @(
-                @{ type = 'distribution'; url = "https://www.powershellgallery.com/packages/$($_.Name)/$($_.Version)" }
+                @{ type = 'distribution'; url = $_.Distribution }
             )
         }
     })
     dependencies = @(
         [ordered]@{
             ref = "pkg:tp-assessment@$Version"
-            dependsOn = @($dependencies | ForEach-Object { "pkg:powershell/$($_.Name)@$($_.Version)" })
+            dependsOn = @($dependencies | ForEach-Object { $_.Purl })
         }
     )
 }

@@ -140,6 +140,32 @@ try {
     Write-Host "  [!] Unblock step failed: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
+# The helpers this installer loads next (Lib\Get-TPModuleInstallScope.ps1 and
+# Lib\Invoke-TPPython.ps1) are subject to the same policy as every other
+# script. In an unsigned release the operator may have unblocked only this
+# file, and dot-sourcing a helper that is still marked as downloaded then
+# fails under RemoteSigned with nothing installed. So the run stops HERE when
+# the policy would refuse a helper, names the files and asks for the review
+# before the relaunch, instead of failing half-way with a policy error.
+$helperPaths = @((Join-Path $scriptDir 'Lib' 'Get-TPModuleInstallScope.ps1'), (Join-Path $scriptDir 'Lib' 'Invoke-TPPython.ps1'))
+$policyNow = [string](Get-ExecutionPolicy)
+if ($policyNow -in @('RemoteSigned', 'AllSigned')) {
+    $refused = @(foreach ($h in $helperPaths) {
+        if (-not (Test-Path -LiteralPath $h -PathType Leaf)) { continue }
+        $hSig = $null
+        try { $hSig = Get-AuthenticodeSignature -LiteralPath $h -ErrorAction Stop } catch { $hSig = $null }
+        $hValid = ($null -ne $hSig -and $hSig.Status -eq 'Valid')
+        $hMarked = $false
+        try { $hMarked = [bool](Get-Item -LiteralPath $h -Stream Zone.Identifier -ErrorAction Stop) } catch { $hMarked = $false }
+        if (-not $hValid -and ($policyNow -eq 'AllSigned' -or $hMarked)) { $h.Substring($scriptDir.Length + 1) }
+    })
+    if ($refused.Count -gt 0) {
+        Write-Host "  [!] Stopping: the helper file(s) this installer loads next carry no signature this workstation verifies, and the $policyNow policy would refuse to load them: $($refused -join ', ')" -ForegroundColor Red
+        Write-Host "      For an unsigned release, review the files, then: Get-ChildItem -Recurse -Include *.ps1,*.psm1,*.psd1,*.ps1xml | Unblock-File — and run this installer again. A signed release is unblocked by this step once its certificate is in the workstation's TrustedPublisher and Root stores." -ForegroundColor Yellow
+        exit 1
+    }
+}
+
 # ── PowerShell modules ───────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "[4/6] Checking PowerShell modules..." -ForegroundColor Cyan

@@ -72,7 +72,14 @@
   a chain the workstation trusts signed the file, which a script planted in a tampered archive and
   signed by any publisher the workstation happens to trust has too, so a file is unblocked only when
   its signer is the signer of the installer's own valid signature, the one the operator already
-  relied on to run it; an installer that carries no valid signature unblocks nothing and says so.
+  relied on to run it; an installer that carries no valid signature unblocks nothing and says so,
+  and it stops before dot-sourcing its two helpers when the execution policy would refuse them
+  (an unsigned release whose operator unblocked only the installer used to fail half-way with a
+  policy error and nothing installed), naming the files to review. The SBOM lists every optional
+  runtime dependency a shipped feature imports, Pode (the `-Web` GUI, MIT, PowerShell Gallery) and
+  openpyxl (the XLSX publishers, MIT, PyPI, the installer's pin) included, each with its own purl,
+  supplier and license, so a release no longer attests an inventory that leaves out two supported
+  features.
 - **[Honesty] The maturity label is provisional when evidence is incomplete.** `Get-TPMaturityTier`
   excludes Error and unknown-state findings from the score denominator (by design: a tool failure
   is not a gap), but it then printed an unqualified tier, so 50 passes beside 50 errored checks
