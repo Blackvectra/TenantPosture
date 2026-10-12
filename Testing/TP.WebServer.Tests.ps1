@@ -249,6 +249,9 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             $appJs = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Web' 'static' 'app.js') -Raw
             $appJs | Should -Not -Match '\.srcdoc\s*='
             $appJs | Should -Match 'frame\.src = url'
+            # One request per open: the frame's load event is the failure check, not a probe GET.
+            $appJs | Should -Not -Match 'await fetch\(url\)'
+            $appJs | Should -Match 'frame\.onload = function'
             (Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Web' 'index.html') -Raw) | Should -Not -Match 'srcdoc'
             foreach ($m in $sets) { $m.Groups[1].Value | Should -Match '^\$cfg\.CspTemplate -f ' }
             ([regex]::Matches($script:ServerSrc, "default-src 'none'")).Count | Should -Be 1 -Because 'the policy text exists once, in the template'
@@ -2212,6 +2215,9 @@ Describe 'per-run image policy (Lib/Get-TPWebRunIndex.ps1)' {
     It 'an origin comes only from an absolute https URL (<Label>)' -ForEach @(
         @{ Label = 'https with path and query'; Url = 'https://cdn.example/a/logo.png?v=2'; Expected = 'https://cdn.example' }
         @{ Label = 'https with port';           Url = 'https://cdn.example:8443/l.png';  Expected = 'https://cdn.example:8443' }
+        @{ Label = 'default port stated';       Url = 'https://cdn.example:443/l.png';   Expected = 'https://cdn.example' }
+        @{ Label = 'userinfo dropped';          Url = ('https://' + 'user:tok' + 'en@cdn.example/l.png'); Expected = 'https://cdn.example' }
+        @{ Label = 'IPv6 host with port';       Url = 'https://[2001:db8::1]:8443/l.png'; Expected = 'https://[2001:db8::1]:8443' }
         @{ Label = 'http';                      Url = 'http://cdn.example/l.png';        Expected = '' }
         @{ Label = 'data URL';                  Url = 'data:image/png;base64,AAAA';      Expected = '' }
         @{ Label = 'relative';                  Url = 'logo.png';                        Expected = '' }

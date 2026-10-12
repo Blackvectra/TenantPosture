@@ -57,7 +57,12 @@ function ConvertTo-TPWebImageOrigin {
     param([Parameter()] [AllowNull()] [AllowEmptyString()] [string] $Url)
     $uri = $null
     if ($Url -and [System.Uri]::TryCreate($Url, [System.UriKind]::Absolute, [ref]$uri) -and $uri.Scheme -eq 'https') {
-        return $uri.GetLeftPart([System.UriPartial]::Authority)
+        # Scheme, host and a non-default port only: a CSP host source has no
+        # userinfo (GetLeftPart(Authority) would keep `user:token@`, an invalid
+        # source that also copied the credential into every policy header).
+        $hostAndPort = $uri.GetComponents([System.UriComponents]::Host -bor [System.UriComponents]::Port, [System.UriFormat]::UriEscaped)
+        if (-not $hostAndPort) { return '' }
+        return ('https://' + $hostAndPort)
     }
     return ''
 }

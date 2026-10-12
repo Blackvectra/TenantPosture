@@ -23,7 +23,9 @@
   `srcdoc`: a `srcdoc` document inherits the index page's policy and discards the report
   response's, so no header on the report could have governed the framed document; the report
   route answers with `frame-ancestors 'self'` (the GUI's own origin may frame it, nothing else may;
-  every other response keeps `'none'`). When a run's metadata gives no logo origin (no results
+  every other response keeps `'none'`); the frame's load event is the failure check, so a report
+  is transferred once per open, not probed first. A logo origin is scheme, host and non-default
+  port only, never the userinfo a `LogoUrl` might carry. When a run's metadata gives no logo origin (no results
   file beside the report, or one above the reader's 128 MB cap), the origins of the `<img>` tags
   in the report's first 256 KB are the fallback. The script directory is resolved before any
   support-script path is built from it (Pode resolves a relative `Use-PodeScript` path against
