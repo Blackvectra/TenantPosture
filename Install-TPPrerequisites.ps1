@@ -42,8 +42,16 @@ Write-Host "  [+] PowerShell $($PSVersionTable.PSVersion) — OK" -ForegroundCol
 Write-Host ""
 Write-Host "[2/6] Checking execution policy..." -ForegroundColor Cyan
 $policy = Get-ExecutionPolicy -Scope CurrentUser
-if ($policy -in @('Restricted','AllSigned','Undefined')) {
-    Write-Host "  [*] Setting CurrentUser policy to RemoteSigned..." -ForegroundColor Yellow
+$effective = Get-ExecutionPolicy
+if ($policy -eq 'AllSigned' -or $effective -eq 'AllSigned') {
+    # AllSigned is a deliberate choice, often set by policy. The installer
+    # never lowers it: the operator signs the tool (Build/Sign-Release.ps1)
+    # or changes the policy knowingly.
+    Write-Host "  [!] Execution policy is AllSigned (CurrentUser: $policy, effective: $effective). Not changed." -ForegroundColor Yellow
+    Write-Host "      Either sign the tool: Build/New-TPCodeSigningCert.ps1 then Build/Sign-Release.ps1" -ForegroundColor DarkGray
+    Write-Host "      or, if your organization allows it: Set-ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor DarkGray
+} elseif ($policy -in @('Restricted', 'Undefined') -and $effective -in @('Restricted', 'Undefined', 'RemoteSigned', 'Unrestricted', 'Bypass')) {
+    Write-Host "  [*] Setting CurrentUser policy to RemoteSigned (was $policy)..." -ForegroundColor Yellow
     try {
         Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
         Write-Host "  [+] Execution policy set" -ForegroundColor Green
@@ -51,18 +59,127 @@ if ($policy -in @('Restricted','AllSigned','Undefined')) {
         Write-Host "  [!] Failed: $($_.Exception.Message)" -ForegroundColor Red
     }
 } else {
-    Write-Host "  [+] Policy is $policy — OK" -ForegroundColor Green
+    Write-Host "  [+] Policy is $policy (effective $effective) — OK" -ForegroundColor Green
 }
 
 # ── Unblock files ────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "[3/6] Unblocking files (Zone.Identifier from downloads)..." -ForegroundColor Cyan
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
+# Removing the download mark is an authorization: with the policy set to
+# RemoteSigned above, that mark is what stops a downloaded script from running,
+# and the module dot-sources every *.ps1 under Lib, Collectors, Evaluators and
+# Publishers on import. So only a script whose Authenticode signature verifies
+# on this workstation AND was made by the release signer is unblocked. A Valid
+# status alone is not that: it says a chain this workstation trusts signed the
+# file, and a script planted in a tampered archive and signed by any publisher
+# the workstation happens to trust is Valid too. The release signer is pinned
+# to the signer of this installer's own signature, which the operator already
+# relied on to run it; an installer that does not carry a valid signature
+# cannot vouch for any file, so nothing is unblocked. A hash record that
+# travels inside the archive (FILES.sha256, the integrity manifest) proves
+# nothing here: whoever changed the archive rewrites it. It is used only to
+# name files that are not part of the release. An unsigned release keeps its
+# marks, and the operator is told how to clear them after a review; a git
+# clone carries none.
+$scriptExt = @('.ps1', '.psm1', '.psd1', '.ps1xml')
 try {
-    Get-ChildItem -Path $scriptDir -Recurse -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
-    Write-Host "  [+] Files unblocked" -ForegroundColor Green
+    $scripts = @(Get-ChildItem -LiteralPath $scriptDir -Recurse -File -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -in $scriptExt -and $_.FullName -notmatch '[\\/](output|\.git)([\\/]|$)' })
+    $pin = ''
+    $selfStatus = 'not on disk'
+    if ($PSCommandPath -and (Test-Path -LiteralPath $PSCommandPath -PathType Leaf)) {
+        $selfSig = Get-AuthenticodeSignature -LiteralPath $PSCommandPath -ErrorAction SilentlyContinue
+        $selfStatus = if ($selfSig) { [string]$selfSig.Status } else { 'unreadable' }
+        if ($selfSig -and $selfSig.Status -eq 'Valid' -and $selfSig.SignerCertificate) {
+            $pin = [string]$selfSig.SignerCertificate.Thumbprint
+        }
+    }
+    # The release record (FILES.sha256 inside an archive, else the committed
+    # manifest) is read BEFORE anything is unblocked: a script the record does
+    # not name is never part of this release, so it keeps its mark even when
+    # the release signer signed it (a script copied from another signed release
+    # into Lib\ would otherwise be unblocked, and the module loader dot-sources
+    # every *.ps1 under its folders on import). The record's hashes are not
+    # what gates here (whoever changed the archive rewrites them); its names
+    # are, beside the signer pin. With no record nothing can be told apart, so
+    # nothing is unblocked.
+    $record = $null
+    foreach ($candidate in @((Join-Path $scriptDir 'FILES.sha256'), (Join-Path $scriptDir 'tools' 'integrity-manifest.txt'))) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { $record = $candidate; break }
+    }
+    $recorded = $null
+    if ($record) {
+        $recorded = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+        foreach ($line in (Get-Content -LiteralPath $record | Where-Object { $_ -and -not $_.StartsWith('#') })) {
+            $parts = $line -split '\s+', 2
+            if ($parts.Count -eq 2) { [void]$recorded.Add((Join-Path $scriptDir ($parts[1].Trim() -replace '/', [string][System.IO.Path]::DirectorySeparatorChar))) }
+        }
+    }
+    $unblocked = 0; $kept = @(); $stray = @()
+    foreach ($f in $scripts) {
+        $sig = Get-AuthenticodeSignature -LiteralPath $f.FullName -ErrorAction SilentlyContinue
+        $status = if ($sig) { [string]$sig.Status } else { 'unreadable' }
+        $tp = if ($sig -and $sig.SignerCertificate) { [string]$sig.SignerCertificate.Thumbprint } else { '' }
+        $rel = $f.FullName.Substring($scriptDir.Length + 1)
+        $inRecord = ($null -ne $recorded -and $recorded.Contains($f.FullName))
+        if (-not $inRecord) { $stray += $rel }
+        if ($pin -and $status -eq 'Valid' -and $tp -eq $pin -and $inRecord) {
+            Unblock-File -LiteralPath $f.FullName -ErrorAction SilentlyContinue
+            $unblocked++
+        } elseif ($pin -and $status -eq 'Valid' -and $tp -eq $pin) {
+            $kept += "$rel [signed by the release signer but not named by the release record]"
+        } elseif ($pin -and $status -eq 'Valid') {
+            $kept += "$rel [Valid, signer $tp is not the release signer]"
+        } else {
+            $kept += "$rel [$status]"
+        }
+    }
+    if (-not $record) {
+        Write-Host "  [i] No release record (FILES.sha256 or tools\integrity-manifest.txt) is beside this installer, so nothing was unblocked: a file the release does not name is never unblocked, and without the record none can be told apart." -ForegroundColor Yellow
+    } elseif ($pin) {
+        Write-Host "  [+] $unblocked script file(s) named by $(Split-Path -Leaf $record) and signed by the release signer ($pin, the signer of this installer) unblocked" -ForegroundColor Green
+    } else {
+        Write-Host "  [i] This installer carries no valid Authenticode signature ($selfStatus), so it cannot vouch for any file: nothing was unblocked." -ForegroundColor Yellow
+    }
+    if ($kept.Count -gt 0) {
+        $shown = if ($kept.Count -le 12) { $kept -join ', ' } else { (($kept | Select-Object -First 12) -join ', ') + ", and $($kept.Count - 12) more" }
+        Write-Host "  [i] Left as downloaded ($($kept.Count) file(s) not named by the release record, not signed by the release signer, or with no signature this workstation verifies): $shown" -ForegroundColor Yellow
+        Write-Host "      An in-house signature verifies once the signing certificate is in this workstation's TrustedPublisher and Root stores (Build/New-TPCodeSigningCert.ps1 does that where it ran). For an unsigned release, review the files, then: Get-ChildItem -Recurse -Include *.ps1,*.psm1,*.psd1,*.ps1xml | Unblock-File" -ForegroundColor DarkGray
+    }
+    # Files no release record names are never part of the release; they were
+    # never unblocked above, and they are named so the operator removes them.
+    if ($record -and $stray.Count -gt 0) {
+        Write-Host "  [!] Not in the release record $(Split-Path -Leaf $record) (the module would load them on import; left blocked, remove what you did not put there): $($stray -join ', ')" -ForegroundColor Red
+    }
 } catch {
-    Write-Host "  [!] Unblock failed: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "  [!] Unblock step failed: $($_.Exception.Message)" -ForegroundColor Yellow
+}
+
+# The helpers this installer loads next (Lib\Get-TPModuleInstallScope.ps1 and
+# Lib\Invoke-TPPython.ps1) are subject to the same policy as every other
+# script. In an unsigned release the operator may have unblocked only this
+# file, and dot-sourcing a helper that is still marked as downloaded then
+# fails under RemoteSigned with nothing installed. So the run stops HERE when
+# the policy would refuse a helper, names the files and asks for the review
+# before the relaunch, instead of failing half-way with a policy error.
+$helperPaths = @((Join-Path $scriptDir 'Lib' 'Get-TPModuleInstallScope.ps1'), (Join-Path $scriptDir 'Lib' 'Invoke-TPPython.ps1'))
+$policyNow = [string](Get-ExecutionPolicy)
+if ($policyNow -in @('RemoteSigned', 'AllSigned')) {
+    $refused = @(foreach ($h in $helperPaths) {
+        if (-not (Test-Path -LiteralPath $h -PathType Leaf)) { continue }
+        $hSig = $null
+        try { $hSig = Get-AuthenticodeSignature -LiteralPath $h -ErrorAction Stop } catch { $hSig = $null }
+        $hValid = ($null -ne $hSig -and $hSig.Status -eq 'Valid')
+        $hMarked = $false
+        try { $hMarked = [bool](Get-Item -LiteralPath $h -Stream Zone.Identifier -ErrorAction Stop) } catch { $hMarked = $false }
+        if (-not $hValid -and ($policyNow -eq 'AllSigned' -or $hMarked)) { $h.Substring($scriptDir.Length + 1) }
+    })
+    if ($refused.Count -gt 0) {
+        Write-Host "  [!] Stopping: the helper file(s) this installer loads next carry no signature this workstation verifies, and the $policyNow policy would refuse to load them: $($refused -join ', ')" -ForegroundColor Red
+        Write-Host "      For an unsigned release, review the files, then: Get-ChildItem -Recurse -Include *.ps1,*.psm1,*.psd1,*.ps1xml | Unblock-File — and run this installer again. A signed release is unblocked by this step once its certificate is in the workstation's TrustedPublisher and Root stores." -ForegroundColor Yellow
+        exit 1
+    }
 }
 
 # ── PowerShell modules ───────────────────────────────────────────────────────
@@ -286,15 +403,25 @@ if ($SkipPython) {
         try {
             if (Test-TPPythonModule -Python $pythonCmd -Module 'openpyxl') { $openpyxlOk = $true }
         } catch { }
+        $openpyxlPin = '3.1.5'
         if ($openpyxlOk) {
-            Write-Host "  [+] openpyxl installed — XLSX matrix enabled" -ForegroundColor Green
+            # The pin applies to an existing install too: a different version is
+            # replaced, so the publishers run against the version the tool was tested with.
+            $have = [string](@(Invoke-TPPython -Python $pythonCmd -Script "import openpyxl; print(openpyxl.__version__)") | Select-Object -Last 1)
+            if ($have.Trim() -ne $openpyxlPin) {
+                Write-Host "  [*] openpyxl $($have.Trim()) found; installing the pinned $openpyxlPin..." -ForegroundColor Yellow
+                $openpyxlOk = $false
+            }
+        }
+        if ($openpyxlOk) {
+            Write-Host "  [+] openpyxl $openpyxlPin installed — XLSX matrix enabled" -ForegroundColor Green
         } else {
             Write-Host "  [*] Installing openpyxl..." -ForegroundColor Yellow
             try {
                 # pip runs through the same helper as every other Python call: the
                 # current directory is off sys.path (no planted pip.py) and the user
                 # site stays, so an unelevated install can fall back to --user.
-                $null = Invoke-TPPython -Python $pythonCmd -Script "import sys, runpy; sys.argv = ['pip', 'install', 'openpyxl', '--quiet']; runpy.run_module('pip', run_name='__main__', alter_sys=True)"
+                $null = Invoke-TPPython -Python $pythonCmd -Script "import sys, runpy; sys.argv = ['pip', 'install', 'openpyxl==$openpyxlPin', '--quiet']; runpy.run_module('pip', run_name='__main__', alter_sys=True)"
                 if ($LASTEXITCODE -eq 0 -and (Test-TPPythonModule -Python $pythonCmd -Module 'openpyxl')) {
                     Write-Host "  [+] openpyxl installed" -ForegroundColor Green
                 } elseif ($LASTEXITCODE -eq 0) {

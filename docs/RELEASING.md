@@ -17,26 +17,48 @@ or checksummed assets.
    - `CHANGELOG.md` → move `## Unreleased` content under the new
      `## vX.Y.Z (YYYY-MM-DD)` heading
 
-3. **Tag and push** (annotated tag, `v` prefix — required):
+3. **Sign, then commit, then tag.** The release workflow checks the commit the
+   tag points at, never a working tree, so a signed release means the signed
+   files are committed before the tag exists.
 
    ```powershell
-   git tag -a v4.13.0 -m "v4.13.0"
-   git push origin v4.13.0
+   git status --porcelain --untracked-files=no   # must print nothing (stash a populated Config/clients.json)
+   .\Build\Sign-Release.ps1            # signs, writes the manifests, builds the catalog
+   git add -u -- '*.ps1' '*.psm1' '*.psd1' '*.ps1xml'   # only what signing changed
+   git add -- tools/integrity-manifest.txt TenantPosture.cat
+   git status --short                  # nothing but signed scripts, the manifest, the catalog
+   git commit -m "Sign vX.Y.Z"
+   git tag -a vX.Y.Z -m "vX.Y.Z"      # must equal the manifest's ModuleVersion
+   git push origin main vX.Y.Z
    ```
+
+   For an **unsigned** release there is nothing to sign or commit: the version
+   bump from step 2 is the release. Tag it and push both refs; the release
+   notes will say "Unsigned release", and `TP_REQUIRE_SIGNED` must be unset.
+
+   ```powershell
+   git tag -a vX.Y.Z -m "vX.Y.Z"
+   git push origin main vX.Y.Z
+   ```
+
+   Never `git add -A` for this commit: `Config/clients.json` is a tracked file an
+   operator workstation fills with real tenant data, and it would ride into the
+   release commit and the archive.
+
+   Repository variables: `TP_SIGNING_THUMBPRINT` (the self-signed cert's SHA-1
+   thumbprint; a hosted runner trusts no self-signed root, so only that pinned
+   signer is accepted) and, once every release is signed, `TP_REQUIRE_SIGNED`
+   = `true` to fail the pipeline on any unsigned script.
 
 4. **The pipeline runs automatically:**
    | Job | Does |
    |---|---|
-   | `sbom` | Generates the CycloneDX SBOM |
-   | `authenticode` | Verifies integrity manifest + Authenticode status (fails on tamper signals) |
-   | `package` | Builds `TenantPosture-vX.Y.Z.zip`, writes `SHA256SUMS`, creates a **draft** GitHub Release with auto-generated categorized notes, attaches zip + checksums + SBOM |
+   | `sbom` | Generates the CycloneDX SBOM from the manifest's required modules |
+   | `authenticode` | Verifies a committed integrity manifest, the Authenticode status of the shipped scripts (fails on tamper signals; unsigned is reported, or fails under `TP_REQUIRE_SIGNED`) and, when the commit carries `TenantPosture.cat`, the signed catalog over every tracked file, so the JavaScript, HTML and configuration that ship are covered too; under `TP_REQUIRE_SIGNED` the catalog is required |
+   | `package` | Builds `TenantPosture-vX.Y.Z.zip` from the shipped-folder allowlist with `FILES.sha256` inside, writes `SHA256SUMS`, attests the archive, checksums and SBOM on a **public** repository only (on a private repository the attestation step is skipped and the release notes say so; `gh attestation verify` has nothing to check), and creates a **draft** GitHub Release (through the `release` environment) whose notes state the signing result |
 
 5. **Review the draft release** on GitHub — check the generated notes
    (categories come from `.github/release.yml` labels), then **Publish**.
-
-6. **Sign before client distribution** (optional but recommended): run
-   `Build/Sign-Release.ps1` locally against the extracted zip — CI verifies
-   signatures but cannot sign (no cert in CI, by design).
 
 ## Client verification
 

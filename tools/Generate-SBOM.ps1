@@ -40,17 +40,81 @@ if (-not (Test-Path -LiteralPath $outputDir)) {
     [void][System.IO.Directory]::CreateDirectory($outputDir)
 }
 
-# Known dependencies (matches docs/security/SBOM.md)
-$dependencies = @(
-    @{ Name = 'Microsoft.Graph.Authentication';      Version = '2.26.1'; License = 'MIT' }
-    @{ Name = 'ExchangeOnlineManagement';            Version = '3.7.2';  License = 'MIT' }
-    @{ Name = 'Microsoft.Graph.Reports';             Version = '2.26.1'; License = 'MIT' }
-    @{ Name = 'Microsoft.Graph.Identity.Governance'; Version = '2.26.1'; License = 'MIT' }
-    @{ Name = 'Microsoft.Graph.Identity.SignIns';    Version = '2.26.1'; License = 'MIT' }
-    @{ Name = 'Microsoft.Graph.Users';               Version = '2.26.1'; License = 'MIT' }
-    @{ Name = 'MicrosoftTeams';                      Version = '6.5.0';  License = 'MIT' }
-    @{ Name = 'PnP.PowerShell';                      Version = '3.0.0';  License = 'MIT' }
+# The components are the modules the manifest actually requires (hard
+# dependencies) plus every optional runtime dependency a shipped feature
+# imports on demand: the Graph submodules and the Teams and SharePoint shells
+# (collectors), Pode (the -Web GUI, Lib/Start-TPWebServer.ps1, 2.10 or later)
+# and openpyxl (the XLSX publishers, through Lib/Invoke-TPPython.ps1; the
+# installer pins 3.1.5). An optional dependency left out of the SBOM is a
+# release attesting an incomplete inventory, so a downstream scanner cannot
+# report exposure in a supported feature. Licenses are what each package
+# publishes, read at the gallery, never assumed from the publisher: the
+# Microsoft Graph SDK, ExchangeOnlineManagement (its license.txt from 3.7.2
+# on), MicrosoftTeams (likewise), Pode and openpyxl are MIT; the SharePoint
+# Online Management Shell publishes no license file in its gallery package
+# and ships under Microsoft's license terms.
+$manifestPath = Join-Path $RepoRoot 'TenantPosture.psd1'
+$required = @()
+# An SBOM with the required modules missing is wrong, not partial: the release
+# attests it, so an unreadable manifest fails the generation outright.
+$m = Import-PowerShellDataFile -LiteralPath $manifestPath -ErrorAction Stop
+foreach ($r in @($m.RequiredModules)) {
+    if ($r -is [hashtable]) { $required += @{ Name = [string]$r.ModuleName; Version = [string]$r.ModuleVersion; Max = [string]$r.MaximumVersion } }
+    else { $required += @{ Name = [string]$r; Version = ''; Max = '' } }
+}
+if ($required.Count -eq 0) { throw "No RequiredModules found in $manifestPath; refusing to write an SBOM without the hard dependencies." }
+$licenseOf = @{
+    'Microsoft.Graph.Authentication'            = 'MIT'
+    'Microsoft.Graph.Reports'                   = 'MIT'
+    'Microsoft.Graph.Identity.Governance'       = 'MIT'
+    'Microsoft.Graph.Identity.SignIns'          = 'MIT'
+    'Microsoft.Graph.Users'                     = 'MIT'
+    'ExchangeOnlineManagement'                  = 'MIT'
+    'MicrosoftTeams'                            = 'MIT'
+    'Microsoft.Online.SharePoint.PowerShell'    = 'LicenseRef-Microsoft-Software-License-Terms'
+    'Pode'                                      = 'MIT'
+    'openpyxl'                                  = 'MIT'
+    'pypdf'                                     = 'BSD-3-Clause'   # PyPI license expression
+    'reportlab'                                 = 'BSD-3-Clause'   # PyPI: "BSD license (see license.txt)"; the file is the three-clause text
+}
+# Where a component is published and by whom. Everything not listed here is a
+# Microsoft module on the PowerShell Gallery.
+$originOf = @{
+    'Pode'     = @{ Ecosystem = 'powershell'; Supplier = 'Badgerati (Matthew Kelly)'; SupplierUrl = 'https://github.com/Badgerati/Pode'; Distribution = 'https://www.powershellgallery.com/packages/Pode/{0}' }
+    'openpyxl' = @{ Ecosystem = 'pypi';       Supplier = 'openpyxl contributors';   SupplierUrl = 'https://pypi.org/project/openpyxl/';   Distribution = 'https://pypi.org/project/openpyxl/{0}/' }
+    'pypdf'    = @{ Ecosystem = 'pypi';       Supplier = 'pypdf contributors';      SupplierUrl = 'https://pypi.org/project/pypdf/';      Distribution = 'https://pypi.org/project/pypdf/{0}' }
+    'reportlab' = @{ Ecosystem = 'pypi';      Supplier = 'ReportLab Inc.';          SupplierUrl = 'https://pypi.org/project/reportlab/';  Distribution = 'https://pypi.org/project/reportlab/{0}' }
+}
+$defaultOrigin = @{ Ecosystem = 'powershell'; Supplier = 'Microsoft Corporation'; SupplierUrl = 'https://www.powershellgallery.com'; Distribution = 'https://www.powershellgallery.com/packages/{1}/{0}' }
+$optional = @(
+    # Graph SDK submodules Connect-TPServices imports when present (Lib/Connect-TPServices.ps1).
+    @{ Name = 'Microsoft.Graph.Reports';                Version = '2.20.0';         Scope = 'optional' }
+    @{ Name = 'Microsoft.Graph.Identity.Governance';    Version = '2.20.0';         Scope = 'optional' }
+    @{ Name = 'Microsoft.Graph.Identity.SignIns';       Version = '2.20.0';         Scope = 'optional' }
+    @{ Name = 'Microsoft.Graph.Users';                  Version = '2.20.0';         Scope = 'optional' }
+    @{ Name = 'MicrosoftTeams';                         Version = '6.5.0';          Scope = 'optional' }
+    @{ Name = 'Microsoft.Online.SharePoint.PowerShell'; Version = '16.0.24720.12000'; Scope = 'optional' }
+    # The -Web GUI (Lib/Start-TPWebServer.ps1) imports Pode and requires 2.10.0 or later.
+    @{ Name = 'Pode';                                   Version = '2.10.0';         Scope = 'optional'; Semantics = 'declared minimum; imported by -Web on demand' }
+    # The XLSX publishers run openpyxl through Lib/Invoke-TPPython.ps1; Install-TPPrerequisites.ps1 pins this version.
+    @{ Name = 'openpyxl';                               Version = '3.1.5';          Scope = 'optional'; Semantics = 'pinned by the installer; used by the XLSX publishers on demand' }
+    # The questionnaire importers read AcroForm fields through pypdf and the
+    # questionnaire publishers render the PDF through reportlab; neither is
+    # pinned or installed by the installer (the operator runs pip when the PDF
+    # path is used), so no version is recorded rather than an invented one.
+    @{ Name = 'pypdf';                                  Version = '';               Scope = 'optional'; Semantics = 'not pinned; installed by the operator (pip install pypdf) for the questionnaire PDF import' }
+    @{ Name = 'reportlab';                              Version = '';               Scope = 'optional'; Semantics = 'not pinned; installed by the operator (pip install reportlab) for the questionnaire PDF output' }
 )
+$dependencies = @()
+foreach ($r in $required) { $dependencies += @{ Name = $r.Name; Version = $r.Version; Max = $r.Max; Scope = 'required'; License = $(if ($licenseOf.ContainsKey($r.Name)) { $licenseOf[$r.Name] } else { 'NOASSERTION' }) } }
+foreach ($o in $optional) { $dependencies += @{ Name = $o.Name; Version = $o.Version; Max = ''; Scope = 'optional'; License = $(if ($licenseOf.ContainsKey($o.Name)) { $licenseOf[$o.Name] } else { 'NOASSERTION' }); Semantics = $(if ($o.ContainsKey('Semantics')) { $o.Semantics } else { '' }) } }
+foreach ($d in $dependencies) {
+    $origin = if ($originOf.ContainsKey($d.Name)) { $originOf[$d.Name] } else { $defaultOrigin }
+    $d['Purl'] = if ($d.Version) { "pkg:$($origin.Ecosystem)/$($d.Name)@$($d.Version)" } else { "pkg:$($origin.Ecosystem)/$($d.Name)" }
+    $d['Supplier'] = $origin.Supplier
+    $d['SupplierUrl'] = $origin.SupplierUrl
+    $d['Distribution'] = ($origin.Distribution -f $d.Version, $d.Name).TrimEnd('/') + $(if ($d.Version) { '/' } else { '' })
+}
 
 $bom = [ordered]@{
     bomFormat    = 'CycloneDX'
@@ -73,7 +137,7 @@ $bom = [ordered]@{
             version = $Version
             description = 'Read-only Microsoft 365 security assessment tool'
             licenses = @(
-                @{ license = @{ id = 'MIT' } }
+                @{ license = @{ id = 'Apache-2.0' } }
             )
             supplier = @{
                 name = 'NRG Technology Services / NextLayerSec LLC'
@@ -84,21 +148,29 @@ $bom = [ordered]@{
     components = @($dependencies | ForEach-Object {
         [ordered]@{
             type       = 'library'
-            'bom-ref'  = "pkg:powershell/$($_.Name)@$($_.Version)"
+            'bom-ref'  = $_.Purl
             name       = $_.Name
-            version    = $_.Version
-            purl       = "pkg:powershell/$($_.Name)@$($_.Version)"
-            licenses   = @(@{ license = @{ id = $_.License } })
-            supplier   = @{ name = 'Microsoft Corporation'; url = @('https://www.powershellgallery.com') }
+            version    = $(if ($_.Version) { $_.Version } else { $null })
+            purl       = $_.Purl
+            scope      = $_.Scope
+            # `version` is the declared MINIMUM; the manifest allows a range and
+            # the installed version varies by workstation. The range is recorded
+            # as a property so an inventory tool does not read the floor as exact.
+            properties = @(
+                @{ name = 'tenantposture:version-semantics'; value = $(if ($_.Scope -eq 'required') { 'declared minimum; manifest range in tenantposture:version-range' } elseif ($_.ContainsKey('Semantics') -and $_.Semantics) { $_.Semantics } else { 'tested version; imported on demand' }) }
+                @{ name = 'tenantposture:version-range'; value = $(if (-not $_.Version) { 'unpinned' } elseif ($_.Max) { "[$($_.Version),$($_.Max)]" } else { "[$($_.Version),)" }) }
+            )
+            licenses   = @($(if ($_.License -like 'LicenseRef-*' -or $_.License -eq 'NOASSERTION') { @{ license = @{ name = $_.License } } } else { @{ license = @{ id = $_.License } } }))
+            supplier   = @{ name = $_.Supplier; url = @($_.SupplierUrl) }
             externalReferences = @(
-                @{ type = 'distribution'; url = "https://www.powershellgallery.com/packages/$($_.Name)/$($_.Version)" }
+                @{ type = 'distribution'; url = $_.Distribution }
             )
         }
     })
     dependencies = @(
         [ordered]@{
             ref = "pkg:tp-assessment@$Version"
-            dependsOn = @($dependencies | ForEach-Object { "pkg:powershell/$($_.Name)@$($_.Version)" })
+            dependsOn = @($dependencies | ForEach-Object { $_.Purl })
         }
     )
 }
