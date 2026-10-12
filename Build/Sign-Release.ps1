@@ -358,14 +358,27 @@ Write-Host "  Signed:  $signed" -ForegroundColor Green
 Write-Host "  Failed:  $failed" -ForegroundColor $(if ($failed) { 'Red' } else { 'DarkGray' })
 Write-Host ""
 
-if ($failed -gt 0) {
+function Restore-TPUnsignedBytes {
+    <# Puts every file's pre-signing bytes back; returns how many it restored. #>
+    param([Parameter(Mandatory)] $Map)
     $restored = 0
-    foreach ($path in @($originals.Keys)) {
-        try { [System.IO.File]::WriteAllBytes($path, $originals[$path]); $restored++ }
+    foreach ($path in @($Map.Keys)) {
+        try { [System.IO.File]::WriteAllBytes($path, $Map[$path]); $restored++ }
         catch { Write-Host "  [!] Could not restore $path`: $($_.Exception.Message)" -ForegroundColor Red }
     }
+    return $restored
+}
+
+if ($failed -gt 0) {
+    $restored = Restore-TPUnsignedBytes -Map $originals
     throw "Signing failed for $failed file(s); the unsigned bytes of $restored file(s) were restored, so the tree is as it was and the run can be repeated."
 }
+
+# Everything after this point (manifests, catalog) is part of the same
+# transaction: a failure there restores the unsigned bytes too, so a
+# timestamp outage during catalog signing or a manifest that does not verify
+# never leaves a half-done tree that the clean-tree check would then refuse.
+try {
 
 # The committed integrity manifest (tools/integrity-manifest.txt, written by
 # tools/Verify-Integrity.ps1 -Update) hashes the same scripts signing just
@@ -453,6 +466,11 @@ try {
     }
 } finally {
     Remove-Item -LiteralPath $tree -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+} catch {
+    $restored = Restore-TPUnsignedBytes -Map $originals
+    throw "Release signing failed after the scripts were signed ($($_.Exception.Message)); the unsigned bytes of $restored file(s) were restored, so the tree is as it was and the run can be repeated."
 }
 
 Write-Host ""

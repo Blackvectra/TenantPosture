@@ -19,8 +19,7 @@ or checksummed assets.
 
 3. **Sign, then commit, then tag.** The release workflow checks the commit the
    tag points at, never a working tree, so a signed release means the signed
-   files are committed before the tag exists. For an unsigned release skip the
-   first two commands; the release notes will say "Unsigned release".
+   files are committed before the tag exists.
 
    ```powershell
    git status --porcelain --untracked-files=no   # must print nothing (stash a populated Config/clients.json)
@@ -30,6 +29,15 @@ or checksummed assets.
    git status --short                  # nothing but signed scripts, the manifest, the catalog
    git commit -m "Sign vX.Y.Z"
    git tag -a vX.Y.Z -m "vX.Y.Z"      # must equal the manifest's ModuleVersion
+   git push origin main vX.Y.Z
+   ```
+
+   For an **unsigned** release there is nothing to sign or commit: the version
+   bump from step 2 is the release. Tag it and push both refs; the release
+   notes will say "Unsigned release", and `TP_REQUIRE_SIGNED` must be unset.
+
+   ```powershell
+   git tag -a vX.Y.Z -m "vX.Y.Z"
    git push origin main vX.Y.Z
    ```
 

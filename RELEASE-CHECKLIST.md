@@ -84,6 +84,10 @@ git tag -s "vX.Y.Z" -m "vX.Y.Z — release notes here"
 git push origin main "vX.Y.Z"      # the signing commit AND the tag: a tag alone leaves main unsigned
 ```
 
+For an unsigned release skip the whole block above: there is nothing to sign, stage or
+commit, so tag the version-bump commit and push `main` with the tag (`git tag -a "vX.Y.Z"
+-m "vX.Y.Z"` then `git push origin main "vX.Y.Z"`); the release notes will say so.
+
 Sign-Release.ps1 writes the signed scripts in the repository's committed form (LF; git
 normalizes CRLF on commit and would otherwise rewrite the signature block after the manifests
 were computed) and re-reads each signature on those bytes, so the manifests describe the bytes

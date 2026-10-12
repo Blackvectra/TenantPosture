@@ -57,7 +57,13 @@
   system no longer verifies clean. The release job calls the catalog check with a hashtable splat (an
   array splat passes its entries positionally, so the switch would have bound to the thumbprint
   parameter), and signing is transactional: a failure midway restores every file's unsigned bytes
-  so the run can be repeated.
+  so the run can be repeated, and the manifest and catalog steps after it are in the same
+  transaction. The installer unblocks only script files the release's own record names
+  (`FILES.sha256`, else the committed manifest) and whose bytes still match it, naming any script
+  on disk the record does not know, since the module dot-sources every `.ps1` under its folders on
+  import; with no record it unblocks nothing and says what to review. The verifier leaves out only
+  the manifest it reads, by exact path. RELEASING.md and the checklist give the unsigned release
+  its own two commands instead of a signing block to half-skip.
 - **[Detection] Four paths that produced an unsupported Satisfied, found by the 2026-10-11 review.**
   AAD-1.4 and AAD-1.5 merged the risk levels of every enabled responding policy whatever its
   scope, so a pilot-group policy, a policy excluding a group, or one applying to no application

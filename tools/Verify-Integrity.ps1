@@ -77,14 +77,17 @@ if ($archiveMode) {
 }
 
 # Separators are matched either way: the repository manifest is read on
-# whatever workstation the operator uses.
+# whatever workstation the operator uses. Only the manifest being read is left
+# out, by its exact path: a prefix match would also have hidden a planted
+# tools\integrity-manifest-evil.ps1 from the extra-file check.
+$manifestFull = if (Test-Path -LiteralPath $ManifestPath) { (Resolve-Path -LiteralPath $ManifestPath).ProviderPath } else { $ManifestPath }
 $files = Get-ChildItem -LiteralPath $repoRoot -Recurse -File -ErrorAction Stop |
     Where-Object {
         ($archiveMode -or $_.Extension -in $includeExtensions) -and
         $_.FullName -notmatch '[\\/]output[\\/]' -and
         $_.FullName -notmatch '[\\/]\.git[\\/]' -and
         $_.FullName -notmatch '[\\/]\.github[\\/]' -and
-        $_.FullName -notmatch '[\\/]tools[\\/]integrity-manifest' -and
+        $_.FullName -ne $manifestFull -and
         $_.FullName -ne $archiveManifest
     } |
     Sort-Object FullName

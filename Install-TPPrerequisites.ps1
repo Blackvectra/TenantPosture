@@ -66,16 +66,46 @@ if ($policy -eq 'AllSigned' -or $effective -eq 'AllSigned') {
 Write-Host ""
 Write-Host "[3/6] Unblocking files (Zone.Identifier from downloads)..." -ForegroundColor Cyan
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
-try {
-    # Only the tool's own script files, never anything under output/ (tenant
-    # data and generated remediation scripts) or an unrelated file dropped
-    # into the folder.
-    Get-ChildItem -LiteralPath $scriptDir -Recurse -File -Include '*.ps1', '*.psm1', '*.psd1', '*.ps1xml' -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notmatch '[\\/](output|\.git)([\\/]|$)' } |
-        Unblock-File -ErrorAction SilentlyContinue
-    Write-Host "  [+] Files unblocked" -ForegroundColor Green
-} catch {
-    Write-Host "  [!] Unblock failed: $($_.Exception.Message)" -ForegroundColor Yellow
+# Only files the release's own record names, and only when their bytes still
+# match it. The module dot-sources every *.ps1 under Lib, Collectors,
+# Evaluators and Publishers on import, so a script the archive did not ship
+# (a Lib\evil.ps1 dropped beside the module) must keep its download mark: with
+# the policy set to RemoteSigned above, that mark is what stops it. A git clone
+# carries no marks and needs nothing; a raw download with no record is left to
+# the operator after a review.
+$scriptExt = @('.ps1', '.psm1', '.psd1', '.ps1xml')
+$record = $null
+foreach ($candidate in @((Join-Path $scriptDir 'FILES.sha256'), (Join-Path $scriptDir 'tools' 'integrity-manifest.txt'))) {
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) { $record = $candidate; break }
+}
+if (-not $record) {
+    Write-Host "  [i] No shipped-file record here (FILES.sha256 from a release archive, or tools\integrity-manifest.txt), so nothing was unblocked. A git clone carries no download mark. For a raw download, review the files first, then: Get-ChildItem -Recurse -Include *.ps1,*.psm1,*.psd1,*.ps1xml | Unblock-File" -ForegroundColor Yellow
+} else {
+    try {
+        $recorded = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+        $unblocked = 0; $mismatch = @()
+        foreach ($line in (Get-Content -LiteralPath $record | Where-Object { $_ -and -not $_.StartsWith('#') })) {
+            $parts = $line -split '\s+', 2
+            if ($parts.Count -ne 2) { continue }
+            $rel = $parts[1].Trim()
+            if ([System.IO.Path]::GetExtension($rel) -notin $scriptExt) { continue }
+            $full = Join-Path $scriptDir ($rel -replace '/', [string][System.IO.Path]::DirectorySeparatorChar)
+            [void]$recorded.Add($full)
+            if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
+            if ((Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash -ne $parts[0]) { $mismatch += $rel; continue }
+            Unblock-File -LiteralPath $full -ErrorAction SilentlyContinue
+            $unblocked++
+        }
+        Write-Host "  [+] $unblocked recorded script file(s) unblocked ($(Split-Path -Leaf $record))" -ForegroundColor Green
+        if ($mismatch.Count -gt 0) { Write-Host "  [!] Left blocked, bytes differ from the record: $($mismatch -join ', ')" -ForegroundColor Red }
+        $stray = @(Get-ChildItem -LiteralPath $scriptDir -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -in $scriptExt -and $_.FullName -notmatch '[\\/](output|\.git)([\\/]|$)' -and -not $recorded.Contains($_.FullName) })
+        if ($stray.Count -gt 0) {
+            Write-Host "  [!] Not in the shipped-file record and left blocked (the module would load them on import; remove what you did not put there): $(($stray | ForEach-Object { $_.FullName.Substring($scriptDir.Length + 1) }) -join ', ')" -ForegroundColor Red
+        }
+    } catch {
+        Write-Host "  [!] Unblock failed: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
 }
 
 # ── PowerShell modules ───────────────────────────────────────────────────────
