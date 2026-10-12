@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **[Honesty] The maturity label is provisional when evidence is incomplete.** `Get-TPMaturityTier`
+  excludes Error and unknown-state findings from the score denominator (by design: a tool failure
+  is not a gap), but it then printed an unqualified tier, so 50 passes beside 50 errored checks
+  read "Optimizing". The tier and the score are still computed over the scored controls; whenever
+  any finding produced no verdict, or no control was scored at all, `EvidenceComplete` is `$false`,
+  `Label` reads `<tier> (provisional: evidence incomplete)`, `ObservedLabel` keeps the bare name
+  and `Qualification` says how many findings the tier claims nothing about. No threshold waives
+  it: one errored check is one control the label says nothing about. The console prints the
+  qualification beside the tier, and a `-FailOn*` gate run on incomplete evidence warns that a
+  clean exit is not a verdict on the unscored controls (exit codes unchanged). Found by the
+  2026-10-11 review.
 - **[Detection] Four paths that produced an unsupported Satisfied, found by the 2026-10-11 review.**
   AAD-1.4 and AAD-1.5 merged the risk levels of every enabled responding policy whatever its
   scope, so a pilot-group policy, a policy excluding a group, or one applying to no application
