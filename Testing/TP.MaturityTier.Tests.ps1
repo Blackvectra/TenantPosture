@@ -137,12 +137,66 @@ Describe 'TenantPosture Maturity Tier Classification' {
         }
     }
 
+    Context 'Evidence completeness qualifies the label' {
+
+        It 'a run in which every counted finding produced a verdict is complete: Label is the bare tier name and Qualification is empty' {
+            $f = @()
+            $f += 1..9 | ForEach-Object { @{ State = 'Satisfied'; Severity = 'Medium' } }
+            $f += @{ State = 'NotApplicable'; Severity = 'Medium' }
+            $m = Get-TPMaturityTier -Findings $f
+            $m.EvidenceComplete   | Should -BeTrue
+            $m.UnverifiedFindings | Should -Be 0
+            $m.Label              | Should -Be 'Optimizing'
+            $m.ObservedLabel      | Should -Be 'Optimizing'
+            $m.Qualification      | Should -Be ''
+        }
+
+        It 'one errored check is enough: there is no threshold below which the label is unqualified' {
+            $f = @()
+            $f += 1..203 | ForEach-Object { @{ State = 'Satisfied'; Severity = 'Medium' } }
+            $f += @{ State = 'Error'; Severity = 'High' }
+            $m = Get-TPMaturityTier -Findings $f
+            $m.Tier             | Should -Be 5
+            $m.EvidenceComplete | Should -BeFalse
+            $m.Label            | Should -Be 'Optimizing (provisional: evidence incomplete)'
+            $m.Qualification    | Should -Match '^1 of 204 finding\(s\) produced no verdict \(1 errored, 0 with an unrecognized state\)'
+        }
+
+        It 'an unrecognized state counts as no verdict, like an Error' {
+            $f = @(@{ State = 'Satisfied'; Severity = 'Medium' }, @{ State = 'Pending'; Severity = 'Medium' })
+            $m = Get-TPMaturityTier -Findings $f
+            $m.EvidenceComplete   | Should -BeFalse
+            $m.UnverifiedFindings | Should -Be 1
+            $m.Qualification      | Should -Match '\(0 errored, 1 with an unrecognized state\)'
+        }
+
+        It 'no scored control at all is provisional too: the tier is a default, not a measurement' {
+            $m = Get-TPMaturityTier -Findings @()
+            $m.Tier             | Should -Be 1
+            $m.EvidenceComplete | Should -BeFalse
+            $m.Label            | Should -Be 'Initial (provisional: evidence incomplete)'
+            $m.Qualification    | Should -Match 'No control was scored'
+            $na = Get-TPMaturityTier -Findings @(1..3 | ForEach-Object { @{ State = 'NotApplicable'; Severity = 'Medium' } })
+            $na.EvidenceComplete | Should -BeFalse
+            $na.Qualification    | Should -Match 'No control was scored'
+            $err = Get-TPMaturityTier -Findings @(@{ State = 'Error'; Severity = 'High' })
+            $err.EvidenceComplete | Should -BeFalse
+            $err.Qualification    | Should -Match '^None of the 1 finding\(s\)'
+        }
+
+        It 'the qualification never reassures' {
+            $f = @(@{ State = 'Satisfied'; Severity = 'Medium' }, @{ State = 'Error'; Severity = 'High' })
+            $m = Get-TPMaturityTier -Findings $f
+            $m.Qualification | Should -Not -Match '(?i)is compliant|no issues|passed|all clear'
+        }
+    }
+
     Context 'Output shape' {
 
         It 'Emits an ordered hashtable with all required keys' {
             $f = @(@{ State = 'Satisfied'; Severity = 'Medium' })
             $m = Get-TPMaturityTier -Findings $f
-            $required = @('Tier','Label','Score','CriticalGaps','HighGaps','ScoredControls','ErrorFindings','UnknownStates','Description','Satisfied','Partial','Gap','NotApplicable','Total')
+            $required = @('Tier','Label','Score','CriticalGaps','HighGaps','ScoredControls','ErrorFindings','UnknownStates','Description','ObservedLabel','EvidenceComplete','UnverifiedFindings','Qualification','Satisfied','Partial','Gap','NotApplicable','Total')
             foreach ($k in $required) {
                 $m.Contains($k) | Should -BeTrue -Because "key '$k' must exist"
             }
@@ -173,17 +227,25 @@ Describe 'TenantPosture Maturity Tier Classification' {
             $m.Tier           | Should -Be 1
         }
 
-        It 'Excludes State=Error from the score denominator (collector hiccups do not deflate score)' {
+        It 'Excludes State=Error from the score denominator (collector hiccups do not deflate score), and says so: the label is provisional' {
             $f = @()
             $f += 1..50 | ForEach-Object { @{ State = 'Satisfied'; Severity = 'Medium' } }
             $f += 1..50 | ForEach-Object { @{ State = 'Error';     Severity = 'High'   } }
             $m = Get-TPMaturityTier -Findings $f
             # Old behavior: scored=100, sat=50, score=50 — deflated to Developing.
-            # New: Error excluded → scored=50, sat=50, score=100 → Optimizing.
-            $m.Score          | Should -Be 100
-            $m.ScoredControls | Should -Be 50
-            $m.ErrorFindings  | Should -Be 50
-            $m.Tier           | Should -Be 5
+            # Error excluded → scored=50, sat=50, score=100 → tier 5 over the
+            # scored half. Excluding a finding does not make it a pass, so the
+            # label must not read as an unqualified claim about the whole tenant.
+            $m.Score              | Should -Be 100
+            $m.ScoredControls     | Should -Be 50
+            $m.ErrorFindings      | Should -Be 50
+            $m.Tier               | Should -Be 5
+            $m.ObservedLabel      | Should -Be 'Optimizing'
+            $m.Label              | Should -Be 'Optimizing (provisional: evidence incomplete)'
+            $m.EvidenceComplete   | Should -BeFalse
+            $m.UnverifiedFindings | Should -Be 50
+            $m.Qualification      | Should -Match '^50 of 100 finding\(s\) produced no verdict \(50 errored, 0 with an unrecognized state\)'
+            $m.Qualification      | Should -Match 'claim nothing about the rest'
         }
 
         It 'Handles PSCustomObject findings (FromResults / ConvertFrom-Json shape)' {
