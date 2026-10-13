@@ -12,6 +12,19 @@
   not call the helper, and drives the HIPAA, comparison, delta and batch-summary Markdown with its hostile
   payload, which none of them had been. Output change: those files now backslash-escape `<` and `>` instead
   of writing `&lt;`/`&gt;`, which renders the same.
+- **[Security] The endpoint script writes its result only where SYSTEM owns the folder.** From the
+  2026-10-13 OSS scan. `Device/Invoke-TPDeviceCompliance.ps1` runs as SYSTEM and wrote to `ProgramData\TP`
+  (or `NRG`) with no check on who owned the folder. `ProgramData` lets a standard user create a subfolder
+  there first and own it, so a user could create the folder, let SYSTEM write the result into it and edit
+  the result afterwards (the assessment then reads a compliance pass the machine never earned), or make the
+  folder a junction and have SYSTEM write wherever it pointed. The script now refuses to write, with exit
+  code 4 naming the path and the reason, when any part of the output path is a junction or symbolic link,
+  when the folder or an existing result file is owned by anyone but SYSTEM, Administrators or the account
+  running it, or when the result file has more than one name; while elevated it gives the default folder a
+  DACL that only SYSTEM and Administrators can write to, set before the file is checked again. A folder
+  named with `-OutputPath` is checked but its ACL is left as set; a share's owner is not judged. The Windows
+  CI job now runs the endpoint suite. Script version 1.2.0; the result schema is unchanged. A refused file
+  was put there by someone else: an administrator removes it, then the job runs again.
 - **[Fix] The batch runner's clients file reaches every assessment, and a client can name its own profile.**
   `Invoke-TPBatchAssessment.ps1 -ClientsFile` read the file it was given, but each assessment it launched read
   `Config/clients.json` beside the script, so a batch run from a file kept anywhere else lost each client's

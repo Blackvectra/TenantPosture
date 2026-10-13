@@ -129,6 +129,13 @@ accounts, patch state, session lock, legacy surface, audit policy, event logging
 report `NotAssessed` — never a pass, never a failure — and the run is flagged
 partial.
 
+**The result folder has to be SYSTEM's.** `ProgramData` lets a standard user
+create a folder there first. The script refuses to write (exit code 4, naming
+the path and the reason) when any part of the output path is a junction or
+symbolic link, or when the folder or an existing result file is owned by anyone
+but SYSTEM, Administrators or the account running it. A refused file was put
+there by someone else: have an administrator remove it, then run again.
+
 Then collect the JSONs and feed them back in:
 
 ```powershell

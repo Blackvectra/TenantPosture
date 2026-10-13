@@ -592,7 +592,8 @@ Three properties, all enforced by test:
 
 - **Windows PowerShell 5.1.** Stock Windows ships 5.1, not 7. The endpoint script is the single carve-out from the repo-wide `#Requires -Version 7` floor, and the security suite asserts it *earns* that exception — no MSHTML, no COM, no `Invoke-Expression`, no network — rather than silently bypassing the rule.
 - **Standalone.** No module import, no network, no credential. It has to run on a bare machine with nothing installed.
-- **Read-only.** It reads local state and writes exactly one file. A static guard fails the build on `Set-ItemProperty`, `Enable-BitLocker`, `Set-MpPreference` and friends.
+- **Read-only.** It reads local state and writes exactly one file; the only other change it makes is the DACL of its own default output folder. A static guard fails the build on `Set-ItemProperty`, `Enable-BitLocker`, `Set-MpPreference` and friends.
+- **Writes only where SYSTEM owns.** `ProgramData` lets a standard user create a folder there first, and a result that user can edit afterwards is not evidence. The script refuses to write (exit code 4, naming the path and the reason) when any part of the output path is a junction or symbolic link, or when the folder or an existing result file is owned by anyone but SYSTEM, Administrators or the account running it; its default folder gets a DACL that only SYSTEM and Administrators can write to.
 
 **Elevation is reported, never assumed.** BitLocker, TPM, Secure Boot and the audit policy return nothing without admin rights — which is indistinguishable from *"not configured"*. Those land as `NotAssessed` and are **excluded from the fleet denominator**, so a control reads *"2 of 5 compliant — 1 device could not run this check (the collector ran without administrative rights)"* rather than inventing a pass or a failure for a machine nobody measured.
 

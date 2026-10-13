@@ -155,6 +155,29 @@ Describe 'Endpoint device compliance' {
                 $script:AgentCode | Should -Not -Match $forbidden -Because "the endpoint collector must not $forbidden"
             }
             @([regex]::Matches($script:AgentCode, 'Set-Content')).Count | Should -Be 1
+            # The one other change it makes is the DACL of its own default output folder
+            # under ProgramData (SYSTEM and Administrators write, Users read): exactly one
+            # Set-Acl, in Initialize-OutputDirectory, on that folder and nothing else.
+            @([regex]::Matches($script:AgentCode, 'Set-Acl')).Count | Should -Be 1
+            $script:AgentCode | Should -Match 'Set-Acl -LiteralPath \$Path -AclObject \( New-ProtectedDirectorySecurity \)'
+            $script:AgentCode | Should -Not -Match 'SetAccessControl'
+            @([regex]::Matches($script:AgentCode, 'CreateDirectory')).Count | Should -Be 1 -Because 'the folder is created in Initialize-OutputDirectory and nowhere else'
+        }
+
+        It 'judges the output location, protects the default folder, and only then writes' {
+            # The order is the defense: the location is judged before anything is
+            # created, the folder is protected before the file is checked again, and
+            # the write comes last. A refusal throws into the outer catch (exit 4).
+            $code = $script:AgentCode
+            $judge   = $code.IndexOf('Test-OutputLocation -Directory')
+            $protect = $code.IndexOf('Initialize-OutputDirectory -Path')
+            $write   = $code.IndexOf('Set-Content -LiteralPath $OutputPath')
+            $judge   | Should -BeGreaterThan 0
+            $protect | Should -BeGreaterThan $judge
+            $write   | Should -BeGreaterThan $protect
+            $code | Should -Match 'throw "refusing to write the result'
+            # The token stream puts a space inside the parentheses.
+            $code | Should -Match 'Initialize-OutputDirectory -Path \$dir -Protect \(\s*\$managedFolder -and \$script:IsElevated\s*\)' -Because 'only the default folder, and only while elevated, gets the DACL'
         }
 
         It 'gates every elevation-dependent check behind the elevation switch' {
@@ -215,6 +238,147 @@ Describe 'Endpoint device compliance' {
                 $text | Should -Not -Match '# -> C:\\ProgramData\\NRG\\device-compliance\.json\s*$' -Because "$doc must not name the folder the script no longer defaults to"
                 $text | Should -Match 'ProgramData\\TP\\device-compliance\.json'
             }
+        }
+    }
+
+    Context 'Output location trust' {
+
+        BeforeAll {
+            # The guard is a set of small functions in the endpoint script; taken from the
+            # parsed file so the test runs the code that ships, against temp folders.
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:AgentPath, [ref]$null, [ref]$null)
+            foreach ($name in 'Get-TrustedOwnerSids', 'Test-TrustedOwner', 'Get-OwnerSid', 'Get-ReparsePointInPath',
+                              'Get-LinkType', 'Test-OutputLocation', 'New-ProtectedDirectorySecurity', 'Initialize-OutputDirectory') {
+                $fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
+                $fn | Should -Not -BeNullOrEmpty -Because "the endpoint script defines $name"
+                Set-Item -Path "function:script:$name" -Value $fn.Body.GetScriptBlock()
+            }
+            $script:Guard = Join-Path $TestDrive 'guard'
+            New-Item -ItemType Directory -Path $script:Guard -Force | Out-Null
+            # A directory link: a junction on Windows (no privilege needed), a symbolic
+            # link elsewhere. Creation can fail on a locked-down host; then those tests skip.
+            $script:LinkKind = if ($IsWindows) { 'Junction' } else { 'SymbolicLink' }
+            $script:MakeLink = {
+                param($Path, $Target, $Kind)
+                try { New-Item -ItemType $Kind -Path $Path -Target $Target -ErrorAction Stop | Out-Null; $true } catch { $false }
+            }
+        }
+
+        It 'trusts SYSTEM, Administrators and the account running the script, and nothing else' {
+            $sids = Get-TrustedOwnerSids -CurrentSid 'S-1-5-21-1-2-3-1001'
+            $sids | Should -Contain 'S-1-5-18'
+            $sids | Should -Contain 'S-1-5-32-544'
+            $sids | Should -Contain 'S-1-5-21-1-2-3-1001'
+            $sids.Count | Should -Be 3
+            (Get-TrustedOwnerSids -CurrentSid 'S-1-5-18').Count | Should -Be 2 -Because 'SYSTEM running the script adds nothing'
+            Test-TrustedOwner -OwnerSid 'S-1-5-21-1-2-3-1002' -TrustedSids $sids | Should -BeFalse -Because 'another user is never trusted'
+            Test-TrustedOwner -OwnerSid 'S-1-5-32-544' -TrustedSids $sids | Should -BeTrue
+        }
+
+        It 'an owner that could not be read is never trusted' {
+            Test-TrustedOwner -OwnerSid '' -TrustedSids @('S-1-5-18') | Should -BeFalse
+            Test-TrustedOwner -OwnerSid $null -TrustedSids @('S-1-5-18') | Should -BeFalse
+        }
+
+        It 'accepts a plain folder with no result file yet, and one holding a plain result file' {
+            $dir = Join-Path $script:Guard 'plain'; New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            $file = Join-Path $dir 'device-compliance.json'
+            (Test-OutputLocation -Directory $dir -File $file -TrustedSids @('S-1-5-18') -CheckOwner $false).Ok | Should -BeTrue
+            Set-Content -LiteralPath $file -Value '{}'
+            (Test-OutputLocation -Directory $dir -File $file -TrustedSids @('S-1-5-18') -CheckOwner $false).Ok | Should -BeTrue
+        }
+
+        It 'accepts a folder that does not exist yet (it will be created)' {
+            $dir = Join-Path $script:Guard 'absent'
+            (Test-OutputLocation -Directory $dir -File (Join-Path $dir 'device-compliance.json') -TrustedSids @('S-1-5-18') -CheckOwner $false).Ok | Should -BeTrue
+        }
+
+        It 'refuses a linked output folder: the junction a user made of ProgramData\TP' {
+            $target = Join-Path $script:Guard 'elsewhere'; New-Item -ItemType Directory -Path $target -Force | Out-Null
+            $dir = Join-Path $script:Guard 'TP-linked'
+            if (-not (& $script:MakeLink $dir $target $script:LinkKind)) { Set-ItResult -Skipped -Because "this host cannot create a $($script:LinkKind)"; return }
+            Get-ReparsePointInPath -Path (Join-Path $dir 'device-compliance.json') | Should -Be $dir
+            $v = Test-OutputLocation -Directory $dir -File (Join-Path $dir 'device-compliance.json') -TrustedSids @('S-1-5-18') -CheckOwner $false
+            $v.Ok | Should -BeFalse
+            $v.Reason | Should -Match 'junction or symbolic link'
+        }
+
+        It 'refuses a link higher up the path, not only the last folder' {
+            $target = Join-Path $script:Guard 'real-root'; New-Item -ItemType Directory -Path (Join-Path $target 'TP') -Force | Out-Null
+            $root = Join-Path $script:Guard 'linked-root'
+            if (-not (& $script:MakeLink $root $target $script:LinkKind)) { Set-ItResult -Skipped -Because "this host cannot create a $($script:LinkKind)"; return }
+            $dir = Join-Path $root 'TP'
+            Get-ReparsePointInPath -Path (Join-Path $dir 'device-compliance.json') | Should -Be $root
+            (Test-OutputLocation -Directory $dir -File (Join-Path $dir 'device-compliance.json') -TrustedSids @('S-1-5-18') -CheckOwner $false).Ok | Should -BeFalse
+        }
+
+        It 'refuses a result file that is a symbolic link' {
+            $dir = Join-Path $script:Guard 'file-link'; New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            $real = Join-Path $script:Guard 'victim.json'; Set-Content -LiteralPath $real -Value '{}'
+            $file = Join-Path $dir 'device-compliance.json'
+            if (-not (& $script:MakeLink $file $real 'SymbolicLink')) { Set-ItResult -Skipped -Because 'this host cannot create a symbolic link'; return }
+            $v = Test-OutputLocation -Directory $dir -File $file -TrustedSids @('S-1-5-18') -CheckOwner $false
+            $v.Ok | Should -BeFalse
+            $v.Reason | Should -Match 'symbolic link'
+        }
+
+        It 'refuses a result file with more than one name (a hard link)' {
+            $dir = Join-Path $script:Guard 'hard-link'; New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            $real = Join-Path $dir 'other.json'; Set-Content -LiteralPath $real -Value '{}'
+            $file = Join-Path $dir 'device-compliance.json'
+            if (-not (& $script:MakeLink $file $real 'HardLink')) { Set-ItResult -Skipped -Because 'this host cannot create a hard link'; return }
+            if (-not (Get-LinkType -Path $file)) { Set-ItResult -Skipped -Because 'this PowerShell build does not report hard links through LinkType'; return }
+            $v = Test-OutputLocation -Directory $dir -File $file -TrustedSids @('S-1-5-18') -CheckOwner $false
+            $v.Ok | Should -BeFalse
+            $v.Reason | Should -Match 'HardLink'
+        }
+
+        It 'refuses a folder path that is a file, and a file path that is a folder' {
+            $notDir = Join-Path $script:Guard 'TP-file'; Set-Content -LiteralPath $notDir -Value 'x'
+            (Test-OutputLocation -Directory $notDir -File (Join-Path $notDir 'device-compliance.json') -TrustedSids @('S-1-5-18') -CheckOwner $false).Reason | Should -Match 'not a folder'
+            $dir = Join-Path $script:Guard 'TP-dirfile'; New-Item -ItemType Directory -Path (Join-Path $dir 'device-compliance.json') -Force | Out-Null
+            (Test-OutputLocation -Directory $dir -File (Join-Path $dir 'device-compliance.json') -TrustedSids @('S-1-5-18') -CheckOwner $false).Reason | Should -Match 'not a file'
+        }
+
+        It 'on Windows, judges the owner: a folder of this account is trusted with this account, refused with SYSTEM and Administrators only' -Skip:(-not $IsWindows) {
+            $dir = Join-Path $script:Guard 'owned'; New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            $owner = Get-OwnerSid -Path $dir
+            $owner | Should -Match '^S-1-5-'
+            $me = [string][System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+            $file = Join-Path $dir 'device-compliance.json'
+            (Test-OutputLocation -Directory $dir -File $file -TrustedSids (Get-TrustedOwnerSids -CurrentSid $me)).Ok | Should -BeTrue
+            # A different account would have made this folder, as far as a SYSTEM run is concerned.
+            $v = Test-OutputLocation -Directory $dir -File $file -TrustedSids @('S-1-5-18')
+            $v.Ok | Should -BeFalse
+            $v.Reason | Should -Match 'owned by'
+        }
+
+        It 'on Windows, the protected DACL lets SYSTEM and Administrators write, Users read, and inherits nothing' -Skip:(-not $IsWindows) {
+            $sec = New-ProtectedDirectorySecurity
+            $sec.AreAccessRulesProtected | Should -BeTrue
+            $rules = @($sec.GetAccessRules($true, $false, [System.Security.Principal.SecurityIdentifier]))
+            $rules.Count | Should -Be 3
+            foreach ($r in $rules) {
+                $r.AccessControlType | Should -Be 'Allow'
+                $r.InheritanceFlags | Should -Be 'ContainerInherit, ObjectInherit'
+                switch ($r.IdentityReference.Value) {
+                    'S-1-5-18'     { $r.FileSystemRights | Should -Be 'FullControl' }
+                    'S-1-5-32-544' { $r.FileSystemRights | Should -Be 'FullControl' }
+                    'S-1-5-32-545' { [string]$r.FileSystemRights | Should -Match 'ReadAndExecute' }
+                    default        { throw "unexpected identity $($r.IdentityReference.Value)" }
+                }
+            }
+            $dir = Join-Path $script:Guard 'protected'
+            Initialize-OutputDirectory -Path $dir -Protect $true
+            (Get-Acl -LiteralPath $dir).AreAccessRulesProtected | Should -BeTrue
+        }
+
+        It 'creates an unprotected folder when not asked to protect it, and leaves an existing one alone' {
+            $dir = Join-Path $script:Guard 'plain-create'
+            Initialize-OutputDirectory -Path $dir -Protect $false
+            Test-Path -LiteralPath $dir -PathType Container | Should -BeTrue
+            Initialize-OutputDirectory -Path $dir -Protect $false
+            Test-Path -LiteralPath $dir -PathType Container | Should -BeTrue
         }
     }
 
