@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **[Security] One Markdown escape, everywhere.** From the 2026-10-13 OSS scan. The rule that every Markdown
+  publisher escapes tenant text through `ConvertTo-TPMarkdownSafe` had four exceptions: the HIPAA readiness and
+  tenant comparison publishers carried weaker private chains, the delta report kept a dead weak one beside the
+  strict one it used, and the batch runner's summary escaped `& < > |` and backtick only, so a client name or
+  an error message holding `[text](https://…)` became a link in `batch-summary-<timestamp>.md`. All four now
+  delegate to the helper (the batch runner dot-sources it, so the summary never depends on module state), and
+  `TP.MarkdownSafe.Tests.ps1` parses every `EscMd`/`EscMdStrict` definition in the tool and fails one that does
+  not call the helper, and drives the HIPAA, comparison, delta and batch-summary Markdown with its hostile
+  payload, which none of them had been. Output change: those files now backslash-escape `<` and `>` instead
+  of writing `&lt;`/`&gt;`, which renders the same.
 - **[Fix] The batch runner's clients file reaches every assessment, and a client can name its own profile.**
   `Invoke-TPBatchAssessment.ps1 -ClientsFile` read the file it was given, but each assessment it launched read
   `Config/clients.json` beside the script, so a batch run from a file kept anywhere else lost each client's

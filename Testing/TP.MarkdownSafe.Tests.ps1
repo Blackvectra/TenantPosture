@@ -8,6 +8,13 @@
 # publisher: no link, image, code span, heading or HTML element can be formed
 # from a finding's text. The SSP workbook writes client-authored text as text,
 # never as a formula.
+#
+# "Every Markdown publisher" is pinned here, not assumed: four private escape
+# chains had drifted from the one helper (the batch summary's let [text](url)
+# through), and the outputs they wrote were not among those checked below. Every
+# EscMd / EscMdStrict definition in the tool must call ConvertTo-TPMarkdownSafe,
+# and the HIPAA, tenant-comparison, delta and batch-summary Markdown is driven
+# with the same hostile payload as the rest.
 
 Describe 'Markdown and workbook output cannot carry markup or formulas' {
 
@@ -70,6 +77,86 @@ Describe 'Markdown and workbook output cannot carry markup or formulas' {
         # openpyxl stores strings inline or in sharedStrings depending on version; look in both.
         $allXml = (Get-ChildItem -LiteralPath (Join-Path $tmp 'xl') -Filter '*.xml' -Recurse | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join "`n"
         $allXml | Should -Match "'=HYPERLINK" -Because 'the value is kept as text with the apostrophe guard'
+    }
+
+    It 'every EscMd and EscMdStrict in the tool calls ConvertTo-TPMarkdownSafe' {
+        # The rule is one function; a private replace chain beside it is how a
+        # publisher drifts. Parsed, not grepped, so a comment naming the helper
+        # does not count.
+        $files = @(Get-ChildItem -LiteralPath (Join-Path $script:RepoRoot 'Publishers') -Filter '*.ps1') +
+                 @(Get-ChildItem -LiteralPath (Join-Path $script:RepoRoot 'Email-IR' 'Publishers') -Filter '*.ps1') +
+                 @(Get-ChildItem -LiteralPath $script:RepoRoot -Filter '*.ps1' -File)
+        $seen = 0
+        foreach ($f in $files) {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
+            foreach ($fn in @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -in @('EscMd', 'EscMdStrict') }, $true))) {
+                $seen++
+                $calls = @($fn.Body.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'ConvertTo-TPMarkdownSafe' }, $true))
+                $calls.Count | Should -BeGreaterThan 0 -Because "$($f.Name) defines $($fn.Name) without the one Markdown rule"
+            }
+        }
+        $seen | Should -BeGreaterThan 8 -Because 'the publishers define these helpers; a count this low means the scan missed them'
+    }
+
+    It 'the HIPAA readiness Markdown carries no raw markup' {
+        $d = Join-Path $TestDrive 'hipaa'; New-Item -ItemType Directory -Path $d -Force | Out-Null
+        # A hostile Gap on every control, so every mapped standard renders the Detail.
+        $f = @(Get-TPControlDefinitions | ForEach-Object {
+            @{ ControlId = $_.ControlId; State = 'Gap'; Severity = $_.Severity; Category = 'c'; Title = "$($_.Title) $script:Payload"; Detail = "Detail $script:Payload"
+               CurrentValue = $script:Payload; RequiredValue = 'r'; Remediation = "Fix $script:Payload"; FrameworkIds = 'NIST:AC-3'; AffectedObjects = @() }
+        })
+        $p = Get-TPHipaaReadiness -Findings $f
+        $md = Join-Path $d 'hipaa.md'
+        Publish-TPHipaaReadiness -Posture $p -OutputPath $md -Metadata $script:Meta | Out-Null
+        Clean $md
+    }
+
+    It 'the tenant comparison Markdown carries no raw markup' {
+        $d = Join-Path $TestDrive 'cmp'; New-Item -ItemType Directory -Path $d -Force | Out-Null
+        $mk = {
+            param([string] $Domain, [string] $State, [string] $Code)
+            $row = [ordered]@{ ControlId = 'AAD-1.1'; Title = "T $script:Payload"; RequiredTier = 'Minimum'; ExpectedState = 'on'
+                               ObservedState = $State; ReasonCode = $Code; Reason = 'r'; Constraint = 'None'; Disposition = 'Normal'; EffectivenessState = 'Unknown' }
+            $o = [pscustomobject]@{
+                Metadata = [ordered]@{ TenantDomain = $Domain; AssessmentTime = '2026-10-01T10:00:00Z'; ToolVersion = '4.14.3'; TargetTier = 'Minimum'; BaselineVersion = '1.0' }
+                Findings = @()
+                BaselineCompliance = [ordered]@{ Available = $true; BaselineVersion = '1.0'; TargetTier = 'Minimum'; Controls = @($row) }
+            }
+            return ($o | ConvertTo-Json -Depth 12 | ConvertFrom-Json -Depth 20)
+        }
+        $cmp = Get-TPBaselineTenantComparison -ResultsA (& $mk 'a.example' 'Satisfied' 'Satisfied') -ResultsB (& $mk 'b.example' 'Failed' 'ControlFailed')
+        $paths = Publish-TPBaselineTenantComparison -Comparison $cmp -OutputPath $d
+        Clean $paths.Markdown
+    }
+
+    It 'the delta report Markdown carries no raw markup' {
+        $d = Join-Path $TestDrive 'delta'; New-Item -ItemType Directory -Path $d -Force | Out-Null
+        $baseline = Join-Path $d 'prior-results.json'
+        # The delta refuses a baseline it cannot tie to the same tenant, so both carry one id.
+        $tid = '11111111-2222-3333-4444-555555555555'
+        $meta = $script:Meta.Clone(); $meta['TenantId'] = $tid
+        $prior = @{
+            Metadata = @{ TenantDomain = 'example.com'; TenantId = $tid; AssessmentDate = 'September 11, 2026'; ToolVersion = '4.14.3' }
+            Findings = @(@{ ControlId = 'AAD-1.1'; State = 'Gap'; Severity = 'High'; Category = 'Identity'; Title = "Old $script:Payload"; Detail = "Detail $script:Payload"; CurrentValue = 'c'; RequiredValue = 'r'; Remediation = 'm'; FrameworkIds = 'NIST:IA-2'; AffectedObjects = @() })
+        }
+        $prior | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $baseline -Encoding utf8
+        $md = Join-Path $d 'delta.md'
+        Publish-TPDeltaReport -CurrentFindings $script:Findings -BaselineResultsPath $baseline -Metadata $meta -OutputPath $md | Out-Null
+        Clean $md
+    }
+
+    It 'the batch summary escape neutralizes link, image and HTML syntax' {
+        # The batch runner is a script, not a function; its EscMd is taken from the
+        # parsed file and run here with the module loaded, as the runner has it.
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:RepoRoot 'Invoke-TPBatchAssessment.ps1'), [ref]$null, [ref]$null)
+        $fn = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'EscMd' }, $true)
+        $fn | Should -Not -BeNullOrEmpty
+        $esc = & $fn.Body.GetScriptBlock() $script:Payload
+        $esc | Should -Not -Match '(?<!\\)<img '
+        $esc | Should -Not -Match '(?<!\\)\]\(https://evil'
+        $esc | Should -Not -Match '(?<!\\)!\['
+        $esc | Should -Not -Match '(?<!\\)`code(?<!\\)`'
+        $esc | Should -Not -Match '(?<!\\)\|'
     }
 
     It 'the two incident-response Markdown reports carry no raw markup' {

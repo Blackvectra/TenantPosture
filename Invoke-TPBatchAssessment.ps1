@@ -104,6 +104,9 @@ $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
 . (Join-Path $scriptDir 'Lib' 'Resolve-TPProfilePath.ps1')
 . (Join-Path $scriptDir 'Lib' 'Get-TPClientRecord.ps1')
+# The one Markdown escape, for the batch summary; dot-sourced so the summary never
+# depends on what state the module is in after the last client.
+. (Join-Path $scriptDir 'Lib' 'ConvertTo-TPMarkdownSafe.ps1')
 
 if (-not $ClientsFile) { $ClientsFile = Join-Path $scriptDir 'Config' 'clients.json' }
 if (-not $OutputRoot)  { $OutputRoot  = Join-Path $scriptDir 'output' }
@@ -432,21 +435,11 @@ $summaryPath = Join-Path $resolvedOutput "batch-summary-$timestamp.md"
 # model consistent across publishers — and a future code path that loads
 # clients from a partner-portal API would inherit the same protection.
 function EscMd {
+    # One Markdown rule for the whole tool: Lib/ConvertTo-TPMarkdownSafe.ps1. The
+    # private chain this replaced left [ and ] alone, so a client name or an error
+    # message could form a link in the summary.
     param([object]$Value)
-    if ($null -eq $Value -or [string]::IsNullOrEmpty([string]$Value)) { return '' }
-    $s = [string]$Value
-    # Strip the high-risk Markdown / HTML control characters. We deliberately
-    # do not call ConvertTo-TPHtmlSafe here because the module may not have
-    # imported successfully — keep this helper standalone so the batch summary
-    # is still produced even on partial load.
-    $s = $s -replace '&', '&amp;'
-    $s = $s -replace '<', '&lt;'
-    $s = $s -replace '>', '&gt;'
-    $s = $s -replace '\|', '\|'
-    $s = $s -replace '`', '\`'
-    # Trim newlines so a multi-line exception message doesn't smash the table.
-    $s = $s -replace '[\r\n]+', ' '
-    return $s
+    return (ConvertTo-TPMarkdownSafe $Value)
 }
 
 $sb = [System.Text.StringBuilder]::new()

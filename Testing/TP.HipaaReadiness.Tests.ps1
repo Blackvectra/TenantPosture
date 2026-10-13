@@ -225,8 +225,10 @@ Describe 'HIPAA Security Rule readiness view' {
             $md = Join-Path $script:Tmp 'markup.md'
             Publish-TPHipaaReadiness -Posture (Get-TPHipaaReadiness -Findings $f) -OutputPath $md -Metadata @{ TenantDomain = 'example.com' } | Out-Null
             $txt = Get-Content -LiteralPath $md -Raw
-            $txt | Should -Not -Match '<img'
-            $txt | Should -Match '&lt;img src=x onerror=alert\(1\)&gt; &amp; co'
+            # The one Markdown rule (ConvertTo-TPMarkdownSafe) backslash-escapes the
+            # angle brackets, as the summary and playbook do; an unescaped tag is the leak.
+            $txt | Should -Not -Match '(?<!\\)<img'
+            $txt | Should -Match '\\<img src=x onerror=alert\(1\)\\> & co'
             # Unmatched citations are rendered, never only counted.
             $un = @((Get-TPHipaaReadiness -Findings $f)['Summary']['UnmatchedCitations'])
             if ($un.Count -gt 0) { $txt | Should -Match ([regex]::Escape(($un[0] -replace '[<>&|]', ''))) }
