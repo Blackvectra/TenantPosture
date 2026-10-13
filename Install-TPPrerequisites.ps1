@@ -433,6 +433,33 @@ if ($SkipPython) {
                 Write-Host "  [!] $($_.Exception.Message)" -ForegroundColor Yellow
             }
         }
+        # pypdf (the questionnaire PDF import) stays the operator's to install: most
+        # runs never use it. A copy that IS present is held to the version the bounded
+        # reader (Lib/Read-TPQuestionnaireFields.ps1) was tested with, as openpyxl is;
+        # the reader itself refuses anything below 4.0.0 at run time.
+        $pypdfPin = '6.20.1'
+        $pypdfPresent = $false
+        try { if (Test-TPPythonModule -Python $pythonCmd -Module 'pypdf') { $pypdfPresent = $true } } catch { }
+        if ($pypdfPresent) {
+            $havePdf = [string](@(Invoke-TPPython -Python $pythonCmd -Script "import pypdf; print(pypdf.__version__)") | Select-Object -Last 1)
+            if ($havePdf.Trim() -eq $pypdfPin) {
+                Write-Host "  [+] pypdf $pypdfPin — questionnaire PDF import enabled" -ForegroundColor Green
+            } else {
+                Write-Host "  [*] pypdf $($havePdf.Trim()) found; installing the pinned $pypdfPin..." -ForegroundColor Yellow
+                try {
+                    $null = Invoke-TPPython -Python $pythonCmd -Script "import sys, runpy; sys.argv = ['pip', 'install', 'pypdf==$pypdfPin', '--quiet']; runpy.run_module('pip', run_name='__main__', alter_sys=True)"
+                    if ($LASTEXITCODE -eq 0 -and (Test-TPPythonModule -Python $pythonCmd -Module 'pypdf')) {
+                        Write-Host "  [+] pypdf $pypdfPin installed" -ForegroundColor Green
+                    } else {
+                        Write-Host "  [!] pypdf $pypdfPin could not be installed; the questionnaire importer refuses a version below 4.0.0" -ForegroundColor Yellow
+                    }
+                } catch {
+                    Write-Host "  [!] $($_.Exception.Message)" -ForegroundColor Yellow
+                }
+            }
+        } else {
+            Write-Host "  [-] pypdf not installed — optional; needed only to import a filled questionnaire PDF ('pip install pypdf==$pypdfPin')" -ForegroundColor DarkGray
+        }
     } else {
         Write-Host "  [-] Python not found. Install from python.org or 'winget install Python.Python.3.12'" -ForegroundColor Yellow
         Write-Host "      XLSX compliance matrix will be skipped at runtime (other reports still work)" -ForegroundColor DarkGray

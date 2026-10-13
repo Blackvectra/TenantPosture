@@ -98,11 +98,12 @@ $optional = @(
     @{ Name = 'Pode';                                   Version = '2.10.0';         Scope = 'optional'; Semantics = 'declared minimum; imported by -Web on demand' }
     # The XLSX publishers run openpyxl through Lib/Invoke-TPPython.ps1; Install-TPPrerequisites.ps1 pins this version.
     @{ Name = 'openpyxl';                               Version = '3.1.5';          Scope = 'optional'; Semantics = 'pinned by the installer; used by the XLSX publishers on demand' }
-    # The questionnaire importers read AcroForm fields through pypdf and the
-    # questionnaire publishers render the PDF through reportlab; neither is
-    # pinned or installed by the installer (the operator runs pip when the PDF
-    # path is used), so no version is recorded rather than an invented one.
-    @{ Name = 'pypdf';                                  Version = '';               Scope = 'optional'; Semantics = 'not pinned; installed by the operator (pip install pypdf) for the questionnaire PDF import' }
+    # The questionnaire importers read AcroForm fields through pypdf (one bounded
+    # reader, Lib/Read-TPQuestionnaireFields.ps1): the operator installs it, the
+    # installer holds a present copy to this version, and the reader refuses one
+    # below 4.0.0. The questionnaire publishers render the PDF through reportlab,
+    # which is neither pinned nor installed, so no version is recorded for it.
+    @{ Name = 'pypdf';                                  Version = '6.20.1';         Scope = 'optional'; Semantics = 'installed by the operator (pip install pypdf); held to this version by the installer when present; the importer refuses below 4.0.0' }
     @{ Name = 'reportlab';                              Version = '';               Scope = 'optional'; Semantics = 'not pinned; installed by the operator (pip install reportlab) for the questionnaire PDF output' }
 )
 $dependencies = @()

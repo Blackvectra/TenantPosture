@@ -118,34 +118,9 @@ try {
         exit 4
     }
 
-    $tmpOut = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "tp-ssp-import-$([guid]::NewGuid().ToString('N')).json")
-    $fieldValues = $null
-    try {
-        $pyScript = @'
-import json, sys
-from pypdf import PdfReader
-
-reader = PdfReader(sys.argv[1])
-fields = reader.get_fields() or {}
-out = {}
-for name, f in fields.items():
-    v = f.get('/V')
-    out[name] = '' if v is None else str(v)
-with open(sys.argv[2], 'w', encoding='utf-8') as fh:
-    json.dump(out, fh)
-'@
-        $null = $pyScript
-        $out = Invoke-TPPython -Python $pythonCmd -Script $pyScript -Arguments @($PdfPath, $tmpOut)
-        if ($LASTEXITCODE -ne 0) { throw "pypdf read failed: $out" }
-        $fieldValues = Get-Content -LiteralPath $tmpOut -Raw -Encoding utf8 | ConvertFrom-Json -ErrorAction Stop
-    } finally {
-        foreach ($t in @($tmpOut)) {
-            if (Test-Path -LiteralPath $t) { Remove-Item -LiteralPath $t -Force -ErrorAction SilentlyContinue }
-        }
-    }
-
-    $fieldMap = @{}
-    foreach ($p in $fieldValues.PSObject.Properties) { $fieldMap[$p.Name] = [string]$p.Value }
+    # The PDF is untrusted (it came back from the client): it is read only through the
+    # bounded reader in Lib/Read-TPQuestionnaireFields.ps1 (size cap, watchdog, pypdf floor).
+    $fieldMap = Read-TPQuestionnaireFields -PdfPath $PdfPath -Python $pythonCmd
 
     # ── Build one answer per requirement, applying the honesty gates ────────
     $accepted     = [ordered]@{}

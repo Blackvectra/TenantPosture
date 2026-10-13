@@ -79,6 +79,7 @@
         'Get-TPSSPImpactLabel',
         'Get-TPSSPQuestionnaireItems',
         'Publish-TPSSPQuestionnaire',
+        'Read-TPQuestionnaireFields',
         'Get-TPHipaaReadiness',
         'Get-TPHipaaCatalog',
         'Get-TPHipaaCitationsFromText',
