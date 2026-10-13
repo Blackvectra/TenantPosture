@@ -911,8 +911,9 @@ Describe 'Tenant comparison: output formats' {
         $script:Fmt.Html | Should -Not -Match '<script>nrgcmpprobe'
         $script:Fmt.Html | Should -Match 'nrgcmpprobe'                    # present, but escaped
         $script:Fmt.Html | Should -Match '&lt;script&gt;nrgcmpprobe'
-        $script:Fmt.Md | Should -Not -Match '<script>nrgcmpprobe'
-        $script:Fmt.Md | Should -Match '&lt;script&gt;nrgcmpprobe'
+        # Markdown: the one rule (ConvertTo-TPMarkdownSafe) backslash-escapes the brackets.
+        $script:Fmt.Md | Should -Not -Match '(?<!\\)<script(?<!\\)>nrgcmpprobe'
+        $script:Fmt.Md | Should -Match '\\<script\\>nrgcmpprobe'
         # A pipe in a title must not break the table row it sits in.
         $line = @($script:Fmt.Md -split "`n" | Where-Object { $_ -match 'AAD-1\.2' -and $_ -match 'nrgcmpprobe' })[0]
         $line | Should -Match '\\\|'
