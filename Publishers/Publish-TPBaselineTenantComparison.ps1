@@ -57,16 +57,7 @@ function Publish-TPBaselineTenantComparison {
         throw "Comparison not generated: $why"
     }
 
-    function EscMd {
-        param([object] $v)
-        $t = [string]$v
-        $t = $t -replace '[\r\n]+', ' '
-        $t = $t -replace '\|', '\|'
-        $t = $t -replace '<', '&lt;' -replace '>', '&gt;'
-        $t = $t -replace '`', '\`'
-        $t = $t -replace '\[', '\[' -replace '\]', '\]'
-        return $t
-    }
+    function EscMd { param([object] $v) ConvertTo-TPMarkdownSafe $v }   # one Markdown rule for the whole tool
     function Esc { param([object] $v) ConvertTo-TPHtmlSafe $v }
     function CsvSafe {
         # A cell that starts with = + - @ tab or CR is read by a spreadsheet as

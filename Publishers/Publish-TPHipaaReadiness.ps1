@@ -58,7 +58,7 @@ function Publish-TPHipaaReadiness {
     # Markdown renderers pass inline HTML through, so encode it here too, and
     # escape the bracket syntax a link or image needs (![x](https://...) would
     # otherwise make the viewer fetch an attacker's URL) and code spans.
-    function EscMd { param([object]$v) ([string]$v) -replace '\\', '\\' -replace '&', '&amp;' -replace '<', '&lt;' -replace '>', '&gt;' -replace '([\[\]`])', '\$1' -replace '\|', '\|' -replace '[\r\n]+', ' ' }
+    function EscMd { param([object]$v) ConvertTo-TPMarkdownSafe $v }   # one Markdown rule for the whole tool
     function Esc   { param([object]$v) ConvertTo-TPHtmlSafe $v }
 
     $st    = Get-TPHipaaStatusNames
