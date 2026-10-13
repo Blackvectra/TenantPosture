@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **[Security] The questionnaire PDF a client returns is read under bounds.** From the 2026-10-13 OSS scan.
+  `Import-TPSSPQuestionnaire.ps1` and `Import-TPManualReviewQuestionnaire.ps1` handed the PDF straight to
+  `pypdf.PdfReader` with no size cap, no time limit and no version floor; pypdf has shipped fixes for crafted
+  files that loop or exhaust memory, and the file comes back by email from the client. Both importers now read
+  it only through `Read-TPQuestionnaireFields` (`Lib/`, exported): a file above 32 MB, empty, or without a
+  `%PDF-` header is refused before Python starts; the read runs under a watchdog that ends the interpreter at
+  60 s; only the AcroForm field values are read; and a pypdf below 4.0.0 is refused with its version named.
+  Each refusal is exit code 4 with the reason, and nothing is imported. Memory is not bounded on Windows.
+  The installer holds a present pypdf to 6.20.1, the version the reader was tested with, and still does not
+  install it; the SBOM records that. `TP.QuestionnairePdfBounds.Tests.ps1` pins each bound.
 - **[Fix] The batch runner's clients file reaches every assessment, and a client can name its own profile.**
   `Invoke-TPBatchAssessment.ps1 -ClientsFile` read the file it was given, but each assessment it launched read
   `Config/clients.json` beside the script, so a batch run from a file kept anywhere else lost each client's
