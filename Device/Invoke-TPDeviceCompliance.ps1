@@ -36,6 +36,13 @@
     A machine that an earlier version already ran on keeps writing to
     C:\ProgramData\NRG\device-compliance.json (the folder the RMM job reads)
     until a TP folder exists beside it.
+    The script refuses to write (exit code 4, naming the path and the reason) when any
+    part of the path is a junction or symbolic link, or when the folder or an existing
+    result file is owned by anyone but SYSTEM, Administrators or the account running
+    the script: ProgramData lets a standard user create a folder there first, and a
+    result that user can edit is not evidence. The default folder is created with, or
+    reset to, a DACL that lets only SYSTEM and Administrators write to it (elevated runs).
+    A folder named here is checked but its ACL is left as the operator set it.
 
 .PARAMETER PassThru
     Also emit the result object to the pipeline, for interactive use.
@@ -67,7 +74,9 @@
 
 .NOTES
     Author: Matthew Levorson, NRG Technology Services / NextLayerSec LLC
-    Read-only: reads local state only. Writes exactly one file, the result JSON.
+    Read-only: reads local state only. Writes exactly one file, the result JSON,
+    and sets the DACL of its own default output folder under ProgramData so that
+    only SYSTEM and Administrators can write there.
     Exit codes: 0 all assessed checks passed, 2 one or more failed,
                 3 ran without elevation (results partial), 4 fatal error.
 #>
@@ -103,7 +112,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$script:ScriptVersion = '1.1.0'
+$script:ScriptVersion = '1.2.0'
 $script:Schema        = 'tp-device-compliance/1.0'
 $script:Checks        = New-Object System.Collections.ArrayList
 
@@ -121,6 +130,156 @@ function Get-DefaultOutputDirectory {
         return $earlier
     }
     return $current
+}
+
+# ── Output location trust ─────────────────────────────────────────────────────
+# The RMM runs this script as SYSTEM, and ProgramData lets a standard user create a
+# folder there that the user then owns. A user who creates ProgramData\TP first (or
+# NRG, which an existing folder makes the default) can edit the result after SYSTEM
+# writes it, and the assessment reads a pass the machine never earned; made a
+# junction, that folder sends SYSTEM's write wherever the user pointed it. The one
+# write is therefore guarded: no component of the output path may be a junction or
+# symbolic link; the folder, and a result file already there, must be owned by
+# SYSTEM, Administrators or the account running the script; a result file with more
+# than one name (a hard link) is refused; and while elevated, the default folder under
+# ProgramData gets a DACL that lets only SYSTEM and Administrators write to it, set
+# BEFORE the file is checked, so nothing can be slipped in between the check and the
+# write. A refusal is exit code 4 naming the path and the reason, never a quiet write
+# somewhere else. A folder named with -OutputPath is checked but its ACL is the
+# operator's and is left alone; the owner of a share (\\server\share) is not judged.
+
+function Get-CurrentSid {
+    try { return [string][System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value } catch { return '' }
+}
+
+function Get-TrustedOwnerSids {
+    # SYSTEM and Administrators always; the account running the script as well, so a
+    # person can test into a folder of their own. When SYSTEM runs, that is SYSTEM.
+    param([string] $CurrentSid)
+    $sids = @('S-1-5-18', 'S-1-5-32-544')
+    if ($CurrentSid -and ($sids -notcontains $CurrentSid)) { $sids += $CurrentSid }
+    return $sids
+}
+
+function Test-TrustedOwner {
+    # An owner that could not be read is not trusted: fail closed.
+    param([string] $OwnerSid, [string[]] $TrustedSids)
+    if (-not $OwnerSid) { return $false }
+    return ($TrustedSids -contains $OwnerSid)
+}
+
+function Get-OwnerSid {
+    # The SID that owns a file or folder, '' when it cannot be read.
+    param([Parameter(Mandatory = $true)] [string] $Path)
+    try {
+        $acl = Get-Acl -LiteralPath $Path -ErrorAction Stop
+        $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier])
+        if ($null -eq $owner) { return '' }
+        return [string]$owner.Value
+    } catch {
+        return ''
+    }
+}
+
+function Get-ReparsePointInPath {
+    # The first component of $Path, from the item up to (not including) the root,
+    # that is a junction or symbolic link; $null when there is none. Upward, because
+    # a link higher up moves everything beneath it. A component that does not exist
+    # yet has nothing to follow and is skipped; one that cannot be read is returned
+    # as if it were a link (fail closed).
+    param([Parameter(Mandatory = $true)] [string] $Path)
+    $p = $Path
+    while ($p) {
+        $parent = Split-Path -Parent $p
+        if (-not $parent -or $parent -eq $p) { break }
+        if (Test-Path -LiteralPath $p) {
+            $item = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+            if ($null -eq $item) { return $p }
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return $p }
+        }
+        $p = $parent
+    }
+    return $null
+}
+
+function Get-LinkType {
+    # 'SymbolicLink', 'Junction', 'HardLink' or '' for an existing item; '' when the
+    # property is absent on this PowerShell build.
+    param([Parameter(Mandatory = $true)] [string] $Path)
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) { return '' }
+    $prop = $item.PSObject.Properties['LinkType']
+    if ($null -eq $prop -or $null -eq $prop.Value) { return '' }
+    return [string]$prop.Value
+}
+
+function Test-OutputLocation {
+    # Judge the folder and, when one is already there, the result file. Returns
+    # @{ Ok; Reason }. The caller decides whether owners are judged (not for a share).
+    param(
+        [Parameter(Mandatory = $true)] [string]   $Directory,
+        [Parameter(Mandatory = $true)] [string]   $File,
+        [Parameter(Mandatory = $true)] [string[]] $TrustedSids,
+        [bool] $CheckOwner = $true
+    )
+    $link = Get-ReparsePointInPath -Path $File
+    if ($link) { return @{ Ok = $false; Reason = "'$link' is a junction or symbolic link" } }
+    if (Test-Path -LiteralPath $Directory) {
+        if (-not (Test-Path -LiteralPath $Directory -PathType Container)) {
+            return @{ Ok = $false; Reason = "'$Directory' exists and is not a folder" }
+        }
+        if ($CheckOwner) {
+            $owner = Get-OwnerSid -Path $Directory
+            if (-not (Test-TrustedOwner -OwnerSid $owner -TrustedSids $TrustedSids)) {
+                return @{ Ok = $false; Reason = "folder '$Directory' is owned by '$owner', not by SYSTEM, Administrators or the account running this script" }
+            }
+        }
+    }
+    if (Test-Path -LiteralPath $File) {
+        if (-not (Test-Path -LiteralPath $File -PathType Leaf)) {
+            return @{ Ok = $false; Reason = "'$File' exists and is not a file" }
+        }
+        $kind = Get-LinkType -Path $File
+        if ($kind) { return @{ Ok = $false; Reason = "'$File' is a $kind, not a plain file" } }
+        if ($CheckOwner) {
+            $owner = Get-OwnerSid -Path $File
+            if (-not (Test-TrustedOwner -OwnerSid $owner -TrustedSids $TrustedSids)) {
+                return @{ Ok = $false; Reason = "file '$File' is owned by '$owner', not by SYSTEM, Administrators or the account running this script" }
+            }
+        }
+    }
+    return @{ Ok = $true; Reason = '' }
+}
+
+function New-ProtectedDirectorySecurity {
+    # SYSTEM and Administrators: full control. Users: read and execute, so the RMM
+    # agent can collect the file whatever account it runs as. Nothing inherited.
+    $sec = New-Object System.Security.AccessControl.DirectorySecurity
+    $sec.SetAccessRuleProtection($true, $false)
+    $inherit = [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+    $none    = [System.Security.AccessControl.PropagationFlags]::None
+    foreach ($entry in @(@('S-1-5-18', 'FullControl'), @('S-1-5-32-544', 'FullControl'), @('S-1-5-32-545', 'ReadAndExecute'))) {
+        $sid   = New-Object System.Security.Principal.SecurityIdentifier($entry[0])
+        $right = [System.Security.AccessControl.FileSystemRights]$entry[1]
+        $rule  = New-Object System.Security.AccessControl.FileSystemAccessRule($sid, $right, $inherit, $none, 'Allow')
+        $sec.AddAccessRule($rule)
+    }
+    return $sec
+}
+
+function Initialize-OutputDirectory {
+    # Create the folder, then make sure it is protected. The DACL is only ever applied
+    # to the default folder under ProgramData, and only while elevated. Set-Acl, not a
+    # .NET call: the static Directory methods that take a DirectorySecurity exist on
+    # .NET Framework (Windows PowerShell 5.1) and not on the runtime the test job uses.
+    # The caller judges the result file AGAIN after this, which covers the instant
+    # between creation and protection.
+    param(
+        [Parameter(Mandatory = $true)] [string] $Path,
+        [bool] $Protect
+    )
+    if (-not (Test-Path -LiteralPath $Path)) { $null = [System.IO.Directory]::CreateDirectory($Path) }
+    if ($Protect) { Set-Acl -LiteralPath $Path -AclObject (New-ProtectedDirectorySecurity) }
 }
 
 # ── Result vocabulary ────────────────────────────────────────────────────────
@@ -930,17 +1089,30 @@ try {
         Checks        = @($script:Checks)
     }
 
+    $managedFolder = $false
     if (-not $OutputPath) {
         $dir = Get-DefaultOutputDirectory -ProgramDataRoot $env:ProgramData
-        if (-not (Test-Path -LiteralPath $dir)) {
-            $null = [System.IO.Directory]::CreateDirectory($dir)
-        }
         $OutputPath = Join-Path $dir 'device-compliance.json'
+        $managedFolder = $true
     } else {
         $dir = Split-Path -Parent $OutputPath
-        if ($dir -and -not (Test-Path -LiteralPath $dir)) {
-            $null = [System.IO.Directory]::CreateDirectory($dir)
-        }
+        if (-not $dir) { $dir = (Get-Location).ProviderPath; $OutputPath = Join-Path $dir $OutputPath }
+    }
+    # Trust is judged before anything is created or written (see "Output location
+    # trust" above). The owner of a share is the share's business, so a UNC path is
+    # held to the link rule only.
+    $trustedSids = Get-TrustedOwnerSids -CurrentSid (Get-CurrentSid)
+    $judgeOwner  = -not ($dir -match '^\\\\')
+    $where = Test-OutputLocation -Directory $dir -File $OutputPath -TrustedSids $trustedSids -CheckOwner $judgeOwner
+    if (-not $where.Ok) {
+        throw "refusing to write the result: $($where.Reason). An administrator should remove or replace it; nothing was written."
+    }
+    # The default folder is protected BEFORE the result file is checked again, so a
+    # file created between the check and the write is impossible, not just unlikely.
+    Initialize-OutputDirectory -Path $dir -Protect ($managedFolder -and $script:IsElevated)
+    $again = Test-OutputLocation -Directory $dir -File $OutputPath -TrustedSids $trustedSids -CheckOwner $judgeOwner
+    if (-not $again.Ok) {
+        throw "refusing to write the result: $($again.Reason). An administrator should remove or replace it; nothing was written."
     }
 
     $json = $result | ConvertTo-Json -Depth 6
