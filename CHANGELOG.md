@@ -8,6 +8,17 @@
   PowerShell supports (3.10.0 or later on 7.6, 3.7.2 to 3.9.x on 7.4 and 7.5), which the README's Prerequisites
   block already stated, so a first-time operator read two rules on one page. Both sentences now match the
   installer. The v4.6.5 correctness-sweep record keeps its wording as a dated document.
+- **[Fix] The results file is written again on Windows.** The first live Windows run after the handle-based
+  sensitive writer (#136) ended at the last step, after every collector and evaluator had run: `could not
+  restrict access on ... results.json, so it was not written: Attempted to perform an unauthorized operation`.
+  `Set-TPSensitiveFileContent` opened its temp file with a plain read/write handle and then set the DACL through
+  that handle; setting a DACL through a handle needs WRITE_DAC, which a read/write open never carries, so
+  Windows refused and the writer withheld the file, as designed. On Windows the temp file is now created WITH
+  the protected DACL (`New-TPSensitiveFileStream`, `FileSystemAclExtensions.Create`) by a handle that also
+  holds `ChangePermissions`, so there is no moment in which it carries the folder's inherited permissions and
+  the re-check through the handle succeeds. No suite had run the writer on Windows:
+  `TP.SensitiveFileWriter.Tests.ps1` runs it, reads the DACL back (the current user, SYSTEM and
+  Administrators, nothing inherited) and pins the bug class, and the Windows CI job runs it.
 - **[Security] The questionnaire PDF a client returns is read under bounds.** From the 2026-10-13 OSS scan.
   `Import-TPSSPQuestionnaire.ps1` and `Import-TPManualReviewQuestionnaire.ps1` handed the PDF straight to
   `pypdf.PdfReader` with no size cap, no time limit and no version floor; pypdf has shipped fixes for crafted
