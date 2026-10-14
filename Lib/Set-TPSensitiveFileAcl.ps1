@@ -65,11 +65,40 @@ function Set-TPSensitiveHandleAcl {
         $null = $setMode.Invoke($null, @($Stream.SafeFileHandle, [System.Enum]::ToObject($modeType, 0x180)))   # 0600; a void Invoke still emits $null
         return $true
     }
+    [System.IO.FileSystemAclExtensions]::SetAccessControl($Stream, (New-TPSensitiveFileSecurity))
+    return $true
+}
+
+# The protected DACL every sensitive file gets on Windows: inheritance off, the
+# three rules above and nothing else.
+function New-TPSensitiveFileSecurity {
+    [CmdletBinding()]
+    [OutputType([System.Security.AccessControl.FileSecurity])]
+    param()
     $sec = [System.Security.AccessControl.FileSecurity]::new()
     $sec.SetAccessRuleProtection($true, $false)
     foreach ($r in (Get-TPSensitiveFileAccessRules)) { $sec.AddAccessRule($r) }
-    [System.IO.FileSystemAclExtensions]::SetAccessControl($Stream, $sec)
-    return $true
+    return $sec
+}
+
+# Opens the temp file on Windows. The file is CREATED with the protected DACL
+# (CreateFile takes the security descriptor, so there is no moment in which it
+# carries the folder's inherited permissions), and the handle requests
+# ChangePermissions beside read and write: setting a DACL through a handle needs
+# WRITE_DAC, which a plain FileStream (GENERIC_READ | GENERIC_WRITE) does not
+# carry, so the first live Windows run after the handle-based writer (#136)
+# ended at the results write with "Attempted to perform an unauthorized
+# operation" and wrote nothing. Nothing here reopens the path.
+function New-TPSensitiveFileStream {
+    [CmdletBinding()]
+    [OutputType([System.IO.FileStream])]
+    param([Parameter(Mandatory)] [string] $Path)
+    $rights = [System.Security.AccessControl.FileSystemRights]::Read -bor
+        [System.Security.AccessControl.FileSystemRights]::Write -bor
+        [System.Security.AccessControl.FileSystemRights]::ChangePermissions
+    return [System.IO.FileSystemAclExtensions]::Create(
+        [System.IO.FileInfo]::new($Path), [System.IO.FileMode]::CreateNew, $rights,
+        [System.IO.FileShare]::None, 4096, [System.IO.FileOptions]::None, (New-TPSensitiveFileSecurity))
 }
 
 # True when this runtime can set a Unix mode through an open handle (so a temp
@@ -172,7 +201,9 @@ function Set-TPSensitiveFileContent {
 
     # The content is written to a new, randomly named file beside the target,
     # opened once with CreateNew (the handle is ours, never a link someone
-    # planted), hardened THROUGH THAT HANDLE before any tenant data lands, written
+    # planted; on Windows it is created WITH the protected DACL by a handle that
+    # can also change permissions), hardened THROUGH THAT HANDLE before any
+    # tenant data lands, written
     # through the same handle, and then moved over the target name. The move
     # replaces the target name itself, so a symbolic link, junction or mount
     # point planted at the output name is replaced, never followed; nothing in
@@ -195,7 +226,8 @@ function Set-TPSensitiveFileContent {
     $tmp = Join-Path ($(if ($stageDir) { $stageDir } else { $dir })) ('.' + $leaf + '.' + [guid]::NewGuid().ToString('N') + '.tmp')
     $fs = $null
     try {
-        $fs = [System.IO.FileStream]::new($tmp, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+        if ($IsWindows) { $fs = New-TPSensitiveFileStream -Path $tmp }
+        else { $fs = [System.IO.FileStream]::new($tmp, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None) }
         # A file that cannot be hardened is not written: tenant data never lands
         # under the folder's inherited permissions.
         $hardened = $false
