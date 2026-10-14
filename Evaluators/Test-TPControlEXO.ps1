@@ -1419,11 +1419,6 @@ function Test-TPControlEXOInboxRulesForwarding {
     $partialNote = ''
     if ($capped)       { $partialNote += " Only the first $scanned mailboxes were swept (scan limit reached); the rest were not checked." }
     if ($failedMb -gt 0) { $partialNote += " Inbox rules could not be read on $failedMb mailbox(es)." }
-    if ($count -eq 0 -and $partialNote) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
-            -Detail "Not assessed across the tenant: no externally forwarding rule was found in the mailboxes that were read.$partialNote Re-run with a higher -InboxRuleScanLimit (0 = all) before treating this control as clean."
-        return
-    }
 
     # Rules whose recipients could not be classified, and rules Exchange
     # itself could not interpret. Both are rules we did not read — not rules
@@ -1435,6 +1430,28 @@ function Test-TPControlEXOInboxRulesForwarding {
     $unresolvedRules = @($allRules | Where-Object { Get-TPObjectField -Item $_ -Key 'IsUnresolved' -Default $false })
     $unparseable     = @($inv.Data['UnparseableRules'] ?? @())
     $blindSpots      = $unresolvedRules.Count + $unparseable.Count
+
+    # Rules whose only unclassifiable recipients the directory no longer
+    # holds: a legacy DN with no object behind it (by LegacyExchangeDN and by
+    # X500 proxy address), so mail the rule forwards is not delivered. That
+    # is an ANSWER, not a blind spot: the rule is stale, named, and a Gap on
+    # its own, never a reason to leave the control unassessed. A rule that
+    # also has an external recipient is counted as external; one that also
+    # has an unresolved recipient stays a blind spot.
+    $orphanedRules = @($allRules | Where-Object {
+        (Get-TPObjectField -Item $_ -Key 'IsOrphaned' -Default $false) -and
+        -not (Get-TPObjectField -Item $_ -Key 'IsExternal' -Default $false) -and
+        -not (Get-TPObjectField -Item $_ -Key 'IsUnresolved' -Default $false) })
+    $orphanedSummary = Get-TPUnresolvedRuleSummary -Rules $orphanedRules -Key 'OrphanedRecipients' -Fallback 'a recipient no longer in the directory'
+    $orphanedNote = if ($orphanedRules.Count -gt 0) {
+        " $($orphanedRules.Count) further rule(s) forward to a recipient the directory no longer holds (not an external address; mail to it is not delivered): $($orphanedSummary.Text). Remove or re-point them."
+    } else { '' }
+
+    if ($count -eq 0 -and $orphanedRules.Count -eq 0 -and $partialNote) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Not assessed across the tenant: no externally forwarding rule was found in the mailboxes that were read.$partialNote Re-run with a higher -InboxRuleScanLimit (0 = all) before treating this control as clean."
+        return
+    }
 
     # An empty list means "no attacker rules found" only if the mailbox sweep
     # actually ran. The sweep is the most failure-prone query in the collector
@@ -1453,13 +1470,32 @@ function Test-TPControlEXOInboxRulesForwarding {
         $detail = @(
             'Not assessed.'
             if ($unparseable.Count -gt 0) { "$($unparseable.Count) inbox rule(s) could not be interpreted by Exchange, so their forwarding actions were never read." }
-            if ($unresolvedRules.Count -gt 0) { "$($unresolvedRules.Count) rule(s) forward to a recipient that could not be resolved to an address: $((Get-TPUnresolvedRuleSummary -Rules $unresolvedRules).Text)." }
+            if ($unresolvedRules.Count -gt 0) { "$($unresolvedRules.Count) rule(s) forward to a recipient that could not be resolved to an address (the directory could not be asked; see Exceptions for EXO-RecipientLookup): $((Get-TPUnresolvedRuleSummary -Rules $unresolvedRules).Text)." }
             'A rule the tool could not read is not a rule that forwards nowhere — review these manually before treating this control as clean.'
         ) -join ' '
         $unresolvedSummary = Get-TPUnresolvedRuleSummary -Rules $unresolvedRules
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -FrameworkIds $cit `
-            -Detail $detail -AffectedObjects $unresolvedSummary.Objects
+            -Detail "$detail$orphanedNote$partialNote" -AffectedObjects (@($unresolvedSummary.Objects) + @($orphanedSummary.Objects))
+        return
+    }
+
+    if ($count -eq 0 -and $orphanedRules.Count -gt 0) {
+        # Owner's decision (2026-09-15 review of the shared-mailbox feeds): a
+        # forwarding rule that is not delivering is still a Gap pending a
+        # decision on whether the feed is needed. The Detail says what was
+        # established (no external address; mail not delivered) and what was
+        # not (why the rule exists), and the severity is Medium: a stale rule
+        # is a hygiene gap, not the exfiltration path the control's High
+        # severity describes.
+        $enabledOrphaned = @($orphanedRules | Where-Object { (Get-TPObjectField -Item $_ -Key 'Enabled' -Default $true) -ne $false }).Count
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+            -Detail "No inbox rule forwards mail to an external address. $($orphanedRules.Count) rule(s) ($enabledOrphaned enabled) forward to a recipient the directory no longer holds — a legacy Exchange DN that no object carries as LegacyExchangeDN or as an X500 proxy address, so mail the rule forwards is not delivered (NDR 5.1.1): $($orphanedSummary.Text). A forwarding rule whose target is gone is a stale rule nobody has reviewed, one edit from forwarding elsewhere; decide whether each feed is still needed, then remove the rule or re-point it.$partialNote" `
+            -CurrentValue "$($orphanedRules.Count) inbox rule(s) forwarding to a recipient not in the directory" `
+            -RequiredValue 'Zero inbox rules forwarding to external or non-existent recipients' `
+            -Remediation 'For each rule named: confirm the recipient is gone (Get-Recipient -Filter "EmailAddresses -eq ''X500:<legacy DN>''" returns nothing), then Remove-InboxRule -Mailbox <UPN> -Identity <RuleName>, or Set-InboxRule with the current address if the feed is still needed. Find every such rule: foreach ($m in Get-Mailbox -ResultSize Unlimited) { Get-InboxRule -Mailbox $m.UserPrincipalName | Where-Object { $_.ForwardTo -or $_.RedirectTo -or $_.ForwardAsAttachmentTo } }.' `
+            -AffectedObjects $orphanedSummary.Objects
         return
     }
 
@@ -1479,7 +1515,15 @@ function Test-TPControlEXOInboxRulesForwarding {
     })
 
     $blindNote = if ($blindSpots -gt 0) { " A further $blindSpots rule(s) could not be read or classified and are not counted here$(if ($unresolvedRules.Count -gt 0) { ': ' + (Get-TPUnresolvedRuleSummary -Rules $unresolvedRules).Text })." } else { '' }
+    $blindNote += $orphanedNote
     $blindNote += $partialNote
+    $affected = @($affected) + @($orphanedSummary.Objects | ForEach-Object {
+        [ordered]@{
+            DisplayName = [string]$_.DisplayName
+            RuleName    = [string]$_.RuleName
+            Recipients  = "$($_.Recipients) (recipient no longer in the directory)"
+        }
+    })
     if ($disabledExt.Count -gt 0) { $blindNote = " $($disabledExt.Count) of them are disabled — not forwarding now, but staged; confirm who created them.$blindNote" }
     Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
         -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
@@ -1490,18 +1534,23 @@ function Test-TPControlEXOInboxRulesForwarding {
         -AffectedObjects $affected
 }
 
-# Names the inbox rules whose forwarding target could not be resolved, so a "not assessed" verdict on the
+# Names the inbox rules whose forwarding target could not be resolved (-Key UnresolvedRecipients, the
+# default) or no longer exists in the directory (-Key OrphanedRecipients), so the verdict on the
 # exfiltration check tells the reviewer exactly which rules to open. Exchange returns such a recipient as
 # `"Display Name" [EX:/o=.../cn=...]` (a legacy distinguished name that no longer maps to an address, or a
 # contact in a directory the lookup could not read); the display name is what a person can act on.
 function Get-TPUnresolvedRuleSummary {
     [CmdletBinding()]
-    param([AllowNull()] [object[]] $Rules)
+    param(
+        [AllowNull()] [object[]] $Rules,
+        [ValidateSet('UnresolvedRecipients', 'OrphanedRecipients')] [string] $Key = 'UnresolvedRecipients',
+        [string] $Fallback = 'an unresolved recipient'
+    )
     $objects = [System.Collections.Generic.List[object]]::new()
     $lines   = [System.Collections.Generic.List[string]]::new()
     foreach ($rule in @($Rules)) {
         if ($null -eq $rule) { continue }
-        $names = @(@(Get-TPObjectField -Item $rule -Key 'UnresolvedRecipients' -Default @()) | ForEach-Object {
+        $names = @(@(Get-TPObjectField -Item $rule -Key $Key -Default @()) | ForEach-Object {
                 $t = [string]$_
                 if ($t -match '^\s*"(.*?)"\s*\[') { $Matches[1].Trim() } else { if ($t.Length -gt 60) { $t.Substring(0, 60) } else { $t } }
             } | Where-Object { $_ } | Select-Object -Unique)
@@ -1510,7 +1559,7 @@ function Get-TPUnresolvedRuleSummary {
         $on   = (Get-TPObjectField -Item $rule -Key 'Enabled' -Default $true) -eq $true
         $objects.Add([ordered]@{ DisplayName = $mbx; RuleName = $name; Enabled = $on; Recipients = ($names -join ', ') })
         $shown = if ($names.Count -gt 4) { (($names | Select-Object -First 4) -join ', ') + " and $($names.Count - 4) more" } else { $names -join ', ' }
-        $lines.Add(("{0} rule '{1}'{2} forwards to {3}" -f $mbx, $name, $(if ($on) { '' } else { ' (disabled)' }), $(if ($shown) { $shown } else { 'an unresolved recipient' })))
+        $lines.Add(("{0} rule '{1}'{2} forwards to {3}" -f $mbx, $name, $(if ($on) { '' } else { ' (disabled)' }), $(if ($shown) { $shown } else { $Fallback })))
     }
     [pscustomobject]@{ Objects = @($objects); Text = (@($lines | Select-Object -First 6) -join '; ') + $(if ($lines.Count -gt 6) { "; and $($lines.Count - 6) more" } else { '' }) }
 }
