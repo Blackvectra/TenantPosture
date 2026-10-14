@@ -99,9 +99,12 @@ say what is not assessed:
 - **INT-2.2** Reads each assigned ASR policy's rule modes; judged only against the approved
   rule list (empty until approved), so it reports the modes read and leaves the rule-set
   half not assessed.
-- **INT-1.1** Coverage per enrolled platform (a Windows policy does not cover iOS); the
-  policies' non-compliance actions are not read, so it does not reach Satisfied (see
-  "Evidence boundaries shown with the control" below).
+- **INT-1.1** Coverage per enrolled platform (a Windows policy does not cover iOS), and
+  each assigned policy's non-compliance actions (read with the policies through
+  `scheduledActionsForRule`): a policy that marks a device noncompliant, retires, wipes,
+  locks or removes its access acts; one whose only actions notify is a shortfall; one
+  whose actions were not read (an older results file, a tenant that refused the expand)
+  leaves the control not assessed, never credited and never faulted.
 - **DEF-2.3** Judged over the malware policies in force. A filter on in a policy that
   applies to nobody no longer satisfies it.
 - **Policies in force (17 evaluators).** A tenant with **no** custom rules has an empty rule
@@ -143,16 +146,17 @@ detail and the remediation playbook show "Not established: <component>." whereve
 displayed (never in the executive summary), so a reader cannot take the verified half for the
 whole requirement.
 
-**INT-1.1 — Device Compliance Policies Configured.** The assessment verifies that compliance
-policies exist, are assigned, and cover each enrolled platform. It does not currently read or
-validate the configured non-compliance actions, including when a device is marked noncompliant,
-blocked, retired or otherwise acted upon. Therefore, the assessment cannot prove that noncompliant
-devices lose access or that remediation actions occur. Until those actions are collected and
-evaluated, INT-1.1 does not return Satisfied: verified components stay visible in the Detail while
-the overall result is Gap (no assigned policy), Partial (a platform with no policy) or Not assessed
-(every platform covered, actions unread). Reading "a compliance policy exists" as "noncompliant
-devices are actively restricted" is the misreading this entry exists to prevent; Conditional Access
-(AAD-2.3 / INT-1.2) is what turns device state into restricted access.
+**INT-1.1 — Device Compliance Policies Configured.** Until 2026-10-14 the assessment verified
+that compliance policies exist, are assigned and cover each enrolled platform, but did not read the
+configured non-compliance actions, so the control never returned Satisfied and this file carried that
+boundary. The collector now reads each policy's `scheduledActionsForRule` with the policies, and the
+control is Satisfied only when every assigned policy acts on a noncompliant device (marks it
+noncompliant, with its grace period, retires, wipes, locks it or removes its access), Partial when a
+policy's only actions notify, and Not assessed when the actions were not read. The boundary that
+remains is stated in the finding itself: the configured actions are read from the policy; whether
+Intune applied them to a given device is not, and Conditional Access (AAD-2.3 / INT-1.2) is what
+turns device state into restricted access. `Config/evidence-limits.json` is empty today; the
+mechanism stays for the next component the tool cannot read.
 
 ## Open verification
 

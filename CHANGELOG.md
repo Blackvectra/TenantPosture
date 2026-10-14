@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **[Detection] INT-1.1 reads each compliance policy's non-compliance actions and can be satisfied.** The control
+  required "an assigned compliance policy per enrolled platform, each with a non-compliance action" but the collector
+  never read the actions, so every tenant with full platform coverage, the first live run included, read "not
+  assessed" and the NRG baseline counted the control as not verified forever. The compliance collector now asks for
+  `scheduledActionsForRule` with the policies (one request, no new scope; a tenant that refuses the nested expand is
+  read without it and every policy records `ActionsRead = false`), and the evaluator credits a policy only for an
+  action that does something to the device or its access (mark noncompliant with its grace period, retire, wipe,
+  lock, remove access): all policies acting is Satisfied, a notification-only policy is a shortfall (Partial), and
+  actions not read, an older results file included, leave the control not assessed. The finding states that the
+  configured actions are read from the policy, not whether Intune applied them to a device. The one entry in
+  `Config/evidence-limits.json` (INT-1.1's "never Satisfied" boundary) is lifted; the mechanism stays, and
+  `TP.EvidenceLimits.Tests.ps1` now proves it with a mocked limit. `TP.IntuneTruth.Tests.ps1` drives the collector
+  with the Graph shape, the refused-expand fallback and the three verdicts.
 - **[Fix] The setup instructions no longer describe a retired Exchange module pin.** The README's
   First-Time Setup paragraph and the run guide's installer section said `Install-TPPrerequisites.ps1` pins
   ExchangeOnlineManagement at 3.2.0. That pin was lifted: the installer chooses the version the running
