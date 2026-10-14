@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **[Fix] The setup instructions no longer describe a retired Exchange module pin.** The README's
+  First-Time Setup paragraph and the run guide's installer section said `Install-TPPrerequisites.ps1` pins
+  ExchangeOnlineManagement at 3.2.0. That pin was lifted: the installer chooses the version the running
+  PowerShell supports (3.10.0 or later on 7.6, 3.7.2 to 3.9.x on 7.4 and 7.5), which the README's Prerequisites
+  block already stated, so a first-time operator read two rules on one page. Both sentences now match the
+  installer. The v4.6.5 correctness-sweep record keeps its wording as a dated document.
 - **[Security] The questionnaire PDF a client returns is read under bounds.** From the 2026-10-13 OSS scan.
   `Import-TPSSPQuestionnaire.ps1` and `Import-TPManualReviewQuestionnaire.ps1` handed the PDF straight to
   `pypdf.PdfReader` with no size cap, no time limit and no version floor; pypdf has shipped fixes for crafted

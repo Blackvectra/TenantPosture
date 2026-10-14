@@ -52,7 +52,7 @@ cd C:\path\to\TenantPosture
 .\Install-TPPrerequisites.ps1
 ```
 
-This installs/pins required PowerShell modules (with EOM at the known-good 3.2.0 version), sets execution policy, unblocks files, and installs Python+openpyxl if you want XLSX compliance matrices. Skip Python with `-SkipPython`.
+This installs or updates the required PowerShell modules, choosing the ExchangeOnlineManagement version your PowerShell supports (the ranges are under Prerequisites below), sets the execution policy, unblocks files, and installs Python and openpyxl for the XLSX compliance matrices. Skip Python with `-SkipPython`.
 
 ## Quick Start
 
