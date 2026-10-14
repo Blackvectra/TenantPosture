@@ -92,10 +92,14 @@ function Publish-TPAssessmentHTML {
     }
 
     # ── Brand (null-safe — brand object may not be present) ─────────────────
+    # Named in full on purpose: PowerShell variable names ignore case, so $P and
+    # $A were the same variables as the $p and $a two loops below iterate, and
+    # the stylesheet printed a dictionary's type name where the primary color
+    # belonged (first live run under the NRG profile, 2026-10-14).
     $brand = if ($Metadata -and $null -ne $Metadata['Brand'] -and $null -ne $Metadata['Brand']) { $Metadata['Brand'] } else { @{} }
-    $P  = sc ($brand['PrimaryColor'])   '#0f2544'
-    $S  = sc ($brand['SecondaryColor']) '#e8621a'
-    $A  = sc ($brand['AccentColor'])    '#3b7dd8'
+    $brandPrimary  = sc ($brand['PrimaryColor'])   '#0f2544'
+    $brandSecondary  = sc ($brand['SecondaryColor']) '#e8621a'
+    $brandAccent  = sc ($brand['AccentColor'])    '#3b7dd8'
     $co = if ($brand['CompanyName']) { $brand['CompanyName'] } else { 'NRG Technology Services / NextLayerSec LLC' }
     $ph = if ($brand['Phone']) { $brand['Phone'] } else { '' }
     $ws = if ($brand['Website']) { $brand['Website'] } else { 'nrgtechservices.com' }
@@ -1245,17 +1249,17 @@ document.querySelectorAll('tr.exp').forEach(function(tr){
 <meta name="referrer" content="no-referrer">
 <title>M365 Security Assessment &mdash; $cD</title>
 <style>
-:root{--P:$P;--S:$S;--A:$A;--bg:#eef2f8;--card:#fff;--txt:#111827;--mut:#6b7280;--bdr:#e2e8f0;--pass:#059669;--warn:#ca8a04;--gap:#dc2626;--na:#9ca3af;--r:12px;--sh:0 1px 3px rgba(0,0,0,.05),0 4px 18px rgba(15,37,68,.08)}
+:root{--P:$brandPrimary;--S:$brandSecondary;--A:$brandAccent;--bg:#eef2f8;--card:#fff;--txt:#111827;--mut:#6b7280;--bdr:#e2e8f0;--pass:#059669;--warn:#ca8a04;--gap:#dc2626;--na:#9ca3af;--r:12px;--sh:0 1px 3px rgba(0,0,0,.05),0 4px 18px rgba(15,37,68,.08)}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{font-size:15px;scroll-behavior:smooth}
 body{font-family:'Segoe UI Variable Display','Segoe UI','Helvetica Neue',system-ui,sans-serif;background:var(--bg);color:var(--txt);line-height:1.6;-webkit-font-smoothing:antialiased}
 a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
 .wrap{max-width:1180px;margin:0 auto}
 
-.hdr{background:linear-gradient(138deg,$P 0%,#061325 100%);position:relative;overflow:hidden}
+.hdr{background:linear-gradient(138deg,$brandPrimary 0%,#061325 100%);position:relative;overflow:hidden}
 .hdr::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle at 80% 50%,rgba(232,98,26,.12) 0%,transparent 60%),radial-gradient(circle at 20% 80%,rgba(59,125,216,.08) 0%,transparent 50%);pointer-events:none}
 .hdr-top{display:flex;align-items:flex-start;justify-content:space-between;padding:40px 52px 26px;gap:32px;position:relative}
-.eye{font-size:.61rem;font-weight:700;text-transform:uppercase;letter-spacing:.18em;color:$S;margin-bottom:8px}
+.eye{font-size:.61rem;font-weight:700;text-transform:uppercase;letter-spacing:.18em;color:$brandSecondary;margin-bottom:8px}
 .hdr-client{font-size:2.2rem;font-weight:900;letter-spacing:-.04em;color:#fff;line-height:1;margin-bottom:10px}
 .hdr-meta{display:flex;gap:22px;flex-wrap:wrap;font-size:.77rem;color:rgba(255,255,255,.42)}
 .hdr-meta strong{color:rgba(255,255,255,.78);font-weight:600}
@@ -1265,8 +1269,8 @@ a{color:var(--A);text-decoration:none}a:hover{text-decoration:underline}
 .logo-t{font-size:1.05rem;font-weight:900;color:rgba(255,255,255,.88);letter-spacing:-.02em}
 .hdr-nav{display:flex;padding:0 52px;border-top:1px solid rgba(255,255,255,.07);position:relative}
 .nav-a{padding:11px 16px;font-size:.68rem;font-weight:700;color:rgba(255,255,255,.38);letter-spacing:.06em;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;text-transform:uppercase;user-select:none}
-.nav-a:hover{color:rgba(255,255,255,.75);border-bottom-color:$S}
-.abar{height:3px;background:linear-gradient(90deg,$S 0%,$A 55%,transparent 100%)}
+.nav-a:hover{color:rgba(255,255,255,.75);border-bottom-color:$brandSecondary}
+.abar{height:3px;background:linear-gradient(90deg,$brandSecondary 0%,$brandAccent 55%,transparent 100%)}
 
 .cnt{padding:28px 52px 56px}
 .card{background:var(--card);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden;border:1px solid var(--bdr)}
@@ -1496,14 +1500,14 @@ th.nf-n{text-align:right}
 .svc{background:var(--gap);color:#fff}.svh{background:#ea580c;color:#fff}.svm{background:var(--warn);color:#fff}.svl{background:#65a30d;color:#fff}.svi{background:#e5e7eb;color:#374151}
 
 /* Footer */
-.ftr{background:$P;color:rgba(255,255,255,.48);padding:24px 52px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:32px;margin-top:36px}
+.ftr{background:$brandPrimary;color:rgba(255,255,255,.48);padding:24px 52px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:32px;margin-top:36px}
 .ftr-l{display:flex;flex-direction:column;gap:4px}
 .ftr-co{font-size:.86rem;font-weight:700;color:#fff}
 .ftr-contact{font-size:.73rem}
 .ftr-contact a{color:rgba(255,255,255,.55);text-decoration:none}
 .ftr-r{text-align:right}
 .ftr-note{font-size:.7rem;color:rgba(255,255,255,.35);margin-top:4px}
-.ftr-cta{display:inline-block;padding:9px 22px;background:$S;color:#fff;border-radius:7px;font-size:.75rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-decoration:none;margin-top:10px}
+.ftr-cta{display:inline-block;padding:9px 22px;background:$brandSecondary;color:#fff;border-radius:7px;font-size:.75rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-decoration:none;margin-top:10px}
 .ftr-cta:hover{opacity:.9;text-decoration:none}
 
 @keyframes rfill{to{stroke-dashoffset:$off}}
@@ -1568,7 +1572,7 @@ th.nf-n{text-align:right}
     <div class="score-wrap br">
       <svg width="136" height="136" viewBox="0 0 160 160">
         <circle fill="none" stroke="#e4e9f2" stroke-width="10" cx="80" cy="80" r="72" transform="rotate(-90 80 80)"/>
-        <circle fill="none" stroke="$S" stroke-width="10" cx="80" cy="80" r="72"
+        <circle fill="none" stroke="$brandSecondary" stroke-width="10" cx="80" cy="80" r="72"
           stroke-linecap="round" stroke-dasharray="$circ" stroke-dashoffset="$circ"
           transform="rotate(-90 80 80)" style="animation:rfill 1.4s cubic-bezier(.4,0,.2,1) .25s forwards"/>
       </svg>
