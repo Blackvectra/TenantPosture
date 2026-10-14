@@ -287,9 +287,9 @@ over time, use `-BaselineResults` on `Invoke-TPAssessment.ps1`.
 
 ### `Install-TPPrerequisites.ps1`
 
-Run once on a fresh machine. Installs and pins the modules (EOM at 3.2.0),
-sets execution policy, unblocks files, optionally installs Python + openpyxl for
-XLSX output.
+Run once on a fresh machine. Installs or updates the modules, choosing the
+ExchangeOnlineManagement version your PowerShell supports, sets execution
+policy, unblocks files, optionally installs Python + openpyxl for XLSX output.
 
 Run it **elevated** if your PowerShell module path is inside OneDrive — it will
 tell you if it is.
