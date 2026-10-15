@@ -182,7 +182,7 @@ jobs:
         run: |
           Import-Module Pester -MinimumVersion 5.5.0 -Force
           $config = New-PesterConfiguration
-          $config.Run.Path = @('./Testing/TP.WebServer.Tests.ps1', './Testing/TP.DeviceCompliance.Tests.ps1', './Testing/TP.SensitiveFileWriter.Tests.ps1')
+          $config.Run.Path = @('./Testing/TP.WebServer.Tests.ps1', './Testing/TP.DeviceCompliance.Tests.ps1', './Testing/TP.SensitiveFileWriter.Tests.ps1', './Testing/TP.OutputFolderProbe.Tests.ps1')
           $config.Run.Exit = $true
           $config.Run.Throw = $false
           $config.Output.Verbosity = 'Detailed'
