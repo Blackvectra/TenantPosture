@@ -715,3 +715,133 @@ return
         }
     }
 }
+
+# ── DEF-4.4: the Priority account tag is read, not screenshotted ──────────────────────
+# The evaluator said for a year that the tag "is not exposed by any supported Graph/EXO
+# read API" and asked the assessor for a portal screenshot. Microsoft documents
+# `Get-User -IsVIP` as the way to list priority accounts and `Get-EmailTenantSettings`
+# EnablePriorityAccountProtection as the Plan 2 protection switch. The collector cases
+# drive the real collector with stand-ins for both, through Get-TPExoCommand, so the
+# verdict rests on the real read path and never on a fixture that pre-computes it.
+Describe 'DEF-4.4 reads the Priority account tag' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop
+        $script:Mod = Get-Module 'TenantPosture'
+        function script:Raw { param([hashtable] $Data, [bool] $Success = $true) [ordered]@{ CollectorId = 'x'; CollectedAt = '2026-09-01T00:00:00Z'; Success = $Success; Data = $Data } }
+        function script:Verdict { param([string] $Fn, [string] $Cid) & $Fn | Out-Null; @(Get-TPFindings | Where-Object { $_.ControlId -eq $Cid })[0] }
+        # The stand-in commands carry their data as closures (never $script: variables, which a
+        # mock body does not share with the test file), and the mock bodies capture the commands
+        # the same way, as the orphaned-recipient cases above do.
+        function script:Collect {
+            param([object[]] $Vips = @(), [object] $Settings = $null, [switch] $NoGetUser, [switch] $NoSettings)
+            $vipRows = @($Vips)
+            $getUserCommand = {
+                [CmdletBinding()] param([switch] $IsVIP, [object] $ResultSize)
+                if (-not $IsVIP) { throw 'the collector must ask for -IsVIP, never list every user' }
+                $vipRows
+            }.GetNewClosure()
+            $settingsRow = $Settings
+            $settingsCommand = { [CmdletBinding()] param() $settingsRow }.GetNewClosure()
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -MockWith { [pscustomobject]@{ Command = $null; Source = 'ExchangeOnline' } }
+            if (-not $NoGetUser) {
+                Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-User' } -MockWith {
+                    [pscustomobject]@{ Source = 'ExchangeOnline'; Command = $getUserCommand }
+                }.GetNewClosure()
+            }
+            if (-not $NoSettings) {
+                Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-EmailTenantSettings' } -MockWith {
+                    [pscustomobject]@{ Source = 'ExchangeOnline'; Command = $settingsCommand }
+                }.GetNewClosure()
+            }
+            $r = Invoke-TPCollectDefender
+            $r.Success | Should -BeTrue
+            $r
+        }
+        $script:TwoVips = @(
+            [pscustomobject]@{ DisplayName = 'Chief Example'; UserPrincipalName = 'ceo@contoso.com'; RecipientTypeDetails = 'UserMailbox' },
+            [pscustomobject]@{ DisplayName = 'Finance Lead';  UserPrincipalName = 'cfo@contoso.com'; RecipientTypeDetails = 'UserMailbox' })
+    }
+    AfterAll { Clear-TPState; Remove-Module 'TenantPosture' -Force -ErrorAction SilentlyContinue }
+    BeforeEach { Clear-TPState }
+
+    Context 'Collector: Get-User -IsVIP and Get-EmailTenantSettings through the Exchange Online session' {
+        It 'stores the tagged accounts and the protection switch, and the control is Satisfied (was: manual verification)' {
+            $r = Collect -Vips $script:TwoVips -Settings ([pscustomobject]@{ EnablePriorityAccountProtection = $true })
+            $pa = $r.Data['PriorityAccounts']
+            $pa.Available | Should -BeTrue
+            $pa.Count | Should -Be 2
+            @($pa.Accounts | ForEach-Object { $_.UserPrincipalName }) | Should -Be @('ceo@contoso.com', 'cfo@contoso.com')
+            $pa.ProtectionRead | Should -BeTrue
+            $pa.ProtectionEnabled | Should -BeTrue
+            $f = Verdict 'Test-TPControlDefenderPriorityAccounts' 'DEF-4.4'
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'ceo@contoso\.com, cfo@contoso\.com'
+            $f.Detail | Should -Match 'protection is on'
+            $f.Detail | Should -Not -Match '(?i)manual verification|screenshot'
+        }
+        It 'no tagged account is a Gap, not a screenshot request' {
+            Collect -Vips @() -Settings ([pscustomobject]@{ EnablePriorityAccountProtection = $true }) | Out-Null
+            $f = Verdict 'Test-TPControlDefenderPriorityAccounts' 'DEF-4.4'
+            $f.State        | Should -Be 'Gap'
+            $f.CurrentValue | Should -Be '0 priority accounts tagged'
+            $f.Detail       | Should -Match 'No account carries the Priority account tag'
+        }
+        It 'tagged accounts with the protection switch read as off is Partial, naming the switch' {
+            Collect -Vips $script:TwoVips -Settings ([pscustomobject]@{ EnablePriorityAccountProtection = $false }) | Out-Null
+            $f = Verdict 'Test-TPControlDefenderPriorityAccounts' 'DEF-4.4'
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'EnablePriorityAccountProtection = False'
+        }
+        It 'a switch that could not be read is context, never a shortfall: the tag verdict stands' {
+            $r = Collect -Vips $script:TwoVips -NoSettings
+            $r.Data['PriorityAccounts'].ProtectionRead | Should -BeFalse
+            $f = Verdict 'Test-TPControlDefenderPriorityAccounts' 'DEF-4.4'
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'was not read'
+            $f.Detail | Should -Match 'Get-EmailTenantSettings is not available'
+        }
+        It 'a string-valued switch ("True") is read as on, and anything else is not read' {
+            Collect -Vips $script:TwoVips -Settings ([pscustomobject]@{ EnablePriorityAccountProtection = 'True' }) | Out-Null
+            (Verdict 'Test-TPControlDefenderPriorityAccounts' 'DEF-4.4').Detail | Should -Match 'protection is on'
+            Clear-TPState
+            $r = Collect -Vips $script:TwoVips -Settings ([pscustomobject]@{ EnablePriorityAccountProtection = 'Maybe' })
+            $r.Data['PriorityAccounts'].ProtectionRead | Should -BeFalse
+            $r.Data['PriorityAccounts'].ProtectionError | Should -Match 'not returned'
+        }
+        It 'with no Get-User in the session the control is not assessed, with the reason recorded' {
+            $r = Collect -NoGetUser
+            $r.Data['PriorityAccounts'].Available | Should -BeFalse
+            @(Get-TPExceptions | Where-Object { $_.Source -eq 'Defender-PriorityAccounts' }).Count | Should -Be 1
+            $f = Verdict 'Test-TPControlDefenderPriorityAccounts' 'DEF-4.4'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'Get-User -IsVIP failed'
+            $f.Detail | Should -Match 'not available in the Exchange Online session'
+            @($f.FrameworkIds).Count | Should -BeGreaterThan 0 -Because 'an uncited not-assessed finding vanishes from the NIST rollup'
+        }
+    }
+
+    Context 'Evaluator: replay and failure shapes' {
+        It 'a results file from before the read is not assessed, never a verdict' {
+            Set-TPRawData -Key 'Defender-Policies' -Data (Raw @{ AntiPhishing = @{ Available = $true; Policies = @(); Rules = @() } })
+            $f = Verdict 'Test-TPControlDefenderPriorityAccounts' 'DEF-4.4'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'predate'
+        }
+        It 'a failed read with Available = false is not assessed and names the failure' {
+            Set-TPRawData -Key 'Defender-Policies' -Data (Raw @{ PriorityAccounts = @{ Available = $false; Error = 'The request was throttled.' } })
+            $f = Verdict 'Test-TPControlDefenderPriorityAccounts' 'DEF-4.4'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'throttled'
+        }
+        It 'the sample names at most five accounts and counts the rest' {
+            $many = @(1..8 | ForEach-Object { @{ DisplayName = "User $_"; UserPrincipalName = "user$_@contoso.com"; RecipientType = 'UserMailbox' } })
+            Set-TPRawData -Key 'Defender-Policies' -Data (Raw @{ PriorityAccounts = @{ Available = $true; Count = 8; Accounts = $many; ProtectionRead = $true; ProtectionEnabled = $true; ProtectionError = '' } })
+            $f = Verdict 'Test-TPControlDefenderPriorityAccounts' 'DEF-4.4'
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'user5@contoso\.com and 3 more'
+            $f.Detail | Should -Not -Match 'user6@contoso\.com'
+        }
+    }
+}

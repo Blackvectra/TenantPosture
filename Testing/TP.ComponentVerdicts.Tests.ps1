@@ -111,6 +111,33 @@ Describe 'Baseline controls judge every component of the expected state' {
             Set-TPRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @('ManagePermissionGrantsForSelf.tp-custom') $false)
             $v = & $script:V62; $v.State | Should -Be 'NotApplicable'; $v.Detail | Should -Match 'custom permission grant policy'
         }
+        It 'the Microsoft-managed recommended policy is a Partial restriction, never "custom" and never not assessed' {
+            # Microsoft's default for new tenants: users may consent to any delegated permission from any
+            # publisher except the file, site, mail, calendar, chat, contacts, tasks and people scopes.
+            Set-TPRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @('ManagePermissionGrantsForSelf.microsoft-user-default-recommended') $true)
+            $v = & $script:V62
+            $v.State  | Should -Be 'Partial'
+            $v.Detail | Should -Match 'Verified: The Microsoft-managed consent policy'
+            $v.Detail | Should -Match 'Shortfall: Users can still consent to every other'
+            $v.Detail | Should -Not -Match 'custom permission grant policy'
+        }
+        It 'the companion mail-client policy beside the managed one is named, not called custom' {
+            Set-TPRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @('ManagePermissionGrantsForSelf.microsoft-user-default-recommended', 'ManagePermissionGrantsForSelf.microsoft-user-default-allow-consent-apps') $true)
+            $v = & $script:V62
+            $v.State  | Should -Be 'Partial'
+            $v.Detail | Should -Match 'mail-client policy'
+            $v.Detail | Should -Not -Match 'custom permission grant policy'
+        }
+        It 'the low-impact policy with the mail-client companion stays Satisfied and names the companion' {
+            Set-TPRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @('ManagePermissionGrantsForSelf.microsoft-user-default-low', 'ManagePermissionGrantsForSelf.microsoft-user-default-allow-consent-apps') $true)
+            $v = & $script:V62
+            $v.State  | Should -Be 'Satisfied'
+            $v.Detail | Should -Match 'mail-client policy'
+        }
+        It 'the legacy policy beside the managed one is still a Gap: unrestricted wins' {
+            Set-TPRawData -Key 'AAD-IdentityGovernance' -Data (& $script:Gov @('ManagePermissionGrantsForSelf.microsoft-user-default-legacy', 'ManagePermissionGrantsForSelf.microsoft-user-default-recommended') $true)
+            (& $script:V62).State | Should -Be 'Gap'
+        }
     }
 
     Context 'DEF-2.2 zero-hour auto purge for spam, phishing AND malware' {
