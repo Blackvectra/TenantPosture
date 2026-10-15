@@ -6,6 +6,7 @@
 # (cmdlets throw if unlicensed; caught per-section, registered as exceptions).
 #
 # Required session: Exchange Online (Connect-ExchangeOnline)
+# Also reads: Get-User -IsVIP and Get-EmailTenantSettings (priority accounts, DEF-4.4)
 # Requires Defender for Office 365 Plan 1 or Plan 2 for Safe Attachments/Links.
 #
 # NIST SP 800-53: SI-3 (malicious code protection), SI-4 (system monitoring), SI-8 (spam protection)
@@ -185,6 +186,58 @@ function Invoke-TPCollectDefender {
             $result.Data['AntiPhishing'] = @{ Available = $false; Error = $_.Exception.Message }
             if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                 Register-TPException -Source 'Defender-AntiPhishing' -Message $_.Exception.Message
+            }
+        }
+
+        # ── Priority accounts (DEF-4.4) ───────────────────────────────────
+        # Readable, and documented as such: Microsoft's "Manage and monitor
+        # priority accounts" lists `Get-User -IsVIP` as the way to list them,
+        # and "Configure and review priority account protection" gives
+        # `Get-EmailTenantSettings` EnablePriorityAccountProtection as the
+        # Defender for Office 365 Plan 2 switch. Two facts, read separately:
+        # the tag is per user and the switch is per tenant (on by default), and
+        # a tenant without Plan 2, or an older module, may refuse the second
+        # read while the first works, so the second never fails the first.
+        # Get-User also exists in the Security & Compliance session, so it is
+        # pinned to Exchange Online like Get-Recipient.
+        try {
+            $getUserCmd = (Get-TPExoCommand -Name 'Get-User' -Session ExchangeOnline).Command
+            if (-not $getUserCmd) { throw 'Get-User is not available in the Exchange Online session.' }
+            $vips = @(& $getUserCmd -IsVIP -ResultSize Unlimited -ErrorAction Stop | Where-Object { $null -ne $_ })
+            $accounts = @($vips | ForEach-Object {
+                [ordered]@{
+                    DisplayName       = [string](Get-TPObjectField -Item $_ -Key 'DisplayName' -Default '')
+                    UserPrincipalName = [string](Get-TPObjectField -Item $_ -Key 'UserPrincipalName' -Default '')
+                    RecipientType     = [string](Get-TPObjectField -Item $_ -Key 'RecipientTypeDetails' -Default '')
+                }
+            })
+            $protRead = $false; $protEnabled = $null; $protError = ''
+            try {
+                $etsCmd = (Get-TPExoCommand -Name 'Get-EmailTenantSettings' -Session ExchangeOnline).Command
+                if (-not $etsCmd) { throw 'Get-EmailTenantSettings is not available in the Exchange Online session.' }
+                $ets = @(& $etsCmd -ErrorAction Stop | Where-Object { $null -ne $_ }) | Select-Object -First 1
+                $raw = Get-TPObjectField -Item $ets -Key 'EnablePriorityAccountProtection' -Default $null
+                if ($raw -is [bool]) { $protEnabled = $raw; $protRead = $true }
+                elseif ([string]$raw -in @('True', 'False')) { $protEnabled = ([string]$raw -eq 'True'); $protRead = $true }
+                else { $protError = 'EnablePriorityAccountProtection was not returned' }
+            } catch {
+                $protError = $_.Exception.Message
+                if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                    Register-TPException -Source 'Defender-PriorityAccountProtection' -Message $_.Exception.Message
+                }
+            }
+            $result.Data['PriorityAccounts'] = @{
+                Available         = $true
+                Count             = $accounts.Count
+                Accounts          = $accounts
+                ProtectionRead    = $protRead
+                ProtectionEnabled = $protEnabled
+                ProtectionError   = $protError
+            }
+        } catch {
+            $result.Data['PriorityAccounts'] = @{ Available = $false; Error = $_.Exception.Message }
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'Defender-PriorityAccounts' -Message $_.Exception.Message
             }
         }
 

@@ -65,6 +65,45 @@ Describe 'Purview Security & Compliance sections' {
         } $script:RealExoCmd
     }
 
+    It 'a section whose cmdlet is not in the session records WHY, and the finding that depends on it says so' {
+        # The 2026-10-14 live run: Get-AutoSensitivityLabelPolicy was not available to the signed-in
+        # account (a missing Purview role). PVW-2.6 read "AutoLabelPolicies was not collected; not
+        # assessed." and the reason sat only in the Exceptions array, so the ticket could not say what to do.
+        $cmds = @{}; foreach ($k in $script:Full.Keys) { if ($k -ne 'Get-AutoSensitivityLabelPolicy') { $cmds[$k] = $script:Full[$k] } }
+        $r = Invoke-Purview $cmds
+        $r.Data.SectionStatus['AutoLabelPolicies'] | Should -Be 'Failed'
+        $r.Data.SectionErrors['AutoLabelPolicies'] | Should -Match 'Get-AutoSensitivityLabelPolicy is not available'
+        $r.Data.SectionErrors['AutoLabelPolicies'] | Should -Match 'role'
+        $f = Get-Verdict 'Test-TPControlPurviewAutoLabel' 'PVW-2.6'
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Match '^AutoLabelPolicies was not collected; not assessed\.' -Because 'the sentence every consumer keys on stays the prefix'
+        $f.Detail | Should -Match 'Reason recorded by the collector: Get-AutoSensitivityLabelPolicy is not available'
+        @($f.FrameworkIds).Count | Should -BeGreaterThan 0 -Because 'an uncited not-assessed finding vanishes from the NIST rollup'
+    }
+    It 'a cmdlet that throws records its message as the reason' {
+        $cmds = @{}; foreach ($k in $script:Full.Keys) { $cmds[$k] = $script:Full[$k] }
+        $cmds['Get-ComplianceTag'] = { throw 'The request was throttled. Try again later.' }
+        $r = Invoke-Purview $cmds
+        $r.Data.SectionStatus['RetentionLabels'] | Should -Be 'Failed'
+        $r.Data.SectionErrors['RetentionLabels'] | Should -Match 'throttled'
+        (Get-Verdict 'Test-TPControlPurviewRecordsManagement' 'PVW-4.4').Detail | Should -Match 'Reason recorded by the collector: The request was throttled'
+    }
+    It 'a results file from before SectionErrors keeps the plain sentence, and a reason never changes the state' {
+        & $script:Mod { Clear-TPState }
+        Set-TPRawData -Key 'Purview' -Data ([ordered]@{ CollectorId = 'x'; CollectedAt = '2026-09-01T00:00:00Z'; Success = $true
+            Data = @{ AutoLabelPolicies = @(); SectionStatus = @{ AutoLabelPolicies = 'Failed' } } })
+        $f = Get-Verdict 'Test-TPControlPurviewAutoLabel' 'PVW-2.6'
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Be 'AutoLabelPolicies was not collected; not assessed.'
+    }
+    It 'the helper falls back to the registered exception on a live run and caps a long reason' {
+        & $script:Mod { Clear-TPState; Register-TPException -Source 'Purview-AutoLabelPolicies' -Message ('x' * 700) }
+        $d = & $script:Mod { Get-TPSectionNotCollectedDetail -Raw ([ordered]@{ Success = $true; Data = @{} }) -Section 'AutoLabelPolicies' -CollectorSource 'Purview-AutoLabelPolicies' }
+        $d | Should -Match '^AutoLabelPolicies was not collected; not assessed\. Reason recorded by the collector: x{600}\.\.\.$'
+        & $script:Mod { Clear-TPState }
+        (& $script:Mod { Get-TPSectionNotCollectedDetail -Raw $null -Section 'AutoLabelPolicies' }) | Should -Be 'AutoLabelPolicies was not collected; not assessed.'
+    }
+
     It 'projects each documented cmdlet and marks every section Collected' {
         $r = Invoke-Purview $script:Full
         foreach ($s in 'AuditRetentionPolicies','AutoLabelPolicies','LabelPolicies','RetentionLabels','CommCompliancePolicies','InformationBarriersMode') {
