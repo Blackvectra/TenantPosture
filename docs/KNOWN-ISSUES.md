@@ -125,8 +125,7 @@ Covered by tests against stubbed or mock data only: the batch runners, the triag
 users' mailboxes, the distribution-list scan, the email assessment on an account that has a mailbox, endpoint compliance
 collection (`Device/` and `-DeviceResults`), delta and monthly reports from two real runs, the SSP
 answers file and questionnaire import, `Apply-TPBaseline.ps1`, the tenant app registration and
-consent scripts, and the Settings Catalog parsers. Issue #98 (the authentication strength read that
-returned a 400 on 2026-09-24) still needs a live confirmation that it no longer recurs.
+consent scripts, and the Settings Catalog parsers. Issue #98 (the authentication strength read that returned a 400 on 2026-09-24) was confirmed fixed on the 2026-10-15 live run: six authentication strengths were read, the section reported Collected, no exception was recorded, and AAD-1.3 judged their allowed methods.
 
 ## Collection limits seen on a real tenant
 
@@ -136,6 +135,31 @@ returned a 400 on 2026-09-24) still needs a live confirmation that it no longer 
 - **Mailbox reads on an account with no mailbox:** the incident-response email assessment reports
   NOT CLEARED and says the account may have no Exchange Online mailbox. Run it on an account that has
   one.
+
+## Seen on the 2026-10-15 live run
+
+The first full run after the October merges, on a Business Premium tenant with Purview and Teams
+connected (81 mailboxes, 664 inbox rules).
+
+- **An output folder on an exFAT or FAT32 drive ended the run at the results write, after six minutes
+  of collection, with nothing written.** Fixed (#166): every entry point proves the output folder
+  before its first sign-in and refuses it with the volume and the `-OutputPath` / `-OutputRoot` remedy.
+- **EXO-7.2 stayed "not assessed" for two rules forwarding to deleted or unmigrated identities.** The
+  REST-backed cmdlets of ExchangeOnlineManagement 3.x render Exchange's not-found answer as
+  `||Message` with the exception type blank. Fixed (#167): the resolver recognizes Exchange's own
+  not-found sentence, so those rules file as Orphaned and the control is a Medium Gap naming them.
+- **The report site was unreadable in a dark-mode browser** (brand navy and default blue links on a
+  dark background) with no way to the light rendering. Fixed (#168): the site renders light like the
+  other deliverables.
+- **`Get-ExternalInOutlook` returned Microsoft's "server side error" once**, so the external-sender
+  tagging read failed for that run and its control is not assessed; the next run reads it again.
+- **DEF-3.4, EXO-3.3 and EXO-1.5 are not assessed on a run without a client record:** the monitoring
+  address and the approved priority users come from `clients.json`, `-MonitoringAddress` or the
+  profile; without them the verified half is reported and the rest is "standard not approved".
+- **PVW-2.6** read "not assessed" because the signed-in account lacks the Purview role that exposes
+  `Get-AutoSensitivityLabelPolicy`; the finding now names that (#159).
+- **`WARNING: Force Validate not set`** during the Purview collection is `Get-DlpCompliancePolicy`'s
+  own notice when its undocumented `-ForceValidate` parameter is omitted; the policies still return.
 
 ## Found in the review of PR #106 and not fixed there (follow-ups)
 
@@ -190,7 +214,8 @@ These fixes passed their tests but have not been seen working against a real ten
   (script detections and a Tor-browser download block). Nothing shows the tool caused any of them;
   the process behind the download event has not been identified. The Tor Project host name was
   removed from every shipped file as a precaution, and a test fails if a live reference returns.
-- **INT-1.1 non-compliance actions** are not read, by design; see `TP-DETECTION-LIMITS.md`.
+- **INT-1.1 non-compliance actions.** Resolved: each assigned policy's `scheduledActionsForRule` is read
+  (#153); the 2026-10-15 live run reported a Partial naming the one policy that only notifies.
 - **Markdown escaping in the other report publishers.** Resolved: every Markdown publisher now calls
   `ConvertTo-TPMarkdownSafe` (`Lib/ConvertTo-TPMarkdownSafe.ps1`), which escapes the HTML, link, image,
   code-span, emphasis, heading and blockquote characters as well as pipes and line breaks.
@@ -243,21 +268,21 @@ Kept unchanged by the citation corrections (PR #122) and recorded in
 ## Pending changes that address an item here
 
 - **The web GUI items above** (run list for command-line runs, report-site link, `-ScriptDir`
-  default): pull request #112, which also adds request filtering.
+  default): pull request #112 (merged), which also adds request filtering.
 - **A private PowerShell module bundle,** so the tool does not depend on the operator's module
-  folders: pull request #108 (scaffold, not active).
+  folders: pull request #108 was a scaffold and was closed without merging; not pursued.
 - **An offline comparison of two saved results files** (whether two tenants meet the same
-  baseline, stating the tier each used): pull request #109.
-- **AAD-7.2 and break-glass accounts:** pull request #119 changes which Conditional Access
-  policies count against a break-glass account and is held for review.
+  baseline, stating the tier each used): shipped as `Compare-TPTenantBaseline.ps1`; pull request
+  #109 was superseded by the renamed implementation.
+- **AAD-7.2 and break-glass accounts:** pull request #119 (merged) changes which Conditional Access
+  policies count against a break-glass account.
 
 ## Not started
 
 - A single-page report in the ScubaGear layout (today's single page is `*-assessment.html`; the
   ScubaGear-style layout is the multi-page report site).
 
-## NLS-Assessment
+## NLS is a profile
 
-NLS-Assessment carries the fixes through v4.14.3 and none since. It is not receiving further
-ports: the plan is to run NRG and NLS from one codebase as configuration profiles. Until that
-lands, an NLS run does not include the changes recorded here.
+There is no separate NLS codebase. `-Profile nls` (`Config/profiles/nls.psd1`) runs this tool for the
+NextLayerSec practice; the retired NLS-Assessment repository receives no ports.
