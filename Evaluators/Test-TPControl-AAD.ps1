@@ -776,19 +776,19 @@ function Test-TPControlAADDeviceComplianceCA {
     if (-not $ca -or -not $ca.Success) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    $devCtl = @('compliantDevice','domainJoinedDevice')
-    $compliancePolicies = @($ca.Data['Policies'] | Where-Object { $_.State -eq 'enabled' -and (Test-TPCAGrantRequires -Policy $_ -Any $devCtl) })
+    # One judgment shared with INT-1.2 (Get-TPCADeviceComplianceCoverage): the
+    # requirement counts only from enabled policies that require a device of all
+    # users on all applications with no narrowing, reaching the browser and the
+    # desktop and mobile clients, exclusions combined across policies. This used to
+    # credit ANY enabled policy requiring a device, whatever its scope, so a policy
+    # on one group passed the control for the tenant (2026-10-15 review).
     # "Compliant OR hybrid-joined OR MFA" (a Microsoft template) lets MFA alone
-    # through on an unmanaged device, so it does not enforce compliance.
-    $optional = @($ca.Data['Policies'] | Where-Object {
-        $_.State -eq 'enabled' -and @($_.GrantControls.BuiltInControls | Where-Object { $_ -in $devCtl }).Count -gt 0 -and -not (Test-TPCAGrantRequires -Policy $_ -Any $devCtl) })
-    if ($compliancePolicies.Count -eq 0 -and $optional.Count -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "A compliant or hybrid-joined device is only one alternative in $(($optional | ForEach-Object { $_.DisplayName }) -join ', ') (grant operator OR): MFA alone still grants access from an unmanaged device." -CurrentValue 'Device compliance optional (OR)' -RequiredValue 'Compliant or hybrid-joined device required' -Remediation $ctrl.Remediation
-    } elseif ($compliancePolicies.Count -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Device compliance required by $($compliancePolicies.Count) CA policy(ies)."
-    } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No CA policy requires compliant or hybrid-joined device. Unmanaged personal devices access corporate resources unchecked.' -Remediation $ctrl.Remediation
-    }
+    # through on an unmanaged device, so it enforces nothing and is a named Gap.
+    $pols = @(Get-TPObjectField -Item $ca.Data -Key 'Policies' -Default @() | Where-Object { $null -ne $_ })
+    Add-TPCADeviceComplianceFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
+        -Model (Get-TPCADeviceComplianceCoverage -Policies $pols) `
+        -Consequence 'Unmanaged personal devices access corporate resources unchecked.' `
+        -RequiredValue 'Compliant or hybrid-joined device required by an enabled CA policy for all users on all applications'
 }
 
 # ── AAD-3.2 No Permanent Admin Assignments ────────────────────────────────────

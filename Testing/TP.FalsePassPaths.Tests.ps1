@@ -242,4 +242,67 @@ Describe 'False-pass paths from the 2026-10-11 review' {
             (V 'Test-TPControlDefenderEndpointDLP' 'DEF-4.5').State | Should -Be 'Gap'
         }
     }
+
+    Context '5. Device compliance is judged on who is protected: AAD-2.3 and INT-1.2 share one judgment (2026-10-15 review)' {
+        BeforeAll {
+            # Both evaluators from one policy set. INT-1.2 needs an Intune bag to run at all.
+            function script:Both([object[]] $Policies) {
+                Ca $Policies
+                Set-TPRawData -Key 'Intune-DeviceCompliance' -Data (Bag @{ CompliancePolicies = @(); SectionStatus = @{ CompliancePolicies = 'Collected' } })
+                @{ AAD = (V 'Test-TPControlAADDeviceComplianceCA' 'AAD-2.3'); INT = (V 'Test-TPControlIntune' 'INT-1.2') }
+            }
+        }
+        It 'an enabled policy requiring a compliant device of all users on all applications is Satisfied for both' {
+            $r = Both @(Pol -Name 'Require compliant device' -Grant @('compliantDevice'))
+            foreach ($f in @($r.AAD, $r.INT)) { $f.State | Should -Be 'Satisfied'; $f.Detail | Should -Match 'for all users on all applications by: Require compliant device' }
+        }
+        It 'hybrid join alone, and compliant device AND MFA, both require a device' {
+            $r = Both @(Pol -Name 'Hybrid' -Grant @('domainJoinedDevice'))
+            foreach ($f in @($r.AAD, $r.INT)) { $f.State | Should -Be 'Satisfied' }
+            $r = Both @(Pol -Name 'Device and MFA' -Grant @('compliantDevice', 'mfa') -Op 'AND')
+            foreach ($f in @($r.AAD, $r.INT)) { $f.State | Should -Be 'Satisfied' }
+        }
+        It 'an excluded user is a shared exception: Partial naming the principal, never Satisfied (both passed)' {
+            $r = Both @(Pol -Name 'p' -Grant @('compliantDevice') -ExUsers @('u-break'))
+            foreach ($f in @($r.AAD, $r.INT)) { $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'user:u-break' }
+        }
+        It 'an excluded application is narrower scope: a Gap that names the exclusion (INT-1.2 passed on All users + All applications alone)' {
+            $r = Both @(Pol -Name 'p' -Grant @('compliantDevice') -ExApps @('app-1'))
+            foreach ($f in @($r.AAD, $r.INT)) { $f.State | Should -Be 'Gap'; $f.Detail | Should -Match 'excludes some applications' }
+        }
+        It 'a browser-only policy leaves the desktop and mobile clients unchecked: a Gap, not all-user coverage' {
+            $r = Both @(Pol -Name 'p' -Grant @('compliantDevice') -ClientApps @('browser'))
+            foreach ($f in @($r.AAD, $r.INT)) { $f.State | Should -Be 'Gap'; $f.Detail | Should -Match 'mobileAppsAndDesktopClients sign-ins are outside it' }
+        }
+        It 'a platform, a location or a device filter narrows the policy: a Gap naming why' {
+            $r = Both @(Pol -Name 'p' -Grant @('compliantDevice') -Platforms @('windows'))
+            foreach ($f in @($r.AAD, $r.INT)) { $f.State | Should -Be 'Gap'; $f.Detail | Should -Match 'limited to some device platforms' }
+            $p = Pol -Name 'p' -Grant @('compliantDevice'); $p.Conditions.Locations.Include = @('loc-1')
+            $r = Both @($p)
+            foreach ($f in @($r.AAD, $r.INT)) { $f.State | Should -Be 'Gap'; $f.Detail | Should -Match 'limited to some locations' }
+            $p = Pol -Name 'p' -Grant @('compliantDevice'); $p.Conditions.Devices.FilterMode = 'exclude'
+            $r = Both @($p)
+            foreach ($f in @($r.AAD, $r.INT)) { $f.State | Should -Be 'Gap'; $f.Detail | Should -Match 'limited by a device filter' }
+        }
+        It 'compliant device OR MFA requires no device: Partial naming the policy, never Satisfied' {
+            $r = Both @(Pol -Name 'Compliant or MFA' -Grant @('compliantDevice', 'mfa') -Op 'OR')
+            foreach ($f in @($r.AAD, $r.INT)) { $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'Compliant or MFA lists a compliant or hybrid-joined device only as one alternative' }
+        }
+        It 'a report-only policy that would cover everyone is Partial, named as staged: report-only enforces nothing' {
+            $r = Both @(Pol -Name 'Staged' -State 'enabledForReportingButNotEnforced' -Grant @('compliantDevice'))
+            foreach ($f in @($r.AAD, $r.INT)) { $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'report-only mode, which enforces nothing: Staged' }
+        }
+        It 'two policies with different exclusions leave coverage unproven: not assessed, never Satisfied' {
+            $r = Both @((Pol -Name 'a' -Grant @('compliantDevice') -ExUsers @('u1')), (Pol -Name 'b' -Grant @('compliantDevice') -ExGroups @('g1')))
+            foreach ($f in @($r.AAD, $r.INT)) { $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'group membership was not resolved' }
+        }
+        It 'a full policy beside a narrower one is Satisfied, with the narrower one noted and not counted' {
+            $r = Both @((Pol -Name 'Everyone' -Grant @('compliantDevice')), (Pol -Name 'Finance only' -Grant @('compliantDevice') -Users @() -Groups @('g-fin')))
+            foreach ($f in @($r.AAD, $r.INT)) { $f.State | Should -Be 'Satisfied'; $f.Detail | Should -Match "'Finance only' also delivers it but applies to only some users" }
+        }
+        It 'no policy at all is the plain Gap for both' {
+            $r = Both @()
+            foreach ($f in @($r.AAD, $r.INT)) { $f.State | Should -Be 'Gap'; $f.Detail | Should -Match '^No Conditional Access policy requires a compliant or hybrid-joined device' }
+        }
+    }
 }
