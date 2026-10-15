@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **[Fix] EXO-1.1 no longer passes on a sampled mailbox's `AuditEnabled` when the organization switch was not
+  read.** The evaluator took "every sampled mailbox reports AuditEnabled = True" as proof that organization-level
+  mailbox auditing is on when `Get-OrganizationConfig` had failed, and docked a Partial when a sampled mailbox
+  reported False. Microsoft documents (Manage mailbox auditing) that while mailbox auditing on by default is on,
+  `AuditEnabled` always displays True and setting it False is ignored, and that while it is off nothing is audited
+  whatever the mailbox says, so the sample is never evidence of the switch in either direction. An unread switch is
+  now not assessed, naming it, with the control's citations; the sample is reported as informational beside the
+  organization verdict. Found by the 2026-10-15 currency review.
 - **[Fix] EXO-7.2 reaches a verdict when the only unresolvable rule recipients are gone from the directory.**
   An inbox rule forwarding to a deleted mailbox or a pre-migration identity carries a legacy Exchange DN
   (`"Name" [EX:/o=…/cn=…]`) that `Get-Recipient` cannot find. The classifier filed that as `Unresolved`, the
