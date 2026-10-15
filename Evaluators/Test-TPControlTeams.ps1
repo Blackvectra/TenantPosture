@@ -530,7 +530,7 @@ function Test-TPControlTeamsFederationAllowlist {
     }
 }
 
-# ── TMS-4.4 Public events (town halls, webinars, legacy live events) ─────────
+# ── TMS-4.4 Public events (town halls and webinars) ──────────────────────────
 # Microsoft retired Teams live events on June 30, 2026 (events scheduled
 # before then run until February 28, 2027); town halls and webinars replace
 # them, and both attendee settings default to Everyone — public and anonymous.
@@ -551,10 +551,8 @@ function Test-TPControlTeamsLiveEvents {
     $th = [string](Get-TPObjectField -Item $ev -Key 'AllowTownhalls' -Default '')
     $thAccess = [string](Get-TPObjectField -Item $ev -Key 'TownhallEventAttendeeAccess' -Default '')
     if ($th -eq 'Disabled') { $closed += 'town halls (off)' } elseif ($thAccess -eq 'Everyone') { $open += 'town halls (TownhallEventAttendeeAccess = Everyone)' } elseif ($thAccess) { $closed += "town halls ($thAccess)" }
-    $bc = Get-TPTeamsSection -Teams $tms -Name 'BroadcastPolicy'
-    if ($bc -and (Get-TPObjectField -Item $bc -Key 'AllowBroadcastScheduling' -Default $false) -eq $true -and [string](Get-TPObjectField -Item $bc -Key 'BroadcastAttendeeVisibilityMode' -Default '') -eq 'Everyone') {
-        $open += 'legacy live events already scheduled (BroadcastAttendeeVisibilityMode = Everyone)'
-    }
+    # Teams live events were retired on June 30, 2026; the broadcast policy's attendee
+    # setting no longer governs anything and is not judged here.
     if (($open.Count + $closed.Count) -eq 0) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'The events policy returned neither webinar nor town hall attendee settings; not assessed.'
     } elseif ($open.Count -eq 0) {

@@ -316,6 +316,8 @@ function Invoke-TPCollectDNSEmailRecords {
                     TotalCerts      = 0
                     Last30Days      = 0
                     Issuers         = @()
+                    IssuersCurrent  = @()   # issuers of certificates still valid now (DNS-2.4 judges these)
+                    CurrentCerts    = 0
                     UnexpectedSANs  = @()
                     QueryError      = $null
                 }
@@ -859,6 +861,20 @@ function Invoke-TPCollectDNSEmailRecords {
                     $d.CTLog.Last30Days = $recent.Count
                     $d.CTLog.Issuers = @($arr | ForEach-Object { [string]$_.issuer_name } |
                                          Sort-Object -Unique | Select-Object -First 20)
+                    # Issuers of certificates still valid now. CT logs keep every certificate
+                    # ever issued, so an issuer seen only on certificates that expired years
+                    # ago (a CA that no longer exists) is history, not an issuance to confirm;
+                    # DNS-2.4 judges these and reports the rest as expired-only. A not_after
+                    # that cannot be parsed keeps the certificate in the judged set.
+                    $nowUtc = [datetime]::UtcNow
+                    $current = @($arr | Where-Object {
+                        $na = [string](Get-TPObjectField -Item $_ -Key 'not_after' -Default '')
+                        $parsed = [datetime]::MinValue
+                        if ($na -and [datetime]::TryParse($na, [cultureinfo]::InvariantCulture, ([System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal), [ref]$parsed)) { $parsed -ge $nowUtc } else { $true }
+                    })
+                    $d.CTLog.CurrentCerts   = $current.Count
+                    $d.CTLog.IssuersCurrent = @($current | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'issuer_name' -Default '') } |
+                                                Where-Object { $_ } | Sort-Object -Unique | Select-Object -First 20)
 
                     # Cross-check: are recent issuers consistent with the CAA
                     # allowlist? If CAA names letsencrypt.org but recent issuers

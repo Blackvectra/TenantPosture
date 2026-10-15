@@ -898,15 +898,27 @@ function Test-TPControlDNSCertTransparency {
         $queryError = $null
         $totalCerts = 0
         $issuers    = @()
+        $issuersAll = @()
+        $hasCurrent = $false
         if ($ct -is [System.Collections.IDictionary]) {
             if ($ct.Contains('QueryError')) { $queryError = $ct['QueryError'] }
             if ($ct.Contains('TotalCerts')) { $totalCerts = [int]($ct['TotalCerts'] ?? 0) }
-            if ($ct.Contains('Issuers'))    { $issuers    = @($ct['Issuers'] ?? @()) }
+            if ($ct.Contains('Issuers'))    { $issuersAll = @($ct['Issuers'] ?? @()) }
+            if ($ct.Contains('IssuersCurrent')) { $hasCurrent = $true; $issuers = @($ct['IssuersCurrent'] ?? @()) }
         } else {
             if ($ct.PSObject.Properties['QueryError']) { $queryError = $ct.QueryError }
             if ($ct.PSObject.Properties['TotalCerts']) { $totalCerts = [int]($ct.TotalCerts ?? 0) }
-            if ($ct.PSObject.Properties['Issuers'])    { $issuers    = @($ct.Issuers ?? @()) }
+            if ($ct.PSObject.Properties['Issuers'])    { $issuersAll = @($ct.Issuers ?? @()) }
+            if ($ct.PSObject.Properties['IssuersCurrent']) { $hasCurrent = $true; $issuers = @($ct.IssuersCurrent ?? @()) }
         }
+        # A collector that recorded the issuers of certificates still valid is judged on
+        # those: CT logs hold every certificate ever issued, and a CA that stopped
+        # existing a decade ago is history, not an issuance to confirm. An older
+        # results file carries only the all-time list and is judged as before.
+        if (-not $hasCurrent) { $issuers = $issuersAll }
+        $expiredOnly = @($issuersAll | Where-Object { $_ -notin $issuers })
+        $expiredNote = if ($hasCurrent -and $expiredOnly.Count -gt 0) { " $($expiredOnly.Count) further issuer(s) appear only on expired certificates and are not judged." } else { '' }
+        $scopeWord = if ($hasCurrent) { 'certificates still valid' } else { 'certificates in CT logs' }
 
         if ($queryError) {
             # Detect rate-limit responses (HTTP 429 / "Too Many Requests" /
@@ -966,14 +978,14 @@ function Test-TPControlDNSCertTransparency {
             Add-TPFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$domain has $totalCerts cert(s) in CT logs, all from recognized CAs ($($issuers.Count) issuer(s))." `
+                -Detail "$domain has $totalCerts cert(s) in CT logs; every issuer of $scopeWord is a recognized CA ($($issuers.Count) issuer(s)).$expiredNote" `
                 -CurrentValue ("TotalCerts: $totalCerts; Issuers: " + (($issuers | Select-Object -First 5) -join '; '))
         } else {
             $top = ($suspicious | Select-Object -First 3) -join '; '
             Add-TPFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$domain has certificates in CT logs from $($suspicious.Count) issuer(s) not on the known-good CA list. Confirm the organization requested them; otherwise investigate possible mis-issuance: $top" `
+                -Detail "$domain has $scopeWord from $($suspicious.Count) issuer(s) not on the known-good CA list. Confirm the organization requested them; otherwise investigate possible mis-issuance: $top.$expiredNote" `
                 -CurrentValue "Suspicious issuers: $top" `
                 -RequiredValue 'All CT-log issuers match the org-approved CA allowlist' `
                 -Remediation $control.Remediation

@@ -85,6 +85,20 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
         (Verdict 'Test-TPControlDNSCertTransparency' 'DNS-2.4').State | Should -Not -Be 'NotApplicable'
     }
 
+    It 'DNS-2.4 judges the issuers of certificates still valid; a CA seen only on expired certificates is history, not a finding (was: Partial for a 2005 VeriSign certificate)' {
+        $d = Collect @{}
+        $d.CTLog.TotalCerts = 5; $d.CTLog.QueryError = $null
+        $d.CTLog.Issuers = @("C=US, O=`"VeriSign, Inc.`", OU=VeriSign Trust Network, CN=VeriSign Class 3 Secure Server CA", "C=US, O=Let's Encrypt, CN=R3")
+        $d.CTLog.IssuersCurrent = @("C=US, O=Let's Encrypt, CN=R3")
+        $f = Verdict 'Test-TPControlDNSCertTransparency' 'DNS-2.4'
+        $f.State  | Should -Be 'Satisfied'
+        $f.Detail | Should -Match 'expired certificates'
+        $d.CTLog.IssuersCurrent = @("C=US, O=Let's Encrypt, CN=R3", 'C=XX, O=Unknown Issuer Ltd, CN=Unknown CA')
+        $f = Verdict 'Test-TPControlDNSCertTransparency' 'DNS-2.4'
+        $f.State  | Should -Be 'Partial'
+        $f.Detail | Should -Match 'certificates still valid'
+    }
+
     Context 'record parsing reads what the RFCs say (collector + evaluator, raw DNS answers)' {
         It 'SPF: two records is a permerror, +all and a bare all authorize everyone, >10 lookups fails' {
             (Run @{ 'shape.test|TXT' = & $A @('v=spf1 -all', 'v=spf1 include:spf.protection.outlook.com -all') } 'Test-TPControlDNSSPF' 'DNS-1.1').State | Should -Be 'Gap'

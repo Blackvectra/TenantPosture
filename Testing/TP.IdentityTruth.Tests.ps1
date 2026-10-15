@@ -245,6 +245,17 @@ Describe 'Not configured is a Gap, not half credit; no data is not a verdict' {
     It 'the default Guest User role (Microsoft''s default, nothing configured) is a Gap, not Partial' {
         Set-TPRawData -Key 'AAD-IdentityGovernance' -Data @{ Success = $true; Data = @{ ExternalCollab = @{ GuestUserRoleId = '10dae51f-b6af-4016-8d66-8c2a99b929b3' } } }
         (V 'Test-TPControlAADGuestPermissions' 'AAD-4.3').State | Should -Be 'Gap'
+        # The three ids Microsoft documents: a0b1b346 is the default (limited access), 10dae51f
+        # is the same access as members, 2af84b1e is Restricted; a fourth is not judged.
+        Clear-TPState
+        Set-TPRawData -Key 'AAD-IdentityGovernance' -Data @{ Success = $true; Data = @{ ExternalCollab = @{ GuestUserRoleId = 'a0b1b346-4d3e-4e8b-98f8-753987be4970' } } }
+        $g = V 'Test-TPControlAADGuestPermissions' 'AAD-4.3'
+        $g.State  | Should -Be 'Gap'
+        $g.Detail | Should -Match 'default Guest User role'
+        $g.Detail | Should -Not -Match 'may have'
+        Clear-TPState
+        Set-TPRawData -Key 'AAD-IdentityGovernance' -Data @{ Success = $true; Data = @{ ExternalCollab = @{ GuestUserRoleId = 'ffffffff-ffff-ffff-ffff-ffffffffffff' } } }
+        (V 'Test-TPControlAADGuestPermissions' 'AAD-4.3').State | Should -Be 'NotApplicable'
     }
     It 'CAE strict mode not enforced (the default) is a Gap, not Partial' {
         Set-TPRawData -Key 'AAD-CAPolicies' -Data @{ Success = $true; Data = @{ Policies = @() } }

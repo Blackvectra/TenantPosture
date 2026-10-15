@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **[Fix] Five verdicts corrected from the 2026-10-15 live run.** DEF-5.1 scored a High Gap for spoofed-sender
+  allow entries, which Microsoft says never expire and cannot be time-boxed, so every tenant with a
+  phishing-simulation or relay spoof allow failed a control it could not act on; the collector now asks the
+  cmdlet which domain, address, URL and file allow entries never expire (`-NoExpiration`), the evaluator
+  judges only those (an empty ExpirationDate is the 45-days-after-last-use default, not "never"), spoof
+  entries are listed for review, and an unread filter leaves the control not assessed. PVW-4.4 scored
+  missing record labels as a Gap on Business Premium, which Microsoft licenses for retention labels but not
+  for declaring records; its license requirement is now E5-class and the finding is an upgrade opportunity
+  there. DNS-2.4 flagged issuers seen only on certificates that expired years ago; the collector records the
+  issuers of certificates still valid and the evaluator judges those, reporting expired-only issuers as
+  history. AAD-4.3 said guests "may have" excessive permissions and labeled the ids backwards; it now names
+  the role behind each id Microsoft documents and does not judge a fourth. TMS-4.4 no longer counts the
+  retired live-events setting.
 - **[Fix] EXO-7.2 recognizes Exchange's not-found answer when the module renders it without the exception
   type.** The REST-backed cmdlets of ExchangeOnlineManagement 3.x render a server error as `||Message` with
   the type blank, so `Get-Recipient`'s "The operation couldn't be performed because object '<legacy DN>'

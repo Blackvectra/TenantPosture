@@ -267,26 +267,40 @@ function Test-TPControlDefenderTenantAllowBlockList {
         return
     }
 
-    # A permanent allow is the one that matters. A time-boxed allow expires on
-    # its own; a never-expiring one is a filtering bypass that outlives whoever
-    # added it and the incident that justified it.
-    $permanent = @($allows | Where-Object {
-        [bool](Get-TPObjectField -Item $_ -Key 'NoExpiration' -Default $false) -or
-        -not [string](Get-TPObjectField -Item $_ -Key 'ExpirationDate')
-    })
+    # Spoofed-sender allow entries never expire by design (Microsoft: "Allow entries
+    # for spoofed senders never expire"), so they cannot be time-boxed and are never
+    # the gap this control scores; they are listed for review instead. Scoring them
+    # made every tenant with a phishing-simulation or relay spoof allow a High Gap
+    # it could not act on (2026-10-15 live run). For the other list types the
+    # collector asked the cmdlet which entries never expire; an entry whose expiry
+    # was not read is not judged, because an empty ExpirationDate is normally the
+    # 45-days-after-last-use default, not "permanent".
+    $spoof     = @($allows | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'ListType' -Default '') -eq 'Spoof' })
+    $other     = @($allows | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'ListType' -Default '') -ne 'Spoof' })
+    $unread    = @($other | Where-Object { -not [bool](Get-TPObjectField -Item $_ -Key 'ExpiryRead' -Default $false) })
+    $permanent = @($other | Where-Object { [bool](Get-TPObjectField -Item $_ -Key 'ExpiryRead' -Default $false) -and [bool](Get-TPObjectField -Item $_ -Key 'NoExpiration' -Default $false) })
+    $spoofNote = if ($spoof.Count -gt 0) {
+        " $($spoof.Count) spoofed-sender allow entr(ies) never expire by design and are not time-boxed; confirm each still names a sending service in use: $((@($spoof | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'Value' -Default '') }) -join '; '))."
+    } else { '' }
 
     if ($permanent.Count -gt 0) {
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity $ctrl.Severity -FrameworkIds $cit `
-            -CurrentValue "$($permanent.Count) never-expiring allow entr(ies) of $($allows.Count) total" `
-            -RequiredValue 'Every allow entry time-boxed with a documented reason' `
-            -Detail "Never-expiring allow entries override filtering indefinitely: $((@($permanent | ForEach-Object { "$([string](Get-TPObjectField -Item $_ -Key 'ListType' -Default '')) $([string](Get-TPObjectField -Item $_ -Key 'Value' -Default ''))" }) | Select-Object -First 5) -join '; '). Spoofed-sender allow entries never expire by design — confirm each still names a sending service you use. An allow added to unblock a sender during an incident outlives the incident, and mail from that sender is never filtered again." `
+            -CurrentValue "$($permanent.Count) never-expiring allow entr(ies) of $($other.Count) domain, address, URL or file allow entries" `
+            -RequiredValue 'Every domain, address, URL or file allow entry time-boxed with a documented reason' `
+            -Detail "Never-expiring allow entries override filtering indefinitely: $((@($permanent | ForEach-Object { "$([string](Get-TPObjectField -Item $_ -Key 'ListType' -Default '')) $([string](Get-TPObjectField -Item $_ -Key 'Value' -Default ''))" }) -join '; ')). An allow added to unblock a sender during an incident outlives the incident, and mail from that sender is never filtered again.$spoofNote" `
             -Remediation $ctrl.Remediation -AffectedObjects $permanent
+    } elseif ($unread.Count -gt 0) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -CurrentValue "$($unread.Count) of $($other.Count) allow entr(ies) with expiry not read" `
+            -Detail "The expiry of $($unread.Count) of $($other.Count) domain, address, URL or file allow entr(ies) was not read (the never-expiring filter of Get-TenantAllowBlockListItems did not answer, or this results file predates it), so whether any is permanent is not established; not assessed.$spoofNote" `
+            -AffectedObjects $unread
     } else {
+        $what = if ($other.Count -gt 0) { "All $($other.Count) domain, address, URL or file allow entr(ies) expire (on a date, or 45 days after last use); none is permanent." } else { 'No domain, address, URL or file allow entries.' }
         Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity 'Informational' -FrameworkIds $cit `
-            -CurrentValue "$($allows.Count) allow entr(ies), all time-boxed" `
-            -Detail "All $($allows.Count) allow entries carry an expiry date, so no filtering bypass is permanent." `
+            -CurrentValue "$($other.Count) allow entr(ies), none permanent; $($spoof.Count) spoofed-sender allow entr(ies)" `
+            -Detail "$what$spoofNote" `
             -AffectedObjects $allows
     }
 }
