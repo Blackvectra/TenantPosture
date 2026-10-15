@@ -74,7 +74,7 @@ jobs:
 
           (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1).Version
 
-      - name: Diagnostics — pwsh + Pester + parse test file
+      - name: Diagnostics — pwsh + Pester
         shell: pwsh
         run: |
           Write-Host ('pwsh version: {0}' -f $PSVersionTable.PSVersion)
@@ -82,42 +82,25 @@ jobs:
           $p = (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1)
           Write-Host ('Pester version: {0} at {1}' -f $p.Version, $p.ModuleBase)
 
-          # AST parse check over EVERY test file — distinguishes syntax errors
-          # from Pester runtime issues before the suite runs.
-          $bad = $false
-          foreach ($tf in Get-ChildItem ./Testing -Filter '*.Tests.ps1' -File) {
-            $tokens = $null
-            $errors = $null
-            $null = [System.Management.Automation.Language.Parser]::ParseFile(
-              $tf.FullName, [ref]$tokens, [ref]$errors)
-            if ($errors -and $errors.Count -gt 0) {
-              $bad = $true
-              Write-Host ('PARSE ERRORS IN {0}:' -f $tf.Name) -ForegroundColor Red
-              $errors | ForEach-Object { Write-Host ('  Line {0}: {1}' -f $_.Extent.StartLineNumber, $_.Message) }
-            }
-          }
-          if ($bad) { throw 'One or more test files do not parse — fix syntax before Pester can run.' }
-          Write-Host 'All test files AST-parse cleanly.'
-
       - name: Run Pester
         shell: pwsh
         run: |
-          # Run the ENTIRE Testing/ suite. This previously ran only
-          # TP.Security.Tests.ps1, which meant the framework-accuracy guards
-          # (SCuBA/CIS/CMMC/ISO citation validation), the Graph-shape tests,
-          # and the reader-helper tests existed but never gated a merge — the
-          # 70-citation SCuBA mis-mapping shipped precisely because these
-          # weren't enforced. ScubaGear runs its full unit suite in CI; so do we.
-          $config = New-PesterConfiguration
-          # Email-IR/Testing too: it held 6 failing tests that no merge ever saw.
-          $config.Run.Path = @('./Testing', './Email-IR/Testing')
-          $config.Run.Exit = $true
-          $config.Run.Throw = $false
-          $config.Output.Verbosity = 'Diagnostic'
-          $config.TestResult.Enabled = $true
-          $config.TestResult.OutputPath = 'pester-results.xml'
-          $config.TestResult.OutputFormat = 'NUnitXml'
-          Invoke-Pester -Configuration $config
+          # Run the ENTIRE suite through tools/Invoke-TPTestGate.ps1 — the same
+          # gate a contributor runs locally, so the two cannot disagree about
+          # what "tests pass" means. The gate AST-parses every test file first
+          # (both Testing/ and Email-IR/Testing/; the inline loop this replaces
+          # read only Testing/), then refuses a run that failed a test, a block
+          # or a container, or that ran no test at all. A FailedCount check
+          # alone passes a file that never parsed: that is how the 2026-10-15
+          # brace was merged.
+          #
+          # The ENTIRE suite because this once ran only TP.Security.Tests.ps1,
+          # so the framework-accuracy guards (SCuBA/CIS/CMMC/ISO citation
+          # validation), the Graph-shape tests and the reader-helper tests
+          # existed but never gated a merge — the 70-citation SCuBA mis-mapping
+          # shipped precisely because they weren't enforced. Email-IR/Testing
+          # too: it held 6 failing tests that no merge ever saw.
+          ./tools/Invoke-TPTestGate.ps1 -ResultPath pester-results.xml -Output Diagnostic
 
       - name: Upload Pester results
         if: always()
@@ -180,16 +163,10 @@ jobs:
         # ACL semantics, which the Ubuntu job can only skip.
         shell: pwsh
         run: |
-          Import-Module Pester -MinimumVersion 5.5.0 -Force
-          $config = New-PesterConfiguration
-          $config.Run.Path = @('./Testing/TP.WebServer.Tests.ps1', './Testing/TP.DeviceCompliance.Tests.ps1', './Testing/TP.SensitiveFileWriter.Tests.ps1', './Testing/TP.OutputFolderProbe.Tests.ps1')
-          $config.Run.Exit = $true
-          $config.Run.Throw = $false
-          $config.Output.Verbosity = 'Detailed'
-          $config.TestResult.Enabled = $true
-          $config.TestResult.OutputPath = 'pester-web-windows.xml'
-          $config.TestResult.OutputFormat = 'NUnitXml'
-          Invoke-Pester -Configuration $config
+          # Same gate as the Ubuntu job, four files instead of the tree.
+          ./tools/Invoke-TPTestGate.ps1 `
+            -Path ./Testing/TP.WebServer.Tests.ps1, ./Testing/TP.DeviceCompliance.Tests.ps1, ./Testing/TP.SensitiveFileWriter.Tests.ps1, ./Testing/TP.OutputFolderProbe.Tests.ps1 `
+            -ResultPath pester-web-windows.xml -Output Detailed
 
       - name: Upload results
         if: always()
