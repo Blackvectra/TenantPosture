@@ -5561,7 +5561,7 @@
       "CollectorDependency": "AAD-Inventory",
       "EvaluatorFunction": "Test-TPControlInventoryStaleGuests",
       "Remediation": "Entra ID > External Identities > All users > Filter by guest, sort by last sign-in. Disable or delete accounts inactive 90+ days. Implement access reviews: PIM > Access reviews > Create review for guest users.",
-      "LicenseRequirement": "Included (all plans) — Access Reviews require Entra P2",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
         "CISControls": [
           "5.3"
@@ -5590,7 +5590,7 @@
       "CollectorDependency": "AAD-Inventory",
       "EvaluatorFunction": "Test-TPControlInventoryStaleMembers",
       "Remediation": "Verify each account represents an active user. Disable accounts for departed employees immediately. Revoke all active sessions. Remove assigned licenses. Review for any recent inbox rules or forwarding.",
-      "LicenseRequirement": "Included (all plans)",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
         "CISControls": [
           "5.3"

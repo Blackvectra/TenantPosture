@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **[Fix] AAD-12.2 and AAD-12.3 say "license", not "collection failed", on tenants without Entra ID P1.**
+  The inventory collector selected `signInActivity` in its guest and member queries; Microsoft documents that
+  property as requiring Microsoft Entra ID P1 or P2, and Graph refuses the whole query without it ("Neither
+  tenant is B2C or tenant doesn't have premium license"). On Business Standard and Office 365 E3-only tenants
+  the guest list itself was lost, both controls read "enumeration did not complete", and the Scope section
+  filed them as data that could have been collected. On that error the collector now re-reads the accounts
+  without `signInActivity`, records `SignInActivityLicensed = $false`, keeps the guest list for the controls
+  that only count guests, marks no account stale, and registers the reason; the two controls report the
+  license as an upgrade opportunity (the marker the scope classifier and Upgrade Unlocks key on), and both
+  controls now carry `M365 Business Premium or Entra ID P1` as their license requirement. Any other failure
+  of the read still fails the section. Found by the 2026-10-15 currency review.
 - **[Fix] EXO-7.2 reaches a verdict when the only unresolvable rule recipients are gone from the directory.**
   An inbox rule forwarding to a deleted mailbox or a pre-migration identity carries a legacy Exchange DN
   (`"Name" [EX:/o=…/cn=…]`) that `Get-Recipient` cannot find. The classifier filed that as `Unresolved`, the

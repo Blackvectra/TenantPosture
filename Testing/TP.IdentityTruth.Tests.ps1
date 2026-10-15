@@ -421,6 +421,82 @@ Describe 'Security Defaults: Conditional Access controls account for it' {
             }
         }
 
+        It 'the inventory collector re-reads guests and members without signInActivity when Graph refuses it for lack of Entra ID P1, and AAD-12.2 / 12.3 say license, not failure' {
+            Clear-TPState
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                if ($Uri -match 'signInActivity') { throw "Neither tenant is B2C or tenant doesn't have premium license" }
+                # Two rows each: one row cannot tell a list of one from a list nested as one.
+                if ($Uri -match "userType eq 'Guest'") { return @{ value = @(
+                    @{ id = 'g1'; displayName = 'Guest One'; userPrincipalName = 'g1_x#EXT#@corp.example'; accountEnabled = $true; userType = 'Guest'; createdDateTime = '2024-01-01T00:00:00Z' },
+                    @{ id = 'g2'; displayName = 'Guest Two'; userPrincipalName = 'g2_x#EXT#@corp.example'; accountEnabled = $true; userType = 'Guest'; createdDateTime = '2024-01-01T00:00:00Z' }) } }
+                if ($Uri -match "userType eq 'Member'") { return @{ value = @(
+                    @{ id = 'u1'; displayName = 'A'; userPrincipalName = 'a@corp.example'; accountEnabled = $true; createdDateTime = '2024-01-01T00:00:00Z'; assignedLicenses = @(@{ skuId = 'x' }) },
+                    @{ id = 'u2'; displayName = 'B'; userPrincipalName = 'b@corp.example'; accountEnabled = $true; createdDateTime = '2024-01-01T00:00:00Z'; assignedLicenses = @(@{ skuId = 'x' }) }) } }
+                return @{ value = @() }
+            }
+            Invoke-TPCollectAADInventory 3>$null | Out-Null
+            $raw = Get-TPRawData -Key 'AAD-Inventory'
+            $raw.Data.SignInActivityLicensed | Should -BeFalse
+            $raw.Data.SectionStatus.GuestUsers | Should -Be 'Collected'
+            $raw.Data.SectionStatus.StaleMembers | Should -Be 'Collected'
+            @($raw.Data.GuestUsers).Count | Should -Be 2 -Because 'the guest list itself does not need the license'
+            @($raw.Data.GuestUsers)[0].DisplayName | Should -Be 'Guest One'
+            @($raw.Data.GuestUsers)[1].UPN | Should -Be 'g2_x#EXT#@corp.example'
+            @($raw.Data.GuestUsers)[0].IsStale | Should -BeNullOrEmpty -Because 'no sign-in data: neither stale nor fresh'
+            @($raw.Data.StaleMembers).Count | Should -Be 0
+            $f = V 'Test-TPControlInventoryStaleGuests' 'AAD-12.2'
+            $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'Entra ID P1'; $f.Detail | Should -Match 'upgrade opportunity'; $f.Detail | Should -Match '2 guest account'
+            $g = V 'Test-TPControlInventoryStaleMembers' 'AAD-12.3'
+            $g.State | Should -Be 'NotApplicable'; $g.Detail | Should -Match 'upgrade opportunity'
+            @(Get-TPExceptions | Where-Object { $_.Message -match 'requires Microsoft Entra ID P1 or P2' }).Count | Should -Be 2
+        }
+        It 'any other failure of the sign-in read still fails the section and the controls stay "did not complete"' {
+            Clear-TPState
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                if ($Uri -match 'signInActivity') { throw 'Graph 403 Forbidden: insufficient privileges' }
+                return @{ value = @() }
+            }
+            Invoke-TPCollectAADInventory 3>$null | Out-Null
+            $raw = Get-TPRawData -Key 'AAD-Inventory'
+            $raw.Data.SignInActivityLicensed | Should -BeTrue
+            $raw.Data.SectionStatus.GuestUsers | Should -Be 'Failed'
+            (V 'Test-TPControlInventoryStaleGuests' 'AAD-12.2').State | Should -Be 'NotApplicable'
+        }
+        It 'an empty guest and member list (the smoke-run shape) is Collected with zero rows and records no exception' {
+            Clear-TPState
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                return @{ value = @() }
+            }
+            Invoke-TPCollectAADInventory 3>$null | Out-Null
+            $raw = Get-TPRawData -Key 'AAD-Inventory'
+            $raw.Data.SectionStatus.GuestUsers | Should -Be 'Collected'
+            $raw.Data.SectionStatus.StaleMembers | Should -Be 'Collected'
+            @($raw.Data.GuestUsers).Count | Should -Be 0
+            @($raw.Data.StaleMembers).Count | Should -Be 0
+            @(Get-TPExceptions | Where-Object { $_.Source -in @('AAD-GuestInventory', 'AAD-StaleAccounts') }).Count | Should -Be 0 -Because 'an empty list returned as one nested row threw on .displayName under StrictMode'
+        }
+        It 'with the license the reads carry signInActivity and the controls judge staleness as before' {
+            Clear-TPState
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                if ($Uri -match "userType eq 'Guest'") { $Uri | Should -Match 'signInActivity'; return @{ value = @(
+                    @{ id = 'g1'; displayName = 'Guest One'; userPrincipalName = 'g1_x#EXT#@corp.example'; accountEnabled = $true; userType = 'Guest'; createdDateTime = '2024-01-01T00:00:00Z'; signInActivity = @{ lastSignInDateTime = '2024-02-01T00:00:00Z' } },
+                    @{ id = 'g2'; displayName = 'Guest Two'; userPrincipalName = 'g2_x#EXT#@corp.example'; accountEnabled = $true; userType = 'Guest'; createdDateTime = '2024-01-01T00:00:00Z'; signInActivity = @{ lastSignInDateTime = [datetime]::UtcNow.AddDays(-1).ToString('o') } }) } }
+                return @{ value = @() }
+            }
+            Invoke-TPCollectAADInventory 3>$null | Out-Null
+            $raw = Get-TPRawData -Key 'AAD-Inventory'
+            $raw.Data.SignInActivityLicensed | Should -BeTrue
+            @($raw.Data.GuestUsers).Count | Should -Be 2
+            @($raw.Data.GuestUsers)[0].DisplayName | Should -Be 'Guest One'
+            @($raw.Data.GuestUsers)[1].IsStale | Should -BeFalse
+            @($raw.Data.GuestUsers)[0].IsStale | Should -BeTrue
+            (V 'Test-TPControlInventoryStaleGuests' 'AAD-12.2').State | Should -Be 'Gap'
+        }
+
         It 'the Conditional Access collector says Security Defaults is on in its console note, within the 70-character console line, and says nothing when it was not read' {
             Set-Graph {
                 param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
