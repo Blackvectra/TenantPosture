@@ -105,7 +105,7 @@ function Test-TPControlEXOSmtpAuth {
     if ($tenantDisabled -ne $true) {
         Add-TPFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
-            -Detail 'SMTP AUTH is enabled for the whole organization, so every mailbox that does not override it can submit mail over SMTP AUTH. It is a password-spray and spam-relay target, and wherever basic authentication is still accepted for it, sign-in bypasses MFA and Conditional Access.' `
+            -Detail 'SMTP AUTH is enabled for the whole organization, so every mailbox that does not override it can submit mail over SMTP AUTH. It is a password-spray and spam-relay target, and wherever basic authentication is still accepted for it, sign-in bypasses MFA and Conditional Access. Microsoft''s published timeline (Exchange Team, January 2026): Basic authentication for SMTP AUTH stays available until the end of December 2026, is then disabled by default for existing tenants (administrators can re-enable it), and its final removal date is to be announced in the second half of 2027; OAuth client submission is unaffected.' `
             -CurrentValue 'SmtpClientAuthenticationDisabled = $false' `
             -RequiredValue 'Set-TransportConfig -SmtpClientAuthenticationDisabled $true' `
             -Remediation $control.Remediation
@@ -433,7 +433,7 @@ function Test-TPControlEXOModernAuth {
         $smtpText = switch ($smtpPath) {
             'Closed'    { 'SMTP AUTH is disabled for the organization and no mailbox overrides it' }
             'Available' {
-                if ($smtpOrgDisabled -eq $false) { 'SMTP AUTH is enabled for the organization (it carries OAuth as well as passwords)' }
+                if ($smtpOrgDisabled -eq $false) { 'SMTP AUTH is enabled for the organization (it carries OAuth as well as passwords; Microsoft disables Basic authentication for SMTP AUTH by default only from the end of December 2026)' }
                 else { "SMTP AUTH is disabled for the organization but $overrides mailbox(es) override it$(if ($overrideSample.Count -gt 0) { ' (for example ' + (($overrideSample | Select-Object -First 3) -join ', ') + ')' })" }
             }
             default     { if ($smtpOrgDisabled -eq $true) { 'SMTP AUTH is disabled for the organization but the per-mailbox overrides were not read' } else { 'the SMTP AUTH setting was not read' } }

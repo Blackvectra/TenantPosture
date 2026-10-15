@@ -353,7 +353,7 @@ function Test-TPControlPurviewComplianceScore {
     $cit = Get-TPFrameworkCitations -ControlId $cid
     Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
         -Title "$($ctrl.Title) (Manual review required)" -Severity 'Low' -FrameworkIds $cit `
-        -Detail 'This control requires manual verification — Compliance Manager improvement actions are not exposed to the APIs this assessment uses. Review them at compliance.microsoft.com > Compliance Manager and confirm each is assigned to an owner with a target date.' `
+        -Detail 'This control requires manual verification — Compliance Manager improvement actions are not exposed to the APIs this assessment uses. Review them in the Microsoft Purview portal (purview.microsoft.com) > Compliance Manager and confirm each is assigned to an owner with a target date.' `
         -Remediation $ctrl.Remediation
 }
 
