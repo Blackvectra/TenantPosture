@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[Fix] INT-4.2 no longer scores a Gap from the tenant-wide Windows Hello policy alone.** The evaluator
+  read only the Intune enrollment-time (tenant-wide) Windows Hello for Business configuration and scored a
+  Gap when it was disabled or not configured, while conceding in the same sentence that an Account
+  protection or settings-catalog policy "is not read here". Microsoft's guidance (Configure Windows Hello for
+  Business, Intune section) says that tenant-wide policy "is usually disabled and Windows Hello for Business
+  is enabled using a policy targeted to a security group", and since July 2024 the supported profile is the
+  endpoint-security Account protection profile (also in the settings catalog). A tenant following
+  Microsoft's pattern therefore read as a Gap. A disabled or unconfigured tenant-wide policy is now not
+  assessed, naming the policy to confirm; Satisfied still needs the tenant-wide policy to enable it. The
+  limit is recorded in `Config/evidence-limits.json` (rendered with the control on every surface),
+  `coverage-exceptions.psd1` (ImplementationPending: the targeted policies are not read yet) and
+  `docs/TP-DETECTION-LIMITS.md`. Found by the 2026-10-15 currency review.
 - **[Fix] EXO-7.2 reaches a verdict when the only unresolvable rule recipients are gone from the directory.**
   An inbox rule forwarding to a deleted mailbox or a pre-migration identity carries a legacy Exchange DN
   (`"Name" [EX:/o=…/cn=…]`) that `Get-Recipient` cannot find. The classifier filed that as `Unresolved`, the
