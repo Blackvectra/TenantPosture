@@ -270,9 +270,10 @@ Kept unchanged by the citation corrections (PR #122) and recorded in
 - **The web GUI items above** (run list for command-line runs, report-site link, `-ScriptDir`
   default): pull request #112 (merged), which also adds request filtering.
 - **A private PowerShell module bundle,** so the tool does not depend on the operator's module
-  folders: pull request #108 (closed without merging; scaffold, not active).
+  folders: pull request #108 was a scaffold and was closed without merging; not pursued.
 - **An offline comparison of two saved results files** (whether two tenants meet the same
-  baseline, stating the tier each used): pull request #109 (closed without merging).
+  baseline, stating the tier each used): shipped as `Compare-TPTenantBaseline.ps1`; pull request
+  #109 was superseded by the renamed implementation.
 - **AAD-7.2 and break-glass accounts:** pull request #119 (merged) changes which Conditional Access
   policies count against a break-glass account.
 
