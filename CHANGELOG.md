@@ -11,6 +11,28 @@
   `$brandSecondary` and `$brandAccent`; `TP.Profile.Tests.ps1` renders the report with a brand, a policy and an
   attachment and reads the `:root` colors back, and a static test fails any publisher that uses one single-letter
   variable name in two casings inside one function. A `-FromResults` republish of an affected run fixes its report.
+- **[Fix] EXO-7.2 reaches a verdict when the only unresolvable rule recipients are gone from the directory.**
+  An inbox rule forwarding to a deleted mailbox or a pre-migration identity carries a legacy Exchange DN
+  (`"Name" [EX:/o=…/cn=…]`) that `Get-Recipient` cannot find. The classifier filed that as `Unresolved`, the
+  same label as a lookup that could not run, and one such recipient made the control "not assessed" on every
+  run of the tenant: the report said the rules could not be classified, nothing said why, and the control
+  stayed in that state for months. `Lib/Resolve-TPExoRecipient.ps1` now keeps the two apart. The directory is
+  asked by LegacyExchangeDN (`-Identity`) and, when that finds nothing, by X500 proxy address (`-Filter
+  "EmailAddresses -eq 'X500:…'"`), the two attributes Exchange routes a legacy DN by; only when both find
+  nothing is the answer "no object", which the classifier reports as `Orphaned` and the collector stores as
+  `OrphanedRecipients` / `IsOrphaned`. Only Exchange's own not-found error (`ManagementObjectNotFoundException`
+  by type name, never the `ObjectNotFound` category a missing command also reports) counts as that answer;
+  throttling, a dropped session, a refused identifier or any other failure keeps the recipient `Unresolved`,
+  the control not assessed, and is now recorded as an `EXO-RecipientLookup` exception so the results file says
+  why. EXO-7.2 scores a rule whose only unclassifiable recipients are orphaned as a **Gap at Medium severity**
+  (owner's 2026-09-15 decision: a forwarding rule that is not delivering is a gap pending a decision on the
+  feed), naming the mailbox, the rule and the display name, stating that no external address was found and
+  that mail to the recipient is not delivered, and asking for the rule to be removed or re-pointed; beside
+  external rules the orphaned ones are named and not counted; beside an unresolved recipient the control stays
+  not assessed and still names them. Older results files replay as before. `TP.ExchangeTruth.Tests.ps1` drives
+  the real collector with Get-Recipient stand-ins that answer as the Exchange Online module does (not found,
+  an X500 hit that is an external contact, throttled, no session), and `TP.RecipientClassification.Tests.ps1`
+  pins that `Orphaned` is never produced without a resolver, for a thrown lookup, or for a display name.
 - **[Fix] The setup instructions no longer describe a retired Exchange module pin.** The README's
   First-Time Setup paragraph and the run guide's installer section said `Install-TPPrerequisites.ps1` pins
   ExchangeOnlineManagement at 3.2.0. That pin was lifted: the installer chooses the version the running
