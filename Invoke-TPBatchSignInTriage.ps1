@@ -177,6 +177,17 @@ if ($WhatIf) {
 
 # ── Batch loop ────────────────────────────────────────────────────────────────
 $resolvedOutput = [System.IO.Path]::GetFullPath($OutputRoot)
+# The batch summary is written under this root only where it can be protected;
+# the root is proven before the first client signs in (Test-TPSensitiveOutputFolder).
+# The writer lives beside this script; a copy run without it keeps the summary's
+# own fallback below and skips the probe, as the test harness stages it.
+$aclLib = Join-Path $scriptDir 'Lib' 'Set-TPSensitiveFileAcl.ps1'
+if (Test-Path -LiteralPath $aclLib -PathType Leaf) { . $aclLib }
+if (-not (Test-Path -LiteralPath $resolvedOutput)) { [void][System.IO.Directory]::CreateDirectory($resolvedOutput) }
+if (Get-Command Test-TPSensitiveOutputFolder -ErrorAction SilentlyContinue) {
+    try { $null = Test-TPSensitiveOutputFolder -Path $resolvedOutput }
+    catch { Write-Host "[!] $($_.Exception.Message)" -ForegroundColor Red; exit 4 }
+}
 $timestamp      = Get-Date -Format 'yyyyMMdd-HHmmss'
 $batchResults   = [System.Collections.Generic.List[object]]::new()
 

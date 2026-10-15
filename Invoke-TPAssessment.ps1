@@ -510,6 +510,17 @@ try {
         }
     }
     Write-Host "  [+] Module loaded (v$($TPAssessmentVersion); profile $($TPBrand['ProfileName']))" -ForegroundColor Green
+    # The results JSON holds tenant data and is written only where the signed-in
+    # user, SYSTEM and Administrators alone can read it. A folder that cannot hold
+    # that protection (an exFAT or FAT32 drive, some shares) is refused HERE, before
+    # any sign-in: the 2026-10-15 live run on such a drive ended at the results
+    # write, after six minutes of collection, with nothing written.
+    # -RegisterApp and -WhatIfConnections write nothing under -OutputPath, so an
+    # unprotectable folder must not stop onboarding or a connection diagnosis.
+    if (-not $RegisterApp -and -not $WhatIfConnections) {
+        try { $null = Test-TPSensitiveOutputFolder -Path $OutputPath }
+        catch { Write-Host "  [!] $($_.Exception.Message)" -ForegroundColor Red; exit 4 }
+    }
     # The report's framework default comes from the profile; 'All' when it
     # sets none or an unknown value. Presentation only (see -Framework).
     if (-not $Framework) {

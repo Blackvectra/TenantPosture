@@ -173,7 +173,7 @@ $script:ExportedFunctions = @(
     'Get-TPFrameworkCitations', 'Get-TPFrameworkDefinitions',
     'Get-TPFindingRiskCost', 'Get-TPAggregateRisk',
     'Get-TPRemediationRoadmap',
-    'Set-TPSensitiveFileAcl', 'Set-TPSensitiveFileContent',
+    'Set-TPSensitiveFileAcl', 'Set-TPSensitiveFileContent', 'Test-TPSensitiveOutputFolder',
     'Invoke-TPPython', 'Test-TPPythonModule',
     'Get-TPTenantLicenseProfile', 'Test-TPLicenseRequirementMet', 'Get-TPControlLicenseStatus',
     'Get-TPSafeProperty', 'Get-TPNestedProperty', 'Test-TPSectionCollected',
