@@ -115,8 +115,8 @@ Describe 'Teams controls read the setting they name' {
         $o = Defaults
         $o['Get-CsTeamsEventsPolicy'].EventAccessType = 'EveryoneInCompanyExcludingGuests'
         $o['Get-CsTeamsEventsPolicy'].TownhallEventAttendeeAccess = 'EveryoneInCompanyExcludingGuests'
-        $o['Get-CsTeamsMeetingBroadcastPolicy'].AllowBroadcastScheduling = $true
-        $o['Get-CsTeamsMeetingBroadcastPolicy'].BroadcastAttendeeVisibilityMode = 'Everyone'
+        # The fixture carries no broadcast policy by default (the section is absent); give it one.
+        $o['Get-CsTeamsMeetingBroadcastPolicy'] = [pscustomobject]@{ AllowBroadcastScheduling = $true; BroadcastAttendeeVisibilityMode = 'Everyone' }
         Collect $o
         $f = Verdict 'Test-TPControlTeamsLiveEvents' 'TMS-4.4'
         if ([datetime]::UtcNow -lt [datetime]::new(2027, 2, 28, 0, 0, 0, [System.DateTimeKind]::Utc)) {
