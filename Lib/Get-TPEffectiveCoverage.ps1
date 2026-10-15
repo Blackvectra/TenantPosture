@@ -206,10 +206,13 @@ function Get-TPCACoverageVerdict {
         }
         'Exceptions' {
             $v += "$What by: $names."
-            $s += "every qualifying policy excludes the same principal(s), so they are not covered: $((@($Coverage.Exceptions) | ForEach-Object { Get-TPCAPrincipalLabel -Principal $_ }) -join ', '). If these are emergency-access accounts, record them as an approved exception (the tenant's EmergencyAccess record in Config/baseline-exceptions), which reports the exclusion as approved and keeps it named."
-            # The excluded principals as structured data, so the approval pass
-            # (Set-TPEmergencyAccessApproval) judges ids, never prose.
-            $ao = @(@($Coverage.Exceptions) | ForEach-Object { [ordered]@{ Principal = [string]$_; Exclusion = 'SharedByEveryQualifyingPolicy' } })
+            $sentence = "every qualifying policy excludes the same principal(s), so they are not covered: $((@($Coverage.Exceptions) | ForEach-Object { Get-TPCAPrincipalLabel -Principal $_ }) -join ', '). If these are emergency-access accounts, record them as an approved exception (the tenant's EmergencyAccess record in Config/baseline-exceptions), which reports the exclusion as approved and keeps it named."
+            $s += $sentence
+            # The excluded principals as structured data, each carrying the shortfall
+            # sentence it produced, so the approval pass (Set-TPEmergencyAccessApproval)
+            # judges ids, never prose, and Add-TPExpectedStateFinding can tell this
+            # shortfall from any other the control also reports.
+            $ao = @(@($Coverage.Exceptions) | ForEach-Object { [ordered]@{ Principal = [string]$_; Exclusion = 'SharedByEveryQualifyingPolicy'; Sentence = $sentence } })
         }
         'Unproven' {
             $v += "$What by: $names."

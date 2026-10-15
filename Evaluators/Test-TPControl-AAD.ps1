@@ -642,8 +642,9 @@ function Get-TPRiskCoverageVerdict {
         }
         $cv = Get-TPCACoverageVerdict -Coverage $cov -What "A responding policy applies to $lvl $Noun"
         $v += @($cv.Verified); $s += @($cv.Shortfalls); $u += @($cv.NotEstablished)
-        # One structured entry per excluded principal across the levels.
-        foreach ($o in @($cv.AffectedObjects)) { if ($seen.Add([string]$o.Principal)) { $ao += $o } }
+        # One structured entry per excluded principal per level sentence, so every
+        # exclusion sentence a level produced stays matched to its principals.
+        foreach ($o in @($cv.AffectedObjects)) { if ($seen.Add("$([string]$o.Principal)|$([string]$o.Sentence)")) { $ao += $o } }
     }
     return [ordered]@{ Verified = $v; Shortfalls = $s; NotEstablished = $u; AffectedObjects = $ao }
 }

@@ -28,9 +28,15 @@
 #     appended so the operator sees what remains.
 #   - A group approval is honored and the finding says membership was not
 #     resolved; a role exclusion is never approved.
-#   - The original result stays in the Detail. Idempotent: a finding already
-#     carrying the marker or the record note is left alone, so a republish does
-#     not stack it.
+#   - The original result stays in the Detail, and the pass is re-derivable: a
+#     finding already carrying the marker or the record note is restored to its
+#     pre-approval result first and judged again against the CURRENT record, so
+#     a republish (-FromResults) of an approved run reflects an approval that
+#     has since lapsed, been removed, or been corrected, and never stacks text.
+#   - An exclusion is approved only when it is the finding's only shortfall:
+#     Add-TPExpectedStateFinding records every other shortfall as a structured
+#     entry beside the exclusions, and one such entry keeps the finding Partial
+#     (annotated), whatever the record says about the principals.
 #   - The satisfied finding says the accounts are outside the protection by
 #     design: an approved exception is a permitted deviation, not coverage.
 
@@ -45,8 +51,10 @@ function Set-TPEmergencyAccessApproval {
     .SYNOPSIS
         Rewrites a Partial Conditional Access coverage finding whose only shortfall
         is a shared exclusion of approved, current emergency-access principals to
-        Satisfied, naming them; annotates one that is partly approved; leaves every
-        other finding alone. Returns the number of findings rewritten to Satisfied.
+        Satisfied, naming them; annotates one that is partly approved or has other
+        shortfalls; restores and re-judges a finding an earlier run already
+        rewrote; leaves every other finding alone. Returns the number of findings
+        that are Satisfied with approved exceptions after the pass.
     #>
     [CmdletBinding()]
     [OutputType([int])]
@@ -64,30 +72,51 @@ function Set-TPEmergencyAccessApproval {
     $exc = if ($Path) { Get-TPBaselineExceptions -Path $Path -AsOf $AsOf }
            elseif ($TenantDomain) { Get-TPBaselineExceptions -TenantDomain $TenantDomain -AsOf $AsOf }
            else { $null }
-    if (-not $exc -or -not $exc.Available) { return 0 }
-    $approved = @{}
-    foreach ($k in @($exc.EmergencyAccess.Keys)) { $approved[([string]$k).ToLowerInvariant()] = $exc.EmergencyAccess[$k] }
-    $rejected = @{}
-    foreach ($r in @($exc.EmergencyAccessRejected)) {
-        $k = "$(([string](Get-TPObjectField -Item $r -Key 'Kind' -Default 'user')).ToLowerInvariant()):$(([string](Get-TPObjectField -Item $r -Key 'ObjectId' -Default '')).ToLowerInvariant())"
-        if (-not $rejected.ContainsKey($k)) { $rejected[$k] = $r }
+    # No record: approvals are not current, so an earlier run's approval is undone
+    # below and nothing is approved.
+    $approved = @{}; $rejected = @{}
+    if ($exc -and $exc.Available) {
+        foreach ($k in @($exc.EmergencyAccess.Keys)) { $approved[([string]$k).ToLowerInvariant()] = $exc.EmergencyAccess[$k] }
+        foreach ($r in @($exc.EmergencyAccessRejected)) {
+            $k = "$(([string](Get-TPObjectField -Item $r -Key 'Kind' -Default 'user')).ToLowerInvariant()):$(([string](Get-TPObjectField -Item $r -Key 'ObjectId' -Default '')).ToLowerInvariant())"
+            if (-not $rejected.ContainsKey($k)) { $rejected[$k] = $r }
+        }
     }
     $targets = if ($PSBoundParameters.ContainsKey('Findings')) { @($Findings | Where-Object { $null -ne $_ }) } else { @($script:TPFindings) }
-    $changed = 0
+    $markerRx = '(?s)^' + [regex]::Escape($script:TPEmergencyAccessMarker) + '.*? Result before the approval record was applied: Partial\. (.*)$'
+    $noteRx   = '(?s)\s*' + [regex]::Escape($script:TPEmergencyAccessRecordNote) + ' .*$'
+    $approvedCount = 0
     foreach ($f in $targets) {
-        if ([string](Get-TPObjectField -Item $f -Key 'State' -Default '') -ne 'Partial') { continue }
+        $state  = [string](Get-TPObjectField -Item $f -Key 'State' -Default '')
         $detail = [string](Get-TPObjectField -Item $f -Key 'Detail' -Default '')
-        if ($detail -like "$script:TPEmergencyAccessMarker*" -or $detail -match [regex]::Escape($script:TPEmergencyAccessRecordNote)) { continue }
+        # Restore a finding an earlier run approved or annotated, then judge it again
+        # against the current record (a republish of an approved run must reflect a
+        # lapsed, removed or corrected approval).
+        if ($state -eq 'Satisfied' -and $detail -like "$script:TPEmergencyAccessMarker*") {
+            if ($detail -notmatch $markerRx) { continue }   # not this pass's shape; leave it
+            $f.State    = 'Partial'
+            $f.Severity = 'Medium'
+            $f.Detail   = $Matches[1]
+            $cv0 = [string](Get-TPObjectField -Item $f -Key 'CurrentValue' -Default '')
+            $f.CurrentValue = ($cv0 -replace '(?:; |^)[Aa]pproved emergency-access exceptions: \d+$', '')
+            $state = 'Partial'; $detail = [string]$f.Detail
+        } elseif ($detail -match [regex]::Escape($script:TPEmergencyAccessRecordNote)) {
+            $f.Detail = ($detail -replace $noteRx, '')
+            $detail = [string]$f.Detail
+        }
+        if ($state -ne 'Partial') { continue }
         $objs = @(Get-TPObjectField -Item $f -Key 'AffectedObjects' -Default @() | Where-Object { $null -ne $_ })
         if ($objs.Count -eq 0) { continue }
-        $principals = @(); $onlyExclusions = $true
+        $principals = @(); $otherShortfalls = @(); $recognized = $true
         foreach ($o in $objs) {
             $kind = [string](Get-TPObjectField -Item $o -Key 'Exclusion' -Default '')
             $p    = [string](Get-TPObjectField -Item $o -Key 'Principal' -Default '')
-            if ($kind -ne $script:TPEmergencyAccessExclusionKind -or -not $p) { $onlyExclusions = $false; break }
-            $principals += $p
+            $sf   = [string](Get-TPObjectField -Item $o -Key 'Shortfall' -Default '')
+            if ($kind -eq $script:TPEmergencyAccessExclusionKind -and $p) { if ($p -notin $principals) { $principals += $p } }
+            elseif ($sf) { $otherShortfalls += $sf }
+            else { $recognized = $false; break }
         }
-        if (-not $onlyExclusions -or $principals.Count -eq 0) { continue }
+        if (-not $recognized -or $principals.Count -eq 0) { continue }
         $ok = @(); $no = @()
         foreach ($p in $principals) {
             $key = $p.ToLowerInvariant()
@@ -104,10 +133,15 @@ function Set-TPEmergencyAccessApproval {
             if ($upn) { "$($x.Principal) ($upn)" } elseif ($dn) { "$($x.Principal) ($dn)" } else { [string]$x.Principal }
         }
         $okNames = @($ok | ForEach-Object { & $label $_ })
-        if ($no.Count -gt 0) {
-            # Partly approved: stays Partial, and says exactly what remains.
-            $note = "$script:TPEmergencyAccessRecordNote $(if ($okNames.Count) { "approved emergency-access exception(s): $($okNames -join '; '). " })Not approved: $($no -join '; ')."
-            $f.Detail = "$detail $note".Trim()
+        if ($no.Count -gt 0 -or $otherShortfalls.Count -gt 0) {
+            # Not approvable as it stands: say exactly why, and only when the record
+            # has something to say (a tenant with no record keeps the plain finding).
+            if (-not ($exc -and $exc.Available)) { continue }
+            $parts = @()
+            if ($okNames.Count) { $parts += "approved emergency-access exception(s): $($okNames -join '; ')." }
+            if ($no.Count) { $parts += "Not approved: $($no -join '; ')." }
+            if ($otherShortfalls.Count) { $parts += "The finding has $($otherShortfalls.Count) other shortfall(s) besides the exclusion, so it stays Partial whatever the record says." }
+            $f.Detail = "$detail $script:TPEmergencyAccessRecordNote $($parts -join ' ')".Trim()
             continue
         }
         $approvals = @($ok | ForEach-Object { [string](Get-TPObjectField -Item $_.Entry -Key 'Verdict' -Default '') } | Where-Object { $_ } | Sort-Object -Unique)
@@ -117,7 +151,7 @@ function Set-TPEmergencyAccessApproval {
         $f.Detail   = "$script:TPEmergencyAccessMarker $($ok.Count) principal(s) excluded from every qualifying policy are on this tenant's current approval record ($($approvals -join ' ')): $($okNames -join '; ').$groupNote The exclusion is a permitted deviation, not coverage: these accounts are outside the protection by design and stay listed. Result before the approval record was applied: Partial. $detail"
         $cv = [string](Get-TPObjectField -Item $f -Key 'CurrentValue' -Default '')
         $f.CurrentValue = $(if ($cv) { "$cv; approved emergency-access exceptions: $($ok.Count)" } else { "Approved emergency-access exceptions: $($ok.Count)" })
-        $changed++
+        $approvedCount++
     }
-    return $changed
+    return $approvedCount
 }

@@ -47,7 +47,13 @@ function ConvertTo-TPBaselineExceptionPsd1 {
     #>
     [CmdletBinding()]
     [OutputType([string])]
-    param([Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Entries)
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Entries,
+        # The tenant's emergency-access approvals, written back as they were read
+        # (rejected ones included, never repaired): the two blocks share one file,
+        # and an edit to an exception must not drop them.
+        [AllowNull()] [AllowEmptyCollection()] [object[]] $EmergencyAccess = @()
+    )
     $q = { param([string] $v) ConvertTo-TPPsd1String -Value ($v ?? '') }
     $sb = [System.Text.StringBuilder]::new()
     $null = $sb.AppendLine('@{')
@@ -65,6 +71,21 @@ function ConvertTo-TPBaselineExceptionPsd1 {
         $null = $sb.AppendLine('        }')
     }
     $null = $sb.AppendLine('    )')
+    $ea = @($EmergencyAccess | Where-Object { $null -ne $_ })
+    if ($ea.Count -gt 0) {
+        $null = $sb.AppendLine('    # Approved emergency-access principals (see Config/baseline-exceptions/example.psd1).')
+        $null = $sb.AppendLine('    EmergencyAccess = @(')
+        foreach ($e in $ea) {
+            $null = $sb.AppendLine('        @{')
+            foreach ($k in @('ObjectId', 'Kind', 'UserPrincipalName', 'DisplayName', 'Reason', 'Approver', 'ApprovedDate', 'ReviewDate', 'ExpiryDate')) {
+                $v = [string](Get-TPObjectField -Item $e -Key $k -Default '')
+                if ($k -in @('UserPrincipalName', 'DisplayName', 'ExpiryDate') -and [string]::IsNullOrWhiteSpace($v)) { continue }
+                $null = $sb.AppendLine(('            {0,-19} = {1}' -f $k, (& $q $v)))
+            }
+            $null = $sb.AppendLine('        }')
+        }
+        $null = $sb.AppendLine('    )')
+    }
     $null = $sb.AppendLine('}')
     return $sb.ToString()
 }
@@ -80,11 +101,19 @@ function Write-TPBaselineExceptionFile {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $Path,
-        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Entries
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Entries,
+        # The emergency-access block to write. When not given, the block the file
+        # holds now is carried over as read, so the exception cmdlets never drop it.
+        [AllowNull()] [AllowEmptyCollection()] [object[]] $EmergencyAccess
     )
     $dir = Split-Path -Parent $Path
     if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-    $text = ConvertTo-TPBaselineExceptionPsd1 -Entries $Entries
+    if (-not $PSBoundParameters.ContainsKey('EmergencyAccess')) {
+        $current = Get-TPBaselineExceptions -Path $Path
+        $EmergencyAccess = @(Get-TPObjectField -Item $current -Key 'EmergencyAccessEntries' -Default @())
+    }
+    $ea = @($EmergencyAccess | Where-Object { $null -ne $_ })
+    $text = ConvertTo-TPBaselineExceptionPsd1 -Entries $Entries -EmergencyAccess $ea
     $tmp = Join-Path $dir ((Split-Path -Leaf $Path) + '.' + [guid]::NewGuid().ToString('N') + '.tmp.psd1')
     try {
         Set-Content -LiteralPath $tmp -Value $text -Encoding utf8 -NoNewline
@@ -92,6 +121,8 @@ function Write-TPBaselineExceptionFile {
         $n = @(Get-TPObjectField -Item $check -Key 'Exceptions' -Default @()).Count
         $expected = @($Entries | Where-Object { $null -ne $_ }).Count
         if ($n -ne $expected) { throw "Round-trip check failed: wrote $expected entr$(if ($expected -eq 1) { 'y' } else { 'ies' }), read back $n." }
+        $nEa = @(Get-TPObjectField -Item $check -Key 'EmergencyAccess' -Default @()).Count
+        if ($nEa -ne $ea.Count) { throw "Round-trip check failed: wrote $($ea.Count) emergency-access entr$(if ($ea.Count -eq 1) { 'y' } else { 'ies' }), read back $nEa." }
         Move-Item -LiteralPath $tmp -Destination $Path -Force
     } finally {
         if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }

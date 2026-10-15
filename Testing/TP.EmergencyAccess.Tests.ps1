@@ -29,9 +29,9 @@ Describe 'Approved emergency-access exclusions' {
         function script:Pol {
             param([string] $Name = 'p', [string] $State = 'enabled', [string[]] $Users = @('All'), [string[]] $Groups = @(), [string[]] $Roles = @(),
                   [string[]] $ExUsers = @(), [string[]] $ExGroups = @(), [string[]] $ExRoles = @(), [string[]] $Apps = @('All'), [string[]] $ExApps = @(),
-                  [string[]] $ClientApps = @('all'), [string[]] $Grant = @(), [string] $Op = 'OR')
+                  [string[]] $ClientApps = @('all'), [string[]] $Grant = @(), [string] $Op = 'OR', [string[]] $SignInRisk = @())
             @{ Id = $Name; DisplayName = $Name; State = $State
-               Conditions = @{ ClientAppTypes = $ClientApps; SignInRiskLevels = @(); UserRiskLevels = @(); AuthFlows = @(); Platforms = @(); ExcludePlatforms = @()
+               Conditions = @{ ClientAppTypes = $ClientApps; SignInRiskLevels = $SignInRisk; UserRiskLevels = @(); AuthFlows = @(); Platforms = @(); ExcludePlatforms = @()
                                Users = @{ IncludeUsers = $Users; IncludeGroups = $Groups; IncludeRoles = $Roles; ExcludeUsers = $ExUsers; ExcludeGroups = $ExGroups; ExcludeRoles = $ExRoles }
                                Applications = @{ Include = $Apps; Exclude = $ExApps; UserActions = @() }
                                Locations = @{ Include = @(); Exclude = @() }; Devices = @{ FilterMode = ''; FilterRule = '' }; ClientApplications = @{ IncludeServicePrincipals = @() } }
@@ -49,6 +49,13 @@ Describe 'Approved emergency-access exclusions' {
             Set-TPRawData -Key 'Intune-DeviceCompliance' -Data (Bag @{ CompliancePolicies = @(); SectionStatus = @{ CompliancePolicies = 'Collected' } })
         }
         function script:V([string] $Fn, [string] $Cid) { & $Fn 3>$null | Out-Null; @(Get-TPFindings | Where-Object ControlId -eq $Cid)[0] }
+        # One of the two members not registered for MFA (AAD-1.2 reports that beside enforcement).
+        function script:Set-Unregistered {
+            $u = @(@{ Id = 'u-1'; UserPrincipalName = 'a@corp.example'; AccountEnabled = $true; UserType = 'Member' },
+                   @{ Id = 'u-2'; UserPrincipalName = 'b@corp.example'; AccountEnabled = $true; UserType = 'Member' })
+            $reg = @(@{ UserPrincipalName = 'a@corp.example'; IsMfaRegistered = $true }, @{ UserPrincipalName = 'b@corp.example'; IsMfaRegistered = $false })
+            Set-TPRawData -Key 'AAD-Users' -Data (Bag @{ Users = $u; MFARegistration = @{ RegistrationDetails = $reg }; SectionStatus = @{ MFARegistration = 'Collected' } })
+        }
         function script:F([string] $Cid) { @(Get-TPFindings | Where-Object ControlId -eq $Cid)[0] }
         # Three controls from one policy set, each judged on combined coverage.
         function script:Evaluate([object[]] $Policies) {
@@ -196,12 +203,82 @@ Describe 'Approved emergency-access exclusions' {
             (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1), (Entry -Id $script:U2)))) | Should -Be 0
             (F 'AAD-2.3').State | Should -Be 'NotApplicable' -Because 'different exclusions are unproven coverage, which no approval resolves'
         }
-        It 'is idempotent: a second run changes nothing and the prefix appears once' {
+        It 'a second run re-derives the same result: the prefix appears once and the count is the same' {
             Evaluate @((Pol -Name 'Device' -Grant @('compliantDevice') -ExUsers @($script:U1)))
             $rec = Record @((Entry -Id $script:U1))
             (Set-TPEmergencyAccessApproval -Path $rec) | Should -Be 2
-            (Set-TPEmergencyAccessApproval -Path $rec) | Should -Be 0
+            $first = (F 'INT-1.2').Detail
+            (Set-TPEmergencyAccessApproval -Path $rec) | Should -Be 2
+            (F 'INT-1.2').Detail | Should -Be $first
             ([regex]::Matches((F 'INT-1.2').Detail, [regex]::Escape($script:Marker))).Count | Should -Be 1
+        }
+        It 'an approval that lapsed, or a record that was removed, undoes an earlier run''s approval on a republish (review finding)' {
+            Evaluate @((Pol -Name 'Device' -Grant @('compliantDevice') -ExUsers @($script:U1)))
+            $original = (F 'AAD-2.3').Detail; $originalCv = (F 'AAD-2.3').CurrentValue
+            (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1)))) | Should -Be 2
+            (F 'AAD-2.3').State | Should -Be 'Satisfied'
+            # The same findings, replayed against a record whose review date has passed.
+            $replay = @((Get-TPFindings | ConvertTo-Json -Depth 12) | ConvertFrom-Json)
+            (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1 -Review $script:Past))) -Findings $replay) | Should -Be 0
+            $f = @($replay | Where-Object { $_.ControlId -eq 'AAD-2.3' })[0]
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Not approved: user:.* review date .* has passed'
+            $f.Detail | Should -Not -Match [regex]::Escape($script:Marker)
+            # Replayed against no record at all: back to the plain pre-approval finding.
+            $replay = @((Get-TPFindings | ConvertTo-Json -Depth 12) | ConvertFrom-Json)
+            (Set-TPEmergencyAccessApproval -TenantDomain 'no-such-tenant.example' -Findings $replay) | Should -Be 0
+            $f = @($replay | Where-Object { $_.ControlId -eq 'AAD-2.3' })[0]
+            $f.State        | Should -Be 'Partial'
+            $f.Severity     | Should -Be 'Medium'
+            $f.Detail       | Should -Be $original
+            $f.CurrentValue | Should -Be $originalCv
+            # A partly-approved note from an earlier run is replaced, never stacked.
+            Evaluate @((Pol -Name 'Device' -Grant @('compliantDevice') -ExUsers @($script:U1, $script:U2)))
+            $rec1 = Record @((Entry -Id $script:U1))
+            (Set-TPEmergencyAccessApproval -Path $rec1) | Should -Be 0
+            (F 'AAD-2.3').Detail | Should -Match "Not approved: user:$($script:U2)"
+            (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1), (Entry -Id $script:U2 -Upn 'bg2@contoso.example')))) | Should -Be 2
+            (F 'AAD-2.3').State  | Should -Be 'Satisfied'
+            ([regex]::Matches((F 'AAD-2.3').Detail, 'Approval record:')).Count | Should -Be 0
+        }
+        It 'an approved exclusion beside another shortfall never makes the finding Satisfied: AAD-1.2 with an unregistered user, AAD-1.4 with no medium-risk policy (review finding)' {
+            Ca @(Pol -Name 'MFA' -Grant @('mfa') -ExUsers @($script:U1)); Set-Unregistered
+            $f = V 'Test-TPControlAADMFA' 'AAD-1.2'
+            $f.State | Should -Be 'Partial'
+            @($f.AffectedObjects | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'Shortfall' -Default '') }).Count | Should -Be 1 -Because 'the registration shortfall is recorded beside the exclusion'
+            (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1)))) | Should -Be 0
+            $f = F 'AAD-1.2'
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Approval record: approved emergency-access exception\(s\): user:.* The finding has 1 other shortfall\(s\) besides the exclusion, so it stays Partial'
+            Ca @(Pol -Name 'High risk' -Grant @('mfa') -SignInRisk @('high') -ExUsers @($script:U1))
+            $f = V 'Test-TPControlAADSignInRisk' 'AAD-1.4'
+            $f.State | Should -Be 'Partial'
+            (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1)))) | Should -Be 0
+            (F 'AAD-1.4').State  | Should -Be 'Partial'
+            (F 'AAD-1.4').Detail | Should -Match 'other shortfall'
+            # With both levels covered the same exclusion is the only shortfall and is approved.
+            Ca @((Pol -Name 'High risk' -Grant @('mfa') -SignInRisk @('high') -ExUsers @($script:U1)), (Pol -Name 'Medium risk' -Grant @('mfa') -SignInRisk @('medium') -ExUsers @($script:U1)))
+            (V 'Test-TPControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Partial'
+            (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1)))) | Should -Be 1
+            (F 'AAD-1.4').State | Should -Be 'Satisfied'
+        }
+        It 'editing a baseline exception keeps the emergency-access block (New, Set and Remove write it back as read; review finding)' {
+            $rec = Record @((Entry -Id $script:U1 -Upn 'bg1@contoso.example'), (Entry -Id $script:U2 -Review $script:Past))
+            $future = (Get-Date).AddMonths(3)
+            $null = New-TPBaselineException -TenantDomain contoso.example -ControlId 'AAD-2.3' -Reason 'r' -CompensatingControl 'c' -Approver 'a@nrg.example' -ReviewDate $future -Path $rec -Confirm:$false
+            $e = Get-TPBaselineExceptions -Path $rec
+            $e.Approved.ContainsKey('AAD-2.3') | Should -BeTrue
+            @($e.EmergencyAccessEntries).Count | Should -Be 2 -Because 'both entries, the lapsed one included, are written back as read'
+            $e.EmergencyAccess.ContainsKey("user:$($script:U1)") | Should -BeTrue
+            $e.EmergencyAccess["user:$($script:U1)"].UserPrincipalName | Should -Be 'bg1@contoso.example'
+            $null = Set-TPBaselineException -TenantDomain contoso.example -ControlId 'AAD-2.3' -Reason 'changed' -Path $rec -Confirm:$false
+            @((Get-TPBaselineExceptions -Path $rec).EmergencyAccessEntries).Count | Should -Be 2
+            $null = Remove-TPBaselineException -TenantDomain contoso.example -ControlId 'AAD-2.3' -Path $rec -Confirm:$false
+            $e = Get-TPBaselineExceptions -Path $rec
+            @($e.Entries).Count | Should -Be 0
+            @($e.EmergencyAccessEntries).Count | Should -Be 2
+            # The written block is data only and re-reads to the same approval.
+            (Set-TPEmergencyAccessApproval -Path $rec -Findings @()) | Should -Be 0
         }
         It 'rewrites findings replayed from a results file (JSON round trip) the same way' {
             Evaluate @((Pol -Name 'Device' -Grant @('compliantDevice') -ExUsers @($script:U1)))
