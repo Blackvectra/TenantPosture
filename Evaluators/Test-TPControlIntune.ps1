@@ -78,7 +78,9 @@ function Test-TPControlIntune {
             # The expected state is an assigned compliance policy PER enrolled platform,
             # each with a non-compliance action. One assigned policy covers one platform,
             # not the fleet, so coverage is judged per platform from the enrolled-device
-            # counts; the non-compliance action is not read, so it is never credited.
+            # counts. The actions come from the collector's scheduledActionsForRule read
+            # (Get-TPComplianceActionVerdict): a policy whose actions were not read leaves
+            # the control not assessed, never credited and never faulted.
             $plats = @(
                 @{ Name = 'Windows'; Device = '^Windows';     Policy = '(?i)windows' }
                 @{ Name = 'iOS/iPadOS'; Device = '^(iOS|iPadOS)'; Policy = '(?i)\bios|ipados' }
@@ -96,18 +98,29 @@ function Test-TPControlIntune {
                 }
             }
             $verified = "Verified: $($assigned.Count) assigned compliance policy(ies)."
+            $av  = Get-TPComplianceActionVerdict -Policies $assigned
+            $req = 'An assigned compliance policy per enrolled platform, each with a non-compliance action'
+            $actionsNote = if ($av.Unread.Count -gt 0) { "the non-compliance actions of $($av.Unread.Count) policy(ies) were not read ($($av.Unread -join ', '))" } else { '' }
             if ($unread) {
                 Add-TPFinding -ControlId 'INT-1.1' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.1') `
-                    -Detail "$verified Not assessed: whether every enrolled platform has one, because the enrolled-device platform counts were not read; and each policy's non-compliance action is not read." `
-                    -CurrentValue "$($assigned.Count) assigned compliance policy(ies); platform coverage not read" -RequiredValue 'An assigned compliance policy per enrolled platform, each with a non-compliance action'
+                    -Detail "$verified Not assessed: whether every enrolled platform has one, because the enrolled-device platform counts were not read$(if ($actionsNote) { "; and $actionsNote" })." `
+                    -CurrentValue "$($assigned.Count) assigned compliance policy(ies); platform coverage not read" -RequiredValue $req
             } elseif ($uncovered.Count -gt 0) {
                 Add-TPFinding -ControlId 'INT-1.1' -State 'Partial' -Category 'Endpoint' -Title $c.Title -Severity 'Medium' -FrameworkIds (& $cit 'INT-1.1') `
                     -Detail "$verified$(if ($covered.Count) { " Covered: $($covered -join ', ')." }) Shortfall: no assigned compliance policy for $($uncovered -join ', '), so those devices are not held to any baseline." `
                     -CurrentValue "Covered: $($covered -join ', '); not covered: $($uncovered -join ', ')" -RequiredValue 'An assigned compliance policy per enrolled platform, each with a non-compliance action' -Remediation $c.Remediation
-            } else {
+            } elseif ($av.Unread.Count -gt 0) {
                 Add-TPFinding -ControlId 'INT-1.1' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.1') `
-                    -Detail "$verified Every enrolled platform has an assigned compliance policy ($($covered -join ', ')). Not assessed: each policy's non-compliance action; it is not read, so the action half of the requirement is not established." `
-                    -CurrentValue "Platforms covered: $($covered -join ', '); non-compliance action not read" -RequiredValue 'An assigned compliance policy per enrolled platform, each with a non-compliance action'
+                    -Detail "$verified Every enrolled platform has an assigned compliance policy ($($covered -join ', ')). Not assessed: $actionsNote, so the action half of the requirement is not established." `
+                    -CurrentValue "Platforms covered: $($covered -join ', '); non-compliance action not read" -RequiredValue $req
+            } elseif ($av.Lacking.Count -gt 0) {
+                Add-TPFinding -ControlId 'INT-1.1' -State 'Partial' -Category 'Endpoint' -Title $c.Title -Severity 'Medium' -FrameworkIds (& $cit 'INT-1.1') `
+                    -Detail "$verified Every enrolled platform has an assigned compliance policy ($($covered -join ', ')).$(if ($av.Acting.Count) { " Verified: $($av.Acting.Count) policy(ies) act on a noncompliant device: $($av.Acting -join '; ')." }) Shortfall: $($av.Lacking.Count) assigned policy(ies) take no action on a noncompliant device beyond a notification ($($av.Lacking -join ', ')), so a device failing one of them is not held to anything." `
+                    -CurrentValue "Platforms covered: $($covered -join ', '); no action beyond a notification: $($av.Lacking -join ', ')" -RequiredValue $req -Remediation $c.Remediation
+            } else {
+                Add-TPFinding -ControlId 'INT-1.1' -State 'Satisfied' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.1') `
+                    -Detail "$verified Every enrolled platform has an assigned compliance policy ($($covered -join ', ')). Every assigned policy acts on a noncompliant device: $($av.Acting -join '; '). (The configured actions are read from the policy; whether Intune applied them to a device is not.)" `
+                    -CurrentValue "Platforms covered: $($covered -join ', '); actions: $($av.Acting -join '; ')" -RequiredValue $req
             }
         } else {
             $why = if ($all.Count) { "$($all.Count) compliance policy(ies) exist but none is assigned to any user or device." } else { 'No device compliance policies configured.' }
@@ -276,6 +289,41 @@ function Get-TPEnrolledPlatformSummary {
     $parts = @($names | Sort-Object | ForEach-Object { "$([int](Get-TPObjectField -Item $by -Key $_ -Default 0)) $_" })
     if ($parts.Count -eq 0) { return 'no managed devices' }
     return ($parts -join ', ')
+}
+
+# Judges the non-compliance actions of assigned compliance policies. An action
+# counts when it does something to the device or its access: block (Intune's
+# "mark device noncompliant", with its grace period), retire, wipe, remoteLock,
+# removeResourceAccessProfiles. notification, pushNotification and noAction only
+# tell someone. A policy whose actions were not read (ActionsRead absent or
+# $false: an older results file, or a tenant that refused the expand) is Unread,
+# never lacking. Acting carries a phrase per policy for the Detail.
+function Get-TPComplianceActionVerdict {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([AllowNull()] [object[]] $Policies)
+    $acting  = [System.Collections.Generic.List[string]]::new()
+    $lacking = [System.Collections.Generic.List[string]]::new()
+    $unread  = [System.Collections.Generic.List[string]]::new()
+    $consequential = @('block', 'retire', 'wipe', 'remoteLock', 'removeResourceAccessProfiles')
+    foreach ($p in @($Policies)) {
+        if ($null -eq $p) { continue }
+        $name = [string](Get-TPObjectField -Item $p -Key 'DisplayName' -Default '')
+        if (-not $name) { $name = [string](Get-TPObjectField -Item $p -Key 'Name' -Default '(unnamed policy)') }
+        $read = Get-TPObjectField -Item $p -Key 'ActionsRead' -Default $null
+        if ($read -ne $true) { $unread.Add($name); continue }
+        $acts = @(Get-TPObjectField -Item $p -Key 'NonComplianceActions' -Default @() | Where-Object { $null -ne $_ })
+        $hits = @($acts | Where-Object { ([string](Get-TPObjectField -Item $_ -Key 'ActionType' -Default '')) -in $consequential })
+        if ($hits.Count -eq 0) { $lacking.Add($name); continue }
+        $parts = foreach ($h in $hits) {
+            $t = [string](Get-TPObjectField -Item $h -Key 'ActionType' -Default '')
+            $g = Get-TPObjectField -Item $h -Key 'GracePeriodHours' -Default $null
+            $label = if ($t -eq 'block') { 'mark noncompliant' } else { $t }
+            if ($null -ne $g -and [int]$g -gt 0) { "$label after $([int]$g) h" } else { "$label immediately" }
+        }
+        $acting.Add("$name ($(@($parts | Sort-Object -Unique) -join ', '))")
+    }
+    return @{ Acting = @($acting.ToArray()); Lacking = @($lacking.ToArray()); Unread = @($unread.ToArray()) }
 }
 
 function Select-TPAssignedPolicies {

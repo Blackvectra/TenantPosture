@@ -7,7 +7,7 @@
 # READ-ONLY: GET-only Graph calls. Does not create, modify, or remove configuration.
 #
 # Returns: structured hashtable under key 'Intune-DeviceCompliance' via Set-TPRawData.
-# Reads:   deviceCompliancePolicies, deviceConfigurations,
+# Reads:   deviceCompliancePolicies (with assignments and scheduledActionsForRule), deviceConfigurations,
 #          deviceEnrollmentConfigurations, managedDevices.
 #
 # NIST SP 800-53: CM-2 (baseline configuration), CM-6 (configuration settings),
@@ -15,6 +15,37 @@
 #                 IA-2 (identification and authentication — WHfB)
 # MITRE ATT&CK:   T1078 (Valid Accounts), T1133 (External Remote Services)
 #
+
+# The non-compliance actions of one compliance policy as Graph returns them:
+# scheduledActionsForRule[].scheduledActionConfigurations[], each with an actionType
+# (block = Intune's "mark device noncompliant", retire, wipe, remoteLock,
+# removeResourceAccessProfiles, pushNotification, notification, noAction), a
+# gracePeriodHours and a notification template. Read is $true only when the policy
+# carries the scheduledActionsForRule property at all: an absent property means the
+# expand was not applied, which is "not read", never "no action".
+function Get-TPComplianceActionList {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory)] [AllowNull()] $Policy)
+    $present = $false
+    if ($Policy -is [System.Collections.IDictionary]) { $present = $Policy.Contains('scheduledActionsForRule') }
+    elseif ($null -ne $Policy) { $present = $null -ne $Policy.PSObject.Properties['scheduledActionsForRule'] }
+    if (-not $present) { return @{ Read = $false; Actions = @() } }
+    $list = [System.Collections.Generic.List[hashtable]]::new()
+    foreach ($rule in @(Get-TPObjectField -Item $Policy -Key 'scheduledActionsForRule' -Default @())) {
+        if ($null -eq $rule) { continue }
+        foreach ($cfg in @(Get-TPObjectField -Item $rule -Key 'scheduledActionConfigurations' -Default @())) {
+            if ($null -eq $cfg) { continue }
+            $list.Add(@{
+                RuleName               = [string](Get-TPObjectField -Item $rule -Key 'ruleName' -Default '')
+                ActionType             = [string](Get-TPObjectField -Item $cfg -Key 'actionType' -Default '')
+                GracePeriodHours       = (Get-TPObjectField -Item $cfg -Key 'gracePeriodHours' -Default $null)
+                NotificationTemplateId = [string](Get-TPObjectField -Item $cfg -Key 'notificationTemplateId' -Default '')
+            })
+        }
+    }
+    return @{ Read = $true; Actions = @($list.ToArray()) }
+}
 
 function Invoke-TPCollectIntuneDeviceCompliance {
     [CmdletBinding()] param()
@@ -59,13 +90,39 @@ function Invoke-TPCollectIntuneDeviceCompliance {
         try {
             # $expand=assignments: an unassigned policy evaluates no device, so
             # "a policy exists" is not "devices are held to it".
-            $next = 'https://graph.microsoft.com/v1.0/deviceManagement/deviceCompliancePolicies?$expand=assignments'
+            # scheduledActionsForRule: what the policy does to a noncompliant device
+            # (mark noncompliant after a grace period, retire, wipe, lock, notify).
+            # INT-1.1 is half a verdict without it. Should a tenant's Graph refuse the
+            # nested expand, the plain read is kept and every policy is recorded with
+            # ActionsRead = $false, so the control says "not read", never "no action".
+            $plainUri   = 'https://graph.microsoft.com/v1.0/deviceManagement/deviceCompliancePolicies?$expand=assignments'
+            $actionsUri = $plainUri + ',scheduledActionsForRule($expand=scheduledActionConfigurations)'
+            $next = $actionsUri
+            $actionsExpanded = $true
             $maxPages  = 200
             $pageCount = 0
             while ($next -and $pageCount -lt $maxPages) {
-                $page = Invoke-TPGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                try {
+                    $page = Invoke-TPGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                } catch {
+                    if ($pageCount -eq 0 -and $actionsExpanded) {
+                        if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                            Register-TPException -Source 'Intune-DeviceCompliance-Actions' `
+                                -Message "The non-compliance actions could not be read with the policies (scheduledActionsForRule expand refused: $($_.Exception.Message)); policies were read without them."
+                        }
+                        $actionsExpanded = $false
+                        $next = $plainUri
+                        continue
+                    }
+                    throw
+                }
                 foreach ($p in @($page.value)) {
+                    $acts = Get-TPComplianceActionList -Policy $p
                     $result.Data.CompliancePolicies += @{
+                        # The non-compliance actions as Graph returned them, and whether they were
+                        # read at all (an absent property is not an empty action list).
+                        ActionsRead          = ($actionsExpanded -and $acts.Read)
+                        NonComplianceActions = $acts.Actions
                         Id          = (Get-TPObjectField -Item $p -Key 'id' -Default $null)
                         DisplayName = [string](Get-TPObjectField -Item $p -Key 'displayName' -Default '')
                         Platform    = [string](Get-TPObjectField -Item $p -Key '@odata.type' -Default '')

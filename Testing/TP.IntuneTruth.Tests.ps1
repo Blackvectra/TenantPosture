@@ -18,9 +18,13 @@ Describe 'Intune controls count what enforces something' {
         $script:Mod = Get-Module 'TenantPosture'
         & $script:Mod { Set-Item -Path 'function:script:Invoke-TPGraphRequest' -Value {
             param([string] $Uri, [string] $Method = 'GET', $Headers, $Body, [string] $OutputType = 'HashTable')
+            $script:SeenUris += @($Uri)
+            # A tenant whose Graph refuses the nested expand answers 400; the collector must keep the plain read.
+            if ($script:RefuseActions -and $Uri -match 'scheduledActionsForRule') { throw 'Request_BadRequest: the expand is not supported' }
             foreach ($k in $script:Graph.Keys) { if ($Uri -match $k) { return @{ value = @($script:Graph[$k]) } } }
             return @{ value = @() }
         } }
+        & $script:Mod { $script:SeenUris = @(); $script:RefuseActions = $false }
         $script:Tid = '00000000-1111-2222-3333-444444444444'
         # The four enrollment configurations every tenant has.
         $script:Defaults = @(
@@ -30,7 +34,7 @@ Describe 'Intune controls count what enforces something' {
             @{ '@odata.type' = '#microsoft.graph.deviceEnrollmentWindowsHelloForBusinessConfiguration'; id = "$($script:Tid)_DefaultWindowsHelloForBusiness"; displayName = 'All users and all devices'; priority = 0; state = 'notConfigured' })
         function script:Run { param([hashtable] $Graph)
             Clear-TPState
-            & $script:Mod { param($g) $script:Graph = $g } $Graph
+            & $script:Mod { param($g) $script:Graph = $g; $script:SeenUris = @() } $Graph
             Invoke-TPCollectIntuneDeviceCompliance | Out-Null
             Invoke-TPCollectIntuneEndpointSecurity | Out-Null
             Invoke-TPCollectIntuneAppProtection | Out-Null
@@ -128,5 +132,59 @@ Describe 'Intune controls count what enforces something' {
     It 'INT-1.5 does not give half credit for enrollment configurations every tenant has' {
         Run @{ 'deviceEnrollmentConfigurations' = $script:Defaults }
         (Verdict 'Test-TPControlIntune' 'INT-1.5').State | Should -Be 'Gap'
+    }
+    It 'INT-1.1 is Satisfied when every platform is covered and every policy acts on a noncompliant device; the actions ride the policy request' {
+        Run @{ 'deviceCompliancePolicies' = @(@{ '@odata.type' = '#microsoft.graph.windows10CompliancePolicy'; id = 'w'; displayName = 'Win'; assignments = $script:Assigned
+                   scheduledActionsForRule = @(@{ ruleName = 'PasswordRequired'; scheduledActionConfigurations = @(
+                       @{ id = 's1'; actionType = 'block'; gracePeriodHours = 0; notificationTemplateId = '' }
+                       @{ id = 's2'; actionType = 'notification'; gracePeriodHours = 24; notificationTemplateId = 't1' }) }) })
+               'managedDevices' = @(@{ id = 'd1'; operatingSystem = 'Windows'; complianceState = 'compliant' }) }
+        $f = Verdict 'Test-TPControlIntune' 'INT-1.1'
+        $f.State | Should -Be 'Satisfied'
+        $f.Detail | Should -Match 'Win \(mark noncompliant immediately\)'
+        $pol = @((Get-TPRawData -Key 'Intune-DeviceCompliance').Data.CompliancePolicies)[0]
+        $pol.ActionsRead | Should -BeTrue
+        @($pol.NonComplianceActions).Count | Should -Be 2
+        $seen = @(& $script:Mod { $script:SeenUris } | Where-Object { $_ -match 'deviceCompliancePolicies' })
+        $seen.Count | Should -Be 1 -Because 'the actions are expanded with the policies, not fetched per policy'
+        $seen[0] | Should -Match ([regex]::Escape('$expand=assignments,scheduledActionsForRule($expand=scheduledActionConfigurations)'))
+    }
+    It 'INT-1.1 is Partial when an assigned policy only notifies' {
+        Run @{ 'deviceCompliancePolicies' = @(@{ '@odata.type' = '#microsoft.graph.windows10CompliancePolicy'; id = 'w'; displayName = 'Win'; assignments = $script:Assigned
+                   scheduledActionsForRule = @(@{ ruleName = 'PasswordRequired'; scheduledActionConfigurations = @(@{ id = 's2'; actionType = 'notification'; gracePeriodHours = 24; notificationTemplateId = 't1' }) }) })
+               'managedDevices' = @(@{ id = 'd1'; operatingSystem = 'Windows'; complianceState = 'compliant' }) }
+        $f = Verdict 'Test-TPControlIntune' 'INT-1.1'
+        $f.State | Should -Be 'Partial'
+        $f.Detail | Should -Match 'beyond a notification \(Win\)'
+    }
+    It 'INT-1.1 is not assessed, never a Gap, when Graph refuses the actions expand: the policies are read without it and say so' {
+        & $script:Mod { $script:RefuseActions = $true }
+        try {
+            Run @{ 'deviceCompliancePolicies' = @(@{ '@odata.type' = '#microsoft.graph.windows10CompliancePolicy'; id = 'w'; displayName = 'Win'; assignments = $script:Assigned })
+                   'managedDevices' = @(@{ id = 'd1'; operatingSystem = 'Windows'; complianceState = 'compliant' }) }
+            $f = Verdict 'Test-TPControlIntune' 'INT-1.1'
+            $f.State | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'were not read \(Win\)'
+            $raw = Get-TPRawData -Key 'Intune-DeviceCompliance'
+            $raw.Data.SectionStatus.CompliancePolicies | Should -Be 'Collected'
+            @($raw.Data.CompliancePolicies)[0].ActionsRead | Should -BeFalse
+            $seen = @(& $script:Mod { $script:SeenUris } | Where-Object { $_ -match 'deviceCompliancePolicies' })
+            $seen.Count | Should -Be 2
+            $seen[1] | Should -Not -Match 'scheduledActionsForRule'
+        } finally { & $script:Mod { $script:RefuseActions = $false } }
+    }
+    It 'a replayed policy with no ActionsRead field is "not read", and an empty action list is "no action" (Get-TPComplianceActionVerdict)' {
+        $v = & $script:Mod { Get-TPComplianceActionVerdict -Policies @(
+            @{ DisplayName = 'Old'; IsAssigned = $true },
+            @{ DisplayName = 'Empty'; IsAssigned = $true; ActionsRead = $true; NonComplianceActions = @() },
+            @{ DisplayName = 'Lock'; IsAssigned = $true; ActionsRead = $true; NonComplianceActions = @(@{ ActionType = 'remoteLock'; GracePeriodHours = 0 }) }) }
+        @($v.Unread)  | Should -Be @('Old')
+        @($v.Lacking) | Should -Be @('Empty')
+        @($v.Acting)  | Should -Be @('Lock (remoteLock immediately)')
+    }
+    It 'the compliance read needs no new Graph scope' {
+        $src = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Collectors/Intune/Invoke-TPCollectIntuneDeviceCompliance.ps1') -Raw
+        $src | Should -Match 'deviceManagement/deviceCompliancePolicies\?\$expand=assignments'
+        @(& $script:Mod { Get-TPGraphScopeList }) | Should -Contain 'DeviceManagementConfiguration.Read.All'
     }
 }
