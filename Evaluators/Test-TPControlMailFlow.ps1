@@ -279,16 +279,28 @@ function Test-TPControlDefenderTenantAllowBlockList {
     $other     = @($allows | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'ListType' -Default '') -ne 'Spoof' })
     $unread    = @($other | Where-Object { -not [bool](Get-TPObjectField -Item $_ -Key 'ExpiryRead' -Default $false) })
     $permanent = @($other | Where-Object { [bool](Get-TPObjectField -Item $_ -Key 'ExpiryRead' -Default $false) -and [bool](Get-TPObjectField -Item $_ -Key 'NoExpiration' -Default $false) })
+    # Inline lists are bounded to five names plus the count of the rest: Microsoft
+    # permits thousands of entries per list subtype, a workbook cell holds 32,767
+    # characters, and every entry is kept in the results file (EXO-Inventory,
+    # TenantAllowBlockList) and, for the entries a finding is about, in its
+    # AffectedObjects.
+    $spoofNames = @($spoof | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'Value' -Default '') })
+    $spoofSample = if ($spoofNames.Count -gt 5) { (@($spoofNames | Select-Object -First 5) -join '; ') + " and $($spoofNames.Count - 5) more (every entry is in the results file)" } else { $spoofNames -join '; ' }
     $spoofNote = if ($spoof.Count -gt 0) {
-        " $($spoof.Count) spoofed-sender allow entr(ies) never expire by design and are not time-boxed; confirm each still names a sending service in use: $((@($spoof | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'Value' -Default '') }) -join '; '))."
+        " $($spoof.Count) spoofed-sender allow entr(ies) never expire by design and are not time-boxed; confirm each still names a sending service in use: $spoofSample."
     } else { '' }
+    # The HTML report shows a Satisfied finding's CurrentValue and not its Detail,
+    # so the entries to confirm are named there as well.
+    $spoofCurrent = if ($spoof.Count -gt 0) { "; $($spoof.Count) spoofed-sender allow entr(ies) to confirm: $spoofSample" } else { '; no spoofed-sender allow entries' }
 
     if ($permanent.Count -gt 0) {
+        $permNames = @($permanent | ForEach-Object { "$([string](Get-TPObjectField -Item $_ -Key 'ListType' -Default '')) $([string](Get-TPObjectField -Item $_ -Key 'Value' -Default ''))" })
+        $permSample = if ($permNames.Count -gt 5) { (@($permNames | Select-Object -First 5) -join '; ') + " and $($permNames.Count - 5) more (every one is listed under AffectedObjects)" } else { $permNames -join '; ' }
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity $ctrl.Severity -FrameworkIds $cit `
             -CurrentValue "$($permanent.Count) never-expiring allow entr(ies) of $($other.Count) domain, address, URL or file allow entries" `
             -RequiredValue 'Every domain, address, URL or file allow entry time-boxed with a documented reason' `
-            -Detail "Never-expiring allow entries override filtering indefinitely: $((@($permanent | ForEach-Object { "$([string](Get-TPObjectField -Item $_ -Key 'ListType' -Default '')) $([string](Get-TPObjectField -Item $_ -Key 'Value' -Default ''))" }) -join '; ')). An allow added to unblock a sender during an incident outlives the incident, and mail from that sender is never filtered again.$spoofNote" `
+            -Detail "Never-expiring allow entries override filtering indefinitely: $permSample. An allow added to unblock a sender during an incident outlives the incident, and mail from that sender is never filtered again.$spoofNote" `
             -Remediation $ctrl.Remediation -AffectedObjects $permanent
     } elseif ($unread.Count -gt 0) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
@@ -299,7 +311,7 @@ function Test-TPControlDefenderTenantAllowBlockList {
         $what = if ($other.Count -gt 0) { "All $($other.Count) domain, address, URL or file allow entr(ies) expire (on a date, or 45 days after last use); none is permanent." } else { 'No domain, address, URL or file allow entries.' }
         Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity 'Informational' -FrameworkIds $cit `
-            -CurrentValue "$($other.Count) allow entr(ies), none permanent; $($spoof.Count) spoofed-sender allow entr(ies)" `
+            -CurrentValue "$($other.Count) allow entr(ies), none permanent$spoofCurrent" `
             -Detail "$what$spoofNote" `
             -AffectedObjects $allows
     }

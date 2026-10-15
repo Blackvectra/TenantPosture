@@ -111,7 +111,7 @@ Describe 'Teams controls read the setting they name' {
         $o['Get-CsTeamsEventsPolicy'].EventAccessType = 'EveryoneInCompanyExcludingGuests'; Collect $o
         (Verdict 'Test-TPControlTeamsLiveEvents' 'TMS-4.4').State | Should -Be 'Partial'
     }
-    It 'TMS-4.4 counts a public live-events attendee setting until February 28, 2027 (events scheduled before the retirement stay attendable), and not after' {
+    It 'TMS-4.4 counts a public live-events attendee setting through February 28, 2027 (events scheduled before the retirement stay attendable), and not after' {
         $o = Defaults
         $o['Get-CsTeamsEventsPolicy'].EventAccessType = 'EveryoneInCompanyExcludingGuests'
         $o['Get-CsTeamsEventsPolicy'].TownhallEventAttendeeAccess = 'EveryoneInCompanyExcludingGuests'
@@ -119,12 +119,21 @@ Describe 'Teams controls read the setting they name' {
         $o['Get-CsTeamsMeetingBroadcastPolicy'] = [pscustomobject]@{ AllowBroadcastScheduling = $true; BroadcastAttendeeVisibilityMode = 'Everyone' }
         Collect $o
         $f = Verdict 'Test-TPControlTeamsLiveEvents' 'TMS-4.4'
-        if ([datetime]::UtcNow -lt [datetime]::new(2027, 2, 28, 0, 0, 0, [System.DateTimeKind]::Utc)) {
+        if (& $script:Mod { Test-TPLiveEventsSupported }) {
             $f.State  | Should -Be 'Partial'
-            $f.Detail | Should -Match 'February 28, 2027'
+            $f.Detail | Should -Match 'through February 28, 2027'
         } else {
             $f.State | Should -Be 'Satisfied' -Because 'after the support window the setting governs nothing'
         }
+    }
+    It 'TMS-4.4 support window: Microsoft says through February 28, 2027, with no time zone, so the whole day counts everywhere (the window ends 2027-03-01T12:00Z, the start of March 1 at UTC-12)' {
+        $utc = [System.DateTimeKind]::Utc
+        (& $script:Mod { param($n) Test-TPLiveEventsSupported -Now $n } ([datetime]::new(2027, 2, 27, 0, 0, 0, $utc)))  | Should -BeTrue
+        (& $script:Mod { param($n) Test-TPLiveEventsSupported -Now $n } ([datetime]::new(2027, 2, 28, 0, 0, 0, $utc)))  | Should -BeTrue -Because 'a midnight cutoff dropped the whole of February 28 (review finding)'
+        (& $script:Mod { param($n) Test-TPLiveEventsSupported -Now $n } ([datetime]::new(2027, 2, 28, 23, 59, 59, $utc))) | Should -BeTrue
+        (& $script:Mod { param($n) Test-TPLiveEventsSupported -Now $n } ([datetime]::new(2027, 3, 1, 11, 59, 59, $utc)))  | Should -BeTrue -Because 'it is still February 28 at UTC-12'
+        (& $script:Mod { param($n) Test-TPLiveEventsSupported -Now $n } ([datetime]::new(2027, 3, 1, 12, 0, 0, $utc)))    | Should -BeFalse
+        (& $script:Mod { param($n) Test-TPLiveEventsSupported -Now $n } ([datetime]::new(2027, 3, 2, 0, 0, 0, $utc)))     | Should -BeFalse
     }
     It 'TMS-1.1 / TMS-2.7 / TMS-4.3 agree: allowlist passes, blocklist is part-way, open is a Gap (TMS-2.7 was Partial on an allowlist)' {
         $o = Defaults; $o['Get-CsTenantFederationConfiguration'].AllowedDomains = @([pscustomobject]@{ AllowedDomain = 'partner.com' }); Collect $o
