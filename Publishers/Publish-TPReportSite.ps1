@@ -294,8 +294,7 @@ function Publish-TPReportSite {
 
     $css = @"
 :root{--p:$($brand.PrimaryColor);--s:$($brand.SecondaryColor);--a:$($brand.AccentColor);--bg:#f5f7fa;--fg:#1f2937;--mut:#6b7280;--card:#fff;--line:#e5e7eb}
-@media (prefers-color-scheme:dark){:root{--bg:#0f172a;--fg:#e5e7eb;--mut:#9ca3af;--card:#1e293b;--line:#334155}}
-*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}a{color:var(--a)}
 header{background:var(--p);color:#fff;padding:18px 24px;border-bottom:4px solid var(--s)}header h1{margin:0;font-size:1.25rem}header .sub{opacity:.85;font-size:.9rem}
 nav{padding:10px 24px;background:var(--card);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px 16px}nav a{color:var(--a);text-decoration:none;font-weight:600}
 main{max-width:1500px;margin:0 auto;padding:20px 16px 48px}h2{margin:28px 0 8px;font-size:1.1rem;border-bottom:2px solid var(--s);padding-bottom:4px}
@@ -326,7 +325,7 @@ table.ft td:nth-child(2){min-width:16rem;overflow-wrap:break-word}table.ft td:nt
     $shell = {
         param($Title, $Body, $Active)
         $navLinks = "<a href='index.html'>Overview</a>" + ((@($rows | ForEach-Object { $_.Workload } | Sort-Object -Unique) | ForEach-Object { $n = $script:TPSiteWorkloadNames[$_]; if ($n) { "<a href='$_.html'>$(& $hx $n)</a>" } }) -join '')
-        "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>$(& $hx $Title) - $(& $hx $brand.CompanyName)</title><style>$css</style></head><body><header><h1>$(& $hx $brand.CompanyName) &middot; Microsoft 365 security assessment</h1><div class='sub'>$tenant &middot; run $runAt &middot; TenantPosture $toolVer</div></header><nav>$navLinks</nav><main>$Body</main></body></html>"
+        "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='color-scheme' content='light'><title>$(& $hx $Title) - $(& $hx $brand.CompanyName)</title><style>$css</style></head><body><header><h1>$(& $hx $brand.CompanyName) &middot; Microsoft 365 security assessment</h1><div class='sub'>$tenant &middot; run $runAt &middot; TenantPosture $toolVer</div></header><nav>$navLinks</nav><main>$Body</main></body></html>"
     }
 
     # ── Per-workload pages ────────────────────────────────────────────────────
