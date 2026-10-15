@@ -215,6 +215,11 @@ try {
     exit 1
 }
 
+# The output folder must be able to hold a protected file (the JSON carries
+# sign-in addresses and message metadata); it is proven here, before any sign-in.
+try { $null = Test-TPSensitiveOutputFolder -Path $OutputPath }
+catch { Write-Host "  [!] $($_.Exception.Message)" -ForegroundColor Red; exit 4 }
+
 if (Get-Command Clear-TPState -ErrorAction SilentlyContinue) { Clear-TPState }
 if (Get-Command Clear-TPSignInTriageState -ErrorAction SilentlyContinue) { Clear-TPSignInTriageState }
 
