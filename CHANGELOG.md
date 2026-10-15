@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **[Docs] Client-facing text names what Microsoft runs today.** From the 2026-10-15 currency scan. PVW-3.3
+  pointed at `compliance.microsoft.com`, the retired classic compliance portal; it now names the Microsoft
+  Purview portal (purview.microsoft.com), in the control, the evaluator and `baselines/purview.md`. TMS-2.2
+  described and remediated "Teams app permission policies" and the Permission policies page, which Microsoft
+  replaced with app centric management (org-wide app settings plus per-app availability) in the 2025
+  auto-migration; the control and `baselines/teams.md` now describe that model. The Conditional Access
+  template `mfa-azure-mgmt` states that Microsoft enforces MFA on these sign-ins itself (admin portals since
+  October 2024; Azure CLI, PowerShell and REST create, update and delete operations from October 2025), so a
+  missing tenant policy no longer means those sign-ins go unprompted. EXO-1.2 and EXO-1.6 carry Microsoft's
+  published timeline for Basic authentication on SMTP AUTH (Exchange Team, January 2026: unchanged until the
+  end of December 2026, then disabled by default for existing tenants with re-enablement possible, final
+  removal to be announced in the second half of 2027), so a client reading the finding knows the password
+  path is still open today. CLAUDE.md now gives the Defender collector's real path (`Collectors/EXO/`) and
+  the PowerShell floor the Exchange module imposes (7.4 or later) beside the module's own 7.0. No verdict
+  changes.
 - **[Fix] EXO-7.2 reaches a verdict when the only unresolvable rule recipients are gone from the directory.**
   An inbox rule forwarding to a deleted mailbox or a pre-migration identity carries a legacy Exchange DN
   (`"Name" [EX:/o=…/cn=…]`) that `Get-Recipient` cannot find. The classifier filed that as `Unresolved`, the
