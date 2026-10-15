@@ -49,6 +49,13 @@ Describe 'Report site preserves every finding, verdict and limitation' {
     }
     AfterAll { if ($script:Out) { Remove-Item -LiteralPath $script:Out -Recurse -Force -ErrorAction SilentlyContinue }; Clear-TPState; Remove-Module 'TenantPosture' -Force -ErrorAction SilentlyContinue }
 
+    It 'renders light whatever the browser prefers: no dark media query, color-scheme light, links in the accent token (the dark branch kept brand navy on navy and default blue links)' {
+        $idx = Get-Content -LiteralPath (Join-Path $script:Site 'index.html') -Raw
+        $idx | Should -Not -Match 'prefers-color-scheme'
+        $idx | Should -Match "<meta name='color-scheme' content='light'>"
+        $idx | Should -Match 'a\{color:var\(--a\)\}'
+        foreach ($page in Get-ChildItem -LiteralPath $script:Site -Filter '*.html') { (Get-Content -LiteralPath $page.FullName -Raw) | Should -Not -Match 'prefers-color-scheme' -Because $page.Name }
+    }
     It 'writes a landing page, one page per workload and an action plan' {
         $script:Page.Keys | Should -Contain 'index'
         foreach ($w in 'AAD', 'DNS', 'PPL', 'DEF', 'INT', 'PVW', 'TMS', 'EXO') { $script:Page.Keys | Should -Contain $w }

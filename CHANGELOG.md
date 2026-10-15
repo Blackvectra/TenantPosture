@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **[Fix] The report site renders light whatever the browser prefers.** The site alone among the HTML
+  deliverables followed the browser's dark preference, and its dark branch kept the profile's navy for
+  headings and the browser's default blue for links on a dark background, which read as unreadable with no
+  way back to light. The dark branch is gone, the page declares `color-scheme: light`, and links use the
+  profile's accent token. `TP.ReportSite.Tests.ps1` pins all three on every page.
 - **[Detection] INT-1.1 reads each compliance policy's non-compliance actions and can be satisfied.** The control
   required "an assigned compliance policy per enrolled platform, each with a non-compliance action" but the collector
   never read the actions, so every tenant with full platform coverage, the first live run included, read "not
