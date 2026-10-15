@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **[Detection] PVW-4.1 judges Audit (Premium) from the licensing the tool already reads.** The evaluator
+  read `AuditConfig.AdvancedAuditEnabled`, a key no collector populates, and so emitted "requires manual
+  verification in the Purview compliance portal" on every tenant, while the fact that decides the control sat
+  in the same results file. Audit (Premium) is a licensed capability, not a switch: Microsoft records the
+  Premium events (MailItemsAccessed, Send, SearchQueryInitiated) for users whose assigned subscription carries
+  the Microsoft 365 Advanced Auditing service plan, on top of a unified audit log that is on. The control now
+  reads the tenant's subscriptions and their service plans (`AAD-Inventory` SubscribedSkus, through the
+  PVW-4.1 rule in `Config/license-service-plans.json`), the unified audit log switch (`Purview` AuditConfig)
+  and each user's assigned subscriptions (`AAD-Users` now stores `AssignedSkuIds` beside `LicenseCount`;
+  SKU ids are not personal data). No subscription with the plan is a Gap naming the subscriptions read, which
+  license gating turns into the upgrade opportunity on tenants without E5; the plan on every enabled, licensed
+  member user with the audit log on is Satisfied; some users without it is Partial naming them; the plan held
+  but assigned to nobody is a Gap (licensed but not configured); the audit log off is a shortfall; subscriptions
+  not read, or users read without `AssignedSkuIds` (an older results file), is not assessed with the licensing
+  stated as verified. A service plan switched off inside an assigned subscription is not read and the finding
+  says so. `TP.DefenderPurviewTruth.Tests.ps1` pins each verdict from raw collector shapes;
+  `TP.IdentityTruth.Tests.ps1` pins the collector field.
 - **[Fix] EXO-7.2 reaches a verdict when the only unresolvable rule recipients are gone from the directory.**
   An inbox rule forwarding to a deleted mailbox or a pre-migration identity carries a legacy Exchange DN
   (`"Name" [EX:/o=…/cn=…]`) that `Get-Recipient` cannot find. The classifier filed that as `Unresolved`, the
