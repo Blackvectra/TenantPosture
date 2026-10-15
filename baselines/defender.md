@@ -755,7 +755,7 @@ No domain, address, URL or file allow entry in the Tenant Allow/Block List is pe
 An allow entry overrides a filtering verdict outright — mail, a URL or a file hash on the allow list bypasses the detonation and reputation checks that would otherwise stop it. Entries are routinely added under pressure during an incident to unblock a sender and are almost never removed afterwards. A never-expiring allow is a permanent, undocumented hole in mail filtering that no anti-spam or anti-phishing policy review will surface, because it lives on a different surface entirely.
 
 **Remediation:**
-Defender portal > Policies & rules > Threat policies > Tenant Allow/Block Lists. Review every allow entry. Remove any whose reason no longer applies, and set an expiry date on the rest — Microsoft caps allow entries at 30 or 90 days for exactly this reason. Block entries may remain permanent.
+Defender portal > Policies & rules > Threat policies > Tenant Allow/Block Lists. Review every allow entry on the Domains & addresses, URLs and Files tabs; remove any whose reason no longer applies and set an expiry on the rest (an allow expires 45 days after last use by default, or on a date up to 30 days out). Spoofed-sender allow entries never expire by design: review that each still names a sending service in use and remove the rest. Block entries may remain permanent.
 
 **Framework mappings:**
 
