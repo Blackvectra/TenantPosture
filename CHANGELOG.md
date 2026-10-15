@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **[Fix] AAD-2.3 and INT-1.2 judge the device requirement on who is protected.** Both controls credited a
+  compliant-device policy from a private check: INT-1.2 read "All users" and "All applications" only, so a
+  policy that excluded users or applications, applied to the browser alone, or was limited to a platform, a
+  location or a device filter still passed and the finding claimed protection for everyone; AAD-2.3 counted
+  any enabled policy requiring a device whatever its scope, so a policy on one group passed the control for
+  the tenant. One shared judgment (`Get-TPCADeviceComplianceCoverage`, the same combined-coverage helper
+  the MFA, legacy-authentication and device-code controls use, with the interactive client app types) now
+  decides both: Satisfied only from enabled policies requiring a compliant or hybrid-joined device of all
+  users on all applications with no narrowing; a principal every such policy excludes is Partial naming it;
+  different exclusions are not assessed; a narrower policy is a Gap that names why; one that lists the
+  device only as an alternative beside MFA stays Partial, named; a report-only policy that would cover
+  everyone is Partial, named as staged. The automation audit now follows a verdict helper that renders
+  through another helper.
 - **[CI] The test suite is judged by one gate, and `FailedCount` is not it.** A container that fails DISCOVERY runs
   no tests, so it reports no failures. The merge resolution between #162 and #156 dropped one closing brace in
   `Testing/TP.IdentityTruth.Tests.ps1`; the local check that approved it read `FailedCount`, saw 0, and Pester on

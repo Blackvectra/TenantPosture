@@ -148,25 +148,19 @@ function Test-TPControlIntune {
         if (-not $ca -or -not $ca.Success) {
             Add-TPFinding -ControlId 'INT-1.2' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.2') -Detail 'Conditional Access policies were not collected; not assessed.'
         } else {
-            $device = @('compliantDevice','domainJoinedDevice')
+            # One judgment shared with AAD-2.3 (Get-TPCADeviceComplianceCoverage): the
+            # requirement counts only from enabled policies that require a device of
+            # all users on all applications with no narrowing, reaching the browser
+            # and the desktop and mobile clients, exclusions combined across policies.
+            # The private check this replaced read "All users" and "All applications"
+            # only, so a policy excluding users or applications, limited to the
+            # browser, a platform, a location or a device filter still passed and the
+            # finding claimed protection for everyone (2026-10-15 review).
             $pols = @(Get-TPObjectField -Item $ca.Data -Key 'Policies' -Default @() | Where-Object { $null -ne $_ })
-            $asks = @($pols | Where-Object { @((Get-TPCAGrantAlternatives -Policy $_).Controls) -contains 'compliantDevice' -and
-                [string](Get-TPObjectField -Item $_ -Key 'State' -Default '') -in @('enabled','enabledForReportingButNotEnforced') })
-            $full = @($asks | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'State' -Default '') -eq 'enabled' -and
-                (Test-TPCAAllUsers $_) -and (Test-TPCAAllApps $_) -and (Test-TPCAGrantRequires -Policy $_ -Any $device) })
-            $names = { param($l) (@($l) | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'DisplayName' -Default '?') }) -join ', ' }
-            if ($full.Count -gt 0) {
-                Add-TPFinding -ControlId 'INT-1.2' -State 'Satisfied' -Category 'Endpoint' -Title $c.Title -Severity 'Informational' -FrameworkIds (& $cit 'INT-1.2') `
-                    -Detail "A compliant (or hybrid-joined) device is required for all users on all cloud apps: $(& $names $full)."
-            } elseif ($asks.Count -gt 0) {
-                Add-TPFinding -ControlId 'INT-1.2' -State 'Partial' -Category 'Endpoint' -Title $c.Title -Severity 'Medium' -FrameworkIds (& $cit 'INT-1.2') `
-                    -Detail "Conditional Access asks for a compliant device, but not of every user on every app, or only in report-only mode, or as one alternative among others: $(& $names $asks)." `
-                    -RequiredValue 'Enabled CA policy requiring a compliant device for all users on all cloud apps' -Remediation $c.Remediation
-            } else {
-                Add-TPFinding -ControlId 'INT-1.2' -State 'Gap' -Category 'Endpoint' -Title $c.Title -Severity $c.Severity -FrameworkIds (& $cit 'INT-1.2') `
-                    -Detail 'No Conditional Access policy requires a compliant device, so a device Intune marks non-compliant (or one never enrolled) still reaches Microsoft 365.' `
-                    -RequiredValue 'Enabled CA policy requiring a compliant device for all users on all cloud apps' -Remediation $c.Remediation
-            }
+            Add-TPCADeviceComplianceFinding -ControlId 'INT-1.2' -Control $c -FrameworkIds (& $cit 'INT-1.2') `
+                -Model (Get-TPCADeviceComplianceCoverage -Policies $pols) `
+                -Consequence 'A device Intune marks non-compliant (or one never enrolled) still reaches Microsoft 365.' `
+                -RequiredValue 'Enabled CA policy requiring a compliant device for all users on all cloud apps'
         }
     }
 
