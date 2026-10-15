@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[Fix] A Purview control that was not assessed says why.** On the 2026-10-14 live run PVW-2.6 read
+  "AutoLabelPolicies was not collected; not assessed." while the Exceptions array said that
+  `Get-AutoSensitivityLabelPolicy` was not available to the signed-in account (a missing Purview role), so the
+  ticket raised from the report could not say what to do. The Purview collector now records the reason beside
+  each failed section (`Data.SectionErrors.<Section>`: the cmdlet-availability sentence with its role hint, or
+  the thrown message), which travels with the results file, and the seven Purview findings built from the
+  "was not collected" boilerplate go through `Get-TPSectionNotCollectedDetail`, which keeps that sentence as
+  the prefix (every consumer that keys on it is unchanged) and appends "Reason recorded by the collector: ...",
+  reading the registered exception as a fallback on a live run and capping a long message. Six of the seven
+  findings also carried no framework citations and so vanished from the NIST rollup when not assessed; they
+  carry them now. A results file from before `SectionErrors` keeps the plain sentence. The other collectors
+  do not record section reasons yet; the helper returns the plain sentence for them.
 - **[Fix] AAD-6.2 judges the Microsoft-managed user consent policy instead of calling it custom.** Microsoft's
   default for new tenants, `microsoft-user-default-recommended` ("Let Microsoft manage your consent
   settings"), lets users consent to any user-consentable delegated permission from any publisher except the
