@@ -28,18 +28,37 @@ function Test-TPControlEXOMailboxAudit {
     $orgDisabled = Get-TPNestedProperty -Object $exoData -Path 'Data.OrganizationConfig.AuditDisabled' -Default $null
     $sample      = Get-TPNestedProperty -Object $exoData -Path 'Data.MailboxAuditSummary.SampleMailboxAudit' -Default $null
 
+    # The sampled mailboxes' own AuditEnabled flag is context, never evidence of
+    # the switch. Microsoft (Manage mailbox auditing): while mailbox auditing on
+    # by default is on, Get-Mailbox "always displays True" for AuditEnabled and
+    # setting it False "is ignored"; while it is off, "no mailbox actions are
+    # audited, even if mailbox auditing is enabled on a mailbox". So a True
+    # sample never proves the switch is on, and a False sample is not a
+    # per-mailbox shortfall. Reading the sample as the switch passed this
+    # control when OrganizationConfig had not been read, and docked it Partial
+    # for a flag Exchange does not act on.
+    $sampleText = ''
+    if ($sample) {
+        $sampleAll   = Get-TPObjectField -Item $sample -Key 'AllEnabled' -Default $null
+        $sampleCount = Get-TPObjectField -Item $sample -Key 'SampleCount' -Default 0
+        if ($null -ne $sampleAll) {
+            $sampleWord = if ([bool]$sampleAll) { 'all True' } else { 'mixed' }
+            $sampleText = " Sampled mailboxes ($sampleCount): per-mailbox AuditEnabled = $sampleWord (informational; Microsoft documents that Exchange ignores this flag while the organization switch is on)."
+        }
+    }
+
     if ($orgDisabled -eq $true) {
         Add-TPFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
             -Detail 'Mailbox audit logging is DISABLED at the organization level. No mailbox activity will be logged.' `
             -CurrentValue 'AuditDisabled = $true' -RequiredValue 'AuditDisabled = $false' `
             -Remediation $control.Remediation
-    } elseif ($sample -and -not $sample.AllEnabled) {
-        Add-TPFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
-            -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
-            -Detail "Organization-level audit is enabled but some mailboxes have audit disabled (sample of $($sample.SampleCount) mailboxes)." `
-            -CurrentValue 'Some mailboxes audit-disabled' -RequiredValue 'All mailboxes audit-enabled'
-    } elseif ($orgDisabled -eq $false -or ($sample -and $sample.AllEnabled)) {
+    } elseif ($null -eq $orgDisabled) {
+        Add-TPFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail "The organization-level mailbox auditing switch (Get-OrganizationConfig AuditDisabled) was not read; not assessed. A sampled mailbox's own AuditEnabled value is not evidence of it: Microsoft documents that it always displays True while the switch is on and that nothing is audited while the switch is off.$sampleText" `
+            -CurrentValue 'OrganizationConfig.AuditDisabled not read' -RequiredValue 'AuditDisabled = $false'
+    } elseif ($orgDisabled -eq $false) {
         # The expected state has two parts: the organization switch AND no mailbox in
         # the audit bypass list. The switch is verified above; the bypass half comes
         # from the inventory read (the same evidence EXO-6.3 scores), and each half
@@ -63,12 +82,12 @@ function Test-TPControlEXOMailboxAudit {
         } else {
             Add-TPFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
                 -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
-                -Detail "Mailbox audit logging is enabled at the organization level and no account is in the audit bypass list."
+                -Detail "Mailbox audit logging is enabled at the organization level and no account is in the audit bypass list.$sampleText"
         }
     } else {
         Add-TPFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
             -Title $control.Title -FrameworkIds $citations `
-            -Detail 'Audit status could not be determined'
+            -Detail "The organization-level mailbox auditing switch was returned as '$orgDisabled', which is neither True nor False; not assessed."
     }
 }
 
@@ -105,7 +124,7 @@ function Test-TPControlEXOSmtpAuth {
     if ($tenantDisabled -ne $true) {
         Add-TPFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
-            -Detail 'SMTP AUTH is enabled for the whole organization, so every mailbox that does not override it can submit mail over SMTP AUTH. It is a password-spray and spam-relay target, and wherever basic authentication is still accepted for it, sign-in bypasses MFA and Conditional Access.' `
+            -Detail 'SMTP AUTH is enabled for the whole organization, so every mailbox that does not override it can submit mail over SMTP AUTH. It is a password-spray and spam-relay target, and wherever basic authentication is still accepted for it, sign-in bypasses MFA and Conditional Access. Microsoft''s published timeline (Exchange Team, January 2026): Basic authentication for SMTP AUTH stays available until the end of December 2026, is then disabled by default for existing tenants (administrators can re-enable it), and its final removal date is to be announced in the second half of 2027; OAuth client submission is unaffected.' `
             -CurrentValue 'SmtpClientAuthenticationDisabled = $false' `
             -RequiredValue 'Set-TransportConfig -SmtpClientAuthenticationDisabled $true' `
             -Remediation $control.Remediation
@@ -433,7 +452,7 @@ function Test-TPControlEXOModernAuth {
         $smtpText = switch ($smtpPath) {
             'Closed'    { 'SMTP AUTH is disabled for the organization and no mailbox overrides it' }
             'Available' {
-                if ($smtpOrgDisabled -eq $false) { 'SMTP AUTH is enabled for the organization (it carries OAuth as well as passwords)' }
+                if ($smtpOrgDisabled -eq $false) { 'SMTP AUTH is enabled for the organization (it carries OAuth as well as passwords; Microsoft disables Basic authentication for SMTP AUTH by default only from the end of December 2026)' }
                 else { "SMTP AUTH is disabled for the organization but $overrides mailbox(es) override it$(if ($overrideSample.Count -gt 0) { ' (for example ' + (($overrideSample | Select-Object -First 3) -join ', ') + ')' })" }
             }
             default     { if ($smtpOrgDisabled -eq $true) { 'SMTP AUTH is disabled for the organization but the per-mailbox overrides were not read' } else { 'the SMTP AUTH setting was not read' } }

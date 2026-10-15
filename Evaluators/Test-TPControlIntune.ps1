@@ -614,10 +614,21 @@ function Test-TPControlIntuneWindowsHello {
     } elseif (@($states | Where-Object { $_ }).Count -eq 0) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'The Windows Hello for Business enrollment state was not returned; not assessed.'
     } else {
-        $how = if ($states -contains 'disabled') { 'disabled' } else { 'not configured (Intune does not manage it; Windows'' own default applies)' }
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "Windows Hello for Business is $how in the Intune enrollment configuration. (A setting made in an Account Protection or settings-catalog policy instead is not read here.)" `
-            -CurrentValue "State = $($states -join ', ')" -RequiredValue 'Windows Hello for Business enabled' -Remediation $ctrl.Remediation
+        # Never a Gap from this read alone. Microsoft's own guidance (Configure
+        # Windows Hello for Business, Intune section): the tenant-wide policy
+        # "is only applied at enrollment time", "applies to all devices", and
+        # "for this reason, the policy is usually disabled and Windows Hello for
+        # Business is enabled using a policy targeted to a security group" (an
+        # endpoint-security Account protection profile, or the settings
+        # catalog). This assessment does not read those policies yet, so a
+        # disabled or unconfigured tenant policy is the documented default of a
+        # tenant that enables Windows Hello elsewhere, not evidence that it is
+        # off. Scoring it as a Gap was a false Gap on every tenant following
+        # Microsoft's pattern; the limit is recorded in Config/evidence-limits.json.
+        $how = if ($states -contains 'disabled') { 'disabled' } else { 'not configured' }
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Windows Hello for Business is $how in the tenant-wide Intune enrollment configuration. Microsoft's documented pattern leaves that policy disabled and enables Windows Hello for Business through an endpoint-security Account protection or settings-catalog policy targeted to a security group, which this assessment does not read, so whether Windows Hello for Business is enabled for enrolled devices is not established; not assessed. Confirm in Intune > Endpoint security > Account protection (or the settings catalog) that a policy with Use Windows Hello for Business = Enabled is assigned to the users or devices in scope." `
+            -CurrentValue "Tenant-wide enrollment policy state = $($states -join ', ')"
     }
 }
 

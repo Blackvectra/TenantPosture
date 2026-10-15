@@ -2849,7 +2849,7 @@
     {
       "ControlId": "TMS-2.2",
       "Title": "Unverified App Publisher Blocked",
-      "Description": "Teams app permission policy restricts installation to Microsoft and verified third-party publishers only.",
+      "Description": "Third-party Teams apps are limited to reviewed apps from verified publishers through the org-wide app settings and each app's availability (app centric management, which replaced Teams app permission policies in the 2025 migration).",
       "BusinessRisk": "Apps from unverified publishers have not been vetted. Malicious Teams apps can access meeting transcripts, chat, and files.",
       "Severity": "Medium",
       "Workload": "TMS",
@@ -2857,7 +2857,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-TPControlTeamsUnverifiedApps",
-      "Remediation": "Teams Admin Center > Teams apps > Permission policies > Block all apps from unknown publishers.",
+      "Remediation": "Teams admin center > Teams apps > Manage apps > Org-wide app settings: turn off letting users install third-party apps by default and block new third-party apps until reviewed; then set each approved app's availability (Available to) per app. App permission policies no longer apply after the migration to app centric management.",
       "References": {
         "CISControls": [
           "2.5"
@@ -3456,7 +3456,7 @@
     {
       "ControlId": "AAD-9.1",
       "Title": "Authenticator Number Matching Enabled",
-      "Description": "Microsoft Authenticator number matching is explicitly enabled to prevent MFA fatigue attacks.",
+      "Description": "Microsoft Authenticator number matching protects against MFA fatigue attacks. Microsoft enforces it for every Authenticator push notification (since May 2023) and users cannot opt out, so there is no tenant setting to read or score; this control is recorded as enforced by the platform.",
       "BusinessRisk": "Without number matching, attackers can spam MFA push requests until a user accidentally approves. MFA fatigue is a documented breach technique.",
       "Severity": "High",
       "Workload": "AAD",
@@ -3464,7 +3464,7 @@
       "Automated": true,
       "CollectorDependency": "AAD-AuthPolicies",
       "EvaluatorFunction": "Test-TPControlAADAuthenticatorNumberMatch",
-      "Remediation": "Entra ID > Security > Authentication methods > Microsoft Authenticator > Configure > Require number matching = Enabled.",
+      "Remediation": "No action: enforced by Microsoft. To add context beyond the number (application name and location), set Entra ID > Authentication methods > Microsoft Authenticator > Configure > Show application name in push and passwordless notifications and Show geographic location to Enabled.",
       "References": {
         "CISControls": [
           "6.3"
@@ -4193,7 +4193,7 @@
       "Automated": true,
       "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-TPControlPurviewComplianceScore",
-      "Remediation": "compliance.microsoft.com > Compliance Manager > Improvement actions > Assign to owners and set target dates.",
+      "Remediation": "Microsoft Purview portal (purview.microsoft.com) > Compliance Manager > Improvement actions > Assign to owners and set target dates.",
       "References": {
         "CISControls": [],
         "CIS": "3.5.2",
@@ -4796,7 +4796,7 @@
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
       "EvaluatorFunction": "Test-TPControlDefenderPriorityAccounts",
-      "Remediation": "Defender portal > Settings > Email & collaboration > User tags > Global Settings > Priority account protection. Tag executives and admins as priority accounts.",
+      "Remediation": "Tag executives and administrators as priority accounts (up to 250): Microsoft 365 admin center > Users > Active users > More actions > Manage priority accounts; or Defender portal > Settings > Email & collaboration > User tags > Priority account; or Exchange Online PowerShell: Set-User -Identity <UPN> -VIP $true. Then confirm priority account protection is on: Defender portal > Settings > Email & collaboration > Priority account protection (Get-EmailTenantSettings | Format-List EnablePriorityAccountProtection).",
       "LicenseRequirement": "Defender for Office 365 Plan 2 (M365 E5 or add-on)",
       "References": {
         "CISControls": [],
@@ -5561,7 +5561,7 @@
       "CollectorDependency": "AAD-Inventory",
       "EvaluatorFunction": "Test-TPControlInventoryStaleGuests",
       "Remediation": "Entra ID > External Identities > All users > Filter by guest, sort by last sign-in. Disable or delete accounts inactive 90+ days. Implement access reviews: PIM > Access reviews > Create review for guest users.",
-      "LicenseRequirement": "Included (all plans) — Access Reviews require Entra P2",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
         "CISControls": [
           "5.3"
@@ -5590,7 +5590,7 @@
       "CollectorDependency": "AAD-Inventory",
       "EvaluatorFunction": "Test-TPControlInventoryStaleMembers",
       "Remediation": "Verify each account represents an active user. Disable accounts for departed employees immediately. Revoke all active sessions. Remove assigned licenses. Review for any recent inbox rules or forwarding.",
-      "LicenseRequirement": "Included (all plans)",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
         "CISControls": [
           "5.3"

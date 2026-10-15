@@ -39,6 +39,9 @@ function Invoke-TPCollectAADInventory {
             SecureScore         = $null
             LastSignInSummary   = @{}
             SubscribedSkus      = @()
+            # $false once Graph refused signInActivity for lack of Entra ID P1/P2 and the
+            # guest and member lists were re-read without it (absent on older results = $true).
+            SignInActivityLicensed = $true
         }
     }
 
@@ -63,27 +66,56 @@ function Invoke-TPCollectAADInventory {
             Write-Verbose "AAD-SubscribedSkus failed — needs Organization.Read.All or Directory.Read.All"
         }
 
-        # Guest users + last sign-in
-        try {
-            # A single $top=500 page with no @odata.nextLink loop evaluated at
-            # most the first 500 guests on any larger tenant, with the section
-            # still marked Collected — silently truncated, not failed. Page
-            # through nextLink the same way AppCredentials does below.
-            $guestRows = @()
-            $next = "https://graph.microsoft.com/v1.0/users?`$select=id,displayName,userPrincipalName,accountEnabled,userType,createdDateTime,signInActivity&`$filter=userType eq 'Guest'&`$top=500"
+        # Shared by the guest and member reads below. signInActivity requires
+        # Microsoft Entra ID P1 or P2 (user resource type) and Graph refuses the
+        # WHOLE query without it ("Neither tenant is B2C or tenant doesn't have
+        # premium license"), which lost the guest list itself on Business
+        # Standard and Office 365 E3 tenants and filed AAD-12.2 and AAD-12.3 as
+        # collection failures. On that error the list is re-read without
+        # signInActivity and SignInActivityLicensed records the fact, so the
+        # controls can say "license", not "the read failed". Any other error
+        # still fails the section. Paged through @odata.nextLink.
+        $pageUsers = {
+            param([string] $Select, [string] $Filter, [string] $Source)
+            $rows = @()
+            $next = "https://graph.microsoft.com/v1.0/users?`$select=$Select&`$filter=$Filter&`$top=500"
             $maxPages = 200; $pageCount = 0
             while ($next -and $pageCount -lt $maxPages) {
                 $page = Invoke-TPGraphRequest -Method GET -Uri $next -ErrorAction Stop
-                if ($page.value) { $guestRows += $page.value }
+                if ($page.value) { $rows += $page.value }
                 $next = $page['@odata.nextLink']
                 $pageCount++
             }
             if ($pageCount -ge $maxPages -and $next) {
                 if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
-                    Register-TPException -Source 'AAD-GuestInventory' `
-                        -Message "Pagination cap reached ($maxPages pages); guest user list may be truncated."
+                    Register-TPException -Source $Source -Message "Pagination cap reached ($maxPages pages); user list may be truncated."
                 }
             }
+            # Emit the rows one by one, never `,$rows`: an array returned as one
+            # object through the try block in $readUsersWithSignIn arrives at the
+            # caller's @() NESTED (one element holding the whole list), so an empty
+            # list became one empty-array row whose .displayName throws under
+            # StrictMode, and a full list became one row. Hashtables are not
+            # unrolled by the pipeline, so each row stays whole.
+            $rows
+        }
+        $readUsersWithSignIn = {
+            param([string] $Select, [string] $Filter, [string] $Source)
+            try { & $pageUsers $Select $Filter $Source }
+            catch {
+                $why = "$($_.Exception.Message) $([string](Get-TPObjectField -Item $_.ErrorDetails -Key 'Message' -Default ''))"
+                if ($why -notmatch 'RequestFromNonPremiumTenant|premium license') { throw }
+                $result.Data.SignInActivityLicensed = $false
+                if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                    Register-TPException -Source $Source -Message "signInActivity requires Microsoft Entra ID P1 or P2 and Graph refused it ($($_.Exception.Message)); the accounts were re-read without it, so last sign-in is not known."
+                }
+                & $pageUsers ($Select -replace ',signInActivity', '') $Filter $Source
+            }
+        }
+
+        # Guest users + last sign-in
+        try {
+            $guestRows = @(& $readUsersWithSignIn 'id,displayName,userPrincipalName,accountEnabled,userType,createdDateTime,signInActivity' "userType eq 'Guest'" 'AAD-GuestInventory')
             $result.Data.GuestUsers = @($guestRows | ForEach-Object {
                 # Graph does NOT return signInActivity at all for a user who
                 # never signed in, or who last signed in before April 2020
@@ -107,7 +139,8 @@ function Invoke-TPCollectAADInventory {
                     CreatedDateTime   = [string]($_.createdDateTime ?? '')
                     LastSignIn        = $lastSign
                     DaysSinceSignIn   = $daysSince
-                    IsStale           = $daysSince -gt 90
+                    # Not known without the license: never stale, never fresh.
+                    IsStale           = $(if ($result.Data.SignInActivityLicensed -eq $false) { $null } else { $daysSince -gt 90 })
                 }
             })
             $result.Data.SectionStatus.GuestUsers = 'Collected'
@@ -120,23 +153,7 @@ function Invoke-TPCollectAADInventory {
 
         # Stale member accounts (signInActivity requires AuditLog.Read.All)
         try {
-            # Same truncation defect as GuestUsers above: page through
-            # @odata.nextLink instead of trusting a single $top=500 page.
-            $staleRows = @()
-            $next = "https://graph.microsoft.com/v1.0/users?`$select=id,displayName,userPrincipalName,accountEnabled,createdDateTime,signInActivity,assignedLicenses&`$filter=userType eq 'Member' and accountEnabled eq true&`$top=500"
-            $maxPages = 200; $pageCount = 0
-            while ($next -and $pageCount -lt $maxPages) {
-                $page = Invoke-TPGraphRequest -Method GET -Uri $next -ErrorAction Stop
-                if ($page.value) { $staleRows += $page.value }
-                $next = $page['@odata.nextLink']
-                $pageCount++
-            }
-            if ($pageCount -ge $maxPages -and $next) {
-                if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
-                    Register-TPException -Source 'AAD-StaleAccounts' `
-                        -Message "Pagination cap reached ($maxPages pages); member account list may be truncated."
-                }
-            }
+            $staleRows = @(& $readUsersWithSignIn 'id,displayName,userPrincipalName,accountEnabled,createdDateTime,signInActivity,assignedLicenses' "userType eq 'Member' and accountEnabled eq true" 'AAD-StaleAccounts')
             # Last ACTIVITY, not last attempt: lastSignInDateTime records the
             # last interactive attempt, successful or not, so a departed user
             # being password-sprayed looked active, while a user who only
@@ -149,7 +166,8 @@ function Invoke-TPCollectAADInventory {
                 $p = [datetime]::MinValue
                 if ($v -and [datetime]::TryParse([string]$v, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$p)) { $p.ToUniversalTime() } else { $null } }
             $now = [datetime]::UtcNow
-            $stale = @(foreach ($u in $staleRows) {
+            # Without the license no account can be called stale; the evaluator reads SignInActivityLicensed.
+            $stale = @(foreach ($u in $(if ($result.Data.SignInActivityLicensed -eq $false) { @() } else { $staleRows })) {
                 $success = & $parseUtc (Get-TPNestedProperty -Object $u -Path 'signInActivity.lastSuccessfulSignInDateTime' -Default '')
                 $basis = 'last successful sign-in'
                 $last = $success
