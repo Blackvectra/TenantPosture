@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[Fix] AAD-6.2 judges the Microsoft-managed user consent policy instead of calling it custom.** Microsoft's
+  default for new tenants, `microsoft-user-default-recommended` ("Let Microsoft manage your consent
+  settings"), lets users consent to any user-consentable delegated permission from any publisher except the
+  file, site, mail, calendar, chat, online-meeting, contacts, tasks and people scopes Microsoft lists; its
+  companion `microsoft-user-default-allow-consent-apps` lets users consent to named mail clients for mail
+  scopes. The evaluator knew only the legacy and low-impact built-ins and filed anything else as "a custom
+  permission grant policy that requires manual verification", so every tenant on Microsoft's own default was
+  not assessed. The managed policy is now a Partial: verified for the scopes it blocks, a shortfall for every
+  other delegated permission it still allows against the baseline's "disabled, or low-impact from verified
+  publishers"; the mail-client companion is named beside either built-in and never called custom; the legacy
+  policy beside the managed one is still a Gap; a policy that is none of Microsoft's built-ins is still not
+  assessed. `TP.ComponentVerdicts.Tests.ps1` pins each.
 - **[Fix] EXO-7.2 reaches a verdict when the only unresolvable rule recipients are gone from the directory.**
   An inbox rule forwarding to a deleted mailbox or a pre-migration identity carries a legacy Exchange DN
   (`"Name" [EX:/o=…/cn=…]`) that `Get-Recipient` cannot find. The classifier filed that as `Unresolved`, the
