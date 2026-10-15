@@ -399,38 +399,114 @@ function Test-TPControlPurviewSensitiveInfoTypes {
 }
 
 # ── PVW-4.1 Purview Audit (Premium) Enabled ───────────────────────────────────
+# Audit (Premium) is a licensed capability, not a tenant switch: Microsoft records
+# the Premium events (MailItemsAccessed, Send, SearchQueryInitiated) for users whose
+# assigned subscription carries the Microsoft 365 Advanced Auditing service plan
+# (Config/license-service-plans.json, control rule PVW-4.1), on top of a unified
+# audit log that is on. The tool already reads both halves: the tenant's
+# subscriptions with their service plans (AAD-Inventory SubscribedSkus) and each
+# user's assigned subscriptions (AAD-Users AssignedSkuIds). Judging from them
+# replaces the "requires manual verification" this control emitted on every tenant
+# while the licensing fact sat in the same results file.
 function Test-TPControlPurviewAuditPremium {
     [CmdletBinding()] param()
     $cid = 'PVW-4.1'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-TPFrameworkCitations -ControlId $cid
     $pvw = Get-TPRawData -Key 'Purview'
-    if (-not $pvw -or -not $pvw.Success) { Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Purview data not collected'; return }
+    if (-not $pvw -or -not $pvw.Success) { Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Purview data not collected'; return }
     # Empty is not clean. The collector reported success, but this section
     # may not have landed — a failed sub-query leaves it absent or empty,
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-TPSectionCollected $pvw 'AuditConfig')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AuditConfig was not collected; not assessed.'
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AuditConfig was not collected; not assessed.'
         return
     }
-    # AdvancedAuditEnabled is not a key the collector populates — Get-AdminAuditLogConfig
-    # (Collectors/Purview/Invoke-TPCollectPurview.ps1) only writes
-    # UnifiedAuditLogIngestionEnabled / AdminAuditLogEnabled / AdminAuditLogAgeLimit.
-    # Defaulting the read to $false made this control score Partial on every
-    # tenant regardless of real Audit Premium status. Default to $null instead
-    # so "never collected" is distinguishable from a real $false and reported
-    # honestly rather than as a confident, uncomputed verdict.
-    $premiumRaw = Get-TPNestedProperty -Object $pvw -Path 'Data.AuditConfig.AdvancedAuditEnabled' -Default $null
-    if ($null -eq $premiumRaw) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Purview Audit (Premium) status is not collected by this tool; requires manual verification in the Purview compliance portal.'
+    # Licensing must be positively present. HasLicenseData false means the
+    # subscriptions were not read, not that none carries the plan.
+    $licProfile = Get-TPTenantLicenseProfile
+    if ((Get-TPObjectField -Item $licProfile -Key 'HasLicenseData' -Default $false) -ne $true) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'The tenant''s subscriptions (subscribedSkus) were not read, so whether any carries the Audit (Premium) service plan is not known; not assessed.'
         return
     }
-    $premiumEnabled = [bool]$premiumRaw
-    if ($premiumEnabled) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Purview Audit (Premium) is enabled. High-value events including MailItemsAccessed and SearchQueryInitiated are captured.'
+    $rules = Get-TPLicensePlanRules
+    if (-not $rules.Controls.ContainsKey($cid)) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Config/license-service-plans.json carries no service-plan rule for PVW-4.1, so the Audit (Premium) plan cannot be identified; not assessed.'
+        return
+    }
+    $rule = @($rules.Controls[$cid])
+    $inv  = Get-TPRawData -Key 'AAD-Inventory'
+    $skus = @(Get-TPNestedProperty -Object $inv -Path 'Data.SubscribedSkus' -Default @())
+    $premiumSkus = @($skus | Where-Object {
+        $plans = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($p in @(Get-TPObjectField -Item $_ -Key 'ServicePlans' -Default @())) { if ($p) { [void]$plans.Add(([string]$p).Trim()) } }
+        Test-TPLicensePlanRule -Rule $rule -PlanSet $plans
+    })
+    $skuName = { param($sku) [string](Get-TPObjectField -Item $sku -Key 'SkuPartNumber' -Default '') }
+    if ($premiumSkus.Count -eq 0) {
+        $held = @($skus | ForEach-Object { & $skuName $_ } | Where-Object { $_ } | Select-Object -Unique)
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "No subscription in this tenant carries the Microsoft 365 Advanced Auditing service plan (subscriptions read: $(if ($held) { $held -join ', ' } else { 'none' })), so Audit (Premium) events (MailItemsAccessed, Send, SearchQueryInitiated) are recorded for no user and the audit log keeps only Audit (Standard) events and retention." `
+            -CurrentValue 'No subscription with the Audit (Premium) service plan' `
+            -RequiredValue 'Microsoft 365 E5, E5 Compliance or the E5 eDiscovery and Audit add-on assigned to every user' `
+            -Remediation $ctrl.Remediation
+        return
+    }
+    $skuNames   = @($premiumSkus | ForEach-Object { & $skuName $_ } | Where-Object { $_ } | Select-Object -Unique)
+    $premiumIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($sku in $premiumSkus) { $id = [string](Get-TPObjectField -Item $sku -Key 'SkuId' -Default ''); if ($id) { [void]$premiumIds.Add($id.Trim()) } }
+
+    $verified = @("Audit (Premium) is licensed: $($skuNames -join ', ') carry the Microsoft 365 Advanced Auditing service plan.")
+    $short = @(); $unknown = @(); $forceGap = $false; $affected = @()
+
+    # The Premium events ride the unified audit log; off means nothing is recorded.
+    $ingRaw = Get-TPNestedProperty -Object $pvw -Path 'Data.AuditConfig.UnifiedAuditLogIngestionEnabled' -Default $null
+    $ingestion = if ($ingRaw -is [bool]) { $ingRaw } elseif ([string]$ingRaw -in @('True', 'False')) { ([string]$ingRaw -eq 'True') } else { $null }
+    if ($ingestion -eq $true) { $verified += 'The unified audit log is on (UnifiedAuditLogIngestionEnabled = True), so the Premium events are recorded for licensed users.' }
+    elseif ($ingestion -eq $false) { $short += 'The unified audit log is off (UnifiedAuditLogIngestionEnabled = False), so no audit event is recorded for anyone, Premium or Standard (also scored under PVW-1.1).' }
+    else { $unknown += 'whether the unified audit log is on (UnifiedAuditLogIngestionEnabled was not returned)' }
+
+    # Per-user coverage: the plan reaches a user only through an assigned
+    # subscription that carries it. Enabled member users with at least one
+    # license are the population; guests and disabled accounts are not.
+    $usersRaw = Get-TPRawData -Key 'AAD-Users'
+    $rows     = @(Get-TPNestedProperty -Object $usersRaw -Path 'Data.Users' -Default @())
+    $usersOk  = ($null -ne $usersRaw -and (Get-TPObjectField -Item $usersRaw -Key 'Success' -Default $false) -eq $true -and $rows.Count -gt 0)
+    $licensed = @($rows | Where-Object {
+        (Get-TPObjectField -Item $_ -Key 'AccountEnabled' -Default $false) -eq $true -and
+        [string](Get-TPObjectField -Item $_ -Key 'UserType' -Default 'Member') -ne 'Guest' -and
+        [int](Get-TPObjectField -Item $_ -Key 'LicenseCount' -Default 0) -gt 0 })
+    $withIds  = @($licensed | Where-Object { $null -ne (Get-TPObjectField -Item $_ -Key 'AssignedSkuIds' -Default $null) })
+    if (-not $usersOk -or $withIds.Count -lt $licensed.Count) {
+        $unknown += 'which users hold a subscription that carries the plan (per-user subscription assignments were not read: AAD-Users was not collected, or the results predate the AssignedSkuIds field)'
+    } elseif ($licensed.Count -eq 0) {
+        $unknown += 'which users hold the plan: no enabled, licensed member user was read'
     } else {
-        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail 'Purview Audit (Standard) only. Premium audit events like MailItemsAccessed (required for mail exfil investigations) and SearchQueryInitiated are not captured. Requires E5 or E5 Compliance add-on.' -Remediation $ctrl.Remediation
+        $covered = @($licensed | Where-Object {
+            $ids = @(Get-TPObjectField -Item $_ -Key 'AssignedSkuIds' -Default @())
+            @($ids | Where-Object { $_ -and $premiumIds.Contains(([string]$_).Trim()) }).Count -gt 0 })
+        $coveredUpn = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($u in $covered) { [void]$coveredUpn.Add([string](Get-TPObjectField -Item $u -Key 'UserPrincipalName' -Default '')) }
+        $uncovered = @($licensed | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'UserPrincipalName' -Default '') } | Where-Object { $_ -and -not $coveredUpn.Contains($_) })
+        if ($uncovered.Count -eq 0) {
+            $verified += "All $($licensed.Count) enabled, licensed member user(s) hold a subscription that carries the plan."
+        } elseif ($covered.Count -eq 0) {
+            $short += "The plan is held but no enabled, licensed member user is assigned a subscription that carries it, so all $($licensed.Count) licensed user(s) get Audit (Standard) only."
+            $forceGap = $true
+        } else {
+            $sample = if ($uncovered.Count -gt 5) { (($uncovered | Select-Object -First 5) -join ', ') + " and $($uncovered.Count - 5) more" } else { $uncovered -join ', ' }
+            $short += "$($covered.Count) of $($licensed.Count) enabled, licensed member users hold a subscription that carries the plan; the other $($uncovered.Count) get Audit (Standard) only ($sample)."
+        }
+        $affected = @($uncovered | Select-Object -First 250)
     }
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+        -ShortfallState $(if ($forceGap) { 'Gap' } else { 'Auto' }) `
+        -Context 'A service plan switched off inside a user''s assigned subscription is not read.' `
+        -CurrentValue "Audit (Premium) plan on: $($skuNames -join ', ')$(if ($ingestion -is [bool]) { "; unified audit log $(if ($ingestion) { 'on' } else { 'off' })" })" `
+        -RequiredValue 'Every user licensed for Audit (Premium); unified audit log on' `
+        -AffectedObjects $(if ($affected.Count -gt 0) { $affected } else { $null })
 }
 
 # ── PVW-4.2 Audit Log Retention Extended Beyond 90 Days ──────────────────────
