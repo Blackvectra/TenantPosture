@@ -272,6 +272,7 @@ function Get-TPBaselineExceptions {
             Verdict           = ''
         }
         $missing = @(foreach ($k in @('ObjectId', 'Reason', 'Approver', 'ApprovedDate', 'ReviewDate')) { if ([string]::IsNullOrWhiteSpace([string]$row[$k])) { $k } })
+        $approvedOn = & $parse (Get-TPObjectField -Item $e -Key 'ApprovedDate' -Default $null)
         $review  = & $parse (Get-TPObjectField -Item $e -Key 'ReviewDate' -Default $null)
         $expiry  = & $parse (Get-TPObjectField -Item $e -Key 'ExpiryDate' -Default $null)
         $guid = [guid]::Empty
@@ -281,6 +282,12 @@ function Get-TPBaselineExceptions {
             $row.Verdict = "Not approved: ObjectId '$oid' is not an Entra object id (a GUID)."
         } elseif ($kind -notin @('User', 'Group')) {
             $row.Verdict = "Not approved: Kind '$kind' is not User or Group (a role is never an emergency-access principal)."
+        } elseif ($null -eq $approvedOn) {
+            # This record turns a shortfall into a pass, so an approval must be a
+            # real date that has arrived: a typo or a post-dated approval is none.
+            $row.Verdict = "Not approved: ApprovedDate '$($row.ApprovedDate)' is not a date."
+        } elseif ($approvedOn.Date -gt $AsOf.Date) {
+            $row.Verdict = "Not approved: approval date $($approvedOn.ToString('yyyy-MM-dd')) is in the future."
         } elseif ($null -eq $review) {
             $row.Verdict = "Not approved: ReviewDate '$($row.ReviewDate)' is not a date."
         } elseif ($review.Date -lt $AsOf.Date) {

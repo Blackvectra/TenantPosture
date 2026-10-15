@@ -85,27 +85,15 @@ function Set-TPEmergencyAccessApproval {
     }
     $targets = if ($PSBoundParameters.ContainsKey('Findings')) { @($Findings | Where-Object { $null -ne $_ }) } else { @($script:TPFindings) }
     $markerRx = '(?s)^' + [regex]::Escape($script:TPEmergencyAccessMarker) + '.*? Result before the approval record was applied: Partial\. (.*)$'
-    $noteRx   = '(?s)\s*' + [regex]::Escape($script:TPEmergencyAccessRecordNote) + ' .*$'
+    # The note this pass appends, in its own grammar only, so tenant text that
+    # happens to contain the words (a policy named "Approval record: ...") is
+    # never cut out of a finding.
+    $noteRx   = '(?s)\s*' + [regex]::Escape($script:TPEmergencyAccessRecordNote) + ' (?:approved emergency-access exception\(s\): |Not approved: |The finding has ).*$'
     $approvedCount = 0
     foreach ($f in $targets) {
-        $state  = [string](Get-TPObjectField -Item $f -Key 'State' -Default '')
-        $detail = [string](Get-TPObjectField -Item $f -Key 'Detail' -Default '')
-        # Restore a finding an earlier run approved or annotated, then judge it again
-        # against the current record (a republish of an approved run must reflect a
-        # lapsed, removed or corrected approval).
-        if ($state -eq 'Satisfied' -and $detail -like "$script:TPEmergencyAccessMarker*") {
-            if ($detail -notmatch $markerRx) { continue }   # not this pass's shape; leave it
-            $f.State    = 'Partial'
-            $f.Severity = 'Medium'
-            $f.Detail   = $Matches[1]
-            $cv0 = [string](Get-TPObjectField -Item $f -Key 'CurrentValue' -Default '')
-            $f.CurrentValue = ($cv0 -replace '(?:; |^)[Aa]pproved emergency-access exceptions: \d+$', '')
-            $state = 'Partial'; $detail = [string]$f.Detail
-        } elseif ($detail -match [regex]::Escape($script:TPEmergencyAccessRecordNote)) {
-            $f.Detail = ($detail -replace $noteRx, '')
-            $detail = [string]$f.Detail
-        }
-        if ($state -ne 'Partial') { continue }
+        # Only a finding that carries this pass's structured exclusions is ever
+        # touched: every AffectedObjects entry must be an exclusion, another
+        # shortfall or an unestablished component, and at least one an exclusion.
         $objs = @(Get-TPObjectField -Item $f -Key 'AffectedObjects' -Default @() | Where-Object { $null -ne $_ })
         if ($objs.Count -eq 0) { continue }
         $principals = @(); $otherShortfalls = @(); $notEstablished = @(); $recognized = $true
@@ -120,6 +108,24 @@ function Set-TPEmergencyAccessApproval {
             else { $recognized = $false; break }
         }
         if (-not $recognized -or $principals.Count -eq 0) { continue }
+        $state  = [string](Get-TPObjectField -Item $f -Key 'State' -Default '')
+        $detail = [string](Get-TPObjectField -Item $f -Key 'Detail' -Default '')
+        # Restore a finding an earlier run approved or annotated, then judge it again
+        # against the current record (a republish of an approved run must reflect a
+        # lapsed, removed or corrected approval).
+        if ($state -eq 'Satisfied' -and $detail -like "$script:TPEmergencyAccessMarker*") {
+            if ($detail -notmatch $markerRx) { continue }   # not this pass's shape; leave it
+            $f.State    = 'Partial'
+            $f.Severity = 'Medium'
+            $f.Detail   = $Matches[1]
+            $cv0 = [string](Get-TPObjectField -Item $f -Key 'CurrentValue' -Default '')
+            $f.CurrentValue = ($cv0 -replace '(?:; |^)[Aa]pproved emergency-access exceptions: \d+$', '')
+            $state = 'Partial'; $detail = [string]$f.Detail
+        } elseif ($state -eq 'Partial' -and $detail -match $noteRx) {
+            $f.Detail = ($detail -replace $noteRx, '')
+            $detail = [string]$f.Detail
+        }
+        if ($state -ne 'Partial') { continue }
         $ok = @(); $no = @()
         foreach ($p in $principals) {
             $key = $p.ToLowerInvariant()

@@ -127,6 +127,16 @@ Describe 'Approved emergency-access exclusions' {
             ($v -join "`n") | Should -Match "Kind 'Role' is not User or Group"
             ($v -join "`n") | Should -Match 'expired'
         }
+        It 'rejects an approval date that is not a date or has not arrived (review finding: the record turns a shortfall into a pass)' {
+            $txt = (Entry -Id $script:U1) -replace "ApprovedDate = '2026-09-01'", "ApprovedDate = 'next week'"
+            $e = Get-TPBaselineExceptions -Path (Record @($txt))
+            $e.EmergencyAccess.Count | Should -Be 0
+            @($e.EmergencyAccessRejected)[0].Verdict | Should -Match "ApprovedDate 'next week' is not a date"
+            $txt = (Entry -Id $script:U1) -replace "ApprovedDate = '2026-09-01'", "ApprovedDate = '$((Get-Date).AddDays(7).ToString('yyyy-MM-dd'))'"
+            $e = Get-TPBaselineExceptions -Path (Record @($txt))
+            $e.EmergencyAccess.Count | Should -Be 0
+            @($e.EmergencyAccessRejected)[0].Verdict | Should -Match 'approval date .* is in the future'
+        }
         It 'a file without the block reads as no approvals, not an error' {
             $p = Join-Path $script:Tmp 'plain.psd1'
             Set-Content -LiteralPath $p -Value "@{ Exceptions = @() }" -Encoding utf8
@@ -276,6 +286,30 @@ Describe 'Approved emergency-access exclusions' {
             $f = F 'AAD-1.3'
             $f.State  | Should -Be 'Partial'
             $f.Detail | Should -Match 'Approval record: approved emergency-access exception\(s\): user:.* The finding has 1 component\(s\) that were not assessed, so an approval cannot make it a pass'
+        }
+        It 'tenant text that contains the words of the note is never cut out, and a finding without this pass''s exclusions is never touched (review finding)' {
+            # A policy named with the note's own words appears in the coverage detail.
+            Evaluate @((Pol -Name 'Approval record: Primary policy' -Grant @('compliantDevice') -ExUsers @($script:U1)))
+            $original = (F 'AAD-2.3').Detail
+            $original | Should -Match 'Approval record: Primary policy'
+            $rec = Record @((Entry -Id $script:U1))
+            (Set-TPEmergencyAccessApproval -Path $rec) | Should -Be 2
+            (F 'AAD-2.3').Detail | Should -Match 'Result before the approval record was applied: Partial\. .*Approval record: Primary policy'
+            (Set-TPEmergencyAccessApproval -TenantDomain 'no-such-tenant.example') | Should -Be 0
+            (F 'AAD-2.3').Detail | Should -Be $original -Because 'the restore keeps the policy name intact'
+            # Partly approved: the note is appended once and the policy name survives a second run.
+            Evaluate @((Pol -Name 'Approval record: Primary policy' -Grant @('compliantDevice') -ExUsers @($script:U1, $script:U2)))
+            (Set-TPEmergencyAccessApproval -Path $rec) | Should -Be 0
+            (Set-TPEmergencyAccessApproval -Path $rec) | Should -Be 0
+            $d = (F 'AAD-2.3').Detail
+            ([regex]::Matches($d, 'Approval record: Primary policy')).Count | Should -Be 1
+            ([regex]::Matches($d, 'Approval record: approved emergency-access exception')).Count | Should -Be 1
+            # No exclusions at all (an OR grant): the finding is Partial and carries the words, and is left alone.
+            Evaluate @((Pol -Name 'Approval record: Primary policy' -Grant @('compliantDevice', 'mfa') -Op 'OR'))
+            $before = (F 'AAD-2.3').Detail
+            (F 'AAD-2.3').State | Should -Be 'Partial'
+            (Set-TPEmergencyAccessApproval -Path $rec) | Should -Be 0
+            (F 'AAD-2.3').Detail | Should -Be $before
         }
         It 'editing a baseline exception keeps the emergency-access block (New, Set and Remove write it back as read; review finding)' {
             $rec = Record @((Entry -Id $script:U1 -Upn 'bg1@contoso.example'), (Entry -Id $script:U2 -Review $script:Past))
