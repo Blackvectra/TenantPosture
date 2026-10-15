@@ -55,6 +55,10 @@ function Invoke-TPCollectAADUsers {
                     UserType                 = [string]($u.userType ?? 'Member')
                     OnPremisesSyncEnabled    = $u.onPremisesSyncEnabled  # $null = cloud-only
                     LicenseCount             = @($u.assignedLicenses ?? @()).Count
+                    # The subscription ids behind the count, so a licensed
+                    # capability (Audit (Premium), PVW-4.1) can be judged per
+                    # user; SKU ids are not personal data.
+                    AssignedSkuIds           = @(@($u.assignedLicenses ?? @()) | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'skuId' -Default '') } | Where-Object { $_ })
                     CreatedDateTime          = [string]($u.createdDateTime ?? '')
                     LastPasswordChange       = [string]($u.lastPasswordChangeDateTime ?? '')
                 })

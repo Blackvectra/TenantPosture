@@ -898,33 +898,65 @@ function Test-TPControlDefenderPriorityAccounts {
     $cit = Get-TPFrameworkCitations -ControlId $cid
     $def = Get-TPRawData -Key 'Defender-Policies'
     if (-not $def -or -not $def.Success) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Defender data not collected'; return
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Defender data not collected'; return
     }
-    # Empty is not clean. The collector reported success, but this section
-    # may not have landed — a failed sub-query leaves it absent or empty,
-    # and reading that as compliance is a false pass on a control nobody
-    # checked. Not assessed is the only honest verdict.
-    if (-not (Test-TPSectionCollected $def 'AntiPhishing')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AntiPhishing was not collected; not assessed.'
+    # The Priority account tag IS readable. Microsoft documents `Get-User -IsVIP` as
+    # the way to list priority accounts ("Manage and monitor priority accounts") and
+    # `Get-EmailTenantSettings` EnablePriorityAccountProtection as the Defender for
+    # Office 365 Plan 2 protection switch ("Configure and review priority account
+    # protection"). This evaluator said for a year that no read surface existed and
+    # asked for a screenshot; the collector now stores both reads under
+    # PriorityAccounts. A results file from before that read has no section, and a
+    # read that failed stores Available = $false with the reason: both are not
+    # assessed, never a verdict.
+    $pa = Get-TPObjectField -Item $def.Data -Key 'PriorityAccounts' -Default $null
+    if ($null -eq $pa) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Priority accounts were not read (the results predate the Get-User -IsVIP read, or the Defender collector did not run it); not assessed.'
         return
     }
-    # The Defender "Priority account" user tag has no supported read surface (no Graph
-    # endpoint, no EXO cmdlet). Rather than fabricate a result, surface the closest
-    # machine-readable proxy — named-user impersonation protection in anti-phishing —
-    # and direct the assessor to confirm the tag itself in the portal. Advisory
-    # only: NotApplicable, never a false Satisfied/Gap/Partial.
-    $ap = $def.Data['AntiPhishing']
-    $proxyProtected = $false
-    if ($ap -and $ap.Available) {
-        $proxyProtected = @($ap.Policies | Where-Object {
-            (Get-TPObjectField -Item $_ -Key 'EnableTargetedUserProtection') -and
-            @(Get-TPObjectField -Item $_ -Key 'TargetedUsersToProtect' -Default @()).Count -gt 0
-        }).Count -gt 0
+    if ((Get-TPObjectField -Item $pa -Key 'Available' -Default $false) -ne $true) {
+        $why = [string](Get-TPObjectField -Item $pa -Key 'Error' -Default '')
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Priority accounts were not read: Get-User -IsVIP failed in the Exchange Online session$(if ($why) { " ($why)" }); not assessed. The signed-in account needs an Exchange role that can run Get-User (View-Only Recipients or above)."
+        return
     }
-    $proxyNote = if ($proxyProtected) { 'Related signal: named-user impersonation protection IS configured in anti-phishing (see EXO-5.2).' } else { 'Related signal: no named-user impersonation protection is configured (see EXO-5.2).' }
-    Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title "$($ctrl.Title) (Manual verification required)" -Severity 'Low' -FrameworkIds $cit `
-        -Detail "This control requires manual verification — the Defender 'Priority account' user tag is not exposed by any supported Graph/EXO read API, so it cannot be assessed programmatically. Verify in Defender portal > Settings > Email & collaboration > User tags that executives and high-value mailboxes carry the Priority account tag. $proxyNote" `
-        -Remediation $ctrl.Remediation
+    $accounts = @(Get-TPObjectField -Item $pa -Key 'Accounts' -Default @())
+    $count    = [int](Get-TPObjectField -Item $pa -Key 'Count' -Default $accounts.Count)
+    $protRead = (Get-TPObjectField -Item $pa -Key 'ProtectionRead' -Default $false) -eq $true
+    $prot     = Get-TPObjectField -Item $pa -Key 'ProtectionEnabled' -Default $null
+    $protWhy  = [string](Get-TPObjectField -Item $pa -Key 'ProtectionError' -Default '')
+    $names = @($accounts | ForEach-Object {
+        $u = [string](Get-TPObjectField -Item $_ -Key 'UserPrincipalName' -Default '')
+        if ($u) { $u } else { [string](Get-TPObjectField -Item $_ -Key 'DisplayName' -Default '') }
+    } | Where-Object { $_ })
+    $sample = if ($names.Count -gt 5) { (($names | Select-Object -First 5) -join ', ') + " and $($names.Count - 5) more" } else { $names -join ', ' }
+    # The protection switch is a Plan 2 feature that Microsoft turns on by default,
+    # so it is a shortfall only when it was read as off. When it was not read (no
+    # Plan 2, an older module, a refused cmdlet) the tag verdict stands and the
+    # Detail says the switch was not read: that is context, not a component.
+    $protContext = if (-not $protRead) {
+        "Whether priority account protection is on was not read (Get-EmailTenantSettings EnablePriorityAccountProtection$(if ($protWhy) { ": $protWhy" })); it is a Defender for Office 365 Plan 2 setting, on by default."
+    } else { '' }
+    if ($count -eq 0) {
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "No account carries the Priority account tag (Get-User -IsVIP returned none), so Defender for Office 365 applies no priority-account reporting or executive-tailored heuristics to anyone.$(if ($protRead -and $prot -eq $true) { ' Priority account protection is on but protects no one until accounts are tagged.' })$(if ($protContext) { " $protContext" })" `
+            -CurrentValue '0 priority accounts tagged' `
+            -RequiredValue 'Executives and administrators tagged as priority accounts (up to 250); priority account protection on' `
+            -Remediation $ctrl.Remediation
+        return
+    }
+    $verified = @("$count account(s) carry the Priority account tag ($sample). Which executives and administrators belong on the list is a judgment for the reviewer; the tool verifies that the tag is in use.")
+    $short = @()
+    if ($protRead -and $prot -eq $false) {
+        $short += 'Priority account protection is turned off (Get-EmailTenantSettings EnablePriorityAccountProtection = False), so the tagged accounts get the reporting tag but not the Plan 2 executive-tailored heuristics.'
+    } elseif ($protRead -and $prot -eq $true) {
+        $verified += 'Priority account protection is on (EnablePriorityAccountProtection = True).'
+    }
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished @() `
+        -Context $protContext `
+        -CurrentValue "$count priority account(s) tagged$(if ($protRead) { "; protection $(if ($prot -eq $true) { 'on' } else { 'off' })" })" `
+        -RequiredValue 'Executives and administrators tagged as priority accounts; priority account protection on'
 }
 
 # ── DEF-4.5 Endpoint DLP Policy Active ───────────────────────────────────────

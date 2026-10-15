@@ -25,7 +25,6 @@
     Exceptions = @(
         # ── Manual: no supported read surface ────────────────────────────────
         @{ ControlId = 'DEF-3.3'; Kind = 'Manual'; Reason = 'Defender for Cloud Apps connection status has no supported Graph/EXO read API.' }
-        @{ ControlId = 'DEF-4.4'; Kind = 'Manual'; Reason = 'The Priority account user tag is not exposed by any supported Graph/EXO read API.' }
         @{ ControlId = 'AAD-8.1'; Kind = 'Manual'; Reason = 'PIM alert configuration is not reliably readable across tenant PIM tiers.' }
         @{ ControlId = 'PVW-3.1'; Kind = 'Manual'; Reason = 'SIEM/audit export configuration has no supported read API.' }
         @{ ControlId = 'AAD-5.1'; Kind = 'Manual'; Reason = 'The user SSPR setting (None/Selected/All) has no supported Graph read; authorizationPolicy.allowedToUseSSPR is the ADMINISTRATOR setting.' }
