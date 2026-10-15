@@ -1498,37 +1498,17 @@ function Test-TPControlAADAuthenticatorNumberMatch {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AuthMethodsPolicy was not collected; not assessed.'
         return
     }
-    $ampConfigs = @(Get-TPNestedProperty -Object $auth -Path 'Data.AuthMethodsPolicy.AuthenticationMethodConfigs' -Default @())
-    $mfaConfig  = $ampConfigs | Where-Object { $_.Id -eq 'MicrosoftAuthenticator' } | Select-Object -First 1
-    # Microsoft enforced number matching as the platform default in May 2023.
-    # When the property is null/empty the API is reporting "MS is enforcing it
-    # at the platform level" — NOT "we don't know". Treating absence as unknown
-    # produced "Number matching state is ''" Gap findings on every modern
-    # tenant (mirrors the AAD-2.3 fix in Test-TPControlAADCA.ps1).
-    $nmStateRaw = Get-TPNestedProperty -Object $mfaConfig -Path 'FeatureSettings.NumberMatchingRequiredState'
-    $nmState    = if ($null -eq $nmStateRaw -or [string]::IsNullOrWhiteSpace([string]$nmStateRaw)) {
-                      'default'
-                  } else {
-                      [string]$nmStateRaw
-                  }
-    if ($nmState -eq 'enabled' -or $nmState -eq 'default') {
-        $msg = if ($nmState -eq 'enabled') {
-            'Microsoft Authenticator number matching is explicitly enabled — MFA fatigue attacks blocked.'
-        } else {
-            'Number matching: enabled (Microsoft platform default since May 2023). Explicit configuration is optional but ensures it cannot be disabled.'
-        }
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail $msg `
-            -CurrentValue "NumberMatchingRequiredState = $nmState" `
-            -RequiredValue 'enabled (or default)'
-    } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "Number matching state is '$nmState'. MFA push fatigue attacks are possible — attacker can spam approve requests." `
-            -CurrentValue "NumberMatchingRequiredState = $nmState" `
-            -RequiredValue 'enabled' -Remediation $ctrl.Remediation
-    }
+    # Enforced by the platform. Microsoft has required number matching for every
+    # Microsoft Authenticator push notification since May 2023 and users cannot
+    # opt out (Learn: How number matching works in MFA push notifications). The
+    # property this control used to read, featureSettings.numberMatchingRequiredState,
+    # no longer exists in Graph v1.0 (microsoftAuthenticatorFeatureSettings defines
+    # only displayAppInformationRequiredState and displayLocationInformationRequiredState),
+    # so the read always came back empty and the control scored Satisfied from
+    # nothing on every tenant. There is no tenant setting to read or score; the
+    # TMS-2.5 pattern applies: not applicable, never a pass.
+    Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+        -Detail 'Enforced by the platform: Microsoft requires number matching for every Microsoft Authenticator push notification (since May 2023) and users cannot opt out, so there is no tenant setting to read or score. The Graph property this control once read (numberMatchingRequiredState) no longer exists. Not scored; MFA fatigue protection beyond number matching is the additional-context settings (application name and location), which this assessment does not score.'
 }
 
 # ── AAD-9.2 Passwordless Auth Methods Available ───────────────────────────────

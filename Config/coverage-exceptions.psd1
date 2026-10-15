@@ -36,6 +36,7 @@
         @{ ControlId = 'PVW-2.4'; Kind = 'Manual'; Reason = 'Insider Risk Management policies are not exposed through the Security & Compliance PowerShell or Graph surfaces this tool reads.' }
         @{ ControlId = 'TMS-2.1'; Kind = 'Manual'; Reason = 'Retired by Microsoft: Skype consumer interoperability with Teams ended May 5, 2025 and AllowPublicUsers no longer has any effect, so there is nothing to score.' }
         @{ ControlId = 'TMS-2.5'; Kind = 'Manual'; Reason = 'Enforced by the platform: guests and external participants cannot start a Teams meeting recording and no tenant setting allows it, so there is nothing to score.' }
+        @{ ControlId = 'AAD-9.1'; Kind = 'Manual'; Reason = 'Enforced by the platform: Microsoft requires number matching for every Authenticator push notification since May 2023 and users cannot opt out; the Graph v1.0 property numberMatchingRequiredState no longer exists, so there is nothing to read or score.' }
         @{ ControlId = 'TMS-2.2'; Kind = 'Manual'; Reason = 'Teams app availability is managed per app (app-centric management) and in org-wide app settings, neither of which this tool reads.' }
         @{ ControlId = 'PVW-3.2'; Kind = 'Manual'; Reason = 'eDiscovery readiness (roles assigned, a documented legal-hold workflow) is not measurable from the tenant; a case count only says whether there has been litigation.' }
         # Verified per-site / deprecated — no tenant-level read signal:
