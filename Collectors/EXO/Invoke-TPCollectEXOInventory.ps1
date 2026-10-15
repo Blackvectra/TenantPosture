@@ -13,7 +13,7 @@
 # Data populated:
 #   - ForwardingMailboxes      mailboxes with ForwardingSmtpAddress OR
 #                              ForwardingAddress set; one row per mechanism,
-#                              each classified External/Internal/Unresolved
+#                              each classified External/Internal/Orphaned/Unresolved
 #   - InboxRulesForwarding     mailbox rules forwarding to external recipients
 #                              (actual exfil vector after credential compromise)
 #   - UnparseableRules         rules Exchange could not interpret — a coverage
@@ -120,10 +120,16 @@ function Invoke-TPCollectEXOInventory {
             }
         }
 
-        # ── Recipient classification: External / Internal / Unresolved ───────
+        # ── Recipient classification: External / Internal / Orphaned / Unresolved
         # Tri-state on purpose. The old boolean collapsed "we know it is
         # internal" and "we could not tell" into the same $false, which is the
         # same class of mistake as reading an empty list as compliance.
+        # Orphaned is the fourth answer: a legacy DN the directory was asked
+        # about and holds no object for (by LegacyExchangeDN and by X500 proxy
+        # address). Mail to it is not delivered, so it is neither an external
+        # forward nor a blind spot; filing it as Unresolved left EXO-7.2
+        # unassessed on every run of a tenant with one deleted mailbox in an
+        # old rule.
         #
         # Exchange renders rule recipients as:
         #     "Display Name" [SMTP:user@dom.tld]     <- address appears TWICE
@@ -150,11 +156,30 @@ function Invoke-TPCollectEXOInventory {
         # unqualified call resolves there once Purview is connected, and legacy
         # DNs stop resolving (2 unresolved rules without Purview, 13 with, on a
         # live tenant). Pin it to the Exchange Online session.
+        # Resolve-TPExoRecipient's contract is the classifier's: an object,
+        # $null only when the directory answered "no such object", a throw
+        # when it could not be asked. The throw is recorded here (the
+        # classifier swallows it into 'Unresolved'), so a results file says
+        # WHY a recipient went unresolved: no session, throttling, a refused
+        # identifier.
         $getRecipientCmd = (Get-TPExoCommand -Name 'Get-Recipient' -Session ExchangeOnline).Command
+        # Captured as command objects, like $getRecipientCmd: GetNewClosure
+        # binds the resolver to its own dynamic module, where a module-private
+        # function cannot be resolved by name, and a name that does not
+        # resolve is swallowed by the classifier as 'Unresolved' — silently,
+        # on every recipient.
+        $resolveRecipientFn  = Get-Command -Name 'Resolve-TPExoRecipient' -ErrorAction Stop
+        $registerExceptionFn = Get-Command -Name 'Register-TPException' -ErrorAction SilentlyContinue
         $recipientResolver = {
             param([string] $Lookup)
-            if (-not $getRecipientCmd) { return $null }
-            @(& $getRecipientCmd -Identity $Lookup -ErrorAction Stop) | Select-Object -First 1
+            try {
+                & $resolveRecipientFn -Lookup $Lookup -Command $getRecipientCmd
+            } catch {
+                if ($registerExceptionFn) {
+                    & $registerExceptionFn -Source 'EXO-RecipientLookup' -Message "[$Lookup] $($_.Exception.Message)"
+                }
+                throw
+            }
         }.GetNewClosure()
 
         $classifyRecipient = {
@@ -286,11 +311,18 @@ function Invoke-TPCollectEXOInventory {
                             ForEach-Object { [string]$_.Recipient })
                         $unresolvedHits = @($classified | Where-Object { $_.Class -eq 'Unresolved' } |
                             ForEach-Object { [string]$_.Recipient })
+                        $orphanedHits = @($classified | Where-Object { $_.Class -eq 'Orphaned' } |
+                            ForEach-Object { [string]$_.Recipient })
 
                         # Only surface a rule when it's forwarding or when it's
                         # disabled (disabled rules can be re-enabled silently —
-                        # attackers stage them ahead of activation).
-                        if ($externalHits.Count -gt 0 -or $unresolvedHits.Count -gt 0 -or -not $r.Enabled) {
+                        # attackers stage them ahead of activation). An orphaned
+                        # target is surfaced too: a rule forwarding to a
+                        # recipient the directory no longer holds is a stale
+                        # rule the evaluator names, not a rule that forwards
+                        # nowhere and can be dropped from the record.
+                        if ($externalHits.Count -gt 0 -or $unresolvedHits.Count -gt 0 -or
+                            $orphanedHits.Count -gt 0 -or -not $r.Enabled) {
                             $rulesFound.Add([ordered]@{
                                 Mailbox      = [string]$mbx.UserPrincipalName
                                 DisplayName  = [string]$mbx.DisplayName
@@ -300,8 +332,10 @@ function Invoke-TPCollectEXOInventory {
                                 Recipients   = @($recipients | ForEach-Object { [string]$_ })
                                 ExternalRecipients = $externalHits
                                 UnresolvedRecipients = $unresolvedHits
+                                OrphanedRecipients = $orphanedHits
                                 IsExternal   = ($externalHits.Count -gt 0)
                                 IsUnresolved = ($unresolvedHits.Count -gt 0)
+                                IsOrphaned   = ($orphanedHits.Count -gt 0)
                                 ForwardAction = @(
                                     if ($r.ForwardTo)             { 'ForwardTo' }
                                     if ($r.ForwardAsAttachmentTo) { 'ForwardAsAttachmentTo' }
