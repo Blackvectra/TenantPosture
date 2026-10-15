@@ -212,12 +212,18 @@ Describe 'Identity controls report what the tenant is configured to do' {
     }
 
     Context 'authentication methods' {
-        It 'AAD-9.1 reads the feature setting''s state; AAD-9.2 counts Authenticator phone sign-in' {
-            $src = Get-Content -Raw (Join-Path $script:RepoRoot 'Collectors/AAD/Invoke-TPCollectAADAuthPolicies.ps1')
-            $src | Should -Match "featureSettings\.numberMatchingRequiredState\.state"
-            Clear-TPState
-            Set-TPRawData -Key 'AAD-AuthPolicies' -Data (Bag @{ AuthMethodsPolicy = @{ AuthenticationMethodConfigs = @(@{ Id = 'Fido2'; State = 'disabled' }, @{ Id = 'MicrosoftAuthenticator'; State = 'enabled'; AuthenticationModes = @('any') }) }; SectionStatus = @{ AuthMethodsPolicy = 'Collected' } })
-            (V 'Test-TPControlAADPasswordless' 'AAD-9.2').State | Should -Be 'Satisfied'
+        It 'AAD-9.1 is enforced by the platform and never scored, whatever the retired property says; AAD-9.2 counts Authenticator phone sign-in' {
+            # Graph v1.0 no longer defines numberMatchingRequiredState, so the read is always empty; the
+            # old evaluator mapped empty to "default" and scored Satisfied from nothing on every tenant.
+            foreach ($state in @('', 'enabled', 'disabled')) {
+                Clear-TPState
+                Set-TPRawData -Key 'AAD-AuthPolicies' -Data (Bag @{ AuthMethodsPolicy = @{ AuthenticationMethodConfigs = @(@{ Id = 'Fido2'; State = 'disabled' }, @{ Id = 'MicrosoftAuthenticator'; State = 'enabled'; AuthenticationModes = @('any'); FeatureSettings = @{ NumberMatchingRequiredState = $state; AdditionalContextFeatureState = '' } }) }; SectionStatus = @{ AuthMethodsPolicy = 'Collected' } })
+                $f = V 'Test-TPControlAADAuthenticatorNumberMatch' 'AAD-9.1'
+                $f.State  | Should -Be 'NotApplicable' -Because "state '$state' is not a tenant setting"
+                $f.Detail | Should -Match 'Enforced by the platform'
+                @($f.FrameworkIds).Count | Should -BeGreaterThan 0
+                (V 'Test-TPControlAADPasswordless' 'AAD-9.2').State | Should -Be 'Satisfied'
+            }
         }
     }
 
@@ -419,6 +425,25 @@ Describe 'Security Defaults: Conditional Access controls account for it' {
                 $got = Get-TPNestedProperty -Object $raw -Path 'Data.MFARegistrationFailure' -Default $null
                 if ($null -eq $case.Expect) { $got | Should -BeNullOrEmpty } else { $got | Should -Be $case.Expect }
             }
+        }
+
+        It 'the Users collector records each user''s assigned subscription ids (AssignedSkuIds) beside the count' {
+            Clear-TPState
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                if ($Uri -match 'userRegistrationDetails') { return @{ value = @() } }
+                return @{ value = @(
+                    @{ id = 'u1'; displayName = 'A'; userPrincipalName = 'a@corp.example'; accountEnabled = $true; userType = 'Member'; onPremisesSyncEnabled = $null
+                       assignedLicenses = @(@{ skuId = '06ebc4ee-1bb5-47dd-8e1b-7f71b5a2d2e3'; disabledPlans = @() }, @{ skuId = 'f8a1db68-be16-40ed-86d5-cb42ce701560'; disabledPlans = @() })
+                       createdDateTime = '2026-01-01T00:00:00Z'; lastPasswordChangeDateTime = '2026-01-01T00:00:00Z' },
+                    @{ id = 'u2'; displayName = 'B'; userPrincipalName = 'b@corp.example'; accountEnabled = $true; userType = 'Member'; onPremisesSyncEnabled = $null
+                       assignedLicenses = @(); createdDateTime = '2026-01-01T00:00:00Z'; lastPasswordChangeDateTime = '2026-01-01T00:00:00Z' }) }
+            }
+            Invoke-TPCollectAADUsers 3>$null | Out-Null
+            $users = @((Get-TPRawData -Key 'AAD-Users').Data.Users)
+            @($users[0].AssignedSkuIds) | Should -Be @('06ebc4ee-1bb5-47dd-8e1b-7f71b5a2d2e3', 'f8a1db68-be16-40ed-86d5-cb42ce701560')
+            $users[0].LicenseCount | Should -Be 2
+            @($users[1].AssignedSkuIds).Count | Should -Be 0
         }
 
         It 'the Conditional Access collector says Security Defaults is on in its console note, within the 70-character console line, and says nothing when it was not read' {

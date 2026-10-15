@@ -175,3 +175,105 @@ Describe 'Defender, Purview and Power Platform verdicts' {
         }
     }
 }
+
+# ── PVW-4.1: Audit (Premium) is judged from licensing the tool already reads ──────────
+# The evaluator read a key the collector never populated and emitted "requires manual
+# verification" on every tenant, while the fact that decides the control (which
+# subscription carries the Microsoft 365 Advanced Auditing service plan, and who is
+# assigned it) sat in the same results file. Every case below feeds raw collector
+# shapes: SubscribedSkus rows with their ServicePlans and user rows with AssignedSkuIds.
+Describe 'PVW-4.1 judges Audit (Premium) from subscriptions and assignments' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop
+        function script:Bag41([hashtable] $Data, [bool] $Success = $true) { [ordered]@{ CollectorId = 'x'; CollectedAt = '2026-10-01T00:00:00Z'; Success = $Success; Data = $Data } }
+        function script:V41([string] $Cid) { Test-TPControlPurviewAuditPremium 3>$null | Out-Null; @(Get-TPFindings | Where-Object ControlId -eq $Cid)[0] }
+        $script:E5 = @{ SkuPartNumber = 'SPE_E5'; SkuId = '06ebc4ee-1bb5-47dd-8e1b-7f71b5a2d2e3'; ServicePlans = @('EXCHANGE_S_ENTERPRISE', 'M365_ADVANCED_AUDITING', 'AAD_PREMIUM_P2') }
+        $script:E3 = @{ SkuPartNumber = 'SPE_E3'; SkuId = '05e9a617-0261-4cee-bb44-138d3ef5d965'; ServicePlans = @('EXCHANGE_S_ENTERPRISE', 'AAD_PREMIUM') }
+        function script:User([string] $Upn, [string[]] $Skus, [string] $Type = 'Member', [bool] $Enabled = $true, [switch] $NoSkuField) {
+            $row = @{ UserPrincipalName = $Upn; DisplayName = $Upn; AccountEnabled = $Enabled; UserType = $Type; LicenseCount = @($Skus).Count }
+            if (-not $NoSkuField) { $row['AssignedSkuIds'] = @($Skus) }
+            $row
+        }
+        function script:Arrange {
+            param([object[]] $Skus, [object[]] $Users, [object] $Ingestion = $true, [switch] $NoLicensing, [switch] $NoUsers)
+            Clear-TPState
+            Set-TPRawData -Key 'Purview' -Data (Bag41 @{ AuditConfig = @{ UnifiedAuditLogIngestionEnabled = $Ingestion; AdminAuditLogEnabled = $true }; SectionStatus = @{ AuditConfig = 'Collected' } })
+            if (-not $NoLicensing) { Set-TPRawData -Key 'AAD-Inventory' -Data (Bag41 @{ SubscribedSkus = @($Skus) }) }
+            if (-not $NoUsers) { Set-TPRawData -Key 'AAD-Users' -Data (Bag41 @{ Users = @($Users) }) }
+        }
+    }
+    AfterAll { Clear-TPState }
+
+    It 'no subscription with the Advanced Auditing plan is a Gap that names the subscriptions read (was: manual verification)' {
+        Arrange -Skus @($script:E3) -Users @((User 'a@contoso.com' @($script:E3.SkuId)))
+        $f = V41 'PVW-4.1'
+        $f.State        | Should -Be 'Gap'
+        $f.Detail       | Should -Match 'Advanced Auditing'
+        $f.Detail       | Should -Match 'SPE_E3'
+        $f.CurrentValue | Should -Be 'No subscription with the Audit (Premium) service plan'
+        $f.Detail       | Should -Not -Match '(?i)manual verification'
+    }
+    It 'the plan on every licensed member user with the audit log on is Satisfied, naming the subscription' {
+        Arrange -Skus @($script:E5, $script:E3) -Users @((User 'a@contoso.com' @($script:E5.SkuId)), (User 'b@contoso.com' @($script:E5.SkuId, $script:E3.SkuId)))
+        $f = V41 'PVW-4.1'
+        $f.State  | Should -Be 'Satisfied'
+        $f.Detail | Should -Match 'SPE_E5'
+        $f.Detail | Should -Match 'All 2 enabled, licensed member user'
+        $f.Detail | Should -Match 'audit log is on'
+    }
+    It 'some licensed users without the plan is Partial, naming who gets Audit \(Standard\) only' {
+        Arrange -Skus @($script:E5, $script:E3) -Users @((User 'a@contoso.com' @($script:E5.SkuId)), (User 'b@contoso.com' @($script:E5.SkuId)), (User 'c@contoso.com' @($script:E3.SkuId)))
+        $f = V41 'PVW-4.1'
+        $f.State  | Should -Be 'Partial'
+        $f.Detail | Should -Match '2 of 3 enabled, licensed member users'
+        $f.Detail | Should -Match 'c@contoso\.com'
+        @($f.AffectedObjects) | Should -Be @('c@contoso.com')
+    }
+    It 'the plan held but assigned to no licensed user is a Gap, not Partial (licensed but not configured)' {
+        Arrange -Skus @($script:E5, $script:E3) -Users @((User 'a@contoso.com' @($script:E3.SkuId)), (User 'b@contoso.com' @($script:E3.SkuId)))
+        $f = V41 'PVW-4.1'
+        $f.State  | Should -Be 'Gap'
+        $f.Detail | Should -Match 'no enabled, licensed member user is assigned'
+    }
+    It 'guests, disabled accounts and unlicensed users are outside the population' {
+        Arrange -Skus @($script:E5, $script:E3) -Users @(
+            (User 'a@contoso.com' @($script:E5.SkuId)),
+            (User 'guest_x#EXT#@contoso.com' @($script:E3.SkuId) -Type 'Guest'),
+            (User 'old@contoso.com' @($script:E3.SkuId) -Enabled $false),
+            (User 'shared@contoso.com' @()))
+        (V41 'PVW-4.1').State | Should -Be 'Satisfied'
+    }
+    It 'a results file whose users carry no AssignedSkuIds is not assessed, with the licensing stated as verified' {
+        Arrange -Skus @($script:E5) -Users @((User 'a@contoso.com' @($script:E5.SkuId) -NoSkuField))
+        $f = V41 'PVW-4.1'
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Match 'Verified: Audit \(Premium\) is licensed'
+        $f.Detail | Should -Match 'Not assessed: which users hold'
+    }
+    It 'users not collected at all is not assessed the same way' {
+        Arrange -Skus @($script:E5) -Users @() -NoUsers
+        (V41 'PVW-4.1').State | Should -Be 'NotApplicable'
+    }
+    It 'subscriptions not read is not assessed, never a Gap' {
+        Arrange -Skus @() -Users @((User 'a@contoso.com' @($script:E5.SkuId))) -NoLicensing
+        $f = V41 'PVW-4.1'
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Match 'not read'
+    }
+    It 'the audit log being off is a shortfall even with every user licensed' {
+        Arrange -Skus @($script:E5) -Users @((User 'a@contoso.com' @($script:E5.SkuId))) -Ingestion $false
+        $f = V41 'PVW-4.1'
+        $f.State  | Should -Be 'Partial'
+        $f.Detail | Should -Match 'audit log is off'
+    }
+    It 'an unlicensed tenant''s Gap is what license gating turns into an upgrade opportunity' {
+        Arrange -Skus @($script:E3) -Users @((User 'a@contoso.com' @($script:E3.SkuId)))
+        V41 'PVW-4.1' | Out-Null
+        Set-TPLicenseGating | Out-Null
+        $f = @(Get-TPFindings | Where-Object ControlId -eq 'PVW-4.1')[0]
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Match 'upgrade opportunity'
+    }
+}

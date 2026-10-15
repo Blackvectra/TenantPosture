@@ -49,6 +49,9 @@ function Invoke-TPCollectPurview {
             RetentionLabels         = @()
             CommCompliancePolicies  = @()
             InformationBarriersMode = $null
+            # The reason a section failed, by section name, so the finding that
+            # depends on it can say what to fix (Get-TPSectionNotCollectedDetail).
+            SectionErrors       = @{}
             SectionStatus       = @{
                 AuditConfig       = 'NotRun'
                 DLPPolicies       = 'NotRun'
@@ -90,6 +93,7 @@ function Invoke-TPCollectPurview {
                 $result.Data.SectionStatus.AuditConfig = 'Collected'
             } catch {
                 $result.Data.SectionStatus.AuditConfig = 'Failed'
+                $result.Data.SectionErrors.AuditConfig = [string]$_.Exception.Message
                 if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                     Register-TPException -Source 'Purview-Audit' -Message $_.Exception.Message
                 }
@@ -118,6 +122,7 @@ function Invoke-TPCollectPurview {
                 $result.Data.SectionStatus.DLPPolicies = 'Collected'
             } catch {
                 $result.Data.SectionStatus.DLPPolicies = 'Failed'
+                $result.Data.SectionErrors.DLPPolicies = [string]$_.Exception.Message
                 if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                     Register-TPException -Source 'Purview-DLP' -Message $_.Exception.Message
                 }
@@ -147,6 +152,7 @@ function Invoke-TPCollectPurview {
                 $result.Data.SectionStatus.DLPRules = 'Collected'
             } catch {
                 $result.Data.SectionStatus.DLPRules = 'Failed'
+                $result.Data.SectionErrors.DLPRules = [string]$_.Exception.Message
                 if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                     Register-TPException -Source 'Purview-DLPRules' -Message $_.Exception.Message
                 }
@@ -169,6 +175,7 @@ function Invoke-TPCollectPurview {
                 $result.Data.SectionStatus.RetentionPolicies = 'Collected'
             } catch {
                 $result.Data.SectionStatus.RetentionPolicies = 'Failed'
+                $result.Data.SectionErrors.RetentionPolicies = [string]$_.Exception.Message
                 if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                     Register-TPException -Source 'Purview-Retention' -Message $_.Exception.Message
                 }
@@ -191,6 +198,7 @@ function Invoke-TPCollectPurview {
                 $result.Data.SectionStatus.SensitivityLabels = 'Collected'
             } catch {
                 $result.Data.SectionStatus.SensitivityLabels = 'Failed'
+                $result.Data.SectionErrors.SensitivityLabels = [string]$_.Exception.Message
                 if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                     Register-TPException -Source 'Purview-Labels' -Message $_.Exception.Message
                 }
@@ -227,6 +235,7 @@ function Invoke-TPCollectPurview {
                 $result.Data.SectionStatus.ProtectionAlerts = 'Collected'
             } catch {
                 $result.Data.SectionStatus.ProtectionAlerts = 'Failed'
+                $result.Data.SectionErrors.ProtectionAlerts = [string]$_.Exception.Message
                 if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                     Register-TPException -Source 'Purview-ProtectionAlerts' -Message $_.Exception.Message
                 }
@@ -247,13 +256,14 @@ function Invoke-TPCollectPurview {
             # to say why.
             if (-not $cmd.Command -or $cmd.Source -eq 'ExchangeOnline') {
                 $result.Data.SectionStatus[$Section] = 'Failed'
-                if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
-                    $why = if (-not $cmd.Command) { 'is not available' } else { 'resolved only to the Exchange Online session' }
+                $why = if (-not $cmd.Command) { 'is not available' } else { 'resolved only to the Exchange Online session' }
                     # Microsoft exposes each Security & Compliance cmdlet only to accounts holding the role that
                     # grants it, so when the session works (other sections collected) a single absent cmdlet
                     # usually means a missing Purview role, not a tool fault. Stated as a likely cause, not proven.
-                    $hint = if (-not $cmd.Command) { ' The session itself works if other Purview sections collected; Microsoft exposes each cmdlet only to accounts holding the role that grants it, so this usually means the signed-in account lacks that Purview role (for example Information Protection or Compliance Administrator). Check with: Get-Command ' + $Cmdlet + ' in the Security & Compliance session.' } else { '' }
-                    Register-TPException -Source "Purview-$Section" -Message "$Cmdlet $why in the Security & Compliance session, so $Section was not collected.$hint"
+                $hint = if (-not $cmd.Command) { ' The session itself works if other Purview sections collected; Microsoft exposes each cmdlet only to accounts holding the role that grants it, so this usually means the signed-in account lacks that Purview role (for example Information Protection or Compliance Administrator). Check with: Get-Command ' + $Cmdlet + ' in the Security & Compliance session.' } else { '' }
+                $result.Data.SectionErrors[$Section] = "$Cmdlet $why in the Security & Compliance session, so $Section was not collected.$hint"
+                if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                    Register-TPException -Source "Purview-$Section" -Message $result.Data.SectionErrors[$Section]
                 }
                 return
             }
@@ -263,6 +273,7 @@ function Invoke-TPCollectPurview {
                 $result.Data.SectionStatus[$Section] = 'Collected'
             } catch {
                 $result.Data.SectionStatus[$Section] = 'Failed'
+                $result.Data.SectionErrors[$Section] = [string]$_.Exception.Message
                 if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                     Register-TPException -Source "Purview-$Section" -Message $_.Exception.Message
                 }

@@ -25,7 +25,6 @@
     Exceptions = @(
         # ── Manual: no supported read surface ────────────────────────────────
         @{ ControlId = 'DEF-3.3'; Kind = 'Manual'; Reason = 'Defender for Cloud Apps connection status has no supported Graph/EXO read API.' }
-        @{ ControlId = 'DEF-4.4'; Kind = 'Manual'; Reason = 'The Priority account user tag is not exposed by any supported Graph/EXO read API.' }
         @{ ControlId = 'AAD-8.1'; Kind = 'Manual'; Reason = 'PIM alert configuration is not reliably readable across tenant PIM tiers.' }
         @{ ControlId = 'PVW-3.1'; Kind = 'Manual'; Reason = 'SIEM/audit export configuration has no supported read API.' }
         @{ ControlId = 'AAD-5.1'; Kind = 'Manual'; Reason = 'The user SSPR setting (None/Selected/All) has no supported Graph read; authorizationPolicy.allowedToUseSSPR is the ADMINISTRATOR setting.' }
@@ -37,6 +36,7 @@
         @{ ControlId = 'TMS-2.1'; Kind = 'Manual'; Reason = 'Retired by Microsoft: Skype consumer interoperability with Teams ended May 5, 2025 and AllowPublicUsers no longer has any effect, so there is nothing to score.' }
         @{ ControlId = 'TMS-2.5'; Kind = 'Manual'; Reason = 'Enforced by the platform: guests and external participants cannot start a Teams meeting recording and no tenant setting allows it, so there is nothing to score.' }
         @{ ControlId = 'INT-4.2'; Kind = 'ImplementationPending'; Reason = 'Satisfied only when the tenant-wide enrollment policy enables Windows Hello for Business. Microsoft documents that policy as usually disabled, with Windows Hello enabled through an Account protection or settings-catalog policy targeted to a security group, which the Intune collectors do not read yet; a disabled tenant policy is therefore not assessed, never a Gap.' }
+        @{ ControlId = 'AAD-9.1'; Kind = 'Manual'; Reason = 'Enforced by the platform: Microsoft requires number matching for every Authenticator push notification since May 2023 and users cannot opt out; the Graph v1.0 property numberMatchingRequiredState no longer exists, so there is nothing to read or score.' }
         @{ ControlId = 'TMS-2.2'; Kind = 'Manual'; Reason = 'Teams app availability is managed per app (app-centric management) and in org-wide app settings, neither of which this tool reads.' }
         @{ ControlId = 'PVW-3.2'; Kind = 'Manual'; Reason = 'eDiscovery readiness (roles assigned, a documented legal-hold workflow) is not measurable from the tenant; a case count only says whether there has been litigation.' }
         # Verified per-site / deprecated — no tenant-level read signal:
