@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **[Fix] A run refuses an output folder that cannot hold a protected file BEFORE any sign-in.** The
+  2026-10-15 live run from an external drive signed in to four services, collected for six minutes and
+  then ended at the results write with "Attempted to perform an unauthorized operation" and nothing
+  written: a volume without access control lists (exFAT, FAT32) accepts the create and refuses the DACL
+  the writer insists on. `Test-TPSensitiveOutputFolder` (in `Lib/Set-TPSensitiveFileAcl.ps1`) now writes
+  a throwaway file through the real writer, reads the protection back and removes it, and every entry
+  point (single run, batch, sign-in triage, email assessment, batch triage) calls it before its first
+  sign-in, exiting 4 with the folder, what the volume reports and the `-OutputPath` remedy. The writer's
+  own refusal names the volume format too. `TP.OutputFolderProbe.Tests.ps1` pins the probe, the message
+  and the ordering in all five entry points.
 - **[Detection] INT-1.1 reads each compliance policy's non-compliance actions and can be satisfied.** The control
   required "an assigned compliance policy per enrolled platform, each with a non-compliance action" but the collector
   never read the actions, so every tenant with full platform coverage, the first live run included, read "not

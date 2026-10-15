@@ -110,6 +110,16 @@ $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
 if (-not $ClientsFile) { $ClientsFile = Join-Path $scriptDir 'Config' 'clients.json' }
 if (-not $OutputRoot)  { $OutputRoot  = Join-Path $scriptDir 'output' }
+# Every client's results land under this root only where they can be protected.
+# The runner signs in before it loads the module, so the writer is dot-sourced
+# here and the root is proven before the first sign-in (Test-TPSensitiveOutputFolder);
+# a root that cannot hold the protection is refused with the remedy (exit 4).
+. (Join-Path $scriptDir 'Lib' 'Set-TPSensitiveFileAcl.ps1')
+if (-not $WhatIfPreference) {
+    if (-not (Test-Path -LiteralPath $OutputRoot)) { [void][System.IO.Directory]::CreateDirectory($OutputRoot) }
+    try { $null = Test-TPSensitiveOutputFolder -Path $OutputRoot }
+    catch { Write-Host "[!] $($_.Exception.Message)" -ForegroundColor Red; exit 4 }
+}
 
 # ── Load clients.json ─────────────────────────────────────────────────────────
 $resolvedCfg = [System.IO.Path]::GetFullPath($ClientsFile)

@@ -232,7 +232,14 @@ function Set-TPSensitiveFileContent {
         # under the folder's inherited permissions.
         $hardened = $false
         try { $hardened = Set-TPSensitiveHandleAcl -Stream $fs }
-        catch { throw "Set-TPSensitiveFileContent: could not restrict access on '$Path', so it was not written: $($_.Exception.Message)" }
+        catch {
+            # A volume without access control lists (exFAT, FAT32) accepts the
+            # create and refuses the DACL with "Attempted to perform an unauthorized
+            # operation", which reads like a permissions problem; name the volume.
+            $fmt = Get-TPVolumeFormat -Path $dir
+            $note = if ($fmt -and $fmt -notmatch '^(NTFS|ReFS)$') { " The volume holding it reports '$fmt', which cannot hold an access control list; write to an NTFS folder (-OutputPath)." } elseif ($fmt) { " (volume: $fmt)" } else { '' }
+            throw "Set-TPSensitiveFileContent: could not restrict access on '$Path', so it was not written: $($_.Exception.Message)$note"
+        }
         if (-not $hardened -and -not $stageDir) { throw "Set-TPSensitiveFileContent: this runtime cannot harden '$Path' before writing, so it was not written." }
         $pre = $Encoding.GetPreamble()   # the caller's BOM (Excel needs one on the action-plan CSV)
         if ($pre.Length -gt 0) { $fs.Write($pre, 0, $pre.Length) }
@@ -253,5 +260,77 @@ function Set-TPSensitiveFileContent {
         throw
     } finally {
         if ($stageDir) { Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+# The file system of the volume holding a path, as .NET reports it ('NTFS',
+# 'ReFS', 'exFAT', 'FAT32', ...), 'network share' for a UNC path, or $null when
+# it cannot be read. Never throws: it only sharpens a refusal message.
+function Get-TPVolumeFormat {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [string] $Path)
+    try {
+        # Judge a UNC path on the text given: GetFullPath on Linux reads backslashes
+        # as ordinary characters and would root it under the current directory.
+        if ($Path -match '^(\\\\|//)') { return 'network share' }
+        $full = [System.IO.Path]::GetFullPath($Path)
+        $root = [System.IO.Path]::GetPathRoot($full)
+        if ([string]::IsNullOrEmpty($root)) { return $null }
+        $di = [System.IO.DriveInfo]::new($root)
+        if (-not $di.IsReady) { return $null }
+        $fmt = [string]$di.DriveFormat
+        if ([string]::IsNullOrWhiteSpace($fmt)) { return $null }
+        return $fmt
+    } catch { return $null }
+}
+
+# One sentence set for every refusal of an output folder: the folder, what the
+# volume reports, why that matters, the reason the writer gave, and the remedy.
+function Format-TPOutputFolderRefusal {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)] [string] $Path,
+        [AllowNull()] [AllowEmptyString()] [string] $Format,
+        [Parameter(Mandatory)] [string] $Reason
+    )
+    $fmtText = if ($Format) { " The volume holding it reports '$Format'." } else { '' }
+    $hint = if ($Format -and $Format -notmatch '^(NTFS|ReFS)$') { " $Format volumes cannot hold an access control list, so no results file can be protected there." } else { '' }
+    return "The output folder '$Path' cannot hold a protected results file, so the assessment would end at the results write with nothing written.$fmtText$hint Reason: $Reason. Choose a folder on an NTFS volume with -OutputPath, for example C:\TenantPosture\output. The results JSON holds tenant data and is written only where the signed-in user, SYSTEM and Administrators alone can read it."
+}
+
+# Proves, BEFORE any sign-in, that the output folder can hold a protected file:
+# a throwaway file is written through Set-TPSensitiveFileContent (the same path
+# the results JSON takes), its protection is read back, and it is removed. A
+# folder that fails is refused with the remedy, instead of the run ending at
+# the results write after the whole collection with nothing written, which is
+# what an exFAT drive did on the 2026-10-15 live run. Throws on refusal; the
+# probe file never survives either outcome.
+function Test-TPSensitiveOutputFolder {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory)] [string] $Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { throw "Test-TPSensitiveOutputFolder: '$Path' is not a folder." }
+    $format = Get-TPVolumeFormat -Path $Path
+    $probe = Join-Path $Path ('.tp-write-probe-' + [guid]::NewGuid().ToString('N') + '.tmp')
+    try {
+        try { Set-TPSensitiveFileContent -Path $probe -Content 'TenantPosture output-folder probe; safe to delete.' }
+        catch { throw (Format-TPOutputFolderRefusal -Path $Path -Format $format -Reason $_.Exception.Message) }
+        if ($IsWindows) {
+            $acl = Get-Acl -LiteralPath $probe
+            $expected = @(Get-TPSensitiveFileAccessRules | ForEach-Object { [string]$_.IdentityReference.Value })
+            $extra = @($acl.Access | ForEach-Object { [string]$_.IdentityReference.Value } | Where-Object { $_ -notin $expected })
+            if (-not $acl.AreAccessRulesProtected) { throw (Format-TPOutputFolderRefusal -Path $Path -Format $format -Reason 'the file came back inheriting the folder permissions after the protection was applied') }
+            if ($extra.Count -gt 0) { throw (Format-TPOutputFolderRefusal -Path $Path -Format $format -Reason "the file came back readable by $($extra -join ', ') after the protection was applied") }
+        } else {
+            $item = Get-Item -LiteralPath $probe -Force   # a dot-file is hidden on Unix; without -Force Get-Item reports it missing
+            $modeProp = $item.PSObject.Properties['UnixMode']
+            $mode = if ($modeProp) { [string]$modeProp.Value } else { '' }
+            if ($mode -and $mode -notmatch '^-rw-------') { throw (Format-TPOutputFolderRefusal -Path $Path -Format $format -Reason "the file came back with mode $mode") }
+        }
+        return [ordered]@{ Path = $Path; Format = $format; Ok = $true }
+    } finally {
+        Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
     }
 }
