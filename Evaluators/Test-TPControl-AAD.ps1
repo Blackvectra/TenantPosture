@@ -1205,12 +1205,25 @@ function Test-TPControlAADUserConsent {
         return
     }
     $consentPolicies = @(@($raw) | ForEach-Object { [string]$_ } | Where-Object { $_ -like 'ManagePermissionGrantsForSelf.*' })
-    # microsoft-user-default-legacy = users can consent to ANY app permission.
-    # microsoft-user-default-low    = verified publishers, low-impact permissions only.
-    # A custom ManagePermissionGrantsForSelf.* policy allows whatever it defines,
+    # Microsoft's built-in user consent policies (Manage app consent policies, Learn):
+    #   microsoft-user-default-legacy        users can consent to ANY app permission.
+    #   microsoft-user-default-low           verified publishers, low-impact permissions only.
+    #   microsoft-user-default-recommended   the Microsoft-managed policy ("Let Microsoft manage your
+    #                                        consent settings"), the default for new tenants: users can
+    #                                        consent to any user-consentable delegated permission EXCEPT
+    #                                        the file, site, mail, calendar, chat, online-meeting,
+    #                                        contacts, tasks and people scopes Microsoft lists and the
+    #                                        legacy mail-protocol scopes; Microsoft updates the list.
+    #   microsoft-user-default-allow-consent-apps  companion policy, on by default: named mail clients
+    #                                        (Apple Mail, Thunderbird, ...) may be consented for mail scopes.
+    # Reading the managed policy as "custom" filed every new tenant as not assessed; it is a documented,
+    # partial restriction and is judged as one. A policy that is none of these allows whatever it defines,
     # which this tool cannot evaluate, so it is not called restricted.
     $unrestrictedConsent = $consentPolicies | Where-Object { $_ -match 'legacy|ByDefault' }
-    $custom = @($consentPolicies | Where-Object { $_ -notmatch 'microsoft-user-default-(legacy|low)$' })
+    $managed  = @($consentPolicies | Where-Object { $_ -match 'microsoft-user-default-recommended$' })
+    $mailApps = @($consentPolicies | Where-Object { $_ -match 'microsoft-user-(default-allow|allow-default)-consent-apps$' })
+    $custom   = @($consentPolicies | Where-Object { $_ -notmatch 'microsoft-user-default-(legacy|low|recommended)$' -and $_ -notmatch 'microsoft-user-(default-allow|allow-default)-consent-apps$' })
+    $mailNote = if ($mailApps.Count -gt 0) { " The companion mail-client policy ($($mailApps -join ', ')) also lets users consent to the mail clients Microsoft names (Apple Mail, Thunderbird and others) for mail scopes." } else { '' }
     # Expected state: users cannot consent freely (disabled, or limited to low-impact permissions from
     # verified publishers). The admin consent workflow is a different safeguard that AAD-6.3 owns; it is
     # shown here as related context and never decides this verdict, so one disabled workflow costs one
@@ -1218,12 +1231,17 @@ function Test-TPControlAADUserConsent {
     $verified = @(); $short = @(); $unknown = @()
     if ($consentPolicies.Count -eq 0) {
         $verified += 'Users cannot consent to applications (no user consent policy assigned).'
-    } elseif (-not $unrestrictedConsent -and $custom.Count -eq 0) {
-        $verified += "User consent is limited to low-impact permissions for apps from verified publishers ($($consentPolicies -join ', '))."
-    } elseif (-not $unrestrictedConsent) {
-        $unknown += "what user consent allows, because it is governed by a custom permission grant policy ($($custom -join ', ')) that requires manual verification."
-    } else {
+    } elseif ($unrestrictedConsent) {
         $short += 'Users can consent to any app permissions. Consent phishing attacks grant attacker apps access to mailbox, files, and contacts without admin awareness.'
+    } elseif ($custom.Count -gt 0) {
+        $unknown += "what user consent allows, because it is governed by a custom permission grant policy ($($custom -join ', ')) that requires manual verification."
+    } elseif ($managed.Count -gt 0) {
+        # Partial on purpose: the managed policy is a real, Microsoft-maintained restriction (verified),
+        # and still lets users consent to every other delegated permission from any publisher (shortfall).
+        $verified += "The Microsoft-managed consent policy ($($managed -join ', ')) blocks user consent to the file, site, mail, calendar, chat, online-meeting, contacts, tasks and people scopes and the legacy mail-protocol scopes Microsoft lists.$mailNote"
+        $short += 'Users can still consent to every other user-consentable delegated permission, from any publisher; the baseline expects user consent disabled, or limited to low-impact permissions from verified publishers.'
+    } else {
+        $verified += "User consent is limited to low-impact permissions for apps from verified publishers ($($consentPolicies -join ', ')).$mailNote"
     }
     $context = ''
     if (Test-TPSectionCollected $gov 'ConsentPolicy') {
@@ -1231,8 +1249,11 @@ function Test-TPControlAADUserConsent {
         if ($wf -is [bool] -and $wf) { $context = 'the admin consent workflow is enabled (AAD-6.3).' }
         elseif ($wf -is [bool]) { $context = 'the admin consent workflow is disabled, so users who need an app have no approval path (scored under AAD-6.3).' }
     }
+    # Unrestricted consent is a Gap outright; the Microsoft-managed policy's shortfall sits beside a
+    # verified restriction and takes the helper's Partial.
+    $shortfallState = if ($managed.Count -gt 0 -and -not $unrestrictedConsent) { 'Auto' } else { 'Gap' }
     Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
-        -ShortfallState 'Gap' -Context $context `
+        -ShortfallState $shortfallState -Context $context `
         -CurrentValue $(if ($consentPolicies.Count) { $consentPolicies -join ', ' } else { 'No user consent policy assigned' }) `
         -RequiredValue 'User consent disabled, or limited to low-impact permissions from verified publishers'
 }
@@ -1498,37 +1519,17 @@ function Test-TPControlAADAuthenticatorNumberMatch {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AuthMethodsPolicy was not collected; not assessed.'
         return
     }
-    $ampConfigs = @(Get-TPNestedProperty -Object $auth -Path 'Data.AuthMethodsPolicy.AuthenticationMethodConfigs' -Default @())
-    $mfaConfig  = $ampConfigs | Where-Object { $_.Id -eq 'MicrosoftAuthenticator' } | Select-Object -First 1
-    # Microsoft enforced number matching as the platform default in May 2023.
-    # When the property is null/empty the API is reporting "MS is enforcing it
-    # at the platform level" — NOT "we don't know". Treating absence as unknown
-    # produced "Number matching state is ''" Gap findings on every modern
-    # tenant (mirrors the AAD-2.3 fix in Test-TPControlAADCA.ps1).
-    $nmStateRaw = Get-TPNestedProperty -Object $mfaConfig -Path 'FeatureSettings.NumberMatchingRequiredState'
-    $nmState    = if ($null -eq $nmStateRaw -or [string]::IsNullOrWhiteSpace([string]$nmStateRaw)) {
-                      'default'
-                  } else {
-                      [string]$nmStateRaw
-                  }
-    if ($nmState -eq 'enabled' -or $nmState -eq 'default') {
-        $msg = if ($nmState -eq 'enabled') {
-            'Microsoft Authenticator number matching is explicitly enabled — MFA fatigue attacks blocked.'
-        } else {
-            'Number matching: enabled (Microsoft platform default since May 2023). Explicit configuration is optional but ensures it cannot be disabled.'
-        }
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail $msg `
-            -CurrentValue "NumberMatchingRequiredState = $nmState" `
-            -RequiredValue 'enabled (or default)'
-    } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "Number matching state is '$nmState'. MFA push fatigue attacks are possible — attacker can spam approve requests." `
-            -CurrentValue "NumberMatchingRequiredState = $nmState" `
-            -RequiredValue 'enabled' -Remediation $ctrl.Remediation
-    }
+    # Enforced by the platform. Microsoft has required number matching for every
+    # Microsoft Authenticator push notification since May 2023 and users cannot
+    # opt out (Learn: How number matching works in MFA push notifications). The
+    # property this control used to read, featureSettings.numberMatchingRequiredState,
+    # no longer exists in Graph v1.0 (microsoftAuthenticatorFeatureSettings defines
+    # only displayAppInformationRequiredState and displayLocationInformationRequiredState),
+    # so the read always came back empty and the control scored Satisfied from
+    # nothing on every tenant. There is no tenant setting to read or score; the
+    # TMS-2.5 pattern applies: not applicable, never a pass.
+    Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+        -Detail 'Enforced by the platform: Microsoft requires number matching for every Microsoft Authenticator push notification (since May 2023) and users cannot opt out, so there is no tenant setting to read or score. The Graph property this control once read (numberMatchingRequiredState) no longer exists. Not scored; MFA fatigue protection beyond number matching is the additional-context settings (application name and location), which this assessment does not score.'
 }
 
 # ── AAD-9.2 Passwordless Auth Methods Available ───────────────────────────────

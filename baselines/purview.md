@@ -404,7 +404,7 @@ Microsoft Purview Compliance Manager improvement actions are reviewed and assign
 Compliance Manager surfaces specific misconfiguration risks with remediation steps. Unreviewed action items represent documented known gaps.
 
 **Remediation:**
-compliance.microsoft.com > Compliance Manager > Improvement actions > Assign to owners and set target dates.
+Microsoft Purview portal (purview.microsoft.com) > Compliance Manager > Improvement actions > Assign to owners and set target dates.
 
 **Framework mappings:**
 

@@ -105,6 +105,11 @@ say what is not assessed:
   locks or removes its access acts; one whose only actions notify is a shortfall; one
   whose actions were not read (an older results file, a tenant that refused the expand)
   leaves the control not assessed, never credited and never faulted.
+- **INT-4.2** Reads the tenant-wide Windows Hello for Business enrollment policy only. Microsoft
+  documents that policy as usually disabled, with Windows Hello enabled through an Account
+  protection or settings-catalog policy the assessment does not read, so a disabled or
+  unconfigured tenant policy is not assessed, never a Gap (see "Evidence boundaries shown
+  with the control" below).
 - **DEF-2.3** Judged over the malware policies in force. A filter on in a policy that
   applies to nobody no longer satisfies it.
 - **Policies in force (17 evaluators).** A tenant with **no** custom rules has an empty rule
@@ -157,6 +162,16 @@ remains is stated in the finding itself: the configured actions are read from th
 Intune applied them to a given device is not, and Conditional Access (AAD-2.3 / INT-1.2) is what
 turns device state into restricted access. `Config/evidence-limits.json` is empty today; the
 mechanism stays for the next component the tool cannot read.
+
+**INT-4.2 — Windows Hello for Business Enabled.** The assessment reads the tenant-wide Intune
+enrollment configuration for Windows Hello for Business and nothing else. Microsoft's own guidance
+says that policy applies only at enrollment time, to every device, and "is usually disabled", with
+Windows Hello for Business enabled through an endpoint-security Account protection profile or a
+settings-catalog policy targeted to a security group, which the Intune collectors do not read.
+INT-4.2 is therefore Satisfied only when the tenant-wide policy enables it; a disabled or
+unconfigured tenant-wide policy is reported as not assessed, naming the policy to confirm, never
+as a Gap. Reading that disabled tenant policy as "Windows Hello is off" was a false Gap on every
+tenant following Microsoft's pattern.
 
 ## Open verification
 

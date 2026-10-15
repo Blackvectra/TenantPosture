@@ -249,7 +249,7 @@ Teams app permission policy restricts installation to Microsoft and verified thi
 Apps from unverified publishers have not been vetted. Malicious Teams apps can access meeting transcripts, chat, and files.
 
 **Remediation:**
-Teams Admin Center > Teams apps > Permission policies > Block all apps from unknown publishers.
+Teams admin center > Teams apps > Manage apps > Org-wide app settings: turn off letting users install third-party apps by default and block new third-party apps until reviewed; then set each approved app's availability (Available to) per app. App permission policies no longer apply after the migration to app centric management.
 
 **Framework mappings:**
 

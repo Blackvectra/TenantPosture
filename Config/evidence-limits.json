@@ -1,4 +1,10 @@
 {
-  "_comment": "Components of a control's expected state the assessment does not establish, whatever the tenant looks like: the evaluator does not read that evidence. Every surface that shows the control also shows 'Not established: <component>.', so a reader cannot take the verified half for the whole requirement. docs/TP-DETECTION-LIMITS.md explains each entry; add an entry here in the same change as the limitation, and remove it in the same change as the read that lifts it. Empty since 2026-10-14: INT-1.1's non-compliance actions are read from scheduledActionsForRule.",
-  "Limits": []
+  "_comment": "Components of a control's expected state the assessment does not establish, whatever the tenant looks like: the evaluator does not read that evidence. Every surface that shows the control also shows 'Not established: <component>.', so a reader cannot take the verified half for the whole requirement. docs/TP-DETECTION-LIMITS.md explains each entry; add an entry here in the same change as the limitation, and remove it in the same change as the read that lifts it. INT-1.1's entry was removed on 2026-10-14 when its non-compliance actions began to be read from scheduledActionsForRule.",
+  "Limits": [
+    {
+      "Control": "INT-4.2",
+      "NotEstablished": "Windows Hello for Business enablement through an Account protection or settings-catalog policy",
+      "Reason": "The assessment reads only the tenant-wide Intune enrollment configuration for Windows Hello for Business. Microsoft documents that policy as usually disabled, with Windows Hello for Business enabled through an endpoint-security Account protection or settings-catalog policy targeted to a security group, which the assessment does not read. INT-4.2 is therefore Satisfied only when the tenant-wide policy enables it, and a disabled or unconfigured tenant-wide policy is not assessed, never a Gap."
+    }
+  ]
 }

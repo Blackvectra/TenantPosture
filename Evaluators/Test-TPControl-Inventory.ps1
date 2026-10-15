@@ -108,6 +108,15 @@ function Test-TPControlInventoryStaleGuests {
     if (-not $inv -or -not $inv.Success) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Inventory data not collected'; return
     }
+    # Last sign-in needs Entra ID P1 or P2; without it the collector re-read the
+    # guest list and recorded the licensing fact. A license is an upgrade
+    # opportunity, never a collection failure and never a pass.
+    if ((Get-TPObjectField -Item $inv.Data -Key 'SignInActivityLicensed' -Default $true) -eq $false) {
+        $n = @(Get-TPObjectField -Item $inv.Data -Key 'GuestUsers' -Default @()).Count
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Not scored: last sign-in (Graph signInActivity) requires Microsoft Entra ID P1 or P2, which this tenant does not hold, so whether any of the $n guest account(s) read is stale is not known — surfaced as a licensing upgrade opportunity, not counted against the score. Review guest accounts by last sign-in in Entra ID > Users, or license Entra ID P1."
+        return
+    }
     $staleGuests = @($inv.Data['GuestUsers'] | Where-Object { $_.IsStale -eq $true })
     $allGuests   = @($inv.Data['GuestUsers']).Count
     if ($allGuests -eq 0 -and -not (Test-TPInventorySectionCollected -Inventory $inv -Section 'GuestUsers')) {
@@ -144,6 +153,11 @@ function Test-TPControlInventoryStaleMembers {
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-TPSectionCollected $inv 'StaleMembers')) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'StaleMembers was not collected; not assessed.'
+        return
+    }
+    if ((Get-TPObjectField -Item $inv.Data -Key 'SignInActivityLicensed' -Default $true) -eq $false) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Not scored: last sign-in (Graph signInActivity) requires Microsoft Entra ID P1 or P2, which this tenant does not hold, so no licensed member account can be judged dormant — surfaced as a licensing upgrade opportunity, not counted against the score. Review licensed accounts by last sign-in in Entra ID > Users, or license Entra ID P1.'
         return
     }
     $stale = @($inv.Data['StaleMembers'] ?? @() | Where-Object { $_.HasLicense -eq $true })

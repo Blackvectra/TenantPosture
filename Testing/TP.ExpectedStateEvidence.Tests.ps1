@@ -117,6 +117,38 @@ Describe 'Expected state: every mandatory component, each half kept visible' {
             Set-TPRawData -Key 'EXO-Inventory' -Data (& $script:Inv 'Collected')
             (& $script:Verdict 'Test-TPControlEXOMailboxAudit' 'EXO-1.1').State | Should -Be 'Gap'
         }
+        # Microsoft, Manage mailbox auditing: while the organization switch is on,
+        # AuditEnabled "always displays True" and setting it False "is ignored";
+        # while it is off, nothing is audited "even if mailbox auditing is enabled
+        # on a mailbox". The sampled flag is therefore never evidence of the switch.
+        It 'switch not read, every sampled mailbox AuditEnabled = True: not assessed, never a pass (was: Satisfied from the sample alone)' {
+            Set-TPRawData -Key 'EXO-MailboxConfig' -Data (& $script:Raw 'EXO-MailboxConfig' @{ SectionStatus = @{ OrganizationConfig = 'Failed' }
+                MailboxAuditSummary = @{ SampleMailboxAudit = @{ SampleCount = 10; AllEnabled = $true } } })
+            Set-TPRawData -Key 'EXO-Inventory' -Data (& $script:Inv 'Collected')
+            $v = & $script:Verdict 'Test-TPControlEXOMailboxAudit' 'EXO-1.1'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match 'was not read'
+            $v.Detail | Should -Match 'always displays True'
+            $v.Detail | Should -Not -Match 'Verified: the organization-level'
+            $v.FrameworkIds | Should -Not -BeNullOrEmpty -Because 'an uncited NotApplicable vanishes from the NIST rollup'
+        }
+        It 'switch not read, a sampled mailbox AuditEnabled = False: not assessed, never Partial' {
+            Set-TPRawData -Key 'EXO-MailboxConfig' -Data (& $script:Raw 'EXO-MailboxConfig' @{ SectionStatus = @{ OrganizationConfig = 'Failed' }
+                MailboxAuditSummary = @{ SampleMailboxAudit = @{ SampleCount = 10; AllEnabled = $false } } })
+            Set-TPRawData -Key 'EXO-Inventory' -Data (& $script:Inv 'Collected')
+            $v = & $script:Verdict 'Test-TPControlEXOMailboxAudit' 'EXO-1.1'
+            $v.State  | Should -Be 'NotApplicable'
+            $v.Detail | Should -Match 'mixed'
+        }
+        It 'switch on, a sampled mailbox AuditEnabled = False: Satisfied, the flag reported as informational (Exchange ignores it)' {
+            Set-TPRawData -Key 'EXO-MailboxConfig' -Data (& $script:Raw 'EXO-MailboxConfig' @{ SectionStatus = @{ OrganizationConfig = 'Collected' }
+                OrganizationConfig = [pscustomobject]@{ AuditDisabled = $false }
+                MailboxAuditSummary = @{ SampleMailboxAudit = @{ SampleCount = 10; AllEnabled = $false } } })
+            Set-TPRawData -Key 'EXO-Inventory' -Data (& $script:Inv 'Collected')
+            $v = & $script:Verdict 'Test-TPControlEXOMailboxAudit' 'EXO-1.1'
+            $v.State  | Should -Be 'Satisfied'
+            $v.Detail | Should -Match 'informational'
+        }
     }
 
     Context 'INT-2.2 ASR: rule modes read, judged only against an approved list' {

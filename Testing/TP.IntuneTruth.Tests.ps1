@@ -65,9 +65,15 @@ Describe 'Intune controls count what enforces something' {
         Run @{ 'deviceEnrollmentConfigurations' = $d }
         (Verdict 'Test-TPControlIntuneEnrollmentRestrictions' 'INT-3.1').State | Should -Be 'Satisfied'
     }
-    It 'INT-4.2 reads the WHfB state, not the presence of the default configuration' {
+    It 'INT-4.2 reads the WHfB state, not the presence of the default configuration, and a disabled tenant-wide policy is not assessed, never a Gap' {
+        # Microsoft: the tenant-wide policy "is usually disabled and Windows Hello for Business is
+        # enabled using a policy targeted to a security group", which the collectors do not read.
         Run @{ 'deviceEnrollmentConfigurations' = $script:Defaults }
-        (Verdict 'Test-TPControlIntuneWindowsHello' 'INT-4.2').State | Should -Be 'Gap'
+        $f = Verdict 'Test-TPControlIntuneWindowsHello' 'INT-4.2'
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Match 'Account protection'
+        $f.Detail | Should -Match 'not assessed'
+        @($f.FrameworkIds).Count | Should -BeGreaterThan 0
     }
     It 'unassigned drafts and same-family templates are not LAPS / ASR' {
         Run @{
