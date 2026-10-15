@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **[Fix] The HTML report's brand colors render again.** Under a profile, the report's stylesheet carried
+  `System.Collections.Specialized.OrderedDictionary` where the primary color belonged and a hashtable's type name
+  for the accent, so the header gradient and footer background declarations were invalid CSS and the header lost its
+  background (first live run under the NRG profile, 2026-10-14). PowerShell variable names ignore case: the publisher
+  kept the colors in `$P`, `$S` and `$A`, and two loops lower in the same function iterate `$p` and `$a`, so the last
+  Conditional Access policy and the last attachment were printed as colors. The colors are now `$brandPrimary`,
+  `$brandSecondary` and `$brandAccent`; `TP.Profile.Tests.ps1` renders the report with a brand, a policy and an
+  attachment and reads the `:root` colors back, and a static test fails any publisher that uses one single-letter
+  variable name in two casings inside one function. A `-FromResults` republish of an affected run fixes its report.
 - **[Docs] Client-facing text names what Microsoft runs today.** From the 2026-10-15 currency scan. PVW-3.3
   pointed at `compliance.microsoft.com`, the retired classic compliance portal; it now names the Microsoft
   Purview portal (purview.microsoft.com), in the control, the evaluator and `baselines/purview.md`. TMS-2.2

@@ -79,3 +79,56 @@ Describe 'Profiles: New-TPProfile and Get-TPProfile' {
         { Import-PowerShellDataFile -LiteralPath $file -ErrorAction Stop } | Should -Not -Throw
     }
 }
+
+# The report's stylesheet printed a dictionary's type name where the primary color belonged on the first
+# live run under the NRG profile: the publisher kept the colors in $P, $S and $A, and two loops lower in the
+# same function iterate $p and $a. PowerShell variable names ignore case, so those are the same variables.
+Describe 'The loaded profile colors reach the HTML report' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop
+    }
+    AfterAll { Clear-TPState; Remove-Module 'TenantPosture' -Force -ErrorAction SilentlyContinue }
+
+    It 'writes the brand colors into :root after a Conditional Access policy and an attachment have been rendered' {
+        Clear-TPState
+        # One CA policy and one attachment make the publisher run the two loops that overwrote the colors.
+        Set-TPRawData -Key 'AAD-CAPolicies' -Data @{ Success = $true; Data = @{ Policies = @(@{ Id = 'p1'; DisplayName = 'Block legacy'; State = 'enabled'
+            Conditions = @{ Users = @{ IncludeUsers = @('All') }; Applications = @{ Include = @('All') }; ClientAppTypes = @('other') }
+            GrantControls = @{ Operator = 'OR'; BuiltInControls = @('block') } }) } }
+        Add-TPFinding -ControlId 'AAD-1.1' -State 'Gap' -Category 'Identity' -Title 'Legacy authentication' -Severity 'High' -Detail 'Shortfall: not blocked.'
+        $dir = Join-Path $TestDrive 'brand'; New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        $out = Join-Path $dir 'r.html'
+        Publish-TPAssessmentHTML -Metadata @{ TenantDomain = 'contoso.example'; TenantId = '00000000-0000-0000-0000-000000000000'; Operator = 'a'; AssessmentDate = 'October 14, 2026'; AssessmentTime = '2026-10-14T16:44:43+00:00'; ToolVersion = '4.14.3'; QuickScan = $false
+                Brand = @{ CompanyName = 'Acme Managed IT'; PrimaryColor = '#1a3a6b'; SecondaryColor = '#e87722'; AccentColor = '#4a7ba6' } } `
+            -Findings (Get-TPFindings) -Connections @{ Graph = $true; EXO = $true; IPPSSession = $true; Teams = $true; SharePoint = $true } `
+            -OutputPath $out -Attachments @(@{ Label = 'Playbook'; FileName = 'playbook.md'; Mime = 'text/markdown'; Content = '# playbook' }) | Out-Null
+        $html = Get-Content -LiteralPath $out -Raw
+        $html | Should -Match ':root\{--P:#1a3a6b;--S:#e87722;--A:#4a7ba6;'
+        $html | Should -Match 'linear-gradient\(138deg,#1a3a6b 0%'
+        $html | Should -Not -Match 'System\.Collections' -Because 'a type name in the stylesheet is a variable that was overwritten'
+    }
+
+    It 'no publisher uses one single-letter variable name in two casings inside one function (PowerShell ignores case)' {
+        $files = @(Get-ChildItem -LiteralPath (Join-Path $script:RepoRoot 'Publishers') -Filter '*.ps1') +
+                 @(Get-ChildItem -LiteralPath (Join-Path $script:RepoRoot 'Email-IR' 'Publishers') -Filter '*.ps1' -ErrorAction SilentlyContinue)
+        $fnType  = [System.Management.Automation.Language.FunctionDefinitionAst]
+        $varType = [System.Management.Automation.Language.VariableExpressionAst]
+        $bad = foreach ($f in $files) {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
+            foreach ($fn in @($ast.FindAll({ param($n) $n -is $fnType }, $true))) {
+                # Variables in this function's own body; a function nested inside it is its own scope.
+                $own = @($fn.Body.FindAll({ param($n) $n -is $varType }, $true) | Where-Object {
+                    $p = $_.Parent; $nested = $false
+                    while ($null -ne $p -and -not [object]::ReferenceEquals($p, $fn)) { if ($p -is $fnType) { $nested = $true; break }; $p = $p.Parent }
+                    -not $nested })
+                $names = @($own | ForEach-Object { $_.VariablePath.UserPath } | Where-Object { $_.Length -eq 1 } | Sort-Object -Unique -CaseSensitive)
+                foreach ($g in @($names | Group-Object { $_.ToLowerInvariant() } | Where-Object { $_.Count -gt 1 })) {
+                    "$($f.Name): $($fn.Name) uses " + (($g.Group | ForEach-Object { '$' + $_ }) -join ' and ')
+                }
+            }
+        }
+        $bad | Should -BeNullOrEmpty
+    }
+}

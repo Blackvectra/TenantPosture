@@ -185,6 +185,8 @@ Every evaluator must guard against missing data as its first action. If `Get-TPR
 
 **US English spelling.** This tool produces deliverables for US clients, so all prose — findings text, remediation guidance, `Config/*.json` strings, comments and docs — uses US spelling: `license` not `licence`, and likewise `organization`, `behavior`, `defense`, `enrollment`, `catalog`, `analyze`, `normalize`, `authorized`, `sanitized`, `labeled`, `gray`. A British spelling reaching a client report reads as careless, and mixed spellings inside one document read worse. Note `Effort: 'License purchase'` in `Config/operational-impact.json` is pinned by `TP.ImprovementPlan.Tests.ps1` — the config value and the test's allowed set must change together.
 
+**Variable names ignore case.** `$P` and `$p` are one variable. The HTML publisher set its brand colors in `$P`, `$S` and `$A`; two loops lower in the same function iterate `$p` and `$a`, so the stylesheet printed `System.Collections.Specialized.OrderedDictionary` where the primary color belonged and the report header lost its background on the first live run under the NRG profile. The colors are `$brandPrimary` / `$brandSecondary` / `$brandAccent`; `TP.Profile.Tests.ps1` renders the report with a brand and reads the `:root` colors back, and fails any publisher that uses one single-letter variable name in two casings inside one function.
+
 **StrictMode.** `Set-StrictMode -Version Latest` is active module-wide. Referencing a property an object does not have THROWS before a `??` default can apply, so fields read off external cmdlet output whose shape is not guaranteed must go through `Get-TPObjectField`, not direct dot-access.
 
 ## Control Schema
