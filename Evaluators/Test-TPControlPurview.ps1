@@ -210,7 +210,7 @@ function Test-TPControlPurviewCommCompliance {
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-TPSectionCollected $pvw 'CommCompliancePolicies')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CommCompliancePolicies was not collected; not assessed.'
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail (Get-TPSectionNotCollectedDetail -Raw $pvw -Section 'CommCompliancePolicies' -CollectorSource 'Purview-CommCompliancePolicies')
         return
     }
     # A policy explicitly Enabled = $false is not active; unknown counts.
@@ -236,7 +236,7 @@ function Test-TPControlPurviewInfoBarriers {
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-TPSectionCollected $pvw 'InformationBarriersMode')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'InformationBarriersMode was not collected; not assessed.'
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail (Get-TPSectionNotCollectedDetail -Raw $pvw -Section 'InformationBarriersMode' -CollectorSource 'Purview-InformationBarriersMode')
         return
     }
     $ibMode = [string]($pvw.Data['InformationBarriersMode'] ?? 'Legacy')
@@ -297,7 +297,7 @@ function Test-TPControlPurviewAutoLabel {
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-TPSectionCollected $pvw 'AutoLabelPolicies')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AutoLabelPolicies was not collected; not assessed.'
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail (Get-TPSectionNotCollectedDetail -Raw $pvw -Section 'AutoLabelPolicies' -CollectorSource 'Purview-AutoLabelPolicies')
         return
     }
     # Mode: Enable (labels content) / TestWith[out]Notifications (simulation:
@@ -410,7 +410,7 @@ function Test-TPControlPurviewAuditPremium {
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-TPSectionCollected $pvw 'AuditConfig')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AuditConfig was not collected; not assessed.'
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail (Get-TPSectionNotCollectedDetail -Raw $pvw -Section 'AuditConfig' -CollectorSource 'Purview-Audit')
         return
     }
     # AdvancedAuditEnabled is not a key the collector populates — Get-AdminAuditLogConfig
@@ -445,7 +445,7 @@ function Test-TPControlPurviewAuditRetention {
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-TPSectionCollected $pvw 'AuditRetentionPolicies')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'AuditRetentionPolicies was not collected; not assessed.'
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail (Get-TPSectionNotCollectedDetail -Raw $pvw -Section 'AuditRetentionPolicies' -CollectorSource 'Purview-AuditRetentionPolicies')
         return
     }
     $retentionPolicies = @($pvw.Data['AuditRetentionPolicies'] ?? @())
@@ -471,7 +471,7 @@ function Test-TPControlPurviewLabelsPublished {
     # never collected at all, so any tenant WITH labels read "labels defined
     # but none published" (Partial) — a statement nothing had checked.
     if (-not (Test-TPSectionCollected $pvw 'SensitivityLabels')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'SensitivityLabels was not collected; not assessed.'
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail (Get-TPSectionNotCollectedDetail -Raw $pvw -Section 'SensitivityLabels' -CollectorSource 'Purview-Labels')
         return
     }
     $labels        = @($pvw.Data['SensitivityLabels'] ?? @())
@@ -501,7 +501,7 @@ function Test-TPControlPurviewRecordsManagement {
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-TPSectionCollected $pvw 'RetentionLabels')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'RetentionLabels was not collected; not assessed.'
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail (Get-TPSectionNotCollectedDetail -Raw $pvw -Section 'RetentionLabels' -CollectorSource 'Purview-RetentionLabels')
         return
     }
     $retentionLabels = @($pvw.Data['RetentionLabels'] ?? @())
