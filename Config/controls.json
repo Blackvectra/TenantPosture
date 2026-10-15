@@ -4796,7 +4796,7 @@
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
       "EvaluatorFunction": "Test-TPControlDefenderPriorityAccounts",
-      "Remediation": "Defender portal > Settings > Email & collaboration > User tags > Global Settings > Priority account protection. Tag executives and admins as priority accounts.",
+      "Remediation": "Tag executives and administrators as priority accounts (up to 250): Microsoft 365 admin center > Users > Active users > More actions > Manage priority accounts; or Defender portal > Settings > Email & collaboration > User tags > Priority account; or Exchange Online PowerShell: Set-User -Identity <UPN> -VIP $true. Then confirm priority account protection is on: Defender portal > Settings > Email & collaboration > Priority account protection (Get-EmailTenantSettings | Format-List EnablePriorityAccountProtection).",
       "LicenseRequirement": "Defender for Office 365 Plan 2 (M365 E5 or add-on)",
       "References": {
         "CISControls": [],

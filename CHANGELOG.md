@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **[Detection] DEF-4.4 reads the Priority account tag instead of asking for a screenshot.** The evaluator
+  said the Defender "Priority account" user tag "is not exposed by any supported Graph/EXO read API" and
+  filed the control as manual verification on every tenant; `Config/coverage-exceptions.psd1` recorded the
+  same claim. Microsoft documents `Get-User -IsVIP` as the way to list priority accounts ("Manage and
+  monitor priority accounts") and `Get-EmailTenantSettings` EnablePriorityAccountProtection as the Defender
+  for Office 365 Plan 2 protection switch ("Configure and review priority account protection"). The Defender
+  collector now reads both through the Exchange Online session (`Get-User` is pinned there, as it also exists
+  in Security & Compliance) and stores them under `PriorityAccounts`; the evaluator is Satisfied when at
+  least one account is tagged (naming up to five and counting the rest; which executives belong on the list
+  stays the reviewer's judgment), a Gap when none is, Partial when the Plan 2 switch was read as off, and
+  not assessed, with the reason, when `Get-User -IsVIP` failed or the results predate the read. A switch
+  that could not be read (no Plan 2, an older module) is stated as context and never fails the tag verdict,
+  because Microsoft turns it on by default. License gating is unchanged: a tenant without Plan 2 that tags
+  nobody still reads as an upgrade opportunity, not a scored gap. The remediation names the admin center,
+  the Defender portal and `Set-User -VIP`. `TP.ExchangeTruth.Tests.ps1` drives the real collector with
+  stand-ins for both cmdlets (and asserts the collector asks for `-IsVIP` rather than listing every user).
 - **[Fix] EXO-7.2 reaches a verdict when the only unresolvable rule recipients are gone from the directory.**
   An inbox rule forwarding to a deleted mailbox or a pre-migration identity carries a legacy Exchange DN
   (`"Name" [EX:/o=…/cn=…]`) that `Get-Recipient` cannot find. The classifier filed that as `Unresolved`, the
