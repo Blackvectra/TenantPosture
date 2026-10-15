@@ -5,6 +5,11 @@
       "Control": "INT-1.1",
       "NotEstablished": "configured non-compliance actions",
       "Reason": "The assessment verifies that compliance policies are assigned and cover each enrolled platform. It does not read the configured non-compliance actions (when a device is marked noncompliant, blocked, retired or otherwise acted upon), so it cannot prove that noncompliant devices lose access or that remediation happens. INT-1.1 therefore never returns Satisfied."
+    },
+    {
+      "Control": "INT-4.2",
+      "NotEstablished": "Windows Hello for Business enablement through an Account protection or settings-catalog policy",
+      "Reason": "The assessment reads only the tenant-wide Intune enrollment configuration for Windows Hello for Business. Microsoft documents that policy as usually disabled, with Windows Hello for Business enabled through an endpoint-security Account protection or settings-catalog policy targeted to a security group, which the assessment does not read. INT-4.2 is therefore Satisfied only when the tenant-wide policy enables it, and a disabled or unconfigured tenant-wide policy is not assessed, never a Gap."
     }
   ]
 }

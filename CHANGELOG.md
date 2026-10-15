@@ -10,6 +10,97 @@
   whatever the mailbox says, so the sample is never evidence of the switch in either direction. An unread switch is
   now not assessed, naming it, with the control's citations; the sample is reported as informational beside the
   organization verdict. Found by the 2026-10-15 currency review.
+- **[Fix] AAD-12.2 and AAD-12.3 say "license", not "collection failed", on tenants without Entra ID P1.**
+  The inventory collector selected `signInActivity` in its guest and member queries; Microsoft documents that
+  property as requiring Microsoft Entra ID P1 or P2, and Graph refuses the whole query without it ("Neither
+  tenant is B2C or tenant doesn't have premium license"). On Business Standard and Office 365 E3-only tenants
+  the guest list itself was lost, both controls read "enumeration did not complete", and the Scope section
+  filed them as data that could have been collected. On that error the collector now re-reads the accounts
+  without `signInActivity`, records `SignInActivityLicensed = $false`, keeps the guest list for the controls
+  that only count guests, marks no account stale, and registers the reason; the two controls report the
+  license as an upgrade opportunity (the marker the scope classifier and Upgrade Unlocks key on), and both
+  controls now carry `M365 Business Premium or Entra ID P1` as their license requirement. Any other failure
+  of the read still fails the section. Found by the 2026-10-15 currency review.
+- **[Fix] INT-4.2 no longer scores a Gap from the tenant-wide Windows Hello policy alone.** The evaluator
+  read only the Intune enrollment-time (tenant-wide) Windows Hello for Business configuration and scored a
+  Gap when it was disabled or not configured, while conceding in the same sentence that an Account
+  protection or settings-catalog policy "is not read here". Microsoft's guidance (Configure Windows Hello for
+  Business, Intune section) says that tenant-wide policy "is usually disabled and Windows Hello for Business
+  is enabled using a policy targeted to a security group", and since July 2024 the supported profile is the
+  endpoint-security Account protection profile (also in the settings catalog). A tenant following
+  Microsoft's pattern therefore read as a Gap. A disabled or unconfigured tenant-wide policy is now not
+  assessed, naming the policy to confirm; Satisfied still needs the tenant-wide policy to enable it. The
+  limit is recorded in `Config/evidence-limits.json` (rendered with the control on every surface),
+  `coverage-exceptions.psd1` (ImplementationPending: the targeted policies are not read yet) and
+  `docs/TP-DETECTION-LIMITS.md`. Found by the 2026-10-15 currency review.
+- **[Fix] AAD-9.1 no longer passes every tenant from a property that no longer exists.** The collector read
+  `featureSettings.numberMatchingRequiredState` from Graph v1.0; the `microsoftAuthenticatorFeatureSettings`
+  resource now defines only `displayAppInformationRequiredState` and `displayLocationInformationRequiredState`,
+  so the read always came back empty, the evaluator mapped empty to "default", and "default" was Satisfied:
+  an unearned pass in every score, with a remediation naming a setting that no longer exists. Microsoft has
+  required number matching for every Authenticator push notification since May 2023 and users cannot opt out,
+  so there is no tenant setting to read or score. The control is now recorded as enforced by the platform
+  (NotApplicable with its citations, the TMS-2.5 pattern, listed in `coverage-exceptions.psd1`), the control
+  text says so, the remediation points at the additional-context settings that remain configurable, and the
+  SCuBA alignment note records that MS.AAD.3.3v2's login-context requirement is collected and not scored.
+  Found by the 2026-10-15 currency review.
+- **[Fix] A Purview control that was not assessed says why.** On the 2026-10-14 live run PVW-2.6 read
+  "AutoLabelPolicies was not collected; not assessed." while the Exceptions array said that
+  `Get-AutoSensitivityLabelPolicy` was not available to the signed-in account (a missing Purview role), so the
+  ticket raised from the report could not say what to do. The Purview collector now records the reason beside
+  each failed section (`Data.SectionErrors.<Section>`: the cmdlet-availability sentence with its role hint, or
+  the thrown message), which travels with the results file, and the seven Purview findings built from the
+  "was not collected" boilerplate go through `Get-TPSectionNotCollectedDetail`, which keeps that sentence as
+  the prefix (every consumer that keys on it is unchanged) and appends "Reason recorded by the collector: ...",
+  reading the registered exception as a fallback on a live run and capping a long message. Six of the seven
+  findings also carried no framework citations and so vanished from the NIST rollup when not assessed; they
+  carry them now. A results file from before `SectionErrors` keeps the plain sentence. The other collectors
+  do not record section reasons yet; the helper returns the plain sentence for them.
+- **[Fix] AAD-6.2 judges the Microsoft-managed user consent policy instead of calling it custom.** Microsoft's
+  default for new tenants, `microsoft-user-default-recommended` ("Let Microsoft manage your consent
+  settings"), lets users consent to any user-consentable delegated permission from any publisher except the
+  file, site, mail, calendar, chat, online-meeting, contacts, tasks and people scopes Microsoft lists; its
+  companion `microsoft-user-default-allow-consent-apps` lets users consent to named mail clients for mail
+  scopes. The evaluator knew only the legacy and low-impact built-ins and filed anything else as "a custom
+  permission grant policy that requires manual verification", so every tenant on Microsoft's own default was
+  not assessed. The managed policy is now a Partial: verified for the scopes it blocks, a shortfall for every
+  other delegated permission it still allows against the baseline's "disabled, or low-impact from verified
+  publishers"; the mail-client companion is named beside either built-in and never called custom; the legacy
+  policy beside the managed one is still a Gap; a policy that is none of Microsoft's built-ins is still not
+  assessed. `TP.ComponentVerdicts.Tests.ps1` pins each.
+- **[Detection] PVW-4.1 judges Audit (Premium) from the licensing the tool already reads.** The evaluator
+  read `AuditConfig.AdvancedAuditEnabled`, a key no collector populates, and so emitted "requires manual
+  verification in the Purview compliance portal" on every tenant, while the fact that decides the control sat
+  in the same results file. Audit (Premium) is a licensed capability, not a switch: Microsoft records the
+  Premium events (MailItemsAccessed, Send, SearchQueryInitiated) for users whose assigned subscription carries
+  the Microsoft 365 Advanced Auditing service plan, on top of a unified audit log that is on. The control now
+  reads the tenant's subscriptions and their service plans (`AAD-Inventory` SubscribedSkus, through the
+  PVW-4.1 rule in `Config/license-service-plans.json`), the unified audit log switch (`Purview` AuditConfig)
+  and each user's assigned subscriptions (`AAD-Users` now stores `AssignedSkuIds` beside `LicenseCount`;
+  SKU ids are not personal data). No subscription with the plan is a Gap naming the subscriptions read, which
+  license gating turns into the upgrade opportunity on tenants without E5; the plan on every enabled, licensed
+  member user with the audit log on is Satisfied; some users without it is Partial naming them; the plan held
+  but assigned to nobody is a Gap (licensed but not configured); the audit log off is a shortfall; subscriptions
+  not read, or users read without `AssignedSkuIds` (an older results file), is not assessed with the licensing
+  stated as verified. A service plan switched off inside an assigned subscription is not read and the finding
+  says so. `TP.DefenderPurviewTruth.Tests.ps1` pins each verdict from raw collector shapes;
+  `TP.IdentityTruth.Tests.ps1` pins the collector field.
+- **[Detection] DEF-4.4 reads the Priority account tag instead of asking for a screenshot.** The evaluator
+  said the Defender "Priority account" user tag "is not exposed by any supported Graph/EXO read API" and
+  filed the control as manual verification on every tenant; `Config/coverage-exceptions.psd1` recorded the
+  same claim. Microsoft documents `Get-User -IsVIP` as the way to list priority accounts ("Manage and
+  monitor priority accounts") and `Get-EmailTenantSettings` EnablePriorityAccountProtection as the Defender
+  for Office 365 Plan 2 protection switch ("Configure and review priority account protection"). The Defender
+  collector now reads both through the Exchange Online session (`Get-User` is pinned there, as it also exists
+  in Security & Compliance) and stores them under `PriorityAccounts`; the evaluator is Satisfied when at
+  least one account is tagged (naming up to five and counting the rest; which executives belong on the list
+  stays the reviewer's judgment), a Gap when none is, Partial when the Plan 2 switch was read as off, and
+  not assessed, with the reason, when `Get-User -IsVIP` failed or the results predate the read. A switch
+  that could not be read (no Plan 2, an older module) is stated as context and never fails the tag verdict,
+  because Microsoft turns it on by default. License gating is unchanged: a tenant without Plan 2 that tags
+  nobody still reads as an upgrade opportunity, not a scored gap. The remediation names the admin center,
+  the Defender portal and `Set-User -VIP`. `TP.ExchangeTruth.Tests.ps1` drives the real collector with
+  stand-ins for both cmdlets (and asserts the collector asks for `-IsVIP` rather than listing every user).
 - **[Fix] EXO-7.2 reaches a verdict when the only unresolvable rule recipients are gone from the directory.**
   An inbox rule forwarding to a deleted mailbox or a pre-migration identity carries a legacy Exchange DN
   (`"Name" [EX:/o=…/cn=…]`) that `Get-Recipient` cannot find. The classifier filed that as `Unresolved`, the
