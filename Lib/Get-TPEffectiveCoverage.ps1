@@ -221,3 +221,106 @@ function Get-TPCACoverageVerdict {
     }
     return [ordered]@{ Verified = $v; Shortfalls = $s; NotEstablished = $u }
 }
+
+function Get-TPCADeviceComplianceCoverage {
+    <#
+    .SYNOPSIS
+        One judgment of the compliant-or-hybrid-joined device requirement for AAD-2.3
+        and INT-1.2 (two controls, one question). Enabled policies whose grant
+        NECESSARILY involves a device control (Test-TPCAGrantRequires) are judged on
+        combined coverage: all users, all applications, no narrowing, and the
+        interactive client app types (a browser-only requirement leaves the desktop
+        and mobile clients unchecked), with exclusions combined across policies.
+        Optional: enabled policies that list a device control only as one alternative
+        in the grant (Microsoft's compliant-or-MFA template), which lets MFA alone
+        through from an unmanaged device and enforces nothing. Staged: report-only
+        policies that would cover everyone if turned on. Both are named, never
+        credited. Module scope, not exported; AAD-2.3 and INT-1.2 call it.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param([AllowNull()] [AllowEmptyCollection()] [object[]] $Policies)
+    $devCtl = @('compliantDevice', 'domainJoinedDevice')
+    $pols = @($Policies | Where-Object { $null -ne $_ })
+    $stateOf = { param($p) [string](Get-TPObjectField -Item $p -Key 'State' -Default '') }
+    $nameOf  = { param($p) [string](Get-TPObjectField -Item $p -Key 'DisplayName' -Default '?') }
+    $listsDevice = { param($p) @((Get-TPCAGrantAlternatives -Policy $p).Controls | Where-Object { $_ -in $devCtl }).Count -gt 0 }
+    $requiring  = @($pols | Where-Object { (& $stateOf $_) -eq 'enabled' -and (Test-TPCAGrantRequires -Policy $_ -Any $devCtl) })
+    $optional   = @($pols | Where-Object { (& $stateOf $_) -eq 'enabled' -and (& $listsDevice $_) -and -not (Test-TPCAGrantRequires -Policy $_ -Any $devCtl) })
+    $reportOnly = @($pols | Where-Object { (& $stateOf $_) -eq 'enabledForReportingButNotEnforced' -and (Test-TPCAGrantRequires -Policy $_ -Any $devCtl) })
+    $types = Get-TPCAInteractiveClientAppTypes
+    $cov = Get-TPCAEffectiveCoverage -Policies $requiring -RequiredClientAppTypes $types
+    # A report-only policy counts as staged only when it is not narrowed (its
+    # exclusions are not judged: it enforces nothing either way).
+    $staged = Get-TPCAEffectiveCoverage -Policies $reportOnly -RequiredClientAppTypes $types
+    return [ordered]@{
+        Coverage  = $cov
+        Requiring = @($requiring | ForEach-Object { & $nameOf $_ })
+        Optional  = @($optional | ForEach-Object { & $nameOf $_ })
+        Staged    = @($staged.Names)
+    }
+}
+
+function Add-TPCADeviceComplianceFinding {
+    <#
+    .SYNOPSIS
+        Emits the AAD-2.3 or INT-1.2 finding from Get-TPCADeviceComplianceCoverage.
+        Satisfied only when enabled policies requiring a device cover all users on all
+        applications (Full); a principal every such policy excludes is Partial naming
+        it; different exclusions are not assessed; a policy narrower than everyone is
+        a Gap that names why; one that lists the device only as an alternative beside
+        MFA is Partial naming it (never Satisfied); a report-only policy that would
+        cover everyone is Partial, named as staged, because report-only enforces
+        nothing; nothing at all is the plain Gap.
+        -Consequence is the control's own sentence on what the gap lets through.
+        Literal -State values on purpose (Get-TPControlAutomationAudit).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $ControlId,
+        [Parameter(Mandatory)] $Control,
+        [AllowNull()] $FrameworkIds,
+        [Parameter(Mandatory)] $Model,
+        [Parameter(Mandatory)] [string] $Consequence,
+        [Parameter(Mandatory)] [string] $RequiredValue
+    )
+    $cov = $Model.Coverage
+    $optionalNames = @($Model.Optional | Where-Object { $_ })
+    $stagedNames   = @($Model.Staged | Where-Object { $_ })
+    $optionalNote = if ($optionalNames.Count -gt 0) {
+        "$($optionalNames -join ', ') lists a compliant or hybrid-joined device only as one alternative in the grant (operator OR), so MFA alone still grants access from an unmanaged device; not counted."
+    } else { '' }
+    $stagedNote = if ($stagedNames.Count -gt 0) {
+        "$($stagedNames -join ', ') would require it of everyone but is in report-only mode, which enforces nothing."
+    } else { '' }
+    if ($cov.Kind -ne 'None' -or @($cov.Narrowed).Count -gt 0) {
+        $cv = Get-TPCACoverageVerdict -Coverage $cov -What 'A compliant or hybrid-joined device is required'
+        $v = @($cv.Verified); $s = @($cv.Shortfalls); $u = @($cv.NotEstablished)
+        # A note about a policy that is not counted never goes into Verified unless
+        # the verdict is already Full: it would turn a Gap into a Partial.
+        if ($optionalNote) { if ($cov.Kind -eq 'Full') { $v += $optionalNote } else { $s += $optionalNote } }
+        if ($stagedNote)   { if ($cov.Kind -eq 'Full') { $v += $stagedNote }   else { $s += $stagedNote } }
+        if ($cov.Kind -eq 'None') { $s += $Consequence }
+        Add-TPExpectedStateFinding -ControlId $ControlId -Control $Control -FrameworkIds $FrameworkIds `
+            -Verified $v -Shortfalls $s -NotEstablished $u `
+            -CurrentValue "Device requirement: $($cov.Kind) coverage$(if (@($cov.Names).Count) { ' by ' + (@($cov.Names) -join ', ') })" `
+            -RequiredValue $RequiredValue
+        return
+    }
+    if ($stagedNames.Count -gt 0) {
+        Add-TPFinding -ControlId $ControlId -State 'Partial' -Category $Control.Category -Title $Control.Title -Severity 'Medium' -FrameworkIds $FrameworkIds `
+            -Detail "A compliant or hybrid-joined device is required of all users on all applications only by a policy in report-only mode, which enforces nothing: $($stagedNames -join ', '). $Consequence$(if ($optionalNote) { " $optionalNote" })" `
+            -CurrentValue "Report-only: $($stagedNames -join ', ')" -RequiredValue $RequiredValue -Remediation $Control.Remediation
+    } elseif ($optionalNote) {
+        # A device listed only as an alternative stays Partial (pinned since the
+        # 2026-10-04 review): the policy prompts for something on every sign-in,
+        # but MFA alone still admits an unmanaged device, so it is never Satisfied.
+        Add-TPFinding -ControlId $ControlId -State 'Partial' -Category $Control.Category -Title $Control.Title -Severity 'Medium' -FrameworkIds $FrameworkIds `
+            -Detail "No Conditional Access policy requires a compliant or hybrid-joined device of everyone. $optionalNote $Consequence" `
+            -CurrentValue 'Device requirement optional (OR)' -RequiredValue $RequiredValue -Remediation $Control.Remediation
+    } else {
+        Add-TPFinding -ControlId $ControlId -State 'Gap' -Category $Control.Category -Title $Control.Title -Severity $Control.Severity -FrameworkIds $FrameworkIds `
+            -Detail "No Conditional Access policy requires a compliant or hybrid-joined device. $Consequence" `
+            -CurrentValue 'No CA policy requires a compliant or hybrid-joined device' -RequiredValue $RequiredValue -Remediation $Control.Remediation
+    }
+}

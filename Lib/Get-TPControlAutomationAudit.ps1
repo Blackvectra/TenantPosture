@@ -37,7 +37,7 @@ function Get-TPControlAutomationAudit {
     # emits whatever -State literals the HELPER's own body emits. Derived from
     # the helper's AST, never declared, so the helper cannot claim a verdict
     # it does not produce.
-    $DelegateFns = @('Add-TPCAPolicyTierFinding', 'Add-TPPolicySetFinding', 'Add-TPDefenderUnavailableFinding', 'Add-TPExpectedStateFinding')
+    $DelegateFns = @('Add-TPCAPolicyTierFinding', 'Add-TPPolicySetFinding', 'Add-TPDefenderUnavailableFinding', 'Add-TPExpectedStateFinding', 'Add-TPCADeviceComplianceFinding')
 
     # ── AST helpers ───────────────────────────────────────────────────────────
     $literalOf = {
@@ -64,14 +64,23 @@ function Get-TPControlAutomationAudit {
         return $null
     }
 
-    # Literal -State values a verdict helper's own Add-TPFinding calls emit.
+    # Literal -State values a verdict helper's own Add-TPFinding calls emit, plus
+    # those of any delegate it hands the finding on to (a helper that renders
+    # through Add-TPExpectedStateFinding emits what that helper emits). Each
+    # helper is read once; a cycle cannot recurse.
     $delegateStates = {
-        param([string]$fn)
+        param([string]$fn, [System.Collections.Generic.HashSet[string]]$seen)
+        if ($null -eq $seen) { $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase) }
+        if (-not $seen.Add($fn)) { return @() }
         $cmd = Get-Command $fn -ErrorAction SilentlyContinue
         if (-not $cmd -or -not $cmd.ScriptBlock) { return @() }
-        @($cmd.ScriptBlock.Ast.FindAll({ param($n)
+        $own = @($cmd.ScriptBlock.Ast.FindAll({ param($n)
                 $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq $AddFn }, $true) |
-            ForEach-Object { & $literalOf (& $paramArg $_ 'State') } | Where-Object { $_ } | Sort-Object -Unique)
+            ForEach-Object { & $literalOf (& $paramArg $_ 'State') } | Where-Object { $_ })
+        $nested = @($cmd.ScriptBlock.Ast.FindAll({ param($n)
+                $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -in $DelegateFns }, $true) |
+            ForEach-Object { & $delegateStates $_.GetCommandName() $seen })
+        @(@($own) + @($nested) | Where-Object { $_ } | Sort-Object -Unique)
     }
 
     # Per-evaluator analysis, cached (functions serve one or many controls).
