@@ -18,6 +18,21 @@
   component was established (every other shortfall and unestablished component is recorded beside it), a republish restores the pre-approval result and judges it against
   the current record, and the exception cmdlets write the block back as read. Applies to AAD-1.1, AAD-1.2,
   AAD-1.3, AAD-1.4, AAD-1.5, AAD-11.1, AAD-2.3 and INT-1.2.
+- **[Fix] Five verdicts corrected from the 2026-10-15 live run.** DEF-5.1 scored a High Gap for spoofed-sender
+  allow entries, which Microsoft says never expire and cannot be time-boxed, so every tenant with a
+  phishing-simulation or relay spoof allow failed a control it could not act on; the collector now asks the
+  cmdlet which domain, address, URL and file allow entries never expire (`-NoExpiration`), the evaluator
+  judges only those (an empty ExpirationDate is the 45-days-after-last-use default, not "never"), spoof
+  entries are listed for review, and an unread filter leaves the control not assessed. PVW-4.4 scored
+  missing record labels as a Gap on Business Premium, which Microsoft licenses for retention labels but not
+  for declaring records; its license requirement is now E5-class (the E5 information-protection plan together with the
+  records-management plan) and the finding is an upgrade opportunity there. DNS-2.4 flagged issuers seen only on certificates that expired years ago; the collector records the
+  issuers of certificates still valid and the evaluator judges those, reporting expired-only issuers as
+  history. AAD-4.3 said guests "may have" excessive permissions and labeled the ids backwards; it now names
+  the role behind each id Microsoft documents and does not judge a fourth. TMS-4.4 counts the live-events attendee setting through February 28, 2027, the date through which
+  Microsoft supports events scheduled before the June 30, 2026 retirement (the whole day, in every time zone). DEF-5.1's inline
+  entry lists are bounded to five names plus the count of the rest, and the spoof entries to confirm are named in the
+  finding's current value, which is what the HTML report shows for a pass.
 - **[Fix] AAD-2.3 and INT-1.2 judge the device requirement on who is protected.** Both controls credited a
   compliant-device policy from a private check: INT-1.2 read "All users" and "All applications" only, so a
   policy that excluded users or applications, applied to the browser alone, or was limited to a platform, a

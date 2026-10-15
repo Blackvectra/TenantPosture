@@ -136,7 +136,7 @@ Describe 'License detection by service plan' {
         }
         It 'holds every E5 compliance feature the controls name' {
             $p = Prof $script:M365E5
-            foreach ($c in 'EXO-2.5','DEF-4.5','PVW-4.1','PVW-4.2','PVW-2.2','PVW-2.3','PVW-2.4','PVW-2.6','AAD-1.4','DEF-4.4') { Met $c $p | Should -BeTrue -Because $c }
+            foreach ($c in 'EXO-2.5','DEF-4.5','PVW-4.1','PVW-4.2','PVW-2.2','PVW-2.3','PVW-2.4','PVW-2.6','PVW-4.4','AAD-1.4','DEF-4.4') { Met $c $p | Should -BeTrue -Because $c }
         }
     }
 
@@ -172,6 +172,7 @@ Describe 'License detection by service plan' {
             Met 'PVW-1.3' $p | Should -BeTrue
             Met 'PVW-1.4' $p | Should -BeTrue
             Met 'PVW-2.6' $p | Should -BeFalse
+            Met 'PVW-4.4' $p | Should -BeFalse -Because 'Business Premium creates retention labels but cannot declare records (Microsoft Purview service description)'
             Met 'EXO-2.5' $p | Should -BeFalse
             Met 'AAD-1.4' $p | Should -BeFalse
         }

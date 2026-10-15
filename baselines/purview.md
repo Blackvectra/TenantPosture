@@ -551,16 +551,16 @@ Purview > Information protection > Sensitivity labels > Create label hierarchy (
 
 **Severity:** Low  |  **Category:** Governance  |  **Automated:** Yes
 
-**License required:** M365 Business Premium or E3+
+**License required:** M365 E5 or E5 Compliance add-on
 
 **Description:**
-Records management retention labels are configured for content subject to legal or regulatory hold requirements.
+Retention labels that declare items as records (or regulatory records) are configured for content subject to legal or regulatory hold requirements. Declaring records requires Microsoft 365 E5/A5/G5, Office 365 E5, E5 Compliance or E5 Information Protection and Governance (Microsoft Purview service description); Business Premium and E3 can create retention labels but not record labels, so on those tenants this is a licensing item, not a configuration gap.
 
 **Business risk:**
 Without immutable records declarations, content subject to litigation hold can be modified or deleted — creating legal liability and spoliation risk.
 
 **Remediation:**
-Purview > Records management > Labels > Create record label with retention action. Publish via label policy. Required for healthcare (HIPAA), government, and financial organizations.
+Purview > Records management > File plan > Create a label that marks items as a record, with the retention action, and publish it through a label policy. Required for healthcare (HIPAA), government and financial organizations; needs an E5-class compliance license.
 
 **Framework mappings:**
 

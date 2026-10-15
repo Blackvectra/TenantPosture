@@ -287,7 +287,111 @@ Describe 'Exchange controls read the setting they name' {
             $r.Data.SectionStatus.TenantAllowBlockList | Should -Be 'Collected'
             Clear-TPState
             Set-TPRawData -Key 'EXO-Inventory' -Data $r
-            (Verdict 'Test-TPControlDefenderTenantAllowBlockList' 'DEF-5.1').State | Should -Be 'Gap'
+            # Microsoft: allow entries for spoofed senders never expire, so they cannot be
+            # time-boxed and are never this control's Gap; they are listed for review.
+            $f = Verdict 'Test-TPControlDefenderTenantAllowBlockList' 'DEF-5.1'
+            $f.State  | Should -Be 'Satisfied' -Because 'a spoof allow cannot be time-boxed (was: a High Gap on every tenant with a phishing-simulation spoof allow)'
+            $f.Detail | Should -Match 'never expire by design'
+            $f.Detail | Should -Match 'partner\.com via 198\.51\.100\.0/24'
+            $f.Detail | Should -Not -Match 'override filtering indefinitely'
+            # The HTML report renders a Satisfied finding's CurrentValue and not its Detail.
+            $f.CurrentValue | Should -Match 'to confirm: partner\.com via 198\.51\.100\.0/24'
+        }
+        It 'DEF-5.1: inline entry lists are bounded to five names plus the count of the rest, on the Gap and on the pass' {
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -MockWith { [pscustomobject]@{ Command = $null; Source = 'ExchangeOnline' } }
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-TenantAllowBlockListItems' } -MockWith {
+                [pscustomobject]@{ Command = {
+                    param($ListType, [switch]$Allow, [switch]$Block, [switch]$NoExpiration)
+                    if ($ListType -ne 'Sender' -or -not $Allow) { return @() }
+                    @(1..7 | ForEach-Object { [pscustomobject]@{ Value = "permanent$_.example"; ExpirationDate = $null; Notes = '' } })
+                }; Source = 'ExchangeOnline' } }
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-TenantAllowBlockListSpoofItems' } -MockWith {
+                [pscustomobject]@{ Command = { @(1..7 | ForEach-Object { [pscustomobject]@{ Action = 'Allow'; SpoofedUser = "spoof$_.example"; SendingInfrastructure = "203.0.113.$_"; SpoofType = 'External' } }) }; Source = 'ExchangeOnline' } }
+            & $script:Mod { $script:OrgHolds = @(); $script:Mbx = @() }
+            $r = Invoke-TPCollectEXOInventory
+            Clear-TPState
+            Set-TPRawData -Key 'EXO-Inventory' -Data $r
+            $f = Verdict 'Test-TPControlDefenderTenantAllowBlockList' 'DEF-5.1'
+            $f.State | Should -Be 'Gap'
+            $f.Detail | Should -Match 'Sender permanent5\.example and 2 more'
+            $f.Detail | Should -Not -Match 'permanent6\.example'
+            $f.Detail | Should -Match 'spoof5\.example via 203\.0\.113\.5 and 2 more'
+            $f.Detail | Should -Not -Match 'spoof6\.example'
+            @($f.AffectedObjects).Count | Should -Be 7 -Because 'the bound is on the prose; every entry stays in AffectedObjects'
+            # The pass names the spoof entries to confirm in CurrentValue, bounded the same way.
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-TenantAllowBlockListItems' } -MockWith {
+                [pscustomobject]@{ Command = { param($ListType, [switch]$Allow, [switch]$Block, [switch]$NoExpiration) @() }; Source = 'ExchangeOnline' } }
+            $r = Invoke-TPCollectEXOInventory
+            Clear-TPState
+            Set-TPRawData -Key 'EXO-Inventory' -Data $r
+            $f = Verdict 'Test-TPControlDefenderTenantAllowBlockList' 'DEF-5.1'
+            $f.State | Should -Be 'Satisfied'
+            $f.CurrentValue | Should -Match '7 spoofed-sender allow entr\(ies\) to confirm: spoof1\.example via 203\.0\.113\.1; .* spoof5\.example via 203\.0\.113\.5 and 2 more'
+            $f.CurrentValue | Should -Not -Match 'spoof6\.example'
+        }
+        It 'DEF-5.1: a domain allow entry the cmdlet lists as never expiring is the Gap; one with no date that the filter does not list expires 45 days after last use' {
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -MockWith { [pscustomobject]@{ Command = $null; Source = 'ExchangeOnline' } }
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-TenantAllowBlockListItems' } -MockWith {
+                [pscustomobject]@{ Command = {
+                    param($ListType, [switch]$Allow, [switch]$Block, [switch]$NoExpiration)
+                    if ($ListType -ne 'Sender' -or -not $Allow) { return @() }
+                    if ($NoExpiration) { return @([pscustomobject]@{ Value = 'legacy.example'; ExpirationDate = $null; Notes = 'added 2021' }) }
+                    @([pscustomobject]@{ Value = 'legacy.example'; ExpirationDate = $null; Notes = 'added 2021' }, [pscustomobject]@{ Value = 'vendor.example'; ExpirationDate = $null; Notes = 'from submission' })
+                }; Source = 'ExchangeOnline' } }
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-TenantAllowBlockListSpoofItems' } -MockWith { [pscustomobject]@{ Command = { @() }; Source = 'ExchangeOnline' } }
+            & $script:Mod { $script:OrgHolds = @(); $script:Mbx = @() }
+            $r = Invoke-TPCollectEXOInventory
+            $r.Data.SectionStatus.TenantAllowBlockList | Should -Be 'Collected'
+            $rows = @($r.Data.TenantAllowBlockList | Where-Object { $_.Action -eq 'Allow' })
+            @($rows | Where-Object { $_.Value -eq 'legacy.example' })[0].NoExpiration | Should -BeTrue
+            @($rows | Where-Object { $_.Value -eq 'vendor.example' })[0].NoExpiration | Should -BeFalse -Because 'an empty ExpirationDate is the 45-days-after-last-use default, not never'
+            Clear-TPState
+            Set-TPRawData -Key 'EXO-Inventory' -Data $r
+            $f = Verdict 'Test-TPControlDefenderTenantAllowBlockList' 'DEF-5.1'
+            $f.State | Should -Be 'Gap'
+            $f.CurrentValue | Should -Match '^1 never-expiring allow entr\(ies\) of 2 '
+            $f.Detail | Should -Match 'Sender legacy\.example'
+            $f.Detail | Should -Not -Match 'vendor\.example'
+            @($f.AffectedObjects).Count | Should -Be 1
+        }
+        It 'DEF-5.1: with no entry listed as never expiring, allow entries without a date are the 45-day default: Satisfied' {
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -MockWith { [pscustomobject]@{ Command = $null; Source = 'ExchangeOnline' } }
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-TenantAllowBlockListItems' } -MockWith {
+                [pscustomobject]@{ Command = {
+                    param($ListType, [switch]$Allow, [switch]$Block, [switch]$NoExpiration)
+                    if ($ListType -ne 'Url' -or -not $Allow -or $NoExpiration) { return @() }
+                    @([pscustomobject]@{ Value = 'files.vendor.example'; ExpirationDate = $null; Notes = '' })
+                }; Source = 'ExchangeOnline' } }
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-TenantAllowBlockListSpoofItems' } -MockWith { [pscustomobject]@{ Command = { @() }; Source = 'ExchangeOnline' } }
+            & $script:Mod { $script:OrgHolds = @(); $script:Mbx = @() }
+            $r = Invoke-TPCollectEXOInventory
+            Clear-TPState
+            Set-TPRawData -Key 'EXO-Inventory' -Data $r
+            $f = Verdict 'Test-TPControlDefenderTenantAllowBlockList' 'DEF-5.1'
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'none is permanent'
+        }
+        It 'DEF-5.1: when the never-expiring filter cannot be read, the entries are not judged: never a Gap, never a pass, and the reason is recorded' {
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -MockWith { [pscustomobject]@{ Command = $null; Source = 'ExchangeOnline' } }
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-TenantAllowBlockListItems' } -MockWith {
+                [pscustomobject]@{ Command = {
+                    param($ListType, [switch]$Allow, [switch]$Block, [switch]$NoExpiration)
+                    if ($NoExpiration) { throw 'A parameter cannot be found that matches parameter name ''NoExpiration''.' }
+                    if ($ListType -ne 'Sender' -or -not $Allow) { return @() }
+                    @([pscustomobject]@{ Value = 'legacy.example'; ExpirationDate = $null; Notes = '' })
+                }; Source = 'ExchangeOnline' } }
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-TenantAllowBlockListSpoofItems' } -MockWith { [pscustomobject]@{ Command = { @() }; Source = 'ExchangeOnline' } }
+            & $script:Mod { $script:OrgHolds = @(); $script:Mbx = @() }
+            $r = Invoke-TPCollectEXOInventory
+            $why = @(Get-TPExceptions | Where-Object { $_.Source -eq 'EXO-TenantAllowBlockList' })
+            $why.Count | Should -BeGreaterOrEqual 1
+            $why[0].Message | Should -Match 'NoExpiration'
+            @($r.Data.TenantAllowBlockList)[0].ExpiryRead | Should -BeFalse
+            Clear-TPState
+            Set-TPRawData -Key 'EXO-Inventory' -Data $r
+            $f = Verdict 'Test-TPControlDefenderTenantAllowBlockList' 'DEF-5.1'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'not read'
         }
     }
 

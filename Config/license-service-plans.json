@@ -252,13 +252,9 @@
     ],
     "PVW-4.4": [
       [
-        "EXCHANGE_S_ENTERPRISE",
-        "EXCHANGE_S_ENTERPRISE_GOV",
-        "EXCHANGE_S_ARCHIVE_ADDON",
-        "SHAREPOINTENTERPRISE",
-        "SHAREPOINTENTERPRISE_GOV",
-        "SHAREPOINTENTERPRISE_EDU",
-        "INFO_GOVERNANCE",
+        "MIP_S_CLP2"
+      ],
+      [
         "RECORDS_MANAGEMENT"
       ]
     ],
