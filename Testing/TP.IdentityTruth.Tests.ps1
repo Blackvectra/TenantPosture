@@ -501,6 +501,7 @@ Describe 'Security Defaults: Conditional Access controls account for it' {
             @($raw.Data.GuestUsers)[1].IsStale | Should -BeFalse
             @($raw.Data.GuestUsers)[0].IsStale | Should -BeTrue
             (V 'Test-TPControlInventoryStaleGuests' 'AAD-12.2').State | Should -Be 'Gap'
+        }
         It 'the Users collector records each user''s assigned subscription ids (AssignedSkuIds) beside the count' {
             Clear-TPState
             Set-Graph {
