@@ -654,7 +654,7 @@
     {
       "ControlId": "DNS-2.4",
       "Title": "Certificate Transparency Log Hygiene",
-      "Description": "All certs issued for the domain (visible in CT logs per RFC 6962) originate from CAs on the org-approved allowlist.",
+      "Description": "Every certificate still valid for the domain (visible in CT logs per RFC 6962) originates from a CA on the org-approved allowlist. CT logs keep every certificate ever issued, so issuers seen only on expired certificates are reported as history and not judged.",
       "BusinessRisk": "A cert issued by an unapproved CA in CT logs may indicate domain takeover, social-engineered cert approval, or use of an unsanctioned third-party service that proxies the domain.",
       "Severity": "Medium",
       "Workload": "DNS",
@@ -6078,7 +6078,7 @@
     {
       "ControlId": "DEF-5.1",
       "Title": "Tenant Allow/Block List Entries Time-Boxed",
-      "Description": "No allow entry in the Tenant Allow/Block List is permanent; every filtering override carries an expiry.",
+      "Description": "No domain, address, URL or file allow entry in the Tenant Allow/Block List is permanent; every such filtering override carries an expiry (a date, or 45 days after last use). Spoofed-sender allow entries never expire by design and are reviewed for a sending service still in use, not time-boxed.",
       "BusinessRisk": "An allow entry overrides a filtering verdict outright — mail, a URL or a file hash on the allow list bypasses the detonation and reputation checks that would otherwise stop it. Entries are routinely added under pressure during an incident to unblock a sender and are almost never removed afterwards. A never-expiring allow is a permanent, undocumented hole in mail filtering that no anti-spam or anti-phishing policy review will surface, because it lives on a different surface entirely.",
       "Severity": "High",
       "Workload": "DEF",

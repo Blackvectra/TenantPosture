@@ -749,7 +749,7 @@ Set-SafeLinksPolicy -Identity <PolicyName> -EnableSafeLinksForOffice $true. Or v
 **License required:** Included (EOP)
 
 **Description:**
-No allow entry in the Tenant Allow/Block List is permanent; every filtering override carries an expiry.
+No domain, address, URL or file allow entry in the Tenant Allow/Block List is permanent; every such filtering override carries an expiry (a date, or 45 days after last use). Spoofed-sender allow entries never expire by design and are reviewed for a sending service still in use, not time-boxed.
 
 **Business risk:**
 An allow entry overrides a filtering verdict outright — mail, a URL or a file hash on the allow list bypasses the detonation and reputation checks that would otherwise stop it. Entries are routinely added under pressure during an incident to unblock a sender and are almost never removed afterwards. A never-expiring allow is a permanent, undocumented hole in mail filtering that no anti-spam or anti-phishing policy review will surface, because it lives on a different surface entirely.

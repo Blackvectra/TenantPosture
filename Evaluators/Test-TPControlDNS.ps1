@@ -987,7 +987,7 @@ function Test-TPControlDNSCertTransparency {
                 -FrameworkIds $citations `
                 -Detail "$domain has $scopeWord from $($suspicious.Count) issuer(s) not on the known-good CA list. Confirm the organization requested them; otherwise investigate possible mis-issuance: $top.$expiredNote" `
                 -CurrentValue "Suspicious issuers: $top" `
-                -RequiredValue 'All CT-log issuers match the org-approved CA allowlist' `
+                -RequiredValue 'Every issuer of a certificate still valid for the domain matches the org-approved CA allowlist' `
                 -Remediation $control.Remediation
         }
     }
