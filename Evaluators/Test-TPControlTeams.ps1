@@ -530,7 +530,7 @@ function Test-TPControlTeamsFederationAllowlist {
     }
 }
 
-# ── TMS-4.4 Public events (town halls and webinars) ──────────────────────────
+# ── TMS-4.4 Public events (town halls, webinars; live events until 2027-02-28) ─
 # Microsoft retired Teams live events on June 30, 2026 (events scheduled
 # before then run until February 28, 2027); town halls and webinars replace
 # them, and both attendee settings default to Everyone — public and anonymous.
@@ -551,8 +551,18 @@ function Test-TPControlTeamsLiveEvents {
     $th = [string](Get-TPObjectField -Item $ev -Key 'AllowTownhalls' -Default '')
     $thAccess = [string](Get-TPObjectField -Item $ev -Key 'TownhallEventAttendeeAccess' -Default '')
     if ($th -eq 'Disabled') { $closed += 'town halls (off)' } elseif ($thAccess -eq 'Everyone') { $open += 'town halls (TownhallEventAttendeeAccess = Everyone)' } elseif ($thAccess) { $closed += "town halls ($thAccess)" }
-    # Teams live events were retired on June 30, 2026; the broadcast policy's attendee
-    # setting no longer governs anything and is not judged here.
+    # Teams live events were retired on June 30, 2026, but Microsoft supports events
+    # scheduled before that date through February 28, 2027, and the broadcast policy's
+    # attendee setting still decides who can join one. The tool does not read the
+    # schedule, so until that date a public setting is reported as the exposure it may
+    # still be; after it the setting governs nothing and is not judged.
+    $liveEventsSupportedUntil = [datetime]::new(2027, 2, 28, 0, 0, 0, [System.DateTimeKind]::Utc)
+    if ([datetime]::UtcNow -lt $liveEventsSupportedUntil) {
+        $bc = Get-TPTeamsSection -Teams $tms -Name 'BroadcastPolicy'
+        if ($bc -and (Get-TPObjectField -Item $bc -Key 'AllowBroadcastScheduling' -Default $false) -eq $true -and [string](Get-TPObjectField -Item $bc -Key 'BroadcastAttendeeVisibilityMode' -Default '') -eq 'Everyone') {
+            $open += 'live events scheduled before the June 30, 2026 retirement, which Microsoft supports until February 28, 2027 (BroadcastAttendeeVisibilityMode = Everyone)'
+        }
+    }
     if (($open.Count + $closed.Count) -eq 0) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'The events policy returned neither webinar nor town hall attendee settings; not assessed.'
     } elseif ($open.Count -eq 0) {

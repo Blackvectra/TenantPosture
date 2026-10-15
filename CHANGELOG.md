@@ -9,12 +9,12 @@
   judges only those (an empty ExpirationDate is the 45-days-after-last-use default, not "never"), spoof
   entries are listed for review, and an unread filter leaves the control not assessed. PVW-4.4 scored
   missing record labels as a Gap on Business Premium, which Microsoft licenses for retention labels but not
-  for declaring records; its license requirement is now E5-class and the finding is an upgrade opportunity
-  there. DNS-2.4 flagged issuers seen only on certificates that expired years ago; the collector records the
+  for declaring records; its license requirement is now E5-class (the E5 information-protection plan together with the
+  records-management plan) and the finding is an upgrade opportunity there. DNS-2.4 flagged issuers seen only on certificates that expired years ago; the collector records the
   issuers of certificates still valid and the evaluator judges those, reporting expired-only issuers as
   history. AAD-4.3 said guests "may have" excessive permissions and labeled the ids backwards; it now names
-  the role behind each id Microsoft documents and does not judge a fourth. TMS-4.4 no longer counts the
-  retired live-events setting.
+  the role behind each id Microsoft documents and does not judge a fourth. TMS-4.4 counts the live-events attendee setting only until February 28, 2027, the date through which
+  Microsoft supports events scheduled before the June 30, 2026 retirement.
 - **[Fix] EXO-7.2 recognizes Exchange's not-found answer when the module renders it without the exception
   type.** The REST-backed cmdlets of ExchangeOnlineManagement 3.x render a server error as `||Message` with
   the type blank, so `Get-Recipient`'s "The operation couldn't be performed because object '<legacy DN>'

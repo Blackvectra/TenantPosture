@@ -253,6 +253,9 @@
     "PVW-4.4": [
       [
         "MIP_S_CLP2"
+      ],
+      [
+        "RECORDS_MANAGEMENT"
       ]
     ],
     "PVW-3.2": [
