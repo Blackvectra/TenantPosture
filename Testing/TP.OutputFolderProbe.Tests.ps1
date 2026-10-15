@@ -42,7 +42,26 @@ Describe 'Output folder probe: the writer is proven before any sign-in' {
         $msg | Should -Match 'cannot hold an access control list'
         $msg | Should -Match 'unauthorized operation'
         $msg | Should -Match '-OutputPath'
+        $msg | Should -Match '-OutputRoot' -Because 'the batch runners take -OutputRoot, not -OutputPath'
         @(Get-ChildItem -LiteralPath $script:Tmp -Force -Filter '.tp-write-probe-*').Count | Should -Be 0
+    }
+
+    It 'blames the volume only for the FAT family: ext4, an SMB share and NTFS over FUSE keep the format and the reason without the no-ACL claim' {
+        foreach ($fmt in 'ext4', 'network share', 'fuseblk', 'apfs') {
+            & $script:Inject { param($Stream) throw 'chmod refused' } ([scriptblock]::Create("param(`$Path) '$fmt'"))
+            $msg = $null
+            try { $null = Test-TPSensitiveOutputFolder -Path $script:Tmp } catch { $msg = $_.Exception.Message }
+            $msg | Should -Match ("reports '{0}'" -f [regex]::Escape($fmt)) -Because $fmt
+            $msg | Should -Not -Match 'cannot hold an access control list' -Because $fmt
+            $msg | Should -Match 'chmod refused'
+            $msg | Should -Match '-OutputPath'
+        }
+        foreach ($fmt in 'FAT32', 'exFAT', 'vfat', 'fat') {
+            & $script:Inject { param($Stream) throw 'no' } ([scriptblock]::Create("param(`$Path) '$fmt'"))
+            $msg = $null
+            try { $null = Test-TPSensitiveOutputFolder -Path $script:Tmp } catch { $msg = $_.Exception.Message }
+            $msg | Should -Match 'cannot hold an access control list' -Because $fmt
+        }
     }
 
     It 'an NTFS volume is not blamed: the refusal still carries the reason and the remedy' {
@@ -99,6 +118,17 @@ Describe 'Output folder probe: the writer is proven before any sign-in' {
                     $c.Extent.StartLineNumber | Should -BeGreaterThan $first -Because "$Name must prove the output folder before $s (line $($c.Extent.StartLineNumber))"
                 }
             }
+            # The batch runners declare their own -WhatIf switch (no SupportsShouldProcess), so
+            # $WhatIfPreference never reflects it: the probe sits after the -WhatIf exit instead.
+            (Get-Content -LiteralPath $path -Raw) | Should -Not -Match '\$WhatIfPreference' -Because 'the runners own -WhatIf is not $WhatIfPreference'
+            if ($Name -like 'Invoke-TPBatch*') {
+                $whatIfExit = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.IfStatementAst] -and $n.Clauses[0].Item1.Extent.Text -match '^\$WhatIf$' }, $true))
+                $whatIfExit.Count | Should -BeGreaterOrEqual 1
+                $first | Should -BeGreaterThan ($whatIfExit | ForEach-Object { $_.Extent.StartLineNumber } | Measure-Object -Minimum).Minimum -Because 'a -WhatIf preview creates and probes nothing'
+            }
+        }
+        It 'the single-tenant entry point skips the probe for -RegisterApp and -WhatIfConnections, which write nothing under -OutputPath' {
+            (Get-Content -LiteralPath (Join-Path $script:Root 'Invoke-TPAssessment.ps1') -Raw) | Should -Match '-not \$RegisterApp -and -not \$WhatIfConnections'
         }
     }
 }

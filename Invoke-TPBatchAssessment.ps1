@@ -110,15 +110,17 @@ $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
 if (-not $ClientsFile) { $ClientsFile = Join-Path $scriptDir 'Config' 'clients.json' }
 if (-not $OutputRoot)  { $OutputRoot  = Join-Path $scriptDir 'output' }
-# Every client's results land under this root only where they can be protected.
-# The runner signs in before it loads the module, so the writer is dot-sourced
-# here and the root is proven before the first sign-in (Test-TPSensitiveOutputFolder);
-# a root that cannot hold the protection is refused with the remedy (exit 4).
+# The runner signs in before it loads the module, so the sensitive-file writer is
+# dot-sourced here: the output root is proven to hold a protected file before the
+# first sign-in (see "Output root" below, after the -WhatIf exit).
 . (Join-Path $scriptDir 'Lib' 'Set-TPSensitiveFileAcl.ps1')
-if (-not $WhatIfPreference) {
-    if (-not (Test-Path -LiteralPath $OutputRoot)) { [void][System.IO.Directory]::CreateDirectory($OutputRoot) }
-    try { $null = Test-TPSensitiveOutputFolder -Path $OutputRoot }
-    catch { Write-Host "[!] $($_.Exception.Message)" -ForegroundColor Red; exit 4 }
+# One rule for a client's folder name under the output root, used by the probe
+# below and by the per-client loop.
+$clientDirName = {
+    param([string] $Domain)
+    $d = ($Domain -replace '[^a-zA-Z0-9.\-]', '') -replace '^\.+|\.+$', ''
+    if ([string]::IsNullOrEmpty($d)) { $d = 'unknown' }
+    $d
 }
 
 # ── Load clients.json ─────────────────────────────────────────────────────────
@@ -204,6 +206,24 @@ if ($WhatIf) {
     exit 0
 }
 
+# ── Output root: proven before the first sign-in ─────────────────────────────
+# Every client's results land under this root only where they can be protected.
+# The root, and each selected client's folder that already exists (one could be a
+# junction or mount onto another volume), is written through the real writer and
+# read back; a folder that cannot hold the protection is refused with the remedy
+# (exit 4) before any sign-in. -WhatIf has already returned, so a preview creates
+# and probes nothing.
+$probeRoot = [System.IO.Path]::GetFullPath($OutputRoot)
+if (-not (Test-Path -LiteralPath $probeRoot)) { [void][System.IO.Directory]::CreateDirectory($probeRoot) }
+$probeDirs = @($probeRoot) + @(foreach ($c in $clients) {
+    $cp = Join-Path $probeRoot (& $clientDirName ([string]$c.TenantDomain))
+    if (Test-Path -LiteralPath $cp -PathType Container) { $cp }
+})
+foreach ($pd in $probeDirs) {
+    try { $null = Test-TPSensitiveOutputFolder -Path $pd }
+    catch { Write-Host "[!] $($_.Exception.Message)" -ForegroundColor Red; exit 4 }
+}
+
 # ── Initial Graph auth — one prompt for all tenants ───────────────────────────
 # GDAP: authenticate against your own NRG tenant with the scopes needed
 # Partner Center GDAP relationships grant the delegated access — no per-client auth needed
@@ -265,8 +285,7 @@ foreach ($client in $clients) {
     $clientStart = Get-Date
 
     # Sanitize domain for use in output path — OWASP A01
-    $safeDir   = ($client.TenantDomain -replace '[^a-zA-Z0-9.\-]', '') -replace '^\.+|\.+$', ''
-    if ([string]::IsNullOrEmpty($safeDir)) { $safeDir = 'unknown' }
+    $safeDir   = & $clientDirName ([string]$client.TenantDomain)
     $clientOut = Join-Path $resolvedOutput $safeDir
 
     Write-Host ''

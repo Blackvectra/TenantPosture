@@ -237,7 +237,7 @@ function Set-TPSensitiveFileContent {
             # create and refuses the DACL with "Attempted to perform an unauthorized
             # operation", which reads like a permissions problem; name the volume.
             $fmt = Get-TPVolumeFormat -Path $dir
-            $note = if ($fmt -and $fmt -notmatch '^(NTFS|ReFS)$') { " The volume holding it reports '$fmt', which cannot hold an access control list; write to an NTFS folder (-OutputPath)." } elseif ($fmt) { " (volume: $fmt)" } else { '' }
+            $note = if (Test-TPVolumeFormatLacksAcl -Format $fmt) { " The volume holding it reports '$fmt', which cannot hold an access control list; write to a folder on a volume that can (NTFS on Windows), with -OutputPath or, on the batch runners, -OutputRoot." } elseif ($fmt) { " (volume: $fmt)" } else { '' }
             throw "Set-TPSensitiveFileContent: could not restrict access on '$Path', so it was not written: $($_.Exception.Message)$note"
         }
         if (-not $hardened -and -not $stageDir) { throw "Set-TPSensitiveFileContent: this runtime cannot harden '$Path' before writing, so it was not written." }
@@ -285,8 +285,21 @@ function Get-TPVolumeFormat {
     } catch { return $null }
 }
 
+# True only for the file systems known to hold no access control list at all (the
+# FAT family: FAT12/16/32, exFAT, vfat, msdos). ext4, XFS, APFS, NTFS over FUSE or
+# an SMB share can protect a file, so a failure there is reported with the format
+# and the writer's reason, never blamed on the volume.
+function Test-TPVolumeFormatLacksAcl {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([AllowNull()] [AllowEmptyString()] [string] $Format)
+    if ([string]::IsNullOrWhiteSpace($Format)) { return $false }
+    return [bool]($Format -match '^(v?fat(12|16|32)?|exfat|fat64|msdos)$')
+}
+
 # One sentence set for every refusal of an output folder: the folder, what the
-# volume reports, why that matters, the reason the writer gave, and the remedy.
+# volume reports, why that matters where it does, the reason the writer gave, and
+# the remedy for the entry point in use (-OutputPath; -OutputRoot on the batch runners).
 function Format-TPOutputFolderRefusal {
     [CmdletBinding()]
     [OutputType([string])]
@@ -296,8 +309,8 @@ function Format-TPOutputFolderRefusal {
         [Parameter(Mandatory)] [string] $Reason
     )
     $fmtText = if ($Format) { " The volume holding it reports '$Format'." } else { '' }
-    $hint = if ($Format -and $Format -notmatch '^(NTFS|ReFS)$') { " $Format volumes cannot hold an access control list, so no results file can be protected there." } else { '' }
-    return "The output folder '$Path' cannot hold a protected results file, so the assessment would end at the results write with nothing written.$fmtText$hint Reason: $Reason. Choose a folder on an NTFS volume with -OutputPath, for example C:\TenantPosture\output. The results JSON holds tenant data and is written only where the signed-in user, SYSTEM and Administrators alone can read it."
+    $hint = if (Test-TPVolumeFormatLacksAcl -Format $Format) { " $Format volumes cannot hold an access control list, so no results file can be protected there." } else { '' }
+    return "The output folder '$Path' cannot hold a protected results file, so the assessment would end at the results write with nothing written.$fmtText$hint Reason: $Reason. Choose a folder on a volume that can hold file permissions (NTFS on Windows) with -OutputPath, or -OutputRoot on the batch runners, for example C:\TenantPosture\output on Windows. The results JSON holds tenant data and is written only where the signed-in user, SYSTEM and Administrators alone can read it."
 }
 
 # Proves, BEFORE any sign-in, that the output folder can hold a protected file:
@@ -327,7 +340,9 @@ function Test-TPSensitiveOutputFolder {
             $item = Get-Item -LiteralPath $probe -Force   # a dot-file is hidden on Unix; without -Force Get-Item reports it missing
             $modeProp = $item.PSObject.Properties['UnixMode']
             $mode = if ($modeProp) { [string]$modeProp.Value } else { '' }
-            if ($mode -and $mode -notmatch '^-rw-------') { throw (Format-TPOutputFolderRefusal -Path $Path -Format $format -Reason "the file came back with mode $mode") }
+            # Fail closed: a mode that cannot be read back is a protection that is not proven.
+            if (-not $mode) { throw (Format-TPOutputFolderRefusal -Path $Path -Format $format -Reason 'the file mode could not be read back (this runtime exposes no UnixMode), so the protection is not proven') }
+            if ($mode -notmatch '^-rw-------') { throw (Format-TPOutputFolderRefusal -Path $Path -Format $format -Reason "the file came back with mode $mode") }
         }
         return [ordered]@{ Path = $Path; Format = $format; Ok = $true }
     } finally {
