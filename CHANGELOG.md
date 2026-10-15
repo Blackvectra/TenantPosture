@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **[Fix] EXO-1.1 no longer passes on a sampled mailbox's `AuditEnabled` when the organization switch was not
+  read.** The evaluator took "every sampled mailbox reports AuditEnabled = True" as proof that organization-level
+  mailbox auditing is on when `Get-OrganizationConfig` had failed, and docked a Partial when a sampled mailbox
+  reported False. Microsoft documents (Manage mailbox auditing) that while mailbox auditing on by default is on,
+  `AuditEnabled` always displays True and setting it False is ignored, and that while it is off nothing is audited
+  whatever the mailbox says, so the sample is never evidence of the switch in either direction. An unread switch is
+  now not assessed, naming it, with the control's citations; the sample is reported as informational beside the
+  organization verdict. Found by the 2026-10-15 currency review.
 - **[Fix] AAD-12.2 and AAD-12.3 say "license", not "collection failed", on tenants without Entra ID P1.**
   The inventory collector selected `signInActivity` in its guest and member queries; Microsoft documents that
   property as requiring Microsoft Entra ID P1 or P2, and Graph refuses the whole query without it ("Neither
