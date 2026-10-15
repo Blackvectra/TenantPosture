@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **[Fix] A run refuses an output folder that cannot hold a protected file BEFORE any sign-in.** The
+  2026-10-15 live run from an external drive signed in to four services, collected for six minutes and
+  then ended at the results write with "Attempted to perform an unauthorized operation" and nothing
+  written: a volume without access control lists (exFAT, FAT32) accepts the create and refuses the DACL
+  the writer insists on. `Test-TPSensitiveOutputFolder` (in `Lib/Set-TPSensitiveFileAcl.ps1`) now writes
+  a throwaway file through the real writer, reads the protection back and removes it, and every entry
+  point (single run, batch, sign-in triage, email assessment, batch triage) calls it before its first
+  sign-in, exiting 4 with the folder, what the volume reports and the `-OutputPath` remedy. The writer's
+  own refusal names the volume format too. The claim that a volume cannot hold an access control list is made
+  only for the FAT family; any other format is reported with the writer's reason, never blamed. The batch
+  runners probe after their own `-WhatIf` exit (their switch is not `$WhatIfPreference`) and include each
+  selected client's folder that already exists; `-RegisterApp` and `-WhatIfConnections` skip the probe, since
+  they write nothing under `-OutputPath`. A Unix mode that cannot be read back is a refusal, never a pass.
+  `TP.OutputFolderProbe.Tests.ps1` pins the probe, the message and the ordering in all five entry points.
 - **[Fix] The report site renders light whatever the browser prefers.** The site alone among the HTML
   deliverables followed the browser's dark preference, and its dark branch kept the profile's navy for
   headings and the browser's default blue for links on a dark background, which read as unreadable with no
