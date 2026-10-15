@@ -448,7 +448,7 @@ The active profile's `DefaultFramework` decides which framework cards the HTML r
 
 `-NISTMatrix` additionally emits a **standalone NIST-only HTML report** alongside the Markdown and XLSX — a self-contained page with the family table, the full control matrix, the not-assessable list and the physical/device section, that names no other framework anywhere on it. That's the artifact for a client who is assessed against 800-53 and shouldn't have to read their posture out of a multi-framework document.
 
-> **The NLS twin defaults to `All`.** That is the single deliberate behavioral difference between the two repos, and each pins its own default by test — it's exactly the setting a careless sync would silently flip, and the failure would be invisible because the report still renders and still scores correctly.
+> **The `nls` profile defaults to `All`.** That is the one deliberate behavioral difference between the two practices, pinned by test: it is exactly the setting a careless edit would silently flip, and the failure would be invisible because the report still renders and still scores correctly.
 
 ### Standalone NIST 800-53 matrix
 
