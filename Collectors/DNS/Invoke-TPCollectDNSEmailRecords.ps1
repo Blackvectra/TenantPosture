@@ -32,10 +32,55 @@
 # Validated FQDN pattern — reused for all domain validation in this file
 $script:DomainPattern = '^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
 
+# The workstation's resolver, in a function of its own so a test can stand in for the
+# operating system's answer (nothing can stand in for [System.Net.Dns] itself).
+function Resolve-TPWorkstationHostAddresses {
+    [CmdletBinding()]
+    [OutputType([System.Net.IPAddress[]])]
+    param([Parameter(Mandatory)] [string] $HostName)
+    return [System.Net.IPAddress[]]@([System.Net.Dns]::GetHostAddresses($HostName))
+}
+
+# The host's A and AAAA records through the tool's own resolver chain (Resolve-TPDns:
+# DNS over HTTPS, then the Resolve-DnsName fallback), the chain the record lookups use.
+# Returns @{ Outcome = 'Answered' | 'NoRecord' | 'LookupFailed'; Addresses; Reason }:
+# NoRecord only when both lookups answered authoritatively that nothing exists; an
+# answer whose rows are not addresses is LookupFailed, never a host with no record.
+function Resolve-TPPublicHostAddresses {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory)] [string] $HostName)
+    $aOut = ''; $aWhy = ''; $aaaaOut = ''; $aaaaWhy = ''
+    $a    = @(Resolve-TPDns -Name $HostName -Type A    -Outcome ([ref]$aOut)    -Reason ([ref]$aWhy))
+    $aaaa = @(Resolve-TPDns -Name $HostName -Type AAAA -Outcome ([ref]$aaaaOut) -Reason ([ref]$aaaaWhy))
+    $parsed = [System.Collections.Generic.List[System.Net.IPAddress]]::new()
+    foreach ($row in @($a) + @($aaaa)) {
+        $ip = $null
+        if ([System.Net.IPAddress]::TryParse([string]$row, [ref]$ip)) { $parsed.Add($ip) }
+    }
+    if ($parsed.Count -gt 0) { return @{ Outcome = 'Answered'; Addresses = @($parsed.ToArray()); Reason = '' } }
+    if ($aOut -eq 'NoRecord' -and $aaaaOut -eq 'NoRecord') { return @{ Outcome = 'NoRecord'; Addresses = @(); Reason = '' } }
+    $why = @()
+    if ($aOut -eq 'Answered' -or $aaaaOut -eq 'Answered') { $why += 'the answer rows were not IP addresses' }
+    if ($aWhy) { $why += "A: $aWhy" }
+    if ($aaaaWhy) { $why += "AAAA: $aaaaWhy" }
+    return @{ Outcome = 'LookupFailed'; Addresses = @(); Reason = ($why -join '; ') }
+}
+
 # SSRF guard for hostnames returned by DNS (MX records, etc.).
 # Returns a hashtable describing the probe target:
-#   @{ Refused = $true; Reason = '<why>' }                 -- unsafe, do not connect
-#   @{ Refused = $false; Address = [IPAddress]; HostName = '<original>' } -- safe to probe by IP
+#   @{ Refused = $true; Reason = '<why>'; PublicDnsOutcome = '<Answered|NoRecord|LookupFailed>' (when the
+#      workstation resolver could not answer and the tool's own resolver was asked) } -- unsafe, do not connect
+#   @{ Refused = $false; Address = [IPAddress]; HostName = '<original>'; ResolvedBy = 'workstation resolver' |
+#      'public DNS'; WorkstationResolverError = '<why>' (public DNS only) } -- safe to probe by IP
+#
+# The workstation's resolver is asked first. When it cannot answer, the host is resolved
+# through the tool's own chain (Resolve-TPDns, the resolvers every record lookup uses) and
+# every address is validated exactly as before: on the 2026-10-15 live run both tenant
+# domains' mta-sts.<domain> hosts (CNAMEs to a GitHub Pages host) came back "No such host is
+# known" from the operator's network on every run since 2026-09-25 while the _mta-sts TXT
+# records resolved over DoH, and DNS-1.4 was "not assessed" on two domains whose policies
+# read mode: enforce. Which resolver answered is returned so the caller can say so.
 #
 # A malicious DNS response could direct a TCP/TLS probe at internal RFC1918 names,
 # `localhost`, cloud-metadata-adjacent names, or link-local addresses. We re-validate
@@ -81,13 +126,28 @@ function Test-TPSafeProbeTarget {
     # 3. Resolve and inspect every returned address. Resolution happens ONCE
     #    and the returned address is the one the caller must connect to —
     #    closing the DNS-rebinding window between validate and connect.
+    $resolvedBy = 'workstation resolver'
+    $workstationError = $null
+    $addresses = @()
     try {
-        $addresses = [System.Net.Dns]::GetHostAddresses($HostName)
+        $addresses = @(Resolve-TPWorkstationHostAddresses -HostName $HostName)
     } catch {
-        return @{ Refused = $true; Reason = "DNS resolution failed: $($_.Exception.Message)" }
+        $workstationError = [string]$_.Exception.Message
     }
-    if (-not $addresses -or $addresses.Count -eq 0) {
-        return @{ Refused = $true; Reason = "no addresses returned for '$HostName'" }
+    if ($addresses.Count -eq 0) {
+        # The workstation could not answer (a filtered or split-horizon resolver, an
+        # internal zone without the name). Ask the tool's own resolver chain before
+        # concluding anything; a refusal says what each resolver answered.
+        $osNote = if ($workstationError) { "DNS resolution failed: $workstationError" } else { "no addresses returned for '$HostName'" }
+        if (-not $workstationError) { $workstationError = "no addresses returned for '$HostName'" }
+        $public = Resolve-TPPublicHostAddresses -HostName $HostName
+        if ($public.Outcome -ne 'Answered') {
+            $publicNote = if ($public.Outcome -eq 'NoRecord') { 'public DNS: no A or AAAA record' }
+                          else { "public DNS: lookup did not complete ($($public.Reason))" }
+            return @{ Refused = $true; Reason = "$osNote; $publicNote"; PublicDnsOutcome = [string]$public.Outcome }
+        }
+        $addresses  = @($public.Addresses)
+        $resolvedBy = 'public DNS'
     }
 
     # Every address the name resolves to must be globally routable unicast
@@ -105,7 +165,20 @@ function Test-TPSafeProbeTarget {
     # connect to this IP literal — second resolution would re-open the rebinding race.
     $picked = $unwrapped | Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } | Select-Object -First 1
     if (-not $picked) { $picked = $unwrapped | Select-Object -First 1 }
-    return @{ Refused = $false; Address = $picked; HostName = $HostName }
+    $result = @{ Refused = $false; Address = $picked; HostName = $HostName; ResolvedBy = $resolvedBy }
+    if ($resolvedBy -eq 'public DNS') { $result['WorkstationResolverError'] = $workstationError }
+    return $result
+}
+
+# One sentence for the per-domain Errors list when a probe target had to be resolved
+# through public DNS, so the results file says why the workstation's answer was not used.
+function Get-TPProbeResolverNote {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [string] $Label, [Parameter(Mandatory)] [hashtable] $Probe)
+    if ([string](Get-TPObjectField -Item $Probe -Key 'ResolvedBy' -Default '') -ne 'public DNS') { return $null }
+    $why = [string](Get-TPObjectField -Item $Probe -Key 'WorkstationResolverError' -Default 'no answer')
+    return "${Label}: the workstation resolver could not resolve '$($Probe.HostName)' ($why); resolved through public DNS instead ($($Probe.Address))"
 }
 
 function Invoke-TPCollectDNSEmailRecords {
@@ -297,7 +370,7 @@ function Invoke-TPCollectDNSEmailRecords {
                     KeyRecords        = @()
                 }
                 DMARC   = $null
-                MTASTS  = @{ DNSRecord = $null; Policy = $null; Mode = $null; PolicyFetchError = $null; PolicyHostMissing = $false }
+                MTASTS  = @{ DNSRecord = $null; Policy = $null; Mode = $null; PolicyFetchError = $null; PolicyHostMissing = $false; PolicyHostResolvedBy = $null; WorkstationResolverError = $null }
                 TLSRPT  = $null
                 DNSSEC  = $false
                 MX      = @()
@@ -575,14 +648,19 @@ function Invoke-TPCollectDNSEmailRecords {
                     # is not in effect. Only an authoritative "no record" for
                     # both A and AAAA says so; any lookup failure stays unknown.
                     if ([string]$mtaStsProbe.Reason -like 'DNS resolution failed*') {
-                        $aOut = ''; $aWhy = ''; $aaaaOut = ''; $aaaaWhy = ''
-                        $a    = @(Resolve-TPDns -Name $mtaStsHost -Type A    -Outcome ([ref]$aOut)    -Reason ([ref]$aWhy))
-                        $aaaa = @(Resolve-TPDns -Name $mtaStsHost -Type AAAA -Outcome ([ref]$aaaaOut) -Reason ([ref]$aaaaWhy))
-                        if ($aOut -eq 'NoRecord' -and $aaaaOut -eq 'NoRecord' -and $a.Count -eq 0 -and $aaaa.Count -eq 0) {
-                            $d.MTASTS.PolicyHostMissing = $true
-                        }
+                        # The guard already asked the tool's own resolver and says what it
+                        # answered; a probe result without that key (a stand-in) is asked here.
+                        $publicOutcome = [string](Get-TPObjectField -Item $mtaStsProbe -Key 'PublicDnsOutcome' -Default '')
+                        if (-not $publicOutcome) { $publicOutcome = [string](Resolve-TPPublicHostAddresses -HostName $mtaStsHost).Outcome }
+                        if ($publicOutcome -eq 'NoRecord') { $d.MTASTS.PolicyHostMissing = $true }
                     }
                 } else {
+                    $d.MTASTS.PolicyHostResolvedBy = [string](Get-TPObjectField -Item $mtaStsProbe -Key 'ResolvedBy' -Default 'workstation resolver')
+                    $resolverNote = Get-TPProbeResolverNote -Label 'MTASTS.Policy' -Probe $mtaStsProbe
+                    if ($resolverNote) {
+                        $d.MTASTS.WorkstationResolverError = [string](Get-TPObjectField -Item $mtaStsProbe -Key 'WorkstationResolverError' -Default '')
+                        $d.Errors += $resolverNote
+                    }
                     # The validated address is passed to the bounded reader, which sends the
                     # request to it and carries the host name as the Host header (what
                     # SocketsHttpHandler uses for TLS), so the name is never resolved twice.
@@ -750,6 +828,8 @@ function Invoke-TPCollectDNSEmailRecords {
                 $d.TLSCerts['Autodiscover'] = @{ Hostname = $autoDiscHost; Error = "Refused: $($autoDiscProbe.Reason)" }
             } else {
                 $tlsTargets['Autodiscover'] = $autoDiscProbe
+                $resolverNote = Get-TPProbeResolverNote -Label 'TLSCerts.Autodiscover' -Probe $autoDiscProbe
+                if ($resolverNote) { $d.Errors += $resolverNote }
             }
             if ($d.MX.Count -gt 0) {
                 $firstMx = [string]$d.MX[0].Exchange
@@ -765,6 +845,8 @@ function Invoke-TPCollectDNSEmailRecords {
                         $d.TLSCerts['MailHost'] = @{ Hostname = $firstMx; Error = "Refused: $($mxProbe.Reason)" }
                     } else {
                         $tlsTargets['MailHost'] = $mxProbe
+                        $resolverNote = Get-TPProbeResolverNote -Label 'TLSCerts.MailHost' -Probe $mxProbe
+                        if ($resolverNote) { $d.Errors += $resolverNote }
                     }
                 }
             }
