@@ -102,6 +102,9 @@ function Add-TPExpectedStateFinding {
     $exclusionSentences = @($ao | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'Sentence' -Default '') } | Where-Object { $_ })
     if ($exclusionSentences.Count -gt 0) {
         foreach ($x in $s) { if ($x -notin $exclusionSentences) { $ao += [ordered]@{ Shortfall = [string]$x } } }
+        # A component that could not be established is a blocker too: an approval
+        # must never turn an incomplete assessment into a pass.
+        foreach ($x in $n) { $ao += [ordered]@{ NotEstablished = [string]$x } }
     }
     if ($ao.Count) { $p.AffectedObjects = @($ao) }
     # Literal -State values on purpose: Get-TPControlAutomationAudit derives what a verdict

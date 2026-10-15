@@ -33,9 +33,10 @@
 #     pre-approval result first and judged again against the CURRENT record, so
 #     a republish (-FromResults) of an approved run reflects an approval that
 #     has since lapsed, been removed, or been corrected, and never stacks text.
-#   - An exclusion is approved only when it is the finding's only shortfall:
-#     Add-TPExpectedStateFinding records every other shortfall as a structured
-#     entry beside the exclusions, and one such entry keeps the finding Partial
+#   - An exclusion is approved only when it is the finding's only shortfall and
+#     every component was established: Add-TPExpectedStateFinding records every
+#     other shortfall and every unestablished component as a structured entry
+#     beside the exclusions, and one such entry keeps the finding Partial
 #     (annotated), whatever the record says about the principals.
 #   - The satisfied finding says the accounts are outside the protection by
 #     design: an approved exception is a permitted deviation, not coverage.
@@ -107,13 +108,15 @@ function Set-TPEmergencyAccessApproval {
         if ($state -ne 'Partial') { continue }
         $objs = @(Get-TPObjectField -Item $f -Key 'AffectedObjects' -Default @() | Where-Object { $null -ne $_ })
         if ($objs.Count -eq 0) { continue }
-        $principals = @(); $otherShortfalls = @(); $recognized = $true
+        $principals = @(); $otherShortfalls = @(); $notEstablished = @(); $recognized = $true
         foreach ($o in $objs) {
             $kind = [string](Get-TPObjectField -Item $o -Key 'Exclusion' -Default '')
             $p    = [string](Get-TPObjectField -Item $o -Key 'Principal' -Default '')
             $sf   = [string](Get-TPObjectField -Item $o -Key 'Shortfall' -Default '')
+            $ne   = [string](Get-TPObjectField -Item $o -Key 'NotEstablished' -Default '')
             if ($kind -eq $script:TPEmergencyAccessExclusionKind -and $p) { if ($p -notin $principals) { $principals += $p } }
             elseif ($sf) { $otherShortfalls += $sf }
+            elseif ($ne) { $notEstablished += $ne }
             else { $recognized = $false; break }
         }
         if (-not $recognized -or $principals.Count -eq 0) { continue }
@@ -133,14 +136,16 @@ function Set-TPEmergencyAccessApproval {
             if ($upn) { "$($x.Principal) ($upn)" } elseif ($dn) { "$($x.Principal) ($dn)" } else { [string]$x.Principal }
         }
         $okNames = @($ok | ForEach-Object { & $label $_ })
-        if ($no.Count -gt 0 -or $otherShortfalls.Count -gt 0) {
+        if ($no.Count -gt 0 -or $otherShortfalls.Count -gt 0 -or $notEstablished.Count -gt 0) {
             # Not approvable as it stands: say exactly why, and only when the record
             # has something to say (a tenant with no record keeps the plain finding).
+            # An approval never turns an incomplete assessment into a pass.
             if (-not ($exc -and $exc.Available)) { continue }
             $parts = @()
             if ($okNames.Count) { $parts += "approved emergency-access exception(s): $($okNames -join '; ')." }
             if ($no.Count) { $parts += "Not approved: $($no -join '; ')." }
             if ($otherShortfalls.Count) { $parts += "The finding has $($otherShortfalls.Count) other shortfall(s) besides the exclusion, so it stays Partial whatever the record says." }
+            if ($notEstablished.Count) { $parts += "The finding has $($notEstablished.Count) component(s) that were not assessed, so an approval cannot make it a pass; it stays Partial." }
             $f.Detail = "$detail $script:TPEmergencyAccessRecordNote $($parts -join ' ')".Trim()
             continue
         }

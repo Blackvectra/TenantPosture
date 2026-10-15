@@ -262,6 +262,21 @@ Describe 'Approved emergency-access exclusions' {
             (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1)))) | Should -Be 1
             (F 'AAD-1.4').State | Should -Be 'Satisfied'
         }
+        It 'an approved exclusion beside a component that was not established never makes the finding Satisfied (review finding: AAD-1.3 with the role catalog unread)' {
+            Clear-TPState
+            $ctrl = [pscustomobject]@{ Category = 'Identity'; Title = 'T'; Severity = 'High'; Remediation = 'r' }
+            $cov = [ordered]@{ Kind = 'Exceptions'; Names = @('p'); FullNames = @(); Exceptions = @("user:$($script:U1)"); ExcludedBy = [ordered]@{ p = @("user:$($script:U1)") }; Narrowed = @() }
+            $cv = & $script:Mod { param($c) Get-TPCACoverageVerdict -Coverage $c -What 'MFA is required' } $cov
+            $u = @($cv.NotEstablished) + "whether p covers every privileged role, because this tenant's role catalog was not read."
+            Add-TPExpectedStateFinding -ControlId 'AAD-1.3' -Control $ctrl -FrameworkIds @() -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $u -AffectedObjects $cv.AffectedObjects
+            $f = F 'AAD-1.3'
+            $f.State | Should -Be 'Partial'
+            @($f.AffectedObjects | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'NotEstablished' -Default '') }).Count | Should -Be 1
+            (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1)))) | Should -Be 0
+            $f = F 'AAD-1.3'
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Approval record: approved emergency-access exception\(s\): user:.* The finding has 1 component\(s\) that were not assessed, so an approval cannot make it a pass'
+        }
         It 'editing a baseline exception keeps the emergency-access block (New, Set and Remove write it back as read; review finding)' {
             $rec = Record @((Entry -Id $script:U1 -Upn 'bg1@contoso.example'), (Entry -Id $script:U2 -Review $script:Past))
             $future = (Get-Date).AddMonths(3)

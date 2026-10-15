@@ -14,8 +14,8 @@
   evaluation and on `-FromResults`, before license gating) rewrites a Partial whose only shortfall is such
   an exclusion to Satisfied, prefixed `Approved emergency-access exceptions:`, naming the principals and
   keeping the original result; a principal not on the record, or lapsed, keeps the finding Partial with the
-  record's answer appended. An exclusion is approved only when it is the finding's only shortfall (every
-  other shortfall is recorded beside it), a republish restores the pre-approval result and judges it against
+  record's answer appended. An exclusion is approved only when it is the finding's only shortfall and every
+  component was established (every other shortfall and unestablished component is recorded beside it), a republish restores the pre-approval result and judges it against
   the current record, and the exception cmdlets write the block back as read. Applies to AAD-1.1, AAD-1.2,
   AAD-1.3, AAD-1.4, AAD-1.5, AAD-11.1, AAD-2.3 and INT-1.2.
 - **[Fix] AAD-2.3 and INT-1.2 judge the device requirement on who is protected.** Both controls credited a
