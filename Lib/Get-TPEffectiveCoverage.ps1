@@ -40,7 +40,7 @@ function Get-TPExclusionCoverage {
     param([AllowNull()] [AllowEmptyCollection()] [object[]] $Candidates)
 
     $c = @($Candidates | Where-Object { $null -ne $_ })
-    $r = [ordered]@{ Kind = 'None'; Names = @(); FullNames = @(); Exceptions = @(); ExcludedBy = [ordered]@{} }
+    $r = [ordered]@{ Kind = 'None'; Names = @(); FullNames = @(); Exceptions = @(); ExcludedBy = [ordered]@{}; Differing = [ordered]@{} }
     if ($c.Count -eq 0) { return $r }
     $r.Names = @($c | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '') })
     $sets = @(); $full = @()
@@ -54,7 +54,17 @@ function Get-TPExclusionCoverage {
     if ($full.Count -gt 0) { $r.Kind = 'Full'; $r.FullNames = $full; return $r }
     $inter = @($sets[0])
     foreach ($s in $sets) { $inter = @($inter | Where-Object { $_ -in $s }) }
-    if ($inter.Count -gt 0) { $r.Kind = 'Exceptions'; $r.Exceptions = $inter } else { $r.Kind = 'Unproven' }
+    if ($inter.Count -gt 0) {
+        $r.Kind = 'Exceptions'; $r.Exceptions = $inter
+        # Exclusions outside the shared set are not covered by the shared verdict: a
+        # principal in each policy's own exclusions could still be excluded from
+        # every policy, and group membership is not resolved. Kept per policy so a
+        # consumer can say so (and an approval of the shared set cannot pass over it).
+        foreach ($n in @($r.ExcludedBy.Keys)) {
+            $own = @($r.ExcludedBy[$n] | Where-Object { $_ -notin $inter })
+            if ($own.Count -gt 0) { $r.Differing[$n] = $own }
+        }
+    } else { $r.Kind = 'Unproven' }
     return $r
 }
 
@@ -213,6 +223,12 @@ function Get-TPCACoverageVerdict {
             # judges ids, never prose, and Add-TPExpectedStateFinding can tell this
             # shortfall from any other the control also reports.
             $ao = @(@($Coverage.Exceptions) | ForEach-Object { [ordered]@{ Principal = [string]$_; Exclusion = 'SharedByEveryQualifyingPolicy'; Sentence = $sentence } })
+            # Exclusions the policies do NOT share stay unproven: whoever sits in every
+            # policy's own exclusions is outside them all, and membership is not resolved.
+            $differing = Get-TPObjectField -Item $Coverage -Key 'Differing' -Default $null
+            if ($differing -and @($differing.Keys).Count -gt 0) {
+                $u += "whether any further user is excluded from every one of these policies through the exclusions they do not share; each excludes different users or groups beyond the shared set and group membership was not resolved ($((@($differing.Keys) | ForEach-Object { "$_ also excludes $(@($differing[$_]).Count)" }) -join '; '))."
+            }
         }
         'Unproven' {
             $v += "$What by: $names."

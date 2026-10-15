@@ -311,6 +311,38 @@ Describe 'Approved emergency-access exclusions' {
             (Set-TPEmergencyAccessApproval -Path $rec) | Should -Be 0
             (F 'AAD-2.3').Detail | Should -Be $before
         }
+        It 'exclusions the policies do not share stay a blocker: a shared approved principal beside differing group exclusions is never a pass (review finding)' {
+            Evaluate @((Pol -Name 'A' -Grant @('compliantDevice') -ExUsers @($script:U1) -ExGroups @('g-h1')), (Pol -Name 'B' -Grant @('compliantDevice') -ExUsers @($script:U1) -ExGroups @('g-h2')))
+            $f = F 'AAD-2.3'
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Not assessed: whether any further user is excluded from every one of these policies through the exclusions they do not share.*A also excludes 1; B also excludes 1'
+            @($f.AffectedObjects | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'NotEstablished' -Default '') }).Count | Should -Be 1
+            (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1)))) | Should -Be 0
+            (F 'AAD-2.3').State  | Should -Be 'Partial'
+            (F 'AAD-2.3').Detail | Should -Match 'component\(s\) that were not assessed, so an approval cannot make it a pass'
+            # The same two policies excluding only the shared principal are approvable.
+            Evaluate @((Pol -Name 'A' -Grant @('compliantDevice') -ExUsers @($script:U1)), (Pol -Name 'B' -Grant @('compliantDevice') -ExUsers @($script:U1)))
+            (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1)))) | Should -Be 2
+        }
+        It 'a Partial that license gating wrapped in the results file is unwrapped before the record is applied, so a republish answers as a live run (review finding)' {
+            Evaluate @((Pol -Name 'Device' -Grant @('compliantDevice') -ExUsers @($script:U1)))
+            $f = F 'INT-1.2'
+            $orig = $f.Detail
+            # The shape Set-TPLicenseGating writes for an unlicensed control.
+            $f.State = 'NotApplicable'; $f.Detail = "Not scored: this control requires M365 Business Premium or Intune Plan 1, which this tenant does not hold — upgrade opportunity, not counted against the score. Result before the license check: Partial — $orig"; $f.CurrentValue = 'Requires M365 Business Premium or Intune Plan 1 (not licensed)'
+            $replay = @((Get-TPFindings | ConvertTo-Json -Depth 12) | ConvertFrom-Json)
+            (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1))) -Findings $replay) | Should -BeGreaterOrEqual 1
+            $g = @($replay | Where-Object { $_.ControlId -eq 'INT-1.2' })[0]
+            $g.State  | Should -Be 'Satisfied'
+            $g.Detail | Should -Match "Result before the approval record was applied: Partial\. $([regex]::Escape($orig))$"
+            $g.CurrentValue | Should -Be 'Approved emergency-access exceptions: 1'
+            # Without a record the wrapper is unwrapped to its Partial, which gating re-wraps afterwards on the entry point.
+            $replay = @((Get-TPFindings | ConvertTo-Json -Depth 12) | ConvertFrom-Json)
+            (Set-TPEmergencyAccessApproval -TenantDomain 'no-such-tenant.example' -Findings $replay) | Should -Be 0
+            $g = @($replay | Where-Object { $_.ControlId -eq 'INT-1.2' })[0]
+            $g.State | Should -Be 'Partial'
+            $g.Detail | Should -Be $orig
+        }
         It 'editing a baseline exception keeps the emergency-access block (New, Set and Remove write it back as read; review finding)' {
             $rec = Record @((Entry -Id $script:U1 -Upn 'bg1@contoso.example'), (Entry -Id $script:U2 -Review $script:Past))
             $future = (Get-Date).AddMonths(3)

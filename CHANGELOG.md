@@ -15,8 +15,9 @@
   an exclusion to Satisfied, prefixed `Approved emergency-access exceptions:`, naming the principals and
   keeping the original result; a principal not on the record, or lapsed, keeps the finding Partial with the
   record's answer appended. An exclusion is approved only when it is the finding's only shortfall and every
-  component was established (every other shortfall and unestablished component is recorded beside it), a republish restores the pre-approval result and judges it against
-  the current record, and the exception cmdlets write the block back as read. Applies to AAD-1.1, AAD-1.2,
+  component was established (every other shortfall and unestablished component is recorded beside it), a republish restores the pre-approval result (a license-gated wrapper
+  included) and judges it against the current record, exclusions the policies do not share stay a blocker, and the
+  exception cmdlets write the block back as read. Applies to AAD-1.1, AAD-1.2,
   AAD-1.3, AAD-1.4, AAD-1.5, AAD-11.1, AAD-2.3 and INT-1.2.
 - **[Fix] Five verdicts corrected from the 2026-10-15 live run.** DEF-5.1 scored a High Gap for spoofed-sender
   allow entries, which Microsoft says never expire and cannot be time-boxed, so every tenant with a

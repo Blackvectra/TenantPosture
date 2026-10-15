@@ -33,6 +33,9 @@
 #     pre-approval result first and judged again against the CURRENT record, so
 #     a republish (-FromResults) of an approved run reflects an approval that
 #     has since lapsed, been removed, or been corrected, and never stacks text.
+#     A Partial that license gating wrapped as NotApplicable in the results file
+#     is unwrapped the same way (gating runs again after this pass on both
+#     paths), so a republish answers as a live run.
 #   - An exclusion is approved only when it is the finding's only shortfall and
 #     every component was established: Add-TPExpectedStateFinding records every
 #     other shortfall and every unestablished component as a structured entry
@@ -110,6 +113,20 @@ function Set-TPEmergencyAccessApproval {
         if (-not $recognized -or $principals.Count -eq 0) { continue }
         $state  = [string](Get-TPObjectField -Item $f -Key 'State' -Default '')
         $detail = [string](Get-TPObjectField -Item $f -Key 'Detail' -Default '')
+        # A results file holds findings AFTER license gating, which wraps a Partial on
+        # an unlicensed control as NotApplicable with the evaluator's result kept in
+        # the Detail (Set-TPLicenseGating). The live run applies approvals before
+        # gating, so a republish unwraps that first and gating runs again afterwards;
+        # otherwise the same record would give a live run and a republish different
+        # answers. The gated CurrentValue names the license, not the control's state,
+        # and is not kept.
+        if ($state -eq 'NotApplicable' -and $detail -match 'upgrade opportunity' -and $detail -match '(?s)Result before the license check: Partial(?: — (.*))?$') {
+            $f.State        = 'Partial'
+            $f.Severity     = 'Medium'
+            $f.Detail       = $(if ($Matches.Count -gt 1 -and $Matches[1]) { $Matches[1] } else { '' })
+            $f.CurrentValue = ''
+            $state = 'Partial'; $detail = [string]$f.Detail
+        }
         # Restore a finding an earlier run approved or annotated, then judge it again
         # against the current record (a republish of an approved run must reflect a
         # lapsed, removed or corrected approval).
