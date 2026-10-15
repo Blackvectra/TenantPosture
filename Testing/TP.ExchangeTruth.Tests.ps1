@@ -510,6 +510,19 @@ Describe 'EXO-7.2 reaches a verdict when the only unresolvable recipients are go
                 '[Server=X,RequestId=Y,TimeStamp=Z] [FailureCategory=Cmdlet-ManagementObjectNotFoundException] Write-ErrorMessage', 'ObjectNotFound', $null)
             & $script:Mod { param($r) Test-TPExoNotFoundError -ErrorRecord $r } $rec | Should -BeTrue
         }
+        It 'recognizes the module 3.x REST shape, ||Message with the type blank, as the 2026-10-15 live run returned it (either apostrophe)' {
+            foreach ($apos in @("'", [string][char]0x2019)) {
+                $m = "||The operation couldn{0}t be performed because object '/o=ExchangeLabs/ou=Exchange Administrative Group (FYDIBOHF23SPDLT)/cn=Recipients/cn=f2bb7dfe65834a758b4fde49a010aab7-mwolf' couldn{0}t be found on 'BL4PR06A03DC003.NAMPR06A003.prod.outlook.com'." -f $apos
+                $rec = [System.Management.Automation.ErrorRecord]::new([System.Exception]::new($m), 'x', 'NotSpecified', $null)
+                & $script:Mod { param($r) Test-TPExoNotFoundError -ErrorRecord $r } $rec | Should -BeTrue -Because $m
+            }
+        }
+        It 'does not read any other could-not-be-found or could-not-be-performed wording as a missing recipient' {
+            foreach ($m in "The specified folder couldn't be found.", "The operation couldn't be performed because the object is in use.", "A server side error has occurred because of which the operation could not be completed. Please try again after some time.") {
+                $rec = [System.Management.Automation.ErrorRecord]::new([System.Exception]::new($m), 'x', 'NotSpecified', $null)
+                & $script:Mod { param($r) Test-TPExoNotFoundError -ErrorRecord $r } $rec | Should -BeFalse -Because $m
+            }
+        }
         It 'does not read the ObjectNotFound CATEGORY as a missing recipient: a missing command reports it too' {
             $ex  = [System.Management.Automation.CommandNotFoundException]::new("The term 'Get-Recipient' is not recognized")
             $rec = [System.Management.Automation.ErrorRecord]::new($ex, 'CommandNotFoundException', 'ObjectNotFound', $null)
@@ -635,6 +648,21 @@ return
             $f.Detail   | Should -Not -Match 'EX:/o='
             $f.Detail   | Should -Not -Match '(?i)not assessed'
             @($f.AffectedObjects).Count | Should -Be 1
+        }
+        It 'files the module 3.x REST shape (||Message, type blank) as Orphaned too: the 2026-10-15 live run left two such rules not assessed' {
+            $live = "||The operation couldn't be performed because object '{0}' couldn't be found on 'BL4PR06A03DC003.NAMPR06A003.prod.outlook.com'." -f $script:GoneDn
+            & $script:Mod { param($m) $script:NotFoundMessage = $m } $live
+            try {
+                $r = Sweep 'NotFound'
+                $rule = @($r.Data.InboxRulesForwarding)[0]
+                $rule.IsOrphaned   | Should -BeTrue
+                $rule.IsUnresolved | Should -BeFalse
+                @($script:SweepExceptions).Count | Should -Be 0 -Because 'the directory answered in the REST wording; nothing failed'
+                $f = Verdict 'Test-TPControlEXOInboxRulesForwarding' 'EXO-7.2'
+                $f.State    | Should -Be 'Gap'
+                $f.Severity | Should -Be 'Medium'
+                $f.Detail   | Should -Not -Match '(?i)not assessed'
+            } finally { & $script:Mod { param($m) $script:NotFoundMessage = $m } $script:NotFoundMessage }
         }
         It 'classifies a DN an X500 proxy address still routes by the object it reaches: external here, never Orphaned' {
             $r = Sweep 'X500'
