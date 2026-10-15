@@ -19,7 +19,7 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
         Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop
         $script:Mod = Get-Module 'TenantPosture'
-        $script:Orig = & $script:Mod { @{ Resolve = ${function:Resolve-TPDns}; Probe = ${function:Test-TPSafeProbeTarget} } }
+        $script:Orig = & $script:Mod { @{ Resolve = ${function:Resolve-TPDns}; Probe = ${function:Test-TPSafeProbeTarget}; Fetch = ${function:Get-TPBoundedHttpText}; Workstation = ${function:Resolve-TPWorkstationHostAddresses} } }
 
         & $script:Mod {
             $script:T_ProbeReason = $null
@@ -59,6 +59,8 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
         & $script:Mod { param($o)
             Set-Item -Path 'function:script:Resolve-TPDns' -Value $o.Resolve
             Set-Item -Path 'function:script:Test-TPSafeProbeTarget' -Value $o.Probe
+            Set-Item -Path 'function:script:Get-TPBoundedHttpText' -Value $o.Fetch
+            Set-Item -Path 'function:script:Resolve-TPWorkstationHostAddresses' -Value $o.Workstation
             Remove-Item -Path 'function:script:Invoke-WebRequest' -ErrorAction SilentlyContinue
         } $script:Orig
     }
@@ -155,6 +157,102 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
             $d = Collect @{}
             $d.CTLog.TotalCerts = 0; $d.CTLog.QueryError = $null
             (Verdict 'Test-TPControlDNSCertTransparency' 'DNS-2.4').State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'MTA-STS policy host: the tool''s own resolver answers when the workstation resolver cannot (2026-10-15 live run)' {
+        # The REAL probe guard, with the workstation lookup and the bounded HTTPS read
+        # stood in for. On the live run both tenant domains' mta-sts hosts (CNAMEs to a
+        # GitHub Pages host) returned "No such host is known" from the operator's
+        # network while the policies read mode: enforce from anywhere else.
+        BeforeAll {
+            & $script:Mod { param($o)
+                Set-Item -Path 'function:script:Test-TPSafeProbeTarget' -Value $o.Probe
+                $script:T_WsAnswer = { throw 'No such host is known.' }
+                $script:T_Fetched = [System.Collections.Generic.List[object]]::new()
+                Set-Item -Path 'function:script:Resolve-TPWorkstationHostAddresses' -Value {
+                    param([string] $HostName) & $script:T_WsAnswer $HostName }
+                # The bounded reader also serves the crt.sh lookup: only the policy URL is
+                # answered and recorded; anything else is the no-network throw of the harness.
+                Set-Item -Path 'function:script:Get-TPBoundedHttpText' -Value {
+                    param([string] $Uri, [int] $TimeoutSeconds, [int] $MaxBytes, [System.Net.IPAddress] $Address)
+                    if ($Uri -notlike '*/.well-known/mta-sts.txt') { throw 'no network in tests' }
+                    $script:T_Fetched.Add([ordered]@{ Uri = $Uri; Address = [string]$Address })
+                    return "version: STSv1`nmode: enforce`nmx: mail.shape.test`nmax_age: 604800`n" }
+            } $script:Orig
+            function script:Fetched { & $script:Mod { @($script:T_Fetched.ToArray()) } }
+            function script:ResetFetch { & $script:Mod { $script:T_Fetched.Clear() } }
+            $script:StsTxt = @{ '_mta-sts.shape.test|TXT' = & $A @('v=STSv1; id=20261002') }
+        }
+        AfterAll {
+            & $script:Mod { param($o)
+                Set-Item -Path 'function:script:Test-TPSafeProbeTarget' -Value { param([string] $HostName) @{ Refused = $true; Reason = 'no network in tests' } }
+                Set-Item -Path 'function:script:Get-TPBoundedHttpText' -Value $o.Fetch
+                Set-Item -Path 'function:script:Resolve-TPWorkstationHostAddresses' -Value $o.Workstation
+                $script:T_WsAnswer = $null
+            } $script:Orig
+        }
+        BeforeEach { ResetFetch }
+
+        It 'reads the policy through the public answer, pins the fetch to that address, and says which resolver answered' {
+            $t = $script:StsTxt.Clone(); $t['mta-sts.shape.test|A'] = & $A @('185.199.108.153')
+            $d = Collect $t
+            $d.MTASTS.Mode                     | Should -Be 'enforce'
+            $d.MTASTS.PolicyHostResolvedBy     | Should -Be 'public DNS'
+            $d.MTASTS.WorkstationResolverError | Should -Match 'No such host'
+            @(Fetched).Count                   | Should -Be 1
+            @(Fetched)[0].Address               | Should -Be '185.199.108.153'
+            @(Fetched)[0].Uri                   | Should -Be 'https://mta-sts.shape.test/.well-known/mta-sts.txt'
+            @($d.Errors | Where-Object { $_ -like 'MTASTS.Policy: the workstation resolver could not resolve*' }).Count | Should -Be 1
+            $f = Verdict 'Test-TPControlDNSMTASTS' 'DNS-1.4'
+            $f.State        | Should -Be 'Satisfied'
+            $f.Detail       | Should -Match 'resolved through public DNS because the workstation'
+            $f.CurrentValue | Should -Match 'public DNS'
+        }
+        It 'an IPv6-only public answer is used the same way' {
+            $t = $script:StsTxt.Clone(); $t['mta-sts.shape.test|AAAA'] = & $A @('2606:50c0:8000::153')
+            $d = Collect $t
+            $d.MTASTS.Mode       | Should -Be 'enforce'
+            @(Fetched)[0].Address | Should -Be '2606:50c0:8000::153'
+        }
+        It 'the workstation answer is still used first, with no public-DNS note' {
+            & $script:Mod { $script:T_WsAnswer = { param($h) [System.Net.IPAddress[]]@([System.Net.IPAddress]::Parse('185.199.109.153')) } }
+            try {
+                $t = $script:StsTxt.Clone(); $t['mta-sts.shape.test|A'] = & $A @('185.199.108.153')
+                $d = Collect $t
+                $d.MTASTS.PolicyHostResolvedBy | Should -Be 'workstation resolver'
+                @(Fetched)[0].Address           | Should -Be '185.199.109.153'
+                (Verdict 'Test-TPControlDNSMTASTS' 'DNS-1.4').Detail | Should -Not -Match 'public DNS'
+            } finally { & $script:Mod { $script:T_WsAnswer = { throw 'No such host is known.' } } }
+        }
+        It 'an authoritative no-record from public DNS is still the Gap, and nothing is fetched' {
+            $f = Run $script:StsTxt 'Test-TPControlDNSMTASTS' 'DNS-1.4'
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'does not exist in DNS'
+            @(Fetched).Count | Should -Be 0
+        }
+        It 'a public lookup that did not complete is not assessed, with both resolvers named' {
+            $t = $script:StsTxt.Clone(); $t['mta-sts.shape.test|A'] = @{ Outcome = 'LookupFailed'; Records = @() }
+            $d = Collect $t
+            $d.MTASTS.PolicyHostMissing | Should -BeFalse
+            $d.MTASTS.PolicyFetchError  | Should -Match 'DNS resolution failed: No such host is known\.; public DNS: lookup did not complete'
+            @(Fetched).Count            | Should -Be 0
+            (Verdict 'Test-TPControlDNSMTASTS' 'DNS-1.4').State | Should -Be 'NotApplicable'
+        }
+        It 'a public answer inside a private range is refused exactly as a workstation answer would be' {
+            $t = $script:StsTxt.Clone(); $t['mta-sts.shape.test|A'] = & $A @('10.1.2.3')
+            $d = Collect $t
+            $d.MTASTS.PolicyFetchError | Should -Match 'refused'
+            $d.MTASTS.PolicyFetchError | Should -Match 'RFC 1918'
+            @(Fetched).Count           | Should -Be 0
+            (Verdict 'Test-TPControlDNSMTASTS' 'DNS-1.4').State | Should -Be 'NotApplicable'
+        }
+        It 'an answer whose rows are not addresses is a lookup that did not complete, never a missing host' {
+            $t = $script:StsTxt.Clone(); $t['mta-sts.shape.test|A'] = & $A @('not-an-address')
+            $d = Collect $t
+            $d.MTASTS.PolicyHostMissing | Should -BeFalse
+            $d.MTASTS.PolicyFetchError  | Should -Match 'not IP addresses'
+            (Verdict 'Test-TPControlDNSMTASTS' 'DNS-1.4').State | Should -Be 'NotApplicable'
         }
     }
 }

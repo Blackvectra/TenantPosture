@@ -121,7 +121,10 @@ say what is not assessed:
 
 - **Email authentication (DNS-1.x).** Lookups run from the assessor's workstation. A
   resolver that cannot reach a name reports the lookup as failed, not absent. The MTA-STS
-  policy file is fetched over HTTPS from that workstation.
+  policy host (and the MX and autodiscover hosts probed for certificates) is resolved by the
+  workstation's resolver first and, when that cannot answer, by the public resolvers the
+  record lookups use; the finding says which one answered. The policy file is fetched over
+  HTTPS from that workstation.
 - **DKIM (DNS-1.2).** Checks the customer's selector CNAMEs, not their targets.
 - **Audit (PVW-1.1/1.2, EXO-4.2).** Reads the configured retention, not whether the audit
   log actually holds events for that long.

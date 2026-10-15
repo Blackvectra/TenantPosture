@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **[Fix] DNS-1.4 reads the MTA-STS policy when only the workstation's resolver cannot find the policy
+  host.** `Test-TPSafeProbeTarget` resolved `mta-sts.<domain>` (and the MX and autodiscover hosts it
+  guards the certificate probes with) through the operating system's resolver only. On the 2026-10-15
+  live run both tenant domains' hosts, CNAMEs to a GitHub Pages host, came back "No such host is known"
+  from the operator's network, as they had on every run since 2026-09-25, while the `_mta-sts` TXT
+  records resolved over DNS over HTTPS, so two domains whose policies read `mode: enforce` were "not
+  assessed". The guard now asks the tool's own resolver chain (`Resolve-TPPublicHostAddresses`: A and
+  AAAA through `Resolve-TPDns`) when the workstation cannot answer, validates every address exactly as
+  before and pins the fetch to it, and reports which resolver answered; the collector keeps that beside
+  the policy (`PolicyHostResolvedBy`, `WorkstationResolverError`, a line in `Errors`) and the DNS-1.4 pass
+  says the host was resolved through public DNS and the assessor's network is what could not. An
+  authoritative no-record from public DNS is still the Gap, a public lookup that did not complete is
+  still not assessed with both resolvers named, and the workstation's own answer is still used first.
+  Also removes the paragraph the #173 merge duplicated in `CLAUDE.md`.
 - **[New] Approved emergency-access exclusions.** A Conditional Access control judged on combined coverage
   reported a Partial whenever every qualifying policy excluded the same principals, which is exactly how
   Microsoft says emergency-access accounts are configured. The owner's rule (2026-10-15): judge whether an

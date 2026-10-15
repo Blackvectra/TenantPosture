@@ -368,10 +368,23 @@ function Test-TPControlDNSMTASTS {
                 -Detail "$domain has no MTA-STS DNS record. SMTP connections to this domain can be TLS-downgraded." `
                 -CurrentValue 'No MTA-STS record' -RequiredValue 'MTA-STS DNS record + policy file in enforce mode'
         } elseif ($d.MTASTS.Mode -eq 'enforce') {
+            # Which resolver found the policy host is part of the evidence: when only
+            # the tool's own resolvers could, the assessor's network is what failed,
+            # not the domain, and the finding says so (CurrentValue too, since the
+            # HTML report renders a Satisfied finding's CurrentValue only).
+            $viaPublic = ([string](Get-TPObjectField -Item $d.MTASTS -Key 'PolicyHostResolvedBy' -Default '')) -eq 'public DNS'
+            $resolverNote = ''
+            $currentValue = 'mode: enforce'
+            if ($viaPublic) {
+                $wsWhy = [string](Get-TPObjectField -Item $d.MTASTS -Key 'WorkstationResolverError' -Default 'no answer')
+                $resolverNote = " The policy host mta-sts.$domain was resolved through public DNS because the workstation running the assessment could not resolve it ($wsWhy); public resolvers answer for it, so sending servers can fetch the policy, and only the assessor's network could not."
+                $currentValue = 'mode: enforce; policy host resolved through public DNS, not by the workstation'
+            }
             Add-TPFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$domain MTA-STS in enforce mode — TLS required for all inbound SMTP."
+                -Detail "$domain MTA-STS in enforce mode — TLS required for all inbound SMTP.$resolverNote" `
+                -CurrentValue $currentValue
         } elseif (-not $d.MTASTS.Mode -and (Get-TPObjectField -Item $d.MTASTS -Key 'PolicyHostMissing' -Default $false) -eq $true) {
             # The TXT record is published but mta-sts.<domain> does not exist
             # (authoritative no A / AAAA record), so no sender can fetch the
