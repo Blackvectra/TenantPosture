@@ -163,9 +163,9 @@ jobs:
         # ACL semantics, which the Ubuntu job can only skip.
         shell: pwsh
         run: |
-          # Same gate as the Ubuntu job, three files instead of the tree.
+          # Same gate as the Ubuntu job, four files instead of the tree.
           ./tools/Invoke-TPTestGate.ps1 `
-            -Path ./Testing/TP.WebServer.Tests.ps1, ./Testing/TP.DeviceCompliance.Tests.ps1, ./Testing/TP.SensitiveFileWriter.Tests.ps1 `
+            -Path ./Testing/TP.WebServer.Tests.ps1, ./Testing/TP.DeviceCompliance.Tests.ps1, ./Testing/TP.SensitiveFileWriter.Tests.ps1, ./Testing/TP.OutputFolderProbe.Tests.ps1 `
             -ResultPath pester-web-windows.xml -Output Detailed
 
       - name: Upload results

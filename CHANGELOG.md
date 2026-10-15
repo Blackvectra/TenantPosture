@@ -16,7 +16,36 @@
   GUI) call the gate instead of `Invoke-Pester`, and so do the README and the pull-request checklist.
   `TP.TestGate.Tests.ps1` drives it with the failed-container, failed-block, zero-test and missing-field shapes,
   with an unclosed `Describe` in a temp directory, and fails if a workflow calls `Invoke-Pester` directly. Suite
-  count 115 -> 116.
+  count 116 -> 117 (main added TP.OutputFolderProbe.Tests.ps1 in the same window).
+- **[Fix] EXO-7.2 recognizes Exchange's not-found answer when the module renders it without the exception
+  type.** The REST-backed cmdlets of ExchangeOnlineManagement 3.x render a server error as `||Message` with
+  the type blank, so `Get-Recipient`'s "The operation couldn't be performed because object '<legacy DN>'
+  couldn't be found on '<server>'" carried no `ManagementObjectNotFoundException` anywhere and the resolver
+  filed it as "could not ask". On the 2026-10-15 live run two inbox rules forwarding to deleted or
+  unmigrated identities therefore kept EXO-7.2 "not assessed", the same symptom #154 fixed for the RPS
+  shape. `Test-TPExoNotFoundError` now also recognizes Exchange's own not-found sentence (ASCII or
+  typographic apostrophe), so those rules file as Orphaned and the control is a Medium Gap naming them. The
+  `EXO-RecipientLookup` exception now records the error id beside the message, so the next unfamiliar shape
+  is diagnosable from the results file.
+- **[Fix] A run refuses an output folder that cannot hold a protected file BEFORE any sign-in.** The
+  2026-10-15 live run from an external drive signed in to four services, collected for six minutes and
+  then ended at the results write with "Attempted to perform an unauthorized operation" and nothing
+  written: a volume without access control lists (exFAT, FAT32) accepts the create and refuses the DACL
+  the writer insists on. `Test-TPSensitiveOutputFolder` (in `Lib/Set-TPSensitiveFileAcl.ps1`) now writes
+  a throwaway file through the real writer, reads the protection back and removes it, and every entry
+  point (single run, batch, sign-in triage, email assessment, batch triage) calls it before its first
+  sign-in, exiting 4 with the folder, what the volume reports and the `-OutputPath` remedy. The writer's
+  own refusal names the volume format too. The claim that a volume cannot hold an access control list is made
+  only for the FAT family; any other format is reported with the writer's reason, never blamed. The batch
+  runners probe after their own `-WhatIf` exit (their switch is not `$WhatIfPreference`) and include each
+  selected client's folder that already exists; `-RegisterApp` and `-WhatIfConnections` skip the probe, since
+  they write nothing under `-OutputPath`. A Unix mode that cannot be read back is a refusal, never a pass.
+  `TP.OutputFolderProbe.Tests.ps1` pins the probe, the message and the ordering in all five entry points.
+- **[Fix] The report site renders light whatever the browser prefers.** The site alone among the HTML
+  deliverables followed the browser's dark preference, and its dark branch kept the profile's navy for
+  headings and the browser's default blue for links on a dark background, which read as unreadable with no
+  way back to light. The dark branch is gone, the page declares `color-scheme: light`, and links use the
+  profile's accent token. `TP.ReportSite.Tests.ps1` pins all three on every page.
 - **[Detection] INT-1.1 reads each compliance policy's non-compliance actions and can be satisfied.** The control
   required "an assigned compliance policy per enrolled platform, each with a non-compliance action" but the collector
   never read the actions, so every tenant with full platform coverage, the first live run included, read "not

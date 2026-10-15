@@ -73,8 +73,19 @@ function Test-TPExoNotFoundError {
         $ex = Get-TPObjectField -Item $ex -Key 'InnerException' -Default $null
         $depth++
     }
+    # Two shapes. The RPS-era module renders the server error as |Type|Message
+    # and puts the exception type in the FailureCategory of the error id. The
+    # REST-backed cmdlets of module 3.x render it as ||Message with the type
+    # BLANK (2026-10-15 live run), so the only not-found evidence left is
+    # Exchange's own sentence: "The operation couldn't be performed because
+    # object '<id>' couldn't be found on '<server>'." That sentence belongs to
+    # ManagementObjectNotFoundException alone; a folder, a command or a server
+    # error is worded differently and stays "could not ask".
+    $rsq = [string][char]0x2019   # the typographic apostrophe Exchange uses; built from its code point, never typed into a script
+    $notFoundSentence = "couldn['$rsq]t be performed because object .+ couldn['$rsq]t be found"
     foreach ($t in $texts) {
         if ($t -match 'ManagementObjectNotFoundException') { return $true }
+        if ($t -match $notFoundSentence) { return $true }
     }
     return $false
 }
