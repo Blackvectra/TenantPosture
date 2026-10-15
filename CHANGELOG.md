@@ -17,6 +17,21 @@
   Microsoft supports events scheduled before the June 30, 2026 retirement (the whole day, in every time zone). DEF-5.1's inline
   entry lists are bounded to five names plus the count of the rest, and the spoof entries to confirm are named in the
   finding's current value, which is what the HTML report shows for a pass.
+- **[CI] The test suite is judged by one gate, and `FailedCount` is not it.** A container that fails DISCOVERY runs
+  no tests, so it reports no failures. The merge resolution between #162 and #156 dropped one closing brace in
+  `Testing/TP.IdentityTruth.Tests.ps1`; the local check that approved it read `FailedCount`, saw 0, and Pester on
+  main then failed at parse before a single test ran (CI runs 554 and 556, fixed by #164). A run whose test path is
+  a typo passes the same check for the same reason: no files, no tests, no failures.
+  `tools/Invoke-TPTestGate.ps1` is now the one gate. It AST-parses every test file in `Testing/` and
+  `Email-IR/Testing/` first and reports each file and line (the inline CI loop it replaces read only `Testing/`),
+  then accepts the run only when Pester returned a result that says `Passed`, at least one test ran, and no failed
+  test, block or container is reported — plus the per-container scan, because a discovery failure lands there while
+  every count stays at zero. Each field is read through `PSObject.Properties`, so a shape the installed Pester does
+  not emit reads as "not reported" rather than as a zero that passes. Both CI Pester jobs (Ubuntu tree, Windows web
+  GUI) call the gate instead of `Invoke-Pester`, and so do the README and the pull-request checklist.
+  `TP.TestGate.Tests.ps1` drives it with the failed-container, failed-block, zero-test and missing-field shapes,
+  with an unclosed `Describe` in a temp directory, and fails if a workflow calls `Invoke-Pester` directly. Suite
+  count 116 -> 117 (main added TP.OutputFolderProbe.Tests.ps1 in the same window).
 - **[Fix] EXO-7.2 recognizes Exchange's not-found answer when the module renders it without the exception
   type.** The REST-backed cmdlets of ExchangeOnlineManagement 3.x render a server error as `||Message` with
   the type blank, so `Get-Recipient`'s "The operation couldn't be performed because object '<legacy DN>'

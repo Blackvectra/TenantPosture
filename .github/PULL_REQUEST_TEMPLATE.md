@@ -40,7 +40,7 @@ Required for every PR. Tick what applies, explain anything skipped.
 
 ## Tests
 
-- [ ] Pester suite passes locally: `Invoke-Pester ./Testing/`
+- [ ] Pester suite passes locally through the gate: `./tools/Invoke-TPTestGate.ps1` — not a bare `Invoke-Pester`, and never a `FailedCount` check: a test file that does not parse runs no tests and reports no failures
 - [ ] PSScriptAnalyzer clean: `Invoke-ScriptAnalyzer -Path . -Recurse -Settings ./PSScriptAnalyzerSettings.psd1` returns no Error-severity findings
 - [ ] If a new function, it has a Pester test
 - [ ] If a new bug fix, it has a regression test naming the bug class
