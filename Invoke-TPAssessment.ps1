@@ -915,6 +915,14 @@ if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
         $reportMetadata['ThirdPartyAwareness'] = $ThirdPartyAwareness
         Write-Host "  [i] $satCount phishing-simulation check(s) reported as run on $ThirdPartyAwareness (declared, not verified; not scored)" -ForegroundColor DarkGray
     }
+    # Approved emergency-access exclusions (Config/baseline-exceptions/<tenant>.psd1,
+    # EmergencyAccess): a Conditional Access shortfall made only of principals on the
+    # tenant's current approval record is a permitted deviation, named, never silent.
+    # Before license gating, like the declarations.
+    $eaCount = Set-TPEmergencyAccessApproval -TenantDomain ([string]$reportMetadata.TenantDomain) -Findings $findings
+    if ($eaCount -gt 0) {
+        Write-Host "  [i] $eaCount Conditional Access finding(s) carry approved emergency-access exceptions (named in the finding; the exclusion stays visible)" -ForegroundColor DarkGray
+    }
     # Same rule on republish (the license profile comes from the restored
     # AAD-Inventory raw data; without it nothing is moved).
     $licGated = Set-TPLicenseGating -Findings $findings
@@ -1242,6 +1250,14 @@ if (-not $skipCollection) {
     if ($ThirdPartyAwareness) {
         $satCount = Set-TPThirdPartyAwareness -Product $ThirdPartyAwareness
         Write-Host "  [i] $satCount phishing-simulation check(s) reported as run on $ThirdPartyAwareness (declared, not verified; not scored)" -ForegroundColor DarkGray
+    }
+    # Approved emergency-access exclusions, from the CONNECTED tenant's record
+    # (Config/baseline-exceptions/<tenant>.psd1, EmergencyAccess): a Conditional
+    # Access shortfall made only of principals on the current approval record is a
+    # permitted deviation, named, never silent.
+    $eaCount = Set-TPEmergencyAccessApproval -TenantDomain ([string]$conn.TenantDomain)
+    if ($eaCount -gt 0) {
+        Write-Host "  [i] $eaCount Conditional Access finding(s) carry approved emergency-access exceptions (named in the finding; the exclusion stays visible)" -ForegroundColor DarkGray
     }
     # After the EDR and awareness declarations, so a Cortex client is not pitched Defender
     # for Endpoint licenses for checks it does not need.

@@ -109,6 +109,7 @@
         'Resolve-TPTenantId',
         'Set-TPThirdPartyEdr',
         'Set-TPThirdPartyAwareness',
+        'Set-TPEmergencyAccessApproval',
         'New-TPProfile',
         'ConvertTo-TPPsLiteral',
         'ConvertFrom-TPDnsTxtData',

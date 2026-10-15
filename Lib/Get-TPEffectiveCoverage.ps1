@@ -198,7 +198,7 @@ function Get-TPCACoverageVerdict {
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)] $Coverage, [Parameter(Mandatory)] [string] $What)
-    $v = @(); $s = @(); $u = @()
+    $v = @(); $s = @(); $u = @(); $ao = @()
     $names = $Coverage.Names -join ', '
     switch ($Coverage.Kind) {
         'Full' {
@@ -206,7 +206,10 @@ function Get-TPCACoverageVerdict {
         }
         'Exceptions' {
             $v += "$What by: $names."
-            $s += "every qualifying policy excludes the same principal(s), so they are not covered: $((@($Coverage.Exceptions) | ForEach-Object { Get-TPCAPrincipalLabel -Principal $_ }) -join ', '). If these are emergency-access accounts, record them as an approved exception."
+            $s += "every qualifying policy excludes the same principal(s), so they are not covered: $((@($Coverage.Exceptions) | ForEach-Object { Get-TPCAPrincipalLabel -Principal $_ }) -join ', '). If these are emergency-access accounts, record them as an approved exception (the tenant's EmergencyAccess record in Config/baseline-exceptions), which reports the exclusion as approved and keeps it named."
+            # The excluded principals as structured data, so the approval pass
+            # (Set-TPEmergencyAccessApproval) judges ids, never prose.
+            $ao = @(@($Coverage.Exceptions) | ForEach-Object { [ordered]@{ Principal = [string]$_; Exclusion = 'SharedByEveryQualifyingPolicy' } })
         }
         'Unproven' {
             $v += "$What by: $names."
@@ -219,7 +222,7 @@ function Get-TPCACoverageVerdict {
         elseif ($Coverage.Kind -eq 'Full' -or [string]$n.Why -eq 'applies to no application') { $v += $(if ([string]$n.Why -eq 'applies to no application') { "'$($n.Name)' is enabled but applies to no application, so it provides no protection and is not counted." } else { $note }) }
         else { $u += "what the narrower policy adds: $note" }
     }
-    return [ordered]@{ Verified = $v; Shortfalls = $s; NotEstablished = $u }
+    return [ordered]@{ Verified = $v; Shortfalls = $s; NotEstablished = $u; AffectedObjects = $ao }
 }
 
 function Get-TPCADeviceComplianceCoverage {
@@ -302,7 +305,7 @@ function Add-TPCADeviceComplianceFinding {
         if ($stagedNote)   { if ($cov.Kind -eq 'Full') { $v += $stagedNote }   else { $s += $stagedNote } }
         if ($cov.Kind -eq 'None') { $s += $Consequence }
         Add-TPExpectedStateFinding -ControlId $ControlId -Control $Control -FrameworkIds $FrameworkIds `
-            -Verified $v -Shortfalls $s -NotEstablished $u `
+            -Verified $v -Shortfalls $s -NotEstablished $u -AffectedObjects $cv.AffectedObjects `
             -CurrentValue "Device requirement: $($cov.Kind) coverage$(if (@($cov.Names).Count) { ' by ' + (@($cov.Names) -join ', ') })" `
             -RequiredValue $RequiredValue
         return

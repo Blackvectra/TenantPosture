@@ -157,7 +157,10 @@ function Get-TPBaselineExceptions {
         and a parseable ReviewDate that is on or after -AsOf, and any ExpiryDate
         is after -AsOf. Anything else is returned with Approved = $false and a
         stated reason, so a lapsed exception is visible rather than silently
-        dropped.
+        dropped. The optional EmergencyAccess block (approved emergency-access
+        principals a Conditional Access policy may exclude) is read the same
+        way into EmergencyAccess (approved, keyed 'user:<id>' / 'group:<id>'),
+        EmergencyAccessEntries and EmergencyAccessRejected.
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
@@ -168,7 +171,7 @@ function Get-TPBaselineExceptions {
     )
     Set-StrictMode -Version Latest
 
-    $empty = [ordered]@{ Available = $false; Path = ''; Entries = @(); Approved = @{}; Rejected = @() }
+    $empty = [ordered]@{ Available = $false; Path = ''; Entries = @(); Approved = @{}; Rejected = @(); EmergencyAccess = @{}; EmergencyAccessEntries = @(); EmergencyAccessRejected = @() }
     $moduleRoot = if ((Get-Variable -Name TPModuleRoot -Scope Script -ErrorAction SilentlyContinue) -and $script:TPModuleRoot) { $script:TPModuleRoot }
                   elseif ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot }
                   else { (Get-Location).Path }
@@ -240,7 +243,64 @@ function Get-TPBaselineExceptions {
         if ($row.Approved -and $cid) { $approved[$cid] = [pscustomobject]$row }
         elseif ($cid) { $rejected.Add([pscustomobject]$row) }
     }
-    return [ordered]@{ Available = $true; Path = $resolved; Entries = @($entries); Approved = $approved; Rejected = @($rejected) }
+    # Emergency-access accounts (owner's 2026-10-15 decision): an approved,
+    # current record is what makes a Conditional Access exclusion a permitted
+    # deviation; an account's name alone proves nothing. Each entry names the
+    # excluded principal by its Entra object id (the id a policy exclusion
+    # carries), the approver, the dates, and whether it is a user or a group.
+    # A group approval attests that the group holds only emergency-access
+    # accounts; its membership is not resolved by the assessment and every
+    # finding that relies on it says so. Roles are never emergency access.
+    $eaEntries  = [System.Collections.Generic.List[object]]::new()
+    $eaApproved = @{}
+    $eaRejected = [System.Collections.Generic.List[object]]::new()
+    foreach ($e in @(Get-TPObjectField -Item $data -Key 'EmergencyAccess' -Default @())) {
+        if ($null -eq $e) { continue }
+        $oid  = ([string](Get-TPObjectField -Item $e -Key 'ObjectId' -Default '')).Trim()
+        $kind = ([string](Get-TPObjectField -Item $e -Key 'Kind' -Default 'User')).Trim()
+        $row = [ordered]@{
+            ObjectId          = $oid
+            Kind              = $kind
+            UserPrincipalName = [string](Get-TPObjectField -Item $e -Key 'UserPrincipalName' -Default '')
+            DisplayName       = [string](Get-TPObjectField -Item $e -Key 'DisplayName' -Default '')
+            Reason            = [string](Get-TPObjectField -Item $e -Key 'Reason' -Default '')
+            Approver          = [string](Get-TPObjectField -Item $e -Key 'Approver' -Default '')
+            ApprovedDate      = [string](Get-TPObjectField -Item $e -Key 'ApprovedDate' -Default '')
+            ReviewDate        = [string](Get-TPObjectField -Item $e -Key 'ReviewDate' -Default '')
+            ExpiryDate        = [string](Get-TPObjectField -Item $e -Key 'ExpiryDate' -Default '')
+            Approved          = $false
+            Verdict           = ''
+        }
+        $missing = @(foreach ($k in @('ObjectId', 'Reason', 'Approver', 'ApprovedDate', 'ReviewDate')) { if ([string]::IsNullOrWhiteSpace([string]$row[$k])) { $k } })
+        $review  = & $parse (Get-TPObjectField -Item $e -Key 'ReviewDate' -Default $null)
+        $expiry  = & $parse (Get-TPObjectField -Item $e -Key 'ExpiryDate' -Default $null)
+        $guid = [guid]::Empty
+        if ($missing.Count -gt 0) {
+            $row.Verdict = "Not approved: missing $($missing -join ', ')."
+        } elseif (-not [guid]::TryParse($oid, [ref]$guid)) {
+            $row.Verdict = "Not approved: ObjectId '$oid' is not an Entra object id (a GUID)."
+        } elseif ($kind -notin @('User', 'Group')) {
+            $row.Verdict = "Not approved: Kind '$kind' is not User or Group (a role is never an emergency-access principal)."
+        } elseif ($null -eq $review) {
+            $row.Verdict = "Not approved: ReviewDate '$($row.ReviewDate)' is not a date."
+        } elseif ($review.Date -lt $AsOf.Date) {
+            $row.Verdict = "Not approved: review date $($review.ToString('yyyy-MM-dd')) has passed; the account must be re-approved."
+        } elseif ($row.ExpiryDate -and $null -eq $expiry) {
+            $row.Verdict = "Not approved: ExpiryDate '$($row.ExpiryDate)' is not a date."
+        } elseif ($null -ne $expiry -and $expiry.Date -lt $AsOf.Date) {
+            $row.Verdict = "Not approved: expired $($expiry.ToString('yyyy-MM-dd'))."
+        } else {
+            $row.Approved = $true
+            $row.Verdict  = "Approved by $($row.Approver) on $($row.ApprovedDate); review by $($review.ToString('yyyy-MM-dd'))."
+        }
+        $eaEntries.Add([pscustomobject]$row)
+        if ($row.Approved) {
+            # Keyed as a policy exclusion names the principal: 'user:<id>' / 'group:<id>', ids lower-case.
+            $eaApproved["$($kind.ToLowerInvariant()):$($guid.ToString())"] = [pscustomobject]$row
+        } else { $eaRejected.Add([pscustomobject]$row) }
+    }
+    return [ordered]@{ Available = $true; Path = $resolved; Entries = @($entries); Approved = $approved; Rejected = @($rejected)
+                       EmergencyAccess = $eaApproved; EmergencyAccessEntries = @($eaEntries); EmergencyAccessRejected = @($eaRejected) }
 }
 
 # ── Compliance view ───────────────────────────────────────────────────────────

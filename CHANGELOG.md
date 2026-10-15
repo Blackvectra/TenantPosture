@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **[New] Approved emergency-access exclusions.** A Conditional Access control judged on combined coverage
+  reported a Partial whenever every qualifying policy excluded the same principals, which is exactly how
+  Microsoft says emergency-access accounts are configured. The owner's rule (2026-10-15): judge whether an
+  exclusion is appropriate, not whether one exists, and an account's name alone proves nothing. The
+  per-tenant exceptions file (`Config/baseline-exceptions/<tenant>.psd1`) gains an `EmergencyAccess` block
+  naming each approved principal by Entra object id with approver, approval date and review date (a group
+  may be approved; the finding then says its membership was not resolved; a role never is), read by
+  `Get-TPBaselineExceptions` under the same date rules as an exception. Every coverage finding now carries
+  its shared exclusions as structured `AffectedObjects`, and `Set-TPEmergencyAccessApproval` (run after
+  evaluation and on `-FromResults`, before license gating) rewrites a Partial whose only shortfall is such
+  an exclusion to Satisfied, prefixed `Approved emergency-access exceptions:`, naming the principals and
+  keeping the original result; a principal not on the record, or lapsed, keeps the finding Partial with the
+  record's answer appended. Applies to AAD-1.1, AAD-1.2, AAD-1.3, AAD-1.4, AAD-1.5, AAD-11.1, AAD-2.3 and
+  INT-1.2.
 - **[Fix] AAD-2.3 and INT-1.2 judge the device requirement on who is protected.** Both controls credited a
   compliant-device policy from a private check: INT-1.2 read "All users" and "All applications" only, so a
   policy that excluded users or applications, applied to the browser alone, or was limited to a platform, a

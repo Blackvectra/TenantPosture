@@ -146,7 +146,7 @@ Every run now classifies the tenant into a **Tenant Security Maturity Tier** (In
 | `-BaselineResults` + plan | Before connecting, the entry point prints the NRG baseline plan: how each required control is expected to resolve (automatic, manual, third-party handled, optional collector, skipped, license blocked, or licensing unknown until connection). With `-BaselineResults`, licensing comes from that prior run. After the run the results JSON carries `BaselinePlan` and `BaselinePlanComparison`. Standalone, connecting to nothing: `.\Get-TPBaselinePlan.ps1 -TenantDomain client.com -BaselineTier Standard [-ResultsPath prior.json]`. |
 | Reason contract | Every baseline row in the results JSON, the HTML and the Markdown carries `ReasonCode` (a stable code from an ordered catalog: `ManualVerificationRequired`, `SkippedByOperator`, `ThirdPartyHandled`, `OptionalCollectorRequired`, `LicenseBlocked`, `LicensingUnknown`, `CollectorUnavailable`, `EvidenceStale`, `EvidenceNotRead`, `EvaluationError`, `ControlFailed`, `Satisfied`, `NotApplicable`, `Automatic`) and a one-sentence `Reason`. The catalog itself is written as `BaselineCompliance.ReasonCodes`, so a consumer keys on the code and never parses prose. |
 | Coverage lines | Two metrics derived from the reason contract and kept apart from each other and from the score. Evidence coverage: of the applicable required controls (NotApplicable excluded), how many have usable evidence (Satisfied, ControlFailed, ThirdPartyHandled); LicenseBlocked is in the denominator and shown separately; the gaps are listed by code. Effectiveness coverage: how many required controls have an Effective or Ineffective reading; configuration evidence never counts. Written as `BaselineCompliance.EvidenceCoverage` and `BaselineCompliance.EffectivenessCoverage`, printed on the console and rendered in both reports. |
-| Exception cmdlets | `New-TPBaselineException -TenantDomain client.com -ControlId AAD-2.3 -Reason … -CompensatingControl … -Approver … -ReviewDate 2027-01-15 [-ExpiryDate …]`, plus `Get-`, `Set-` and `Remove-TPBaselineException`. Writes `Config/baseline-exceptions/<tenant>.psd1` as data-only PSD1 with an atomic, re-read-verified save; refuses a control outside the baseline, a review date not in the future, an expiry before the review, and a second active exception for the same control; preserves and reports an existing entry that is not in force rather than repairing it; honors PowerShell's WhatIf and Confirm semantics. An exception changes the baseline disposition only, never the observed state, and never `BaselineVersion`. |
+| Exception cmdlets | `New-TPBaselineException -TenantDomain client.com -ControlId AAD-2.3 -Reason … -CompensatingControl … -Approver … -ReviewDate 2027-01-15 [-ExpiryDate …]`, plus `Get-`, `Set-` and `Remove-TPBaselineException`. Writes `Config/baseline-exceptions/<tenant>.psd1` as data-only PSD1 with an atomic, re-read-verified save; refuses a control outside the baseline, a review date not in the future, an expiry before the review, and a second active exception for the same control; preserves and reports an existing entry that is not in force rather than repairing it; honors PowerShell's WhatIf and Confirm semantics. An exception changes the baseline disposition only, never the observed state, and never `BaselineVersion`. The same file's optional `EmergencyAccess` block lists approved emergency-access (break-glass) principals by Entra object id with approver and dates (`Config/baseline-exceptions/example.psd1`): a Conditional Access control whose only shortfall is that every qualifying policy excludes those principals reports "Approved emergency-access exceptions" and names them, as Satisfied, when every one is on the record and current; a principal not on the record, or lapsed, keeps the finding Partial and is named. The record is the approval; an account's name alone establishes nothing. |
 | Per-client collector flags | A `Collectors` block on a `clients.json` record (`"Collectors": { "SharePointShell": true }`) declares opt-in collectors for that client. The entry point, the batch runner and the standalone plan all read it. An operator expectation, not proof: the run still reports a collector that fails, and the plan comparison names the row. |
 | `-NISTMatrix` | Standalone NIST SP 800-53 Rev 5 matrix. |
 | `-SSP`, `-SSPAnswers` | NIST SP 800-171 Rev 2 System Security Plan. Answers come from `Config/ssp/<tenant-domain>.psd1` unless `-SSPAnswers` names a file. |
@@ -350,7 +350,7 @@ Invoke-TPAssessment.ps1          ← Entry point (validated params, try/finally)
 Invoke-TPBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 Compare-TPTenantBaseline.ps1     ← Offline two-tenant baseline comparison (connects to nothing)
 TenantPosture.psm1               ← Module loader (recursive dot-source, path traversal check)
-TenantPosture.psd1               ← Module manifest (421 exports, dependency declarations)
+TenantPosture.psd1               ← Module manifest (422 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-TPFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -395,7 +395,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA (ScubaGear v2.0.0) + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          117 Pester suites — the FULL suite gates every PR
+Testing/                          118 Pester suites — the FULL suite gates every PR
   TP.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   TP.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   TP.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -650,7 +650,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **117 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **118 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite through the same gate CI uses. The gate parses every
@@ -708,7 +708,7 @@ Six GitHub Actions workflows cover the repository. All run automatically on push
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (117 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (118 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -736,4 +736,4 @@ You may use, modify and redistribute it under that license, including commercial
 
 ---
 
-*TenantPosture v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 421 exported functions · full Pester suite (117 suites) gating CI*
+*TenantPosture v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 422 exported functions · full Pester suite (118 suites) gating CI*
